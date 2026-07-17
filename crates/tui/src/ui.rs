@@ -5,6 +5,7 @@ use ratatui::widgets::{Block, Clear, Gauge, Paragraph, Wrap};
 use ratatui::Frame;
 
 use feral_processes_engine::components::GlyphColor;
+use feral_processes_engine::items::ItemId;
 use feral_processes_engine::world::{Biome, Tile};
 use feral_processes_engine::{EntityView, Game, PlayerStatus};
 
@@ -20,10 +21,12 @@ pub fn render(f: &mut Frame, app: &mut App) {
         Mode::Playing
         | Mode::Build
         | Mode::BuildDirection
-        | Mode::Work
-        | Mode::WorkStructure
+        | Mode::Cronjob
+        | Mode::CronjobStructure
         | Mode::Inspect
-        | Mode::InspectDetail => render_playing(f, app),
+        | Mode::InspectDetail
+        | Mode::Inventory
+        | Mode::InventoryItemAction => render_playing(f, app),
     }
 }
 
@@ -67,10 +70,12 @@ fn render_playing(f: &mut Frame, app: &mut App) {
     match mode {
         Mode::Build => render_build_menu(f, area, game),
         Mode::BuildDirection => render_build_direction(f, area),
-        Mode::Work => render_work_menu(f, area, game),
-        Mode::WorkStructure => render_work_structure_menu(f, area, game),
+        Mode::Cronjob => render_cronjob_menu(f, area, game),
+        Mode::CronjobStructure => render_cronjob_structure_menu(f, area, game),
         Mode::Inspect => render_inspect_menu(f, area, game),
         Mode::InspectDetail => render_inspect_detail(f, area, game, app.pending_inspect),
+        Mode::Inventory => render_inventory_screen(f, area, game),
+        Mode::InventoryItemAction => render_inventory_item_action(f, area, app.pending_inventory_item),
         _ => {}
     }
 }
@@ -195,6 +200,7 @@ fn render_status_panel(f: &mut Frame, area: Rect, status: &PlayerStatus) {
             status.position.0, status.position.1
         )),
         Line::from(format!("Attack {}   Defense {}", status.atk, status.def)),
+        Line::from(format!("Decompiler {}", status.decompiler)),
     ];
     lines.push(Line::from(""));
     lines.push(Line::from("Inventory:"));
@@ -207,8 +213,9 @@ fn render_status_panel(f: &mut Frame, area: Rect, status: &PlayerStatus) {
     lines.push(Line::from(""));
     lines.push(Line::from("hjkl/arrows move  e drain  r recharge"));
     lines.push(Line::from("g scan    c compile orb"));
-    lines.push(Line::from("b deploy  w assign subroutine"));
+    lines.push(Line::from("b deploy  w assign cronjob"));
     lines.push(Line::from("i inspect nearby program"));
+    lines.push(Line::from("v inventory/equipment"));
     lines.push(Line::from("s save    q quit   ? help"));
     lines.push(Line::from("+/- zoom"));
     f.render_widget(
@@ -248,7 +255,7 @@ fn render_build_direction(f: &mut Frame, area: Rect) {
     );
 }
 
-fn render_work_menu(f: &mut Frame, area: Rect, game: &mut Game) {
+fn render_cronjob_menu(f: &mut Frame, area: Rect, game: &mut Game) {
     let popup = centered_rect(60, 50, area);
     f.render_widget(Clear, popup);
     let workers: Vec<_> = game
@@ -256,7 +263,7 @@ fn render_work_menu(f: &mut Frame, area: Rect, game: &mut Game) {
         .into_iter()
         .filter(|e| e.is_tamed)
         .collect();
-    let mut lines = vec![Line::from("Assign which program to work? (Esc to cancel)")];
+    let mut lines = vec![Line::from("Assign which program to a cronjob? (Esc to cancel)")];
     if workers.is_empty() {
         lines.push(Line::from("(no compiled programs nearby)"));
     }
@@ -271,12 +278,12 @@ fn render_work_menu(f: &mut Frame, area: Rect, game: &mut Game) {
         )));
     }
     f.render_widget(
-        Paragraph::new(lines).block(Block::bordered().title("Assign Subroutine")),
+        Paragraph::new(lines).block(Block::bordered().title("Assign Cronjob")),
         popup,
     );
 }
 
-fn render_work_structure_menu(f: &mut Frame, area: Rect, game: &mut Game) {
+fn render_cronjob_structure_menu(f: &mut Frame, area: Rect, game: &mut Game) {
     let popup = centered_rect(60, 50, area);
     f.render_widget(Clear, popup);
     let structures: Vec<_> = game
@@ -284,7 +291,7 @@ fn render_work_structure_menu(f: &mut Frame, area: Rect, game: &mut Game) {
         .into_iter()
         .filter(|e| e.can_work)
         .collect();
-    let mut lines = vec![Line::from("Work which structure? (Esc to cancel)")];
+    let mut lines = vec![Line::from("Cronjob which structure? (Esc to cancel)")];
     if structures.is_empty() {
         lines.push(Line::from("(no workable structures nearby)"));
     }
@@ -298,7 +305,7 @@ fn render_work_structure_menu(f: &mut Frame, area: Rect, game: &mut Game) {
         )));
     }
     f.render_widget(
-        Paragraph::new(lines).block(Block::bordered().title("Assign Subroutine")),
+        Paragraph::new(lines).block(Block::bordered().title("Assign Cronjob")),
         popup,
     );
 }
@@ -402,6 +409,91 @@ fn render_inspect_detail(f: &mut Frame, area: Rect, game: &mut Game, entity: Opt
     );
 }
 
+fn render_inventory_screen(f: &mut Frame, area: Rect, game: &mut Game) {
+    let popup = centered_rect(70, 70, area);
+    f.render_widget(Clear, popup);
+    let status = game.player_status();
+
+    let mut lines = vec![
+        Line::styled(
+            format!(
+                "Level {}   Attack {}   Defense {}   Decompiler {}",
+                status.level, status.atk, status.def, status.decompiler
+            ),
+            Style::new().fg(Color::Cyan),
+        ),
+        Line::from(""),
+        Line::styled("Equipped (number to unequip):", Style::new().add_modifier(Modifier::BOLD)),
+        equipped_line(1, "Weapon", status.weapon),
+        equipped_line(2, "Armor", status.armor),
+        equipped_line(3, "Module", status.module),
+        Line::from(""),
+        Line::styled("Inventory (number to equip/drop/destroy):", Style::new().add_modifier(Modifier::BOLD)),
+    ];
+    if status.inventory.is_empty() {
+        lines.push(Line::from("  (empty)"));
+    }
+    for (i, (item, qty)) in status.inventory.iter().enumerate() {
+        let tag = if item.equipment().is_some() { " (equippable)" } else { "" };
+        lines.push(Line::from(format!("[{}] {} x{}{}", i + 4, item.display_name(), qty, tag)));
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from("Esc to close"));
+
+    f.render_widget(
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: true })
+            .block(Block::bordered().title("Inventory")),
+        popup,
+    );
+}
+
+fn equipped_line(num: usize, label: &str, item: Option<ItemId>) -> Line<'static> {
+    match item.and_then(|i| i.equipment().map(|(_, mods)| (i, mods))) {
+        Some((item, mods)) => {
+            let mut parts = Vec::new();
+            if mods.atk != 0 {
+                parts.push(format!("+{} ATK", mods.atk));
+            }
+            if mods.def != 0 {
+                parts.push(format!("+{} DEF", mods.def));
+            }
+            if mods.decompiler != 0 {
+                parts.push(format!("+{} DECOMP", mods.decompiler));
+            }
+            Line::from(format!("[{num}] {label}: {} ({})", item.display_name(), parts.join(" ")))
+        }
+        None => Line::from(format!("[{num}] {label}: (empty)")),
+    }
+}
+
+fn render_inventory_item_action(f: &mut Frame, area: Rect, item: Option<ItemId>) {
+    let popup = centered_rect(50, 30, area);
+    f.render_widget(Clear, popup);
+    let Some(item) = item else {
+        f.render_widget(
+            Paragraph::new(Line::from("Nothing selected.")).block(Block::bordered().title("Item")),
+            popup,
+        );
+        return;
+    };
+    let mut actions = vec!["[D]rop".to_string(), "[X] Destroy".to_string()];
+    if item.equipment().is_some() {
+        actions.insert(0, "[E]quip".to_string());
+    }
+    let lines = vec![
+        Line::styled(item.display_name(), Style::new().add_modifier(Modifier::BOLD)),
+        Line::from(""),
+        Line::from(actions.join("   ")),
+        Line::from(""),
+        Line::from("Esc to cancel"),
+    ];
+    f.render_widget(
+        Paragraph::new(lines).block(Block::bordered().title("Item")),
+        popup,
+    );
+}
+
 fn render_battle(f: &mut Frame, app: &mut App) {
     let area = f.area();
     let Some(game) = &mut app.game else { return };
@@ -433,8 +525,8 @@ fn render_battle(f: &mut Frame, app: &mut App) {
     f.render_widget(
         Gauge::default()
             .block(Block::bordered().title(format!(
-                "You (ATK {} / DEF {})",
-                view.player_atk, view.player_def
+                "You (ATK {} / DEF {} / DECOMP {})",
+                view.player_atk, view.player_def, view.player_decompiler
             )))
             .gauge_style(Style::new().fg(Color::Cyan))
             .ratio(player_ratio)
@@ -517,8 +609,9 @@ fn render_help(f: &mut Frame) {
         Line::from("g                   scan the sector for power cells"),
         Line::from("c                   compile an ICE Breaker (3 Core Fragments)"),
         Line::from("b                   deploy a structure"),
-        Line::from("w                   assign a compiled program to work a structure"),
+        Line::from("w                   assign a compiled program to a cronjob"),
         Line::from("i                   inspect a nearby program (stats/moves, no intrusion)"),
+        Line::from("v                   inventory/equipment: equip, unequip, drop, destroy items"),
         Line::from("s                   save session"),
         Line::from("q                   quit"),
         Line::from("+ / -               zoom the grid in / out"),
@@ -527,6 +620,10 @@ fn render_help(f: &mut Frame) {
         Line::from(""),
         Line::from("Defeating or decompiling a rogue program grants XP. Compiled programs"),
         Line::from("gain XP from completed work cycles. Leveling up fully restores Integrity."),
+        Line::from(""),
+        Line::from("Equipping a weapon/armor/module grants a flat Attack/Defense/Decompiler"),
+        Line::from("bonus while worn. Equip up to one item per slot; equipping a second"),
+        Line::from("item in an occupied slot swaps the old one back to your inventory."),
         Line::from(""),
         Line::from("Press any key to close"),
     ];

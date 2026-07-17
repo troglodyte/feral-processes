@@ -13,4 +13,5 @@
         (name: "Lockout", power: 7),
     ],
     work_resource: None,
+    equipment_drop: Some((FirewallPlating, 0.35)),
 )

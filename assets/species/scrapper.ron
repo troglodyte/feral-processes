@@ -13,4 +13,5 @@
         (name: "Shock", power: 11),
     ],
     work_resource: Some(PowerCell),
+    equipment_drop: Some((OverclockCore, 0.15)),
 )

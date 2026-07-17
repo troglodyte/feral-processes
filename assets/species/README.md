@@ -24,8 +24,14 @@ is skipped with a warning logged in-game rather than crashing startup.
         (name: "Move Name", power: 8),
         (name: "Other Move", power: 5),
     ],
-    work_resource: Some(CoreFragment),  // or `None` if it shouldn't be assignable to work
-    // Item options: CoreFragment, PowerCell, IceBreaker
+    work_resource: Some(CoreFragment),  // or `None` if it shouldn't be assignable to a cronjob
+    // Item options: CoreFragment, PowerCell, IceBreaker, OverclockCore,
+    //               FirewallPlating, NeuralAmplifier
+
+    // Optional; omit entirely for no chance of a gear drop. If set, defeating
+    // or decompiling this species has a chance (0.0-1.0) to additionally
+    // drop one piece of equipment, independent of `work_resource`.
+    equipment_drop: Some((FirewallPlating, 0.3)),
 )
 ```
 

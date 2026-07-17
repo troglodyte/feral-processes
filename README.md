@@ -56,6 +56,7 @@ main menu to reload).
 | `b` | Deploy a structure |
 | `w` | Assign a compiled program to a cronjob (work a structure) |
 | `i` | Inspect a nearby program (stats/moves/decompile odds, no intrusion) |
+| `v` | Inventory/equipment: equip, unequip, drop, destroy items |
 | `s` | Save |
 | `q` | Quit |
 | `+` / `-` | Zoom the grid in/out |
@@ -104,15 +105,15 @@ creature to work" mechanic.
    Core Fragments right now).
 3. **Schedule a cronjob with `w`** — pick a compiled (tamed) program, then
    the structure to assign it to. This only works on structures with a
-   `work` recipe (Mining Node, Power Conduit, Compiler); Terminal and Data
-   Cache aren't assignable this way.
+   `work` recipe (Mining Node, Power Conduit, Compiler, Fabricator);
+   Terminal and Data Cache aren't assignable this way.
 4. **Production runs automatically after that**, tick by tick, regardless of
    where you are or what you're doing:
    - Each tick, the assigned program's progress advances by 1.
    - Once progress reaches the structure's `ticks_per_unit` (Mining Node 5,
-     Power Conduit 6, Compiler 8), one unit of output drops straight into
-     *your* inventory, progress resets, and the worker gains 5 flat XP
-     (enough to level up mid-cycle sometimes).
+     Power Conduit 6, Compiler 8, Fabricator 12), one unit of output drops
+     straight into *your* inventory, progress resets, and the worker gains
+     5 flat XP (enough to level up mid-cycle sometimes).
    - Every structure you build starts with a **fixed reserve of 20 units**.
      Each completed cycle consumes one; once it hits 0 the structure goes
      idle and the assigned worker just sits there until reassigned.
@@ -124,8 +125,9 @@ creature to work" mechanic.
    picks up right where it left off, no need to reassign it with `w`.
 
 Once you have a Mining Node feeding a steady supply of Core Fragments, feed
-that into a Power Conduit (Power Cells) and/or a Compiler (ICE Breakers) to
-round out the loop.
+that into a Power Conduit (Power Cells), a Compiler (ICE Breakers), and/or
+a Fabricator (Overclock Cores — see [Equipment](#equipment)) to round out
+the loop.
 
 ### Stats
 
@@ -150,10 +152,37 @@ Shown in the status panel (always) and the intrusion screen (in battle):
 | Power Cell | Starting inventory; scan (`g`); dropped by Scrapper/Glitch; cooked passively at a Terminal; a Power Conduit cronjob | Drain (`e`) to restore Power |
 | ICE Breaker | Starting inventory; compiled (`c`) from 3 Core Fragments; a Compiler cronjob | Attempt to decompile a rogue program in battle (`d`) |
 
-A deliberately tight three-item economy: Core Fragment is the universal raw
-material, and the other two are refined from it (or scavenged directly) for
-one specific purpose each. Items aren't yet data-driven the way species and
-structures are — see `CLAUDE.md` for the moddability note on adding a new one.
+A deliberately tight core-consumable economy: Core Fragment is the
+universal raw material, and the other two are refined from it (or
+scavenged directly) for one specific purpose each. Equipment (below) is a
+separate, non-consumable item category. Items aren't yet data-driven the
+way species and structures are — see `CLAUDE.md` for the moddability note
+on adding a new one.
+
+### Equipment
+
+Press `v` to open the inventory/equipment screen from anywhere while
+playing. It shows your stats, your three equipment slots, and your
+inventory, each item numbered for selection.
+
+| Item | Slot | Bonus | Source |
+| --- | --- | --- | --- |
+| Overclock Core | Weapon | +3 Attack | Fabricator cronjob; loot chance from Scrapper, Construct |
+| Firewall Plating | Armor | +3 Defense | Loot chance from Wraith, Sentinel |
+| Neural Amplifier | Module | +2 Decompiler | Loot chance from Virus, Phantom |
+
+- **Equip**: select a numbered inventory item, then `[E]`. Equipping into an
+  already-occupied slot swaps the old item back into your inventory — you
+  can only ever have one item per slot.
+- **Unequip**: press the number of an occupied slot (1 Weapon, 2 Armor, 3
+  Module) directly from the main inventory screen.
+- **Drop** / **Destroy**: select a numbered inventory item, then `[D]` or
+  `[X]`. Both permanently remove the item — they're functionally identical,
+  just distinct log wording; there's no way to recover a dropped item from
+  the world.
+- An equipped item's stat bonus is added the moment you equip it and
+  removed the moment you unequip it — it shows up immediately in the status
+  panel and the intrusion screen.
 
 ### Current roster
 
@@ -168,6 +197,10 @@ structures are — see `CLAUDE.md` for the moddability note on adding a new one.
 | Construct (`C`) | Hard | Mainframe | Core Fragments |
 | Sentinel (`S`) | Hard | StaticField | — |
 
+Scrapper, Wraith, Virus, Construct, Sentinel, and Phantom also each have a
+chance to drop a piece of equipment on top of their listed resource — see
+[Equipment](#equipment) for which item and odds.
+
 ### Structures
 
 | Structure | Cost | Purpose |
@@ -177,11 +210,13 @@ structures are — see `CLAUDE.md` for the moddability note on adding a new one.
 | Mining Node | 2 Core Fragments | Cronjob a compiled program to it to produce Core Fragments over time |
 | Power Conduit | 4 Core Fragments | Cronjob a compiled program to it to produce Power Cells over time |
 | Compiler | 6 Core Fragments | Cronjob a compiled program to it to produce ICE Breakers over time |
+| Fabricator | 8 Core Fragments | Cronjob a compiled program to it to produce Overclock Cores (see [Equipment](#equipment)) over time |
 
-Mining Node, Power Conduit, and Compiler use **active** automation (an
-assigned cronjob produces over time); Terminal uses **passive** automation
-(it processes on its own whenever you're in range). Any structure can define
-either or both via its `.ron` file — see [Modding](#modding).
+Mining Node, Power Conduit, Compiler, and Fabricator use **active**
+automation (an assigned cronjob produces over time); Terminal uses
+**passive** automation (it processes on its own whenever you're in range).
+Any structure can define either or both via its `.ron` file — see
+[Modding](#modding).
 
 ## Modding
 

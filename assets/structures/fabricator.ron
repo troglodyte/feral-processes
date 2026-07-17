@@ -1,0 +1,8 @@
+(
+    id: "fabricator",
+    name: "Fabricator",
+    glyph: '*',
+    color: White,
+    build_cost: [(CoreFragment, 8)],
+    work: Some((produces: OverclockCore, ticks_per_unit: 12)),
+)

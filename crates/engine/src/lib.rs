@@ -20,10 +20,11 @@ use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 
 use components::{
-    Creature, Experience, Glyph, GlyphColor, Hostile, Inventory, Needs, PassiveProcessor, Player,
-    Position, ResourceNode, Stats, Structure, Tamed, Task, TaskKind, WanderAi,
+    Creature, Decompiler, Equipment, Experience, Glyph, GlyphColor, Hostile, Inventory, Needs,
+    PassiveProcessor, Player, Position, ResourceNode, Stats, Structure, Tamed, Task, TaskKind,
+    WanderAi,
 };
-use items::ItemId;
+use items::{EquipmentSlot, ItemId};
 pub use resources::DifficultyMode;
 use resources::{BattleState, GameClock, GameOver, GameRng, MessageLog, PlayerEntity};
 use species::{MoveDef, SpeciesDb, SpeciesDef};
@@ -36,18 +37,25 @@ const REST_TICKS: u32 = 40;
 /// Core Fragment cost to compile one ICE Breaker.
 const ICE_BREAKER_CORE_COST: u32 = 3;
 
+/// How much the player's `Decompiler` skill grows per level gained.
+const DECOMPILER_SKILL_PER_LEVEL: i32 = 1;
+
 pub struct PlayerStatus {
     pub position: (i32, i32),
     pub hp: i32,
     pub max_hp: i32,
     pub atk: i32,
     pub def: i32,
+    pub decompiler: i32,
     pub hunger: f32,
     pub fatigue: f32,
     pub inventory: Vec<(ItemId, u32)>,
     pub level: u32,
     pub xp: u32,
     pub xp_to_next: u32,
+    pub weapon: Option<ItemId>,
+    pub armor: Option<ItemId>,
+    pub module: Option<ItemId>,
 }
 
 #[derive(Clone)]
@@ -76,6 +84,7 @@ pub struct BattleView {
     pub player_max_hp: i32,
     pub player_atk: i32,
     pub player_def: i32,
+    pub player_decompiler: i32,
     pub log: Vec<String>,
     pub can_tame: bool,
     /// Estimated chance (0.0-1.0) that a decompile attempt would succeed
@@ -152,6 +161,8 @@ impl Game {
                 },
                 Needs::default(),
                 Experience::default(),
+                Decompiler::default(),
+                Equipment::default(),
                 Inventory {
                     items: vec![
                         (ItemId::IceBreaker, 3),
@@ -230,6 +241,14 @@ impl Game {
                     xp: data.player.xp,
                     xp_to_next: data.player.xp_to_next,
                 },
+                Decompiler {
+                    skill: data.player.decompiler,
+                },
+                Equipment {
+                    weapon: data.player.weapon,
+                    armor: data.player.armor,
+                    module: data.player.module,
+                },
                 Inventory {
                     items: data.player.inventory,
                 },
@@ -251,6 +270,7 @@ impl Game {
             game.log(warning);
         }
 
+        let mut pending_cronjobs: Vec<(Entity, save::CronjobSave)> = Vec::new();
         for c in data.creatures {
             let Some(species) = game.world.resource::<SpeciesDb>().get(&c.species).cloned() else {
                 continue;
@@ -275,6 +295,7 @@ impl Game {
                 },
             ));
             if c.tamed {
+                let creature_id = entity.id();
                 entity.insert((
                     Tamed { owner: player },
                     Experience {
@@ -283,11 +304,15 @@ impl Game {
                         xp_to_next: c.xp_to_next,
                     },
                 ));
+                if let Some(cronjob) = c.cronjob {
+                    pending_cronjobs.push((creature_id, cronjob));
+                }
             } else {
                 entity.insert((Hostile, WanderAi::default()));
             }
         }
 
+        let mut structure_positions: HashMap<(i32, i32), Entity> = HashMap::new();
         for s in data.structures {
             let Some(def) = game.world.resource::<StructureDb>().get(&s.kind).cloned() else {
                 continue;
@@ -305,6 +330,7 @@ impl Game {
                     color: def.color,
                 },
             ));
+            let structure_id = entity.id();
             if let Some(amount) = s.resource_amount {
                 let resource = def
                     .work
@@ -312,9 +338,25 @@ impl Game {
                     .map(|w| w.produces)
                     .unwrap_or(ItemId::CoreFragment);
                 entity.insert(ResourceNode { resource, amount });
+                structure_positions.insert(s.position, structure_id);
             }
             if def.passive_process.is_some() {
                 entity.insert(PassiveProcessor::default());
+            }
+        }
+
+        // Reconnect each restored cronjob to its target structure now that
+        // both sides exist. A structure is matched by position (entity ids
+        // aren't stable across a save/load round trip) — if it's gone,
+        // the assignment is silently dropped rather than crashing.
+        for (worker, cronjob) in pending_cronjobs {
+            if let Some(&target) = structure_positions.get(&cronjob.target_position) {
+                game.world.entity_mut(worker).insert(Task {
+                    kind: TaskKind::GatherResource,
+                    target,
+                    progress: cronjob.progress,
+                    required: cronjob.required,
+                });
             }
         }
 
@@ -328,6 +370,8 @@ impl Game {
         let stats = *self.world.get::<Stats>(player).unwrap();
         let needs = *self.world.get::<Needs>(player).unwrap();
         let exp = *self.world.get::<Experience>(player).unwrap();
+        let decompiler = self.world.get::<Decompiler>(player).unwrap().skill;
+        let equipment = *self.world.get::<Equipment>(player).unwrap();
         let inventory = self.world.get::<Inventory>(player).unwrap().items.clone();
 
         let mut creatures = Vec::new();
@@ -337,8 +381,16 @@ impl Game {
             &Stats,
             Option<&Tamed>,
             Option<&Experience>,
+            Option<&Task>,
         )>();
-        for (creature, pos, stats, tamed, exp) in creature_query.iter(&self.world) {
+        for (creature, pos, stats, tamed, exp, task) in creature_query.iter(&self.world) {
+            let cronjob = task.and_then(|t| {
+                self.world.get::<Position>(t.target).map(|target_pos| save::CronjobSave {
+                    target_position: (target_pos.x, target_pos.y),
+                    progress: t.progress,
+                    required: t.required,
+                })
+            });
             creatures.push(save::CreatureSave {
                 species: creature.species.clone(),
                 position: (pos.x, pos.y),
@@ -350,6 +402,7 @@ impl Game {
                 level: exp.map(|e| e.level).unwrap_or(1),
                 xp: exp.map(|e| e.xp).unwrap_or(0),
                 xp_to_next: exp.map(|e| e.xp_to_next).unwrap_or(20),
+                cronjob,
             });
         }
 
@@ -389,6 +442,10 @@ impl Game {
                 level: exp.level,
                 xp: exp.xp,
                 xp_to_next: exp.xp_to_next,
+                decompiler,
+                weapon: equipment.weapon,
+                armor: equipment.armor,
+                module: equipment.module,
             },
             creatures,
             structures,
@@ -576,6 +633,98 @@ impl Game {
         self.tick();
     }
 
+    /// Adds (`sign` = 1) or removes (`sign` = -1) an equipped item's stat
+    /// bonus from the player's `Stats`/`Decompiler`. Shared by `equip` and
+    /// `unequip` so the two stay symmetric.
+    fn apply_equipment_delta(&mut self, player: Entity, mods: items::EquipmentStats, sign: i32) {
+        if let Some(mut stats) = self.world.get_mut::<Stats>(player) {
+            stats.atk += sign * mods.atk;
+            stats.def += sign * mods.def;
+        }
+        if mods.decompiler != 0 {
+            if let Some(mut decompiler) = self.world.get_mut::<Decompiler>(player) {
+                decompiler.skill += sign * mods.decompiler;
+            }
+        }
+    }
+
+    /// Equips `item` from inventory into its slot, swapping out (and
+    /// returning to inventory) whatever was there before.
+    pub fn equip(&mut self, item: ItemId) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        let Some((slot, new_mods)) = item.equipment() else {
+            return Err(format!("{} can't be equipped.", item.display_name()));
+        };
+        let player = self.player_entity();
+        let taken = self.world.get_mut::<Inventory>(player).unwrap().take(item, 1);
+        if taken == 0 {
+            return Err(format!("You don't have a {}.", item.display_name()));
+        }
+
+        let old_item = {
+            let mut equipment = self.world.get_mut::<Equipment>(player).unwrap();
+            equipment.slot_mut(slot).replace(item)
+        };
+        if let Some(old_item) = old_item {
+            let (_, old_mods) = old_item.equipment().unwrap();
+            self.apply_equipment_delta(player, old_mods, -1);
+            self.world.get_mut::<Inventory>(player).unwrap().add(old_item, 1);
+        }
+        self.apply_equipment_delta(player, new_mods, 1);
+        self.log(format!("You equip {}.", item.display_name()));
+        self.tick();
+        Ok(())
+    }
+
+    /// Unequips whatever's in `slot`, returning it to inventory.
+    pub fn unequip(&mut self, slot: EquipmentSlot) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        let player = self.player_entity();
+        let removed = {
+            let mut equipment = self.world.get_mut::<Equipment>(player).unwrap();
+            equipment.slot_mut(slot).take()
+        };
+        let Some(item) = removed else {
+            return Err(format!("Nothing equipped in your {} slot.", slot.label()));
+        };
+        let (_, mods) = item.equipment().unwrap();
+        self.apply_equipment_delta(player, mods, -1);
+        self.world.get_mut::<Inventory>(player).unwrap().add(item, 1);
+        self.log(format!("You unequip {}.", item.display_name()));
+        self.tick();
+        Ok(())
+    }
+
+    /// Removes `qty` of `item` from inventory and logs with `verb` ("drop"
+    /// or "destroy") — the two are functionally identical, distinguished
+    /// only by flavor text. Only ever acts on unequipped inventory stock;
+    /// an equipped item must be unequipped first.
+    fn discard_item(&mut self, item: ItemId, qty: u32, verb: &str) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        let player = self.player_entity();
+        let taken = self.world.get_mut::<Inventory>(player).unwrap().take(item, qty);
+        if taken == 0 {
+            return Err(format!("You don't have any {}.", item.display_name()));
+        }
+        self.log(format!("You {verb} {taken} {}.", item.display_name()));
+        self.tick();
+        Ok(())
+    }
+
+    pub fn drop_item(&mut self, item: ItemId, qty: u32) -> Result<(), String> {
+        self.discard_item(item, qty, "drop")
+    }
+
+    pub fn destroy_item(&mut self, item: ItemId, qty: u32) -> Result<(), String> {
+        self.discard_item(item, qty, "destroy")
+    }
+
     pub fn place_structure(&mut self, structure_id: &str, dx: i32, dy: i32) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't deploy right now.".into());
@@ -636,7 +785,7 @@ impl Game {
         Ok(())
     }
 
-    pub fn assign_work(&mut self, worker: Entity, structure: Entity) -> Result<(), String> {
+    pub fn assign_cronjob(&mut self, worker: Entity, structure: Entity) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
@@ -665,7 +814,7 @@ impl Game {
             progress: 0,
             required: ticks,
         });
-        self.log("Subroutine deployed and processing.");
+        self.log("Cronjob scheduled.");
         self.tick();
         Ok(())
     }
@@ -697,6 +846,7 @@ impl Game {
         let wild_name = species.map(|s| s.name.clone()).unwrap_or_default();
         let taming_difficulty = species.map(|s| s.taming_difficulty).unwrap_or(0.5);
         let player_stats = self.world.get::<Stats>(battle.player)?;
+        let decompiler_skill = self.world.get::<Decompiler>(battle.player).map(|d| d.skill).unwrap_or(0);
         let can_tame = self
             .world
             .get::<Inventory>(battle.player)
@@ -706,6 +856,7 @@ impl Game {
             wild_stats.hp_fraction(),
             taming::item_potency(ItemId::IceBreaker),
             taming_difficulty,
+            decompiler_skill,
         );
         Some(BattleView {
             wild_name,
@@ -717,6 +868,7 @@ impl Game {
             player_max_hp: player_stats.max_hp,
             player_atk: player_stats.atk,
             player_def: player_stats.def,
+            player_decompiler: decompiler_skill,
             log: battle.log.clone(),
             can_tame,
             decompile_chance,
@@ -769,23 +921,29 @@ impl Game {
         let Some(species_id) = self.world.get::<Creature>(wild).map(|c| c.species.clone()) else {
             return;
         };
-        let Some(resource) = self
-            .world
-            .resource::<SpeciesDb>()
-            .get(&species_id)
-            .and_then(|s| s.work_resource)
-        else {
+        let Some(species) = self.world.resource::<SpeciesDb>().get(&species_id).cloned() else {
             return;
         };
-        let qty = {
-            let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_range(1..=2)
-        };
-        self.world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .add(resource, qty);
-        self.log(format!("It drops {} {}.", qty, resource.display_name()));
+
+        if let Some(resource) = species.work_resource {
+            let qty = {
+                let mut rng = self.world.resource_mut::<GameRng>();
+                rng.0.random_range(1..=2)
+            };
+            self.world.get_mut::<Inventory>(player).unwrap().add(resource, qty);
+            self.log(format!("It drops {} {}.", qty, resource.display_name()));
+        }
+
+        if let Some((item, chance)) = species.equipment_drop {
+            let roll = {
+                let mut rng = self.world.resource_mut::<GameRng>();
+                rng.0.random_bool(chance as f64)
+            };
+            if roll {
+                self.world.get_mut::<Inventory>(player).unwrap().add(item, 1);
+                self.log(format!("It also drops a {}!", item.display_name()));
+            }
+        }
     }
 
     /// Awards `amount` XP to the player, growing stats and fully healing on
@@ -801,6 +959,9 @@ impl Game {
             (levels, exp.level)
         };
         if levels > 0 {
+            if let Some(mut decompiler) = self.world.get_mut::<Decompiler>(player) {
+                decompiler.skill += DECOMPILER_SKILL_PER_LEVEL * levels as i32;
+            }
             self.log(format!("You gain {amount} XP and reach level {new_level}!"));
         } else {
             self.log(format!("You gain {amount} XP."));
@@ -841,7 +1002,8 @@ impl Game {
             .map(|s| s.taming_difficulty)
             .unwrap_or(0.5);
         let potency = taming::item_potency(ItemId::IceBreaker);
-        let chance = taming::capture_chance(hp_fraction, potency, taming_difficulty);
+        let decompiler_skill = self.world.get::<Decompiler>(player).map(|d| d.skill).unwrap_or(0);
+        let chance = taming::capture_chance(hp_fraction, potency, taming_difficulty, decompiler_skill);
         let roll = {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_bool(chance as f64)
@@ -1041,18 +1203,24 @@ impl Game {
         let pos = self.world.get::<Position>(player).unwrap();
         let inv = self.world.get::<Inventory>(player).unwrap();
         let exp = self.world.get::<Experience>(player).unwrap();
+        let decompiler = self.world.get::<Decompiler>(player).map(|d| d.skill).unwrap_or(0);
+        let equipment = self.world.get::<Equipment>(player).copied().unwrap_or_default();
         PlayerStatus {
             position: (pos.x, pos.y),
             hp: stats.hp,
             max_hp: stats.max_hp,
             atk: stats.atk,
             def: stats.def,
+            decompiler,
             hunger: needs.hunger,
             fatigue: needs.fatigue,
             inventory: inv.items.clone(),
             level: exp.level,
             xp: exp.xp,
             xp_to_next: exp.xp_to_next,
+            weapon: equipment.weapon,
+            armor: equipment.armor,
+            module: equipment.module,
         }
     }
 
@@ -1132,10 +1300,16 @@ impl Game {
         let level = self.world.get::<Experience>(entity).map(|e| e.level);
         let is_hostile = self.world.get::<Hostile>(entity).is_some();
         let is_tamed = self.world.get::<Tamed>(entity).is_some();
+        let decompiler_skill = self
+            .world
+            .get::<Decompiler>(self.player_entity())
+            .map(|d| d.skill)
+            .unwrap_or(0);
         let decompile_chance = taming::capture_chance(
             stats.hp_fraction(),
             taming::item_potency(ItemId::IceBreaker),
             species.taming_difficulty,
+            decompiler_skill,
         );
         Some(InspectView {
             name: species.name.clone(),
@@ -1224,8 +1398,8 @@ mod tests {
         let species = game
             .species_defs()
             .into_iter()
-            .find(|s| s.work_resource.is_none())
-            .expect("at least one species should have no work_resource for this test");
+            .find(|s| s.work_resource.is_none() && s.equipment_drop.is_none())
+            .expect("at least one species should have neither a work_resource nor an equipment_drop for this test");
 
         let wild = game
             .world
@@ -1277,5 +1451,198 @@ mod tests {
         let game = Game::new(4, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
         assert!(game.inspect(player).is_none());
+    }
+
+    #[test]
+    fn cronjob_assignment_survives_save_and_load() {
+        let assets = test_assets_dir();
+        let mut game = Game::new(6, DifficultyMode::Forgiving, &assets).unwrap();
+
+        let structure_def = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.work.is_some())
+            .expect("at least one workable structure should exist");
+        let structure = game
+            .world
+            .spawn((
+                Structure { kind: structure_def.id.clone() },
+                Position { x: 3, y: 3 },
+                ResourceNode {
+                    resource: structure_def.work.as_ref().unwrap().produces,
+                    amount: 20,
+                },
+            ))
+            .id();
+
+        let species = game.species_defs().into_iter().next().expect("at least one species");
+        let player = game.player_entity();
+        game.world.spawn((
+            Creature { species: species.id.clone() },
+            Position { x: 3, y: 4 },
+            Stats { hp: 10, max_hp: 10, atk: 1, def: 1 },
+            Tamed { owner: player },
+            Experience::default(),
+            Task {
+                kind: TaskKind::GatherResource,
+                target: structure,
+                progress: 3,
+                required: 6,
+            },
+        ));
+
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_cronjob_test_{}_{}.bin",
+            std::process::id(),
+            6
+        ));
+        game.save(&path).unwrap();
+        let mut loaded = Game::load(&path, &assets).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        let mut query = loaded.world.query::<&Task>();
+        let task = query
+            .iter(&loaded.world)
+            .next()
+            .expect("restored creature should still have its cronjob task");
+        assert_eq!(task.progress, 3);
+        assert_eq!(task.required, 6);
+        let target_pos = loaded
+            .world
+            .get::<Position>(task.target)
+            .expect("task target should resolve to a structure entity");
+        assert_eq!((target_pos.x, target_pos.y), (3, 3));
+    }
+
+    #[test]
+    fn player_decompiler_skill_grows_on_level_up_and_survives_save_load() {
+        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+
+        assert_eq!(game.player_status().decompiler, 0, "should start with no decompiler skill");
+
+        game.award_player_xp(player, 20);
+        assert_eq!(game.player_status().level, 2, "20 xp should be enough to reach level 2");
+        assert_eq!(
+            game.player_status().decompiler,
+            DECOMPILER_SKILL_PER_LEVEL,
+            "one level gained should grant one point of decompiler skill"
+        );
+
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_decompiler_test_{}.bin",
+            std::process::id()
+        ));
+        game.save(&path).unwrap();
+        let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(
+            loaded.player_status().decompiler,
+            DECOMPILER_SKILL_PER_LEVEL,
+            "decompiler skill should survive a save/load round trip"
+        );
+    }
+
+    #[test]
+    fn equip_grants_stat_bonus_and_removes_item_from_inventory() {
+        let mut game = Game::new(8, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Inventory>(player).unwrap().add(ItemId::OverclockCore, 1);
+        let atk_before = game.player_status().atk;
+
+        game.equip(ItemId::OverclockCore).unwrap();
+
+        let status = game.player_status();
+        assert_eq!(status.atk, atk_before + 3, "weapon should grant its Attack bonus");
+        assert_eq!(status.weapon, Some(ItemId::OverclockCore));
+        assert!(
+            status.inventory.iter().all(|(i, _)| *i != ItemId::OverclockCore),
+            "equipped item should leave the inventory stack"
+        );
+    }
+
+    #[test]
+    fn equipping_the_same_slot_again_swaps_without_double_counting_the_bonus() {
+        let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Inventory>(player).unwrap().add(ItemId::OverclockCore, 2);
+        let atk_before = game.player_status().atk;
+
+        game.equip(ItemId::OverclockCore).unwrap();
+        assert_eq!(game.player_status().atk, atk_before + 3);
+
+        // Equipping into an already-occupied slot swaps the old item back
+        // to inventory and must not stack the bonus a second time.
+        game.equip(ItemId::OverclockCore).unwrap();
+        let status = game.player_status();
+        assert_eq!(status.atk, atk_before + 3, "re-equipping must not double the bonus");
+        assert_eq!(
+            status.inventory.iter().find(|(i, _)| *i == ItemId::OverclockCore).map(|(_, q)| *q),
+            Some(1),
+            "the swapped-out copy should return to inventory"
+        );
+    }
+
+    #[test]
+    fn unequip_removes_bonus_and_returns_item_to_inventory() {
+        let mut game = Game::new(10, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Inventory>(player).unwrap().add(ItemId::FirewallPlating, 1);
+        let def_before = game.player_status().def;
+        game.equip(ItemId::FirewallPlating).unwrap();
+        assert_eq!(game.player_status().def, def_before + 3);
+
+        game.unequip(EquipmentSlot::Armor).unwrap();
+
+        let status = game.player_status();
+        assert_eq!(status.def, def_before, "unequip should remove the bonus");
+        assert_eq!(status.armor, None);
+        assert_eq!(
+            status.inventory.iter().find(|(i, _)| *i == ItemId::FirewallPlating).map(|(_, q)| *q),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn unequip_errors_on_an_empty_slot() {
+        let mut game = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        assert!(game.unequip(EquipmentSlot::Weapon).is_err());
+    }
+
+    #[test]
+    fn drop_and_destroy_remove_the_full_stack() {
+        let mut game = Game::new(12, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Inventory>(player).unwrap().add(ItemId::NeuralAmplifier, 3);
+
+        game.drop_item(ItemId::NeuralAmplifier, 3).unwrap();
+        assert!(game.player_status().inventory.iter().all(|(i, _)| *i != ItemId::NeuralAmplifier));
+
+        assert!(
+            game.destroy_item(ItemId::NeuralAmplifier, 1).is_err(),
+            "destroying from an empty stack should error"
+        );
+    }
+
+    #[test]
+    fn equipped_gear_and_its_bonus_survive_save_and_load() {
+        let mut game = Game::new(13, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Inventory>(player).unwrap().add(ItemId::NeuralAmplifier, 1);
+        game.equip(ItemId::NeuralAmplifier).unwrap();
+        let decompiler_after_equip = game.player_status().decompiler;
+
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_equipment_test_{}.bin",
+            std::process::id()
+        ));
+        game.save(&path).unwrap();
+        let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        let status = loaded.player_status();
+        assert_eq!(status.module, Some(ItemId::NeuralAmplifier));
+        assert_eq!(status.decompiler, decompiler_after_equip);
     }
 }

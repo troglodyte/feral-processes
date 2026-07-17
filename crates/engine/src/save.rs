@@ -21,6 +21,14 @@ pub struct PlayerSave {
     pub level: u32,
     pub xp: u32,
     pub xp_to_next: u32,
+    #[serde(default)]
+    pub decompiler: i32,
+    #[serde(default)]
+    pub weapon: Option<ItemId>,
+    #[serde(default)]
+    pub armor: Option<ItemId>,
+    #[serde(default)]
+    pub module: Option<ItemId>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -36,6 +44,21 @@ pub struct CreatureSave {
     pub level: u32,
     pub xp: u32,
     pub xp_to_next: u32,
+    /// Only meaningful when `tamed` is true. The target structure is
+    /// identified by position rather than entity id, since entity ids
+    /// aren't stable across a save/load round trip.
+    #[serde(default)]
+    pub cronjob: Option<CronjobSave>,
+}
+
+/// An in-progress work assignment (a "cronjob") a tamed creature is running
+/// against a structure, persisted so it survives save/load instead of
+/// silently dropping the worker's progress.
+#[derive(Serialize, Deserialize)]
+pub struct CronjobSave {
+    pub target_position: (i32, i32),
+    pub progress: u32,
+    pub required: u32,
 }
 
 #[derive(Serialize, Deserialize)]

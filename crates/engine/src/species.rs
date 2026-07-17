@@ -31,6 +31,12 @@ pub struct SpeciesDef {
     pub moves: Vec<MoveDef>,
     /// If set, a tamed member of this species can work a matching resource node.
     pub work_resource: Option<ItemId>,
+    /// If set, defeating/decompiling this species has a chance (0.0-1.0) to
+    /// additionally drop one piece of equipment, independent of
+    /// `work_resource`. `#[serde(default)]` so existing species files
+    /// (including mods) without this field keep parsing.
+    #[serde(default)]
+    pub equipment_drop: Option<(ItemId, f32)>,
 }
 
 #[derive(Resource, Default)]

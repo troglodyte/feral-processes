@@ -6,7 +6,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 
-use feral_processes_engine::items::ItemId;
+use feral_processes_engine::items::{EquipmentSlot, ItemId};
 use feral_processes_engine::{DifficultyMode, Entity, Game};
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -21,10 +21,12 @@ pub enum Mode {
     Battle,
     Build,
     BuildDirection,
-    Work,
-    WorkStructure,
+    Cronjob,
+    CronjobStructure,
     Inspect,
     InspectDetail,
+    Inventory,
+    InventoryItemAction,
     Help,
     GameOver,
 }
@@ -44,6 +46,7 @@ pub struct App {
     pending_structure: Option<String>,
     pending_worker: Option<Entity>,
     pending_inspect: Option<Entity>,
+    pending_inventory_item: Option<ItemId>,
     /// How many screen characters render each world tile along each axis.
     pub zoom: u16,
 }
@@ -62,6 +65,7 @@ impl App {
             pending_structure: None,
             pending_worker: None,
             pending_inspect: None,
+            pending_inventory_item: None,
             zoom: 2,
         }
     }
@@ -133,10 +137,12 @@ impl App {
             Mode::Battle => self.handle_battle_key(code),
             Mode::Build => self.handle_build_key(code),
             Mode::BuildDirection => self.handle_build_direction_key(code),
-            Mode::Work => self.handle_work_key(code),
-            Mode::WorkStructure => self.handle_work_structure_key(code),
+            Mode::Cronjob => self.handle_cronjob_key(code),
+            Mode::CronjobStructure => self.handle_cronjob_structure_key(code),
             Mode::Inspect => self.handle_inspect_key(code),
             Mode::InspectDetail => self.handle_inspect_detail_key(code),
+            Mode::Inventory => self.handle_inventory_key(code),
+            Mode::InventoryItemAction => self.handle_inventory_item_action_key(code),
             Mode::Help => self.handle_help_key(),
             Mode::GameOver => self.handle_game_over_key(),
         }
@@ -170,11 +176,15 @@ impl App {
                 return;
             }
             KeyCode::Char('w') => {
-                self.mode = Mode::Work;
+                self.mode = Mode::Cronjob;
                 return;
             }
             KeyCode::Char('i') => {
                 self.mode = Mode::Inspect;
+                return;
+            }
+            KeyCode::Char('v') => {
+                self.mode = Mode::Inventory;
                 return;
             }
             KeyCode::Char('s') => {
@@ -310,7 +320,7 @@ impl App {
         self.mode = Mode::Playing;
     }
 
-    fn handle_work_key(&mut self, code: KeyCode) {
+    fn handle_cronjob_key(&mut self, code: KeyCode) {
         if code == KeyCode::Esc {
             self.mode = Mode::Playing;
             return;
@@ -326,13 +336,13 @@ impl App {
                 let idx = idx as usize;
                 if idx >= 1 && idx <= workers.len() {
                     self.pending_worker = Some(workers[idx - 1].entity);
-                    self.mode = Mode::WorkStructure;
+                    self.mode = Mode::CronjobStructure;
                 }
             }
         }
     }
 
-    fn handle_work_structure_key(&mut self, code: KeyCode) {
+    fn handle_cronjob_structure_key(&mut self, code: KeyCode) {
         if code == KeyCode::Esc {
             self.pending_worker = None;
             self.mode = Mode::Playing;
@@ -352,7 +362,7 @@ impl App {
             if let Some(idx) = c.to_digit(10) {
                 let idx = idx as usize;
                 if idx >= 1 && idx <= structures.len() {
-                    match game.assign_work(worker, structures[idx - 1].entity) {
+                    match game.assign_cronjob(worker, structures[idx - 1].entity) {
                         Ok(()) => self.status_line = None,
                         Err(e) => self.status_line = Some(e),
                     }
@@ -392,6 +402,74 @@ impl App {
             return;
         }
         self.mode = Mode::Inspect;
+    }
+
+    /// Equipped slots are numbered 1-3 (Weapon/Armor/Module) and unequip
+    /// immediately when pressed; unequipped inventory items start at 4 and
+    /// open `Mode::InventoryItemAction` for the selected item.
+    fn handle_inventory_key(&mut self, code: KeyCode) {
+        if code == KeyCode::Esc {
+            self.mode = Mode::Playing;
+            return;
+        }
+        let Some(game) = &mut self.game else { return };
+        let KeyCode::Char(c) = code else { return };
+        let Some(idx) = c.to_digit(10) else { return };
+        let slot = match idx {
+            1 => Some(EquipmentSlot::Weapon),
+            2 => Some(EquipmentSlot::Armor),
+            3 => Some(EquipmentSlot::Module),
+            _ => None,
+        };
+        if let Some(slot) = slot {
+            match game.unequip(slot) {
+                Ok(()) => self.status_line = None,
+                Err(e) => self.status_line = Some(e),
+            }
+            return;
+        }
+        if idx >= 4 {
+            let inventory = game.player_status().inventory;
+            if let Some(&(item, _)) = inventory.get((idx - 4) as usize) {
+                self.pending_inventory_item = Some(item);
+                self.mode = Mode::InventoryItemAction;
+            }
+        }
+    }
+
+    fn handle_inventory_item_action_key(&mut self, code: KeyCode) {
+        if code == KeyCode::Esc {
+            self.pending_inventory_item = None;
+            self.mode = Mode::Inventory;
+            return;
+        }
+        let Some(item) = self.pending_inventory_item else {
+            self.mode = Mode::Inventory;
+            return;
+        };
+        let Some(game) = &mut self.game else { return };
+        let stack_qty = game
+            .player_status()
+            .inventory
+            .iter()
+            .find(|(i, _)| *i == item)
+            .map(|(_, q)| *q)
+            .unwrap_or(0);
+        let result = match code {
+            KeyCode::Char('e') | KeyCode::Char('E') if item.equipment().is_some() => {
+                Some(game.equip(item))
+            }
+            KeyCode::Char('d') | KeyCode::Char('D') => Some(game.drop_item(item, stack_qty)),
+            KeyCode::Char('x') | KeyCode::Char('X') => Some(game.destroy_item(item, stack_qty)),
+            _ => None,
+        };
+        let Some(result) = result else { return };
+        match result {
+            Ok(()) => self.status_line = None,
+            Err(e) => self.status_line = Some(e),
+        }
+        self.pending_inventory_item = None;
+        self.mode = Mode::Inventory;
     }
 
     fn handle_help_key(&mut self) {

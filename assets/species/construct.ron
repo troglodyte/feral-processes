@@ -13,4 +13,5 @@
         (name: "Lockdown", power: 6),
     ],
     work_resource: Some(CoreFragment),
+    equipment_drop: Some((OverclockCore, 0.3)),
 )

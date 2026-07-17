@@ -14,10 +14,11 @@ is skipped with a warning logged in-game rather than crashing startup.
     color: Magenta,                // one of: White, Gray, Green, DarkGreen, Red,
                                     //         Yellow, Blue, Magenta, Cyan, Brown
     build_cost: [(CoreFragment, 3)],  // list of (item, quantity) pairs
-    // Item options: CoreFragment, PowerCell, IceBreaker
+    // Item options: CoreFragment, PowerCell, IceBreaker, OverclockCore,
+    //               FirewallPlating, NeuralAmplifier
 
     // Omit (`None`) for a purely decorative/utility structure. Set `Some(...)`
-    // to make it assignable to a tamed creature via the work menu — it'll
+    // to make it assignable to a tamed creature via the cronjob menu — it'll
     // produce one unit of `produces` every `ticks_per_unit` ticks.
     work: Some((produces: CoreFragment, ticks_per_unit: 5)),
 

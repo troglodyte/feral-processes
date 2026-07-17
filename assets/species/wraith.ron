@@ -13,4 +13,5 @@
         (name: "Corrupt", power: 9),
     ],
     work_resource: None,
+    equipment_drop: Some((FirewallPlating, 0.2)),
 )

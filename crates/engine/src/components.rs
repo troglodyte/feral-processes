@@ -1,7 +1,7 @@
 use bevy_ecs::prelude::{Component, Entity};
 use serde::{Deserialize, Serialize};
 
-use crate::items::ItemId;
+use crate::items::{EquipmentSlot, ItemId};
 use crate::species::SpeciesId;
 use crate::structures::StructureId;
 
@@ -102,9 +102,48 @@ pub struct WanderAi {
     pub cooldown: u32,
 }
 
+/// Player-only skill at cracking a program's ICE — raises decompile odds
+/// independent of the target's HP or species difficulty, and grows on
+/// player level-up (see `award_player_xp`). Creatures never attempt a
+/// decompile themselves, so this never appears on them.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct Decompiler {
+    pub skill: i32,
+}
+
 #[derive(Component)]
 pub struct Tamed {
     pub owner: Entity,
+}
+
+/// Player-only: what's currently equipped in each slot. Each slot's stat
+/// bonus (see `ItemId::equipment`) is added directly onto `Stats`/
+/// `Decompiler` when equipped and subtracted back on unequip — mirroring
+/// how leveling directly mutates `Stats` elsewhere, rather than maintaining
+/// a separate "base stats" layer.
+#[derive(Component, Default, Clone, Copy)]
+pub struct Equipment {
+    pub weapon: Option<ItemId>,
+    pub armor: Option<ItemId>,
+    pub module: Option<ItemId>,
+}
+
+impl Equipment {
+    pub fn slot_mut(&mut self, slot: EquipmentSlot) -> &mut Option<ItemId> {
+        match slot {
+            EquipmentSlot::Weapon => &mut self.weapon,
+            EquipmentSlot::Armor => &mut self.armor,
+            EquipmentSlot::Module => &mut self.module,
+        }
+    }
+
+    pub fn get(&self, slot: EquipmentSlot) -> Option<ItemId> {
+        match slot {
+            EquipmentSlot::Weapon => self.weapon,
+            EquipmentSlot::Armor => self.armor,
+            EquipmentSlot::Module => self.module,
+        }
+    }
 }
 
 #[derive(Component, Default, Clone)]
@@ -129,15 +168,21 @@ impl Inventory {
             .unwrap_or(0)
     }
 
-    /// Removes up to `qty` of `item`, returning how many were actually removed.
+    /// Removes up to `qty` of `item`, returning how many were actually
+    /// removed. Drops the slot entirely once it hits zero, rather than
+    /// leaving a `(item, 0)` behind — callers that list `items` (the status
+    /// panel, the inventory screen) shouldn't have to filter zero-quantity
+    /// stacks themselves.
     pub fn take(&mut self, item: ItemId, qty: u32) -> u32 {
-        if let Some(slot) = self.items.iter_mut().find(|(i, _)| *i == item) {
-            let taken = slot.1.min(qty);
-            slot.1 -= taken;
-            taken
-        } else {
-            0
+        let Some(pos) = self.items.iter().position(|(i, _)| *i == item) else {
+            return 0;
+        };
+        let taken = self.items[pos].1.min(qty);
+        self.items[pos].1 -= taken;
+        if self.items[pos].1 == 0 {
+            self.items.remove(pos);
         }
+        taken
     }
 }
 

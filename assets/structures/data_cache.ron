@@ -1,0 +1,8 @@
+(
+    id: "data_cache",
+    name: "Data Cache",
+    glyph: '=',
+    color: Gray,
+    build_cost: [(CoreFragment, 5)],
+    work: None,
+)

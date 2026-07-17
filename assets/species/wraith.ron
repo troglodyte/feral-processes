@@ -1,0 +1,16 @@
+(
+    id: "wraith",
+    name: "Wraith",
+    glyph: 'w',
+    color: White,
+    base_hp: 20,
+    base_atk: 6,
+    base_def: 3,
+    taming_difficulty: 0.5,
+    habitats: [StaticField],
+    moves: [
+        (name: "Freeze", power: 7),
+        (name: "Corrupt", power: 9),
+    ],
+    work_resource: None,
+)

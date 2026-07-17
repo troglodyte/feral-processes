@@ -1,0 +1,16 @@
+(
+    id: "sprite",
+    name: "Sprite",
+    glyph: 's',
+    color: Cyan,
+    base_hp: 16,
+    base_atk: 4,
+    base_def: 2,
+    taming_difficulty: 0.2,
+    habitats: [OpenGrid, Mainframe],
+    moves: [
+        (name: "Ping", power: 5),
+        (name: "Pulse", power: 8),
+    ],
+    work_resource: None,
+)

@@ -1,0 +1,14 @@
+(
+    id: "terminal",
+    name: "Terminal",
+    glyph: 'T',
+    color: Cyan,
+    build_cost: [(CoreFragment, 3)],
+    work: None,
+    passive_process: Some((
+        consumes: CoreFragment,
+        produces: PowerCell,
+        ticks_per_unit: 15,
+        radius: 2,
+    )),
+)

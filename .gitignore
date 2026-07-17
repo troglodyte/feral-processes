@@ -1,3 +1,16 @@
+# Build artifacts
 /target
 **/*.rs.bk
 *.pdb
+
+# Runtime-generated game data (not source)
+/save.bin
+/run_history.log
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+
+# OS cruft
+.DS_Store

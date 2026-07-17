@@ -1,0 +1,8 @@
+(
+    id: "mining_node",
+    name: "Mining Node",
+    glyph: '#',
+    color: Magenta,
+    build_cost: [(CoreFragment, 2)],
+    work: Some((produces: CoreFragment, ticks_per_unit: 5)),
+)

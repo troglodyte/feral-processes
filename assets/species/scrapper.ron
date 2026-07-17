@@ -1,0 +1,16 @@
+(
+    id: "scrapper",
+    name: "Scrapper",
+    glyph: 'x',
+    color: Yellow,
+    base_hp: 26,
+    base_atk: 7,
+    base_def: 4,
+    taming_difficulty: 0.45,
+    habitats: [OpenGrid, NullSector],
+    moves: [
+        (name: "Ram", power: 8),
+        (name: "Shock", power: 11),
+    ],
+    work_resource: Some(PowerCell),
+)

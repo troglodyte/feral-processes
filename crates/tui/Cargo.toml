@@ -1,0 +1,9 @@
+[package]
+name = "feral-processes"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+crossterm = "0.29.0"
+feral-processes-engine = { version = "0.1.0", path = "../engine" }
+ratatui = "0.30.2"

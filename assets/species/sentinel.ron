@@ -1,0 +1,16 @@
+(
+    id: "sentinel",
+    name: "Sentinel",
+    glyph: 'S',
+    color: Blue,
+    base_hp: 40,
+    base_atk: 7,
+    base_def: 10,
+    taming_difficulty: 0.65,
+    habitats: [StaticField],
+    moves: [
+        (name: "Barrier Slam", power: 9),
+        (name: "Lockout", power: 7),
+    ],
+    work_resource: None,
+)

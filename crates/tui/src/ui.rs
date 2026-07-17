@@ -17,9 +17,13 @@ pub fn render(f: &mut Frame, app: &mut App) {
         Mode::GameOver => render_game_over(f, app),
         Mode::Battle => render_battle(f, app),
         Mode::Help => render_help(f),
-        Mode::Playing | Mode::Build | Mode::BuildDirection | Mode::Work | Mode::WorkStructure => {
-            render_playing(f, app)
-        }
+        Mode::Playing
+        | Mode::Build
+        | Mode::BuildDirection
+        | Mode::Work
+        | Mode::WorkStructure
+        | Mode::Inspect
+        | Mode::InspectDetail => render_playing(f, app),
     }
 }
 
@@ -65,6 +69,8 @@ fn render_playing(f: &mut Frame, app: &mut App) {
         Mode::BuildDirection => render_build_direction(f, area),
         Mode::Work => render_work_menu(f, area, game),
         Mode::WorkStructure => render_work_structure_menu(f, area, game),
+        Mode::Inspect => render_inspect_menu(f, area, game),
+        Mode::InspectDetail => render_inspect_detail(f, area, game, app.pending_inspect),
         _ => {}
     }
 }
@@ -202,6 +208,7 @@ fn render_status_panel(f: &mut Frame, area: Rect, status: &PlayerStatus) {
     lines.push(Line::from("hjkl/arrows move  e drain  r recharge"));
     lines.push(Line::from("g scan    c compile orb"));
     lines.push(Line::from("b deploy  w assign subroutine"));
+    lines.push(Line::from("i inspect nearby program"));
     lines.push(Line::from("s save    q quit   ? help"));
     lines.push(Line::from("+/- zoom"));
     f.render_widget(
@@ -292,6 +299,105 @@ fn render_work_structure_menu(f: &mut Frame, area: Rect, game: &mut Game) {
     }
     f.render_widget(
         Paragraph::new(lines).block(Block::bordered().title("Assign Subroutine")),
+        popup,
+    );
+}
+
+fn render_inspect_menu(f: &mut Frame, area: Rect, game: &mut Game) {
+    let popup = centered_rect(60, 50, area);
+    f.render_widget(Clear, popup);
+    let creatures: Vec<_> = game
+        .view_entities(crate::MENU_SCAN_RADIUS, crate::MENU_SCAN_RADIUS)
+        .into_iter()
+        .filter(|e| !e.is_player && !e.is_structure)
+        .collect();
+    let mut lines = vec![Line::from("Inspect which program? (Esc to cancel)")];
+    if creatures.is_empty() {
+        lines.push(Line::from("(no programs nearby)"));
+    }
+    for (i, c) in creatures.iter().enumerate() {
+        let tag = if c.is_tamed {
+            "compiled"
+        } else if c.is_hostile {
+            "rogue"
+        } else {
+            "idle"
+        };
+        lines.push(Line::from(format!(
+            "[{}] {}{} ({tag}) at ({}, {})",
+            i + 1,
+            c.label,
+            c.level.map(|l| format!(" Lv{l}")).unwrap_or_default(),
+            c.pos.0,
+            c.pos.1
+        )));
+    }
+    f.render_widget(
+        Paragraph::new(lines).block(Block::bordered().title("Inspect")),
+        popup,
+    );
+}
+
+fn render_inspect_detail(f: &mut Frame, area: Rect, game: &mut Game, entity: Option<feral_processes_engine::Entity>) {
+    let popup = centered_rect(60, 60, area);
+    f.render_widget(Clear, popup);
+    let Some(view) = entity.and_then(|e| game.inspect(e)) else {
+        f.render_widget(
+            Paragraph::new(Line::from("That program is gone. Press any key to go back."))
+                .block(Block::bordered().title("Inspect")),
+            popup,
+        );
+        return;
+    };
+
+    let status = if view.is_tamed {
+        "compiled (yours)".to_string()
+    } else if view.is_hostile {
+        "rogue".to_string()
+    } else {
+        "idle".to_string()
+    };
+    let habitats: Vec<String> = view.habitats.iter().map(|b| format!("{b:?}")).collect();
+    let moves: Vec<String> = view
+        .moves
+        .iter()
+        .map(|m| format!("{} (pow {})", m.name, m.power))
+        .collect();
+
+    let mut lines = vec![
+        Line::styled(
+            format!("{}{}", view.name, view.level.map(|l| format!(" — Lv{l}")).unwrap_or_default()),
+            Style::new().add_modifier(Modifier::BOLD),
+        ),
+        Line::from(format!("Status: {status}")),
+        Line::from(format!("Integrity: {}/{}", view.hp, view.max_hp)),
+        Line::from(format!("Attack {}   Defense {}", view.atk, view.def)),
+        Line::from(format!("Decompile difficulty: {:.0}%", view.taming_difficulty * 100.0)),
+    ];
+    if view.is_hostile && !view.is_tamed {
+        lines.push(Line::styled(
+            format!("Decompile chance right now: {:.0}%", view.decompile_chance * 100.0),
+            Style::new().fg(Color::Magenta),
+        ));
+    }
+    lines.push(Line::from(format!(
+        "Habitats: {}",
+        if habitats.is_empty() { "unknown".to_string() } else { habitats.join(", ") }
+    )));
+    lines.push(Line::from(format!(
+        "Moves: {}",
+        if moves.is_empty() { "none".to_string() } else { moves.join(", ") }
+    )));
+    if let Some(res) = view.work_resource {
+        lines.push(Line::from(format!("Work aptitude: {}", res.display_name())));
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from("Press any key to go back, Esc to close"));
+
+    f.render_widget(
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: true })
+            .block(Block::bordered().title("Inspect")),
         popup,
     );
 }
@@ -412,6 +518,7 @@ fn render_help(f: &mut Frame) {
         Line::from("c                   compile an ICE Breaker (3 Core Fragments)"),
         Line::from("b                   deploy a structure"),
         Line::from("w                   assign a compiled program to work a structure"),
+        Line::from("i                   inspect a nearby program (stats/moves, no intrusion)"),
         Line::from("s                   save session"),
         Line::from("q                   quit"),
         Line::from("+ / -               zoom the grid in / out"),

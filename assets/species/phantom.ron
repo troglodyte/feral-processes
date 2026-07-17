@@ -1,0 +1,16 @@
+(
+    id: "phantom",
+    name: "Phantom",
+    glyph: 'p',
+    color: DarkGreen,
+    base_hp: 22,
+    base_atk: 10,
+    base_def: 2,
+    taming_difficulty: 0.55,
+    habitats: [Mainframe, StaticField],
+    moves: [
+        (name: "Backdoor", power: 12),
+        (name: "Spoof", power: 9),
+    ],
+    work_resource: None,
+)

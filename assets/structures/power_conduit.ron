@@ -1,0 +1,8 @@
+(
+    id: "power_conduit",
+    name: "Power Conduit",
+    glyph: '+',
+    color: Yellow,
+    build_cost: [(CoreFragment, 4)],
+    work: Some((produces: PowerCell, ticks_per_unit: 6)),
+)

@@ -26,7 +26,7 @@ use components::{
 use items::ItemId;
 pub use resources::DifficultyMode;
 use resources::{BattleState, GameClock, GameOver, GameRng, MessageLog, PlayerEntity};
-use species::{SpeciesDb, SpeciesDef};
+use species::{MoveDef, SpeciesDb, SpeciesDef};
 use structures::{StructureDb, StructureDef};
 use world::{Biome, Tile, WorldMap};
 
@@ -83,6 +83,29 @@ pub struct BattleView {
     /// species' difficulty. Shown to the player even if they have no ICE
     /// Breaker yet, so they can decide whether it's worth going to compile one.
     pub decompile_chance: f32,
+}
+
+/// Full species-level detail on a single creature, shown by `Game::inspect`
+/// so the player can scope a program out before bumping into it and
+/// triggering an intrusion.
+pub struct InspectView {
+    pub name: String,
+    pub glyph: char,
+    pub color: GlyphColor,
+    pub level: Option<u32>,
+    pub hp: i32,
+    pub max_hp: i32,
+    pub atk: i32,
+    pub def: i32,
+    pub is_hostile: bool,
+    pub is_tamed: bool,
+    pub taming_difficulty: f32,
+    /// Estimated decompile chance if an intrusion started right now, using
+    /// the creature's current HP fraction — same formula as `BattleView`.
+    pub decompile_chance: f32,
+    pub habitats: Vec<Biome>,
+    pub moves: Vec<MoveDef>,
+    pub work_resource: Option<ItemId>,
 }
 
 pub struct Game {
@@ -1098,6 +1121,41 @@ impl Game {
             .collect()
     }
 
+    /// Species-level detail on a creature `view_entities` reported nearby.
+    /// Read-only — looking a program over never triggers an intrusion.
+    /// Returns `None` for anything that isn't a creature (e.g. a structure
+    /// or the player) or whose species failed to resolve.
+    pub fn inspect(&self, entity: Entity) -> Option<InspectView> {
+        let creature = self.world.get::<Creature>(entity)?;
+        let species = self.world.resource::<SpeciesDb>().get(&creature.species)?;
+        let stats = self.world.get::<Stats>(entity)?;
+        let level = self.world.get::<Experience>(entity).map(|e| e.level);
+        let is_hostile = self.world.get::<Hostile>(entity).is_some();
+        let is_tamed = self.world.get::<Tamed>(entity).is_some();
+        let decompile_chance = taming::capture_chance(
+            stats.hp_fraction(),
+            taming::item_potency(ItemId::IceBreaker),
+            species.taming_difficulty,
+        );
+        Some(InspectView {
+            name: species.name.clone(),
+            glyph: species.glyph,
+            color: species.color,
+            level,
+            hp: stats.hp,
+            max_hp: stats.max_hp,
+            atk: stats.atk,
+            def: stats.def,
+            is_hostile,
+            is_tamed,
+            taming_difficulty: species.taming_difficulty,
+            decompile_chance,
+            habitats: species.habitats.clone(),
+            moves: species.moves.clone(),
+            work_resource: species.work_resource,
+        })
+    }
+
     pub fn structure_defs(&self) -> Vec<StructureDef> {
         self.world.resource::<StructureDb>().all().cloned().collect()
     }
@@ -1183,5 +1241,41 @@ mod tests {
         let after: u32 = game.world.get::<Inventory>(player).unwrap().items.iter().map(|(_, q)| *q).sum();
 
         assert_eq!(before, after, "no-resource species shouldn't add anything to inventory");
+    }
+
+    #[test]
+    fn inspect_reports_species_detail_without_starting_a_battle() {
+        let mut game = Game::new(3, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let species = game.species_defs().into_iter().next().expect("at least one species");
+
+        let wild = game
+            .world
+            .spawn((
+                Creature { species: species.id.clone() },
+                Hostile,
+                Position { x: 5, y: 5 },
+                Stats {
+                    hp: species.base_hp,
+                    max_hp: species.base_hp,
+                    atk: species.base_atk,
+                    def: species.base_def,
+                },
+            ))
+            .id();
+
+        let view = game.inspect(wild).expect("wild creature should be inspectable");
+        assert_eq!(view.name, species.name);
+        assert!(view.is_hostile);
+        assert!(!view.is_tamed);
+        assert_eq!(view.max_hp, species.base_hp);
+        assert!((0.0..=1.0).contains(&view.decompile_chance));
+        assert!(!game.has_active_battle(), "inspecting must not trigger an intrusion");
+    }
+
+    #[test]
+    fn inspect_returns_none_for_non_creature_entities() {
+        let game = Game::new(4, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        assert!(game.inspect(player).is_none());
     }
 }

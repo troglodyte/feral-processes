@@ -1,0 +1,8 @@
+(
+    id: "compiler",
+    name: "Compiler",
+    glyph: '&',
+    color: Green,
+    build_cost: [(CoreFragment, 6)],
+    work: Some((produces: IceBreaker, ticks_per_unit: 8)),
+)

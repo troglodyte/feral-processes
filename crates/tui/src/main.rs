@@ -23,6 +23,8 @@ pub enum Mode {
     BuildDirection,
     Work,
     WorkStructure,
+    Inspect,
+    InspectDetail,
     Help,
     GameOver,
 }
@@ -41,6 +43,7 @@ pub struct App {
     pub quit: bool,
     pending_structure: Option<String>,
     pending_worker: Option<Entity>,
+    pending_inspect: Option<Entity>,
     /// How many screen characters render each world tile along each axis.
     pub zoom: u16,
 }
@@ -58,6 +61,7 @@ impl App {
             quit: false,
             pending_structure: None,
             pending_worker: None,
+            pending_inspect: None,
             zoom: 2,
         }
     }
@@ -131,6 +135,8 @@ impl App {
             Mode::BuildDirection => self.handle_build_direction_key(code),
             Mode::Work => self.handle_work_key(code),
             Mode::WorkStructure => self.handle_work_structure_key(code),
+            Mode::Inspect => self.handle_inspect_key(code),
+            Mode::InspectDetail => self.handle_inspect_detail_key(code),
             Mode::Help => self.handle_help_key(),
             Mode::GameOver => self.handle_game_over_key(),
         }
@@ -165,6 +171,10 @@ impl App {
             }
             KeyCode::Char('w') => {
                 self.mode = Mode::Work;
+                return;
+            }
+            KeyCode::Char('i') => {
+                self.mode = Mode::Inspect;
                 return;
             }
             KeyCode::Char('s') => {
@@ -351,6 +361,37 @@ impl App {
                 }
             }
         }
+    }
+
+    fn handle_inspect_key(&mut self, code: KeyCode) {
+        if code == KeyCode::Esc {
+            self.mode = Mode::Playing;
+            return;
+        }
+        let Some(game) = &mut self.game else { return };
+        let creatures: Vec<_> = game
+            .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
+            .into_iter()
+            .filter(|e| !e.is_player && !e.is_structure)
+            .collect();
+        if let KeyCode::Char(c) = code {
+            if let Some(idx) = c.to_digit(10) {
+                let idx = idx as usize;
+                if idx >= 1 && idx <= creatures.len() {
+                    self.pending_inspect = Some(creatures[idx - 1].entity);
+                    self.mode = Mode::InspectDetail;
+                }
+            }
+        }
+    }
+
+    fn handle_inspect_detail_key(&mut self, code: KeyCode) {
+        if code == KeyCode::Esc {
+            self.pending_inspect = None;
+            self.mode = Mode::Playing;
+            return;
+        }
+        self.mode = Mode::Inspect;
     }
 
     fn handle_help_key(&mut self) {

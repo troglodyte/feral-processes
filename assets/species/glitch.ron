@@ -1,0 +1,16 @@
+(
+    id: "glitch",
+    name: "Glitch",
+    glyph: 'g',
+    color: Green,
+    base_hp: 12,
+    base_atk: 3,
+    base_def: 1,
+    taming_difficulty: 0.15,
+    habitats: [OpenGrid, NullSector],
+    moves: [
+        (name: "Flicker", power: 4),
+        (name: "Static Burst", power: 6),
+    ],
+    work_resource: Some(PowerCell),
+)

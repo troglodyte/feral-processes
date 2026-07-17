@@ -9,7 +9,7 @@ pub fn item_potency(item: ItemId) -> f32 {
 }
 
 /// ICE-breaking odds: weaker (lower `hp_fraction`) and easier-compiled
-/// species are more likely to be decrypted; stronger breakers help.
+/// species are more likely to be decompiled; stronger breakers help.
 pub fn capture_chance(hp_fraction: f32, item_potency: f32, taming_difficulty: f32) -> f32 {
     let base = item_potency * (1.05 - hp_fraction * 0.65) * (1.0 - taming_difficulty * 0.6);
     base.clamp(0.05, 0.95)

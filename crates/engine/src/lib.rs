@@ -40,6 +40,8 @@ pub struct PlayerStatus {
     pub position: (i32, i32),
     pub hp: i32,
     pub max_hp: i32,
+    pub atk: i32,
+    pub def: i32,
     pub hunger: f32,
     pub fatigue: f32,
     pub inventory: Vec<(ItemId, u32)>,
@@ -68,10 +70,19 @@ pub struct BattleView {
     pub wild_name: String,
     pub wild_hp: i32,
     pub wild_max_hp: i32,
+    pub wild_atk: i32,
+    pub wild_def: i32,
     pub player_hp: i32,
     pub player_max_hp: i32,
+    pub player_atk: i32,
+    pub player_def: i32,
     pub log: Vec<String>,
     pub can_tame: bool,
+    /// Estimated chance (0.0-1.0) that a decompile attempt would succeed
+    /// right now, given the wild program's current HP fraction and its
+    /// species' difficulty. Shown to the player even if they have no ICE
+    /// Breaker yet, so they can decide whether it's worth going to compile one.
+    pub decompile_chance: f32,
 }
 
 pub struct Game {
@@ -658,26 +669,34 @@ impl Game {
         let battle = self.world.get_resource::<BattleState>()?;
         let wild_stats = self.world.get::<Stats>(battle.wild_creature)?;
         let wild_creature = self.world.get::<Creature>(battle.wild_creature)?;
-        let wild_name = self
-            .world
-            .get_resource::<SpeciesDb>()?
-            .get(&wild_creature.species)
-            .map(|s| s.name.clone())
-            .unwrap_or_default();
+        let species_db = self.world.get_resource::<SpeciesDb>()?;
+        let species = species_db.get(&wild_creature.species);
+        let wild_name = species.map(|s| s.name.clone()).unwrap_or_default();
+        let taming_difficulty = species.map(|s| s.taming_difficulty).unwrap_or(0.5);
         let player_stats = self.world.get::<Stats>(battle.player)?;
         let can_tame = self
             .world
             .get::<Inventory>(battle.player)
             .map(|i| i.count(ItemId::IceBreaker) > 0)
             .unwrap_or(false);
+        let decompile_chance = taming::capture_chance(
+            wild_stats.hp_fraction(),
+            taming::item_potency(ItemId::IceBreaker),
+            taming_difficulty,
+        );
         Some(BattleView {
             wild_name,
             wild_hp: wild_stats.hp,
             wild_max_hp: wild_stats.max_hp,
+            wild_atk: wild_stats.atk,
+            wild_def: wild_stats.def,
             player_hp: player_stats.hp,
             player_max_hp: player_stats.max_hp,
+            player_atk: player_stats.atk,
+            player_def: player_stats.def,
             log: battle.log.clone(),
             can_tame,
+            decompile_chance,
         })
     }
 
@@ -765,7 +784,7 @@ impl Game {
         }
     }
 
-    pub fn battle_tame(&mut self) {
+    pub fn battle_decompile(&mut self) {
         if self.is_game_over().is_some() {
             return;
         }
@@ -818,7 +837,7 @@ impl Game {
             return;
         }
 
-        self.log("The program's ICE holds — decryption failed!");
+        self.log("The program's ICE holds — decompile failed!");
         self.wild_retaliate(wild, player);
         if !self.creature_alive(player) {
             self.world.remove_resource::<BattleState>();
@@ -1003,6 +1022,8 @@ impl Game {
             position: (pos.x, pos.y),
             hp: stats.hp,
             max_hp: stats.max_hp,
+            atk: stats.atk,
+            def: stats.def,
             hunger: needs.hunger,
             fatigue: needs.fatigue,
             inventory: inv.items.clone(),

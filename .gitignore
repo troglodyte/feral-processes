@@ -14,3 +14,12 @@
 
 # OS cruft
 .DS_Store
+
+# AI assistant tooling/config (local, not shared project content)
+CLAUDE.md
+AGENTS.md
+.junie/
+.cursor/
+.cursorrules
+.aider*
+.github/copilot-instructions.md

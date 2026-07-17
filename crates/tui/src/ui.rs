@@ -188,6 +188,7 @@ fn render_status_panel(f: &mut Frame, area: Rect, status: &PlayerStatus) {
             "Position: ({}, {})",
             status.position.0, status.position.1
         )),
+        Line::from(format!("Attack {}   Defense {}", status.atk, status.def)),
     ];
     lines.push(Line::from(""));
     lines.push(Line::from("Inventory:"));
@@ -303,6 +304,7 @@ fn render_battle(f: &mut Frame, app: &mut App) {
     let chunks = Layout::vertical([
         Constraint::Length(3),
         Constraint::Length(3),
+        Constraint::Length(1),
         Constraint::Min(5),
         Constraint::Length(3),
     ])
@@ -311,7 +313,10 @@ fn render_battle(f: &mut Frame, app: &mut App) {
     let wild_ratio = (view.wild_hp as f64 / view.wild_max_hp.max(1) as f64).clamp(0.0, 1.0);
     f.render_widget(
         Gauge::default()
-            .block(Block::bordered().title(view.wild_name.clone()))
+            .block(Block::bordered().title(format!(
+                "{} (ATK {} / DEF {})",
+                view.wild_name, view.wild_atk, view.wild_def
+            )))
             .gauge_style(Style::new().fg(Color::Red))
             .ratio(wild_ratio)
             .label(format!("{}/{}", view.wild_hp, view.wild_max_hp)),
@@ -321,14 +326,29 @@ fn render_battle(f: &mut Frame, app: &mut App) {
     let player_ratio = (view.player_hp as f64 / view.player_max_hp.max(1) as f64).clamp(0.0, 1.0);
     f.render_widget(
         Gauge::default()
-            .block(Block::bordered().title("You"))
+            .block(Block::bordered().title(format!(
+                "You (ATK {} / DEF {})",
+                view.player_atk, view.player_def
+            )))
             .gauge_style(Style::new().fg(Color::Cyan))
             .ratio(player_ratio)
             .label(format!("{}/{}", view.player_hp, view.player_max_hp)),
         chunks[1],
     );
 
-    let log_capacity = chunks[2].height.saturating_sub(2) as usize;
+    f.render_widget(
+        Paragraph::new(Line::styled(
+            format!(
+                "Decompile chance right now: {:.0}%{}",
+                view.decompile_chance * 100.0,
+                if view.can_tame { "" } else { " (needs an ICE Breaker)" }
+            ),
+            Style::new().fg(Color::Magenta),
+        )),
+        chunks[2],
+    );
+
+    let log_capacity = chunks[3].height.saturating_sub(2) as usize;
     let log_lines: Vec<Line> = game
         .message_log(log_capacity.max(1))
         .into_iter()
@@ -338,17 +358,17 @@ fn render_battle(f: &mut Frame, app: &mut App) {
         Paragraph::new(log_lines)
             .block(Block::bordered().title("Intrusion"))
             .wrap(Wrap { trim: true }),
-        chunks[2],
+        chunks[3],
     );
 
     let mut actions = vec!["[A]ttack".to_string()];
     if view.can_tame {
-        actions.push("[D]ecrypt".to_string());
+        actions.push("[D]ecompile".to_string());
     }
     actions.push("[J]ack Out".to_string());
     f.render_widget(
         Paragraph::new(Line::from(actions.join("   "))).block(Block::bordered()),
-        chunks[3],
+        chunks[4],
     );
 }
 
@@ -396,9 +416,9 @@ fn render_help(f: &mut Frame) {
         Line::from("q                   quit"),
         Line::from("+ / -               zoom the grid in / out"),
         Line::from(""),
-        Line::from("In an intrusion:  a attack   d decrypt (needs an ICE Breaker)   j jack out"),
+        Line::from("In an intrusion:  a attack   d decompile (needs an ICE Breaker)   j jack out"),
         Line::from(""),
-        Line::from("Defeating or decrypting a rogue program grants XP. Compiled programs"),
+        Line::from("Defeating or decompiling a rogue program grants XP. Compiled programs"),
         Line::from("gain XP from completed work cycles. Leveling up fully restores Integrity."),
         Line::from(""),
         Line::from("Press any key to close"),

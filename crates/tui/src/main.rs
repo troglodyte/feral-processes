@@ -243,7 +243,7 @@ impl App {
             let Some(game) = &mut self.game else { return };
             match code {
                 KeyCode::Char('a') => game.battle_attack(),
-                KeyCode::Char('d') => game.battle_tame(),
+                KeyCode::Char('d') => game.battle_decompile(),
                 KeyCode::Char('j') => game.battle_flee(),
                 _ => return,
             }

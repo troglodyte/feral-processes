@@ -111,7 +111,11 @@ creature to work" mechanic.
 3. **Schedule a cronjob with `w`** — pick a compiled (tamed) program, then
    the structure to assign it to. This only works on structures with a
    `work` recipe (Mining Node, Power Conduit, Compiler, Fabricator);
-   Terminal and Data Cache aren't assignable this way.
+   Terminal and Data Cache aren't assignable this way. Both pickers show
+   status: the program picker flags `(active companion)` or
+   `(on a cronjob: <structure>)`, and the structure picker flags
+   `(assigned: <program>)`, so you can see who's already spoken for
+   before reassigning them.
 4. **Production runs automatically after that**, tick by tick, regardless of
    where you are or what you're doing:
    - Each tick, the assigned program's progress advances by 1.

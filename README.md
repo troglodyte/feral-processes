@@ -52,10 +52,11 @@ main menu to reload).
 | `.` | Wait in place (advances one tick) |
 | `e` | Drain a Power Cell (restores Power) |
 | `r` | Recharge overnight (restores Fatigue and Integrity, costs Power) |
-| `g` | Scan the sector for Power Cells |
-| `c` | Open the compile menu (create an ICE Breaker — costs 3 Core Fragments — and any future recipes) |
+| `g` | Scan the sector for Core Fragments |
+| `c` | Open the compile menu (compile an ICE Breaker — 3 Core Fragments — a Power Cell — 2 Core Fragments — and any future recipes) |
 | `b` | Deploy a structure |
 | `w` | Assign a compiled program to a cronjob (work a structure) |
+| `u` | Use symlink: instantly teleport to a deployed symlink structure (e.g. Home), for its item cost |
 | `i` | Inspect: pick a direction, see stats/moves/decompile odds for the first program that way (no intrusion) |
 | `v` | Inventory/equipment: equip, unequip, drop, destroy items |
 | `p` | Pick a nearby compiled program as your active companion |
@@ -93,14 +94,15 @@ creature to work" mechanic.
 
 1. **Gather starting materials.** You spawn with 5 Core Fragments, 3 Power
    Cells, and 3 ICE Breakers — enough to bootstrap. Beyond that:
-   - `g` (scan) has a biome-dependent chance to find a **Power Cell**
+   - `g` (scan) has a biome-dependent chance to find a **Core Fragment**
      (60% Mainframe/OpenGrid, 30% NullSector, 15% StaticField, 0% in the
-     unwalkable DataVoid/BlackIce biomes). It never yields Core Fragments.
+     unwalkable DataVoid/BlackIce biomes). It never yields Power Cells
+     directly — compile those with `c` instead (see [Items](#items)).
    - Defeating or decompiling a **Virus** or **Construct** drops a **Core
      Fragment**.
    - Once you have a Mining Node running (see below), it's the sustainable
      source of Core Fragments — everything before that comes from starting
-     inventory or creature loot.
+     inventory, scanning, or creature loot.
 2. **Deploy a structure with `b`.** Pick one from the menu, then a direction
    to place it on an adjacent walkable tile. It's rejected if the tile isn't
    walkable, is already occupied, or you don't have enough of the required
@@ -151,16 +153,17 @@ Shown in the status panel (always) and the intrusion screen (in battle):
 
 | Item | Source | Used for |
 | --- | --- | --- |
-| Core Fragment | Starting inventory; dropped by Virus/Construct; a Mining Node cronjob | Deploy structures (2–6 each); compile an ICE Breaker (3 each) |
-| Power Cell | Starting inventory; scan (`g`); dropped by Scrapper/Glitch; cooked passively at a Terminal; a Power Conduit cronjob | Drain (`e`) to restore Power |
+| Core Fragment | Starting inventory; scan (`g`); dropped by Virus/Construct; a Mining Node cronjob | Deploy structures (2–6 each); compile an ICE Breaker (3 each) or a Power Cell (2 each) |
+| Power Cell | Starting inventory; compiled (`c`) from 2 Core Fragments; dropped by Scrapper/Glitch; cooked passively at a Terminal; a Power Conduit cronjob | Drain (`e`) to restore Power |
 | ICE Breaker | Starting inventory; compiled (`c`) from 3 Core Fragments; a Compiler cronjob | Attempt to decompile a rogue program in battle (`d`) |
 
 A deliberately tight core-consumable economy: Core Fragment is the
-universal raw material, and the other two are refined from it (or
-scavenged directly) for one specific purpose each. Equipment (below) is a
-separate, non-consumable item category. Items aren't yet data-driven the
-way species and structures are — see `CLAUDE.md` for the moddability note
-on adding a new one.
+universal raw material — found by scanning (`g`) or harvested passively via
+a Mining Node — and the other two are refined from it (compiled with `c`,
+scavenged from creatures, or produced by a structure cronjob) for one
+specific purpose each. Equipment (below) is a separate, non-consumable item
+category. Items aren't yet data-driven the way species and structures are —
+see `CLAUDE.md` for the moddability note on adding a new one.
 
 ### Equipment
 
@@ -204,6 +207,10 @@ single tamed program that fights alongside you.
 - The wild program's retaliation always targets you, never the companion —
   the companion is a support striker, not something that can be knocked
   out or lost in a fight.
+- The companion picker shows each candidate's status: `(active companion)`
+  or `(on a cronjob)`, so you can see at a glance who's free to swap in.
+- Recharging overnight (`r`) fully heals the active companion too, not
+  just you.
 
 ### Current roster
 
@@ -232,10 +239,15 @@ chance to drop a piece of equipment on top of their listed resource — see
 | Power Conduit | 4 Core Fragments | Cronjob a compiled program to it to produce Power Cells over time |
 | Compiler | 6 Core Fragments | Cronjob a compiled program to it to produce ICE Breakers over time |
 | Fabricator | 8 Core Fragments | Cronjob a compiled program to it to produce Overclock Cores (see [Equipment](#equipment)) over time |
+| Home | 5 Core Fragments | `u` ("use symlink") instantly teleports you to it from anywhere on the map, for 4 Power Cells |
 
 Mining Node, Power Conduit, Compiler, and Fabricator use **active**
 automation (an assigned cronjob produces over time); Terminal uses
 **passive** automation (it processes on its own whenever you're in range).
+Home is a **symlink target** — a third category, neither cronjob nor
+passive: press `u`, pick it from the list of deployed symlink structures,
+and pay the Power Cell cost to warp there instantly, no matter how far
+away you are. Deploy more than one and `u` lists all of them.
 Any structure can define either or both via its `.ron` file — see
 [Modding](#modding).
 

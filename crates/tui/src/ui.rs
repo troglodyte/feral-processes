@@ -24,6 +24,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
         | Mode::Craft
         | Mode::Cronjob
         | Mode::CronjobStructure
+        | Mode::Symlink
         | Mode::InspectDirection
         | Mode::InspectDetail
         | Mode::Inventory
@@ -82,6 +83,7 @@ fn render_playing(f: &mut Frame, app: &mut App) {
         Mode::Craft => render_craft_menu(f, area, game),
         Mode::Cronjob => render_cronjob_menu(f, area, game),
         Mode::CronjobStructure => render_cronjob_structure_menu(f, area, game),
+        Mode::Symlink => render_symlink_menu(f, area, game),
         Mode::InspectDirection => render_inspect_direction(f, area),
         Mode::InspectDetail => render_inspect_detail(f, area, game, app.pending_inspect),
         Mode::Inventory => render_inventory_screen(f, area, game),
@@ -239,6 +241,7 @@ fn render_status_panel(f: &mut Frame, area: Rect, status: &PlayerStatus) {
     lines.push(Line::from("hjkl/arrows move  . wait   e drain  r recharge"));
     lines.push(Line::from("g scan    c compile"));
     lines.push(Line::from("b deploy  w assign cronjob"));
+    lines.push(Line::from("u use symlink"));
     lines.push(Line::from("i inspect (pick a direction)"));
     lines.push(Line::from("v inventory/equipment"));
     lines.push(Line::from("p companion"));
@@ -343,13 +346,21 @@ fn render_cronjob_menu(f: &mut Frame, area: Rect, game: &mut Game) {
         lines.push(Line::from("(no compiled programs nearby)"));
     }
     for (i, w) in workers.iter().enumerate() {
+        let companion = if w.is_companion { " (active companion)" } else { "" };
+        let job = w
+            .job_structure
+            .as_ref()
+            .map(|s| format!(" (on a cronjob: {s})"))
+            .unwrap_or_default();
         lines.push(Line::from(format!(
-            "[{}] {}{} at ({}, {})",
+            "[{}] {}{} at ({}, {}){}{}",
             i + 1,
             w.label,
             w.level.map(|l| format!(" Lv{l}")).unwrap_or_default(),
             w.pos.0,
-            w.pos.1
+            w.pos.1,
+            companion,
+            job
         )));
     }
     f.render_widget(
@@ -371,16 +382,45 @@ fn render_cronjob_structure_menu(f: &mut Frame, area: Rect, game: &mut Game) {
         lines.push(Line::from("(no workable structures nearby)"));
     }
     for (i, s) in structures.iter().enumerate() {
+        let assigned = s
+            .structure_worker
+            .as_ref()
+            .map(|w| format!(" (assigned: {w})"))
+            .unwrap_or_default();
         lines.push(Line::from(format!(
-            "[{}] {} at ({}, {})",
+            "[{}] {} at ({}, {}){}",
             i + 1,
             s.label,
             s.pos.0,
-            s.pos.1
+            s.pos.1,
+            assigned
         )));
     }
     f.render_widget(
         Paragraph::new(lines).block(Block::bordered().title("Assign Cronjob")),
+        popup,
+    );
+}
+
+fn render_symlink_menu(f: &mut Frame, area: Rect, game: &mut Game) {
+    let popup = centered_rect(60, 50, area);
+    f.render_widget(Clear, popup);
+    let targets = game.symlink_targets();
+    let mut lines = vec![Line::from("Use symlink to which structure? (Esc to cancel)")];
+    if targets.is_empty() {
+        lines.push(Line::from("(no symlink-capable structures deployed yet)"));
+    }
+    for (i, t) in targets.iter().enumerate() {
+        lines.push(Line::from(format!(
+            "[{}] {} at ({}, {})",
+            i + 1,
+            t.label,
+            t.pos.0,
+            t.pos.1
+        )));
+    }
+    f.render_widget(
+        Paragraph::new(lines).wrap(Wrap { trim: true }).block(Block::bordered().title("Symlink")),
         popup,
     );
 }
@@ -401,12 +441,18 @@ fn render_companion_menu(f: &mut Frame, area: Rect, game: &mut Game) {
     }
     for (i, c) in candidates.iter().enumerate() {
         let active = if c.is_companion { " (active companion)" } else { "" };
+        let job = c
+            .job_structure
+            .as_ref()
+            .map(|s| format!(" (on a cronjob: {s})"))
+            .unwrap_or_default();
         lines.push(Line::from(format!(
-            "[{}] {}{}{}",
+            "[{}] {}{}{}{}",
             i + 1,
             c.label,
             c.level.map(|l| format!(" Lv{l}")).unwrap_or_default(),
-            active
+            active,
+            job
         )));
     }
     f.render_widget(
@@ -711,10 +757,11 @@ fn render_help(f: &mut Frame) {
         Line::from(".                   wait in place (advances one tick)"),
         Line::from("e                   drain a power cell"),
         Line::from("r                   recharge overnight (restores fatigue and Integrity, uses power)"),
-        Line::from("g                   scan the sector for power cells"),
-        Line::from("c                   open the compile menu (create an ICE Breaker and any future recipes)"),
+        Line::from("g                   scan the sector for core fragments"),
+        Line::from("c                   open the compile menu (compile an ICE Breaker, a Power Cell, and any future recipes)"),
         Line::from("b                   deploy a structure"),
         Line::from("w                   assign a compiled program to a cronjob"),
+        Line::from("u                   use symlink: instantly teleport to a deployed symlink structure (e.g. Home)"),
         Line::from("i                   pick a direction, inspect the first program that way (stats/moves, no intrusion)"),
         Line::from("v                   inventory/equipment: equip, unequip, drop, destroy items"),
         Line::from("p                   pick a nearby compiled program as your active companion"),

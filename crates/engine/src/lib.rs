@@ -28,7 +28,7 @@ use items::{EquipmentSlot, ItemId};
 pub use resources::DifficultyMode;
 use resources::{BattleState, Companion, GameClock, GameOver, GameRng, MessageLog, PlayerEntity};
 use species::{MoveDef, SpeciesDb, SpeciesDef};
-use structures::{StructureDb, StructureDef};
+use structures::{StructureDb, StructureDef, StructureId};
 use world::{Biome, Tile, WorldMap};
 
 /// How many ticks a full night's recharge cycle advances the clock by.
@@ -36,6 +36,9 @@ const REST_TICKS: u32 = 40;
 
 /// Core Fragment cost to compile one ICE Breaker.
 const ICE_BREAKER_CORE_COST: u32 = 3;
+
+/// Core Fragment cost to compile one Power Cell.
+const POWER_CELL_CORE_COST: u32 = 2;
 
 /// How much the player's `Decompiler` skill grows per level gained.
 const DECOMPILER_SKILL_PER_LEVEL: i32 = 1;
@@ -81,6 +84,14 @@ pub struct EntityView {
     pub is_hostile: bool,
     pub is_structure: bool,
     pub can_work: bool,
+    /// Whether this (tamed) entity is currently assigned to a cronjob.
+    pub has_job: bool,
+    /// If `has_job`, the label of the structure this (tamed) entity is
+    /// assigned to.
+    pub job_structure: Option<String>,
+    /// If this is a structure, the label of the (tamed) entity currently
+    /// working it via cronjob, if any.
+    pub structure_worker: Option<String>,
     pub hp_fraction: Option<f32>,
     pub level: Option<u32>,
 }
@@ -609,6 +620,11 @@ impl Game {
             let mut stats = self.world.get_mut::<Stats>(player).unwrap();
             stats.hp = stats.max_hp;
         }
+        if let Some(companion) = self.world.resource::<Companion>().0
+            && let Some(mut stats) = self.world.get_mut::<Stats>(companion)
+        {
+            stats.hp = stats.max_hp;
+        }
         self.log("You come back online, fully recharged and repaired.");
     }
 
@@ -623,9 +639,11 @@ impl Game {
         self.tick();
     }
 
-    /// Scan the current sector for salvageable power cells. Chance depends
-    /// on the sector's biome; this is the only way to replenish Power Cells
-    /// once the starting stock runs out.
+    /// Scan the current sector for salvageable Core Fragments. Chance
+    /// depends on the sector's biome; besides starting inventory and combat
+    /// drops, this and structure cronjobs are the only ways to replenish
+    /// Core Fragments — the raw material Power Cells and ICE Breakers are
+    /// compiled from (see `craft_recipes`).
     pub fn forage(&mut self) {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
@@ -644,8 +662,8 @@ impl Game {
             rng.0.random_bool(chance)
         };
         if found {
-            self.world.get_mut::<Inventory>(player).unwrap().add(ItemId::PowerCell, 1);
-            self.log("You scan the sector and recover a power cell.");
+            self.world.get_mut::<Inventory>(player).unwrap().add(ItemId::CoreFragment, 1);
+            self.log("You scan the sector and recover a core fragment.");
         } else {
             self.log("You scan the sector but find nothing salvageable.");
         }
@@ -658,10 +676,16 @@ impl Game {
     /// methods so the crafting menu can show every option at once and new
     /// recipes don't need new UI plumbing.
     pub fn craft_recipes(&self) -> Vec<CraftRecipe> {
-        vec![CraftRecipe {
-            result: ItemId::IceBreaker,
-            cost: vec![(ItemId::CoreFragment, ICE_BREAKER_CORE_COST)],
-        }]
+        vec![
+            CraftRecipe {
+                result: ItemId::IceBreaker,
+                cost: vec![(ItemId::CoreFragment, ICE_BREAKER_CORE_COST)],
+            },
+            CraftRecipe {
+                result: ItemId::PowerCell,
+                cost: vec![(ItemId::CoreFragment, POWER_CELL_CORE_COST)],
+            },
+        ]
     }
 
     /// Compiles one unit of `result` per its `craft_recipes` entry.
@@ -1451,6 +1475,28 @@ impl Game {
             .map(|(entity, _)| entity)
     }
 
+    /// Display label for any entity — species name for a creature,
+    /// structure name for a structure, `"You"` otherwise. Shared by
+    /// `view_entities` for both an entity's own label and cross-references
+    /// (a worker's assigned structure, a structure's assigned worker).
+    fn entity_label(&self, entity: Entity) -> String {
+        if let Some(c) = self.world.get::<Creature>(entity) {
+            self.world
+                .resource::<SpeciesDb>()
+                .get(&c.species)
+                .map(|s| s.name.clone())
+                .unwrap_or_else(|| c.species.clone())
+        } else if let Some(s) = self.world.get::<Structure>(entity) {
+            self.world
+                .resource::<StructureDb>()
+                .get(&s.kind)
+                .map(|d| d.name.clone())
+                .unwrap_or_else(|| s.kind.clone())
+        } else {
+            "You".to_string()
+        }
+    }
+
     pub fn view_entities(&mut self, half_w: i32, half_h: i32) -> Vec<EntityView> {
         let center = *self.world.get::<Position>(self.player_entity()).unwrap();
         let mut query = self.world.query::<(Entity, &Position, &Glyph)>();
@@ -1460,6 +1506,11 @@ impl Game {
             .map(|(e, p, g)| (e, *p, *g))
             .collect();
 
+        let worker_by_structure: HashMap<Entity, Entity> = {
+            let mut tasks = self.world.query::<(Entity, &Task)>();
+            tasks.iter(&self.world).map(|(worker, task)| (task.target, worker)).collect()
+        };
+
         hits.into_iter()
             .map(|(entity, pos, glyph)| {
                 let is_player = self.world.get::<Player>(entity).is_some();
@@ -1468,23 +1519,17 @@ impl Game {
                 let is_hostile = self.world.get::<Hostile>(entity).is_some();
                 let is_structure = self.world.get::<Structure>(entity).is_some();
                 let can_work = self.world.get::<ResourceNode>(entity).is_some();
+                let task_target = self.world.get::<Task>(entity).map(|t| t.target);
+                let has_job = task_target.is_some();
+                let job_structure = task_target.map(|target| self.entity_label(target));
+                let structure_worker = if is_structure {
+                    worker_by_structure.get(&entity).map(|&worker| self.entity_label(worker))
+                } else {
+                    None
+                };
                 let hp_fraction = self.world.get::<Stats>(entity).map(|s| s.hp_fraction());
                 let level = self.world.get::<Experience>(entity).map(|e| e.level);
-                let label = if let Some(c) = self.world.get::<Creature>(entity) {
-                    self.world
-                        .resource::<SpeciesDb>()
-                        .get(&c.species)
-                        .map(|s| s.name.clone())
-                        .unwrap_or_else(|| c.species.clone())
-                } else if let Some(s) = self.world.get::<Structure>(entity) {
-                    self.world
-                        .resource::<StructureDb>()
-                        .get(&s.kind)
-                        .map(|d| d.name.clone())
-                        .unwrap_or_else(|| s.kind.clone())
-                } else {
-                    "You".to_string()
-                };
+                let label = self.entity_label(entity);
                 EntityView {
                     entity,
                     pos: (pos.x, pos.y),
@@ -1497,6 +1542,9 @@ impl Game {
                     is_hostile,
                     is_structure,
                     can_work,
+                    has_job,
+                    job_structure,
+                    structure_worker,
                     hp_fraction,
                     level,
                 }
@@ -1543,6 +1591,87 @@ impl Game {
             moves: species.moves.clone(),
             work_resource: species.work_resource,
         })
+    }
+
+    /// Every deployed structure that's a symlink target (its def has
+    /// `teleport_cost` set), anywhere on the map — unlike `view_entities`,
+    /// this isn't limited to a scan radius, since the whole point of a
+    /// symlink is reaching it from far away.
+    pub fn symlink_targets(&mut self) -> Vec<EntityView> {
+        let mut query = self.world.query::<(Entity, &Position, &Glyph, &Structure)>();
+        let hits: Vec<(Entity, Position, Glyph, StructureId)> = query
+            .iter(&self.world)
+            .map(|(e, p, g, s)| (e, *p, *g, s.kind.clone()))
+            .collect();
+
+        let db = self.world.resource::<StructureDb>();
+        hits.into_iter()
+            .filter(|(_, _, _, kind)| db.get(kind).is_some_and(|d| d.teleport_cost.is_some()))
+            .map(|(entity, pos, glyph, _kind)| EntityView {
+                entity,
+                pos: (pos.x, pos.y),
+                glyph: glyph.ch,
+                color: glyph.color,
+                label: self.entity_label(entity),
+                is_player: false,
+                is_tamed: false,
+                is_companion: false,
+                is_hostile: false,
+                is_structure: true,
+                can_work: false,
+                has_job: false,
+                job_structure: None,
+                structure_worker: None,
+                hp_fraction: None,
+                level: None,
+            })
+            .collect()
+    }
+
+    /// "Use symlink" — instantly teleports the player to `target` (a
+    /// symlink-capable structure from `symlink_targets`), paying its
+    /// `teleport_cost` from inventory.
+    pub fn use_symlink(&mut self, target: Entity) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        let kind = self
+            .world
+            .get::<Structure>(target)
+            .ok_or_else(|| "That's not a structure.".to_string())?
+            .kind
+            .clone();
+        let cost = self
+            .world
+            .resource::<StructureDb>()
+            .get(&kind)
+            .and_then(|d| d.teleport_cost.clone())
+            .ok_or_else(|| "That structure has no symlink.".to_string())?;
+        let player = self.player_entity();
+        {
+            let inv = self.world.get::<Inventory>(player).unwrap();
+            for (item, qty) in &cost {
+                if inv.count(*item) < *qty {
+                    return Err(format!("Not enough {}.", item.display_name()));
+                }
+            }
+        }
+        {
+            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
+            for (item, qty) in &cost {
+                inv.take(*item, *qty);
+            }
+        }
+        let target_pos = *self.world.get::<Position>(target).unwrap();
+        let name = self.entity_label(target);
+        {
+            let mut pos = self.world.get_mut::<Position>(player).unwrap();
+            pos.x = target_pos.x;
+            pos.y = target_pos.y;
+        }
+        self.log(format!("You use a symlink and teleport to {name}."));
+        self.tick();
+        Ok(())
     }
 
     pub fn structure_defs(&self) -> Vec<StructureDef> {
@@ -1666,6 +1795,80 @@ mod tests {
         let game = Game::new(4, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
         assert!(game.inspect(player).is_none());
+    }
+
+    #[test]
+    fn use_symlink_teleports_the_player_to_the_structure_and_charges_the_cost() {
+        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let def = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.teleport_cost.is_some())
+            .expect("a symlink-capable structure (Home) should exist");
+        let cost = def.teleport_cost.clone().unwrap();
+
+        let home = game
+            .world
+            .spawn((
+                Structure { kind: def.id.clone() },
+                Position { x: 50, y: 50 },
+                Glyph { ch: def.glyph, color: def.color },
+            ))
+            .id();
+
+        let player = game.player_entity();
+        {
+            let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+            for (item, qty) in &cost {
+                inv.add(*item, *qty);
+            }
+        }
+        let before: Vec<u32> = cost
+            .iter()
+            .map(|(item, _)| game.world.get::<Inventory>(player).unwrap().count(*item))
+            .collect();
+
+        let targets = game.symlink_targets();
+        assert!(targets.iter().any(|t| t.entity == home), "Home should be a symlink target");
+
+        game.use_symlink(home).unwrap();
+
+        let pos = *game.world.get::<Position>(player).unwrap();
+        assert_eq!(pos, Position { x: 50, y: 50 }, "symlink should teleport the player onto the structure");
+        for ((item, qty), before) in cost.iter().zip(before) {
+            let after = game.world.get::<Inventory>(player).unwrap().count(*item);
+            assert_eq!(after, before - qty, "the teleport cost should be fully consumed");
+        }
+    }
+
+    #[test]
+    fn use_symlink_fails_without_enough_of_the_cost() {
+        let mut game = Game::new(8, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let def = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.teleport_cost.is_some())
+            .expect("a symlink-capable structure (Home) should exist");
+
+        let home = game
+            .world
+            .spawn((
+                Structure { kind: def.id.clone() },
+                Position { x: 20, y: 20 },
+                Glyph { ch: def.glyph, color: def.color },
+            ))
+            .id();
+
+        let player = game.player_entity();
+        {
+            let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+            inv.items.clear();
+        }
+
+        let before_pos = *game.world.get::<Position>(player).unwrap();
+        assert!(game.use_symlink(home).is_err());
+        let after_pos = *game.world.get::<Position>(player).unwrap();
+        assert_eq!(before_pos, after_pos, "a failed symlink shouldn't move the player");
     }
 
     #[test]
@@ -2001,6 +2204,22 @@ mod tests {
         let needs = *game.world.get::<Needs>(player).unwrap();
         assert_eq!(stats.hp, stats.max_hp, "rest should fully heal Integrity");
         assert_eq!(needs.fatigue, 100.0, "rest should fully restore Fatigue");
+    }
+
+    #[test]
+    fn rest_also_fully_heals_the_active_companion() {
+        let mut game = Game::new(29, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let companion = spawn_tamed(&mut game, 10, 3);
+        game.set_companion(companion).unwrap();
+        {
+            let mut stats = game.world.get_mut::<Stats>(companion).unwrap();
+            stats.hp = 1;
+        }
+
+        game.rest();
+
+        let stats = *game.world.get::<Stats>(companion).unwrap();
+        assert_eq!(stats.hp, stats.max_hp, "rest should fully heal the active companion too");
     }
 
     #[test]

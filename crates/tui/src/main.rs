@@ -24,6 +24,7 @@ pub enum Mode {
     Craft,
     Cronjob,
     CronjobStructure,
+    Symlink,
     InspectDirection,
     InspectDetail,
     Inventory,
@@ -142,6 +143,7 @@ impl App {
             Mode::Craft => self.handle_craft_key(code),
             Mode::Cronjob => self.handle_cronjob_key(code),
             Mode::CronjobStructure => self.handle_cronjob_structure_key(code),
+            Mode::Symlink => self.handle_symlink_key(code),
             Mode::InspectDirection => self.handle_inspect_direction_key(code),
             Mode::InspectDetail => self.handle_inspect_detail_key(code),
             Mode::Inventory => self.handle_inventory_key(code),
@@ -185,6 +187,10 @@ impl App {
             }
             KeyCode::Char('w') => {
                 self.mode = Mode::Cronjob;
+                return;
+            }
+            KeyCode::Char('u') => {
+                self.mode = Mode::Symlink;
                 return;
             }
             KeyCode::Char('i') => {
@@ -403,6 +409,30 @@ impl App {
                         Err(e) => self.status_line = Some(e),
                     }
                     self.pending_worker = None;
+                    self.mode = Mode::Playing;
+                }
+            }
+        }
+    }
+
+    /// Lists every deployed symlink-capable structure (e.g. Home) anywhere
+    /// on the map — not scan-radius-limited like the build/cronjob
+    /// menus — and teleports the player to the picked one.
+    fn handle_symlink_key(&mut self, code: KeyCode) {
+        if code == KeyCode::Esc {
+            self.mode = Mode::Playing;
+            return;
+        }
+        let Some(game) = &mut self.game else { return };
+        let targets = game.symlink_targets();
+        if let KeyCode::Char(c) = code {
+            if let Some(idx) = c.to_digit(10) {
+                let idx = idx as usize;
+                if idx >= 1 && idx <= targets.len() {
+                    match game.use_symlink(targets[idx - 1].entity) {
+                        Ok(()) => self.status_line = None,
+                        Err(e) => self.status_line = Some(e),
+                    }
                     self.mode = Mode::Playing;
                 }
             }

@@ -1,0 +1,9 @@
+(
+    id: "home",
+    name: "Home",
+    glyph: 'H',
+    color: Green,
+    build_cost: [(CoreFragment, 5)],
+    work: None,
+    teleport_cost: Some([(PowerCell, 4)]),
+)

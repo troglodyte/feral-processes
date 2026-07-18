@@ -32,6 +32,12 @@ is skipped with a warning logged in-game rather than crashing startup.
         ticks_per_unit: 15,
         radius: 2,
     )),
+
+    // Optional; can be left out entirely (defaults to no symlink). If set,
+    // this structure is a symlink target: the player can "use symlink" (`u`
+    // in the TUI) to instantly teleport to it from anywhere on the map,
+    // paying the listed item cost.
+    teleport_cost: Some([(PowerCell, 4)]),
 )
 ```
 

@@ -41,6 +41,12 @@ pub struct StructureDef {
     /// parse (defaulting to no passive processing).
     #[serde(default)]
     pub passive_process: Option<PassiveProcessDef>,
+    /// If set, this structure is a symlink target: `Game::use_symlink` can
+    /// teleport the player to it for this item cost, from anywhere on the
+    /// map. `#[serde(default)]` so existing structure files written before
+    /// this field existed still parse (defaulting to no symlink).
+    #[serde(default)]
+    pub teleport_cost: Option<Vec<(ItemId, u32)>>,
 }
 
 #[derive(Resource, Default)]

@@ -26,7 +26,7 @@ use components::{
 };
 use items::{EquipmentSlot, ItemId};
 pub use resources::DifficultyMode;
-use resources::{BattleState, GameClock, GameOver, GameRng, MessageLog, PlayerEntity};
+use resources::{BattleState, Companion, GameClock, GameOver, GameRng, MessageLog, PlayerEntity};
 use species::{MoveDef, SpeciesDb, SpeciesDef};
 use structures::{StructureDb, StructureDef};
 use world::{Biome, Tile, WorldMap};
@@ -56,6 +56,16 @@ pub struct PlayerStatus {
     pub weapon: Option<ItemId>,
     pub armor: Option<ItemId>,
     pub module: Option<ItemId>,
+    pub companion: Option<CompanionInfo>,
+}
+
+/// Snapshot of the player's active companion, shown in the status panel
+/// and during an intrusion.
+pub struct CompanionInfo {
+    pub name: String,
+    pub hp: i32,
+    pub max_hp: i32,
+    pub atk: i32,
 }
 
 #[derive(Clone)]
@@ -67,6 +77,7 @@ pub struct EntityView {
     pub label: String,
     pub is_player: bool,
     pub is_tamed: bool,
+    pub is_companion: bool,
     pub is_hostile: bool,
     pub is_structure: bool,
     pub can_work: bool,
@@ -92,6 +103,13 @@ pub struct BattleView {
     /// species' difficulty. Shown to the player even if they have no ICE
     /// Breaker yet, so they can decide whether it's worth going to compile one.
     pub decompile_chance: f32,
+    pub companion: Option<CompanionInfo>,
+}
+
+/// One entry in `Game::craft_recipes` — compiling `result` consumes `cost`.
+pub struct CraftRecipe {
+    pub result: ItemId,
+    pub cost: Vec<(ItemId, u32)>,
 }
 
 /// Full species-level detail on a single creature, shown by `Game::inspect`
@@ -141,6 +159,7 @@ impl Game {
         world.insert_resource(MessageLog::default());
         world.insert_resource(GameOver::default());
         world.insert_resource(difficulty);
+        world.insert_resource(Companion::default());
 
         let player = world
             .spawn((
@@ -214,6 +233,7 @@ impl Game {
         world.insert_resource(MessageLog::default());
         world.insert_resource(GameOver::default());
         world.insert_resource(data.difficulty);
+        world.insert_resource(Companion::default());
 
         let player = world
             .spawn((
@@ -271,10 +291,12 @@ impl Game {
         }
 
         let mut pending_cronjobs: Vec<(Entity, save::CronjobSave)> = Vec::new();
+        let mut companion: Option<Entity> = None;
         for c in data.creatures {
             let Some(species) = game.world.resource::<SpeciesDb>().get(&c.species).cloned() else {
                 continue;
             };
+            let is_companion = c.is_companion;
             let mut entity = game.world.spawn((
                 Creature {
                     species: species.id.clone(),
@@ -304,12 +326,17 @@ impl Game {
                         xp_to_next: c.xp_to_next,
                     },
                 ));
-                if let Some(cronjob) = c.cronjob {
+                if is_companion {
+                    companion = Some(creature_id);
+                } else if let Some(cronjob) = c.cronjob {
                     pending_cronjobs.push((creature_id, cronjob));
                 }
             } else {
                 entity.insert((Hostile, WanderAi::default()));
             }
+        }
+        if let Some(companion) = companion {
+            game.world.insert_resource(Companion(Some(companion)));
         }
 
         let mut structure_positions: HashMap<(i32, i32), Entity> = HashMap::new();
@@ -374,8 +401,10 @@ impl Game {
         let equipment = *self.world.get::<Equipment>(player).unwrap();
         let inventory = self.world.get::<Inventory>(player).unwrap().items.clone();
 
+        let companion_entity = self.world.resource::<Companion>().0;
         let mut creatures = Vec::new();
         let mut creature_query = self.world.query::<(
+            Entity,
             &Creature,
             &Position,
             &Stats,
@@ -383,7 +412,7 @@ impl Game {
             Option<&Experience>,
             Option<&Task>,
         )>();
-        for (creature, pos, stats, tamed, exp, task) in creature_query.iter(&self.world) {
+        for (entity, creature, pos, stats, tamed, exp, task) in creature_query.iter(&self.world) {
             let cronjob = task.and_then(|t| {
                 self.world.get::<Position>(t.target).map(|target_pos| save::CronjobSave {
                     target_position: (target_pos.x, target_pos.y),
@@ -403,6 +432,7 @@ impl Game {
                 xp: exp.map(|e| e.xp).unwrap_or(0),
                 xp_to_next: exp.map(|e| e.xp_to_next).unwrap_or(20),
                 cronjob,
+                is_companion: companion_entity == Some(entity),
             });
         }
 
@@ -554,9 +584,11 @@ impl Game {
 
     /// Power down for the night: many ticks pass at once (power reserves
     /// drain accordingly, tamed programs keep processing, rogue programs
-    /// keep roaming), then fatigue is restored to full. There's no separate
-    /// "rest" system beyond replaying the normal tick loop plus a fatigue
-    /// reset at the end.
+    /// keep roaming), then Fatigue and Integrity are both restored to full.
+    /// There's no separate "rest" system beyond replaying the normal tick
+    /// loop plus a Fatigue/HP reset at the end. If Power runs out and you
+    /// take lethal damage mid-rest, the loop bails out via the
+    /// `is_game_over` check before either restore happens.
     pub fn rest(&mut self) {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
@@ -573,7 +605,22 @@ impl Game {
             let mut needs = self.world.get_mut::<Needs>(player).unwrap();
             needs.fatigue = 100.0;
         }
-        self.log("You come back online, fully recharged.");
+        {
+            let mut stats = self.world.get_mut::<Stats>(player).unwrap();
+            stats.hp = stats.max_hp;
+        }
+        self.log("You come back online, fully recharged and repaired.");
+    }
+
+    /// Stand in place for a single tick — lets the world (wander AI,
+    /// cronjob production, needs decay) advance by one step without moving
+    /// or taking any other action. Distinct from `rest`, which advances
+    /// `REST_TICKS` at once and restores Fatigue.
+    pub fn wait(&mut self) {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return;
+        }
+        self.tick();
     }
 
     /// Scan the current sector for salvageable power cells. Chance depends
@@ -605,32 +652,52 @@ impl Game {
         self.tick();
     }
 
-    /// Compile raw Core Fragments into an ICE Breaker. The only way to
-    /// replenish breakers once the starting stock runs out.
-    pub fn craft_ice_breaker(&mut self) {
+    /// The full list of things the player can compile from raw materials.
+    /// Static/hardcoded like `ItemId` itself (see `CLAUDE.md` — items
+    /// aren't data-driven), but exposed as a list rather than one-off
+    /// methods so the crafting menu can show every option at once and new
+    /// recipes don't need new UI plumbing.
+    pub fn craft_recipes(&self) -> Vec<CraftRecipe> {
+        vec![CraftRecipe {
+            result: ItemId::IceBreaker,
+            cost: vec![(ItemId::CoreFragment, ICE_BREAKER_CORE_COST)],
+        }]
+    }
+
+    /// Compiles one unit of `result` per its `craft_recipes` entry.
+    pub fn craft(&mut self, result: ItemId) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
-            return;
+            return Err("Can't do that right now.".into());
         }
+        let recipe = self
+            .craft_recipes()
+            .into_iter()
+            .find(|r| r.result == result)
+            .ok_or_else(|| format!("{} can't be compiled.", result.display_name()))?;
         let player = self.player_entity();
-        let has_enough = self
-            .world
-            .get::<Inventory>(player)
-            .unwrap()
-            .count(ItemId::CoreFragment)
-            >= ICE_BREAKER_CORE_COST;
-        if !has_enough {
-            self.log(format!(
-                "Compiling an ICE Breaker needs {ICE_BREAKER_CORE_COST} Core Fragments."
-            ));
-            return;
+        {
+            let inv = self.world.get::<Inventory>(player).unwrap();
+            for (item, qty) in &recipe.cost {
+                if inv.count(*item) < *qty {
+                    return Err(format!(
+                        "Compiling {} needs {} {}.",
+                        result.display_name(),
+                        qty,
+                        item.display_name()
+                    ));
+                }
+            }
         }
         {
             let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
-            inv.take(ItemId::CoreFragment, ICE_BREAKER_CORE_COST);
-            inv.add(ItemId::IceBreaker, 1);
+            for (item, qty) in &recipe.cost {
+                inv.take(*item, *qty);
+            }
+            inv.add(result, 1);
         }
-        self.log("You compile an ICE Breaker from salvaged core fragments.");
+        self.log(format!("You compile 1 {} from salvaged components.", result.display_name()));
         self.tick();
+        Ok(())
     }
 
     /// Adds (`sign` = 1) or removes (`sign` = -1) an equipped item's stat
@@ -808,6 +875,10 @@ impl Game {
             .and_then(|d| d.work.as_ref())
             .map(|w| w.ticks_per_unit)
             .unwrap_or(5);
+        if self.world.resource::<Companion>().0 == Some(worker) {
+            self.world.insert_resource(Companion(None));
+            self.log("It stands down as your companion to run this cronjob.");
+        }
         self.world.entity_mut(worker).insert(Task {
             kind: TaskKind::GatherResource,
             target: structure,
@@ -872,6 +943,7 @@ impl Game {
             log: battle.log.clone(),
             can_tame,
             decompile_chance,
+            companion: self.companion_info(),
         })
     }
 
@@ -895,6 +967,55 @@ impl Game {
         let dmg = battle::compute_damage(p_atk, w_def, 5);
         self.apply_damage(wild, dmg);
         self.log(format!("You unleash a data strike for {dmg} damage."));
+
+        if !self.creature_alive(wild) {
+            self.log("The rogue program crashes and deletes itself!");
+            let wild_max_hp = self.world.get::<Stats>(wild).unwrap().max_hp;
+            self.award_player_xp(player, wild_max_hp as u32);
+            self.award_loot(player, wild);
+            self.world.despawn(wild);
+            self.world.remove_resource::<BattleState>();
+            self.tick();
+            return;
+        }
+
+        self.wild_retaliate(wild, player);
+        if !self.creature_alive(player) {
+            self.world.remove_resource::<BattleState>();
+        }
+        self.tick();
+    }
+
+    /// Commands the active companion to attack the wild creature this
+    /// round instead of the player acting directly. The wild creature
+    /// still retaliates against the player, not the companion — the
+    /// companion is a support striker, never a target, so it needs no
+    /// health-loss/knockout handling of its own.
+    pub fn battle_companion_attack(&mut self) {
+        if self.is_game_over().is_some() {
+            return;
+        }
+        let Some((player, wild)) = self
+            .world
+            .get_resource::<BattleState>()
+            .map(|b| (b.player, b.wild_creature))
+        else {
+            return;
+        };
+        let Some(companion) = self.world.resource::<Companion>().0 else {
+            self.log("You have no active companion.");
+            return;
+        };
+
+        let (c_atk, w_def) = {
+            let c = *self.world.get::<Stats>(companion).unwrap();
+            let w = *self.world.get::<Stats>(wild).unwrap();
+            (c.atk, w.def)
+        };
+        let name = self.creature_label(companion);
+        let dmg = battle::compute_damage(c_atk, w_def, 5);
+        self.apply_damage(wild, dmg);
+        self.log(format!("{name} strikes for {dmg} damage."));
 
         if !self.creature_alive(wild) {
             self.log("The rogue program crashes and deletes itself!");
@@ -1011,7 +1132,7 @@ impl Game {
 
         if roll {
             let wild_max_hp = self.world.get::<Stats>(wild).unwrap().max_hp;
-            self.world.entity_mut(wild).remove::<Hostile>();
+            self.world.entity_mut(wild).remove::<(Hostile, WanderAi)>();
             self.world
                 .entity_mut(wild)
                 .insert((Tamed { owner: player }, Experience::default()));
@@ -1221,7 +1342,68 @@ impl Game {
             weapon: equipment.weapon,
             armor: equipment.armor,
             module: equipment.module,
+            companion: self.companion_info(),
         }
+    }
+
+    /// Species display name for a creature entity, falling back to the raw
+    /// species id if the species definition is somehow missing.
+    fn creature_label(&self, entity: Entity) -> String {
+        self.world
+            .get::<Creature>(entity)
+            .map(|c| {
+                self.world
+                    .resource::<SpeciesDb>()
+                    .get(&c.species)
+                    .map(|s| s.name.clone())
+                    .unwrap_or_else(|| c.species.clone())
+            })
+            .unwrap_or_else(|| "Program".to_string())
+    }
+
+    fn companion_info(&self) -> Option<CompanionInfo> {
+        let entity = self.world.resource::<Companion>().0?;
+        let stats = self.world.get::<Stats>(entity)?;
+        Some(CompanionInfo {
+            name: self.creature_label(entity),
+            hp: stats.hp,
+            max_hp: stats.max_hp,
+            atk: stats.atk,
+        })
+    }
+
+    /// Designates `creature` (a tamed program you own) as your active
+    /// battle companion, replacing any previous one. Clears an in-progress
+    /// cronjob task on it first — a program can only be doing one job
+    /// (working a structure, or fighting beside you) at a time.
+    pub fn set_companion(&mut self, creature: Entity) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        let player = self.player_entity();
+        let owner = self
+            .world
+            .get::<Tamed>(creature)
+            .ok_or_else(|| "That program isn't compiled under your control.".to_string())?
+            .owner;
+        if owner != player {
+            return Err("You don't control that program.".into());
+        }
+        self.world.entity_mut(creature).remove::<Task>();
+        self.world.insert_resource(Companion(Some(creature)));
+        let name = self.creature_label(creature);
+        self.log(format!("{name} falls in alongside you."));
+        Ok(())
+    }
+
+    /// Stands the active companion down, if any — it remains a tamed
+    /// program, just no longer commandable in battle.
+    pub fn clear_companion(&mut self) {
+        if let Some(entity) = self.world.resource::<Companion>().0 {
+            let name = self.creature_label(entity);
+            self.log(format!("{name} falls back from active duty."));
+        }
+        self.world.insert_resource(Companion(None));
     }
 
     pub fn view_tiles(&mut self, half_w: i32, half_h: i32) -> Vec<Vec<Tile>> {
@@ -1238,6 +1420,37 @@ impl Game {
         rows
     }
 
+    /// Finds the nearest creature generally toward (dx, dy) from the
+    /// player — the read-only "look in a direction" counterpart to
+    /// `move_player`. `(dx, dy)` is one of the four cardinal unit vectors.
+    /// A creature counts as "that way" if it's within the 90° cone
+    /// centered on the chosen direction (i.e. leans at least as much
+    /// toward that axis as away from it) and within `max_range` tiles —
+    /// a strict single-tile-wide ray would almost never line up with a
+    /// wandering creature's exact row/column, so this is deliberately
+    /// forgiving. Ignores terrain walkability (this never moves anything,
+    /// just looks), and only ever matches creatures, not structures or
+    /// the player.
+    pub fn find_creature_in_direction(&mut self, dx: i32, dy: i32, max_range: i32) -> Option<Entity> {
+        let player = self.player_entity();
+        let start = *self.world.get::<Position>(player).unwrap();
+        let mut query = self.world.query::<(Entity, &Position, &Creature)>();
+        query
+            .iter(&self.world)
+            .filter_map(|(entity, pos, _)| {
+                let (ddx, ddy) = (pos.x - start.x, pos.y - start.y);
+                let in_cone = if dx != 0 {
+                    ddx.signum() == dx && ddx.abs() >= ddy.abs()
+                } else {
+                    ddy.signum() == dy && ddy.abs() >= ddx.abs()
+                };
+                let dist = ddx.abs().max(ddy.abs());
+                (in_cone && dist >= 1 && dist <= max_range).then_some((entity, dist))
+            })
+            .min_by_key(|(_, dist)| *dist)
+            .map(|(entity, _)| entity)
+    }
+
     pub fn view_entities(&mut self, half_w: i32, half_h: i32) -> Vec<EntityView> {
         let center = *self.world.get::<Position>(self.player_entity()).unwrap();
         let mut query = self.world.query::<(Entity, &Position, &Glyph)>();
@@ -1251,6 +1464,7 @@ impl Game {
             .map(|(entity, pos, glyph)| {
                 let is_player = self.world.get::<Player>(entity).is_some();
                 let is_tamed = self.world.get::<Tamed>(entity).is_some();
+                let is_companion = self.world.resource::<Companion>().0 == Some(entity);
                 let is_hostile = self.world.get::<Hostile>(entity).is_some();
                 let is_structure = self.world.get::<Structure>(entity).is_some();
                 let can_work = self.world.get::<ResourceNode>(entity).is_some();
@@ -1279,6 +1493,7 @@ impl Game {
                     label,
                     is_player,
                     is_tamed,
+                    is_companion,
                     is_hostile,
                     is_structure,
                     can_work,
@@ -1644,5 +1859,371 @@ mod tests {
         let status = loaded.player_status();
         assert_eq!(status.module, Some(ItemId::NeuralAmplifier));
         assert_eq!(status.decompiler, decompiler_after_equip);
+    }
+
+    /// The initial world spawns 14 wild creatures scattered around the
+    /// player, so directional-inspect tests clear whatever landed along
+    /// their search ray first — otherwise they'd be at the mercy of the
+    /// seed's RNG instead of testing the method itself.
+    fn clear_creatures_east_of_player(game: &mut Game, start: Position, range: i32) {
+        // Matches the same 90° eastward cone `find_creature_in_direction`
+        // itself uses, not just the exact row — otherwise a wild creature
+        // that merely leans east (without being exactly on the player's
+        // row) would survive the cleanup and make the test flaky.
+        let stale: Vec<Entity> = {
+            let mut query = game.world.query::<(Entity, &Position, &Creature)>();
+            query
+                .iter(&game.world)
+                .filter(|(_, pos, _)| {
+                    let (ddx, ddy) = (pos.x - start.x, pos.y - start.y);
+                    ddx > 0 && ddx >= ddy.abs() && ddx <= range
+                })
+                .map(|(e, ..)| e)
+                .collect()
+        };
+        for e in stale {
+            game.world.despawn(e);
+        }
+    }
+
+    #[test]
+    fn find_creature_in_direction_finds_the_nearest_match_along_the_line() {
+        let mut game = Game::new(14, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let start = *game.world.get::<Position>(player).unwrap();
+        let species = game.species_defs().into_iter().next().unwrap();
+        clear_creatures_east_of_player(&mut game, start, 10);
+
+        assert!(game.find_creature_in_direction(1, 0, 10).is_none());
+
+        let far = game
+            .world
+            .spawn((
+                Creature { species: species.id.clone() },
+                Position { x: start.x + 5, y: start.y },
+                Stats { hp: 1, max_hp: 1, atk: 1, def: 1 },
+            ))
+            .id();
+        let near = game
+            .world
+            .spawn((
+                Creature { species: species.id.clone() },
+                Position { x: start.x + 2, y: start.y },
+                Stats { hp: 1, max_hp: 1, atk: 1, def: 1 },
+            ))
+            .id();
+
+        let found = game.find_creature_in_direction(1, 0, 10);
+        assert_eq!(found, Some(near), "the nearer creature along the ray should win");
+        assert_ne!(found, Some(far));
+    }
+
+    #[test]
+    fn find_creature_in_direction_respects_max_range() {
+        let mut game = Game::new(15, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let start = *game.world.get::<Position>(player).unwrap();
+        let species = game.species_defs().into_iter().next().unwrap();
+        clear_creatures_east_of_player(&mut game, start, 10);
+        game.world.spawn((
+            Creature { species: species.id.clone() },
+            Position { x: start.x + 10, y: start.y },
+            Stats { hp: 1, max_hp: 1, atk: 1, def: 1 },
+        ));
+
+        assert!(game.find_creature_in_direction(1, 0, 5).is_none(), "creature is out of range");
+        assert!(game.find_creature_in_direction(1, 0, 10).is_some(), "creature should be within range");
+    }
+
+    #[test]
+    fn find_creature_in_direction_matches_a_90_degree_cone_not_just_the_exact_row() {
+        let mut game = Game::new(17, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let start = *game.world.get::<Position>(player).unwrap();
+        let species = game.species_defs().into_iter().next().unwrap();
+        clear_creatures_east_of_player(&mut game, start, 10);
+
+        // Leans east more than north/south (ddx=4 >= |ddy|=3) — inside the cone.
+        let diagonal_ish = game
+            .world
+            .spawn((
+                Creature { species: species.id.clone() },
+                Position { x: start.x + 4, y: start.y - 3 },
+                Stats { hp: 1, max_hp: 1, atk: 1, def: 1 },
+            ))
+            .id();
+        assert_eq!(game.find_creature_in_direction(1, 0, 10), Some(diagonal_ish));
+
+        // Leans north more than east (ddy=-8, ddx=2) — outside the eastward cone.
+        game.world.spawn((
+            Creature { species: species.id.clone() },
+            Position { x: start.x + 2, y: start.y - 8 },
+            Stats { hp: 1, max_hp: 1, atk: 1, def: 1 },
+        ));
+        assert_eq!(
+            game.find_creature_in_direction(1, 0, 10),
+            Some(diagonal_ish),
+            "a creature that leans mostly north shouldn't win the eastward search"
+        );
+    }
+
+    #[test]
+    fn wait_advances_one_tick_without_moving() {
+        let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let pos_before = *game.world.get::<Position>(player).unwrap();
+        let tick_before = game.world.resource::<GameClock>().tick;
+
+        game.wait();
+
+        let pos_after = *game.world.get::<Position>(player).unwrap();
+        let tick_after = game.world.resource::<GameClock>().tick;
+        assert_eq!(pos_after, pos_before, "waiting shouldn't move the player");
+        assert_eq!(tick_after, tick_before + 1, "waiting should advance exactly one tick");
+    }
+
+    #[test]
+    fn rest_fully_heals_and_restores_fatigue() {
+        let mut game = Game::new(18, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        {
+            let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+            stats.hp = 1;
+        }
+        {
+            let mut needs = game.world.get_mut::<Needs>(player).unwrap();
+            needs.fatigue = 10.0;
+        }
+
+        game.rest();
+
+        let stats = *game.world.get::<Stats>(player).unwrap();
+        let needs = *game.world.get::<Needs>(player).unwrap();
+        assert_eq!(stats.hp, stats.max_hp, "rest should fully heal Integrity");
+        assert_eq!(needs.fatigue, 100.0, "rest should fully restore Fatigue");
+    }
+
+    #[test]
+    fn successful_decompile_removes_wander_ai_so_the_tamed_creature_stops_roaming() {
+        let mut game = Game::new(19, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let species = game.species_defs().into_iter().next().expect("at least one species");
+
+        let wild = game
+            .world
+            .spawn((
+                Creature { species: species.id.clone() },
+                Hostile,
+                WanderAi::default(),
+                Position { x: 3, y: 3 },
+                Stats { hp: 1, max_hp: 10, atk: 1, def: 1 },
+            ))
+            .id();
+        game.world.insert_resource(BattleState {
+            player,
+            wild_creature: wild,
+            log: Vec::new(),
+            finished: false,
+            player_won: false,
+        });
+        // Near-dead target + maxed decompiler skill + plenty of breakers,
+        // so the capture-chance clamp (95%) makes a handful of attempts
+        // succeed for certain, without needing to control the RNG directly.
+        game.world.get_mut::<Inventory>(player).unwrap().add(ItemId::IceBreaker, 50);
+        game.world.get_mut::<Decompiler>(player).unwrap().skill = 50;
+
+        for _ in 0..50 {
+            if game.world.get::<Tamed>(wild).is_some() {
+                break;
+            }
+            game.battle_decompile();
+        }
+
+        assert!(game.world.get::<Tamed>(wild).is_some(), "creature should have been tamed");
+        assert!(game.world.get::<Hostile>(wild).is_none());
+        assert!(
+            game.world.get::<WanderAi>(wild).is_none(),
+            "a tamed creature must stop roaming like a wild one"
+        );
+    }
+
+    #[test]
+    fn craft_consumes_cost_and_grants_the_result() {
+        let mut game = Game::new(20, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        {
+            let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+            inv.items.clear();
+            inv.add(ItemId::CoreFragment, ICE_BREAKER_CORE_COST);
+        }
+
+        game.craft(ItemId::IceBreaker).unwrap();
+
+        let inv = game.world.get::<Inventory>(player).unwrap();
+        assert_eq!(inv.count(ItemId::CoreFragment), 0, "cost should be fully consumed");
+        assert_eq!(inv.count(ItemId::IceBreaker), 1, "the recipe's result should be granted");
+    }
+
+    #[test]
+    fn craft_fails_without_enough_of_the_cost() {
+        let mut game = Game::new(21, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        {
+            let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+            inv.items.clear();
+        }
+
+        assert!(game.craft(ItemId::IceBreaker).is_err());
+        assert_eq!(game.world.get::<Inventory>(player).unwrap().count(ItemId::IceBreaker), 0);
+    }
+
+    #[test]
+    fn craft_rejects_a_result_with_no_recipe() {
+        let mut game = Game::new(22, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        assert!(game.craft(ItemId::CoreFragment).is_err());
+    }
+
+    fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
+        let player = game.player_entity();
+        let species = game.species_defs().into_iter().next().expect("at least one species");
+        game.world
+            .spawn((
+                Creature { species: species.id.clone() },
+                Position { x: 3, y: 3 },
+                Stats { hp, max_hp: hp, atk, def: 1 },
+                Tamed { owner: player },
+                Experience::default(),
+            ))
+            .id()
+    }
+
+    #[test]
+    fn set_companion_rejects_a_wild_creature() {
+        let mut game = Game::new(23, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let species = game.species_defs().into_iter().next().expect("at least one species");
+        let wild = game
+            .world
+            .spawn((
+                Creature { species: species.id.clone() },
+                Hostile,
+                Position { x: 3, y: 3 },
+                Stats { hp: 5, max_hp: 5, atk: 1, def: 1 },
+            ))
+            .id();
+        assert!(game.set_companion(wild).is_err());
+        assert!(game.player_status().companion.is_none());
+    }
+
+    #[test]
+    fn set_companion_clears_any_active_cronjob_task() {
+        let mut game = Game::new(24, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let worker = spawn_tamed(&mut game, 10, 3);
+        let structure = game
+            .world
+            .spawn((Structure { kind: "mining_node".to_string() }, Position { x: 3, y: 4 }))
+            .id();
+        game.world.entity_mut(worker).insert(Task {
+            kind: TaskKind::GatherResource,
+            target: structure,
+            progress: 2,
+            required: 5,
+        });
+
+        game.set_companion(worker).unwrap();
+
+        assert!(game.world.get::<Task>(worker).is_none(), "companion duty should cancel the cronjob");
+        assert_eq!(game.player_status().companion.map(|c| c.hp), Some(10));
+    }
+
+    #[test]
+    fn assigning_cronjob_to_the_active_companion_clears_companion_status() {
+        let assets = test_assets_dir();
+        let mut game = Game::new(25, DifficultyMode::Forgiving, &assets).unwrap();
+        let worker = spawn_tamed(&mut game, 10, 3);
+        game.set_companion(worker).unwrap();
+        assert!(game.player_status().companion.is_some());
+
+        let structure_def = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.work.is_some())
+            .expect("at least one workable structure should exist");
+        let structure = game
+            .world
+            .spawn((
+                Structure { kind: structure_def.id.clone() },
+                Position { x: 3, y: 4 },
+                ResourceNode { resource: structure_def.work.as_ref().unwrap().produces, amount: 20 },
+            ))
+            .id();
+
+        game.assign_cronjob(worker, structure).unwrap();
+
+        assert!(game.player_status().companion.is_none(), "running a cronjob should stand the companion down");
+        assert!(game.world.get::<Task>(worker).is_some());
+    }
+
+    #[test]
+    fn clear_companion_reverts_to_no_companion() {
+        let mut game = Game::new(26, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let worker = spawn_tamed(&mut game, 10, 3);
+        game.set_companion(worker).unwrap();
+        assert!(game.player_status().companion.is_some());
+
+        game.clear_companion();
+
+        assert!(game.player_status().companion.is_none());
+    }
+
+    #[test]
+    fn battle_companion_attack_damages_the_wild_creature_and_never_the_companion() {
+        let mut game = Game::new(27, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let companion = spawn_tamed(&mut game, 10, 20);
+        game.set_companion(companion).unwrap();
+
+        let species = game.species_defs().into_iter().next().expect("at least one species");
+        let wild = game
+            .world
+            .spawn((
+                Creature { species: species.id.clone() },
+                Hostile,
+                Position { x: 5, y: 5 },
+                Stats { hp: 100, max_hp: 100, atk: 1, def: 0 },
+            ))
+            .id();
+        game.world.insert_resource(BattleState {
+            player,
+            wild_creature: wild,
+            log: Vec::new(),
+            finished: false,
+            player_won: false,
+        });
+
+        game.battle_companion_attack();
+
+        let wild_hp = game.world.get::<Stats>(wild).unwrap().hp;
+        assert!(wild_hp < 100, "the companion's attack should have damaged the wild creature");
+        let companion_hp = game.world.get::<Stats>(companion).unwrap().hp;
+        assert_eq!(companion_hp, 10, "the companion is never a retaliation target");
+    }
+
+    #[test]
+    fn companion_status_survives_save_and_load() {
+        let assets = test_assets_dir();
+        let mut game = Game::new(28, DifficultyMode::Forgiving, &assets).unwrap();
+        let worker = spawn_tamed(&mut game, 10, 3);
+        game.set_companion(worker).unwrap();
+
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_companion_test_{}.bin",
+            std::process::id()
+        ));
+        game.save(&path).unwrap();
+        let loaded = Game::load(&path, &assets).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        let status = loaded.player_status();
+        assert!(status.companion.is_some(), "the active companion should survive a save/load round trip");
     }
 }

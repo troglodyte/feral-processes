@@ -21,12 +21,14 @@ pub enum Mode {
     Battle,
     Build,
     BuildDirection,
+    Craft,
     Cronjob,
     CronjobStructure,
-    Inspect,
+    InspectDirection,
     InspectDetail,
     Inventory,
     InventoryItemAction,
+    Companion,
     Help,
     GameOver,
 }
@@ -137,12 +139,14 @@ impl App {
             Mode::Battle => self.handle_battle_key(code),
             Mode::Build => self.handle_build_key(code),
             Mode::BuildDirection => self.handle_build_direction_key(code),
+            Mode::Craft => self.handle_craft_key(code),
             Mode::Cronjob => self.handle_cronjob_key(code),
             Mode::CronjobStructure => self.handle_cronjob_structure_key(code),
-            Mode::Inspect => self.handle_inspect_key(code),
+            Mode::InspectDirection => self.handle_inspect_direction_key(code),
             Mode::InspectDetail => self.handle_inspect_detail_key(code),
             Mode::Inventory => self.handle_inventory_key(code),
             Mode::InventoryItemAction => self.handle_inventory_item_action_key(code),
+            Mode::Companion => self.handle_companion_key(code),
             Mode::Help => self.handle_help_key(),
             Mode::GameOver => self.handle_game_over_key(),
         }
@@ -175,16 +179,24 @@ impl App {
                 self.mode = Mode::Build;
                 return;
             }
+            KeyCode::Char('c') => {
+                self.mode = Mode::Craft;
+                return;
+            }
             KeyCode::Char('w') => {
                 self.mode = Mode::Cronjob;
                 return;
             }
             KeyCode::Char('i') => {
-                self.mode = Mode::Inspect;
+                self.mode = Mode::InspectDirection;
                 return;
             }
             KeyCode::Char('v') => {
                 self.mode = Mode::Inventory;
+                return;
+            }
+            KeyCode::Char('p') => {
+                self.mode = Mode::Companion;
                 return;
             }
             KeyCode::Char('s') => {
@@ -192,7 +204,9 @@ impl App {
                 return;
             }
             KeyCode::Char('q') => {
-                self.quit = true;
+                self.game = None;
+                self.status_line = None;
+                self.mode = Mode::MainMenu;
                 return;
             }
             KeyCode::Char('?') => {
@@ -229,6 +243,10 @@ impl App {
                     game.move_player(1, 0);
                     true
                 }
+                KeyCode::Char('.') => {
+                    game.wait();
+                    true
+                }
                 KeyCode::Char('e') => {
                     game.eat(ItemId::PowerCell);
                     true
@@ -239,10 +257,6 @@ impl App {
                 }
                 KeyCode::Char('g') => {
                     game.forage();
-                    true
-                }
-                KeyCode::Char('c') => {
-                    game.craft_ice_breaker();
                     true
                 }
                 _ => false,
@@ -264,6 +278,7 @@ impl App {
             match code {
                 KeyCode::Char('a') => game.battle_attack(),
                 KeyCode::Char('d') => game.battle_decompile(),
+                KeyCode::Char('c') => game.battle_companion_attack(),
                 KeyCode::Char('j') => game.battle_flee(),
                 _ => return,
             }
@@ -288,6 +303,27 @@ impl App {
                 if idx >= 1 && idx <= defs.len() {
                     self.pending_structure = Some(defs[idx - 1].id.clone());
                     self.mode = Mode::BuildDirection;
+                }
+            }
+        }
+    }
+
+    fn handle_craft_key(&mut self, code: KeyCode) {
+        if code == KeyCode::Esc {
+            self.mode = Mode::Playing;
+            return;
+        }
+        let Some(game) = &mut self.game else { return };
+        let recipes = game.craft_recipes();
+        if let KeyCode::Char(c) = code {
+            if let Some(idx) = c.to_digit(10) {
+                let idx = idx as usize;
+                if idx >= 1 && idx <= recipes.len() {
+                    match game.craft(recipes[idx - 1].result) {
+                        Ok(()) => self.status_line = None,
+                        Err(e) => self.status_line = Some(e),
+                    }
+                    self.mode = Mode::Playing;
                 }
             }
         }
@@ -373,35 +409,72 @@ impl App {
         }
     }
 
-    fn handle_inspect_key(&mut self, code: KeyCode) {
+    /// Lists nearby tamed programs; pressing the active companion's number
+    /// stands it down, pressing any other tamed program's number makes it
+    /// the new companion (swapping out whichever was active before).
+    fn handle_companion_key(&mut self, code: KeyCode) {
         if code == KeyCode::Esc {
             self.mode = Mode::Playing;
             return;
         }
         let Some(game) = &mut self.game else { return };
-        let creatures: Vec<_> = game
+        let candidates: Vec<_> = game
             .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
             .into_iter()
-            .filter(|e| !e.is_player && !e.is_structure)
+            .filter(|e| e.is_tamed)
             .collect();
         if let KeyCode::Char(c) = code {
             if let Some(idx) = c.to_digit(10) {
                 let idx = idx as usize;
-                if idx >= 1 && idx <= creatures.len() {
-                    self.pending_inspect = Some(creatures[idx - 1].entity);
-                    self.mode = Mode::InspectDetail;
+                if idx >= 1 && idx <= candidates.len() {
+                    let candidate = &candidates[idx - 1];
+                    if candidate.is_companion {
+                        game.clear_companion();
+                    } else {
+                        match game.set_companion(candidate.entity) {
+                            Ok(()) => self.status_line = None,
+                            Err(e) => self.status_line = Some(e),
+                        }
+                    }
+                    self.mode = Mode::Playing;
                 }
             }
         }
     }
 
-    fn handle_inspect_detail_key(&mut self, code: KeyCode) {
+    /// Picks a direction (arrows/hjkl) and inspects the first creature the
+    /// engine finds stepping that way from the player, rather than picking
+    /// from a numbered list of grid coordinates.
+    fn handle_inspect_direction_key(&mut self, code: KeyCode) {
         if code == KeyCode::Esc {
-            self.pending_inspect = None;
             self.mode = Mode::Playing;
             return;
         }
-        self.mode = Mode::Inspect;
+        let dir = match code {
+            KeyCode::Up | KeyCode::Char('k') => Some((0, -1)),
+            KeyCode::Down | KeyCode::Char('j') => Some((0, 1)),
+            KeyCode::Left | KeyCode::Char('h') => Some((-1, 0)),
+            KeyCode::Right | KeyCode::Char('l') => Some((1, 0)),
+            _ => None,
+        };
+        let Some((dx, dy)) = dir else { return };
+        let Some(game) = &mut self.game else { return };
+        match game.find_creature_in_direction(dx, dy, MENU_SCAN_RADIUS) {
+            Some(entity) => {
+                self.pending_inspect = Some(entity);
+                self.status_line = None;
+                self.mode = Mode::InspectDetail;
+            }
+            None => {
+                self.status_line = Some("Nothing in that direction.".to_string());
+                self.mode = Mode::Playing;
+            }
+        }
+    }
+
+    fn handle_inspect_detail_key(&mut self, _code: KeyCode) {
+        self.pending_inspect = None;
+        self.mode = Mode::Playing;
     }
 
     /// Equipped slots are numbered 1-3 (Weapon/Armor/Module) and unequip

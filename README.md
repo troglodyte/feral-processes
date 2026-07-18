@@ -49,16 +49,18 @@ main menu to reload).
 | Key | Action |
 | --- | --- |
 | `hjkl` / arrow keys | Move (bumping a rogue program starts an intrusion) |
+| `.` | Wait in place (advances one tick) |
 | `e` | Drain a Power Cell (restores Power) |
-| `r` | Recharge overnight (restores Fatigue, costs Power) |
+| `r` | Recharge overnight (restores Fatigue and Integrity, costs Power) |
 | `g` | Scan the sector for Power Cells |
-| `c` | Compile an ICE Breaker (costs 3 Core Fragments) |
+| `c` | Open the compile menu (create an ICE Breaker — costs 3 Core Fragments — and any future recipes) |
 | `b` | Deploy a structure |
 | `w` | Assign a compiled program to a cronjob (work a structure) |
-| `i` | Inspect a nearby program (stats/moves/decompile odds, no intrusion) |
+| `i` | Inspect: pick a direction, see stats/moves/decompile odds for the first program that way (no intrusion) |
 | `v` | Inventory/equipment: equip, unequip, drop, destroy items |
+| `p` | Pick a nearby compiled program as your active companion |
 | `s` | Save |
-| `q` | Quit |
+| `q` | Return to the main menu (unsaved progress is lost — `s` first if you want to keep it) |
 | `+` / `-` | Zoom the grid in/out |
 | `?` | In-game help / full control list |
 
@@ -68,6 +70,7 @@ main menu to reload).
 | --- | --- |
 | `a` | Attack |
 | `d` | Decompile (attempt to compile/tame the program — needs an ICE Breaker) |
+| `c` | Command your active companion to attack (only shown if you have one) |
 | `j` | Jack out (flee) |
 
 ### The loop
@@ -135,7 +138,7 @@ Shown in the status panel (always) and the intrusion screen (in battle):
 
 | Stat | What it means |
 | --- | --- |
-| **Integrity** | Your HP. Hits 0 and you flatline — final in Permadeath, a costly soft-reboot in Forgiving mode. Leveling up fully restores it. |
+| **Integrity** | Your HP. Hits 0 and you flatline — final in Permadeath, a costly soft-reboot in Forgiving mode. Leveling up or recharging overnight (`r`) both fully restore it. |
 | **Power** | Your hunger-equivalent. Drains over time; hits 0 and you start taking Integrity damage each tick. Restored by draining a Power Cell (`e`) or standing near a cooking Terminal. |
 | **Fatigue** | Drains over time; restored to full by recharging overnight (`r`). Currently cosmetic — doesn't yet penalize anything on its own, but rest also advances a lot of game time, so use it deliberately. |
 | **Level / XP** | Grows from defeating or decompiling rogue programs, or (for a compiled program) completing cronjob cycles. Each level-up grows Attack/Defense/max Integrity and fully heals. |
@@ -183,6 +186,24 @@ inventory, each item numbered for selection.
 - An equipped item's stat bonus is added the moment you equip it and
   removed the moment you unequip it — it shows up immediately in the status
   panel and the intrusion screen.
+
+### Companion
+
+Press `p` to pick a nearby compiled program as your active companion — a
+single tamed program that fights alongside you.
+
+- Only one companion at a time; picking a different program swaps it in.
+  Selecting the active companion's own number again stands it down.
+- A companion is mutually exclusive with a cronjob: assigning it to work a
+  structure (`w`) automatically stands it down as companion, and vice
+  versa — a program is either working or fighting beside you, never both.
+- During an intrusion, if you have an active companion the battle menu
+  gains `[C]ommand companion`: it attacks using its own Attack stat
+  *instead of* you acting that round — a turn-economy tradeoff, not a free
+  extra hit.
+- The wild program's retaliation always targets you, never the companion —
+  the companion is a support striker, not something that can be knocked
+  out or lost in a fight.
 
 ### Current roster
 

@@ -21,12 +21,14 @@ pub fn render(f: &mut Frame, app: &mut App) {
         Mode::Playing
         | Mode::Build
         | Mode::BuildDirection
+        | Mode::Craft
         | Mode::Cronjob
         | Mode::CronjobStructure
-        | Mode::Inspect
+        | Mode::InspectDirection
         | Mode::InspectDetail
         | Mode::Inventory
-        | Mode::InventoryItemAction => render_playing(f, app),
+        | Mode::InventoryItemAction
+        | Mode::Companion => render_playing(f, app),
     }
 }
 
@@ -46,7 +48,14 @@ fn render_playing(f: &mut Frame, app: &mut App) {
 
     let status = game.player_status();
     let tiles = game.view_tiles(half_w, half_h);
-    let entities = game.view_entities(half_w, half_h);
+    // Tamed programs are compiled off the field once captured — they no
+    // longer occupy a map tile (the terrain underneath shows through), even
+    // though the entity itself still exists for cronjob assignment (`w`).
+    let entities: Vec<_> = game
+        .view_entities(half_w, half_h)
+        .into_iter()
+        .filter(|e| !e.is_tamed)
+        .collect();
 
     f.render_widget(
         build_map_paragraph(&tiles, &entities, status.position, half_w, half_h, zoom),
@@ -70,12 +79,14 @@ fn render_playing(f: &mut Frame, app: &mut App) {
     match mode {
         Mode::Build => render_build_menu(f, area, game),
         Mode::BuildDirection => render_build_direction(f, area),
+        Mode::Craft => render_craft_menu(f, area, game),
         Mode::Cronjob => render_cronjob_menu(f, area, game),
         Mode::CronjobStructure => render_cronjob_structure_menu(f, area, game),
-        Mode::Inspect => render_inspect_menu(f, area, game),
+        Mode::InspectDirection => render_inspect_direction(f, area),
         Mode::InspectDetail => render_inspect_detail(f, area, game, app.pending_inspect),
         Mode::Inventory => render_inventory_screen(f, area, game),
         Mode::InventoryItemAction => render_inventory_item_action(f, area, app.pending_inventory_item),
+        Mode::Companion => render_companion_menu(f, area, game),
         _ => {}
     }
 }
@@ -88,9 +99,13 @@ fn build_map_paragraph<'a>(
     half_h: i32,
     zoom: u16,
 ) -> Paragraph<'a> {
-    let mut grid: Vec<Vec<(char, Color)>> = tiles
+    // Third element: bold, set for structures so they visually pop out from
+    // terrain and creatures on the map even when a glyph or color happens
+    // to be shared (the game's limited 10-color palette can't guarantee
+    // every structure a color no species also uses).
+    let mut grid: Vec<Vec<(char, Color, bool)>> = tiles
         .iter()
-        .map(|row| row.iter().map(|t| tile_style(t.biome)).collect())
+        .map(|row| row.iter().map(|t| { let (ch, color) = tile_style(t.biome); (ch, color, false) }).collect())
         .collect();
 
     for ev in entities {
@@ -101,7 +116,7 @@ fn build_map_paragraph<'a>(
         }
         if let Some(row) = grid.get_mut(ry as usize) {
             if let Some(cell) = row.get_mut(rx as usize) {
-                *cell = (ev.glyph, glyph_color(ev.color));
+                *cell = (ev.glyph, glyph_color(ev.color), ev.is_structure);
             }
         }
     }
@@ -114,8 +129,12 @@ fn build_map_paragraph<'a>(
         .flat_map(|row| {
             let spans: Vec<Span<'a>> = row
                 .into_iter()
-                .flat_map(|(ch, color)| {
-                    std::iter::repeat(Span::styled(ch.to_string(), Style::new().fg(color))).take(zoom)
+                .flat_map(|(ch, color, bold)| {
+                    let mut style = Style::new().fg(color);
+                    if bold {
+                        style = style.add_modifier(Modifier::BOLD);
+                    }
+                    std::iter::repeat(Span::styled(ch.to_string(), style)).take(zoom)
                 })
                 .collect();
             std::iter::repeat(Line::from(spans)).take(zoom)
@@ -202,6 +221,12 @@ fn render_status_panel(f: &mut Frame, area: Rect, status: &PlayerStatus) {
         Line::from(format!("Attack {}   Defense {}", status.atk, status.def)),
         Line::from(format!("Decompiler {}", status.decompiler)),
     ];
+    if let Some(companion) = &status.companion {
+        lines.push(Line::from(format!(
+            "Companion: {} (HP {}/{})",
+            companion.name, companion.hp, companion.max_hp
+        )));
+    }
     lines.push(Line::from(""));
     lines.push(Line::from("Inventory:"));
     if status.inventory.is_empty() {
@@ -211,12 +236,13 @@ fn render_status_panel(f: &mut Frame, area: Rect, status: &PlayerStatus) {
         lines.push(Line::from(format!("  {} x{}", item.display_name(), qty)));
     }
     lines.push(Line::from(""));
-    lines.push(Line::from("hjkl/arrows move  e drain  r recharge"));
-    lines.push(Line::from("g scan    c compile orb"));
+    lines.push(Line::from("hjkl/arrows move  . wait   e drain  r recharge"));
+    lines.push(Line::from("g scan    c compile"));
     lines.push(Line::from("b deploy  w assign cronjob"));
-    lines.push(Line::from("i inspect nearby program"));
+    lines.push(Line::from("i inspect (pick a direction)"));
     lines.push(Line::from("v inventory/equipment"));
-    lines.push(Line::from("s save    q quit   ? help"));
+    lines.push(Line::from("p companion"));
+    lines.push(Line::from("s save    q main menu   ? help"));
     lines.push(Line::from("+/- zoom"));
     f.render_widget(
         Paragraph::new(lines).block(Block::bordered().title("System")),
@@ -224,23 +250,72 @@ fn render_status_panel(f: &mut Frame, area: Rect, status: &PlayerStatus) {
     );
 }
 
+fn render_craft_menu(f: &mut Frame, area: Rect, game: &mut Game) {
+    let popup = centered_rect(60, 40, area);
+    f.render_widget(Clear, popup);
+    let recipes = game.craft_recipes();
+    let mut lines = vec![Line::from("Compile what? (Esc to cancel)"), Line::from("")];
+    for (i, recipe) in recipes.iter().enumerate() {
+        let cost: Vec<String> = recipe
+            .cost
+            .iter()
+            .map(|(item, qty)| format!("{} {}", qty, item.display_name()))
+            .collect();
+        lines.push(Line::from(format!(
+            "[{}] {} ({})",
+            i + 1,
+            recipe.result.display_name(),
+            cost.join(", ")
+        )));
+    }
+    f.render_widget(
+        Paragraph::new(lines).wrap(Wrap { trim: true }).block(Block::bordered().title("Compile")),
+        popup,
+    );
+}
+
 fn render_build_menu(f: &mut Frame, area: Rect, game: &mut Game) {
-    let popup = centered_rect(60, 50, area);
+    let popup = centered_rect(70, 60, area);
     f.render_widget(Clear, popup);
     let defs = game.structure_defs();
-    let mut lines = vec![Line::from("Deploy what? (Esc to cancel)")];
+    let mut lines = vec![Line::from("Deploy what? (Esc to cancel)"), Line::from("")];
     for (i, def) in defs.iter().enumerate() {
         let cost: Vec<String> = def
             .build_cost
             .iter()
             .map(|(item, qty)| format!("{} {}", qty, item.display_name()))
             .collect();
-        lines.push(Line::from(format!("[{}] {} ({})", i + 1, def.name, cost.join(", "))));
+        lines.push(Line::styled(
+            format!("[{}] {} ({})", i + 1, def.name, cost.join(", ")),
+            Style::new().add_modifier(Modifier::BOLD),
+        ));
+        lines.push(Line::from(format!("    {}", structure_description(def))));
     }
     f.render_widget(
-        Paragraph::new(lines).block(Block::bordered().title("Deploy")),
+        Paragraph::new(lines).wrap(Wrap { trim: true }).block(Block::bordered().title("Deploy")),
         popup,
     );
+}
+
+/// A one-sentence summary of what a structure does, derived from its
+/// `work`/`passive_process` recipe rather than a separate authored field —
+/// any structure a modder drops in automatically gets a sensible line here.
+fn structure_description(def: &feral_processes_engine::structures::StructureDef) -> String {
+    let mut parts = Vec::new();
+    if let Some(work) = &def.work {
+        parts.push(format!("cronjob → {}", work.produces.display_name()));
+    }
+    if let Some(passive) = &def.passive_process {
+        parts.push(format!(
+            "{} → {}",
+            passive.consumes.display_name(),
+            passive.produces.display_name()
+        ));
+    }
+    if parts.is_empty() {
+        parts.push("no production".to_string());
+    }
+    parts.join(", ")
 }
 
 fn render_build_direction(f: &mut Frame, area: Rect) {
@@ -310,37 +385,44 @@ fn render_cronjob_structure_menu(f: &mut Frame, area: Rect, game: &mut Game) {
     );
 }
 
-fn render_inspect_menu(f: &mut Frame, area: Rect, game: &mut Game) {
+fn render_companion_menu(f: &mut Frame, area: Rect, game: &mut Game) {
     let popup = centered_rect(60, 50, area);
     f.render_widget(Clear, popup);
-    let creatures: Vec<_> = game
+    let candidates: Vec<_> = game
         .view_entities(crate::MENU_SCAN_RADIUS, crate::MENU_SCAN_RADIUS)
         .into_iter()
-        .filter(|e| !e.is_player && !e.is_structure)
+        .filter(|e| e.is_tamed)
         .collect();
-    let mut lines = vec![Line::from("Inspect which program? (Esc to cancel)")];
-    if creatures.is_empty() {
-        lines.push(Line::from("(no programs nearby)"));
+    let mut lines = vec![Line::from(
+        "Pick a companion to fight beside you — select its own number again to stand it down. (Esc to cancel)",
+    )];
+    if candidates.is_empty() {
+        lines.push(Line::from("(no compiled programs nearby)"));
     }
-    for (i, c) in creatures.iter().enumerate() {
-        let tag = if c.is_tamed {
-            "compiled"
-        } else if c.is_hostile {
-            "rogue"
-        } else {
-            "idle"
-        };
+    for (i, c) in candidates.iter().enumerate() {
+        let active = if c.is_companion { " (active companion)" } else { "" };
         lines.push(Line::from(format!(
-            "[{}] {}{} ({tag}) at ({}, {})",
+            "[{}] {}{}{}",
             i + 1,
             c.label,
             c.level.map(|l| format!(" Lv{l}")).unwrap_or_default(),
-            c.pos.0,
-            c.pos.1
+            active
         )));
     }
     f.render_widget(
-        Paragraph::new(lines).block(Block::bordered().title("Inspect")),
+        Paragraph::new(lines).wrap(Wrap { trim: true }).block(Block::bordered().title("Companion")),
+        popup,
+    );
+}
+
+fn render_inspect_direction(f: &mut Frame, area: Rect) {
+    let popup = centered_rect(50, 20, area);
+    f.render_widget(Clear, popup);
+    let lines = vec![Line::from(
+        "Choose a direction to inspect (arrows/hjkl), Esc to cancel",
+    )];
+    f.render_widget(
+        Paragraph::new(lines).block(Block::bordered().title("Inspect Direction")),
         popup,
     );
 }
@@ -499,14 +581,15 @@ fn render_battle(f: &mut Frame, app: &mut App) {
     let Some(game) = &mut app.game else { return };
     let Some(view) = game.battle_view() else { return };
 
-    let chunks = Layout::vertical([
-        Constraint::Length(3),
-        Constraint::Length(3),
-        Constraint::Length(1),
-        Constraint::Min(5),
-        Constraint::Length(3),
-    ])
-    .split(area);
+    let mut constraints = vec![Constraint::Length(3), Constraint::Length(3)];
+    if view.companion.is_some() {
+        constraints.push(Constraint::Length(1));
+    }
+    constraints.push(Constraint::Length(1));
+    constraints.push(Constraint::Min(5));
+    constraints.push(Constraint::Length(3));
+    let chunks = Layout::vertical(constraints).split(area);
+    let mut i = 0;
 
     let wild_ratio = (view.wild_hp as f64 / view.wild_max_hp.max(1) as f64).clamp(0.0, 1.0);
     f.render_widget(
@@ -518,8 +601,9 @@ fn render_battle(f: &mut Frame, app: &mut App) {
             .gauge_style(Style::new().fg(Color::Red))
             .ratio(wild_ratio)
             .label(format!("{}/{}", view.wild_hp, view.wild_max_hp)),
-        chunks[0],
+        chunks[i],
     );
+    i += 1;
 
     let player_ratio = (view.player_hp as f64 / view.player_max_hp.max(1) as f64).clamp(0.0, 1.0);
     f.render_widget(
@@ -531,8 +615,23 @@ fn render_battle(f: &mut Frame, app: &mut App) {
             .gauge_style(Style::new().fg(Color::Cyan))
             .ratio(player_ratio)
             .label(format!("{}/{}", view.player_hp, view.player_max_hp)),
-        chunks[1],
+        chunks[i],
     );
+    i += 1;
+
+    if let Some(companion) = &view.companion {
+        f.render_widget(
+            Paragraph::new(Line::styled(
+                format!(
+                    "Companion: {} (HP {}/{}, ATK {})",
+                    companion.name, companion.hp, companion.max_hp, companion.atk
+                ),
+                Style::new().fg(Color::Green),
+            )),
+            chunks[i],
+        );
+        i += 1;
+    }
 
     f.render_widget(
         Paragraph::new(Line::styled(
@@ -543,10 +642,11 @@ fn render_battle(f: &mut Frame, app: &mut App) {
             ),
             Style::new().fg(Color::Magenta),
         )),
-        chunks[2],
+        chunks[i],
     );
+    i += 1;
 
-    let log_capacity = chunks[3].height.saturating_sub(2) as usize;
+    let log_capacity = chunks[i].height.saturating_sub(2) as usize;
     let log_lines: Vec<Line> = game
         .message_log(log_capacity.max(1))
         .into_iter()
@@ -556,17 +656,21 @@ fn render_battle(f: &mut Frame, app: &mut App) {
         Paragraph::new(log_lines)
             .block(Block::bordered().title("Intrusion"))
             .wrap(Wrap { trim: true }),
-        chunks[3],
+        chunks[i],
     );
+    i += 1;
 
     let mut actions = vec!["[A]ttack".to_string()];
     if view.can_tame {
         actions.push("[D]ecompile".to_string());
     }
+    if view.companion.is_some() {
+        actions.push("[C]ommand companion".to_string());
+    }
     actions.push("[J]ack Out".to_string());
     f.render_widget(
         Paragraph::new(Line::from(actions.join("   "))).block(Block::bordered()),
-        chunks[4],
+        chunks[i],
     );
 }
 
@@ -604,19 +708,22 @@ fn render_help(f: &mut Frame) {
         Line::styled("Controls", Style::new().add_modifier(Modifier::BOLD)),
         Line::from(""),
         Line::from("hjkl / arrow keys   move (bumping a rogue program starts an intrusion)"),
+        Line::from(".                   wait in place (advances one tick)"),
         Line::from("e                   drain a power cell"),
-        Line::from("r                   recharge overnight (restores fatigue, uses power)"),
+        Line::from("r                   recharge overnight (restores fatigue and Integrity, uses power)"),
         Line::from("g                   scan the sector for power cells"),
-        Line::from("c                   compile an ICE Breaker (3 Core Fragments)"),
+        Line::from("c                   open the compile menu (create an ICE Breaker and any future recipes)"),
         Line::from("b                   deploy a structure"),
         Line::from("w                   assign a compiled program to a cronjob"),
-        Line::from("i                   inspect a nearby program (stats/moves, no intrusion)"),
+        Line::from("i                   pick a direction, inspect the first program that way (stats/moves, no intrusion)"),
         Line::from("v                   inventory/equipment: equip, unequip, drop, destroy items"),
+        Line::from("p                   pick a nearby compiled program as your active companion"),
         Line::from("s                   save session"),
-        Line::from("q                   quit"),
+        Line::from("q                   return to the main menu (unsaved progress is lost — save first)"),
         Line::from("+ / -               zoom the grid in / out"),
         Line::from(""),
-        Line::from("In an intrusion:  a attack   d decompile (needs an ICE Breaker)   j jack out"),
+        Line::from("In an intrusion:  a attack   d decompile (needs an ICE Breaker)"),
+        Line::from("                  c command companion (if one is active)   j jack out"),
         Line::from(""),
         Line::from("Defeating or decompiling a rogue program grants XP. Compiled programs"),
         Line::from("gain XP from completed work cycles. Leveling up fully restores Integrity."),
@@ -624,6 +731,11 @@ fn render_help(f: &mut Frame) {
         Line::from("Equipping a weapon/armor/module grants a flat Attack/Defense/Decompiler"),
         Line::from("bonus while worn. Equip up to one item per slot; equipping a second"),
         Line::from("item in an occupied slot swaps the old one back to your inventory."),
+        Line::from(""),
+        Line::from("A companion (p) fights alongside you: commanding it (c) in an intrusion"),
+        Line::from("has it attack using its own Attack stat instead of you acting that round."),
+        Line::from("It's never targeted by the wild program's retaliation. Assigning it to a"),
+        Line::from("cronjob (w) stands it down as companion, and vice versa — one job at a time."),
         Line::from(""),
         Line::from("Press any key to close"),
     ];

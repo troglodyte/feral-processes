@@ -59,3 +59,11 @@ pub struct BattleState {
     pub finished: bool,
     pub player_won: bool,
 }
+
+/// The player's active battle companion: a tamed program that can be
+/// commanded to attack during an intrusion. `None` means no companion is
+/// set. Mutually exclusive with an active cronjob `Task` on the same
+/// entity — a program is either working a structure or fighting beside
+/// the player, never both at once.
+#[derive(Resource, Default, Clone, Copy)]
+pub struct Companion(pub Option<Entity>);

@@ -49,6 +49,10 @@ pub struct CreatureSave {
     /// aren't stable across a save/load round trip.
     #[serde(default)]
     pub cronjob: Option<CronjobSave>,
+    /// Only meaningful when `tamed` is true: whether this program is the
+    /// player's active battle companion.
+    #[serde(default)]
+    pub is_companion: bool,
 }
 
 /// An in-progress work assignment (a "cronjob") a tamed creature is running

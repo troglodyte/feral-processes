@@ -22,6 +22,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
         | Mode::Build
         | Mode::BuildDirection
         | Mode::Craft
+        | Mode::CraftQuantity
         | Mode::Cronjob
         | Mode::CronjobStructure
         | Mode::InspectDirection
@@ -80,6 +81,9 @@ fn render_playing(f: &mut Frame, app: &mut App) {
         Mode::Build => render_build_menu(f, area, game),
         Mode::BuildDirection => render_build_direction(f, area),
         Mode::Craft => render_craft_menu(f, area, game),
+        Mode::CraftQuantity => {
+            render_craft_quantity_menu(f, area, game, app.pending_craft, &app.craft_quantity_input)
+        }
         Mode::Cronjob => render_cronjob_menu(f, area, game),
         Mode::CronjobStructure => render_cronjob_structure_menu(f, area, game),
         Mode::InspectDirection => render_inspect_direction(f, area),
@@ -268,6 +272,37 @@ fn render_craft_menu(f: &mut Frame, area: Rect, game: &mut Game) {
             cost.join(", ")
         )));
     }
+    f.render_widget(
+        Paragraph::new(lines).wrap(Wrap { trim: true }).block(Block::bordered().title("Compile")),
+        popup,
+    );
+}
+
+fn render_craft_quantity_menu(
+    f: &mut Frame,
+    area: Rect,
+    game: &mut Game,
+    pending: Option<ItemId>,
+    quantity_input: &str,
+) {
+    let popup = centered_rect(60, 30, area);
+    f.render_widget(Clear, popup);
+    let Some(result) = pending else { return };
+    let recipe = game.craft_recipes().into_iter().find(|r| r.result == result);
+    let mut lines = vec![Line::from(format!("Compile how many {}?", result.display_name())), Line::from("")];
+    if let Some(recipe) = &recipe {
+        let cost: Vec<String> = recipe
+            .cost
+            .iter()
+            .map(|(item, qty)| format!("{} {}", qty, item.display_name()))
+            .collect();
+        lines.push(Line::from(format!("Cost per unit: {}", cost.join(", "))));
+        lines.push(Line::from(""));
+    }
+    let shown = if quantity_input.is_empty() { "1" } else { quantity_input };
+    lines.push(Line::from(format!("Quantity: {shown}")));
+    lines.push(Line::from(""));
+    lines.push(Line::from("Type digits, Enter to compile, Esc to go back"));
     f.render_widget(
         Paragraph::new(lines).wrap(Wrap { trim: true }).block(Block::bordered().title("Compile")),
         popup,

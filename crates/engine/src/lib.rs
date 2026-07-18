@@ -664,10 +664,13 @@ impl Game {
         }]
     }
 
-    /// Compiles one unit of `result` per its `craft_recipes` entry.
-    pub fn craft(&mut self, result: ItemId) -> Result<(), String> {
+    /// Compiles `quantity` units of `result` per its `craft_recipes` entry.
+    pub fn craft(&mut self, result: ItemId, quantity: u32) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
+        }
+        if quantity == 0 {
+            return Err("Compile at least 1.".into());
         }
         let recipe = self
             .craft_recipes()
@@ -678,11 +681,12 @@ impl Game {
         {
             let inv = self.world.get::<Inventory>(player).unwrap();
             for (item, qty) in &recipe.cost {
-                if inv.count(*item) < *qty {
+                if inv.count(*item) < *qty * quantity {
                     return Err(format!(
-                        "Compiling {} needs {} {}.",
+                        "Compiling {} {} needs {} {}.",
+                        quantity,
                         result.display_name(),
-                        qty,
+                        qty * quantity,
                         item.display_name()
                     ));
                 }
@@ -691,11 +695,15 @@ impl Game {
         {
             let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
             for (item, qty) in &recipe.cost {
-                inv.take(*item, *qty);
+                inv.take(*item, *qty * quantity);
             }
-            inv.add(result, 1);
+            inv.add(result, quantity);
         }
-        self.log(format!("You compile 1 {} from salvaged components.", result.display_name()));
+        self.log(format!(
+            "You compile {} {} from salvaged components.",
+            quantity,
+            result.display_name()
+        ));
         self.tick();
         Ok(())
     }
@@ -2057,11 +2065,28 @@ mod tests {
             inv.add(ItemId::CoreFragment, ICE_BREAKER_CORE_COST);
         }
 
-        game.craft(ItemId::IceBreaker).unwrap();
+        game.craft(ItemId::IceBreaker, 1).unwrap();
 
         let inv = game.world.get::<Inventory>(player).unwrap();
         assert_eq!(inv.count(ItemId::CoreFragment), 0, "cost should be fully consumed");
         assert_eq!(inv.count(ItemId::IceBreaker), 1, "the recipe's result should be granted");
+    }
+
+    #[test]
+    fn craft_multiple_scales_cost_and_result() {
+        let mut game = Game::new(30, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        {
+            let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+            inv.items.clear();
+            inv.add(ItemId::CoreFragment, ICE_BREAKER_CORE_COST * 3);
+        }
+
+        game.craft(ItemId::IceBreaker, 3).unwrap();
+
+        let inv = game.world.get::<Inventory>(player).unwrap();
+        assert_eq!(inv.count(ItemId::CoreFragment), 0, "cost should scale with quantity");
+        assert_eq!(inv.count(ItemId::IceBreaker), 3, "quantity units should be granted");
     }
 
     #[test]
@@ -2073,14 +2098,14 @@ mod tests {
             inv.items.clear();
         }
 
-        assert!(game.craft(ItemId::IceBreaker).is_err());
+        assert!(game.craft(ItemId::IceBreaker, 1).is_err());
         assert_eq!(game.world.get::<Inventory>(player).unwrap().count(ItemId::IceBreaker), 0);
     }
 
     #[test]
     fn craft_rejects_a_result_with_no_recipe() {
         let mut game = Game::new(22, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        assert!(game.craft(ItemId::CoreFragment).is_err());
+        assert!(game.craft(ItemId::CoreFragment, 1).is_err());
     }
 
     fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {

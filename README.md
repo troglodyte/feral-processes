@@ -130,9 +130,9 @@ creature to work" mechanic.
    picks up right where it left off, no need to reassign it with `w`.
 
 Once you have a Mining Node feeding a steady supply of Core Fragments, feed
-that into a Power Conduit (Power Cells), a Compiler (ICE Breakers), and/or
-a Fabricator (Overclock Cores — see [Equipment](#equipment)) to round out
-the loop.
+that into a Power Conduit (Power Cells), a Compiler (ICE Breakers), a
+Fabricator (Overclock Cores), and/or an Armory (Firewall Plating — see
+[Equipment](#equipment)) to round out the loop.
 
 ### Stats
 
@@ -174,7 +174,7 @@ inventory, each item numbered for selection.
 | Item | Slot | Bonus | Source |
 | --- | --- | --- | --- |
 | Overclock Core | Weapon | +3 Attack | Fabricator cronjob; loot chance from Scrapper, Construct |
-| Firewall Plating | Armor | +3 Defense | Loot chance from Wraith, Sentinel |
+| Firewall Plating | Armor | +3 Defense | Armory cronjob; loot chance from Wraith, Sentinel |
 | Neural Amplifier | Module | +2 Decompiler | Loot chance from Virus, Phantom |
 
 - **Equip**: select a numbered inventory item, then `[E]`. Equipping into an
@@ -204,9 +204,11 @@ single tamed program that fights alongside you.
   gains `[C]ommand companion`: it attacks using its own Attack stat
   *instead of* you acting that round — a turn-economy tradeoff, not a free
   extra hit.
-- The wild program's retaliation always targets you, never the companion —
-  the companion is a support striker, not something that can be knocked
-  out or lost in a fight.
+- The wild program's retaliation has a 30% chance to target the active
+  companion instead of you, using the companion's Defense stat. A companion
+  knocked to 0 HP stands down automatically — it isn't lost, just no longer
+  active; reselect it as companion (`p`) and recharge overnight (`r`) to
+  heal it back up.
 - The companion picker shows each candidate's status: `(active companion)`
   or `(on a cronjob)`, so you can see at a glance who's free to swap in.
 - Recharging overnight (`r`) fully heals the active companion too, not
@@ -239,9 +241,10 @@ chance to drop a piece of equipment on top of their listed resource — see
 | Power Conduit | 4 Core Fragments | Cronjob a compiled program to it to produce Power Cells over time |
 | Compiler | 6 Core Fragments | Cronjob a compiled program to it to produce ICE Breakers over time |
 | Fabricator | 8 Core Fragments | Cronjob a compiled program to it to produce Overclock Cores (see [Equipment](#equipment)) over time |
+| Armory | 8 Core Fragments | Cronjob a compiled program to it to produce Firewall Plating (see [Equipment](#equipment)) over time |
 | Home | 5 Core Fragments | `u` ("use symlink") instantly teleports you to it from anywhere on the map, for 4 Power Cells |
 
-Mining Node, Power Conduit, Compiler, and Fabricator use **active**
+Mining Node, Power Conduit, Compiler, Fabricator, and Armory use **active**
 automation (an assigned cronjob produces over time); Terminal uses
 **passive** automation (it processes on its own whenever you're in range).
 Home is a **symlink target** — a third category, neither cronjob nor

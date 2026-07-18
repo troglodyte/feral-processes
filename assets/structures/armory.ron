@@ -1,0 +1,8 @@
+(
+    id: "armory",
+    name: "Armory",
+    glyph: '%',
+    color: Blue,
+    build_cost: [(CoreFragment, 8)],
+    work: Some((produces: FirewallPlating, ticks_per_unit: 12)),
+)

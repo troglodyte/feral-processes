@@ -40,6 +40,11 @@ const ICE_BREAKER_CORE_COST: u32 = 3;
 /// Core Fragment cost to compile one Power Cell.
 const POWER_CELL_CORE_COST: u32 = 2;
 
+/// Chance a wild program's retaliation targets the active companion instead
+/// of the player, if one is present. The companion is a battle-worthy
+/// program in its own right, not invulnerable cover.
+const COMPANION_RETALIATION_CHANCE: f64 = 0.3;
+
 /// How much the player's `Decompiler` skill grows per level gained.
 const DECOMPILER_SKILL_PER_LEVEL: i32 = 1;
 
@@ -1011,10 +1016,9 @@ impl Game {
     }
 
     /// Commands the active companion to attack the wild creature this
-    /// round instead of the player acting directly. The wild creature
-    /// still retaliates against the player, not the companion — the
-    /// companion is a support striker, never a target, so it needs no
-    /// health-loss/knockout handling of its own.
+    /// round instead of the player acting directly. The wild creature's
+    /// retaliation (see `wild_retaliate`) can land on either the player or
+    /// the companion regardless of who acted this round.
     pub fn battle_companion_attack(&mut self) {
         if self.is_game_over().is_some() {
             return;
@@ -1200,6 +1204,9 @@ impl Game {
         self.tick();
     }
 
+    /// The wild creature strikes back at whoever's exposed: normally the
+    /// player, but if a companion is fighting alongside them, there's a
+    /// `COMPANION_RETALIATION_CHANCE` chance it eats the hit instead.
     fn wild_retaliate(&mut self, wild: Entity, player: Entity) {
         let species_id = self.world.get::<Creature>(wild).unwrap().species.clone();
         let move_count = self
@@ -1220,17 +1227,38 @@ impl Game {
             .unwrap()
             .moves[idx]
             .clone();
-        let (w_atk, p_def) = {
-            let w = *self.world.get::<Stats>(wild).unwrap();
-            let p = *self.world.get::<Stats>(player).unwrap();
-            (w.atk, p.def)
+
+        let companion = self.world.resource::<Companion>().0;
+        let targets_companion = companion.is_some() && {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_bool(COMPANION_RETALIATION_CHANCE)
         };
-        let dmg = battle::compute_damage(w_atk, p_def, mv.power);
-        self.apply_damage(player, dmg);
-        self.log(format!(
-            "The rogue program executes {} for {} damage.",
-            mv.name, dmg
-        ));
+        let target = if targets_companion { companion.unwrap() } else { player };
+
+        let (w_atk, t_def) = {
+            let w = *self.world.get::<Stats>(wild).unwrap();
+            let t = *self.world.get::<Stats>(target).unwrap();
+            (w.atk, t.def)
+        };
+        let dmg = battle::compute_damage(w_atk, t_def, mv.power);
+        self.apply_damage(target, dmg);
+
+        if targets_companion {
+            let name = self.creature_label(target);
+            self.log(format!(
+                "The rogue program executes {} on {} for {} damage.",
+                mv.name, name, dmg
+            ));
+            if !self.creature_alive(target) {
+                self.log(format!("{name} is knocked offline and stands down."));
+                self.world.insert_resource(Companion(None));
+            }
+        } else {
+            self.log(format!(
+                "The rogue program executes {} for {} damage.",
+                mv.name, dmg
+            ));
+        }
     }
 
     fn apply_damage(&mut self, target: Entity, dmg: i32) {
@@ -1872,6 +1900,18 @@ mod tests {
     }
 
     #[test]
+    fn armory_structure_loads_and_produces_firewall_plating() {
+        let game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let def = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.id == "armory")
+            .expect("armory.ron should load as a structure");
+        let work = def.work.expect("Armory should be cronjob-workable, like Fabricator");
+        assert_eq!(work.produces, ItemId::FirewallPlating);
+    }
+
+    #[test]
     fn cronjob_assignment_survives_save_and_load() {
         let assets = test_assets_dir();
         let mut game = Game::new(6, DifficultyMode::Forgiving, &assets).unwrap();
@@ -2395,7 +2435,7 @@ mod tests {
     }
 
     #[test]
-    fn battle_companion_attack_damages_the_wild_creature_and_never_the_companion() {
+    fn battle_companion_attack_damages_the_wild_creature() {
         let mut game = Game::new(27, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
         let companion = spawn_tamed(&mut game, 10, 20);
@@ -2423,8 +2463,109 @@ mod tests {
 
         let wild_hp = game.world.get::<Stats>(wild).unwrap().hp;
         assert!(wild_hp < 100, "the companion's attack should have damaged the wild creature");
-        let companion_hp = game.world.get::<Stats>(companion).unwrap().hp;
-        assert_eq!(companion_hp, 10, "the companion is never a retaliation target");
+    }
+
+    /// `wild_retaliate` rolls per-call whether a companion soaks the hit, so
+    /// this drives it across many seeds and checks both outcomes occur —
+    /// proof the roll is live, not that any single call behaves one way.
+    #[test]
+    fn wild_retaliation_can_land_on_either_the_player_or_the_companion() {
+        let species_id = {
+            let game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            game.species_defs().into_iter().next().expect("at least one species").id.clone()
+        };
+
+        let mut companion_hit = false;
+        let mut player_hit = false;
+
+        for seed in 0..60u32 {
+            let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            let player = game.player_entity();
+            let companion = spawn_tamed(&mut game, 1000, 1);
+            game.set_companion(companion).unwrap();
+            let player_hp_before = game.world.get::<Stats>(player).unwrap().hp;
+
+            let wild = game
+                .world
+                .spawn((
+                    Creature { species: species_id.clone() },
+                    Hostile,
+                    Position { x: 5, y: 5 },
+                    Stats { hp: 1000, max_hp: 1000, atk: 5, def: 0 },
+                ))
+                .id();
+            game.world.insert_resource(BattleState {
+                player,
+                wild_creature: wild,
+                log: Vec::new(),
+                finished: false,
+                player_won: false,
+            });
+
+            game.battle_attack();
+
+            let companion_hp = game.world.get::<Stats>(companion).unwrap().hp;
+            let player_hp_after = game.world.get::<Stats>(player).unwrap().hp;
+            if companion_hp < 1000 {
+                companion_hit = true;
+            }
+            if player_hp_after < player_hp_before {
+                player_hit = true;
+            }
+            if companion_hit && player_hit {
+                break;
+            }
+        }
+
+        assert!(companion_hit, "across 60 battles, the companion should have taken at least one hit");
+        assert!(player_hit, "across 60 battles, the player should have taken at least one hit");
+    }
+
+    #[test]
+    fn a_knocked_out_companion_stands_down() {
+        let species_id = {
+            let game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            game.species_defs().into_iter().next().expect("at least one species").id.clone()
+        };
+
+        // The companion-targeting roll is 30% per call; a 1-HP companion is
+        // guaranteed to hit 0 the moment it's targeted (damage is always
+        // >= 1). Across 60 seeds the odds of never once rolling the
+        // companion are astronomically small, so this deterministically
+        // exercises the knockout path without needing to fake the RNG.
+        for seed in 0..60u32 {
+            let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            let player = game.player_entity();
+            let companion = spawn_tamed(&mut game, 1, 1);
+            game.set_companion(companion).unwrap();
+
+            let wild = game
+                .world
+                .spawn((
+                    Creature { species: species_id.clone() },
+                    Hostile,
+                    Position { x: 5, y: 5 },
+                    Stats { hp: 1000, max_hp: 1000, atk: 50, def: 0 },
+                ))
+                .id();
+            game.world.insert_resource(BattleState {
+                player,
+                wild_creature: wild,
+                log: Vec::new(),
+                finished: false,
+                player_won: false,
+            });
+
+            game.wild_retaliate(wild, player);
+            if game.world.get::<Stats>(companion).unwrap().hp == 0 {
+                assert!(
+                    game.player_status().companion.is_none(),
+                    "0 HP should have stood the companion down"
+                );
+                return;
+            }
+        }
+        panic!("companion was never targeted across 60 seeds — retaliation roll may be broken");
     }
 
     #[test]

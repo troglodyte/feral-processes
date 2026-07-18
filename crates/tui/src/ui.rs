@@ -781,8 +781,9 @@ fn render_help(f: &mut Frame) {
         Line::from(""),
         Line::from("A companion (p) fights alongside you: commanding it (c) in an intrusion"),
         Line::from("has it attack using its own Attack stat instead of you acting that round."),
-        Line::from("It's never targeted by the wild program's retaliation. Assigning it to a"),
-        Line::from("cronjob (w) stands it down as companion, and vice versa — one job at a time."),
+        Line::from("The wild program's retaliation has a chance to hit the companion instead"),
+        Line::from("of you. Assigning it to a cronjob (w) stands it down as companion, and"),
+        Line::from("vice versa — one job at a time."),
         Line::from(""),
         Line::from("Press any key to close"),
     ];

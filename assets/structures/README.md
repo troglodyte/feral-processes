@@ -14,8 +14,9 @@ is skipped with a warning logged in-game rather than crashing startup.
     color: Magenta,                // one of: White, Gray, Green, DarkGreen, Red,
                                     //         Yellow, Blue, Magenta, Cyan, Brown
     build_cost: [(CoreFragment, 3)],  // list of (item, quantity) pairs
-    // Item options: CoreFragment, PowerCell, IceBreaker, OverclockCore,
-    //               FirewallPlating, NeuralAmplifier
+    // Item options: CoreFragment, PowerCell, IceBreaker, PortalFragment,
+    //               OverclockCore, MonofilamentWhip, FirewallPlating,
+    //               AblativePlating, NeuralAmplifier, CortexHack
 
     // Omit (`None`) for a purely decorative/utility structure. Set `Some(...)`
     // to make it assignable to a tamed creature via the cronjob menu — it'll
@@ -38,6 +39,35 @@ is skipped with a warning logged in-game rather than crashing startup.
     // in the TUI) to instantly teleport to it from anywhere on the map,
     // paying the listed item cost.
     teleport_cost: Some([(PowerCell, 4)]),
+
+    // Optional; can be left out entirely (defaults to false). If true,
+    // walking onto this structure breaches the player into the next zone
+    // sector instead of blocking movement — see `Game::enter_next_zone`.
+    // Wild programs in the new zone spawn with stats doubled per zone
+    // level, and there's no portal back down. `build_cost` above is
+    // treated as a *per-zone-level* rate for a zone-portal structure: the
+    // amount actually charged when deploying it is each quantity
+    // multiplied by the current zone level (so building the portal out of
+    // zone 2 costs twice as much as building it out of zone 1).
+    zone_portal: true,
+
+    // Optional; can be left out entirely (defaults to no trading). If set,
+    // this structure is a trading post: the player can "trade" (`t` in the
+    // TUI) with it to sell any inventory item (except CoreFragment) for
+    // `sell_rate` Core Fragments per unit, or buy any item listed in `buy`
+    // for its Core Fragment cost.
+    trade: Some((
+        sell_rate: 1,
+        buy: [(IceBreaker, 4), (PowerCell, 3)],
+    )),
+
+    // Optional; can be left out entirely (defaults to 30). How much damage
+    // this structure can take from raids (see `Game::raid_check`) before
+    // being destroyed. An assigned cronjob worker fights a raid off,
+    // reducing the damage by its Defense stat; an unassigned structure
+    // takes the raid's full damage. Damaged structures slowly regenerate
+    // over time regardless.
+    durability: 30,
 )
 ```
 

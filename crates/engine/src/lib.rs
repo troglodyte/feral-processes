@@ -2,6 +2,7 @@ pub mod battle;
 pub mod components;
 pub mod difficulty;
 pub mod items;
+pub mod perks;
 pub mod progression;
 pub mod resources;
 pub mod save;
@@ -20,15 +21,19 @@ use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 
 use components::{
-    Creature, Decompiler, Equipment, Experience, Glyph, GlyphColor, Hostile, Inventory, Needs,
-    PassiveProcessor, Player, Position, ResourceNode, Stats, Structure, Tamed, Task, TaskKind,
-    WanderAi,
+    ActiveStatus, Creature, Decompiler, Durability, Equipment, Experience, Glyph, GlyphColor,
+    Hostile, Inventory, Needs, PassiveProcessor, Perks, Player, Position, ResourceNode, Stats,
+    StatusEffects, StatusKind, Structure, Tamed, Task, TaskKind, WanderAi, ZonePortal,
 };
 use items::{EquipmentSlot, ItemId};
+pub use perks::Perk;
 pub use resources::DifficultyMode;
-use resources::{BattleState, Companion, GameClock, GameOver, GameRng, MessageLog, PlayerEntity};
+use resources::{
+    BattleState, GameClock, GameOver, GameRng, MessageLog, Party, PlayerEntity, ZoneLevel,
+    MAX_PARTY_SIZE,
+};
 use species::{MoveDef, SpeciesDb, SpeciesDef};
-use structures::{StructureDb, StructureDef, StructureId};
+use structures::{StructureDb, StructureDef, StructureId, TradeDef};
 use world::{Biome, Tile, WorldMap};
 
 /// How many ticks a full night's recharge cycle advances the clock by.
@@ -48,6 +53,60 @@ const COMPANION_RETALIATION_CHANCE: f64 = 0.3;
 /// How much the player's `Decompiler` skill grows per level gained.
 const DECOMPILER_SKILL_PER_LEVEL: i32 = 1;
 
+/// Perk Points (see `perks::Perk`) awarded per player level gained.
+const PERK_POINTS_PER_LEVEL: u32 = 1;
+
+/// Flat bonus `Perk::KeenScavenger` adds to `Game::forage`'s success chance.
+const KEEN_SCAVENGER_BONUS: f64 = 0.15;
+
+/// `Perk::LowPowerMode`'s hunger-decay multiplier (30% slower).
+const LOW_POWER_MODE_MULTIPLIER: f32 = 0.7;
+
+/// Effective Decompiler skill `Perk::ExploitFocus` adds on top of the
+/// player's real `Decompiler` stat.
+const EXPLOIT_FOCUS_BONUS: i32 = 5;
+
+/// Flat per-item discount `Perk::LeanCompiler` applies to `Game::craft`
+/// recipe costs (never below 1 each).
+const LEAN_COMPILER_DISCOUNT: u32 = 1;
+
+/// Chance a defeated wild program additionally drops a Portal Fragment,
+/// independent of its species' own `work_resource`/`equipment_drop`.
+/// Fragments are the raw material for deploying a zone-portal structure
+/// (see `StructureDef::zone_portal`).
+const PORTAL_FRAGMENT_DROP_CHANCE: f64 = 0.35;
+
+/// Chance a habitat spawn roll (see `Game::try_spawn_habitat_creature`)
+/// picks a boss species instead of an ordinary one, when the tile's biome
+/// has at least one boss defined for it.
+const BOSS_SPAWN_CHANCE: f64 = 0.04;
+
+/// Range of Portal Fragments a defeated boss guarantees, replacing the
+/// flat `PORTAL_FRAGMENT_DROP_CHANCE` roll every other species gets.
+const BOSS_PORTAL_FRAGMENT_DROP: std::ops::RangeInclusive<u32> = 3..=6;
+
+/// Chance per tick (see `Game::raid_check`) that a random deployed
+/// structure comes under raid, if any exist.
+const RAID_CHANCE_PER_TICK: f64 = 0.02;
+
+/// Damage a raid deals to a structure's `Durability` when it has no
+/// assigned cronjob worker defending it.
+const RAID_DAMAGE: u32 = 10;
+
+/// Damage a defending cronjob worker takes fending off a raid on its
+/// structure — win or lose, defending has a cost. The raid's damage to the
+/// structure itself is reduced by the worker's Defense stat instead
+/// (`RAID_DAMAGE.saturating_sub(worker_def)`).
+const RAID_DEFENDER_DAMAGE: i32 = 6;
+
+/// How often (in ticks) damaged structures passively regenerate — a slow
+/// trickle, not a substitute for staying ahead of raids.
+const STRUCTURE_REGEN_INTERVAL: u64 = 20;
+
+/// How much `Durability` a damaged structure regenerates every
+/// `STRUCTURE_REGEN_INTERVAL` ticks.
+const STRUCTURE_REGEN_AMOUNT: u32 = 2;
+
 pub struct PlayerStatus {
     pub position: (i32, i32),
     pub hp: i32,
@@ -64,16 +123,30 @@ pub struct PlayerStatus {
     pub weapon: Option<ItemId>,
     pub armor: Option<ItemId>,
     pub module: Option<ItemId>,
-    pub companion: Option<CompanionInfo>,
+    /// The player's active battle party (see `resources::Party`), in
+    /// party-slot order.
+    pub companions: Vec<CompanionInfo>,
+    /// Which zone sector the player is currently breached into. See
+    /// `ZoneLevel`.
+    pub zone: u32,
+    /// Unspent Perk Points (see `perks::Perk`), earned 1 per level gained.
+    pub perk_points: u32,
+    /// Which perks have been unlocked so far.
+    pub unlocked_perks: Vec<Perk>,
 }
 
 /// Snapshot of the player's active companion, shown in the status panel
 /// and during an intrusion.
 pub struct CompanionInfo {
+    pub entity: Entity,
     pub name: String,
     pub hp: i32,
     pub max_hp: i32,
     pub atk: i32,
+    /// The companion's current battle status condition, if any (see
+    /// `status_label`) — e.g. "Bleeding (2)". Always `None` outside a
+    /// battle, since status effects are scoped to a single intrusion.
+    pub status: Option<String>,
 }
 
 #[derive(Clone)]
@@ -88,7 +161,11 @@ pub struct EntityView {
     pub is_companion: bool,
     pub is_hostile: bool,
     pub is_structure: bool,
+    pub is_boss: bool,
     pub can_work: bool,
+    /// Whether this (structure) entity is a trading post (see
+    /// `StructureDef::trade`).
+    pub can_trade: bool,
     /// Whether this (tamed) entity is currently assigned to a cronjob.
     pub has_job: bool,
     /// If `has_job`, the label of the structure this (tamed) entity is
@@ -99,10 +176,13 @@ pub struct EntityView {
     pub structure_worker: Option<String>,
     pub hp_fraction: Option<f32>,
     pub level: Option<u32>,
+    /// If this is a structure, its current/max raid `Durability`.
+    pub durability: Option<(u32, u32)>,
 }
 
 pub struct BattleView {
     pub wild_name: String,
+    pub wild_is_boss: bool,
     pub wild_hp: i32,
     pub wild_max_hp: i32,
     pub wild_atk: i32,
@@ -119,7 +199,13 @@ pub struct BattleView {
     /// species' difficulty. Shown to the player even if they have no ICE
     /// Breaker yet, so they can decide whether it's worth going to compile one.
     pub decompile_chance: f32,
-    pub companion: Option<CompanionInfo>,
+    /// The player's active battle party (see `resources::Party`), in
+    /// party-slot order.
+    pub companions: Vec<CompanionInfo>,
+    /// The player's current battle status condition, if any — see `status_label`.
+    pub player_status_effect: Option<String>,
+    /// The wild program's current battle status condition, if any.
+    pub wild_status_effect: Option<String>,
 }
 
 /// One entry in `Game::craft_recipes` — compiling `result` consumes `cost`.
@@ -142,6 +228,7 @@ pub struct InspectView {
     pub def: i32,
     pub is_hostile: bool,
     pub is_tamed: bool,
+    pub is_boss: bool,
     pub taming_difficulty: f32,
     /// Estimated decompile chance if an intrusion started right now, using
     /// the creature's current HP fraction — same formula as `BattleView`.
@@ -175,7 +262,8 @@ impl Game {
         world.insert_resource(MessageLog::default());
         world.insert_resource(GameOver::default());
         world.insert_resource(difficulty);
-        world.insert_resource(Companion::default());
+        world.insert_resource(Party::default());
+        world.insert_resource(ZoneLevel::default());
 
         let player = world
             .spawn((
@@ -205,6 +293,8 @@ impl Game {
                         (ItemId::CoreFragment, 5),
                     ],
                 },
+                StatusEffects::default(),
+                Perks::default(),
             ))
             .id();
         world.insert_resource(PlayerEntity(player));
@@ -249,7 +339,8 @@ impl Game {
         world.insert_resource(MessageLog::default());
         world.insert_resource(GameOver::default());
         world.insert_resource(data.difficulty);
-        world.insert_resource(Companion::default());
+        world.insert_resource(Party::default());
+        world.insert_resource(ZoneLevel(data.zone));
 
         let player = world
             .spawn((
@@ -288,6 +379,8 @@ impl Game {
                 Inventory {
                     items: data.player.inventory,
                 },
+                StatusEffects::default(),
+                Perks { points: data.player.perk_points, unlocked: data.player.unlocked_perks },
             ))
             .id();
         world.insert_resource(PlayerEntity(player));
@@ -307,7 +400,7 @@ impl Game {
         }
 
         let mut pending_cronjobs: Vec<(Entity, save::CronjobSave)> = Vec::new();
-        let mut companion: Option<Entity> = None;
+        let mut party: Vec<Entity> = Vec::new();
         for c in data.creatures {
             let Some(species) = game.world.resource::<SpeciesDb>().get(&c.species).cloned() else {
                 continue;
@@ -331,6 +424,8 @@ impl Game {
                     atk: c.atk,
                     def: c.def,
                 },
+                ZonePortal(c.zone),
+                StatusEffects::default(),
             ));
             if c.tamed {
                 let creature_id = entity.id();
@@ -343,7 +438,7 @@ impl Game {
                     },
                 ));
                 if is_companion {
-                    companion = Some(creature_id);
+                    party.push(creature_id);
                 } else if let Some(cronjob) = c.cronjob {
                     pending_cronjobs.push((creature_id, cronjob));
                 }
@@ -351,9 +446,8 @@ impl Game {
                 entity.insert((Hostile, WanderAi::default()));
             }
         }
-        if let Some(companion) = companion {
-            game.world.insert_resource(Companion(Some(companion)));
-        }
+        party.truncate(MAX_PARTY_SIZE);
+        game.world.insert_resource(Party(party));
 
         let mut structure_positions: HashMap<(i32, i32), Entity> = HashMap::new();
         for s in data.structures {
@@ -371,6 +465,10 @@ impl Game {
                 Glyph {
                     ch: def.glyph,
                     color: def.color,
+                },
+                Durability {
+                    hp: s.durability.unwrap_or(def.durability).min(def.durability),
+                    max_hp: def.durability,
                 },
             ));
             let structure_id = entity.id();
@@ -416,8 +514,9 @@ impl Game {
         let decompiler = self.world.get::<Decompiler>(player).unwrap().skill;
         let equipment = *self.world.get::<Equipment>(player).unwrap();
         let inventory = self.world.get::<Inventory>(player).unwrap().items.clone();
+        let perks = self.world.get::<Perks>(player).cloned().unwrap_or_default();
 
-        let companion_entity = self.world.resource::<Companion>().0;
+        let party_entities = self.world.resource::<Party>().0.clone();
         let mut creatures = Vec::new();
         let mut creature_query = self.world.query::<(
             Entity,
@@ -427,8 +526,11 @@ impl Game {
             Option<&Tamed>,
             Option<&Experience>,
             Option<&Task>,
+            Option<&ZonePortal>,
         )>();
-        for (entity, creature, pos, stats, tamed, exp, task) in creature_query.iter(&self.world) {
+        for (entity, creature, pos, stats, tamed, exp, task, spawn_zone) in
+            creature_query.iter(&self.world)
+        {
             let cronjob = task.and_then(|t| {
                 self.world.get::<Position>(t.target).map(|target_pos| save::CronjobSave {
                     target_position: (target_pos.x, target_pos.y),
@@ -448,19 +550,21 @@ impl Game {
                 xp: exp.map(|e| e.xp).unwrap_or(0),
                 xp_to_next: exp.map(|e| e.xp_to_next).unwrap_or(20),
                 cronjob,
-                is_companion: companion_entity == Some(entity),
+                is_companion: party_entities.contains(&entity),
+                zone: spawn_zone.map(|z| z.0).unwrap_or(1),
             });
         }
 
         let mut structures = Vec::new();
         let mut structure_query =
             self.world
-                .query::<(&Structure, &Position, Option<&ResourceNode>)>();
-        for (structure, pos, node) in structure_query.iter(&self.world) {
+                .query::<(&Structure, &Position, Option<&ResourceNode>, Option<&Durability>)>();
+        for (structure, pos, node, durability) in structure_query.iter(&self.world) {
             structures.push(save::StructureSave {
                 kind: structure.kind.clone(),
                 position: (pos.x, pos.y),
                 resource_amount: node.map(|n| n.amount),
+                durability: durability.map(|d| d.hp),
             });
         }
 
@@ -492,10 +596,13 @@ impl Game {
                 weapon: equipment.weapon,
                 armor: equipment.armor,
                 module: equipment.module,
+                perk_points: perks.points,
+                unlocked_perks: perks.unlocked,
             },
             creatures,
             structures,
             tile_overrides,
+            zone: self.world.resource::<ZoneLevel>().0,
         };
         save::save_to_file(path, &data)
     }
@@ -544,6 +651,8 @@ impl Game {
         }
         self.maybe_spawn_wild_creature();
         self.schedule.run(&mut self.world);
+        self.structure_regen();
+        self.raid_check();
         self.world.resource_mut::<GameClock>().tick += 1;
     }
 
@@ -557,6 +666,11 @@ impl Game {
 
         if let Some(target) = self.find_wild_creature_at(nx, ny) {
             self.start_battle(target);
+            self.tick();
+            return;
+        }
+        if self.find_zone_portal_at(nx, ny).is_some() {
+            self.enter_next_zone();
             self.tick();
             return;
         }
@@ -625,10 +739,17 @@ impl Game {
             let mut stats = self.world.get_mut::<Stats>(player).unwrap();
             stats.hp = stats.max_hp;
         }
-        if let Some(companion) = self.world.resource::<Companion>().0
-            && let Some(mut stats) = self.world.get_mut::<Stats>(companion)
-        {
-            stats.hp = stats.max_hp;
+        // Every tamed program you own gets fully healed too, not just your
+        // active party — including any left behind defending a structure
+        // from a raid while you were away.
+        let owned: Vec<Entity> = {
+            let mut query = self.world.query_filtered::<(Entity, &Tamed), With<Creature>>();
+            query.iter(&self.world).filter(|(_, t)| t.owner == player).map(|(e, _)| e).collect()
+        };
+        for creature in owned {
+            if let Some(mut stats) = self.world.get_mut::<Stats>(creature) {
+                stats.hp = stats.max_hp;
+            }
         }
         self.log("You come back online, fully recharged and repaired.");
     }
@@ -656,12 +777,7 @@ impl Game {
         let player = self.player_entity();
         let pos = *self.world.get::<Position>(player).unwrap();
         let biome = self.world.resource_mut::<WorldMap>().tile(pos.x, pos.y).biome;
-        let chance = match biome {
-            Biome::Mainframe | Biome::OpenGrid => 0.6,
-            Biome::NullSector => 0.3,
-            Biome::StaticField => 0.15,
-            Biome::DataVoid | Biome::BlackIce => 0.0,
-        };
+        let chance = forage_chance(biome, self.player_has_perk(Perk::KeenScavenger));
         let found = {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_bool(chance)
@@ -673,6 +789,49 @@ impl Game {
             self.log("You scan the sector but find nothing salvageable.");
         }
         self.tick();
+    }
+
+    /// Whether the player has unlocked `perk`.
+    pub fn player_has_perk(&self, perk: Perk) -> bool {
+        let player = self.player_entity();
+        self.world.get::<Perks>(player).is_some_and(|p| p.has(perk))
+    }
+
+    /// The player's effective Decompiler skill for decompile-chance
+    /// calculations: their real `Decompiler` stat plus `EXPLOIT_FOCUS_BONUS`
+    /// if `Perk::ExploitFocus` is unlocked.
+    fn player_decompiler_skill(&self) -> i32 {
+        let player = self.player_entity();
+        let base = self.world.get::<Decompiler>(player).map(|d| d.skill).unwrap_or(0);
+        if self.player_has_perk(Perk::ExploitFocus) {
+            base + EXPLOIT_FOCUS_BONUS
+        } else {
+            base
+        }
+    }
+
+    /// Spends Perk Points to unlock `perk` (see `perks::Perk`). Each perk
+    /// can only be unlocked once.
+    pub fn unlock_perk(&mut self, perk: Perk) -> Result<(), String> {
+        if self.is_game_over().is_some() {
+            return Err("Can't do that right now.".into());
+        }
+        let player = self.player_entity();
+        let mut perks = self.world.get_mut::<Perks>(player).ok_or_else(|| "No perks available.".to_string())?;
+        if perks.has(perk) {
+            return Err(format!("{} is already unlocked.", perk.display_name()));
+        }
+        if perks.points < perk.cost() {
+            return Err(format!(
+                "Not enough Perk Points (need {}, have {}).",
+                perk.cost(),
+                perks.points
+            ));
+        }
+        perks.points -= perk.cost();
+        perks.unlocked.push(perk);
+        self.log(format!("You unlock the {} perk.", perk.display_name()));
+        Ok(())
     }
 
     /// The full list of things the player can compile from raw materials.
@@ -693,6 +852,25 @@ impl Game {
         ]
     }
 
+    /// The actual per-unit cost to compile `result` right now: its
+    /// `craft_recipes` entry, with each quantity reduced by
+    /// `LEAN_COMPILER_DISCOUNT` (down to a minimum of 1 each) if
+    /// `Perk::LeanCompiler` is unlocked. Empty if `result` has no recipe.
+    pub fn craft_cost(&self, result: ItemId) -> Vec<(ItemId, u32)> {
+        let Some(recipe) = self.craft_recipes().into_iter().find(|r| r.result == result) else {
+            return Vec::new();
+        };
+        let lean = self.player_has_perk(Perk::LeanCompiler);
+        recipe
+            .cost
+            .into_iter()
+            .map(|(item, qty)| {
+                let qty = if lean { qty.saturating_sub(LEAN_COMPILER_DISCOUNT).max(1) } else { qty };
+                (item, qty)
+            })
+            .collect()
+    }
+
     /// Compiles `quantity` units of `result` per its `craft_recipes` entry.
     pub fn craft(&mut self, result: ItemId, quantity: u32) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
@@ -701,15 +879,14 @@ impl Game {
         if quantity == 0 {
             return Err("Compile at least 1.".into());
         }
-        let recipe = self
-            .craft_recipes()
-            .into_iter()
-            .find(|r| r.result == result)
-            .ok_or_else(|| format!("{} can't be compiled.", result.display_name()))?;
+        if self.craft_recipes().iter().all(|r| r.result != result) {
+            return Err(format!("{} can't be compiled.", result.display_name()));
+        }
         let player = self.player_entity();
+        let cost = self.craft_cost(result);
         {
             let inv = self.world.get::<Inventory>(player).unwrap();
-            for (item, qty) in &recipe.cost {
+            for (item, qty) in &cost {
                 if inv.count(*item) < *qty * quantity {
                     return Err(format!(
                         "Compiling {} {} needs {} {}.",
@@ -723,7 +900,7 @@ impl Game {
         }
         {
             let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
-            for (item, qty) in &recipe.cost {
+            for (item, qty) in &cost {
                 inv.take(*item, *qty * quantity);
             }
             inv.add(result, quantity);
@@ -850,9 +1027,10 @@ impl Game {
         if self.find_blocking_structure_at(x, y).is_some() {
             return Err("Something is already deployed there.".into());
         }
+        let build_cost = self.structure_build_cost(&def);
         {
             let inv = self.world.get::<Inventory>(player).unwrap();
-            for (item, qty) in &def.build_cost {
+            for (item, qty) in &build_cost {
                 if inv.count(*item) < *qty {
                     return Err(format!("Not enough {}.", item.display_name()));
                 }
@@ -860,7 +1038,7 @@ impl Game {
         }
         {
             let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
-            for (item, qty) in &def.build_cost {
+            for (item, qty) in &build_cost {
                 inv.take(*item, *qty);
             }
         }
@@ -874,6 +1052,7 @@ impl Game {
                 ch: def.glyph,
                 color: def.color,
             },
+            Durability { hp: def.durability, max_hp: def.durability },
         ));
         if let Some(work) = &def.work {
             entity.insert(ResourceNode {
@@ -912,8 +1091,8 @@ impl Game {
             .and_then(|d| d.work.as_ref())
             .map(|w| w.ticks_per_unit)
             .unwrap_or(5);
-        if self.world.resource::<Companion>().0 == Some(worker) {
-            self.world.insert_resource(Companion(None));
+        if self.world.resource::<Party>().0.contains(&worker) {
+            self.world.resource_mut::<Party>().0.retain(|&e| e != worker);
             self.log("It stands down as your companion to run this cronjob.");
         }
         self.world.entity_mut(worker).insert(Task {
@@ -951,10 +1130,13 @@ impl Game {
         let wild_creature = self.world.get::<Creature>(battle.wild_creature)?;
         let species_db = self.world.get_resource::<SpeciesDb>()?;
         let species = species_db.get(&wild_creature.species);
-        let wild_name = species.map(|s| s.name.clone()).unwrap_or_default();
+        let wild_name = species
+            .map(|s| self.zone_tagged_name(battle.wild_creature, s.name.clone()))
+            .unwrap_or_default();
+        let wild_is_boss = species.is_some_and(|s| s.is_boss);
         let taming_difficulty = species.map(|s| s.taming_difficulty).unwrap_or(0.5);
         let player_stats = self.world.get::<Stats>(battle.player)?;
-        let decompiler_skill = self.world.get::<Decompiler>(battle.player).map(|d| d.skill).unwrap_or(0);
+        let decompiler_skill = self.player_decompiler_skill();
         let can_tame = self
             .world
             .get::<Inventory>(battle.player)
@@ -968,6 +1150,7 @@ impl Game {
         );
         Some(BattleView {
             wild_name,
+            wild_is_boss,
             wild_hp: wild_stats.hp,
             wild_max_hp: wild_stats.max_hp,
             wild_atk: wild_stats.atk,
@@ -980,7 +1163,9 @@ impl Game {
             log: battle.log.clone(),
             can_tame,
             decompile_chance,
-            companion: self.companion_info(),
+            player_status_effect: self.status_label(battle.player),
+            wild_status_effect: self.status_label(battle.wild_creature),
+            companions: self.party_info(),
         })
     }
 
@@ -996,38 +1181,46 @@ impl Game {
             return;
         };
 
-        let (p_atk, w_def) = {
-            let p = *self.world.get::<Stats>(player).unwrap();
-            let w = *self.world.get::<Stats>(wild).unwrap();
-            (p.atk, w.def)
-        };
-        let dmg = battle::compute_damage(p_atk, w_def, 5);
-        self.apply_damage(wild, dmg);
-        self.log(format!("You unleash a data strike for {dmg} damage."));
+        if self.is_stunned(player) {
+            self.log("Your process stalls — stunned, you lose this turn!");
+        } else {
+            let (p_atk, w_def) = {
+                let p = *self.world.get::<Stats>(player).unwrap();
+                let w = *self.world.get::<Stats>(wild).unwrap();
+                (p.atk, w.def)
+            };
+            let dmg = battle::compute_damage(p_atk, w_def, 5);
+            self.apply_damage(wild, dmg);
+            self.log(format!("You unleash a data strike for {dmg} damage."));
 
-        if !self.creature_alive(wild) {
-            self.log("The rogue program crashes and deletes itself!");
-            let wild_max_hp = self.world.get::<Stats>(wild).unwrap().max_hp;
-            self.award_player_xp(player, wild_max_hp as u32);
-            self.award_loot(player, wild);
-            self.world.despawn(wild);
-            self.world.remove_resource::<BattleState>();
-            self.tick();
-            return;
+            if !self.creature_alive(wild) {
+                self.log("The rogue program crashes and deletes itself!");
+                let wild_max_hp = self.world.get::<Stats>(wild).unwrap().max_hp;
+                self.award_player_xp(player, wild_max_hp as u32);
+                self.award_loot(player, wild);
+                self.world.despawn(wild);
+                self.clear_battle_status_effects(player, wild);
+                self.world.remove_resource::<BattleState>();
+                self.tick();
+                return;
+            }
         }
 
         self.wild_retaliate(wild, player);
+        self.tick_all_status_effects(wild, player);
         if !self.creature_alive(player) {
+            self.clear_battle_status_effects(player, wild);
             self.world.remove_resource::<BattleState>();
         }
         self.tick();
     }
 
-    /// Commands the active companion to attack the wild creature this
-    /// round instead of the player acting directly. The wild creature's
-    /// retaliation (see `wild_retaliate`) can land on either the player or
-    /// the companion regardless of who acted this round.
-    pub fn battle_companion_attack(&mut self) {
+    /// Commands `companion` (a member of the active party — see
+    /// `resources::Party`) to attack the wild creature this round instead
+    /// of the player acting directly. The wild creature's retaliation (see
+    /// `wild_retaliate`) can land on the player or any party member
+    /// regardless of who acted this round.
+    pub fn battle_companion_attack(&mut self, companion: Entity) {
         if self.is_game_over().is_some() {
             return;
         }
@@ -1038,34 +1231,41 @@ impl Game {
         else {
             return;
         };
-        let Some(companion) = self.world.resource::<Companion>().0 else {
-            self.log("You have no active companion.");
+        if !self.world.resource::<Party>().0.contains(&companion) {
+            self.log("That program isn't in your active party.");
             return;
-        };
-
-        let (c_atk, w_def) = {
-            let c = *self.world.get::<Stats>(companion).unwrap();
-            let w = *self.world.get::<Stats>(wild).unwrap();
-            (c.atk, w.def)
-        };
+        }
         let name = self.creature_label(companion);
-        let dmg = battle::compute_damage(c_atk, w_def, 5);
-        self.apply_damage(wild, dmg);
-        self.log(format!("{name} strikes for {dmg} damage."));
 
-        if !self.creature_alive(wild) {
-            self.log("The rogue program crashes and deletes itself!");
-            let wild_max_hp = self.world.get::<Stats>(wild).unwrap().max_hp;
-            self.award_player_xp(player, wild_max_hp as u32);
-            self.award_loot(player, wild);
-            self.world.despawn(wild);
-            self.world.remove_resource::<BattleState>();
-            self.tick();
-            return;
+        if self.is_stunned(companion) {
+            self.log(format!("{name} stalls — stunned, it loses this turn!"));
+        } else {
+            let (c_atk, w_def) = {
+                let c = *self.world.get::<Stats>(companion).unwrap();
+                let w = *self.world.get::<Stats>(wild).unwrap();
+                (c.atk, w.def)
+            };
+            let dmg = battle::compute_damage(c_atk, w_def, 5);
+            self.apply_damage(wild, dmg);
+            self.log(format!("{name} strikes for {dmg} damage."));
+
+            if !self.creature_alive(wild) {
+                self.log("The rogue program crashes and deletes itself!");
+                let wild_max_hp = self.world.get::<Stats>(wild).unwrap().max_hp;
+                self.award_player_xp(player, wild_max_hp as u32);
+                self.award_loot(player, wild);
+                self.world.despawn(wild);
+                self.clear_battle_status_effects(player, wild);
+                self.world.remove_resource::<BattleState>();
+                self.tick();
+                return;
+            }
         }
 
         self.wild_retaliate(wild, player);
+        self.tick_all_status_effects(wild, player);
         if !self.creature_alive(player) {
+            self.clear_battle_status_effects(player, wild);
             self.world.remove_resource::<BattleState>();
         }
         self.tick();
@@ -1101,6 +1301,24 @@ impl Game {
                 self.log(format!("It also drops a {}!", item.display_name()));
             }
         }
+
+        if species.is_boss {
+            let qty = {
+                let mut rng = self.world.resource_mut::<GameRng>();
+                rng.0.random_range(BOSS_PORTAL_FRAGMENT_DROP)
+            };
+            self.world.get_mut::<Inventory>(player).unwrap().add(ItemId::PortalFragment, qty);
+            self.log(format!("Its crash leaves behind a cache of {qty} portal fragments!"));
+        } else {
+            let portal_fragment_roll = {
+                let mut rng = self.world.resource_mut::<GameRng>();
+                rng.0.random_bool(PORTAL_FRAGMENT_DROP_CHANCE)
+            };
+            if portal_fragment_roll {
+                self.world.get_mut::<Inventory>(player).unwrap().add(ItemId::PortalFragment, 1);
+                self.log("It leaves behind a portal fragment.");
+            }
+        }
     }
 
     /// Awards `amount` XP to the player, growing stats and fully healing on
@@ -1119,6 +1337,9 @@ impl Game {
             if let Some(mut decompiler) = self.world.get_mut::<Decompiler>(player) {
                 decompiler.skill += DECOMPILER_SKILL_PER_LEVEL * levels as i32;
             }
+            if let Some(mut perks) = self.world.get_mut::<Perks>(player) {
+                perks.points += PERK_POINTS_PER_LEVEL * levels;
+            }
             self.log(format!("You gain {amount} XP and reach level {new_level}!"));
         } else {
             self.log(format!("You gain {amount} XP."));
@@ -1136,6 +1357,18 @@ impl Game {
         else {
             return;
         };
+
+        if self.is_stunned(player) {
+            self.log("Your process stalls — stunned, you lose this turn!");
+            self.wild_retaliate(wild, player);
+            self.tick_all_status_effects(wild, player);
+            if !self.creature_alive(player) {
+                self.clear_battle_status_effects(player, wild);
+                self.world.remove_resource::<BattleState>();
+            }
+            self.tick();
+            return;
+        }
 
         let taken = self
             .world
@@ -1159,7 +1392,7 @@ impl Game {
             .map(|s| s.taming_difficulty)
             .unwrap_or(0.5);
         let potency = taming::item_potency(ItemId::IceBreaker);
-        let decompiler_skill = self.world.get::<Decompiler>(player).map(|d| d.skill).unwrap_or(0);
+        let decompiler_skill = self.player_decompiler_skill();
         let chance = taming::capture_chance(hp_fraction, potency, taming_difficulty, decompiler_skill);
         let roll = {
             let mut rng = self.world.resource_mut::<GameRng>();
@@ -1174,6 +1407,7 @@ impl Game {
                 .insert((Tamed { owner: player }, Experience::default()));
             self.log("ICE breached! The program now runs under your control.");
             self.award_player_xp(player, wild_max_hp as u32);
+            self.clear_battle_status_effects(player, wild);
             self.world.remove_resource::<BattleState>();
             self.tick();
             return;
@@ -1181,7 +1415,9 @@ impl Game {
 
         self.log("The program's ICE holds — decompile failed!");
         self.wild_retaliate(wild, player);
+        self.tick_all_status_effects(wild, player);
         if !self.creature_alive(player) {
+            self.clear_battle_status_effects(player, wild);
             self.world.remove_resource::<BattleState>();
         }
         self.tick();
@@ -1208,6 +1444,7 @@ impl Game {
         } else {
             self.log("You jack out safely.");
         }
+        self.clear_battle_status_effects(player, wild);
         self.world.remove_resource::<BattleState>();
         self.tick();
     }
@@ -1236,12 +1473,20 @@ impl Game {
             .moves[idx]
             .clone();
 
-        let companion = self.world.resource::<Companion>().0;
-        let targets_companion = companion.is_some() && {
+        let party = self.world.resource::<Party>().0.clone();
+        let targets_companion = !party.is_empty() && {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_bool(COMPANION_RETALIATION_CHANCE)
         };
-        let target = if targets_companion { companion.unwrap() } else { player };
+        let target = if targets_companion {
+            let idx = {
+                let mut rng = self.world.resource_mut::<GameRng>();
+                rng.0.random_range(0..party.len())
+            };
+            party[idx]
+        } else {
+            player
+        };
 
         let (w_atk, t_def) = {
             let w = *self.world.get::<Stats>(wild).unwrap();
@@ -1259,13 +1504,20 @@ impl Game {
             ));
             if !self.creature_alive(target) {
                 self.log(format!("{name} is knocked offline and stands down."));
-                self.world.insert_resource(Companion(None));
+                self.world.resource_mut::<Party>().0.retain(|&e| e != target);
+            } else if let Some(effect) = &mv.effect {
+                self.apply_status_effect(target, effect, &name);
             }
         } else {
             self.log(format!(
                 "The rogue program executes {} for {} damage.",
                 mv.name, dmg
             ));
+            if self.creature_alive(target)
+                && let Some(effect) = &mv.effect
+            {
+                self.apply_status_effect(target, effect, "You");
+            }
         }
     }
 
@@ -1277,6 +1529,102 @@ impl Game {
 
     fn creature_alive(&self, e: Entity) -> bool {
         self.world.get::<Stats>(e).map(|s| s.hp > 0).unwrap_or(false)
+    }
+
+    /// Rolls `effect.chance`; on success, overwrites `target`'s active
+    /// status condition (see `StatusEffects`) and logs it. A miss is
+    /// silent — the move's direct damage still landed, it just didn't also
+    /// inflict its status this time.
+    fn apply_status_effect(&mut self, target: Entity, effect: &species::MoveEffect, target_label: &str) {
+        let applied = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_bool(effect.chance as f64)
+        };
+        if !applied {
+            return;
+        }
+        if let Some(mut statuses) = self.world.get_mut::<StatusEffects>(target) {
+            statuses.active = Some(ActiveStatus {
+                kind: effect.kind,
+                remaining: effect.duration,
+                power: effect.power,
+            });
+        }
+        match effect.kind {
+            StatusKind::Bleed => self.log(format!("{target_label} starts bleeding corrupted data!")),
+            StatusKind::Stun => self.log(format!("{target_label} locks up, stunned!")),
+        }
+    }
+
+    /// Whether `entity` currently has an active `Stun` status. Doesn't
+    /// consume it — `consume_stun` does that once a round is confirmed to
+    /// skip.
+    fn is_stunned(&self, entity: Entity) -> bool {
+        self.world
+            .get::<StatusEffects>(entity)
+            .and_then(|s| s.active)
+            .is_some_and(|a| a.kind == StatusKind::Stun)
+    }
+
+    /// End-of-round status upkeep for one combatant: `Bleed` deals its
+    /// damage, then the active effect's remaining-rounds counter ticks
+    /// down, clearing it once it hits 0.
+    fn tick_status_effects(&mut self, entity: Entity, label: &str) {
+        let Some(active) = self.world.get::<StatusEffects>(entity).and_then(|s| s.active) else {
+            return;
+        };
+
+        if active.kind == StatusKind::Bleed {
+            self.apply_damage(entity, active.power);
+            self.log(format!("{label} takes {} bleed damage.", active.power));
+        }
+
+        let remaining = active.remaining.saturating_sub(1);
+        if let Some(mut statuses) = self.world.get_mut::<StatusEffects>(entity) {
+            statuses.active = if remaining == 0 { None } else { Some(ActiveStatus { remaining, ..active }) };
+        }
+        if remaining == 0 {
+            match active.kind {
+                StatusKind::Bleed => self.log(format!("{label}'s bleed clears.")),
+                StatusKind::Stun => self.log(format!("{label} shakes off the stun.")),
+            }
+        }
+    }
+
+    /// Ticks end-of-round status upkeep for every combatant that could
+    /// have one: the wild creature, the player, and the active companion
+    /// (if any) — `wild_retaliate`'s target selection means the companion
+    /// can pick up a status even on a round where it didn't act.
+    fn tick_all_status_effects(&mut self, wild: Entity, player: Entity) {
+        let wild_label = self.entity_label(wild);
+        self.tick_status_effects(wild, &wild_label);
+        let player_label = self.entity_label(player);
+        self.tick_status_effects(player, &player_label);
+        let party = self.world.resource::<Party>().0.clone();
+        for companion in party {
+            let companion_label = self.creature_label(companion);
+            self.tick_status_effects(companion, &companion_label);
+        }
+    }
+
+    /// Clears any residual status effects from the player, `wild`, and
+    /// every party member. Status conditions are scoped to a single
+    /// intrusion, so nothing should carry forward once one ends, however
+    /// it ends. `wild` may already be despawned (a kill), in which case
+    /// clearing it is a no-op.
+    fn clear_battle_status_effects(&mut self, player: Entity, wild: Entity) {
+        if let Some(mut s) = self.world.get_mut::<StatusEffects>(player) {
+            s.active = None;
+        }
+        if let Some(mut s) = self.world.get_mut::<StatusEffects>(wild) {
+            s.active = None;
+        }
+        let party = self.world.resource::<Party>().0.clone();
+        for companion in party {
+            if let Some(mut s) = self.world.get_mut::<StatusEffects>(companion) {
+                s.active = None;
+            }
+        }
     }
 
     fn find_wild_creature_at(&mut self, x: i32, y: i32) -> Option<Entity> {
@@ -1299,10 +1647,85 @@ impl Game {
             .map(|(e, _)| e)
     }
 
+    /// Finds a zone-portal structure (`StructureDef::zone_portal`) at
+    /// `(x, y)`, if any — checked before the generic blocking-structure
+    /// check in `move_player` so walking onto one breaches the zone instead
+    /// of just bumping into it.
+    fn find_zone_portal_at(&mut self, x: i32, y: i32) -> Option<Entity> {
+        let mut query = self
+            .world
+            .query_filtered::<(Entity, &Position, &Structure), ()>();
+        let (entity, kind) = query
+            .iter(&self.world)
+            .find(|(_, p, _)| p.x == x && p.y == y)
+            .map(|(e, _, s)| (e, s.kind.clone()))?;
+        self.world
+            .resource::<StructureDb>()
+            .get(&kind)
+            .is_some_and(|d| d.zone_portal)
+            .then_some(entity)
+    }
+
+    /// Breaches the player (and any tamed programs they own) forward into
+    /// the next zone sector: wild programs and all structures in the
+    /// current zone are left behind (despawned — there's no portal back
+    /// down), a fresh sector is generated from a new seed, and wild
+    /// programs there spawn with stats scaled by the new zone's
+    /// `ZoneLevel::stat_multiplier`.
+    fn enter_next_zone(&mut self) {
+        let stale: Vec<Entity> = {
+            let mut query =
+                self.world.query_filtered::<Entity, Or<(With<Hostile>, With<Structure>)>>();
+            query.iter(&self.world).collect()
+        };
+        for e in stale {
+            self.world.despawn(e);
+        }
+        // Any cronjob a tamed program was running just lost its target
+        // structure above; drop the dangling task rather than leave it
+        // pointing at a despawned entity.
+        let dangling_tasks: Vec<Entity> = {
+            let mut query = self.world.query_filtered::<Entity, With<Task>>();
+            query.iter(&self.world).collect()
+        };
+        for e in dangling_tasks {
+            self.world.entity_mut(e).remove::<Task>();
+        }
+
+        let new_level = {
+            let mut zone = self.world.resource_mut::<ZoneLevel>();
+            zone.0 += 1;
+            zone.0
+        };
+        let new_seed = self.world.resource::<WorldMap>().seed().wrapping_add(0x9E37_79B9);
+        let mut new_map = WorldMap::new(new_seed);
+        let start = find_walkable_start(&mut new_map);
+        self.world.insert_resource(new_map);
+
+        let travelers: Vec<Entity> = {
+            let mut query = self.world.query_filtered::<Entity, Or<(With<Player>, With<Tamed>)>>();
+            query.iter(&self.world).collect()
+        };
+        for e in travelers {
+            if let Some(mut pos) = self.world.get_mut::<Position>(e) {
+                pos.x = start.0;
+                pos.y = start.1;
+            }
+        }
+
+        self.log(format!(
+            "You breach the portal and materialize in a level {new_level} sector. Hostile signal strength has spiked."
+        ));
+        self.spawn_initial_creatures(14);
+    }
+
     fn spawn_wild_creature(&mut self, species_id: &str, x: i32, y: i32) {
         let Some(species) = self.world.resource::<SpeciesDb>().get(species_id).cloned() else {
             return;
         };
+        let zone_level = self.world.resource::<ZoneLevel>();
+        let mult = zone_level.stat_multiplier();
+        let zone = zone_level.0;
         self.world.spawn((
             Creature {
                 species: species.id.clone(),
@@ -1313,13 +1736,15 @@ impl Game {
                 color: species.color,
             },
             Stats {
-                hp: species.base_hp,
-                max_hp: species.base_hp,
-                atk: species.base_atk,
-                def: species.base_def,
+                hp: species.base_hp * mult,
+                max_hp: species.base_hp * mult,
+                atk: species.base_atk * mult,
+                def: species.base_def * mult,
             },
             Hostile,
             WanderAi::default(),
+            ZonePortal(zone),
+            StatusEffects::default(),
         ));
     }
 
@@ -1354,25 +1779,127 @@ impl Game {
         self.try_spawn_habitat_creature(player_pos.x + dx, player_pos.y + dy);
     }
 
+    /// Slow passive healing for damaged structures — every
+    /// `STRUCTURE_REGEN_INTERVAL` ticks, everything below max `Durability`
+    /// recovers `STRUCTURE_REGEN_AMOUNT`.
+    fn structure_regen(&mut self) {
+        let tick = self.world.resource::<GameClock>().tick;
+        if tick % STRUCTURE_REGEN_INTERVAL != 0 {
+            return;
+        }
+        let mut query = self.world.query::<&mut Durability>();
+        for mut durability in query.iter_mut(&mut self.world) {
+            durability.hp = (durability.hp + STRUCTURE_REGEN_AMOUNT).min(durability.max_hp);
+        }
+    }
+
+    /// Rolls `RAID_CHANCE_PER_TICK`; on success, picks one deployed
+    /// structure at random and either damages it directly (undefended) or
+    /// has its assigned cronjob worker, if any, fight the raid off —
+    /// reducing the structure's damage by the worker's Defense, at the
+    /// cost of `RAID_DEFENDER_DAMAGE` to the worker. A worker knocked to 0
+    /// HP stands down from the cronjob (like a knocked-out companion, not
+    /// destroyed — `rest` heals it back up along with every other tamed
+    /// program you own). A structure whose `Durability` reaches 0 is
+    /// destroyed and any cronjob assignment on it is dropped.
+    fn raid_check(&mut self) {
+        let roll = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_bool(RAID_CHANCE_PER_TICK)
+        };
+        if !roll {
+            return;
+        }
+        let targets: Vec<Entity> = {
+            let mut query = self.world.query_filtered::<Entity, With<Durability>>();
+            query.iter(&self.world).collect()
+        };
+        if targets.is_empty() {
+            return;
+        }
+        let target = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            let idx = rng.0.random_range(0..targets.len());
+            targets[idx]
+        };
+        let target_label = self.entity_label(target);
+
+        let defender = {
+            let mut query = self.world.query::<(Entity, &Task)>();
+            query.iter(&self.world).find(|(_, t)| t.target == target).map(|(e, _)| e)
+        };
+
+        let Some(worker) = defender else {
+            self.damage_structure(target, RAID_DAMAGE, &target_label);
+            return;
+        };
+
+        let worker_def = self.world.get::<Stats>(worker).map(|s| s.def).unwrap_or(0);
+        let mitigated = RAID_DAMAGE.saturating_sub(worker_def.max(0) as u32);
+        let worker_label = self.creature_label(worker);
+        if mitigated > 0 {
+            self.damage_structure(target, mitigated, &target_label);
+        } else {
+            self.log(format!("{worker_label} fends off a raid on {target_label} without a scratch!"));
+        }
+        self.apply_damage(worker, RAID_DEFENDER_DAMAGE);
+        if !self.creature_alive(worker) {
+            self.log(format!(
+                "{worker_label} is knocked offline defending {target_label} and stands down from its cronjob."
+            ));
+            self.world.entity_mut(worker).remove::<Task>();
+        }
+    }
+
+    /// Applies `dmg` to `structure`'s `Durability`, destroying (despawning)
+    /// it and clearing any cronjob assignment pointing at it if that
+    /// brings it to 0.
+    fn damage_structure(&mut self, structure: Entity, dmg: u32, label: &str) {
+        let Some(mut durability) = self.world.get_mut::<Durability>(structure) else {
+            return;
+        };
+        durability.hp = durability.hp.saturating_sub(dmg);
+        let destroyed = durability.hp == 0;
+        if destroyed {
+            self.log(format!("{label} is destroyed in a raid!"));
+            let workers: Vec<Entity> = {
+                let mut query = self.world.query::<(Entity, &Task)>();
+                query.iter(&self.world).filter(|(_, t)| t.target == structure).map(|(e, _)| e).collect()
+            };
+            for w in workers {
+                self.world.entity_mut(w).remove::<Task>();
+            }
+            self.world.despawn(structure);
+        } else {
+            self.log(format!("{label} takes {dmg} raid damage!"));
+        }
+    }
+
     fn try_spawn_habitat_creature(&mut self, x: i32, y: i32) {
         let tile = self.world.resource_mut::<WorldMap>().tile(x, y);
         if !tile.walkable {
             return;
         }
-        let candidates: Vec<String> = self
-            .world
-            .resource::<SpeciesDb>()
-            .habitat_matches(tile.biome)
-            .into_iter()
-            .map(|s| s.id.clone())
-            .collect();
-        if candidates.is_empty() {
+        let species_db = self.world.resource::<SpeciesDb>();
+        let candidates: Vec<String> =
+            species_db.habitat_matches(tile.biome).into_iter().map(|s| s.id.clone()).collect();
+        let boss_candidates: Vec<String> =
+            species_db.boss_habitat_matches(tile.biome).into_iter().map(|s| s.id.clone()).collect();
+        if candidates.is_empty() && boss_candidates.is_empty() {
             return;
         }
+        // A boss takes the tile's one spawn slot instead of an ordinary
+        // habitat creature, but only rarely, and only where one is defined
+        // for this biome at all.
+        let spawn_boss = !boss_candidates.is_empty() && {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_bool(BOSS_SPAWN_CHANCE)
+        };
+        let pool = if spawn_boss || candidates.is_empty() { &boss_candidates } else { &candidates };
         let pick = {
             let mut rng = self.world.resource_mut::<GameRng>();
-            let idx = rng.0.random_range(0..candidates.len());
-            candidates[idx].clone()
+            let idx = rng.0.random_range(0..pool.len());
+            pool[idx].clone()
         };
         self.spawn_wild_creature(&pick, x, y);
     }
@@ -1386,6 +1913,7 @@ impl Game {
         let exp = self.world.get::<Experience>(player).unwrap();
         let decompiler = self.world.get::<Decompiler>(player).map(|d| d.skill).unwrap_or(0);
         let equipment = self.world.get::<Equipment>(player).copied().unwrap_or_default();
+        let perks = self.world.get::<Perks>(player);
         PlayerStatus {
             position: (pos.x, pos.y),
             hp: stats.hp,
@@ -1402,7 +1930,10 @@ impl Game {
             weapon: equipment.weapon,
             armor: equipment.armor,
             module: equipment.module,
-            companion: self.companion_info(),
+            companions: self.party_info(),
+            zone: self.world.resource::<ZoneLevel>().0,
+            perk_points: perks.map(|p| p.points).unwrap_or(0),
+            unlocked_perks: perks.map(|p| p.unlocked.clone()).unwrap_or_default(),
         }
     }
 
@@ -1412,31 +1943,79 @@ impl Game {
         self.world
             .get::<Creature>(entity)
             .map(|c| {
-                self.world
+                let name = self
+                    .world
                     .resource::<SpeciesDb>()
                     .get(&c.species)
                     .map(|s| s.name.clone())
-                    .unwrap_or_else(|| c.species.clone())
+                    .unwrap_or_else(|| c.species.clone());
+                self.zone_tagged_name(entity, name)
             })
             .unwrap_or_else(|| "Program".to_string())
     }
 
-    fn companion_info(&self) -> Option<CompanionInfo> {
-        let entity = self.world.resource::<Companion>().0?;
+    /// Appends a creature's `ZonePortal` to its species name for display
+    /// (e.g. "Scrapper 2"), so a deeper-zone catch reads differently from a
+    /// shallow one at a glance. Falls back to the bare name if the entity
+    /// has no `ZonePortal` — expected for creatures hand-spawned outside the
+    /// normal `spawn_wild_creature` path (e.g. in tests).
+    fn zone_tagged_name(&self, entity: Entity, name: String) -> String {
+        match self.world.get::<ZonePortal>(entity) {
+            Some(zone) => format!("{name} {}", zone.0),
+            None => name,
+        }
+    }
+
+    /// Whether `entity` is a creature of a boss species (`SpeciesDef::is_boss`).
+    /// `false` for anything that isn't a creature, or whose species failed
+    /// to resolve.
+    fn is_boss_creature(&self, entity: Entity) -> bool {
+        self.world
+            .get::<Creature>(entity)
+            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+            .is_some_and(|s| s.is_boss)
+    }
+
+    fn companion_info(&self, entity: Entity) -> Option<CompanionInfo> {
         let stats = self.world.get::<Stats>(entity)?;
         Some(CompanionInfo {
+            entity,
             name: self.creature_label(entity),
             hp: stats.hp,
             max_hp: stats.max_hp,
             atk: stats.atk,
+            status: self.status_label(entity),
         })
     }
 
-    /// Designates `creature` (a tamed program you own) as your active
-    /// battle companion, replacing any previous one. Clears an in-progress
-    /// cronjob task on it first — a program can only be doing one job
-    /// (working a structure, or fighting beside you) at a time.
-    pub fn set_companion(&mut self, creature: Entity) -> Result<(), String> {
+    /// Snapshot of every current party member (see `resources::Party`), in
+    /// party-slot order.
+    fn party_info(&self) -> Vec<CompanionInfo> {
+        self.world
+            .resource::<Party>()
+            .0
+            .iter()
+            .filter_map(|&e| self.companion_info(e))
+            .collect()
+    }
+
+    /// Display string for `entity`'s current active status condition, if
+    /// any — e.g. "Bleeding (2)" or "Stunned (1)", the number being battle
+    /// rounds remaining. `None` if it has no active condition.
+    fn status_label(&self, entity: Entity) -> Option<String> {
+        let active = self.world.get::<StatusEffects>(entity)?.active?;
+        Some(match active.kind {
+            StatusKind::Bleed => format!("Bleeding ({})", active.remaining),
+            StatusKind::Stun => format!("Stunned ({})", active.remaining),
+        })
+    }
+
+    /// Adds `creature` (a tamed program you own) to your active battle
+    /// party (see `resources::Party`), up to `MAX_PARTY_SIZE` at once.
+    /// Clears an in-progress cronjob task on it first — a program can only
+    /// be doing one job (working a structure, or fighting beside you) at a
+    /// time.
+    pub fn add_companion(&mut self, creature: Entity) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
@@ -1449,21 +2028,107 @@ impl Game {
         if owner != player {
             return Err("You don't control that program.".into());
         }
+        if self.world.resource::<Party>().0.contains(&creature) {
+            return Err("That program is already in your party.".into());
+        }
+        if self.world.resource::<Party>().0.len() >= MAX_PARTY_SIZE {
+            return Err(format!("Your party is full ({MAX_PARTY_SIZE} max) — stand one down first."));
+        }
         self.world.entity_mut(creature).remove::<Task>();
-        self.world.insert_resource(Companion(Some(creature)));
+        self.world.resource_mut::<Party>().0.push(creature);
         let name = self.creature_label(creature);
         self.log(format!("{name} falls in alongside you."));
         Ok(())
     }
 
-    /// Stands the active companion down, if any — it remains a tamed
-    /// program, just no longer commandable in battle.
-    pub fn clear_companion(&mut self) {
-        if let Some(entity) = self.world.resource::<Companion>().0 {
-            let name = self.creature_label(entity);
+    /// Stands `creature` down from the active party, if it's a member — it
+    /// remains a tamed program, just no longer commandable in battle. A
+    /// no-op (no log) if it wasn't in the party to begin with.
+    pub fn remove_companion(&mut self, creature: Entity) {
+        let was_present = {
+            let mut party = self.world.resource_mut::<Party>();
+            let before = party.0.len();
+            party.0.retain(|&e| e != creature);
+            party.0.len() != before
+        };
+        if was_present {
+            let name = self.creature_label(creature);
             self.log(format!("{name} falls back from active duty."));
         }
-        self.world.insert_resource(Companion(None));
+    }
+
+    /// Fuses two of the player's tamed programs (`a` and `b`, any species,
+    /// party members or not) into one new tamed program, consuming both.
+    /// The result keeps the species (and so the moves/work aptitude) of
+    /// whichever input is the higher level — ties favor `a` — at that same
+    /// level, with each stat computed as `higher + lower / 2` so a fusion
+    /// is always stronger than either input alone without simply summing
+    /// them (which would make repeated fusion runaway). A resource sink for
+    /// duplicate catches: there's no separate item cost, since losing two
+    /// programs to gain one is the cost.
+    pub fn fuse_companions(&mut self, a: Entity, b: Entity) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        if a == b {
+            return Err("Pick two different programs to fuse.".into());
+        }
+        let player = self.player_entity();
+        for e in [a, b] {
+            let owner = self
+                .world
+                .get::<Tamed>(e)
+                .ok_or_else(|| "Both programs must be compiled under your control.".to_string())?
+                .owner;
+            if owner != player {
+                return Err("You don't control both programs.".into());
+            }
+        }
+        let (species_a, exp_a, stats_a) = (
+            self.world.get::<Creature>(a).unwrap().species.clone(),
+            *self.world.get::<Experience>(a).unwrap(),
+            *self.world.get::<Stats>(a).unwrap(),
+        );
+        let (species_b, exp_b, stats_b) = (
+            self.world.get::<Creature>(b).unwrap().species.clone(),
+            *self.world.get::<Experience>(b).unwrap(),
+            *self.world.get::<Stats>(b).unwrap(),
+        );
+        let (species_id, level) =
+            if exp_a.level >= exp_b.level { (species_a, exp_a.level) } else { (species_b, exp_b.level) };
+        let species = self
+            .world
+            .resource::<SpeciesDb>()
+            .get(&species_id)
+            .cloned()
+            .ok_or_else(|| "That species is no longer available.".to_string())?;
+
+        fn fuse_stat(x: i32, y: i32) -> i32 {
+            x.max(y) + x.min(y) / 2
+        }
+        let fused_hp = fuse_stat(stats_a.max_hp, stats_b.max_hp);
+        let fused_atk = fuse_stat(stats_a.atk, stats_b.atk);
+        let fused_def = fuse_stat(stats_a.def, stats_b.def);
+
+        let name_a = self.creature_label(a);
+        let name_b = self.creature_label(b);
+        self.world.resource_mut::<Party>().0.retain(|&e| e != a && e != b);
+        self.world.despawn(a);
+        self.world.despawn(b);
+
+        let player_pos = *self.world.get::<Position>(player).unwrap();
+        self.world.spawn((
+            Creature { species: species.id.clone() },
+            Position { x: player_pos.x, y: player_pos.y },
+            Glyph { ch: species.glyph, color: species.color },
+            Stats { hp: fused_hp, max_hp: fused_hp, atk: fused_atk, def: fused_def },
+            Tamed { owner: player },
+            Experience { level, xp: 0, xp_to_next: progression::xp_for_level(level) },
+            ZonePortal(1),
+            StatusEffects::default(),
+        ));
+        self.log(format!("You fuse {name_a} and {name_b} into a new {}.", species.name));
+        Ok(())
     }
 
     pub fn view_tiles(&mut self, half_w: i32, half_h: i32) -> Vec<Vec<Tile>> {
@@ -1517,11 +2182,13 @@ impl Game {
     /// (a worker's assigned structure, a structure's assigned worker).
     fn entity_label(&self, entity: Entity) -> String {
         if let Some(c) = self.world.get::<Creature>(entity) {
-            self.world
+            let name = self
+                .world
                 .resource::<SpeciesDb>()
                 .get(&c.species)
                 .map(|s| s.name.clone())
-                .unwrap_or_else(|| c.species.clone())
+                .unwrap_or_else(|| c.species.clone());
+            self.zone_tagged_name(entity, name)
         } else if let Some(s) = self.world.get::<Structure>(entity) {
             self.world
                 .resource::<StructureDb>()
@@ -1551,10 +2218,12 @@ impl Game {
             .map(|(entity, pos, glyph)| {
                 let is_player = self.world.get::<Player>(entity).is_some();
                 let is_tamed = self.world.get::<Tamed>(entity).is_some();
-                let is_companion = self.world.resource::<Companion>().0 == Some(entity);
+                let is_companion = self.world.resource::<Party>().0.contains(&entity);
                 let is_hostile = self.world.get::<Hostile>(entity).is_some();
                 let is_structure = self.world.get::<Structure>(entity).is_some();
+                let is_boss = self.is_boss_creature(entity);
                 let can_work = self.world.get::<ResourceNode>(entity).is_some();
+                let can_trade = self.trade_options(entity).is_some();
                 let task_target = self.world.get::<Task>(entity).map(|t| t.target);
                 let has_job = task_target.is_some();
                 let job_structure = task_target.map(|target| self.entity_label(target));
@@ -1565,6 +2234,7 @@ impl Game {
                 };
                 let hp_fraction = self.world.get::<Stats>(entity).map(|s| s.hp_fraction());
                 let level = self.world.get::<Experience>(entity).map(|e| e.level);
+                let durability = self.world.get::<Durability>(entity).map(|d| (d.hp, d.max_hp));
                 let label = self.entity_label(entity);
                 EntityView {
                     entity,
@@ -1577,12 +2247,15 @@ impl Game {
                     is_companion,
                     is_hostile,
                     is_structure,
+                    is_boss,
                     can_work,
+                    can_trade,
                     has_job,
                     job_structure,
                     structure_worker,
                     hp_fraction,
                     level,
+                    durability,
                 }
             })
             .collect()
@@ -1599,11 +2272,7 @@ impl Game {
         let level = self.world.get::<Experience>(entity).map(|e| e.level);
         let is_hostile = self.world.get::<Hostile>(entity).is_some();
         let is_tamed = self.world.get::<Tamed>(entity).is_some();
-        let decompiler_skill = self
-            .world
-            .get::<Decompiler>(self.player_entity())
-            .map(|d| d.skill)
-            .unwrap_or(0);
+        let decompiler_skill = self.player_decompiler_skill();
         let decompile_chance = taming::capture_chance(
             stats.hp_fraction(),
             taming::item_potency(ItemId::IceBreaker),
@@ -1611,7 +2280,7 @@ impl Game {
             decompiler_skill,
         );
         Some(InspectView {
-            name: species.name.clone(),
+            name: self.zone_tagged_name(entity, species.name.clone()),
             glyph: species.glyph,
             color: species.color,
             level,
@@ -1621,6 +2290,7 @@ impl Game {
             def: stats.def,
             is_hostile,
             is_tamed,
+            is_boss: species.is_boss,
             taming_difficulty: species.taming_difficulty,
             decompile_chance,
             habitats: species.habitats.clone(),
@@ -1654,14 +2324,25 @@ impl Game {
                 is_companion: false,
                 is_hostile: false,
                 is_structure: true,
+                is_boss: false,
                 can_work: false,
+                can_trade: false,
                 has_job: false,
                 job_structure: None,
                 structure_worker: None,
                 hp_fraction: None,
                 level: None,
+                durability: self.world.get::<Durability>(entity).map(|d| (d.hp, d.max_hp)),
             })
             .collect()
+    }
+
+    /// The item cost to symlink to `target`, if it's a symlink-capable
+    /// structure — used both by `use_symlink` itself and by the TUI to show
+    /// the cost before the player commits to it.
+    pub fn symlink_cost(&self, target: Entity) -> Option<Vec<(ItemId, u32)>> {
+        let kind = self.world.get::<Structure>(target)?.kind.clone();
+        self.world.resource::<StructureDb>().get(&kind).and_then(|d| d.teleport_cost.clone())
     }
 
     /// "Use symlink" — instantly teleports the player to `target` (a
@@ -1671,18 +2352,10 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        let kind = self
-            .world
-            .get::<Structure>(target)
-            .ok_or_else(|| "That's not a structure.".to_string())?
-            .kind
-            .clone();
-        let cost = self
-            .world
-            .resource::<StructureDb>()
-            .get(&kind)
-            .and_then(|d| d.teleport_cost.clone())
-            .ok_or_else(|| "That structure has no symlink.".to_string())?;
+        if self.world.get::<Structure>(target).is_none() {
+            return Err("That's not a structure.".to_string());
+        }
+        let cost = self.symlink_cost(target).ok_or_else(|| "That structure has no symlink.".to_string())?;
         let player = self.player_entity();
         {
             let inv = self.world.get::<Inventory>(player).unwrap();
@@ -1714,8 +2387,109 @@ impl Game {
         self.world.resource::<StructureDb>().all().cloned().collect()
     }
 
+    /// The actual item cost to deploy `def` right now: `def.build_cost`
+    /// unchanged for a normal structure, or each amount scaled by the
+    /// current zone level for a zone-portal structure (see
+    /// `StructureDef::zone_portal`) — breaching deeper costs more raw
+    /// material each time.
+    pub fn structure_build_cost(&self, def: &StructureDef) -> Vec<(ItemId, u32)> {
+        let multiplier = if def.zone_portal {
+            self.world.resource::<ZoneLevel>().0
+        } else {
+            1
+        };
+        def.build_cost.iter().map(|(item, qty)| (*item, qty * multiplier)).collect()
+    }
+
     pub fn species_defs(&self) -> Vec<SpeciesDef> {
         self.world.resource::<SpeciesDb>().all().cloned().collect()
+    }
+
+    /// `entity`'s trading-post terms (see `StructureDef::trade`), if it's a
+    /// structure with any — used both by `sell_item`/`buy_item` and by the
+    /// TUI to show prices before the player commits.
+    pub fn trade_options(&self, entity: Entity) -> Option<TradeDef> {
+        let kind = self.world.get::<Structure>(entity)?.kind.clone();
+        self.world.resource::<StructureDb>().get(&kind)?.trade.clone()
+    }
+
+    /// Sells `qty` of `item` from inventory to the trading post `structure`,
+    /// crediting Core Fragments at its flat `sell_rate` per unit. Core
+    /// Fragments themselves can't be sold (trading them for more of the
+    /// same thing is meaningless, and would be exploitable if a modded
+    /// `sell_rate` was ever above 1).
+    pub fn sell_item(&mut self, structure: Entity, item: ItemId, qty: u32) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        if qty == 0 {
+            return Err("Sell at least 1.".into());
+        }
+        if item == ItemId::CoreFragment {
+            return Err("Core Fragments aren't worth trading for more Core Fragments.".into());
+        }
+        let trade = self
+            .trade_options(structure)
+            .ok_or_else(|| "That structure doesn't trade.".to_string())?;
+        let player = self.player_entity();
+        let taken = self.world.get_mut::<Inventory>(player).unwrap().take(item, qty);
+        if taken == 0 {
+            return Err(format!("You don't have any {}.", item.display_name()));
+        }
+        let payout = trade.sell_rate * taken;
+        self.world.get_mut::<Inventory>(player).unwrap().add(ItemId::CoreFragment, payout);
+        self.log(format!("You sell {taken} {} for {payout} Core Fragments.", item.display_name()));
+        self.tick();
+        Ok(())
+    }
+
+    /// Buys `qty` of `item` from the trading post `structure`, at its
+    /// listed per-unit Core Fragment cost.
+    pub fn buy_item(&mut self, structure: Entity, item: ItemId, qty: u32) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        if qty == 0 {
+            return Err("Buy at least 1.".into());
+        }
+        let trade = self
+            .trade_options(structure)
+            .ok_or_else(|| "That structure doesn't trade.".to_string())?;
+        let (_, unit_cost) = trade
+            .buy
+            .iter()
+            .find(|(i, _)| *i == item)
+            .ok_or_else(|| format!("{} isn't for sale here.", item.display_name()))?;
+        let total_cost = unit_cost * qty;
+        let player = self.player_entity();
+        if self.world.get::<Inventory>(player).unwrap().count(ItemId::CoreFragment) < total_cost {
+            return Err(format!("Not enough Core Fragments (need {total_cost})."));
+        }
+        {
+            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
+            inv.take(ItemId::CoreFragment, total_cost);
+            inv.add(item, qty);
+        }
+        self.log(format!("You buy {qty} {} for {total_cost} Core Fragments.", item.display_name()));
+        self.tick();
+        Ok(())
+    }
+}
+
+/// `Game::forage`'s success chance for `biome`, boosted by
+/// `KEEN_SCAVENGER_BONUS` (capped at 1.0) if `has_keen_scavenger` — pulled
+/// out of the method so the formula is unit-testable without an RNG.
+fn forage_chance(biome: Biome, has_keen_scavenger: bool) -> f64 {
+    let chance = match biome {
+        Biome::Mainframe | Biome::OpenGrid => 0.6,
+        Biome::NullSector => 0.3,
+        Biome::StaticField => 0.15,
+        Biome::DataVoid | Biome::BlackIce => 0.0,
+    };
+    if chance > 0.0 && has_keen_scavenger {
+        (chance + KEEN_SCAVENGER_BONUS).min(1.0)
+    } else {
+        chance
     }
 }
 
@@ -1790,11 +2564,24 @@ mod tests {
             ))
             .id();
 
-        let before: u32 = game.world.get::<Inventory>(player).unwrap().items.iter().map(|(_, q)| *q).sum();
+        // Portal Fragments are a universal drop independent of species, so
+        // count everything *except* those to check the species-specific
+        // channels stayed silent.
+        let count_non_portal = |game: &Game| -> u32 {
+            game.world
+                .get::<Inventory>(player)
+                .unwrap()
+                .items
+                .iter()
+                .filter(|(item, _)| *item != ItemId::PortalFragment)
+                .map(|(_, q)| *q)
+                .sum()
+        };
+        let before = count_non_portal(&game);
         game.award_loot(player, wild);
-        let after: u32 = game.world.get::<Inventory>(player).unwrap().items.iter().map(|(_, q)| *q).sum();
+        let after = count_non_portal(&game);
 
-        assert_eq!(before, after, "no-resource species shouldn't add anything to inventory");
+        assert_eq!(before, after, "no-resource species shouldn't add anything besides a possible portal fragment");
     }
 
     #[test]
@@ -2258,7 +3045,7 @@ mod tests {
     fn rest_also_fully_heals_the_active_companion() {
         let mut game = Game::new(29, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let companion = spawn_tamed(&mut game, 10, 3);
-        game.set_companion(companion).unwrap();
+        game.add_companion(companion).unwrap();
         {
             let mut stats = game.world.get_mut::<Stats>(companion).unwrap();
             stats.hp = 1;
@@ -2394,8 +3181,8 @@ mod tests {
                 Stats { hp: 5, max_hp: 5, atk: 1, def: 1 },
             ))
             .id();
-        assert!(game.set_companion(wild).is_err());
-        assert!(game.player_status().companion.is_none());
+        assert!(game.add_companion(wild).is_err());
+        assert!(game.player_status().companions.is_empty());
     }
 
     #[test]
@@ -2413,10 +3200,10 @@ mod tests {
             required: 5,
         });
 
-        game.set_companion(worker).unwrap();
+        game.add_companion(worker).unwrap();
 
         assert!(game.world.get::<Task>(worker).is_none(), "companion duty should cancel the cronjob");
-        assert_eq!(game.player_status().companion.map(|c| c.hp), Some(10));
+        assert_eq!(game.player_status().companions.first().map(|c| c.hp), Some(10));
     }
 
     #[test]
@@ -2424,8 +3211,8 @@ mod tests {
         let assets = test_assets_dir();
         let mut game = Game::new(25, DifficultyMode::Forgiving, &assets).unwrap();
         let worker = spawn_tamed(&mut game, 10, 3);
-        game.set_companion(worker).unwrap();
-        assert!(game.player_status().companion.is_some());
+        game.add_companion(worker).unwrap();
+        assert!(!game.player_status().companions.is_empty());
 
         let structure_def = game
             .structure_defs()
@@ -2443,7 +3230,7 @@ mod tests {
 
         game.assign_cronjob(worker, structure).unwrap();
 
-        assert!(game.player_status().companion.is_none(), "running a cronjob should stand the companion down");
+        assert!(game.player_status().companions.is_empty(), "running a cronjob should stand the companion down");
         assert!(game.world.get::<Task>(worker).is_some());
     }
 
@@ -2451,12 +3238,12 @@ mod tests {
     fn clear_companion_reverts_to_no_companion() {
         let mut game = Game::new(26, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let worker = spawn_tamed(&mut game, 10, 3);
-        game.set_companion(worker).unwrap();
-        assert!(game.player_status().companion.is_some());
+        game.add_companion(worker).unwrap();
+        assert!(!game.player_status().companions.is_empty());
 
-        game.clear_companion();
+        game.remove_companion(worker);
 
-        assert!(game.player_status().companion.is_none());
+        assert!(game.player_status().companions.is_empty());
     }
 
     #[test]
@@ -2464,7 +3251,7 @@ mod tests {
         let mut game = Game::new(27, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
         let companion = spawn_tamed(&mut game, 10, 20);
-        game.set_companion(companion).unwrap();
+        game.add_companion(companion).unwrap();
 
         let species = game.species_defs().into_iter().next().expect("at least one species");
         let wild = game
@@ -2484,7 +3271,7 @@ mod tests {
             player_won: false,
         });
 
-        game.battle_companion_attack();
+        game.battle_companion_attack(companion);
 
         let wild_hp = game.world.get::<Stats>(wild).unwrap().hp;
         assert!(wild_hp < 100, "the companion's attack should have damaged the wild creature");
@@ -2507,7 +3294,7 @@ mod tests {
             let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
             let player = game.player_entity();
             let companion = spawn_tamed(&mut game, 1000, 1);
-            game.set_companion(companion).unwrap();
+            game.add_companion(companion).unwrap();
             let player_hp_before = game.world.get::<Stats>(player).unwrap().hp;
 
             let wild = game
@@ -2562,7 +3349,7 @@ mod tests {
             let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
             let player = game.player_entity();
             let companion = spawn_tamed(&mut game, 1, 1);
-            game.set_companion(companion).unwrap();
+            game.add_companion(companion).unwrap();
 
             let wild = game
                 .world
@@ -2584,7 +3371,7 @@ mod tests {
             game.wild_retaliate(wild, player);
             if game.world.get::<Stats>(companion).unwrap().hp == 0 {
                 assert!(
-                    game.player_status().companion.is_none(),
+                    game.player_status().companions.is_empty(),
                     "0 HP should have stood the companion down"
                 );
                 return;
@@ -2598,7 +3385,7 @@ mod tests {
         let assets = test_assets_dir();
         let mut game = Game::new(28, DifficultyMode::Forgiving, &assets).unwrap();
         let worker = spawn_tamed(&mut game, 10, 3);
-        game.set_companion(worker).unwrap();
+        game.add_companion(worker).unwrap();
 
         let path = std::env::temp_dir().join(format!(
             "feral_processes_companion_test_{}.bin",
@@ -2609,6 +3396,897 @@ mod tests {
         let _ = std::fs::remove_file(&path);
 
         let status = loaded.player_status();
-        assert!(status.companion.is_some(), "the active companion should survive a save/load round trip");
+        assert!(!status.companions.is_empty(), "the active companion should survive a save/load round trip");
+    }
+
+    #[test]
+    fn party_accepts_up_to_max_party_size_and_rejects_beyond_that() {
+        let mut game = Game::new(70, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let members: Vec<Entity> = (0..MAX_PARTY_SIZE).map(|_| spawn_tamed(&mut game, 10, 3)).collect();
+        for &m in &members {
+            game.add_companion(m).unwrap();
+        }
+        assert_eq!(game.player_status().companions.len(), MAX_PARTY_SIZE);
+
+        let one_too_many = spawn_tamed(&mut game, 10, 3);
+        assert!(
+            game.add_companion(one_too_many).is_err(),
+            "adding a 4th member to a full 3-slot party should fail"
+        );
+        assert_eq!(game.player_status().companions.len(), MAX_PARTY_SIZE);
+    }
+
+    #[test]
+    fn adding_the_same_companion_twice_is_rejected() {
+        let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let companion = spawn_tamed(&mut game, 10, 3);
+        game.add_companion(companion).unwrap();
+        assert!(game.add_companion(companion).is_err(), "a program already in the party can't be added again");
+        assert_eq!(game.player_status().companions.len(), 1);
+    }
+
+    #[test]
+    fn removing_one_party_member_leaves_the_others_active() {
+        let mut game = Game::new(72, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let a = spawn_tamed(&mut game, 10, 3);
+        let b = spawn_tamed(&mut game, 10, 3);
+        game.add_companion(a).unwrap();
+        game.add_companion(b).unwrap();
+
+        game.remove_companion(a);
+
+        assert_eq!(game.player_status().companions.len(), 1);
+        assert!(game.player_status().companions.first().is_some_and(|c| c.hp == 10));
+        assert!(!game.world.resource::<Party>().0.contains(&a));
+        assert!(game.world.resource::<Party>().0.contains(&b));
+    }
+
+    #[test]
+    fn battle_companion_attack_rejects_a_program_not_in_the_party() {
+        let mut game = Game::new(73, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let not_in_party = spawn_tamed(&mut game, 10, 20);
+
+        let species = game.species_defs().into_iter().next().expect("at least one species");
+        let wild = game
+            .world
+            .spawn((
+                Creature { species: species.id.clone() },
+                Hostile,
+                Position { x: 5, y: 5 },
+                Stats { hp: 100, max_hp: 100, atk: 1, def: 0 },
+            ))
+            .id();
+        game.world.insert_resource(BattleState {
+            player,
+            wild_creature: wild,
+            log: Vec::new(),
+            finished: false,
+            player_won: false,
+        });
+
+        game.battle_companion_attack(not_in_party);
+
+        let wild_hp = game.world.get::<Stats>(wild).unwrap().hp;
+        assert_eq!(wild_hp, 100, "a program outside the active party shouldn't be able to act in battle");
+    }
+
+    #[test]
+    fn rest_heals_every_party_member() {
+        let mut game = Game::new(74, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let a = spawn_tamed(&mut game, 10, 3);
+        let b = spawn_tamed(&mut game, 10, 3);
+        game.add_companion(a).unwrap();
+        game.add_companion(b).unwrap();
+        for e in [a, b] {
+            game.world.get_mut::<Stats>(e).unwrap().hp = 1;
+        }
+
+        game.rest();
+
+        assert_eq!(game.world.get::<Stats>(a).unwrap().hp, 10);
+        assert_eq!(game.world.get::<Stats>(b).unwrap().hp, 10);
+    }
+
+    #[test]
+    fn fuse_companions_combines_stats_and_keeps_the_higher_level_species() {
+        let mut game = Game::new(80, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let species = game.species_defs();
+        let species_a = species[0].id.clone();
+        let species_b = species[1 % species.len()].id.clone();
+
+        let a = game
+            .world
+            .spawn((
+                Creature { species: species_a },
+                Position { x: 3, y: 3 },
+                Stats { hp: 20, max_hp: 20, atk: 10, def: 4 },
+                Tamed { owner: player },
+                Experience { level: 5, xp: 3, xp_to_next: 100 },
+            ))
+            .id();
+        let b = game
+            .world
+            .spawn((
+                Creature { species: species_b.clone() },
+                Position { x: 4, y: 4 },
+                Stats { hp: 10, max_hp: 10, atk: 6, def: 2 },
+                Tamed { owner: player },
+                Experience { level: 2, xp: 1, xp_to_next: 40 },
+            ))
+            .id();
+
+        game.fuse_companions(a, b).unwrap();
+
+        assert!(game.world.get::<Creature>(a).is_none(), "the first input should be consumed");
+        assert!(game.world.get::<Creature>(b).is_none(), "the second input should be consumed");
+
+        let mut query = game.world.query::<(&Creature, &Stats, &Experience, &Tamed)>();
+        let (creature, stats, exp, _) =
+            query.iter(&game.world).find(|(_, _, _, t)| t.owner == player).expect("a fused creature should exist");
+        assert_eq!(exp.level, 5, "fusion should keep the higher level (ties favor `a`)");
+        assert_eq!(exp.xp, 0);
+        assert_eq!(exp.xp_to_next, progression::xp_for_level(5));
+        assert_eq!(stats.max_hp, 20 + 10 / 2, "fused HP should be higher + lower/2");
+        assert_eq!(stats.atk, 10 + 6 / 2);
+        assert_eq!(stats.def, 4 + 2 / 2);
+        assert_ne!(creature.species, species_b, "the lower-level input's species shouldn't win the tie");
+    }
+
+    #[test]
+    fn fuse_companions_rejects_fusing_a_program_with_itself() {
+        let mut game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let a = spawn_tamed(&mut game, 10, 3);
+        assert!(game.fuse_companions(a, a).is_err());
+    }
+
+    #[test]
+    fn fuse_companions_rejects_a_wild_creature() {
+        let mut game = Game::new(82, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let a = spawn_tamed(&mut game, 10, 3);
+        let species = game.species_defs().into_iter().next().unwrap();
+        let wild = game
+            .world
+            .spawn((
+                Creature { species: species.id.clone() },
+                Hostile,
+                Position { x: 5, y: 5 },
+                Stats { hp: 5, max_hp: 5, atk: 1, def: 1 },
+            ))
+            .id();
+        assert!(game.fuse_companions(a, wild).is_err());
+        assert!(game.world.get::<Creature>(a).is_some(), "a failed fusion shouldn't consume either input");
+        assert!(game.world.get::<Creature>(wild).is_some());
+    }
+
+    #[test]
+    fn fuse_companions_removes_fused_members_from_the_active_party() {
+        let mut game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let a = spawn_tamed(&mut game, 10, 3);
+        let b = spawn_tamed(&mut game, 10, 3);
+        game.add_companion(a).unwrap();
+        game.add_companion(b).unwrap();
+
+        game.fuse_companions(a, b).unwrap();
+
+        assert!(!game.world.resource::<Party>().0.contains(&a));
+        assert!(!game.world.resource::<Party>().0.contains(&b));
+    }
+
+    #[test]
+    fn sell_item_pays_out_core_fragments_at_the_structures_sell_rate() {
+        let mut game = Game::new(90, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let def = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.trade.is_some())
+            .expect("a trading structure (Black Market) should exist");
+        let market = game
+            .world
+            .spawn((Structure { kind: def.id.clone() }, Position { x: 5, y: 5 }))
+            .id();
+
+        game.world.get_mut::<Inventory>(player).unwrap().add(ItemId::FirewallPlating, 3);
+        let cf_before = game.world.get::<Inventory>(player).unwrap().count(ItemId::CoreFragment);
+
+        game.sell_item(market, ItemId::FirewallPlating, 2).unwrap();
+
+        let inv = game.world.get::<Inventory>(player).unwrap();
+        assert_eq!(inv.count(ItemId::FirewallPlating), 1, "only the sold quantity should leave the inventory");
+        let sell_rate = def.trade.as_ref().unwrap().sell_rate;
+        assert_eq!(inv.count(ItemId::CoreFragment), cf_before + sell_rate * 2);
+    }
+
+    #[test]
+    fn sell_item_rejects_core_fragments_and_items_you_dont_have() {
+        let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let def = game.structure_defs().into_iter().find(|d| d.trade.is_some()).unwrap();
+        let market = game
+            .world
+            .spawn((Structure { kind: def.id.clone() }, Position { x: 5, y: 5 }))
+            .id();
+
+        assert!(game.sell_item(market, ItemId::CoreFragment, 1).is_err());
+        assert!(game.sell_item(market, ItemId::NeuralAmplifier, 1).is_err(), "can't sell what you don't have");
+    }
+
+    #[test]
+    fn buy_item_charges_core_fragments_and_grants_the_item() {
+        let mut game = Game::new(92, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let def = game.structure_defs().into_iter().find(|d| d.trade.is_some()).unwrap();
+        let (buy_item, unit_cost) = def.trade.as_ref().unwrap().buy[0];
+        let market = game
+            .world
+            .spawn((Structure { kind: def.id.clone() }, Position { x: 5, y: 5 }))
+            .id();
+        {
+            let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+            inv.items.clear();
+            inv.add(ItemId::CoreFragment, unit_cost * 2);
+        }
+
+        game.buy_item(market, buy_item, 2).unwrap();
+
+        let inv = game.world.get::<Inventory>(player).unwrap();
+        assert_eq!(inv.count(ItemId::CoreFragment), 0, "the full cost should be charged");
+        assert_eq!(inv.count(buy_item), 2);
+    }
+
+    #[test]
+    fn buy_item_fails_without_enough_core_fragments_or_for_an_unlisted_item() {
+        let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let def = game.structure_defs().into_iter().find(|d| d.trade.is_some()).unwrap();
+        let (buy_item, _) = def.trade.as_ref().unwrap().buy[0];
+        let market = game
+            .world
+            .spawn((Structure { kind: def.id.clone() }, Position { x: 5, y: 5 }))
+            .id();
+        game.world.get_mut::<Inventory>(player).unwrap().items.clear();
+
+        assert!(game.buy_item(market, buy_item, 1).is_err(), "no Core Fragments should fail the purchase");
+        assert!(
+            game.buy_item(market, ItemId::CoreFragment, 1).is_err(),
+            "an item not on the buy list shouldn't be purchasable"
+        );
+    }
+
+    #[test]
+    fn damage_structure_destroys_it_and_clears_its_cronjob_at_zero_durability() {
+        let mut game = Game::new(100, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let structure = game
+            .world
+            .spawn((
+                Structure { kind: "mining_node".to_string() },
+                Position { x: 5, y: 5 },
+                Durability { hp: 10, max_hp: 30 },
+            ))
+            .id();
+        let worker = spawn_tamed(&mut game, 10, 3);
+        game.world.entity_mut(worker).insert(Task {
+            kind: TaskKind::GatherResource,
+            target: structure,
+            progress: 1,
+            required: 5,
+        });
+
+        game.damage_structure(structure, 10, "Mining Node");
+
+        assert!(game.world.get::<Structure>(structure).is_none(), "0 durability should destroy the structure");
+        assert!(game.world.get::<Task>(worker).is_none(), "the destroyed structure's cronjob should be cleared");
+    }
+
+    #[test]
+    fn damage_structure_just_reduces_durability_when_it_survives() {
+        let mut game = Game::new(101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let structure = game
+            .world
+            .spawn((
+                Structure { kind: "mining_node".to_string() },
+                Position { x: 5, y: 5 },
+                Durability { hp: 20, max_hp: 30 },
+            ))
+            .id();
+
+        game.damage_structure(structure, 10, "Mining Node");
+
+        assert_eq!(game.world.get::<Durability>(structure).unwrap().hp, 10);
+        assert!(game.world.get::<Structure>(structure).is_some(), "a structure with remaining durability should survive");
+    }
+
+    #[test]
+    fn raid_check_can_damage_an_undefended_structure() {
+        // RAID_CHANCE_PER_TICK is a per-call roll; drive many seeds until it
+        // fires at least once, same pattern as the wild-retaliation test.
+        for seed in 0..300u32 {
+            let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            let structure = game
+                .world
+                .spawn((
+                    Structure { kind: "mining_node".to_string() },
+                    Position { x: 5, y: 5 },
+                    Durability { hp: 30, max_hp: 30 },
+                ))
+                .id();
+
+            game.raid_check();
+
+            let Some(durability) = game.world.get::<Durability>(structure) else {
+                // Destroyed outright (30 durability, RAID_DAMAGE 10 — shouldn't
+                // happen in one hit, but tolerate it rather than assume).
+                return;
+            };
+            if durability.hp < 30 {
+                return;
+            }
+        }
+        panic!("raid_check never damaged the structure across 300 seeds — the raid roll may be broken");
+    }
+
+    #[test]
+    fn raid_check_defended_by_a_worker_reduces_structure_damage_and_hurts_the_worker() {
+        for seed in 0..300u32 {
+            let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            let structure = game
+                .world
+                .spawn((
+                    Structure { kind: "mining_node".to_string() },
+                    Position { x: 5, y: 5 },
+                    Durability { hp: 30, max_hp: 30 },
+                ))
+                .id();
+            let worker = spawn_tamed(&mut game, 50, 3);
+            game.world.get_mut::<Stats>(worker).unwrap().def = 100; // fully mitigates RAID_DAMAGE
+            game.world.entity_mut(worker).insert(Task {
+                kind: TaskKind::GatherResource,
+                target: structure,
+                progress: 0,
+                required: 5,
+            });
+
+            game.raid_check();
+
+            let worker_hp = game.world.get::<Stats>(worker).unwrap().hp;
+            if worker_hp < 50 {
+                // The raid rolled this attempt: the structure should be
+                // untouched (fully mitigated) and the worker should have
+                // taken the defender's cost.
+                assert_eq!(
+                    game.world.get::<Durability>(structure).unwrap().hp,
+                    30,
+                    "a worker with overwhelming Defense should fully mitigate the raid"
+                );
+                assert_eq!(worker_hp, 50 - RAID_DEFENDER_DAMAGE);
+                return;
+            }
+        }
+        panic!("raid_check never rolled across 300 seeds — the raid roll may be broken");
+    }
+
+    #[test]
+    fn structure_regen_heals_damaged_structures_over_time() {
+        let mut game = Game::new(102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let structure = game
+            .world
+            .spawn((
+                Structure { kind: "mining_node".to_string() },
+                Position { x: 5, y: 5 },
+                Durability { hp: 10, max_hp: 30 },
+            ))
+            .id();
+        game.world.resource_mut::<GameClock>().tick = STRUCTURE_REGEN_INTERVAL;
+
+        game.structure_regen();
+
+        assert_eq!(game.world.get::<Durability>(structure).unwrap().hp, 10 + STRUCTURE_REGEN_AMOUNT);
+    }
+
+    #[test]
+    fn structure_regen_does_not_exceed_max_durability() {
+        let mut game = Game::new(103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let structure = game
+            .world
+            .spawn((
+                Structure { kind: "mining_node".to_string() },
+                Position { x: 5, y: 5 },
+                Durability { hp: 29, max_hp: 30 },
+            ))
+            .id();
+        game.world.resource_mut::<GameClock>().tick = STRUCTURE_REGEN_INTERVAL;
+
+        game.structure_regen();
+
+        assert_eq!(game.world.get::<Durability>(structure).unwrap().hp, 30);
+    }
+
+    #[test]
+    fn structures_survive_save_and_load_with_their_durability() {
+        let assets = test_assets_dir();
+        let mut game = Game::new(104, DifficultyMode::Forgiving, &assets).unwrap();
+        let structure_def = game.structure_defs().into_iter().find(|d| d.id == "mining_node").unwrap();
+        game.world.spawn((
+            Structure { kind: structure_def.id.clone() },
+            Position { x: 5, y: 5 },
+            Durability { hp: 12, max_hp: structure_def.durability },
+        ));
+
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_structure_durability_test_{}.bin",
+            std::process::id()
+        ));
+        game.save(&path).unwrap();
+        let mut loaded = Game::load(&path, &assets).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        let mut query = loaded.world.query::<&Durability>();
+        let durability = query.iter(&loaded.world).next().expect("the structure should survive a save/load round trip");
+        assert_eq!(durability.hp, 12);
+        assert_eq!(durability.max_hp, structure_def.durability);
+    }
+
+    #[test]
+    fn forage_chance_applies_keen_scavenger_but_never_boosts_a_zero_chance_biome() {
+        assert_eq!(forage_chance(Biome::OpenGrid, false), 0.6);
+        assert_eq!(forage_chance(Biome::OpenGrid, true), 0.6 + KEEN_SCAVENGER_BONUS);
+        assert_eq!(
+            forage_chance(Biome::DataVoid, true),
+            0.0,
+            "an unwalkable biome's 0% chance shouldn't be boosted into a nonzero one"
+        );
+    }
+
+    #[test]
+    fn unlock_perk_spends_points_and_can_only_be_unlocked_once() {
+        let mut game = Game::new(110, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Perks>(player).unwrap().points = 5;
+
+        game.unlock_perk(Perk::KeenScavenger).unwrap();
+
+        let status = game.player_status();
+        assert_eq!(status.perk_points, 5 - Perk::KeenScavenger.cost());
+        assert_eq!(status.unlocked_perks, vec![Perk::KeenScavenger]);
+        assert!(game.player_has_perk(Perk::KeenScavenger));
+
+        assert!(
+            game.unlock_perk(Perk::KeenScavenger).is_err(),
+            "unlocking the same perk twice should be rejected"
+        );
+    }
+
+    #[test]
+    fn unlock_perk_rejects_without_enough_points() {
+        let mut game = Game::new(111, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Perks>(player).unwrap().points = 0;
+
+        assert!(game.unlock_perk(Perk::ExploitFocus).is_err());
+        assert!(!game.player_has_perk(Perk::ExploitFocus));
+    }
+
+    #[test]
+    fn exploit_focus_boosts_effective_decompiler_skill_used_for_decompile_chance() {
+        let mut game = Game::new(112, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let species = game.species_defs().into_iter().next().expect("at least one species");
+        let wild = game
+            .world
+            .spawn((
+                Creature { species: species.id.clone() },
+                Hostile,
+                Position { x: 3, y: 3 },
+                Stats { hp: 10, max_hp: 10, atk: 1, def: 1 },
+            ))
+            .id();
+
+        let before = game.inspect(wild).unwrap().decompile_chance;
+
+        game.world.get_mut::<Perks>(player).unwrap().points = 10;
+        game.unlock_perk(Perk::ExploitFocus).unwrap();
+        let after = game.inspect(wild).unwrap().decompile_chance;
+
+        assert!(after > before, "Exploit Focus should raise the decompile chance shown for the same target");
+    }
+
+    #[test]
+    fn lean_compiler_discounts_craft_cost_but_never_below_one_each() {
+        let mut game = Game::new(113, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let base_cost = game.craft_cost(ItemId::PowerCell);
+        assert_eq!(base_cost, vec![(ItemId::CoreFragment, POWER_CELL_CORE_COST)]);
+
+        game.world.get_mut::<Perks>(player).unwrap().points = 10;
+        game.unlock_perk(Perk::LeanCompiler).unwrap();
+        let discounted = game.craft_cost(ItemId::PowerCell);
+        assert_eq!(discounted, vec![(ItemId::CoreFragment, POWER_CELL_CORE_COST - LEAN_COMPILER_DISCOUNT)]);
+    }
+
+    #[test]
+    fn perk_state_survives_save_and_load() {
+        let assets = test_assets_dir();
+        let mut game = Game::new(114, DifficultyMode::Forgiving, &assets).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Perks>(player).unwrap().points = 10;
+        game.unlock_perk(Perk::LowPowerMode).unwrap();
+        let points_after_unlock = game.player_status().perk_points;
+
+        let path = std::env::temp_dir().join(format!("feral_processes_perk_test_{}.bin", std::process::id()));
+        game.save(&path).unwrap();
+        let loaded = Game::load(&path, &assets).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        let status = loaded.player_status();
+        assert_eq!(status.perk_points, points_after_unlock);
+        assert_eq!(status.unlocked_perks, vec![Perk::LowPowerMode]);
+    }
+
+    #[test]
+    fn entering_a_zone_portal_increments_zone_and_doubles_wild_stats() {
+        let mut game = Game::new(40, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        assert_eq!(game.player_status().zone, 1);
+        let player = game.player_entity();
+        let ppos = *game.world.get::<Position>(player).unwrap();
+
+        game.world.spawn((
+            Structure { kind: "portal".to_string() },
+            Position { x: ppos.x + 1, y: ppos.y },
+        ));
+
+        game.move_player(1, 0);
+
+        assert_eq!(game.player_status().zone, 2, "walking onto a zone portal should advance the zone level");
+
+        let species_db = game.species_defs();
+        let mut query = game.world.query_filtered::<(&Creature, &Stats), With<Hostile>>();
+        let results: Vec<_> = query.iter(&game.world).map(|(c, s)| (c.species.clone(), s.max_hp)).collect();
+        assert!(!results.is_empty(), "zone 2 should have spawned wild creatures");
+        for (species_id, max_hp) in results {
+            let species = species_db.iter().find(|s| s.id == species_id).unwrap();
+            assert_eq!(max_hp, species.base_hp * 2, "zone 2 wild creatures should have doubled stats");
+        }
+    }
+
+    #[test]
+    fn a_creatures_display_label_is_tagged_with_its_spawn_zone() {
+        let mut game = Game::new(50, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let species = game.species_defs().into_iter().next().unwrap();
+
+        let zone1 = game
+            .world
+            .spawn((
+                Creature { species: species.id.clone() },
+                Hostile,
+                Position { x: 3, y: 3 },
+                Stats { hp: 1, max_hp: 1, atk: 1, def: 1 },
+                ZonePortal(1),
+            ))
+            .id();
+        let zone2 = game
+            .world
+            .spawn((
+                Creature { species: species.id.clone() },
+                Hostile,
+                Position { x: 4, y: 4 },
+                Stats { hp: 2, max_hp: 2, atk: 2, def: 2 },
+                ZonePortal(2),
+            ))
+            .id();
+
+        assert_eq!(game.entity_label(zone1), format!("{} 1", species.name));
+        assert_eq!(game.entity_label(zone2), format!("{} 2", species.name));
+        assert_eq!(game.inspect(zone2).unwrap().name, format!("{} 2", species.name));
+    }
+
+    #[test]
+    fn defeating_a_boss_guarantees_a_cache_of_portal_fragments() {
+        let mut game = Game::new(51, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let boss = game
+            .species_defs()
+            .into_iter()
+            .find(|s| s.is_boss)
+            .expect("at least one boss species should exist in assets/species for this test");
+
+        let wild = game
+            .world
+            .spawn((
+                Creature { species: boss.id.clone() },
+                Position { x: 0, y: 0 },
+                Stats { hp: 1, max_hp: 1, atk: 1, def: 1 },
+            ))
+            .id();
+
+        game.award_loot(player, wild);
+
+        let qty = game.world.get::<Inventory>(player).unwrap().count(ItemId::PortalFragment);
+        assert!(
+            BOSS_PORTAL_FRAGMENT_DROP.contains(&qty),
+            "boss kill should guarantee a portal fragment cache in {BOSS_PORTAL_FRAGMENT_DROP:?}, got {qty}"
+        );
+    }
+
+    #[test]
+    fn boss_creatures_are_flagged_in_entity_and_inspect_views() {
+        let mut game = Game::new(52, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let boss = game
+            .species_defs()
+            .into_iter()
+            .find(|s| s.is_boss)
+            .expect("at least one boss species should exist in assets/species for this test");
+        let normal = game
+            .species_defs()
+            .into_iter()
+            .find(|s| !s.is_boss)
+            .expect("at least one non-boss species should exist");
+
+        let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+        let boss_entity = game
+            .world
+            .spawn((
+                Creature { species: boss.id.clone() },
+                Hostile,
+                Position { x: player_pos.x + 1, y: player_pos.y },
+                Glyph { ch: boss.glyph, color: boss.color },
+                Stats { hp: boss.base_hp, max_hp: boss.base_hp, atk: boss.base_atk, def: boss.base_def },
+            ))
+            .id();
+        game.world.spawn((
+            Creature { species: normal.id.clone() },
+            Hostile,
+            Position { x: player_pos.x - 1, y: player_pos.y },
+            Glyph { ch: normal.glyph, color: normal.color },
+            Stats { hp: normal.base_hp, max_hp: normal.base_hp, atk: normal.base_atk, def: normal.base_def },
+        ));
+
+        let views = game.view_entities(5, 5);
+        let boss_view = views.iter().find(|v| v.entity == boss_entity).unwrap();
+        assert!(boss_view.is_boss, "the boss creature's EntityView should be flagged is_boss");
+        let normal_views: Vec<_> = views.iter().filter(|v| v.entity != boss_entity && v.is_hostile).collect();
+        assert!(normal_views.iter().all(|v| !v.is_boss), "non-boss creatures shouldn't be flagged is_boss");
+
+        assert!(game.inspect(boss_entity).unwrap().is_boss, "InspectView should also flag a boss creature");
+    }
+
+    #[test]
+    fn stunned_player_loses_their_turn_but_wild_still_retaliates_and_stun_clears() {
+        let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        // Deliberately effect-free, so the wild creature's own retaliation
+        // can't re-apply (and thus reset the clock on) the status this test
+        // is tracking.
+        let species = game
+            .species_defs()
+            .into_iter()
+            .find(|s| !s.is_boss && s.moves.iter().all(|m| m.effect.is_none()))
+            .expect("at least one species with no status-effect moves should exist for this test");
+        let wild = game
+            .world
+            .spawn((
+                Creature { species: species.id.clone() },
+                Hostile,
+                Position { x: 5, y: 5 },
+                Stats { hp: 50, max_hp: 50, atk: 3, def: 0 },
+                StatusEffects::default(),
+            ))
+            .id();
+        game.world.insert_resource(BattleState {
+            player,
+            wild_creature: wild,
+            log: Vec::new(),
+            finished: false,
+            player_won: false,
+        });
+        game.world.get_mut::<StatusEffects>(player).unwrap().active =
+            Some(ActiveStatus { kind: StatusKind::Stun, remaining: 1, power: 0 });
+
+        let wild_hp_before = game.world.get::<Stats>(wild).unwrap().hp;
+        game.battle_attack();
+        let wild_hp_after = game.world.get::<Stats>(wild).unwrap().hp;
+
+        assert_eq!(wild_hp_before, wild_hp_after, "a stunned player shouldn't deal any attack damage");
+        assert!(
+            game.world.get::<StatusEffects>(player).unwrap().active.is_none(),
+            "the stun should clear after its one round elapses"
+        );
+    }
+
+    #[test]
+    fn bleed_status_deals_extra_damage_each_round_and_expires_after_its_duration() {
+        let mut game = Game::new(62, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        // Deliberately effect-free, so the wild creature's own retaliation
+        // can't re-apply (and thus reset the clock on) the status this test
+        // is tracking.
+        let species = game
+            .species_defs()
+            .into_iter()
+            .find(|s| !s.is_boss && s.moves.iter().all(|m| m.effect.is_none()))
+            .expect("at least one species with no status-effect moves should exist for this test");
+        let wild = game
+            .world
+            .spawn((
+                Creature { species: species.id.clone() },
+                Hostile,
+                Position { x: 5, y: 5 },
+                Stats { hp: 100, max_hp: 100, atk: 0, def: 0 },
+                StatusEffects { active: Some(ActiveStatus { kind: StatusKind::Bleed, remaining: 2, power: 5 }) },
+            ))
+            .id();
+        game.world.insert_resource(BattleState {
+            player,
+            wild_creature: wild,
+            log: Vec::new(),
+            finished: false,
+            player_won: false,
+        });
+        let player_atk = game.world.get::<Stats>(player).unwrap().atk;
+        let expected_attack_dmg = battle::compute_damage(player_atk, 0, 5);
+
+        let hp_before = game.world.get::<Stats>(wild).unwrap().hp;
+        game.battle_attack();
+        let hp_after = game.world.get::<Stats>(wild).unwrap().hp;
+        assert_eq!(
+            hp_before - hp_after,
+            expected_attack_dmg + 5,
+            "wild should take its attack damage plus one round of bleed"
+        );
+        assert_eq!(game.world.get::<StatusEffects>(wild).unwrap().active.unwrap().remaining, 1);
+
+        let hp_before2 = game.world.get::<Stats>(wild).unwrap().hp;
+        game.battle_attack();
+        let hp_after2 = game.world.get::<Stats>(wild).unwrap().hp;
+        assert_eq!(hp_before2 - hp_after2, expected_attack_dmg + 5, "the second bleed round should also tick");
+        assert!(
+            game.world.get::<StatusEffects>(wild).unwrap().active.is_none(),
+            "bleed should clear once its duration elapses"
+        );
+    }
+
+    #[test]
+    fn status_effects_are_cleared_once_the_battle_ends() {
+        let mut game = Game::new(63, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        // Deliberately effect-free, so the wild creature's own retaliation
+        // can't re-apply (and thus reset the clock on) the status this test
+        // is tracking.
+        let species = game
+            .species_defs()
+            .into_iter()
+            .find(|s| !s.is_boss && s.moves.iter().all(|m| m.effect.is_none()))
+            .expect("at least one species with no status-effect moves should exist for this test");
+        let wild = game
+            .world
+            .spawn((
+                Creature { species: species.id.clone() },
+                Hostile,
+                Position { x: 5, y: 5 },
+                Stats { hp: 1, max_hp: 1, atk: 1, def: 0 },
+                StatusEffects::default(),
+            ))
+            .id();
+        game.world.insert_resource(BattleState {
+            player,
+            wild_creature: wild,
+            log: Vec::new(),
+            finished: false,
+            player_won: false,
+        });
+        game.world.get_mut::<StatusEffects>(player).unwrap().active =
+            Some(ActiveStatus { kind: StatusKind::Bleed, remaining: 5, power: 1 });
+
+        // 1 HP wild creature dies to the player's first attack, ending the battle.
+        game.battle_attack();
+
+        assert!(!game.has_active_battle(), "the wild creature's death should end the battle");
+        assert!(
+            game.world.get::<StatusEffects>(player).unwrap().active.is_none(),
+            "leftover status effects should be cleared once the battle ends, however it ends"
+        );
+    }
+
+    #[test]
+    fn zone_transition_carries_tamed_companions_but_leaves_structures_and_wild_creatures_behind() {
+        let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let ppos = *game.world.get::<Position>(player).unwrap();
+
+        let companion = spawn_tamed(&mut game, 10, 3);
+        game.add_companion(companion).unwrap();
+
+        let species = game.species_defs().into_iter().next().unwrap();
+        let wild = game
+            .world
+            .spawn((
+                Creature { species: species.id.clone() },
+                Hostile,
+                Position { x: ppos.x + 3, y: ppos.y },
+                Stats { hp: 5, max_hp: 5, atk: 1, def: 1 },
+            ))
+            .id();
+
+        let home = game
+            .world
+            .spawn((Structure { kind: "home".to_string() }, Position { x: ppos.x + 5, y: ppos.y }))
+            .id();
+
+        game.world.spawn((
+            Structure { kind: "portal".to_string() },
+            Position { x: ppos.x + 1, y: ppos.y },
+        ));
+
+        game.move_player(1, 0);
+
+        assert_eq!(game.player_status().zone, 2);
+        assert!(game.world.get::<Tamed>(companion).is_some(), "the companion should still be tamed after breaching");
+        assert!(
+            game.world.get::<Creature>(wild).is_none(),
+            "wild creatures should be left behind, not carried through the portal"
+        );
+        assert!(
+            game.world.get::<Structure>(home).is_none(),
+            "structures should be left behind when breaching a zone"
+        );
+        let companion_pos = *game.world.get::<Position>(companion).unwrap();
+        let player_pos = *game.world.get::<Position>(player).unwrap();
+        assert_eq!(companion_pos, player_pos, "the companion should travel with the player into the new zone");
+    }
+
+    #[test]
+    fn portal_build_cost_scales_with_current_zone_level() {
+        let mut game = Game::new(42, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+
+        // Zone 1: base rate from portal.ron is 5 PortalFragment * zone 1 = 5.
+        game.world.get_mut::<Inventory>(player).unwrap().add(ItemId::PortalFragment, 5);
+        game.place_structure("portal", 1, 0).unwrap();
+        assert_eq!(
+            game.world.get::<Inventory>(player).unwrap().count(ItemId::PortalFragment),
+            0,
+            "zone 1 portal should cost the base rate"
+        );
+
+        game.move_player(1, 0);
+        assert_eq!(game.player_status().zone, 2);
+
+        // Zone 2: cost should now be doubled (5 * zone level 2 = 10).
+        game.world.get_mut::<Inventory>(player).unwrap().add(ItemId::PortalFragment, 9);
+        assert!(
+            game.place_structure("portal", 1, 0).is_err(),
+            "9 fragments shouldn't be enough for a zone-2 portal"
+        );
+        game.world.get_mut::<Inventory>(player).unwrap().add(ItemId::PortalFragment, 1);
+        game.place_structure("portal", 1, 0).unwrap();
+        assert_eq!(
+            game.world.get::<Inventory>(player).unwrap().count(ItemId::PortalFragment),
+            0,
+            "zone 2 portal should cost double the base rate"
+        );
+    }
+
+    #[test]
+    fn zone_level_survives_save_and_load() {
+        let assets = test_assets_dir();
+        let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
+        let player = game.player_entity();
+        let ppos = *game.world.get::<Position>(player).unwrap();
+        game.world.spawn((
+            Structure { kind: "portal".to_string() },
+            Position { x: ppos.x + 1, y: ppos.y },
+        ));
+        game.move_player(1, 0);
+        assert_eq!(game.player_status().zone, 2);
+
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_zone_test_{}.bin",
+            std::process::id()
+        ));
+        game.save(&path).unwrap();
+        let loaded = Game::load(&path, &assets).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(loaded.player_status().zone, 2, "zone level should survive a save/load round trip");
     }
 }

@@ -8,7 +8,11 @@ pub fn item_potency(item: ItemId) -> f32 {
         | ItemId::PowerCell
         | ItemId::OverclockCore
         | ItemId::FirewallPlating
-        | ItemId::NeuralAmplifier => 0.0,
+        | ItemId::NeuralAmplifier
+        | ItemId::PortalFragment
+        | ItemId::MonofilamentWhip
+        | ItemId::AblativePlating
+        | ItemId::CortexHack => 0.0,
     }
 }
 

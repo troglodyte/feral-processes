@@ -10,7 +10,7 @@
     habitats: [NullSector, Mainframe],
     moves: [
         (name: "Exploit", power: 10),
-        (name: "Corrupt", power: 8),
+        (name: "Corrupt", power: 8, effect: Some((kind: Bleed, chance: 0.4, duration: 3, power: 4))),
     ],
     work_resource: Some(CoreFragment),
     equipment_drop: Some((NeuralAmplifier, 0.25)),

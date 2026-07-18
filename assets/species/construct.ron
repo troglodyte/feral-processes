@@ -10,7 +10,7 @@
     habitats: [Mainframe],
     moves: [
         (name: "Crash", power: 13),
-        (name: "Lockdown", power: 6),
+        (name: "Lockdown", power: 6, effect: Some((kind: Stun, chance: 0.35, duration: 1, power: 0))),
     ],
     work_resource: Some(CoreFragment),
     equipment_drop: Some((OverclockCore, 0.3)),

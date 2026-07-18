@@ -1,0 +1,17 @@
+(
+    id: "rootkit",
+    name: "Rootkit",
+    glyph: 'k',
+    color: Red,
+    base_hp: 32,
+    base_atk: 9,
+    base_def: 8,
+    taming_difficulty: 0.75,
+    habitats: [Mainframe, NullSector],
+    moves: [
+        (name: "Privilege Escalation", power: 10, effect: Some((kind: Stun, chance: 0.4, duration: 1, power: 0))),
+        (name: "Kernel Panic", power: 12),
+    ],
+    work_resource: None,
+    equipment_drop: Some((AblativePlating, 0.3)),
+)

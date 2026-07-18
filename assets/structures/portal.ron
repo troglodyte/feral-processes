@@ -1,0 +1,9 @@
+(
+    id: "portal",
+    name: "Zone Portal",
+    glyph: 'O',
+    color: Magenta,
+    build_cost: [(PortalFragment, 5)],
+    work: None,
+    zone_portal: true,
+)

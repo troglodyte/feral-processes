@@ -1,0 +1,18 @@
+(
+    id: "wintermute",
+    name: "Wintermute",
+    glyph: 'W',
+    color: Magenta,
+    base_hp: 200,
+    base_atk: 28,
+    base_def: 18,
+    taming_difficulty: 0.95,
+    habitats: [OpenGrid, Mainframe, NullSector, StaticField],
+    moves: [
+        (name: "Cascade Logic", power: 26, effect: Some((kind: Bleed, chance: 0.5, duration: 3, power: 6))),
+        (name: "Absolute Authority", power: 20, effect: Some((kind: Stun, chance: 0.45, duration: 1, power: 0))),
+    ],
+    work_resource: None,
+    equipment_drop: Some((MonofilamentWhip, 0.6)),
+    is_boss: true,
+)

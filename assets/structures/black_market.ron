@@ -1,0 +1,16 @@
+(
+    id: "black_market",
+    name: "Black Market",
+    glyph: '$',
+    color: Yellow,
+    build_cost: [(CoreFragment, 6)],
+    work: None,
+    trade: Some((
+        sell_rate: 1,
+        buy: [
+            (IceBreaker, 4),
+            (PowerCell, 3),
+            (PortalFragment, 8),
+        ],
+    )),
+)

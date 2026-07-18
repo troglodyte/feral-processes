@@ -8,6 +8,10 @@ pub enum ItemId {
     OverclockCore,
     FirewallPlating,
     NeuralAmplifier,
+    PortalFragment,
+    MonofilamentWhip,
+    AblativePlating,
+    CortexHack,
 }
 
 impl ItemId {
@@ -19,6 +23,10 @@ impl ItemId {
             ItemId::OverclockCore => "Overclock Core",
             ItemId::FirewallPlating => "Firewall Plating",
             ItemId::NeuralAmplifier => "Neural Amplifier",
+            ItemId::PortalFragment => "Portal Fragment",
+            ItemId::MonofilamentWhip => "Monofilament Whip",
+            ItemId::AblativePlating => "Ablative Plating",
+            ItemId::CortexHack => "Cortex Hack",
         }
     }
 
@@ -30,15 +38,29 @@ impl ItemId {
                 EquipmentSlot::Weapon,
                 EquipmentStats { atk: 3, ..EquipmentStats::default() },
             )),
+            ItemId::MonofilamentWhip => Some((
+                EquipmentSlot::Weapon,
+                EquipmentStats { atk: 4, ..EquipmentStats::default() },
+            )),
             ItemId::FirewallPlating => Some((
                 EquipmentSlot::Armor,
                 EquipmentStats { def: 3, ..EquipmentStats::default() },
+            )),
+            ItemId::AblativePlating => Some((
+                EquipmentSlot::Armor,
+                EquipmentStats { def: 4, ..EquipmentStats::default() },
             )),
             ItemId::NeuralAmplifier => Some((
                 EquipmentSlot::Module,
                 EquipmentStats { decompiler: 2, ..EquipmentStats::default() },
             )),
-            ItemId::CoreFragment | ItemId::PowerCell | ItemId::IceBreaker => None,
+            ItemId::CortexHack => Some((
+                EquipmentSlot::Module,
+                EquipmentStats { decompiler: 3, ..EquipmentStats::default() },
+            )),
+            ItemId::CoreFragment | ItemId::PowerCell | ItemId::IceBreaker | ItemId::PortalFragment => {
+                None
+            }
         }
     }
 }
@@ -92,5 +114,20 @@ mod tests {
         let (slot, mods) = ItemId::NeuralAmplifier.equipment().unwrap();
         assert_eq!(slot, EquipmentSlot::Module);
         assert_eq!((mods.atk, mods.def, mods.decompiler), (0, 0, 2));
+    }
+
+    #[test]
+    fn each_new_equipment_item_shares_its_slot_with_an_existing_alternative() {
+        let (slot, mods) = ItemId::MonofilamentWhip.equipment().unwrap();
+        assert_eq!(slot, EquipmentSlot::Weapon);
+        assert_eq!((mods.atk, mods.def, mods.decompiler), (4, 0, 0));
+
+        let (slot, mods) = ItemId::AblativePlating.equipment().unwrap();
+        assert_eq!(slot, EquipmentSlot::Armor);
+        assert_eq!((mods.atk, mods.def, mods.decompiler), (0, 4, 0));
+
+        let (slot, mods) = ItemId::CortexHack.equipment().unwrap();
+        assert_eq!(slot, EquipmentSlot::Module);
+        assert_eq!((mods.atk, mods.def, mods.decompiler), (0, 0, 3));
     }
 }

@@ -23,15 +23,44 @@ is skipped with a warning logged in-game rather than crashing startup.
     moves: [
         (name: "Move Name", power: 8),
         (name: "Other Move", power: 5),
+
+        // Optional per-move; omit `effect` entirely for a plain damage-only
+        // move. If set, landing this move has a `chance` (0.0-1.0) to also
+        // inflict a status condition on the target for `duration` battle
+        // rounds, on top of its direct damage. A combatant can only carry one
+        // status condition at a time — a fresh one overwrites whatever was
+        // active. `kind: Bleed` deals `power` extra damage at the end of
+        // every round it's active; `kind: Stun` causes the afflicted side to
+        // lose their next action instead (`power` is required by the schema
+        // but unused for Stun — just set it to 0).
+        (name: "Corrupted Move", power: 6, effect: Some((
+            kind: Bleed,       // or `Stun`
+            chance: 0.4,
+            duration: 3,
+            power: 3,
+        ))),
     ],
     work_resource: Some(CoreFragment),  // or `None` if it shouldn't be assignable to a cronjob
-    // Item options: CoreFragment, PowerCell, IceBreaker, OverclockCore,
-    //               FirewallPlating, NeuralAmplifier
+    // Item options: CoreFragment, PowerCell, IceBreaker, PortalFragment,
+    //               OverclockCore, MonofilamentWhip (Weapon),
+    //               FirewallPlating, AblativePlating (Armor),
+    //               NeuralAmplifier, CortexHack (Module)
 
     // Optional; omit entirely for no chance of a gear drop. If set, defeating
     // or decompiling this species has a chance (0.0-1.0) to additionally
     // drop one piece of equipment, independent of `work_resource`.
     equipment_drop: Some((FirewallPlating, 0.3)),
+
+    // Optional; can be left out entirely (defaults to false). If true, this
+    // species is a boss: it's excluded from the normal per-tile habitat spawn
+    // roll and spawns in its place only rarely (see `BOSS_SPAWN_CHANCE` in
+    // the engine), rendered bold on the map and tagged "[BOSS]" in the
+    // inspect/battle screens. Defeating one guarantees a cache of 3-6 Portal
+    // Fragments instead of the flat drop chance every other species rolls.
+    // There's no separate engine-side stat multiplier for a boss — make
+    // `base_hp`/`base_atk`/`base_def` tough here directly (a boss's stats
+    // still double per zone level like any other species, on top of this).
+    is_boss: true,
 )
 ```
 

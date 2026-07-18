@@ -1,0 +1,17 @@
+(
+    id: "trojan",
+    name: "Trojan",
+    glyph: 't',
+    color: Brown,
+    base_hp: 24,
+    base_atk: 8,
+    base_def: 3,
+    taming_difficulty: 0.5,
+    habitats: [Mainframe, OpenGrid],
+    moves: [
+        (name: "Backdoor Access", power: 9, effect: Some((kind: Stun, chance: 0.3, duration: 1, power: 0))),
+        (name: "Payload Drop", power: 7),
+    ],
+    work_resource: None,
+    equipment_drop: Some((OverclockCore, 0.2)),
+)

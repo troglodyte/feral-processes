@@ -9,8 +9,8 @@
     taming_difficulty: 0.5,
     habitats: [StaticField],
     moves: [
-        (name: "Freeze", power: 7),
-        (name: "Corrupt", power: 9),
+        (name: "Freeze", power: 7, effect: Some((kind: Stun, chance: 0.3, duration: 1, power: 0))),
+        (name: "Corrupt", power: 9, effect: Some((kind: Bleed, chance: 0.4, duration: 3, power: 3))),
     ],
     work_resource: None,
     equipment_drop: Some((FirewallPlating, 0.2)),

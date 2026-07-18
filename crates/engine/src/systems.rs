@@ -2,9 +2,10 @@ use bevy_ecs::prelude::*;
 use rand::RngExt;
 
 use crate::components::{
-    Experience, Inventory, Needs, PassiveProcessor, Player, Position, ResourceNode, Stats,
+    Experience, Inventory, Needs, PassiveProcessor, Perks, Player, Position, ResourceNode, Stats,
     Structure, Tamed, Task, WanderAi,
 };
+use crate::perks::Perk;
 use crate::progression;
 use crate::resources::{GameRng, MessageLog};
 use crate::structures::StructureDb;
@@ -17,18 +18,25 @@ const HUNGER_DECAY_PER_TICK: f32 = 0.15;
 const FATIGUE_DECAY_PER_TICK: f32 = 0.08;
 
 /// One tick of hunger/fatigue decay; pulled out of the system so the rates
-/// are unit-testable without spinning up an ECS `World`.
-pub fn decay_needs(hunger: f32, fatigue: f32) -> (f32, f32) {
+/// are unit-testable without spinning up an ECS `World`. `hunger_multiplier`
+/// scales only the hunger rate (e.g. `Perk::LowPowerMode`'s 0.7) — fatigue
+/// is unaffected.
+pub fn decay_needs(hunger: f32, fatigue: f32, hunger_multiplier: f32) -> (f32, f32) {
     (
-        (hunger - HUNGER_DECAY_PER_TICK).max(0.0),
+        (hunger - HUNGER_DECAY_PER_TICK * hunger_multiplier).max(0.0),
         (fatigue - FATIGUE_DECAY_PER_TICK).max(0.0),
     )
 }
 
-pub fn needs_decay_system(mut query: Query<(&mut Needs, &mut Stats), With<Player>>, mut log: ResMut<MessageLog>) {
-    for (mut needs, mut stats) in &mut query {
+pub fn needs_decay_system(
+    mut query: Query<(&mut Needs, &mut Stats, Option<&Perks>), With<Player>>,
+    mut log: ResMut<MessageLog>,
+) {
+    for (mut needs, mut stats, perks) in &mut query {
+        let hunger_multiplier =
+            if perks.is_some_and(|p| p.has(Perk::LowPowerMode)) { crate::LOW_POWER_MODE_MULTIPLIER } else { 1.0 };
         let was_starving = needs.hunger <= 0.0;
-        let (hunger, fatigue) = decay_needs(needs.hunger, needs.fatigue);
+        let (hunger, fatigue) = decay_needs(needs.hunger, needs.fatigue, hunger_multiplier);
         needs.hunger = hunger;
         needs.fatigue = fatigue;
         if needs.hunger <= 0.0 {
@@ -149,15 +157,25 @@ mod tests {
 
     #[test]
     fn needs_decay_at_expected_rate() {
-        let (hunger, fatigue) = decay_needs(100.0, 100.0);
+        let (hunger, fatigue) = decay_needs(100.0, 100.0, 1.0);
         assert!((hunger - (100.0 - HUNGER_DECAY_PER_TICK)).abs() < f32::EPSILON);
         assert!((fatigue - (100.0 - FATIGUE_DECAY_PER_TICK)).abs() < f32::EPSILON);
     }
 
     #[test]
     fn needs_never_go_negative() {
-        let (hunger, fatigue) = decay_needs(0.05, 0.02);
+        let (hunger, fatigue) = decay_needs(0.05, 0.02, 1.0);
         assert_eq!(hunger, 0.0);
         assert_eq!(fatigue, 0.0);
+    }
+
+    #[test]
+    fn hunger_multiplier_scales_only_the_hunger_rate() {
+        let (hunger, fatigue) = decay_needs(100.0, 100.0, 0.5);
+        assert!((hunger - (100.0 - HUNGER_DECAY_PER_TICK * 0.5)).abs() < f32::EPSILON);
+        assert!(
+            (fatigue - (100.0 - FATIGUE_DECAY_PER_TICK)).abs() < f32::EPSILON,
+            "fatigue decay shouldn't be affected by the hunger multiplier"
+        );
     }
 }

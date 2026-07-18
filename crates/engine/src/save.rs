@@ -4,6 +4,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::items::ItemId;
+use crate::perks::Perk;
 use crate::resources::DifficultyMode;
 use crate::species::SpeciesId;
 use crate::world::Tile;
@@ -29,6 +30,14 @@ pub struct PlayerSave {
     pub armor: Option<ItemId>,
     #[serde(default)]
     pub module: Option<ItemId>,
+    /// Unspent Perk Points (see `perks::Perk`). Defaults to 0 for saves
+    /// written before perks existed.
+    #[serde(default)]
+    pub perk_points: u32,
+    /// Which perks have been unlocked. Defaults to empty for saves written
+    /// before perks existed.
+    #[serde(default)]
+    pub unlocked_perks: Vec<Perk>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -53,6 +62,11 @@ pub struct CreatureSave {
     /// player's active battle companion.
     #[serde(default)]
     pub is_companion: bool,
+    /// Which zone sector this creature was originally spawned in (see
+    /// `components::ZonePortal`). Defaults to 1 for saves written before
+    /// zone portals existed.
+    #[serde(default = "default_zone_level")]
+    pub zone: u32,
 }
 
 /// An in-progress work assignment (a "cronjob") a tamed creature is running
@@ -70,6 +84,11 @@ pub struct StructureSave {
     pub kind: String,
     pub position: (i32, i32),
     pub resource_amount: Option<u32>,
+    /// Current raid durability (see `components::Durability`). `None` for
+    /// saves written before raids existed — treated as full health at load
+    /// time, using whatever the structure's current `.ron` def says.
+    #[serde(default)]
+    pub durability: Option<u32>,
 }
 
 /// Only the world seed and the sparse tile overlay are persisted; unmodified
@@ -83,6 +102,14 @@ pub struct SaveData {
     pub creatures: Vec<CreatureSave>,
     pub structures: Vec<StructureSave>,
     pub tile_overrides: Vec<((i32, i32), Tile)>,
+    /// Which zone sector the player had breached into. Defaults to 1 (the
+    /// starting sector) for saves written before zone portals existed.
+    #[serde(default = "default_zone_level")]
+    pub zone: u32,
+}
+
+fn default_zone_level() -> u32 {
+    1
 }
 
 pub fn save_to_file(path: &Path, data: &SaveData) -> io::Result<()> {

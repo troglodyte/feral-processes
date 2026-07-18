@@ -60,10 +60,37 @@ pub struct BattleState {
     pub player_won: bool,
 }
 
-/// The player's active battle companion: a tamed program that can be
-/// commanded to attack during an intrusion. `None` means no companion is
-/// set. Mutually exclusive with an active cronjob `Task` on the same
-/// entity — a program is either working a structure or fighting beside
-/// the player, never both at once.
-#[derive(Resource, Default, Clone, Copy)]
-pub struct Companion(pub Option<Entity>);
+/// The player's active battle party can hold at most this many tamed
+/// programs at once.
+pub const MAX_PARTY_SIZE: usize = 3;
+
+/// The player's active battle party: up to `MAX_PARTY_SIZE` tamed programs
+/// that fight alongside them and can be commanded to attack during an
+/// intrusion. Membership is mutually exclusive with an active cronjob
+/// `Task` on the same entity — a program is either working a structure or
+/// fighting beside the player, never both at once.
+#[derive(Resource, Default, Clone)]
+pub struct Party(pub Vec<Entity>);
+
+/// Which zone sector the player is currently breached into. Starts at 1
+/// (the sector the run begins in); breaching a zone portal increments it.
+/// Deeper zones regenerate their terrain from a different seed and spawn
+/// wild programs with stats scaled by `stat_multiplier` — there's no way
+/// back down once you've breached forward.
+#[derive(Resource, Clone, Copy, Serialize, Deserialize)]
+pub struct ZoneLevel(pub u32);
+
+impl Default for ZoneLevel {
+    fn default() -> Self {
+        ZoneLevel(1)
+    }
+}
+
+impl ZoneLevel {
+    /// Flat stat multiplier applied to wild programs spawned in this zone:
+    /// doubles with each zone level (level 1 = x1, level 2 = x2, level 3 =
+    /// x4, ...).
+    pub fn stat_multiplier(self) -> i32 {
+        1 << (self.0 - 1)
+    }
+}

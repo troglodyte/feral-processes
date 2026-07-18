@@ -24,6 +24,17 @@ pub struct PassiveProcessDef {
     pub radius: i32,
 }
 
+/// A structure's trading post capability: sell any item here for a flat
+/// per-unit payout, and buy specific items back for Core Fragments.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TradeDef {
+    /// Core Fragments granted per unit when selling any item to this
+    /// structure — a uniform sell price, not a per-item table.
+    pub sell_rate: u32,
+    /// Items purchasable here, each as `(item, cost in Core Fragments)`.
+    pub buy: Vec<(ItemId, u32)>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StructureDef {
     pub id: StructureId,
@@ -47,6 +58,33 @@ pub struct StructureDef {
     /// this field existed still parse (defaulting to no symlink).
     #[serde(default)]
     pub teleport_cost: Option<Vec<(ItemId, u32)>>,
+    /// If true, walking onto this structure breaches into the next zone
+    /// (see `Game::enter_next_zone`) instead of just blocking movement.
+    /// `build_cost` is treated as a *per-zone-level* rate for this
+    /// structure: the actual cost charged when deploying it is each amount
+    /// multiplied by the current zone level, since a deeper breach costs
+    /// more raw material. `#[serde(default)]` so existing structure files
+    /// written before this field existed still parse (defaulting to a
+    /// plain, non-portal structure).
+    #[serde(default)]
+    pub zone_portal: bool,
+    /// If set, this structure is a trading post: `Game::sell_item` and
+    /// `Game::buy_item` work against it. `#[serde(default)]` so existing
+    /// structure files written before this field existed still parse
+    /// (defaulting to no trading).
+    #[serde(default)]
+    pub trade: Option<TradeDef>,
+    /// How much damage this structure can take from raids (see
+    /// `components::Durability`) before being destroyed.
+    /// `#[serde(default = "default_durability")]` so existing structure
+    /// files (including mods) without this field get a sturdy baseline
+    /// rather than 0, which would let the very next raid destroy them.
+    #[serde(default = "default_durability")]
+    pub durability: u32,
+}
+
+fn default_durability() -> u32 {
+    30
 }
 
 #[derive(Resource, Default)]

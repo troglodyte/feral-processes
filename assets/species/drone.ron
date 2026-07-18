@@ -1,0 +1,16 @@
+(
+    id: "drone",
+    name: "Drone",
+    glyph: 'o',
+    color: Gray,
+    base_hp: 14,
+    base_atk: 3,
+    base_def: 2,
+    taming_difficulty: 0.15,
+    habitats: [OpenGrid, Mainframe],
+    moves: [
+        (name: "Buzz", power: 4),
+        (name: "Recon Ping", power: 3),
+    ],
+    work_resource: Some(CoreFragment),
+)

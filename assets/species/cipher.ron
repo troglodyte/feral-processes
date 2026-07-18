@@ -1,0 +1,17 @@
+(
+    id: "cipher",
+    name: "Cipher",
+    glyph: 'c',
+    color: Cyan,
+    base_hp: 30,
+    base_atk: 8,
+    base_def: 6,
+    taming_difficulty: 0.8,
+    habitats: [Mainframe, StaticField],
+    moves: [
+        (name: "Encrypt", power: 6, effect: Some((kind: Stun, chance: 0.35, duration: 1, power: 0))),
+        (name: "Cross-Reference", power: 9),
+    ],
+    work_resource: None,
+    equipment_drop: Some((CortexHack, 0.35)),
+)

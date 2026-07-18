@@ -2,6 +2,7 @@ use bevy_ecs::prelude::{Component, Entity};
 use serde::{Deserialize, Serialize};
 
 use crate::items::{EquipmentSlot, ItemId};
+use crate::perks::Perk;
 use crate::species::SpeciesId;
 use crate::structures::StructureId;
 
@@ -39,6 +40,15 @@ pub struct Player;
 pub struct Creature {
     pub species: SpeciesId,
 }
+
+/// Which zone portal's sector a creature was spawned in — set once at
+/// spawn time and never changed afterward, even if the creature is later
+/// tamed and carried through a portal into a deeper zone. Drives its stat
+/// scale (see `ZoneLevel::stat_multiplier`) and is appended to its display
+/// label (e.g. "Scrapper 2") so a deeper-zone catch reads differently from
+/// a shallow one.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct ZonePortal(pub u32);
 
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Stats {
@@ -219,4 +229,58 @@ pub struct Task {
     pub target: Entity,
     pub progress: u32,
     pub required: u32,
+}
+
+/// A status condition a battle `MoveDef::effect` can inflict on a combatant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StatusKind {
+    /// Deals `ActiveStatus::power` damage at the end of every round it's
+    /// active.
+    Bleed,
+    /// Causes the afflicted side to lose their next action in battle.
+    Stun,
+}
+
+/// One combatant's currently active status condition, and how long it has
+/// left.
+#[derive(Clone, Copy, Debug)]
+pub struct ActiveStatus {
+    pub kind: StatusKind,
+    /// Battle rounds remaining, ticked down at the end of every round.
+    pub remaining: u32,
+    /// Bleed damage dealt per round; unused for `Stun`.
+    pub power: i32,
+}
+
+/// A creature or the player can carry at most one status condition at a
+/// time — a fresh application overwrites whatever was active, mirroring a
+/// classic single-status-condition model rather than a stacking one.
+/// Scoped to a single intrusion: cleared whenever a battle ends, however it
+/// ends (kill, tame, flee, or the player going down).
+#[derive(Component, Default, Clone, Copy)]
+pub struct StatusEffects {
+    pub active: Option<ActiveStatus>,
+}
+
+/// A structure's remaining health against raids (see `Game::raid_check`).
+/// Every deployed structure gets one, sized from its
+/// `StructureDef::durability`; reaching 0 destroys the structure.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Durability {
+    pub hp: u32,
+    pub max_hp: u32,
+}
+
+/// Player-only: accumulated Perk Points (earned 1 per level-up) and which
+/// perks have been unlocked with them. See `perks::Perk`.
+#[derive(Component, Default, Clone)]
+pub struct Perks {
+    pub points: u32,
+    pub unlocked: Vec<Perk>,
+}
+
+impl Perks {
+    pub fn has(&self, perk: Perk) -> bool {
+        self.unlocked.contains(&perk)
+    }
 }

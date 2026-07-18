@@ -81,6 +81,8 @@ pub struct EntityView {
     pub is_hostile: bool,
     pub is_structure: bool,
     pub can_work: bool,
+    /// Whether this (tamed) entity is currently assigned to a cronjob.
+    pub has_job: bool,
     pub hp_fraction: Option<f32>,
     pub level: Option<u32>,
 }
@@ -607,6 +609,11 @@ impl Game {
         }
         {
             let mut stats = self.world.get_mut::<Stats>(player).unwrap();
+            stats.hp = stats.max_hp;
+        }
+        if let Some(companion) = self.world.resource::<Companion>().0
+            && let Some(mut stats) = self.world.get_mut::<Stats>(companion)
+        {
             stats.hp = stats.max_hp;
         }
         self.log("You come back online, fully recharged and repaired.");
@@ -1468,6 +1475,7 @@ impl Game {
                 let is_hostile = self.world.get::<Hostile>(entity).is_some();
                 let is_structure = self.world.get::<Structure>(entity).is_some();
                 let can_work = self.world.get::<ResourceNode>(entity).is_some();
+                let has_job = self.world.get::<Task>(entity).is_some();
                 let hp_fraction = self.world.get::<Stats>(entity).map(|s| s.hp_fraction());
                 let level = self.world.get::<Experience>(entity).map(|e| e.level);
                 let label = if let Some(c) = self.world.get::<Creature>(entity) {
@@ -1497,6 +1505,7 @@ impl Game {
                     is_hostile,
                     is_structure,
                     can_work,
+                    has_job,
                     hp_fraction,
                     level,
                 }
@@ -2001,6 +2010,22 @@ mod tests {
         let needs = *game.world.get::<Needs>(player).unwrap();
         assert_eq!(stats.hp, stats.max_hp, "rest should fully heal Integrity");
         assert_eq!(needs.fatigue, 100.0, "rest should fully restore Fatigue");
+    }
+
+    #[test]
+    fn rest_also_fully_heals_the_active_companion() {
+        let mut game = Game::new(29, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let companion = spawn_tamed(&mut game, 10, 3);
+        game.set_companion(companion).unwrap();
+        {
+            let mut stats = game.world.get_mut::<Stats>(companion).unwrap();
+            stats.hp = 1;
+        }
+
+        game.rest();
+
+        let stats = *game.world.get::<Stats>(companion).unwrap();
+        assert_eq!(stats.hp, stats.max_hp, "rest should fully heal the active companion too");
     }
 
     #[test]

@@ -343,13 +343,21 @@ fn render_cronjob_menu(f: &mut Frame, area: Rect, game: &mut Game) {
         lines.push(Line::from("(no compiled programs nearby)"));
     }
     for (i, w) in workers.iter().enumerate() {
+        let status = if w.has_job {
+            " (on a cronjob)"
+        } else if w.is_companion {
+            " (active companion)"
+        } else {
+            ""
+        };
         lines.push(Line::from(format!(
-            "[{}] {}{} at ({}, {})",
+            "[{}] {}{} at ({}, {}){}",
             i + 1,
             w.label,
             w.level.map(|l| format!(" Lv{l}")).unwrap_or_default(),
             w.pos.0,
-            w.pos.1
+            w.pos.1,
+            status
         )));
     }
     f.render_widget(
@@ -401,12 +409,14 @@ fn render_companion_menu(f: &mut Frame, area: Rect, game: &mut Game) {
     }
     for (i, c) in candidates.iter().enumerate() {
         let active = if c.is_companion { " (active companion)" } else { "" };
+        let job = if c.has_job { " (on a cronjob)" } else { "" };
         lines.push(Line::from(format!(
-            "[{}] {}{}{}",
+            "[{}] {}{}{}{}",
             i + 1,
             c.label,
             c.level.map(|l| format!(" Lv{l}")).unwrap_or_default(),
-            active
+            active,
+            job
         )));
     }
     f.render_widget(

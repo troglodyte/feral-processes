@@ -109,7 +109,10 @@ creature to work" mechanic.
 3. **Schedule a cronjob with `w`** — pick a compiled (tamed) program, then
    the structure to assign it to. This only works on structures with a
    `work` recipe (Mining Node, Power Conduit, Compiler, Fabricator);
-   Terminal and Data Cache aren't assignable this way.
+   Terminal and Data Cache aren't assignable this way. The program picker
+   shows each candidate's status too: `(on a cronjob)` or
+   `(active companion)`, so you can see who's already spoken for before
+   reassigning them.
 4. **Production runs automatically after that**, tick by tick, regardless of
    where you are or what you're doing:
    - Each tick, the assigned program's progress advances by 1.
@@ -204,6 +207,10 @@ single tamed program that fights alongside you.
 - The wild program's retaliation always targets you, never the companion —
   the companion is a support striker, not something that can be knocked
   out or lost in a fight.
+- The companion picker shows each candidate's status: `(active companion)`
+  or `(on a cronjob)`, so you can see at a glance who's free to swap in.
+- Recharging overnight (`r`) fully heals the active companion too, not
+  just you.
 
 ### Current roster
 

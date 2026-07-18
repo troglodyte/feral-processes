@@ -39,7 +39,8 @@ Game** and pick a difficulty:
 - **Permadeath** — flatlining ends the run for good; a summary is appended
   to `run_history.log`.
 - **Forgiving** — flatlining costs you (half Integrity, some Fatigue/Power
-  restored) but you keep going.
+  restored) but you keep going, rebooting at the nearest deployed structure
+  (or in place, if you haven't built anything yet).
 
 Progress saves to `save.bin` in the repo root (`s` to save, `L` from the
 main menu to reload).

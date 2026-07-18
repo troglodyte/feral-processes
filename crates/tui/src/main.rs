@@ -22,6 +22,7 @@ pub enum Mode {
     Build,
     BuildDirection,
     Craft,
+    CraftQuantity,
     Cronjob,
     CronjobStructure,
     Symlink,
@@ -50,6 +51,11 @@ pub struct App {
     pending_worker: Option<Entity>,
     pending_inspect: Option<Entity>,
     pending_inventory_item: Option<ItemId>,
+    /// The recipe result picked in `Mode::Craft`, awaiting a quantity from
+    /// `Mode::CraftQuantity` before `Game::craft` is actually called.
+    pending_craft: Option<ItemId>,
+    /// Digits typed so far on the craft-quantity page.
+    craft_quantity_input: String,
     /// How many screen characters render each world tile along each axis.
     pub zoom: u16,
 }
@@ -69,6 +75,8 @@ impl App {
             pending_worker: None,
             pending_inspect: None,
             pending_inventory_item: None,
+            pending_craft: None,
+            craft_quantity_input: String::new(),
             zoom: 2,
         }
     }
@@ -141,6 +149,7 @@ impl App {
             Mode::Build => self.handle_build_key(code),
             Mode::BuildDirection => self.handle_build_direction_key(code),
             Mode::Craft => self.handle_craft_key(code),
+            Mode::CraftQuantity => self.handle_craft_quantity_key(code),
             Mode::Cronjob => self.handle_cronjob_key(code),
             Mode::CronjobStructure => self.handle_cronjob_structure_key(code),
             Mode::Symlink => self.handle_symlink_key(code),
@@ -325,13 +334,55 @@ impl App {
             if let Some(idx) = c.to_digit(10) {
                 let idx = idx as usize;
                 if idx >= 1 && idx <= recipes.len() {
-                    match game.craft(recipes[idx - 1].result) {
+                    self.pending_craft = Some(recipes[idx - 1].result);
+                    self.craft_quantity_input.clear();
+                    self.mode = Mode::CraftQuantity;
+                }
+            }
+        }
+    }
+
+    /// Second page of the compile flow: asks how many units of
+    /// `pending_craft` to make before actually calling `Game::craft`.
+    fn handle_craft_quantity_key(&mut self, code: KeyCode) {
+        match code {
+            KeyCode::Esc => {
+                self.pending_craft = None;
+                self.craft_quantity_input.clear();
+                self.mode = Mode::Craft;
+            }
+            KeyCode::Backspace => {
+                self.craft_quantity_input.pop();
+            }
+            KeyCode::Char(c) if c.is_ascii_digit() => {
+                if self.craft_quantity_input.len() < 4 {
+                    self.craft_quantity_input.push(c);
+                }
+            }
+            KeyCode::Enter => {
+                let Some(result) = self.pending_craft.take() else {
+                    self.mode = Mode::Playing;
+                    return;
+                };
+                let quantity: u32 = if self.craft_quantity_input.is_empty() {
+                    1
+                } else {
+                    self.craft_quantity_input.parse().unwrap_or(0)
+                };
+                self.craft_quantity_input.clear();
+                if quantity == 0 {
+                    self.mode = Mode::Playing;
+                    return;
+                }
+                if let Some(game) = &mut self.game {
+                    match game.craft(result, quantity) {
                         Ok(()) => self.status_line = None,
                         Err(e) => self.status_line = Some(e),
                     }
-                    self.mode = Mode::Playing;
                 }
+                self.mode = Mode::Playing;
             }
+            _ => {}
         }
     }
 

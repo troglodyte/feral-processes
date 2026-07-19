@@ -10,7 +10,7 @@
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use feral_processes_engine::items::{EquipmentSlot, ItemId};
+use feral_processes_engine::items::{EquipmentSlot, ITEM_FUSION_COST, ItemId};
 use feral_processes_engine::{DifficultyMode, Entity, Game};
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -1220,8 +1220,19 @@ impl App {
             self.mode = Mode::Inventory;
             return;
         };
+        let Some(game) = &self.game else { return };
+        let stack_qty = game
+            .player_status()
+            .inventory
+            .iter()
+            .find(|(i, _)| *i == item)
+            .map(|(_, q)| *q)
+            .unwrap_or(0);
         let mut actions = vec!['x'];
         if item.equipment().is_some() {
+            if stack_qty >= ITEM_FUSION_COST {
+                actions.insert(0, 'u');
+            }
             actions.insert(0, 'e');
         }
         let idx = self
@@ -1231,15 +1242,9 @@ impl App {
                 _ => None,
             });
         let Some(game) = &mut self.game else { return };
-        let stack_qty = game
-            .player_status()
-            .inventory
-            .iter()
-            .find(|(i, _)| *i == item)
-            .map(|(_, q)| *q)
-            .unwrap_or(0);
         let result = match idx.map(|i| actions[i]) {
             Some('e') => Some(game.equip(item)),
+            Some('u') => Some(game.fuse_item(item)),
             Some('x') => Some(game.erase_item(item, stack_qty)),
             _ => None,
         };

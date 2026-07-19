@@ -429,7 +429,22 @@ fn draw_mode_overlay(app: &mut App) {
         Mode::InspectDetail => draw_inspect_detail(game, app.pending_inspect),
         Mode::Inventory => draw_inventory(game, selected),
         Mode::InventoryItemAction => {
-            draw_inventory_item_action(app.pending_inventory_item, game.player_status().zone, selected)
+            let status = game.player_status();
+            let stack_qty = app
+                .pending_inventory_item
+                .and_then(|item| status.inventory.iter().find(|(i, _)| *i == item).map(|(_, q)| *q))
+                .unwrap_or(0);
+            let fusion_tier = app
+                .pending_inventory_item
+                .map(|item| game.item_fusion_tier(item))
+                .unwrap_or(0);
+            draw_inventory_item_action(
+                app.pending_inventory_item,
+                status.zone,
+                stack_qty,
+                fusion_tier,
+                selected,
+            )
         }
         Mode::Companion => draw_companion_menu(game, selected),
         Mode::Fuse => draw_fuse_menu(game, selected),
@@ -668,7 +683,7 @@ fn draw_inventory(game: &mut Game, selected: usize) {
         rows.push(text_row("(empty)"));
     }
     for (i, (item, qty)) in status.inventory.iter().enumerate() {
-        let tag = equip_preview_tag(*item, status.zone);
+        let tag = equip_preview_tag(*item, status.zone, game.item_fusion_tier(*item));
         rows.push(item_row(format!("[{}] {} x{}{}", i + 4, item.display_name(), qty, tag), selected == i + 3));
     }
     rows.push(text_row(""));
@@ -681,11 +696,11 @@ fn draw_inventory(game: &mut Game, selected: usize) {
 /// equip it (see `Game::equip`), so this previews that same number rather
 /// than a flat, unscaled base value. Empty string for a non-equippable
 /// item (in place of the old generic "(equippable)" tag).
-fn equip_preview_tag(item: ItemId, zone_level: u32) -> String {
+fn equip_preview_tag(item: ItemId, zone_level: u32, fusion_tier: u32) -> String {
     let Some((_, base_mods)) = item.equipment() else {
         return String::new();
     };
-    let mods = base_mods.scaled_for_level(zone_level);
+    let mods = base_mods.scaled_for_level(zone_level).fused_for_tier(fusion_tier);
     let mut parts = Vec::new();
     if mods.atk != 0 {
         parts.push(format!("+{} ATK", mods.atk));
@@ -696,13 +711,16 @@ fn equip_preview_tag(item: ItemId, zone_level: u32) -> String {
     if mods.decompiler != 0 {
         parts.push(format!("+{} DECOMP", mods.decompiler));
     }
+    if fusion_tier > 0 {
+        parts.push(format!("fusion T{fusion_tier}"));
+    }
     format!(" ({})", parts.join(" "))
 }
 
 fn equipped_row(num: usize, label: &str, equipped: Option<feral_processes_engine::components::EquippedItem>, selected: bool) -> Row {
     match equipped.and_then(|e| e.item.equipment().map(|(_, mods)| (e, mods))) {
         Some((equipped, mods)) => {
-            let mods = mods.scaled_for_level(equipped.level);
+            let mods = mods.scaled_for_level(equipped.level).fused_for_tier(equipped.fusion_tier);
             let mut parts = Vec::new();
             if mods.atk != 0 {
                 parts.push(format!("+{} ATK", mods.atk));
@@ -713,9 +731,16 @@ fn equipped_row(num: usize, label: &str, equipped: Option<feral_processes_engine
             if mods.decompiler != 0 {
                 parts.push(format!("+{} DECOMP", mods.decompiler));
             }
-            let level_note = if equipped.level > 1 { format!(" Lv{}", equipped.level) } else { String::new() };
+            let mut notes = Vec::new();
+            if equipped.level > 1 {
+                notes.push(format!("Lv{}", equipped.level));
+            }
+            if equipped.fusion_tier > 0 {
+                notes.push(format!("T{}", equipped.fusion_tier));
+            }
+            let note = if notes.is_empty() { String::new() } else { format!(" {}", notes.join(" ")) };
             item_row(
-                format!("[{num}] {label}: {}{level_note} ({})", equipped.item.display_name(), parts.join(" ")),
+                format!("[{num}] {label}: {}{note} ({})", equipped.item.display_name(), parts.join(" ")),
                 selected,
             )
         }
@@ -723,16 +748,19 @@ fn equipped_row(num: usize, label: &str, equipped: Option<feral_processes_engine
     }
 }
 
-fn draw_inventory_item_action(item: Option<ItemId>, zone_level: u32, selected: usize) {
+fn draw_inventory_item_action(item: Option<ItemId>, zone_level: u32, stack_qty: u32, fusion_tier: u32, selected: usize) {
     let Some(item) = item else {
         draw_popup("Item", PopupSize::Small, &[text_row("Nothing selected.")]);
         return;
     };
     let mut actions = vec!["[X] Erase".to_string()];
     if item.equipment().is_some() {
+        if stack_qty >= feral_processes_engine::items::ITEM_FUSION_COST {
+            actions.insert(0, "[U] Fuse (2 -> +10% bonus)".to_string());
+        }
         actions.insert(0, "[E]quip".to_string());
     }
-    let title = format!("{}{}", item.display_name(), equip_preview_tag(item, zone_level));
+    let title = format!("{}{}", item.display_name(), equip_preview_tag(item, zone_level, fusion_tier));
     let mut rows = vec![Row::TextColored(title, TEXT), text_row("")];
     for (i, action) in actions.iter().enumerate() {
         rows.push(item_row(action.clone(), i == selected));
@@ -779,10 +807,18 @@ fn draw_companion_menu(game: &mut Game, selected: usize) {
 /// PWR numbers a fusion decision actually depends on.
 fn fuse_candidate_label(num: usize, c: &EntityView, pets: &[PetInfo]) -> String {
     match pets.iter().find(|p| p.entity == c.entity) {
-        Some(p) => format!(
-            "[{num}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}",
-            c.label, p.level, p.hp, p.max_hp, p.atk, p.def, p.power
-        ),
+        Some(p) => {
+            let active = if p.is_companion { " (in party)" } else { "" };
+            let job = p
+                .job_structure
+                .as_ref()
+                .map(|s| format!(" (on a cronjob: {s})"))
+                .unwrap_or_default();
+            format!(
+                "[{num}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}{active}{job}",
+                c.label, p.level, p.hp, p.max_hp, p.atk, p.def, p.power
+            )
+        }
         None => format!("[{num}] {}{}", c.label, c.level.map(|l| format!(" Lv{l}")).unwrap_or_default()),
     }
 }

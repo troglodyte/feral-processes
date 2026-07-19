@@ -151,16 +151,32 @@ impl StructureDb {
         self.structures.get(id)
     }
 
-    /// Every loaded structure, sorted by `id`. `HashMap` iteration order is
-    /// randomized per-instance (a fresh seed each time a `StructureDb` is
-    /// built, i.e. every new/loaded game), so without this sort, the
-    /// build menu's `[1]`, `[2]`, ... numbering would shuffle unpredictably
-    /// from one session to the next even though nothing about the mod files
-    /// changed — the same digit could mean a 2-Core-Fragment Mining Node in
-    /// one session and an 8-Core-Fragment Fabricator in the next.
+    /// Every loaded structure, sorted by `id` — except `home`, `mining_node`
+    /// and `compiler`, which are always pinned first in that order (the
+    /// natural early-game build sequence: shelter, then a resource, then
+    /// somewhere to turn it into gear), with everything else alphabetical
+    /// after them. `HashMap` iteration order is randomized per-instance (a
+    /// fresh seed each time a `StructureDb` is built, i.e. every new/loaded
+    /// game), so without this sort, the build menu's `[1]`, `[2]`, ...
+    /// numbering would shuffle unpredictably from one session to the next
+    /// even though nothing about the mod files changed — the same digit
+    /// could mean a 2-Core-Fragment Mining Node in one session and an
+    /// 8-Core-Fragment Fabricator in the next. A modded structure with none
+    /// of those three ids just sorts alphabetically among the rest, same as
+    /// before.
     pub fn all(&self) -> impl Iterator<Item = &StructureDef> {
+        let priority = |id: &str| match id {
+            "home" => 0,
+            "mining_node" => 1,
+            "compiler" => 2,
+            _ => 3,
+        };
         let mut defs: Vec<&StructureDef> = self.structures.values().collect();
-        defs.sort_by(|a, b| a.id.cmp(&b.id));
+        defs.sort_by(|a, b| {
+            priority(&a.id)
+                .cmp(&priority(&b.id))
+                .then_with(|| a.id.cmp(&b.id))
+        });
         defs.into_iter()
     }
 }

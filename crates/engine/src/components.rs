@@ -146,10 +146,14 @@ pub struct Tamed {
 /// equip time — like a wild program's zone-doubled stats, it doesn't
 /// retroactively change if the player breaches deeper afterward; re-equip
 /// (or unequip/re-equip) to pick up a newly unlocked level.
+///
+/// `fusion_tier` is likewise captured at equip time — see `ItemFusions` and
+/// `items::EquipmentStats::fused_for_tier`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EquippedItem {
     pub item: ItemId,
     pub level: u32,
+    pub fusion_tier: u32,
 }
 
 /// Player-only: what's currently equipped in each slot. Each slot's
@@ -185,6 +189,36 @@ impl Equipment {
 #[derive(Component, Default, Clone)]
 pub struct Inventory {
     pub items: Vec<(ItemId, u32)>,
+}
+
+/// Player-only: how many times each equippable `ItemId` has been fused
+/// (see `Game::fuse_item`) — every fusion consumes 2 copies of an item
+/// from `Inventory` and permanently adds `items::ITEM_FUSION_BONUS_PER_TIER`
+/// to that item type's equipped bonus (see
+/// `items::EquipmentStats::fused_for_tier`). Tracked per `ItemId` rather
+/// than per physical item, since inventory stacks aren't individually
+/// distinguishable.
+#[derive(Component, Default, Clone)]
+pub struct ItemFusions {
+    pub tiers: Vec<(ItemId, u32)>,
+}
+
+impl ItemFusions {
+    pub fn tier(&self, item: ItemId) -> u32 {
+        self.tiers
+            .iter()
+            .find(|(i, _)| *i == item)
+            .map(|(_, t)| *t)
+            .unwrap_or(0)
+    }
+
+    pub fn increment(&mut self, item: ItemId) {
+        if let Some(slot) = self.tiers.iter_mut().find(|(i, _)| *i == item) {
+            slot.1 += 1;
+        } else {
+            self.tiers.push((item, 1));
+        }
+    }
 }
 
 impl Inventory {

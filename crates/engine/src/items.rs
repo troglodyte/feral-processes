@@ -118,11 +118,31 @@ pub struct EquipmentStats {
 /// gear — see `Game::equip`.
 pub const GEAR_LEVEL_GROWTH: f64 = 2.5;
 
+/// Bonus `Game::fuse_item` adds to an item type's equipped stats, per
+/// fusion tier — additive, not compounding (tier 2 is +20%, not +21%).
+pub const ITEM_FUSION_BONUS_PER_TIER: f64 = 0.10;
+
+/// Copies of an item `Game::fuse_item` consumes from inventory per fusion.
+pub const ITEM_FUSION_COST: u32 = 2;
+
 impl EquipmentStats {
     /// This item's bonus scaled up for `level` (1 = base, no scaling).
     /// Each component is rounded independently to the nearest whole point.
     pub fn scaled_for_level(self, level: u32) -> EquipmentStats {
         let factor = GEAR_LEVEL_GROWTH.powi(level.max(1) as i32 - 1);
+        let scale = |v: i32| (v as f64 * factor).round() as i32;
+        EquipmentStats {
+            atk: scale(self.atk),
+            def: scale(self.def),
+            decompiler: scale(self.decompiler),
+        }
+    }
+
+    /// This item's bonus scaled up for `tier` fusions (0 = base, no
+    /// scaling) — see `ITEM_FUSION_BONUS_PER_TIER`. Applied on top of
+    /// `scaled_for_level`, not in place of it.
+    pub fn fused_for_tier(self, tier: u32) -> EquipmentStats {
+        let factor = 1.0 + ITEM_FUSION_BONUS_PER_TIER * tier as f64;
         let scale = |v: i32| (v as f64 * factor).round() as i32;
         EquipmentStats {
             atk: scale(self.atk),

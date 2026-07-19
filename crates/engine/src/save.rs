@@ -26,15 +26,22 @@ pub struct PlayerSave {
     pub weapon: Option<ItemId>,
     /// Gear level `weapon` was equipped at — see `components::EquippedItem`.
     pub weapon_level: u32,
+    /// Fusion tier `weapon` was equipped at — see `components::EquippedItem`.
+    pub weapon_fusion_tier: u32,
     pub armor: Option<ItemId>,
     pub armor_level: u32,
+    pub armor_fusion_tier: u32,
     pub module: Option<ItemId>,
     pub module_level: u32,
+    pub module_fusion_tier: u32,
     /// Unspent Perk Points — see `perks::Perk`.
     pub perk_points: u32,
     /// Which perks have been bought, and at what level (see
     /// `components::Perks::level`) — one entry per level bought.
     pub unlocked_perks: Vec<Perk>,
+    /// How many times each item type has been fused — see
+    /// `components::ItemFusions`.
+    pub item_fusions: Vec<(ItemId, u32)>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -137,7 +144,7 @@ pub struct SaveData {
 /// and every save written under the old version stops loading. That's an
 /// intentional, simple tradeoff for a single-player game rather than
 /// building real schema migration.
-pub const SAVE_FORMAT_VERSION: u32 = 2;
+pub const SAVE_FORMAT_VERSION: u32 = 3;
 
 pub fn save_to_file(path: &Path, data: &SaveData) -> io::Result<()> {
     let encoded = bincode::serde::encode_to_vec(data, bincode::config::standard())
@@ -200,10 +207,14 @@ mod tests {
                 decompiler: 0,
                 weapon: None,
                 weapon_level: 1,
+                weapon_fusion_tier: 0,
                 armor: None,
                 armor_level: 1,
+                armor_fusion_tier: 0,
                 module: None,
                 module_level: 1,
+                module_fusion_tier: 0,
+                item_fusions: Vec::new(),
                 perk_points: 0,
                 unlocked_perks: Vec::new(),
             },

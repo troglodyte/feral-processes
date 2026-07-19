@@ -22,9 +22,9 @@ use rand::{RngExt, SeedableRng};
 
 use components::{
     ActiveBuff, ActiveStatus, BuffKind, Creature, CustomName, Decompiler, Durability, Equipment,
-    EquippedItem, Experience, Glyph, GlyphColor, Hostile, Inventory, Needs, PassiveProcessor,
-    Perks, Player, PlayerBuff, Position, ResourceNode, Stats, StatusEffects, StatusKind,
-    Structure, Tamed, Task, TaskKind, WanderAi, ZonePortal,
+    EquippedItem, Experience, Glyph, GlyphColor, Hostile, Inventory, ItemFusions, Needs,
+    PassiveProcessor, Perks, Player, PlayerBuff, Position, ResourceNode, Stats, StatusEffects,
+    StatusKind, Structure, Tamed, Task, TaskKind, WanderAi, ZonePortal,
 };
 use items::{EquipmentSlot, ItemId};
 pub use perks::Perk;
@@ -100,6 +100,16 @@ const EXPLOIT_FOCUS_BONUS_PER_LEVEL: i32 = 1;
 /// costs, per level (never below 1 each).
 const LEAN_COMPILER_DISCOUNT_PER_LEVEL: u32 = 1;
 
+/// Permanent ATK `Perk::Attacker` adds to the player's `Stats`, per level.
+const ATTACKER_BONUS_PER_LEVEL: i32 = 1;
+
+/// Permanent DEF `Perk::Defender` adds to the player's `Stats`, per level.
+const DEFENDER_BONUS_PER_LEVEL: i32 = 1;
+
+/// Permanent max Integrity (HP) `Perk::Buffer` adds to the player's
+/// `Stats`, per level.
+const BUFFER_BONUS_PER_LEVEL: i32 = 10;
+
 /// Chance a defeated wild program additionally drops a Portal Fragment,
 /// independent of its species' own `work_resource`/`equipment_drop`.
 /// Fragments are the raw material for deploying a zone-portal structure
@@ -137,6 +147,12 @@ const RAID_DAMAGE: u32 = 10;
 /// structure itself is reduced by the worker's Defense stat instead
 /// (`RAID_DAMAGE.saturating_sub(worker_def)`).
 const RAID_DEFENDER_DAMAGE: i32 = 6;
+
+/// `StructureDef::id` of the one structure `Game::place_structure` will
+/// let you deploy before any other — everything else requires a Home
+/// already standing somewhere. Also what pins the build menu's ordering
+/// (see `StructureDb::all`).
+const HOME_STRUCTURE_ID: &str = "home";
 
 /// How often (in ticks) damaged structures passively regenerate — a slow
 /// trickle, not a substitute for staying ahead of raids.
@@ -368,6 +384,7 @@ impl Game {
                         (ItemId::CoreFragment, 5),
                     ],
                 },
+                ItemFusions::default(),
                 StatusEffects::default(),
                 PlayerBuff::default(),
                 Perks::default(),
@@ -449,18 +466,24 @@ impl Game {
                     weapon: data.player.weapon.map(|item| EquippedItem {
                         item,
                         level: data.player.weapon_level,
+                        fusion_tier: data.player.weapon_fusion_tier,
                     }),
                     armor: data.player.armor.map(|item| EquippedItem {
                         item,
                         level: data.player.armor_level,
+                        fusion_tier: data.player.armor_fusion_tier,
                     }),
                     module: data.player.module.map(|item| EquippedItem {
                         item,
                         level: data.player.module_level,
+                        fusion_tier: data.player.module_fusion_tier,
                     }),
                 },
                 Inventory {
                     items: data.player.inventory,
+                },
+                ItemFusions {
+                    tiers: data.player.item_fusions,
                 },
                 StatusEffects::default(),
                 PlayerBuff::default(),
@@ -614,6 +637,11 @@ impl Game {
         let decompiler = self.world.get::<Decompiler>(player).unwrap().skill;
         let equipment = *self.world.get::<Equipment>(player).unwrap();
         let inventory = self.world.get::<Inventory>(player).unwrap().items.clone();
+        let item_fusions = self
+            .world
+            .get::<ItemFusions>(player)
+            .map(|f| f.tiers.clone())
+            .unwrap_or_default();
         let perks = self.world.get::<Perks>(player).cloned().unwrap_or_default();
 
         let party_entities = self.world.resource::<Party>().0.clone();
@@ -706,10 +734,14 @@ impl Game {
                 decompiler,
                 weapon: equipment.weapon.map(|e| e.item),
                 weapon_level: equipment.weapon.map(|e| e.level).unwrap_or(1),
+                weapon_fusion_tier: equipment.weapon.map(|e| e.fusion_tier).unwrap_or(0),
                 armor: equipment.armor.map(|e| e.item),
                 armor_level: equipment.armor.map(|e| e.level).unwrap_or(1),
+                armor_fusion_tier: equipment.armor.map(|e| e.fusion_tier).unwrap_or(0),
                 module: equipment.module.map(|e| e.item),
                 module_level: equipment.module.map(|e| e.level).unwrap_or(1),
+                module_fusion_tier: equipment.module.map(|e| e.fusion_tier).unwrap_or(0),
+                item_fusions,
                 perk_points: perks.points,
                 unlocked_perks: perks.unlocked,
             },
@@ -955,20 +987,41 @@ impl Game {
             return Err("Can't do that right now.".into());
         }
         let player = self.player_entity();
-        let mut perks = self
-            .world
-            .get_mut::<Perks>(player)
-            .ok_or_else(|| "No perks available.".to_string())?;
-        if perks.points < perk.cost() {
-            return Err(format!(
-                "Not enough Perk Points (need {}, have {}).",
-                perk.cost(),
-                perks.points
-            ));
+        let level = {
+            let mut perks = self
+                .world
+                .get_mut::<Perks>(player)
+                .ok_or_else(|| "No perks available.".to_string())?;
+            if perks.points < perk.cost() {
+                return Err(format!(
+                    "Not enough Perk Points (need {}, have {}).",
+                    perk.cost(),
+                    perks.points
+                ));
+            }
+            perks.points -= perk.cost();
+            perks.unlocked.push(perk);
+            perks.level(perk)
+        };
+        match perk {
+            Perk::Attacker => {
+                if let Some(mut stats) = self.world.get_mut::<Stats>(player) {
+                    stats.atk += ATTACKER_BONUS_PER_LEVEL;
+                }
+            }
+            Perk::Defender => {
+                if let Some(mut stats) = self.world.get_mut::<Stats>(player) {
+                    stats.def += DEFENDER_BONUS_PER_LEVEL;
+                }
+            }
+            Perk::Buffer => {
+                if let Some(mut stats) = self.world.get_mut::<Stats>(player) {
+                    stats.max_hp += BUFFER_BONUS_PER_LEVEL;
+                    stats.hp = stats.max_hp;
+                }
+            }
+            _ => {}
         }
-        perks.points -= perk.cost();
-        perks.unlocked.push(perk);
-        let level = perks.level(perk);
         self.log(format!(
             "You buy the {} perk (level {level}).",
             perk.display_name()
@@ -1140,28 +1193,52 @@ impl Game {
             return Err(format!("You don't have a {}.", item.display_name()));
         }
         let level = self.world.resource::<ZoneLevel>().0;
+        let fusion_tier = self
+            .world
+            .get::<ItemFusions>(player)
+            .map(|f| f.tier(item))
+            .unwrap_or(0);
 
         let old_item = {
             let mut equipment = self.world.get_mut::<Equipment>(player).unwrap();
-            equipment
-                .slot_mut(slot)
-                .replace(EquippedItem { item, level })
+            equipment.slot_mut(slot).replace(EquippedItem {
+                item,
+                level,
+                fusion_tier,
+            })
         };
         if let Some(old) = old_item {
             let (_, old_base_mods) = old.item.equipment().unwrap();
-            self.apply_equipment_delta(player, old_base_mods.scaled_for_level(old.level), -1);
+            self.apply_equipment_delta(
+                player,
+                old_base_mods
+                    .scaled_for_level(old.level)
+                    .fused_for_tier(old.fusion_tier),
+                -1,
+            );
             self.world
                 .get_mut::<Inventory>(player)
                 .unwrap()
                 .add(old.item, 1);
         }
-        self.apply_equipment_delta(player, base_mods.scaled_for_level(level), 1);
-        let level_note = if level > 1 {
-            format!(" (level {level})")
-        } else {
+        self.apply_equipment_delta(
+            player,
+            base_mods.scaled_for_level(level).fused_for_tier(fusion_tier),
+            1,
+        );
+        let mut notes = Vec::new();
+        if level > 1 {
+            notes.push(format!("level {level}"));
+        }
+        if fusion_tier > 0 {
+            notes.push(format!("fusion tier {fusion_tier}"));
+        }
+        let note = if notes.is_empty() {
             String::new()
+        } else {
+            format!(" ({})", notes.join(", "))
         };
-        self.log(format!("You equip {}{level_note}.", item.display_name()));
+        self.log(format!("You equip {}{note}.", item.display_name()));
         self.tick();
         Ok(())
     }
@@ -1180,12 +1257,70 @@ impl Game {
             return Err(format!("Nothing equipped in your {} slot.", slot.label()));
         };
         let (_, base_mods) = equipped.item.equipment().unwrap();
-        self.apply_equipment_delta(player, base_mods.scaled_for_level(equipped.level), -1);
+        self.apply_equipment_delta(
+            player,
+            base_mods
+                .scaled_for_level(equipped.level)
+                .fused_for_tier(equipped.fusion_tier),
+            -1,
+        );
         self.world
             .get_mut::<Inventory>(player)
             .unwrap()
             .add(equipped.item, 1);
         self.log(format!("You unequip {}.", equipped.item.display_name()));
+        self.tick();
+        Ok(())
+    }
+
+    /// How many times `item` has been fused so far — see `fuse_item`.
+    pub fn item_fusion_tier(&self, item: ItemId) -> u32 {
+        self.world
+            .get::<ItemFusions>(self.player_entity())
+            .map(|f| f.tier(item))
+            .unwrap_or(0)
+    }
+
+    /// Consumes `items::ITEM_FUSION_COST` copies of `item` from inventory to
+    /// permanently boost that item type's equipped bonus by another
+    /// `items::ITEM_FUSION_BONUS_PER_TIER` (see `ItemFusions`,
+    /// `EquipmentStats::fused_for_tier`) — a sink for extra copies of gear
+    /// you're not going to wear multiple of. Only equippable items qualify;
+    /// the new tier applies the next time the item is equipped, not
+    /// retroactively to a copy already worn.
+    pub fn fuse_item(&mut self, item: ItemId) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        if item.equipment().is_none() {
+            return Err(format!("{} can't be fused.", item.display_name()));
+        }
+        let player = self.player_entity();
+        let taken = self
+            .world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .take(item, items::ITEM_FUSION_COST);
+        if taken < items::ITEM_FUSION_COST {
+            self.world
+                .get_mut::<Inventory>(player)
+                .unwrap()
+                .add(item, taken);
+            return Err(format!(
+                "Need {} {} to fuse (have {taken}).",
+                items::ITEM_FUSION_COST,
+                item.display_name()
+            ));
+        }
+        let mut fusions = self.world.get_mut::<ItemFusions>(player).unwrap();
+        fusions.increment(item);
+        let tier = fusions.tier(item);
+        self.log(format!(
+            "You fuse {} {} into a tier {tier} bonus ({}% stronger equipped).",
+            items::ITEM_FUSION_COST,
+            item.display_name(),
+            (tier as f64 * items::ITEM_FUSION_BONUS_PER_TIER * 100.0).round() as i32
+        ));
         self.tick();
         Ok(())
     }
@@ -1220,6 +1355,9 @@ impl Game {
             .get(structure_id)
             .cloned()
             .ok_or_else(|| "Unknown structure".to_string())?;
+        if structure_id != HOME_STRUCTURE_ID && !self.has_structure(HOME_STRUCTURE_ID) {
+            return Err("Deploy a Home first before building anything else.".into());
+        }
         let player = self.player_entity();
         let ppos = *self.world.get::<Position>(player).unwrap();
         let (x, y) = (ppos.x + dx, ppos.y + dy);
@@ -3322,6 +3460,18 @@ mod tests {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
     }
 
+    /// Deploys a Home just off the player's current position (`dx`, `dy`
+    /// relative, so it doesn't collide with whatever the caller places
+    /// next) — `place_structure` refuses anything else until a Home
+    /// exists, so most structure-placement tests need this first.
+    fn place_home(game: &mut Game, dx: i32, dy: i32) {
+        game.world
+            .get_mut::<Inventory>(game.player_entity())
+            .unwrap()
+            .add(ItemId::CoreFragment, 5);
+        game.place_structure("home", dx, dy).unwrap();
+    }
+
     #[test]
     fn award_loot_grants_the_species_work_resource() {
         let mut game = Game::new(1, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -3554,6 +3704,40 @@ mod tests {
     }
 
     #[test]
+    fn place_structure_rejects_anything_but_home_until_a_home_exists() {
+        let mut game = Game::new(300, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::CoreFragment, 20);
+
+        assert!(
+            game.place_structure("armory", 1, 0).is_err(),
+            "nothing should be buildable before a Home exists"
+        );
+        assert_eq!(
+            game.view_entities(10, 10)
+                .into_iter()
+                .filter(|e| e.is_structure)
+                .count(),
+            0,
+            "the rejected placement shouldn't have spawned anything"
+        );
+
+        game.place_structure("home", -1, 0).unwrap();
+        game.place_structure("armory", 1, 0).unwrap();
+        assert_eq!(
+            game.view_entities(10, 10)
+                .into_iter()
+                .filter(|e| e.is_structure)
+                .count(),
+            2,
+            "once a Home exists, other structures should be buildable"
+        );
+    }
+
+    #[test]
     fn armory_and_fabricator_are_not_cronjob_workable() {
         let game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         for id in ["armory", "fabricator"] {
@@ -3579,6 +3763,7 @@ mod tests {
             "Firewall Plating shouldn't be craftable before an Armory is built"
         );
 
+        place_home(&mut game, -1, 0);
         game.world
             .get_mut::<Inventory>(game.player_entity())
             .unwrap()
@@ -3726,6 +3911,82 @@ mod tests {
     }
 
     #[test]
+    fn cronjob_work_grants_no_more_xp_once_the_worker_hits_the_work_level_cap() {
+        let mut game = Game::new(301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let worker = spawn_tamed(&mut game, 10, 3);
+        game.world.get_mut::<Experience>(worker).unwrap().level = systems::WORK_XP_LEVEL_CAP;
+        let structure = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "mining_node".to_string(),
+                },
+                Position { x: 3, y: 4 },
+                ResourceNode {
+                    resource: ItemId::CoreFragment,
+                    amount: 5,
+                    capacity: 5,
+                    level: None,
+                },
+            ))
+            .id();
+        game.world.entity_mut(worker).insert(Task {
+            kind: TaskKind::GatherResource,
+            target: structure,
+            progress: 0,
+            required: 1,
+        });
+
+        for _ in 0..3 {
+            game.tick();
+        }
+
+        let exp = game.world.get::<Experience>(worker).unwrap();
+        assert_eq!(
+            exp.level,
+            systems::WORK_XP_LEVEL_CAP,
+            "a capped worker shouldn't level further from cronjob work"
+        );
+        assert_eq!(exp.xp, 0, "a capped worker shouldn't earn any work XP at all");
+    }
+
+    #[test]
+    fn cronjob_work_still_grants_xp_below_the_work_level_cap() {
+        let mut game = Game::new(302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let worker = spawn_tamed(&mut game, 10, 3);
+        assert!(
+            game.world.get::<Experience>(worker).unwrap().level < systems::WORK_XP_LEVEL_CAP,
+            "a freshly tamed program should start well under the work level cap"
+        );
+        let structure = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "mining_node".to_string(),
+                },
+                Position { x: 3, y: 4 },
+                ResourceNode {
+                    resource: ItemId::CoreFragment,
+                    amount: 5,
+                    capacity: 5,
+                    level: None,
+                },
+            ))
+            .id();
+        game.world.entity_mut(worker).insert(Task {
+            kind: TaskKind::GatherResource,
+            target: structure,
+            progress: 0,
+            required: 1,
+        });
+
+        game.tick();
+
+        let xp = game.world.get::<Experience>(worker).unwrap().xp;
+        assert!(xp > 0, "a worker under the cap should still earn work XP");
+    }
+
+    #[test]
     fn a_leveled_node_doesnt_always_yield_on_a_completed_cycle() {
         let mut game = Game::new(27, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let worker = spawn_tamed(&mut game, 10, 3);
@@ -3834,7 +4095,8 @@ mod tests {
             status.weapon,
             Some(EquippedItem {
                 item: ItemId::OverclockCore,
-                level: 1
+                level: 1,
+                fusion_tier: 0
             })
         );
         assert!(
@@ -3870,7 +4132,8 @@ mod tests {
             status.weapon,
             Some(EquippedItem {
                 item: ItemId::OverclockCore,
-                level: 3
+                level: 3,
+                fusion_tier: 0
             })
         );
 
@@ -3949,6 +4212,111 @@ mod tests {
     }
 
     #[test]
+    fn fuse_item_consumes_two_copies_and_raises_the_fusion_tier() {
+        let mut game = Game::new(200, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::OverclockCore, 3);
+
+        game.fuse_item(ItemId::OverclockCore).unwrap();
+
+        assert_eq!(game.item_fusion_tier(ItemId::OverclockCore), 1);
+        assert_eq!(
+            game.player_status()
+                .inventory
+                .iter()
+                .find(|(i, _)| *i == ItemId::OverclockCore)
+                .map(|(_, q)| *q),
+            Some(1),
+            "fusing should consume 2 of the 3 copies"
+        );
+    }
+
+    #[test]
+    fn fuse_item_bonus_scales_the_equipped_stat_bonus() {
+        let mut game = Game::new(201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        // Ablative Plating's base is +4 def, so a 10%/tier bonus is visible
+        // (unlike a +3 item, where 10% rounds away to nothing at tier 1).
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::AblativePlating, 6);
+
+        let def_before = game.player_status().def;
+        game.equip(ItemId::AblativePlating).unwrap();
+        assert_eq!(
+            game.player_status().def,
+            def_before + 4,
+            "unfused equip should grant the plain base bonus"
+        );
+        game.unequip(EquipmentSlot::Armor).unwrap();
+
+        game.fuse_item(ItemId::AblativePlating).unwrap();
+        game.fuse_item(ItemId::AblativePlating).unwrap();
+        assert_eq!(game.item_fusion_tier(ItemId::AblativePlating), 2);
+
+        game.equip(ItemId::AblativePlating).unwrap();
+        assert_eq!(
+            game.player_status().def,
+            def_before + 5,
+            "tier 2 is +20%: 4 * 1.2 = 4.8, rounds to 5"
+        );
+    }
+
+    #[test]
+    fn fuse_item_rejects_non_equipment_and_insufficient_stock() {
+        let mut game = Game::new(202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        assert!(
+            game.fuse_item(ItemId::CoreFragment).is_err(),
+            "plain resources aren't equipment and can't be fused"
+        );
+
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::OverclockCore, 1);
+        assert!(
+            game.fuse_item(ItemId::OverclockCore).is_err(),
+            "fusing needs 2 copies, only 1 is available"
+        );
+        assert_eq!(
+            game.player_status()
+                .inventory
+                .iter()
+                .find(|(i, _)| *i == ItemId::OverclockCore)
+                .map(|(_, q)| *q),
+            Some(1),
+            "a failed fuse should not consume the lone copy"
+        );
+    }
+
+    #[test]
+    fn item_fusion_tier_survives_save_and_load() {
+        let assets = test_assets_dir();
+        let mut game = Game::new(203, DifficultyMode::Forgiving, &assets).unwrap();
+        let player = game.player_entity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::OverclockCore, 2);
+        game.fuse_item(ItemId::OverclockCore).unwrap();
+
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_fusion_test_{}.bin",
+            std::process::id()
+        ));
+        game.save(&path).unwrap();
+        let loaded = Game::load(&path, &assets).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(loaded.item_fusion_tier(ItemId::OverclockCore), 1);
+    }
+
+    #[test]
     fn erase_item_removes_the_full_stack() {
         let mut game = Game::new(12, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
@@ -3995,7 +4363,8 @@ mod tests {
             status.module,
             Some(EquippedItem {
                 item: ItemId::NeuralAmplifier,
-                level: 1
+                level: 1,
+                fusion_tier: 0
             })
         );
         assert_eq!(status.decompiler, decompiler_after_equip);
@@ -4429,7 +4798,7 @@ mod tests {
     }
 
     #[test]
-    fn structure_defs_order_is_sorted_by_id_and_stable_across_sessions() {
+    fn structure_defs_order_pins_home_mining_node_compiler_first_and_is_stable_across_sessions() {
         // StructureDb is backed by a HashMap, whose iteration order is
         // randomized per-instance — without an explicit sort, the build
         // menu's [1], [2], ... numbering would shuffle between sessions
@@ -4440,11 +4809,17 @@ mod tests {
         for seed in seeds {
             let game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
             let ids: Vec<String> = game.structure_defs().into_iter().map(|d| d.id).collect();
-            let mut sorted = ids.clone();
-            sorted.sort();
             assert_eq!(
-                ids, sorted,
-                "structure_defs() should already be sorted by id"
+                &ids[..3],
+                ["home", "mining_node", "compiler"],
+                "the three starter structures should always lead the build menu"
+            );
+            let mut rest_sorted = ids[3..].to_vec();
+            rest_sorted.sort();
+            assert_eq!(
+                ids[3..],
+                rest_sorted[..],
+                "everything after the pinned three should still be alphabetical"
             );
             orders.push(ids);
         }
@@ -6378,6 +6753,60 @@ mod tests {
     }
 
     #[test]
+    fn attacker_perk_adds_permanent_atk_per_level() {
+        let mut game = Game::new(115, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Perks>(player).unwrap().points = 10;
+        let base_atk = game.player_status().atk;
+
+        game.unlock_perk(Perk::Attacker).unwrap();
+        assert_eq!(
+            game.player_status().atk,
+            base_atk + ATTACKER_BONUS_PER_LEVEL
+        );
+
+        game.unlock_perk(Perk::Attacker).unwrap();
+        assert_eq!(
+            game.player_status().atk,
+            base_atk + ATTACKER_BONUS_PER_LEVEL * 2
+        );
+    }
+
+    #[test]
+    fn defender_perk_adds_permanent_def_per_level() {
+        let mut game = Game::new(116, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Perks>(player).unwrap().points = 10;
+        let base_def = game.player_status().def;
+
+        game.unlock_perk(Perk::Defender).unwrap();
+        assert_eq!(
+            game.player_status().def,
+            base_def + DEFENDER_BONUS_PER_LEVEL
+        );
+    }
+
+    #[test]
+    fn buffer_perk_adds_permanent_max_hp_per_level_and_fully_heals() {
+        let mut game = Game::new(117, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Perks>(player).unwrap().points = 10;
+        let base_max_hp = game.player_status().max_hp;
+        {
+            let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+            stats.hp = 1;
+        }
+
+        game.unlock_perk(Perk::Buffer).unwrap();
+        let status = game.player_status();
+        assert_eq!(status.max_hp, base_max_hp + BUFFER_BONUS_PER_LEVEL);
+        assert_eq!(
+            status.hp, status.max_hp,
+            "buying Buffer should fully heal, like a level-up does"
+        );
+    }
+
+    #[test]
     fn entering_a_zone_portal_increments_zone_and_doubles_wild_stats() {
         let mut game = Game::new(40, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         assert_eq!(game.player_status().zone, 1);
@@ -6960,6 +7389,7 @@ mod tests {
     fn portal_build_cost_scales_with_current_zone_level() {
         let mut game = Game::new(42, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
+        place_home(&mut game, -1, 0);
 
         // Zone 1: base rate from portal.ron is 5 PortalFragment * zone 1 = 5.
         game.world
@@ -6978,6 +7408,10 @@ mod tests {
 
         game.move_player(1, 0);
         assert_eq!(game.player_status().zone, 2);
+        // Zone transitions leave structures behind (see
+        // `zone_transition_carries_tamed_companions_but_leaves_structures_and_wild_creatures_behind`),
+        // so the new zone needs its own Home before anything else.
+        place_home(&mut game, -1, 0);
 
         // Zone 2: cost should now be doubled (5 * zone level 2 = 10).
         game.world

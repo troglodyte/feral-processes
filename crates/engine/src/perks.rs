@@ -22,15 +22,28 @@ pub enum Perk {
     /// -1 to the cost of each item Compiling (`Game::craft`) requires per
     /// level, down to a minimum of 1 each.
     LeanCompiler,
+    /// +1 permanent ATK per level, applied directly to the player's `Stats`
+    /// the moment it's bought (same as a level-up's stat bump).
+    Attacker,
+    /// +1 permanent DEF per level, applied directly to the player's `Stats`
+    /// the moment it's bought (same as a level-up's stat bump).
+    Defender,
+    /// +10 permanent max Integrity (HP) per level, applied directly to the
+    /// player's `Stats` the moment it's bought, fully healing them the same
+    /// way a level-up does.
+    Buffer,
 }
 
 impl Perk {
-    pub fn all() -> [Perk; 4] {
+    pub fn all() -> [Perk; 7] {
         [
             Perk::KeenScavenger,
             Perk::LowPowerMode,
             Perk::ExploitFocus,
             Perk::LeanCompiler,
+            Perk::Attacker,
+            Perk::Defender,
+            Perk::Buffer,
         ]
     }
 
@@ -40,6 +53,9 @@ impl Perk {
             Perk::LowPowerMode => "Low Power Mode",
             Perk::ExploitFocus => "Exploit Focus",
             Perk::LeanCompiler => "Lean Compiler",
+            Perk::Attacker => "Attacker",
+            Perk::Defender => "Defender",
+            Perk::Buffer => "Buffer",
         }
     }
 
@@ -53,6 +69,9 @@ impl Perk {
             Perk::LeanCompiler => {
                 "Compiling costs 1 less of each required item per level (min 1 each)"
             }
+            Perk::Attacker => "+1 permanent Attack per level",
+            Perk::Defender => "+1 permanent Defense per level",
+            Perk::Buffer => "+10 permanent max Integrity per level",
         }
     }
 
@@ -64,6 +83,9 @@ impl Perk {
             Perk::LowPowerMode => 2,
             Perk::ExploitFocus => 3,
             Perk::LeanCompiler => 3,
+            Perk::Attacker => 2,
+            Perk::Defender => 2,
+            Perk::Buffer => 3,
         }
     }
 }

@@ -14,6 +14,13 @@ use crate::world::WorldMap;
 /// XP a tamed creature earns for each completed gather cycle.
 const WORK_XP_PER_CYCLE: u32 = 5;
 
+/// A cronjob worker stops earning XP from `task_progress_system` once it
+/// reaches this level — structure work is meant to be a steady, low-effort
+/// income, not a way to grind a pet's level uncapped without ever
+/// battling. Levels above this only come from combat (`Game::award_xp` /
+/// `award_party_xp`), which has no such cap.
+pub(crate) const WORK_XP_LEVEL_CAP: u32 = 10;
+
 const HUNGER_DECAY_PER_TICK: f32 = 0.15;
 const FATIGUE_DECAY_PER_TICK: f32 = 0.08;
 
@@ -119,9 +126,13 @@ pub fn task_progress_system(
         node.amount -= 1;
         if let Ok(mut inv) = inventories.get_mut(tamed.owner) {
             inv.add(node.resource, 1);
-            let levels = progression::add_xp(&mut exp, &mut stats, WORK_XP_PER_CYCLE);
-            let level_note = if levels > 0 {
-                format!(" It levels up to {}!", exp.level)
+            let level_note = if exp.level < WORK_XP_LEVEL_CAP {
+                let levels = progression::add_xp(&mut exp, &mut stats, WORK_XP_PER_CYCLE);
+                if levels > 0 {
+                    format!(" It levels up to {}!", exp.level)
+                } else {
+                    String::new()
+                }
             } else {
                 String::new()
             };

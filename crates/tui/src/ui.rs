@@ -114,8 +114,25 @@ fn render_playing(f: &mut Frame, app: &mut App) {
         Mode::InspectDetail => render_inspect_detail(f, area, game, app.pending_inspect),
         Mode::Inventory => render_inventory_screen(f, area, game, selected),
         Mode::InventoryItemAction => {
-            let zone = game.player_status().zone;
-            render_inventory_item_action(f, area, app.pending_inventory_item, zone, selected)
+            let status = game.player_status();
+            let zone = status.zone;
+            let stack_qty = app
+                .pending_inventory_item
+                .and_then(|item| status.inventory.iter().find(|(i, _)| *i == item).map(|(_, q)| *q))
+                .unwrap_or(0);
+            let fusion_tier = app
+                .pending_inventory_item
+                .map(|item| game.item_fusion_tier(item))
+                .unwrap_or(0);
+            render_inventory_item_action(
+                f,
+                area,
+                app.pending_inventory_item,
+                zone,
+                stack_qty,
+                fusion_tier,
+                selected,
+            )
         }
         Mode::Companion => render_companion_menu(f, area, game, selected),
         Mode::Fuse => render_fuse_menu(f, area, game, selected),
@@ -775,6 +792,33 @@ fn render_companion_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: u
     );
 }
 
+/// Formats one fuse-candidate row with its full stat line plus party/
+/// cronjob status, cross-referencing `pets` (`Game::owned_pets`) by entity
+/// — `view_entities` alone only carries a level and an HP fraction, not
+/// the raw HP/ATK/DEF/PWR numbers (or party/job status) a fusion decision
+/// actually depends on.
+fn fuse_candidate_label(num: usize, c: &EntityView, pets: &[PetInfo]) -> String {
+    match pets.iter().find(|p| p.entity == c.entity) {
+        Some(p) => {
+            let active = if p.is_companion { " (in party)" } else { "" };
+            let job = p
+                .job_structure
+                .as_ref()
+                .map(|s| format!(" (on a cronjob: {s})"))
+                .unwrap_or_default();
+            format!(
+                "[{num}] {} Lv{} — HP {}/{}  ATK {}  DEF {}  PWR {}{active}{job}",
+                c.label, p.level, p.hp, p.max_hp, p.atk, p.def, p.power
+            )
+        }
+        None => format!(
+            "[{num}] {}{}",
+            c.label,
+            c.level.map(|l| format!(" Lv{l}")).unwrap_or_default()
+        ),
+    }
+}
+
 fn render_fuse_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize) {
     let popup = centered_rect(60, 50, area);
     f.render_widget(Clear, popup);
@@ -783,6 +827,7 @@ fn render_fuse_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize)
         .into_iter()
         .filter(|e| e.is_tamed)
         .collect();
+    let pets = game.owned_pets();
     let mut lines = vec![Line::from(
         "Fuse which program? Pick the first of two. (Esc to cancel; Up/Down + Enter also work)",
     )];
@@ -790,15 +835,7 @@ fn render_fuse_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize)
         lines.push(Line::from("(no compiled programs nearby)"));
     }
     for (i, c) in candidates.iter().enumerate() {
-        lines.push(menu_line(
-            format!(
-                "[{}] {}{}",
-                i + 1,
-                c.label,
-                c.level.map(|l| format!(" Lv{l}")).unwrap_or_default()
-            ),
-            i == selected,
-        ));
+        lines.push(menu_line(fuse_candidate_label(i + 1, c, &pets), i == selected));
     }
     f.render_widget(
         Paragraph::new(lines)
@@ -828,6 +865,7 @@ fn render_fuse_second_menu(
         .into_iter()
         .filter(|e| e.is_tamed && e.entity != first)
         .collect();
+    let pets = game.owned_pets();
     let mut lines = vec![Line::from(format!(
         "Fuse {first_label} with which program? Both are consumed by the fusion. (Esc to cancel; Up/Down + Enter also work)"
     ))];
@@ -835,15 +873,7 @@ fn render_fuse_second_menu(
         lines.push(Line::from("(no other compiled programs nearby)"));
     }
     for (i, c) in candidates.iter().enumerate() {
-        lines.push(menu_line(
-            format!(
-                "[{}] {}{}",
-                i + 1,
-                c.label,
-                c.level.map(|l| format!(" Lv{l}")).unwrap_or_default()
-            ),
-            i == selected,
-        ));
+        lines.push(menu_line(fuse_candidate_label(i + 1, c, &pets), i == selected));
     }
     f.render_widget(
         Paragraph::new(lines)
@@ -1290,7 +1320,7 @@ fn render_inventory_screen(f: &mut Frame, area: Rect, game: &mut Game, selected:
         lines.push(Line::from("  (empty)"));
     }
     for (i, (item, qty)) in status.inventory.iter().enumerate() {
-        let tag = equip_preview_tag(*item, status.zone);
+        let tag = equip_preview_tag(*item, status.zone, game.item_fusion_tier(*item));
         lines.push(menu_line(
             format!("[{}] {} x{}{}", i + 4, item.display_name(), qty, tag),
             selected == i + 3,
@@ -1315,7 +1345,7 @@ fn equipped_line(
 ) -> Line<'static> {
     match equipped.and_then(|e| e.item.equipment().map(|(_, mods)| (e, mods))) {
         Some((equipped, mods)) => {
-            let mods = mods.scaled_for_level(equipped.level);
+            let mods = mods.scaled_for_level(equipped.level).fused_for_tier(equipped.fusion_tier);
             let mut parts = Vec::new();
             if mods.atk != 0 {
                 parts.push(format!("+{} ATK", mods.atk));
@@ -1326,14 +1356,21 @@ fn equipped_line(
             if mods.decompiler != 0 {
                 parts.push(format!("+{} DECOMP", mods.decompiler));
             }
-            let level_note = if equipped.level > 1 {
-                format!(" Lv{}", equipped.level)
-            } else {
+            let mut notes = Vec::new();
+            if equipped.level > 1 {
+                notes.push(format!("Lv{}", equipped.level));
+            }
+            if equipped.fusion_tier > 0 {
+                notes.push(format!("T{}", equipped.fusion_tier));
+            }
+            let note = if notes.is_empty() {
                 String::new()
+            } else {
+                format!(" {}", notes.join(" "))
             };
             menu_line(
                 format!(
-                    "[{num}] {label}: {}{level_note} ({})",
+                    "[{num}] {label}: {}{note} ({})",
                     equipped.item.display_name(),
                     parts.join(" ")
                 ),
@@ -1349,11 +1386,11 @@ fn equipped_line(
 /// equip it (see `Game::equip`), so this previews that same number rather
 /// than a flat, unscaled base value. Empty string for a non-equippable
 /// item (in place of the old generic "(equippable)" tag).
-fn equip_preview_tag(item: ItemId, zone_level: u32) -> String {
+fn equip_preview_tag(item: ItemId, zone_level: u32, fusion_tier: u32) -> String {
     let Some((_, base_mods)) = item.equipment() else {
         return String::new();
     };
-    let mods = base_mods.scaled_for_level(zone_level);
+    let mods = base_mods.scaled_for_level(zone_level).fused_for_tier(fusion_tier);
     let mut parts = Vec::new();
     if mods.atk != 0 {
         parts.push(format!("+{} ATK", mods.atk));
@@ -1364,6 +1401,9 @@ fn equip_preview_tag(item: ItemId, zone_level: u32) -> String {
     if mods.decompiler != 0 {
         parts.push(format!("+{} DECOMP", mods.decompiler));
     }
+    if fusion_tier > 0 {
+        parts.push(format!("fusion T{fusion_tier}"));
+    }
     format!(" ({})", parts.join(" "))
 }
 
@@ -1372,6 +1412,8 @@ fn render_inventory_item_action(
     area: Rect,
     item: Option<ItemId>,
     zone_level: u32,
+    stack_qty: u32,
+    fusion_tier: u32,
     selected: usize,
 ) {
     let popup = centered_rect(50, 30, area);
@@ -1385,11 +1427,18 @@ fn render_inventory_item_action(
     };
     let mut actions = vec!["[X] Erase".to_string()];
     if item.equipment().is_some() {
+        if stack_qty >= feral_processes_engine::items::ITEM_FUSION_COST {
+            actions.insert(0, "[U] Fuse (2 -> +10% bonus)".to_string());
+        }
         actions.insert(0, "[E]quip".to_string());
     }
     let mut lines = vec![
         Line::styled(
-            format!("{}{}", item.display_name(), equip_preview_tag(item, zone_level)),
+            format!(
+                "{}{}",
+                item.display_name(),
+                equip_preview_tag(item, zone_level, fusion_tier)
+            ),
             Style::new().add_modifier(Modifier::BOLD),
         ),
         Line::from(""),

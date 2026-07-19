@@ -155,7 +155,12 @@ creature to work" mechanic.
    to place it on an adjacent walkable tile. It's rejected if the tile isn't
    walkable, is already occupied, or you don't have enough of the required
    item (see the [Structures](#structures) table for costs — all paid in
-   Core Fragments right now).
+   Core Fragments right now). **Home** always comes first in the menu,
+   followed by **Mining Node** then **Compiler** — everything else after —
+   and nothing else can be built until a Home is standing. Zone transitions
+   leave every structure behind (see [Zones and portals](#zones-and-portals)),
+   so each new zone needs its own Home again before you can build anything
+   else there.
 3. **Schedule a cronjob with `w`** — pick a compiled (tamed) program, then
    the structure to assign it to. This only works on structures with a
    `work` recipe (Mining Node, Power Conduit, Compiler); Fabricator, Armory,
@@ -176,7 +181,9 @@ creature to work" mechanic.
      (a basic level-1 node succeeds only about half the time) on top of
      its doubled `ticks_per_unit`, so it's meaningfully slower and less
      reliable than the other two. A missed attempt still resets the cycle,
-     it just doesn't pay out.
+     it just doesn't pay out. Cronjob XP stops entirely once a worker hits
+     **level 10** — resources keep flowing, but leveling past that only
+     comes from battling, not idle cronjob work.
    - Every worked structure holds a stock capped at 5 units (the `capacity`
      in its `.ron` file, moddable per-structure). Each completed cycle draws
      one down; once mined to 0 it immediately refills back to capacity and
@@ -224,6 +231,9 @@ on top of whatever you already have, at the same Perk Point cost every time:
 | Low Power Mode | 2 | Power drains 1 percentage point slower (floor: stops draining entirely) |
 | Exploit Focus | 3 | +1 effective Decompiler skill toward decompile odds |
 | Lean Compiler | 3 | Compiling (`c`) costs 1 less of each required item (min 1 each) |
+| Attacker | 2 | +1 permanent Attack |
+| Defender | 2 | +1 permanent Defense |
+| Buffer | 3 | +10 permanent max Integrity (fully heals on purchase) |
 
 The `x` menu shows each perk's current level next to it. Perks are a small,
 fixed set of player-only progression choices rather than moddable content —
@@ -291,6 +301,17 @@ level and its actual scaled bonus.
 - An equipped item's (level-scaled) stat bonus is added the moment you
   equip it and removed the moment you unequip it — it shows up immediately
   in the status panel and the intrusion screen.
+
+**Fusing items.** Got a duplicate piece of gear? Select a numbered
+inventory item with 2 or more copies, then `[U]` to fuse: it permanently
+consumes 2 copies of that item and adds another +10% to *that item type's*
+equipped bonus (stacking every time you fuse it again — tier 2 is +20%,
+tier 3 is +30%, and so on), applied on top of gear-level scaling. Like gear
+level, the fusion tier is locked in at the moment you equip the item —
+fusing further afterward doesn't retroactively boost a copy you're already
+wearing; re-equip to pick up the new tier. The inventory screen and item
+action menu show each item's current fusion tier alongside its preview
+bonus.
 
 ### Companions
 
@@ -440,6 +461,10 @@ enough of them, then walk onto it to breach into the next zone.
 | Black Market | 6 Core Fragments | `t` ("trade") to sell inventory items or buy consumables for Core Fragments — see [Trading](#trading) |
 | Turret | 6 Core Fragments | Passively reduces raid damage against **every** deployed structure by 4 — see [Base defense](#base-defense) |
 
+Home must be built before anything else — the build menu (`b`) always
+lists it first, followed by Mining Node then Compiler, with the rest
+after. This table is otherwise unordered; it's just a reference.
+
 Mining Node, Power Conduit, and Compiler use **active** automation (an
 assigned cronjob produces over time); Terminal uses **passive** automation
 (it processes on its own whenever you're in range); Fabricator and Armory
@@ -525,6 +550,23 @@ cargo test
 
 ### 2026-07-19
 
+- **Cronjob work now caps out at level 10**: a worker stops earning XP from
+  structure work once it hits level 10 — resources keep coming, but further
+  leveling requires battling.
+- **Home is required to build anything else**: the build menu always lists
+  Home first, then Mining Node, then Compiler, and nothing else can be
+  deployed until a Home exists — see [Playing](#playing). Since zone
+  transitions leave structures behind, that means rebuilding a Home first
+  in every new zone too.
+- **Fuse and cronjob/guard/party pickers show pet status everywhere**: any
+  menu listing your compiled programs now flags party membership and
+  cronjob/guard assignment on every row, not just some of them.
+- **Fuse duplicate equipment**: from the inventory item menu, `[U]` fuses 2
+  copies of an item into a permanent +10% (stacking) bonus for that item
+  type — see [Equipment](#equipment).
+- **Three new perks**: **Attacker** (+1 Attack/level), **Defender** (+1
+  Defense/level), and **Buffer** (+10 max Integrity/level, fully healing on
+  purchase) — see [Perks](#perks).
 - **Graphical frontend added**: a second, windowed UI alongside the
   original terminal one, picked at startup (or via `--gui`/`--tui`) with
   automatic fallback to the text UI if no display is available — see

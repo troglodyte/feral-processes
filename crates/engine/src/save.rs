@@ -9,6 +9,10 @@ use crate::resources::DifficultyMode;
 use crate::species::SpeciesId;
 use crate::world::Tile;
 
+fn default_gear_level() -> u32 {
+    1
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct PlayerSave {
     pub position: (i32, i32),
@@ -26,10 +30,20 @@ pub struct PlayerSave {
     pub decompiler: i32,
     #[serde(default)]
     pub weapon: Option<ItemId>,
+    /// Gear level `weapon` was equipped at (see
+    /// `components::EquippedItem`). `#[serde(default = "default_gear_level")]`
+    /// so saves written before leveled gear existed treat whatever's
+    /// equipped as level 1, matching its original unscaled bonus.
+    #[serde(default = "default_gear_level")]
+    pub weapon_level: u32,
     #[serde(default)]
     pub armor: Option<ItemId>,
+    #[serde(default = "default_gear_level")]
+    pub armor_level: u32,
     #[serde(default)]
     pub module: Option<ItemId>,
+    #[serde(default = "default_gear_level")]
+    pub module_level: u32,
     /// Unspent Perk Points (see `perks::Perk`). Defaults to 0 for saves
     /// written before perks existed.
     #[serde(default)]
@@ -69,6 +83,15 @@ pub struct CreatureSave {
     pub zone: u32,
 }
 
+/// Mirrors `components::TaskKind` for persistence — kept separate so the
+/// engine-internal enum doesn't need to derive `Serialize`/`Deserialize`.
+#[derive(Serialize, Deserialize, Default, Clone, Copy)]
+pub enum CronjobKind {
+    #[default]
+    GatherResource,
+    Guard,
+}
+
 /// An in-progress work assignment (a "cronjob") a tamed creature is running
 /// against a structure, persisted so it survives save/load instead of
 /// silently dropping the worker's progress.
@@ -77,6 +100,10 @@ pub struct CronjobSave {
     pub target_position: (i32, i32),
     pub progress: u32,
     pub required: u32,
+    /// `#[serde(default)]` so saves written before `Game::assign_guard`
+    /// existed keep loading — they only ever had `GatherResource` jobs.
+    #[serde(default)]
+    pub kind: CronjobKind,
 }
 
 #[derive(Serialize, Deserialize)]

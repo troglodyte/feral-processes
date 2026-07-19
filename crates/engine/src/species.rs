@@ -10,6 +10,26 @@ use crate::world::Biome;
 
 pub type SpeciesId = String;
 
+/// A companion's unique battle action, used in place of the default rally
+/// buff when a party member commands it — see
+/// `Game::battle_command_companion`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum SpecialAbility {
+    /// Boosts the player's ATK by `power` for `duration` rounds.
+    Rally { power: i32, duration: u32 },
+    /// Boosts the player's DEF by `power` for `duration` rounds.
+    Shield { power: i32, duration: u32 },
+    /// Heals the player for `power` HP immediately.
+    Heal { power: i32 },
+    /// Inflicts `kind` (`Bleed` or `Stun`) on the wild program, same as a
+    /// `MoveEffect` would.
+    Debuff {
+        kind: StatusKind,
+        power: i32,
+        duration: u32,
+    },
+}
+
 /// A status condition a move has a chance to inflict on top of its direct
 /// damage — see `components::StatusEffects`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -70,6 +90,14 @@ pub struct SpeciesDef {
     /// non-boss species.
     #[serde(default)]
     pub is_boss: bool,
+    /// If set, commanding a tamed member of this species in battle (see
+    /// `Game::battle_command_companion`) triggers this ability instead of
+    /// the default rally buff every companion gets otherwise.
+    /// `#[serde(default)]` so existing species files (including mods)
+    /// without this field keep parsing as companions with no special
+    /// ability.
+    #[serde(default)]
+    pub special_ability: Option<SpecialAbility>,
 }
 
 #[derive(Resource, Default)]
@@ -146,14 +174,29 @@ mod tests {
     #[test]
     fn habitat_matches_excludes_bosses_and_boss_habitat_matches_includes_only_them() {
         let (db, warnings) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
-        assert!(warnings.is_empty(), "species assets should all load cleanly: {warnings:?}");
+        assert!(
+            warnings.is_empty(),
+            "species assets should all load cleanly: {warnings:?}"
+        );
 
         let normal = db.habitat_matches(Biome::OpenGrid);
-        assert!(!normal.is_empty(), "OpenGrid should have ordinary habitat species");
-        assert!(normal.iter().all(|s| !s.is_boss), "habitat_matches should never include a boss species");
+        assert!(
+            !normal.is_empty(),
+            "OpenGrid should have ordinary habitat species"
+        );
+        assert!(
+            normal.iter().all(|s| !s.is_boss),
+            "habitat_matches should never include a boss species"
+        );
 
         let bosses = db.boss_habitat_matches(Biome::OpenGrid);
-        assert!(!bosses.is_empty(), "at least one boss species should inhabit OpenGrid");
-        assert!(bosses.iter().all(|s| s.is_boss), "boss_habitat_matches should only ever include boss species");
+        assert!(
+            !bosses.is_empty(),
+            "at least one boss species should inhabit OpenGrid"
+        );
+        assert!(
+            bosses.iter().all(|s| s.is_boss),
+            "boss_habitat_matches should only ever include boss species"
+        );
     }
 }

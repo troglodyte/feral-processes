@@ -26,7 +26,14 @@ is skipped with a warning logged in-game rather than crashing startup.
     // it's mined down to empty; once empty it immediately refills to
     // `capacity` and the assigned creature keeps working — a worked node is
     // an infinite, bursty resource, never a one-time deposit.
-    work: Some((produces: CoreFragment, ticks_per_unit: 5, capacity: 5)),
+    // `level` (optional, defaults to `None`) makes each completed cycle a
+    // gamble instead of a guaranteed yield: with it set, there's only a
+    // level-based percentage chance the cycle actually pays out (a level-1
+    // node succeeds about half the time), and a miss still costs the full
+    // cycle. Higher levels succeed more reliably. Leave it out entirely for
+    // a node that always yields on completion, same as before this field
+    // existed.
+    work: Some((produces: CoreFragment, ticks_per_unit: 5, capacity: 5, level: Some(1))),
 
     // Optional; can be left out entirely (defaults to no passive processing).
     // If set, the structure automatically converts one `consumes` into one
@@ -68,11 +75,20 @@ is skipped with a warning logged in-game rather than crashing startup.
 
     // Optional; can be left out entirely (defaults to 30). How much damage
     // this structure can take from raids (see `Game::raid_check`) before
-    // being destroyed. An assigned cronjob worker fights a raid off,
+    // being destroyed. An assigned cronjob worker/guard fights a raid off,
     // reducing the damage by its Defense stat; an unassigned structure
-    // takes the raid's full damage. Damaged structures slowly regenerate
-    // over time regardless.
+    // takes the raid's full damage (less any raid_defense below).
+    // Damaged structures slowly regenerate over time regardless.
     durability: 30,
+
+    // Optional; can be left out entirely (defaults to 0). Flat raid-damage
+    // reduction this structure contributes to *every* raid, against *any*
+    // deployed structure, for as long as it's standing — not just itself,
+    // and it stacks additively across every deployed structure that sets
+    // this (e.g. several Turrets). Applied before an assigned worker/guard's
+    // own Defense-based mitigation, so the two stack. This is how the
+    // Turret structure works: `raid_defense: 4` with no `work` recipe.
+    raid_defense: 4,
 )
 ```
 

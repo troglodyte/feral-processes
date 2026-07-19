@@ -134,20 +134,32 @@ pub struct Tamed {
     pub owner: Entity,
 }
 
-/// Player-only: what's currently equipped in each slot. Each slot's stat
-/// bonus (see `ItemId::equipment`) is added directly onto `Stats`/
-/// `Decompiler` when equipped and subtracted back on unequip — mirroring
-/// how leveling directly mutates `Stats` elsewhere, rather than maintaining
-/// a separate "base stats" layer.
+/// An item sitting in an `Equipment` slot, and the gear level its stat
+/// bonus was scaled for when it was equipped (see
+/// `items::EquipmentStats::scaled_for_level`). The level is captured at
+/// equip time — like a wild program's zone-doubled stats, it doesn't
+/// retroactively change if the player breaches deeper afterward; re-equip
+/// (or unequip/re-equip) to pick up a newly unlocked level.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EquippedItem {
+    pub item: ItemId,
+    pub level: u32,
+}
+
+/// Player-only: what's currently equipped in each slot. Each slot's
+/// level-scaled stat bonus (see `EquippedItem`, `ItemId::equipment`) is
+/// added directly onto `Stats`/`Decompiler` when equipped and subtracted
+/// back on unequip — mirroring how leveling directly mutates `Stats`
+/// elsewhere, rather than maintaining a separate "base stats" layer.
 #[derive(Component, Default, Clone, Copy)]
 pub struct Equipment {
-    pub weapon: Option<ItemId>,
-    pub armor: Option<ItemId>,
-    pub module: Option<ItemId>,
+    pub weapon: Option<EquippedItem>,
+    pub armor: Option<EquippedItem>,
+    pub module: Option<EquippedItem>,
 }
 
 impl Equipment {
-    pub fn slot_mut(&mut self, slot: EquipmentSlot) -> &mut Option<ItemId> {
+    pub fn slot_mut(&mut self, slot: EquipmentSlot) -> &mut Option<EquippedItem> {
         match slot {
             EquipmentSlot::Weapon => &mut self.weapon,
             EquipmentSlot::Armor => &mut self.armor,
@@ -155,7 +167,7 @@ impl Equipment {
         }
     }
 
-    pub fn get(&self, slot: EquipmentSlot) -> Option<ItemId> {
+    pub fn get(&self, slot: EquipmentSlot) -> Option<EquippedItem> {
         match slot {
             EquipmentSlot::Weapon => self.weapon,
             EquipmentSlot::Armor => self.armor,
@@ -217,6 +229,13 @@ pub struct ResourceNode {
     /// `StructureDef::work`'s `capacity` field. Nodes never run dry
     /// permanently; a worked node just cycles between empty and full.
     pub capacity: u32,
+    /// Mirrors `WorkDef::level`. `None` means a completed gather cycle
+    /// always yields, same as before this field existed. `Some(level)` gates
+    /// each completion behind a level-based percentage chance instead (see
+    /// `systems::task_progress_system`) — a harder, chancier variant that a
+    /// structure opts into via its `.ron` file rather than something every
+    /// worked node does by default.
+    pub level: Option<u32>,
 }
 
 /// Ticks toward a structure's next passive-processing conversion (see
@@ -227,9 +246,15 @@ pub struct PassiveProcessor {
     pub progress: u32,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TaskKind {
     GatherResource,
+    /// Posted to defend a structure against raids (see `Game::raid_check`)
+    /// without also working it — see `Game::assign_guard`. Unlike
+    /// `GatherResource`, `task_progress_system` ignores this kind entirely;
+    /// a guard doesn't produce anything even if its target happens to have
+    /// a `ResourceNode`.
+    Guard,
 }
 
 /// A generic ongoing job: `worker` progresses `target` over multiple ticks.
@@ -274,6 +299,37 @@ pub struct StatusEffects {
     pub active: Option<ActiveStatus>,
 }
 
+/// Which stat a companion's rally/shield temporarily boosts — see
+/// `PlayerBuff`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BuffKind {
+    Atk,
+    Def,
+}
+
+/// One active combat buff, and how long it has left.
+#[derive(Clone, Copy, Debug)]
+pub struct ActiveBuff {
+    pub kind: BuffKind,
+    /// Battle rounds remaining, ticked down at the end of every round.
+    pub remaining: u32,
+    pub power: i32,
+}
+
+/// A temporary combat buff a companion grants the player by being commanded
+/// (see `Game::battle_command_companion`) instead of attacking directly.
+/// Player-only. Kept separate from `StatusEffects` because that component is
+/// reserved for conditions a hostile move can inflict (always unwanted) —
+/// buffs are always player-directed and shouldn't be clobbered by (or
+/// clobber) an unrelated bleed/stun. Like `StatusEffects`, holds at most one
+/// buff at a time: commanding a companion again overwrites whatever's still
+/// active. Scoped to a single intrusion, cleared with everything else when a
+/// battle ends.
+#[derive(Component, Default, Clone, Copy)]
+pub struct PlayerBuff {
+    pub active: Option<ActiveBuff>,
+}
+
 /// A structure's remaining health against raids (see `Game::raid_check`).
 /// Every deployed structure gets one, sized from its
 /// `StructureDef::durability`; reaching 0 destroys the structure.
@@ -284,7 +340,9 @@ pub struct Durability {
 }
 
 /// Player-only: accumulated Perk Points (earned 1 per level-up) and which
-/// perks have been unlocked with them. See `perks::Perk`.
+/// perks have been bought with them. See `perks::Perk` — a perk can be
+/// bought more than once, so `unlocked` holds one entry per level bought
+/// (duplicates allowed) rather than a unique set.
 #[derive(Component, Default, Clone)]
 pub struct Perks {
     pub points: u32,
@@ -292,7 +350,8 @@ pub struct Perks {
 }
 
 impl Perks {
-    pub fn has(&self, perk: Perk) -> bool {
-        self.unlocked.contains(&perk)
+    /// How many levels of `perk` have been bought — 0 if none.
+    pub fn level(&self, perk: Perk) -> u32 {
+        self.unlocked.iter().filter(|&&p| p == perk).count() as u32
     }
 }

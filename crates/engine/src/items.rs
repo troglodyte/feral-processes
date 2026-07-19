@@ -36,31 +36,50 @@ impl ItemId {
         match self {
             ItemId::OverclockCore => Some((
                 EquipmentSlot::Weapon,
-                EquipmentStats { atk: 3, ..EquipmentStats::default() },
+                EquipmentStats {
+                    atk: 3,
+                    ..EquipmentStats::default()
+                },
             )),
             ItemId::MonofilamentWhip => Some((
                 EquipmentSlot::Weapon,
-                EquipmentStats { atk: 4, ..EquipmentStats::default() },
+                EquipmentStats {
+                    atk: 4,
+                    ..EquipmentStats::default()
+                },
             )),
             ItemId::FirewallPlating => Some((
                 EquipmentSlot::Armor,
-                EquipmentStats { def: 3, ..EquipmentStats::default() },
+                EquipmentStats {
+                    def: 3,
+                    ..EquipmentStats::default()
+                },
             )),
             ItemId::AblativePlating => Some((
                 EquipmentSlot::Armor,
-                EquipmentStats { def: 4, ..EquipmentStats::default() },
+                EquipmentStats {
+                    def: 4,
+                    ..EquipmentStats::default()
+                },
             )),
             ItemId::NeuralAmplifier => Some((
                 EquipmentSlot::Module,
-                EquipmentStats { decompiler: 2, ..EquipmentStats::default() },
+                EquipmentStats {
+                    decompiler: 2,
+                    ..EquipmentStats::default()
+                },
             )),
             ItemId::CortexHack => Some((
                 EquipmentSlot::Module,
-                EquipmentStats { decompiler: 3, ..EquipmentStats::default() },
+                EquipmentStats {
+                    decompiler: 3,
+                    ..EquipmentStats::default()
+                },
             )),
-            ItemId::CoreFragment | ItemId::PowerCell | ItemId::IceBreaker | ItemId::PortalFragment => {
-                None
-            }
+            ItemId::CoreFragment
+            | ItemId::PowerCell
+            | ItemId::IceBreaker
+            | ItemId::PortalFragment => None,
         }
     }
 }
@@ -82,12 +101,35 @@ impl EquipmentSlot {
     }
 }
 
-/// Flat stat bonuses an equipped item grants while worn.
+/// Flat stat bonuses an equipped item grants while worn, at gear level 1
+/// (base). See `GEAR_LEVEL_GROWTH`/`EquipmentStats::scaled_for_level` for
+/// how a higher gear level scales these up.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct EquipmentStats {
     pub atk: i32,
     pub def: i32,
     pub decompiler: i32,
+}
+
+/// Growth factor applied to an item's base `EquipmentStats` per gear level
+/// above 1 — "150% more than the previous level" (level *N* = base *
+/// `GEAR_LEVEL_GROWTH.powi(N - 1)`). Gear level is capped by
+/// `resources::ZoneLevel`: reaching zone *N* is what "unlocks" level *N*
+/// gear — see `Game::equip`.
+pub const GEAR_LEVEL_GROWTH: f64 = 2.5;
+
+impl EquipmentStats {
+    /// This item's bonus scaled up for `level` (1 = base, no scaling).
+    /// Each component is rounded independently to the nearest whole point.
+    pub fn scaled_for_level(self, level: u32) -> EquipmentStats {
+        let factor = GEAR_LEVEL_GROWTH.powi(level.max(1) as i32 - 1);
+        let scale = |v: i32| (v as f64 * factor).round() as i32;
+        EquipmentStats {
+            atk: scale(self.atk),
+            def: scale(self.def),
+            decompiler: scale(self.decompiler),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -129,5 +171,34 @@ mod tests {
         let (slot, mods) = ItemId::CortexHack.equipment().unwrap();
         assert_eq!(slot, EquipmentSlot::Module);
         assert_eq!((mods.atk, mods.def, mods.decompiler), (0, 0, 3));
+    }
+
+    #[test]
+    fn scaled_for_level_grows_150_percent_per_level_above_1() {
+        let base = EquipmentStats {
+            atk: 4,
+            def: 0,
+            decompiler: 0,
+        };
+        assert_eq!(
+            base.scaled_for_level(1).atk,
+            4,
+            "level 1 should be unscaled base"
+        );
+        assert_eq!(
+            base.scaled_for_level(2).atk,
+            10,
+            "level 2 should be 2.5x base (4 * 2.5 = 10)"
+        );
+        assert_eq!(
+            base.scaled_for_level(3).atk,
+            25,
+            "level 3 should be 2.5x level 2 (10 * 2.5 = 25)"
+        );
+        assert_eq!(
+            base.scaled_for_level(0).atk,
+            4,
+            "level 0 should clamp to level 1's unscaled base"
+        );
     }
 }

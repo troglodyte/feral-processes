@@ -66,6 +66,7 @@ fails.
 | `c` | Open the compile menu (compile an ICE Breaker — 3 Core Fragments — a Power Cell — 2 Core Fragments — and any future recipes). Then pick a quantity: type digits and Enter, or `[F]` for 5 at once, or `[M]` for the most you can currently afford |
 | `b` | Deploy a structure |
 | `w` | Assign a compiled program to a cronjob (work a structure) |
+| `G` | Assign a compiled program to guard a structure against raids (any structure, not just a workable one — see [Base defense](#base-defense)) |
 | `u` | Use symlink: instantly teleport to a deployed symlink structure (e.g. Home), for its item cost |
 | `i` | Inspect: pick a direction, see stats/moves/decompile odds for the first program that way (no intrusion) |
 | `v` | Inventory/equipment: equip, unequip, erase items |
@@ -89,7 +90,7 @@ a row's own number or letter directly.
 | --- | --- |
 | `a` | Attack |
 | `d` | Decompile (attempt to compile/tame the program — needs an ICE Breaker) |
-| `c` | Command your active companion to attack (only shown if you have one) |
+| `c` | Command your active companion to buff you instead of attacking — a rally (ATK boost) by default, or its species' own special ability if it has one (only shown if you have a companion) |
 | `j` | Jack out (flee) — costs a mild XP setback, same as flatlining |
 
 ### The loop
@@ -144,19 +145,25 @@ creature to work" mechanic.
    Core Fragments right now).
 3. **Schedule a cronjob with `w`** — pick a compiled (tamed) program, then
    the structure to assign it to. This only works on structures with a
-   `work` recipe (Mining Node, Power Conduit, Compiler, Fabricator, Armory);
-   Terminal and Data Cache aren't assignable this way. Both pickers show
-   status: the program picker flags `(active companion)` or
-   `(on a cronjob: <structure>)`, and the structure picker flags
-   `(assigned: <program>)`, so you can see who's already spoken for
-   before reassigning them.
+   `work` recipe (Mining Node, Power Conduit, Compiler); Fabricator, Armory,
+   Terminal, and Data Cache aren't assignable this way — Fabricator and
+   Armory unlock crafting instead (see below), and Terminal automates
+   passively. Both pickers show status: the program picker flags
+   `(active companion)` or `(on a cronjob: <structure>)`, and the structure
+   picker flags `(assigned: <program>)`, so you can see who's already
+   spoken for before reassigning them.
 4. **Production runs automatically after that**, tick by tick, regardless of
    where you are or what you're doing:
    - Each tick, the assigned program's progress advances by 1.
-   - Once progress reaches the structure's `ticks_per_unit` (Mining Node 5,
-     Power Conduit 6, Compiler 8, Fabricator 12, Armory 12), one unit of
-     output drops straight into *your* inventory, progress resets, and the
-     worker gains 5 flat XP (enough to level up mid-cycle sometimes).
+   - Once progress reaches the structure's `ticks_per_unit` (Mining Node 10,
+     Power Conduit 6, Compiler 8), a completed cycle drops one unit of
+     output straight into *your* inventory, progress resets, and the worker
+     gains 5 flat XP (enough to level up mid-cycle sometimes) — **except** a
+     Mining Node, which is gated behind a level-based percentage chance
+     (a basic level-1 node succeeds only about half the time) on top of
+     its doubled `ticks_per_unit`, so it's meaningfully slower and less
+     reliable than the other two. A missed attempt still resets the cycle,
+     it just doesn't pay out.
    - Every worked structure holds a stock capped at 5 units (the `capacity`
      in its `.ron` file, moddable per-structure). Each completed cycle draws
      one down; once mined to 0 it immediately refills back to capacity and
@@ -170,9 +177,11 @@ creature to work" mechanic.
    picks up right where it left off, no need to reassign it with `w`.
 
 Once you have a Mining Node feeding a steady supply of Core Fragments, feed
-that into a Power Conduit (Power Cells), a Compiler (ICE Breakers), a
-Fabricator (Overclock Cores), and/or an Armory (Firewall Plating — see
-[Equipment](#equipment)) to round out the loop.
+that into a Power Conduit (Power Cells) and a Compiler (ICE Breakers) to
+round out the consumable loop. Gear (Overclock Cores, Firewall Plating) is
+handled separately — see [Equipment](#equipment): build a Fabricator or
+Armory and it unlocks the matching craft recipe, paid in Portal Fragments
+rather than run as a cronjob.
 
 ### Stats
 
@@ -192,18 +201,20 @@ Shown in the status panel (always) and the intrusion screen (in battle):
 ### Perks
 
 Every level-up grants 1 Perk Point (shown in the status panel and the `x`
-menu). Spend them on permanent passive unlocks — each perk unlocks once and
-stacks with your regular stats:
+menu). Spend them on permanent passive upgrades — unlike a one-time unlock,
+each perk can be bought repeatedly, and each purchase stacks another level
+on top of whatever you already have, at the same Perk Point cost every time:
 
-| Perk | Cost | Effect |
+| Perk | Cost/level | Effect per level |
 | --- | --- | --- |
-| Keen Scavenger | 2 | +15 percentage points to scan (`g`)'s success chance |
-| Low Power Mode | 2 | Power drains 30% slower |
-| Exploit Focus | 3 | +5 effective Decompiler skill toward decompile odds |
+| Keen Scavenger | 2 | +1 percentage point to scan (`g`)'s success chance |
+| Low Power Mode | 2 | Power drains 1 percentage point slower (floor: stops draining entirely) |
+| Exploit Focus | 3 | +1 effective Decompiler skill toward decompile odds |
 | Lean Compiler | 3 | Compiling (`c`) costs 1 less of each required item (min 1 each) |
 
-Perks are a small, fixed set of player-only progression choices rather than
-moddable content — see `CLAUDE.md` for the distinction.
+The `x` menu shows each perk's current level next to it. Perks are a small,
+fixed set of player-only progression choices rather than moddable content —
+see `CLAUDE.md` for the distinction.
 
 ### Items
 
@@ -227,17 +238,35 @@ Press `v` to open the inventory/equipment screen from anywhere while
 playing. It shows your stats, your three equipment slots, and your
 inventory, each item numbered for selection.
 
-| Item | Slot | Bonus | Source |
+| Item | Slot | Base bonus (level 1) | Source |
 | --- | --- | --- | --- |
-| Overclock Core | Weapon | +3 Attack | Fabricator cronjob; loot chance from Scrapper, Construct, Trojan |
+| Overclock Core | Weapon | +3 Attack | Compile at a Fabricator (Portal Fragments); loot chance from Scrapper, Construct, Trojan |
 | Monofilament Whip | Weapon | +4 Attack | Loot chance from Wintermute (boss) |
-| Firewall Plating | Armor | +3 Defense | Armory cronjob; loot chance from Wraith, Sentinel |
+| Firewall Plating | Armor | +3 Defense | Compile at an Armory (Portal Fragments); loot chance from Wraith, Sentinel |
 | Ablative Plating | Armor | +4 Defense | Loot chance from Rootkit |
 | Neural Amplifier | Module | +2 Decompiler | Loot chance from Virus, Phantom, Ghost |
 | Cortex Hack | Module | +3 Decompiler | Loot chance from Cipher |
 
 Each slot now has two options — a common one from an ordinary program, and
 a tougher, slightly stronger one from a harder species or boss.
+
+Overclock Core and Firewall Plating are compiled (`c`) like any other
+recipe, but only once you've built the matching workbench — a Fabricator or
+Armory respectively. Placing one doesn't run a cronjob; it just unlocks that
+recipe in the compile menu, paid in Portal Fragments instead of Core
+Fragments.
+
+**Gear levels.** Every piece of equipment has a level, starting at 1, and
+each level above that is **150% stronger** than the one before it (level 2
+= 2.5× the base bonus, level 3 = 6.25×, and so on). Reaching zone *N* (see
+[Zones and portals](#zones-and-portals)) is what unlocks level *N* gear:
+whatever you equip *while* at zone level *N* gets that level's scaled
+bonus. The level is locked in at the moment you equip an item — like a wild
+program's zone-doubled stats, it doesn't retroactively get stronger if you
+breach deeper afterward while still wearing it. Unequip and re-equip the
+same item (or an identical one from inventory) to pick up a newly unlocked
+level. The inventory/equipment screen (`v`) shows each equipped item's
+level and its actual scaled bonus.
 
 - **Equip**: select a numbered inventory item, then `[E]`. Equipping into an
   already-occupied slot swaps the old item back into your inventory — you
@@ -246,9 +275,9 @@ a tougher, slightly stronger one from a harder species or boss.
   Module) directly from the main inventory screen.
 - **Erase**: select a numbered inventory item, then `[X]`. Permanently
   removes it from your inventory — there's no way to get it back.
-- An equipped item's stat bonus is added the moment you equip it and
-  removed the moment you unequip it — it shows up immediately in the status
-  panel and the intrusion screen.
+- An equipped item's (level-scaled) stat bonus is added the moment you
+  equip it and removed the moment you unequip it — it shows up immediately
+  in the status panel and the intrusion screen.
 
 ### Companions
 
@@ -266,11 +295,14 @@ be active party members, fighting alongside you at once.
   a structure (`w`) automatically stands it down from the party, and vice
   versa — a program is either working or fighting beside you, never both.
 - During an intrusion, if you have at least one active companion the battle
-  menu gains `[C]ommand companion`: with exactly one, it attacks
-  immediately; with more than one, you're asked which party member acts.
-  Either way, it's *instead of* you acting that round — a turn-economy
-  tradeoff, not a free extra hit, and only one companion can act per round
-  even with a full party.
+  menu gains `[C]ommand companion`: with exactly one, it acts immediately;
+  with more than one, you're asked which party member acts. A commanded
+  companion doesn't attack — it buffs you instead: a temporary Attack rally
+  by default, or its species' own special ability if one is defined (a
+  bigger Attack/Defense buff, a heal, or a debuff on the wild program — see
+  `assets/species/README.md`). Either way, it's *instead of* you acting
+  that round — a turn-economy tradeoff, not a free extra hit, and only one
+  companion can act per round even with a full party.
 - The wild program's retaliation has a 30% chance to target the party
   instead of you (picking uniformly among current members if you have
   more than one), using that member's Defense stat. A party member knocked
@@ -378,18 +410,22 @@ enough of them, then walk onto it to breach into the next zone.
 | --- | --- | --- |
 | Terminal | 3 Core Fragments | Passively cooks a Core Fragment into a Power Cell every so often while you're standing nearby — no cronjob needed |
 | Data Cache | 5 Core Fragments | Utility storage |
-| Mining Node | 2 Core Fragments | Cronjob a compiled program to it to produce Core Fragments over time |
+| Mining Node | 2 Core Fragments | Cronjob a compiled program to it to produce Core Fragments over time (slower and level-gated — see [Getting started](#getting-started-building-and-running-cronjobs)) |
 | Power Conduit | 4 Core Fragments | Cronjob a compiled program to it to produce Power Cells over time |
 | Compiler | 6 Core Fragments | Cronjob a compiled program to it to produce ICE Breakers over time |
-| Fabricator | 8 Core Fragments | Cronjob a compiled program to it to produce Overclock Cores (see [Equipment](#equipment)) over time |
-| Armory | 8 Core Fragments | Cronjob a compiled program to it to produce Firewall Plating (see [Equipment](#equipment)) over time |
+| Fabricator | 8 Core Fragments | Not cronjob-workable — unlocks compiling Overclock Cores (see [Equipment](#equipment)) for Portal Fragments |
+| Armory | 8 Core Fragments | Not cronjob-workable — unlocks compiling Firewall Plating (see [Equipment](#equipment)) for Portal Fragments |
 | Home | 5 Core Fragments | `u` ("use symlink") instantly teleports you to it from anywhere on the map, for 4 Power Cells |
 | Zone Portal | 5 Portal Fragments *(× current zone level)* | Walk onto it to breach into the next zone — see [Zones and portals](#zones-and-portals) |
 | Black Market | 6 Core Fragments | `t` ("trade") to sell inventory items or buy consumables for Core Fragments — see [Trading](#trading) |
+| Turret | 6 Core Fragments | Passively reduces raid damage against **every** deployed structure by 4 — see [Base defense](#base-defense) |
 
-Mining Node, Power Conduit, Compiler, Fabricator, and Armory use **active**
-automation (an assigned cronjob produces over time); Terminal uses
-**passive** automation (it processes on its own whenever you're in range).
+Mining Node, Power Conduit, and Compiler use **active** automation (an
+assigned cronjob produces over time); Terminal uses **passive** automation
+(it processes on its own whenever you're in range); Fabricator and Armory
+use neither — building one just unlocks a compile recipe; Turret uses
+neither either — it just sits there passively defending (see
+[Base defense](#base-defense)).
 Home is a **symlink target** — a third category, neither cronjob nor
 passive: press `u`, pick it from the list of deployed symlink structures,
 and pay the Power Cell cost to warp there instantly, no matter how far
@@ -403,20 +439,36 @@ Every deployed structure has raid **Durability** (30 by default), shown as
 `[HP x/y]` in the cronjob, symlink, and trade menus. Each tick has a small
 chance of a raid hitting a random deployed structure:
 
-- If a compiled program is assigned to it (`w`), it fights the raid off:
-  the structure's damage is reduced by the worker's Defense stat, but the
-  worker still takes a flat cost to its own HP for defending — win or
-  lose. A worker knocked to 0 HP stands down from the cronjob (like a
-  knocked-out companion), but isn't destroyed.
-- An unassigned structure takes the raid's full damage. At 0 Durability
-  it's destroyed outright, and any cronjob pointed at it is dropped.
+- If a compiled program is assigned to it — either cronjob-working it (`w`)
+  or just posted to guard it (`G`) — it fights the raid off: the
+  structure's damage is reduced by the defender's Defense stat, but the
+  defender still takes a flat cost to its own HP for defending — win or
+  lose. A defender knocked to 0 HP stands down (like a knocked-out
+  companion), but isn't destroyed.
+- `G` (guard) works on **any** structure, including ones with no cronjob
+  recipe at all — Home, Terminal, Data Cache, Fabricator, Armory, and so
+  on. It's the only way to defend those. A structure already cronjob-worked
+  is already defended by its worker; guard it separately only if you want a
+  program standing there purely for defense, doing no production.
+- Every deployed **Turret** shaves a flat amount (4) off *every* raid's
+  damage, against *any* structure it hits — not just itself, and it stacks
+  across however many Turrets you've built. This is applied before a
+  worker/guard's own Defense-based mitigation, so the two stack: a couple
+  of Turrets plus a guarded structure can fully no-sell a raid. A Turret
+  has no cronjob recipe of its own — it just sits there defending, and it's
+  a raid target like anything else, so it's not invulnerable.
+- An unassigned (and unguarded) structure — after Turret reduction — takes
+  whatever raid damage is left. At 0 Durability it's destroyed outright,
+  and any cronjob/guard assignment pointed at it is dropped.
 - Damaged structures slowly regenerate Durability over time regardless.
 - Recharging overnight (`r`) fully heals **every** tamed program you own,
   not just your active party — including one left behind defending a
   raid while you were elsewhere.
 
-Keeping your key structures staffed is the cheapest defense; an idle
-Mining Node out on its own is the one most likely to get chipped away.
+Keeping your key structures staffed is the cheapest defense early on; a
+Turret (or several) is the scalable version once you can afford one — an
+idle Mining Node out on its own is the one most likely to get chipped away
+without either.
 
 ### Trading
 

@@ -3,7 +3,7 @@ use rand::RngExt;
 
 use crate::components::{
     Experience, Inventory, Needs, PassiveProcessor, Perks, Player, Position, ResourceNode, Stats,
-    Structure, Tamed, Task, WanderAi,
+    Structure, Tamed, Task, TaskKind, WanderAi,
 };
 use crate::perks::Perk;
 use crate::progression;
@@ -19,8 +19,8 @@ const FATIGUE_DECAY_PER_TICK: f32 = 0.08;
 
 /// One tick of hunger/fatigue decay; pulled out of the system so the rates
 /// are unit-testable without spinning up an ECS `World`. `hunger_multiplier`
-/// scales only the hunger rate (e.g. `Perk::LowPowerMode`'s 0.7) — fatigue
-/// is unaffected.
+/// scales only the hunger rate (e.g. `Perk::LowPowerMode`'s per-level
+/// reduction) — fatigue is unaffected.
 pub fn decay_needs(hunger: f32, fatigue: f32, hunger_multiplier: f32) -> (f32, f32) {
     (
         (hunger - HUNGER_DECAY_PER_TICK * hunger_multiplier).max(0.0),
@@ -33,8 +33,9 @@ pub fn needs_decay_system(
     mut log: ResMut<MessageLog>,
 ) {
     for (mut needs, mut stats, perks) in &mut query {
+        let low_power_level = perks.map(|p| p.level(Perk::LowPowerMode)).unwrap_or(0);
         let hunger_multiplier =
-            if perks.is_some_and(|p| p.has(Perk::LowPowerMode)) { crate::LOW_POWER_MODE_MULTIPLIER } else { 1.0 };
+            (1.0 - crate::LOW_POWER_MODE_REDUCTION_PER_LEVEL * low_power_level as f32).max(0.0);
         let was_starving = needs.hunger <= 0.0;
         let (hunger, fatigue) = decay_needs(needs.hunger, needs.fatigue, hunger_multiplier);
         needs.hunger = hunger;
@@ -72,6 +73,15 @@ pub fn wander_ai_system(
     }
 }
 
+/// Chance (0.0-1.0) a completed gather cycle against a leveled node (see
+/// `ResourceNode::level`) actually yields, rather than fizzling out and
+/// costing the cycle for nothing. Scales up with level so a node can be
+/// made more reliable over time; a basic level-1 node succeeds only about
+/// half the time.
+fn mining_success_chance(level: u32) -> f64 {
+    (0.4 + level as f64 * 0.1).min(1.0)
+}
+
 /// Generic job progression: any entity with a `Task` advances it once per
 /// tick against its `target`; on completion the producing node hands a unit
 /// of resource to the worker's owner. A node that's been mined down to 0
@@ -83,8 +93,12 @@ pub fn task_progress_system(
     mut nodes: Query<&mut ResourceNode>,
     mut inventories: Query<&mut Inventory>,
     mut log: ResMut<MessageLog>,
+    mut rng: ResMut<GameRng>,
 ) {
     for (mut task, tamed, mut exp, mut stats) in &mut tasks {
+        if !matches!(task.kind, TaskKind::GatherResource) {
+            continue;
+        }
         let Ok(mut node) = nodes.get_mut(task.target) else {
             continue;
         };
@@ -92,22 +106,29 @@ pub fn task_progress_system(
             node.amount = node.capacity;
         }
         task.progress += 1;
-        if task.progress >= task.required {
-            task.progress = 0;
-            node.amount -= 1;
-            if let Ok(mut inv) = inventories.get_mut(tamed.owner) {
-                inv.add(node.resource, 1);
-                let levels = progression::add_xp(&mut exp, &mut stats, WORK_XP_PER_CYCLE);
-                let level_note = if levels > 0 {
-                    format!(" It levels up to {}!", exp.level)
-                } else {
-                    String::new()
-                };
-                log.push(format!(
-                    "Your subroutine extracted a {}.{level_note}",
-                    node.resource.display_name()
-                ));
-            }
+        if task.progress < task.required {
+            continue;
+        }
+        task.progress = 0;
+        if let Some(level) = node.level
+            && !rng.0.random_bool(mining_success_chance(level))
+        {
+            log.push("Your subroutine's extraction attempt fails to compile.".to_string());
+            continue;
+        }
+        node.amount -= 1;
+        if let Ok(mut inv) = inventories.get_mut(tamed.owner) {
+            inv.add(node.resource, 1);
+            let levels = progression::add_xp(&mut exp, &mut stats, WORK_XP_PER_CYCLE);
+            let level_note = if levels > 0 {
+                format!(" It levels up to {}!", exp.level)
+            } else {
+                String::new()
+            };
+            log.push(format!(
+                "Your subroutine extracted a {}.{level_note}",
+                node.resource.display_name()
+            ));
         }
     }
 }
@@ -132,7 +153,9 @@ pub fn passive_process_system(
             let Some(recipe) = &def.passive_process else {
                 continue;
             };
-            if (pos.x - player_pos.x).abs() > recipe.radius || (pos.y - player_pos.y).abs() > recipe.radius {
+            if (pos.x - player_pos.x).abs() > recipe.radius
+                || (pos.y - player_pos.y).abs() > recipe.radius
+            {
                 continue;
             }
             proc.progress += 1;
@@ -169,6 +192,25 @@ mod tests {
         let (hunger, fatigue) = decay_needs(0.05, 0.02, 1.0);
         assert_eq!(hunger, 0.0);
         assert_eq!(fatigue, 0.0);
+    }
+
+    #[test]
+    fn mining_success_chance_rises_with_level_and_caps_at_one() {
+        let level_1 = mining_success_chance(1);
+        let level_2 = mining_success_chance(2);
+        assert!(
+            level_1 > 0.0 && level_1 < 1.0,
+            "a basic level-1 node shouldn't be a sure thing"
+        );
+        assert!(
+            level_2 > level_1,
+            "a higher-level node should succeed more reliably"
+        );
+        assert_eq!(
+            mining_success_chance(100),
+            1.0,
+            "chance should never exceed a sure thing"
+        );
     }
 
     #[test]

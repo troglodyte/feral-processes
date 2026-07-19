@@ -1,0 +1,9 @@
+(
+    id: "turret",
+    name: "Turret",
+    glyph: '^',
+    color: Red,
+    build_cost: [(CoreFragment, 6)],
+    work: None,
+    raid_defense: 4,
+)

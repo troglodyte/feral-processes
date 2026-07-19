@@ -70,6 +70,22 @@ is skipped with a warning logged in-game rather than crashing startup.
     // `base_hp`/`base_atk`/`base_def` tough here directly (a boss's stats
     // still double per zone level like any other species, on top of this).
     is_boss: true,
+
+    // Optional; can be left out entirely (defaults to `None`). A tamed
+    // program no longer attacks directly when commanded in battle — it
+    // grants the player a buff instead. With no `special_ability` set, that's
+    // a generic rally (a temporary ATK boost). Setting this gives a tamed
+    // member of this species its own unique action instead, triggered the
+    // same way (commanding it in battle):
+    //   Rally(power: 4, duration: 3)                   — boosts player ATK
+    //   Shield(power: 4, duration: 3)                   — boosts player DEF
+    //   Heal(power: 8)                                  — heals the player now
+    //   Debuff(kind: Bleed, power: 3, duration: 3)      — afflicts the wild
+    //                                                      program (kind is
+    //                                                      `Bleed` or `Stun`,
+    //                                                      same as a move's
+    //                                                      `effect`)
+    special_ability: Some(Heal(power: 8)),
 )
 ```
 

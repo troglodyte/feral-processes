@@ -21,6 +21,16 @@ pub struct WorkDef {
     /// without this field get a sensible baseline.
     #[serde(default = "default_work_capacity")]
     pub capacity: u32,
+    /// If set, a completed gather cycle isn't a guaranteed yield: it only
+    /// pays out with a level-based percentage chance (see
+    /// `systems::task_progress_system`), and a miss still resets the cycle.
+    /// Higher `level` values yield more reliably. `None` (the default) keeps
+    /// the old always-succeeds behavior — this is an opt-in per structure,
+    /// not something every worked node gets automatically.
+    /// `#[serde(default)]` so existing structure files (including mods)
+    /// without this field keep parsing as guaranteed-yield nodes.
+    #[serde(default)]
+    pub level: Option<u32>,
 }
 
 fn default_work_capacity() -> u32 {
@@ -93,6 +103,15 @@ pub struct StructureDef {
     /// rather than 0, which would let the very next raid destroy them.
     #[serde(default = "default_durability")]
     pub durability: u32,
+    /// How much this structure reduces raid damage by, for *every* raid
+    /// against *any* deployed structure — not just itself — while it's
+    /// standing (see `Game::raid_check`). Stacks additively across every
+    /// deployed structure with this set, on top of whatever an assigned
+    /// worker/guard already mitigates. `#[serde(default)]` so existing
+    /// structure files (including mods) without this field contribute
+    /// nothing, same as before it existed.
+    #[serde(default)]
+    pub raid_defense: u32,
 }
 
 fn default_durability() -> u32 {

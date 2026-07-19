@@ -31,6 +31,8 @@ pub enum Mode {
     CraftQuantity,
     Cronjob,
     CronjobStructure,
+    Guard,
+    GuardStructure,
     Symlink,
     InspectDirection,
     InspectDetail,
@@ -255,6 +257,8 @@ impl App {
             Mode::CraftQuantity => self.handle_craft_quantity_key(code),
             Mode::Cronjob => self.handle_cronjob_key(code),
             Mode::CronjobStructure => self.handle_cronjob_structure_key(code),
+            Mode::Guard => self.handle_guard_key(code),
+            Mode::GuardStructure => self.handle_guard_structure_key(code),
             Mode::Symlink => self.handle_symlink_key(code),
             Mode::InspectDirection => self.handle_inspect_direction_key(code),
             Mode::InspectDetail => self.handle_inspect_detail_key(code),
@@ -285,10 +289,12 @@ impl App {
             options.push('l');
         }
         options.push('q');
-        let idx = self.selected_index(code, options.len()).or_else(|| match code {
-            KeyCode::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
-            _ => None,
-        });
+        let idx = self
+            .selected_index(code, options.len())
+            .or_else(|| match code {
+                KeyCode::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
+                _ => None,
+            });
         match idx.map(|i| options[i]) {
             Some('n') => {
                 self.status_line = None;
@@ -306,10 +312,12 @@ impl App {
             return;
         }
         let options = ['p', 'f'];
-        let idx = self.selected_index(code, options.len()).or_else(|| match code {
-            KeyCode::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
-            _ => None,
-        });
+        let idx = self
+            .selected_index(code, options.len())
+            .or_else(|| match code {
+                KeyCode::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
+                _ => None,
+            });
         match idx.map(|i| options[i]) {
             Some('p') => self.start_new_game(DifficultyMode::Permadeath),
             Some('f') => self.start_new_game(DifficultyMode::Forgiving),
@@ -329,6 +337,10 @@ impl App {
             }
             KeyCode::Char('w') => {
                 self.mode = Mode::Cronjob;
+                return;
+            }
+            KeyCode::Char('G') => {
+                self.mode = Mode::Guard;
                 return;
             }
             KeyCode::Char('u') => {
@@ -426,7 +438,12 @@ impl App {
             return;
         }
         self.status_line = None;
-        if self.game.as_ref().map(|g| g.has_active_battle()).unwrap_or(false) {
+        if self
+            .game
+            .as_ref()
+            .map(|g| g.has_active_battle())
+            .unwrap_or(false)
+        {
             self.mode = Mode::Battle;
         }
         self.check_game_over();
@@ -440,7 +457,7 @@ impl App {
                 0 => self.status_line = Some("You have no active companion.".to_string()),
                 1 => {
                     let entity = party[0].entity;
-                    game.battle_companion_attack(entity);
+                    game.battle_command_companion(entity);
                     if !game.has_active_battle() {
                         self.mode = Mode::Playing;
                     }
@@ -467,8 +484,8 @@ impl App {
         self.check_game_over();
     }
 
-    /// Picks which party member attacks this round when there's more than
-    /// one active companion (a single companion is commanded directly from
+    /// Picks which party member acts this round when there's more than one
+    /// active companion (a single companion is commanded directly from
     /// `handle_battle_key` with no extra step).
     fn handle_battle_companion_key(&mut self, code: KeyCode) {
         if code == KeyCode::Esc {
@@ -477,12 +494,18 @@ impl App {
         }
         let Some(game) = &self.game else { return };
         let party = game.player_status().companions;
-        let Some(idx) = self.selected_index(code, party.len()) else { return };
+        let Some(idx) = self.selected_index(code, party.len()) else {
+            return;
+        };
         let entity = party[idx].entity;
         let Some(game) = &mut self.game else { return };
-        game.battle_companion_attack(entity);
+        game.battle_command_companion(entity);
         let still_active = game.has_active_battle();
-        self.mode = if still_active { Mode::Battle } else { Mode::Playing };
+        self.mode = if still_active {
+            Mode::Battle
+        } else {
+            Mode::Playing
+        };
         self.check_game_over();
     }
 
@@ -527,10 +550,8 @@ impl App {
             KeyCode::Backspace => {
                 self.craft_quantity_input.pop();
             }
-            KeyCode::Char(c) if c.is_ascii_digit() => {
-                if self.craft_quantity_input.len() < 4 {
-                    self.craft_quantity_input.push(c);
-                }
+            KeyCode::Char(c) if c.is_ascii_digit() && self.craft_quantity_input.len() < 4 => {
+                self.craft_quantity_input.push(c);
             }
             KeyCode::Char('f') | KeyCode::Char('F') => {
                 let Some(result) = self.pending_craft.take() else {
@@ -546,10 +567,16 @@ impl App {
                     return;
                 };
                 self.craft_quantity_input.clear();
-                let max = self.game.as_ref().map(|g| g.max_craftable(result)).unwrap_or(0);
+                let max = self
+                    .game
+                    .as_ref()
+                    .map(|g| g.max_craftable(result))
+                    .unwrap_or(0);
                 if max == 0 {
-                    self.status_line =
-                        Some(format!("Not enough resources to compile any {}.", result.display_name()));
+                    self.status_line = Some(format!(
+                        "Not enough resources to compile any {}.",
+                        result.display_name()
+                    ));
                     self.mode = Mode::Playing;
                     return;
                 }
@@ -653,6 +680,50 @@ impl App {
         if let Some(idx) = self.selected_index(code, structures.len()) {
             let Some(game) = &mut self.game else { return };
             match game.assign_cronjob(worker, structures[idx].entity) {
+                Ok(()) => self.status_line = None,
+                Err(e) => self.status_line = Some(e),
+            }
+            self.pending_worker = None;
+            self.mode = Mode::Playing;
+        }
+    }
+
+    fn handle_guard_key(&mut self, code: KeyCode) {
+        if code == KeyCode::Esc {
+            self.mode = Mode::Playing;
+            return;
+        }
+        let Some(game) = &mut self.game else { return };
+        let workers: Vec<_> = game
+            .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
+            .into_iter()
+            .filter(|e| e.is_tamed)
+            .collect();
+        if let Some(idx) = self.selected_index(code, workers.len()) {
+            self.pending_worker = Some(workers[idx].entity);
+            self.mode = Mode::GuardStructure;
+        }
+    }
+
+    fn handle_guard_structure_key(&mut self, code: KeyCode) {
+        if code == KeyCode::Esc {
+            self.pending_worker = None;
+            self.mode = Mode::Playing;
+            return;
+        }
+        let Some(worker) = self.pending_worker else {
+            self.mode = Mode::Playing;
+            return;
+        };
+        let Some(game) = &mut self.game else { return };
+        let structures: Vec<_> = game
+            .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
+            .into_iter()
+            .filter(|e| e.is_structure)
+            .collect();
+        if let Some(idx) = self.selected_index(code, structures.len()) {
+            let Some(game) = &mut self.game else { return };
+            match game.assign_guard(worker, structures[idx].entity) {
                 Ok(()) => self.status_line = None,
                 Err(e) => self.status_line = Some(e),
             }
@@ -820,10 +891,8 @@ impl App {
             KeyCode::Backspace => {
                 self.trade_quantity_input.pop();
             }
-            KeyCode::Char(c) if c.is_ascii_digit() => {
-                if self.trade_quantity_input.len() < 4 {
-                    self.trade_quantity_input.push(c);
-                }
+            KeyCode::Char(c) if c.is_ascii_digit() && self.trade_quantity_input.len() < 4 => {
+                self.trade_quantity_input.push(c);
             }
             KeyCode::Enter => {
                 let Some(choice) = self.pending_trade_choice.take() else {
@@ -925,7 +994,9 @@ impl App {
         let Some(game) = &self.game else { return };
         let inventory = game.player_status().inventory;
         let total = 3 + inventory.len();
-        let Some(idx) = self.selected_index(code, total) else { return };
+        let Some(idx) = self.selected_index(code, total) else {
+            return;
+        };
         let slot = match idx {
             0 => Some(EquipmentSlot::Weapon),
             1 => Some(EquipmentSlot::Armor),
@@ -960,10 +1031,12 @@ impl App {
         if item.equipment().is_some() {
             actions.insert(0, 'e');
         }
-        let idx = self.selected_index(code, actions.len()).or_else(|| match code {
-            KeyCode::Char(c) => actions.iter().position(|&o| o == c.to_ascii_lowercase()),
-            _ => None,
-        });
+        let idx = self
+            .selected_index(code, actions.len())
+            .or_else(|| match code {
+                KeyCode::Char(c) => actions.iter().position(|&o| o == c.to_ascii_lowercase()),
+                _ => None,
+            });
         let Some(game) = &mut self.game else { return };
         let stack_qty = game
             .player_status()
@@ -999,16 +1072,33 @@ impl App {
     fn run(&mut self, terminal: &mut ratatui::DefaultTerminal) -> io::Result<()> {
         while !self.quit {
             terminal.draw(|f| ui::render(f, self))?;
-            if event::poll(Duration::from_millis(200))? {
-                if let Event::Key(key) = event::read()? {
-                    if key.kind == KeyEventKind::Press {
-                        self.handle_key(key.code);
-                    }
-                }
+            if event::poll(Duration::from_millis(200))?
+                && let Event::Key(key) = event::read()?
+                && key.kind == KeyEventKind::Press
+            {
+                self.handle_key(key.code);
             }
         }
         Ok(())
     }
+}
+
+fn main() -> io::Result<()> {
+    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repo_root = crate_dir
+        .parent()
+        .and_then(|p| p.parent())
+        .unwrap_or(&crate_dir)
+        .to_path_buf();
+    let assets_dir = repo_root.join("assets");
+    let save_path = repo_root.join("save.bin");
+    let history_path = repo_root.join("run_history.log");
+
+    let mut terminal = ratatui::init();
+    let mut app = App::new(assets_dir, save_path, history_path);
+    let result = app.run(&mut terminal);
+    ratatui::restore();
+    result
 }
 
 #[cfg(test)]
@@ -1018,7 +1108,8 @@ mod tests {
     fn test_app(seed: u32) -> App {
         let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
         let save_path = std::env::temp_dir().join(format!("feral_processes_tui_test_{seed}.bin"));
-        let history_path = std::env::temp_dir().join(format!("feral_processes_tui_test_{seed}.log"));
+        let history_path =
+            std::env::temp_dir().join(format!("feral_processes_tui_test_{seed}.log"));
         let mut app = App::new(assets_dir.clone(), save_path, history_path);
         app.game = Game::new(seed, DifficultyMode::Forgiving, &assets_dir).ok();
         app.mode = Mode::Playing;
@@ -1075,7 +1166,10 @@ mod tests {
                 );
 
                 app.handle_key(dir);
-                assert!(app.mode == Mode::Playing, "the direction picker should return to Playing either way");
+                assert!(
+                    app.mode == Mode::Playing,
+                    "the direction picker should return to Playing either way"
+                );
 
                 if structure_count(&mut app) > before {
                     placed = true;
@@ -1089,22 +1183,4 @@ mod tests {
              in at least one of the four directions"
         );
     }
-}
-
-fn main() -> io::Result<()> {
-    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let repo_root = crate_dir
-        .parent()
-        .and_then(|p| p.parent())
-        .unwrap_or(&crate_dir)
-        .to_path_buf();
-    let assets_dir = repo_root.join("assets");
-    let save_path = repo_root.join("save.bin");
-    let history_path = repo_root.join("run_history.log");
-
-    let mut terminal = ratatui::init();
-    let mut app = App::new(assets_dir, save_path, history_path);
-    let result = app.run(&mut terminal);
-    ratatui::restore();
-    result
 }

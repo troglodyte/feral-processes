@@ -351,7 +351,7 @@ then the second (anyone but the first). Both are consumed.
 | Sprite (`s`) | Easy | OpenGrid, Mainframe | — |
 | Glitch (`g`) | Easy | OpenGrid, NullSector | Power Cells |
 | Drone (`o`) | Easy | OpenGrid, Mainframe | Core Fragments |
-| Daemon (`d`) | Easy/Medium | OpenGrid, NullSector | Power Cells |
+| SubProcess (`d`) | Easy/Medium | OpenGrid, NullSector | Power Cells |
 | Scrapper (`x`) | Medium | OpenGrid, NullSector | Power Cells |
 | Wraith (`w`) | Medium | StaticField | — |
 | Phantom (`p`) | Medium | Mainframe, StaticField | — |
@@ -379,7 +379,7 @@ program) their next action. Only one condition is active at a time — a
 fresh one overwrites whatever was there. Wraith's Freeze, Construct's
 Lockdown, Sentinel's Lockout, Trojan's Backdoor Access, Rootkit's Privilege
 Escalation, Cipher's Encrypt, and Wintermute's Absolute Authority can stun;
-Wraith's, Virus's, Daemon's Fork Bomb, Worm's Replicate, Ghost's Haunt, the
+Wraith's, Virus's, SubProcess's Fork Bomb, Worm's Replicate, Ghost's Haunt, the
 Overseer's Corrupt/Purge, and Wintermute's Cascade Logic can cause bleeding.
 
 ### Bosses

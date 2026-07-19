@@ -1,10 +1,14 @@
-mod ui;
+//! Shared, renderer-agnostic game-flow state machine.
+//!
+//! This crate owns `App`/`Mode` — what pressing a key does in a given
+//! screen, save/load orchestration, autosave pacing — but knows nothing
+//! about terminals or windows. Frontends (currently `feral-processes-tui`
+//! and `feral-processes-gui`) translate their own input events into
+//! `GameKey` and call `App::handle_key`, then read `App`'s public fields to
+//! render however they like.
 
-use std::io;
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use feral_processes_engine::items::{EquipmentSlot, ItemId};
 use feral_processes_engine::{DifficultyMode, Entity, Game};
@@ -17,6 +21,21 @@ pub const MENU_SCAN_RADIUS: i32 = 40;
 /// paced against game time rather than wall-clock time, so it's the same
 /// whether the player is acting quickly or sitting on a menu.
 const AUTOSAVE_INTERVAL_TICKS: u64 = 50;
+
+/// A frontend-agnostic input event. Every renderer crate maps its own input
+/// system's keys onto this small vocabulary before calling `App::handle_key`
+/// — this is the seam that keeps `App` free of any UI-toolkit dependency.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GameKey {
+    Up,
+    Down,
+    Left,
+    Right,
+    Char(char),
+    Enter,
+    Esc,
+    Backspace,
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -63,8 +82,8 @@ pub enum TradeChoice {
     Buy(ItemId),
 }
 
-const MIN_ZOOM: u16 = 1;
-const MAX_ZOOM: u16 = 4;
+pub const MIN_ZOOM: u16 = 1;
+pub const MAX_ZOOM: u16 = 4;
 
 pub struct App {
     pub mode: Mode,
@@ -80,35 +99,35 @@ pub struct App {
     current_save_path: Option<PathBuf>,
     /// The save picked from `Mode::LoadGame`, awaiting a Load/Delete choice
     /// from `Mode::SaveAction`.
-    pending_save: Option<PathBuf>,
+    pub pending_save: Option<PathBuf>,
     history_path: PathBuf,
     pub quit: bool,
     pending_structure: Option<String>,
     pending_worker: Option<Entity>,
-    pending_inspect: Option<Entity>,
+    pub pending_inspect: Option<Entity>,
     /// The first program picked in `Mode::Fuse`, awaiting a second from
     /// `Mode::FuseSecond` before `Game::fuse_companions` is actually called.
-    pending_fuse_first: Option<Entity>,
-    pending_inventory_item: Option<ItemId>,
+    pub pending_fuse_first: Option<Entity>,
+    pub pending_inventory_item: Option<ItemId>,
     /// The recipe result picked in `Mode::Craft`, awaiting a quantity from
     /// `Mode::CraftQuantity` before `Game::craft` is actually called.
-    pending_craft: Option<ItemId>,
+    pub pending_craft: Option<ItemId>,
     /// Digits typed so far on the craft-quantity page.
-    craft_quantity_input: String,
+    pub craft_quantity_input: String,
     /// The trading post picked in `Mode::Trade`, awaiting a line-item pick
     /// from `Mode::TradeAction`.
-    pending_trade_structure: Option<Entity>,
+    pub pending_trade_structure: Option<Entity>,
     /// The sell/buy line item picked in `Mode::TradeAction`, awaiting a
     /// quantity from `Mode::TradeQuantity` before `Game::sell_item`/
     /// `Game::buy_item` is actually called.
-    pending_trade_choice: Option<TradeChoice>,
+    pub pending_trade_choice: Option<TradeChoice>,
     /// Digits typed so far on the trade-quantity page.
-    trade_quantity_input: String,
+    pub trade_quantity_input: String,
     /// How many screen characters render each world tile along each axis.
     pub zoom: u16,
     /// Which row is highlighted on the current numbered/lettered menu, for
-    /// Up/Down-arrow-plus-Enter navigation (see `App::selected_index`) —
-    /// on top of, not instead of, typing a row's own number/letter directly.
+    /// Up/Down-plus-Enter navigation (see `App::selected_index`) — on top
+    /// of, not instead of, typing a row's own number/letter directly.
     /// Reset to 0 every time a menu mode is entered.
     pub menu_selected: usize,
     /// The game tick (see `Game::current_tick`) as of the last autosave —
@@ -130,7 +149,7 @@ pub struct SaveEntry {
 }
 
 impl App {
-    fn new(assets_dir: PathBuf, saves_dir: PathBuf, history_path: PathBuf) -> Self {
+    pub fn new(assets_dir: PathBuf, saves_dir: PathBuf, history_path: PathBuf) -> Self {
         Self {
             mode: Mode::MainMenu,
             game: None,
@@ -288,60 +307,60 @@ impl App {
     /// move `menu_selected` (wrapping) and return `None`; Enter resolves to
     /// whatever `menu_selected` currently highlights. Any other key, or an
     /// empty menu, returns `None`.
-    fn selected_index(&mut self, code: KeyCode, len: usize) -> Option<usize> {
+    fn selected_index(&mut self, key: GameKey, len: usize) -> Option<usize> {
         if len == 0 {
             return None;
         }
-        if let KeyCode::Char(c) = code {
+        if let GameKey::Char(c) = key {
             return c.to_digit(10).and_then(|d| {
                 let d = d as usize;
                 (d >= 1 && d <= len).then_some(d - 1)
             });
         }
-        match code {
-            KeyCode::Up => {
+        match key {
+            GameKey::Up => {
                 self.menu_selected = (self.menu_selected + len - 1) % len;
                 None
             }
-            KeyCode::Down => {
+            GameKey::Down => {
                 self.menu_selected = (self.menu_selected + 1) % len;
                 None
             }
-            KeyCode::Enter => Some(self.menu_selected.min(len - 1)),
+            GameKey::Enter => Some(self.menu_selected.min(len - 1)),
             _ => None,
         }
     }
 
-    fn handle_key(&mut self, code: KeyCode) {
+    pub fn handle_key(&mut self, key: GameKey) {
         let mode_before = self.mode;
         match self.mode {
-            Mode::MainMenu => self.handle_main_menu_key(code),
-            Mode::LoadGame => self.handle_load_game_key(code),
-            Mode::SaveAction => self.handle_save_action_key(code),
-            Mode::DifficultyPick => self.handle_difficulty_key(code),
-            Mode::Playing => self.handle_playing_key(code),
-            Mode::Battle => self.handle_battle_key(code),
-            Mode::BattleCompanion => self.handle_battle_companion_key(code),
-            Mode::Build => self.handle_build_key(code),
-            Mode::BuildDirection => self.handle_build_direction_key(code),
-            Mode::Craft => self.handle_craft_key(code),
-            Mode::CraftQuantity => self.handle_craft_quantity_key(code),
-            Mode::Cronjob => self.handle_cronjob_key(code),
-            Mode::CronjobStructure => self.handle_cronjob_structure_key(code),
-            Mode::Guard => self.handle_guard_key(code),
-            Mode::GuardStructure => self.handle_guard_structure_key(code),
-            Mode::Symlink => self.handle_symlink_key(code),
-            Mode::InspectDirection => self.handle_inspect_direction_key(code),
-            Mode::InspectDetail => self.handle_inspect_detail_key(code),
-            Mode::Inventory => self.handle_inventory_key(code),
-            Mode::InventoryItemAction => self.handle_inventory_item_action_key(code),
-            Mode::Companion => self.handle_companion_key(code),
-            Mode::Fuse => self.handle_fuse_key(code),
-            Mode::FuseSecond => self.handle_fuse_second_key(code),
-            Mode::Trade => self.handle_trade_key(code),
-            Mode::TradeAction => self.handle_trade_action_key(code),
-            Mode::TradeQuantity => self.handle_trade_quantity_key(code),
-            Mode::Perks => self.handle_perks_key(code),
+            Mode::MainMenu => self.handle_main_menu_key(key),
+            Mode::LoadGame => self.handle_load_game_key(key),
+            Mode::SaveAction => self.handle_save_action_key(key),
+            Mode::DifficultyPick => self.handle_difficulty_key(key),
+            Mode::Playing => self.handle_playing_key(key),
+            Mode::Battle => self.handle_battle_key(key),
+            Mode::BattleCompanion => self.handle_battle_companion_key(key),
+            Mode::Build => self.handle_build_key(key),
+            Mode::BuildDirection => self.handle_build_direction_key(key),
+            Mode::Craft => self.handle_craft_key(key),
+            Mode::CraftQuantity => self.handle_craft_quantity_key(key),
+            Mode::Cronjob => self.handle_cronjob_key(key),
+            Mode::CronjobStructure => self.handle_cronjob_structure_key(key),
+            Mode::Guard => self.handle_guard_key(key),
+            Mode::GuardStructure => self.handle_guard_structure_key(key),
+            Mode::Symlink => self.handle_symlink_key(key),
+            Mode::InspectDirection => self.handle_inspect_direction_key(key),
+            Mode::InspectDetail => self.handle_inspect_detail_key(key),
+            Mode::Inventory => self.handle_inventory_key(key),
+            Mode::InventoryItemAction => self.handle_inventory_item_action_key(key),
+            Mode::Companion => self.handle_companion_key(key),
+            Mode::Fuse => self.handle_fuse_key(key),
+            Mode::FuseSecond => self.handle_fuse_second_key(key),
+            Mode::Trade => self.handle_trade_key(key),
+            Mode::TradeAction => self.handle_trade_action_key(key),
+            Mode::TradeQuantity => self.handle_trade_quantity_key(key),
+            Mode::Perks => self.handle_perks_key(key),
             Mode::Help => self.handle_help_key(),
             Mode::GameOver => self.handle_game_over_key(),
         }
@@ -354,16 +373,16 @@ impl App {
         self.maybe_autosave();
     }
 
-    fn handle_main_menu_key(&mut self, code: KeyCode) {
+    fn handle_main_menu_key(&mut self, key: GameKey) {
         let mut options = vec!['n'];
         if !self.list_saves().is_empty() {
             options.push('l');
         }
         options.push('q');
         let idx = self
-            .selected_index(code, options.len())
-            .or_else(|| match code {
-                KeyCode::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
+            .selected_index(key, options.len())
+            .or_else(|| match key {
+                GameKey::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
                 _ => None,
             });
         match idx.map(|i| options[i]) {
@@ -380,20 +399,20 @@ impl App {
         }
     }
 
-    fn handle_load_game_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_load_game_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.mode = Mode::MainMenu;
             return;
         }
         let saves = self.list_saves();
-        if let Some(idx) = self.selected_index(code, saves.len()) {
+        if let Some(idx) = self.selected_index(key, saves.len()) {
             self.pending_save = Some(saves[idx].path.clone());
             self.mode = Mode::SaveAction;
         }
     }
 
-    fn handle_save_action_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_save_action_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.pending_save = None;
             self.mode = Mode::LoadGame;
             return;
@@ -404,9 +423,9 @@ impl App {
         };
         let options = ['l', 'x'];
         let idx = self
-            .selected_index(code, options.len())
-            .or_else(|| match code {
-                KeyCode::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
+            .selected_index(key, options.len())
+            .or_else(|| match key {
+                GameKey::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
                 _ => None,
             });
         match idx.map(|i| options[i]) {
@@ -426,16 +445,16 @@ impl App {
         }
     }
 
-    fn handle_difficulty_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_difficulty_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.mode = Mode::MainMenu;
             return;
         }
         let options = ['p', 'f'];
         let idx = self
-            .selected_index(code, options.len())
-            .or_else(|| match code {
-                KeyCode::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
+            .selected_index(key, options.len())
+            .or_else(|| match key {
+                GameKey::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
                 _ => None,
             });
         match idx.map(|i| options[i]) {
@@ -445,71 +464,71 @@ impl App {
         }
     }
 
-    fn handle_playing_key(&mut self, code: KeyCode) {
-        match code {
-            KeyCode::Char('b') => {
+    fn handle_playing_key(&mut self, key: GameKey) {
+        match key {
+            GameKey::Char('b') => {
                 self.mode = Mode::Build;
                 return;
             }
-            KeyCode::Char('c') => {
+            GameKey::Char('c') => {
                 self.mode = Mode::Craft;
                 return;
             }
-            KeyCode::Char('w') => {
+            GameKey::Char('w') => {
                 self.mode = Mode::Cronjob;
                 return;
             }
-            KeyCode::Char('G') => {
+            GameKey::Char('G') => {
                 self.mode = Mode::Guard;
                 return;
             }
-            KeyCode::Char('u') => {
+            GameKey::Char('u') => {
                 self.mode = Mode::Symlink;
                 return;
             }
-            KeyCode::Char('i') => {
+            GameKey::Char('i') => {
                 self.mode = Mode::InspectDirection;
                 return;
             }
-            KeyCode::Char('v') => {
+            GameKey::Char('v') => {
                 self.mode = Mode::Inventory;
                 return;
             }
-            KeyCode::Char('p') => {
+            GameKey::Char('p') => {
                 self.mode = Mode::Companion;
                 return;
             }
-            KeyCode::Char('f') => {
+            GameKey::Char('f') => {
                 self.mode = Mode::Fuse;
                 return;
             }
-            KeyCode::Char('t') => {
+            GameKey::Char('t') => {
                 self.mode = Mode::Trade;
                 return;
             }
-            KeyCode::Char('x') => {
+            GameKey::Char('x') => {
                 self.mode = Mode::Perks;
                 return;
             }
-            KeyCode::Char('s') => {
+            GameKey::Char('s') => {
                 self.save_game();
                 return;
             }
-            KeyCode::Char('q') => {
+            GameKey::Char('q') => {
                 self.game = None;
                 self.status_line = None;
                 self.mode = Mode::MainMenu;
                 return;
             }
-            KeyCode::Char('?') => {
+            GameKey::Char('?') => {
                 self.mode = Mode::Help;
                 return;
             }
-            KeyCode::Char('+') | KeyCode::Char('=') => {
+            GameKey::Char('+') | GameKey::Char('=') => {
                 self.zoom = (self.zoom + 1).min(MAX_ZOOM);
                 return;
             }
-            KeyCode::Char('-') | KeyCode::Char('_') => {
+            GameKey::Char('-') | GameKey::Char('_') => {
                 self.zoom = self.zoom.saturating_sub(1).max(MIN_ZOOM);
                 return;
             }
@@ -518,36 +537,36 @@ impl App {
 
         let acted = {
             let Some(game) = &mut self.game else { return };
-            match code {
-                KeyCode::Up | KeyCode::Char('k') => {
+            match key {
+                GameKey::Up | GameKey::Char('k') => {
                     game.move_player(0, -1);
                     true
                 }
-                KeyCode::Down | KeyCode::Char('j') => {
+                GameKey::Down | GameKey::Char('j') => {
                     game.move_player(0, 1);
                     true
                 }
-                KeyCode::Left | KeyCode::Char('h') => {
+                GameKey::Left | GameKey::Char('h') => {
                     game.move_player(-1, 0);
                     true
                 }
-                KeyCode::Right | KeyCode::Char('l') => {
+                GameKey::Right | GameKey::Char('l') => {
                     game.move_player(1, 0);
                     true
                 }
-                KeyCode::Char('.') => {
+                GameKey::Char('.') => {
                     game.wait();
                     true
                 }
-                KeyCode::Char('e') => {
+                GameKey::Char('e') => {
                     game.eat(ItemId::PowerCell);
                     true
                 }
-                KeyCode::Char('r') => {
+                GameKey::Char('r') => {
                     game.rest();
                     true
                 }
-                KeyCode::Char('g') => {
+                GameKey::Char('g') => {
                     game.forage();
                     true
                 }
@@ -569,8 +588,8 @@ impl App {
         self.check_game_over();
     }
 
-    fn handle_battle_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Char('c') {
+    fn handle_battle_key(&mut self, key: GameKey) {
+        if key == GameKey::Char('c') {
             let Some(game) = &mut self.game else { return };
             let party = game.player_status().companions;
             match party.len() {
@@ -590,10 +609,10 @@ impl App {
 
         let still_active = {
             let Some(game) = &mut self.game else { return };
-            match code {
-                KeyCode::Char('a') => game.battle_attack(),
-                KeyCode::Char('d') => game.battle_decompile(),
-                KeyCode::Char('j') => game.battle_flee(),
+            match key {
+                GameKey::Char('a') => game.battle_attack(),
+                GameKey::Char('d') => game.battle_decompile(),
+                GameKey::Char('j') => game.battle_flee(),
                 _ => return,
             }
             game.has_active_battle()
@@ -607,14 +626,14 @@ impl App {
     /// Picks which party member acts this round when there's more than one
     /// active companion (a single companion is commanded directly from
     /// `handle_battle_key` with no extra step).
-    fn handle_battle_companion_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_battle_companion_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.mode = Mode::Battle;
             return;
         }
         let Some(game) = &self.game else { return };
         let party = game.player_status().companions;
-        let Some(idx) = self.selected_index(code, party.len()) else {
+        let Some(idx) = self.selected_index(key, party.len()) else {
             return;
         };
         let entity = party[idx].entity;
@@ -629,27 +648,27 @@ impl App {
         self.check_game_over();
     }
 
-    fn handle_build_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_build_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.mode = Mode::Playing;
             return;
         }
         let Some(game) = &self.game else { return };
         let defs = game.structure_defs();
-        if let Some(idx) = self.selected_index(code, defs.len()) {
+        if let Some(idx) = self.selected_index(key, defs.len()) {
             self.pending_structure = Some(defs[idx].id.clone());
             self.mode = Mode::BuildDirection;
         }
     }
 
-    fn handle_craft_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_craft_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.mode = Mode::Playing;
             return;
         }
         let Some(game) = &mut self.game else { return };
         let recipes = game.craft_recipes();
-        if let Some(idx) = self.selected_index(code, recipes.len()) {
+        if let Some(idx) = self.selected_index(key, recipes.len()) {
             self.pending_craft = Some(recipes[idx].result);
             self.craft_quantity_input.clear();
             self.mode = Mode::CraftQuantity;
@@ -660,20 +679,20 @@ impl App {
     /// `pending_craft` to make before actually calling `Game::craft`. `[F]`
     /// is a shortcut for 5 at once, `[M]` for the most affordable right now
     /// (see `Game::max_craftable`) — both bypass typing digits and Enter.
-    fn handle_craft_quantity_key(&mut self, code: KeyCode) {
-        match code {
-            KeyCode::Esc => {
+    fn handle_craft_quantity_key(&mut self, key: GameKey) {
+        match key {
+            GameKey::Esc => {
                 self.pending_craft = None;
                 self.craft_quantity_input.clear();
                 self.mode = Mode::Craft;
             }
-            KeyCode::Backspace => {
+            GameKey::Backspace => {
                 self.craft_quantity_input.pop();
             }
-            KeyCode::Char(c) if c.is_ascii_digit() && self.craft_quantity_input.len() < 4 => {
+            GameKey::Char(c) if c.is_ascii_digit() && self.craft_quantity_input.len() < 4 => {
                 self.craft_quantity_input.push(c);
             }
-            KeyCode::Char('f') | KeyCode::Char('F') => {
+            GameKey::Char('f') | GameKey::Char('F') => {
                 let Some(result) = self.pending_craft.take() else {
                     self.mode = Mode::Playing;
                     return;
@@ -681,7 +700,7 @@ impl App {
                 self.craft_quantity_input.clear();
                 self.commit_craft(result, 5);
             }
-            KeyCode::Char('m') | KeyCode::Char('M') => {
+            GameKey::Char('m') | GameKey::Char('M') => {
                 let Some(result) = self.pending_craft.take() else {
                     self.mode = Mode::Playing;
                     return;
@@ -702,7 +721,7 @@ impl App {
                 }
                 self.commit_craft(result, max);
             }
-            KeyCode::Enter => {
+            GameKey::Enter => {
                 let Some(result) = self.pending_craft.take() else {
                     self.mode = Mode::Playing;
                     return;
@@ -737,17 +756,17 @@ impl App {
         self.mode = Mode::Playing;
     }
 
-    fn handle_build_direction_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_build_direction_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.pending_structure = None;
             self.mode = Mode::Playing;
             return;
         }
-        let dir = match code {
-            KeyCode::Up | KeyCode::Char('k') => Some((0, -1)),
-            KeyCode::Down | KeyCode::Char('j') => Some((0, 1)),
-            KeyCode::Left | KeyCode::Char('h') => Some((-1, 0)),
-            KeyCode::Right | KeyCode::Char('l') => Some((1, 0)),
+        let dir = match key {
+            GameKey::Up | GameKey::Char('k') => Some((0, -1)),
+            GameKey::Down | GameKey::Char('j') => Some((0, 1)),
+            GameKey::Left | GameKey::Char('h') => Some((-1, 0)),
+            GameKey::Right | GameKey::Char('l') => Some((1, 0)),
             _ => None,
         };
         let Some((dx, dy)) = dir else { return };
@@ -764,8 +783,8 @@ impl App {
         self.mode = Mode::Playing;
     }
 
-    fn handle_cronjob_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_cronjob_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.mode = Mode::Playing;
             return;
         }
@@ -775,14 +794,14 @@ impl App {
             .into_iter()
             .filter(|e| e.is_tamed)
             .collect();
-        if let Some(idx) = self.selected_index(code, workers.len()) {
+        if let Some(idx) = self.selected_index(key, workers.len()) {
             self.pending_worker = Some(workers[idx].entity);
             self.mode = Mode::CronjobStructure;
         }
     }
 
-    fn handle_cronjob_structure_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_cronjob_structure_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.pending_worker = None;
             self.mode = Mode::Playing;
             return;
@@ -797,7 +816,7 @@ impl App {
             .into_iter()
             .filter(|e| e.can_work)
             .collect();
-        if let Some(idx) = self.selected_index(code, structures.len()) {
+        if let Some(idx) = self.selected_index(key, structures.len()) {
             let Some(game) = &mut self.game else { return };
             match game.assign_cronjob(worker, structures[idx].entity) {
                 Ok(()) => self.status_line = None,
@@ -808,8 +827,8 @@ impl App {
         }
     }
 
-    fn handle_guard_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_guard_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.mode = Mode::Playing;
             return;
         }
@@ -819,14 +838,14 @@ impl App {
             .into_iter()
             .filter(|e| e.is_tamed)
             .collect();
-        if let Some(idx) = self.selected_index(code, workers.len()) {
+        if let Some(idx) = self.selected_index(key, workers.len()) {
             self.pending_worker = Some(workers[idx].entity);
             self.mode = Mode::GuardStructure;
         }
     }
 
-    fn handle_guard_structure_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_guard_structure_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.pending_worker = None;
             self.mode = Mode::Playing;
             return;
@@ -841,7 +860,7 @@ impl App {
             .into_iter()
             .filter(|e| e.is_structure)
             .collect();
-        if let Some(idx) = self.selected_index(code, structures.len()) {
+        if let Some(idx) = self.selected_index(key, structures.len()) {
             let Some(game) = &mut self.game else { return };
             match game.assign_guard(worker, structures[idx].entity) {
                 Ok(()) => self.status_line = None,
@@ -855,14 +874,14 @@ impl App {
     /// Lists every deployed symlink-capable structure (e.g. Home) anywhere
     /// on the map — not scan-radius-limited like the build/cronjob
     /// menus — and teleports the player to the picked one.
-    fn handle_symlink_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_symlink_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.mode = Mode::Playing;
             return;
         }
         let Some(game) = &mut self.game else { return };
         let targets = game.symlink_targets();
-        if let Some(idx) = self.selected_index(code, targets.len()) {
+        if let Some(idx) = self.selected_index(key, targets.len()) {
             let Some(game) = &mut self.game else { return };
             match game.use_symlink(targets[idx].entity) {
                 Ok(()) => self.status_line = None,
@@ -875,14 +894,14 @@ impl App {
     /// Lists every tamed program you own, wherever it is — pressing a party
     /// member's number stands it down, pressing any other program's number
     /// adds it to the party (up to `MAX_PARTY_SIZE` at once).
-    fn handle_companion_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_companion_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.mode = Mode::Playing;
             return;
         }
         let Some(game) = &mut self.game else { return };
         let candidates = game.owned_pets();
-        if let Some(idx) = self.selected_index(code, candidates.len()) {
+        if let Some(idx) = self.selected_index(key, candidates.len()) {
             let candidate = &candidates[idx];
             let Some(game) = &mut self.game else { return };
             if candidate.is_companion {
@@ -898,8 +917,8 @@ impl App {
     }
 
     /// Picks the first of two tamed programs to fuse together.
-    fn handle_fuse_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_fuse_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.mode = Mode::Playing;
             return;
         }
@@ -909,7 +928,7 @@ impl App {
             .into_iter()
             .filter(|e| e.is_tamed)
             .collect();
-        if let Some(idx) = self.selected_index(code, candidates.len()) {
+        if let Some(idx) = self.selected_index(key, candidates.len()) {
             self.pending_fuse_first = Some(candidates[idx].entity);
             self.mode = Mode::FuseSecond;
         }
@@ -917,8 +936,8 @@ impl App {
 
     /// Picks the second program to fuse with the one from `handle_fuse_key`,
     /// then actually runs the fusion.
-    fn handle_fuse_second_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_fuse_second_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.pending_fuse_first = None;
             self.mode = Mode::Playing;
             return;
@@ -933,7 +952,7 @@ impl App {
             .into_iter()
             .filter(|e| e.is_tamed && e.entity != first)
             .collect();
-        if let Some(idx) = self.selected_index(code, candidates.len()) {
+        if let Some(idx) = self.selected_index(key, candidates.len()) {
             let Some(game) = &mut self.game else { return };
             match game.fuse_companions(first, candidates[idx].entity) {
                 Ok(()) => self.status_line = None,
@@ -945,8 +964,8 @@ impl App {
     }
 
     /// Picks a nearby trading-post structure to open a trade session with.
-    fn handle_trade_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_trade_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.mode = Mode::Playing;
             return;
         }
@@ -956,7 +975,7 @@ impl App {
             .into_iter()
             .filter(|e| e.can_trade)
             .collect();
-        if let Some(idx) = self.selected_index(code, structures.len()) {
+        if let Some(idx) = self.selected_index(key, structures.len()) {
             self.pending_trade_structure = Some(structures[idx].entity);
             self.mode = Mode::TradeAction;
         }
@@ -964,8 +983,8 @@ impl App {
 
     /// Picks a sell (from inventory) or buy (from the structure's trade
     /// list) line item — sell offers are numbered first, then buy offers.
-    fn handle_trade_action_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_trade_action_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.pending_trade_structure = None;
             self.mode = Mode::Trade;
             return;
@@ -988,7 +1007,7 @@ impl App {
             .collect();
         let buy_items: Vec<ItemId> = trade.buy.iter().map(|(item, _)| *item).collect();
         let total = sell_items.len() + buy_items.len();
-        if let Some(idx) = self.selected_index(code, total) {
+        if let Some(idx) = self.selected_index(key, total) {
             let choice = if idx < sell_items.len() {
                 TradeChoice::Sell(sell_items[idx])
             } else {
@@ -1001,20 +1020,20 @@ impl App {
     }
 
     /// Types a quantity for the pending sell/buy line item; Enter commits it.
-    fn handle_trade_quantity_key(&mut self, code: KeyCode) {
-        match code {
-            KeyCode::Esc => {
+    fn handle_trade_quantity_key(&mut self, key: GameKey) {
+        match key {
+            GameKey::Esc => {
                 self.pending_trade_choice = None;
                 self.trade_quantity_input.clear();
                 self.mode = Mode::TradeAction;
             }
-            KeyCode::Backspace => {
+            GameKey::Backspace => {
                 self.trade_quantity_input.pop();
             }
-            KeyCode::Char(c) if c.is_ascii_digit() && self.trade_quantity_input.len() < 4 => {
+            GameKey::Char(c) if c.is_ascii_digit() && self.trade_quantity_input.len() < 4 => {
                 self.trade_quantity_input.push(c);
             }
-            KeyCode::Enter => {
+            GameKey::Enter => {
                 let Some(choice) = self.pending_trade_choice.take() else {
                     self.mode = Mode::Playing;
                     return;
@@ -1053,13 +1072,13 @@ impl App {
 
     /// Picks a numbered perk to unlock; stays open so multiple can be
     /// unlocked in one visit if there are enough Perk Points.
-    fn handle_perks_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_perks_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.mode = Mode::Playing;
             return;
         }
         let perks = feral_processes_engine::Perk::all();
-        if let Some(idx) = self.selected_index(code, perks.len()) {
+        if let Some(idx) = self.selected_index(key, perks.len()) {
             let Some(game) = &mut self.game else { return };
             match game.unlock_perk(perks[idx]) {
                 Ok(()) => self.status_line = None,
@@ -1071,16 +1090,16 @@ impl App {
     /// Picks a direction (arrows/hjkl) and inspects the first creature the
     /// engine finds stepping that way from the player, rather than picking
     /// from a numbered list of grid coordinates.
-    fn handle_inspect_direction_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_inspect_direction_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.mode = Mode::Playing;
             return;
         }
-        let dir = match code {
-            KeyCode::Up | KeyCode::Char('k') => Some((0, -1)),
-            KeyCode::Down | KeyCode::Char('j') => Some((0, 1)),
-            KeyCode::Left | KeyCode::Char('h') => Some((-1, 0)),
-            KeyCode::Right | KeyCode::Char('l') => Some((1, 0)),
+        let dir = match key {
+            GameKey::Up | GameKey::Char('k') => Some((0, -1)),
+            GameKey::Down | GameKey::Char('j') => Some((0, 1)),
+            GameKey::Left | GameKey::Char('h') => Some((-1, 0)),
+            GameKey::Right | GameKey::Char('l') => Some((1, 0)),
             _ => None,
         };
         let Some((dx, dy)) = dir else { return };
@@ -1098,7 +1117,7 @@ impl App {
         }
     }
 
-    fn handle_inspect_detail_key(&mut self, _code: KeyCode) {
+    fn handle_inspect_detail_key(&mut self, _key: GameKey) {
         self.pending_inspect = None;
         self.mode = Mode::Playing;
     }
@@ -1106,15 +1125,15 @@ impl App {
     /// Equipped slots are numbered 1-3 (Weapon/Armor/Module) and unequip
     /// immediately when pressed; unequipped inventory items start at 4 and
     /// open `Mode::InventoryItemAction` for the selected item.
-    fn handle_inventory_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_inventory_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.mode = Mode::Playing;
             return;
         }
         let Some(game) = &self.game else { return };
         let inventory = game.player_status().inventory;
         let total = 3 + inventory.len();
-        let Some(idx) = self.selected_index(code, total) else {
+        let Some(idx) = self.selected_index(key, total) else {
             return;
         };
         let slot = match idx {
@@ -1137,8 +1156,8 @@ impl App {
         }
     }
 
-    fn handle_inventory_item_action_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Esc {
+    fn handle_inventory_item_action_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
             self.pending_inventory_item = None;
             self.mode = Mode::Inventory;
             return;
@@ -1152,9 +1171,9 @@ impl App {
             actions.insert(0, 'e');
         }
         let idx = self
-            .selected_index(code, actions.len())
-            .or_else(|| match code {
-                KeyCode::Char(c) => actions.iter().position(|&o| o == c.to_ascii_lowercase()),
+            .selected_index(key, actions.len())
+            .or_else(|| match key {
+                GameKey::Char(c) => actions.iter().position(|&o| o == c.to_ascii_lowercase()),
                 _ => None,
             });
         let Some(game) = &mut self.game else { return };
@@ -1188,47 +1207,6 @@ impl App {
         self.status_line = None;
         self.mode = Mode::MainMenu;
     }
-
-    fn run(&mut self, terminal: &mut ratatui::DefaultTerminal) -> io::Result<()> {
-        while !self.quit {
-            terminal.draw(|f| ui::render(f, self))?;
-            if event::poll(Duration::from_millis(200))?
-                && let Event::Key(key) = event::read()?
-                && key.kind == KeyEventKind::Press
-            {
-                self.handle_key(key.code);
-            }
-        }
-        Ok(())
-    }
-}
-
-fn main() -> io::Result<()> {
-    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let repo_root = crate_dir
-        .parent()
-        .and_then(|p| p.parent())
-        .unwrap_or(&crate_dir)
-        .to_path_buf();
-    let assets_dir = repo_root.join("assets");
-    let saves_dir = repo_root.join("saves");
-    std::fs::create_dir_all(&saves_dir)?;
-    // One-time migration: earlier builds kept a single save at
-    // `save.bin`. Move it into the new saves directory (under its old
-    // name) so it still shows up in the load list instead of silently
-    // disappearing — even if it turns out to be from an incompatible
-    // save version, it's still visible there and deletable.
-    let legacy_save = repo_root.join("save.bin");
-    if legacy_save.exists() {
-        let _ = std::fs::rename(&legacy_save, saves_dir.join("save.bin"));
-    }
-    let history_path = repo_root.join("run_history.log");
-
-    let mut terminal = ratatui::init();
-    let mut app = App::new(assets_dir, saves_dir, history_path);
-    let result = app.run(&mut terminal);
-    ratatui::restore();
-    result
 }
 
 #[cfg(test)]
@@ -1237,9 +1215,9 @@ mod tests {
 
     fn test_app(seed: u32) -> App {
         let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
-        let saves_dir = std::env::temp_dir().join(format!("feral_processes_tui_test_{seed}_saves"));
+        let saves_dir = std::env::temp_dir().join(format!("feral_processes_appcore_test_{seed}_saves"));
         let history_path =
-            std::env::temp_dir().join(format!("feral_processes_tui_test_{seed}.log"));
+            std::env::temp_dir().join(format!("feral_processes_appcore_test_{seed}.log"));
         let mut app = App::new(assets_dir.clone(), saves_dir, history_path);
         app.game = Game::new(seed, DifficultyMode::Forgiving, &assets_dir).ok();
         app.mode = Mode::Playing;
@@ -1250,11 +1228,11 @@ mod tests {
     fn starting_a_new_game_creates_a_listed_save_that_can_be_loaded_and_deleted() {
         let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
         let saves_dir = std::env::temp_dir()
-            .join(format!("feral_processes_tui_test_savelist_{}", std::process::id()));
+            .join(format!("feral_processes_appcore_test_savelist_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&saves_dir);
         std::fs::create_dir_all(&saves_dir).unwrap();
         let history_path = std::env::temp_dir()
-            .join(format!("feral_processes_tui_test_savelist_{}.log", std::process::id()));
+            .join(format!("feral_processes_appcore_test_savelist_{}.log", std::process::id()));
         let mut app = App::new(assets_dir, saves_dir.clone(), history_path);
 
         app.start_new_game(DifficultyMode::Forgiving);
@@ -1266,20 +1244,20 @@ mod tests {
         // Back to the main menu, then load that save from the list.
         app.game = None;
         app.mode = Mode::MainMenu;
-        app.handle_key(KeyCode::Char('l'));
+        app.handle_key(GameKey::Char('l'));
         assert!(app.mode == Mode::LoadGame, "'l' should open the load list once a save exists");
-        app.handle_key(KeyCode::Char('1'));
+        app.handle_key(GameKey::Char('1'));
         assert!(app.mode == Mode::SaveAction, "picking a save should open the load/delete choice");
-        app.handle_key(KeyCode::Char('l'));
+        app.handle_key(GameKey::Char('l'));
         assert!(app.mode == Mode::Playing, "loading should return to Playing");
         assert!(app.game.is_some(), "loading should populate the game");
 
         // Delete it.
         app.game = None;
         app.mode = Mode::MainMenu;
-        app.handle_key(KeyCode::Char('l'));
-        app.handle_key(KeyCode::Char('1'));
-        app.handle_key(KeyCode::Char('x'));
+        app.handle_key(GameKey::Char('l'));
+        app.handle_key(GameKey::Char('1'));
+        app.handle_key(GameKey::Char('x'));
         assert!(app.list_saves().is_empty(), "deleting the only save should empty the list");
 
         let _ = std::fs::remove_dir_all(&saves_dir);
@@ -1319,16 +1297,16 @@ mod tests {
         // exercise the new arrow-navigation path and because a menu with
         // more than 9 rows can't be reached by a single digit at all.
         'outer: for n in 0..structure_count_in_menu {
-            for dir in [KeyCode::Up, KeyCode::Down, KeyCode::Left, KeyCode::Right] {
+            for dir in [GameKey::Up, GameKey::Down, GameKey::Left, GameKey::Right] {
                 let before = structure_count(&mut app);
 
-                app.handle_key(KeyCode::Char('b'));
+                app.handle_key(GameKey::Char('b'));
                 assert!(app.mode == Mode::Build, "'b' should open the build menu");
 
                 for _ in 0..n {
-                    app.handle_key(KeyCode::Down);
+                    app.handle_key(GameKey::Down);
                 }
-                app.handle_key(KeyCode::Enter);
+                app.handle_key(GameKey::Enter);
                 assert!(
                     app.mode == Mode::BuildDirection,
                     "picking structure {n} via Down+Enter should move to the direction picker"

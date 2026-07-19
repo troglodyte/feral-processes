@@ -1,10 +1,9 @@
 [package]
-name = "feral-processes-tui"
+name = "feral-processes-gui"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-crossterm = "0.29.0"
 feral-processes-app-core = { version = "0.1.0", path = "../app-core" }
 feral-processes-engine = { version = "0.1.0", path = "../engine" }
-ratatui = "0.30.2"
+macroquad = "0.4"

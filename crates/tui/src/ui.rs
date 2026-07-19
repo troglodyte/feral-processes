@@ -4,12 +4,11 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Gauge, Paragraph, Wrap};
 
+use feral_processes_app_core::{App, Mode, MENU_SCAN_RADIUS, TradeChoice};
 use feral_processes_engine::components::{EquippedItem, GlyphColor};
 use feral_processes_engine::items::ItemId;
 use feral_processes_engine::world::{Biome, Tile};
 use feral_processes_engine::{EntityView, Game, PetInfo, PlayerStatus};
-
-use crate::{App, Mode};
 
 pub fn render(f: &mut Frame, app: &mut App) {
     match app.mode {
@@ -496,7 +495,7 @@ fn render_cronjob_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usi
     let popup = centered_rect(60, 50, area);
     f.render_widget(Clear, popup);
     let workers: Vec<_> = game
-        .view_entities(crate::MENU_SCAN_RADIUS, crate::MENU_SCAN_RADIUS)
+        .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
         .into_iter()
         .filter(|e| e.is_tamed)
         .collect();
@@ -537,7 +536,7 @@ fn render_cronjob_structure_menu(f: &mut Frame, area: Rect, game: &mut Game, sel
     let popup = centered_rect(60, 50, area);
     f.render_widget(Clear, popup);
     let structures: Vec<_> = game
-        .view_entities(crate::MENU_SCAN_RADIUS, crate::MENU_SCAN_RADIUS)
+        .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
         .into_iter()
         .filter(|e| e.can_work)
         .collect();
@@ -580,7 +579,7 @@ fn render_guard_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize
     let popup = centered_rect(60, 50, area);
     f.render_widget(Clear, popup);
     let workers: Vec<_> = game
-        .view_entities(crate::MENU_SCAN_RADIUS, crate::MENU_SCAN_RADIUS)
+        .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
         .into_iter()
         .filter(|e| e.is_tamed)
         .collect();
@@ -621,7 +620,7 @@ fn render_guard_structure_menu(f: &mut Frame, area: Rect, game: &mut Game, selec
     let popup = centered_rect(60, 50, area);
     f.render_widget(Clear, popup);
     let structures: Vec<_> = game
-        .view_entities(crate::MENU_SCAN_RADIUS, crate::MENU_SCAN_RADIUS)
+        .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
         .into_iter()
         .filter(|e| e.is_structure)
         .collect();
@@ -745,7 +744,7 @@ fn render_fuse_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize)
     let popup = centered_rect(60, 50, area);
     f.render_widget(Clear, popup);
     let candidates: Vec<_> = game
-        .view_entities(crate::MENU_SCAN_RADIUS, crate::MENU_SCAN_RADIUS)
+        .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
         .into_iter()
         .filter(|e| e.is_tamed)
         .collect();
@@ -784,7 +783,7 @@ fn render_fuse_second_menu(
     let popup = centered_rect(60, 50, area);
     f.render_widget(Clear, popup);
     let Some(first) = first else { return };
-    let nearby = game.view_entities(crate::MENU_SCAN_RADIUS, crate::MENU_SCAN_RADIUS);
+    let nearby = game.view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS);
     let first_label = nearby
         .iter()
         .find(|e| e.entity == first)
@@ -823,7 +822,7 @@ fn render_trade_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize
     let popup = centered_rect(60, 50, area);
     f.render_widget(Clear, popup);
     let structures: Vec<_> = game
-        .view_entities(crate::MENU_SCAN_RADIUS, crate::MENU_SCAN_RADIUS)
+        .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
         .into_iter()
         .filter(|e| e.can_trade)
         .collect();
@@ -932,7 +931,7 @@ fn render_trade_quantity_menu(
     area: Rect,
     game: &mut Game,
     structure: Option<feral_processes_engine::Entity>,
-    choice: Option<crate::TradeChoice>,
+    choice: Option<TradeChoice>,
     quantity_input: &str,
 ) {
     let popup = centered_rect(60, 30, area);
@@ -945,8 +944,8 @@ fn render_trade_quantity_menu(
     };
 
     let (verb, item, unit_price) = match choice {
-        crate::TradeChoice::Sell(item) => ("Sell", item, trade.sell_rate),
-        crate::TradeChoice::Buy(item) => {
+        TradeChoice::Sell(item) => ("Sell", item, trade.sell_rate),
+        TradeChoice::Buy(item) => {
             let price = trade
                 .buy
                 .iter()

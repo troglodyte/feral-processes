@@ -1,14 +1,16 @@
 use bevy_ecs::prelude::*;
 
-use crate::components::{Needs, Player, Position, Stats, Structure};
+use crate::components::{Experience, Needs, Player, Position, Stats, Structure};
+use crate::progression;
 use crate::resources::{DifficultyMode, GameClock, GameOver, MessageLog};
 
 /// Gates what happens when the player's HP hits zero. Permadeath ends the
 /// run (the caller is responsible for writing the history log once);
 /// Forgiving mode is a soft respawn with a penalty, warping the player to
-/// the nearest built structure if one exists (in place otherwise).
+/// the nearest built structure if one exists (in place otherwise). Either
+/// way, a mild XP setback applies too (see `progression::apply_setback_xp_penalty`).
 pub fn death_handling_system(
-    mut player_query: Query<(&mut Stats, &mut Needs, &mut Position), With<Player>>,
+    mut player_query: Query<(&mut Stats, &mut Needs, &mut Position, &mut Experience), With<Player>>,
     structure_query: Query<&Position, (With<Structure>, Without<Player>)>,
     difficulty: Res<DifficultyMode>,
     clock: Res<GameClock>,
@@ -18,7 +20,7 @@ pub fn death_handling_system(
     if game_over.reason.is_some() {
         return;
     }
-    for (mut stats, mut needs, mut pos) in &mut player_query {
+    for (mut stats, mut needs, mut pos, mut exp) in &mut player_query {
         if stats.hp > 0 {
             continue;
         }
@@ -43,6 +45,10 @@ pub fn death_handling_system(
                     log.push("Your connection is forcibly cut. You reboot, battered but online.");
                 }
             }
+        }
+        let xp_lost = progression::apply_setback_xp_penalty(&mut exp);
+        if xp_lost > 0 {
+            log.push(format!("The crash costs you {xp_lost} XP."));
         }
     }
 }
@@ -72,6 +78,7 @@ mod tests {
                 Position { x: 0, y: 0 },
                 Stats { hp: 0, max_hp: 10, atk: 1, def: 1 },
                 Needs { hunger: 0.0, fatigue: 0.0 },
+                Experience { level: 2, xp: 10, xp_to_next: 40 },
             ))
             .id();
         world.spawn((
@@ -89,6 +96,9 @@ mod tests {
         assert_eq!(pos, Position { x: 1, y: 1 }, "should warp to the nearest structure, not the farther one");
         let stats = world.get::<Stats>(player).unwrap();
         assert_eq!(stats.hp, 5, "forgiving death should still halve HP");
+        let exp = world.get::<Experience>(player).unwrap();
+        assert_eq!(exp.xp, 8, "death should also apply the mild XP setback penalty (20% of 10)");
+        assert_eq!(exp.level, 2, "the XP setback should never de-level the player");
     }
 
     #[test]
@@ -105,6 +115,7 @@ mod tests {
                 Position { x: 3, y: 4 },
                 Stats { hp: 0, max_hp: 10, atk: 1, def: 1 },
                 Needs { hunger: 0.0, fatigue: 0.0 },
+                Experience { level: 2, xp: 10, xp_to_next: 40 },
             ))
             .id();
 

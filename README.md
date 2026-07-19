@@ -42,8 +42,17 @@ Game** and pick a difficulty:
   restored) but you keep going, rebooting at the nearest deployed structure
   (or in place, if you haven't built anything yet).
 
+Either way, flatlining also docks a mild (20%) chunk of your current
+in-level XP — never a de-level, just a setback. Jacking out of a fight
+(`j`) costs the same modest XP setback, so fleeing isn't entirely free
+either, but it's a lot cheaper than dying.
+
 Progress saves to `save.bin` in the repo root (`s` to save, `L` from the
-main menu to reload).
+main menu to reload). It also autosaves to that same file every 50 game
+ticks (paced against game time, not wall-clock time, so it's the same
+whether you're playing fast or slow) — silently, so it won't cover up a
+status message from whatever you just did, unless the autosave itself
+fails.
 
 ### Controls
 
@@ -54,13 +63,13 @@ main menu to reload).
 | `e` | Drain a Power Cell (restores Power) |
 | `r` | Recharge overnight (restores Fatigue and Integrity, costs Power) |
 | `g` | Scan the sector for Core Fragments |
-| `c` | Open the compile menu (compile an ICE Breaker — 3 Core Fragments — a Power Cell — 2 Core Fragments — and any future recipes) |
+| `c` | Open the compile menu (compile an ICE Breaker — 3 Core Fragments — a Power Cell — 2 Core Fragments — and any future recipes). Then pick a quantity: type digits and Enter, or `[F]` for 5 at once, or `[M]` for the most you can currently afford |
 | `b` | Deploy a structure |
 | `w` | Assign a compiled program to a cronjob (work a structure) |
 | `u` | Use symlink: instantly teleport to a deployed symlink structure (e.g. Home), for its item cost |
 | `i` | Inspect: pick a direction, see stats/moves/decompile odds for the first program that way (no intrusion) |
-| `v` | Inventory/equipment: equip, unequip, drop, destroy items |
-| `p` | Manage your party: add/stand down nearby compiled programs (max 3) |
+| `v` | Inventory/equipment: equip, unequip, erase items |
+| `p` | Your pets: full stats (level, HP, Attack, Defense) for every compiled program you own, wherever it is — add/stand down party members (max 3) here too |
 | `f` | Fuse two nearby compiled programs into one stronger one |
 | `t` | Trade with a nearby Black Market: sell items, buy consumables |
 | `x` | Perks: spend Perk Points on permanent passive unlocks |
@@ -69,6 +78,11 @@ main menu to reload).
 | `+` / `-` | Zoom the grid in/out |
 | `?` | In-game help / full control list |
 
+Every numbered or lettered menu (compile, deploy, cronjob, inventory,
+party, fuse, trade, perks, and so on) can also be navigated with Up/Down
+arrows and confirmed with Enter — that's on top of, not instead of, typing
+a row's own number or letter directly.
+
 **During an intrusion (battle):**
 
 | Key | Action |
@@ -76,7 +90,7 @@ main menu to reload).
 | `a` | Attack |
 | `d` | Decompile (attempt to compile/tame the program — needs an ICE Breaker) |
 | `c` | Command your active companion to attack (only shown if you have one) |
-| `j` | Jack out (flee) |
+| `j` | Jack out (flee) — costs a mild XP setback, same as flatlining |
 
 ### The loop
 
@@ -85,6 +99,22 @@ deploy structures (build menu) to put compiled programs to work gathering
 resources for you. Defeating or decompiling a program grants XP; compiled
 programs also gain XP from completed work cycles. Leveling up grows stats
 and fully restores Integrity.
+
+Every hostile program on the map is colored by an old-school "con" system,
+scaled to your *current* power (max Integrity + Attack + Defense) rather
+than a fixed per-species color — the same program can read Green early on
+and Red again in a deeper zone once stat doubling catches up to you:
+
+| Color | Meaning |
+| --- | --- |
+| Green | Much weaker than you — easy |
+| Yellow | Roughly an even match |
+| Orange | Notably tougher than you |
+| Red | Far stronger — dangerous |
+| Purple (Magenta) | A boss, regardless of stats |
+
+Tamed/companion programs and structures keep their own fixed colors — only
+hostiles get this treatment.
 
 ### Getting started: building and running cronjobs
 
@@ -114,7 +144,7 @@ creature to work" mechanic.
    Core Fragments right now).
 3. **Schedule a cronjob with `w`** — pick a compiled (tamed) program, then
    the structure to assign it to. This only works on structures with a
-   `work` recipe (Mining Node, Power Conduit, Compiler, Fabricator);
+   `work` recipe (Mining Node, Power Conduit, Compiler, Fabricator, Armory);
    Terminal and Data Cache aren't assignable this way. Both pickers show
    status: the program picker flags `(active companion)` or
    `(on a cronjob: <structure>)`, and the structure picker flags
@@ -124,12 +154,14 @@ creature to work" mechanic.
    where you are or what you're doing:
    - Each tick, the assigned program's progress advances by 1.
    - Once progress reaches the structure's `ticks_per_unit` (Mining Node 5,
-     Power Conduit 6, Compiler 8, Fabricator 12), one unit of output drops
-     straight into *your* inventory, progress resets, and the worker gains
-     5 flat XP (enough to level up mid-cycle sometimes).
-   - Every structure you build starts with a **fixed reserve of 20 units**.
-     Each completed cycle consumes one; once it hits 0 the structure goes
-     idle and the assigned worker just sits there until reassigned.
+     Power Conduit 6, Compiler 8, Fabricator 12, Armory 12), one unit of
+     output drops straight into *your* inventory, progress resets, and the
+     worker gains 5 flat XP (enough to level up mid-cycle sometimes).
+   - Every worked structure holds a stock capped at 5 units (the `capacity`
+     in its `.ron` file, moddable per-structure). Each completed cycle draws
+     one down; once mined to 0 it immediately refills back to capacity and
+     the worker keeps going — a worked node is an infinite, bursty resource,
+     never a one-time deposit you can exhaust.
    - Terminal works differently: it's **passive**, not cronjob-based — it
      auto-cooks a Core Fragment into a Power Cell every 15 ticks whenever
      you're standing within 2 tiles, no assignment needed.
@@ -212,23 +244,24 @@ a tougher, slightly stronger one from a harder species or boss.
   can only ever have one item per slot.
 - **Unequip**: press the number of an occupied slot (1 Weapon, 2 Armor, 3
   Module) directly from the main inventory screen.
-- **Drop** / **Destroy**: select a numbered inventory item, then `[D]` or
-  `[X]`. Both permanently remove the item — they're functionally identical,
-  just distinct log wording; there's no way to recover a dropped item from
-  the world.
+- **Erase**: select a numbered inventory item, then `[X]`. Permanently
+  removes it from your inventory — there's no way to get it back.
 - An equipped item's stat bonus is added the moment you equip it and
   removed the moment you unequip it — it shows up immediately in the status
   panel and the intrusion screen.
 
 ### Companions
 
-Press `p` to open your party screen: up to **3** nearby compiled programs
-can fight alongside you at once.
+Press `p` to open your pets screen: it lists **every** compiled program you
+own — wherever it is, not just what's nearby — with its level, HP,
+Attack, and Defense, so you can check on a cronjob worker off at some
+distant structure without walking over to it. Up to **3** of them can also
+be active party members, fighting alongside you at once.
 
 - Selecting a tamed program not already in the party adds it (rejected if
   the party's already full — stand one down first). Selecting a party
-  member's own number stands it down. The party screen stays open so you
-  can adjust multiple slots in one visit; `Esc` closes it.
+  member's own number stands it down. The screen stays open so you can
+  adjust multiple slots in one visit; `Esc` closes it.
 - A party member is mutually exclusive with a cronjob: assigning it to work
   a structure (`w`) automatically stands it down from the party, and vice
   versa — a program is either working or fighting beside you, never both.

@@ -12,7 +12,8 @@ is skipped with a warning logged in-game rather than crashing startup.
     name: "Display Name",
     glyph: '#',                   // single character shown on the map
     color: Magenta,                // one of: White, Gray, Green, DarkGreen, Red,
-                                    //         Yellow, Blue, Magenta, Cyan, Brown
+                                    //         Yellow, Blue, Magenta, Cyan, Brown,
+                                    //         Orange
     build_cost: [(CoreFragment, 3)],  // list of (item, quantity) pairs
     // Item options: CoreFragment, PowerCell, IceBreaker, PortalFragment,
     //               OverclockCore, MonofilamentWhip, FirewallPlating,
@@ -20,8 +21,12 @@ is skipped with a warning logged in-game rather than crashing startup.
 
     // Omit (`None`) for a purely decorative/utility structure. Set `Some(...)`
     // to make it assignable to a tamed creature via the cronjob menu — it'll
-    // produce one unit of `produces` every `ticks_per_unit` ticks.
-    work: Some((produces: CoreFragment, ticks_per_unit: 5)),
+    // produce one unit of `produces` every `ticks_per_unit` ticks. `capacity`
+    // (optional, defaults to 5) caps how many units the node can hold before
+    // it's mined down to empty; once empty it immediately refills to
+    // `capacity` and the assigned creature keeps working — a worked node is
+    // an infinite, bursty resource, never a one-time deposit.
+    work: Some((produces: CoreFragment, ticks_per_unit: 5, capacity: 5)),
 
     // Optional; can be left out entirely (defaults to no passive processing).
     // If set, the structure automatically converts one `consumes` into one

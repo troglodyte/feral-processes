@@ -24,6 +24,7 @@ pub enum GlyphColor {
     Magenta,
     Cyan,
     Brown,
+    Orange,
 }
 
 #[derive(Component, Clone, Copy, Debug)]
@@ -65,6 +66,13 @@ impl Stats {
         } else {
             (self.hp as f32 / self.max_hp as f32).clamp(0.0, 1.0)
         }
+    }
+
+    /// A rough "how strong is this" scalar — max HP plus Attack plus
+    /// Defense, unweighted — used to gauge relative difficulty (see
+    /// `difficulty_color`) without singling out any one stat.
+    pub fn power(&self) -> i32 {
+        self.max_hp + self.atk + self.def
     }
 }
 
@@ -205,6 +213,10 @@ pub struct Structure {
 pub struct ResourceNode {
     pub resource: ItemId,
     pub amount: u32,
+    /// The stock level `amount` refills to once mined down to 0 — see
+    /// `StructureDef::work`'s `capacity` field. Nodes never run dry
+    /// permanently; a worked node just cycles between empty and full.
+    pub capacity: u32,
 }
 
 /// Ticks toward a structure's next passive-processing conversion (see

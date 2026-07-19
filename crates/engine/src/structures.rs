@@ -13,6 +13,18 @@ pub type StructureId = String;
 pub struct WorkDef {
     pub produces: ItemId,
     pub ticks_per_unit: u32,
+    /// How many units a worked node stores before its assigned creature has
+    /// to wait for it to refill. Once a node is mined down to 0 it
+    /// immediately refills to `capacity` and the cronjob keeps running —
+    /// nodes are an infinite (if bursty) resource, not a one-time deposit.
+    /// `#[serde(default)]` so existing structure files (including mods)
+    /// without this field get a sensible baseline.
+    #[serde(default = "default_work_capacity")]
+    pub capacity: u32,
+}
+
+fn default_work_capacity() -> u32 {
+    5
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

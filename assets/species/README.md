@@ -12,7 +12,16 @@ is skipped with a warning logged in-game rather than crashing startup.
     name: "Display Name",
     glyph: 'x',                   // single character shown on the map
     color: Cyan,                  // one of: White, Gray, Green, DarkGreen, Red,
-                                   //         Yellow, Blue, Magenta, Cyan, Brown
+                                   //         Yellow, Blue, Magenta, Cyan, Brown,
+                                   //         Orange
+                                   // Only shown as-is for a tamed/companion
+                                   // program. A *hostile* one is recolored on
+                                   // the map by difficulty relative to the
+                                   // player's current power (see
+                                   // `difficulty_color` in lib.rs) — Green,
+                                   // Yellow, Orange, or Red, or Magenta if
+                                   // `is_boss` — so this field only matters
+                                   // once it's compiled.
     base_hp: 20,
     base_atk: 6,
     base_def: 3,

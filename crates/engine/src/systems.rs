@@ -74,8 +74,10 @@ pub fn wander_ai_system(
 
 /// Generic job progression: any entity with a `Task` advances it once per
 /// tick against its `target`; on completion the producing node hands a unit
-/// of resource to the worker's owner. The same loop would drive future
-/// colonist-style jobs, not just base-building work.
+/// of resource to the worker's owner. A node that's been mined down to 0
+/// refills to its `capacity` on the next tick rather than stalling the
+/// cronjob forever. The same loop would drive future colonist-style jobs,
+/// not just base-building work.
 pub fn task_progress_system(
     mut tasks: Query<(&mut Task, &Tamed, &mut Experience, &mut Stats)>,
     mut nodes: Query<&mut ResourceNode>,
@@ -87,7 +89,7 @@ pub fn task_progress_system(
             continue;
         };
         if node.amount == 0 {
-            continue;
+            node.amount = node.capacity;
         }
         task.progress += 1;
         if task.progress >= task.required {

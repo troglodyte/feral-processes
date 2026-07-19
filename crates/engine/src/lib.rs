@@ -85,6 +85,15 @@ const BOSS_SPAWN_CHANCE: f64 = 0.04;
 /// flat `PORTAL_FRAGMENT_DROP_CHANCE` roll every other species gets.
 const BOSS_PORTAL_FRAGMENT_DROP: std::ops::RangeInclusive<u32> = 3..=6;
 
+/// Thresholds for `difficulty_color`'s old-school "con" coloring, as
+/// upper bounds on a hostile program's power (see `Stats::power`) relative
+/// to the player's own — anything at or under `DIFFICULTY_EASY_MAX` reads
+/// Green, up through `DIFFICULTY_EVEN_MAX` reads Yellow, up through
+/// `DIFFICULTY_TOUGH_MAX` reads Orange, and anything above that reads Red.
+const DIFFICULTY_EASY_MAX: f64 = 0.7;
+const DIFFICULTY_EVEN_MAX: f64 = 1.1;
+const DIFFICULTY_TOUGH_MAX: f64 = 1.6;
+
 /// Chance per tick (see `Game::raid_check`) that a random deployed
 /// structure comes under raid, if any exist.
 const RAID_CHANCE_PER_TICK: f64 = 0.02;
@@ -133,6 +142,22 @@ pub struct PlayerStatus {
     pub perk_points: u32,
     /// Which perks have been unlocked so far.
     pub unlocked_perks: Vec<Perk>,
+}
+
+/// Full stats for one tamed program the player owns, wherever it is on the
+/// map — shown by the pets/roster screen so you can check on (or manage) a
+/// cronjob worker without walking over to it. See `Game::owned_pets`.
+pub struct PetInfo {
+    pub entity: Entity,
+    pub name: String,
+    pub level: u32,
+    pub hp: i32,
+    pub max_hp: i32,
+    pub atk: i32,
+    pub def: i32,
+    pub is_companion: bool,
+    /// The label of the structure this pet is cronjob-assigned to, if any.
+    pub job_structure: Option<String>,
 }
 
 /// Snapshot of the player's active companion, shown in the status panel
@@ -478,7 +503,8 @@ impl Game {
                     .as_ref()
                     .map(|w| w.produces)
                     .unwrap_or(ItemId::CoreFragment);
-                entity.insert(ResourceNode { resource, amount });
+                let capacity = def.work.as_ref().map(|w| w.capacity).unwrap_or(5);
+                entity.insert(ResourceNode { resource, amount, capacity });
                 structure_positions.insert(s.position, structure_id);
             }
             if def.passive_process.is_some() {
@@ -639,6 +665,13 @@ impl Game {
 
     pub fn is_game_over(&self) -> Option<String> {
         self.world.resource::<GameOver>().reason.clone()
+    }
+
+    /// How many ticks (see `tick`) have elapsed this session. Exposed so a
+    /// caller (e.g. the TUI's autosave timer) can pace itself against game
+    /// time rather than wall-clock time or its own separate counter.
+    pub fn current_tick(&self) -> u64 {
+        self.world.resource::<GameClock>().tick
     }
 
     pub fn has_active_battle(&self) -> bool {
@@ -871,6 +904,19 @@ impl Game {
             .collect()
     }
 
+    /// The most whole units of `result` the player can afford to compile
+    /// right now, given `craft_cost` (already Lean-Compiler-adjusted) and
+    /// their current inventory. 0 if `result` has no recipe or they can't
+    /// afford even one unit yet.
+    pub fn max_craftable(&self, result: ItemId) -> u32 {
+        let cost = self.craft_cost(result);
+        if cost.is_empty() {
+            return 0;
+        }
+        let inv = self.world.get::<Inventory>(self.player_entity()).unwrap();
+        cost.iter().map(|(item, qty)| inv.count(*item) / (*qty).max(1)).min().unwrap_or(0)
+    }
+
     /// Compiles `quantity` units of `result` per its `craft_recipes` entry.
     pub fn craft(&mut self, result: ItemId, quantity: u32) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
@@ -980,11 +1026,9 @@ impl Game {
         Ok(())
     }
 
-    /// Removes `qty` of `item` from inventory and logs with `verb` ("drop"
-    /// or "destroy") — the two are functionally identical, distinguished
-    /// only by flavor text. Only ever acts on unequipped inventory stock;
-    /// an equipped item must be unequipped first.
-    fn discard_item(&mut self, item: ItemId, qty: u32, verb: &str) -> Result<(), String> {
+    /// Permanently removes `qty` of `item` from inventory. Only ever acts on
+    /// unequipped inventory stock; an equipped item must be unequipped first.
+    pub fn erase_item(&mut self, item: ItemId, qty: u32) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
@@ -993,17 +1037,9 @@ impl Game {
         if taken == 0 {
             return Err(format!("You don't have any {}.", item.display_name()));
         }
-        self.log(format!("You {verb} {taken} {}.", item.display_name()));
+        self.log(format!("You erase {taken} {}.", item.display_name()));
         self.tick();
         Ok(())
-    }
-
-    pub fn drop_item(&mut self, item: ItemId, qty: u32) -> Result<(), String> {
-        self.discard_item(item, qty, "drop")
-    }
-
-    pub fn destroy_item(&mut self, item: ItemId, qty: u32) -> Result<(), String> {
-        self.discard_item(item, qty, "destroy")
     }
 
     pub fn place_structure(&mut self, structure_id: &str, dx: i32, dy: i32) -> Result<(), String> {
@@ -1057,7 +1093,8 @@ impl Game {
         if let Some(work) = &def.work {
             entity.insert(ResourceNode {
                 resource: work.produces,
-                amount: 20,
+                amount: work.capacity,
+                capacity: work.capacity,
             });
         }
         if def.passive_process.is_some() {
@@ -1443,6 +1480,14 @@ impl Game {
             self.wild_retaliate(wild, player);
         } else {
             self.log("You jack out safely.");
+        }
+        // A forced jack-out costs a little progress too — nothing drastic,
+        // same mild setback as a flatline (see `death_handling_system`).
+        if let Some(mut exp) = self.world.get_mut::<Experience>(player) {
+            let xp_lost = progression::apply_setback_xp_penalty(&mut exp);
+            if xp_lost > 0 {
+                self.log(format!("Bailing out costs you {xp_lost} XP."));
+            }
         }
         self.clear_battle_status_effects(player, wild);
         self.world.remove_resource::<BattleState>();
@@ -1999,6 +2044,39 @@ impl Game {
             .collect()
     }
 
+    /// Full stats for every tamed program the player owns, anywhere on the
+    /// map — unlike `view_entities`, not limited to what's currently in
+    /// view. Lets you check on a cronjob worker's HP/level without walking
+    /// over to it.
+    pub fn owned_pets(&mut self) -> Vec<PetInfo> {
+        let player = self.player_entity();
+        let party = self.world.resource::<Party>().0.clone();
+        let owned: Vec<Entity> = {
+            let mut query = self.world.query::<(Entity, &Tamed)>();
+            query.iter(&self.world).filter(|(_, t)| t.owner == player).map(|(e, _)| e).collect()
+        };
+        owned
+            .into_iter()
+            .filter_map(|entity| {
+                let stats = *self.world.get::<Stats>(entity)?;
+                let level = self.world.get::<Experience>(entity).map(|e| e.level).unwrap_or(1);
+                let job_structure =
+                    self.world.get::<Task>(entity).map(|t| t.target).map(|target| self.entity_label(target));
+                Some(PetInfo {
+                    entity,
+                    name: self.creature_label(entity),
+                    level,
+                    hp: stats.hp,
+                    max_hp: stats.max_hp,
+                    atk: stats.atk,
+                    def: stats.def,
+                    is_companion: party.contains(&entity),
+                    job_structure,
+                })
+            })
+            .collect()
+    }
+
     /// Display string for `entity`'s current active status condition, if
     /// any — e.g. "Bleeding (2)" or "Stunned (1)", the number being battle
     /// rounds remaining. `None` if it has no active condition.
@@ -2214,6 +2292,8 @@ impl Game {
             tasks.iter(&self.world).map(|(worker, task)| (task.target, worker)).collect()
         };
 
+        let player_power = self.world.get::<Stats>(self.player_entity()).unwrap().power();
+
         hits.into_iter()
             .map(|(entity, pos, glyph)| {
                 let is_player = self.world.get::<Player>(entity).is_some();
@@ -2232,7 +2312,20 @@ impl Game {
                 } else {
                     None
                 };
-                let hp_fraction = self.world.get::<Stats>(entity).map(|s| s.hp_fraction());
+                let stats = self.world.get::<Stats>(entity);
+                let hp_fraction = stats.map(|s| s.hp_fraction());
+                // Hostile wild programs are recolored by difficulty relative
+                // to the player's current power, rather than shown in their
+                // species' authored color — see `difficulty_color`. Everyone
+                // and everything else (the player, tamed/companion programs,
+                // structures) keeps its normal glyph color.
+                let color = if is_hostile {
+                    stats
+                        .map(|s| difficulty_color(s.power(), player_power, is_boss))
+                        .unwrap_or(glyph.color)
+                } else {
+                    glyph.color
+                };
                 let level = self.world.get::<Experience>(entity).map(|e| e.level);
                 let durability = self.world.get::<Durability>(entity).map(|d| (d.hp, d.max_hp));
                 let label = self.entity_label(entity);
@@ -2240,7 +2333,7 @@ impl Game {
                     entity,
                     pos: (pos.x, pos.y),
                     glyph: glyph.ch,
-                    color: glyph.color,
+                    color,
                     label,
                     is_player,
                     is_tamed,
@@ -2493,6 +2586,28 @@ fn forage_chance(biome: Biome, has_keen_scavenger: bool) -> f64 {
     }
 }
 
+/// Old-school "con"-style map coloring for a hostile wild program, relative
+/// to the player's current `Stats::power`. A boss is always Magenta
+/// regardless of the ratio; everything else runs Green (easy) → Yellow
+/// (even) → Orange (tough) → Red (hard) as `creature_power` grows past
+/// `player_power`. Pulled out of `view_entities` so the bucketing is
+/// unit-testable without spinning up a `Game`.
+fn difficulty_color(creature_power: i32, player_power: i32, is_boss: bool) -> GlyphColor {
+    if is_boss {
+        return GlyphColor::Magenta;
+    }
+    let ratio = creature_power as f64 / player_power.max(1) as f64;
+    if ratio <= DIFFICULTY_EASY_MAX {
+        GlyphColor::Green
+    } else if ratio <= DIFFICULTY_EVEN_MAX {
+        GlyphColor::Yellow
+    } else if ratio <= DIFFICULTY_TOUGH_MAX {
+        GlyphColor::Orange
+    } else {
+        GlyphColor::Red
+    }
+}
+
 fn find_walkable_start(world_map: &mut WorldMap) -> (i32, i32) {
     for r in 0..64i32 {
         for dx in -r..=r {
@@ -2724,6 +2839,7 @@ mod tests {
                 ResourceNode {
                     resource: structure_def.work.as_ref().unwrap().produces,
                     amount: 20,
+                    capacity: 20,
                 },
             ))
             .id();
@@ -2765,6 +2881,39 @@ mod tests {
             .get::<Position>(task.target)
             .expect("task target should resolve to a structure entity");
         assert_eq!((target_pos.x, target_pos.y), (3, 3));
+    }
+
+    #[test]
+    fn a_mined_out_node_refills_instead_of_stalling_the_cronjob() {
+        let mut game = Game::new(27, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let worker = spawn_tamed(&mut game, 10, 3);
+        let structure = game
+            .world
+            .spawn((
+                Structure { kind: "mining_node".to_string() },
+                Position { x: 3, y: 4 },
+                ResourceNode { resource: ItemId::CoreFragment, amount: 1, capacity: 2 },
+            ))
+            .id();
+        game.world.entity_mut(worker).insert(Task {
+            kind: TaskKind::GatherResource,
+            target: structure,
+            progress: 0,
+            required: 1,
+        });
+
+        // First tick mines the last unit down to 0.
+        game.tick();
+        assert_eq!(game.world.get::<ResourceNode>(structure).unwrap().amount, 0);
+
+        // The node refills to capacity on the next tick rather than
+        // leaving the assigned creature permanently idle.
+        game.tick();
+        assert_eq!(game.world.get::<ResourceNode>(structure).unwrap().amount, 1);
+        assert!(
+            game.world.get::<Task>(worker).is_some(),
+            "the cronjob should keep running once the node refills"
+        );
     }
 
     #[test]
@@ -2864,17 +3013,17 @@ mod tests {
     }
 
     #[test]
-    fn drop_and_destroy_remove_the_full_stack() {
+    fn erase_item_removes_the_full_stack() {
         let mut game = Game::new(12, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
         game.world.get_mut::<Inventory>(player).unwrap().add(ItemId::NeuralAmplifier, 3);
 
-        game.drop_item(ItemId::NeuralAmplifier, 3).unwrap();
+        game.erase_item(ItemId::NeuralAmplifier, 3).unwrap();
         assert!(game.player_status().inventory.iter().all(|(i, _)| *i != ItemId::NeuralAmplifier));
 
         assert!(
-            game.destroy_item(ItemId::NeuralAmplifier, 1).is_err(),
-            "destroying from an empty stack should error"
+            game.erase_item(ItemId::NeuralAmplifier, 1).is_err(),
+            "erasing from an empty stack should error"
         );
     }
 
@@ -3021,6 +3170,17 @@ mod tests {
     }
 
     #[test]
+    fn current_tick_matches_the_internal_game_clock() {
+        let mut game = Game::new(35, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        assert_eq!(game.current_tick(), 0, "a fresh game should start at tick 0");
+
+        game.wait();
+        game.wait();
+
+        assert_eq!(game.current_tick(), 2, "current_tick should track GameClock exactly");
+    }
+
+    #[test]
     fn rest_fully_heals_and_restores_fatigue() {
         let mut game = Game::new(18, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
@@ -3136,6 +3296,31 @@ mod tests {
     }
 
     #[test]
+    fn max_craftable_floors_to_the_cheapest_affordable_whole_unit() {
+        let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        {
+            let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+            inv.items.clear();
+            // ICE_BREAKER_CORE_COST per unit; 7 fragments afford 2 whole
+            // units with 1 left over, not 3.
+            inv.add(ItemId::CoreFragment, ICE_BREAKER_CORE_COST * 2 + 1);
+        }
+
+        assert_eq!(game.max_craftable(ItemId::IceBreaker), 2);
+    }
+
+    #[test]
+    fn max_craftable_is_zero_with_no_recipe_or_no_resources() {
+        let mut game = Game::new(32, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Inventory>(player).unwrap().items.clear();
+
+        assert_eq!(game.max_craftable(ItemId::IceBreaker), 0, "no resources at all");
+        assert_eq!(game.max_craftable(ItemId::CoreFragment), 0, "no recipe exists for this item");
+    }
+
+    #[test]
     fn craft_fails_without_enough_of_the_cost() {
         let mut game = Game::new(21, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
@@ -3152,6 +3337,39 @@ mod tests {
     fn craft_rejects_a_result_with_no_recipe() {
         let mut game = Game::new(22, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         assert!(game.craft(ItemId::CoreFragment, 1).is_err());
+    }
+
+    #[test]
+    fn battle_flee_applies_the_same_mild_xp_setback_as_a_death() {
+        let mut game = Game::new(33, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Experience>(player).unwrap().xp = 10;
+        let species = game.species_defs().into_iter().next().expect("at least one species");
+        let wild = game
+            .world
+            .spawn((
+                Creature { species: species.id.clone() },
+                Hostile,
+                Position { x: 3, y: 3 },
+                Stats { hp: 10, max_hp: 10, atk: 0, def: 1 },
+            ))
+            .id();
+        game.world.insert_resource(BattleState {
+            player,
+            wild_creature: wild,
+            log: Vec::new(),
+            finished: false,
+            player_won: false,
+        });
+
+        game.battle_flee();
+
+        assert_eq!(
+            game.world.get::<Experience>(player).unwrap().xp,
+            8,
+            "fleeing should dock the same 20% setback as a death"
+        );
+        assert!(!game.has_active_battle(), "fleeing should end the battle");
     }
 
     fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
@@ -3224,7 +3442,11 @@ mod tests {
             .spawn((
                 Structure { kind: structure_def.id.clone() },
                 Position { x: 3, y: 4 },
-                ResourceNode { resource: structure_def.work.as_ref().unwrap().produces, amount: 20 },
+                ResourceNode {
+                    resource: structure_def.work.as_ref().unwrap().produces,
+                    amount: 20,
+                    capacity: 20,
+                },
             ))
             .id();
 
@@ -3244,6 +3466,46 @@ mod tests {
         game.remove_companion(worker);
 
         assert!(game.player_status().companions.is_empty());
+    }
+
+    #[test]
+    fn owned_pets_reports_every_owned_creature_regardless_of_location_or_job() {
+        let mut game = Game::new(34, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let companion = spawn_tamed(&mut game, 10, 3);
+        game.add_companion(companion).unwrap();
+
+        let far_worker = spawn_tamed(&mut game, 12, 4);
+        game.world.entity_mut(far_worker).insert(Position { x: 500, y: 500 });
+        let structure = game
+            .world
+            .spawn((Structure { kind: "mining_node".to_string() }, Position { x: 500, y: 501 }))
+            .id();
+        game.world.entity_mut(far_worker).insert(Task {
+            kind: TaskKind::GatherResource,
+            target: structure,
+            progress: 1,
+            required: 5,
+        });
+
+        let idle = spawn_tamed(&mut game, 5, 2);
+        game.world.entity_mut(idle).insert(Position { x: 999, y: 999 });
+
+        let pets = game.owned_pets();
+        assert_eq!(pets.len(), 3, "every owned tamed creature should be reported, wherever it is");
+
+        let companion_info = pets.iter().find(|p| p.entity == companion).unwrap();
+        assert!(companion_info.is_companion);
+        assert_eq!(companion_info.job_structure, None);
+
+        let worker_info = pets.iter().find(|p| p.entity == far_worker).unwrap();
+        assert!(!worker_info.is_companion);
+        assert!(worker_info.job_structure.is_some(), "a far-off cronjob worker should still be reported");
+        assert_eq!(worker_info.hp, 12);
+        assert_eq!(worker_info.atk, 4);
+
+        let idle_info = pets.iter().find(|p| p.entity == idle).unwrap();
+        assert!(!idle_info.is_companion);
+        assert_eq!(idle_info.job_structure, None);
     }
 
     #[test]
@@ -3828,6 +4090,25 @@ mod tests {
     }
 
     #[test]
+    fn difficulty_color_buckets_relative_power_into_con_colors() {
+        assert_eq!(difficulty_color(50, 100, false), GlyphColor::Green, "much weaker than the player");
+        assert_eq!(difficulty_color(100, 100, false), GlyphColor::Yellow, "an even match");
+        assert_eq!(difficulty_color(140, 100, false), GlyphColor::Orange, "notably tougher");
+        assert_eq!(difficulty_color(200, 100, false), GlyphColor::Red, "far stronger than the player");
+    }
+
+    #[test]
+    fn difficulty_color_is_always_magenta_for_a_boss_regardless_of_power() {
+        assert_eq!(difficulty_color(1, 1000, true), GlyphColor::Magenta);
+        assert_eq!(difficulty_color(1000, 1, true), GlyphColor::Magenta);
+    }
+
+    #[test]
+    fn difficulty_color_never_divides_by_zero_player_power() {
+        assert_eq!(difficulty_color(10, 0, false), GlyphColor::Red);
+    }
+
+    #[test]
     fn forage_chance_applies_keen_scavenger_but_never_boosts_a_zero_chance_biome() {
         assert_eq!(forage_chance(Biome::OpenGrid, false), 0.6);
         assert_eq!(forage_chance(Biome::OpenGrid, true), 0.6 + KEEN_SCAVENGER_BONUS);
@@ -4048,6 +4329,55 @@ mod tests {
         assert!(normal_views.iter().all(|v| !v.is_boss), "non-boss creatures shouldn't be flagged is_boss");
 
         assert!(game.inspect(boss_entity).unwrap().is_boss, "InspectView should also flag a boss creature");
+    }
+
+    #[test]
+    fn view_entities_colors_hostiles_by_difficulty_and_leaves_others_alone() {
+        let mut game = Game::new(53, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let player_pos = *game.world.get::<Position>(player).unwrap();
+        game.world.get_mut::<Stats>(player).unwrap().atk = 0;
+        game.world.get_mut::<Stats>(player).unwrap().def = 0;
+        game.world.get_mut::<Stats>(player).unwrap().max_hp = 100;
+        game.world.get_mut::<Stats>(player).unwrap().hp = 100;
+        // Player power is now 100. An easy hostile is well under that; a
+        // hard one is well over it.
+        let easy = game
+            .world
+            .spawn((
+                Creature { species: "does_not_matter".to_string() },
+                Hostile,
+                Position { x: player_pos.x + 1, y: player_pos.y },
+                Glyph { ch: 'e', color: GlyphColor::Cyan },
+                Stats { hp: 10, max_hp: 10, atk: 0, def: 0 },
+            ))
+            .id();
+        let hard = game
+            .world
+            .spawn((
+                Creature { species: "does_not_matter".to_string() },
+                Hostile,
+                Position { x: player_pos.x - 1, y: player_pos.y },
+                Glyph { ch: 'h', color: GlyphColor::Cyan },
+                Stats { hp: 300, max_hp: 300, atk: 0, def: 0 },
+            ))
+            .id();
+        let tamed_worker = spawn_tamed(&mut game, 10, 3);
+        game.world.entity_mut(tamed_worker).insert(Position { x: player_pos.x, y: player_pos.y + 1 });
+        game.world.entity_mut(tamed_worker).insert(Glyph { ch: 't', color: GlyphColor::Cyan });
+
+        let views = game.view_entities(5, 5);
+        let easy_view = views.iter().find(|v| v.entity == easy).unwrap();
+        let hard_view = views.iter().find(|v| v.entity == hard).unwrap();
+        let tamed_view = views.iter().find(|v| v.entity == tamed_worker).unwrap();
+
+        assert_eq!(easy_view.color, GlyphColor::Green, "a much weaker hostile should read Green");
+        assert_eq!(hard_view.color, GlyphColor::Red, "a much stronger hostile should read Red");
+        assert_eq!(
+            tamed_view.color,
+            GlyphColor::Cyan,
+            "a non-hostile entity should keep its own glyph color, not be difficulty-colored"
+        );
     }
 
     #[test]

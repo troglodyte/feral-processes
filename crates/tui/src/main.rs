@@ -13,6 +13,11 @@ use feral_processes_engine::{DifficultyMode, Entity, Game};
 /// visible viewport size.
 pub const MENU_SCAN_RADIUS: i32 = 40;
 
+/// How many game ticks (see `Game::current_tick`) pass between autosaves —
+/// paced against game time rather than wall-clock time, so it's the same
+/// whether the player is acting quickly or sitting on a menu.
+const AUTOSAVE_INTERVAL_TICKS: u64 = 50;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     MainMenu,
@@ -86,6 +91,15 @@ pub struct App {
     trade_quantity_input: String,
     /// How many screen characters render each world tile along each axis.
     pub zoom: u16,
+    /// Which row is highlighted on the current numbered/lettered menu, for
+    /// Up/Down-arrow-plus-Enter navigation (see `App::selected_index`) —
+    /// on top of, not instead of, typing a row's own number/letter directly.
+    /// Reset to 0 every time a menu mode is entered.
+    pub menu_selected: usize,
+    /// The game tick (see `Game::current_tick`) as of the last autosave —
+    /// reset to the current tick whenever a game starts or loads, so a
+    /// resumed session doesn't immediately autosave on its very first move.
+    last_autosave_tick: u64,
 }
 
 impl App {
@@ -110,6 +124,8 @@ impl App {
             pending_trade_choice: None,
             trade_quantity_input: String::new(),
             zoom: 2,
+            menu_selected: 0,
+            last_autosave_tick: 0,
         }
     }
 
@@ -124,6 +140,7 @@ impl App {
             .unwrap_or(1);
         match Game::new(seed, difficulty, &self.assets_dir) {
             Ok(game) => {
+                self.last_autosave_tick = game.current_tick();
                 self.game = Some(game);
                 self.history_written = false;
                 self.status_line = None;
@@ -136,6 +153,7 @@ impl App {
     fn load_game(&mut self) {
         match Game::load(&self.save_path, &self.assets_dir) {
             Ok(game) => {
+                self.last_autosave_tick = game.current_tick();
                 self.game = Some(game);
                 self.history_written = false;
                 self.status_line = None;
@@ -151,6 +169,25 @@ impl App {
                 Ok(()) => self.status_line = Some("Game saved.".to_string()),
                 Err(e) => self.status_line = Some(format!("Save failed: {e}")),
             }
+        }
+    }
+
+    /// Silently saves to the same slot `s` does, once at least
+    /// `AUTOSAVE_INTERVAL_TICKS` game ticks have passed since the last one —
+    /// checked after every keypress so it fires no matter which action
+    /// (movement, rest, a cronjob cycle, ...) advanced the clock. Doesn't
+    /// touch `status_line` on success so it doesn't cover up a more useful
+    /// message from whatever the player just did; a failure does surface,
+    /// since silently failing to protect their progress would be worse.
+    fn maybe_autosave(&mut self) {
+        let Some(game) = &mut self.game else { return };
+        let current = game.current_tick();
+        if current.saturating_sub(self.last_autosave_tick) < AUTOSAVE_INTERVAL_TICKS {
+            return;
+        }
+        self.last_autosave_tick = current;
+        if let Err(e) = game.save(&self.save_path) {
+            self.status_line = Some(format!("Autosave failed: {e}"));
         }
     }
 
@@ -172,7 +209,40 @@ impl App {
         self.mode = Mode::GameOver;
     }
 
+    /// Shared Up/Down/Enter handling layered on top of every numbered menu's
+    /// existing direct digit-key shortcuts (1-9) — this doesn't replace
+    /// them, it's just another way to pick the same row. `len` is how many
+    /// selectable rows the menu currently has. A typed digit 1-`len` resolves
+    /// immediately to that 0-based index, same as before; Up/Down instead
+    /// move `menu_selected` (wrapping) and return `None`; Enter resolves to
+    /// whatever `menu_selected` currently highlights. Any other key, or an
+    /// empty menu, returns `None`.
+    fn selected_index(&mut self, code: KeyCode, len: usize) -> Option<usize> {
+        if len == 0 {
+            return None;
+        }
+        if let KeyCode::Char(c) = code {
+            return c.to_digit(10).and_then(|d| {
+                let d = d as usize;
+                (d >= 1 && d <= len).then_some(d - 1)
+            });
+        }
+        match code {
+            KeyCode::Up => {
+                self.menu_selected = (self.menu_selected + len - 1) % len;
+                None
+            }
+            KeyCode::Down => {
+                self.menu_selected = (self.menu_selected + 1) % len;
+                None
+            }
+            KeyCode::Enter => Some(self.menu_selected.min(len - 1)),
+            _ => None,
+        }
+    }
+
     fn handle_key(&mut self, code: KeyCode) {
+        let mode_before = self.mode;
         match self.mode {
             Mode::MainMenu => self.handle_main_menu_key(code),
             Mode::DifficultyPick => self.handle_difficulty_key(code),
@@ -200,25 +270,49 @@ impl App {
             Mode::Help => self.handle_help_key(),
             Mode::GameOver => self.handle_game_over_key(),
         }
+        // Every menu's arrow-key highlight (see `selected_index`) starts
+        // fresh at the top of its list, rather than carrying over whatever
+        // row happened to be highlighted on a previous, unrelated menu.
+        if self.mode != mode_before {
+            self.menu_selected = 0;
+        }
+        self.maybe_autosave();
     }
 
     fn handle_main_menu_key(&mut self, code: KeyCode) {
-        match code {
-            KeyCode::Char('n') | KeyCode::Char('N') => {
+        let mut options = vec!['n'];
+        if self.save_exists() {
+            options.push('l');
+        }
+        options.push('q');
+        let idx = self.selected_index(code, options.len()).or_else(|| match code {
+            KeyCode::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
+            _ => None,
+        });
+        match idx.map(|i| options[i]) {
+            Some('n') => {
                 self.status_line = None;
                 self.mode = Mode::DifficultyPick;
             }
-            KeyCode::Char('l') | KeyCode::Char('L') if self.save_exists() => self.load_game(),
-            KeyCode::Char('q') | KeyCode::Char('Q') => self.quit = true,
+            Some('l') => self.load_game(),
+            Some('q') => self.quit = true,
             _ => {}
         }
     }
 
     fn handle_difficulty_key(&mut self, code: KeyCode) {
-        match code {
-            KeyCode::Char('p') | KeyCode::Char('P') => self.start_new_game(DifficultyMode::Permadeath),
-            KeyCode::Char('f') | KeyCode::Char('F') => self.start_new_game(DifficultyMode::Forgiving),
-            KeyCode::Esc => self.mode = Mode::MainMenu,
+        if code == KeyCode::Esc {
+            self.mode = Mode::MainMenu;
+            return;
+        }
+        let options = ['p', 'f'];
+        let idx = self.selected_index(code, options.len()).or_else(|| match code {
+            KeyCode::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
+            _ => None,
+        });
+        match idx.map(|i| options[i]) {
+            Some('p') => self.start_new_game(DifficultyMode::Permadeath),
+            Some('f') => self.start_new_game(DifficultyMode::Forgiving),
             _ => {}
         }
     }
@@ -381,15 +475,11 @@ impl App {
             self.mode = Mode::Battle;
             return;
         }
-        let Some(game) = &mut self.game else { return };
+        let Some(game) = &self.game else { return };
         let party = game.player_status().companions;
-        let KeyCode::Char(c) = code else { return };
-        let Some(idx) = c.to_digit(10) else { return };
-        let idx = idx as usize;
-        if idx < 1 || idx > party.len() {
-            return;
-        }
-        let entity = party[idx - 1].entity;
+        let Some(idx) = self.selected_index(code, party.len()) else { return };
+        let entity = party[idx].entity;
+        let Some(game) = &mut self.game else { return };
         game.battle_companion_attack(entity);
         let still_active = game.has_active_battle();
         self.mode = if still_active { Mode::Battle } else { Mode::Playing };
@@ -403,14 +493,9 @@ impl App {
         }
         let Some(game) = &self.game else { return };
         let defs = game.structure_defs();
-        if let KeyCode::Char(c) = code {
-            if let Some(idx) = c.to_digit(10) {
-                let idx = idx as usize;
-                if idx >= 1 && idx <= defs.len() {
-                    self.pending_structure = Some(defs[idx - 1].id.clone());
-                    self.mode = Mode::BuildDirection;
-                }
-            }
+        if let Some(idx) = self.selected_index(code, defs.len()) {
+            self.pending_structure = Some(defs[idx].id.clone());
+            self.mode = Mode::BuildDirection;
         }
     }
 
@@ -421,20 +506,17 @@ impl App {
         }
         let Some(game) = &mut self.game else { return };
         let recipes = game.craft_recipes();
-        if let KeyCode::Char(c) = code {
-            if let Some(idx) = c.to_digit(10) {
-                let idx = idx as usize;
-                if idx >= 1 && idx <= recipes.len() {
-                    self.pending_craft = Some(recipes[idx - 1].result);
-                    self.craft_quantity_input.clear();
-                    self.mode = Mode::CraftQuantity;
-                }
-            }
+        if let Some(idx) = self.selected_index(code, recipes.len()) {
+            self.pending_craft = Some(recipes[idx].result);
+            self.craft_quantity_input.clear();
+            self.mode = Mode::CraftQuantity;
         }
     }
 
     /// Second page of the compile flow: asks how many units of
-    /// `pending_craft` to make before actually calling `Game::craft`.
+    /// `pending_craft` to make before actually calling `Game::craft`. `[F]`
+    /// is a shortcut for 5 at once, `[M]` for the most affordable right now
+    /// (see `Game::max_craftable`) — both bypass typing digits and Enter.
     fn handle_craft_quantity_key(&mut self, code: KeyCode) {
         match code {
             KeyCode::Esc => {
@@ -450,6 +532,29 @@ impl App {
                     self.craft_quantity_input.push(c);
                 }
             }
+            KeyCode::Char('f') | KeyCode::Char('F') => {
+                let Some(result) = self.pending_craft.take() else {
+                    self.mode = Mode::Playing;
+                    return;
+                };
+                self.craft_quantity_input.clear();
+                self.commit_craft(result, 5);
+            }
+            KeyCode::Char('m') | KeyCode::Char('M') => {
+                let Some(result) = self.pending_craft.take() else {
+                    self.mode = Mode::Playing;
+                    return;
+                };
+                self.craft_quantity_input.clear();
+                let max = self.game.as_ref().map(|g| g.max_craftable(result)).unwrap_or(0);
+                if max == 0 {
+                    self.status_line =
+                        Some(format!("Not enough resources to compile any {}.", result.display_name()));
+                    self.mode = Mode::Playing;
+                    return;
+                }
+                self.commit_craft(result, max);
+            }
             KeyCode::Enter => {
                 let Some(result) = self.pending_craft.take() else {
                     self.mode = Mode::Playing;
@@ -461,20 +566,28 @@ impl App {
                     self.craft_quantity_input.parse().unwrap_or(0)
                 };
                 self.craft_quantity_input.clear();
-                if quantity == 0 {
-                    self.mode = Mode::Playing;
-                    return;
-                }
-                if let Some(game) = &mut self.game {
-                    match game.craft(result, quantity) {
-                        Ok(()) => self.status_line = None,
-                        Err(e) => self.status_line = Some(e),
-                    }
-                }
-                self.mode = Mode::Playing;
+                self.commit_craft(result, quantity);
             }
             _ => {}
         }
+    }
+
+    /// Calls `Game::craft(result, quantity)` and returns to normal play,
+    /// shared by the craft-quantity page's Enter, `[F]` (5), and `[M]` (max)
+    /// paths. A quantity of 0 (e.g. Enter on an explicitly typed "0") is a
+    /// silent no-op rather than a round-trip to the engine for an error.
+    fn commit_craft(&mut self, result: ItemId, quantity: u32) {
+        if quantity == 0 {
+            self.mode = Mode::Playing;
+            return;
+        }
+        if let Some(game) = &mut self.game {
+            match game.craft(result, quantity) {
+                Ok(()) => self.status_line = None,
+                Err(e) => self.status_line = Some(e),
+            }
+        }
+        self.mode = Mode::Playing;
     }
 
     fn handle_build_direction_key(&mut self, code: KeyCode) {
@@ -515,14 +628,9 @@ impl App {
             .into_iter()
             .filter(|e| e.is_tamed)
             .collect();
-        if let KeyCode::Char(c) = code {
-            if let Some(idx) = c.to_digit(10) {
-                let idx = idx as usize;
-                if idx >= 1 && idx <= workers.len() {
-                    self.pending_worker = Some(workers[idx - 1].entity);
-                    self.mode = Mode::CronjobStructure;
-                }
-            }
+        if let Some(idx) = self.selected_index(code, workers.len()) {
+            self.pending_worker = Some(workers[idx].entity);
+            self.mode = Mode::CronjobStructure;
         }
     }
 
@@ -542,18 +650,14 @@ impl App {
             .into_iter()
             .filter(|e| e.can_work)
             .collect();
-        if let KeyCode::Char(c) = code {
-            if let Some(idx) = c.to_digit(10) {
-                let idx = idx as usize;
-                if idx >= 1 && idx <= structures.len() {
-                    match game.assign_cronjob(worker, structures[idx - 1].entity) {
-                        Ok(()) => self.status_line = None,
-                        Err(e) => self.status_line = Some(e),
-                    }
-                    self.pending_worker = None;
-                    self.mode = Mode::Playing;
-                }
+        if let Some(idx) = self.selected_index(code, structures.len()) {
+            let Some(game) = &mut self.game else { return };
+            match game.assign_cronjob(worker, structures[idx].entity) {
+                Ok(()) => self.status_line = None,
+                Err(e) => self.status_line = Some(e),
             }
+            self.pending_worker = None;
+            self.mode = Mode::Playing;
         }
     }
 
@@ -567,48 +671,36 @@ impl App {
         }
         let Some(game) = &mut self.game else { return };
         let targets = game.symlink_targets();
-        if let KeyCode::Char(c) = code {
-            if let Some(idx) = c.to_digit(10) {
-                let idx = idx as usize;
-                if idx >= 1 && idx <= targets.len() {
-                    match game.use_symlink(targets[idx - 1].entity) {
-                        Ok(()) => self.status_line = None,
-                        Err(e) => self.status_line = Some(e),
-                    }
-                    self.mode = Mode::Playing;
-                }
+        if let Some(idx) = self.selected_index(code, targets.len()) {
+            let Some(game) = &mut self.game else { return };
+            match game.use_symlink(targets[idx].entity) {
+                Ok(()) => self.status_line = None,
+                Err(e) => self.status_line = Some(e),
             }
+            self.mode = Mode::Playing;
         }
     }
 
-    /// Lists nearby tamed programs; pressing a party member's number stands
-    /// it down, pressing any other tamed program's number adds it to the
-    /// party (up to `MAX_PARTY_SIZE` at once).
+    /// Lists every tamed program you own, wherever it is — pressing a party
+    /// member's number stands it down, pressing any other program's number
+    /// adds it to the party (up to `MAX_PARTY_SIZE` at once).
     fn handle_companion_key(&mut self, code: KeyCode) {
         if code == KeyCode::Esc {
             self.mode = Mode::Playing;
             return;
         }
         let Some(game) = &mut self.game else { return };
-        let candidates: Vec<_> = game
-            .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
-            .into_iter()
-            .filter(|e| e.is_tamed)
-            .collect();
-        if let KeyCode::Char(c) = code {
-            if let Some(idx) = c.to_digit(10) {
-                let idx = idx as usize;
-                if idx >= 1 && idx <= candidates.len() {
-                    let candidate = &candidates[idx - 1];
-                    if candidate.is_companion {
-                        game.remove_companion(candidate.entity);
-                        self.status_line = None;
-                    } else {
-                        match game.add_companion(candidate.entity) {
-                            Ok(()) => self.status_line = None,
-                            Err(e) => self.status_line = Some(e),
-                        }
-                    }
+        let candidates = game.owned_pets();
+        if let Some(idx) = self.selected_index(code, candidates.len()) {
+            let candidate = &candidates[idx];
+            let Some(game) = &mut self.game else { return };
+            if candidate.is_companion {
+                game.remove_companion(candidate.entity);
+                self.status_line = None;
+            } else {
+                match game.add_companion(candidate.entity) {
+                    Ok(()) => self.status_line = None,
+                    Err(e) => self.status_line = Some(e),
                 }
             }
         }
@@ -626,14 +718,9 @@ impl App {
             .into_iter()
             .filter(|e| e.is_tamed)
             .collect();
-        if let KeyCode::Char(c) = code {
-            if let Some(idx) = c.to_digit(10) {
-                let idx = idx as usize;
-                if idx >= 1 && idx <= candidates.len() {
-                    self.pending_fuse_first = Some(candidates[idx - 1].entity);
-                    self.mode = Mode::FuseSecond;
-                }
-            }
+        if let Some(idx) = self.selected_index(code, candidates.len()) {
+            self.pending_fuse_first = Some(candidates[idx].entity);
+            self.mode = Mode::FuseSecond;
         }
     }
 
@@ -655,18 +742,14 @@ impl App {
             .into_iter()
             .filter(|e| e.is_tamed && e.entity != first)
             .collect();
-        if let KeyCode::Char(c) = code {
-            if let Some(idx) = c.to_digit(10) {
-                let idx = idx as usize;
-                if idx >= 1 && idx <= candidates.len() {
-                    match game.fuse_companions(first, candidates[idx - 1].entity) {
-                        Ok(()) => self.status_line = None,
-                        Err(e) => self.status_line = Some(e),
-                    }
-                    self.pending_fuse_first = None;
-                    self.mode = Mode::Playing;
-                }
+        if let Some(idx) = self.selected_index(code, candidates.len()) {
+            let Some(game) = &mut self.game else { return };
+            match game.fuse_companions(first, candidates[idx].entity) {
+                Ok(()) => self.status_line = None,
+                Err(e) => self.status_line = Some(e),
             }
+            self.pending_fuse_first = None;
+            self.mode = Mode::Playing;
         }
     }
 
@@ -682,14 +765,9 @@ impl App {
             .into_iter()
             .filter(|e| e.can_trade)
             .collect();
-        if let KeyCode::Char(c) = code {
-            if let Some(idx) = c.to_digit(10) {
-                let idx = idx as usize;
-                if idx >= 1 && idx <= structures.len() {
-                    self.pending_trade_structure = Some(structures[idx - 1].entity);
-                    self.mode = Mode::TradeAction;
-                }
-            }
+        if let Some(idx) = self.selected_index(code, structures.len()) {
+            self.pending_trade_structure = Some(structures[idx].entity);
+            self.mode = Mode::TradeAction;
         }
     }
 
@@ -719,20 +797,15 @@ impl App {
             .collect();
         let buy_items: Vec<ItemId> = trade.buy.iter().map(|(item, _)| *item).collect();
         let total = sell_items.len() + buy_items.len();
-        if let KeyCode::Char(c) = code {
-            if let Some(idx) = c.to_digit(10) {
-                let idx = idx as usize;
-                if idx >= 1 && idx <= total {
-                    let choice = if idx <= sell_items.len() {
-                        TradeChoice::Sell(sell_items[idx - 1])
-                    } else {
-                        TradeChoice::Buy(buy_items[idx - 1 - sell_items.len()])
-                    };
-                    self.pending_trade_choice = Some(choice);
-                    self.trade_quantity_input.clear();
-                    self.mode = Mode::TradeQuantity;
-                }
-            }
+        if let Some(idx) = self.selected_index(code, total) {
+            let choice = if idx < sell_items.len() {
+                TradeChoice::Sell(sell_items[idx])
+            } else {
+                TradeChoice::Buy(buy_items[idx - sell_items.len()])
+            };
+            self.pending_trade_choice = Some(choice);
+            self.trade_quantity_input.clear();
+            self.mode = Mode::TradeQuantity;
         }
     }
 
@@ -796,13 +869,10 @@ impl App {
             self.mode = Mode::Playing;
             return;
         }
-        let Some(game) = &mut self.game else { return };
-        let KeyCode::Char(c) = code else { return };
-        let Some(idx) = c.to_digit(10) else { return };
-        let idx = idx as usize;
         let perks = feral_processes_engine::Perk::all();
-        if idx >= 1 && idx <= perks.len() {
-            match game.unlock_perk(perks[idx - 1]) {
+        if let Some(idx) = self.selected_index(code, perks.len()) {
+            let Some(game) = &mut self.game else { return };
+            match game.unlock_perk(perks[idx]) {
                 Ok(()) => self.status_line = None,
                 Err(e) => self.status_line = Some(e),
             }
@@ -852,28 +922,27 @@ impl App {
             self.mode = Mode::Playing;
             return;
         }
-        let Some(game) = &mut self.game else { return };
-        let KeyCode::Char(c) = code else { return };
-        let Some(idx) = c.to_digit(10) else { return };
+        let Some(game) = &self.game else { return };
+        let inventory = game.player_status().inventory;
+        let total = 3 + inventory.len();
+        let Some(idx) = self.selected_index(code, total) else { return };
         let slot = match idx {
-            1 => Some(EquipmentSlot::Weapon),
-            2 => Some(EquipmentSlot::Armor),
-            3 => Some(EquipmentSlot::Module),
+            0 => Some(EquipmentSlot::Weapon),
+            1 => Some(EquipmentSlot::Armor),
+            2 => Some(EquipmentSlot::Module),
             _ => None,
         };
         if let Some(slot) = slot {
+            let Some(game) = &mut self.game else { return };
             match game.unequip(slot) {
                 Ok(()) => self.status_line = None,
                 Err(e) => self.status_line = Some(e),
             }
             return;
         }
-        if idx >= 4 {
-            let inventory = game.player_status().inventory;
-            if let Some(&(item, _)) = inventory.get((idx - 4) as usize) {
-                self.pending_inventory_item = Some(item);
-                self.mode = Mode::InventoryItemAction;
-            }
+        if let Some(&(item, _)) = inventory.get(idx - 3) {
+            self.pending_inventory_item = Some(item);
+            self.mode = Mode::InventoryItemAction;
         }
     }
 
@@ -887,6 +956,14 @@ impl App {
             self.mode = Mode::Inventory;
             return;
         };
+        let mut actions = vec!['x'];
+        if item.equipment().is_some() {
+            actions.insert(0, 'e');
+        }
+        let idx = self.selected_index(code, actions.len()).or_else(|| match code {
+            KeyCode::Char(c) => actions.iter().position(|&o| o == c.to_ascii_lowercase()),
+            _ => None,
+        });
         let Some(game) = &mut self.game else { return };
         let stack_qty = game
             .player_status()
@@ -895,12 +972,9 @@ impl App {
             .find(|(i, _)| *i == item)
             .map(|(_, q)| *q)
             .unwrap_or(0);
-        let result = match code {
-            KeyCode::Char('e') | KeyCode::Char('E') if item.equipment().is_some() => {
-                Some(game.equip(item))
-            }
-            KeyCode::Char('d') | KeyCode::Char('D') => Some(game.drop_item(item, stack_qty)),
-            KeyCode::Char('x') | KeyCode::Char('X') => Some(game.destroy_item(item, stack_qty)),
+        let result = match idx.map(|i| actions[i]) {
+            Some('e') => Some(game.equip(item)),
+            Some('x') => Some(game.erase_item(item, stack_qty)),
             _ => None,
         };
         let Some(result) = result else { return };

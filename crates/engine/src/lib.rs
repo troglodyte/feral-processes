@@ -21,10 +21,10 @@ use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 
 use components::{
-    ActiveBuff, ActiveStatus, BuffKind, Creature, Decompiler, Durability, Equipment, EquippedItem,
-    Experience, Glyph, GlyphColor, Hostile, Inventory, Needs, PassiveProcessor, Perks, Player,
-    PlayerBuff, Position, ResourceNode, Stats, StatusEffects, StatusKind, Structure, Tamed, Task,
-    TaskKind, WanderAi, ZonePortal,
+    ActiveBuff, ActiveStatus, BuffKind, Creature, CustomName, Decompiler, Durability, Equipment,
+    EquippedItem, Experience, Glyph, GlyphColor, Hostile, Inventory, Needs, PassiveProcessor,
+    Perks, Player, PlayerBuff, Position, ResourceNode, Stats, StatusEffects, StatusKind,
+    Structure, Tamed, Task, TaskKind, WanderAi, ZonePortal,
 };
 use items::{EquipmentSlot, ItemId};
 pub use perks::Perk;
@@ -63,6 +63,16 @@ const COMPANION_RETALIATION_CHANCE: f64 = 0.3;
 /// `Game::rally_player`) lasts when its species defines no
 /// `special_ability`.
 const RALLY_DURATION: u32 = 3;
+
+/// Fatigue the player spends each time they command a companion in battle
+/// (see `Game::battle_command_companion`) — the rally/special-ability
+/// bonus isn't free, whichever kind the companion has.
+const COMPANION_COMMAND_FATIGUE_COST: f32 = 5.0;
+
+/// Longest name a player can give a fused program (see
+/// `Game::fuse_companions`) — enforced by truncation, not rejection, so a
+/// too-long name just gets shortened rather than failing the fusion.
+pub const MAX_CUSTOM_NAME_LEN: usize = 12;
 
 /// How much the player's `Decompiler` skill grows per level gained.
 const DECOMPILER_SKILL_PER_LEVEL: i32 = 1;
@@ -499,6 +509,9 @@ impl Game {
                 ZonePortal(c.zone),
                 StatusEffects::default(),
             ));
+            if let Some(name) = c.custom_name.clone() {
+                entity.insert(CustomName(name));
+            }
             if c.tamed {
                 let creature_id = entity.id();
                 entity.insert((
@@ -609,8 +622,9 @@ impl Game {
             Option<&Experience>,
             Option<&Task>,
             Option<&ZonePortal>,
+            Option<&CustomName>,
         )>();
-        for (entity, creature, pos, stats, tamed, exp, task, spawn_zone) in
+        for (entity, creature, pos, stats, tamed, exp, task, spawn_zone, custom_name) in
             creature_query.iter(&self.world)
         {
             let cronjob = task.and_then(|t| {
@@ -640,6 +654,7 @@ impl Game {
                 cronjob,
                 is_companion: party_entities.contains(&entity),
                 zone: spawn_zone.map(|z| z.0).unwrap_or(1),
+                custom_name: custom_name.map(|c| c.0.clone()),
             });
         }
 
@@ -1380,6 +1395,8 @@ impl Game {
             taming_difficulty,
             decompiler_skill,
         );
+        let player_atk = self.effective_atk(battle.player);
+        let player_def = self.effective_def(battle.player);
         Some(BattleView {
             wild_name,
             wild_is_boss,
@@ -1390,9 +1407,9 @@ impl Game {
             wild_power: wild_stats.power(),
             player_hp: player_stats.hp,
             player_max_hp: player_stats.max_hp,
-            player_atk: player_stats.atk,
-            player_power: player_stats.power(),
-            player_def: player_stats.def,
+            player_atk,
+            player_power: player_stats.max_hp + player_atk + player_def,
+            player_def,
             player_decompiler: decompiler_skill,
             log: battle.log.clone(),
             can_tame,
@@ -1482,6 +1499,9 @@ impl Game {
             match ability {
                 Some(ability) => self.use_special_ability(&ability, &name, player, wild),
                 None => self.rally_player(companion, &name, player),
+            }
+            if let Some(mut needs) = self.world.get_mut::<Needs>(player) {
+                needs.fatigue = (needs.fatigue - COMPANION_COMMAND_FATIGUE_COST).max(0.0);
             }
         }
 
@@ -1573,8 +1593,15 @@ impl Game {
         }
     }
 
-    /// The player's effective ATK for damage purposes: their real `Stats`
-    /// value plus an active `PlayerBuff::Atk` bonus, if any.
+    /// `entity`'s effective ATK for damage purposes: its real `Stats`
+    /// value, plus an active `PlayerBuff::Atk` bonus if any. If `entity` is
+    /// the player, this also adds the standing party bonus (see
+    /// `party_stat_bonus`) and applies the low-power attack penalty (see
+    /// `battle::power_attack_multiplier`) — both are player-only effects.
+    /// `entity` isn't always the player: `wild_retaliate` can call this
+    /// (via `effective_def`) with a companion that's eating the hit
+    /// instead, and a companion has neither a `Party` bonus of its own nor
+    /// `Needs` to run low on.
     fn effective_atk(&self, entity: Entity) -> i32 {
         let base = self.world.get::<Stats>(entity).map(|s| s.atk).unwrap_or(0);
         let bonus = self
@@ -1584,11 +1611,18 @@ impl Game {
             .filter(|a| a.kind == BuffKind::Atk)
             .map(|a| a.power)
             .unwrap_or(0);
-        base + bonus
+        if entity != self.player_entity() {
+            return base + bonus;
+        }
+        let total = base + bonus + self.party_stat_bonus().0;
+        let hunger = self.world.get::<Needs>(entity).map(|n| n.hunger).unwrap_or(100.0);
+        ((total as f32) * battle::power_attack_multiplier(hunger)).round() as i32
     }
 
-    /// The player's effective DEF against incoming damage: their real
-    /// `Stats` value plus an active `PlayerBuff::Def` bonus, if any.
+    /// `entity`'s effective DEF against incoming damage: its real `Stats`
+    /// value, plus an active `PlayerBuff::Def` bonus if any, plus the
+    /// standing party bonus (see `party_stat_bonus`) if `entity` is the
+    /// player. Same non-player-safe behavior as `effective_atk`.
     fn effective_def(&self, entity: Entity) -> i32 {
         let base = self.world.get::<Stats>(entity).map(|s| s.def).unwrap_or(0);
         let bonus = self
@@ -1598,7 +1632,28 @@ impl Game {
             .filter(|a| a.kind == BuffKind::Def)
             .map(|a| a.power)
             .unwrap_or(0);
-        base + bonus
+        if entity != self.player_entity() {
+            return base + bonus;
+        }
+        base + bonus + self.party_stat_bonus().1
+    }
+
+    /// Standing `(atk, def)` bonus the player gets just for having programs
+    /// in their active party — each member contributes 10% of its own
+    /// current ATK and DEF (minimum 1 each), summed across the party.
+    /// Computed live from each companion's current `Stats` rather than
+    /// baked into the player's own `Stats` on add/remove, so it stays
+    /// correct automatically as a companion levels up, is fused, or dies —
+    /// no separate bookkeeping to keep in sync.
+    fn party_stat_bonus(&self) -> (i32, i32) {
+        self.world
+            .resource::<Party>()
+            .0
+            .iter()
+            .filter_map(|&e| self.world.get::<Stats>(e))
+            .fold((0, 0), |(atk, def), s| {
+                (atk + (s.atk / 10).max(1), def + (s.def / 10).max(1))
+            })
     }
 
     /// Kills `wild`: awards the player XP/loot, despawns it, and ends the
@@ -2432,13 +2487,15 @@ impl Game {
             .copied()
             .unwrap_or_default();
         let perks = self.world.get::<Perks>(player);
+        let atk = self.effective_atk(player);
+        let def = self.effective_def(player);
         PlayerStatus {
             position: (pos.x, pos.y),
             hp: stats.hp,
             max_hp: stats.max_hp,
-            atk: stats.atk,
-            def: stats.def,
-            power: stats.power(),
+            atk,
+            def,
+            power: stats.max_hp + atk + def,
             decompiler,
             hunger: needs.hunger,
             fatigue: needs.fatigue,
@@ -2456,21 +2513,31 @@ impl Game {
         }
     }
 
-    /// Species display name for a creature entity, falling back to the raw
-    /// species id if the species definition is somehow missing.
+    /// A creature's own display name: the player's `CustomName` if they set
+    /// one (currently only via `Game::fuse_companions`), else its species
+    /// name (falling back to the raw species id if the species definition
+    /// is somehow missing). `None` if `entity` isn't a `Creature` at all.
+    fn creature_name(&self, entity: Entity) -> Option<String> {
+        let c = self.world.get::<Creature>(entity)?;
+        if let Some(custom) = self.world.get::<CustomName>(entity) {
+            return Some(custom.0.clone());
+        }
+        Some(
+            self.world
+                .resource::<SpeciesDb>()
+                .get(&c.species)
+                .map(|s| s.name.clone())
+                .unwrap_or_else(|| c.species.clone()),
+        )
+    }
+
+    /// `creature_name`, zone-tagged, falling back to a generic label if
+    /// `entity` isn't a `Creature`.
     fn creature_label(&self, entity: Entity) -> String {
-        self.world
-            .get::<Creature>(entity)
-            .map(|c| {
-                let name = self
-                    .world
-                    .resource::<SpeciesDb>()
-                    .get(&c.species)
-                    .map(|s| s.name.clone())
-                    .unwrap_or_else(|| c.species.clone());
-                self.zone_tagged_name(entity, name)
-            })
-            .unwrap_or_else(|| "Program".to_string())
+        match self.creature_name(entity) {
+            Some(name) => self.zone_tagged_name(entity, name),
+            None => "Program".to_string(),
+        }
     }
 
     /// Appends a creature's `ZonePortal` to its species name for display
@@ -2634,7 +2701,16 @@ impl Game {
     /// them (which would make repeated fusion runaway). A resource sink for
     /// duplicate catches: there's no separate item cost, since losing two
     /// programs to gain one is the cost.
-    pub fn fuse_companions(&mut self, a: Entity, b: Entity) -> Result<(), String> {
+    /// `custom_name`, if given, is trimmed and truncated to
+    /// `MAX_CUSTOM_NAME_LEN` characters and becomes the fused program's
+    /// display name everywhere (see `CustomName`) instead of its species
+    /// name. Blank (or all-whitespace) is treated the same as `None`.
+    pub fn fuse_companions(
+        &mut self,
+        a: Entity,
+        b: Entity,
+        custom_name: Option<String>,
+    ) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
@@ -2690,8 +2766,14 @@ impl Game {
         self.world.despawn(a);
         self.world.despawn(b);
 
+        let final_name: Option<String> = custom_name.and_then(|n| {
+            let trimmed = n.trim();
+            (!trimmed.is_empty())
+                .then(|| trimmed.chars().take(MAX_CUSTOM_NAME_LEN).collect::<String>())
+        });
+
         let player_pos = *self.world.get::<Position>(player).unwrap();
-        self.world.spawn((
+        let mut fused = self.world.spawn((
             Creature {
                 species: species.id.clone(),
             },
@@ -2718,10 +2800,13 @@ impl Game {
             ZonePortal(1),
             StatusEffects::default(),
         ));
-        self.log(format!(
-            "You fuse {name_a} and {name_b} into a new {}.",
-            species.name
-        ));
+        if let Some(name) = &final_name {
+            fused.insert(CustomName(name.clone()));
+        }
+        self.log(match &final_name {
+            Some(name) => format!("You fuse {name_a} and {name_b} into {name}, a new {}.", species.name),
+            None => format!("You fuse {name_a} and {name_b} into a new {}.", species.name),
+        });
         Ok(())
     }
 
@@ -2780,13 +2865,7 @@ impl Game {
     /// `view_entities` for both an entity's own label and cross-references
     /// (a worker's assigned structure, a structure's assigned worker).
     fn entity_label(&self, entity: Entity) -> String {
-        if let Some(c) = self.world.get::<Creature>(entity) {
-            let name = self
-                .world
-                .resource::<SpeciesDb>()
-                .get(&c.species)
-                .map(|s| s.name.clone())
-                .unwrap_or_else(|| c.species.clone());
+        if let Some(name) = self.creature_name(entity) {
             self.zone_tagged_name(entity, name)
         } else if let Some(s) = self.world.get::<Structure>(entity) {
             self.world
@@ -2907,8 +2986,13 @@ impl Game {
             species.taming_difficulty,
             decompiler_skill,
         );
+        let display_name = self
+            .world
+            .get::<CustomName>(entity)
+            .map(|c| c.0.clone())
+            .unwrap_or_else(|| species.name.clone());
         Some(InspectView {
-            name: self.zone_tagged_name(entity, species.name.clone()),
+            name: self.zone_tagged_name(entity, display_name),
             glyph: species.glyph,
             color: species.color,
             level,
@@ -4646,6 +4730,77 @@ mod tests {
         );
     }
 
+    /// Sets up a single-round battle with one companion (stunned or not)
+    /// and returns how much the player's fatigue dropped from commanding
+    /// it. Shared by the two fatigue-cost tests below.
+    fn fatigue_spent_commanding_companion(seed: u32, stunned: bool) -> f32 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let companion = spawn_tamed(&mut game, 10, 20);
+        game.add_companion(companion).unwrap();
+        if stunned {
+            game.world.entity_mut(companion).insert(StatusEffects {
+                active: Some(ActiveStatus {
+                    kind: StatusKind::Stun,
+                    remaining: 1,
+                    power: 0,
+                }),
+            });
+        }
+
+        let species = game
+            .species_defs()
+            .into_iter()
+            .next()
+            .expect("at least one species");
+        let wild = game
+            .world
+            .spawn((
+                Creature {
+                    species: species.id.clone(),
+                },
+                Hostile,
+                Position { x: 5, y: 5 },
+                Stats {
+                    hp: 100,
+                    max_hp: 100,
+                    atk: 0,
+                    def: 0,
+                },
+                StatusEffects::default(),
+            ))
+            .id();
+        game.world.insert_resource(BattleState {
+            player,
+            wild_creature: wild,
+            log: Vec::new(),
+            finished: false,
+            player_won: false,
+        });
+
+        let fatigue_before = game.world.get::<Needs>(player).unwrap().fatigue;
+        game.battle_command_companion(companion);
+        let fatigue_after = game.world.get::<Needs>(player).unwrap().fatigue;
+        fatigue_before - fatigue_after
+    }
+
+    #[test]
+    fn commanding_a_companion_in_battle_costs_more_fatigue_than_a_stunned_one() {
+        // Both paths advance the clock by one tick (`battle_command_companion`
+        // always ticks at the end), so both pay the same small natural
+        // fatigue decay regardless — comparing the two deltas rather than
+        // asserting an absolute number isolates just the companion-command
+        // cost from that shared per-tick decay.
+        let active = fatigue_spent_commanding_companion(84, false);
+        let stunned = fatigue_spent_commanding_companion(85, true);
+        assert!(
+            (active - stunned - COMPANION_COMMAND_FATIGUE_COST).abs() < 0.001,
+            "commanding an active companion should cost exactly {COMPANION_COMMAND_FATIGUE_COST} \
+             more fatigue than commanding a stunned one, which doesn't actually act: \
+             active spent {active}, stunned spent {stunned}"
+        );
+    }
+
     #[test]
     fn an_atk_buff_increases_damage_dealt_and_expires_after_its_duration() {
         let mut game = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -4918,6 +5073,31 @@ mod tests {
     }
 
     #[test]
+    fn effective_def_excludes_the_players_party_bonus_when_a_companion_is_the_target() {
+        // `wild_retaliate` calls `effective_def` on whichever entity got
+        // hit — the player, or (per the test above) a companion. The
+        // player's passive party bonus (see `party_stat_bonus`) must only
+        // ever land on the player, never get double-applied to a
+        // companion's own defense just because it's a party member too.
+        let mut game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let a = spawn_tamed(&mut game, 10, 30);
+        game.world.get_mut::<Stats>(a).unwrap().def = 20;
+        game.add_companion(a).unwrap();
+        // A second party member gives the *player's* bonus a nonzero,
+        // easy-to-notice value if it ever leaked onto `a`.
+        let b = spawn_tamed(&mut game, 10, 200);
+        game.add_companion(b).unwrap();
+
+        let raw_def = game.world.get::<Stats>(a).unwrap().def;
+        assert_eq!(
+            game.effective_def(a),
+            raw_def,
+            "a companion's effective DEF as a retaliation target must be its own raw Stats, \
+             not inflated by the player's party bonus"
+        );
+    }
+
+    #[test]
     fn a_knocked_out_companion_stands_down() {
         let species_id = {
             let game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -5051,6 +5231,75 @@ mod tests {
     }
 
     #[test]
+    fn party_members_grant_a_passive_ten_percent_atk_def_bonus_that_stacks_updates_live_and_disappears_on_removal() {
+        let mut game = Game::new(75, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let base_atk = game.player_status().atk;
+        let base_def = game.player_status().def;
+
+        // `spawn_tamed` fixes def at 1, so 10% of it floors to 0 and should
+        // clamp up to the stated minimum of 1 rather than contributing 0.
+        let a = spawn_tamed(&mut game, 10, 30);
+        game.add_companion(a).unwrap();
+        let status = game.player_status();
+        assert_eq!(status.atk, base_atk + 3, "10% of a's 30 ATK is 3");
+        assert_eq!(status.def, base_def + 1, "10% of a's 1 DEF floors to 0, minimum 1 applies");
+
+        // A second party member's bonus stacks on top of the first's.
+        let b = spawn_tamed(&mut game, 10, 50);
+        game.add_companion(b).unwrap();
+        let status = game.player_status();
+        assert_eq!(status.atk, base_atk + 3 + 5, "10% of b's 50 ATK is 5, stacked with a's");
+        assert_eq!(status.def, base_def + 1 + 1);
+
+        // The bonus is computed live from each companion's current Stats,
+        // not baked in at add_companion time — a level-up (simulated here
+        // by mutating Stats directly, same as `progression::add_xp` would)
+        // should be reflected immediately with no extra bookkeeping.
+        game.world.get_mut::<Stats>(a).unwrap().atk = 60;
+        let status = game.player_status();
+        assert_eq!(status.atk, base_atk + 6 + 5, "a's stronger ATK should raise its contribution");
+
+        game.remove_companion(a);
+        game.remove_companion(b);
+        let status = game.player_status();
+        assert_eq!(status.atk, base_atk, "bonus should vanish once every companion leaves the party");
+        assert_eq!(status.def, base_def);
+    }
+
+    #[test]
+    fn dropping_below_half_power_weakens_the_players_attack() {
+        let mut game = Game::new(76, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let full_atk = game.player_status().atk;
+
+        // At and above the threshold, no penalty at all.
+        game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
+        assert_eq!(game.player_status().atk, full_atk, "50 power is still full strength");
+
+        // Below it, a linear falloff — checked at a couple of points rather
+        // than re-deriving the formula, since `battle::power_attack_multiplier`
+        // already has its own dedicated unit tests for the exact curve.
+        game.world.get_mut::<Needs>(player).unwrap().hunger = 25.0;
+        let quarter_power_atk = game.player_status().atk;
+        assert!(
+            quarter_power_atk < full_atk,
+            "attack should be weaker at 25 power than at full power"
+        );
+
+        game.world.get_mut::<Needs>(player).unwrap().hunger = 0.0;
+        let zero_power_atk = game.player_status().atk;
+        assert!(
+            zero_power_atk < quarter_power_atk,
+            "attack should keep weakening as power keeps dropping"
+        );
+        assert_eq!(
+            zero_power_atk,
+            (full_atk as f32 * 0.5).round() as i32,
+            "the penalty floors at half strength, even fully starved"
+        );
+    }
+
+    #[test]
     fn battle_command_companion_rejects_a_program_not_in_the_party() {
         let mut game = Game::new(73, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
@@ -5160,7 +5409,7 @@ mod tests {
             ))
             .id();
 
-        game.fuse_companions(a, b).unwrap();
+        game.fuse_companions(a, b, None).unwrap();
 
         assert!(
             game.world.get::<Creature>(a).is_none(),
@@ -5201,7 +5450,7 @@ mod tests {
     fn fuse_companions_rejects_fusing_a_program_with_itself() {
         let mut game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let a = spawn_tamed(&mut game, 10, 3);
-        assert!(game.fuse_companions(a, a).is_err());
+        assert!(game.fuse_companions(a, a, None).is_err());
     }
 
     #[test]
@@ -5225,7 +5474,7 @@ mod tests {
                 },
             ))
             .id();
-        assert!(game.fuse_companions(a, wild).is_err());
+        assert!(game.fuse_companions(a, wild, None).is_err());
         assert!(
             game.world.get::<Creature>(a).is_some(),
             "a failed fusion shouldn't consume either input"
@@ -5241,7 +5490,7 @@ mod tests {
         game.add_companion(a).unwrap();
         game.add_companion(b).unwrap();
 
-        game.fuse_companions(a, b).unwrap();
+        game.fuse_companions(a, b, None).unwrap();
 
         assert!(!game.world.resource::<Party>().0.contains(&a));
         assert!(!game.world.resource::<Party>().0.contains(&b));

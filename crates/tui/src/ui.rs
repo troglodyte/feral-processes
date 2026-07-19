@@ -40,6 +40,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
         | Mode::Companion
         | Mode::Fuse
         | Mode::FuseSecond
+        | Mode::FuseName
         | Mode::Trade
         | Mode::TradeAction
         | Mode::TradeQuantity
@@ -113,13 +114,22 @@ fn render_playing(f: &mut Frame, app: &mut App) {
         Mode::InspectDetail => render_inspect_detail(f, area, game, app.pending_inspect),
         Mode::Inventory => render_inventory_screen(f, area, game, selected),
         Mode::InventoryItemAction => {
-            render_inventory_item_action(f, area, app.pending_inventory_item, selected)
+            let zone = game.player_status().zone;
+            render_inventory_item_action(f, area, app.pending_inventory_item, zone, selected)
         }
         Mode::Companion => render_companion_menu(f, area, game, selected),
         Mode::Fuse => render_fuse_menu(f, area, game, selected),
         Mode::FuseSecond => {
             render_fuse_second_menu(f, area, game, app.pending_fuse_first, selected)
         }
+        Mode::FuseName => render_fuse_name_menu(
+            f,
+            area,
+            game,
+            app.pending_fuse_first,
+            app.pending_fuse_second,
+            &app.fuse_name_input,
+        ),
         Mode::Trade => render_trade_menu(f, area, game, selected),
         Mode::TradeAction => {
             render_trade_action_menu(f, area, game, app.pending_trade_structure, selected)
@@ -303,6 +313,14 @@ fn render_status_panel(f: &mut Frame, area: Rect, status: &PlayerStatus) {
             status.atk, status.def, status.power
         )),
         Line::from(format!("Decompiler {}", status.decompiler)),
+        Line::styled(
+            format!(
+                "Party: {}/{}",
+                status.companions.len(),
+                feral_processes_engine::resources::MAX_PARTY_SIZE
+            ),
+            Style::new().fg(Color::Green),
+        ),
     ];
     for companion in &status.companions {
         lines.push(Line::from(format!(
@@ -499,6 +517,10 @@ fn render_cronjob_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usi
         .into_iter()
         .filter(|e| e.is_tamed)
         .collect();
+    // `view_entities` doesn't carry a raw power number, only a level and
+    // an HP fraction — cross-reference `owned_pets` for it, same as the
+    // fuse menu does.
+    let pets = game.owned_pets();
     let mut lines = vec![Line::from(
         "Assign which program to a cronjob? (Esc to cancel; Up/Down + Enter also work)",
     )];
@@ -512,12 +534,18 @@ fn render_cronjob_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usi
             .as_ref()
             .map(|s| format!(" (on a cronjob: {s})"))
             .unwrap_or_default();
+        let power = pets
+            .iter()
+            .find(|p| p.entity == w.entity)
+            .map(|p| format!(" PWR {}", p.power))
+            .unwrap_or_default();
         lines.push(menu_line(
             format!(
-                "[{}] {}{} at ({}, {}){}{}",
+                "[{}] {}{}{} at ({}, {}){}{}",
                 i + 1,
                 w.label,
                 w.level.map(|l| format!(" Lv{l}")).unwrap_or_default(),
+                power,
                 w.pos.0,
                 w.pos.1,
                 companion,
@@ -583,6 +611,7 @@ fn render_guard_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize
         .into_iter()
         .filter(|e| e.is_tamed)
         .collect();
+    let pets = game.owned_pets();
     let mut lines = vec![Line::from(
         "Assign which program to guard duty? (Esc to cancel; Up/Down + Enter also work)",
     )];
@@ -596,12 +625,18 @@ fn render_guard_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize
             .as_ref()
             .map(|s| format!(" (on a cronjob: {s})"))
             .unwrap_or_default();
+        let power = pets
+            .iter()
+            .find(|p| p.entity == w.entity)
+            .map(|p| format!(" PWR {}", p.power))
+            .unwrap_or_default();
         lines.push(menu_line(
             format!(
-                "[{}] {}{} at ({}, {}){}{}",
+                "[{}] {}{}{} at ({}, {}){}{}",
                 i + 1,
                 w.label,
                 w.level.map(|l| format!(" Lv{l}")).unwrap_or_default(),
+                power,
                 w.pos.0,
                 w.pos.1,
                 companion,
@@ -810,6 +845,49 @@ fn render_fuse_second_menu(
             i == selected,
         ));
     }
+    f.render_widget(
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: true })
+            .block(Block::bordered().title("Fuse")),
+        popup,
+    );
+}
+
+/// Free-text naming page shown after both fuse candidates are picked —
+/// same shape as the craft/trade quantity pages, just typing characters
+/// instead of digits. Blank and Enter keeps the default species name.
+fn render_fuse_name_menu(
+    f: &mut Frame,
+    area: Rect,
+    game: &mut Game,
+    first: Option<feral_processes_engine::Entity>,
+    second: Option<feral_processes_engine::Entity>,
+    name_input: &str,
+) {
+    let popup = centered_rect(55, 30, area);
+    f.render_widget(Clear, popup);
+    let (Some(first), Some(second)) = (first, second) else {
+        return;
+    };
+    let nearby = game.view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS);
+    let label_of = |e: feral_processes_engine::Entity| {
+        nearby
+            .iter()
+            .find(|ev| ev.entity == e)
+            .map(|ev| ev.label.clone())
+            .unwrap_or_else(|| "it".to_string())
+    };
+    let lines = vec![
+        Line::from(format!("Fusing {} and {}.", label_of(first), label_of(second))),
+        Line::from(""),
+        Line::from(format!(
+            "Name it (optional, {} max): {name_input}",
+            feral_processes_engine::MAX_CUSTOM_NAME_LEN
+        )),
+        Line::from(""),
+        Line::from("Type a name, Enter to fuse (blank keeps the default name)"),
+        Line::from("Esc to go back and re-pick the second program"),
+    ];
     f.render_widget(
         Paragraph::new(lines)
             .wrap(Wrap { trim: true })
@@ -1211,11 +1289,7 @@ fn render_inventory_screen(f: &mut Frame, area: Rect, game: &mut Game, selected:
         lines.push(Line::from("  (empty)"));
     }
     for (i, (item, qty)) in status.inventory.iter().enumerate() {
-        let tag = if item.equipment().is_some() {
-            " (equippable)"
-        } else {
-            ""
-        };
+        let tag = equip_preview_tag(*item, status.zone);
         lines.push(menu_line(
             format!("[{}] {} x{}{}", i + 4, item.display_name(), qty, tag),
             selected == i + 3,
@@ -1269,7 +1343,36 @@ fn equipped_line(
     }
 }
 
-fn render_inventory_item_action(f: &mut Frame, area: Rect, item: Option<ItemId>, selected: usize) {
+/// Formats an equippable item's stat bonus as it would be *if equipped
+/// right now* — gear scales with the current zone level at the moment you
+/// equip it (see `Game::equip`), so this previews that same number rather
+/// than a flat, unscaled base value. Empty string for a non-equippable
+/// item (in place of the old generic "(equippable)" tag).
+fn equip_preview_tag(item: ItemId, zone_level: u32) -> String {
+    let Some((_, base_mods)) = item.equipment() else {
+        return String::new();
+    };
+    let mods = base_mods.scaled_for_level(zone_level);
+    let mut parts = Vec::new();
+    if mods.atk != 0 {
+        parts.push(format!("+{} ATK", mods.atk));
+    }
+    if mods.def != 0 {
+        parts.push(format!("+{} DEF", mods.def));
+    }
+    if mods.decompiler != 0 {
+        parts.push(format!("+{} DECOMP", mods.decompiler));
+    }
+    format!(" ({})", parts.join(" "))
+}
+
+fn render_inventory_item_action(
+    f: &mut Frame,
+    area: Rect,
+    item: Option<ItemId>,
+    zone_level: u32,
+    selected: usize,
+) {
     let popup = centered_rect(50, 30, area);
     f.render_widget(Clear, popup);
     let Some(item) = item else {
@@ -1285,7 +1388,7 @@ fn render_inventory_item_action(f: &mut Frame, area: Rect, item: Option<ItemId>,
     }
     let mut lines = vec![
         Line::styled(
-            item.display_name(),
+            format!("{}{}", item.display_name(), equip_preview_tag(item, zone_level)),
             Style::new().add_modifier(Modifier::BOLD),
         ),
         Line::from(""),

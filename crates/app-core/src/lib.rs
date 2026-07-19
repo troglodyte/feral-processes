@@ -65,6 +65,12 @@ pub enum Mode {
     Companion,
     Fuse,
     FuseSecond,
+    /// Typing a name (`App::fuse_name_input`) for the program that'll
+    /// result from fusing `pending_fuse_first`/`pending_fuse_second` —
+    /// blank keeps the default species name. Reached after picking both
+    /// programs in `Mode::Fuse`/`Mode::FuseSecond`; Enter actually runs the
+    /// fusion.
+    FuseName,
     Trade,
     TradeAction,
     TradeQuantity,
@@ -108,6 +114,12 @@ pub struct App {
     /// The first program picked in `Mode::Fuse`, awaiting a second from
     /// `Mode::FuseSecond` before `Game::fuse_companions` is actually called.
     pub pending_fuse_first: Option<Entity>,
+    /// The second program picked in `Mode::FuseSecond`, awaiting a name
+    /// from `Mode::FuseName` before `Game::fuse_companions` is actually
+    /// called.
+    pub pending_fuse_second: Option<Entity>,
+    /// Characters typed so far on the fuse-naming page (see `Mode::FuseName`).
+    pub fuse_name_input: String,
     pub pending_inventory_item: Option<ItemId>,
     /// The recipe result picked in `Mode::Craft`, awaiting a quantity from
     /// `Mode::CraftQuantity` before `Game::craft` is actually called.
@@ -165,6 +177,8 @@ impl App {
             pending_worker: None,
             pending_inspect: None,
             pending_fuse_first: None,
+            pending_fuse_second: None,
+            fuse_name_input: String::new(),
             pending_inventory_item: None,
             pending_craft: None,
             craft_quantity_input: String::new(),
@@ -357,6 +371,7 @@ impl App {
             Mode::Companion => self.handle_companion_key(key),
             Mode::Fuse => self.handle_fuse_key(key),
             Mode::FuseSecond => self.handle_fuse_second_key(key),
+            Mode::FuseName => self.handle_fuse_name_key(key),
             Mode::Trade => self.handle_trade_key(key),
             Mode::TradeAction => self.handle_trade_action_key(key),
             Mode::TradeQuantity => self.handle_trade_quantity_key(key),
@@ -953,13 +968,52 @@ impl App {
             .filter(|e| e.is_tamed && e.entity != first)
             .collect();
         if let Some(idx) = self.selected_index(key, candidates.len()) {
-            let Some(game) = &mut self.game else { return };
-            match game.fuse_companions(first, candidates[idx].entity) {
-                Ok(()) => self.status_line = None,
-                Err(e) => self.status_line = Some(e),
+            self.pending_fuse_second = Some(candidates[idx].entity);
+            self.fuse_name_input.clear();
+            self.mode = Mode::FuseName;
+        }
+    }
+
+    /// Types a name (up to `feral_processes_engine::MAX_CUSTOM_NAME_LEN`
+    /// characters) for the program that'll result from fusing
+    /// `pending_fuse_first`/`pending_fuse_second`; Enter runs the fusion
+    /// (blank keeps the default species name). Esc backs up one step to
+    /// re-pick the second program, rather than aborting the whole fusion —
+    /// the first pick is still good.
+    fn handle_fuse_name_key(&mut self, key: GameKey) {
+        match key {
+            GameKey::Esc => {
+                self.pending_fuse_second = None;
+                self.fuse_name_input.clear();
+                self.mode = Mode::FuseSecond;
             }
-            self.pending_fuse_first = None;
-            self.mode = Mode::Playing;
+            GameKey::Backspace => {
+                self.fuse_name_input.pop();
+            }
+            GameKey::Char(c)
+                if !c.is_control()
+                    && self.fuse_name_input.chars().count()
+                        < feral_processes_engine::MAX_CUSTOM_NAME_LEN =>
+            {
+                self.fuse_name_input.push(c);
+            }
+            GameKey::Enter => {
+                let (Some(first), Some(second)) =
+                    (self.pending_fuse_first.take(), self.pending_fuse_second.take())
+                else {
+                    self.mode = Mode::Playing;
+                    return;
+                };
+                let name = (!self.fuse_name_input.is_empty()).then(|| self.fuse_name_input.clone());
+                self.fuse_name_input.clear();
+                let Some(game) = &mut self.game else { return };
+                match game.fuse_companions(first, second, name) {
+                    Ok(()) => self.status_line = None,
+                    Err(e) => self.status_line = Some(e),
+                }
+                self.mode = Mode::Playing;
+            }
+            _ => {}
         }
     }
 

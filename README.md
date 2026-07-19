@@ -197,8 +197,8 @@ Shown in the status panel (always) and the intrusion screen (in battle):
 | Stat | What it means |
 | --- | --- |
 | **Integrity** | Your HP. Hits 0 and you flatline — final in Permadeath, a costly soft-reboot in Forgiving mode. Leveling up or recharging overnight (`r`) both fully restore it. |
-| **Power** | Your hunger-equivalent. Drains over time; hits 0 and you start taking Integrity damage each tick. Restored by draining a Power Cell (`e`) or standing near a cooking Terminal. |
-| **Fatigue** | Drains over time; restored to full by recharging overnight (`r`). Currently cosmetic — doesn't yet penalize anything on its own, but rest also advances a lot of game time, so use it deliberately. |
+| **Power** | Your hunger-equivalent. Drains over time; hits 0 and you start taking Integrity damage each tick. Below 50%, your Attack also starts weakening — a linear falloff to half strength at 0 Power, on top of (not instead of) the tick damage. Restored by draining a Power Cell (`e`) or standing near a cooking Terminal. |
+| **Fatigue** | Drains over time; restored to full by recharging overnight (`r`). Commanding a companion in battle (`c`) also costs a flat chunk of it — rest also advances a lot of game time, so use both deliberately. |
 | **Level / XP** | Grows from defeating or decompiling rogue programs, or (for a compiled program) completing cronjob cycles. Each level-up grows Attack/Defense/max Integrity, fully heals, and grants 1 Perk Point — see [Perks](#perks). |
 | **Attack** | How hard your hits land. Battle damage is roughly `move power + attacker's Attack − defender's Defense` (always at least 1). |
 | **Defense** | How much incoming damage you shrug off — see the Attack formula above. |
@@ -298,6 +298,11 @@ be active party members, fighting alongside you at once.
   the party's already full — stand one down first). Selecting a party
   member's own number stands it down. The screen stays open so you can
   adjust multiple slots in one visit; `Esc` closes it.
+- Every active party member also passively adds 10% of its own current
+  Attack and Defense (minimum 1 each) to yours, stacking across the whole
+  party — shown live in your own Attack/Defense numbers in the status panel
+  and intrusion screen. It updates automatically as a companion levels up
+  or is fused, and drops off the moment it's stood down or knocked out.
 - A party member is mutually exclusive with a cronjob: assigning it to work
   a structure (`w`) automatically stands it down from the party, and vice
   versa — a program is either working or fighting beside you, never both.
@@ -309,7 +314,9 @@ be active party members, fighting alongside you at once.
   bigger Attack/Defense buff, a heal, or a debuff on the wild program — see
   `assets/species/README.md`). Either way, it's *instead of* you acting
   that round — a turn-economy tradeoff, not a free extra hit, and only one
-  companion can act per round even with a full party.
+  companion can act per round even with a full party. It also costs you a
+  flat chunk of Fatigue — a stunned companion that can't act costs nothing,
+  since nothing actually happened that round.
 - The wild program's retaliation has a 30% chance to target the party
   instead of you (picking uniformly among current members if you have
   more than one), using that member's Defense stat. A party member knocked

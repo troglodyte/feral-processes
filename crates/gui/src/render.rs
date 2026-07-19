@@ -10,7 +10,7 @@ use feral_processes_app_core::{App, MENU_SCAN_RADIUS, Mode, TradeChoice};
 use feral_processes_engine::components::GlyphColor;
 use feral_processes_engine::items::ItemId;
 use feral_processes_engine::world::Biome;
-use feral_processes_engine::{Entity, Game};
+use feral_processes_engine::{Entity, EntityView, Game, PetInfo};
 
 const FONT_SIZE: f32 = 24.0;
 const LINE_HEIGHT: f32 = 30.0;
@@ -67,6 +67,23 @@ fn item_row(s: impl Into<String>, selected: bool) -> Row {
     Row::Item(s.into(), selected)
 }
 
+/// How much of the window a popup claims. Height always shrinks to fit
+/// short content regardless of size (see `draw_popup`), so this really
+/// only controls width in practice — `Small` exists for the handful of
+/// one-line prompts that would otherwise be a lot of empty box around a
+/// single sentence.
+#[derive(Clone, Copy)]
+enum PopupSize {
+    /// Every list/detail menu with real content — deploy/compile/trade/
+    /// inventory/party/etc. Sized to leave long rows room rather than
+    /// running off the popup's edge, and to give scrollable lists (see
+    /// `draw_popup`) more rows on screen before they need to scroll at all.
+    Large,
+    /// A short, single-purpose prompt with nothing to clip: a direction
+    /// picker, a "that program is gone" message.
+    Small,
+}
+
 /// Centered popup, sized as a percentage of the window — same idea as
 /// `ui.rs`'s `centered_rect`, just in pixels instead of terminal cells.
 ///
@@ -76,7 +93,11 @@ fn item_row(s: impl Into<String>, selected: bool) -> Row {
 /// scrollable body. Long lists (more structures/pets/etc. than fit the
 /// popup) auto-scroll to keep the highlighted row in view instead of
 /// silently running off the bottom with no way to see or reach it.
-fn draw_popup(title: &str, pct_w: f32, pct_h: f32, rows: &[Row]) {
+fn draw_popup(title: &str, size: PopupSize, rows: &[Row]) {
+    let (pct_w, pct_h) = match size {
+        PopupSize::Large => (0.88, 0.85),
+        PopupSize::Small => (0.5, 0.85),
+    };
     let w = screen_width() * pct_w;
     let h = (screen_height() * pct_h).min(rows.len() as f32 * LINE_HEIGHT + 70.0).max(120.0);
     let x = (screen_width() - w) / 2.0;
@@ -321,6 +342,18 @@ fn draw_status_panel(x: f32, y: f32, w: f32, h: f32, status: &feral_processes_en
         draw_text(line, x + 10.0, cy, FONT_SIZE, TEXT);
         cy += LINE_HEIGHT;
     }
+    draw_text(
+        &format!(
+            "Party: {}/{}",
+            status.companions.len(),
+            feral_processes_engine::resources::MAX_PARTY_SIZE
+        ),
+        x + 10.0,
+        cy,
+        FONT_SIZE,
+        GREEN,
+    );
+    cy += LINE_HEIGHT;
     for companion in &status.companions {
         draw_text(
             &format!(
@@ -395,10 +428,18 @@ fn draw_mode_overlay(app: &mut App) {
         Mode::InspectDirection => draw_direction_prompt("Inspect Direction", "Choose a direction to inspect (arrows/hjkl), Esc to cancel"),
         Mode::InspectDetail => draw_inspect_detail(game, app.pending_inspect),
         Mode::Inventory => draw_inventory(game, selected),
-        Mode::InventoryItemAction => draw_inventory_item_action(app.pending_inventory_item, selected),
+        Mode::InventoryItemAction => {
+            draw_inventory_item_action(app.pending_inventory_item, game.player_status().zone, selected)
+        }
         Mode::Companion => draw_companion_menu(game, selected),
         Mode::Fuse => draw_fuse_menu(game, selected),
         Mode::FuseSecond => draw_fuse_second_menu(game, app.pending_fuse_first, selected),
+        Mode::FuseName => draw_fuse_name_menu(
+            game,
+            app.pending_fuse_first,
+            app.pending_fuse_second,
+            &app.fuse_name_input,
+        ),
         Mode::Trade => draw_trade_menu(game, selected),
         Mode::TradeAction => draw_trade_action_menu(game, app.pending_trade_structure, selected),
         Mode::TradeQuantity => draw_trade_quantity_menu(
@@ -413,7 +454,7 @@ fn draw_mode_overlay(app: &mut App) {
 }
 
 fn draw_direction_prompt(title: &str, body: &str) {
-    draw_popup(title, 0.5, 0.15, &[text_row(body)]);
+    draw_popup(title, PopupSize::Small, &[text_row(body)]);
 }
 
 fn draw_build_menu(game: &mut Game, selected: usize) {
@@ -423,19 +464,19 @@ fn draw_build_menu(game: &mut Game, selected: usize) {
     for (i, def) in defs.iter().enumerate() {
         let raw_cost = game.structure_build_cost(def);
         let cost = cost_display(&raw_cost, &status.inventory);
-        rows.push(item_row(format!("[{}] {} — {}", i + 1, def.name, cost.join(", ")), i == selected));
+        rows.push(item_row(format!("[{}] {} - {}", i + 1, def.name, cost.join(", ")), i == selected));
         rows.push(text_row(format!("    {}", structure_description(def))));
     }
-    draw_popup("Deploy", 0.6, 0.7, &rows);
+    draw_popup("Deploy", PopupSize::Large, &rows);
 }
 
 fn structure_description(def: &feral_processes_engine::structures::StructureDef) -> String {
     let mut parts = Vec::new();
     if let Some(work) = &def.work {
-        parts.push(format!("cronjob → {}", work.produces.display_name()));
+        parts.push(format!("cronjob -> {}", work.produces.display_name()));
     }
     if let Some(passive) = &def.passive_process {
-        parts.push(format!("{} → {}", passive.consumes.display_name(), passive.produces.display_name()));
+        parts.push(format!("{} -> {}", passive.consumes.display_name(), passive.produces.display_name()));
     }
     if parts.is_empty() {
         parts.push("no production".to_string());
@@ -450,11 +491,11 @@ fn draw_craft_menu(game: &mut Game, selected: usize) {
     for (i, recipe) in recipes.iter().enumerate() {
         let cost = cost_display(&recipe.cost, &status.inventory);
         rows.push(item_row(
-            format!("[{}] {} — {}", i + 1, recipe.result.display_name(), cost.join(", ")),
+            format!("[{}] {} - {}", i + 1, recipe.result.display_name(), cost.join(", ")),
             i == selected,
         ));
     }
-    draw_popup("Compile", 0.55, 0.6, &rows);
+    draw_popup("Compile", PopupSize::Large, &rows);
 }
 
 fn draw_craft_quantity(game: &mut Game, pending: Option<ItemId>, quantity_input: &str) {
@@ -474,7 +515,7 @@ fn draw_craft_quantity(game: &mut Game, pending: Option<ItemId>, quantity_input:
     rows.push(text_row(""));
     rows.push(text_row("Type digits, Enter to compile"));
     rows.push(text_row("[F] Compile 5   [M] Compile max affordable   Esc to go back"));
-    draw_popup("Compile", 0.5, 0.45, &rows);
+    draw_popup("Compile", PopupSize::Large, &rows);
 }
 
 fn draw_worker_menu(game: &mut Game, title: &str, prompt: &str, selected: usize) {
@@ -483,6 +524,10 @@ fn draw_worker_menu(game: &mut Game, title: &str, prompt: &str, selected: usize)
         .into_iter()
         .filter(|e| e.is_tamed)
         .collect();
+    // `view_entities` doesn't carry a raw power number, only a level and
+    // an HP fraction — cross-reference `owned_pets` for it, same as the
+    // fuse menu does.
+    let pets = game.owned_pets();
     let mut rows = vec![text_row(format!("{prompt} (Esc to cancel; Up/Down + Enter also work)"))];
     if workers.is_empty() {
         rows.push(text_row("(no compiled programs nearby)"));
@@ -490,12 +535,14 @@ fn draw_worker_menu(game: &mut Game, title: &str, prompt: &str, selected: usize)
     for (i, w) in workers.iter().enumerate() {
         let companion = if w.is_companion { " (in party)" } else { "" };
         let job = w.job_structure.as_ref().map(|s| format!(" (on a cronjob: {s})")).unwrap_or_default();
+        let power = pets.iter().find(|p| p.entity == w.entity).map(|p| format!(" PWR {}", p.power)).unwrap_or_default();
         rows.push(item_row(
             format!(
-                "[{}] {}{} at ({}, {}){}{}",
+                "[{}] {}{}{} at ({}, {}){}{}",
                 i + 1,
                 w.label,
                 w.level.map(|l| format!(" Lv{l}")).unwrap_or_default(),
+                power,
                 w.pos.0,
                 w.pos.1,
                 companion,
@@ -504,7 +551,7 @@ fn draw_worker_menu(game: &mut Game, title: &str, prompt: &str, selected: usize)
             i == selected,
         ));
     }
-    draw_popup(title, 0.55, 0.6, &rows);
+    draw_popup(title, PopupSize::Large, &rows);
 }
 
 fn draw_structure_menu(game: &mut Game, title: &str, prompt: &str, workable_only: bool, selected: usize) {
@@ -525,7 +572,7 @@ fn draw_structure_menu(game: &mut Game, title: &str, prompt: &str, workable_only
             i == selected,
         ));
     }
-    draw_popup(title, 0.55, 0.6, &rows);
+    draw_popup(title, PopupSize::Large, &rows);
 }
 
 fn draw_symlink_menu(game: &mut Game, selected: usize) {
@@ -540,16 +587,16 @@ fn draw_symlink_menu(game: &mut Game, selected: usize) {
         let cost = cost_display(&raw_cost, &status.inventory);
         let durability = t.durability.map(|(hp, max)| format!(" [HP {hp}/{max}]")).unwrap_or_default();
         rows.push(item_row(
-            format!("[{}] {} at ({}, {}){} — {}", i + 1, t.label, t.pos.0, t.pos.1, durability, cost.join(", ")),
+            format!("[{}] {} at ({}, {}){} - {}", i + 1, t.label, t.pos.0, t.pos.1, durability, cost.join(", ")),
             i == selected,
         ));
     }
-    draw_popup("Symlink", 0.55, 0.6, &rows);
+    draw_popup("Symlink", PopupSize::Large, &rows);
 }
 
 fn draw_inspect_detail(game: &mut Game, entity: Option<Entity>) {
     let Some(view) = entity.and_then(|e| game.inspect(e)) else {
-        draw_popup("Inspect", 0.5, 0.2, &[text_row("That program is gone. Press any key to go back.")]);
+        draw_popup("Inspect", PopupSize::Small, &[text_row("That program is gone. Press any key to go back.")]);
         return;
     };
     let status = if view.is_tamed {
@@ -567,7 +614,7 @@ fn draw_inspect_detail(game: &mut Game, entity: Option<Entity>) {
             format!(
                 "{}{}{}",
                 view.name,
-                view.level.map(|l| format!(" — Lv{l}")).unwrap_or_default(),
+                view.level.map(|l| format!(" - Lv{l}")).unwrap_or_default(),
                 if view.is_boss { " [BOSS]" } else { "" }
             ),
             if view.is_boss { RED } else { WHITE },
@@ -596,7 +643,7 @@ fn draw_inspect_detail(game: &mut Game, entity: Option<Entity>) {
     }
     rows.push(text_row(""));
     rows.push(text_row("Press any key to go back, Esc to close"));
-    draw_popup("Inspect", 0.55, 0.55, &rows);
+    draw_popup("Inspect", PopupSize::Large, &rows);
 }
 
 fn draw_inventory(game: &mut Game, selected: usize) {
@@ -621,12 +668,35 @@ fn draw_inventory(game: &mut Game, selected: usize) {
         rows.push(text_row("(empty)"));
     }
     for (i, (item, qty)) in status.inventory.iter().enumerate() {
-        let tag = if item.equipment().is_some() { " (equippable)" } else { "" };
+        let tag = equip_preview_tag(*item, status.zone);
         rows.push(item_row(format!("[{}] {} x{}{}", i + 4, item.display_name(), qty, tag), selected == i + 3));
     }
     rows.push(text_row(""));
     rows.push(text_row("Esc to close; Up/Down + Enter also work"));
-    draw_popup("Inventory", 0.6, 0.75, &rows);
+    draw_popup("Inventory", PopupSize::Large, &rows);
+}
+
+/// Formats an equippable item's stat bonus as it would be *if equipped
+/// right now* — gear scales with the current zone level at the moment you
+/// equip it (see `Game::equip`), so this previews that same number rather
+/// than a flat, unscaled base value. Empty string for a non-equippable
+/// item (in place of the old generic "(equippable)" tag).
+fn equip_preview_tag(item: ItemId, zone_level: u32) -> String {
+    let Some((_, base_mods)) = item.equipment() else {
+        return String::new();
+    };
+    let mods = base_mods.scaled_for_level(zone_level);
+    let mut parts = Vec::new();
+    if mods.atk != 0 {
+        parts.push(format!("+{} ATK", mods.atk));
+    }
+    if mods.def != 0 {
+        parts.push(format!("+{} DEF", mods.def));
+    }
+    if mods.decompiler != 0 {
+        parts.push(format!("+{} DECOMP", mods.decompiler));
+    }
+    format!(" ({})", parts.join(" "))
 }
 
 fn equipped_row(num: usize, label: &str, equipped: Option<feral_processes_engine::components::EquippedItem>, selected: bool) -> Row {
@@ -653,28 +723,29 @@ fn equipped_row(num: usize, label: &str, equipped: Option<feral_processes_engine
     }
 }
 
-fn draw_inventory_item_action(item: Option<ItemId>, selected: usize) {
+fn draw_inventory_item_action(item: Option<ItemId>, zone_level: u32, selected: usize) {
     let Some(item) = item else {
-        draw_popup("Item", 0.4, 0.2, &[text_row("Nothing selected.")]);
+        draw_popup("Item", PopupSize::Small, &[text_row("Nothing selected.")]);
         return;
     };
     let mut actions = vec!["[X] Erase".to_string()];
     if item.equipment().is_some() {
         actions.insert(0, "[E]quip".to_string());
     }
-    let mut rows = vec![Row::TextColored(item.display_name().to_string(), TEXT), text_row("")];
+    let title = format!("{}{}", item.display_name(), equip_preview_tag(item, zone_level));
+    let mut rows = vec![Row::TextColored(title, TEXT), text_row("")];
     for (i, action) in actions.iter().enumerate() {
         rows.push(item_row(action.clone(), i == selected));
     }
     rows.push(text_row(""));
     rows.push(text_row("Esc to cancel; Up/Down + Enter also work"));
-    draw_popup("Item", 0.4, 0.35, &rows);
+    draw_popup("Item", PopupSize::Large, &rows);
 }
 
 fn draw_companion_menu(game: &mut Game, selected: usize) {
     let pets = game.owned_pets();
     let mut rows = vec![text_row(
-        "Pick a program to add to your party (max 3) — select a party member's own number to stand it down.",
+        "Pick a program to add to your party (max 3) - select a party member's own number to stand it down.",
     )];
     if pets.is_empty() {
         rows.push(text_row("(you don't have any compiled programs yet)"));
@@ -684,7 +755,7 @@ fn draw_companion_menu(game: &mut Game, selected: usize) {
         let job = p.job_structure.as_ref().map(|s| format!(" (on a cronjob: {s})")).unwrap_or_default();
         rows.push(item_row(
             format!(
-                "[{}] {} Lv{} — HP {}/{}  ATK {}  DEF {}  PWR {}{}{}",
+                "[{}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}{}{}",
                 i + 1,
                 p.name,
                 p.level,
@@ -699,7 +770,21 @@ fn draw_companion_menu(game: &mut Game, selected: usize) {
             i == selected,
         ));
     }
-    draw_popup("Party", 0.65, 0.65, &rows);
+    draw_popup("Party", PopupSize::Large, &rows);
+}
+
+/// Formats one fuse-candidate row with its full stat line, cross-
+/// referencing `pets` (`Game::owned_pets`) by entity — `view_entities`
+/// alone only carries a level and an HP fraction, not the raw HP/ATK/DEF/
+/// PWR numbers a fusion decision actually depends on.
+fn fuse_candidate_label(num: usize, c: &EntityView, pets: &[PetInfo]) -> String {
+    match pets.iter().find(|p| p.entity == c.entity) {
+        Some(p) => format!(
+            "[{num}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}",
+            c.label, p.level, p.hp, p.max_hp, p.atk, p.def, p.power
+        ),
+        None => format!("[{num}] {}{}", c.label, c.level.map(|l| format!(" Lv{l}")).unwrap_or_default()),
+    }
 }
 
 fn draw_fuse_menu(game: &mut Game, selected: usize) {
@@ -708,17 +793,15 @@ fn draw_fuse_menu(game: &mut Game, selected: usize) {
         .into_iter()
         .filter(|e| e.is_tamed)
         .collect();
+    let pets = game.owned_pets();
     let mut rows = vec![text_row("Fuse which program? Pick the first of two.")];
     if candidates.is_empty() {
         rows.push(text_row("(no compiled programs nearby)"));
     }
     for (i, c) in candidates.iter().enumerate() {
-        rows.push(item_row(
-            format!("[{}] {}{}", i + 1, c.label, c.level.map(|l| format!(" Lv{l}")).unwrap_or_default()),
-            i == selected,
-        ));
+        rows.push(item_row(fuse_candidate_label(i + 1, c, &pets), i == selected));
     }
-    draw_popup("Fuse", 0.55, 0.6, &rows);
+    draw_popup("Fuse", PopupSize::Large, &rows);
 }
 
 fn draw_fuse_second_menu(game: &mut Game, first: Option<Entity>, selected: usize) {
@@ -726,17 +809,38 @@ fn draw_fuse_second_menu(game: &mut Game, first: Option<Entity>, selected: usize
     let nearby = game.view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS);
     let first_label = nearby.iter().find(|e| e.entity == first).map(|e| e.label.clone()).unwrap_or_else(|| "it".to_string());
     let candidates: Vec<_> = nearby.into_iter().filter(|e| e.is_tamed && e.entity != first).collect();
+    let pets = game.owned_pets();
     let mut rows = vec![text_row(format!("Fuse {first_label} with which program? Both are consumed."))];
     if candidates.is_empty() {
         rows.push(text_row("(no other compiled programs nearby)"));
     }
     for (i, c) in candidates.iter().enumerate() {
-        rows.push(item_row(
-            format!("[{}] {}{}", i + 1, c.label, c.level.map(|l| format!(" Lv{l}")).unwrap_or_default()),
-            i == selected,
-        ));
+        rows.push(item_row(fuse_candidate_label(i + 1, c, &pets), i == selected));
     }
-    draw_popup("Fuse", 0.55, 0.6, &rows);
+    draw_popup("Fuse", PopupSize::Large, &rows);
+}
+
+/// Free-text naming page shown after both fuse candidates are picked.
+/// Blank and Enter keeps the default species name.
+fn draw_fuse_name_menu(game: &mut Game, first: Option<Entity>, second: Option<Entity>, name_input: &str) {
+    let (Some(first), Some(second)) = (first, second) else { return };
+    let nearby = game.view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS);
+    let label_of = |e: Entity| {
+        nearby
+            .iter()
+            .find(|ev| ev.entity == e)
+            .map(|ev| ev.label.clone())
+            .unwrap_or_else(|| "it".to_string())
+    };
+    let rows = vec![
+        text_row(format!("Fusing {} and {}.", label_of(first), label_of(second))),
+        text_row(""),
+        item_row(format!("Name it (optional, {} max): {name_input}", feral_processes_engine::MAX_CUSTOM_NAME_LEN), true),
+        text_row(""),
+        text_row("Type a name, Enter to fuse (blank keeps the default name)"),
+        text_row("Esc to go back and re-pick the second program"),
+    ];
+    draw_popup("Fuse", PopupSize::Small, &rows);
 }
 
 fn draw_trade_menu(game: &mut Game, selected: usize) {
@@ -753,7 +857,7 @@ fn draw_trade_menu(game: &mut Game, selected: usize) {
         let durability = s.durability.map(|(hp, max)| format!(" [HP {hp}/{max}]")).unwrap_or_default();
         rows.push(item_row(format!("[{}] {} at ({}, {}){}", i + 1, s.label, s.pos.0, s.pos.1, durability), i == selected));
     }
-    draw_popup("Trade", 0.55, 0.6, &rows);
+    draw_popup("Trade", PopupSize::Large, &rows);
 }
 
 fn draw_trade_action_menu(game: &mut Game, structure: Option<Entity>, selected: usize) {
@@ -782,7 +886,7 @@ fn draw_trade_action_menu(game: &mut Game, structure: Option<Entity>, selected: 
     }
     rows.push(text_row(""));
     rows.push(text_row("Esc to cancel; Up/Down + Enter also work"));
-    draw_popup("Trade", 0.6, 0.7, &rows);
+    draw_popup("Trade", PopupSize::Large, &rows);
 }
 
 fn draw_trade_quantity_menu(game: &mut Game, structure: Option<Entity>, choice: Option<TradeChoice>, quantity_input: &str) {
@@ -805,7 +909,7 @@ fn draw_trade_quantity_menu(game: &mut Game, structure: Option<Entity>, choice: 
         text_row(""),
         text_row(format!("Type digits, Enter to {}, Esc to go back", verb.to_lowercase())),
     ];
-    draw_popup("Trade", 0.5, 0.4, &rows);
+    draw_popup("Trade", PopupSize::Large, &rows);
 }
 
 fn draw_perks_menu(game: &mut Game, selected: usize) {
@@ -818,14 +922,14 @@ fn draw_perks_menu(game: &mut Game, selected: usize) {
         let level = status.unlocked_perks.iter().filter(|p| *p == perk).count();
         let tag = if level > 0 { format!(" (level {level})") } else { String::new() };
         rows.push(item_row(
-            format!("[{}] {} — {} Perk Points{}", i + 1, perk.display_name(), perk.cost(), tag),
+            format!("[{}] {} - {} Perk Points{}", i + 1, perk.display_name(), perk.cost(), tag),
             i == selected,
         ));
         rows.push(text_row(format!("    {}", perk.description())));
     }
     rows.push(text_row(""));
     rows.push(text_row("Pick a number to buy another level. Esc to close"));
-    draw_popup("Perks", 0.6, 0.75, &rows);
+    draw_popup("Perks", PopupSize::Large, &rows);
 }
 
 fn status_tag(status: &Option<String>) -> String {
@@ -933,7 +1037,7 @@ fn draw_battle_companion_menu(app: &mut App) {
             i == selected,
         ));
     }
-    draw_popup("Command Companion", 0.55, 0.5, &rows);
+    draw_popup("Command Companion", PopupSize::Large, &rows);
 }
 
 fn draw_main_menu(app: &App) {
@@ -954,7 +1058,7 @@ fn draw_main_menu(app: &App) {
         rows.push(text_row(""));
         rows.push(Row::TextColored(s.clone(), RED));
     }
-    draw_popup("Main Menu", 0.4, 0.4, &rows);
+    draw_popup("Main Menu", PopupSize::Large, &rows);
 }
 
 fn draw_load_game(app: &App) {
@@ -964,10 +1068,10 @@ fn draw_load_game(app: &App) {
         rows.push(text_row("(no saves found)"));
     }
     for (i, save) in saves.iter().enumerate() {
-        let summary = save.summary.as_deref().unwrap_or("(incompatible save — can still be deleted)");
-        rows.push(item_row(format!("[{}] {} — {}", i + 1, save.name, summary), i == app.menu_selected));
+        let summary = save.summary.as_deref().unwrap_or("(incompatible save - can still be deleted)");
+        rows.push(item_row(format!("[{}] {} - {}", i + 1, save.name, summary), i == app.menu_selected));
     }
-    draw_popup("Load Game", 0.6, 0.6, &rows);
+    draw_popup("Load Game", PopupSize::Large, &rows);
 }
 
 fn draw_save_action(app: &App) {
@@ -989,7 +1093,7 @@ fn draw_save_action(app: &App) {
         rows.push(text_row(""));
         rows.push(Row::TextColored(s.clone(), RED));
     }
-    draw_popup("Save", 0.4, 0.35, &rows);
+    draw_popup("Save", PopupSize::Large, &rows);
 }
 
 fn draw_difficulty_pick(selected: usize) {
@@ -999,7 +1103,7 @@ fn draw_difficulty_pick(selected: usize) {
         text_row(""),
         text_row("Esc to go back; Up/Down + Enter also work"),
     ];
-    draw_popup("New Game", 0.55, 0.3, &rows);
+    draw_popup("New Game", PopupSize::Large, &rows);
 }
 
 fn draw_game_over(app: &mut App) {
@@ -1011,7 +1115,7 @@ fn draw_game_over(app: &mut App) {
         text_row(""),
         text_row("Press any key to return to the main menu"),
     ];
-    draw_popup("Session Terminated", 0.5, 0.3, &rows);
+    draw_popup("Session Terminated", PopupSize::Large, &rows);
 }
 
 fn draw_help() {
@@ -1029,5 +1133,5 @@ fn draw_help() {
         text_row(""),
         text_row("Press any key to close"),
     ];
-    draw_popup("Help", 0.6, 0.45, &rows);
+    draw_popup("Help", PopupSize::Large, &rows);
 }

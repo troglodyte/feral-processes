@@ -42,6 +42,12 @@ pub struct Creature {
     pub species: SpeciesId,
 }
 
+/// A player-chosen display name that overrides a creature's species name
+/// wherever it's shown — currently only set via `Game::fuse_companions`.
+/// Length is enforced by the caller (`MAX_CUSTOM_NAME_LEN`), not here.
+#[derive(Component, Clone, Debug)]
+pub struct CustomName(pub String);
+
 /// Which zone portal's sector a creature was spawned in — set once at
 /// spawn time and never changed afterward, even if the creature is later
 /// tamed and carried through a portal into a deeper zone. Drives its stat

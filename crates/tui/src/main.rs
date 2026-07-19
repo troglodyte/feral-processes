@@ -22,6 +22,11 @@ const AUTOSAVE_INTERVAL_TICKS: u64 = 50;
 pub enum Mode {
     MainMenu,
     DifficultyPick,
+    /// Lists saves found in the saves directory (see `App::list_saves`);
+    /// picking one moves to `Mode::SaveAction` to choose Load or Delete.
+    LoadGame,
+    /// Load-or-delete choice for the save picked from `Mode::LoadGame`.
+    SaveAction,
     Playing,
     Battle,
     BattleCompanion,
@@ -67,7 +72,15 @@ pub struct App {
     pub status_line: Option<String>,
     history_written: bool,
     assets_dir: PathBuf,
-    save_path: PathBuf,
+    /// Directory saves are read from/written to — see `App::list_saves`.
+    saves_dir: PathBuf,
+    /// Which file the active session's manual/auto-saves go to. `None`
+    /// until a game is started (which immediately saves to claim a new
+    /// slot) or loaded (which points this at the picked file).
+    current_save_path: Option<PathBuf>,
+    /// The save picked from `Mode::LoadGame`, awaiting a Load/Delete choice
+    /// from `Mode::SaveAction`.
+    pending_save: Option<PathBuf>,
     history_path: PathBuf,
     pub quit: bool,
     pending_structure: Option<String>,
@@ -104,15 +117,29 @@ pub struct App {
     last_autosave_tick: u64,
 }
 
+/// One entry in the `Mode::LoadGame` list — a save file found in the saves
+/// directory, with a short summary peeked from it (if it's still readable
+/// under the current `save::SAVE_FORMAT_VERSION`).
+pub struct SaveEntry {
+    pub path: PathBuf,
+    /// The filename without its extension, shown as the save's name.
+    pub name: String,
+    /// `None` if the file couldn't be read at all (wrong version, corrupt,
+    /// ...) — still listed (so it can be deleted), just flagged as such.
+    pub summary: Option<String>,
+}
+
 impl App {
-    fn new(assets_dir: PathBuf, save_path: PathBuf, history_path: PathBuf) -> Self {
+    fn new(assets_dir: PathBuf, saves_dir: PathBuf, history_path: PathBuf) -> Self {
         Self {
             mode: Mode::MainMenu,
             game: None,
             status_line: None,
             history_written: false,
             assets_dir,
-            save_path,
+            saves_dir,
+            current_save_path: None,
+            pending_save: None,
             history_path,
             quit: false,
             pending_structure: None,
@@ -131,8 +158,42 @@ impl App {
         }
     }
 
-    pub fn save_exists(&self) -> bool {
-        self.save_path.exists()
+    /// Every `*.bin` file in the saves directory, newest first. Missing
+    /// directory reads as no saves rather than an error — nothing to show
+    /// on a first run before anything's ever been saved.
+    pub fn list_saves(&self) -> Vec<SaveEntry> {
+        let Ok(entries) = std::fs::read_dir(&self.saves_dir) else {
+            return Vec::new();
+        };
+        let mut saves: Vec<(std::time::SystemTime, SaveEntry)> = entries
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "bin"))
+            .map(|e| {
+                let path = e.path();
+                let modified = e.metadata().and_then(|m| m.modified()).unwrap_or(std::time::UNIX_EPOCH);
+                let name = path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| path.to_string_lossy().into_owned());
+                let summary = feral_processes_engine::save::load_from_file(&path).ok().map(|data| {
+                    format!(
+                        "Lv{} · Zone {} · {:?} · tick {}",
+                        data.player.level, data.zone, data.difficulty, data.tick
+                    )
+                });
+                (modified, SaveEntry { path, name, summary })
+            })
+            .collect();
+        saves.sort_by_key(|(modified, _)| std::cmp::Reverse(*modified));
+        saves.into_iter().map(|(_, entry)| entry).collect()
+    }
+
+    /// A fresh, filesystem-safe save filename for a just-started game —
+    /// unique enough for one-per-second play sessions, which is the only
+    /// case that matters here.
+    fn new_save_path(&self) -> PathBuf {
+        let ts = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        self.saves_dir.join(format!("save_{ts}.bin"))
     }
 
     fn start_new_game(&mut self, difficulty: DifficultyMode) {
@@ -144,19 +205,25 @@ impl App {
             Ok(game) => {
                 self.last_autosave_tick = game.current_tick();
                 self.game = Some(game);
+                self.current_save_path = Some(self.new_save_path());
                 self.history_written = false;
                 self.status_line = None;
                 self.mode = Mode::Playing;
+                // Save immediately so the new slot shows up in the load
+                // list (and survives a crash) even before the first
+                // autosave interval elapses.
+                self.save_game();
             }
             Err(e) => self.status_line = Some(format!("Failed to start game: {e}")),
         }
     }
 
-    fn load_game(&mut self) {
-        match Game::load(&self.save_path, &self.assets_dir) {
+    fn load_game(&mut self, path: PathBuf) {
+        match Game::load(&path, &self.assets_dir) {
             Ok(game) => {
                 self.last_autosave_tick = game.current_tick();
                 self.game = Some(game);
+                self.current_save_path = Some(path);
                 self.history_written = false;
                 self.status_line = None;
                 self.mode = Mode::Playing;
@@ -166,8 +233,9 @@ impl App {
     }
 
     fn save_game(&mut self) {
+        let Some(path) = &self.current_save_path else { return };
         if let Some(game) = &mut self.game {
-            match game.save(&self.save_path) {
+            match game.save(path) {
                 Ok(()) => self.status_line = Some("Game saved.".to_string()),
                 Err(e) => self.status_line = Some(format!("Save failed: {e}")),
             }
@@ -182,13 +250,14 @@ impl App {
     /// message from whatever the player just did; a failure does surface,
     /// since silently failing to protect their progress would be worse.
     fn maybe_autosave(&mut self) {
+        let Some(path) = self.current_save_path.clone() else { return };
         let Some(game) = &mut self.game else { return };
         let current = game.current_tick();
         if current.saturating_sub(self.last_autosave_tick) < AUTOSAVE_INTERVAL_TICKS {
             return;
         }
         self.last_autosave_tick = current;
-        if let Err(e) = game.save(&self.save_path) {
+        if let Err(e) = game.save(&path) {
             self.status_line = Some(format!("Autosave failed: {e}"));
         }
     }
@@ -247,6 +316,8 @@ impl App {
         let mode_before = self.mode;
         match self.mode {
             Mode::MainMenu => self.handle_main_menu_key(code),
+            Mode::LoadGame => self.handle_load_game_key(code),
+            Mode::SaveAction => self.handle_save_action_key(code),
             Mode::DifficultyPick => self.handle_difficulty_key(code),
             Mode::Playing => self.handle_playing_key(code),
             Mode::Battle => self.handle_battle_key(code),
@@ -285,7 +356,7 @@ impl App {
 
     fn handle_main_menu_key(&mut self, code: KeyCode) {
         let mut options = vec!['n'];
-        if self.save_exists() {
+        if !self.list_saves().is_empty() {
             options.push('l');
         }
         options.push('q');
@@ -300,8 +371,57 @@ impl App {
                 self.status_line = None;
                 self.mode = Mode::DifficultyPick;
             }
-            Some('l') => self.load_game(),
+            Some('l') => {
+                self.status_line = None;
+                self.mode = Mode::LoadGame;
+            }
             Some('q') => self.quit = true,
+            _ => {}
+        }
+    }
+
+    fn handle_load_game_key(&mut self, code: KeyCode) {
+        if code == KeyCode::Esc {
+            self.mode = Mode::MainMenu;
+            return;
+        }
+        let saves = self.list_saves();
+        if let Some(idx) = self.selected_index(code, saves.len()) {
+            self.pending_save = Some(saves[idx].path.clone());
+            self.mode = Mode::SaveAction;
+        }
+    }
+
+    fn handle_save_action_key(&mut self, code: KeyCode) {
+        if code == KeyCode::Esc {
+            self.pending_save = None;
+            self.mode = Mode::LoadGame;
+            return;
+        }
+        let Some(path) = self.pending_save.clone() else {
+            self.mode = Mode::LoadGame;
+            return;
+        };
+        let options = ['l', 'x'];
+        let idx = self
+            .selected_index(code, options.len())
+            .or_else(|| match code {
+                KeyCode::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
+                _ => None,
+            });
+        match idx.map(|i| options[i]) {
+            Some('l') => {
+                self.pending_save = None;
+                self.load_game(path);
+            }
+            Some('x') => {
+                self.pending_save = None;
+                match std::fs::remove_file(&path) {
+                    Ok(()) => self.status_line = Some("Save deleted.".to_string()),
+                    Err(e) => self.status_line = Some(format!("Delete failed: {e}")),
+                }
+                self.mode = Mode::LoadGame;
+            }
             _ => {}
         }
     }
@@ -1091,11 +1211,21 @@ fn main() -> io::Result<()> {
         .unwrap_or(&crate_dir)
         .to_path_buf();
     let assets_dir = repo_root.join("assets");
-    let save_path = repo_root.join("save.bin");
+    let saves_dir = repo_root.join("saves");
+    std::fs::create_dir_all(&saves_dir)?;
+    // One-time migration: earlier builds kept a single save at
+    // `save.bin`. Move it into the new saves directory (under its old
+    // name) so it still shows up in the load list instead of silently
+    // disappearing — even if it turns out to be from an incompatible
+    // save version, it's still visible there and deletable.
+    let legacy_save = repo_root.join("save.bin");
+    if legacy_save.exists() {
+        let _ = std::fs::rename(&legacy_save, saves_dir.join("save.bin"));
+    }
     let history_path = repo_root.join("run_history.log");
 
     let mut terminal = ratatui::init();
-    let mut app = App::new(assets_dir, save_path, history_path);
+    let mut app = App::new(assets_dir, saves_dir, history_path);
     let result = app.run(&mut terminal);
     ratatui::restore();
     result
@@ -1107,13 +1237,52 @@ mod tests {
 
     fn test_app(seed: u32) -> App {
         let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
-        let save_path = std::env::temp_dir().join(format!("feral_processes_tui_test_{seed}.bin"));
+        let saves_dir = std::env::temp_dir().join(format!("feral_processes_tui_test_{seed}_saves"));
         let history_path =
             std::env::temp_dir().join(format!("feral_processes_tui_test_{seed}.log"));
-        let mut app = App::new(assets_dir.clone(), save_path, history_path);
+        let mut app = App::new(assets_dir.clone(), saves_dir, history_path);
         app.game = Game::new(seed, DifficultyMode::Forgiving, &assets_dir).ok();
         app.mode = Mode::Playing;
         app
+    }
+
+    #[test]
+    fn starting_a_new_game_creates_a_listed_save_that_can_be_loaded_and_deleted() {
+        let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let saves_dir = std::env::temp_dir()
+            .join(format!("feral_processes_tui_test_savelist_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&saves_dir);
+        std::fs::create_dir_all(&saves_dir).unwrap();
+        let history_path = std::env::temp_dir()
+            .join(format!("feral_processes_tui_test_savelist_{}.log", std::process::id()));
+        let mut app = App::new(assets_dir, saves_dir.clone(), history_path);
+
+        app.start_new_game(DifficultyMode::Forgiving);
+        assert!(app.mode == Mode::Playing, "starting a new game should enter Playing");
+        let saves = app.list_saves();
+        assert_eq!(saves.len(), 1, "starting a new game should immediately create one listed save");
+        assert!(saves[0].summary.is_some(), "a freshly saved game should be readable back");
+
+        // Back to the main menu, then load that save from the list.
+        app.game = None;
+        app.mode = Mode::MainMenu;
+        app.handle_key(KeyCode::Char('l'));
+        assert!(app.mode == Mode::LoadGame, "'l' should open the load list once a save exists");
+        app.handle_key(KeyCode::Char('1'));
+        assert!(app.mode == Mode::SaveAction, "picking a save should open the load/delete choice");
+        app.handle_key(KeyCode::Char('l'));
+        assert!(app.mode == Mode::Playing, "loading should return to Playing");
+        assert!(app.game.is_some(), "loading should populate the game");
+
+        // Delete it.
+        app.game = None;
+        app.mode = Mode::MainMenu;
+        app.handle_key(KeyCode::Char('l'));
+        app.handle_key(KeyCode::Char('1'));
+        app.handle_key(KeyCode::Char('x'));
+        assert!(app.list_saves().is_empty(), "deleting the only save should empty the list");
+
+        let _ = std::fs::remove_dir_all(&saves_dir);
     }
 
     fn structure_count(app: &mut App) -> usize {

@@ -3,7 +3,7 @@
     name: "Ghost",
     glyph: 'h',
     color: White,
-    base_hp: 26,
+    base_hp: 78,
     base_atk: 11,
     base_def: 3,
     taming_difficulty: 0.65,

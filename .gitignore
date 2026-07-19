@@ -5,6 +5,7 @@
 
 # Runtime-generated game data (not source)
 /save.bin
+/saves/
 /run_history.log
 
 # Editor/IDE

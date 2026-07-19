@@ -3,7 +3,7 @@
     name: "Sentinel",
     glyph: 'S',
     color: Blue,
-    base_hp: 40,
+    base_hp: 120,
     base_atk: 7,
     base_def: 10,
     taming_difficulty: 0.65,

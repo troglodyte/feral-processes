@@ -3,7 +3,7 @@
     name: "Drone",
     glyph: 'o',
     color: Gray,
-    base_hp: 14,
+    base_hp: 42,
     base_atk: 3,
     base_def: 2,
     taming_difficulty: 0.15,

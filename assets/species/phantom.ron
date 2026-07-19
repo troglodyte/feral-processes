@@ -3,7 +3,7 @@
     name: "Phantom",
     glyph: 'p',
     color: DarkGreen,
-    base_hp: 22,
+    base_hp: 66,
     base_atk: 10,
     base_def: 2,
     taming_difficulty: 0.55,

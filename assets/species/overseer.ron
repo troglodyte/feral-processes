@@ -3,7 +3,7 @@
     name: "Overseer",
     glyph: 'B',
     color: Red,
-    base_hp: 150,
+    base_hp: 450,
     base_atk: 22,
     base_def: 14,
     taming_difficulty: 0.9,

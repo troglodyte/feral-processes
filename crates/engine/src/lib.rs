@@ -337,8 +337,8 @@ impl Game {
                     color: GlyphColor::Cyan,
                 },
                 Stats {
-                    hp: 30,
-                    max_hp: 30,
+                    hp: 90,
+                    max_hp: 90,
                     atk: 6,
                     def: 2,
                 },

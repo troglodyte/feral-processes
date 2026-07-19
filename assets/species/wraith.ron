@@ -3,7 +3,7 @@
     name: "Wraith",
     glyph: 'w',
     color: White,
-    base_hp: 20,
+    base_hp: 60,
     base_atk: 6,
     base_def: 3,
     taming_difficulty: 0.5,

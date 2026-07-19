@@ -3,7 +3,7 @@
     name: "Construct",
     glyph: 'C',
     color: Red,
-    base_hp: 34,
+    base_hp: 102,
     base_atk: 9,
     base_def: 7,
     taming_difficulty: 0.7,

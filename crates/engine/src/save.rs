@@ -9,10 +9,6 @@ use crate::resources::DifficultyMode;
 use crate::species::SpeciesId;
 use crate::world::Tile;
 
-fn default_gear_level() -> u32 {
-    1
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct PlayerSave {
     pub position: (i32, i32),
@@ -26,31 +22,18 @@ pub struct PlayerSave {
     pub level: u32,
     pub xp: u32,
     pub xp_to_next: u32,
-    #[serde(default)]
     pub decompiler: i32,
-    #[serde(default)]
     pub weapon: Option<ItemId>,
-    /// Gear level `weapon` was equipped at (see
-    /// `components::EquippedItem`). `#[serde(default = "default_gear_level")]`
-    /// so saves written before leveled gear existed treat whatever's
-    /// equipped as level 1, matching its original unscaled bonus.
-    #[serde(default = "default_gear_level")]
+    /// Gear level `weapon` was equipped at — see `components::EquippedItem`.
     pub weapon_level: u32,
-    #[serde(default)]
     pub armor: Option<ItemId>,
-    #[serde(default = "default_gear_level")]
     pub armor_level: u32,
-    #[serde(default)]
     pub module: Option<ItemId>,
-    #[serde(default = "default_gear_level")]
     pub module_level: u32,
-    /// Unspent Perk Points (see `perks::Perk`). Defaults to 0 for saves
-    /// written before perks existed.
-    #[serde(default)]
+    /// Unspent Perk Points — see `perks::Perk`.
     pub perk_points: u32,
-    /// Which perks have been unlocked. Defaults to empty for saves written
-    /// before perks existed.
-    #[serde(default)]
+    /// Which perks have been bought, and at what level (see
+    /// `components::Perks::level`) — one entry per level bought.
     pub unlocked_perks: Vec<Perk>,
 }
 
@@ -70,16 +53,12 @@ pub struct CreatureSave {
     /// Only meaningful when `tamed` is true. The target structure is
     /// identified by position rather than entity id, since entity ids
     /// aren't stable across a save/load round trip.
-    #[serde(default)]
     pub cronjob: Option<CronjobSave>,
     /// Only meaningful when `tamed` is true: whether this program is the
     /// player's active battle companion.
-    #[serde(default)]
     pub is_companion: bool,
     /// Which zone sector this creature was originally spawned in (see
-    /// `components::ZonePortal`). Defaults to 1 for saves written before
-    /// zone portals existed.
-    #[serde(default = "default_zone_level")]
+    /// `components::ZonePortal`).
     pub zone: u32,
 }
 
@@ -100,9 +79,6 @@ pub struct CronjobSave {
     pub target_position: (i32, i32),
     pub progress: u32,
     pub required: u32,
-    /// `#[serde(default)]` so saves written before `Game::assign_guard`
-    /// existed keep loading — they only ever had `GatherResource` jobs.
-    #[serde(default)]
     pub kind: CronjobKind,
 }
 
@@ -111,10 +87,7 @@ pub struct StructureSave {
     pub kind: String,
     pub position: (i32, i32),
     pub resource_amount: Option<u32>,
-    /// Current raid durability (see `components::Durability`). `None` for
-    /// saves written before raids existed — treated as full health at load
-    /// time, using whatever the structure's current `.ron` def says.
-    #[serde(default)]
+    /// Current raid durability — see `components::Durability`.
     pub durability: Option<u32>,
 }
 
@@ -129,25 +102,62 @@ pub struct SaveData {
     pub creatures: Vec<CreatureSave>,
     pub structures: Vec<StructureSave>,
     pub tile_overrides: Vec<((i32, i32), Tile)>,
-    /// Which zone sector the player had breached into. Defaults to 1 (the
-    /// starting sector) for saves written before zone portals existed.
-    #[serde(default = "default_zone_level")]
+    /// Which zone sector the player had breached into.
     pub zone: u32,
 }
 
-fn default_zone_level() -> u32 {
-    1
-}
+/// Bumped whenever `SaveData` (or anything it contains, transitively)
+/// changes shape in *any* way — a field added/removed/reordered, an enum
+/// gaining a variant, all of it.
+///
+/// bincode encodes everything *positionally*: it has no field names or
+/// self-describing structure on disk, so a struct is really just "decode
+/// exactly `fields.len()` values in order," where `fields.len()` is
+/// whatever the *current* type definition says. serde's `#[serde(default)]`
+/// (which genuinely works for the RON-based species/structure asset files,
+/// since RON *is* self-describing) does **not** give bincode saves any
+/// backward compatibility: an old file missing a newly-added field doesn't
+/// decode that field as its default, it desyncs every byte read after that
+/// point and produces garbage — which usually doesn't fail until some much
+/// later, unrelated field happens to decode into a nonsense enum
+/// discriminant. That's a footgun this project hit directly: several
+/// fields below used to carry `#[serde(default = ...)]` on the assumption
+/// that it made old saves keep loading, and it silently didn't.
+///
+/// The fix is this version prefix (see `save_to_file`/`load_from_file`): a
+/// save written by a different version is rejected up front with a clear
+/// error, instead of decoded into corruption. There is no partial/granular
+/// compatibility — any shape change at all means bumping this constant,
+/// and every save written under the old version stops loading. That's an
+/// intentional, simple tradeoff for a single-player game rather than
+/// building real schema migration.
+pub const SAVE_FORMAT_VERSION: u32 = 1;
 
 pub fn save_to_file(path: &Path, data: &SaveData) -> io::Result<()> {
-    let bytes = bincode::serde::encode_to_vec(data, bincode::config::standard())
+    let encoded = bincode::serde::encode_to_vec(data, bincode::config::standard())
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let mut bytes = Vec::with_capacity(4 + encoded.len());
+    bytes.extend_from_slice(&SAVE_FORMAT_VERSION.to_le_bytes());
+    bytes.extend(encoded);
     std::fs::write(path, bytes)
 }
 
 pub fn load_from_file(path: &Path) -> io::Result<SaveData> {
     let bytes = std::fs::read(path)?;
-    let (data, _) = bincode::serde::decode_from_slice(&bytes, bincode::config::standard())
+    let Some((version_bytes, payload)) = bytes.split_first_chunk::<4>() else {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "save file is too short to be valid"));
+    };
+    let version = u32::from_le_bytes(*version_bytes);
+    if version != SAVE_FORMAT_VERSION {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "incompatible save version (v{version}, this build reads v{SAVE_FORMAT_VERSION}) — \
+                 delete it and start a new game"
+            ),
+        ));
+    }
+    let (data, _) = bincode::serde::decode_from_slice(payload, bincode::config::standard())
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     Ok(data)
 }
@@ -156,9 +166,87 @@ pub fn load_from_file(path: &Path) -> io::Result<SaveData> {
 /// short structured summary is appended to a plain-text history log.
 pub fn append_run_history(path: &Path, summary: &str) -> io::Result<()> {
     use std::io::Write;
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)?;
+    let mut file = std::fs::OpenOptions::new().create(true).append(true).open(path)?;
     writeln!(file, "{summary}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_data() -> SaveData {
+        SaveData {
+            seed: 1,
+            tick: 0,
+            difficulty: DifficultyMode::Forgiving,
+            player: PlayerSave {
+                position: (0, 0),
+                hp: 30,
+                max_hp: 30,
+                atk: 6,
+                def: 2,
+                hunger: 100.0,
+                fatigue: 100.0,
+                inventory: Vec::new(),
+                level: 1,
+                xp: 0,
+                xp_to_next: 20,
+                decompiler: 0,
+                weapon: None,
+                weapon_level: 1,
+                armor: None,
+                armor_level: 1,
+                module: None,
+                module_level: 1,
+                perk_points: 0,
+                unlocked_perks: Vec::new(),
+            },
+            creatures: Vec::new(),
+            structures: Vec::new(),
+            tile_overrides: Vec::new(),
+            zone: 1,
+        }
+    }
+
+    #[test]
+    fn a_save_round_trips_through_the_current_version() {
+        let path = std::env::temp_dir()
+            .join(format!("feral_processes_save_roundtrip_{}.bin", std::process::id()));
+        save_to_file(&path, &sample_data()).unwrap();
+        let loaded = load_from_file(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(loaded.seed, 1);
+    }
+
+    #[test]
+    fn a_save_written_with_a_different_version_is_rejected_cleanly_instead_of_corrupting() {
+        let path = std::env::temp_dir()
+            .join(format!("feral_processes_save_badversion_{}.bin", std::process::id()));
+        let encoded = bincode::serde::encode_to_vec(sample_data(), bincode::config::standard()).unwrap();
+        let mut bytes = 999u32.to_le_bytes().to_vec();
+        bytes.extend(encoded);
+        std::fs::write(&path, bytes).unwrap();
+
+        let Err(err) = load_from_file(&path) else {
+            panic!("loading a mismatched-version save should fail, not succeed");
+        };
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert!(
+            err.to_string().contains("incompatible save version"),
+            "error should clearly say the save is from an incompatible version, got: {err}"
+        );
+    }
+
+    #[test]
+    fn a_truncated_file_fails_cleanly_instead_of_panicking() {
+        let path = std::env::temp_dir()
+            .join(format!("feral_processes_save_truncated_{}.bin", std::process::id()));
+        std::fs::write(&path, [1, 2]).unwrap();
+        let Err(err) = load_from_file(&path) else {
+            panic!("loading a truncated save should fail, not succeed");
+        };
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
 }

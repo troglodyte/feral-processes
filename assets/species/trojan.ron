@@ -3,7 +3,7 @@
     name: "Trojan",
     glyph: 't',
     color: Brown,
-    base_hp: 24,
+    base_hp: 72,
     base_atk: 8,
     base_def: 3,
     taming_difficulty: 0.5,

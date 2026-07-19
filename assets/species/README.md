@@ -22,7 +22,7 @@ is skipped with a warning logged in-game rather than crashing startup.
                                    // Yellow, Orange, or Red, or Magenta if
                                    // `is_boss` — so this field only matters
                                    // once it's compiled.
-    base_hp: 20,
+    base_hp: 60,
     base_atk: 6,
     base_def: 3,
     taming_difficulty: 0.4,       // 0.0 (trivial) .. 1.0 (very hard) to compile/tame

@@ -47,12 +47,19 @@ in-level XP — never a de-level, just a setback. Jacking out of a fight
 (`j`) costs the same modest XP setback, so fleeing isn't entirely free
 either, but it's a lot cheaper than dying.
 
-Progress saves to `save.bin` in the repo root (`s` to save, `L` from the
-main menu to reload). It also autosaves to that same file every 50 game
-ticks (paced against game time, not wall-clock time, so it's the same
-whether you're playing fast or slow) — silently, so it won't cover up a
-status message from whatever you just did, unless the autosave itself
-fails.
+Each game session gets its own save file under `saves/` in the repo root,
+named from when it was started. Starting a new game (`N`) claims a fresh
+file immediately; `s` saves it manually at any time, and it also autosaves
+to that same file every 50 game ticks (paced against game time, not
+wall-clock time, so it's the same whether you're playing fast or slow) —
+silently, so it won't cover up a status message from whatever you just did,
+unless the autosave itself fails.
+
+`L` from the main menu opens a list of every save in `saves/`, each shown
+with a short summary (level, zone, difficulty, tick). Pick one to choose
+**Load** or **Delete**. Save files aren't compatible across updates that
+change what gets stored — a save from a different build shows up as
+"(incompatible save)" and can still be deleted, just not loaded.
 
 ### Controls
 
@@ -500,3 +507,43 @@ in-game warning rather than crashing startup.
 ```sh
 cargo test
 ```
+
+## Changelog
+
+### 2026-07-19
+
+- **Battles lengthened**: tripled HP across the board — player starting/max
+  HP (30 → 90), per-level HP growth (+4 → +12), and every species'
+  `base_hp`. Attack/Defense and damage formulas are untouched, so fights
+  just take longer, not deadlier.
+- **Save system fixed and reworked**: saves now carry a format version and
+  are rejected cleanly (instead of crashing) if incompatible. Save slots
+  moved from a single `save.bin` to a `saves/` directory; `L` from the main
+  menu lists every save with a summary and lets you Load or Delete each
+  one. An existing `save.bin` is migrated into `saves/` automatically.
+- **Gear now has levels**: every equipped item's bonus scales 150% per
+  level above 1, unlocked by reaching the matching zone depth — see
+  [Equipment](#equipment).
+- **Turret** structure added: passively reduces raid damage against every
+  deployed structure, stacking across however many you build — see
+  [Structures](#structures) / [Base defense](#base-defense).
+- **Perks reworked**: no longer one-time unlocks — each perk can be bought
+  repeatedly, with every level adding a flat +1 to its bonus at the same
+  Perk Point cost — see [Perks](#perks).
+- **Guard assignment** (`G`): post a compiled program to defend any
+  structure against raids, without needing a cronjob — see
+  [Base defense](#base-defense).
+- **Gear crafting reworked**: the Fabricator/Armory no longer run a
+  cronjob to grind out gear — building one unlocks compiling that gear
+  (Overclock Core / Firewall Plating) for Portal Fragments instead — see
+  [Equipment](#equipment).
+- **Companions buff instead of attacking**: commanding a companion in
+  battle now grants the player a buff (a rally by default, or a species'
+  own special ability) rather than dealing damage directly — see
+  [Companions](#companions).
+- **Mining is harder**: Mining Node cronjobs take twice as long per cycle
+  and gate the payout behind a level-based success chance instead of
+  always yielding — see [Getting started](#getting-started-building-and-running-cronjobs).
+- **Power rating** added throughout the UI (status panel, pets screen,
+  battle screen, inspect) — a rough overall-strength number (max
+  HP + Attack + Defense) alongside the individual stats.

@@ -3,7 +3,7 @@
     name: "Worm",
     glyph: 'm',
     color: Green,
-    base_hp: 28,
+    base_hp: 84,
     base_atk: 6,
     base_def: 2,
     taming_difficulty: 0.4,

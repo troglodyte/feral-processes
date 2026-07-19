@@ -3,7 +3,7 @@
     name: "Daemon",
     glyph: 'd',
     color: DarkGreen,
-    base_hp: 18,
+    base_hp: 54,
     base_atk: 5,
     base_def: 3,
     taming_difficulty: 0.3,

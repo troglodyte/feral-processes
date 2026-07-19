@@ -14,6 +14,8 @@ use crate::{App, Mode};
 pub fn render(f: &mut Frame, app: &mut App) {
     match app.mode {
         Mode::MainMenu => render_main_menu(f, app),
+        Mode::LoadGame => render_load_game_menu(f, app),
+        Mode::SaveAction => render_save_action_menu(f, app),
         Mode::DifficultyPick => render_difficulty_pick(f, app.menu_selected),
         Mode::GameOver => render_game_over(f, app),
         Mode::Battle => render_battle(f, app),
@@ -1435,7 +1437,7 @@ fn render_battle(f: &mut Frame, app: &mut App) {
 fn render_main_menu(f: &mut Frame, app: &App) {
     let area = f.area();
     let mut options = vec!["[N] New Game".to_string()];
-    if app.save_exists() {
+    if !app.list_saves().is_empty() {
         options.push("[L] Load Game".to_string());
     }
     options.push("[Q] Quit".to_string());
@@ -1459,6 +1461,53 @@ fn render_main_menu(f: &mut Frame, app: &App) {
         Paragraph::new(lines)
             .alignment(Alignment::Center)
             .block(Block::bordered().title("Main Menu")),
+        popup,
+    );
+}
+
+fn render_load_game_menu(f: &mut Frame, app: &App) {
+    let area = f.area();
+    let saves = app.list_saves();
+    let mut lines = vec![Line::from("Pick a save (Esc to cancel; Up/Down + Enter also work)")];
+    if saves.is_empty() {
+        lines.push(Line::from("(no saves found)"));
+    }
+    for (i, save) in saves.iter().enumerate() {
+        let summary = save.summary.as_deref().unwrap_or("(incompatible save — can still be deleted)");
+        lines.push(menu_line(format!("[{}] {} — {}", i + 1, save.name, summary), i == app.menu_selected));
+    }
+    let popup = centered_rect(70, 60, area);
+    f.render_widget(Clear, popup);
+    f.render_widget(
+        Paragraph::new(lines).wrap(Wrap { trim: true }).block(Block::bordered().title("Load Game")),
+        popup,
+    );
+}
+
+fn render_save_action_menu(f: &mut Frame, app: &App) {
+    let area = f.area();
+    let popup = centered_rect(50, 30, area);
+    f.render_widget(Clear, popup);
+    let name = app
+        .pending_save
+        .as_ref()
+        .and_then(|p| p.file_stem())
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "(unknown save)".to_string());
+    let mut lines = vec![
+        Line::styled(name, Style::new().add_modifier(Modifier::BOLD)),
+        Line::from(""),
+        menu_line("[L]oad".to_string(), app.menu_selected == 0),
+        menu_line("[X] Delete".to_string(), app.menu_selected == 1),
+        Line::from(""),
+        Line::from("Esc to cancel; Up/Down + Enter also work"),
+    ];
+    if let Some(s) = &app.status_line {
+        lines.push(Line::from(""));
+        lines.push(Line::styled(s.clone(), Style::new().fg(Color::Red)));
+    }
+    f.render_widget(
+        Paragraph::new(lines).block(Block::bordered().title("Save")),
         popup,
     );
 }

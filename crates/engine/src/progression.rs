@@ -1,6 +1,6 @@
 use crate::components::{Experience, Stats};
 
-const HP_PER_LEVEL: i32 = 4;
+const HP_PER_LEVEL: i32 = 12;
 const ATK_PER_LEVEL: i32 = 1;
 const DEF_PER_LEVEL: i32 = 1;
 

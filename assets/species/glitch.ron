@@ -3,7 +3,7 @@
     name: "Glitch",
     glyph: 'g',
     color: Green,
-    base_hp: 12,
+    base_hp: 36,
     base_atk: 3,
     base_def: 1,
     taming_difficulty: 0.15,

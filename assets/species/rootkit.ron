@@ -3,7 +3,7 @@
     name: "Rootkit",
     glyph: 'k',
     color: Red,
-    base_hp: 32,
+    base_hp: 96,
     base_atk: 9,
     base_def: 8,
     taming_difficulty: 0.75,

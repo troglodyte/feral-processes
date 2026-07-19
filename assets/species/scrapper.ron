@@ -3,7 +3,7 @@
     name: "Scrapper",
     glyph: 'x',
     color: Yellow,
-    base_hp: 26,
+    base_hp: 78,
     base_atk: 7,
     base_def: 4,
     taming_difficulty: 0.45,

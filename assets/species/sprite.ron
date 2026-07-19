@@ -3,7 +3,7 @@
     name: "Sprite",
     glyph: 's',
     color: Cyan,
-    base_hp: 16,
+    base_hp: 48,
     base_atk: 4,
     base_def: 2,
     taming_difficulty: 0.2,

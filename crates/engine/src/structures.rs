@@ -132,7 +132,16 @@ impl StructureDb {
         self.structures.get(id)
     }
 
+    /// Every loaded structure, sorted by `id`. `HashMap` iteration order is
+    /// randomized per-instance (a fresh seed each time a `StructureDb` is
+    /// built, i.e. every new/loaded game), so without this sort, the
+    /// build menu's `[1]`, `[2]`, ... numbering would shuffle unpredictably
+    /// from one session to the next even though nothing about the mod files
+    /// changed — the same digit could mean a 2-Core-Fragment Mining Node in
+    /// one session and an 8-Core-Fragment Fabricator in the next.
     pub fn all(&self) -> impl Iterator<Item = &StructureDef> {
-        self.structures.values()
+        let mut defs: Vec<&StructureDef> = self.structures.values().collect();
+        defs.sort_by(|a, b| a.id.cmp(&b.id));
+        defs.into_iter()
     }
 }

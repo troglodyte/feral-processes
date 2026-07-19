@@ -1011,6 +1011,86 @@ impl App {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_app(seed: u32) -> App {
+        let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let save_path = std::env::temp_dir().join(format!("feral_processes_tui_test_{seed}.bin"));
+        let history_path = std::env::temp_dir().join(format!("feral_processes_tui_test_{seed}.log"));
+        let mut app = App::new(assets_dir.clone(), save_path, history_path);
+        app.game = Game::new(seed, DifficultyMode::Forgiving, &assets_dir).ok();
+        app.mode = Mode::Playing;
+        app
+    }
+
+    fn structure_count(app: &mut App) -> usize {
+        app.game
+            .as_mut()
+            .unwrap()
+            .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
+            .into_iter()
+            .filter(|e| e.is_structure)
+            .count()
+    }
+
+    /// Exercises the exact key sequence a player drives at the keyboard —
+    /// `b` to open Build, a number to pick a structure, then a direction to
+    /// place it — entirely through `App::handle_key`, to make sure the
+    /// build/deploy flow (as opposed to `Game::place_structure` in
+    /// isolation, which the engine's own tests already cover) still works
+    /// end to end after the menu-navigation changes. Loops over every
+    /// structure number and every direction (re-opening the build menu each
+    /// time, exactly as a player retrying would) rather than assuming
+    /// number "1" is affordable or a given direction is walkable — with
+    /// starting resources, several of the ten structures are affordable, so
+    /// this only fails if the *menu itself* is broken, not because of which
+    /// particular structure a fresh session happens to put at each digit.
+    #[test]
+    fn build_menu_number_key_reaches_the_direction_picker_and_can_place_a_structure() {
+        let mut app = test_app(101);
+        assert!(app.game.is_some(), "test game should have loaded");
+        assert!(app.mode == Mode::Playing);
+
+        let structure_count_in_menu = app.game.as_mut().unwrap().structure_defs().len();
+        let mut placed = false;
+        // Navigate with Down + Enter rather than a digit key, both to
+        // exercise the new arrow-navigation path and because a menu with
+        // more than 9 rows can't be reached by a single digit at all.
+        'outer: for n in 0..structure_count_in_menu {
+            for dir in [KeyCode::Up, KeyCode::Down, KeyCode::Left, KeyCode::Right] {
+                let before = structure_count(&mut app);
+
+                app.handle_key(KeyCode::Char('b'));
+                assert!(app.mode == Mode::Build, "'b' should open the build menu");
+
+                for _ in 0..n {
+                    app.handle_key(KeyCode::Down);
+                }
+                app.handle_key(KeyCode::Enter);
+                assert!(
+                    app.mode == Mode::BuildDirection,
+                    "picking structure {n} via Down+Enter should move to the direction picker"
+                );
+
+                app.handle_key(dir);
+                assert!(app.mode == Mode::Playing, "the direction picker should return to Playing either way");
+
+                if structure_count(&mut app) > before {
+                    placed = true;
+                    break 'outer;
+                }
+            }
+        }
+        assert!(
+            placed,
+            "should have been able to place at least one of the {structure_count_in_menu} structures \
+             in at least one of the four directions"
+        );
+    }
+}
+
 fn main() -> io::Result<()> {
     let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let repo_root = crate_dir

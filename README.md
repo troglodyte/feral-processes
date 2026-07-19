@@ -280,6 +280,12 @@ be active party members, fighting alongside you at once.
   `(on a cronjob)`, so you can see at a glance who's free.
 - Recharging overnight (`r`) fully heals every tamed program you own too,
   not just you — not just the active party, see [Base defense](#base-defense).
+- Every active party member gains **half** as much XP as you do from a kill
+  or a successful decompile, independently of who actually landed the blow
+  — they can level up (growing their own stats and fully healing) right
+  alongside you. A tamed program that's idle or on a cronjob doesn't earn
+  battle XP this way; only cronjob work cycles grow it (see
+  [Getting started](#getting-started-building-and-running-cronjobs)).
 
 ### Fusing programs
 

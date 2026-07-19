@@ -123,8 +123,14 @@ impl SpeciesDb {
             .collect()
     }
 
+    /// Every loaded species, sorted by `id` for a stable, reproducible
+    /// order — see `structures::StructureDb::all` for why: `HashMap`
+    /// iteration order is randomized per-instance, so without this sort
+    /// this list's order would shuffle unpredictably between sessions.
     pub fn all(&self) -> impl Iterator<Item = &SpeciesDef> {
-        self.species.values()
+        let mut defs: Vec<&SpeciesDef> = self.species.values().collect();
+        defs.sort_by(|a, b| a.id.cmp(&b.id));
+        defs.into_iter()
     }
 }
 

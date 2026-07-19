@@ -56,6 +56,11 @@ const DECOMPILER_SKILL_PER_LEVEL: i32 = 1;
 /// Perk Points (see `perks::Perk`) awarded per player level gained.
 const PERK_POINTS_PER_LEVEL: u32 = 1;
 
+/// Every party member (see `resources::Party`) gains `1 / PARTY_XP_DIVISOR`
+/// of whatever XP the player just earned from a kill or successful
+/// decompile — see `Game::award_party_xp`.
+const PARTY_XP_DIVISOR: u32 = 2;
+
 /// Flat bonus `Perk::KeenScavenger` adds to `Game::forage`'s success chance.
 const KEEN_SCAVENGER_BONUS: f64 = 0.15;
 
@@ -1359,8 +1364,11 @@ impl Game {
     }
 
     /// Awards `amount` XP to the player, growing stats and fully healing on
-    /// any level-up gained. Silently does nothing if the player is somehow
-    /// missing an `Experience` component (shouldn't happen in practice).
+    /// any level-up gained, then awards every current party member half as
+    /// much (see `award_party_xp`) — fighting beside you pays off even on
+    /// rounds where only the player's hit actually lands. Silently does
+    /// nothing for the player if they're somehow missing an `Experience`
+    /// component (shouldn't happen in practice).
     fn award_player_xp(&mut self, player: Entity, amount: u32) {
         let (levels, new_level) = {
             let mut query = self.world.query::<(&mut Experience, &mut Stats)>();
@@ -1380,6 +1388,35 @@ impl Game {
             self.log(format!("You gain {amount} XP and reach level {new_level}!"));
         } else {
             self.log(format!("You gain {amount} XP."));
+        }
+        self.award_party_xp(amount / PARTY_XP_DIVISOR);
+    }
+
+    /// Awards `amount` XP to every program in the active party (see
+    /// `resources::Party`), each independently able to level up from it —
+    /// the party-wide, half-rate companion to `award_player_xp`. A no-op
+    /// for any party member somehow missing `Experience` (shouldn't happen
+    /// in practice) or if the party is empty. Only logs a level-up, not
+    /// every ordinary gain, so a busy fight doesn't flood the feed with a
+    /// line per party member per kill.
+    fn award_party_xp(&mut self, amount: u32) {
+        if amount == 0 {
+            return;
+        }
+        let party = self.world.resource::<Party>().0.clone();
+        for companion in party {
+            let leveled = {
+                let mut query = self.world.query::<(&mut Experience, &mut Stats)>();
+                let Ok((mut exp, mut stats)) = query.get_mut(&mut self.world, companion) else {
+                    continue;
+                };
+                progression::add_xp(&mut exp, &mut stats, amount) > 0
+            };
+            if leveled {
+                let name = self.creature_label(companion);
+                let level = self.world.get::<Experience>(companion).unwrap().level;
+                self.log(format!("{name} gains {amount} XP and levels up to {level}!"));
+            }
         }
     }
 
@@ -3340,6 +3377,47 @@ mod tests {
     }
 
     #[test]
+    fn structure_defs_order_is_sorted_by_id_and_stable_across_sessions() {
+        // StructureDb is backed by a HashMap, whose iteration order is
+        // randomized per-instance — without an explicit sort, the build
+        // menu's [1], [2], ... numbering would shuffle between sessions
+        // even though the mod files never changed. Multiple seeds (each a
+        // fresh StructureDb/HashMap instance) should all agree.
+        let seeds = [40, 41, 42, 43];
+        let mut orders = Vec::new();
+        for seed in seeds {
+            let game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            let ids: Vec<String> = game.structure_defs().into_iter().map(|d| d.id).collect();
+            let mut sorted = ids.clone();
+            sorted.sort();
+            assert_eq!(ids, sorted, "structure_defs() should already be sorted by id");
+            orders.push(ids);
+        }
+        assert!(
+            orders.windows(2).all(|w| w[0] == w[1]),
+            "structure order should be identical across fresh sessions, got {orders:?}"
+        );
+    }
+
+    #[test]
+    fn species_defs_order_is_sorted_by_id_and_stable_across_sessions() {
+        let seeds = [44, 45, 46, 47];
+        let mut orders = Vec::new();
+        for seed in seeds {
+            let game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            let ids: Vec<String> = game.species_defs().into_iter().map(|d| d.id).collect();
+            let mut sorted = ids.clone();
+            sorted.sort();
+            assert_eq!(ids, sorted, "species_defs() should already be sorted by id");
+            orders.push(ids);
+        }
+        assert!(
+            orders.windows(2).all(|w| w[0] == w[1]),
+            "species order should be identical across fresh sessions, got {orders:?}"
+        );
+    }
+
+    #[test]
     fn battle_flee_applies_the_same_mild_xp_setback_as_a_death() {
         let mut game = Game::new(33, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
@@ -3537,6 +3615,76 @@ mod tests {
 
         let wild_hp = game.world.get::<Stats>(wild).unwrap().hp;
         assert!(wild_hp < 100, "the companion's attack should have damaged the wild creature");
+    }
+
+    #[test]
+    fn award_player_xp_also_grants_party_members_half_as_much() {
+        let mut game = Game::new(36, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let in_party = spawn_tamed(&mut game, 10, 3);
+        game.add_companion(in_party).unwrap();
+        let not_in_party = spawn_tamed(&mut game, 10, 3);
+
+        game.award_player_xp(player, 10);
+
+        assert_eq!(
+            game.world.get::<Experience>(in_party).unwrap().xp,
+            5,
+            "a party member should gain half the player's XP"
+        );
+        assert_eq!(
+            game.world.get::<Experience>(not_in_party).unwrap().xp,
+            0,
+            "a tamed program outside the party shouldn't gain any XP from a kill"
+        );
+    }
+
+    #[test]
+    fn award_player_xp_can_level_up_a_party_member_independently_of_the_player() {
+        let mut game = Game::new(37, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let companion = spawn_tamed(&mut game, 10, 3);
+        game.world.get_mut::<Experience>(companion).unwrap().xp_to_next = 5;
+        game.add_companion(companion).unwrap();
+
+        game.award_player_xp(player, 10);
+
+        let exp = game.world.get::<Experience>(companion).unwrap();
+        assert_eq!(exp.level, 2, "5 XP against a 5-XP requirement should level the companion up");
+    }
+
+    #[test]
+    fn killing_a_wild_creature_in_battle_awards_the_active_companion_half_xp() {
+        let mut game = Game::new(38, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let companion = spawn_tamed(&mut game, 10, 3);
+        game.add_companion(companion).unwrap();
+
+        let species = game.species_defs().into_iter().next().expect("at least one species");
+        let wild = game
+            .world
+            .spawn((
+                Creature { species: species.id.clone() },
+                Hostile,
+                Position { x: 5, y: 5 },
+                Stats { hp: 1, max_hp: 10, atk: 0, def: 0 },
+            ))
+            .id();
+        game.world.insert_resource(BattleState {
+            player,
+            wild_creature: wild,
+            log: Vec::new(),
+            finished: false,
+            player_won: false,
+        });
+
+        game.battle_attack();
+
+        assert_eq!(
+            game.world.get::<Experience>(companion).unwrap().xp,
+            5,
+            "killing a 10-max-HP wild program should award the party member half its max HP as XP"
+        );
     }
 
     /// `wild_retaliate` rolls per-call whether a companion soaks the hit, so

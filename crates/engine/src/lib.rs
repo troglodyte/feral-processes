@@ -209,6 +209,11 @@ pub struct CompanionInfo {
     /// `status_label`) — e.g. "Bleeding (2)". Always `None` outside a
     /// battle, since status effects are scoped to a single intrusion.
     pub status: Option<String>,
+    /// What commanding this companion in battle would do right now — see
+    /// `Game::companion_ability_label`. Shown in the Command Companion
+    /// picker so the player can see what they're about to use before
+    /// picking a party member with more than one active.
+    pub ability: String,
 }
 
 #[derive(Clone)]
@@ -2573,7 +2578,30 @@ impl Game {
             def: stats.def,
             power: stats.power(),
             status: self.status_label(entity),
+            ability: self.companion_ability_label(entity),
         })
+    }
+
+    /// What commanding `entity` in battle would do right now: its species'
+    /// own `special_ability` if it has one (see
+    /// `SpecialAbility::display_label`), or the generic Attack Rally
+    /// otherwise — computed the same way `rally_player` actually computes
+    /// it, from the companion's own current ATK, so this stays accurate as
+    /// it levels up rather than showing a stale number.
+    fn companion_ability_label(&self, entity: Entity) -> String {
+        let ability = self
+            .world
+            .get::<Creature>(entity)
+            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+            .and_then(|s| s.special_ability.clone());
+        match ability {
+            Some(ability) => ability.display_label(),
+            None => {
+                let atk = self.world.get::<Stats>(entity).map(|s| s.atk).unwrap_or(0);
+                let power = (atk / 3).max(1);
+                format!("Attack Rally: +{power} ATK for {RALLY_DURATION} rounds")
+            }
+        }
     }
 
     /// Snapshot of every current party member (see `resources::Party`), in
@@ -4912,6 +4940,67 @@ mod tests {
     }
 
     #[test]
+    fn companion_ability_label_shows_special_ability_or_a_computed_attack_rally() {
+        let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let all_species = game.species_defs();
+        let no_ability_species = all_species
+            .iter()
+            .find(|s| s.special_ability.is_none())
+            .expect("at least one species with no special ability")
+            .id
+            .clone();
+
+        let plain = game
+            .world
+            .spawn((
+                Creature { species: no_ability_species },
+                Position { x: 3, y: 3 },
+                Stats { hp: 10, max_hp: 10, atk: 30, def: 1 },
+                Tamed { owner: player },
+                Experience::default(),
+            ))
+            .id();
+        game.add_companion(plain).unwrap();
+        let plain_ability = game.player_status().companions[0].ability.clone();
+        assert_eq!(
+            plain_ability,
+            format!("Attack Rally: +{} ATK for {RALLY_DURATION} rounds", (30_i32 / 3).max(1)),
+            "a species with no special_ability should show the computed default rally"
+        );
+
+        if let Some((species_id, expected)) = all_species
+            .iter()
+            .find_map(|s| s.special_ability.clone().map(|a| (s.id.clone(), a)))
+        {
+            let with_ability = game
+                .world
+                .spawn((
+                    Creature { species: species_id },
+                    Position { x: 3, y: 3 },
+                    Stats { hp: 10, max_hp: 10, atk: 5, def: 1 },
+                    Tamed { owner: player },
+                    Experience::default(),
+                ))
+                .id();
+            game.add_companion(with_ability).unwrap();
+            let shown = game
+                .player_status()
+                .companions
+                .iter()
+                .find(|c| c.entity == with_ability)
+                .unwrap()
+                .ability
+                .clone();
+            assert_eq!(
+                shown,
+                expected.display_label(),
+                "a species with a special_ability should show its own label, not the generic rally"
+            );
+        }
+    }
+
+    #[test]
     fn award_player_xp_also_grants_party_members_half_as_much() {
         let mut game = Game::new(36, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
@@ -5443,6 +5532,95 @@ mod tests {
         assert_ne!(
             creature.species, species_b,
             "the lower-level input's species shouldn't win the tie"
+        );
+    }
+
+    #[test]
+    fn fuse_companions_applies_a_custom_name_truncated_to_the_max_length() {
+        let mut game = Game::new(90, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let a = spawn_tamed(&mut game, 10, 3);
+        let b = spawn_tamed(&mut game, 10, 3);
+        game.fuse_companions(a, b, Some("Way Too Long A Name".to_string())).unwrap();
+
+        let fused = game.owned_pets();
+        assert_eq!(fused.len(), 1, "fusing two owned programs should leave exactly one");
+        // PetInfo::name is zone-tagged (every fused program gets
+        // `ZonePortal(1)`, always shown per `entity_label`'s own test
+        // coverage), so strip that " 1" suffix before checking the
+        // truncated custom name itself.
+        let base_name = fused[0]
+            .name
+            .strip_suffix(" 1")
+            .expect("a freshly fused program should be zone-tagged");
+        assert_eq!(
+            base_name.chars().count(),
+            MAX_CUSTOM_NAME_LEN,
+            "an overlong custom name should be truncated, not rejected"
+        );
+        assert!(
+            "Way Too Long A Name".starts_with(base_name),
+            "the truncated name should be a prefix of what was typed, got {base_name:?}"
+        );
+    }
+
+    #[test]
+    fn fuse_companions_with_no_name_or_blank_name_keeps_the_species_name() {
+        let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        // `spawn_tamed` always uses this same species (`species_defs()` is
+        // stably sorted), and fusing two same-level, same-species programs
+        // keeps it — capturing it directly here avoids having to pick the
+        // fused entity back out of a world that also has 14 unrelated wild
+        // creatures in it from `Game::new`.
+        let species_name = game.species_defs().into_iter().next().unwrap().name;
+        let a = spawn_tamed(&mut game, 10, 3);
+        let b = spawn_tamed(&mut game, 10, 3);
+        game.fuse_companions(a, b, None).unwrap();
+        let no_name = game.owned_pets();
+        assert_eq!(no_name.len(), 1);
+        // Every fused program gets `ZonePortal(1)` (see `fuse_companions`),
+        // which `creature_label`/`PetInfo::name` always zone-tags — even at
+        // zone 1, per `entity_label`'s own test coverage — so the expected
+        // fallback name carries that same " 1" suffix, not the bare species name.
+        let expected_default_name = format!("{species_name} 1");
+        assert_eq!(
+            no_name[0].name, expected_default_name,
+            "no name given should fall back to the (zone-tagged) species name"
+        );
+
+        let c = spawn_tamed(&mut game, 10, 3);
+        let d = spawn_tamed(&mut game, 10, 3);
+        game.fuse_companions(c, d, Some("   ".to_string())).unwrap();
+        let pets = game.owned_pets();
+        let blank_named = pets.iter().find(|p| p.entity != no_name[0].entity).unwrap();
+        assert_eq!(
+            blank_named.name, expected_default_name,
+            "an all-whitespace name should also fall back to the species name, not become blank"
+        );
+    }
+
+    #[test]
+    fn a_fused_programs_custom_name_survives_save_and_load() {
+        let assets = test_assets_dir();
+        let mut game = Game::new(92, DifficultyMode::Forgiving, &assets).unwrap();
+        let a = spawn_tamed(&mut game, 10, 3);
+        let b = spawn_tamed(&mut game, 10, 3);
+        game.fuse_companions(a, b, Some("Zappy".to_string())).unwrap();
+
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_fuse_name_test_{}.bin",
+            std::process::id()
+        ));
+        game.save(&path).unwrap();
+        let mut loaded = Game::load(&path, &assets).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        let pets = loaded.owned_pets();
+        assert_eq!(pets.len(), 1);
+        // Zone-tagged the same as any other fused program — see the
+        // truncation test above for why " 1" is expected here too.
+        assert_eq!(
+            pets[0].name, "Zappy 1",
+            "a custom name should survive a save/load round trip"
         );
     }
 

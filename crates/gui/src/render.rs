@@ -1036,6 +1036,7 @@ fn draw_battle_companion_menu(app: &mut App) {
             format!("[{}] {} (HP {}/{}, ATK {}, PWR {}){}", i + 1, c.name, c.hp, c.max_hp, c.atk, c.power, status_tag(&c.status)),
             i == selected,
         ));
+        rows.push(text_row(format!("    {}", c.ability)));
     }
     draw_popup("Command Companion", PopupSize::Large, &rows);
 }

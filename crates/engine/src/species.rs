@@ -30,6 +30,30 @@ pub enum SpecialAbility {
     },
 }
 
+impl SpecialAbility {
+    /// Short display label for the Command Companion picker — what
+    /// commanding this companion would actually do, e.g. "Rally: +3 ATK
+    /// for 3 rounds".
+    pub fn display_label(&self) -> String {
+        match self {
+            SpecialAbility::Rally { power, duration } => {
+                format!("Rally: +{power} ATK for {duration} rounds")
+            }
+            SpecialAbility::Shield { power, duration } => {
+                format!("Shield: +{power} DEF for {duration} rounds")
+            }
+            SpecialAbility::Heal { power } => format!("Heal: +{power} HP"),
+            SpecialAbility::Debuff { kind, power, duration } => {
+                let kind_name = match kind {
+                    StatusKind::Bleed => "Bleeding",
+                    StatusKind::Stun => "Stun",
+                };
+                format!("Debuff: {kind_name} ({power}, {duration} rounds)")
+            }
+        }
+    }
+}
+
 /// A status condition a move has a chance to inflict on top of its direct
 /// damage — see `components::StatusEffects`.
 #[derive(Clone, Debug, Serialize, Deserialize)]

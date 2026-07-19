@@ -3,7 +3,10 @@ use crate::items::ItemId;
 /// How effective an item is as a base multiplier in [`capture_chance`].
 pub fn item_potency(item: ItemId) -> f32 {
     match item {
-        ItemId::IceBreaker => 0.55,
+        // Lowered from 0.55 — decompile odds were landing too high even at
+        // full HP against easy species, making the HP-weakening step feel
+        // optional rather than the intended core tension.
+        ItemId::IceBreaker => 0.4,
         ItemId::CoreFragment
         | ItemId::PowerCell
         | ItemId::OverclockCore
@@ -17,14 +20,18 @@ pub fn item_potency(item: ItemId) -> f32 {
 }
 
 /// Percentage-point bonus to decompile chance per point of the player's
-/// `Decompiler` stat (see `components::Decompiler`).
-const DECOMPILER_SKILL_BONUS: f32 = 0.03;
+/// `Decompiler` stat (see `components::Decompiler`). Lowered from 0.03
+/// alongside `item_potency` — a well-leveled player was able to stack
+/// enough skill to make almost any attempt a near-guaranteed success.
+const DECOMPILER_SKILL_BONUS: f32 = 0.02;
 
 /// ICE-breaking odds: weaker (lower `hp_fraction`) and easier-compiled
 /// species are more likely to be decompiled; stronger breakers help; a more
-/// practiced player (`decompiler_skill`) adds a flat bonus on top.
+/// practiced player (`decompiler_skill`) adds a flat bonus on top. The
+/// `0.9` ceiling (rather than a full `1.0`) means even a fully-weakened,
+/// zero-difficulty target isn't a sure thing on item potency alone.
 pub fn capture_chance(hp_fraction: f32, item_potency: f32, taming_difficulty: f32, decompiler_skill: i32) -> f32 {
-    let base = item_potency * (1.05 - hp_fraction * 0.65) * (1.0 - taming_difficulty * 0.6);
+    let base = item_potency * (0.9 - hp_fraction * 0.65) * (1.0 - taming_difficulty * 0.6);
     let skill_bonus = decompiler_skill as f32 * DECOMPILER_SKILL_BONUS;
     (base + skill_bonus).clamp(0.05, 0.95)
 }

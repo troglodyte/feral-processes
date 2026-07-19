@@ -1138,6 +1138,7 @@ fn render_battle_companion_menu(f: &mut Frame, app: &mut App) {
             ),
             i == selected,
         ));
+        lines.push(Line::from(format!("    {}", c.ability)));
     }
     f.render_widget(
         Paragraph::new(lines)

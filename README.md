@@ -1,11 +1,15 @@
 # feral-processes
 
-A Neuromancer/Tron-flavored ASCII game blending Pokemon (tame and battle
-rogue programs), Palworld (compiled programs work your base for you), and
-Dwarf Fortress (procedural world, needs simulation, configurable permadeath).
+![feral-processes gameplay screenshot](pics/gameplay.png)
 
-Single-player, built in Rust as a terminal (TUI) app. The simulation is kept
-decoupled from rendering so a client/server split is possible later.
+A Neuromancer/Tron-flavored game blending Pokemon (tame and battle rogue
+programs), Palworld (compiled programs work your base for you), and Dwarf
+Fortress (procedural world, needs simulation, configurable permadeath).
+
+Single-player, built in Rust. Two interchangeable frontends — a terminal
+(TUI) UI and a graphical (GUI) one, shown above — sit on top of the same
+simulation, which stays fully decoupled from both so a client/server split
+is possible later too.
 
 ## Installing
 
@@ -25,16 +29,18 @@ cargo build
 
 ## Playing
 
-Run it from the `tui` crate:
+Run the `feral-processes` binary (the `launcher` crate):
 
 ```sh
 cargo run -p feral-processes
 ```
 
-(or, from `crates/tui`, just `cargo run`)
+With no flags, it asks **Graphics or Text?** up front, before starting
+either one. To skip that prompt: `cargo run -p feral-processes -- --gui` or
+`-- --tui`. If graphics aren't available (no display, or the GUI fails to
+start), it automatically falls back to the text UI.
 
-This launches a full-screen terminal UI. From the main menu, start a **New
-Game** and pick a difficulty:
+Either way, from the main menu, start a **New Game** and pick a difficulty:
 
 - **Permadeath** — flatlining ends the run for good; a summary is appended
   to `run_history.log`.
@@ -197,8 +203,8 @@ Shown in the status panel (always) and the intrusion screen (in battle):
 | Stat | What it means |
 | --- | --- |
 | **Integrity** | Your HP. Hits 0 and you flatline — final in Permadeath, a costly soft-reboot in Forgiving mode. Leveling up or recharging overnight (`r`) both fully restore it. |
-| **Power** | Your hunger-equivalent. Drains over time; hits 0 and you start taking Integrity damage each tick. Restored by draining a Power Cell (`e`) or standing near a cooking Terminal. |
-| **Fatigue** | Drains over time; restored to full by recharging overnight (`r`). Currently cosmetic — doesn't yet penalize anything on its own, but rest also advances a lot of game time, so use it deliberately. |
+| **Power** | Your hunger-equivalent. Drains over time; hits 0 and you start taking Integrity damage each tick. Below 50%, your Attack also starts weakening — a linear falloff to half strength at 0 Power, on top of (not instead of) the tick damage. Restored by draining a Power Cell (`e`) or standing near a cooking Terminal. |
+| **Fatigue** | Drains over time; restored to full by recharging overnight (`r`). Commanding a companion in battle (`c`) also costs a flat chunk of it — rest also advances a lot of game time, so use both deliberately. |
 | **Level / XP** | Grows from defeating or decompiling rogue programs, or (for a compiled program) completing cronjob cycles. Each level-up grows Attack/Defense/max Integrity, fully heals, and grants 1 Perk Point — see [Perks](#perks). |
 | **Attack** | How hard your hits land. Battle damage is roughly `move power + attacker's Attack − defender's Defense` (always at least 1). |
 | **Defense** | How much incoming damage you shrug off — see the Attack formula above. |
@@ -298,6 +304,11 @@ be active party members, fighting alongside you at once.
   the party's already full — stand one down first). Selecting a party
   member's own number stands it down. The screen stays open so you can
   adjust multiple slots in one visit; `Esc` closes it.
+- Every active party member also passively adds 10% of its own current
+  Attack and Defense (minimum 1 each) to yours, stacking across the whole
+  party — shown live in your own Attack/Defense numbers in the status panel
+  and intrusion screen. It updates automatically as a companion levels up
+  or is fused, and drops off the moment it's stood down or knocked out.
 - A party member is mutually exclusive with a cronjob: assigning it to work
   a structure (`w`) automatically stands it down from the party, and vice
   versa — a program is either working or fighting beside you, never both.
@@ -309,7 +320,9 @@ be active party members, fighting alongside you at once.
   bigger Attack/Defense buff, a heal, or a debuff on the wild program — see
   `assets/species/README.md`). Either way, it's *instead of* you acting
   that round — a turn-economy tradeoff, not a free extra hit, and only one
-  companion can act per round even with a full party.
+  companion can act per round even with a full party. It also costs you a
+  flat chunk of Fatigue — a stunned companion that can't act costs nothing,
+  since nothing actually happened that round.
 - The wild program's retaliation has a 30% chance to target the party
   instead of you (picking uniformly among current members if you have
   more than one), using that member's Defense stat. A party member knocked
@@ -351,7 +364,7 @@ then the second (anyone but the first). Both are consumed.
 | Sprite (`s`) | Easy | OpenGrid, Mainframe | — |
 | Glitch (`g`) | Easy | OpenGrid, NullSector | Power Cells |
 | Drone (`o`) | Easy | OpenGrid, Mainframe | Core Fragments |
-| Daemon (`d`) | Easy/Medium | OpenGrid, NullSector | Power Cells |
+| SubProcess (`d`) | Easy/Medium | OpenGrid, NullSector | Power Cells |
 | Scrapper (`x`) | Medium | OpenGrid, NullSector | Power Cells |
 | Wraith (`w`) | Medium | StaticField | — |
 | Phantom (`p`) | Medium | Mainframe, StaticField | — |
@@ -379,7 +392,7 @@ program) their next action. Only one condition is active at a time — a
 fresh one overwrites whatever was there. Wraith's Freeze, Construct's
 Lockdown, Sentinel's Lockout, Trojan's Backdoor Access, Rootkit's Privilege
 Escalation, Cipher's Encrypt, and Wintermute's Absolute Authority can stun;
-Wraith's, Virus's, Daemon's Fork Bomb, Worm's Replicate, Ghost's Haunt, the
+Wraith's, Virus's, SubProcess's Fork Bomb, Worm's Replicate, Ghost's Haunt, the
 Overseer's Corrupt/Purge, and Wintermute's Cascade Logic can cause bleeding.
 
 ### Bosses
@@ -512,6 +525,34 @@ cargo test
 
 ### 2026-07-19
 
+- **Graphical frontend added**: a second, windowed UI alongside the
+  original terminal one, picked at startup (or via `--gui`/`--tui`) with
+  automatic fallback to the text UI if no display is available — see
+  [Playing](#playing). Menus scroll to keep your selection in view instead
+  of clipping, size themselves to use most of the screen, and a structure
+  with a cronjob worker assigned gets a yellow outline on the map.
+- **Companions passively boost your stats**: every active party member adds
+  10% (minimum 1) of its own current Attack and Defense to yours, stacking
+  across the whole party and updating live as it levels — see
+  [Companions](#companions).
+- **Low Power weakens your attacks**: below 50% Power your Attack falls off
+  linearly, down to half strength at 0 — on top of, not instead of, the
+  existing tick damage from fully running out. Commanding a companion in
+  battle also now costs a flat chunk of Fatigue — see the Stats table and
+  [Companions](#companions).
+- **Fuse now lets you name the result**: after picking both programs, type
+  an optional name (12 characters max) for what they become — see
+  [Companions](#companions). The Fuse and cronjob/guard pickers also now
+  show each candidate's full stats (or Power rating) instead of just a
+  level.
+- **Decompile odds lowered**: ICE Breaker potency and the Decompiler skill
+  bonus were both tuned down — weakening a target first now matters a lot
+  more than before, rather than skill alone making most attempts a sure
+  thing.
+- **Command Companion shows what it'll do**: the picker now lists each
+  party member's actual ability (its species' special ability, or the
+  computed default rally) instead of just its stats.
+- Renamed the Daemon species to **SubProcess** throughout.
 - **Battles lengthened**: tripled HP across the board — player starting/max
   HP (30 → 90), per-level HP growth (+4 → +12), and every species'
   `base_hp`. Attack/Defense and damage formulas are untouched, so fights

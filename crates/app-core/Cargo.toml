@@ -1,0 +1,7 @@
+[package]
+name = "feral-processes-app-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+feral-processes-engine = { version = "0.1.0", path = "../engine" }

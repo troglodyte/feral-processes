@@ -1,6 +1,6 @@
 (
-    id: "daemon",
-    name: "Daemon",
+    id: "sub_process",
+    name: "SubProcess",
     glyph: 'd',
     color: DarkGreen,
     base_hp: 54,

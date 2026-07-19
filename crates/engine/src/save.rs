@@ -60,6 +60,12 @@ pub struct CreatureSave {
     /// Which zone sector this creature was originally spawned in (see
     /// `components::ZonePortal`).
     pub zone: u32,
+    /// The player's custom display name for this creature, if they set one
+    /// (see `components::CustomName`) — currently only possible via
+    /// `Game::fuse_companions`. This is a shape change to `CreatureSave`,
+    /// so it required bumping `SAVE_FORMAT_VERSION` (bincode has no
+    /// granular field-level compatibility here — see that constant's docs).
+    pub custom_name: Option<String>,
 }
 
 /// Mirrors `components::TaskKind` for persistence — kept separate so the
@@ -131,7 +137,7 @@ pub struct SaveData {
 /// and every save written under the old version stops loading. That's an
 /// intentional, simple tradeoff for a single-player game rather than
 /// building real schema migration.
-pub const SAVE_FORMAT_VERSION: u32 = 1;
+pub const SAVE_FORMAT_VERSION: u32 = 2;
 
 pub fn save_to_file(path: &Path, data: &SaveData) -> io::Result<()> {
     let encoded = bincode::serde::encode_to_vec(data, bincode::config::standard())

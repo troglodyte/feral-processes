@@ -1,0 +1,13 @@
+[package]
+name = "feral-processes"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "feral-processes"
+path = "src/main.rs"
+
+[dependencies]
+feral-processes-app-core = { version = "0.1.0", path = "../app-core" }
+feral-processes-gui = { version = "0.1.0", path = "../gui" }
+feral-processes-tui = { version = "0.1.0", path = "../tui" }

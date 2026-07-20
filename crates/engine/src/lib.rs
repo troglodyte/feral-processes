@@ -2717,35 +2717,97 @@ impl Game {
         self.spawn_initial_creatures(14);
     }
 
-    fn spawn_wild_creature(&mut self, species_id: &str, x: i32, y: i32) {
-        let Some(species) = self.world.resource::<SpeciesDb>().get(species_id).cloned() else {
-            return;
-        };
+    /// Spawns a wild creature of `species_id` at `(x, y)`, returning its
+    /// `Entity` — `None` only if `species_id` isn't in `SpeciesDb` (every
+    /// real call site passes an id it already validated against
+    /// `SpeciesDb`, so this is a defensive no-op path, not an expected
+    /// outcome). `spawn_nest_guardian` uses the returned entity to attach
+    /// `NestGuardian`.
+    fn spawn_wild_creature(&mut self, species_id: &str, x: i32, y: i32) -> Option<Entity> {
+        let species = self.world.resource::<SpeciesDb>().get(species_id).cloned()?;
         let zone_level = self.world.resource::<ZoneLevel>();
         let mult = zone_level.stat_multiplier() as f32;
         let zone = zone_level.0;
         let dist_mult = self.distance_stat_multiplier(x, y);
         let scale = |base: i32| ((base as f32) * mult * dist_mult).round() as i32;
-        self.world.spawn((
-            Creature {
-                species: species.id.clone(),
-            },
-            Position { x, y },
-            Glyph {
-                ch: species.glyph,
-                color: species.color,
-            },
-            Stats {
-                hp: scale(species.base_hp),
-                max_hp: scale(species.base_hp),
-                atk: scale(species.base_atk),
-                def: scale(species.base_def),
-            },
-            Hostile,
-            WanderAi::default(),
-            ZonePortal(zone),
-            StatusEffects::default(),
-        ));
+        Some(
+            self.world
+                .spawn((
+                    Creature {
+                        species: species.id.clone(),
+                    },
+                    Position { x, y },
+                    Glyph {
+                        ch: species.glyph,
+                        color: species.color,
+                    },
+                    Stats {
+                        hp: scale(species.base_hp),
+                        max_hp: scale(species.base_hp),
+                        atk: scale(species.base_atk),
+                        def: scale(species.base_def),
+                    },
+                    Hostile,
+                    WanderAi::default(),
+                    ZonePortal(zone),
+                    StatusEffects::default(),
+                ))
+                .id(),
+        )
+    }
+
+    /// Spawns a `Nest` for `species_id` at `(x, y)`, plus an initial
+    /// `NEST_GUARDIAN_MIN..=NEST_GUARDIAN_MAX` guardians clustered within
+    /// `NEST_TETHER_RADIUS` of it. See the nests design doc
+    /// (`docs/superpowers/specs/2026-07-20-nests-design.md`).
+    fn spawn_nest(&mut self, species_id: &str, x: i32, y: i32) {
+        let Some(species) = self.world.resource::<SpeciesDb>().get(species_id).cloned() else {
+            return;
+        };
+        let nest = self
+            .world
+            .spawn((
+                Nest {
+                    species: species.id.clone(),
+                    pending_respawns: Vec::new(),
+                },
+                Position { x, y },
+                Glyph {
+                    ch: 'N',
+                    color: species.color,
+                },
+                Durability {
+                    hp: NEST_DURABILITY,
+                    max_hp: NEST_DURABILITY,
+                },
+            ))
+            .id();
+        let guardian_count = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_range(NEST_GUARDIAN_MIN..=NEST_GUARDIAN_MAX)
+        };
+        for _ in 0..guardian_count {
+            self.spawn_nest_guardian(nest, species_id, x, y);
+        }
+    }
+
+    /// Spawns one `species_id` wild creature tethered to `nest`, at a
+    /// random offset within `NEST_TETHER_RADIUS` of `(nest_x, nest_y)` —
+    /// used both for a nest's initial guardians (`spawn_nest`) and for
+    /// respawns (`nest_respawn_tick`). Walkability isn't rechecked for the
+    /// offset tile, matching the existing looseness
+    /// `try_spawn_habitat_creature` already has for pack members.
+    fn spawn_nest_guardian(&mut self, nest: Entity, species_id: &str, nest_x: i32, nest_y: i32) {
+        let (gx, gy) = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            (
+                nest_x + rng.0.random_range(-NEST_TETHER_RADIUS..=NEST_TETHER_RADIUS),
+                nest_y + rng.0.random_range(-NEST_TETHER_RADIUS..=NEST_TETHER_RADIUS),
+            )
+        };
+        if let Some(guardian) = self.spawn_wild_creature(species_id, gx, gy) {
+            self.world.entity_mut(guardian).insert(NestGuardian { nest });
+        }
     }
 
     /// Stat multiplier for a wild spawn at `(x, y)`, from how far it is
@@ -2996,6 +3058,29 @@ impl Game {
             let idx = rng.0.random_range(0..pool.len());
             pool[idx].clone()
         };
+
+        // A nest takes the tile's spawn slot instead of an ordinary pack,
+        // same "rare special outcome" shape as the boss roll above — but
+        // only ever considered for the non-boss pick, and only for a
+        // species that opted in via `SpeciesDef::can_nest`. The RNG draw
+        // only happens when `can_nest` is true, so this never shifts the
+        // RNG sequence for the (overwhelmingly common) non-nesting case.
+        if !spawn_boss {
+            let can_nest = self
+                .world
+                .resource::<SpeciesDb>()
+                .get(&pick)
+                .is_some_and(|s| s.can_nest);
+            let spawn_nest_roll = can_nest && {
+                let mut rng = self.world.resource_mut::<GameRng>();
+                rng.0.random_bool(NEST_SPAWN_CHANCE)
+            };
+            if spawn_nest_roll {
+                self.spawn_nest(&pick, x, y);
+                return true;
+            }
+        }
+
         // Bosses always spawn alone — packs are an ordinary-encounter
         // mechanic, not something to stack onto an already-tough boss
         // fight.
@@ -5314,6 +5399,51 @@ mod tests {
             NEST_DURABILITY,
             "a Nest must never take raid damage, even when it's the only Durability holder"
         );
+    }
+
+    #[test]
+    fn spawn_nest_creates_a_tethered_guardian_cluster() {
+        let mut game = Game::new(601, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.spawn_nest("scrapper", 30, 30);
+
+        let nests: Vec<(Entity, Position)> = {
+            let mut query = game.world.query::<(Entity, &Nest, &Position)>();
+            query
+                .iter(&game.world)
+                .map(|(e, _, p)| (e, *p))
+                .collect()
+        };
+        assert_eq!(nests.len(), 1, "spawn_nest should create exactly one Nest entity");
+        let (nest, nest_pos) = nests[0];
+        assert_eq!(nest_pos, Position { x: 30, y: 30 });
+        assert_eq!(
+            game.world.get::<Durability>(nest).unwrap().hp,
+            NEST_DURABILITY
+        );
+
+        let guardians: Vec<Position> = {
+            let mut query = game.world.query::<(&NestGuardian, &Position)>();
+            query
+                .iter(&game.world)
+                .filter(|(g, _)| g.nest == nest)
+                .map(|(_, p)| *p)
+                .collect()
+        };
+        assert!(
+            guardians.len() >= NEST_GUARDIAN_MIN as usize
+                && guardians.len() <= NEST_GUARDIAN_MAX as usize,
+            "expected {}..={} guardians, got {}",
+            NEST_GUARDIAN_MIN,
+            NEST_GUARDIAN_MAX,
+            guardians.len()
+        );
+        for pos in guardians {
+            let dist = (pos.x - 30).abs().max((pos.y - 30).abs());
+            assert!(
+                dist <= NEST_TETHER_RADIUS,
+                "guardian spawned {dist} tiles from its nest, past the {NEST_TETHER_RADIUS}-tile tether"
+            );
+        }
     }
 
     #[test]

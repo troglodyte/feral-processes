@@ -1,9 +1,10 @@
 use bevy_ecs::prelude::*;
 use rand::RngExt;
 
+use crate::NEST_TETHER_RADIUS;
 use crate::components::{
-    Experience, Inventory, Needs, PassiveProcessor, Perks, Player, Position, ResourceNode, Stats,
-    Structure, Tamed, Task, TaskKind, WanderAi,
+    Experience, Inventory, Needs, Nest, NestGuardian, PassiveProcessor, Perks, Player, Position,
+    ResourceNode, Stats, Structure, Tamed, Task, TaskKind, WanderAi,
 };
 use crate::perks::Perk;
 use crate::progression;
@@ -57,11 +58,12 @@ pub fn needs_decay_system(
 }
 
 pub fn wander_ai_system(
-    mut query: Query<(&mut Position, &mut WanderAi), Without<Player>>,
+    mut query: Query<(&mut Position, &mut WanderAi, Option<&NestGuardian>), Without<Player>>,
+    nests: Query<&Position, (With<Nest>, Without<WanderAi>)>,
     mut world: ResMut<WorldMap>,
     mut rng: ResMut<GameRng>,
 ) {
-    for (mut pos, mut ai) in &mut query {
+    for (mut pos, mut ai, guardian) in &mut query {
         if ai.cooldown > 0 {
             ai.cooldown -= 1;
             continue;
@@ -73,6 +75,14 @@ pub fn wander_ai_system(
             continue;
         }
         let (nx, ny) = (pos.x + dx, pos.y + dy);
+        if let Some(guardian) = guardian
+            && let Ok(nest_pos) = nests.get(guardian.nest)
+        {
+            let dist = (nx - nest_pos.x).abs().max((ny - nest_pos.y).abs());
+            if dist > NEST_TETHER_RADIUS {
+                continue;
+            }
+        }
         if world.tile(nx, ny).walkable {
             pos.x = nx;
             pos.y = ny;

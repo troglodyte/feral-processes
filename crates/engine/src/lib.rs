@@ -5447,6 +5447,39 @@ mod tests {
     }
 
     #[test]
+    fn guardian_never_wanders_beyond_the_nest_tether_radius() {
+        let mut game = Game::new(602, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.spawn_nest("scrapper", 40, 40);
+
+        let (nest, nest_pos) = {
+            let mut query = game.world.query::<(Entity, &Nest, &Position)>();
+            let (e, _, p) = query.iter(&game.world).next().expect("nest should exist");
+            (e, *p)
+        };
+        let guardians: Vec<Entity> = {
+            let mut query = game.world.query::<(Entity, &NestGuardian)>();
+            query
+                .iter(&game.world)
+                .filter(|(_, g)| g.nest == nest)
+                .map(|(e, _)| e)
+                .collect()
+        };
+        assert!(!guardians.is_empty());
+
+        for _ in 0..200 {
+            game.tick();
+            for &guardian in &guardians {
+                let pos = *game.world.get::<Position>(guardian).unwrap();
+                let dist = (pos.x - nest_pos.x).abs().max((pos.y - nest_pos.y).abs());
+                assert!(
+                    dist <= NEST_TETHER_RADIUS,
+                    "guardian wandered {dist} tiles from its nest, past the {NEST_TETHER_RADIUS}-tile tether"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn craft_consumes_cost_and_grants_the_result() {
         let mut game = Game::new(20, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();

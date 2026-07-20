@@ -122,6 +122,18 @@ pub struct SpeciesDef {
     /// ability.
     #[serde(default)]
     pub special_ability: Option<SpecialAbility>,
+    /// Whether this species can spawn as a Nest — a stationary,
+    /// destructible object that keeps 2-5 guardians of this species
+    /// tethered around it and respawns any that are killed/tamed, until
+    /// the nest itself is destroyed (see `components::Nest`,
+    /// `Game::try_spawn_habitat_creature`). `#[serde(default)]` so
+    /// existing species files (including mods) without this field keep
+    /// parsing as non-nesting, same as before this field existed. Never
+    /// applies to a boss species regardless of this flag — the habitat
+    /// spawn roll only ever considers it for the ordinary (non-boss)
+    /// pick.
+    #[serde(default)]
+    pub can_nest: bool,
 }
 
 #[derive(Resource, Default)]
@@ -221,6 +233,30 @@ mod tests {
         assert!(
             bosses.iter().all(|s| s.is_boss),
             "boss_habitat_matches should only ever include boss species"
+        );
+    }
+
+    #[test]
+    fn can_nest_is_set_only_for_the_intended_swarm_flavored_species() {
+        let (db, warnings) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+        assert!(warnings.is_empty(), "species assets should all load cleanly: {warnings:?}");
+
+        let nesting: Vec<&str> = db
+            .all()
+            .filter(|s| s.can_nest)
+            .map(|s| s.id.as_str())
+            .collect();
+        let mut nesting = nesting;
+        nesting.sort();
+        assert_eq!(nesting, vec!["scrapper", "trojan", "worm", "wraith"]);
+
+        // No boss should ever be nest-eligible, regardless of this flag —
+        // try_spawn_habitat_creature only rolls a nest for the non-boss
+        // pick, but the data itself shouldn't set can_nest on a boss
+        // either, to avoid a misleading .ron file.
+        assert!(
+            db.all().all(|s| !(s.is_boss && s.can_nest)),
+            "no boss species should have can_nest set"
         );
     }
 }

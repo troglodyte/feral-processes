@@ -389,6 +389,31 @@ pub struct Durability {
     pub max_hp: u32,
 }
 
+/// A stationary spawner for a wild species — see the nests feature (spec:
+/// `docs/superpowers/specs/2026-07-20-nests-design.md`). Present on the
+/// nest entity itself, which also carries `Position`, `Glyph`, and
+/// `Durability` (all reused as-is — a nest is destroyed the same way a
+/// structure is, just via a direct bump-attack instead of a raid).
+#[derive(Component, Clone, Debug)]
+pub struct Nest {
+    pub species: SpeciesId,
+    /// Ticks remaining until each queued replacement guardian spawns —
+    /// one entry per guardian currently missing from the nest's original
+    /// count (see `systems`-adjacent `Game::nest_respawn_tick`). Emptied
+    /// naturally once every missing guardian is back.
+    pub pending_respawns: Vec<u32>,
+}
+
+/// Tags a wild creature as tethered to a `Nest` — see
+/// `systems::wander_ai_system`'s radius check. Removed (not the
+/// creature) when its nest is destroyed (`Game::attack_nest`) or when the
+/// creature itself is killed/tamed, at which point it either despawns or
+/// resumes ordinary untethered behavior.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct NestGuardian {
+    pub nest: Entity,
+}
+
 /// Player-only: accumulated Perk Points (earned 1 per level-up) and which
 /// perks have been bought with them. See `perks::Perk` — a perk can be
 /// bought more than once, so `unlocked` holds one entry per level bought

@@ -86,6 +86,16 @@ is skipped with a warning logged in-game rather than crashing startup.
     //                                                      same as a move's
     //                                                      `effect`)
     special_ability: Some(Heal(power: 8)),
+
+    // Optional; can be left out entirely (defaults to false). If true,
+    // this species can spawn as a Nest instead of an ordinary lone
+    // creature/pack during habitat spawning: a stationary, destructible
+    // object that keeps 2-5 guardians of this species tethered within 5
+    // tiles of it, respawning any that are killed or tamed 10 ticks
+    // later, until the nest itself is destroyed (walk into it to attack
+    // it — it never attacks back). Never applies to a boss species,
+    // regardless of this flag.
+    can_nest: false,
 )
 ```
 

@@ -23,9 +23,9 @@ use rand::{RngExt, SeedableRng};
 
 use components::{
     ActiveBuff, ActiveStatus, BuffKind, Creature, CustomName, Decompiler, Durability, Equipment,
-    EquippedItem, Experience, Glyph, GlyphColor, Hostile, Inventory, ItemFusions, Needs,
-    PassiveProcessor, Perks, Player, PlayerBuff, Position, ResourceNode, Stats, StatusEffects,
-    StatusKind, Structure, Tamed, Task, TaskKind, WanderAi, ZonePortal,
+    EquippedItem, Experience, Glyph, GlyphColor, Hostile, Inventory, ItemFusions, Needs, Nest,
+    NestGuardian, PassiveProcessor, Perks, Player, PlayerBuff, Position, ResourceNode, Stats,
+    StatusEffects, StatusKind, Structure, Tamed, Task, TaskKind, WanderAi, ZonePortal,
 };
 use items::{EquipmentSlot, ItemId};
 pub use perks::Perk;
@@ -34,7 +34,7 @@ use resources::{
     BattleState, GameClock, GameOver, GameRng, MAX_PARTY_SIZE, MessageLog, Party, PlayerEntity,
     ZoneLevel, ZoneSpawnPoint,
 };
-use species::{MoveDef, SpecialAbility, SpeciesDb, SpeciesDef};
+use species::{MoveDef, SpecialAbility, SpeciesDb, SpeciesDef, SpeciesId};
 use structures::{StructureDb, StructureDef, StructureId, TradeDef};
 use world::{Biome, Tile, WorldMap};
 
@@ -159,6 +159,33 @@ const BOSS_SPAWN_CHANCE: f64 = 0.04;
 /// Range of Portal Fragments a defeated boss guarantees, replacing the
 /// flat `PORTAL_FRAGMENT_DROP_CHANCE` roll every other species gets.
 const BOSS_PORTAL_FRAGMENT_DROP: std::ops::RangeInclusive<u32> = 3..=6;
+
+/// Chance a habitat spawn roll (see `Game::try_spawn_habitat_creature`)
+/// produces a Nest instead of an ordinary pack, for a species that has
+/// `SpeciesDef::can_nest` set. Only rolled at all when `can_nest` is
+/// true, mirroring how `BOSS_SPAWN_CHANCE` is only rolled when a boss
+/// candidate exists — keeps the extra RNG draw out of the common
+/// non-nesting path entirely.
+const NEST_SPAWN_CHANCE: f64 = 0.06;
+
+/// Chebyshev distance a `NestGuardian` may wander from its `Nest` — see
+/// `systems::wander_ai_system`. `pub(crate)` so `systems.rs` (a sibling
+/// module) can read it too.
+pub(crate) const NEST_TETHER_RADIUS: i32 = 5;
+
+/// Inclusive range of guardians a freshly spawned `Nest` starts with —
+/// see `Game::spawn_nest`.
+const NEST_GUARDIAN_MIN: u32 = 2;
+const NEST_GUARDIAN_MAX: u32 = 5;
+
+/// Ticks between a guardian's death/taming and its replacement spawning
+/// — see `Game::nest_respawn_tick`.
+const NEST_RESPAWN_TICKS: u32 = 10;
+
+/// A Nest's starting/max `Durability` — double the default structure
+/// durability (`structures::default_durability`), since it's meant to
+/// take real, sustained effort to clear, not a single lucky hit.
+const NEST_DURABILITY: u32 = 60;
 
 /// Thresholds for `difficulty_color`'s old-school "con" coloring, as
 /// upper bounds on a hostile program's power (see `Stats::power`) relative
@@ -883,6 +910,7 @@ impl Game {
         self.schedule.run(&mut self.world);
         self.structure_regen();
         self.raid_check();
+        self.nest_respawn_tick();
         self.world.resource_mut::<GameClock>().tick += 1;
     }
 
@@ -897,6 +925,11 @@ impl Game {
         if let Some(target) = self.find_wild_creature_at(nx, ny) {
             let pack = self.gather_pack(target);
             self.start_battle(pack);
+            self.tick();
+            return;
+        }
+        if let Some(nest) = self.find_nest_at(nx, ny) {
+            self.attack_nest(nest);
             self.tick();
             return;
         }
@@ -1939,7 +1972,13 @@ impl Game {
         let wild_max_hp = self.world.get::<Stats>(front).unwrap().max_hp;
         self.award_player_xp(player, wild_max_hp as u32);
         self.award_loot(player, front);
+        let nest = self.world.get::<NestGuardian>(front).map(|g| g.nest);
         self.world.despawn(front);
+        if let Some(nest) = nest
+            && let Some(mut n) = self.world.get_mut::<Nest>(nest)
+        {
+            n.pending_respawns.push(NEST_RESPAWN_TICKS);
+        }
         if self.pop_front_pack_member() {
             self.clear_battle_status_effects(player, front);
             self.world.remove_resource::<BattleState>();
@@ -2287,10 +2326,18 @@ impl Game {
 
         if roll {
             let wild_max_hp = self.world.get::<Stats>(front).unwrap().max_hp;
-            self.world.entity_mut(front).remove::<(Hostile, WanderAi)>();
+            let nest = self.world.get::<NestGuardian>(front).map(|g| g.nest);
+            self.world
+                .entity_mut(front)
+                .remove::<(Hostile, WanderAi, NestGuardian)>();
             self.world
                 .entity_mut(front)
                 .insert((Tamed { owner: player }, Experience::default()));
+            if let Some(nest) = nest
+                && let Some(mut n) = self.world.get_mut::<Nest>(nest)
+            {
+                n.pending_respawns.push(NEST_RESPAWN_TICKS);
+            }
             self.log("ICE breached! The program now runs under your control.");
             self.award_player_xp(player, wild_max_hp as u32);
             if self.pop_front_pack_member() {
@@ -2587,6 +2634,53 @@ impl Game {
             .map(|(e, _)| e)
     }
 
+    /// Finds a `Nest` at `(x, y)`, if any — checked in `move_player`
+    /// before the ordinary blocking-structure check, so walking into a
+    /// nest tile attacks it instead of just being blocked.
+    fn find_nest_at(&mut self, x: i32, y: i32) -> Option<Entity> {
+        let mut query = self.world.query_filtered::<(Entity, &Position), With<Nest>>();
+        query
+            .iter(&self.world)
+            .find(|(_, p)| p.x == x && p.y == y)
+            .map(|(e, _)| e)
+    }
+
+    /// Deals one hit of the player's `effective_atk` (against no defense
+    /// — a nest has none, only a `Durability` pool) to `nest`. A nest
+    /// never retaliates, unlike an ordinary wild-creature encounter — see
+    /// the nests design doc for why this deliberately isn't routed
+    /// through `BattleState`. Destroying it strips `NestGuardian` from
+    /// every creature tethered to it (they resume ordinary wandering) and
+    /// despawns the nest, which implicitly cancels anything left in its
+    /// `Nest::pending_respawns`.
+    fn attack_nest(&mut self, nest: Entity) {
+        let player = self.player_entity();
+        let label = self.entity_label(nest);
+        let dmg = battle::compute_damage(self.effective_atk(player), 0, 5) as u32;
+        let Some(mut durability) = self.world.get_mut::<Durability>(nest) else {
+            return;
+        };
+        durability.hp = durability.hp.saturating_sub(dmg);
+        let destroyed = durability.hp == 0;
+        if destroyed {
+            self.log(format!("The {label} crashes and collapses!"));
+            let guardians: Vec<Entity> = {
+                let mut query = self.world.query::<(Entity, &NestGuardian)>();
+                query
+                    .iter(&self.world)
+                    .filter(|(_, g)| g.nest == nest)
+                    .map(|(e, _)| e)
+                    .collect()
+            };
+            for guardian in guardians {
+                self.world.entity_mut(guardian).remove::<NestGuardian>();
+            }
+            self.world.despawn(nest);
+        } else {
+            self.log(format!("You unleash a data strike into the {label} for {dmg} damage."));
+        }
+    }
+
     fn find_blocking_structure_at(&mut self, x: i32, y: i32) -> Option<Entity> {
         let mut query = self
             .world
@@ -2636,7 +2730,7 @@ impl Game {
         let stale: Vec<Entity> = {
             let mut query = self
                 .world
-                .query_filtered::<Entity, Or<(With<Hostile>, With<Structure>)>>();
+                .query_filtered::<Entity, Or<(With<Hostile>, With<Structure>, With<Nest>)>>();
             query.iter(&self.world).collect()
         };
         for e in stale {
@@ -2690,35 +2784,97 @@ impl Game {
         self.spawn_initial_creatures(14);
     }
 
-    fn spawn_wild_creature(&mut self, species_id: &str, x: i32, y: i32) {
-        let Some(species) = self.world.resource::<SpeciesDb>().get(species_id).cloned() else {
-            return;
-        };
+    /// Spawns a wild creature of `species_id` at `(x, y)`, returning its
+    /// `Entity` — `None` only if `species_id` isn't in `SpeciesDb` (every
+    /// real call site passes an id it already validated against
+    /// `SpeciesDb`, so this is a defensive no-op path, not an expected
+    /// outcome). `spawn_nest_guardian` uses the returned entity to attach
+    /// `NestGuardian`.
+    fn spawn_wild_creature(&mut self, species_id: &str, x: i32, y: i32) -> Option<Entity> {
+        let species = self.world.resource::<SpeciesDb>().get(species_id).cloned()?;
         let zone_level = self.world.resource::<ZoneLevel>();
         let mult = zone_level.stat_multiplier() as f32;
         let zone = zone_level.0;
         let dist_mult = self.distance_stat_multiplier(x, y);
         let scale = |base: i32| ((base as f32) * mult * dist_mult).round() as i32;
-        self.world.spawn((
-            Creature {
-                species: species.id.clone(),
-            },
-            Position { x, y },
-            Glyph {
-                ch: species.glyph,
-                color: species.color,
-            },
-            Stats {
-                hp: scale(species.base_hp),
-                max_hp: scale(species.base_hp),
-                atk: scale(species.base_atk),
-                def: scale(species.base_def),
-            },
-            Hostile,
-            WanderAi::default(),
-            ZonePortal(zone),
-            StatusEffects::default(),
-        ));
+        Some(
+            self.world
+                .spawn((
+                    Creature {
+                        species: species.id.clone(),
+                    },
+                    Position { x, y },
+                    Glyph {
+                        ch: species.glyph,
+                        color: species.color,
+                    },
+                    Stats {
+                        hp: scale(species.base_hp),
+                        max_hp: scale(species.base_hp),
+                        atk: scale(species.base_atk),
+                        def: scale(species.base_def),
+                    },
+                    Hostile,
+                    WanderAi::default(),
+                    ZonePortal(zone),
+                    StatusEffects::default(),
+                ))
+                .id(),
+        )
+    }
+
+    /// Spawns a `Nest` for `species_id` at `(x, y)`, plus an initial
+    /// `NEST_GUARDIAN_MIN..=NEST_GUARDIAN_MAX` guardians clustered within
+    /// `NEST_TETHER_RADIUS` of it. See the nests design doc
+    /// (`docs/superpowers/specs/2026-07-20-nests-design.md`).
+    fn spawn_nest(&mut self, species_id: &str, x: i32, y: i32) {
+        let Some(species) = self.world.resource::<SpeciesDb>().get(species_id).cloned() else {
+            return;
+        };
+        let nest = self
+            .world
+            .spawn((
+                Nest {
+                    species: species.id.clone(),
+                    pending_respawns: Vec::new(),
+                },
+                Position { x, y },
+                Glyph {
+                    ch: 'N',
+                    color: species.color,
+                },
+                Durability {
+                    hp: NEST_DURABILITY,
+                    max_hp: NEST_DURABILITY,
+                },
+            ))
+            .id();
+        let guardian_count = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_range(NEST_GUARDIAN_MIN..=NEST_GUARDIAN_MAX)
+        };
+        for _ in 0..guardian_count {
+            self.spawn_nest_guardian(nest, species_id, x, y);
+        }
+    }
+
+    /// Spawns one `species_id` wild creature tethered to `nest`, at a
+    /// random offset within `NEST_TETHER_RADIUS` of `(nest_x, nest_y)` —
+    /// used both for a nest's initial guardians (`spawn_nest`) and for
+    /// respawns (`nest_respawn_tick`). Walkability isn't rechecked for the
+    /// offset tile, matching the existing looseness
+    /// `try_spawn_habitat_creature` already has for pack members.
+    fn spawn_nest_guardian(&mut self, nest: Entity, species_id: &str, nest_x: i32, nest_y: i32) {
+        let (gx, gy) = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            (
+                nest_x + rng.0.random_range(-NEST_TETHER_RADIUS..=NEST_TETHER_RADIUS),
+                nest_y + rng.0.random_range(-NEST_TETHER_RADIUS..=NEST_TETHER_RADIUS),
+            )
+        };
+        if let Some(guardian) = self.spawn_wild_creature(species_id, gx, gy) {
+            self.world.entity_mut(guardian).insert(NestGuardian { nest });
+        }
     }
 
     /// Stat multiplier for a wild spawn at `(x, y)`, from how far it is
@@ -2812,6 +2968,39 @@ impl Game {
         }
     }
 
+    /// Advances every `Nest`'s `pending_respawns` countdown by one tick,
+    /// spawning a replacement guardian for each entry that reaches 0 (a
+    /// nest can have more than one entry reach 0 on the same tick, e.g.
+    /// two guardians killed together, so this spawns once per ready
+    /// entry, not once per nest). Called directly from `tick` —
+    /// not registered on `self.schedule` — because it needs
+    /// `spawn_nest_guardian`, a `Game` method unreachable from a bevy
+    /// system function.
+    fn nest_respawn_tick(&mut self) {
+        let ready: Vec<(Entity, SpeciesId, Position, usize)> = {
+            let mut query = self.world.query::<(Entity, &mut Nest, &Position)>();
+            query
+                .iter_mut(&mut self.world)
+                .filter_map(|(entity, mut nest, pos)| {
+                    for slot in nest.pending_respawns.iter_mut() {
+                        *slot = slot.saturating_sub(1);
+                    }
+                    let ready_count = nest.pending_respawns.iter().filter(|&&t| t == 0).count();
+                    if ready_count == 0 {
+                        return None;
+                    }
+                    nest.pending_respawns.retain(|&t| t != 0);
+                    Some((entity, nest.species.clone(), *pos, ready_count))
+                })
+                .collect()
+        };
+        for (nest, species, pos, count) in ready {
+            for _ in 0..count {
+                self.spawn_nest_guardian(nest, &species, pos.x, pos.y);
+            }
+        }
+    }
+
     /// Rolls `RAID_CHANCE_PER_TICK`; on success, picks one deployed
     /// structure at random and either damages it directly (undefended) or
     /// has its assigned cronjob worker, if any, fight the raid off —
@@ -2845,7 +3034,9 @@ impl Game {
             return;
         }
         let targets: Vec<Entity> = {
-            let mut query = self.world.query_filtered::<Entity, With<Durability>>();
+            let mut query = self
+                .world
+                .query_filtered::<Entity, (With<Durability>, Without<Nest>)>();
             query.iter(&self.world).collect()
         };
         if targets.is_empty() {
@@ -2967,6 +3158,29 @@ impl Game {
             let idx = rng.0.random_range(0..pool.len());
             pool[idx].clone()
         };
+
+        // A nest takes the tile's spawn slot instead of an ordinary pack,
+        // same "rare special outcome" shape as the boss roll above — but
+        // only ever considered for the non-boss pick, and only for a
+        // species that opted in via `SpeciesDef::can_nest`. The RNG draw
+        // only happens when `can_nest` is true, so this never shifts the
+        // RNG sequence for the (overwhelmingly common) non-nesting case.
+        if !spawn_boss {
+            let can_nest = self
+                .world
+                .resource::<SpeciesDb>()
+                .get(&pick)
+                .is_some_and(|s| s.can_nest);
+            let spawn_nest_roll = can_nest && {
+                let mut rng = self.world.resource_mut::<GameRng>();
+                rng.0.random_bool(NEST_SPAWN_CHANCE)
+            };
+            if spawn_nest_roll {
+                self.spawn_nest(&pick, x, y);
+                return true;
+            }
+        }
+
         // Bosses always spawn alone — packs are an ordinary-encounter
         // mechanic, not something to stack onto an already-tough boss
         // fight.
@@ -3431,6 +3645,14 @@ impl Game {
                 .get(&s.kind)
                 .map(|d| d.name.clone())
                 .unwrap_or_else(|| s.kind.clone())
+        } else if let Some(nest) = self.world.get::<Nest>(entity) {
+            let species_name = self
+                .world
+                .resource::<SpeciesDb>()
+                .get(&nest.species)
+                .map(|s| s.name.clone())
+                .unwrap_or_else(|| nest.species.clone());
+            format!("{species_name} Nest")
         } else {
             "You".to_string()
         }
@@ -5235,6 +5457,185 @@ mod tests {
             game.world.get::<WanderAi>(wild).is_none(),
             "a tamed creature must stop roaming like a wild one"
         );
+    }
+
+    #[test]
+    fn raid_check_never_targets_a_nest_even_as_the_only_durability_holder() {
+        let mut game = Game::new(600, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        // Strip every other Durability holder so a Nest would be the only
+        // possible target if it weren't explicitly excluded.
+        let existing: Vec<Entity> = {
+            let mut query = game.world.query_filtered::<Entity, With<Durability>>();
+            query.iter(&game.world).collect()
+        };
+        for e in existing {
+            game.world.despawn(e);
+        }
+        let nest = game
+            .world
+            .spawn((
+                Nest {
+                    species: "scrapper".to_string(),
+                    pending_respawns: Vec::new(),
+                },
+                Position { x: 10, y: 10 },
+                Glyph {
+                    ch: 'N',
+                    color: GlyphColor::Red,
+                },
+                Durability {
+                    hp: NEST_DURABILITY,
+                    max_hp: NEST_DURABILITY,
+                },
+            ))
+            .id();
+
+        for _ in 0..500 {
+            game.raid_check();
+        }
+
+        assert_eq!(
+            game.world.get::<Durability>(nest).unwrap().hp,
+            NEST_DURABILITY,
+            "a Nest must never take raid damage, even when it's the only Durability holder"
+        );
+    }
+
+    #[test]
+    fn entering_a_zone_portal_despawns_nests_left_behind_in_the_old_zone() {
+        let mut game = Game::new(602, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let nest = game
+            .world
+            .spawn((
+                Nest {
+                    species: "scrapper".to_string(),
+                    pending_respawns: Vec::new(),
+                },
+                Position { x: 10, y: 10 },
+                Glyph {
+                    ch: 'N',
+                    color: GlyphColor::Red,
+                },
+                Durability {
+                    hp: NEST_DURABILITY,
+                    max_hp: NEST_DURABILITY,
+                },
+            ))
+            .id();
+
+        let player = game.player_entity();
+        let ppos = *game.world.get::<Position>(player).unwrap();
+        game.world.spawn((
+            Structure {
+                kind: "portal".to_string(),
+            },
+            Position {
+                x: ppos.x + 1,
+                y: ppos.y,
+            },
+        ));
+
+        game.move_player(1, 0);
+
+        // Note: `enter_next_zone` spawns fresh initial creatures for the new
+        // zone, which can legitimately include brand-new nests — so this
+        // must check the specific entity spawned above, not just count all
+        // `Nest` entities in the world.
+        assert!(
+            game.world.get_entity(nest).is_err(),
+            "a Nest left behind in the old zone must be despawned on zone transition, not just its guardians"
+        );
+    }
+
+    #[test]
+    fn spawn_nest_creates_a_tethered_guardian_cluster() {
+        let mut game = Game::new(601, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+        // `Game::new` runs its own initial habitat-spawn rolls, which can
+        // themselves occasionally create a Nest (now that species like
+        // scrapper have can_nest: true) before this test's own explicit
+        // spawn_nest call ever runs. Capture whatever nests already exist
+        // first, so the assertions below only ever look at the nest this
+        // test itself created, not a world-wide count that a background
+        // spawn could inflate.
+        let pre_existing_nests: std::collections::HashSet<Entity> = {
+            let mut query = game.world.query_filtered::<Entity, With<Nest>>();
+            query.iter(&game.world).collect()
+        };
+        game.spawn_nest("scrapper", 30, 30);
+
+        let nests: Vec<(Entity, Position)> = {
+            let mut query = game.world.query::<(Entity, &Nest, &Position)>();
+            query
+                .iter(&game.world)
+                .filter(|(e, _, _)| !pre_existing_nests.contains(e))
+                .map(|(e, _, p)| (e, *p))
+                .collect()
+        };
+        assert_eq!(nests.len(), 1, "spawn_nest should create exactly one new Nest entity");
+        let (nest, nest_pos) = nests[0];
+        assert_eq!(nest_pos, Position { x: 30, y: 30 });
+        assert_eq!(
+            game.world.get::<Durability>(nest).unwrap().hp,
+            NEST_DURABILITY
+        );
+
+        let guardians: Vec<Position> = {
+            let mut query = game.world.query::<(&NestGuardian, &Position)>();
+            query
+                .iter(&game.world)
+                .filter(|(g, _)| g.nest == nest)
+                .map(|(_, p)| *p)
+                .collect()
+        };
+        assert!(
+            guardians.len() >= NEST_GUARDIAN_MIN as usize
+                && guardians.len() <= NEST_GUARDIAN_MAX as usize,
+            "expected {}..={} guardians, got {}",
+            NEST_GUARDIAN_MIN,
+            NEST_GUARDIAN_MAX,
+            guardians.len()
+        );
+        for pos in guardians {
+            let dist = (pos.x - 30).abs().max((pos.y - 30).abs());
+            assert!(
+                dist <= NEST_TETHER_RADIUS,
+                "guardian spawned {dist} tiles from its nest, past the {NEST_TETHER_RADIUS}-tile tether"
+            );
+        }
+    }
+
+    #[test]
+    fn guardian_never_wanders_beyond_the_nest_tether_radius() {
+        let mut game = Game::new(602, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.spawn_nest("scrapper", 40, 40);
+
+        let (nest, nest_pos) = {
+            let mut query = game.world.query::<(Entity, &Nest, &Position)>();
+            let (e, _, p) = query.iter(&game.world).next().expect("nest should exist");
+            (e, *p)
+        };
+        let guardians: Vec<Entity> = {
+            let mut query = game.world.query::<(Entity, &NestGuardian)>();
+            query
+                .iter(&game.world)
+                .filter(|(_, g)| g.nest == nest)
+                .map(|(e, _)| e)
+                .collect()
+        };
+        assert!(!guardians.is_empty());
+
+        for _ in 0..200 {
+            game.tick();
+            for &guardian in &guardians {
+                let pos = *game.world.get::<Position>(guardian).unwrap();
+                let dist = (pos.x - nest_pos.x).abs().max((pos.y - nest_pos.y).abs());
+                assert!(
+                    dist <= NEST_TETHER_RADIUS,
+                    "guardian wandered {dist} tiles from its nest, past the {NEST_TETHER_RADIUS}-tile tether"
+                );
+            }
+        }
     }
 
     #[test]
@@ -8353,5 +8754,364 @@ mod tests {
                  creatures, found {count}"
             );
         }
+    }
+
+    #[test]
+    fn bumping_a_nest_damages_it_and_destroying_it_frees_its_guardians() {
+        let mut game = Game::new(603, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Position>(player).unwrap().x = 49;
+        game.world.get_mut::<Position>(player).unwrap().y = 50;
+
+        let nest = game
+            .world
+            .spawn((
+                Nest {
+                    species: "scrapper".to_string(),
+                    pending_respawns: Vec::new(),
+                },
+                Position { x: 50, y: 50 },
+                Glyph {
+                    ch: 'N',
+                    color: GlyphColor::Red,
+                },
+                Durability { hp: 5, max_hp: 5 },
+            ))
+            .id();
+        let guardian = game
+            .world
+            .spawn((
+                Creature {
+                    species: "scrapper".to_string(),
+                },
+                Hostile,
+                WanderAi::default(),
+                NestGuardian { nest },
+                Position { x: 52, y: 52 },
+                Stats {
+                    hp: 10,
+                    max_hp: 10,
+                    atk: 1,
+                    def: 1,
+                },
+            ))
+            .id();
+
+        // Player's base ATK (6) vs. 0 defense, move_power 5 → well over 5
+        // damage, so one bump is enough to destroy a 5-HP nest.
+        game.move_player(1, 0);
+
+        assert!(
+            game.world.get::<Nest>(nest).is_none(),
+            "nest should be destroyed by one bump"
+        );
+        assert!(
+            game.world.get::<NestGuardian>(guardian).is_none(),
+            "guardian should lose its NestGuardian tether once the nest is destroyed"
+        );
+    }
+
+    #[test]
+    fn bumping_a_nest_with_high_hp_damages_it_without_destroying_it() {
+        let mut game = Game::new(604, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Position>(player).unwrap().x = 49;
+        game.world.get_mut::<Position>(player).unwrap().y = 50;
+
+        let nest = game
+            .world
+            .spawn((
+                Nest {
+                    species: "scrapper".to_string(),
+                    pending_respawns: Vec::new(),
+                },
+                Position { x: 50, y: 50 },
+                Glyph {
+                    ch: 'N',
+                    color: GlyphColor::Red,
+                },
+                Durability { hp: 50, max_hp: 50 },
+            ))
+            .id();
+        let guardian = game
+            .world
+            .spawn((
+                Creature {
+                    species: "scrapper".to_string(),
+                },
+                Hostile,
+                WanderAi::default(),
+                NestGuardian { nest },
+                Position { x: 52, y: 52 },
+                Stats {
+                    hp: 10,
+                    max_hp: 10,
+                    atk: 1,
+                    def: 1,
+                },
+            ))
+            .id();
+
+        // Player's base ATK (6) vs. 0 defense, move_power 5 → 11 damage,
+        // well short of the nest's 50 HP, so one bump only dents it.
+        game.move_player(1, 0);
+
+        assert!(
+            game.world.get::<Nest>(nest).is_some(),
+            "nest should survive a single bump when it has 50 HP"
+        );
+        let hp = game.world.get::<Durability>(nest).unwrap().hp;
+        assert!(hp < 50, "nest HP should have decreased from the bump, got {hp}");
+        assert!(hp > 0, "nest HP should still be positive, got {hp}");
+        assert!(
+            game.world.get::<NestGuardian>(guardian).is_some(),
+            "guardian should keep its NestGuardian tether while the nest survives"
+        );
+    }
+
+    #[test]
+    fn killing_a_guardian_respawns_a_replacement_after_exactly_the_respawn_delay() {
+        let mut game = Game::new(604, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let nest = game
+            .world
+            .spawn((
+                Nest {
+                    species: "scrapper".to_string(),
+                    pending_respawns: Vec::new(),
+                },
+                Position { x: 60, y: 60 },
+                Glyph {
+                    ch: 'N',
+                    color: GlyphColor::Red,
+                },
+                Durability {
+                    hp: NEST_DURABILITY,
+                    max_hp: NEST_DURABILITY,
+                },
+            ))
+            .id();
+        let guardian = game
+            .world
+            .spawn((
+                Creature {
+                    species: "scrapper".to_string(),
+                },
+                Hostile,
+                NestGuardian { nest },
+                Position { x: 61, y: 61 },
+                Stats {
+                    hp: 1,
+                    max_hp: 10,
+                    atk: 0,
+                    def: 0,
+                },
+            ))
+            .id();
+        game.world.insert_resource(BattleState {
+            player,
+            wild_creatures: vec![guardian],
+            log: Vec::new(),
+            finished: false,
+            player_won: false,
+        });
+
+        game.battle_attack();
+
+        // battle_attack's own kill-resolution path (finish_front_pack_member
+        // returning true, the pack now empty) already calls self.tick() once
+        // internally before returning — that tick already ran
+        // nest_respawn_tick and decremented the entry we just pushed. So the
+        // value observed here is NEST_RESPAWN_TICKS - 1, not the full delay.
+        assert_eq!(
+            game.world.get::<Nest>(nest).unwrap().pending_respawns,
+            vec![NEST_RESPAWN_TICKS - 1],
+            "killing a guardian should queue one respawn"
+        );
+
+        let guardian_count = |game: &mut Game| -> usize {
+            let mut query = game.world.query::<&NestGuardian>();
+            query.iter(&game.world).filter(|g| g.nest == nest).count()
+        };
+
+        for _ in 0..(NEST_RESPAWN_TICKS - 2) {
+            game.tick();
+        }
+        assert_eq!(
+            guardian_count(&mut game),
+            0,
+            "no replacement should spawn before its delay elapses"
+        );
+
+        game.tick();
+        assert_eq!(
+            guardian_count(&mut game),
+            1,
+            "a replacement should spawn exactly when its delay elapses"
+        );
+    }
+
+    #[test]
+    fn taming_a_guardian_also_queues_a_respawn() {
+        let mut game = Game::new(605, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let nest = game
+            .world
+            .spawn((
+                Nest {
+                    species: "scrapper".to_string(),
+                    pending_respawns: Vec::new(),
+                },
+                Position { x: 70, y: 70 },
+                Glyph {
+                    ch: 'N',
+                    color: GlyphColor::Red,
+                },
+                Durability {
+                    hp: NEST_DURABILITY,
+                    max_hp: NEST_DURABILITY,
+                },
+            ))
+            .id();
+        let guardian = game
+            .world
+            .spawn((
+                Creature {
+                    species: "scrapper".to_string(),
+                },
+                Hostile,
+                WanderAi::default(),
+                NestGuardian { nest },
+                Position { x: 71, y: 71 },
+                Stats {
+                    hp: 1,
+                    max_hp: 10,
+                    atk: 1,
+                    def: 1,
+                },
+            ))
+            .id();
+        game.world.insert_resource(BattleState {
+            player,
+            wild_creatures: vec![guardian],
+            log: Vec::new(),
+            finished: false,
+            player_won: false,
+        });
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::IceBreaker, 50);
+        game.world.get_mut::<Decompiler>(player).unwrap().skill = 50;
+
+        for _ in 0..50 {
+            if game.world.get::<Tamed>(guardian).is_some() {
+                break;
+            }
+            game.battle_decompile();
+        }
+
+        assert!(game.world.get::<Tamed>(guardian).is_some());
+        assert!(
+            game.world.get::<NestGuardian>(guardian).is_none(),
+            "a tamed creature should lose its nest tether"
+        );
+        // Same off-by-one as the kill test above: battle_decompile's
+        // success path also calls self.tick() once internally before
+        // returning, which already decremented the entry we just pushed.
+        assert_eq!(
+            game.world.get::<Nest>(nest).unwrap().pending_respawns,
+            vec![NEST_RESPAWN_TICKS - 1],
+            "taming a guardian should also queue one respawn"
+        );
+    }
+
+    #[test]
+    fn killing_a_guardian_whose_nest_is_already_gone_queues_nothing() {
+        let mut game = Game::new(606, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        // A dangling nest Entity — never actually spawned, standing in
+        // for "the nest was destroyed before this guardian died."
+        let gone_nest = game.world.spawn_empty().id();
+        let guardian = game
+            .world
+            .spawn((
+                Creature {
+                    species: "scrapper".to_string(),
+                },
+                Hostile,
+                NestGuardian { nest: gone_nest },
+                Position { x: 80, y: 80 },
+                Stats {
+                    hp: 1,
+                    max_hp: 10,
+                    atk: 0,
+                    def: 0,
+                },
+            ))
+            .id();
+        game.world.insert_resource(BattleState {
+            player,
+            wild_creatures: vec![guardian],
+            log: Vec::new(),
+            finished: false,
+            player_won: false,
+        });
+
+        // Should not panic even though `gone_nest` has no Nest component.
+        game.battle_attack();
+
+        for _ in 0..(NEST_RESPAWN_TICKS + 5) {
+            game.tick();
+        }
+        // Nothing to assert beyond "didn't panic" — there's no Nest left
+        // to have queued anything on, and no new guardian entity for a
+        // nonexistent nest.
+    }
+
+    #[test]
+    fn nest_respawn_tick_spawns_one_guardian_per_ready_entry_not_one_per_nest() {
+        let mut game = Game::new(607, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let nest = game
+            .world
+            .spawn((
+                Nest {
+                    species: "scrapper".to_string(),
+                    // Two entries reach 0 on the same tick, and a third
+                    // untouched entry that should survive, decremented but
+                    // not fired — this proves nest_respawn_tick spawns once
+                    // per ready entry, not once per nest.
+                    pending_respawns: vec![1, 1, 5],
+                },
+                Position { x: 90, y: 90 },
+                Glyph {
+                    ch: 'N',
+                    color: GlyphColor::Red,
+                },
+                Durability {
+                    hp: NEST_DURABILITY,
+                    max_hp: NEST_DURABILITY,
+                },
+            ))
+            .id();
+
+        let guardian_count = |game: &mut Game| -> usize {
+            let mut query = game.world.query::<&NestGuardian>();
+            query.iter(&game.world).filter(|g| g.nest == nest).count()
+        };
+        assert_eq!(guardian_count(&mut game), 0, "no guardians before the tick");
+
+        game.tick();
+
+        assert_eq!(
+            guardian_count(&mut game),
+            2,
+            "both entries reaching 0 on the same tick should each spawn a guardian"
+        );
+        assert_eq!(
+            game.world.get::<Nest>(nest).unwrap().pending_respawns,
+            vec![4],
+            "the two fired entries should be removed and the untouched entry decremented once"
+        );
     }
 }

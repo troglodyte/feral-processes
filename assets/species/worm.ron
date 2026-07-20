@@ -13,4 +13,5 @@
         (name: "Burrow Strike", power: 8),
     ],
     work_resource: Some(CoreFragment),
+    can_nest: true,
 )

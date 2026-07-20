@@ -14,4 +14,5 @@
     ],
     work_resource: Some(PowerCell),
     equipment_drop: Some((OverclockCore, 0.15)),
+    can_nest: true,
 )

@@ -29,7 +29,7 @@ use components::{
 };
 use items::{EquipmentSlot, ItemId};
 pub use perks::Perk;
-pub use resources::DifficultyMode;
+pub use resources::{DifficultyMode, MessageKind};
 use resources::{
     BattleState, GameClock, GameOver, GameRng, MAX_PARTY_SIZE, MessageLog, Party, PlayerEntity,
     ZoneLevel, ZoneSpawnPoint,
@@ -184,6 +184,18 @@ const RAID_DEFENDER_DAMAGE: i32 = 6;
 /// (see `StructureDb::all`).
 const HOME_STRUCTURE_ID: &str = "home";
 
+/// Every non-Home structure must be deployed within this many tiles (per
+/// axis, same box-radius style as `StructureDef::passive_process`'s
+/// `radius`) of the Home structure — a base clusters around its Home
+/// rather than sprawling across the map.
+const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 15;
+
+/// Fraction of a structure's current build cost refunded when it's removed
+/// (see `Game::remove_structure`), rounded down per item. Applies uniformly
+/// whether the structure is removed directly or swept up in a Home's
+/// cascading removal.
+const STRUCTURE_REMOVAL_REFUND_PERCENT: u32 = 30;
+
 /// How often (in ticks) damaged structures passively regenerate — a slow
 /// trickle, not a substitute for staying ahead of raids.
 const STRUCTURE_REGEN_INTERVAL: u64 = 20;
@@ -274,6 +286,10 @@ pub struct EntityView {
     pub is_companion: bool,
     pub is_hostile: bool,
     pub is_structure: bool,
+    /// Whether this (structure) entity is the base's Home — the anchor for
+    /// the 15-tile build radius, and the one whose removal cascades to
+    /// every other structure (see `Game::remove_structure`).
+    pub is_home: bool,
     pub is_boss: bool,
     pub can_work: bool,
     /// Whether this (structure) entity is a trading post (see
@@ -820,7 +836,11 @@ impl Game {
         self.world.resource_mut::<MessageLog>().push(s);
     }
 
-    pub fn message_log(&self, n: usize) -> Vec<String> {
+    fn log_kind(&mut self, kind: MessageKind, s: impl Into<String>) {
+        self.world.resource_mut::<MessageLog>().push_kind(kind, s);
+    }
+
+    pub fn message_log(&self, n: usize) -> Vec<(MessageKind, String)> {
         self.world.resource::<MessageLog>().recent(n).to_vec()
     }
 
@@ -992,7 +1012,7 @@ impl Game {
                 .get_mut::<Inventory>(player)
                 .unwrap()
                 .add(ItemId::CoreFragment, 1);
-            self.log("You scan the sector and recover a core fragment.");
+            self.log_kind(MessageKind::Loot, "You scan the sector and recover a core fragment.");
         } else {
             self.log("You scan the sector but find nothing salvageable.");
         }
@@ -1189,11 +1209,14 @@ impl Game {
             }
             inv.add(result, quantity);
         }
-        self.log(format!(
-            "You compile {} {} from salvaged components.",
-            quantity,
-            result.display_name()
-        ));
+        self.log_kind(
+            MessageKind::Loot,
+            format!(
+                "You compile {} {} from salvaged components.",
+                quantity,
+                result.display_name()
+            ),
+        );
         self.tick();
         Ok(())
     }
@@ -1400,9 +1423,23 @@ impl Game {
         if structure_id != HOME_STRUCTURE_ID && !self.has_structure(HOME_STRUCTURE_ID) {
             return Err("Deploy a Home first before building anything else.".into());
         }
+        if structure_id == HOME_STRUCTURE_ID && self.has_structure(HOME_STRUCTURE_ID) {
+            return Err("A Home is already deployed. Remove it before building another.".into());
+        }
         let player = self.player_entity();
         let ppos = *self.world.get::<Position>(player).unwrap();
         let (x, y) = (ppos.x + dx, ppos.y + dy);
+
+        if structure_id != HOME_STRUCTURE_ID {
+            let home = self.home_position().expect("checked above: a Home exists");
+            if (x - home.x).abs() > MAX_BUILD_DISTANCE_FROM_HOME
+                || (y - home.y).abs() > MAX_BUILD_DISTANCE_FROM_HOME
+            {
+                return Err(format!(
+                    "Too far from Home — structures must be built within {MAX_BUILD_DISTANCE_FROM_HOME} tiles of it."
+                ));
+            }
+        }
 
         let walkable = self.world.resource_mut::<WorldMap>().tile(x, y).walkable;
         if !walkable {
@@ -1453,6 +1490,114 @@ impl Game {
             entity.insert(PassiveProcessor::default());
         }
         self.log(format!("You deploy a {}.", def.name));
+        self.tick();
+        Ok(())
+    }
+
+    /// Demolishes `structure`, refunding `STRUCTURE_REMOVAL_REFUND_PERCENT`
+    /// of its current build cost. Removing the Home is a special case: it
+    /// cascades to demolish every other structure along with it (each
+    /// refunding its own share the same way), since nothing else can exist
+    /// outside a Home's `MAX_BUILD_DISTANCE_FROM_HOME` radius anyway.
+    /// Frontends are expected to warn the player about that cascade before
+    /// calling this for a Home — this method itself performs the removal
+    /// unconditionally, with no confirmation step of its own.
+    pub fn remove_structure(&mut self, structure: Entity) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        let kind = self
+            .world
+            .get::<Structure>(structure)
+            .ok_or_else(|| "That structure is already gone.".to_string())?
+            .kind
+            .clone();
+        let is_home = kind == HOME_STRUCTURE_ID;
+        let removed_name = self
+            .world
+            .resource::<StructureDb>()
+            .get(&kind)
+            .map(|d| d.name.clone())
+            .unwrap_or(kind.clone());
+
+        let mut targets = vec![structure];
+        if is_home {
+            let mut query = self.world.query::<(Entity, &Structure)>();
+            targets.extend(
+                query
+                    .iter(&self.world)
+                    .filter(|(e, s)| *e != structure && s.kind != HOME_STRUCTURE_ID)
+                    .map(|(e, _)| e),
+            );
+        }
+        let removed_count = targets.len();
+
+        let mut refund: Vec<(ItemId, u32)> = Vec::new();
+        for &target in &targets {
+            let Some(target_kind) = self.world.get::<Structure>(target).map(|s| s.kind.clone())
+            else {
+                continue;
+            };
+            let Some(def) = self.world.resource::<StructureDb>().get(&target_kind).cloned()
+            else {
+                continue;
+            };
+            for (item, qty) in self.structure_build_cost(&def) {
+                let share = qty * STRUCTURE_REMOVAL_REFUND_PERCENT / 100;
+                if share == 0 {
+                    continue;
+                }
+                match refund.iter_mut().find(|(i, _)| *i == item) {
+                    Some((_, total)) => *total += share,
+                    None => refund.push((item, share)),
+                }
+            }
+            let workers: Vec<Entity> = {
+                let mut tasks = self.world.query::<(Entity, &Task)>();
+                tasks
+                    .iter(&self.world)
+                    .filter(|(_, t)| t.target == target)
+                    .map(|(w, _)| w)
+                    .collect()
+            };
+            for worker in workers {
+                self.world.entity_mut(worker).remove::<Task>();
+            }
+            self.world.despawn(target);
+        }
+
+        let player = self.player_entity();
+        if !refund.is_empty() {
+            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
+            for (item, qty) in &refund {
+                inv.add(*item, *qty);
+            }
+        }
+        let refund_note = if refund.is_empty() {
+            String::new()
+        } else {
+            let parts: Vec<String> = refund
+                .iter()
+                .map(|(item, qty)| format!("{qty} {}", item.display_name()))
+                .collect();
+            format!(" You recover {}.", parts.join(", "))
+        };
+        if is_home && removed_count > 1 {
+            self.log_kind(
+                MessageKind::Loot,
+                format!(
+                    "You demolish the Home — without it, {} other base structure{} collapse{}.{refund_note}",
+                    removed_count - 1,
+                    if removed_count - 1 == 1 { "" } else { "s" },
+                    if removed_count - 1 == 1 { "s" } else { "" },
+                ),
+            );
+        } else {
+            self.log_kind(
+                MessageKind::Loot,
+                format!("You demolish the {removed_name}.{refund_note}"),
+            );
+        }
         self.tick();
         Ok(())
     }
@@ -1965,7 +2110,7 @@ impl Game {
                 .get_mut::<Inventory>(player)
                 .unwrap()
                 .add(resource, qty);
-            self.log(format!("It drops {} {}.", qty, resource.display_name()));
+            self.log_kind(MessageKind::Loot, format!("It drops {} {}.", qty, resource.display_name()));
         }
 
         if let Some((item, chance)) = species.equipment_drop {
@@ -1978,7 +2123,7 @@ impl Game {
                     .get_mut::<Inventory>(player)
                     .unwrap()
                     .add(item, 1);
-                self.log(format!("It also drops a {}!", item.display_name()));
+                self.log_kind(MessageKind::Loot, format!("It also drops a {}!", item.display_name()));
             }
         }
 
@@ -1991,9 +2136,10 @@ impl Game {
                 .get_mut::<Inventory>(player)
                 .unwrap()
                 .add(ItemId::PortalFragment, qty);
-            self.log(format!(
-                "Its crash leaves behind a cache of {qty} portal fragments!"
-            ));
+            self.log_kind(
+                MessageKind::Loot,
+                format!("Its crash leaves behind a cache of {qty} portal fragments!"),
+            );
         } else {
             let portal_fragment_roll = {
                 let mut rng = self.world.resource_mut::<GameRng>();
@@ -2004,7 +2150,7 @@ impl Game {
                     .get_mut::<Inventory>(player)
                     .unwrap()
                     .add(ItemId::PortalFragment, 1);
-                self.log("It leaves behind a portal fragment.");
+                self.log_kind(MessageKind::Loot, "It leaves behind a portal fragment.");
             }
         }
     }
@@ -2031,7 +2177,10 @@ impl Game {
             if let Some(mut perks) = self.world.get_mut::<Perks>(player) {
                 perks.points += PERK_POINTS_PER_LEVEL * levels;
             }
-            self.log(format!("You gain {amount} XP and reach level {new_level}!"));
+            self.log_kind(
+                MessageKind::LevelUp,
+                format!("You gain {amount} XP and reach level {new_level}!"),
+            );
         } else {
             self.log(format!("You gain {amount} XP."));
         }
@@ -2061,9 +2210,10 @@ impl Game {
             if leveled {
                 let name = self.creature_label(companion);
                 let level = self.world.get::<Experience>(companion).unwrap().level;
-                self.log(format!(
-                    "{name} gains {amount} XP and levels up to {level}!"
-                ));
+                self.log_kind(
+                    MessageKind::LevelUp,
+                    format!("{name} gains {amount} XP and levels up to {level}!"),
+                );
             }
         }
     }
@@ -2428,6 +2578,16 @@ impl Game {
             .map(|(e, _)| e)
     }
 
+    /// The Home structure's position, if one is deployed anywhere right
+    /// now — the anchor `place_structure` measures the build radius from.
+    fn home_position(&mut self) -> Option<Position> {
+        let mut query = self.world.query::<(&Structure, &Position)>();
+        query
+            .iter(&self.world)
+            .find(|(s, _)| s.kind == HOME_STRUCTURE_ID)
+            .map(|(_, p)| *p)
+    }
+
     /// Finds a zone-portal structure (`StructureDef::zone_portal`) at
     /// `(x, y)`, if any — checked before the generic blocking-structure
     /// check in `move_player` so walking onto one breaches the zone instead
@@ -2728,7 +2888,7 @@ impl Game {
         durability.hp = durability.hp.saturating_sub(dmg);
         let destroyed = durability.hp == 0;
         if destroyed {
-            self.log(format!("{label} is destroyed in a raid!"));
+            self.log_kind(MessageKind::Raid, format!("{label} is destroyed in a raid!"));
             let workers: Vec<Entity> = {
                 let mut query = self.world.query::<(Entity, &Task)>();
                 query
@@ -2742,7 +2902,7 @@ impl Game {
             }
             self.world.despawn(structure);
         } else {
-            self.log(format!("{label} takes {dmg} raid damage!"));
+            self.log_kind(MessageKind::Raid, format!("{label} takes {dmg} raid damage!"));
         }
     }
 
@@ -3289,6 +3449,10 @@ impl Game {
                 let is_companion = self.world.resource::<Party>().0.contains(&entity);
                 let is_hostile = self.world.get::<Hostile>(entity).is_some();
                 let is_structure = self.world.get::<Structure>(entity).is_some();
+                let is_home = self
+                    .world
+                    .get::<Structure>(entity)
+                    .is_some_and(|s| s.kind == HOME_STRUCTURE_ID);
                 let is_boss = self.is_boss_creature(entity);
                 let can_work = self.world.get::<ResourceNode>(entity).is_some();
                 let can_trade = self.trade_options(entity).is_some();
@@ -3333,6 +3497,7 @@ impl Game {
                     is_companion,
                     is_hostile,
                     is_structure,
+                    is_home,
                     is_boss,
                     can_work,
                     can_trade,
@@ -3407,7 +3572,7 @@ impl Game {
         let db = self.world.resource::<StructureDb>();
         hits.into_iter()
             .filter(|(_, _, _, kind)| db.get(kind).is_some_and(|d| d.teleport_cost.is_some()))
-            .map(|(entity, pos, glyph, _kind)| EntityView {
+            .map(|(entity, pos, glyph, kind)| EntityView {
                 entity,
                 pos: (pos.x, pos.y),
                 glyph: glyph.ch,
@@ -3418,6 +3583,7 @@ impl Game {
                 is_companion: false,
                 is_hostile: false,
                 is_structure: true,
+                is_home: kind == HOME_STRUCTURE_ID,
                 is_boss: false,
                 can_work: false,
                 can_trade: false,
@@ -3720,6 +3886,15 @@ mod tests {
             after > before,
             "defeating the program should have granted {resource:?}"
         );
+        let tagged = game
+            .message_log(10)
+            .into_iter()
+            .any(|(kind, _)| kind == MessageKind::Loot);
+        assert!(
+            tagged,
+            "a resource drop should log a MessageKind::Loot line, got: {:?}",
+            game.message_log(10)
+        );
     }
 
     #[test]
@@ -3951,6 +4126,128 @@ mod tests {
     }
 
     #[test]
+    fn place_structure_rejects_a_second_home() {
+        let mut game = Game::new(301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game, -1, 0);
+
+        let err = game
+            .place_structure("home", 1, 0)
+            .expect_err("a second Home shouldn't be buildable while one already exists");
+        assert!(err.contains("already deployed"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn place_structure_rejects_building_beyond_max_distance_from_home() {
+        let mut game = Game::new(302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::CoreFragment, 20);
+        place_home(&mut game, 0, 1);
+
+        // Walk far enough away that the next placement lands outside the
+        // 15-tile build radius from Home.
+        game.world.get_mut::<Position>(player).unwrap().x += 20;
+        let err = game
+            .place_structure("armory", 1, 0)
+            .expect_err("structures more than 15 tiles from Home shouldn't be buildable");
+        assert!(err.contains("Too far from Home"), "unexpected error: {err}");
+
+        // Walking back within range should make it buildable again.
+        game.world.get_mut::<Position>(player).unwrap().x -= 20;
+        game.place_structure("armory", 1, 0)
+            .expect("building back within 15 tiles of Home should succeed");
+    }
+
+    #[test]
+    fn remove_structure_refunds_a_percentage_of_its_build_cost() {
+        let mut game = Game::new(303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::CoreFragment, 20);
+        place_home(&mut game, -1, 0);
+        game.place_structure("armory", 1, 0).unwrap();
+        let armory = game
+            .view_entities(10, 10)
+            .into_iter()
+            .find(|e| e.is_structure && !e.is_home)
+            .unwrap()
+            .entity;
+
+        let before = game
+            .world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(ItemId::CoreFragment);
+        game.remove_structure(armory).unwrap();
+        let after = game
+            .world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(ItemId::CoreFragment);
+
+        assert!(
+            after > before,
+            "demolishing a structure should refund some of its build cost"
+        );
+        assert_eq!(
+            game.view_entities(10, 10)
+                .into_iter()
+                .filter(|e| e.is_structure)
+                .count(),
+            1,
+            "only the Home should remain after demolishing the armory"
+        );
+    }
+
+    #[test]
+    fn removing_home_cascades_to_destroy_every_other_structure_and_refunds_each() {
+        let mut game = Game::new(304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::CoreFragment, 50);
+        place_home(&mut game, -1, 0);
+        game.place_structure("armory", 1, 0).unwrap();
+        game.place_structure("fabricator", 0, 1).unwrap();
+        let home = game
+            .view_entities(10, 10)
+            .into_iter()
+            .find(|e| e.is_home)
+            .unwrap()
+            .entity;
+
+        let before = game
+            .world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(ItemId::CoreFragment);
+        game.remove_structure(home).unwrap();
+        let after = game
+            .world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(ItemId::CoreFragment);
+
+        assert_eq!(
+            game.view_entities(10, 10)
+                .into_iter()
+                .filter(|e| e.is_structure)
+                .count(),
+            0,
+            "removing Home should cascade to remove every other structure too"
+        );
+        assert!(
+            after > before,
+            "the cascade should refund a share of every demolished structure's cost, including Home's own"
+        );
+    }
+
+    #[test]
     fn armory_and_fabricator_are_not_cronjob_workable() {
         let game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         for id in ["armory", "fabricator"] {
@@ -3980,7 +4277,7 @@ mod tests {
         game.world
             .get_mut::<Inventory>(game.player_entity())
             .unwrap()
-            .add(ItemId::CoreFragment, 8);
+            .add(ItemId::CoreFragment, 18);
         game.place_structure("armory", 1, 0).unwrap();
 
         let recipe = game
@@ -5631,6 +5928,25 @@ mod tests {
     }
 
     #[test]
+    fn player_level_up_message_is_tagged_message_kind_level_up() {
+        let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Experience>(player).unwrap().xp_to_next = 5;
+
+        game.award_player_xp(player, 5);
+
+        let tagged = game
+            .message_log(10)
+            .into_iter()
+            .any(|(kind, text)| kind == MessageKind::LevelUp && text.contains("reach level"));
+        assert!(
+            tagged,
+            "leveling up should log a MessageKind::LevelUp line, got: {:?}",
+            game.message_log(10)
+        );
+    }
+
+    #[test]
     fn killing_a_wild_creature_in_battle_awards_the_active_companion_half_xp() {
         let mut game = Game::new(38, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
@@ -6485,6 +6801,35 @@ mod tests {
         }
         panic!(
             "raid_check never damaged the structure across 300 seeds — the raid roll may be broken"
+        );
+    }
+
+    #[test]
+    fn raid_damage_message_is_tagged_message_kind_raid() {
+        // Same seed-hunting pattern as raid_check_can_damage_an_undefended_structure
+        // — RAID_CHANCE_PER_TICK is a per-call roll, so drive seeds until it fires.
+        for seed in 0..300u32 {
+            let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            game.world.spawn((
+                Structure {
+                    kind: "mining_node".to_string(),
+                },
+                Position { x: 5, y: 5 },
+                Durability { hp: 30, max_hp: 30 },
+            ));
+
+            game.raid_check();
+
+            let tagged = game
+                .message_log(10)
+                .into_iter()
+                .any(|(kind, _)| kind == MessageKind::Raid);
+            if tagged {
+                return;
+            }
+        }
+        panic!(
+            "raid_check never logged a MessageKind::Raid line across 300 seeds — the raid roll may be broken"
         );
     }
 
@@ -7816,11 +8161,11 @@ mod tests {
         let player = game.player_entity();
         place_home(&mut game, -1, 0);
 
-        // Zone 1: base rate from portal.ron is 5 PortalFragment * zone 1 = 5.
+        // Zone 1: base rate from portal.ron is 10 PortalFragment * zone 1 = 10.
         game.world
             .get_mut::<Inventory>(player)
             .unwrap()
-            .add(ItemId::PortalFragment, 5);
+            .add(ItemId::PortalFragment, 10);
         game.place_structure("portal", 1, 0).unwrap();
         assert_eq!(
             game.world
@@ -7838,14 +8183,14 @@ mod tests {
         // so the new zone needs its own Home before anything else.
         place_home(&mut game, -1, 0);
 
-        // Zone 2: cost should now be doubled (5 * zone level 2 = 10).
+        // Zone 2: cost should now be doubled (10 * zone level 2 = 20).
         game.world
             .get_mut::<Inventory>(player)
             .unwrap()
-            .add(ItemId::PortalFragment, 9);
+            .add(ItemId::PortalFragment, 19);
         assert!(
             game.place_structure("portal", 1, 0).is_err(),
-            "9 fragments shouldn't be enough for a zone-2 portal"
+            "19 fragments shouldn't be enough for a zone-2 portal"
         );
         game.world
             .get_mut::<Inventory>(player)

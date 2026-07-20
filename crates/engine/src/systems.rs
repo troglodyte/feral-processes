@@ -7,7 +7,7 @@ use crate::components::{
 };
 use crate::perks::Perk;
 use crate::progression;
-use crate::resources::{GameRng, MessageLog};
+use crate::resources::{GameRng, MessageKind, MessageLog};
 use crate::structures::StructureDb;
 use crate::world::WorldMap;
 
@@ -136,10 +136,13 @@ pub fn task_progress_system(
             } else {
                 String::new()
             };
-            log.push(format!(
-                "Your subroutine extracted a {}.{level_note}",
-                node.resource.display_name()
-            ));
+            log.push_kind(
+                MessageKind::Loot,
+                format!(
+                    "Your subroutine extracted a {}.{level_note}",
+                    node.resource.display_name()
+                ),
+            );
         }
     }
 }
@@ -176,12 +179,15 @@ pub fn passive_process_system(
             proc.progress = 0;
             if inventory.take(recipe.consumes, 1) == 1 {
                 inventory.add(recipe.produces, 1);
-                log.push(format!(
-                    "The {} processes a {} into a {}.",
-                    def.name,
-                    recipe.consumes.display_name(),
-                    recipe.produces.display_name()
-                ));
+                log.push_kind(
+                    MessageKind::Loot,
+                    format!(
+                        "The {} processes a {} into a {}.",
+                        def.name,
+                        recipe.consumes.display_name(),
+                        recipe.produces.display_name()
+                    ),
+                );
             }
         }
     }

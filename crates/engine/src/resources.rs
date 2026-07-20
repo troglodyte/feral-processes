@@ -18,21 +18,37 @@ pub struct GameRng(pub StdRng);
 
 const MESSAGE_LOG_CAP: usize = 100;
 
+/// How a log line should be presented — a display hint set by whatever
+/// engine code produced the line, not derived from the text itself, so
+/// frontends don't need to pattern-match message strings to style them.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MessageKind {
+    #[default]
+    Info,
+    Loot,
+    LevelUp,
+    Raid,
+}
+
 #[derive(Resource, Default)]
 pub struct MessageLog {
-    pub lines: Vec<String>,
+    pub lines: Vec<(MessageKind, String)>,
 }
 
 impl MessageLog {
     pub fn push(&mut self, line: impl Into<String>) {
-        self.lines.push(line.into());
+        self.push_kind(MessageKind::Info, line);
+    }
+
+    pub fn push_kind(&mut self, kind: MessageKind, line: impl Into<String>) {
+        self.lines.push((kind, line.into()));
         if self.lines.len() > MESSAGE_LOG_CAP {
             let excess = self.lines.len() - MESSAGE_LOG_CAP;
             self.lines.drain(0..excess);
         }
     }
 
-    pub fn recent(&self, n: usize) -> &[String] {
+    pub fn recent(&self, n: usize) -> &[(MessageKind, String)] {
         let start = self.lines.len().saturating_sub(n);
         &self.lines[start..]
     }

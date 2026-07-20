@@ -80,6 +80,7 @@ change what gets stored — a save from a different build shows up as
 | `b` | Deploy a structure |
 | `w` | Assign a compiled program to a cronjob (work a structure) |
 | `G` | Assign a compiled program to guard a structure against raids (any structure, not just a workable one — see [Base defense](#base-defense)) |
+| `R` | Demolish a nearby structure, refunding 30% of its materials — demolishing Home destroys every other base structure too, after a confirmation warning (see [Structures](#structures)) |
 | `u` | Use symlink: instantly teleport to a deployed symlink structure (e.g. Home), for its item cost |
 | `i` | Inspect: pick a direction, see stats/moves/decompile odds for the first program that way (no intrusion) |
 | `v` | Inventory/equipment: equip, unequip, erase items |
@@ -483,6 +484,16 @@ Home must be built before anything else — the build menu (`b`) always
 lists it first, followed by Mining Node then Compiler, with the rest
 after. This table is otherwise unordered; it's just a reference.
 
+Only one Home can exist at a time, and every other structure must be
+deployed within 15 tiles of it — a base clusters around its Home rather
+than sprawling across the map. `R` demolishes a nearby structure and
+refunds 30% of its materials; demolishing Home is a special case, since
+without it nothing else could exist out of range anyway — it cascades to
+demolish **every** other base structure too (each refunding its own 30%
+share), so `R` warns you and asks to confirm before Home specifically goes
+down. Remove Home to relocate the whole base, or to free up the 15-tile
+radius for a fresh one elsewhere.
+
 Mining Node, Power Conduit, and Compiler use **active** automation (an
 assigned cronjob produces over time); Terminal uses **passive** automation
 (it processes on its own whenever you're in range); Fabricator and Armory
@@ -568,6 +579,15 @@ cargo test
 
 ### 2026-07-20
 
+- **Structures must be built within 15 tiles of Home, and Home can be
+  demolished**: only one Home can exist at a time, and every other
+  structure now has to be deployed within 15 tiles of it. The new `R` key
+  demolishes a nearby structure for a 30% material refund; demolishing
+  Home cascades to demolish the whole base (with a confirmation warning
+  first, since it's irreversible) — see [Structures](#structures).
+- **Message feed is color-coded by importance**: routine lines stay gray,
+  loot/crafting gains are green, leveling up is bold green, and taking raid
+  damage on a base structure is orange — in both the GUI and text UI.
 - **Graphics is now the default frontend, no more startup prompt**: the
   launcher goes straight into the GUI instead of asking Graphics-or-Text;
   the `--gui`/`--tui`/`--ascii` flags are gone. The text UI still runs

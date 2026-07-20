@@ -8,7 +8,23 @@ use feral_processes_app_core::{App, Mode, MENU_SCAN_RADIUS, TradeChoice};
 use feral_processes_engine::components::{EquippedItem, GlyphColor};
 use feral_processes_engine::items::ItemId;
 use feral_processes_engine::world::{Biome, Tile};
-use feral_processes_engine::{EntityView, Game, PetInfo, PlayerStatus};
+use feral_processes_engine::{EntityView, Game, MessageKind, PetInfo, PlayerStatus};
+
+/// Display styling for a message-log line, chosen by the engine-supplied
+/// `MessageKind` rather than by sniffing the text — low-priority chatter
+/// stays dim, gains/damage that matter get a color and (for level-ups) bold.
+fn message_style(kind: MessageKind) -> Style {
+    match kind {
+        MessageKind::Info => Style::new().fg(Color::Gray),
+        MessageKind::Loot => Style::new().fg(Color::Green),
+        MessageKind::LevelUp => Style::new().fg(Color::Green).add_modifier(Modifier::BOLD),
+        MessageKind::Raid => Style::new().fg(Color::Rgb(255, 140, 0)),
+    }
+}
+
+fn message_line(kind: MessageKind, text: String) -> Line<'static> {
+    Line::styled(text, message_style(kind))
+}
 
 pub fn render(f: &mut Frame, app: &mut App) {
     match app.mode {
@@ -32,6 +48,8 @@ pub fn render(f: &mut Frame, app: &mut App) {
         | Mode::CronjobStructure
         | Mode::Guard
         | Mode::GuardStructure
+        | Mode::Remove
+        | Mode::RemoveConfirm
         | Mode::Symlink
         | Mode::InspectDirection
         | Mode::InspectDetail
@@ -97,7 +115,7 @@ fn render_playing(f: &mut Frame, app: &mut App) {
     log_lines.extend(
         game.message_log(log_capacity.max(1))
             .into_iter()
-            .map(Line::from),
+            .map(|(kind, text)| message_line(kind, text)),
     );
     f.render_widget(
         Paragraph::new(log_lines)
@@ -118,6 +136,8 @@ fn render_playing(f: &mut Frame, app: &mut App) {
         Mode::CronjobStructure => render_cronjob_structure_menu(f, area, game, selected),
         Mode::Guard => render_guard_menu(f, area, game, selected),
         Mode::GuardStructure => render_guard_structure_menu(f, area, game, selected),
+        Mode::Remove => render_remove_menu(f, area, game, selected),
+        Mode::RemoveConfirm => render_remove_confirm(f, area, selected),
         Mode::Symlink => render_symlink_menu(f, area, game, selected),
         Mode::InspectDirection => render_inspect_direction(f, area),
         Mode::InspectDetail => render_inspect_detail(f, area, game, app.pending_inspect),
@@ -380,6 +400,7 @@ fn render_status_panel(f: &mut Frame, area: Rect, status: &PlayerStatus) {
     lines.push(Line::from("hjkl/arrows move  . wait   e drain  r recharge"));
     lines.push(Line::from("g scan    c compile"));
     lines.push(Line::from("b deploy  w assign cronjob  G assign guard"));
+    lines.push(Line::from("R demolish structure"));
     lines.push(Line::from("u use symlink"));
     lines.push(Line::from("i inspect (pick a direction)"));
     lines.push(Line::from("v inventory/equipment"));
@@ -730,6 +751,69 @@ fn render_guard_structure_menu(f: &mut Frame, area: Rect, game: &mut Game, selec
     }
     f.render_widget(
         Paragraph::new(lines).block(Block::bordered().title("Assign Guard")),
+        popup,
+    );
+}
+
+fn render_remove_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize) {
+    let popup = centered_rect(60, 50, area);
+    f.render_widget(Clear, popup);
+    let structures: Vec<_> = game
+        .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
+        .into_iter()
+        .filter(|e| e.is_structure)
+        .collect();
+    let mut lines = vec![Line::from(
+        "Demolish which structure? Removing Home destroys the whole base. (Esc to cancel; Up/Down + Enter also work)",
+    )];
+    if structures.is_empty() {
+        lines.push(Line::from("(no structures nearby)"));
+    }
+    for (i, s) in structures.iter().enumerate() {
+        let durability = s
+            .durability
+            .map(|(hp, max)| format!(" [HP {hp}/{max}]"))
+            .unwrap_or_default();
+        let home_tag = if s.is_home { " (Home)" } else { "" };
+        lines.push(menu_line(
+            format!(
+                "[{}] {} at ({}, {}){}{}",
+                i + 1,
+                s.label,
+                s.pos.0,
+                s.pos.1,
+                durability,
+                home_tag
+            ),
+            i == selected,
+        ));
+    }
+    f.render_widget(
+        Paragraph::new(lines).block(Block::bordered().title("Demolish Structure")),
+        popup,
+    );
+}
+
+fn render_remove_confirm(f: &mut Frame, area: Rect, selected: usize) {
+    let popup = centered_rect(60, 40, area);
+    f.render_widget(Clear, popup);
+    let options = ["Yes, demolish everything", "No, cancel"];
+    let mut lines = vec![
+        Line::styled(
+            "Removing Home destroys every other structure in this base and refunds",
+            Style::new().fg(Color::Rgb(255, 140, 0)),
+        ),
+        Line::styled(
+            "30% of each one's materials. This can't be undone.",
+            Style::new().fg(Color::Rgb(255, 140, 0)),
+        ),
+        Line::from(""),
+    ];
+    for (i, opt) in options.iter().enumerate() {
+        lines.push(menu_line(format!("[{}] {}", if i == 0 { "y" } else { "n" }, opt), i == selected));
+    }
+    f.render_widget(
+        Paragraph::new(lines).block(Block::bordered().title("Confirm Demolish Home")),
         popup,
     );
 }
@@ -1591,7 +1675,7 @@ fn render_battle(f: &mut Frame, app: &mut App) {
     let log_lines: Vec<Line> = game
         .message_log(log_capacity.max(1))
         .into_iter()
-        .map(Line::from)
+        .map(|(kind, text)| message_line(kind, text))
         .collect();
     f.render_widget(
         Paragraph::new(log_lines)
@@ -1712,6 +1796,9 @@ fn render_help(f: &mut Frame) {
         Line::from("w                   assign a compiled program to a cronjob"),
         Line::from(
             "G                   assign a compiled program to guard a structure against raids (any structure, no cronjob needed)",
+        ),
+        Line::from(
+            "R                   demolish a nearby structure (30% material refund; demolishing Home destroys the whole base)",
         ),
         Line::from(
             "u                   use symlink: instantly teleport to a deployed symlink structure (e.g. Home)",

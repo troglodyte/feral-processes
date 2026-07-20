@@ -10,7 +10,7 @@ use feral_processes_app_core::{App, MENU_SCAN_RADIUS, Mode, TradeChoice};
 use feral_processes_engine::components::GlyphColor;
 use feral_processes_engine::items::ItemId;
 use feral_processes_engine::world::Biome;
-use feral_processes_engine::{Entity, EntityView, Game, PetInfo};
+use feral_processes_engine::{Entity, EntityView, Game, MessageKind, PetInfo};
 
 const FONT_SIZE: f32 = 24.0;
 const LINE_HEIGHT: f32 = 30.0;
@@ -25,6 +25,25 @@ const BLUE: Color = Color::new(0.3, 0.55, 0.95, 1.0);
 const CYAN: Color = Color::new(0.25, 0.85, 0.85, 1.0);
 const MAGENTA: Color = Color::new(0.8, 0.35, 0.85, 1.0);
 const GREEN: Color = Color::new(0.35, 0.85, 0.4, 1.0);
+const ORANGE: Color = Color::new(0.95, 0.55, 0.15, 1.0);
+
+/// Display styling for a message-log line, chosen by the engine-supplied
+/// `MessageKind` rather than by sniffing the text — low-priority chatter
+/// stays dim, gains/damage that matter get a color. macroquad has no bold
+/// font loaded, so `LevelUp` fakes weight by drawing the glyphs twice with
+/// a 1px horizontal offset.
+fn draw_message_line(kind: MessageKind, text: &str, x: f32, y: f32) {
+    let color = match kind {
+        MessageKind::Info => TEXT_DIM,
+        MessageKind::Loot => GREEN,
+        MessageKind::LevelUp => GREEN,
+        MessageKind::Raid => ORANGE,
+    };
+    if kind == MessageKind::LevelUp {
+        draw_text(text, x + 1.0, y, FONT_SIZE, color);
+    }
+    draw_text(text, x, y, FONT_SIZE, color);
+}
 
 pub fn draw(app: &mut App) {
     clear_background(Color::new(0.02, 0.02, 0.03, 1.0));
@@ -317,11 +336,11 @@ fn draw_playing_base(app: &mut App) {
         ly += LINE_HEIGHT;
     }
     let capacity = ((log_h - 30.0) / LINE_HEIGHT).max(1.0) as usize;
-    for line in game.message_log(capacity) {
+    for (kind, line) in game.message_log(capacity) {
         if ly > screen_height() - 6.0 {
             break;
         }
-        draw_text(&line, 10.0, ly, FONT_SIZE, TEXT_DIM);
+        draw_message_line(kind, &line, 10.0, ly);
         ly += LINE_HEIGHT;
     }
 }
@@ -387,7 +406,7 @@ fn draw_status_panel(x: f32, y: f32, w: f32, h: f32, status: &feral_processes_en
     }
     let keys = [
         "hjkl/arrows move  . wait  e drain  r recharge",
-        "g scan   c compile   b deploy   w cronjob  G guard",
+        "g scan   c compile   b deploy   w cronjob  G guard  R demolish",
         "u symlink   i inspect   v inventory",
         "p companions  f fuse  t trade  x perks",
         "s save   q main menu   ? help   +/- zoom",
@@ -435,6 +454,8 @@ fn draw_mode_overlay(app: &mut App) {
         Mode::CronjobStructure => draw_structure_menu(game, "Assign Cronjob", "Cronjob which structure?", true, selected),
         Mode::Guard => draw_worker_menu(game, "Assign Guard", "Assign which program to guard duty?", selected),
         Mode::GuardStructure => draw_structure_menu(game, "Assign Guard", "Guard which structure? Any structure qualifies.", false, selected),
+        Mode::Remove => draw_remove_menu(game, selected),
+        Mode::RemoveConfirm => draw_remove_confirm(selected),
         Mode::Symlink => draw_symlink_menu(game, selected),
         Mode::InspectDirection => draw_direction_prompt("Inspect Direction", "Choose a direction to inspect (arrows/hjkl), Esc to cancel"),
         Mode::InspectDetail => draw_inspect_detail(game, app.pending_inspect),
@@ -599,6 +620,43 @@ fn draw_structure_menu(game: &mut Game, title: &str, prompt: &str, workable_only
         ));
     }
     draw_popup(title, PopupSize::Large, &rows);
+}
+
+fn draw_remove_menu(game: &mut Game, selected: usize) {
+    let structures: Vec<_> = game
+        .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
+        .into_iter()
+        .filter(|e| e.is_structure)
+        .collect();
+    let mut rows = vec![text_row(
+        "Demolish which structure? Removing Home destroys the whole base. (Esc to cancel; Up/Down + Enter also work)",
+    )];
+    if structures.is_empty() {
+        rows.push(text_row("(no structures nearby)"));
+    }
+    for (i, s) in structures.iter().enumerate() {
+        let durability = s.durability.map(|(hp, max)| format!(" [HP {hp}/{max}]")).unwrap_or_default();
+        let home_tag = if s.is_home { " (Home)" } else { "" };
+        rows.push(item_row(
+            format!("[{}] {} at ({}, {}){}{}", i + 1, s.label, s.pos.0, s.pos.1, durability, home_tag),
+            i == selected,
+        ));
+    }
+    draw_popup("Demolish Structure", PopupSize::Large, &rows);
+}
+
+fn draw_remove_confirm(selected: usize) {
+    let rows = vec![
+        Row::TextColored(
+            "Removing Home destroys every other structure in this base and refunds".to_string(),
+            ORANGE,
+        ),
+        Row::TextColored("30% of each one's materials. This can't be undone.".to_string(), ORANGE),
+        text_row(""),
+        item_row("[y] Yes, demolish everything", selected == 0),
+        item_row("[n] No, cancel", selected == 1),
+    ];
+    draw_popup("Confirm Demolish Home", PopupSize::Small, &rows);
 }
 
 fn draw_symlink_menu(game: &mut Game, selected: usize) {
@@ -1063,8 +1121,8 @@ fn draw_battle(app: &mut App) {
     draw_rectangle_lines(20.0, y, w - 40.0, log_bottom - y, 2.0, BORDER);
     let capacity = (((log_bottom - y) - 20.0) / LINE_HEIGHT).max(1.0) as usize;
     let mut ly = y + 20.0;
-    for line in game.message_log(capacity) {
-        draw_text(&line, 30.0, ly, FONT_SIZE, TEXT_DIM);
+    for (kind, line) in game.message_log(capacity) {
+        draw_message_line(kind, &line, 30.0, ly);
         ly += LINE_HEIGHT;
     }
 
@@ -1175,7 +1233,7 @@ fn draw_game_over(app: &mut App) {
 fn draw_help() {
     let rows = vec![
         text_row("hjkl/arrows move   . wait   e drain   r recharge"),
-        text_row("g scan   c compile   b deploy   w cronjob   G guard"),
+        text_row("g scan   c compile   b deploy   w cronjob   G guard   R demolish"),
         text_row("u symlink   i inspect   v inventory   p companions"),
         text_row("f fuse   t trade   x perks   s save   q main menu"),
         text_row("+/- zoom   [/] volume"),

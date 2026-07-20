@@ -82,6 +82,13 @@ pub enum Mode {
     CronjobStructure,
     Guard,
     GuardStructure,
+    /// Lists nearby structures to demolish (see `App::pending_remove_structure`).
+    /// Picking the Home moves to `Mode::RemoveConfirm` instead of demolishing
+    /// immediately, since it cascades; anything else is removed right away.
+    Remove,
+    /// Warns that demolishing the Home destroys every other base structure
+    /// too, before `Game::remove_structure` is actually called.
+    RemoveConfirm,
     Symlink,
     InspectDirection,
     InspectDetail,
@@ -135,6 +142,9 @@ pub struct App {
     pub quit: bool,
     pending_structure: Option<String>,
     pending_worker: Option<Entity>,
+    /// The structure picked in `Mode::Remove`, awaiting confirmation from
+    /// `Mode::RemoveConfirm` if it's the Home (see `Game::remove_structure`).
+    pending_remove_structure: Option<Entity>,
     pub pending_inspect: Option<Entity>,
     /// The first program picked in `Mode::Fuse`, awaiting a second from
     /// `Mode::FuseSecond` before `Game::fuse_companions` is actually called.
@@ -203,6 +213,7 @@ impl App {
             quit: false,
             pending_structure: None,
             pending_worker: None,
+            pending_remove_structure: None,
             pending_inspect: None,
             pending_fuse_first: None,
             pending_fuse_second: None,
@@ -399,6 +410,8 @@ impl App {
             Mode::CronjobStructure => self.handle_cronjob_structure_key(key),
             Mode::Guard => self.handle_guard_key(key),
             Mode::GuardStructure => self.handle_guard_structure_key(key),
+            Mode::Remove => self.handle_remove_key(key),
+            Mode::RemoveConfirm => self.handle_remove_confirm_key(key),
             Mode::Symlink => self.handle_symlink_key(key),
             Mode::InspectDirection => self.handle_inspect_direction_key(key),
             Mode::InspectDetail => self.handle_inspect_detail_key(key),
@@ -531,6 +544,10 @@ impl App {
             }
             GameKey::Char('G') => {
                 self.mode = Mode::Guard;
+                return;
+            }
+            GameKey::Char('R') => {
+                self.mode = Mode::Remove;
                 return;
             }
             GameKey::Char('u') => {
@@ -963,6 +980,66 @@ impl App {
             }
             self.pending_worker = None;
             self.mode = Mode::Playing;
+        }
+    }
+
+    fn handle_remove_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.mode = Mode::Playing;
+            return;
+        }
+        let Some(game) = &mut self.game else { return };
+        let structures: Vec<_> = game
+            .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
+            .into_iter()
+            .filter(|e| e.is_structure)
+            .collect();
+        if let Some(idx) = self.selected_index(key, structures.len()) {
+            let picked_entity = structures[idx].entity;
+            let picked_is_home = structures[idx].is_home;
+            if picked_is_home {
+                self.pending_remove_structure = Some(picked_entity);
+                self.mode = Mode::RemoveConfirm;
+                return;
+            }
+            let Some(game) = &mut self.game else { return };
+            match game.remove_structure(picked_entity) {
+                Ok(()) => self.status_line = None,
+                Err(e) => self.status_line = Some(e),
+            }
+            self.mode = Mode::Playing;
+        }
+    }
+
+    fn handle_remove_confirm_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.pending_remove_structure = None;
+            self.mode = Mode::Playing;
+            return;
+        }
+        let options = ['y', 'n'];
+        let idx = self
+            .selected_index(key, options.len())
+            .or_else(|| match key {
+                GameKey::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
+                _ => None,
+            });
+        match idx.map(|i| options[i]) {
+            Some('y') => {
+                if let Some(structure) = self.pending_remove_structure.take() {
+                    let Some(game) = &mut self.game else { return };
+                    match game.remove_structure(structure) {
+                        Ok(()) => self.status_line = None,
+                        Err(e) => self.status_line = Some(e),
+                    }
+                }
+                self.mode = Mode::Playing;
+            }
+            Some('n') => {
+                self.pending_remove_structure = None;
+                self.mode = Mode::Playing;
+            }
+            _ => {}
         }
     }
 
@@ -1468,6 +1545,51 @@ mod tests {
             "should have been able to place at least one of the {structure_count_in_menu} structures \
              in at least one of the four directions"
         );
+    }
+
+    /// Exercises the `R` demolish flow end to end through `App::handle_key`:
+    /// picking Home moves to a confirmation step instead of demolishing
+    /// immediately (unlike any other structure — see `Game::remove_structure`
+    /// for why Home is special), `n` backs out leaving it standing, and `y`
+    /// actually demolishes it.
+    #[test]
+    fn remove_key_on_home_requires_confirmation_before_demolishing() {
+        let mut app = test_app(203);
+
+        app.handle_key(GameKey::Char('b'));
+        assert!(app.mode == Mode::Build, "'b' should open the build menu");
+        app.handle_key(GameKey::Enter);
+        assert!(
+            app.mode == Mode::BuildDirection,
+            "Home is the first entry in the build menu"
+        );
+        app.handle_key(GameKey::Up);
+        assert!(app.mode == Mode::Playing);
+        assert_eq!(structure_count(&mut app), 1, "Home should now be deployed");
+
+        app.handle_key(GameKey::Char('R'));
+        assert!(app.mode == Mode::Remove, "'R' should open the demolish menu");
+        app.handle_key(GameKey::Enter);
+        assert!(
+            app.mode == Mode::RemoveConfirm,
+            "picking Home should require confirmation instead of demolishing immediately"
+        );
+        assert_eq!(structure_count(&mut app), 1, "Home shouldn't be removed yet");
+
+        app.handle_key(GameKey::Char('n'));
+        assert!(app.mode == Mode::Playing);
+        assert_eq!(
+            structure_count(&mut app),
+            1,
+            "declining the warning should leave Home in place"
+        );
+
+        app.handle_key(GameKey::Char('R'));
+        app.handle_key(GameKey::Enter);
+        assert!(app.mode == Mode::RemoveConfirm);
+        app.handle_key(GameKey::Char('y'));
+        assert!(app.mode == Mode::Playing);
+        assert_eq!(structure_count(&mut app), 0, "confirming should demolish Home");
     }
 
     /// `SoundEvent`s are the seam frontends use to play movement/battle

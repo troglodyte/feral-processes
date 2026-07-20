@@ -3,6 +3,6 @@
     name: "Data Cache",
     glyph: '=',
     color: Gray,
-    build_cost: [(CoreFragment, 5)],
+    build_cost: [(CoreFragment, 15)],
     work: None,
 )

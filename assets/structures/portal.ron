@@ -3,7 +3,7 @@
     name: "Zone Portal",
     glyph: 'O',
     color: Magenta,
-    build_cost: [(PortalFragment, 5)],
+    build_cost: [(PortalFragment, 10)],
     work: None,
     zone_portal: true,
 )

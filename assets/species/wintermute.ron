@@ -3,7 +3,7 @@
     name: "Wintermute",
     glyph: 'W',
     color: Magenta,
-    base_hp: 600,
+    base_hp: 1600,
     base_atk: 28,
     base_def: 18,
     taming_difficulty: 0.95,

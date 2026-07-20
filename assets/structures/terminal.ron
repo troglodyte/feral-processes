@@ -8,7 +8,7 @@
     passive_process: Some((
         consumes: CoreFragment,
         produces: PowerCell,
-        ticks_per_unit: 15,
+        ticks_per_unit: 1,
         radius: 2,
     )),
 )

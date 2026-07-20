@@ -3,7 +3,7 @@
     name: "Turret",
     glyph: '^',
     color: Red,
-    build_cost: [(CoreFragment, 6)],
+    build_cost: [(CoreFragment, 16)],
     work: None,
     raid_defense: 4,
 )

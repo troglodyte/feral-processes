@@ -3,6 +3,6 @@
     name: "Mining Node",
     glyph: '$',
     color: Brown,
-    build_cost: [(CoreFragment, 2)],
+    build_cost: [(CoreFragment, 12)],
     work: Some((produces: CoreFragment, ticks_per_unit: 10, level: Some(1))),
 )

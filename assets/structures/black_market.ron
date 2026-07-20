@@ -1,9 +1,9 @@
 (
-    id: "black_market",
-    name: "Black Market",
+    id: "market",
+    name: "iso Market",
     glyph: '$',
     color: Yellow,
-    build_cost: [(CoreFragment, 6)],
+    build_cost: [(CoreFragment, 16)],
     work: None,
     trade: Some((
         sell_rate: 1,

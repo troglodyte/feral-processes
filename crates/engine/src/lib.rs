@@ -8703,4 +8703,62 @@ mod tests {
             "guardian should lose its NestGuardian tether once the nest is destroyed"
         );
     }
+
+    #[test]
+    fn bumping_a_nest_with_high_hp_damages_it_without_destroying_it() {
+        let mut game = Game::new(604, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Position>(player).unwrap().x = 49;
+        game.world.get_mut::<Position>(player).unwrap().y = 50;
+
+        let nest = game
+            .world
+            .spawn((
+                Nest {
+                    species: "scrapper".to_string(),
+                    pending_respawns: Vec::new(),
+                },
+                Position { x: 50, y: 50 },
+                Glyph {
+                    ch: 'N',
+                    color: GlyphColor::Red,
+                },
+                Durability { hp: 50, max_hp: 50 },
+            ))
+            .id();
+        let guardian = game
+            .world
+            .spawn((
+                Creature {
+                    species: "scrapper".to_string(),
+                },
+                Hostile,
+                WanderAi::default(),
+                NestGuardian { nest },
+                Position { x: 52, y: 52 },
+                Stats {
+                    hp: 10,
+                    max_hp: 10,
+                    atk: 1,
+                    def: 1,
+                },
+            ))
+            .id();
+
+        // Player's base ATK (6) vs. 0 defense, move_power 5 → 11 damage,
+        // well short of the nest's 50 HP, so one bump only dents it.
+        game.move_player(1, 0);
+
+        assert!(
+            game.world.get::<Nest>(nest).is_some(),
+            "nest should survive a single bump when it has 50 HP"
+        );
+        let hp = game.world.get::<Durability>(nest).unwrap().hp;
+        assert!(hp < 50, "nest HP should have decreased from the bump, got {hp}");
+        assert!(hp > 0, "nest HP should still be positive, got {hp}");
+        assert!(
+            game.world.get::<NestGuardian>(guardian).is_some(),
+            "guardian should keep its NestGuardian tether while the nest survives"
+        );
+    }
 }

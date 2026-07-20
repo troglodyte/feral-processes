@@ -14,7 +14,7 @@ onto the existing wild-creature spawn/wander/battle machinery
 screen, because that machinery is built entirely around `Creature`/species
 assumptions (decompile odds, retaliation, companion abilities) that don't
 apply to a nest. Guardian respawning is a `Game` method called directly
-from `tick_inner` (like `structure_regen`/`raid_check`), not a
+from `tick` (like `structure_regen`/`raid_check`), not a
 `Schedule`-registered system, because it needs `spawn_wild_creature` and
 friends, which are `Game` methods unreachable from a bevy system function.
 
@@ -52,6 +52,19 @@ friends, which are `Game` methods unreachable from a bevy system function.
   seeded outcomes for any existing test whose seed happens to roll a
   nest-eligible species. If that happens, fix the affected test's
   expectations — don't weaken the design to dodge it.
+- **This plan was drafted against a slightly different snapshot of the
+  codebase than the one you're implementing against** (an editor's
+  working copy had some unrelated, not-yet-committed feature work applied
+  — a `growth_multiplier`/`Potential` stat-variance mechanic and a
+  `tick_inner`/`Temporary`-structure-decay split — neither of which
+  exists in the actual `origin/main` history this worktree is built
+  from). Every task below has been individually re-verified against the
+  real, clean codebase and corrected where it mattered (Tasks 2-4 and 6
+  call this out explicitly at the relevant step); the code quoted in each
+  task's steps is the *verified-correct* version to implement. Where a
+  step tells you to re-verify an anchor and it doesn't match, that's the
+  signal to stop and ask rather than a plan bug you need to route around
+  silently.
 
 ---
 
@@ -68,7 +81,7 @@ friends, which are `Game` methods unreachable from a bevy system function.
   `spawn_nest`/`spawn_nest_guardian`, `try_spawn_habitat_creature`
   integration (Task 3); `move_player`, `find_nest_at`, `attack_nest`
   (Task 5); `finish_front_pack_member`, `battle_decompile`,
-  `nest_respawn_tick`, `tick_inner` hook (Task 6). All tests live in
+  `nest_respawn_tick`, `tick` hook (Task 6). All tests live in
   `lib.rs`'s existing `#[cfg(test)] mod tests`.
 - `crates/engine/src/systems.rs` — `wander_ai_system` tether check
   (Task 4).
@@ -201,8 +214,19 @@ EOF
 
 - [ ] **Step 1: Add the components**
 
-In `crates/engine/src/components.rs`, add after the `Durability` struct
-(after line 462, before the `Temporary` doc comment at line 464):
+**Before starting this task, re-verify these anchors against the actual
+file** — the line numbers and surrounding code quoted throughout this
+plan were captured from a different snapshot of the codebase and may
+have drifted (they're a description of *where a piece of content lives*,
+not a literal patch — match by the quoted code, not the line number).
+Content quoted in this plan was confirmed to match the codebase as of
+the start of this task; if what you find doesn't match, stop and report
+NEEDS_CONTEXT rather than guessing.
+
+In `crates/engine/src/components.rs`, add this new code immediately
+after the closing `}` of the `Durability` struct (`pub struct Durability
+{ pub hp: u32, pub max_hp: u32, }`) and before the doc comment for the
+`Perks` struct (`/// Player-only: accumulated Perk Points...`):
 
 ```rust
 /// A stationary spawner for a wild species — see the nests feature (spec:
@@ -233,9 +257,10 @@ pub struct NestGuardian {
 
 - [ ] **Step 2: Add the constants**
 
-In `crates/engine/src/lib.rs`, add right after `BOSS_PORTAL_FRAGMENT_DROP`
-(currently ending at line 162, before the `DIFFICULTY_EASY_MAX` doc
-comment at line 164):
+In `crates/engine/src/lib.rs`, add right after the
+`const BOSS_PORTAL_FRAGMENT_DROP: std::ops::RangeInclusive<u32> = 3..=6;`
+line, before the doc comment for `DIFFICULTY_EASY_MAX`
+(`/// Thresholds for \`difficulty_color\`'s old-school "con" coloring...`):
 
 ```rust
 /// Chance a habitat spawn roll (see `Game::try_spawn_habitat_creature`)
@@ -268,17 +293,28 @@ const NEST_DURABILITY: u32 = 60;
 
 - [ ] **Step 3: Import the new components**
 
-In `crates/engine/src/lib.rs:24-30`, add `Nest` and `NestGuardian` to the
-existing `components::{...}` import list (alphabetical among the
-existing names):
+Near the top of `crates/engine/src/lib.rs`, find the existing
+`use components::{...};` import block and add `Nest` and `NestGuardian`
+to it (alphabetical among the existing names — insert `Nest,
+NestGuardian,` after `Needs,` and before `PassiveProcessor,`). Change:
 
 ```rust
 use components::{
     ActiveBuff, ActiveStatus, BuffKind, Creature, CustomName, Decompiler, Durability, Equipment,
-    EquippedItem, Experience, Glyph, GlyphColor, Hostile, Inventory, ItemFusions,
-    MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL, Needs, Nest, NestGuardian, PassiveProcessor, Perks,
-    Player, PlayerBuff, Position, Potential, ResourceNode, Stats, StatusEffects, StatusKind,
-    Structure, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
+    EquippedItem, Experience, Glyph, GlyphColor, Hostile, Inventory, ItemFusions, Needs,
+    PassiveProcessor, Perks, Player, PlayerBuff, Position, ResourceNode, Stats, StatusEffects,
+    StatusKind, Structure, Tamed, Task, TaskKind, WanderAi, ZonePortal,
+};
+```
+
+to:
+
+```rust
+use components::{
+    ActiveBuff, ActiveStatus, BuffKind, Creature, CustomName, Decompiler, Durability, Equipment,
+    EquippedItem, Experience, Glyph, GlyphColor, Hostile, Inventory, ItemFusions, Needs, Nest,
+    NestGuardian, PassiveProcessor, Perks, Player, PlayerBuff, Position, ResourceNode, Stats,
+    StatusEffects, StatusKind, Structure, Tamed, Task, TaskKind, WanderAi, ZonePortal,
 };
 ```
 
@@ -438,7 +474,12 @@ EOF
 
 - [ ] **Step 1: Change `spawn_wild_creature`'s return type**
 
-In `crates/engine/src/lib.rs`, change (currently lines 2819-2850):
+**Before starting this task, re-verify this anchor against the actual
+file** the same way Task 2 asked — match by the quoted code, not by any
+line number mentioned elsewhere in this plan. If what you find doesn't
+match what's quoted below, stop and report NEEDS_CONTEXT.
+
+In `crates/engine/src/lib.rs`, change:
 
 ```rust
     fn spawn_wild_creature(&mut self, species_id: &str, x: i32, y: i32) {
@@ -449,8 +490,7 @@ In `crates/engine/src/lib.rs`, change (currently lines 2819-2850):
         let mult = zone_level.stat_multiplier() as f32;
         let zone = zone_level.0;
         let dist_mult = self.distance_stat_multiplier(x, y);
-        let potential = self.roll_potential();
-        let scale = |base: i32, roll: f32| ((base as f32) * mult * dist_mult * roll).round() as i32;
+        let scale = |base: i32| ((base as f32) * mult * dist_mult).round() as i32;
         self.world.spawn((
             Creature {
                 species: species.id.clone(),
@@ -461,12 +501,11 @@ In `crates/engine/src/lib.rs`, change (currently lines 2819-2850):
                 color: species.color,
             },
             Stats {
-                hp: scale(species.base_hp, potential.hp_roll),
-                max_hp: scale(species.base_hp, potential.hp_roll),
-                atk: scale(species.base_atk, potential.atk_roll),
-                def: scale(species.base_def, potential.def_roll),
+                hp: scale(species.base_hp),
+                max_hp: scale(species.base_hp),
+                atk: scale(species.base_atk),
+                def: scale(species.base_def),
             },
-            potential,
             Hostile,
             WanderAi::default(),
             ZonePortal(zone),
@@ -490,8 +529,7 @@ to:
         let mult = zone_level.stat_multiplier() as f32;
         let zone = zone_level.0;
         let dist_mult = self.distance_stat_multiplier(x, y);
-        let potential = self.roll_potential();
-        let scale = |base: i32, roll: f32| ((base as f32) * mult * dist_mult * roll).round() as i32;
+        let scale = |base: i32| ((base as f32) * mult * dist_mult).round() as i32;
         Some(
             self.world
                 .spawn((
@@ -504,12 +542,11 @@ to:
                         color: species.color,
                     },
                     Stats {
-                        hp: scale(species.base_hp, potential.hp_roll),
-                        max_hp: scale(species.base_hp, potential.hp_roll),
-                        atk: scale(species.base_atk, potential.atk_roll),
-                        def: scale(species.base_def, potential.def_roll),
+                        hp: scale(species.base_hp),
+                        max_hp: scale(species.base_hp),
+                        atk: scale(species.base_atk),
+                        def: scale(species.base_def),
                     },
-                    potential,
                     Hostile,
                     WanderAi::default(),
                     ZonePortal(zone),
@@ -520,10 +557,18 @@ to:
     }
 ```
 
+Note this plan was originally drafted against a slightly different
+snapshot of `spawn_wild_creature` (one with an extra per-individual stat
+variance roll) — that variance mechanic isn't present in this codebase,
+so ignore any other reference to a `Potential`/`roll_potential`/stat-roll
+parameter anywhere else in this plan; this task's own code above is the
+correct, verified version to implement.
+
 The two existing call sites (`try_spawn_habitat_creature`'s
-`self.spawn_wild_creature(&pick, gx, gy);` and a test at what's currently
-line 6208) call this as a bare statement and already discard the return
-value — an `Option<Entity>` return doesn't break either of them.
+`self.spawn_wild_creature(&pick, gx, gy);` and a test further down in
+`lib.rs`'s test module) call this as a bare statement and already
+discard the return value — an `Option<Entity>` return doesn't break
+either of them.
 
 - [ ] **Step 2: Add `spawn_nest` and `spawn_nest_guardian`**
 
@@ -751,8 +796,28 @@ EOF
 
 - [ ] **Step 1: Update imports**
 
-In `crates/engine/src/systems.rs`, change the top-of-file imports
-(currently lines 1-13):
+**Re-verify this anchor against the actual file before starting** — match
+by the quoted code, not by any line number mentioned elsewhere in this
+plan. If it doesn't match, stop and report NEEDS_CONTEXT.
+
+In `crates/engine/src/systems.rs`, change the top-of-file imports:
+
+```rust
+use bevy_ecs::prelude::*;
+use rand::RngExt;
+
+use crate::components::{
+    Experience, Inventory, Needs, PassiveProcessor, Perks, Player, Position, ResourceNode, Stats,
+    Structure, Tamed, Task, TaskKind, WanderAi,
+};
+use crate::perks::Perk;
+use crate::progression;
+use crate::resources::{GameRng, MessageKind, MessageLog};
+use crate::structures::StructureDb;
+use crate::world::WorldMap;
+```
+
+to:
 
 ```rust
 use bevy_ecs::prelude::*;
@@ -760,16 +825,21 @@ use rand::RngExt;
 
 use crate::NEST_TETHER_RADIUS;
 use crate::components::{
-    Creature, Experience, Inventory, Needs, Nest, NestGuardian, PassiveProcessor, Perks, Player,
-    Position, Potential, ResourceNode, Stats, Structure, Tamed, Task, TaskKind, WanderAi,
+    Experience, Inventory, Needs, Nest, NestGuardian, PassiveProcessor, Perks, Player, Position,
+    ResourceNode, Stats, Structure, Tamed, Task, TaskKind, WanderAi,
 };
 use crate::perks::Perk;
 use crate::progression;
 use crate::resources::{GameRng, MessageKind, MessageLog};
-use crate::species::SpeciesDb;
 use crate::structures::StructureDb;
 use crate::world::WorldMap;
 ```
+
+(This plan was originally drafted against a slightly different snapshot
+of `systems.rs` that also imported `Creature`, `Potential`, and
+`SpeciesDb` — none of those are present or needed in this file as it
+actually exists, and `wander_ai_system`/`task_progress_system` don't
+reference them. Only add what's shown above.)
 
 - [ ] **Step 2: Add the tether check**
 
@@ -1157,17 +1227,17 @@ EOF
 ### Task 6: Respawn queuing and `nest_respawn_tick`
 
 **Files:**
-- Modify: `crates/engine/src/lib.rs:2024-2040`
-  (`finish_front_pack_member`)
-- Modify: `crates/engine/src/lib.rs:2395-2413` (`battle_decompile`'s
-  success branch)
-- Modify: `crates/engine/src/lib.rs:910-922` (`tick_inner`)
+- Modify: `crates/engine/src/lib.rs` (`finish_front_pack_member`)
+- Modify: `crates/engine/src/lib.rs` (`battle_decompile`'s success
+  branch)
+- Modify: `crates/engine/src/lib.rs` (`tick` — see the note on Step 4
+  below about this method's actual current shape)
 - Test: `crates/engine/src/lib.rs`
 
 **Interfaces:**
 - Consumes: `Nest`, `NestGuardian` (Task 2), `spawn_nest_guardian`
   (Task 3), `NEST_RESPAWN_TICKS` (Task 2).
-- Produces: `fn nest_respawn_tick(&mut self)`, called from `tick_inner`.
+- Produces: `fn nest_respawn_tick(&mut self)`, called from `tick`.
   Killing or taming a `NestGuardian` whose nest still exists queues a
   replacement `NEST_RESPAWN_TICKS` ticks out.
 
@@ -1260,7 +1330,7 @@ line 2955, before `raid_check`):
     /// spawning a replacement guardian for each entry that reaches 0 (a
     /// nest can have more than one entry reach 0 on the same tick, e.g.
     /// two guardians killed together, so this spawns once per ready
-    /// entry, not once per nest). Called directly from `tick_inner` —
+    /// entry, not once per nest). Called directly from `tick` —
     /// not registered on `self.schedule` — because it needs
     /// `spawn_nest_guardian`, a `Game` method unreachable from a bevy
     /// system function.
@@ -1297,12 +1367,24 @@ This needs `SpeciesId` importable in `lib.rs` — add it to the existing
 use species::{MoveDef, SpecialAbility, SpeciesDb, SpeciesDef, SpeciesId};
 ```
 
-- [ ] **Step 4: Call it from `tick_inner`**
+- [ ] **Step 4: Call it from `tick`**
 
-Change `tick_inner` (currently lines 910-922):
+**Re-verify this anchor before starting** — match by the quoted code, not
+by any line number mentioned elsewhere in this plan (this plan was
+originally drafted against a snapshot of `lib.rs` that split tick
+handling into a public `tick()` plus a private `tick_inner(&mut self,
+age_temporary: bool)` with an `age_temporary_structures` step for a
+`Temporary` structure-decay mechanic. None of that — `tick_inner`,
+`age_temporary_structures`, `Temporary` — exists in this codebase; there
+is only a single private `tick(&mut self)` method that does it all
+directly. If you find a `tick_inner` method instead of what's quoted
+below, stop and report NEEDS_CONTEXT — the codebase has diverged further
+than expected and needs a human to reconcile it.)
+
+Change `tick`:
 
 ```rust
-    fn tick_inner(&mut self, age_temporary: bool) {
+    fn tick(&mut self) {
         if self.is_game_over().is_some() {
             return;
         }
@@ -1310,9 +1392,6 @@ Change `tick_inner` (currently lines 910-922):
         self.schedule.run(&mut self.world);
         self.structure_regen();
         self.raid_check();
-        if age_temporary {
-            self.age_temporary_structures();
-        }
         self.world.resource_mut::<GameClock>().tick += 1;
     }
 ```
@@ -1320,7 +1399,7 @@ Change `tick_inner` (currently lines 910-922):
 to:
 
 ```rust
-    fn tick_inner(&mut self, age_temporary: bool) {
+    fn tick(&mut self) {
         if self.is_game_over().is_some() {
             return;
         }
@@ -1329,9 +1408,6 @@ to:
         self.structure_regen();
         self.raid_check();
         self.nest_respawn_tick();
-        if age_temporary {
-            self.age_temporary_structures();
-        }
         self.world.resource_mut::<GameClock>().tick += 1;
     }
 ```
@@ -1569,7 +1645,7 @@ Queue and process nest guardian respawns
 
 Killing or taming a NestGuardian whose nest still exists queues a
 replacement NEST_RESPAWN_TICKS ticks out; nest_respawn_tick processes
-the countdown once per game tick from tick_inner.
+the countdown once per game tick from tick.
 EOF
 )"
 ```

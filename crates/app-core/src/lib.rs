@@ -37,6 +37,31 @@ pub enum GameKey {
     Backspace,
 }
 
+/// A cue for a frontend to play a sound effect for — pushed by `App` as it
+/// handles keys, drained by whichever frontend cares (`App::take_sounds`).
+/// `App` itself never touches an audio device; this is just the same
+/// renderer-agnostic seam `GameKey` is, in the other direction. A frontend
+/// with no audio (the TUI) is free to just drop what it drains.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SoundEvent {
+    /// A movement key actually moved the player (or was blocked/no-op —
+    /// the engine gives no feedback to distinguish the two, so this fires
+    /// on every movement key press that doesn't start a battle instead).
+    Step,
+    /// A movement key walked the player into a wild creature.
+    BattleStart,
+    /// The player or a companion took a battle action (attack, decompile
+    /// attempt, or a companion command).
+    Attack,
+    /// The player jacked out of a battle.
+    Flee,
+    /// A battle ended with the wild creature gone and the player still
+    /// standing.
+    Victory,
+    /// The run ended in `Mode::GameOver`.
+    Defeat,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     MainMenu,
@@ -146,6 +171,9 @@ pub struct App {
     /// reset to the current tick whenever a game starts or loads, so a
     /// resumed session doesn't immediately autosave on its very first move.
     last_autosave_tick: u64,
+    /// Sound cues queued up by the most recent `handle_key` calls, awaiting
+    /// `take_sounds` — see `SoundEvent`.
+    pending_sounds: Vec<SoundEvent>,
 }
 
 /// One entry in the `Mode::LoadGame` list — a save file found in the saves
@@ -188,7 +216,15 @@ impl App {
             zoom: 2,
             menu_selected: 0,
             last_autosave_tick: 0,
+            pending_sounds: Vec::new(),
         }
+    }
+
+    /// Drains every `SoundEvent` queued since the last call — a frontend
+    /// with audio calls this once per frame and plays whatever comes back;
+    /// one with none (the TUI) can just drop the result.
+    pub fn take_sounds(&mut self) -> Vec<SoundEvent> {
+        std::mem::take(&mut self.pending_sounds)
     }
 
     /// Every `*.bin` file in the saves directory, newest first. Missing
@@ -550,6 +586,17 @@ impl App {
             _ => {}
         }
 
+        let is_move_key = matches!(
+            key,
+            GameKey::Up
+                | GameKey::Down
+                | GameKey::Left
+                | GameKey::Right
+                | GameKey::Char('k')
+                | GameKey::Char('j')
+                | GameKey::Char('h')
+                | GameKey::Char('l')
+        );
         let acted = {
             let Some(game) = &mut self.game else { return };
             match key {
@@ -592,15 +639,38 @@ impl App {
             return;
         }
         self.status_line = None;
-        if self
+        let entered_battle = self
             .game
             .as_ref()
             .map(|g| g.has_active_battle())
-            .unwrap_or(false)
-        {
+            .unwrap_or(false);
+        if entered_battle {
             self.mode = Mode::Battle;
         }
+        if is_move_key {
+            self.pending_sounds
+                .push(if entered_battle { SoundEvent::BattleStart } else { SoundEvent::Step });
+        }
         self.check_game_over();
+        if self.mode == Mode::GameOver {
+            self.pending_sounds.push(SoundEvent::Defeat);
+        }
+    }
+
+    /// Shared tail of every battle-turn key handler: queues the sound for
+    /// the action just taken, then — once `check_game_over` has had a
+    /// chance to move `self.mode` to `Mode::GameOver` — queues whichever
+    /// outcome sound actually applies. A `Flee` action never gets a
+    /// `Victory` sound layered on top of it even though it also ends the
+    /// battle, since jacking out isn't a win.
+    fn push_battle_outcome_sounds(&mut self, action_sound: SoundEvent, still_active: bool) {
+        self.pending_sounds.push(action_sound);
+        self.check_game_over();
+        if self.mode == Mode::GameOver {
+            self.pending_sounds.push(SoundEvent::Defeat);
+        } else if !still_active && action_sound != SoundEvent::Flee {
+            self.pending_sounds.push(SoundEvent::Victory);
+        }
     }
 
     fn handle_battle_key(&mut self, key: GameKey) {
@@ -612,30 +682,40 @@ impl App {
                 1 => {
                     let entity = party[0].entity;
                     game.battle_command_companion(entity);
-                    if !game.has_active_battle() {
+                    let still_active = game.has_active_battle();
+                    if !still_active {
                         self.mode = Mode::Playing;
                     }
-                    self.check_game_over();
+                    self.push_battle_outcome_sounds(SoundEvent::Attack, still_active);
                 }
                 _ => self.mode = Mode::BattleCompanion,
             }
             return;
         }
 
-        let still_active = {
+        let (still_active, action_sound) = {
             let Some(game) = &mut self.game else { return };
-            match key {
-                GameKey::Char('a') => game.battle_attack(),
-                GameKey::Char('d') => game.battle_decompile(),
-                GameKey::Char('j') => game.battle_flee(),
+            let sound = match key {
+                GameKey::Char('a') => {
+                    game.battle_attack();
+                    SoundEvent::Attack
+                }
+                GameKey::Char('d') => {
+                    game.battle_decompile();
+                    SoundEvent::Attack
+                }
+                GameKey::Char('j') => {
+                    game.battle_flee();
+                    SoundEvent::Flee
+                }
                 _ => return,
-            }
-            game.has_active_battle()
+            };
+            (game.has_active_battle(), sound)
         };
         if !still_active {
             self.mode = Mode::Playing;
         }
-        self.check_game_over();
+        self.push_battle_outcome_sounds(action_sound, still_active);
     }
 
     /// Picks which party member acts this round when there's more than one
@@ -660,7 +740,7 @@ impl App {
         } else {
             Mode::Playing
         };
-        self.check_game_over();
+        self.push_battle_outcome_sounds(SoundEvent::Attack, still_active);
     }
 
     fn handle_build_key(&mut self, key: GameKey) {
@@ -1387,6 +1467,38 @@ mod tests {
             placed,
             "should have been able to place at least one of the {structure_count_in_menu} structures \
              in at least one of the four directions"
+        );
+    }
+
+    /// `SoundEvent`s are the seam frontends use to play movement/battle
+    /// sound effects — this doesn't try to reach every variant (the
+    /// engine's own battle tests already cover the mechanics that decide
+    /// which one fires), just locks in that a movement key queues exactly
+    /// one of `Step`/`BattleStart`, that a non-movement key queues neither,
+    /// and that `take_sounds` actually drains the queue rather than
+    /// leaking across keypresses.
+    #[test]
+    fn movement_keys_queue_exactly_one_step_or_battle_start_sound() {
+        let mut app = test_app(202);
+        assert!(app.take_sounds().is_empty(), "a fresh App should start with no queued sounds");
+
+        app.handle_key(GameKey::Char('.'));
+        assert!(
+            app.take_sounds().is_empty(),
+            "waiting isn't a movement key and shouldn't queue a movement sound"
+        );
+
+        app.handle_key(GameKey::Right);
+        let sounds = app.take_sounds();
+        assert_eq!(sounds.len(), 1, "a movement key should queue exactly one sound, got {sounds:?}");
+        assert!(
+            matches!(sounds[0], SoundEvent::Step | SoundEvent::BattleStart),
+            "a movement key should queue Step or BattleStart, got {:?}",
+            sounds[0]
+        );
+        assert!(
+            app.take_sounds().is_empty(),
+            "take_sounds should drain the queue, not just peek it"
         );
     }
 }

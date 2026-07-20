@@ -2415,14 +2415,29 @@ impl Game {
         ));
     }
 
+    /// Spawns `count` wild creatures near the player, retrying with a fresh
+    /// random offset whenever a roll whiffs (an unwalkable tile, or a biome
+    /// with no matching species) rather than giving up on that slot — a
+    /// freshly generated zone's terrain noise can otherwise leave large
+    /// unwalkable or habitat-sparse patches right around the player's
+    /// start point (see `find_walkable_start`, which always searches out
+    /// from world origin), and a blind one-attempt-per-slot approach would
+    /// leave the zone nearly empty whenever that happens. Bounded to
+    /// `count * 20` attempts so a pathologically bad pocket can't loop
+    /// forever instead of just spawning fewer than `count`.
     fn spawn_initial_creatures(&mut self, count: usize) {
         let player_pos = *self.world.get::<Position>(self.player_entity()).unwrap();
-        for _ in 0..count {
+        let mut spawned = 0;
+        let mut attempts = 0;
+        while spawned < count && attempts < count * 20 {
+            attempts += 1;
             let (dx, dy) = {
                 let mut rng = self.world.resource_mut::<GameRng>();
                 (rng.0.random_range(-15..=15), rng.0.random_range(-15..=15))
             };
-            self.try_spawn_habitat_creature(player_pos.x + dx, player_pos.y + dy);
+            if self.try_spawn_habitat_creature(player_pos.x + dx, player_pos.y + dy) {
+                spawned += 1;
+            }
         }
     }
 
@@ -2573,10 +2588,15 @@ impl Game {
         }
     }
 
-    fn try_spawn_habitat_creature(&mut self, x: i32, y: i32) {
+    /// Attempts to spawn one habitat-appropriate wild creature at `(x, y)`,
+    /// returning whether it actually did — `false` on an unwalkable tile or
+    /// a biome with no matching species, so callers (see
+    /// `spawn_initial_creatures`) can retry elsewhere instead of silently
+    /// losing that spawn slot.
+    fn try_spawn_habitat_creature(&mut self, x: i32, y: i32) -> bool {
         let tile = self.world.resource_mut::<WorldMap>().tile(x, y);
         if !tile.walkable {
-            return;
+            return false;
         }
         let species_db = self.world.resource::<SpeciesDb>();
         let candidates: Vec<String> = species_db
@@ -2590,7 +2610,7 @@ impl Game {
             .map(|s| s.id.clone())
             .collect();
         if candidates.is_empty() && boss_candidates.is_empty() {
-            return;
+            return false;
         }
         // A boss takes the tile's one spawn slot instead of an ordinary
         // habitat creature, but only rarely, and only where one is defined
@@ -2610,6 +2630,7 @@ impl Game {
             pool[idx].clone()
         };
         self.spawn_wild_creature(&pick, x, y);
+        true
     }
 
     pub fn player_status(&self) -> PlayerStatus {
@@ -7468,5 +7489,57 @@ mod tests {
             2,
             "zone level should survive a save/load round trip"
         );
+    }
+
+    /// Regression test for a nearly-empty zone: `find_walkable_start`
+    /// always re-centers a freshly generated zone's spawn box near world
+    /// origin, and the terrain noise there has roughly the same period as
+    /// that box — so a blind, one-attempt-per-slot spawn (the previous
+    /// behavior of `spawn_initial_creatures`) could land almost all 14
+    /// rolls on an unwalkable or habitat-mismatched tile for an unlucky
+    /// seed, leaving the new zone feeling all but abandoned. Sweeps a
+    /// range of seeds (rather than trusting one lucky one) to confirm the
+    /// retry-until-`count` fix reliably delivers the full population.
+    #[test]
+    fn zone_transition_reliably_populates_the_new_zone_regardless_of_seed() {
+        for seed in 0u32..20 {
+            let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            let player = game.player_entity();
+            let ppos = *game.world.get::<Position>(player).unwrap();
+            // The zone-1 starting spawn can, for some seeds, happen to
+            // place a wild creature right on the tile the portal is about
+            // to go on — clear it so the walk onto the portal deterministically
+            // enters the portal rather than picking a fight instead.
+            let blockers: Vec<Entity> = {
+                let mut query = game.world.query_filtered::<(Entity, &Position), With<Hostile>>();
+                query
+                    .iter(&game.world)
+                    .filter(|(_, p)| p.x == ppos.x + 1 && p.y == ppos.y)
+                    .map(|(e, _)| e)
+                    .collect()
+            };
+            for e in blockers {
+                game.world.despawn(e);
+            }
+            game.world.spawn((
+                Structure {
+                    kind: "portal".to_string(),
+                },
+                Position {
+                    x: ppos.x + 1,
+                    y: ppos.y,
+                },
+            ));
+            game.move_player(1, 0);
+            assert_eq!(game.player_status().zone, 2, "seed {seed}: portal should advance the zone");
+
+            let mut query = game.world.query_filtered::<Entity, With<Hostile>>();
+            let count = query.iter(&game.world).count();
+            assert!(
+                count >= 14,
+                "seed {seed}: zone 2 should have spawned at least the 14 requested wild \
+                 creatures, found {count}"
+            );
+        }
     }
 }

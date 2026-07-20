@@ -6,10 +6,12 @@
 //! `app-core` and knows nothing about macroquad.
 
 mod render;
+mod sounds;
 
 use macroquad::prelude::*;
 
 use feral_processes_app_core::{App, GameKey};
+use sounds::SoundBank;
 
 fn map_special_key(key: KeyCode) -> Option<GameKey> {
     match key {
@@ -57,6 +59,7 @@ pub fn run(app: App) {
 }
 
 async fn game_loop(mut app: App) {
+    let sound_bank = SoundBank::load().await;
     loop {
         for &key in SPECIAL_KEYS {
             if is_key_pressed(key)
@@ -69,6 +72,10 @@ async fn game_loop(mut app: App) {
             if !c.is_control() {
                 app.handle_key(GameKey::Char(c));
             }
+        }
+
+        for event in app.take_sounds() {
+            sound_bank.play(event);
         }
 
         if app.quit {

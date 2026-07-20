@@ -44,6 +44,10 @@ fn run_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resul
             && let Some(game_key) = map_key(key.code)
         {
             app.handle_key(game_key);
+            // The text frontend has no audio device to play `SoundEvent`s
+            // through — drain the queue so it doesn't grow unbounded over
+            // a long session.
+            let _ = app.take_sounds();
         }
     }
     Ok(())

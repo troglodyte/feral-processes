@@ -603,6 +603,14 @@ cargo test
 
 ### 2026-07-20
 
+- **Wild creature nests**: Scrapper, Worm, Wraith, and Trojan can now
+  spawn as a stationary Nest instead of an ordinary lone creature/pack —
+  it keeps 2-5 guardians of its species tethered within 5 tiles, and any
+  guardian that's killed or tamed is replaced 10 ticks later. Walk into
+  the nest itself to attack it (it never attacks back); destroying it
+  frees any surviving guardians to wander normally and stops further
+  respawns. New species schema field: `can_nest` — see
+  `assets/species/README.md`.
 - **Buffer perk now scales with max Integrity**: each level adds 1% of
   your current max Integrity instead of a flat +10, with a +10 floor so
   it's never worse than before — a meaningful boost once your max HP has

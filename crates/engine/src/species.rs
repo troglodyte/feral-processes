@@ -237,16 +237,26 @@ mod tests {
     }
 
     #[test]
-    fn can_nest_defaults_to_false_for_species_files_that_omit_it() {
+    fn can_nest_is_set_only_for_the_intended_swarm_flavored_species() {
         let (db, warnings) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
         assert!(warnings.is_empty(), "species assets should all load cleanly: {warnings:?}");
 
-        // None of the base roster's .ron files set can_nest yet (Task 7
-        // flips a few to true) — at this point in the plan every species
-        // must still default to false.
+        let nesting: Vec<&str> = db
+            .all()
+            .filter(|s| s.can_nest)
+            .map(|s| s.id.as_str())
+            .collect();
+        let mut nesting = nesting;
+        nesting.sort();
+        assert_eq!(nesting, vec!["scrapper", "trojan", "worm", "wraith"]);
+
+        // No boss should ever be nest-eligible, regardless of this flag —
+        // try_spawn_habitat_creature only rolls a nest for the non-boss
+        // pick, but the data itself shouldn't set can_nest on a boss
+        // either, to avoid a misleading .ron file.
         assert!(
-            db.all().all(|s| !s.can_nest),
-            "can_nest should default to false until Task 7 opts specific species in"
+            db.all().all(|s| !(s.is_boss && s.can_nest)),
+            "no boss species should have can_nest set"
         );
     }
 }

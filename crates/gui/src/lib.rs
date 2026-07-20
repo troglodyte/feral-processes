@@ -47,6 +47,33 @@ fn window_conf() -> Conf {
     }
 }
 
+const DEFAULT_VOLUME: f32 = 0.6;
+const VOLUME_STEP: f32 = 0.1;
+/// How long the "Volume: NN%" readout stays on screen after `[`/`]` last
+/// changed it, in seconds.
+const VOLUME_TOAST_SECONDS: f64 = 1.5;
+
+/// Draws a brief centered "Volume: NN%" readout, on top of whatever
+/// `render::draw` just drew — volume is a GUI-only concern (`App` knows
+/// nothing about audio), so this stays local to the game loop rather than
+/// threading a volume parameter through `render::draw`.
+fn draw_volume_toast(volume: f32) {
+    let pct = (volume * 100.0).round() as i32;
+    let text = format!("Volume: {pct}%");
+    let font_size = 28.0;
+    let dims = measure_text(&text, None, font_size as u16, 1.0);
+    let x = (screen_width() - dims.width) / 2.0;
+    let y = 44.0;
+    draw_rectangle(
+        x - 14.0,
+        y - dims.height - 10.0,
+        dims.width + 28.0,
+        dims.height + 22.0,
+        Color::new(0.06, 0.07, 0.10, 0.85),
+    );
+    draw_text(&text, x, y, font_size, Color::new(0.92, 0.92, 0.92, 1.0));
+}
+
 /// Runs the graphics frontend to completion (until `app.quit`). Takes `App`
 /// by value — macroquad's `Window::from_config` requires a `'static`
 /// future, so the loop owns the state machine outright rather than
@@ -60,6 +87,8 @@ pub fn run(app: App) {
 
 async fn game_loop(mut app: App) {
     let sound_bank = SoundBank::load().await;
+    let mut volume = DEFAULT_VOLUME;
+    let mut volume_toast_until = 0.0f64;
     loop {
         for &key in SPECIAL_KEYS {
             if is_key_pressed(key)
@@ -73,9 +102,17 @@ async fn game_loop(mut app: App) {
                 app.handle_key(GameKey::Char(c));
             }
         }
+        if is_key_pressed(KeyCode::LeftBracket) {
+            volume = (volume - VOLUME_STEP).max(0.0);
+            volume_toast_until = get_time() + VOLUME_TOAST_SECONDS;
+        }
+        if is_key_pressed(KeyCode::RightBracket) {
+            volume = (volume + VOLUME_STEP).min(1.0);
+            volume_toast_until = get_time() + VOLUME_TOAST_SECONDS;
+        }
 
         for event in app.take_sounds() {
-            sound_bank.play(event);
+            sound_bank.play(event, volume);
         }
 
         if app.quit {
@@ -83,6 +120,9 @@ async fn game_loop(mut app: App) {
         }
 
         render::draw(&mut app);
+        if get_time() < volume_toast_until {
+            draw_volume_toast(volume);
+        }
         next_frame().await;
     }
 }

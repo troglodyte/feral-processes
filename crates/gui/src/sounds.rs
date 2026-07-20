@@ -34,7 +34,11 @@ impl SoundBank {
         }
     }
 
-    pub fn play(&self, event: SoundEvent) {
+    /// `volume` is the caller's current master volume (see the `[`/`]`
+    /// controls in `game_loop`), applied as-is with no further scaling —
+    /// each wav was synthesized at a level already balanced against the
+    /// others, so there's no separate per-sound mix to fold in.
+    pub fn play(&self, event: SoundEvent, volume: f32) {
         let sound = match event {
             SoundEvent::Step => &self.step,
             SoundEvent::BattleStart => &self.battle_start,
@@ -43,12 +47,6 @@ impl SoundBank {
             SoundEvent::Victory => &self.victory,
             SoundEvent::Defeat => &self.defeat,
         };
-        audio::play_sound(
-            sound,
-            PlaySoundParams {
-                looped: false,
-                volume: 0.6,
-            },
-        );
+        audio::play_sound(sound, PlaySoundParams { looped: false, volume });
     }
 }

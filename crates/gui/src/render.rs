@@ -1161,7 +1161,7 @@ fn draw_help() {
         text_row("g scan   c compile   b deploy   w cronjob   G guard"),
         text_row("u symlink   i inspect   v inventory   p companions"),
         text_row("f fuse   t trade   x perks   s save   q main menu"),
-        text_row("+/- zoom"),
+        text_row("+/- zoom   [/] volume"),
         text_row(""),
         text_row("Every numbered menu also takes Up/Down + Enter, on top of"),
         text_row("typing a row's own number/letter directly."),

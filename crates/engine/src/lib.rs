@@ -9009,4 +9009,50 @@ mod tests {
         // to have queued anything on, and no new guardian entity for a
         // nonexistent nest.
     }
+
+    #[test]
+    fn nest_respawn_tick_spawns_one_guardian_per_ready_entry_not_one_per_nest() {
+        let mut game = Game::new(607, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let nest = game
+            .world
+            .spawn((
+                Nest {
+                    species: "scrapper".to_string(),
+                    // Two entries reach 0 on the same tick, and a third
+                    // untouched entry that should survive, decremented but
+                    // not fired — this proves nest_respawn_tick spawns once
+                    // per ready entry, not once per nest.
+                    pending_respawns: vec![1, 1, 5],
+                },
+                Position { x: 90, y: 90 },
+                Glyph {
+                    ch: 'N',
+                    color: GlyphColor::Red,
+                },
+                Durability {
+                    hp: NEST_DURABILITY,
+                    max_hp: NEST_DURABILITY,
+                },
+            ))
+            .id();
+
+        let guardian_count = |game: &mut Game| -> usize {
+            let mut query = game.world.query::<&NestGuardian>();
+            query.iter(&game.world).filter(|g| g.nest == nest).count()
+        };
+        assert_eq!(guardian_count(&mut game), 0, "no guardians before the tick");
+
+        game.tick();
+
+        assert_eq!(
+            guardian_count(&mut game),
+            2,
+            "both entries reaching 0 on the same tick should each spawn a guardian"
+        );
+        assert_eq!(
+            game.world.get::<Nest>(nest).unwrap().pending_respawns,
+            vec![4],
+            "the two fired entries should be removed and the untouched entry decremented once"
+        );
+    }
 }

@@ -28,9 +28,9 @@ pub enum Perk {
     /// +1 permanent DEF per level, applied directly to the player's `Stats`
     /// the moment it's bought (same as a level-up's stat bump).
     Defender,
-    /// +10 permanent max Integrity (HP) per level, applied directly to the
-    /// player's `Stats` the moment it's bought, fully healing them the same
-    /// way a level-up does.
+    /// +1% permanent max Integrity (HP) per level (minimum +10), applied
+    /// directly to the player's `Stats` the moment it's bought, fully
+    /// healing them the same way a level-up does.
     Buffer,
 }
 
@@ -71,7 +71,7 @@ impl Perk {
             }
             Perk::Attacker => "+1 permanent Attack per level",
             Perk::Defender => "+1 permanent Defense per level",
-            Perk::Buffer => "+10 permanent max Integrity per level",
+            Perk::Buffer => "+1% permanent max Integrity per level (min 10)",
         }
     }
 

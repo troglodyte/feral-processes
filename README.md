@@ -270,7 +270,7 @@ on top of whatever you already have, at the same Perk Point cost every time:
 | Lean Compiler | 3 | Compiling (`c`) costs 1 less of each required item (min 1 each) |
 | Attacker | 2 | +1 permanent Attack |
 | Defender | 2 | +1 permanent Defense |
-| Buffer | 3 | +10 permanent max Integrity (fully heals on purchase) |
+| Buffer | 3 | +1% permanent max Integrity per level, minimum +10 (fully heals on purchase) |
 
 The `x` menu shows each perk's current level next to it. Perks are a small,
 fixed set of player-only progression choices rather than moddable content —
@@ -603,6 +603,10 @@ cargo test
 
 ### 2026-07-20
 
+- **Buffer perk now scales with max Integrity**: each level adds 1% of
+  your current max Integrity instead of a flat +10, with a +10 floor so
+  it's never worse than before — a meaningful boost once your max HP has
+  grown well past its starting value — see [Perks](#perks).
 - **README corrected to match the current structure-tuning pass**: the
   structure-cost table, Terminal's passive rate, and a couple of boss
   move/loot footnotes had drifted out of sync with an earlier balance

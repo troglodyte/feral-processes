@@ -136,9 +136,14 @@ const ATTACKER_BONUS_PER_LEVEL: i32 = 1;
 /// Permanent DEF `Perk::Defender` adds to the player's `Stats`, per level.
 const DEFENDER_BONUS_PER_LEVEL: i32 = 1;
 
-/// Permanent max Integrity (HP) `Perk::Buffer` adds to the player's
-/// `Stats`, per level.
-const BUFFER_BONUS_PER_LEVEL: i32 = 10;
+/// Percentage of current max Integrity `Perk::Buffer` adds to the
+/// player's `Stats`, per level.
+const BUFFER_BONUS_PERCENT_PER_LEVEL: f32 = 0.01;
+
+/// Floor on `Perk::Buffer`'s per-level max Integrity bonus, so it's still
+/// worth buying early when 1% of max Integrity would round to less than
+/// this.
+const BUFFER_MIN_BONUS_PER_LEVEL: i32 = 10;
 
 /// Chance a defeated wild program additionally drops a Portal Fragment,
 /// independent of its species' own `work_resource`/`equipment_drop`.
@@ -1089,7 +1094,10 @@ impl Game {
             }
             Perk::Buffer => {
                 if let Some(mut stats) = self.world.get_mut::<Stats>(player) {
-                    stats.max_hp += BUFFER_BONUS_PER_LEVEL;
+                    let bonus = ((stats.max_hp as f32 * BUFFER_BONUS_PERCENT_PER_LEVEL).round()
+                        as i32)
+                        .max(BUFFER_MIN_BONUS_PER_LEVEL);
+                    stats.max_hp += bonus;
                     stats.hp = stats.max_hp;
                 }
             }
@@ -7379,7 +7387,7 @@ mod tests {
     }
 
     #[test]
-    fn buffer_perk_adds_permanent_max_hp_per_level_and_fully_heals() {
+    fn buffer_perk_adds_percent_max_hp_per_level_floored_and_fully_heals() {
         let mut game = Game::new(117, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
         game.world.get_mut::<Perks>(player).unwrap().points = 10;
@@ -7391,10 +7399,31 @@ mod tests {
 
         game.unlock_perk(Perk::Buffer).unwrap();
         let status = game.player_status();
-        assert_eq!(status.max_hp, base_max_hp + BUFFER_BONUS_PER_LEVEL);
+        // 1% of the starting max HP rounds to well under the floor, so the
+        // minimum bonus is what actually applies here.
+        assert_eq!(status.max_hp, base_max_hp + BUFFER_MIN_BONUS_PER_LEVEL);
         assert_eq!(
             status.hp, status.max_hp,
             "buying Buffer should fully heal, like a level-up does"
+        );
+    }
+
+    #[test]
+    fn buffer_perk_scales_past_the_floor_at_high_max_hp() {
+        let mut game = Game::new(118, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Perks>(player).unwrap().points = 10;
+        {
+            let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+            stats.max_hp = 2000;
+            stats.hp = 2000;
+        }
+
+        game.unlock_perk(Perk::Buffer).unwrap();
+        let status = game.player_status();
+        assert_eq!(
+            status.max_hp, 2020,
+            "1% of 2000 is 20, above the floor, so that's what should apply"
         );
     }
 

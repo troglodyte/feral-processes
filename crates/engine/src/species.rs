@@ -122,6 +122,18 @@ pub struct SpeciesDef {
     /// ability.
     #[serde(default)]
     pub special_ability: Option<SpecialAbility>,
+    /// Whether this species can spawn as a Nest — a stationary,
+    /// destructible object that keeps 2-5 guardians of this species
+    /// tethered around it and respawns any that are killed/tamed, until
+    /// the nest itself is destroyed (see `components::Nest`,
+    /// `Game::try_spawn_habitat_creature`). `#[serde(default)]` so
+    /// existing species files (including mods) without this field keep
+    /// parsing as non-nesting, same as before this field existed. Never
+    /// applies to a boss species regardless of this flag — the habitat
+    /// spawn roll only ever considers it for the ordinary (non-boss)
+    /// pick.
+    #[serde(default)]
+    pub can_nest: bool,
 }
 
 #[derive(Resource, Default)]
@@ -221,6 +233,20 @@ mod tests {
         assert!(
             bosses.iter().all(|s| s.is_boss),
             "boss_habitat_matches should only ever include boss species"
+        );
+    }
+
+    #[test]
+    fn can_nest_defaults_to_false_for_species_files_that_omit_it() {
+        let (db, warnings) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+        assert!(warnings.is_empty(), "species assets should all load cleanly: {warnings:?}");
+
+        // None of the base roster's .ron files set can_nest yet (Task 7
+        // flips a few to true) — at this point in the plan every species
+        // must still default to false.
+        assert!(
+            db.all().all(|s| !s.can_nest),
+            "can_nest should default to false until Task 7 opts specific species in"
         );
     }
 }

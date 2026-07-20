@@ -859,6 +859,17 @@ impl Game {
         self.world.get_resource::<BattleState>().is_some()
     }
 
+    /// Advances the world clock with no player action behind it — the hook
+    /// a frontend's real-time loop calls once a second so the world keeps
+    /// moving while the player is idle. A no-op during battle (turns there
+    /// are paced by battle actions, not the wall clock) or after game over.
+    pub fn idle_tick(&mut self) {
+        if self.has_active_battle() {
+            return;
+        }
+        self.tick();
+    }
+
     fn tick(&mut self) {
         if self.is_game_over().is_some() {
             return;
@@ -5091,6 +5102,29 @@ mod tests {
             game.current_tick(),
             2,
             "current_tick should track GameClock exactly"
+        );
+    }
+
+    #[test]
+    fn idle_tick_advances_the_clock_outside_battle_but_not_during_one() {
+        let mut game = Game::new(35, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+        game.idle_tick();
+        assert_eq!(game.current_tick(), 1, "idle_tick should advance the clock with no battle active");
+
+        let player = game.player_entity();
+        game.world.insert_resource(BattleState {
+            player,
+            wild_creatures: vec![player],
+            log: Vec::new(),
+            finished: false,
+            player_won: false,
+        });
+        game.idle_tick();
+        assert_eq!(
+            game.current_tick(),
+            1,
+            "idle_tick should be a no-op while a battle is active"
         );
     }
 

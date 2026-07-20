@@ -8,7 +8,7 @@
 //! render however they like.
 
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use feral_processes_engine::items::{EquipmentSlot, ITEM_FUSION_COST, ItemId};
 use feral_processes_engine::{DifficultyMode, Entity, Game};
@@ -21,6 +21,11 @@ pub const MENU_SCAN_RADIUS: i32 = 40;
 /// paced against game time rather than wall-clock time, so it's the same
 /// whether the player is acting quickly or sitting on a menu.
 const AUTOSAVE_INTERVAL_TICKS: u64 = 50;
+
+/// Wall-clock spacing between idle ticks (see `App::update_realtime`) —
+/// the world keeps moving once a second even while the player just sits on
+/// `Mode::Playing` and touches nothing.
+const REALTIME_TICK_INTERVAL: Duration = Duration::from_secs(1);
 
 /// A frontend-agnostic input event. Every renderer crate maps its own input
 /// system's keys onto this small vocabulary before calling `App::handle_key`
@@ -184,6 +189,10 @@ pub struct App {
     /// Sound cues queued up by the most recent `handle_key` calls, awaiting
     /// `take_sounds` — see `SoundEvent`.
     pending_sounds: Vec<SoundEvent>,
+    /// Wall-clock time of the last idle tick (see `App::update_realtime`) —
+    /// reset whenever ticking is paused (any mode but `Playing`) so resuming
+    /// play doesn't immediately fire a burst of catch-up ticks.
+    last_realtime_tick: Instant,
 }
 
 /// One entry in the `Mode::LoadGame` list — a save file found in the saves
@@ -228,6 +237,7 @@ impl App {
             menu_selected: 0,
             last_autosave_tick: 0,
             pending_sounds: Vec::new(),
+            last_realtime_tick: Instant::now(),
         }
     }
 
@@ -434,6 +444,31 @@ impl App {
         if self.mode != mode_before {
             self.menu_selected = 0;
         }
+        self.maybe_autosave();
+    }
+
+    /// Advances the world by one idle tick if a real second has passed
+    /// since the last one — called every frame by a frontend's own loop
+    /// (independent of `handle_key`, which only fires on input) so the
+    /// world keeps moving while the player sits idle. Ticking only happens
+    /// in `Mode::Playing`: every other mode — battle included, since
+    /// entering one switches away from `Playing` — is treated as paused,
+    /// and the wall-clock timer resets rather than banking elapsed time,
+    /// so coming back from a menu never triggers a burst of catch-up ticks.
+    pub fn update_realtime(&mut self) {
+        if self.mode != Mode::Playing {
+            self.last_realtime_tick = Instant::now();
+            return;
+        }
+        let Some(game) = &mut self.game else {
+            self.last_realtime_tick = Instant::now();
+            return;
+        };
+        if self.last_realtime_tick.elapsed() < REALTIME_TICK_INTERVAL {
+            return;
+        }
+        self.last_realtime_tick = Instant::now();
+        game.idle_tick();
         self.maybe_autosave();
     }
 
@@ -1621,6 +1656,46 @@ mod tests {
         assert!(
             app.take_sounds().is_empty(),
             "take_sounds should drain the queue, not just peek it"
+        );
+    }
+
+    /// `update_realtime` is the hook a frontend's own loop calls every
+    /// frame, independent of `handle_key`, so the world keeps advancing
+    /// while the player is idle — but only in `Mode::Playing`. Backdates
+    /// `last_realtime_tick` instead of actually sleeping so the test stays
+    /// fast and deterministic.
+    #[test]
+    fn update_realtime_ticks_once_a_second_only_while_playing() {
+        let mut app = test_app(303);
+        let start_tick = app.game.as_ref().unwrap().current_tick();
+
+        // Not enough wall-clock time has passed yet.
+        app.last_realtime_tick = Instant::now();
+        app.update_realtime();
+        assert_eq!(
+            app.game.as_ref().unwrap().current_tick(),
+            start_tick,
+            "update_realtime shouldn't tick before a full second has elapsed"
+        );
+
+        // A full second (backdated) should fire exactly one idle tick.
+        app.last_realtime_tick = Instant::now() - Duration::from_secs(2);
+        app.update_realtime();
+        assert_eq!(
+            app.game.as_ref().unwrap().current_tick(),
+            start_tick + 1,
+            "update_realtime should advance the world by one tick once a second has passed"
+        );
+
+        // Paused outside Playing (any menu, or battle via its own Mode) —
+        // no tick, and the timer resets rather than banking elapsed time.
+        app.mode = Mode::Inventory;
+        app.last_realtime_tick = Instant::now() - Duration::from_secs(5);
+        app.update_realtime();
+        assert_eq!(
+            app.game.as_ref().unwrap().current_tick(),
+            start_tick + 1,
+            "update_realtime shouldn't tick while paused on a non-Playing mode"
         );
     }
 }

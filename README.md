@@ -40,6 +40,28 @@ It launches straight into the graphics window. If no display is available
 (e.g. over SSH) or the GUI fails to start, it automatically falls back to
 a text UI instead.
 
+To skip `cargo run`'s overhead on every launch, either run the built binary
+directly:
+
+```sh
+cargo build --release
+./target/release/feral-processes
+```
+
+or install it onto your `PATH` so you can just type `feral-processes` from
+anywhere:
+
+```sh
+cargo install --path crates/launcher
+```
+
+Either way, the binary still finds `assets/`, `saves/`, and
+`run_history.log` in this repo checkout — those paths are resolved at
+build time, not from the current directory — so the clone needs to stay
+put, but you can run or reinstall the binary from anywhere. Rebuild
+(`cargo build --release`) or reinstall (`cargo install --path
+crates/launcher`) after pulling code changes to pick them up.
+
 Either way, from the main menu, start a **New Game** and pick a difficulty:
 
 - **Permadeath** — flatlining ends the run for good; a summary is appended
@@ -169,7 +191,8 @@ creature to work" mechanic.
    to place it on an adjacent walkable tile. It's rejected if the tile isn't
    walkable, is already occupied, or you don't have enough of the required
    item (see the [Structures](#structures) table for costs — all paid in
-   Core Fragments right now). **Home** always comes first in the menu,
+   Core Fragments except the Zone Portal, which costs Portal Fragments).
+   **Home** always comes first in the menu,
    followed by **Mining Node** then **Compiler** — everything else after —
    and nothing else can be built until a Home is standing. Zone transitions
    leave every structure behind (see [Zones and portals](#zones-and-portals)),
@@ -204,7 +227,7 @@ creature to work" mechanic.
      the worker keeps going — a worked node is an infinite, bursty resource,
      never a one-time deposit you can exhaust.
    - Terminal works differently: it's **passive**, not cronjob-based — it
-     auto-cooks a Core Fragment into a Power Cell every 15 ticks whenever
+     auto-cooks a Core Fragment into a Power Cell every tick whenever
      you're standing within 2 tiles, no assignment needed.
 5. **Cronjobs persist across save/load.** A program's assignment, its target
    structure, and its in-progress tick count are all saved — reload and it
@@ -281,7 +304,7 @@ inventory, each item numbered for selection.
 | Monofilament Whip | Weapon | +4 Attack | Loot chance from Wintermute (boss) |
 | Firewall Plating | Armor | +3 Defense | Compile at an Armory (Portal Fragments); loot chance from Wraith, Sentinel |
 | Ablative Plating | Armor | +4 Defense | Loot chance from Rootkit |
-| Neural Amplifier | Module | +2 Decompiler | Loot chance from Virus, Phantom, Ghost |
+| Neural Amplifier | Module | +2 Decompiler | Loot chance from Virus, Phantom, Ghost, Overseer |
 | Cortex Hack | Module | +3 Decompiler | Loot chance from Cipher |
 
 Each slot now has two options — a common one from an ordinary program, and
@@ -426,9 +449,10 @@ damage, shown bracketed on the intrusion screen (e.g. `[Bleeding (2)]`).
 program) their next action. Only one condition is active at a time — a
 fresh one overwrites whatever was there. Wraith's Freeze, Construct's
 Lockdown, Sentinel's Lockout, Trojan's Backdoor Access, Rootkit's Privilege
-Escalation, Cipher's Encrypt, and Wintermute's Absolute Authority can stun;
-Wraith's, Virus's, SubProcess's Fork Bomb, Worm's Replicate, Ghost's Haunt, the
-Overseer's Corrupt/Purge, and Wintermute's Cascade Logic can cause bleeding.
+Escalation, Cipher's Encrypt, the Overseer's Kernel Panic, and Wintermute's
+Absolute Authority can stun; Wraith's, Virus's, SubProcess's Fork Bomb,
+Worm's Replicate, Ghost's Haunt, the Overseer's Purge, and Wintermute's
+Cascade Logic can cause bleeding.
 
 ### Bosses
 
@@ -456,7 +480,7 @@ enough of them, then walk onto it to breach into the next zone.
   stats, capping out at **3×** far enough out. Staying close to your entry
   point (and any structures you've rebuilt there) is the safer play;
   venturing out is riskier, zone level for zone level.
-- Deploying a Zone Portal costs 5 Portal Fragments **times your current
+- Deploying a Zone Portal costs 10 Portal Fragments **times your current
   zone level** — breaching deeper costs more raw material each time, so
   fragments gathered in zone 2 only ever fund the zone-3 portal.
 - Your active party travels with you through a portal; deployed structures
@@ -468,17 +492,17 @@ enough of them, then walk onto it to breach into the next zone.
 
 | Structure | Cost | Purpose |
 | --- | --- | --- |
-| Terminal | 3 Core Fragments | Passively cooks a Core Fragment into a Power Cell every so often while you're standing nearby — no cronjob needed |
-| Data Cache | 5 Core Fragments | Utility storage |
-| Mining Node | 2 Core Fragments | Cronjob a compiled program to it to produce Core Fragments over time (slower and level-gated — see [Getting started](#getting-started-building-and-running-cronjobs)) |
-| Power Conduit | 4 Core Fragments | Cronjob a compiled program to it to produce Power Cells over time |
-| Compiler | 6 Core Fragments | Cronjob a compiled program to it to produce ICE Breakers over time |
-| Fabricator | 8 Core Fragments | Not cronjob-workable — unlocks compiling Overclock Cores (see [Equipment](#equipment)) for Portal Fragments |
-| Armory | 8 Core Fragments | Not cronjob-workable — unlocks compiling Firewall Plating (see [Equipment](#equipment)) for Portal Fragments |
+| Terminal | 3 Core Fragments | Passively cooks a Core Fragment into a Power Cell every tick while you're standing nearby — no cronjob needed |
+| Data Cache | 15 Core Fragments | Utility storage |
+| Mining Node | 12 Core Fragments | Cronjob a compiled program to it to produce Core Fragments over time (slower and level-gated — see [Getting started](#getting-started-building-and-running-cronjobs)) |
+| Power Conduit | 14 Core Fragments | Cronjob a compiled program to it to produce Power Cells over time |
+| Compiler | 16 Core Fragments | Cronjob a compiled program to it to produce ICE Breakers over time |
+| Fabricator | 18 Core Fragments | Not cronjob-workable — unlocks compiling Overclock Cores (see [Equipment](#equipment)) for Portal Fragments |
+| Armory | 18 Core Fragments | Not cronjob-workable — unlocks compiling Firewall Plating (see [Equipment](#equipment)) for Portal Fragments |
 | Home | 5 Core Fragments | `u` ("use symlink") instantly teleports you to it from anywhere on the map, for 4 Power Cells |
-| Zone Portal | 5 Portal Fragments *(× current zone level)* | Walk onto it to breach into the next zone — see [Zones and portals](#zones-and-portals) |
-| Black Market | 6 Core Fragments | `t` ("trade") to sell inventory items or buy consumables for Core Fragments — see [Trading](#trading) |
-| Turret | 6 Core Fragments | Passively reduces raid damage against **every** deployed structure by 4 — see [Base defense](#base-defense) |
+| Zone Portal | 10 Portal Fragments *(× current zone level)* | Walk onto it to breach into the next zone — see [Zones and portals](#zones-and-portals) |
+| Black Market | 16 Core Fragments | `t` ("trade") to sell inventory items or buy consumables for Core Fragments — see [Trading](#trading) |
+| Turret | 16 Core Fragments | Passively reduces raid damage against **every** deployed structure by 4 — see [Base defense](#base-defense) |
 
 Home must be built before anything else — the build menu (`b`) always
 lists it first, followed by Mining Node then Compiler, with the rest
@@ -579,6 +603,25 @@ cargo test
 
 ### 2026-07-20
 
+- **README corrected to match the current structure-tuning pass**: the
+  structure-cost table, Terminal's passive rate, and a couple of boss
+  move/loot footnotes had drifted out of sync with an earlier balance
+  commit (`fbd2bed`) that raised most build costs and sped up the
+  Terminal. Data Cache, Mining Node, Power Conduit, Compiler, Fabricator,
+  Armory, Black Market, and Turret all cost more Core Fragments than
+  documented, and the Zone Portal costs 10 Portal Fragments per zone
+  level, not 5 — see [Structures](#structures) and
+  [Zones and portals](#zones-and-portals). The Terminal now cooks every
+  tick, not every 15 — see [Getting started](#getting-started-building-and-running-cronjobs).
+  Overseer was also missing from the Neural Amplifier's loot sources and
+  the stun move list, and credited with a "Corrupt" move it doesn't have
+  — see [Current roster](#current-roster) and [Equipment](#equipment).
+- **The world now ticks in real time while you're out and about**: once a
+  second passes, one full game tick advances on its own — structures regen,
+  wild programs can spawn, raids can roll — even if you're just standing
+  still. This pauses the instant you open any menu (build, inventory,
+  trade, ...) and never fires during a battle, so nothing sneaks up on you
+  mid-dialog or mid-fight.
 - **Structures must be built within 15 tiles of Home, and Home can be
   demolished**: only one Home can exist at a time, and every other
   structure now has to be deployed within 15 tiles of it. The new `R` key

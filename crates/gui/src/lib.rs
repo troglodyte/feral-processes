@@ -90,6 +90,7 @@ async fn game_loop(mut app: App) {
     let mut volume = DEFAULT_VOLUME;
     let mut volume_toast_until = 0.0f64;
     loop {
+        app.update_realtime();
         for &key in SPECIAL_KEYS {
             if is_key_pressed(key)
                 && let Some(game_key) = map_special_key(key)

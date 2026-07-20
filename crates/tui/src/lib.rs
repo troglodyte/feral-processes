@@ -49,6 +49,7 @@ fn run_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resul
             // a long session.
             let _ = app.take_sounds();
         }
+        app.update_realtime();
     }
     Ok(())
 }

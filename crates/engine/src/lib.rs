@@ -23,9 +23,9 @@ use rand::{RngExt, SeedableRng};
 
 use components::{
     ActiveBuff, ActiveStatus, BuffKind, Creature, CustomName, Decompiler, Durability, Equipment,
-    EquippedItem, Experience, Glyph, GlyphColor, Hostile, Inventory, ItemFusions, Needs,
-    PassiveProcessor, Perks, Player, PlayerBuff, Position, ResourceNode, Stats, StatusEffects,
-    StatusKind, Structure, Tamed, Task, TaskKind, WanderAi, ZonePortal,
+    EquippedItem, Experience, Glyph, GlyphColor, Hostile, Inventory, ItemFusions, Needs, Nest,
+    NestGuardian, PassiveProcessor, Perks, Player, PlayerBuff, Position, ResourceNode, Stats,
+    StatusEffects, StatusKind, Structure, Tamed, Task, TaskKind, WanderAi, ZonePortal,
 };
 use items::{EquipmentSlot, ItemId};
 pub use perks::Perk;
@@ -159,6 +159,33 @@ const BOSS_SPAWN_CHANCE: f64 = 0.04;
 /// Range of Portal Fragments a defeated boss guarantees, replacing the
 /// flat `PORTAL_FRAGMENT_DROP_CHANCE` roll every other species gets.
 const BOSS_PORTAL_FRAGMENT_DROP: std::ops::RangeInclusive<u32> = 3..=6;
+
+/// Chance a habitat spawn roll (see `Game::try_spawn_habitat_creature`)
+/// produces a Nest instead of an ordinary pack, for a species that has
+/// `SpeciesDef::can_nest` set. Only rolled at all when `can_nest` is
+/// true, mirroring how `BOSS_SPAWN_CHANCE` is only rolled when a boss
+/// candidate exists — keeps the extra RNG draw out of the common
+/// non-nesting path entirely.
+const NEST_SPAWN_CHANCE: f64 = 0.06;
+
+/// Chebyshev distance a `NestGuardian` may wander from its `Nest` — see
+/// `systems::wander_ai_system`. `pub(crate)` so `systems.rs` (a sibling
+/// module) can read it too.
+pub(crate) const NEST_TETHER_RADIUS: i32 = 5;
+
+/// Inclusive range of guardians a freshly spawned `Nest` starts with —
+/// see `Game::spawn_nest`.
+const NEST_GUARDIAN_MIN: u32 = 2;
+const NEST_GUARDIAN_MAX: u32 = 5;
+
+/// Ticks between a guardian's death/taming and its replacement spawning
+/// — see `Game::nest_respawn_tick`.
+const NEST_RESPAWN_TICKS: u32 = 10;
+
+/// A Nest's starting/max `Durability` — double the default structure
+/// durability (`structures::default_durability`), since it's meant to
+/// take real, sustained effort to clear, not a single lucky hit.
+const NEST_DURABILITY: u32 = 60;
 
 /// Thresholds for `difficulty_color`'s old-school "con" coloring, as
 /// upper bounds on a hostile program's power (see `Stats::power`) relative
@@ -2845,7 +2872,9 @@ impl Game {
             return;
         }
         let targets: Vec<Entity> = {
-            let mut query = self.world.query_filtered::<Entity, With<Durability>>();
+            let mut query = self
+                .world
+                .query_filtered::<Entity, (With<Durability>, Without<Nest>)>();
             query.iter(&self.world).collect()
         };
         if targets.is_empty() {
@@ -3431,6 +3460,14 @@ impl Game {
                 .get(&s.kind)
                 .map(|d| d.name.clone())
                 .unwrap_or_else(|| s.kind.clone())
+        } else if let Some(nest) = self.world.get::<Nest>(entity) {
+            let species_name = self
+                .world
+                .resource::<SpeciesDb>()
+                .get(&nest.species)
+                .map(|s| s.name.clone())
+                .unwrap_or_else(|| nest.species.clone());
+            format!("{species_name} Nest")
         } else {
             "You".to_string()
         }
@@ -5234,6 +5271,48 @@ mod tests {
         assert!(
             game.world.get::<WanderAi>(wild).is_none(),
             "a tamed creature must stop roaming like a wild one"
+        );
+    }
+
+    #[test]
+    fn raid_check_never_targets_a_nest_even_as_the_only_durability_holder() {
+        let mut game = Game::new(600, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        // Strip every other Durability holder so a Nest would be the only
+        // possible target if it weren't explicitly excluded.
+        let existing: Vec<Entity> = {
+            let mut query = game.world.query_filtered::<Entity, With<Durability>>();
+            query.iter(&game.world).collect()
+        };
+        for e in existing {
+            game.world.despawn(e);
+        }
+        let nest = game
+            .world
+            .spawn((
+                Nest {
+                    species: "scrapper".to_string(),
+                    pending_respawns: Vec::new(),
+                },
+                Position { x: 10, y: 10 },
+                Glyph {
+                    ch: 'N',
+                    color: GlyphColor::Red,
+                },
+                Durability {
+                    hp: NEST_DURABILITY,
+                    max_hp: NEST_DURABILITY,
+                },
+            ))
+            .id();
+
+        for _ in 0..500 {
+            game.raid_check();
+        }
+
+        assert_eq!(
+            game.world.get::<Durability>(nest).unwrap().hp,
+            NEST_DURABILITY,
+            "a Nest must never take raid damage, even when it's the only Durability holder"
         );
     }
 

@@ -927,6 +927,11 @@ impl Game {
             self.tick();
             return;
         }
+        if let Some(nest) = self.find_nest_at(nx, ny) {
+            self.attack_nest(nest);
+            self.tick();
+            return;
+        }
         if self.find_zone_portal_at(nx, ny).is_some() {
             self.enter_next_zone();
             self.tick();
@@ -2612,6 +2617,53 @@ impl Game {
             .iter(&self.world)
             .find(|(_, p)| p.x == x && p.y == y)
             .map(|(e, _)| e)
+    }
+
+    /// Finds a `Nest` at `(x, y)`, if any — checked in `move_player`
+    /// before the ordinary blocking-structure check, so walking into a
+    /// nest tile attacks it instead of just being blocked.
+    fn find_nest_at(&mut self, x: i32, y: i32) -> Option<Entity> {
+        let mut query = self.world.query_filtered::<(Entity, &Position), With<Nest>>();
+        query
+            .iter(&self.world)
+            .find(|(_, p)| p.x == x && p.y == y)
+            .map(|(e, _)| e)
+    }
+
+    /// Deals one hit of the player's `effective_atk` (against no defense
+    /// — a nest has none, only a `Durability` pool) to `nest`. A nest
+    /// never retaliates, unlike an ordinary wild-creature encounter — see
+    /// the nests design doc for why this deliberately isn't routed
+    /// through `BattleState`. Destroying it strips `NestGuardian` from
+    /// every creature tethered to it (they resume ordinary wandering) and
+    /// despawns the nest, which implicitly cancels anything left in its
+    /// `Nest::pending_respawns`.
+    fn attack_nest(&mut self, nest: Entity) {
+        let player = self.player_entity();
+        let label = self.entity_label(nest);
+        let dmg = battle::compute_damage(self.effective_atk(player), 0, 5) as u32;
+        let Some(mut durability) = self.world.get_mut::<Durability>(nest) else {
+            return;
+        };
+        durability.hp = durability.hp.saturating_sub(dmg);
+        let destroyed = durability.hp == 0;
+        if destroyed {
+            self.log(format!("The {label} crashes and collapses!"));
+            let guardians: Vec<Entity> = {
+                let mut query = self.world.query::<(Entity, &NestGuardian)>();
+                query
+                    .iter(&self.world)
+                    .filter(|(_, g)| g.nest == nest)
+                    .map(|(e, _)| e)
+                    .collect()
+            };
+            for guardian in guardians {
+                self.world.entity_mut(guardian).remove::<NestGuardian>();
+            }
+            self.world.despawn(nest);
+        } else {
+            self.log(format!("You unleash a data strike into the {label} for {dmg} damage."));
+        }
     }
 
     fn find_blocking_structure_at(&mut self, x: i32, y: i32) -> Option<Entity> {
@@ -8595,5 +8647,60 @@ mod tests {
                  creatures, found {count}"
             );
         }
+    }
+
+    #[test]
+    fn bumping_a_nest_damages_it_and_destroying_it_frees_its_guardians() {
+        let mut game = Game::new(603, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Position>(player).unwrap().x = 49;
+        game.world.get_mut::<Position>(player).unwrap().y = 50;
+
+        let nest = game
+            .world
+            .spawn((
+                Nest {
+                    species: "scrapper".to_string(),
+                    pending_respawns: Vec::new(),
+                },
+                Position { x: 50, y: 50 },
+                Glyph {
+                    ch: 'N',
+                    color: GlyphColor::Red,
+                },
+                Durability { hp: 5, max_hp: 5 },
+            ))
+            .id();
+        let guardian = game
+            .world
+            .spawn((
+                Creature {
+                    species: "scrapper".to_string(),
+                },
+                Hostile,
+                WanderAi::default(),
+                NestGuardian { nest },
+                Position { x: 52, y: 52 },
+                Stats {
+                    hp: 10,
+                    max_hp: 10,
+                    atk: 1,
+                    def: 1,
+                },
+            ))
+            .id();
+
+        // Player's base ATK (6) vs. 0 defense, move_power 5 → well over 5
+        // damage, so one bump is enough to destroy a 5-HP nest.
+        game.move_player(1, 0);
+
+        assert!(
+            game.world.get::<Nest>(nest).is_none(),
+            "nest should be destroyed by one bump"
+        );
+        assert!(
+            game.world.get::<NestGuardian>(guardian).is_none(),
+            "guardian should lose its NestGuardian tether once the nest is destroyed"
+        );
     }
 }

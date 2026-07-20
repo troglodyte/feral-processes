@@ -117,6 +117,9 @@ pub struct SaveData {
     pub tile_overrides: Vec<((i32, i32), Tile)>,
     /// Which zone sector the player had breached into.
     pub zone: u32,
+    /// Where the player materialized on breaching into that zone — see
+    /// `resources::ZoneSpawnPoint`.
+    pub spawn_point: (i32, i32),
 }
 
 /// Bumped whenever `SaveData` (or anything it contains, transitively)
@@ -144,7 +147,7 @@ pub struct SaveData {
 /// and every save written under the old version stops loading. That's an
 /// intentional, simple tradeoff for a single-player game rather than
 /// building real schema migration.
-pub const SAVE_FORMAT_VERSION: u32 = 3;
+pub const SAVE_FORMAT_VERSION: u32 = 4;
 
 pub fn save_to_file(path: &Path, data: &SaveData) -> io::Result<()> {
     let encoded = bincode::serde::encode_to_vec(data, bincode::config::standard())
@@ -222,6 +225,7 @@ mod tests {
             structures: Vec::new(),
             tile_overrides: Vec::new(),
             zone: 1,
+            spawn_point: (0, 0),
         }
     }
 

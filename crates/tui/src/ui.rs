@@ -73,9 +73,18 @@ fn render_playing(f: &mut Frame, app: &mut App) {
         .into_iter()
         .filter(|e| !e.is_tamed)
         .collect();
+    let spawn_point = game.zone_spawn_point();
 
     f.render_widget(
-        build_map_paragraph(&tiles, &entities, status.position, half_w, half_h, zoom),
+        build_map_paragraph(
+            &tiles,
+            &entities,
+            status.position,
+            spawn_point,
+            half_w,
+            half_h,
+            zoom,
+        ),
         viewport_area,
     );
     render_status_panel(f, top[1], &status);
@@ -183,6 +192,7 @@ fn build_map_paragraph<'a>(
     tiles: &[Vec<Tile>],
     entities: &[EntityView],
     center: (i32, i32),
+    spawn_point: (i32, i32),
     half_w: i32,
     half_h: i32,
     zoom: u16,
@@ -202,6 +212,19 @@ fn build_map_paragraph<'a>(
                 .collect()
         })
         .collect();
+
+    // Marks where the player materialized on breaching into this zone (see
+    // `Game::zone_spawn_point`) — drawn before entities so anything
+    // standing on that tile still takes visual priority over the marker.
+    let srx = spawn_point.0 - center.0 + half_w;
+    let sry = spawn_point.1 - center.1 + half_h;
+    if srx >= 0
+        && sry >= 0
+        && let Some(row) = grid.get_mut(sry as usize)
+        && let Some(cell) = row.get_mut(srx as usize)
+    {
+        *cell = ('O', Color::LightMagenta, true);
+    }
 
     for ev in entities {
         let rx = ev.pos.0 - center.0 + half_w;

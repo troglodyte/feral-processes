@@ -32,7 +32,7 @@ pub use perks::Perk;
 pub use resources::DifficultyMode;
 use resources::{
     BattleState, GameClock, GameOver, GameRng, MAX_PARTY_SIZE, MessageLog, Party, PlayerEntity,
-    ZoneLevel,
+    ZoneLevel, ZoneSpawnPoint,
 };
 use species::{MoveDef, SpecialAbility, SpeciesDb, SpeciesDef};
 use structures::{StructureDb, StructureDef, StructureId, TradeDef};
@@ -59,6 +59,22 @@ const OVERCLOCK_CORE_PORTAL_COST: u32 = 2;
 /// of the player, if one is present. The companion is a battle-worthy
 /// program in its own right, not invulnerable cover.
 const COMPANION_RETALIATION_CHANCE: f64 = 0.3;
+
+/// Tile distance from `ZoneSpawnPoint` per step of `DISTANCE_STAT_STEP_BONUS`
+/// — see `Game::distance_stat_multiplier`.
+const DISTANCE_STAT_STEP_TILES: i32 = 15;
+
+/// Stat growth added per `DISTANCE_STAT_STEP_TILES` step away from the
+/// zone's spawn point, on top of `ZoneLevel::stat_multiplier` — a gentler,
+/// linear (not doubling) knob than zone depth, since it's optional
+/// distance covered within a zone you can always retreat from, not a
+/// one-way commitment like breaching deeper.
+const DISTANCE_STAT_STEP_BONUS: f32 = 0.25;
+
+/// Cap on `distance_stat_multiplier`, so wandering far enough doesn't
+/// scale stats forever within a single zone — unlike zone depth, which
+/// really is unbounded.
+const MAX_DISTANCE_STAT_MULTIPLIER: f32 = 3.0;
 
 /// Battle rounds a companion's default rally buff (see
 /// `Game::rally_player`) lasts when its species defines no
@@ -356,6 +372,10 @@ impl Game {
         world.insert_resource(difficulty);
         world.insert_resource(Party::default());
         world.insert_resource(ZoneLevel::default());
+        world.insert_resource(ZoneSpawnPoint {
+            x: start.0,
+            y: start.1,
+        });
 
         let player = world
             .spawn((
@@ -428,6 +448,10 @@ impl Game {
         world.insert_resource(data.difficulty);
         world.insert_resource(Party::default());
         world.insert_resource(ZoneLevel(data.zone));
+        world.insert_resource(ZoneSpawnPoint {
+            x: data.spawn_point.0,
+            y: data.spawn_point.1,
+        });
 
         let player = world
             .spawn((
@@ -745,6 +769,10 @@ impl Game {
             structures,
             tile_overrides,
             zone: self.world.resource::<ZoneLevel>().0,
+            spawn_point: {
+                let p = self.world.resource::<ZoneSpawnPoint>();
+                (p.x, p.y)
+            },
         };
         save::save_to_file(path, &data)
     }
@@ -2362,6 +2390,10 @@ impl Game {
         let mut new_map = WorldMap::new(new_seed);
         let start = find_walkable_start(&mut new_map);
         self.world.insert_resource(new_map);
+        self.world.insert_resource(ZoneSpawnPoint {
+            x: start.0,
+            y: start.1,
+        });
 
         let travelers: Vec<Entity> = {
             let mut query = self
@@ -2387,8 +2419,10 @@ impl Game {
             return;
         };
         let zone_level = self.world.resource::<ZoneLevel>();
-        let mult = zone_level.stat_multiplier();
+        let mult = zone_level.stat_multiplier() as f32;
         let zone = zone_level.0;
+        let dist_mult = self.distance_stat_multiplier(x, y);
+        let scale = |base: i32| ((base as f32) * mult * dist_mult).round() as i32;
         self.world.spawn((
             Creature {
                 species: species.id.clone(),
@@ -2399,16 +2433,31 @@ impl Game {
                 color: species.color,
             },
             Stats {
-                hp: species.base_hp * mult,
-                max_hp: species.base_hp * mult,
-                atk: species.base_atk * mult,
-                def: species.base_def * mult,
+                hp: scale(species.base_hp),
+                max_hp: scale(species.base_hp),
+                atk: scale(species.base_atk),
+                def: scale(species.base_def),
             },
             Hostile,
             WanderAi::default(),
             ZonePortal(zone),
             StatusEffects::default(),
         ));
+    }
+
+    /// Stat multiplier for a wild spawn at `(x, y)`, from how far it is
+    /// (Chebyshev distance — matching 8-directional movement, so it's
+    /// "how many moves away") from `ZoneSpawnPoint`: `1.0` right at spawn,
+    /// growing by `DISTANCE_STAT_STEP_BONUS` every
+    /// `DISTANCE_STAT_STEP_TILES`, capped at `MAX_DISTANCE_STAT_MULTIPLIER`.
+    /// Applied multiplicatively with `ZoneLevel::stat_multiplier` in
+    /// `spawn_wild_creature` — venturing away from where you breached in
+    /// is its own escalating risk, independent of zone depth.
+    fn distance_stat_multiplier(&self, x: i32, y: i32) -> f32 {
+        let spawn = self.world.resource::<ZoneSpawnPoint>();
+        let dist = (x - spawn.x).abs().max((y - spawn.y).abs());
+        let mult = 1.0 + (dist / DISTANCE_STAT_STEP_TILES) as f32 * DISTANCE_STAT_STEP_BONUS;
+        mult.min(MAX_DISTANCE_STAT_MULTIPLIER)
     }
 
     /// Spawns `count` wild creatures near the player, retrying with a fresh
@@ -2991,6 +3040,15 @@ impl Game {
             None => format!("You fuse {name_a} and {name_b} into a new {}.", species.name),
         });
         Ok(())
+    }
+
+    /// Where the player materialized on breaching into the current zone —
+    /// see `resources::ZoneSpawnPoint`. Both frontends mark this on the map
+    /// so a player can navigate back toward the (comparatively) safer
+    /// ground near it, per `distance_stat_multiplier`.
+    pub fn zone_spawn_point(&self) -> (i32, i32) {
+        let p = self.world.resource::<ZoneSpawnPoint>();
+        (p.x, p.y)
     }
 
     pub fn view_tiles(&mut self, half_w: i32, half_h: i32) -> Vec<Vec<Tile>> {
@@ -6851,23 +6909,66 @@ mod tests {
         let species_db = game.species_defs();
         let mut query = game
             .world
-            .query_filtered::<(&Creature, &Stats), With<Hostile>>();
+            .query_filtered::<(&Creature, &Stats, &Position), With<Hostile>>();
         let results: Vec<_> = query
             .iter(&game.world)
-            .map(|(c, s)| (c.species.clone(), s.max_hp))
+            .map(|(c, s, p)| (c.species.clone(), s.max_hp, *p))
             .collect();
         assert!(
             !results.is_empty(),
             "zone 2 should have spawned wild creatures"
         );
-        for (species_id, max_hp) in results {
+        for (species_id, max_hp, _pos) in results {
             let species = species_db.iter().find(|s| s.id == species_id).unwrap();
-            assert_eq!(
-                max_hp,
-                species.base_hp * 2,
-                "zone 2 wild creatures should have doubled stats"
+            // Zone 2 doubles base stats at minimum (`ZoneLevel::stat_multiplier`);
+            // `distance_stat_multiplier` can scale it up further (capped at
+            // `MAX_DISTANCE_STAT_MULTIPLIER`) depending how far from the
+            // zone's entry point it spawned. Checked as a range rather than
+            // an exact figure since `WanderAi` may have already moved this
+            // creature from its spawn position by the time this runs.
+            assert!(
+                max_hp >= species.base_hp * 2,
+                "zone 2 wild creatures should have at least doubled stats"
+            );
+            assert!(
+                (max_hp as f32) <= (species.base_hp as f32) * 2.0 * MAX_DISTANCE_STAT_MULTIPLIER,
+                "zone 2 wild creatures shouldn't exceed the zone doubling times the distance cap"
             );
         }
+    }
+
+    #[test]
+    fn distance_stat_multiplier_grows_with_distance_from_the_zone_spawn_point_and_caps() {
+        let game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let spawn = *game.world.resource::<ZoneSpawnPoint>();
+
+        assert_eq!(
+            game.distance_stat_multiplier(spawn.x, spawn.y),
+            1.0,
+            "right at the spawn point, distance shouldn't add any scaling"
+        );
+        assert_eq!(
+            game.distance_stat_multiplier(spawn.x + DISTANCE_STAT_STEP_TILES - 1, spawn.y),
+            1.0,
+            "just short of a full step away should still read as no scaling"
+        );
+        assert!(
+            (game.distance_stat_multiplier(spawn.x + DISTANCE_STAT_STEP_TILES, spawn.y) - 1.25)
+                .abs()
+                < f32::EPSILON,
+            "one full step away should add one step of bonus"
+        );
+        assert!(
+            (game.distance_stat_multiplier(spawn.x + DISTANCE_STAT_STEP_TILES * 2, spawn.y) - 1.5)
+                .abs()
+                < f32::EPSILON,
+            "two full steps away should add two steps of bonus"
+        );
+        assert_eq!(
+            game.distance_stat_multiplier(spawn.x + 10_000, spawn.y),
+            MAX_DISTANCE_STAT_MULTIPLIER,
+            "far enough away should cap rather than grow without bound"
+        );
     }
 
     #[test]

@@ -258,6 +258,7 @@ fn draw_playing_base(app: &mut App) {
         .into_iter()
         .filter(|e| !e.is_tamed)
         .collect();
+    let spawn_point = game.zone_spawn_point();
 
     draw_rectangle(0.0, 0.0, map_w, map_h, Color::new(0.03, 0.03, 0.05, 1.0));
     for (ry, row) in tiles.iter().enumerate() {
@@ -284,6 +285,16 @@ fn draw_playing_base(app: &mut App) {
             let tx = px + (tile_px - dims.width) / 2.0;
             let ty = py + (tile_px + dims.height) / 2.0;
             draw_text(&ch.to_string(), tx, ty, font_size, if bold { color } else { color });
+            // Marks where the player materialized on breaching into this
+            // zone (see `Game::zone_spawn_point`) — an outline rather than
+            // replacing the glyph, so whatever's actually standing there
+            // (the player, a creature, a rebuilt structure) still reads
+            // clearly on top of it.
+            let spawn_rx = spawn_point.0 - status.position.0 + half_w;
+            let spawn_ry = spawn_point.1 - status.position.1 + half_h;
+            if rx as i32 == spawn_rx && ry as i32 == spawn_ry {
+                draw_rectangle_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, MAGENTA);
+            }
             // A structure with a pet actively cronjob-assigned gets a
             // yellow outline so it's visible at a glance without opening
             // the cronjob menu to check.

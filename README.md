@@ -437,6 +437,11 @@ enough of them, then walk onto it to breach into the next zone.
 - Each zone level **doubles** wild programs' stats compared to the last —
   zone 2 creatures hit twice as hard and survive twice as long as zone 1's,
   zone 3 quadruples it, and so on.
+- Wandering away from where you breached in adds its own scaling on top:
+  every 15 tiles from that zone's entry point adds another **25%** to wild
+  stats, capping out at **3×** far enough out. Staying close to your entry
+  point (and any structures you've rebuilt there) is the safer play;
+  venturing out is riskier, zone level for zone level.
 - Deploying a Zone Portal costs 5 Portal Fragments **times your current
   zone level** — breaching deeper costs more raw material each time, so
   fragments gathered in zone 2 only ever fund the zone-3 portal.
@@ -547,6 +552,18 @@ cargo test
 ```
 
 ## Changelog
+
+### 2026-07-20
+
+- **Wild programs scale with distance from your zone's entry point**: on
+  top of the existing per-zone doubling, wandering away from where you
+  breached in adds up to another 3× to wild stats the farther out you go —
+  see [Zones and portals](#zones-and-portals).
+- **Gear scaling brought down to 2× per level (was 2.5×)**: gear was
+  overtaking zone scaling badly enough that a fully-geared level 1 player
+  could trivialize zones 5+, while grinding without gear couldn't keep pace
+  past zone 5 at all. 2× keeps gear and levels both mattering together —
+  see [Equipment](#equipment).
 
 ### 2026-07-19
 

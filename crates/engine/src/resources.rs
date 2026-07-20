@@ -94,3 +94,13 @@ impl ZoneLevel {
         1 << (self.0 - 1)
     }
 }
+
+/// Where the player materialized on breaching into the current zone sector
+/// (set alongside `ZoneLevel` in `Game::new`/`Game::enter_next_zone`) — the
+/// origin wild spawns measure distance from to scale stats further out, on
+/// top of `ZoneLevel::stat_multiplier` — see `Game::distance_stat_multiplier`.
+#[derive(Resource, Clone, Copy, Serialize, Deserialize)]
+pub struct ZoneSpawnPoint {
+    pub x: i32,
+    pub y: i32,
+}

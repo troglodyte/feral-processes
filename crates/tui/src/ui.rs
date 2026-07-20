@@ -1505,13 +1505,19 @@ fn render_battle(f: &mut Frame, app: &mut App) {
     let mut i = 0;
 
     let wild_ratio = (view.wild_hp as f64 / view.wild_max_hp.max(1) as f64).clamp(0.0, 1.0);
+    let pack_tag = if view.pack_remaining > 0 {
+        format!(" [+{} more in the pack]", view.pack_remaining)
+    } else {
+        String::new()
+    };
     f.render_widget(
         Gauge::default()
             .block(Block::bordered().title(format!(
-                "{}{}{} (ATK {} / DEF {} / PWR {})",
+                "{}{}{}{} (ATK {} / DEF {} / PWR {})",
                 view.wild_name,
                 if view.wild_is_boss { " [BOSS]" } else { "" },
                 status_tag(&view.wild_status_effect),
+                pack_tag,
                 view.wild_atk,
                 view.wild_def,
                 view.wild_power

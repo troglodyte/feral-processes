@@ -49,12 +49,16 @@ pub struct GameOver {
 #[derive(Resource, Clone, Copy)]
 pub struct PlayerEntity(pub Entity);
 
-/// Active turn-based encounter between the player and a wild creature.
-/// Removing this resource ends the battle.
+/// Active turn-based encounter between the player and one or more wild
+/// creatures spawned together as a pack (see `Game::gather_pack`).
+/// `wild_creatures[0]` is always the "front" target — the only one the
+/// player can actually attack or decompile — while every other entry is a
+/// reinforcement waiting its turn; all of them retaliate each round
+/// regardless. Removing this resource ends the battle.
 #[derive(Resource)]
 pub struct BattleState {
     pub player: Entity,
-    pub wild_creature: Entity,
+    pub wild_creatures: Vec<Entity>,
     pub log: Vec<String>,
     pub finished: bool,
     pub player_won: bool,

@@ -130,6 +130,19 @@ and Red again in a deeper zone once stat doubling catches up to you:
 Tamed/companion programs and structures keep their own fixed colors — only
 hostiles get this treatment.
 
+**Packs.** A hostile program sometimes spawns with others clustered right
+next to it, and bumping into any one of them pulls the whole cluster into
+the same intrusion. You can only attack or decompile whichever one is
+currently up front, but every packmate still alive retaliates alongside it
+each round — defeating or taming the front one just brings the next
+packmate up, it doesn't end the fight. How large a pack can get is capped
+at your current zone level + 1 (zone 1 → at most 2, zone 2 → at most 3,
+and so on), and that cap is only reached gradually the farther the
+encounter is from your zone's entry point — see
+[Zones and portals](#zones-and-portals) for how that distance scaling
+works for individual stats; packs grow into their cap at twice that
+distance.
+
 ### Getting started: building and running cronjobs
 
 There's no ore vein or resource deposit hiding out in the map to stumble
@@ -564,6 +577,14 @@ cargo test
   could trivialize zones 5+, while grinding without gear couldn't keep pace
   past zone 5 at all. 2× keeps gear and levels both mattering together —
   see [Equipment](#equipment).
+- **Wild programs can spawn in packs**: bump into one and any packmates
+  spawned alongside it join the fight together. Pack size caps at your
+  current zone level + 1 (zone 1 → 2, zone 2 → 3, ...), reached gradually
+  the farther the encounter is from your zone's entry point — twice the
+  distance it takes per-creature stat scaling to grow. Only the lead
+  program can be attacked or decompiled at a time, but every packmate still
+  alive retaliates each round, and defeating or taming the leader just
+  brings the next one forward — see [The loop](#the-loop).
 
 ### 2026-07-19
 

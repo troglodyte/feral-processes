@@ -989,15 +989,21 @@ fn draw_battle(app: &mut App) {
 
     let w = screen_width();
     let mut y = 20.0;
+    let pack_tag = if view.pack_remaining > 0 {
+        format!(" [+{} more in the pack]", view.pack_remaining)
+    } else {
+        String::new()
+    };
     y = draw_bar(
         20.0,
         y,
         w - 40.0,
         &format!(
-            "{}{}{} (ATK {} / DEF {} / PWR {})",
+            "{}{}{}{} (ATK {} / DEF {} / PWR {})",
             view.wild_name,
             if view.wild_is_boss { " [BOSS]" } else { "" },
             status_tag(&view.wild_status_effect),
+            pack_tag,
             view.wild_atk,
             view.wild_def,
             view.wild_power

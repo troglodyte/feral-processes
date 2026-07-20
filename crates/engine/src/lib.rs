@@ -76,6 +76,19 @@ const DISTANCE_STAT_STEP_BONUS: f32 = 0.25;
 /// really is unbounded.
 const MAX_DISTANCE_STAT_MULTIPLIER: f32 = 3.0;
 
+/// Tile distance from `ZoneSpawnPoint` per extra pack member a wild spawn
+/// can roll — see `Game::max_pack_size`. Twice `DISTANCE_STAT_STEP_TILES`:
+/// packs grow into their zone's cap more gradually than per-creature stats
+/// do.
+const PACK_SIZE_STEP_TILES: i32 = DISTANCE_STAT_STEP_TILES * 2;
+
+/// How tightly a pack's members cluster around the tile a spawn roll
+/// picked (`Game::try_spawn_habitat_creature`), and how far `gather_pack`
+/// searches from whichever member the player bumped into — both use the
+/// same radius so a whole spawned cluster is guaranteed to pull together
+/// into one fight.
+const PACK_GATHER_RADIUS: i32 = 2;
+
 /// Battle rounds a companion's default rally buff (see
 /// `Game::rally_player`) lasts when its species defines no
 /// `special_ability`.
@@ -312,6 +325,10 @@ pub struct BattleView {
     pub player_status_effect: Option<String>,
     /// The wild program's current battle status condition, if any.
     pub wild_status_effect: Option<String>,
+    /// How many more wild programs are waiting behind the current one in
+    /// this pack (see `resources::BattleState::wild_creatures`) — 0 for an
+    /// ordinary solo encounter.
+    pub pack_remaining: usize,
 }
 
 /// One entry in `Game::craft_recipes` — compiling `result` consumes `cost`.
@@ -842,7 +859,8 @@ impl Game {
         let (nx, ny) = (pos.x + dx, pos.y + dy);
 
         if let Some(target) = self.find_wild_creature_at(nx, ny) {
-            self.start_battle(target);
+            let pack = self.gather_pack(target);
+            self.start_battle(pack);
             self.tick();
             return;
         }
@@ -1520,32 +1538,82 @@ impl Game {
         Ok(())
     }
 
-    fn start_battle(&mut self, wild: Entity) {
+    /// Every alive `Hostile` creature within `PACK_GATHER_RADIUS` tiles of
+    /// `anchor` (Chebyshev distance) — the whole cluster a group spawn
+    /// roll placed together (see `try_spawn_habitat_creature`) joins the
+    /// fight at once when the player bumps into any one of them. `anchor`
+    /// is always first, becoming the initial front target. Truncated to
+    /// `max_pack_size` at `anchor`'s own position as a safety cap, in case
+    /// unrelated wandering creatures happened to drift into the same
+    /// cluster since they spawned.
+    fn gather_pack(&mut self, anchor: Entity) -> Vec<Entity> {
+        let Some(anchor_pos) = self.world.get::<Position>(anchor).copied() else {
+            return vec![anchor];
+        };
+        let mut pack = vec![anchor];
+        let mut query = self
+            .world
+            .query_filtered::<(Entity, &Position), With<Hostile>>();
+        for (e, pos) in query.iter(&self.world) {
+            if e == anchor {
+                continue;
+            }
+            let dist = (pos.x - anchor_pos.x).abs().max((pos.y - anchor_pos.y).abs());
+            if dist <= PACK_GATHER_RADIUS {
+                pack.push(e);
+            }
+        }
+        let cap = (self.max_pack_size(anchor_pos.x, anchor_pos.y) as usize).max(1);
+        pack.truncate(cap);
+        pack
+    }
+
+    fn start_battle(&mut self, pack: Vec<Entity>) {
         let player = self.player_entity();
+        let anchor = pack[0];
         let name = self
             .world
-            .get::<Creature>(wild)
+            .get::<Creature>(anchor)
             .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
             .map(|s| s.name.clone())
             .unwrap_or_else(|| "program".to_string());
+        let others = pack.len() - 1;
         self.world.insert_resource(BattleState {
             player,
-            wild_creature: wild,
+            wild_creatures: pack,
             log: Vec::new(),
             finished: false,
             player_won: false,
         });
-        self.log(format!("A rogue {name} intercepts your signal!"));
+        if others > 0 {
+            self.log(format!(
+                "A pack of rogue programs intercepts your signal — a {name} takes point, {others} more behind it!"
+            ));
+        } else {
+            self.log(format!("A rogue {name} intercepts your signal!"));
+        }
+    }
+
+    /// The front pack member of the active battle, if any — see
+    /// `resources::BattleState::wild_creatures`.
+    fn front_wild_creature(&self) -> Option<Entity> {
+        self.world
+            .get_resource::<BattleState>()?
+            .wild_creatures
+            .first()
+            .copied()
     }
 
     pub fn battle_view(&self) -> Option<BattleView> {
         let battle = self.world.get_resource::<BattleState>()?;
-        let wild_stats = self.world.get::<Stats>(battle.wild_creature)?;
-        let wild_creature = self.world.get::<Creature>(battle.wild_creature)?;
+        let wild = *battle.wild_creatures.first()?;
+        let pack_remaining = battle.wild_creatures.len() - 1;
+        let wild_stats = self.world.get::<Stats>(wild)?;
+        let wild_creature = self.world.get::<Creature>(wild)?;
         let species_db = self.world.get_resource::<SpeciesDb>()?;
         let species = species_db.get(&wild_creature.species);
         let wild_name = species
-            .map(|s| self.zone_tagged_name(battle.wild_creature, s.name.clone()))
+            .map(|s| self.zone_tagged_name(wild, s.name.clone()))
             .unwrap_or_default();
         let wild_is_boss = species.is_some_and(|s| s.is_boss);
         let taming_difficulty = species.map(|s| s.taming_difficulty).unwrap_or(0.5);
@@ -1581,8 +1649,9 @@ impl Game {
             log: battle.log.clone(),
             can_tame,
             decompile_chance,
+            pack_remaining,
             player_status_effect: self.status_label(battle.player),
-            wild_status_effect: self.status_label(battle.wild_creature),
+            wild_status_effect: self.status_label(wild),
             companions: self.party_info(),
         })
     }
@@ -1591,10 +1660,10 @@ impl Game {
         if self.is_game_over().is_some() {
             return;
         }
-        let Some((player, wild)) = self
+        let Some((player, front)) = self
             .world
             .get_resource::<BattleState>()
-            .map(|b| (b.player, b.wild_creature))
+            .and_then(|b| b.wild_creatures.first().map(|&w| (b.player, w)))
         else {
             return;
         };
@@ -1603,31 +1672,20 @@ impl Game {
             self.log("Your process stalls — stunned, you lose this turn!");
         } else {
             let (p_atk, w_def) = {
-                let w = *self.world.get::<Stats>(wild).unwrap();
+                let w = *self.world.get::<Stats>(front).unwrap();
                 (self.effective_atk(player), w.def)
             };
             let dmg = battle::compute_damage(p_atk, w_def, 5);
-            self.apply_damage(wild, dmg);
+            self.apply_damage(front, dmg);
             self.log(format!("You unleash a data strike for {dmg} damage."));
 
-            if !self.creature_alive(wild) {
-                self.finish_wild_creature(player, wild);
+            if !self.creature_alive(front) && self.finish_front_pack_member(player) {
                 self.tick();
                 return;
             }
         }
 
-        self.wild_retaliate(wild, player);
-        self.tick_all_status_effects(wild, player);
-        if !self.creature_alive(wild) {
-            self.finish_wild_creature(player, wild);
-            self.tick();
-            return;
-        }
-        if !self.creature_alive(player) {
-            self.clear_battle_status_effects(player, wild);
-            self.world.remove_resource::<BattleState>();
-        }
+        self.resolve_post_action(player);
         self.tick();
     }
 
@@ -1635,18 +1693,14 @@ impl Game {
     /// `resources::Party`) to act this round instead of the player: it
     /// grants the player a temporary combat buff rather than attacking
     /// directly, using its species' `special_ability` if it has one, or a
-    /// generic ATK rally otherwise. The wild creature's retaliation (see
-    /// `wild_retaliate`) can still land on the player or any party member
-    /// regardless of who acted this round.
+    /// generic ATK rally otherwise. The wild pack's retaliation (see
+    /// `resolve_post_action`) can still land on the player or any party
+    /// member regardless of who acted this round.
     pub fn battle_command_companion(&mut self, companion: Entity) {
         if self.is_game_over().is_some() {
             return;
         }
-        let Some((player, wild)) = self
-            .world
-            .get_resource::<BattleState>()
-            .map(|b| (b.player, b.wild_creature))
-        else {
+        let Some(player) = self.world.get_resource::<BattleState>().map(|b| b.player) else {
             return;
         };
         if !self.world.resource::<Party>().0.contains(&companion) {
@@ -1658,13 +1712,16 @@ impl Game {
         if self.is_stunned(companion) {
             self.log(format!("{name} stalls — stunned, it can't act!"));
         } else {
+            let Some(front) = self.front_wild_creature() else {
+                return;
+            };
             let ability = self
                 .world
                 .get::<Creature>(companion)
                 .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
                 .and_then(|s| s.special_ability.clone());
             match ability {
-                Some(ability) => self.use_special_ability(&ability, &name, player, wild),
+                Some(ability) => self.use_special_ability(&ability, &name, player, front),
                 None => self.rally_player(companion, &name, player),
             }
             if let Some(mut needs) = self.world.get_mut::<Needs>(player) {
@@ -1672,18 +1729,83 @@ impl Game {
             }
         }
 
-        self.wild_retaliate(wild, player);
-        self.tick_all_status_effects(wild, player);
-        if !self.creature_alive(wild) {
-            self.finish_wild_creature(player, wild);
-            self.tick();
+        self.resolve_post_action(player);
+        self.tick();
+    }
+
+    /// Every currently-alive member of the active pack retaliates this
+    /// round — the core of what makes a multi-creature pack meaningfully
+    /// more dangerous than a solo encounter of the same species. Each one
+    /// independently rolls its own move and target (see `wild_retaliate`).
+    fn all_wild_retaliate(&mut self, player: Entity) {
+        let Some(battle) = self.world.get_resource::<BattleState>() else {
+            return;
+        };
+        let pack = battle.wild_creatures.clone();
+        for wild in pack {
+            if self.creature_alive(wild) {
+                self.wild_retaliate(wild, player);
+            }
+        }
+    }
+
+    /// Drops the current front pack member from
+    /// `BattleState::wild_creatures` (the caller is responsible for
+    /// whatever happened to it — a kill or a successful tame). Returns
+    /// whether that emptied the pack.
+    fn pop_front_pack_member(&mut self) -> bool {
+        let mut battle = self.world.resource_mut::<BattleState>();
+        if !battle.wild_creatures.is_empty() {
+            battle.wild_creatures.remove(0);
+        }
+        battle.wild_creatures.is_empty()
+    }
+
+    /// Handles the front pack member dying (from a direct hit or a status
+    /// tick): logs the kill, awards its loot/XP, despawns it, and drops it
+    /// from the pack. If that was the last member, the whole encounter
+    /// ends in a win (`BattleState` removed) and this returns `true`;
+    /// otherwise the next pack member becomes the new front and the fight
+    /// continues, returning `false`.
+    fn finish_front_pack_member(&mut self, player: Entity) -> bool {
+        let Some(front) = self.front_wild_creature() else {
+            return true;
+        };
+        self.log("The rogue program crashes and deletes itself!");
+        let wild_max_hp = self.world.get::<Stats>(front).unwrap().max_hp;
+        self.award_player_xp(player, wild_max_hp as u32);
+        self.award_loot(player, front);
+        self.world.despawn(front);
+        if self.pop_front_pack_member() {
+            self.clear_battle_status_effects(player, front);
+            self.world.remove_resource::<BattleState>();
+            true
+        } else {
+            self.log("Another rogue program from the pack engages!");
+            false
+        }
+    }
+
+    /// Shared end-of-round resolution used by every battle action once the
+    /// player's (or a companion's) move has resolved: the whole pack
+    /// retaliates, status effects tick for the front target and player,
+    /// and a status-effect kill (e.g. a lingering Bleed finishing off the
+    /// front) or the player's death is handled the same way a direct hit
+    /// would be.
+    fn resolve_post_action(&mut self, player: Entity) {
+        self.all_wild_retaliate(player);
+        let Some(front) = self.front_wild_creature() else {
+            return;
+        };
+        self.tick_all_status_effects(front, player);
+        if !self.creature_alive(front) {
+            self.finish_front_pack_member(player);
             return;
         }
         if !self.creature_alive(player) {
-            self.clear_battle_status_effects(player, wild);
+            self.clear_battle_status_effects(player, front);
             self.world.remove_resource::<BattleState>();
         }
-        self.tick();
     }
 
     /// Default companion command when its species defines no
@@ -1823,20 +1945,6 @@ impl Game {
             })
     }
 
-    /// Kills `wild`: awards the player XP/loot, despawns it, and ends the
-    /// battle. Shared by every path that can finish a wild creature off — a
-    /// direct hit, or a status effect (e.g. a companion's `Debuff` ability)
-    /// ticking it down to 0 at end of round.
-    fn finish_wild_creature(&mut self, player: Entity, wild: Entity) {
-        self.log("The rogue program crashes and deletes itself!");
-        let wild_max_hp = self.world.get::<Stats>(wild).unwrap().max_hp;
-        self.award_player_xp(player, wild_max_hp as u32);
-        self.award_loot(player, wild);
-        self.world.despawn(wild);
-        self.clear_battle_status_effects(player, wild);
-        self.world.remove_resource::<BattleState>();
-    }
-
     /// Defeated (not tamed) rogue programs drop whatever resource their
     /// species is associated with, if any — the same `work_resource` used
     /// to decide what a tamed member of that species can gather.
@@ -1964,24 +2072,13 @@ impl Game {
         if self.is_game_over().is_some() {
             return;
         }
-        let Some((player, wild)) = self
-            .world
-            .get_resource::<BattleState>()
-            .map(|b| (b.player, b.wild_creature))
-        else {
+        let Some(player) = self.world.get_resource::<BattleState>().map(|b| b.player) else {
             return;
         };
 
         if self.is_stunned(player) {
             self.log("Your process stalls — stunned, you lose this turn!");
-            self.wild_retaliate(wild, player);
-            self.tick_all_status_effects(wild, player);
-            if !self.creature_alive(wild) {
-                self.finish_wild_creature(player, wild);
-            } else if !self.creature_alive(player) {
-                self.clear_battle_status_effects(player, wild);
-                self.world.remove_resource::<BattleState>();
-            }
+            self.resolve_post_action(player);
             self.tick();
             return;
         }
@@ -1996,9 +2093,12 @@ impl Game {
             return;
         }
 
+        let Some(front) = self.front_wild_creature() else {
+            return;
+        };
         let (hp_fraction, species_id) = {
-            let stats = *self.world.get::<Stats>(wild).unwrap();
-            let species = self.world.get::<Creature>(wild).unwrap().species.clone();
+            let stats = *self.world.get::<Stats>(front).unwrap();
+            let species = self.world.get::<Creature>(front).unwrap().species.clone();
             (stats.hp_fraction(), species)
         };
         let taming_difficulty = self
@@ -2017,28 +2117,27 @@ impl Game {
         };
 
         if roll {
-            let wild_max_hp = self.world.get::<Stats>(wild).unwrap().max_hp;
-            self.world.entity_mut(wild).remove::<(Hostile, WanderAi)>();
+            let wild_max_hp = self.world.get::<Stats>(front).unwrap().max_hp;
+            self.world.entity_mut(front).remove::<(Hostile, WanderAi)>();
             self.world
-                .entity_mut(wild)
+                .entity_mut(front)
                 .insert((Tamed { owner: player }, Experience::default()));
             self.log("ICE breached! The program now runs under your control.");
             self.award_player_xp(player, wild_max_hp as u32);
-            self.clear_battle_status_effects(player, wild);
-            self.world.remove_resource::<BattleState>();
+            if self.pop_front_pack_member() {
+                self.clear_battle_status_effects(player, front);
+                self.world.remove_resource::<BattleState>();
+                self.tick();
+                return;
+            }
+            self.log("Another rogue program from the pack engages!");
+            self.resolve_post_action(player);
             self.tick();
             return;
         }
 
         self.log("The program's ICE holds — decompile failed!");
-        self.wild_retaliate(wild, player);
-        self.tick_all_status_effects(wild, player);
-        if !self.creature_alive(wild) {
-            self.finish_wild_creature(player, wild);
-        } else if !self.creature_alive(player) {
-            self.clear_battle_status_effects(player, wild);
-            self.world.remove_resource::<BattleState>();
-        }
+        self.resolve_post_action(player);
         self.tick();
     }
 
@@ -2046,11 +2145,7 @@ impl Game {
         if self.is_game_over().is_some() {
             return;
         }
-        let Some((player, wild)) = self
-            .world
-            .get_resource::<BattleState>()
-            .map(|b| (b.player, b.wild_creature))
-        else {
+        let Some(player) = self.world.get_resource::<BattleState>().map(|b| b.player) else {
             return;
         };
         let got_hit = {
@@ -2059,7 +2154,7 @@ impl Game {
         };
         if got_hit {
             self.log("You jack out, but not before taking a parting counter-strike!");
-            self.wild_retaliate(wild, player);
+            self.all_wild_retaliate(player);
         } else {
             self.log("You jack out safely.");
         }
@@ -2071,7 +2166,9 @@ impl Game {
                 self.log(format!("Bailing out costs you {xp_lost} XP."));
             }
         }
-        self.clear_battle_status_effects(player, wild);
+        if let Some(front) = self.front_wild_creature() {
+            self.clear_battle_status_effects(player, front);
+        }
         self.world.remove_resource::<BattleState>();
         self.tick();
     }
@@ -2460,6 +2557,22 @@ impl Game {
         mult.min(MAX_DISTANCE_STAT_MULTIPLIER)
     }
 
+    /// Maximum wild pack size at `(x, y)`: capped at `zone + 1` (zone 1 →
+    /// 2, zone 2 → 3, ...), reached gradually the farther `(x, y)` is from
+    /// `ZoneSpawnPoint` — solo right at spawn, then one more potential
+    /// packmate every `PACK_SIZE_STEP_TILES`. Used both to pick how many
+    /// creatures a group spawn roll places together
+    /// (`try_spawn_habitat_creature`) and as a hard ceiling on how many
+    /// can ever end up in one fight (`gather_pack`).
+    fn max_pack_size(&self, x: i32, y: i32) -> u32 {
+        let zone = self.world.resource::<ZoneLevel>().0;
+        let cap = zone + 1;
+        let spawn = self.world.resource::<ZoneSpawnPoint>();
+        let dist = (x - spawn.x).abs().max((y - spawn.y).abs());
+        let grown = 1 + (dist / PACK_SIZE_STEP_TILES) as u32;
+        grown.min(cap)
+    }
+
     /// Spawns `count` wild creatures near the player, retrying with a fresh
     /// random offset whenever a roll whiffs (an unwalkable tile, or a biome
     /// with no matching species) rather than giving up on that slot — a
@@ -2633,11 +2746,12 @@ impl Game {
         }
     }
 
-    /// Attempts to spawn one habitat-appropriate wild creature at `(x, y)`,
-    /// returning whether it actually did — `false` on an unwalkable tile or
-    /// a biome with no matching species, so callers (see
-    /// `spawn_initial_creatures`) can retry elsewhere instead of silently
-    /// losing that spawn slot.
+    /// Attempts to spawn one habitat-appropriate wild creature (or, away
+    /// from the zone's spawn point, a small pack of the same species — see
+    /// `max_pack_size`) at `(x, y)`, returning whether it actually spawned
+    /// anything — `false` on an unwalkable tile or a biome with no
+    /// matching species, so callers (see `spawn_initial_creatures`) can
+    /// retry elsewhere instead of silently losing that spawn slot.
     fn try_spawn_habitat_creature(&mut self, x: i32, y: i32) -> bool {
         let tile = self.world.resource_mut::<WorldMap>().tile(x, y);
         if !tile.walkable {
@@ -2674,7 +2788,31 @@ impl Game {
             let idx = rng.0.random_range(0..pool.len());
             pool[idx].clone()
         };
-        self.spawn_wild_creature(&pick, x, y);
+        // Bosses always spawn alone — packs are an ordinary-encounter
+        // mechanic, not something to stack onto an already-tough boss
+        // fight.
+        let group_size = if spawn_boss {
+            1
+        } else {
+            let max_pack = self.max_pack_size(x, y);
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_range(1..=max_pack)
+        };
+        for i in 0..group_size {
+            // The first member anchors the roll's own tile; the rest
+            // cluster loosely around it (walkability isn't rechecked for
+            // these — same looseness the rest of spawning already has).
+            let (gx, gy) = if i == 0 {
+                (x, y)
+            } else {
+                let mut rng = self.world.resource_mut::<GameRng>();
+                (
+                    x + rng.0.random_range(-PACK_GATHER_RADIUS..=PACK_GATHER_RADIUS),
+                    y + rng.0.random_range(-PACK_GATHER_RADIUS..=PACK_GATHER_RADIUS),
+                )
+            };
+            self.spawn_wild_creature(&pick, gx, gy);
+        }
         true
     }
 
@@ -4728,7 +4866,7 @@ mod tests {
             .id();
         game.world.insert_resource(BattleState {
             player,
-            wild_creature: wild,
+            wild_creatures: vec![wild],
             log: Vec::new(),
             finished: false,
             player_won: false,
@@ -4950,7 +5088,7 @@ mod tests {
             .id();
         game.world.insert_resource(BattleState {
             player,
-            wild_creature: wild,
+            wild_creatures: vec![wild],
             log: Vec::new(),
             finished: false,
             player_won: false,
@@ -5188,7 +5326,7 @@ mod tests {
             .id();
         game.world.insert_resource(BattleState {
             player,
-            wild_creature: wild,
+            wild_creatures: vec![wild],
             log: Vec::new(),
             finished: false,
             player_won: false,
@@ -5250,7 +5388,7 @@ mod tests {
             .id();
         game.world.insert_resource(BattleState {
             player,
-            wild_creature: wild,
+            wild_creatures: vec![wild],
             log: Vec::new(),
             finished: false,
             player_won: false,
@@ -5313,7 +5451,7 @@ mod tests {
             .id();
         game.world.insert_resource(BattleState {
             player,
-            wild_creature: wild,
+            wild_creatures: vec![wild],
             log: Vec::new(),
             finished: false,
             player_won: false,
@@ -5522,7 +5660,7 @@ mod tests {
             .id();
         game.world.insert_resource(BattleState {
             player,
-            wild_creature: wild,
+            wild_creatures: vec![wild],
             log: Vec::new(),
             finished: false,
             player_won: false,
@@ -5580,7 +5718,7 @@ mod tests {
                 .id();
             game.world.insert_resource(BattleState {
                 player,
-                wild_creature: wild,
+                wild_creatures: vec![wild],
                 log: Vec::new(),
                 finished: false,
                 player_won: false,
@@ -5677,7 +5815,7 @@ mod tests {
                 .id();
             game.world.insert_resource(BattleState {
                 player,
-                wild_creature: wild,
+                wild_creatures: vec![wild],
                 log: Vec::new(),
                 finished: false,
                 player_won: false,
@@ -5867,7 +6005,7 @@ mod tests {
             .id();
         game.world.insert_resource(BattleState {
             player,
-            wild_creature: wild,
+            wild_creatures: vec![wild],
             log: Vec::new(),
             finished: false,
             player_won: false,
@@ -6972,6 +7110,175 @@ mod tests {
     }
 
     #[test]
+    fn max_pack_size_grows_with_zone_and_distance_and_caps_per_zone() {
+        let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let spawn = *game.world.resource::<ZoneSpawnPoint>();
+
+        assert_eq!(
+            game.max_pack_size(spawn.x, spawn.y),
+            1,
+            "right at spawn, packs should always be solo"
+        );
+        assert_eq!(
+            game.max_pack_size(spawn.x + PACK_SIZE_STEP_TILES - 1, spawn.y),
+            1,
+            "just short of a full step away should still be solo"
+        );
+        assert_eq!(
+            game.max_pack_size(spawn.x + PACK_SIZE_STEP_TILES, spawn.y),
+            2,
+            "one full step away should allow a packmate, and zone 1's cap is 2"
+        );
+        assert_eq!(
+            game.max_pack_size(spawn.x + PACK_SIZE_STEP_TILES * 10, spawn.y),
+            2,
+            "zone 1's cap of 2 should hold even far past the first step"
+        );
+
+        game.world.resource_mut::<ZoneLevel>().0 = 2;
+        assert_eq!(
+            game.max_pack_size(spawn.x + PACK_SIZE_STEP_TILES, spawn.y),
+            2,
+            "zone 2 grows the same way per step, just with a higher cap"
+        );
+        assert_eq!(
+            game.max_pack_size(spawn.x + PACK_SIZE_STEP_TILES * 2, spawn.y),
+            3,
+            "two steps away should reach zone 2's cap of 3"
+        );
+    }
+
+    #[test]
+    fn defeating_the_front_pack_member_continues_the_battle_against_the_next_one() {
+        let species_id = {
+            let game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            game.species_defs()
+                .into_iter()
+                .next()
+                .expect("at least one species")
+                .id
+                .clone()
+        };
+        let mut game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        {
+            let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+            stats.atk = 1000; // guarantees a one-shot kill on the front target below
+        }
+        let front = game
+            .world
+            .spawn((
+                Creature {
+                    species: species_id.clone(),
+                },
+                Hostile,
+                Position { x: 5, y: 5 },
+                Stats {
+                    hp: 1,
+                    max_hp: 1,
+                    atk: 1,
+                    def: 0,
+                },
+            ))
+            .id();
+        let second = game
+            .world
+            .spawn((
+                Creature {
+                    species: species_id.clone(),
+                },
+                Hostile,
+                Position { x: 6, y: 5 },
+                Stats {
+                    hp: 500,
+                    max_hp: 500,
+                    atk: 1,
+                    def: 0,
+                },
+            ))
+            .id();
+        game.world.insert_resource(BattleState {
+            player,
+            wild_creatures: vec![front, second],
+            log: Vec::new(),
+            finished: false,
+            player_won: false,
+        });
+
+        game.battle_attack();
+
+        assert!(
+            game.has_active_battle(),
+            "a pack member is still alive, so the fight should continue rather than end"
+        );
+        let view = game
+            .battle_view()
+            .expect("battle should still be active with the second member up front");
+        assert_eq!(
+            view.pack_remaining, 0,
+            "only the second (surviving) member should remain, now as the front"
+        );
+        assert_eq!(
+            view.wild_hp, 500,
+            "the new front should be the untouched second pack member"
+        );
+    }
+
+    #[test]
+    fn gather_pack_pulls_in_nearby_hostiles_and_caps_at_max_pack_size() {
+        let species_id = {
+            let game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            game.species_defs()
+                .into_iter()
+                .next()
+                .expect("at least one species")
+                .id
+                .clone()
+        };
+        let mut game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let spawn = *game.world.resource::<ZoneSpawnPoint>();
+        // Far enough out that zone 1's pack cap (2) is fully unlocked.
+        let (ax, ay) = (spawn.x + PACK_SIZE_STEP_TILES * 5, spawn.y);
+        let spawn_hostile = |game: &mut Game, x: i32, y: i32| {
+            game.world
+                .spawn((
+                    Creature {
+                        species: species_id.clone(),
+                    },
+                    Hostile,
+                    Position { x, y },
+                    Stats {
+                        hp: 10,
+                        max_hp: 10,
+                        atk: 1,
+                        def: 0,
+                    },
+                ))
+                .id()
+        };
+        let anchor = spawn_hostile(&mut game, ax, ay);
+        for i in 1..=3 {
+            spawn_hostile(&mut game, ax + i, ay);
+        }
+
+        let pack = game.gather_pack(anchor);
+
+        assert_eq!(
+            pack[0], anchor,
+            "the creature actually bumped into should always be the pack's front"
+        );
+        assert!(
+            pack.len() <= 2,
+            "zone 1's pack cap is 2 even with 3 other Hostiles nearby, got {}",
+            pack.len()
+        );
+        assert!(
+            pack.len() >= 2,
+            "at least one nearby Hostile should have joined the anchor"
+        );
+    }
+
+    #[test]
     fn a_creatures_display_label_is_tagged_with_its_spawn_zone() {
         let mut game = Game::new(50, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let species = game.species_defs().into_iter().next().unwrap();
@@ -7258,7 +7565,7 @@ mod tests {
             .id();
         game.world.insert_resource(BattleState {
             player,
-            wild_creature: wild,
+            wild_creatures: vec![wild],
             log: Vec::new(),
             finished: false,
             player_won: false,
@@ -7324,7 +7631,7 @@ mod tests {
             .id();
         game.world.insert_resource(BattleState {
             player,
-            wild_creature: wild,
+            wild_creatures: vec![wild],
             log: Vec::new(),
             finished: false,
             player_won: false,
@@ -7399,7 +7706,7 @@ mod tests {
             .id();
         game.world.insert_resource(BattleState {
             player,
-            wild_creature: wild,
+            wild_creatures: vec![wild],
             log: Vec::new(),
             finished: false,
             player_won: false,

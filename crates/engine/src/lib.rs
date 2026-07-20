@@ -5550,16 +5550,29 @@ mod tests {
     #[test]
     fn spawn_nest_creates_a_tethered_guardian_cluster() {
         let mut game = Game::new(601, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+        // `Game::new` runs its own initial habitat-spawn rolls, which can
+        // themselves occasionally create a Nest (now that species like
+        // scrapper have can_nest: true) before this test's own explicit
+        // spawn_nest call ever runs. Capture whatever nests already exist
+        // first, so the assertions below only ever look at the nest this
+        // test itself created, not a world-wide count that a background
+        // spawn could inflate.
+        let pre_existing_nests: std::collections::HashSet<Entity> = {
+            let mut query = game.world.query_filtered::<Entity, With<Nest>>();
+            query.iter(&game.world).collect()
+        };
         game.spawn_nest("scrapper", 30, 30);
 
         let nests: Vec<(Entity, Position)> = {
             let mut query = game.world.query::<(Entity, &Nest, &Position)>();
             query
                 .iter(&game.world)
+                .filter(|(e, _, _)| !pre_existing_nests.contains(e))
                 .map(|(e, _, p)| (e, *p))
                 .collect()
         };
-        assert_eq!(nests.len(), 1, "spawn_nest should create exactly one Nest entity");
+        assert_eq!(nests.len(), 1, "spawn_nest should create exactly one new Nest entity");
         let (nest, nest_pos) = nests[0];
         assert_eq!(nest_pos, Position { x: 30, y: 30 });
         assert_eq!(

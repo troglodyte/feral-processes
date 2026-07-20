@@ -280,8 +280,8 @@ recipe in the compile menu, paid in Portal Fragments instead of Core
 Fragments.
 
 **Gear levels.** Every piece of equipment has a level, starting at 1, and
-each level above that is **150% stronger** than the one before it (level 2
-= 2.5× the base bonus, level 3 = 6.25×, and so on). Reaching zone *N* (see
+each level above that **doubles** the bonus of the one before it (level 2
+= 2× the base bonus, level 3 = 4×, and so on). Reaching zone *N* (see
 [Zones and portals](#zones-and-portals)) is what unlocks level *N* gear:
 whatever you equip *while* at zone level *N* gets that level's scaled
 bonus. The level is locked in at the moment you equip an item — like a wild

@@ -112,11 +112,14 @@ pub struct EquipmentStats {
 }
 
 /// Growth factor applied to an item's base `EquipmentStats` per gear level
-/// above 1 — "150% more than the previous level" (level *N* = base *
-/// `GEAR_LEVEL_GROWTH.powi(N - 1)`). Gear level is capped by
-/// `resources::ZoneLevel`: reaching zone *N* is what "unlocks" level *N*
-/// gear — see `Game::equip`.
-pub const GEAR_LEVEL_GROWTH: f64 = 2.5;
+/// above 1 — doubles each level (level *N* = base *
+/// `GEAR_LEVEL_GROWTH.powi(N - 1)`), matching `ZoneLevel::stat_multiplier`'s
+/// own per-zone doubling so neither leveling nor gear dominates the other
+/// outright — see `balance::best_case_gear_bonus`'s tests for the
+/// simulation that surfaced the old 2.5x growth overtaking it. Gear level
+/// is capped by `resources::ZoneLevel`: reaching zone *N* is what
+/// "unlocks" level *N* gear — see `Game::equip`.
+pub const GEAR_LEVEL_GROWTH: f64 = 2.0;
 
 /// Bonus `Game::fuse_item` adds to an item type's equipped stats, per
 /// fusion tier — additive, not compounding (tier 2 is +20%, not +21%).
@@ -194,7 +197,7 @@ mod tests {
     }
 
     #[test]
-    fn scaled_for_level_grows_150_percent_per_level_above_1() {
+    fn scaled_for_level_grows_100_percent_per_level_above_1() {
         let base = EquipmentStats {
             atk: 4,
             def: 0,
@@ -207,13 +210,13 @@ mod tests {
         );
         assert_eq!(
             base.scaled_for_level(2).atk,
-            10,
-            "level 2 should be 2.5x base (4 * 2.5 = 10)"
+            8,
+            "level 2 should be 2x base (4 * 2 = 8)"
         );
         assert_eq!(
             base.scaled_for_level(3).atk,
-            25,
-            "level 3 should be 2.5x level 2 (10 * 2.5 = 25)"
+            16,
+            "level 3 should be 2x level 2 (8 * 2 = 16)"
         );
         assert_eq!(
             base.scaled_for_level(0).atk,

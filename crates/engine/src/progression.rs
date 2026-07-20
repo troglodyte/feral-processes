@@ -15,6 +15,22 @@ pub fn xp_for_level(level: u32) -> u32 {
     level * 20
 }
 
+/// `base` after `levels_gained` level-ups, fully healed — the same flat
+/// HP/ATK/DEF growth `add_xp` applies per level-up, computed directly
+/// rather than by spending XP one level at a time. Lets balance
+/// projections (see `crate::balance`) reuse the real growth constants
+/// instead of re-deriving them.
+pub fn stats_after_levels(base: Stats, levels_gained: u32) -> Stats {
+    let levels_gained = levels_gained as i32;
+    let max_hp = base.max_hp + HP_PER_LEVEL * levels_gained;
+    Stats {
+        hp: max_hp,
+        max_hp,
+        atk: base.atk + ATK_PER_LEVEL * levels_gained,
+        def: base.def + DEF_PER_LEVEL * levels_gained,
+    }
+}
+
 /// Docks `exp` a mild fraction (`SETBACK_XP_PENALTY_FRACTION`) of its
 /// current in-level XP as a death/jack-out penalty, returning how much was
 /// lost (0 if there was none to lose). Never drops `xp` below 0 and never

@@ -1,3 +1,4 @@
+pub mod balance;
 pub mod battle;
 pub mod components;
 pub mod difficulty;
@@ -367,12 +368,7 @@ impl Game {
                     ch: '@',
                     color: GlyphColor::Cyan,
                 },
-                Stats {
-                    hp: 90,
-                    max_hp: 90,
-                    atk: 6,
-                    def: 2,
-                },
+                components::PLAYER_BASE_STATS,
                 Needs::default(),
                 Experience::default(),
                 Decompiler::default(),
@@ -4130,7 +4126,7 @@ mod tests {
     }
 
     #[test]
-    fn equipping_gear_in_a_deeper_zone_scales_its_bonus_150_percent_per_level() {
+    fn equipping_gear_in_a_deeper_zone_scales_its_bonus_100_percent_per_level() {
         let mut game = Game::new(8, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
         game.world.resource_mut::<ZoneLevel>().0 = 3;
@@ -4143,11 +4139,11 @@ mod tests {
         game.equip(ItemId::OverclockCore).unwrap();
 
         let status = game.player_status();
-        // Base +3 ATK, scaled 2.5x per level above 1: level 3 = 3 * 2.5^2 = 18.75 -> 19.
+        // Base +3 ATK, scaled 2x per level above 1: level 3 = 3 * 2^2 = 12.
         assert_eq!(
             status.atk,
-            atk_before + 19,
-            "gear equipped at zone level 3 should be scaled 2.5x per level"
+            atk_before + 12,
+            "gear equipped at zone level 3 should be scaled 2x per level"
         );
         assert_eq!(
             status.weapon,

@@ -82,6 +82,16 @@ impl Stats {
     }
 }
 
+/// The player's stats at level 1, before any leveling or gear — the seed
+/// value `Game::new` spawns the player with, and the baseline `balance`'s
+/// projections grow from, so both stay in lockstep.
+pub const PLAYER_BASE_STATS: Stats = Stats {
+    hp: 90,
+    max_hp: 90,
+    atk: 6,
+    def: 2,
+};
+
 /// Hunger/fatigue both run 0..=100; 100 is fully satisfied, 0 is critical.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Needs {

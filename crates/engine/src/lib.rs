@@ -2730,7 +2730,7 @@ impl Game {
         let stale: Vec<Entity> = {
             let mut query = self
                 .world
-                .query_filtered::<Entity, Or<(With<Hostile>, With<Structure>)>>();
+                .query_filtered::<Entity, Or<(With<Hostile>, With<Structure>, With<Nest>)>>();
             query.iter(&self.world).collect()
         };
         for e in stale {
@@ -5498,6 +5498,52 @@ mod tests {
             game.world.get::<Durability>(nest).unwrap().hp,
             NEST_DURABILITY,
             "a Nest must never take raid damage, even when it's the only Durability holder"
+        );
+    }
+
+    #[test]
+    fn entering_a_zone_portal_despawns_nests_left_behind_in_the_old_zone() {
+        let mut game = Game::new(602, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let nest = game
+            .world
+            .spawn((
+                Nest {
+                    species: "scrapper".to_string(),
+                    pending_respawns: Vec::new(),
+                },
+                Position { x: 10, y: 10 },
+                Glyph {
+                    ch: 'N',
+                    color: GlyphColor::Red,
+                },
+                Durability {
+                    hp: NEST_DURABILITY,
+                    max_hp: NEST_DURABILITY,
+                },
+            ))
+            .id();
+
+        let player = game.player_entity();
+        let ppos = *game.world.get::<Position>(player).unwrap();
+        game.world.spawn((
+            Structure {
+                kind: "portal".to_string(),
+            },
+            Position {
+                x: ppos.x + 1,
+                y: ppos.y,
+            },
+        ));
+
+        game.move_player(1, 0);
+
+        // Note: `enter_next_zone` spawns fresh initial creatures for the new
+        // zone, which can legitimately include brand-new nests — so this
+        // must check the specific entity spawned above, not just count all
+        // `Nest` entities in the world.
+        assert!(
+            game.world.get_entity(nest).is_err(),
+            "a Nest left behind in the old zone must be despawned on zone transition, not just its guardians"
         );
     }
 

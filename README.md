@@ -6,10 +6,11 @@ A Neuromancer/Tron-flavored game blending Pokemon (tame and battle rogue
 programs), Palworld (compiled programs work your base for you), and Dwarf
 Fortress (procedural world, needs simulation, configurable permadeath).
 
-Single-player, built in Rust. Two interchangeable frontends — a terminal
-(TUI) UI and a graphical (GUI) one, shown above — sit on top of the same
-simulation, which stays fully decoupled from both so a client/server split
-is possible later too.
+Single-player, built in Rust. The graphical (GUI) frontend, shown above,
+sits on top of a simulation that stays fully decoupled from presentation
+so a client/server split is possible later too. A terminal (TUI) frontend
+still exists internally as a fallback for headless environments, but it's
+no longer user-selectable.
 
 ## Installing
 
@@ -35,10 +36,9 @@ Run the `feral-processes` binary (the `launcher` crate):
 cargo run -p feral-processes
 ```
 
-With no flags, it asks **Graphics or Text?** up front, before starting
-either one. To skip that prompt: `cargo run -p feral-processes -- --gui` or
-`-- --tui`. If graphics aren't available (no display, or the GUI fails to
-start), it automatically falls back to the text UI.
+It launches straight into the graphics window. If no display is available
+(e.g. over SSH) or the GUI fails to start, it automatically falls back to
+a text UI instead.
 
 Either way, from the main menu, start a **New Game** and pick a difficulty:
 
@@ -568,6 +568,11 @@ cargo test
 
 ### 2026-07-20
 
+- **Graphics is now the default frontend, no more startup prompt**: the
+  launcher goes straight into the GUI instead of asking Graphics-or-Text;
+  the `--gui`/`--tui`/`--ascii` flags are gone. The text UI still runs
+  automatically if no display is available or the GUI crashes, but it's no
+  longer user-selectable — see [Playing](#playing).
 - **Wild programs scale with distance from your zone's entry point**: on
   top of the existing per-zone doubling, wandering away from where you
   breached in adds up to another 3× to wild stats the farther out you go —
@@ -606,9 +611,9 @@ cargo test
   Defense/level), and **Buffer** (+10 max Integrity/level, fully healing on
   purchase) — see [Perks](#perks).
 - **Graphical frontend added**: a second, windowed UI alongside the
-  original terminal one, picked at startup (or via `--gui`/`--tui`) with
-  automatic fallback to the text UI if no display is available — see
-  [Playing](#playing). Menus scroll to keep your selection in view instead
+  original terminal one, with automatic fallback to the text UI if no
+  display is available — see [Playing](#playing). Menus scroll to keep
+  your selection in view instead
   of clipping, size themselves to use most of the screen, and a structure
   with a cronjob worker assigned gets a yellow outline on the map.
 - **Companions passively boost your stats**: every active party member adds

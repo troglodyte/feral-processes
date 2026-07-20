@@ -1,20 +1,14 @@
-//! The `feral-processes` binary. Resolves the game's on-disk paths, picks a
-//! frontend (graphics or text), and hands off to whichever renderer crate
-//! (`feral-processes-gui` or `feral-processes-tui`) runs it — this crate
-//! itself draws nothing and knows nothing about game rules, it's purely the
-//! backend-selection glue.
+//! The `feral-processes` binary. Resolves the game's on-disk paths and hands
+//! off to the graphical frontend (`feral-processes-gui`) — this crate itself
+//! draws nothing and knows nothing about game rules. The text frontend
+//! (`feral-processes-tui`) is no longer user-selectable; it's kept solely as
+//! the fallback renderer for the no-display/GUI-crash cases below.
 
-use std::io::{self, Write};
+use std::io;
 use std::panic::{self, AssertUnwindSafe};
 use std::path::PathBuf;
 
 use feral_processes_app_core::App;
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Backend {
-    Gui,
-    Tui,
-}
 
 fn main() -> io::Result<()> {
     let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -37,55 +31,23 @@ fn main() -> io::Result<()> {
     }
     let history_path = repo_root.join("run_history.log");
 
-    let backend = pick_backend();
-
-    match backend {
-        Backend::Tui => {
-            let mut app = App::new(assets_dir, saves_dir, history_path);
-            feral_processes_tui::run(&mut app)
-        }
-        Backend::Gui => {
-            if !graphics_available() {
-                eprintln!("No display detected; falling back to text mode.");
-                let mut app = App::new(assets_dir, saves_dir, history_path);
-                return feral_processes_tui::run(&mut app);
-            }
-            let app = App::new(assets_dir.clone(), saves_dir.clone(), history_path.clone());
-            let result = panic::catch_unwind(AssertUnwindSafe(|| feral_processes_gui::run(app)));
-            if result.is_err() {
-                // The in-progress session is lost with the unwound stack
-                // frame (see feral-processes-gui::run's docs) — autosaves
-                // mean at most a few ticks of progress, recoverable from
-                // the load-game menu, not a fresh save every time.
-                eprintln!("Graphics frontend crashed; falling back to text mode.");
-                let mut app = App::new(assets_dir, saves_dir, history_path);
-                return feral_processes_tui::run(&mut app);
-            }
-            Ok(())
-        }
+    if !graphics_available() {
+        eprintln!("No display detected; falling back to text mode.");
+        let mut app = App::new(assets_dir, saves_dir, history_path);
+        return feral_processes_tui::run(&mut app);
     }
-}
-
-/// `--gui`/`--tui`/`--ascii` skip the prompt; otherwise ask interactively,
-/// before either backend has touched a terminal or opened a window, so the
-/// choice happens once, up front.
-fn pick_backend() -> Backend {
-    let args: Vec<String> = std::env::args().collect();
-    if args.iter().any(|a| a == "--gui") {
-        return Backend::Gui;
+    let app = App::new(assets_dir.clone(), saves_dir.clone(), history_path.clone());
+    let result = panic::catch_unwind(AssertUnwindSafe(|| feral_processes_gui::run(app)));
+    if result.is_err() {
+        // The in-progress session is lost with the unwound stack frame (see
+        // feral-processes-gui::run's docs) — autosaves mean at most a few
+        // ticks of progress, recoverable from the load-game menu, not a
+        // fresh save every time.
+        eprintln!("Graphics frontend crashed; falling back to text mode.");
+        let mut app = App::new(assets_dir, saves_dir, history_path);
+        return feral_processes_tui::run(&mut app);
     }
-    if args.iter().any(|a| a == "--tui" || a == "--ascii") {
-        return Backend::Tui;
-    }
-
-    print!("feral-processes — Graphics or Text interface? [g/t]: ");
-    let _ = io::stdout().flush();
-    let mut input = String::new();
-    if io::stdin().read_line(&mut input).is_ok() && input.trim().eq_ignore_ascii_case("g") {
-        Backend::Gui
-    } else {
-        Backend::Tui
-    }
+    Ok(())
 }
 
 /// Best-effort preflight check: on Linux there's no windowing system to

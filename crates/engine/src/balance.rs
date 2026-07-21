@@ -5,10 +5,10 @@
 //! actual regression check this module exists to support.
 
 use crate::battle::compute_damage;
-use crate::components::{Stats, PLAYER_BASE_STATS};
+use crate::components::{PLAYER_BASE_STATS, Stats};
 use crate::items::ItemId;
 use crate::progression::stats_after_levels;
-use crate::resources::{ZoneLevel, MAX_PARTY_SIZE};
+use crate::resources::{MAX_PARTY_SIZE, ZoneLevel};
 use crate::species::{SpeciesDb, SpeciesDef};
 
 /// Rounds to let a simulated fight run before scoring it a loss —
@@ -134,7 +134,12 @@ pub fn simulate_battle(
             rally_power = (strongest_companion_atk / 3).max(1);
             rally_rounds_left = 3;
         } else {
-            let effective_atk = player.atk + if rally_rounds_left > 0 { rally_power } else { 0 };
+            let effective_atk = player.atk
+                + if rally_rounds_left > 0 {
+                    rally_power
+                } else {
+                    0
+                };
             let dmg = compute_damage(effective_atk, wild.def, 5);
             wild.hp -= dmg;
             if wild.hp <= 0 {

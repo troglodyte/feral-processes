@@ -42,7 +42,11 @@ impl SpecialAbility {
                 format!("Shield: +{power} DEF for {duration} rounds")
             }
             SpecialAbility::Heal { power } => format!("Heal: +{power} HP"),
-            SpecialAbility::Debuff { kind, power, duration } => {
+            SpecialAbility::Debuff {
+                kind,
+                power,
+                duration,
+            } => {
                 let kind_name = match kind {
                     StatusKind::Bleed => "Bleeding",
                     StatusKind::Stun => "Stun",
@@ -266,7 +270,10 @@ mod tests {
     #[test]
     fn base_roster_growth_multiplier_rises_with_difficulty_tier() {
         let (db, warnings) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
-        assert!(warnings.is_empty(), "species assets should all load cleanly: {warnings:?}");
+        assert!(
+            warnings.is_empty(),
+            "species assets should all load cleanly: {warnings:?}"
+        );
 
         let get = |id: &str| db.get(id).unwrap().growth_multiplier;
         // Easy-tier species (and SubProcess, Easy/Medium) omit the field
@@ -286,7 +293,10 @@ mod tests {
     #[test]
     fn can_nest_is_set_only_for_the_intended_swarm_flavored_species() {
         let (db, warnings) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
-        assert!(warnings.is_empty(), "species assets should all load cleanly: {warnings:?}");
+        assert!(
+            warnings.is_empty(),
+            "species assets should all load cleanly: {warnings:?}"
+        );
 
         let nesting: Vec<&str> = db
             .all()

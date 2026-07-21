@@ -47,6 +47,12 @@ impl SoundBank {
             SoundEvent::Victory => &self.victory,
             SoundEvent::Defeat => &self.defeat,
         };
-        audio::play_sound(sound, PlaySoundParams { looped: false, volume });
+        audio::play_sound(
+            sound,
+            PlaySoundParams {
+                looped: false,
+                volume,
+            },
+        );
     }
 }

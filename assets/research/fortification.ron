@@ -1,0 +1,8 @@
+(
+    id: "fortification",
+    name: "Fortification",
+    description: "Automated perimeter defense. Unlocks the Turret.",
+    cost: 15,
+    requires: ["power_grid"],
+    unlocks_structures: ["turret"],
+)

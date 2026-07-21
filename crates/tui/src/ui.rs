@@ -4,11 +4,13 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Gauge, Paragraph, Wrap};
 
-use feral_processes_app_core::{App, Mode, MENU_SCAN_RADIUS, TradeChoice};
+use feral_processes_app_core::{App, MENU_SCAN_RADIUS, Mode, TradeChoice};
 use feral_processes_engine::components::{EquippedItem, GlyphColor};
 use feral_processes_engine::items::ItemId;
 use feral_processes_engine::world::{Biome, Tile};
-use feral_processes_engine::{EntityView, Game, MAX_FUSIONS, MessageKind, PetInfo, PlayerStatus};
+use feral_processes_engine::{
+    EntityView, Game, MAX_FUSIONS, MessageKind, PetInfo, PlayerStatus, ResearchState,
+};
 
 /// Display styling for a message-log line, chosen by the engine-supplied
 /// `MessageKind` rather than by sniffing the text — low-priority chatter
@@ -62,7 +64,8 @@ pub fn render(f: &mut Frame, app: &mut App) {
         | Mode::Trade
         | Mode::TradeAction
         | Mode::TradeQuantity
-        | Mode::Perks => render_playing(f, app),
+        | Mode::Perks
+        | Mode::Research => render_playing(f, app),
     }
 }
 
@@ -147,7 +150,13 @@ fn render_playing(f: &mut Frame, app: &mut App) {
             let zone = status.zone;
             let stack_qty = app
                 .pending_inventory_item
-                .and_then(|item| status.inventory.iter().find(|(i, _)| *i == item).map(|(_, q)| *q))
+                .and_then(|item| {
+                    status
+                        .inventory
+                        .iter()
+                        .find(|(i, _)| *i == item)
+                        .map(|(_, q)| *q)
+                })
                 .unwrap_or(0);
             let fusion_tier = app
                 .pending_inventory_item
@@ -189,6 +198,7 @@ fn render_playing(f: &mut Frame, app: &mut App) {
             &app.trade_quantity_input,
         ),
         Mode::Perks => render_perks_menu(f, area, game, selected),
+        Mode::Research => render_research_menu(f, area, game, selected),
         _ => {}
     }
 }
@@ -513,7 +523,7 @@ fn render_build_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize
     let popup = centered_rect(70, 60, area);
     f.render_widget(Clear, popup);
     let status = game.player_status();
-    let defs = game.structure_defs();
+    let defs = game.buildable_structure_defs();
     let mut lines = vec![
         Line::from("Deploy what? (Esc to cancel; Up/Down + Enter also work)"),
         Line::from(""),
@@ -810,7 +820,10 @@ fn render_remove_confirm(f: &mut Frame, area: Rect, selected: usize) {
         Line::from(""),
     ];
     for (i, opt) in options.iter().enumerate() {
-        lines.push(menu_line(format!("[{}] {}", if i == 0 { "y" } else { "n" }, opt), i == selected));
+        lines.push(menu_line(
+            format!("[{}] {}", if i == 0 { "y" } else { "n" }, opt),
+            i == selected,
+        ));
     }
     f.render_widget(
         Paragraph::new(lines).block(Block::bordered().title("Confirm Demolish Home")),
@@ -874,7 +887,11 @@ fn render_companion_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: u
             .as_ref()
             .map(|s| format!(" (on a cronjob: {s})"))
             .unwrap_or_default();
-        let quality = p.quality.as_ref().map(|q| format!(" [{q}]")).unwrap_or_default();
+        let quality = p
+            .quality
+            .as_ref()
+            .map(|q| format!(" [{q}]"))
+            .unwrap_or_default();
         let fused = fusion_tag(p.fusions);
         lines.push(menu_line(
             format!(
@@ -959,7 +976,10 @@ fn render_fuse_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize)
         lines.push(Line::from("(no compiled programs nearby)"));
     }
     for (i, c) in candidates.iter().enumerate() {
-        lines.push(menu_line(fuse_candidate_label(i + 1, c, &pets), i == selected));
+        lines.push(menu_line(
+            fuse_candidate_label(i + 1, c, &pets),
+            i == selected,
+        ));
     }
     f.render_widget(
         Paragraph::new(lines)
@@ -997,7 +1017,10 @@ fn render_fuse_second_menu(
         lines.push(Line::from("(no other compiled programs nearby)"));
     }
     for (i, c) in candidates.iter().enumerate() {
-        lines.push(menu_line(fuse_candidate_label(i + 1, c, &pets), i == selected));
+        lines.push(menu_line(
+            fuse_candidate_label(i + 1, c, &pets),
+            i == selected,
+        ));
     }
     f.render_widget(
         Paragraph::new(lines)
@@ -1032,7 +1055,11 @@ fn render_fuse_name_menu(
             .unwrap_or_else(|| "it".to_string())
     };
     let lines = vec![
-        Line::from(format!("Fusing {} and {}.", label_of(first), label_of(second))),
+        Line::from(format!(
+            "Fusing {} and {}.",
+            label_of(first),
+            label_of(second)
+        )),
         Line::from(""),
         Line::from(format!(
             "Name it (optional, {} max): {name_input}",
@@ -1265,6 +1292,63 @@ fn render_perks_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize
     );
 }
 
+fn render_research_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize) {
+    let popup = centered_rect(70, 65, area);
+    f.render_widget(Clear, popup);
+    let held = game
+        .player_status()
+        .inventory
+        .iter()
+        .find(|(item, _)| *item == ItemId::ResearchData)
+        .map(|(_, n)| *n)
+        .unwrap_or(0);
+    let nodes = game.research_nodes();
+    let mut lines = vec![
+        Line::styled(
+            format!("Research Data: {held}"),
+            Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+        ),
+        Line::from(""),
+    ];
+    for (i, node) in nodes.iter().enumerate() {
+        let (tag, mut style) = match &node.state {
+            ResearchState::Unlocked => (" (researched)".to_string(), Style::new().fg(Color::Green)),
+            ResearchState::Available if node.affordable => (String::new(), Style::new()),
+            ResearchState::Available => (String::new(), Style::new().fg(Color::DarkGray)),
+            ResearchState::Locked { missing } => (
+                format!(" (needs {})", missing.join(", ")),
+                Style::new().fg(Color::DarkGray),
+            ),
+        };
+        let prefix = if i == selected {
+            style = style.add_modifier(Modifier::REVERSED);
+            "> "
+        } else {
+            "  "
+        };
+        lines.push(Line::styled(
+            format!(
+                "{prefix}[{}] {} — {} Research Data{tag}",
+                i + 1,
+                node.name,
+                node.cost
+            ),
+            style,
+        ));
+        lines.push(Line::from(format!("    {}", node.description)));
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from(
+        "Pick a number to research it (Up/Down + Enter also work). Esc to close",
+    ));
+    f.render_widget(
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: true })
+            .block(Block::bordered().title("Research")),
+        popup,
+    );
+}
+
 /// Popup shown over the battle screen (`Mode::BattleCompanion`) when more
 /// than one companion is active, to pick which one acts this round. A
 /// single active companion skips this and is commanded directly.
@@ -1280,7 +1364,13 @@ fn render_battle_companion_menu(f: &mut Frame, app: &mut App) {
     )];
     for (i, c) in party.iter().enumerate() {
         lines.push(menu_line(
-            format!("[{}] {} ({}){}", i + 1, c.name, c.ability, status_tag(&c.status)),
+            format!(
+                "[{}] {} ({}){}",
+                i + 1,
+                c.name,
+                c.ability,
+                status_tag(&c.status)
+            ),
             i == selected,
         ));
     }
@@ -1473,7 +1563,9 @@ fn equipped_line(
 ) -> Line<'static> {
     match equipped.and_then(|e| e.item.equipment().map(|(_, mods)| (e, mods))) {
         Some((equipped, mods)) => {
-            let mods = mods.scaled_for_level(equipped.level).fused_for_tier(equipped.fusion_tier);
+            let mods = mods
+                .scaled_for_level(equipped.level)
+                .fused_for_tier(equipped.fusion_tier);
             let mut parts = Vec::new();
             if mods.atk != 0 {
                 parts.push(format!("+{} ATK", mods.atk));
@@ -1518,7 +1610,9 @@ fn equip_preview_tag(item: ItemId, zone_level: u32, fusion_tier: u32) -> String 
     let Some((_, base_mods)) = item.equipment() else {
         return String::new();
     };
-    let mods = base_mods.scaled_for_level(zone_level).fused_for_tier(fusion_tier);
+    let mods = base_mods
+        .scaled_for_level(zone_level)
+        .fused_for_tier(fusion_tier);
     let mut parts = Vec::new();
     if mods.atk != 0 {
         parts.push(format!("+{} ATK", mods.atk));
@@ -1754,18 +1848,28 @@ fn render_main_menu(f: &mut Frame, app: &App) {
 fn render_load_game_menu(f: &mut Frame, app: &App) {
     let area = f.area();
     let saves = app.list_saves();
-    let mut lines = vec![Line::from("Pick a save (Esc to cancel; Up/Down + Enter also work)")];
+    let mut lines = vec![Line::from(
+        "Pick a save (Esc to cancel; Up/Down + Enter also work)",
+    )];
     if saves.is_empty() {
         lines.push(Line::from("(no saves found)"));
     }
     for (i, save) in saves.iter().enumerate() {
-        let summary = save.summary.as_deref().unwrap_or("(incompatible save — can still be deleted)");
-        lines.push(menu_line(format!("[{}] {} — {}", i + 1, save.name, summary), i == app.menu_selected));
+        let summary = save
+            .summary
+            .as_deref()
+            .unwrap_or("(incompatible save — can still be deleted)");
+        lines.push(menu_line(
+            format!("[{}] {} — {}", i + 1, save.name, summary),
+            i == app.menu_selected,
+        ));
     }
     let popup = centered_rect(70, 60, area);
     f.render_widget(Clear, popup);
     f.render_widget(
-        Paragraph::new(lines).wrap(Wrap { trim: true }).block(Block::bordered().title("Load Game")),
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: true })
+            .block(Block::bordered().title("Load Game")),
         popup,
     );
 }
@@ -1828,6 +1932,9 @@ fn render_help(f: &mut Frame) {
             "i                   pick a direction, inspect the first program that way (stats/moves, no intrusion)",
         ),
         Line::from("v                   inventory/equipment: equip, unequip, erase items"),
+        Line::from(
+            "T                   research tree: spend Research Data to unlock structures and recipes",
+        ),
         Line::from(
             "p                   your pets: full stats for every compiled program you own; add/stand down party (max 3)",
         ),

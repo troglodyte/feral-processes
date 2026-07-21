@@ -1,0 +1,12 @@
+(
+    id: "neural_amp",
+    name: "Neural Interfacing",
+    description: "Compile Neural Amplifiers at a Fabricator.",
+    cost: 25,
+    requires: ["weapon_bench"],
+    unlocks_recipes: [(
+        result: NeuralAmplifier,
+        cost: [(PortalFragment, 6)],
+        requires_structure: Some("fabricator"),
+    )],
+)

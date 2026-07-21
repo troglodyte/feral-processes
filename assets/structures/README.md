@@ -16,8 +16,9 @@ is skipped with a warning logged in-game rather than crashing startup.
                                     //         Orange
     build_cost: [(CoreFragment, 3)],  // list of (item, quantity) pairs
     // Item options: CoreFragment, PowerCell, IceBreaker, PortalFragment,
-    //               OverclockCore, MonofilamentWhip, FirewallPlating,
-    //               AblativePlating, NeuralAmplifier, CortexHack
+    //               ResearchData, OverclockCore, MonofilamentWhip,
+    //               FirewallPlating, AblativePlating, NeuralAmplifier,
+    //               CortexHack
 
     // Omit (`None`) for a purely decorative/utility structure. Set `Some(...)`
     // to make it assignable to a tamed creature via the cronjob menu — it'll
@@ -110,3 +111,16 @@ is skipped with a warning logged in-game rather than crashing startup.
 
 The filename doesn't matter to the loader (only the `id` field does), but
 name it after the structure for readability, e.g. `data_cache.ron`.
+
+## Research gating
+
+A structure named in some research node's `unlocks_structures` can't be
+built until that node is researched — see `assets/research/README.md`. A
+structure named by **no** research file is buildable from turn one, which is
+how the Home, Mining Node, Research Node, Recharger Node and Zone Portal
+stay available at the start, and why a structure mod that ships no research
+file keeps working unchanged.
+
+The Research Node itself (`research_node.ron`) is the source of Research
+Data: assign a tamed program to it via the cronjob menu, same as a Mining
+Node.

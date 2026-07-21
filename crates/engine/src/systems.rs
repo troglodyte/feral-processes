@@ -101,6 +101,18 @@ fn mining_success_chance(level: u32) -> f64 {
     (0.4 + level as f64 * 0.1).min(1.0)
 }
 
+/// The worker-side components `task_progress_system` reads per cronjob
+/// assignment. Aliased rather than written inline because the tuple is long
+/// enough to trip clippy's `type_complexity` lint.
+type CronjobWorker = (
+    &'static mut Task,
+    &'static Tamed,
+    &'static Creature,
+    Option<&'static Potential>,
+    &'static mut Experience,
+    &'static mut Stats,
+);
+
 /// Generic job progression: any entity with a `Task` advances it once per
 /// tick against its `target`; on completion the producing node hands a unit
 /// of resource to the worker's owner. A node that's been mined down to 0
@@ -108,14 +120,7 @@ fn mining_success_chance(level: u32) -> f64 {
 /// cronjob forever. The same loop would drive future colonist-style jobs,
 /// not just base-building work.
 pub fn task_progress_system(
-    mut tasks: Query<(
-        &mut Task,
-        &Tamed,
-        &Creature,
-        Option<&Potential>,
-        &mut Experience,
-        &mut Stats,
-    )>,
+    mut tasks: Query<CronjobWorker>,
     mut nodes: Query<&mut ResourceNode>,
     mut inventories: Query<&mut Inventory>,
     species_db: Res<SpeciesDb>,

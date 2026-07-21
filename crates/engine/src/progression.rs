@@ -165,9 +165,21 @@ mod tests {
         // about — a smaller multiplier like 1.25 wouldn't move ATK/DEF at all.
         let levels = add_xp(&mut exp, &mut stats, 20, 1.5, None);
         assert_eq!(levels, 1);
-        assert_eq!(stats.max_hp, 10 + 18, "1.5x should scale HP growth up from 12 to 18");
-        assert_eq!(stats.atk, 5 + 2, "1.5x should scale ATK growth up from 1 to 2");
-        assert_eq!(stats.def, 5 + 2, "1.5x should scale DEF growth up from 1 to 2");
+        assert_eq!(
+            stats.max_hp,
+            10 + 18,
+            "1.5x should scale HP growth up from 12 to 18"
+        );
+        assert_eq!(
+            stats.atk,
+            5 + 2,
+            "1.5x should scale ATK growth up from 1 to 2"
+        );
+        assert_eq!(
+            stats.def,
+            5 + 2,
+            "1.5x should scale DEF growth up from 1 to 2"
+        );
     }
 
     #[test]
@@ -201,9 +213,15 @@ mod tests {
             Some(CREATURE_MAX_LEVEL),
         );
 
-        assert_eq!(levels, 0, "an already-maxed creature shouldn't level up further");
+        assert_eq!(
+            levels, 0,
+            "an already-maxed creature shouldn't level up further"
+        );
         assert_eq!(exp.level, CREATURE_MAX_LEVEL);
-        assert_eq!(exp.xp, 0, "XP awarded past the cap shouldn't even accumulate");
+        assert_eq!(
+            exp.xp, 0,
+            "XP awarded past the cap shouldn't even accumulate"
+        );
         assert_eq!(stats.max_hp, 10, "stats shouldn't grow past the cap");
     }
 
@@ -225,7 +243,10 @@ mod tests {
             Some(CREATURE_MAX_LEVEL),
         );
 
-        assert_eq!(levels, 1, "should only be able to gain the one level up to the cap");
+        assert_eq!(
+            levels, 1,
+            "should only be able to gain the one level up to the cap"
+        );
         assert_eq!(exp.level, CREATURE_MAX_LEVEL);
     }
 
@@ -240,7 +261,13 @@ mod tests {
         };
         let mut stats = base_stats();
 
-        let levels = add_xp(&mut exp, &mut stats, 100_000, BASELINE_GROWTH_MULTIPLIER, None);
+        let levels = add_xp(
+            &mut exp,
+            &mut stats,
+            100_000,
+            BASELINE_GROWTH_MULTIPLIER,
+            None,
+        );
 
         assert!(levels > 0, "an uncapped entity should keep leveling");
         assert!(
@@ -248,17 +275,27 @@ mod tests {
             "uncapped leveling should pass the creature ceiling, got {}",
             exp.level
         );
-        assert!(stats.max_hp > 10, "uncapped level-ups should still grow stats");
+        assert!(
+            stats.max_hp > 10,
+            "uncapped level-ups should still grow stats"
+        );
     }
 
     #[test]
     fn setback_penalty_docks_a_mild_fraction_of_in_level_xp() {
-        let mut exp = Experience { level: 3, xp: 10, xp_to_next: 40 };
+        let mut exp = Experience {
+            level: 3,
+            xp: 10,
+            xp_to_next: 40,
+        };
         let lost = apply_setback_xp_penalty(&mut exp);
         assert_eq!(lost, 2, "20% of 10 xp");
         assert_eq!(exp.xp, 8);
         assert_eq!(exp.level, 3, "a setback should never touch level");
-        assert_eq!(exp.xp_to_next, 40, "a setback should never touch xp_to_next");
+        assert_eq!(
+            exp.xp_to_next, 40,
+            "a setback should never touch xp_to_next"
+        );
     }
 
     #[test]

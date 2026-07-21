@@ -1,0 +1,12 @@
+(
+    id: "overclock",
+    name: "Overclock Cores",
+    description: "Compile Overclock Cores at a Fabricator.",
+    cost: 22,
+    requires: ["weapon_bench"],
+    unlocks_recipes: [(
+        result: OverclockCore,
+        cost: [(PortalFragment, 6)],
+        requires_structure: Some("fabricator"),
+    )],
+)

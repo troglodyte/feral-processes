@@ -13,6 +13,7 @@ pub fn item_potency(item: ItemId) -> f32 {
         | ItemId::FirewallPlating
         | ItemId::NeuralAmplifier
         | ItemId::PortalFragment
+        | ItemId::ResearchData
         | ItemId::MonofilamentWhip
         | ItemId::AblativePlating
         | ItemId::CortexHack => 0.0,
@@ -30,7 +31,12 @@ const DECOMPILER_SKILL_BONUS: f32 = 0.02;
 /// practiced player (`decompiler_skill`) adds a flat bonus on top. The
 /// `0.9` ceiling (rather than a full `1.0`) means even a fully-weakened,
 /// zero-difficulty target isn't a sure thing on item potency alone.
-pub fn capture_chance(hp_fraction: f32, item_potency: f32, taming_difficulty: f32, decompiler_skill: i32) -> f32 {
+pub fn capture_chance(
+    hp_fraction: f32,
+    item_potency: f32,
+    taming_difficulty: f32,
+    decompiler_skill: i32,
+) -> f32 {
     let base = item_potency * (0.9 - hp_fraction * 0.65) * (1.0 - taming_difficulty * 0.6);
     let skill_bonus = decompiler_skill as f32 * DECOMPILER_SKILL_BONUS;
     (base + skill_bonus).clamp(0.05, 0.95)

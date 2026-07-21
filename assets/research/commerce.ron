@@ -1,0 +1,7 @@
+(
+    id: "commerce",
+    name: "Isometric Commerce",
+    description: "Barter protocols. Unlocks the iso Market.",
+    cost: 12,
+    unlocks_structures: ["market"],
+)

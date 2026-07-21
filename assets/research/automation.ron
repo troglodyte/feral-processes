@@ -1,0 +1,7 @@
+(
+    id: "automation",
+    name: "Automation",
+    description: "Self-running compile jobs. Unlocks the Compiler.",
+    cost: 8,
+    unlocks_structures: ["compiler"],
+)

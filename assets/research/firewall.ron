@@ -1,0 +1,12 @@
+(
+    id: "firewall",
+    name: "Firewall Plating",
+    description: "Compile Firewall Plating at an Armory.",
+    cost: 22,
+    requires: ["armor_bench"],
+    unlocks_recipes: [(
+        result: FirewallPlating,
+        cost: [(PortalFragment, 6)],
+        requires_structure: Some("armory"),
+    )],
+)

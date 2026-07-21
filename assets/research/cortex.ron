@@ -1,0 +1,12 @@
+(
+    id: "cortex",
+    name: "Cortex Hacking",
+    description: "Compile Cortex Hacks at a Fabricator.",
+    cost: 45,
+    requires: ["neural_amp"],
+    unlocks_recipes: [(
+        result: CortexHack,
+        cost: [(PortalFragment, 12)],
+        requires_structure: Some("fabricator"),
+    )],
+)

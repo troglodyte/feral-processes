@@ -134,6 +134,10 @@ pub struct SaveData {
     /// Where the player materialized on breaching into that zone — see
     /// `resources::ZoneSpawnPoint`.
     pub spawn_point: (i32, i32),
+    /// Which research nodes have been unlocked — see `research::ResearchDb`.
+    /// Sorted on write so the encoded bytes don't depend on `HashSet`
+    /// iteration order.
+    pub researched: Vec<crate::research::ResearchId>,
 }
 
 /// Bumped whenever `SaveData` (or anything it contains, transitively)
@@ -161,7 +165,7 @@ pub struct SaveData {
 /// and every save written under the old version stops loading. That's an
 /// intentional, simple tradeoff for a single-player game rather than
 /// building real schema migration.
-pub const SAVE_FORMAT_VERSION: u32 = 6;
+pub const SAVE_FORMAT_VERSION: u32 = 7;
 
 pub fn save_to_file(path: &Path, data: &SaveData) -> io::Result<()> {
     let encoded = bincode::serde::encode_to_vec(data, bincode::config::standard())
@@ -175,7 +179,10 @@ pub fn save_to_file(path: &Path, data: &SaveData) -> io::Result<()> {
 pub fn load_from_file(path: &Path) -> io::Result<SaveData> {
     let bytes = std::fs::read(path)?;
     let Some((version_bytes, payload)) = bytes.split_first_chunk::<4>() else {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "save file is too short to be valid"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "save file is too short to be valid",
+        ));
     };
     let version = u32::from_le_bytes(*version_bytes);
     if version != SAVE_FORMAT_VERSION {
@@ -196,7 +203,10 @@ pub fn load_from_file(path: &Path) -> io::Result<SaveData> {
 /// short structured summary is appended to a plain-text history log.
 pub fn append_run_history(path: &Path, summary: &str) -> io::Result<()> {
     use std::io::Write;
-    let mut file = std::fs::OpenOptions::new().create(true).append(true).open(path)?;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
     writeln!(file, "{summary}")
 }
 
@@ -240,13 +250,16 @@ mod tests {
             tile_overrides: Vec::new(),
             zone: 1,
             spawn_point: (0, 0),
+            researched: Vec::new(),
         }
     }
 
     #[test]
     fn a_save_round_trips_through_the_current_version() {
-        let path = std::env::temp_dir()
-            .join(format!("feral_processes_save_roundtrip_{}.bin", std::process::id()));
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_save_roundtrip_{}.bin",
+            std::process::id()
+        ));
         save_to_file(&path, &sample_data()).unwrap();
         let loaded = load_from_file(&path).unwrap();
         let _ = std::fs::remove_file(&path);
@@ -255,9 +268,12 @@ mod tests {
 
     #[test]
     fn a_save_written_with_a_different_version_is_rejected_cleanly_instead_of_corrupting() {
-        let path = std::env::temp_dir()
-            .join(format!("feral_processes_save_badversion_{}.bin", std::process::id()));
-        let encoded = bincode::serde::encode_to_vec(sample_data(), bincode::config::standard()).unwrap();
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_save_badversion_{}.bin",
+            std::process::id()
+        ));
+        let encoded =
+            bincode::serde::encode_to_vec(sample_data(), bincode::config::standard()).unwrap();
         let mut bytes = 999u32.to_le_bytes().to_vec();
         bytes.extend(encoded);
         std::fs::write(&path, bytes).unwrap();
@@ -275,8 +291,10 @@ mod tests {
 
     #[test]
     fn a_truncated_file_fails_cleanly_instead_of_panicking() {
-        let path = std::env::temp_dir()
-            .join(format!("feral_processes_save_truncated_{}.bin", std::process::id()));
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_save_truncated_{}.bin",
+            std::process::id()
+        ));
         std::fs::write(&path, [1, 2]).unwrap();
         let Err(err) = load_from_file(&path) else {
             panic!("loading a truncated save should fail, not succeed");

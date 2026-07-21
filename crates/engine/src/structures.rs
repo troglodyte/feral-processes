@@ -183,11 +183,13 @@ impl StructureDb {
         self.structures.get(id)
     }
 
-    /// Every loaded structure, sorted by `id` — except `home`, `mining_node`
-    /// and `compiler`, which are always pinned first in that order (the
-    /// natural early-game build sequence: shelter, then a resource, then
-    /// somewhere to turn it into gear), with everything else alphabetical
-    /// after them. `HashMap` iteration order is randomized per-instance (a
+    /// Every loaded structure, sorted by `id` — except `home`,
+    /// `mining_node`, `research_node` and `compiler`, which are always
+    /// pinned first in that order (the natural early-game build sequence:
+    /// shelter, then a resource, then somewhere to research what to do with
+    /// it, then somewhere to turn it into gear), with everything else
+    /// alphabetical after them. `HashMap` iteration order is randomized
+    /// per-instance (a
     /// fresh seed each time a `StructureDb` is built, i.e. every new/loaded
     /// game), so without this sort, the build menu's `[1]`, `[2]`, ...
     /// numbering would shuffle unpredictably from one session to the next
@@ -200,8 +202,9 @@ impl StructureDb {
         let priority = |id: &str| match id {
             "home" => 0,
             "mining_node" => 1,
-            "compiler" => 2,
-            _ => 3,
+            "research_node" => 2,
+            "compiler" => 3,
+            _ => 4,
         };
         let mut defs: Vec<&StructureDef> = self.structures.values().collect();
         defs.sort_by(|a, b| {

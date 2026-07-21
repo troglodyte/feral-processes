@@ -1,0 +1,7 @@
+(
+    id: "power_grid",
+    name: "Power Grid",
+    description: "Routed power. Unlocks the Terminal and the Power Conduit.",
+    cost: 10,
+    unlocks_structures: ["terminal", "power_conduit"],
+)

@@ -9,6 +9,7 @@ pub enum ItemId {
     FirewallPlating,
     NeuralAmplifier,
     PortalFragment,
+    ResearchData,
     MonofilamentWhip,
     AblativePlating,
     CortexHack,
@@ -24,6 +25,7 @@ impl ItemId {
             ItemId::FirewallPlating => "Firewall Plating",
             ItemId::NeuralAmplifier => "Neural Amplifier",
             ItemId::PortalFragment => "Portal Fragment",
+            ItemId::ResearchData => "Research Data",
             ItemId::MonofilamentWhip => "Monofilament Whip",
             ItemId::AblativePlating => "Ablative Plating",
             ItemId::CortexHack => "Cortex Hack",
@@ -79,7 +81,8 @@ impl ItemId {
             ItemId::CoreFragment
             | ItemId::PowerCell
             | ItemId::IceBreaker
-            | ItemId::PortalFragment => None,
+            | ItemId::PortalFragment
+            | ItemId::ResearchData => None,
         }
     }
 }
@@ -158,6 +161,15 @@ impl EquipmentStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn research_data_is_a_plain_resource() {
+        assert!(
+            ItemId::ResearchData.equipment().is_none(),
+            "Research Data is spent on the tree, never worn"
+        );
+        assert_eq!(ItemId::ResearchData.display_name(), "Research Data");
+    }
 
     #[test]
     fn plain_resources_are_not_equippable() {

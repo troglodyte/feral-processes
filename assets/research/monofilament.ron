@@ -1,0 +1,12 @@
+(
+    id: "monofilament",
+    name: "Monofilament Edge",
+    description: "Compile Monofilament Whips at a Fabricator.",
+    cost: 40,
+    requires: ["overclock"],
+    unlocks_recipes: [(
+        result: MonofilamentWhip,
+        cost: [(PortalFragment, 12)],
+        requires_structure: Some("fabricator"),
+    )],
+)

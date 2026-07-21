@@ -16,6 +16,11 @@ pub struct GameClock {
 #[derive(Resource)]
 pub struct GameRng(pub StdRng);
 
+/// Which research nodes the player has unlocked (see `research::ResearchDb`).
+/// Empty at the start of a run — every node in the tree begins locked.
+#[derive(Resource, Default)]
+pub struct Research(pub std::collections::HashSet<crate::research::ResearchId>);
+
 const MESSAGE_LOG_CAP: usize = 100;
 
 /// How a log line should be presented — a display hint set by whatever

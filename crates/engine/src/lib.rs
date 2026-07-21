@@ -5,6 +5,7 @@ pub mod difficulty;
 pub mod items;
 pub mod perks;
 pub mod progression;
+pub mod research;
 pub mod resources;
 pub mod save;
 pub mod species;
@@ -30,11 +31,13 @@ use components::{
 };
 use items::{EquipmentSlot, ItemId};
 pub use perks::Perk;
-pub use resources::{DifficultyMode, MessageKind};
+use research::{ResearchDb, ResearchDef};
+pub use research::{ResearchId, ResearchRecipe};
 use resources::{
     BattleState, GameClock, GameOver, GameRng, MAX_PARTY_SIZE, MessageLog, Party, PlayerEntity,
-    ZoneLevel, ZoneSpawnPoint,
+    Research, ZoneLevel, ZoneSpawnPoint,
 };
+pub use resources::{DifficultyMode, MessageKind};
 use species::{MoveDef, SpecialAbility, SpeciesDb, SpeciesDef, SpeciesId};
 use structures::{StructureDb, StructureDef, StructureId, TradeDef};
 use world::{Biome, Tile, WorldMap};
@@ -47,14 +50,6 @@ const ICE_BREAKER_CORE_COST: u32 = 3;
 
 /// Core Fragment cost to compile one Power Cell.
 const POWER_CELL_CORE_COST: u32 = 2;
-
-/// Portal Fragment cost to compile one Firewall Plating, once an Armory is
-/// built (see `Game::craft_recipes`).
-const FIREWALL_PLATING_PORTAL_COST: u32 = 2;
-
-/// Portal Fragment cost to compile one Overclock Core, once a Fabricator is
-/// built (see `Game::craft_recipes`).
-const OVERCLOCK_CORE_PORTAL_COST: u32 = 2;
 
 /// Chance a wild program's retaliation targets the active companion instead
 /// of the player, if one is present. The companion is a battle-worthy
@@ -254,6 +249,31 @@ const STRUCTURE_REGEN_INTERVAL: u64 = 20;
 /// How much `Durability` a damaged structure regenerates every
 /// `STRUCTURE_REGEN_INTERVAL` ticks.
 const STRUCTURE_REGEN_AMOUNT: u32 = 2;
+
+/// One node of the research tree as the menus see it — see
+/// `Game::research_nodes`.
+pub struct ResearchStatus {
+    pub id: ResearchId,
+    pub name: String,
+    pub description: String,
+    pub cost: u32,
+    pub state: ResearchState,
+    /// Whether the player can pay `cost` right now. Independent of `state`:
+    /// a node can be `Available` but unaffordable, or affordable but
+    /// `Locked`.
+    pub affordable: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ResearchState {
+    Unlocked,
+    Available,
+    /// Display names of the prerequisites still missing — the menu shows
+    /// *why* a node can't be taken rather than just greying it out.
+    Locked {
+        missing: Vec<String>,
+    },
+}
 
 pub struct PlayerStatus {
     pub position: (i32, i32),
@@ -462,6 +482,9 @@ impl Game {
         let (structure_db, structure_warnings) =
             StructureDb::load_dir(&assets_dir.join("structures"))?;
         load_warnings.extend(structure_warnings);
+        let (research_db, research_warnings) =
+            ResearchDb::load_dir(&assets_dir.join("research"), &structure_db)?;
+        load_warnings.extend(research_warnings);
 
         let mut world_map = WorldMap::new(seed);
         let start = find_walkable_start(&mut world_map);
@@ -469,6 +492,7 @@ impl Game {
         let mut world = World::new();
         world.insert_resource(species_db);
         world.insert_resource(structure_db);
+        world.insert_resource(research_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock::default());
         world.insert_resource(GameRng(StdRng::seed_from_u64(seed as u64)));
@@ -476,6 +500,7 @@ impl Game {
         world.insert_resource(GameOver::default());
         world.insert_resource(difficulty);
         world.insert_resource(Party::default());
+        world.insert_resource(Research::default());
         world.insert_resource(ZoneLevel::default());
         world.insert_resource(ZoneSpawnPoint {
             x: start.0,
@@ -537,6 +562,9 @@ impl Game {
         let (structure_db, structure_warnings) =
             StructureDb::load_dir(&assets_dir.join("structures"))?;
         load_warnings.extend(structure_warnings);
+        let (research_db, research_warnings) =
+            ResearchDb::load_dir(&assets_dir.join("research"), &structure_db)?;
+        load_warnings.extend(research_warnings);
 
         let mut world_map = WorldMap::new(data.seed);
         let overrides: HashMap<(i32, i32), Tile> = data.tile_overrides.into_iter().collect();
@@ -545,6 +573,7 @@ impl Game {
         let mut world = World::new();
         world.insert_resource(species_db);
         world.insert_resource(structure_db);
+        world.insert_resource(research_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock { tick: data.tick });
         world.insert_resource(GameRng(StdRng::seed_from_u64(data.seed as u64 ^ data.tick)));
@@ -552,6 +581,7 @@ impl Game {
         world.insert_resource(GameOver::default());
         world.insert_resource(data.difficulty);
         world.insert_resource(Party::default());
+        world.insert_resource(Research(data.researched.into_iter().collect()));
         world.insert_resource(ZoneLevel(data.zone));
         world.insert_resource(ZoneSpawnPoint {
             x: data.spawn_point.0,
@@ -904,6 +934,17 @@ impl Game {
                 let p = self.world.resource::<ZoneSpawnPoint>();
                 (p.x, p.y)
             },
+            researched: {
+                let mut ids: Vec<ResearchId> = self
+                    .world
+                    .resource::<Research>()
+                    .0
+                    .iter()
+                    .cloned()
+                    .collect();
+                ids.sort();
+                ids
+            },
         };
         save::save_to_file(path, &data)
     }
@@ -1190,7 +1231,10 @@ impl Game {
                 .get_mut::<Inventory>(player)
                 .unwrap()
                 .add(ItemId::CoreFragment, 1);
-            self.log_kind(MessageKind::Loot, "You scan the sector and recover a core fragment.");
+            self.log_kind(
+                MessageKind::Loot,
+                "You scan the sector and recover a core fragment.",
+            );
         } else {
             self.log("You scan the sector but find nothing salvageable.");
         }
@@ -1272,16 +1316,116 @@ impl Game {
         Ok(())
     }
 
-    /// The full list of things the player can compile from raw materials.
-    /// Static/hardcoded like `ItemId` itself (see `CLAUDE.md` — items
-    /// aren't data-driven), but exposed as a list rather than one-off
-    /// methods so the crafting menu can show every option at once and new
-    /// recipes don't need new UI plumbing.
-    ///
-    /// Firewall Plating and Overclock Core only appear once the matching
-    /// workbench (an Armory or Fabricator) is actually built somewhere —
-    /// placing one unlocks the recipe rather than letting a cronjob worker
-    /// grind the gear out directly (see `has_structure`).
+    pub fn is_researched(&self, id: &str) -> bool {
+        self.world.resource::<Research>().0.contains(id)
+    }
+
+    /// Display names of `def`'s prerequisites that aren't unlocked yet, in
+    /// the order the file lists them.
+    fn missing_prereqs(&self, def: &ResearchDef) -> Vec<String> {
+        let db = self.world.resource::<ResearchDb>();
+        def.requires
+            .iter()
+            .filter(|id| !self.is_researched(id))
+            .map(|id| {
+                db.get(id)
+                    .map(|d| d.name.clone())
+                    .unwrap_or_else(|| id.clone())
+            })
+            .collect()
+    }
+
+    /// Every research node, ordered the way the menu shows them: available
+    /// first, then locked, then already-unlocked, each group cheapest-first
+    /// (see `ResearchDb::all`). Ordering lives here rather than in each
+    /// renderer so both peers agree on what `[3]` means.
+    pub fn research_nodes(&self) -> Vec<ResearchStatus> {
+        let held = self
+            .world
+            .get::<Inventory>(self.player_entity())
+            .map(|inv| inv.count(ItemId::ResearchData))
+            .unwrap_or(0);
+        let mut nodes: Vec<ResearchStatus> = self
+            .world
+            .resource::<ResearchDb>()
+            .all()
+            .map(|def| {
+                let state = if self.is_researched(&def.id) {
+                    ResearchState::Unlocked
+                } else {
+                    let missing = self.missing_prereqs(def);
+                    if missing.is_empty() {
+                        ResearchState::Available
+                    } else {
+                        ResearchState::Locked { missing }
+                    }
+                };
+                ResearchStatus {
+                    id: def.id.clone(),
+                    name: def.name.clone(),
+                    description: def.description.clone(),
+                    cost: def.cost,
+                    state,
+                    affordable: held >= def.cost,
+                }
+            })
+            .collect();
+        // `sort_by_key` is stable, so cheapest-first survives inside each group.
+        nodes.sort_by_key(|n| match n.state {
+            ResearchState::Available => 0,
+            ResearchState::Locked { .. } => 1,
+            ResearchState::Unlocked => 2,
+        });
+        nodes
+    }
+
+    /// Unlocks `id`, consuming its Research Data cost. Fails with an
+    /// explicit message when the id is unknown, it's already unlocked, a
+    /// prerequisite is missing, or the player can't pay.
+    pub fn unlock_research(&mut self, id: &str) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        let def = self
+            .world
+            .resource::<ResearchDb>()
+            .get(id)
+            .cloned()
+            .ok_or_else(|| "Unknown research.".to_string())?;
+        if self.is_researched(id) {
+            return Err(format!("{} is already researched.", def.name));
+        }
+        let missing = self.missing_prereqs(&def);
+        if !missing.is_empty() {
+            return Err(format!("Requires {} first.", missing.join(", ")));
+        }
+        let player = self.player_entity();
+        let held = self
+            .world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(ItemId::ResearchData);
+        if held < def.cost {
+            return Err(format!("Not enough Research Data ({held}/{}).", def.cost));
+        }
+        self.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .take(ItemId::ResearchData, def.cost);
+        self.world
+            .resource_mut::<Research>()
+            .0
+            .insert(def.id.clone());
+        self.log(format!("Research complete: {}.", def.name));
+        Ok(())
+    }
+
+    /// The full list of things the player can compile right now: the two
+    /// always-available starter recipes, plus every recipe from an unlocked
+    /// research node whose bench (`ResearchRecipe::requires_structure`) is
+    /// currently deployed. Recipe data lives in `assets/research/*.ron` so a
+    /// mod can add one without touching Rust — only `ItemId` itself is a
+    /// hardcoded enum (see `CLAUDE.md`).
     pub fn craft_recipes(&self) -> Vec<CraftRecipe> {
         let mut recipes = vec![
             CraftRecipe {
@@ -1293,24 +1437,30 @@ impl Game {
                 cost: vec![(ItemId::CoreFragment, POWER_CELL_CORE_COST)],
             },
         ];
-        if self.has_structure("armory") {
-            recipes.push(CraftRecipe {
-                result: ItemId::FirewallPlating,
-                cost: vec![(ItemId::PortalFragment, FIREWALL_PLATING_PORTAL_COST)],
-            });
-        }
-        if self.has_structure("fabricator") {
-            recipes.push(CraftRecipe {
-                result: ItemId::OverclockCore,
-                cost: vec![(ItemId::PortalFragment, OVERCLOCK_CORE_PORTAL_COST)],
-            });
+        for def in self.world.resource::<ResearchDb>().all() {
+            if !self.is_researched(&def.id) {
+                continue;
+            }
+            for recipe in &def.unlocks_recipes {
+                let bench_ready = recipe
+                    .requires_structure
+                    .as_ref()
+                    .is_none_or(|s| self.has_structure(s));
+                if bench_ready {
+                    recipes.push(CraftRecipe {
+                        result: recipe.result,
+                        cost: recipe.cost.clone(),
+                    });
+                }
+            }
         }
         recipes
     }
 
     /// Whether a structure of `kind` exists anywhere right now. Every
     /// structure is player-built, so this doubles as "has the player built
-    /// one of these" — used to gate workbench-unlocked craft recipes (see
+    /// one of these" — backs `ResearchRecipe::requires_structure`, the bench
+    /// a researched recipe needs deployed before it shows up (see
     /// `craft_recipes`).
     fn has_structure(&self, kind: &str) -> bool {
         self.world
@@ -1469,7 +1619,9 @@ impl Game {
         }
         self.apply_equipment_delta(
             player,
-            base_mods.scaled_for_level(level).fused_for_tier(fusion_tier),
+            base_mods
+                .scaled_for_level(level)
+                .fused_for_tier(fusion_tier),
             1,
         );
         let mut notes = Vec::new();
@@ -1601,6 +1753,9 @@ impl Game {
             .get(structure_id)
             .cloned()
             .ok_or_else(|| "Unknown structure".to_string())?;
+        if !self.structure_unlocked(structure_id) {
+            return Err(format!("{} hasn't been researched yet.", def.name));
+        }
         if structure_id != HOME_STRUCTURE_ID && !self.has_structure(HOME_STRUCTURE_ID) {
             return Err("Deploy a Home first before building anything else.".into());
         }
@@ -1724,7 +1879,11 @@ impl Game {
             else {
                 continue;
             };
-            let Some(def) = self.world.resource::<StructureDb>().get(&target_kind).cloned()
+            let Some(def) = self
+                .world
+                .resource::<StructureDb>()
+                .get(&target_kind)
+                .cloned()
             else {
                 continue;
             };
@@ -1889,7 +2048,9 @@ impl Game {
             if e == anchor {
                 continue;
             }
-            let dist = (pos.x - anchor_pos.x).abs().max((pos.y - anchor_pos.y).abs());
+            let dist = (pos.x - anchor_pos.x)
+                .abs()
+                .max((pos.y - anchor_pos.y).abs());
             if dist <= PACK_GATHER_RADIUS {
                 pack.push(e);
             }
@@ -2241,7 +2402,11 @@ impl Game {
             return base + bonus;
         }
         let total = base + bonus + self.party_stat_bonus().0;
-        let hunger = self.world.get::<Needs>(entity).map(|n| n.hunger).unwrap_or(100.0);
+        let hunger = self
+            .world
+            .get::<Needs>(entity)
+            .map(|n| n.hunger)
+            .unwrap_or(100.0);
         ((total as f32) * battle::power_attack_multiplier(hunger)).round() as i32
     }
 
@@ -2302,7 +2467,10 @@ impl Game {
                 .get_mut::<Inventory>(player)
                 .unwrap()
                 .add(resource, qty);
-            self.log_kind(MessageKind::Loot, format!("It drops {} {}.", qty, resource.display_name()));
+            self.log_kind(
+                MessageKind::Loot,
+                format!("It drops {} {}.", qty, resource.display_name()),
+            );
         }
 
         if let Some((item, chance)) = species.equipment_drop {
@@ -2315,7 +2483,10 @@ impl Game {
                     .get_mut::<Inventory>(player)
                     .unwrap()
                     .add(item, 1);
-                self.log_kind(MessageKind::Loot, format!("It also drops a {}!", item.display_name()));
+                self.log_kind(
+                    MessageKind::Loot,
+                    format!("It also drops a {}!", item.display_name()),
+                );
             }
         }
 
@@ -2797,7 +2968,9 @@ impl Game {
     /// before the ordinary blocking-structure check, so walking into a
     /// nest tile attacks it instead of just being blocked.
     fn find_nest_at(&mut self, x: i32, y: i32) -> Option<Entity> {
-        let mut query = self.world.query_filtered::<(Entity, &Position), With<Nest>>();
+        let mut query = self
+            .world
+            .query_filtered::<(Entity, &Position), With<Nest>>();
         query
             .iter(&self.world)
             .find(|(_, p)| p.x == x && p.y == y)
@@ -2836,7 +3009,9 @@ impl Game {
             }
             self.world.despawn(nest);
         } else {
-            self.log(format!("You unleash a data strike into the {label} for {dmg} damage."));
+            self.log(format!(
+                "You unleash a data strike into the {label} for {dmg} damage."
+            ));
         }
     }
 
@@ -2969,7 +3144,11 @@ impl Game {
     /// outcome). `spawn_nest_guardian` uses the returned entity to attach
     /// `NestGuardian`.
     fn spawn_wild_creature(&mut self, species_id: &str, x: i32, y: i32) -> Option<Entity> {
-        let species = self.world.resource::<SpeciesDb>().get(species_id).cloned()?;
+        let species = self
+            .world
+            .resource::<SpeciesDb>()
+            .get(species_id)
+            .cloned()?;
         let zone_level = self.world.resource::<ZoneLevel>();
         let mult = zone_level.stat_multiplier() as f32;
         let zone = zone_level.0;
@@ -3005,8 +3184,7 @@ impl Game {
 
     /// Spawns a `Nest` for `species_id` at `(x, y)`, plus an initial
     /// `NEST_GUARDIAN_MIN..=NEST_GUARDIAN_MAX` guardians clustered within
-    /// `NEST_TETHER_RADIUS` of it. See the nests design doc
-    /// (`docs/superpowers/specs/2026-07-20-nests-design.md`).
+    /// `NEST_TETHER_RADIUS` of it.
     fn spawn_nest(&mut self, species_id: &str, x: i32, y: i32) {
         let Some(species) = self.world.resource::<SpeciesDb>().get(species_id).cloned() else {
             return;
@@ -3053,7 +3231,9 @@ impl Game {
             )
         };
         if let Some(guardian) = self.spawn_wild_creature(species_id, gx, gy) {
-            self.world.entity_mut(guardian).insert(NestGuardian { nest });
+            self.world
+                .entity_mut(guardian)
+                .insert(NestGuardian { nest });
         }
     }
 
@@ -3079,10 +3259,18 @@ impl Game {
     fn roll_potential(&mut self) -> Potential {
         let mut rng = self.world.resource_mut::<GameRng>();
         Potential {
-            hp_roll: rng.0.random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
-            atk_roll: rng.0.random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
-            def_roll: rng.0.random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
-            growth_roll: rng.0.random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
+            hp_roll: rng
+                .0
+                .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
+            atk_roll: rng
+                .0
+                .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
+            def_roll: rng
+                .0
+                .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
+            growth_roll: rng
+                .0
+                .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
         }
     }
 
@@ -3146,7 +3334,9 @@ impl Game {
         // `pending_respawns` the way an actual defeat does. Guardian counts
         // are best-effort once a nest is far behind the player.
         let hostiles: Vec<(Entity, i32)> = {
-            let mut query = self.world.query_filtered::<(Entity, &Position), With<Hostile>>();
+            let mut query = self
+                .world
+                .query_filtered::<(Entity, &Position), With<Hostile>>();
             query
                 .iter(&self.world)
                 .map(|(e, p)| {
@@ -3313,7 +3503,10 @@ impl Game {
         durability.hp = durability.hp.saturating_sub(dmg);
         let destroyed = durability.hp == 0;
         if destroyed {
-            self.log_kind(MessageKind::Raid, format!("{label} is destroyed in a raid!"));
+            self.log_kind(
+                MessageKind::Raid,
+                format!("{label} is destroyed in a raid!"),
+            );
             let workers: Vec<Entity> = {
                 let mut query = self.world.query::<(Entity, &Task)>();
                 query
@@ -3327,7 +3520,10 @@ impl Game {
             }
             self.world.despawn(structure);
         } else {
-            self.log_kind(MessageKind::Raid, format!("{label} takes {dmg} raid damage!"));
+            self.log_kind(
+                MessageKind::Raid,
+                format!("{label} takes {dmg} raid damage!"),
+            );
         }
     }
 
@@ -3742,13 +3938,19 @@ impl Game {
             self.world.get::<Creature>(a).unwrap().species.clone(),
             *self.world.get::<Experience>(a).unwrap(),
             *self.world.get::<Stats>(a).unwrap(),
-            self.world.get::<Potential>(a).copied().unwrap_or(Potential::NEUTRAL),
+            self.world
+                .get::<Potential>(a)
+                .copied()
+                .unwrap_or(Potential::NEUTRAL),
         );
         let (species_b, exp_b, stats_b, potential_b) = (
             self.world.get::<Creature>(b).unwrap().species.clone(),
             *self.world.get::<Experience>(b).unwrap(),
             *self.world.get::<Stats>(b).unwrap(),
-            self.world.get::<Potential>(b).copied().unwrap_or(Potential::NEUTRAL),
+            self.world
+                .get::<Potential>(b)
+                .copied()
+                .unwrap_or(Potential::NEUTRAL),
         );
         let (species_id, level) = if exp_a.level >= exp_b.level {
             (species_a, exp_a.level)
@@ -3781,8 +3983,12 @@ impl Game {
 
         let final_name: Option<String> = custom_name.and_then(|n| {
             let trimmed = n.trim();
-            (!trimmed.is_empty())
-                .then(|| trimmed.chars().take(MAX_CUSTOM_NAME_LEN).collect::<String>())
+            (!trimmed.is_empty()).then(|| {
+                trimmed
+                    .chars()
+                    .take(MAX_CUSTOM_NAME_LEN)
+                    .collect::<String>()
+            })
         });
 
         let player_pos = *self.world.get::<Position>(player).unwrap();
@@ -3819,8 +4025,14 @@ impl Game {
             fused.insert(CustomName(name.clone()));
         }
         self.log(match &final_name {
-            Some(name) => format!("You fuse {name_a} and {name_b} into {name}, a new {}.", species.name),
-            None => format!("You fuse {name_a} and {name_b} into a new {}.", species.name),
+            Some(name) => format!(
+                "You fuse {name_a} and {name_b} into {name}, a new {}.",
+                species.name
+            ),
+            None => format!(
+                "You fuse {name_a} and {name_b} into a new {}.",
+                species.name
+            ),
         });
         Ok(())
     }
@@ -4156,6 +4368,36 @@ impl Game {
             .collect()
     }
 
+    /// Whether `structure_id` may be built right now. A structure named by
+    /// no research file is unlocked by default — that's what keeps Home, the
+    /// Mining Node, the Research Node, the Recharger Node and the Zone
+    /// Portal available from turn one without a hardcoded whitelist, and
+    /// what keeps a structure mod that ships no research file working
+    /// unchanged.
+    fn structure_unlocked(&self, structure_id: &str) -> bool {
+        let db = self.world.resource::<ResearchDb>();
+        let mut gates = db
+            .all()
+            .filter(|def| def.unlocks_structures.iter().any(|s| s == structure_id))
+            .peekable();
+        if gates.peek().is_none() {
+            return true;
+        }
+        gates.any(|def| self.is_researched(&def.id))
+    }
+
+    /// The structures the build menu offers: `structure_defs` minus anything
+    /// still behind unfinished research. `structure_defs` itself stays
+    /// unfiltered — it's the general lookup, not the menu.
+    pub fn buildable_structure_defs(&self) -> Vec<StructureDef> {
+        self.world
+            .resource::<StructureDb>()
+            .all()
+            .filter(|def| self.structure_unlocked(&def.id))
+            .cloned()
+            .collect()
+    }
+
     /// The actual item cost to deploy `def` right now: `def.build_cost`
     /// unchanged for a normal structure, or each amount scaled by the
     /// current zone level for a zone-portal structure (see
@@ -4334,6 +4576,327 @@ mod tests {
 
     fn test_assets_dir() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+    }
+
+    /// Gives the player `n` Research Data, bypassing the Research Node so
+    /// the test doesn't depend on tick timing or a tamed worker.
+    fn grant_research_data(game: &mut Game, n: u32) {
+        let player = game.player_entity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::ResearchData, n);
+    }
+
+    /// Unlocks `id` and every prerequisite it needs, funding the whole
+    /// chain — so a test that just needs a research-gated structure on the
+    /// map doesn't have to model the tree itself.
+    fn unlock_research_chain(game: &mut Game, id: &str) {
+        fn order(game: &Game, id: &str, out: &mut Vec<String>) {
+            let Some(def) = game.world.resource::<ResearchDb>().get(id).cloned() else {
+                return;
+            };
+            for req in &def.requires {
+                order(game, req, out);
+            }
+            if !out.contains(&def.id) {
+                out.push(def.id);
+            }
+        }
+        grant_research_data(game, 1000);
+        let mut chain = Vec::new();
+        order(game, id, &mut chain);
+        for node in chain {
+            if !game.is_researched(&node) {
+                game.unlock_research(&node).unwrap();
+            }
+        }
+    }
+
+    fn research_data_held(game: &Game) -> u32 {
+        game.player_status()
+            .inventory
+            .iter()
+            .find(|(item, _)| *item == ItemId::ResearchData)
+            .map(|(_, n)| *n)
+            .unwrap_or(0)
+    }
+
+    #[test]
+    fn a_save_round_trip_preserves_unlocked_research() {
+        let mut game = Game::new(84, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        unlock_research_chain(&mut game, "weapon_bench");
+
+        let path =
+            std::env::temp_dir().join(format!("feral_research_save_{}.bin", std::process::id()));
+        game.save(&path).unwrap();
+        let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        assert!(loaded.is_researched("automation"));
+        assert!(loaded.is_researched("weapon_bench"));
+        assert!(
+            !loaded.is_researched("commerce"),
+            "loading must not invent research the player never took"
+        );
+    }
+
+    #[test]
+    fn the_two_starter_recipes_need_no_research() {
+        let game = Game::new(80, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let results: Vec<ItemId> = game.craft_recipes().into_iter().map(|r| r.result).collect();
+        assert!(results.contains(&ItemId::IceBreaker));
+        assert!(results.contains(&ItemId::PowerCell));
+        assert_eq!(results.len(), 2, "nothing else is free");
+    }
+
+    #[test]
+    fn a_researched_recipe_stays_hidden_until_its_bench_is_built() {
+        let mut game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        unlock_research_chain(&mut game, "overclock");
+
+        let results: Vec<ItemId> = game.craft_recipes().into_iter().map(|r| r.result).collect();
+        assert!(
+            !results.contains(&ItemId::OverclockCore),
+            "the blueprint alone isn't enough — you still need the Fabricator"
+        );
+
+        place_home(&mut game, 1, 0);
+        let player = game.player_entity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::CoreFragment, 200);
+        game.place_structure("fabricator", 0, 1).unwrap();
+
+        let results: Vec<ItemId> = game.craft_recipes().into_iter().map(|r| r.result).collect();
+        assert!(results.contains(&ItemId::OverclockCore));
+    }
+
+    #[test]
+    fn a_built_bench_alone_does_not_unlock_its_recipe() {
+        let mut game = Game::new(82, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        unlock_research_chain(&mut game, "weapon_bench");
+        place_home(&mut game, 1, 0);
+        let player = game.player_entity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::CoreFragment, 200);
+        game.place_structure("fabricator", 0, 1).unwrap();
+
+        let results: Vec<ItemId> = game.craft_recipes().into_iter().map(|r| r.result).collect();
+        assert!(
+            !results.contains(&ItemId::OverclockCore),
+            "the Fabricator is a bench now, not an unlock"
+        );
+    }
+
+    #[test]
+    fn a_researched_recipe_carries_the_cost_from_its_ron_file() {
+        let mut game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        unlock_research_chain(&mut game, "overclock");
+        place_home(&mut game, 1, 0);
+        let player = game.player_entity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::CoreFragment, 200);
+        game.place_structure("fabricator", 0, 1).unwrap();
+
+        assert_eq!(
+            game.craft_cost(ItemId::OverclockCore),
+            vec![(ItemId::PortalFragment, 6)]
+        );
+    }
+
+    #[test]
+    fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
+        let game = Game::new(70, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let ids: Vec<String> = game
+            .buildable_structure_defs()
+            .into_iter()
+            .map(|d| d.id)
+            .collect();
+        let mut sorted = ids.clone();
+        sorted.sort();
+        assert_eq!(
+            sorted,
+            vec![
+                "home".to_string(),
+                "mining_node".to_string(),
+                "portal".to_string(),
+                "recharger_node".to_string(),
+                "research_node".to_string(),
+            ],
+            "exactly the structures named by no research file start available"
+        );
+    }
+
+    #[test]
+    fn a_research_gated_structure_is_hidden_from_the_build_menu_until_researched() {
+        let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let hidden: Vec<String> = game
+            .buildable_structure_defs()
+            .into_iter()
+            .map(|d| d.id)
+            .collect();
+        assert!(!hidden.contains(&"fabricator".to_string()));
+
+        grant_research_data(&mut game, 40);
+        game.unlock_research("automation").unwrap();
+        game.unlock_research("weapon_bench").unwrap();
+
+        let shown: Vec<String> = game
+            .buildable_structure_defs()
+            .into_iter()
+            .map(|d| d.id)
+            .collect();
+        assert!(shown.contains(&"fabricator".to_string()));
+    }
+
+    #[test]
+    fn placing_an_unresearched_structure_is_rejected_even_when_called_directly() {
+        let mut game = Game::new(72, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game, 1, 0);
+        let player = game.player_entity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::CoreFragment, 200);
+        let err = game.place_structure("fabricator", 0, 1).unwrap_err();
+        assert!(
+            err.contains("researched"),
+            "filtering the menu is not a gate: {err}"
+        );
+    }
+
+    #[test]
+    fn nothing_is_researched_at_the_start_of_a_game() {
+        let game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        assert!(!game.is_researched("automation"));
+        assert!(
+            game.research_nodes()
+                .iter()
+                .all(|n| n.state != ResearchState::Unlocked),
+            "a fresh game starts with an entirely locked tree"
+        );
+    }
+
+    #[test]
+    fn unlocking_research_consumes_exactly_its_cost() {
+        let mut game = Game::new(62, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        grant_research_data(&mut game, 20);
+        game.unlock_research("automation").unwrap();
+        assert!(game.is_researched("automation"));
+        assert_eq!(
+            research_data_held(&game),
+            12,
+            "automation costs 8 of the 20 granted"
+        );
+    }
+
+    #[test]
+    fn unlocking_research_fails_without_enough_research_data() {
+        let mut game = Game::new(63, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        grant_research_data(&mut game, 7);
+        let err = game.unlock_research("automation").unwrap_err();
+        assert!(err.contains("Research Data"), "got: {err}");
+        assert!(!game.is_researched("automation"));
+    }
+
+    #[test]
+    fn unlocking_research_fails_while_a_prerequisite_is_missing() {
+        let mut game = Game::new(64, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        grant_research_data(&mut game, 500);
+        let err = game.unlock_research("weapon_bench").unwrap_err();
+        assert!(
+            err.contains("Automation"),
+            "the error should name the missing prereq: {err}"
+        );
+        assert!(!game.is_researched("weapon_bench"));
+        assert_eq!(
+            research_data_held(&game),
+            500,
+            "a rejected unlock must not charge the player"
+        );
+    }
+
+    #[test]
+    fn a_locked_node_reports_which_prerequisites_are_missing() {
+        let game = Game::new(65, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let node = game
+            .research_nodes()
+            .into_iter()
+            .find(|n| n.id == "weapon_bench")
+            .unwrap();
+        assert_eq!(
+            node.state,
+            ResearchState::Locked {
+                missing: vec!["Automation".to_string()]
+            }
+        );
+    }
+
+    #[test]
+    fn a_prerequisite_free_node_is_available_immediately() {
+        let game = Game::new(66, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let node = game
+            .research_nodes()
+            .into_iter()
+            .find(|n| n.id == "automation")
+            .unwrap();
+        assert_eq!(node.state, ResearchState::Available);
+        assert!(
+            !node.affordable,
+            "available is about prereqs; affordability is separate"
+        );
+    }
+
+    #[test]
+    fn researching_the_same_node_twice_is_rejected() {
+        let mut game = Game::new(67, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        grant_research_data(&mut game, 40);
+        game.unlock_research("automation").unwrap();
+        let err = game.unlock_research("automation").unwrap_err();
+        assert!(err.contains("already"), "got: {err}");
+    }
+
+    #[test]
+    fn unknown_research_is_rejected() {
+        let mut game = Game::new(68, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        assert!(game.unlock_research("not_a_node").is_err());
+    }
+
+    #[test]
+    fn research_nodes_lists_available_before_locked_before_unlocked() {
+        let mut game = Game::new(69, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        grant_research_data(&mut game, 40);
+        game.unlock_research("automation").unwrap();
+        let ranks: Vec<u8> = game
+            .research_nodes()
+            .iter()
+            .map(|n| match n.state {
+                ResearchState::Available => 0,
+                ResearchState::Locked { .. } => 1,
+                ResearchState::Unlocked => 2,
+            })
+            .collect();
+        let mut sorted = ranks.clone();
+        sorted.sort();
+        assert_eq!(ranks, sorted, "menu order must group by state");
+    }
+
+    #[test]
+    fn the_research_node_is_a_cronjob_worked_research_data_source() {
+        let game = Game::new(60, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let def = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.id == "research_node")
+            .expect("research_node.ron should load");
+        let work = def.work.expect("the Research Node must be workable");
+        assert_eq!(work.produces, ItemId::ResearchData);
     }
 
     /// Deploys a Home just off the player's current position (`dx`, `dy`
@@ -4591,6 +5154,7 @@ mod tests {
     #[test]
     fn place_structure_rejects_anything_but_home_until_a_home_exists() {
         let mut game = Game::new(300, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        unlock_research_chain(&mut game, "armor_bench");
         let player = game.player_entity();
         game.world
             .get_mut::<Inventory>(player)
@@ -4636,6 +5200,7 @@ mod tests {
     #[test]
     fn place_structure_rejects_building_beyond_max_distance_from_home() {
         let mut game = Game::new(302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        unlock_research_chain(&mut game, "armor_bench");
         let player = game.player_entity();
         game.world
             .get_mut::<Inventory>(player)
@@ -4660,6 +5225,7 @@ mod tests {
     #[test]
     fn remove_structure_refunds_a_percentage_of_its_build_cost() {
         let mut game = Game::new(303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        unlock_research_chain(&mut game, "armor_bench");
         let player = game.player_entity();
         game.world
             .get_mut::<Inventory>(player)
@@ -4703,6 +5269,8 @@ mod tests {
     #[test]
     fn removing_home_cascades_to_destroy_every_other_structure_and_refunds_each() {
         let mut game = Game::new(304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        unlock_research_chain(&mut game, "armor_bench");
+        unlock_research_chain(&mut game, "weapon_bench");
         let player = game.player_entity();
         game.world
             .get_mut::<Inventory>(player)
@@ -4761,8 +5329,9 @@ mod tests {
     }
 
     #[test]
-    fn building_an_armory_unlocks_firewall_plating_crafting_for_portal_fragments() {
+    fn researching_and_building_an_armory_unlocks_firewall_plating() {
         let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        unlock_research_chain(&mut game, "firewall");
         assert!(
             game.craft_recipes()
                 .iter()
@@ -4781,11 +5350,8 @@ mod tests {
             .craft_recipes()
             .into_iter()
             .find(|r| r.result == ItemId::FirewallPlating)
-            .expect("building an Armory should unlock Firewall Plating crafting");
-        assert_eq!(
-            recipe.cost,
-            vec![(ItemId::PortalFragment, FIREWALL_PLATING_PORTAL_COST)]
-        );
+            .expect("researching it and building an Armory should unlock the recipe");
+        assert_eq!(recipe.cost, vec![(ItemId::PortalFragment, 6)]);
 
         game.world
             .get_mut::<Inventory>(game.player_entity())
@@ -4954,7 +5520,10 @@ mod tests {
             systems::WORK_XP_LEVEL_CAP,
             "a capped worker shouldn't level further from cronjob work"
         );
-        assert_eq!(exp.xp, 0, "a capped worker shouldn't earn any work XP at all");
+        assert_eq!(
+            exp.xp, 0,
+            "a capped worker shouldn't earn any work XP at all"
+        );
     }
 
     #[test]
@@ -5596,7 +6165,11 @@ mod tests {
         let mut game = Game::new(35, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
 
         game.idle_tick();
-        assert_eq!(game.current_tick(), 1, "idle_tick should advance the clock with no battle active");
+        assert_eq!(
+            game.current_tick(),
+            1,
+            "idle_tick should advance the clock with no battle active"
+        );
 
         let player = game.player_entity();
         game.world.insert_resource(BattleState {
@@ -5830,7 +6403,11 @@ mod tests {
                 .map(|(e, _, p)| (e, *p))
                 .collect()
         };
-        assert_eq!(nests.len(), 1, "spawn_nest should create exactly one new Nest entity");
+        assert_eq!(
+            nests.len(),
+            1,
+            "spawn_nest should create exactly one new Nest entity"
+        );
         let (nest, nest_pos) = nests[0];
         assert_eq!(nest_pos, Position { x: 30, y: 30 });
         assert_eq!(
@@ -6009,7 +6586,8 @@ mod tests {
     }
 
     #[test]
-    fn structure_defs_order_pins_home_mining_node_compiler_first_and_is_stable_across_sessions() {
+    fn structure_defs_order_pins_home_mining_research_compiler_first_and_is_stable_across_sessions()
+    {
         // StructureDb is backed by a HashMap, whose iteration order is
         // randomized per-instance — without an explicit sort, the build
         // menu's [1], [2], ... numbering would shuffle between sessions
@@ -6021,16 +6599,16 @@ mod tests {
             let game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
             let ids: Vec<String> = game.structure_defs().into_iter().map(|d| d.id).collect();
             assert_eq!(
-                &ids[..3],
-                ["home", "mining_node", "compiler"],
-                "the three starter structures should always lead the build menu"
+                &ids[..4],
+                ["home", "mining_node", "research_node", "compiler"],
+                "the four starter structures should always lead the build menu"
             );
-            let mut rest_sorted = ids[3..].to_vec();
+            let mut rest_sorted = ids[4..].to_vec();
             rest_sorted.sort();
             assert_eq!(
-                ids[3..],
+                ids[4..],
                 rest_sorted[..],
-                "everything after the pinned three should still be alphabetical"
+                "everything after the pinned four should still be alphabetical"
             );
             orders.push(ids);
         }
@@ -6560,9 +7138,16 @@ mod tests {
         let plain = game
             .world
             .spawn((
-                Creature { species: no_ability_species },
+                Creature {
+                    species: no_ability_species,
+                },
                 Position { x: 3, y: 3 },
-                Stats { hp: 10, max_hp: 10, atk: 30, def: 1 },
+                Stats {
+                    hp: 10,
+                    max_hp: 10,
+                    atk: 30,
+                    def: 1,
+                },
                 Tamed { owner: player },
                 Experience::default(),
             ))
@@ -6581,9 +7166,16 @@ mod tests {
             let with_ability = game
                 .world
                 .spawn((
-                    Creature { species: species_id },
+                    Creature {
+                        species: species_id,
+                    },
                     Position { x: 3, y: 3 },
-                    Stats { hp: 10, max_hp: 10, atk: 5, def: 1 },
+                    Stats {
+                        hp: 10,
+                        max_hp: 10,
+                        atk: 5,
+                        def: 1,
+                    },
                     Tamed { owner: player },
                     Experience::default(),
                 ))
@@ -6670,9 +7262,18 @@ mod tests {
                 .spawn((
                     Creature { species },
                     Position { x: 3, y: 3 },
-                    Stats { hp: 100, max_hp: 100, atk: 10, def: 10 },
+                    Stats {
+                        hp: 100,
+                        max_hp: 100,
+                        atk: 10,
+                        def: 10,
+                    },
                     Tamed { owner: player },
-                    Experience { level: 1, xp: 0, xp_to_next: 1 },
+                    Experience {
+                        level: 1,
+                        xp: 0,
+                        xp_to_next: 1,
+                    },
                 ))
                 .id()
         };
@@ -6701,7 +7302,9 @@ mod tests {
             game.spawn_wild_creature(&species_id, 5, 5);
         }
 
-        let mut query = game.world.query_filtered::<(&Position, &Stats), With<Hostile>>();
+        let mut query = game
+            .world
+            .query_filtered::<(&Position, &Stats), With<Hostile>>();
         let max_hps: Vec<i32> = query
             .iter(&game.world)
             .filter(|(p, _)| p.x == 5 && p.y == 5)
@@ -6721,9 +7324,16 @@ mod tests {
         let species_id = game.species_defs().into_iter().next().unwrap().id;
         for _ in 0..24 {
             game.world.spawn((
-                Creature { species: species_id.clone() },
+                Creature {
+                    species: species_id.clone(),
+                },
                 Position { x: 0, y: 0 },
-                Stats { hp: 10, max_hp: 10, atk: 1, def: 1 },
+                Stats {
+                    hp: 10,
+                    max_hp: 10,
+                    atk: 1,
+                    def: 1,
+                },
                 Tamed { owner: player },
             ));
         }
@@ -6906,9 +7516,16 @@ mod tests {
         let low_roll = game
             .world
             .spawn((
-                Creature { species: species_id.clone() },
+                Creature {
+                    species: species_id.clone(),
+                },
                 Position { x: 3, y: 3 },
-                Stats { hp: 100, max_hp: 100, atk: 10, def: 10 },
+                Stats {
+                    hp: 100,
+                    max_hp: 100,
+                    atk: 10,
+                    def: 10,
+                },
                 Potential {
                     hp_roll: 1.0,
                     atk_roll: 1.0,
@@ -6916,15 +7533,26 @@ mod tests {
                     growth_roll: MIN_INDIVIDUAL_ROLL,
                 },
                 Tamed { owner: player },
-                Experience { level: 1, xp: 0, xp_to_next: 1 },
+                Experience {
+                    level: 1,
+                    xp: 0,
+                    xp_to_next: 1,
+                },
             ))
             .id();
         let high_roll = game
             .world
             .spawn((
-                Creature { species: species_id },
+                Creature {
+                    species: species_id,
+                },
                 Position { x: 3, y: 3 },
-                Stats { hp: 100, max_hp: 100, atk: 10, def: 10 },
+                Stats {
+                    hp: 100,
+                    max_hp: 100,
+                    atk: 10,
+                    def: 10,
+                },
                 Potential {
                     hp_roll: 1.0,
                     atk_roll: 1.0,
@@ -6932,7 +7560,11 @@ mod tests {
                     growth_roll: MAX_INDIVIDUAL_ROLL,
                 },
                 Tamed { owner: player },
-                Experience { level: 1, xp: 0, xp_to_next: 1 },
+                Experience {
+                    level: 1,
+                    xp: 0,
+                    xp_to_next: 1,
+                },
             ))
             .id();
         game.add_companion(low_roll).unwrap();
@@ -6964,7 +7596,12 @@ mod tests {
             .spawn((
                 Creature { species: species_a },
                 Position { x: 3, y: 3 },
-                Stats { hp: 20, max_hp: 20, atk: 10, def: 4 },
+                Stats {
+                    hp: 20,
+                    max_hp: 20,
+                    atk: 10,
+                    def: 4,
+                },
                 Potential {
                     hp_roll: 0.8,
                     atk_roll: 0.8,
@@ -6972,7 +7609,11 @@ mod tests {
                     growth_roll: 0.8,
                 },
                 Tamed { owner: player },
-                Experience { level: 5, xp: 3, xp_to_next: 100 },
+                Experience {
+                    level: 5,
+                    xp: 3,
+                    xp_to_next: 100,
+                },
             ))
             .id();
         let b = game
@@ -6980,7 +7621,12 @@ mod tests {
             .spawn((
                 Creature { species: species_b },
                 Position { x: 4, y: 4 },
-                Stats { hp: 10, max_hp: 10, atk: 6, def: 2 },
+                Stats {
+                    hp: 10,
+                    max_hp: 10,
+                    atk: 6,
+                    def: 2,
+                },
                 Potential {
                     hp_roll: 1.2,
                     atk_roll: 1.2,
@@ -6988,7 +7634,11 @@ mod tests {
                     growth_roll: 1.2,
                 },
                 Tamed { owner: player },
-                Experience { level: 2, xp: 1, xp_to_next: 40 },
+                Experience {
+                    level: 2,
+                    xp: 1,
+                    xp_to_next: 40,
+                },
             ))
             .id();
 
@@ -6999,7 +7649,10 @@ mod tests {
             .iter(&game.world)
             .find(|(_, t)| t.owner == player)
             .expect("a fused creature should exist");
-        assert_eq!(potential.hp_roll, 1.0, "fused rolls should average the two parents'");
+        assert_eq!(
+            potential.hp_roll, 1.0,
+            "fused rolls should average the two parents'"
+        );
         assert_eq!(potential.growth_roll, 1.0);
     }
 
@@ -7010,9 +7663,16 @@ mod tests {
         let player = game.player_entity();
         let species = game.species_defs().into_iter().next().unwrap();
         game.world.spawn((
-            Creature { species: species.id.clone() },
+            Creature {
+                species: species.id.clone(),
+            },
             Position { x: 3, y: 3 },
-            Stats { hp: 10, max_hp: 10, atk: 1, def: 1 },
+            Stats {
+                hp: 10,
+                max_hp: 10,
+                atk: 1,
+                def: 1,
+            },
             Potential {
                 hp_roll: 1.15,
                 atk_roll: 0.85,
@@ -7339,7 +7999,8 @@ mod tests {
     }
 
     #[test]
-    fn party_members_grant_a_passive_ten_percent_atk_def_bonus_that_stacks_updates_live_and_disappears_on_removal() {
+    fn party_members_grant_a_passive_ten_percent_atk_def_bonus_that_stacks_updates_live_and_disappears_on_removal()
+     {
         let mut game = Game::new(75, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let base_atk = game.player_status().atk;
         let base_def = game.player_status().def;
@@ -7350,13 +8011,21 @@ mod tests {
         game.add_companion(a).unwrap();
         let status = game.player_status();
         assert_eq!(status.atk, base_atk + 3, "10% of a's 30 ATK is 3");
-        assert_eq!(status.def, base_def + 1, "10% of a's 1 DEF floors to 0, minimum 1 applies");
+        assert_eq!(
+            status.def,
+            base_def + 1,
+            "10% of a's 1 DEF floors to 0, minimum 1 applies"
+        );
 
         // A second party member's bonus stacks on top of the first's.
         let b = spawn_tamed(&mut game, 10, 50);
         game.add_companion(b).unwrap();
         let status = game.player_status();
-        assert_eq!(status.atk, base_atk + 3 + 5, "10% of b's 50 ATK is 5, stacked with a's");
+        assert_eq!(
+            status.atk,
+            base_atk + 3 + 5,
+            "10% of b's 50 ATK is 5, stacked with a's"
+        );
         assert_eq!(status.def, base_def + 1 + 1);
 
         // The bonus is computed live from each companion's current Stats,
@@ -7365,12 +8034,19 @@ mod tests {
         // should be reflected immediately with no extra bookkeeping.
         game.world.get_mut::<Stats>(a).unwrap().atk = 60;
         let status = game.player_status();
-        assert_eq!(status.atk, base_atk + 6 + 5, "a's stronger ATK should raise its contribution");
+        assert_eq!(
+            status.atk,
+            base_atk + 6 + 5,
+            "a's stronger ATK should raise its contribution"
+        );
 
         game.remove_companion(a);
         game.remove_companion(b);
         let status = game.player_status();
-        assert_eq!(status.atk, base_atk, "bonus should vanish once every companion leaves the party");
+        assert_eq!(
+            status.atk, base_atk,
+            "bonus should vanish once every companion leaves the party"
+        );
         assert_eq!(status.def, base_def);
     }
 
@@ -7382,7 +8058,11 @@ mod tests {
 
         // At and above the threshold, no penalty at all.
         game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
-        assert_eq!(game.player_status().atk, full_atk, "50 power is still full strength");
+        assert_eq!(
+            game.player_status().atk,
+            full_atk,
+            "50 power is still full strength"
+        );
 
         // Below it, a linear falloff — checked at a couple of points rather
         // than re-deriving the formula, since `battle::power_attack_multiplier`
@@ -7594,10 +8274,15 @@ mod tests {
         let mut game = Game::new(90, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let a = spawn_tamed(&mut game, 10, 3);
         let b = spawn_tamed(&mut game, 10, 3);
-        game.fuse_companions(a, b, Some("Way Too Long A Name".to_string())).unwrap();
+        game.fuse_companions(a, b, Some("Way Too Long A Name".to_string()))
+            .unwrap();
 
         let fused = game.owned_pets();
-        assert_eq!(fused.len(), 1, "fusing two owned programs should leave exactly one");
+        assert_eq!(
+            fused.len(),
+            1,
+            "fusing two owned programs should leave exactly one"
+        );
         // PetInfo::name is zone-tagged (every fused program gets
         // `ZonePortal(1)`, always shown per `entity_label`'s own test
         // coverage), so strip that " 1" suffix before checking the
@@ -7658,7 +8343,8 @@ mod tests {
         let mut game = Game::new(92, DifficultyMode::Forgiving, &assets).unwrap();
         let a = spawn_tamed(&mut game, 10, 3);
         let b = spawn_tamed(&mut game, 10, 3);
-        game.fuse_companions(a, b, Some("Zappy".to_string())).unwrap();
+        game.fuse_companions(a, b, Some("Zappy".to_string()))
+            .unwrap();
 
         let path = std::env::temp_dir().join(format!(
             "feral_processes_fuse_name_test_{}.bin",
@@ -9598,7 +10284,9 @@ mod tests {
             // to go on — clear it so the walk onto the portal deterministically
             // enters the portal rather than picking a fight instead.
             let blockers: Vec<Entity> = {
-                let mut query = game.world.query_filtered::<(Entity, &Position), With<Hostile>>();
+                let mut query = game
+                    .world
+                    .query_filtered::<(Entity, &Position), With<Hostile>>();
                 query
                     .iter(&game.world)
                     .filter(|(_, p)| p.x == ppos.x + 1 && p.y == ppos.y)
@@ -9618,7 +10306,11 @@ mod tests {
                 },
             ));
             game.move_player(1, 0);
-            assert_eq!(game.player_status().zone, 2, "seed {seed}: portal should advance the zone");
+            assert_eq!(
+                game.player_status().zone,
+                2,
+                "seed {seed}: portal should advance the zone"
+            );
 
             let mut query = game.world.query_filtered::<Entity, With<Hostile>>();
             let count = query.iter(&game.world).count();
@@ -9735,7 +10427,10 @@ mod tests {
             "nest should survive a single bump when it has 50 HP"
         );
         let hp = game.world.get::<Durability>(nest).unwrap().hp;
-        assert!(hp < 50, "nest HP should have decreased from the bump, got {hp}");
+        assert!(
+            hp < 50,
+            "nest HP should have decreased from the bump, got {hp}"
+        );
         assert!(hp > 0, "nest HP should still be positive, got {hp}");
         assert!(
             game.world.get::<NestGuardian>(guardian).is_some(),

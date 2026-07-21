@@ -421,8 +421,7 @@ impl Potential {
     /// independently to its own stat/growth.
     pub fn quality_percent(&self) -> u32 {
         let avg = (self.hp_roll + self.atk_roll + self.def_roll + self.growth_roll) / 4.0;
-        let pct =
-            (avg - MIN_INDIVIDUAL_ROLL) / (MAX_INDIVIDUAL_ROLL - MIN_INDIVIDUAL_ROLL) * 100.0;
+        let pct = (avg - MIN_INDIVIDUAL_ROLL) / (MAX_INDIVIDUAL_ROLL - MIN_INDIVIDUAL_ROLL) * 100.0;
         pct.round().clamp(0.0, 100.0) as u32
     }
 
@@ -473,11 +472,10 @@ pub struct Durability {
     pub max_hp: u32,
 }
 
-/// A stationary spawner for a wild species — see the nests feature (spec:
-/// `docs/superpowers/specs/2026-07-20-nests-design.md`). Present on the
-/// nest entity itself, which also carries `Position`, `Glyph`, and
-/// `Durability` (all reused as-is — a nest is destroyed the same way a
-/// structure is, just via a direct bump-attack instead of a raid).
+/// A stationary spawner for a wild species. Present on the nest entity
+/// itself, which also carries `Position`, `Glyph`, and `Durability` (all
+/// reused as-is — a nest is destroyed the same way a structure is, just
+/// via a direct bump-attack instead of a raid).
 #[derive(Component, Clone, Debug)]
 pub struct Nest {
     pub species: SpeciesId,

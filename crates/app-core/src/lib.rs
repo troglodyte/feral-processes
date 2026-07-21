@@ -112,6 +112,9 @@ pub enum Mode {
     TradeAction,
     TradeQuantity,
     Perks,
+    /// The research tree (see `Game::research_nodes`). Stays open after each
+    /// unlock so several nodes can be taken in one visit.
+    Research,
     Help,
     GameOver,
 }
@@ -260,18 +263,30 @@ impl App {
             .filter(|e| e.path().extension().is_some_and(|ext| ext == "bin"))
             .map(|e| {
                 let path = e.path();
-                let modified = e.metadata().and_then(|m| m.modified()).unwrap_or(std::time::UNIX_EPOCH);
+                let modified = e
+                    .metadata()
+                    .and_then(|m| m.modified())
+                    .unwrap_or(std::time::UNIX_EPOCH);
                 let name = path
                     .file_stem()
                     .map(|s| s.to_string_lossy().into_owned())
                     .unwrap_or_else(|| path.to_string_lossy().into_owned());
-                let summary = feral_processes_engine::save::load_from_file(&path).ok().map(|data| {
-                    format!(
-                        "Lv{} · Zone {} · {:?} · tick {}",
-                        data.player.level, data.zone, data.difficulty, data.tick
-                    )
-                });
-                (modified, SaveEntry { path, name, summary })
+                let summary = feral_processes_engine::save::load_from_file(&path)
+                    .ok()
+                    .map(|data| {
+                        format!(
+                            "Lv{} · Zone {} · {:?} · tick {}",
+                            data.player.level, data.zone, data.difficulty, data.tick
+                        )
+                    });
+                (
+                    modified,
+                    SaveEntry {
+                        path,
+                        name,
+                        summary,
+                    },
+                )
             })
             .collect();
         saves.sort_by_key(|(modified, _)| std::cmp::Reverse(*modified));
@@ -282,7 +297,10 @@ impl App {
     /// unique enough for one-per-second play sessions, which is the only
     /// case that matters here.
     fn new_save_path(&self) -> PathBuf {
-        let ts = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
         self.saves_dir.join(format!("save_{ts}.bin"))
     }
 
@@ -323,7 +341,9 @@ impl App {
     }
 
     fn save_game(&mut self) {
-        let Some(path) = &self.current_save_path else { return };
+        let Some(path) = &self.current_save_path else {
+            return;
+        };
         if let Some(game) = &mut self.game {
             match game.save(path) {
                 Ok(()) => self.status_line = Some("Game saved.".to_string()),
@@ -340,7 +360,9 @@ impl App {
     /// message from whatever the player just did; a failure does surface,
     /// since silently failing to protect their progress would be worse.
     fn maybe_autosave(&mut self) {
-        let Some(path) = self.current_save_path.clone() else { return };
+        let Some(path) = self.current_save_path.clone() else {
+            return;
+        };
         let Some(game) = &mut self.game else { return };
         let current = game.current_tick();
         if current.saturating_sub(self.last_autosave_tick) < AUTOSAVE_INTERVAL_TICKS {
@@ -435,6 +457,7 @@ impl App {
             Mode::TradeAction => self.handle_trade_action_key(key),
             Mode::TradeQuantity => self.handle_trade_quantity_key(key),
             Mode::Perks => self.handle_perks_key(key),
+            Mode::Research => self.handle_research_key(key),
             Mode::Help => self.handle_help_key(),
             Mode::GameOver => self.handle_game_over_key(),
         }
@@ -613,6 +636,10 @@ impl App {
                 self.mode = Mode::Perks;
                 return;
             }
+            GameKey::Char('T') => {
+                self.mode = Mode::Research;
+                return;
+            }
             GameKey::Char('s') => {
                 self.save_game();
                 return;
@@ -700,8 +727,11 @@ impl App {
             self.mode = Mode::Battle;
         }
         if is_move_key {
-            self.pending_sounds
-                .push(if entered_battle { SoundEvent::BattleStart } else { SoundEvent::Step });
+            self.pending_sounds.push(if entered_battle {
+                SoundEvent::BattleStart
+            } else {
+                SoundEvent::Step
+            });
         }
         self.check_game_over();
         if self.mode == Mode::GameOver {
@@ -801,7 +831,7 @@ impl App {
             return;
         }
         let Some(game) = &self.game else { return };
-        let defs = game.structure_defs();
+        let defs = game.buildable_structure_defs();
         if let Some(idx) = self.selected_index(key, defs.len()) {
             self.pending_structure = Some(defs[idx].id.clone());
             self.mode = Mode::BuildDirection;
@@ -1190,9 +1220,10 @@ impl App {
                 self.fuse_name_input.push(c);
             }
             GameKey::Enter => {
-                let (Some(first), Some(second)) =
-                    (self.pending_fuse_first.take(), self.pending_fuse_second.take())
-                else {
+                let (Some(first), Some(second)) = (
+                    self.pending_fuse_first.take(),
+                    self.pending_fuse_second.take(),
+                ) else {
                     self.mode = Mode::Playing;
                     return;
                 };
@@ -1333,6 +1364,34 @@ impl App {
         }
     }
 
+    /// Picks a numbered research node to unlock; stays open so several can
+    /// be taken in one visit.
+    fn handle_research_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.mode = Mode::Playing;
+            return;
+        }
+        // Collecting the ids through `as_ref().map` (rather than a
+        // `let Some(game) = &self.game` binding) ends the borrow here —
+        // `selected_index` needs `&mut self`.
+        let Some(ids) = self.game.as_ref().map(|g| {
+            g.research_nodes()
+                .into_iter()
+                .map(|n| n.id)
+                .collect::<Vec<_>>()
+        }) else {
+            return;
+        };
+        if let Some(idx) = self.selected_index(key, ids.len()) {
+            let id = ids[idx].clone();
+            let Some(game) = &mut self.game else { return };
+            match game.unlock_research(&id) {
+                Ok(()) => self.status_line = None,
+                Err(e) => self.status_line = Some(e),
+            }
+        }
+    }
+
     /// Picks a direction (arrows/hjkl) and inspects the first creature the
     /// engine finds stepping that way from the player, rather than picking
     /// from a numbered list of grid coordinates.
@@ -1466,7 +1525,8 @@ mod tests {
 
     fn test_app(seed: u32) -> App {
         let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
-        let saves_dir = std::env::temp_dir().join(format!("feral_processes_appcore_test_{seed}_saves"));
+        let saves_dir =
+            std::env::temp_dir().join(format!("feral_processes_appcore_test_{seed}_saves"));
         let history_path =
             std::env::temp_dir().join(format!("feral_processes_appcore_test_{seed}.log"));
         let mut app = App::new(assets_dir.clone(), saves_dir, history_path);
@@ -1478,29 +1538,52 @@ mod tests {
     #[test]
     fn starting_a_new_game_creates_a_listed_save_that_can_be_loaded_and_deleted() {
         let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
-        let saves_dir = std::env::temp_dir()
-            .join(format!("feral_processes_appcore_test_savelist_{}", std::process::id()));
+        let saves_dir = std::env::temp_dir().join(format!(
+            "feral_processes_appcore_test_savelist_{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&saves_dir);
         std::fs::create_dir_all(&saves_dir).unwrap();
-        let history_path = std::env::temp_dir()
-            .join(format!("feral_processes_appcore_test_savelist_{}.log", std::process::id()));
+        let history_path = std::env::temp_dir().join(format!(
+            "feral_processes_appcore_test_savelist_{}.log",
+            std::process::id()
+        ));
         let mut app = App::new(assets_dir, saves_dir.clone(), history_path);
 
         app.start_new_game(DifficultyMode::Forgiving);
-        assert!(app.mode == Mode::Playing, "starting a new game should enter Playing");
+        assert!(
+            app.mode == Mode::Playing,
+            "starting a new game should enter Playing"
+        );
         let saves = app.list_saves();
-        assert_eq!(saves.len(), 1, "starting a new game should immediately create one listed save");
-        assert!(saves[0].summary.is_some(), "a freshly saved game should be readable back");
+        assert_eq!(
+            saves.len(),
+            1,
+            "starting a new game should immediately create one listed save"
+        );
+        assert!(
+            saves[0].summary.is_some(),
+            "a freshly saved game should be readable back"
+        );
 
         // Back to the main menu, then load that save from the list.
         app.game = None;
         app.mode = Mode::MainMenu;
         app.handle_key(GameKey::Char('l'));
-        assert!(app.mode == Mode::LoadGame, "'l' should open the load list once a save exists");
+        assert!(
+            app.mode == Mode::LoadGame,
+            "'l' should open the load list once a save exists"
+        );
         app.handle_key(GameKey::Char('1'));
-        assert!(app.mode == Mode::SaveAction, "picking a save should open the load/delete choice");
+        assert!(
+            app.mode == Mode::SaveAction,
+            "picking a save should open the load/delete choice"
+        );
         app.handle_key(GameKey::Char('l'));
-        assert!(app.mode == Mode::Playing, "loading should return to Playing");
+        assert!(
+            app.mode == Mode::Playing,
+            "loading should return to Playing"
+        );
         assert!(app.game.is_some(), "loading should populate the game");
 
         // Delete it.
@@ -1509,7 +1592,10 @@ mod tests {
         app.handle_key(GameKey::Char('l'));
         app.handle_key(GameKey::Char('1'));
         app.handle_key(GameKey::Char('x'));
-        assert!(app.list_saves().is_empty(), "deleting the only save should empty the list");
+        assert!(
+            app.list_saves().is_empty(),
+            "deleting the only save should empty the list"
+        );
 
         let _ = std::fs::remove_dir_all(&saves_dir);
     }
@@ -1537,12 +1623,39 @@ mod tests {
     /// this only fails if the *menu itself* is broken, not because of which
     /// particular structure a fresh session happens to put at each digit.
     #[test]
+    fn t_opens_the_research_menu_and_esc_closes_it() {
+        let mut app = test_app(501);
+        app.handle_key(GameKey::Char('T'));
+        assert!(matches!(app.mode, Mode::Research));
+        app.handle_key(GameKey::Esc);
+        assert!(matches!(app.mode, Mode::Playing));
+    }
+
+    #[test]
+    fn picking_an_unaffordable_research_node_reports_why_and_stays_open() {
+        let mut app = test_app(502);
+        app.handle_key(GameKey::Char('T'));
+        app.handle_key(GameKey::Char('1'));
+        assert!(
+            matches!(app.mode, Mode::Research),
+            "the menu stays open so several nodes can be taken in one visit"
+        );
+        assert!(
+            app.status_line
+                .as_ref()
+                .is_some_and(|s| s.contains("Research Data")),
+            "got: {:?}",
+            app.status_line
+        );
+    }
+
+    #[test]
     fn build_menu_number_key_reaches_the_direction_picker_and_can_place_a_structure() {
         let mut app = test_app(101);
         assert!(app.game.is_some(), "test game should have loaded");
         assert!(app.mode == Mode::Playing);
 
-        let structure_count_in_menu = app.game.as_mut().unwrap().structure_defs().len();
+        let structure_count_in_menu = app.game.as_mut().unwrap().buildable_structure_defs().len();
         let mut placed = false;
         // Navigate with Down + Enter rather than a digit key, both to
         // exercise the new arrow-navigation path and because a menu with
@@ -1603,13 +1716,20 @@ mod tests {
         assert_eq!(structure_count(&mut app), 1, "Home should now be deployed");
 
         app.handle_key(GameKey::Char('R'));
-        assert!(app.mode == Mode::Remove, "'R' should open the demolish menu");
+        assert!(
+            app.mode == Mode::Remove,
+            "'R' should open the demolish menu"
+        );
         app.handle_key(GameKey::Enter);
         assert!(
             app.mode == Mode::RemoveConfirm,
             "picking Home should require confirmation instead of demolishing immediately"
         );
-        assert_eq!(structure_count(&mut app), 1, "Home shouldn't be removed yet");
+        assert_eq!(
+            structure_count(&mut app),
+            1,
+            "Home shouldn't be removed yet"
+        );
 
         app.handle_key(GameKey::Char('n'));
         assert!(app.mode == Mode::Playing);
@@ -1624,7 +1744,11 @@ mod tests {
         assert!(app.mode == Mode::RemoveConfirm);
         app.handle_key(GameKey::Char('y'));
         assert!(app.mode == Mode::Playing);
-        assert_eq!(structure_count(&mut app), 0, "confirming should demolish Home");
+        assert_eq!(
+            structure_count(&mut app),
+            0,
+            "confirming should demolish Home"
+        );
     }
 
     /// `SoundEvent`s are the seam frontends use to play movement/battle
@@ -1637,7 +1761,10 @@ mod tests {
     #[test]
     fn movement_keys_queue_exactly_one_step_or_battle_start_sound() {
         let mut app = test_app(202);
-        assert!(app.take_sounds().is_empty(), "a fresh App should start with no queued sounds");
+        assert!(
+            app.take_sounds().is_empty(),
+            "a fresh App should start with no queued sounds"
+        );
 
         app.handle_key(GameKey::Char('.'));
         assert!(
@@ -1647,7 +1774,11 @@ mod tests {
 
         app.handle_key(GameKey::Right);
         let sounds = app.take_sounds();
-        assert_eq!(sounds.len(), 1, "a movement key should queue exactly one sound, got {sounds:?}");
+        assert_eq!(
+            sounds.len(),
+            1,
+            "a movement key should queue exactly one sound, got {sounds:?}"
+        );
         assert!(
             matches!(sounds[0], SoundEvent::Step | SoundEvent::BattleStart),
             "a movement key should queue Step or BattleStart, got {:?}",

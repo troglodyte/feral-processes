@@ -76,29 +76,55 @@ mod tests {
             .spawn((
                 Player,
                 Position { x: 0, y: 0 },
-                Stats { hp: 0, max_hp: 10, atk: 1, def: 1 },
-                Needs { hunger: 0.0, fatigue: 0.0 },
-                Experience { level: 2, xp: 10, xp_to_next: 40 },
+                Stats {
+                    hp: 0,
+                    max_hp: 10,
+                    atk: 1,
+                    def: 1,
+                },
+                Needs {
+                    hunger: 0.0,
+                    fatigue: 0.0,
+                },
+                Experience {
+                    level: 2,
+                    xp: 10,
+                    xp_to_next: 40,
+                },
             ))
             .id();
         world.spawn((
-            Structure { kind: StructureId::from("terminal") },
+            Structure {
+                kind: StructureId::from("terminal"),
+            },
             Position { x: 5, y: 5 },
         ));
         world.spawn((
-            Structure { kind: StructureId::from("data_cache") },
+            Structure {
+                kind: StructureId::from("data_cache"),
+            },
             Position { x: 1, y: 1 },
         ));
 
         run_death_handling(&mut world);
 
         let pos = *world.get::<Position>(player).unwrap();
-        assert_eq!(pos, Position { x: 1, y: 1 }, "should warp to the nearest structure, not the farther one");
+        assert_eq!(
+            pos,
+            Position { x: 1, y: 1 },
+            "should warp to the nearest structure, not the farther one"
+        );
         let stats = world.get::<Stats>(player).unwrap();
         assert_eq!(stats.hp, 5, "forgiving death should still halve HP");
         let exp = world.get::<Experience>(player).unwrap();
-        assert_eq!(exp.xp, 8, "death should also apply the mild XP setback penalty (20% of 10)");
-        assert_eq!(exp.level, 2, "the XP setback should never de-level the player");
+        assert_eq!(
+            exp.xp, 8,
+            "death should also apply the mild XP setback penalty (20% of 10)"
+        );
+        assert_eq!(
+            exp.level, 2,
+            "the XP setback should never de-level the player"
+        );
     }
 
     #[test]
@@ -113,15 +139,31 @@ mod tests {
             .spawn((
                 Player,
                 Position { x: 3, y: 4 },
-                Stats { hp: 0, max_hp: 10, atk: 1, def: 1 },
-                Needs { hunger: 0.0, fatigue: 0.0 },
-                Experience { level: 2, xp: 10, xp_to_next: 40 },
+                Stats {
+                    hp: 0,
+                    max_hp: 10,
+                    atk: 1,
+                    def: 1,
+                },
+                Needs {
+                    hunger: 0.0,
+                    fatigue: 0.0,
+                },
+                Experience {
+                    level: 2,
+                    xp: 10,
+                    xp_to_next: 40,
+                },
             ))
             .id();
 
         run_death_handling(&mut world);
 
         let pos = *world.get::<Position>(player).unwrap();
-        assert_eq!(pos, Position { x: 3, y: 4 }, "with no structures on the map, death should leave position untouched");
+        assert_eq!(
+            pos,
+            Position { x: 3, y: 4 },
+            "with no structures on the map, death should leave position untouched"
+        );
     }
 }

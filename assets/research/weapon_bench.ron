@@ -1,0 +1,8 @@
+(
+    id: "weapon_bench",
+    name: "Weapon Fabrication",
+    description: "A bench for weapon and module work. Unlocks the Fabricator.",
+    cost: 18,
+    requires: ["automation"],
+    unlocks_structures: ["fabricator"],
+)

@@ -10,7 +10,9 @@ use feral_processes_app_core::{App, MENU_SCAN_RADIUS, Mode, TradeChoice};
 use feral_processes_engine::components::GlyphColor;
 use feral_processes_engine::items::ItemId;
 use feral_processes_engine::world::Biome;
-use feral_processes_engine::{Entity, EntityView, Game, MAX_FUSIONS, MessageKind, PetInfo};
+use feral_processes_engine::{
+    Entity, EntityView, Game, MAX_FUSIONS, MessageKind, PetInfo, ResearchState,
+};
 
 const FONT_SIZE: f32 = 24.0;
 const LINE_HEIGHT: f32 = 30.0;
@@ -118,7 +120,9 @@ fn draw_popup(title: &str, size: PopupSize, rows: &[Row]) {
         PopupSize::Small => (0.5, 0.85),
     };
     let w = screen_width() * pct_w;
-    let h = (screen_height() * pct_h).min(rows.len() as f32 * LINE_HEIGHT + 70.0).max(120.0);
+    let h = (screen_height() * pct_h)
+        .min(rows.len() as f32 * LINE_HEIGHT + 70.0)
+        .max(120.0);
     let x = (screen_width() - w) / 2.0;
     let y = (screen_height() - h) / 2.0;
 
@@ -146,10 +150,17 @@ fn draw_popup(title: &str, size: PopupSize, rows: &[Row]) {
     let scrolling = body.len() > raw_capacity;
     // Scrolling reserves one line above and below for "N more" indicators,
     // so the item rows themselves never get a partial cut-off line.
-    let capacity = if scrolling { raw_capacity.saturating_sub(2).max(1) } else { raw_capacity };
+    let capacity = if scrolling {
+        raw_capacity.saturating_sub(2).max(1)
+    } else {
+        raw_capacity
+    };
 
     if !body.is_empty() {
-        let selected_idx = body.iter().position(|r| matches!(r, Row::Item(_, true))).unwrap_or(0);
+        let selected_idx = body
+            .iter()
+            .position(|r| matches!(r, Row::Item(_, true)))
+            .unwrap_or(0);
         let scroll_offset = if body.len() <= capacity {
             0
         } else {
@@ -209,7 +220,7 @@ fn draw_row(row: &Row, x: f32, w: f32, cy: f32, max_y: f32) -> f32 {
                 draw_rectangle(x + 6.0, cy - FONT_SIZE, w - 12.0, LINE_HEIGHT, SELECT_BG);
             }
             let prefix = if *selected { "> " } else { "  " };
-            draw_text(&format!("{prefix}{s}"), x + 16.0, cy, FONT_SIZE, TEXT);
+            draw_text(format!("{prefix}{s}"), x + 16.0, cy, FONT_SIZE, TEXT);
         }
     }
     cy + LINE_HEIGHT
@@ -300,10 +311,18 @@ fn draw_playing_base(app: &mut App) {
             let bg = Color::new(color.r * 0.18, color.g * 0.18, color.b * 0.18, 1.0);
             draw_rectangle(px, py, tile_px - 1.0, tile_px - 1.0, bg);
             let font_size = (tile_px * 0.8).max(14.0);
-            let dims = measure_text(&ch.to_string(), None, font_size as u16, 1.0);
+            let glyph = ch.to_string();
+            let dims = measure_text(&glyph, None, font_size as u16, 1.0);
             let tx = px + (tile_px - dims.width) / 2.0;
             let ty = py + (tile_px + dims.height) / 2.0;
-            draw_text(&ch.to_string(), tx, ty, font_size, if bold { color } else { color });
+            // Same faux-bold trick `draw_message_line` uses — macroquad has
+            // no bold font loaded, so weight is drawing the glyph twice a
+            // pixel apart. Structures and bosses get it so they read out of
+            // the terrain, matching the TUI's bold styling for them.
+            if bold {
+                draw_text(&glyph, tx + 1.0, ty, font_size, color);
+            }
+            draw_text(&glyph, tx, ty, font_size, color);
             // Marks where the player materialized on breaching into this
             // zone (see `Game::zone_spawn_point`) — an outline rather than
             // replacing the glyph, so whatever's actually standing there
@@ -345,14 +364,44 @@ fn draw_playing_base(app: &mut App) {
     }
 }
 
-fn draw_status_panel(x: f32, y: f32, w: f32, h: f32, status: &feral_processes_engine::PlayerStatus) {
+fn draw_status_panel(
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    status: &feral_processes_engine::PlayerStatus,
+) {
     draw_rectangle(x, y, w, h, PANEL_BG);
     draw_rectangle_lines(x, y, w, h, 2.0, BORDER);
 
     let mut cy = y + 22.0;
-    cy = draw_bar(x + 10.0, cy, w - 20.0, "Integrity", status.hp as f32, status.max_hp.max(1) as f32, RED);
-    cy = draw_bar(x + 10.0, cy, w - 20.0, "Power", status.hunger, 100.0, YELLOW);
-    cy = draw_bar(x + 10.0, cy, w - 20.0, "Fatigue", status.fatigue, 100.0, BLUE);
+    cy = draw_bar(
+        x + 10.0,
+        cy,
+        w - 20.0,
+        "Integrity",
+        status.hp as f32,
+        status.max_hp.max(1) as f32,
+        RED,
+    );
+    cy = draw_bar(
+        x + 10.0,
+        cy,
+        w - 20.0,
+        "Power",
+        status.hunger,
+        100.0,
+        YELLOW,
+    );
+    cy = draw_bar(
+        x + 10.0,
+        cy,
+        w - 20.0,
+        "Fatigue",
+        status.fatigue,
+        100.0,
+        BLUE,
+    );
     cy += 6.0;
 
     let lines = [
@@ -373,7 +422,7 @@ fn draw_status_panel(x: f32, y: f32, w: f32, h: f32, status: &feral_processes_en
         cy += LINE_HEIGHT;
     }
     draw_text(
-        &format!(
+        format!(
             "Party: {}/{}",
             status.companions.len(),
             feral_processes_engine::resources::MAX_PARTY_SIZE
@@ -386,7 +435,7 @@ fn draw_status_panel(x: f32, y: f32, w: f32, h: f32, status: &feral_processes_en
     cy += LINE_HEIGHT;
     for companion in &status.companions {
         draw_text(
-            &format!(
+            format!(
                 "Companion: {} (HP {}/{}, PWR {})",
                 companion.name, companion.hp, companion.max_hp, companion.power
             ),
@@ -419,7 +468,13 @@ fn draw_status_panel(x: f32, y: f32, w: f32, h: f32, status: &feral_processes_en
         if cy > keys_y - LINE_HEIGHT {
             break;
         }
-        draw_text(&format!("{} x{}", item.display_name(), qty), x + 10.0, cy, FONT_SIZE, TEXT_DIM);
+        draw_text(
+            format!("{} x{}", item.display_name(), qty),
+            x + 10.0,
+            cy,
+            FONT_SIZE,
+            TEXT_DIM,
+        );
         cy += LINE_HEIGHT;
     }
 
@@ -434,7 +489,13 @@ fn draw_status_panel(x: f32, y: f32, w: f32, h: f32, status: &feral_processes_en
 /// whatever's drawn next.
 fn draw_bar(x: f32, y: f32, w: f32, label: &str, value: f32, max: f32, color: Color) -> f32 {
     let ratio = (value / max).clamp(0.0, 1.0);
-    draw_text(&format!("{label} {value:.0}/{max:.0}"), x, y, FONT_SIZE - 2.0, TEXT);
+    draw_text(
+        format!("{label} {value:.0}/{max:.0}"),
+        x,
+        y,
+        FONT_SIZE - 2.0,
+        TEXT,
+    );
     let bar_y = y + 6.0;
     draw_rectangle(x, bar_y, w, 14.0, Color::new(0.15, 0.15, 0.15, 1.0));
     draw_rectangle(x, bar_y, w * ratio, 14.0, color);
@@ -447,24 +508,60 @@ fn draw_mode_overlay(app: &mut App) {
     let Some(game) = &mut app.game else { return };
     match app.mode {
         Mode::Build => draw_build_menu(game, selected),
-        Mode::BuildDirection => draw_direction_prompt("Deploy Direction", "Choose a direction to deploy (arrows/hjkl), Esc to cancel"),
+        Mode::BuildDirection => draw_direction_prompt(
+            "Deploy Direction",
+            "Choose a direction to deploy (arrows/hjkl), Esc to cancel",
+        ),
         Mode::Craft => draw_craft_menu(game, selected),
-        Mode::CraftQuantity => draw_craft_quantity(game, app.pending_craft, &app.craft_quantity_input),
-        Mode::Cronjob => draw_worker_menu(game, "Assign Cronjob", "Assign which program to a cronjob?", selected),
-        Mode::CronjobStructure => draw_structure_menu(game, "Assign Cronjob", "Cronjob which structure?", true, selected),
-        Mode::Guard => draw_worker_menu(game, "Assign Guard", "Assign which program to guard duty?", selected),
-        Mode::GuardStructure => draw_structure_menu(game, "Assign Guard", "Guard which structure? Any structure qualifies.", false, selected),
+        Mode::CraftQuantity => {
+            draw_craft_quantity(game, app.pending_craft, &app.craft_quantity_input)
+        }
+        Mode::Cronjob => draw_worker_menu(
+            game,
+            "Assign Cronjob",
+            "Assign which program to a cronjob?",
+            selected,
+        ),
+        Mode::CronjobStructure => draw_structure_menu(
+            game,
+            "Assign Cronjob",
+            "Cronjob which structure?",
+            true,
+            selected,
+        ),
+        Mode::Guard => draw_worker_menu(
+            game,
+            "Assign Guard",
+            "Assign which program to guard duty?",
+            selected,
+        ),
+        Mode::GuardStructure => draw_structure_menu(
+            game,
+            "Assign Guard",
+            "Guard which structure? Any structure qualifies.",
+            false,
+            selected,
+        ),
         Mode::Remove => draw_remove_menu(game, selected),
         Mode::RemoveConfirm => draw_remove_confirm(selected),
         Mode::Symlink => draw_symlink_menu(game, selected),
-        Mode::InspectDirection => draw_direction_prompt("Inspect Direction", "Choose a direction to inspect (arrows/hjkl), Esc to cancel"),
+        Mode::InspectDirection => draw_direction_prompt(
+            "Inspect Direction",
+            "Choose a direction to inspect (arrows/hjkl), Esc to cancel",
+        ),
         Mode::InspectDetail => draw_inspect_detail(game, app.pending_inspect),
         Mode::Inventory => draw_inventory(game, selected),
         Mode::InventoryItemAction => {
             let status = game.player_status();
             let stack_qty = app
                 .pending_inventory_item
-                .and_then(|item| status.inventory.iter().find(|(i, _)| *i == item).map(|(_, q)| *q))
+                .and_then(|item| {
+                    status
+                        .inventory
+                        .iter()
+                        .find(|(i, _)| *i == item)
+                        .map(|(_, q)| *q)
+                })
                 .unwrap_or(0);
             let fusion_tier = app
                 .pending_inventory_item
@@ -496,6 +593,7 @@ fn draw_mode_overlay(app: &mut App) {
             &app.trade_quantity_input,
         ),
         Mode::Perks => draw_perks_menu(game, selected),
+        Mode::Research => draw_research_menu(game, selected),
         _ => {}
     }
 }
@@ -506,12 +604,18 @@ fn draw_direction_prompt(title: &str, body: &str) {
 
 fn draw_build_menu(game: &mut Game, selected: usize) {
     let status = game.player_status();
-    let defs = game.structure_defs();
-    let mut rows = vec![text_row("Esc to cancel; Up/Down + Enter also work"), text_row("")];
+    let defs = game.buildable_structure_defs();
+    let mut rows = vec![
+        text_row("Esc to cancel; Up/Down + Enter also work"),
+        text_row(""),
+    ];
     for (i, def) in defs.iter().enumerate() {
         let raw_cost = game.structure_build_cost(def);
         let cost = cost_display(&raw_cost, &status.inventory);
-        rows.push(item_row(format!("[{}] {} - {}", i + 1, def.name, cost.join(", ")), i == selected));
+        rows.push(item_row(
+            format!("[{}] {} - {}", i + 1, def.name, cost.join(", ")),
+            i == selected,
+        ));
         rows.push(text_row(format!("    {}", structure_description(def))));
     }
     draw_popup("Deploy", PopupSize::Large, &rows);
@@ -523,7 +627,11 @@ fn structure_description(def: &feral_processes_engine::structures::StructureDef)
         parts.push(format!("cronjob -> {}", work.produces.display_name()));
     }
     if let Some(passive) = &def.passive_process {
-        parts.push(format!("{} -> {}", passive.consumes.display_name(), passive.produces.display_name()));
+        parts.push(format!(
+            "{} -> {}",
+            passive.consumes.display_name(),
+            passive.produces.display_name()
+        ));
     }
     if parts.is_empty() {
         parts.push("no production".to_string());
@@ -534,11 +642,19 @@ fn structure_description(def: &feral_processes_engine::structures::StructureDef)
 fn draw_craft_menu(game: &mut Game, selected: usize) {
     let status = game.player_status();
     let recipes = game.craft_recipes();
-    let mut rows = vec![text_row("Esc to cancel; Up/Down + Enter also work"), text_row("")];
+    let mut rows = vec![
+        text_row("Esc to cancel; Up/Down + Enter also work"),
+        text_row(""),
+    ];
     for (i, recipe) in recipes.iter().enumerate() {
         let cost = cost_display(&recipe.cost, &status.inventory);
         rows.push(item_row(
-            format!("[{}] {} - {}", i + 1, recipe.result.display_name(), cost.join(", ")),
+            format!(
+                "[{}] {} - {}",
+                i + 1,
+                recipe.result.display_name(),
+                cost.join(", ")
+            ),
             i == selected,
         ));
     }
@@ -548,20 +664,35 @@ fn draw_craft_menu(game: &mut Game, selected: usize) {
 fn draw_craft_quantity(game: &mut Game, pending: Option<ItemId>, quantity_input: &str) {
     let Some(result) = pending else { return };
     let status = game.player_status();
-    let recipe = game.craft_recipes().into_iter().find(|r| r.result == result);
-    let mut rows = vec![text_row(format!("Compile how many {}?", result.display_name())), text_row("")];
+    let recipe = game
+        .craft_recipes()
+        .into_iter()
+        .find(|r| r.result == result);
+    let mut rows = vec![
+        text_row(format!("Compile how many {}?", result.display_name())),
+        text_row(""),
+    ];
     if let Some(recipe) = &recipe {
         let cost = cost_display(&recipe.cost, &status.inventory);
         rows.push(text_row(format!("Cost per unit: {}", cost.join(", "))));
         rows.push(text_row(""));
     }
-    let shown = if quantity_input.is_empty() { "1" } else { quantity_input };
+    let shown = if quantity_input.is_empty() {
+        "1"
+    } else {
+        quantity_input
+    };
     rows.push(text_row(format!("Quantity: {shown}")));
     rows.push(text_row(""));
-    rows.push(text_row(format!("Max affordable right now: {}", game.max_craftable(result))));
+    rows.push(text_row(format!(
+        "Max affordable right now: {}",
+        game.max_craftable(result)
+    )));
     rows.push(text_row(""));
     rows.push(text_row("Type digits, Enter to compile"));
-    rows.push(text_row("[F] Compile 5   [M] Compile max affordable   Esc to go back"));
+    rows.push(text_row(
+        "[F] Compile 5   [M] Compile max affordable   Esc to go back",
+    ));
     draw_popup("Compile", PopupSize::Large, &rows);
 }
 
@@ -575,14 +706,24 @@ fn draw_worker_menu(game: &mut Game, title: &str, prompt: &str, selected: usize)
     // an HP fraction — cross-reference `owned_pets` for it, same as the
     // fuse menu does.
     let pets = game.owned_pets();
-    let mut rows = vec![text_row(format!("{prompt} (Esc to cancel; Up/Down + Enter also work)"))];
+    let mut rows = vec![text_row(format!(
+        "{prompt} (Esc to cancel; Up/Down + Enter also work)"
+    ))];
     if workers.is_empty() {
         rows.push(text_row("(no compiled programs nearby)"));
     }
     for (i, w) in workers.iter().enumerate() {
         let companion = if w.is_companion { " (in party)" } else { "" };
-        let job = w.job_structure.as_ref().map(|s| format!(" (on a cronjob: {s})")).unwrap_or_default();
-        let power = pets.iter().find(|p| p.entity == w.entity).map(|p| format!(" PWR {}", p.power)).unwrap_or_default();
+        let job = w
+            .job_structure
+            .as_ref()
+            .map(|s| format!(" (on a cronjob: {s})"))
+            .unwrap_or_default();
+        let power = pets
+            .iter()
+            .find(|p| p.entity == w.entity)
+            .map(|p| format!(" PWR {}", p.power))
+            .unwrap_or_default();
         rows.push(item_row(
             format!(
                 "[{}] {}{}{} at ({}, {}){}{}",
@@ -601,21 +742,50 @@ fn draw_worker_menu(game: &mut Game, title: &str, prompt: &str, selected: usize)
     draw_popup(title, PopupSize::Large, &rows);
 }
 
-fn draw_structure_menu(game: &mut Game, title: &str, prompt: &str, workable_only: bool, selected: usize) {
+fn draw_structure_menu(
+    game: &mut Game,
+    title: &str,
+    prompt: &str,
+    workable_only: bool,
+    selected: usize,
+) {
     let structures: Vec<_> = game
         .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
         .into_iter()
-        .filter(|e| if workable_only { e.can_work } else { e.is_structure })
+        .filter(|e| {
+            if workable_only {
+                e.can_work
+            } else {
+                e.is_structure
+            }
+        })
         .collect();
-    let mut rows = vec![text_row(format!("{prompt} (Esc to cancel; Up/Down + Enter also work)"))];
+    let mut rows = vec![text_row(format!(
+        "{prompt} (Esc to cancel; Up/Down + Enter also work)"
+    ))];
     if structures.is_empty() {
         rows.push(text_row("(no structures nearby)"));
     }
     for (i, s) in structures.iter().enumerate() {
-        let assigned = s.structure_worker.as_ref().map(|w| format!(" (assigned: {w})")).unwrap_or_default();
-        let durability = s.durability.map(|(hp, max)| format!(" [HP {hp}/{max}]")).unwrap_or_default();
+        let assigned = s
+            .structure_worker
+            .as_ref()
+            .map(|w| format!(" (assigned: {w})"))
+            .unwrap_or_default();
+        let durability = s
+            .durability
+            .map(|(hp, max)| format!(" [HP {hp}/{max}]"))
+            .unwrap_or_default();
         rows.push(item_row(
-            format!("[{}] {} at ({}, {}){}{}", i + 1, s.label, s.pos.0, s.pos.1, durability, assigned),
+            format!(
+                "[{}] {} at ({}, {}){}{}",
+                i + 1,
+                s.label,
+                s.pos.0,
+                s.pos.1,
+                durability,
+                assigned
+            ),
             i == selected,
         ));
     }
@@ -635,10 +805,21 @@ fn draw_remove_menu(game: &mut Game, selected: usize) {
         rows.push(text_row("(no structures nearby)"));
     }
     for (i, s) in structures.iter().enumerate() {
-        let durability = s.durability.map(|(hp, max)| format!(" [HP {hp}/{max}]")).unwrap_or_default();
+        let durability = s
+            .durability
+            .map(|(hp, max)| format!(" [HP {hp}/{max}]"))
+            .unwrap_or_default();
         let home_tag = if s.is_home { " (Home)" } else { "" };
         rows.push(item_row(
-            format!("[{}] {} at ({}, {}){}{}", i + 1, s.label, s.pos.0, s.pos.1, durability, home_tag),
+            format!(
+                "[{}] {} at ({}, {}){}{}",
+                i + 1,
+                s.label,
+                s.pos.0,
+                s.pos.1,
+                durability,
+                home_tag
+            ),
             i == selected,
         ));
     }
@@ -651,7 +832,10 @@ fn draw_remove_confirm(selected: usize) {
             "Removing Home destroys every other structure in this base and refunds".to_string(),
             ORANGE,
         ),
-        Row::TextColored("30% of each one's materials. This can't be undone.".to_string(), ORANGE),
+        Row::TextColored(
+            "30% of each one's materials. This can't be undone.".to_string(),
+            ORANGE,
+        ),
         text_row(""),
         item_row("[y] Yes, demolish everything", selected == 0),
         item_row("[n] No, cancel", selected == 1),
@@ -662,16 +846,29 @@ fn draw_remove_confirm(selected: usize) {
 fn draw_symlink_menu(game: &mut Game, selected: usize) {
     let status = game.player_status();
     let targets = game.symlink_targets();
-    let mut rows = vec![text_row("Use symlink to which structure? (Esc to cancel; Up/Down + Enter also work)")];
+    let mut rows = vec![text_row(
+        "Use symlink to which structure? (Esc to cancel; Up/Down + Enter also work)",
+    )];
     if targets.is_empty() {
         rows.push(text_row("(no symlink-capable structures deployed yet)"));
     }
     for (i, t) in targets.iter().enumerate() {
         let raw_cost = game.symlink_cost(t.entity).unwrap_or_default();
         let cost = cost_display(&raw_cost, &status.inventory);
-        let durability = t.durability.map(|(hp, max)| format!(" [HP {hp}/{max}]")).unwrap_or_default();
+        let durability = t
+            .durability
+            .map(|(hp, max)| format!(" [HP {hp}/{max}]"))
+            .unwrap_or_default();
         rows.push(item_row(
-            format!("[{}] {} at ({}, {}){} - {}", i + 1, t.label, t.pos.0, t.pos.1, durability, cost.join(", ")),
+            format!(
+                "[{}] {} at ({}, {}){} - {}",
+                i + 1,
+                t.label,
+                t.pos.0,
+                t.pos.1,
+                durability,
+                cost.join(", ")
+            ),
             i == selected,
         ));
     }
@@ -680,7 +877,11 @@ fn draw_symlink_menu(game: &mut Game, selected: usize) {
 
 fn draw_inspect_detail(game: &mut Game, entity: Option<Entity>) {
     let Some(view) = entity.and_then(|e| game.inspect(e)) else {
-        draw_popup("Inspect", PopupSize::Small, &[text_row("That program is gone. Press any key to go back.")]);
+        draw_popup(
+            "Inspect",
+            PopupSize::Small,
+            &[text_row("That program is gone. Press any key to go back.")],
+        );
         return;
     };
     let status = if view.is_tamed {
@@ -691,7 +892,11 @@ fn draw_inspect_detail(game: &mut Game, entity: Option<Entity>) {
         "idle".to_string()
     };
     let habitats: Vec<String> = view.habitats.iter().map(|b| format!("{b:?}")).collect();
-    let moves: Vec<String> = view.moves.iter().map(|m| format!("{} (pow {})", m.name, m.power)).collect();
+    let moves: Vec<String> = view
+        .moves
+        .iter()
+        .map(|m| format!("{} (pow {})", m.name, m.power))
+        .collect();
 
     let mut rows = vec![
         Row::TextColored(
@@ -705,8 +910,14 @@ fn draw_inspect_detail(game: &mut Game, entity: Option<Entity>) {
         ),
         text_row(format!("Status: {status}")),
         text_row(format!("Integrity: {}/{}", view.hp, view.max_hp)),
-        text_row(format!("Attack {}   Defense {}   Power {}", view.atk, view.def, view.power)),
-        text_row(format!("Decompile difficulty: {:.0}%", view.taming_difficulty * 100.0)),
+        text_row(format!(
+            "Attack {}   Defense {}   Power {}",
+            view.atk, view.def, view.power
+        )),
+        text_row(format!(
+            "Decompile difficulty: {:.0}%",
+            view.taming_difficulty * 100.0
+        )),
     ];
     if let Some(quality) = &view.quality {
         rows.push(text_row(format!("Potential: {quality}")));
@@ -715,22 +926,37 @@ fn draw_inspect_detail(game: &mut Game, entity: Option<Entity>) {
         rows.push(text_row(format!(
             "Fusions: {}/{MAX_FUSIONS}{}",
             view.fusions,
-            if view.fusions >= MAX_FUSIONS { " (can't be fused again)" } else { "" }
+            if view.fusions >= MAX_FUSIONS {
+                " (can't be fused again)"
+            } else {
+                ""
+            }
         )));
     }
     if view.is_hostile && !view.is_tamed {
         rows.push(Row::TextColored(
-            format!("Decompile chance right now: {:.0}%", view.decompile_chance * 100.0),
+            format!(
+                "Decompile chance right now: {:.0}%",
+                view.decompile_chance * 100.0
+            ),
             MAGENTA,
         ));
     }
     rows.push(text_row(format!(
         "Habitats: {}",
-        if habitats.is_empty() { "unknown".to_string() } else { habitats.join(", ") }
+        if habitats.is_empty() {
+            "unknown".to_string()
+        } else {
+            habitats.join(", ")
+        }
     )));
     rows.push(text_row(format!(
         "Moves: {}",
-        if moves.is_empty() { "none".to_string() } else { moves.join(", ") }
+        if moves.is_empty() {
+            "none".to_string()
+        } else {
+            moves.join(", ")
+        }
     )));
     if let Some(res) = view.work_resource {
         rows.push(text_row(format!("Work aptitude: {}", res.display_name())));
@@ -763,7 +989,10 @@ fn draw_inventory(game: &mut Game, selected: usize) {
     }
     for (i, (item, qty)) in status.inventory.iter().enumerate() {
         let tag = equip_preview_tag(*item, status.zone, game.item_fusion_tier(*item));
-        rows.push(item_row(format!("[{}] {} x{}{}", i + 4, item.display_name(), qty, tag), selected == i + 3));
+        rows.push(item_row(
+            format!("[{}] {} x{}{}", i + 4, item.display_name(), qty, tag),
+            selected == i + 3,
+        ));
     }
     rows.push(text_row(""));
     rows.push(text_row("Esc to close; Up/Down + Enter also work"));
@@ -779,7 +1008,9 @@ fn equip_preview_tag(item: ItemId, zone_level: u32, fusion_tier: u32) -> String 
     let Some((_, base_mods)) = item.equipment() else {
         return String::new();
     };
-    let mods = base_mods.scaled_for_level(zone_level).fused_for_tier(fusion_tier);
+    let mods = base_mods
+        .scaled_for_level(zone_level)
+        .fused_for_tier(fusion_tier);
     let mut parts = Vec::new();
     if mods.atk != 0 {
         parts.push(format!("+{} ATK", mods.atk));
@@ -796,10 +1027,17 @@ fn equip_preview_tag(item: ItemId, zone_level: u32, fusion_tier: u32) -> String 
     format!(" ({})", parts.join(" "))
 }
 
-fn equipped_row(num: usize, label: &str, equipped: Option<feral_processes_engine::components::EquippedItem>, selected: bool) -> Row {
+fn equipped_row(
+    num: usize,
+    label: &str,
+    equipped: Option<feral_processes_engine::components::EquippedItem>,
+    selected: bool,
+) -> Row {
     match equipped.and_then(|e| e.item.equipment().map(|(_, mods)| (e, mods))) {
         Some((equipped, mods)) => {
-            let mods = mods.scaled_for_level(equipped.level).fused_for_tier(equipped.fusion_tier);
+            let mods = mods
+                .scaled_for_level(equipped.level)
+                .fused_for_tier(equipped.fusion_tier);
             let mut parts = Vec::new();
             if mods.atk != 0 {
                 parts.push(format!("+{} ATK", mods.atk));
@@ -817,9 +1055,17 @@ fn equipped_row(num: usize, label: &str, equipped: Option<feral_processes_engine
             if equipped.fusion_tier > 0 {
                 notes.push(format!("T{}", equipped.fusion_tier));
             }
-            let note = if notes.is_empty() { String::new() } else { format!(" {}", notes.join(" ")) };
+            let note = if notes.is_empty() {
+                String::new()
+            } else {
+                format!(" {}", notes.join(" "))
+            };
             item_row(
-                format!("[{num}] {label}: {}{note} ({})", equipped.item.display_name(), parts.join(" ")),
+                format!(
+                    "[{num}] {label}: {}{note} ({})",
+                    equipped.item.display_name(),
+                    parts.join(" ")
+                ),
                 selected,
             )
         }
@@ -827,7 +1073,13 @@ fn equipped_row(num: usize, label: &str, equipped: Option<feral_processes_engine
     }
 }
 
-fn draw_inventory_item_action(item: Option<ItemId>, zone_level: u32, stack_qty: u32, fusion_tier: u32, selected: usize) {
+fn draw_inventory_item_action(
+    item: Option<ItemId>,
+    zone_level: u32,
+    stack_qty: u32,
+    fusion_tier: u32,
+    selected: usize,
+) {
     let Some(item) = item else {
         draw_popup("Item", PopupSize::Small, &[text_row("Nothing selected.")]);
         return;
@@ -839,7 +1091,11 @@ fn draw_inventory_item_action(item: Option<ItemId>, zone_level: u32, stack_qty: 
         }
         actions.insert(0, "[E]quip".to_string());
     }
-    let title = format!("{}{}", item.display_name(), equip_preview_tag(item, zone_level, fusion_tier));
+    let title = format!(
+        "{}{}",
+        item.display_name(),
+        equip_preview_tag(item, zone_level, fusion_tier)
+    );
     let mut rows = vec![Row::TextColored(title, TEXT), text_row("")];
     for (i, action) in actions.iter().enumerate() {
         rows.push(item_row(action.clone(), i == selected));
@@ -859,8 +1115,16 @@ fn draw_companion_menu(game: &mut Game, selected: usize) {
     }
     for (i, p) in pets.iter().enumerate() {
         let active = if p.is_companion { " (in party)" } else { "" };
-        let job = p.job_structure.as_ref().map(|s| format!(" (on a cronjob: {s})")).unwrap_or_default();
-        let quality = p.quality.as_ref().map(|q| format!(" [{q}]")).unwrap_or_default();
+        let job = p
+            .job_structure
+            .as_ref()
+            .map(|s| format!(" (on a cronjob: {s})"))
+            .unwrap_or_default();
+        let quality = p
+            .quality
+            .as_ref()
+            .map(|q| format!(" [{q}]"))
+            .unwrap_or_default();
         let fused = fusion_tag(p.fusions);
         rows.push(item_row(
             format!(
@@ -935,7 +1199,10 @@ fn draw_fuse_menu(game: &mut Game, selected: usize) {
         rows.push(text_row("(no compiled programs nearby)"));
     }
     for (i, c) in candidates.iter().enumerate() {
-        rows.push(item_row(fuse_candidate_label(i + 1, c, &pets), i == selected));
+        rows.push(item_row(
+            fuse_candidate_label(i + 1, c, &pets),
+            i == selected,
+        ));
     }
     draw_popup("Fuse", PopupSize::Large, &rows);
 }
@@ -943,23 +1210,42 @@ fn draw_fuse_menu(game: &mut Game, selected: usize) {
 fn draw_fuse_second_menu(game: &mut Game, first: Option<Entity>, selected: usize) {
     let Some(first) = first else { return };
     let nearby = game.view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS);
-    let first_label = nearby.iter().find(|e| e.entity == first).map(|e| e.label.clone()).unwrap_or_else(|| "it".to_string());
-    let candidates: Vec<_> = nearby.into_iter().filter(|e| e.is_tamed && e.entity != first).collect();
+    let first_label = nearby
+        .iter()
+        .find(|e| e.entity == first)
+        .map(|e| e.label.clone())
+        .unwrap_or_else(|| "it".to_string());
+    let candidates: Vec<_> = nearby
+        .into_iter()
+        .filter(|e| e.is_tamed && e.entity != first)
+        .collect();
     let pets = game.owned_pets();
-    let mut rows = vec![text_row(format!("Fuse {first_label} with which program? Both are consumed."))];
+    let mut rows = vec![text_row(format!(
+        "Fuse {first_label} with which program? Both are consumed."
+    ))];
     if candidates.is_empty() {
         rows.push(text_row("(no other compiled programs nearby)"));
     }
     for (i, c) in candidates.iter().enumerate() {
-        rows.push(item_row(fuse_candidate_label(i + 1, c, &pets), i == selected));
+        rows.push(item_row(
+            fuse_candidate_label(i + 1, c, &pets),
+            i == selected,
+        ));
     }
     draw_popup("Fuse", PopupSize::Large, &rows);
 }
 
 /// Free-text naming page shown after both fuse candidates are picked.
 /// Blank and Enter keeps the default species name.
-fn draw_fuse_name_menu(game: &mut Game, first: Option<Entity>, second: Option<Entity>, name_input: &str) {
-    let (Some(first), Some(second)) = (first, second) else { return };
+fn draw_fuse_name_menu(
+    game: &mut Game,
+    first: Option<Entity>,
+    second: Option<Entity>,
+    name_input: &str,
+) {
+    let (Some(first), Some(second)) = (first, second) else {
+        return;
+    };
     let nearby = game.view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS);
     let label_of = |e: Entity| {
         nearby
@@ -969,9 +1255,19 @@ fn draw_fuse_name_menu(game: &mut Game, first: Option<Entity>, second: Option<En
             .unwrap_or_else(|| "it".to_string())
     };
     let rows = vec![
-        text_row(format!("Fusing {} and {}.", label_of(first), label_of(second))),
+        text_row(format!(
+            "Fusing {} and {}.",
+            label_of(first),
+            label_of(second)
+        )),
         text_row(""),
-        item_row(format!("Name it (optional, {} max): {name_input}", feral_processes_engine::MAX_CUSTOM_NAME_LEN), true),
+        item_row(
+            format!(
+                "Name it (optional, {} max): {name_input}",
+                feral_processes_engine::MAX_CUSTOM_NAME_LEN
+            ),
+            true,
+        ),
         text_row(""),
         text_row("Type a name, Enter to fuse (blank keeps the default name)"),
         text_row("Esc to go back and re-pick the second program"),
@@ -990,26 +1286,49 @@ fn draw_trade_menu(game: &mut Game, selected: usize) {
         rows.push(text_row("(no trading posts nearby)"));
     }
     for (i, s) in structures.iter().enumerate() {
-        let durability = s.durability.map(|(hp, max)| format!(" [HP {hp}/{max}]")).unwrap_or_default();
-        rows.push(item_row(format!("[{}] {} at ({}, {}){}", i + 1, s.label, s.pos.0, s.pos.1, durability), i == selected));
+        let durability = s
+            .durability
+            .map(|(hp, max)| format!(" [HP {hp}/{max}]"))
+            .unwrap_or_default();
+        rows.push(item_row(
+            format!(
+                "[{}] {} at ({}, {}){}",
+                i + 1,
+                s.label,
+                s.pos.0,
+                s.pos.1,
+                durability
+            ),
+            i == selected,
+        ));
     }
     draw_popup("Trade", PopupSize::Large, &rows);
 }
 
 fn draw_trade_action_menu(game: &mut Game, structure: Option<Entity>, selected: usize) {
     let Some(structure) = structure else { return };
-    let Some(trade) = game.trade_options(structure) else { return };
+    let Some(trade) = game.trade_options(structure) else {
+        return;
+    };
     let inventory = game.player_status().inventory;
 
     let mut rows = vec![Row::TextColored("Sell (from inventory):".to_string(), TEXT)];
-    let sellable: Vec<_> = inventory.iter().filter(|(item, _)| *item != ItemId::CoreFragment).collect();
+    let sellable: Vec<_> = inventory
+        .iter()
+        .filter(|(item, _)| *item != ItemId::CoreFragment)
+        .collect();
     if sellable.is_empty() {
         rows.push(text_row("(nothing to sell)"));
     }
     let mut idx = 0;
     for (item, qty) in &sellable {
         rows.push(item_row(
-            format!("[{}] Sell {} x{qty} ({} Core Fragments each)", idx + 1, item.display_name(), trade.sell_rate),
+            format!(
+                "[{}] Sell {} x{qty} ({} Core Fragments each)",
+                idx + 1,
+                item.display_name(),
+                trade.sell_rate
+            ),
             idx == selected,
         ));
         idx += 1;
@@ -1017,7 +1336,14 @@ fn draw_trade_action_menu(game: &mut Game, structure: Option<Entity>, selected: 
     rows.push(text_row(""));
     rows.push(Row::TextColored("Buy:".to_string(), TEXT));
     for (item, cost) in &trade.buy {
-        rows.push(item_row(format!("[{}] Buy {} ({cost} Core Fragments each)", idx + 1, item.display_name()), idx == selected));
+        rows.push(item_row(
+            format!(
+                "[{}] Buy {} ({cost} Core Fragments each)",
+                idx + 1,
+                item.display_name()
+            ),
+            idx == selected,
+        ));
         idx += 1;
     }
     rows.push(text_row(""));
@@ -1025,17 +1351,35 @@ fn draw_trade_action_menu(game: &mut Game, structure: Option<Entity>, selected: 
     draw_popup("Trade", PopupSize::Large, &rows);
 }
 
-fn draw_trade_quantity_menu(game: &mut Game, structure: Option<Entity>, choice: Option<TradeChoice>, quantity_input: &str) {
-    let (Some(structure), Some(choice)) = (structure, choice) else { return };
-    let Some(trade) = game.trade_options(structure) else { return };
+fn draw_trade_quantity_menu(
+    game: &mut Game,
+    structure: Option<Entity>,
+    choice: Option<TradeChoice>,
+    quantity_input: &str,
+) {
+    let (Some(structure), Some(choice)) = (structure, choice) else {
+        return;
+    };
+    let Some(trade) = game.trade_options(structure) else {
+        return;
+    };
     let (verb, item, unit_price) = match choice {
         TradeChoice::Sell(item) => ("Sell", item, trade.sell_rate),
         TradeChoice::Buy(item) => {
-            let price = trade.buy.iter().find(|(i, _)| *i == item).map(|(_, c)| *c).unwrap_or(0);
+            let price = trade
+                .buy
+                .iter()
+                .find(|(i, _)| *i == item)
+                .map(|(_, c)| *c)
+                .unwrap_or(0);
             ("Buy", item, price)
         }
     };
-    let shown = if quantity_input.is_empty() { "1" } else { quantity_input };
+    let shown = if quantity_input.is_empty() {
+        "1"
+    } else {
+        quantity_input
+    };
     let rows = vec![
         text_row(format!("{verb} how many {}?", item.display_name())),
         text_row(""),
@@ -1043,7 +1387,10 @@ fn draw_trade_quantity_menu(game: &mut Game, structure: Option<Entity>, choice: 
         text_row(""),
         text_row(format!("Quantity: {shown}")),
         text_row(""),
-        text_row(format!("Type digits, Enter to {}, Esc to go back", verb.to_lowercase())),
+        text_row(format!(
+            "Type digits, Enter to {}, Esc to go back",
+            verb.to_lowercase()
+        )),
     ];
     draw_popup("Trade", PopupSize::Large, &rows);
 }
@@ -1056,9 +1403,19 @@ fn draw_perks_menu(game: &mut Game, selected: usize) {
     ];
     for (i, perk) in feral_processes_engine::Perk::all().iter().enumerate() {
         let level = status.unlocked_perks.iter().filter(|p| *p == perk).count();
-        let tag = if level > 0 { format!(" (level {level})") } else { String::new() };
+        let tag = if level > 0 {
+            format!(" (level {level})")
+        } else {
+            String::new()
+        };
         rows.push(item_row(
-            format!("[{}] {} - {} Perk Points{}", i + 1, perk.display_name(), perk.cost(), tag),
+            format!(
+                "[{}] {} - {} Perk Points{}",
+                i + 1,
+                perk.display_name(),
+                perk.cost(),
+                tag
+            ),
             i == selected,
         ));
         rows.push(text_row(format!("    {}", perk.description())));
@@ -1068,13 +1425,53 @@ fn draw_perks_menu(game: &mut Game, selected: usize) {
     draw_popup("Perks", PopupSize::Large, &rows);
 }
 
+fn draw_research_menu(game: &mut Game, selected: usize) {
+    let held = game
+        .player_status()
+        .inventory
+        .iter()
+        .find(|(item, _)| *item == ItemId::ResearchData)
+        .map(|(_, n)| *n)
+        .unwrap_or(0);
+    let nodes = game.research_nodes();
+    let mut rows = vec![
+        Row::TextColored(format!("Research Data: {held}"), CYAN),
+        text_row(""),
+    ];
+    for (i, node) in nodes.iter().enumerate() {
+        let tag = match &node.state {
+            ResearchState::Unlocked => " (researched)".to_string(),
+            ResearchState::Available => String::new(),
+            ResearchState::Locked { missing } => format!(" (needs {})", missing.join(", ")),
+        };
+        rows.push(item_row(
+            format!(
+                "[{}] {} - {} Research Data{tag}",
+                i + 1,
+                node.name,
+                node.cost
+            ),
+            i == selected,
+        ));
+        rows.push(text_row(format!("    {}", node.description)));
+    }
+    rows.push(text_row(""));
+    rows.push(text_row("Pick a number to research it. Esc to close"));
+    draw_popup("Research", PopupSize::Large, &rows);
+}
+
 fn status_tag(status: &Option<String>) -> String {
-    status.as_ref().map(|s| format!(" [{s}]")).unwrap_or_default()
+    status
+        .as_ref()
+        .map(|s| format!(" [{s}]"))
+        .unwrap_or_default()
 }
 
 fn draw_battle(app: &mut App) {
     let Some(game) = &mut app.game else { return };
-    let Some(view) = game.battle_view() else { return };
+    let Some(view) = game.battle_view() else {
+        return;
+    };
 
     let w = screen_width();
     let mut y = 20.0;
@@ -1122,9 +1519,14 @@ fn draw_battle(app: &mut App) {
 
     for companion in &view.companions {
         draw_text(
-            &format!(
+            format!(
                 "Companion: {} (HP {}/{}, ATK {}, PWR {}){}",
-                companion.name, companion.hp, companion.max_hp, companion.atk, companion.power, status_tag(&companion.status)
+                companion.name,
+                companion.hp,
+                companion.max_hp,
+                companion.atk,
+                companion.power,
+                status_tag(&companion.status)
             ),
             20.0,
             y,
@@ -1135,10 +1537,14 @@ fn draw_battle(app: &mut App) {
     }
 
     draw_text(
-        &format!(
+        format!(
             "Decompile chance right now: {:.0}%{}",
             view.decompile_chance * 100.0,
-            if view.can_tame { "" } else { " (needs an ICE Breaker)" }
+            if view.can_tame {
+                ""
+            } else {
+                " (needs an ICE Breaker)"
+            }
         ),
         20.0,
         y,
@@ -1165,17 +1571,31 @@ fn draw_battle(app: &mut App) {
         actions.push("[C]ommand companion".to_string());
     }
     actions.push("[J]ack Out".to_string());
-    draw_text(&actions.join("   "), 20.0, screen_height() - 24.0, FONT_SIZE, TEXT);
+    draw_text(
+        actions.join("   "),
+        20.0,
+        screen_height() - 24.0,
+        FONT_SIZE,
+        TEXT,
+    );
 }
 
 fn draw_battle_companion_menu(app: &mut App) {
     let selected = app.menu_selected;
     let Some(game) = &mut app.game else { return };
     let party = game.player_status().companions;
-    let mut rows = vec![text_row("Command which companion? It'll buff you instead of attacking.")];
+    let mut rows = vec![text_row(
+        "Command which companion? It'll buff you instead of attacking.",
+    )];
     for (i, c) in party.iter().enumerate() {
         rows.push(item_row(
-            format!("[{}] {} ({}){}", i + 1, c.name, c.ability, status_tag(&c.status)),
+            format!(
+                "[{}] {} ({}){}",
+                i + 1,
+                c.name,
+                c.ability,
+                status_tag(&c.status)
+            ),
             i == selected,
         ));
     }
@@ -1205,13 +1625,21 @@ fn draw_main_menu(app: &App) {
 
 fn draw_load_game(app: &App) {
     let saves = app.list_saves();
-    let mut rows = vec![text_row("Pick a save (Esc to cancel; Up/Down + Enter also work)")];
+    let mut rows = vec![text_row(
+        "Pick a save (Esc to cancel; Up/Down + Enter also work)",
+    )];
     if saves.is_empty() {
         rows.push(text_row("(no saves found)"));
     }
     for (i, save) in saves.iter().enumerate() {
-        let summary = save.summary.as_deref().unwrap_or("(incompatible save - can still be deleted)");
-        rows.push(item_row(format!("[{}] {} - {}", i + 1, save.name, summary), i == app.menu_selected));
+        let summary = save
+            .summary
+            .as_deref()
+            .unwrap_or("(incompatible save - can still be deleted)");
+        rows.push(item_row(
+            format!("[{}] {} - {}", i + 1, save.name, summary),
+            i == app.menu_selected,
+        ));
     }
     draw_popup("Load Game", PopupSize::Large, &rows);
 }
@@ -1240,8 +1668,14 @@ fn draw_save_action(app: &App) {
 
 fn draw_difficulty_pick(selected: usize) {
     let rows = vec![
-        item_row("[P] Permadeath - flatlining is final; the session is archived to a log".to_string(), selected == 0),
-        item_row("[F] Forgiving - flatlining costs you, but you reboot and keep going".to_string(), selected == 1),
+        item_row(
+            "[P] Permadeath - flatlining is final; the session is archived to a log".to_string(),
+            selected == 0,
+        ),
+        item_row(
+            "[F] Forgiving - flatlining costs you, but you reboot and keep going".to_string(),
+            selected == 1,
+        ),
         text_row(""),
         text_row("Esc to go back; Up/Down + Enter also work"),
     ];
@@ -1249,7 +1683,11 @@ fn draw_difficulty_pick(selected: usize) {
 }
 
 fn draw_game_over(app: &mut App) {
-    let summary = app.game.as_mut().and_then(|g| g.history_summary()).unwrap_or_else(|| "Connection lost.".to_string());
+    let summary = app
+        .game
+        .as_mut()
+        .and_then(|g| g.history_summary())
+        .unwrap_or_else(|| "Connection lost.".to_string());
     let rows = vec![
         Row::TextColored("FLATLINE".to_string(), RED),
         text_row(""),
@@ -1265,7 +1703,7 @@ fn draw_help() {
         text_row("hjkl/arrows move   . wait   e drain   r recharge"),
         text_row("g scan   c compile   b deploy   w cronjob   G guard   R demolish"),
         text_row("u symlink   i inspect   v inventory   p companions"),
-        text_row("f fuse   t trade   x perks   s save   q main menu"),
+        text_row("f fuse   t trade   x perks   T research   s save   q main menu"),
         text_row("+/- zoom   [/] volume"),
         text_row(""),
         text_row("Every numbered menu also takes Up/Down + Enter, on top of"),

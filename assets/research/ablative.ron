@@ -1,0 +1,12 @@
+(
+    id: "ablative",
+    name: "Ablative Lattice",
+    description: "Compile Ablative Plating at an Armory.",
+    cost: 40,
+    requires: ["firewall"],
+    unlocks_recipes: [(
+        result: AblativePlating,
+        cost: [(PortalFragment, 12)],
+        requires_structure: Some("armory"),
+    )],
+)

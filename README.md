@@ -520,7 +520,7 @@ enough of them, then walk onto it to breach into the next zone.
 | Zone Portal | 10 Portal Fragments *(× current zone level)* | Walk onto it to breach into the next zone — see [Zones and portals](#zones-and-portals) |
 | Black Market | 16 Core Fragments | `t` ("trade") to sell inventory items or buy consumables for Core Fragments — see [Trading](#trading) |
 | Turret | 16 Core Fragments | Passively reduces raid damage against **every** deployed structure by 4 — see [Base defense](#base-defense) |
-| Recharger Node | 5 Core Fragments | Required to `r` (recharge/rest) within 2 tiles of it — **temporary**: collapses on its own after 20 ticks of not resting near it (resting itself doesn't burn down this clock) |
+| Recharger Node | 5 Core Fragments | Required to `r` (recharge/rest) within 2 tiles of it |
 
 Home must be built before anything else — the build menu (`b`) always
 lists it first, followed by Mining Node then Compiler, with the rest
@@ -547,11 +547,7 @@ passive: press `u`, pick it from the list of deployed symlink structures,
 and pay the Power Cell cost to warp there instantly, no matter how far
 away you are. Deploy more than one and `u` lists all of them.
 Recharger Node is a **rest gate** — a fourth category: `r` only works
-while you're within 2 tiles of one, and it's **temporary**, collapsing on
-its own once 20 ordinary game-clock ticks pass since it was deployed
-(ticks spent inside a rest cycle don't count against that clock, so
-resting near it doesn't wear it down any faster than leaving it idle
-would — you'd need to rebuild it if you let it sit unused that long).
+while you're within 2 tiles of one.
 Any structure can define any combination of these via its `.ron` file —
 see [Modding](#modding).
 
@@ -625,8 +621,25 @@ cargo test
 
 ## Changelog
 
+### 2026-07-21
+
+- **A busier, better-behaved wild population**: the world-wide cap on wild
+  programs is up from 24 to 100, so an area you're exploring stays alive
+  with things to fight and tame. To keep the simulation cheap, hitting the
+  cap now culls the wild program *farthest* from you rather than blocking
+  the spawn — a population you wandered away from quietly thins out
+  instead of starving the area you're actually in. Programs near you are
+  never culled. One caveat: a nest you've left far behind can lose a
+  guardian this way, and it won't queue a respawn for it; walk back and
+  the usual kill/tame/respawn cycle rebuilds the nest as normal.
+
 ### 2026-07-20
 
+- **Recharger Node is now a permanent structure**: it no longer collapses
+  after 20 ticks — like every other structure, it just needs to be built
+  within 15 tiles of your Home. Existing saves need no migration; a
+  Recharger Node that was mid-countdown when this shipped simply stops
+  decaying — see [Structures](#structures).
 - **Wild creature nests**: Scrapper, Worm, Wraith, and Trojan can now
   spawn as a stationary Nest instead of an ordinary lone creature/pack —
   it keeps 2-5 guardians of its species tethered within 5 tiles, and any

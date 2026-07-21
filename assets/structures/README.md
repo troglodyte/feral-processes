@@ -102,8 +102,8 @@ is skipped with a warning logged in-game rather than crashing startup.
     // `max_ticks` ordinary game-clock ticks have passed since it was
     // deployed — no refund, it just disappears. Ticks spent inside a
     // `Game::rest` cycle don't count toward this, so a structure that also
-    // sets `enables_rest` (like the Recharger Node) isn't worn down any
-    // faster by actually being used to rest than by sitting there idle.
+    // sets `enables_rest` isn't worn down any faster by actually being
+    // used to rest than by sitting there idle.
     temporary: Some((max_ticks: 20)),
 )
 ```

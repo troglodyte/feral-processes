@@ -486,8 +486,8 @@ pub struct NestGuardian {
     pub nest: Entity,
 }
 
-/// Present on a structure whose `StructureDef::temporary` is set (e.g. a
-/// Recharger Node) — counts down by one on every ordinary game tick (see
+/// Present on a structure whose `StructureDef::temporary` is set —
+/// counts down by one on every ordinary game tick (see
 /// `Game::tick_inner`) until it hits 0, at which point the structure
 /// collapses. Ticks spent inside a `Game::rest` cycle deliberately don't
 /// decrement this.

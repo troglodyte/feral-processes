@@ -90,12 +90,16 @@ const PACK_SIZE_STEP_TILES: i32 = DISTANCE_STAT_STEP_TILES * 2;
 /// into one fight.
 const PACK_GATHER_RADIUS: i32 = 2;
 
-/// How far (per axis) from the player a `Hostile` creature still counts
-/// against `Game::maybe_spawn_wild_creature`'s population cap. Matches
-/// `app_core::MENU_SCAN_RADIUS`, the existing notion of "nearby" the scan
-/// command already uses — a creature farther away than this is somewhere
-/// the player has moved on from, not part of "this area."
-const WILD_POPULATION_CAP_RADIUS: i32 = 40;
+/// How many `Hostile` creatures may exist across the whole map at once.
+/// Wild creatures never despawn on their own, so without a bound the
+/// world-wide population — and the per-tick AI cost of simulating it —
+/// grows all session. Rather than blocking new spawns once the cap is
+/// reached (which would let a population the player wandered away from
+/// permanently starve the area they're actually in), reaching it culls
+/// the `Hostile` farthest from the player to free a slot — see
+/// `Game::maybe_spawn_wild_creature`. Tamed programs never count here at
+/// all; they shouldn't crowd out wild spawns just by existing.
+const WILD_CREATURE_CAP: usize = 100;
 
 /// Battle rounds a companion's default rally buff (see
 /// `Game::rally_player`) lasts when its species defines no
@@ -3085,35 +3089,37 @@ impl Game {
 
     fn maybe_spawn_wild_creature(&mut self) {
         let player_pos = *self.world.get::<Position>(self.player_entity()).unwrap();
-        // Only wild (`Hostile`) creatures within `WILD_POPULATION_CAP_RADIUS`
-        // of the player count against this cap. Counting the whole map would
-        // let a population the player wandered away from — which never
-        // despawns on its own — permanently block new spawns whenever it
-        // added up to 24, no matter how empty the player's current area
-        // actually is; scoping it to nearby creatures keeps the cap doing
-        // its job (bounding how crowded *this* area gets) without that
-        // global lockout. A tamed program (party member or cronjob worker)
-        // is still a `Creature` but never counts here at all — it shouldn't
-        // crowd out wild spawns just by existing.
-        let nearby_hostiles = {
-            let mut query = self.world.query_filtered::<&Position, With<Hostile>>();
-            query
-                .iter(&self.world)
-                .filter(|p| {
-                    (p.x - player_pos.x).abs() <= WILD_POPULATION_CAP_RADIUS
-                        && (p.y - player_pos.y).abs() <= WILD_POPULATION_CAP_RADIUS
-                })
-                .count()
-        };
-        if nearby_hostiles >= 24 {
-            return;
-        }
+        // Roll first: culling is wasted work if nothing was going to spawn.
         let roll = {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_bool(0.05)
         };
         if !roll {
             return;
+        }
+        // At `WILD_CREATURE_CAP`, make room by despawning the `Hostile`
+        // farthest (Chebyshev, matching 8-directional movement) from where
+        // the player is now — the one least likely to ever be encountered
+        // again. `NestGuardian`s are eligible like any other hostile; a cull
+        // is a plain despawn, so it deliberately doesn't feed the nest's
+        // `pending_respawns` the way an actual defeat does. Guardian counts
+        // are best-effort once a nest is far behind the player.
+        let hostiles: Vec<(Entity, i32)> = {
+            let mut query = self.world.query_filtered::<(Entity, &Position), With<Hostile>>();
+            query
+                .iter(&self.world)
+                .map(|(e, p)| {
+                    (
+                        e,
+                        (p.x - player_pos.x).abs().max((p.y - player_pos.y).abs()),
+                    )
+                })
+                .collect()
+        };
+        if hostiles.len() >= WILD_CREATURE_CAP
+            && let Some(&(farthest, _)) = hostiles.iter().max_by_key(|(_, dist)| *dist)
+        {
+            self.world.despawn(farthest);
         }
         let (dx, dy) = {
             let mut rng = self.world.resource_mut::<GameRng>();
@@ -6055,18 +6061,11 @@ mod tests {
     /// `Game::rest` requires one nearby, so tests exercising `rest` need
     /// this in place first. Spawned directly rather than through
     /// `place_structure` to sidestep its Home/cost/radius requirements,
-    /// which aren't what these tests are about — but still attaches
-    /// `Temporary` from the real `recharger_node.ron` schema, the same way
-    /// `place_structure` would, so its lifespan behaves identically.
+    /// which aren't what these tests are about. The real Recharger Node is
+    /// a permanent structure (no `Temporary` component), so this doesn't
+    /// attach one either.
     fn spawn_recharger_node_at_player(game: &mut Game) {
         let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
-        let max_ticks = game
-            .world
-            .resource::<StructureDb>()
-            .get("recharger_node")
-            .and_then(|d| d.temporary.as_ref())
-            .expect("recharger_node.ron should define `temporary`")
-            .max_ticks;
         game.world.spawn((
             Structure {
                 kind: "recharger_node".to_string(),
@@ -6074,9 +6073,6 @@ mod tests {
             Position {
                 x: player_pos.x,
                 y: player_pos.y,
-            },
-            Temporary {
-                ticks_remaining: max_ticks,
             },
         ));
     }
@@ -6683,25 +6679,38 @@ mod tests {
     }
 
     #[test]
-    fn wild_spawn_cap_is_not_exhausted_by_creatures_far_from_the_player() {
+    fn a_full_wild_population_far_away_is_culled_so_spawns_near_the_player_still_happen() {
         let mut game = Game::new(423, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let species_id = game.species_defs().into_iter().next().unwrap().id;
-        let player_pos = *game
-            .world
-            .get::<Position>(game.player_entity())
-            .unwrap();
+        let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
 
-        // A wild population the player wandered away from, far outside the
-        // (-12..=12) radius `maybe_spawn_wild_creature` ever spawns into
-        // around the player's *current* position.
-        for _ in 0..24 {
-            game.world.spawn((
-                Creature { species: species_id.clone() },
-                Position { x: player_pos.x + 500, y: player_pos.y + 500 },
-                Stats { hp: 10, max_hp: 10, atk: 1, def: 1 },
-                Hostile,
-            ));
-        }
+        // Fill the cap with a wild population the player wandered away from,
+        // far outside the (-12..=12) radius `maybe_spawn_wild_creature` ever
+        // spawns into around the player's *current* position.
+        let mut hostile_query = game.world.query_filtered::<(), With<Hostile>>();
+        let already = hostile_query.iter(&game.world).count();
+        let distant: Vec<Entity> = (0..WILD_CREATURE_CAP - already)
+            .map(|_| {
+                game.world
+                    .spawn((
+                        Creature {
+                            species: species_id.clone(),
+                        },
+                        Position {
+                            x: player_pos.x + 500,
+                            y: player_pos.y + 500,
+                        },
+                        Stats {
+                            hp: 10,
+                            max_hp: 10,
+                            atk: 1,
+                            def: 1,
+                        },
+                        Hostile,
+                    ))
+                    .id()
+            })
+            .collect();
 
         let mut nearby_query = game.world.query_filtered::<&Position, With<Hostile>>();
         let nearby_before = nearby_query
@@ -6723,6 +6732,98 @@ mod tests {
             "a wild population the player left behind elsewhere on the map shouldn't be able \
              to block new spawns near the player's current position, but nothing spawned \
              nearby in 500 attempts (nearby count stayed at {nearby_before})"
+        );
+
+        let surviving_distant = distant
+            .iter()
+            .filter(|&&e| game.world.get_entity(e).is_ok())
+            .count();
+        assert!(
+            surviving_distant < distant.len(),
+            "the distant population should have been culled to make room, but all \
+             {} of them survived",
+            distant.len()
+        );
+    }
+
+    #[test]
+    fn nest_guardians_are_eligible_to_be_culled_for_spawn_room() {
+        let mut game = Game::new(424, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let species_id = game.species_defs().into_iter().next().unwrap().id;
+        let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+
+        let nest = game
+            .world
+            .spawn((
+                Nest {
+                    species: species_id.clone(),
+                    pending_respawns: Vec::new(),
+                },
+                Position {
+                    x: player_pos.x + 500,
+                    y: player_pos.y + 500,
+                },
+                Durability {
+                    hp: 100,
+                    max_hp: 100,
+                },
+            ))
+            .id();
+
+        // Fill the cap entirely with guardians of that far-away nest — the
+        // farthest hostile from the player is always going to be one of them.
+        let mut hostile_query = game.world.query_filtered::<(), With<Hostile>>();
+        let already = hostile_query.iter(&game.world).count();
+        for _ in 0..WILD_CREATURE_CAP - already {
+            game.world.spawn((
+                Creature {
+                    species: species_id.clone(),
+                },
+                Position {
+                    x: player_pos.x + 500,
+                    y: player_pos.y + 500,
+                },
+                Stats {
+                    hp: 10,
+                    max_hp: 10,
+                    atk: 1,
+                    def: 1,
+                },
+                Hostile,
+                WanderAi::default(),
+                NestGuardian { nest },
+            ));
+        }
+
+        let nearby_before = {
+            let mut query = game.world.query_filtered::<&Position, With<Hostile>>();
+            query
+                .iter(&game.world)
+                .filter(|p| (p.x - player_pos.x).abs() <= 20 && (p.y - player_pos.y).abs() <= 20)
+                .count()
+        };
+
+        for _ in 0..500 {
+            game.maybe_spawn_wild_creature();
+        }
+
+        let mut hostile_query = game.world.query_filtered::<&Position, With<Hostile>>();
+        let nearby_after = hostile_query
+            .iter(&game.world)
+            .filter(|p| (p.x - player_pos.x).abs() <= 20 && (p.y - player_pos.y).abs() <= 20)
+            .count();
+        assert!(
+            nearby_after > nearby_before,
+            "guardians of a nest the player left behind shouldn't block spawns near the \
+             player, but nothing spawned nearby in 500 attempts"
+        );
+
+        let mut guardian_query = game.world.query_filtered::<(), With<NestGuardian>>();
+        let guardians_left = guardian_query.iter(&game.world).count();
+        assert!(
+            guardians_left < WILD_CREATURE_CAP - already,
+            "the farthest hostile should be culled even when it's a nest guardian, but \
+             all {guardians_left} guardians survived"
         );
     }
 
@@ -7299,7 +7400,7 @@ mod tests {
     }
 
     #[test]
-    fn recharger_node_structure_loads_with_the_expected_rest_and_temporary_schema() {
+    fn recharger_node_structure_loads_with_the_expected_rest_schema_and_is_permanent() {
         let game = Game::new(400, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let def = game
             .structure_defs()
@@ -7308,7 +7409,10 @@ mod tests {
             .expect("recharger_node.ron should load");
         assert_eq!(def.build_cost, vec![(ItemId::CoreFragment, 5)]);
         assert_eq!(def.enables_rest.as_ref().unwrap().radius, 2);
-        assert_eq!(def.temporary.as_ref().unwrap().max_ticks, 20);
+        assert!(
+            def.temporary.is_none(),
+            "the Recharger Node should be a permanent structure"
+        );
     }
 
     #[test]
@@ -7326,36 +7430,6 @@ mod tests {
         assert_eq!(
             needs.fatigue, 10.0,
             "resting without a nearby Recharger Node shouldn't restore anything"
-        );
-    }
-
-    #[test]
-    fn recharger_node_collapses_after_its_lifespan_of_ordinary_ticks() {
-        let mut game = Game::new(402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        spawn_recharger_node_at_player(&mut game);
-
-        for _ in 0..20 {
-            game.wait();
-        }
-
-        let mut query = game.world.query::<&Structure>();
-        assert!(
-            query.iter(&game.world).all(|s| s.kind != "recharger_node"),
-            "the node should collapse once its 20-tick lifespan elapses"
-        );
-    }
-
-    #[test]
-    fn resting_does_not_age_the_recharger_node() {
-        let mut game = Game::new(403, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        spawn_recharger_node_at_player(&mut game);
-
-        game.rest(); // burns REST_TICKS (40) internally — past the node's own 20-tick lifespan
-
-        let mut query = game.world.query::<&Structure>();
-        assert!(
-            query.iter(&game.world).any(|s| s.kind == "recharger_node"),
-            "ticks spent resting shouldn't count against the node's own lifespan"
         );
     }
 

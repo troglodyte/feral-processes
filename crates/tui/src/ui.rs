@@ -8,7 +8,7 @@ use feral_processes_app_core::{App, Mode, MENU_SCAN_RADIUS, TradeChoice};
 use feral_processes_engine::components::{EquippedItem, GlyphColor};
 use feral_processes_engine::items::ItemId;
 use feral_processes_engine::world::{Biome, Tile};
-use feral_processes_engine::{EntityView, Game, MessageKind, PetInfo, PlayerStatus};
+use feral_processes_engine::{EntityView, Game, MAX_FUSIONS, MessageKind, PetInfo, PlayerStatus};
 
 /// Display styling for a message-log line, chosen by the engine-supplied
 /// `MessageKind` rather than by sniffing the text — low-priority chatter
@@ -875,9 +875,10 @@ fn render_companion_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: u
             .map(|s| format!(" (on a cronjob: {s})"))
             .unwrap_or_default();
         let quality = p.quality.as_ref().map(|q| format!(" [{q}]")).unwrap_or_default();
+        let fused = fusion_tag(p.fusions);
         lines.push(menu_line(
             format!(
-                "[{}] {} Lv{} — HP {}/{}  ATK {}  DEF {}  PWR {}{}{}{}",
+                "[{}] {} Lv{} — HP {}/{}  ATK {}  DEF {}  PWR {}{}{}{}{}",
                 i + 1,
                 p.name,
                 p.level,
@@ -887,6 +888,7 @@ fn render_companion_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: u
                 p.def,
                 p.power,
                 quality,
+                fused,
                 active,
                 job
             ),
@@ -906,7 +908,20 @@ fn render_companion_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: u
 /// — `view_entities` alone only carries a level and an HP fraction, not
 /// the raw HP/ATK/DEF/PWR numbers (or party/job status) a fusion decision
 /// actually depends on.
+/// How a program's fusion depth reads in a menu row — nothing at all for
+/// a program that's never been fused, a plain count while it still has
+/// fusions left, and an explicit "maxed" note once it's hit
+/// `MAX_FUSIONS` and can't be an input to another fusion.
+fn fusion_tag(fusions: u32) -> String {
+    match fusions {
+        0 => String::new(),
+        n if n >= MAX_FUSIONS => format!(" (fused {n}/{MAX_FUSIONS} — maxed)"),
+        n => format!(" (fused {n}/{MAX_FUSIONS})"),
+    }
+}
+
 fn fuse_candidate_label(num: usize, c: &EntityView, pets: &[PetInfo]) -> String {
+    let fused = fusion_tag(c.fusions);
     match pets.iter().find(|p| p.entity == c.entity) {
         Some(p) => {
             let active = if p.is_companion { " (in party)" } else { "" };
@@ -916,12 +931,12 @@ fn fuse_candidate_label(num: usize, c: &EntityView, pets: &[PetInfo]) -> String 
                 .map(|s| format!(" (on a cronjob: {s})"))
                 .unwrap_or_default();
             format!(
-                "[{num}] {} Lv{} — HP {}/{}  ATK {}  DEF {}  PWR {}{active}{job}",
+                "[{num}] {} Lv{} — HP {}/{}  ATK {}  DEF {}  PWR {}{fused}{active}{job}",
                 c.label, p.level, p.hp, p.max_hp, p.atk, p.def, p.power
             )
         }
         None => format!(
-            "[{num}] {}{}",
+            "[{num}] {}{}{fused}",
             c.label,
             c.level.map(|l| format!(" Lv{l}")).unwrap_or_default()
         ),
@@ -1351,6 +1366,17 @@ fn render_inspect_detail(
     ];
     if let Some(quality) = &view.quality {
         lines.push(Line::from(format!("Potential: {quality}")));
+    }
+    if view.fusions > 0 {
+        lines.push(Line::from(format!(
+            "Fusions: {}/{MAX_FUSIONS}{}",
+            view.fusions,
+            if view.fusions >= MAX_FUSIONS {
+                " (can't be fused again)"
+            } else {
+                ""
+            }
+        )));
     }
     if view.is_hostile && !view.is_tamed {
         lines.push(Line::styled(
@@ -1856,7 +1882,10 @@ fn render_help(f: &mut Frame) {
         Line::from("habitat's spawn slot instead of an ordinary program. Much tougher, but"),
         Line::from("defeating one guarantees a cache of several Portal Fragments at once."),
         Line::from(""),
-        Line::from("Fuse (f) two compiled programs into one: pick two, and both are consumed"),
+        Line::from(
+            "Fuse (f) two compiled programs into one: pick two, and both are consumed (a program \
+             can only be fused 3 times)",
+        ),
         Line::from("to produce a new tamed program at the higher of the two levels, whose"),
         Line::from("species (and so moves/work aptitude) matches whichever input was that"),
         Line::from("level (ties favor the first pick). Each stat is the higher input's value"),

@@ -10,7 +10,7 @@ use feral_processes_app_core::{App, MENU_SCAN_RADIUS, Mode, TradeChoice};
 use feral_processes_engine::components::GlyphColor;
 use feral_processes_engine::items::ItemId;
 use feral_processes_engine::world::Biome;
-use feral_processes_engine::{Entity, EntityView, Game, MessageKind, PetInfo};
+use feral_processes_engine::{Entity, EntityView, Game, MAX_FUSIONS, MessageKind, PetInfo};
 
 const FONT_SIZE: f32 = 24.0;
 const LINE_HEIGHT: f32 = 30.0;
@@ -711,6 +711,13 @@ fn draw_inspect_detail(game: &mut Game, entity: Option<Entity>) {
     if let Some(quality) = &view.quality {
         rows.push(text_row(format!("Potential: {quality}")));
     }
+    if view.fusions > 0 {
+        rows.push(text_row(format!(
+            "Fusions: {}/{MAX_FUSIONS}{}",
+            view.fusions,
+            if view.fusions >= MAX_FUSIONS { " (can't be fused again)" } else { "" }
+        )));
+    }
     if view.is_hostile && !view.is_tamed {
         rows.push(Row::TextColored(
             format!("Decompile chance right now: {:.0}%", view.decompile_chance * 100.0),
@@ -854,9 +861,10 @@ fn draw_companion_menu(game: &mut Game, selected: usize) {
         let active = if p.is_companion { " (in party)" } else { "" };
         let job = p.job_structure.as_ref().map(|s| format!(" (on a cronjob: {s})")).unwrap_or_default();
         let quality = p.quality.as_ref().map(|q| format!(" [{q}]")).unwrap_or_default();
+        let fused = fusion_tag(p.fusions);
         rows.push(item_row(
             format!(
-                "[{}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}{}{}{}",
+                "[{}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}{}{}{}{}",
                 i + 1,
                 p.name,
                 p.level,
@@ -866,6 +874,7 @@ fn draw_companion_menu(game: &mut Game, selected: usize) {
                 p.def,
                 p.power,
                 quality,
+                fused,
                 active,
                 job
             ),
@@ -879,7 +888,20 @@ fn draw_companion_menu(game: &mut Game, selected: usize) {
 /// referencing `pets` (`Game::owned_pets`) by entity — `view_entities`
 /// alone only carries a level and an HP fraction, not the raw HP/ATK/DEF/
 /// PWR numbers a fusion decision actually depends on.
+/// How a program's fusion depth reads in a menu row — nothing at all for
+/// a program that's never been fused, a plain count while it still has
+/// fusions left, and an explicit "maxed" note once it's hit
+/// `MAX_FUSIONS` and can't be an input to another fusion.
+fn fusion_tag(fusions: u32) -> String {
+    match fusions {
+        0 => String::new(),
+        n if n >= MAX_FUSIONS => format!(" (fused {n}/{MAX_FUSIONS} - maxed)"),
+        n => format!(" (fused {n}/{MAX_FUSIONS})"),
+    }
+}
+
 fn fuse_candidate_label(num: usize, c: &EntityView, pets: &[PetInfo]) -> String {
+    let fused = fusion_tag(c.fusions);
     match pets.iter().find(|p| p.entity == c.entity) {
         Some(p) => {
             let active = if p.is_companion { " (in party)" } else { "" };
@@ -889,11 +911,15 @@ fn fuse_candidate_label(num: usize, c: &EntityView, pets: &[PetInfo]) -> String 
                 .map(|s| format!(" (on a cronjob: {s})"))
                 .unwrap_or_default();
             format!(
-                "[{num}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}{active}{job}",
+                "[{num}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}{fused}{active}{job}",
                 c.label, p.level, p.hp, p.max_hp, p.atk, p.def, p.power
             )
         }
-        None => format!("[{num}] {}{}", c.label, c.level.map(|l| format!(" Lv{l}")).unwrap_or_default()),
+        None => format!(
+            "[{num}] {}{}{fused}",
+            c.label,
+            c.level.map(|l| format!(" Lv{l}")).unwrap_or_default()
+        ),
     }
 }
 

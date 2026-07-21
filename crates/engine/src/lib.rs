@@ -23,7 +23,7 @@ use rand::{RngExt, SeedableRng};
 
 use components::{
     ActiveBuff, ActiveStatus, BuffKind, Creature, CustomName, Decompiler, Durability, Equipment,
-    EquippedItem, Experience, Glyph, GlyphColor, Hostile, Inventory, ItemFusions,
+    EquippedItem, Experience, FusionCount, Glyph, GlyphColor, Hostile, Inventory, ItemFusions,
     MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL, Needs, Nest, NestGuardian, PassiveProcessor, Perks,
     Player, PlayerBuff, Position, Potential, ResourceNode, Stats, StatusEffects, StatusKind,
     Structure, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
@@ -115,6 +115,13 @@ const COMPANION_COMMAND_FATIGUE_COST: f32 = 5.0;
 /// `Game::fuse_companions`) — enforced by truncation, not rejection, so a
 /// too-long name just gets shortened rather than failing the fusion.
 pub const MAX_CUSTOM_NAME_LEN: usize = 12;
+
+/// How many fusions deep a program's lineage may go before it's a
+/// finished product (see `components::FusionCount`). A program at this
+/// depth can't be fed into another fusion at all, so the stat-compounding
+/// `fuse_stat` gives is bounded instead of being an endless duplicate
+/// laundry.
+pub const MAX_FUSIONS: u32 = 3;
 
 /// How much the player's `Decompiler` skill grows per level gained.
 const DECOMPILER_SKILL_PER_LEVEL: i32 = 1;
@@ -299,6 +306,10 @@ pub struct PetInfo {
     /// (shouldn't happen for anything spawned going forward, but possible
     /// for an old save predating this component).
     pub quality: Option<String>,
+    /// How many fusions deep this program's lineage is, 0 to `MAX_FUSIONS`
+    /// — see `components::FusionCount`. At `MAX_FUSIONS` it can no longer
+    /// be fused.
+    pub fusions: u32,
 }
 
 /// Snapshot of the player's active companion, shown in the status panel
@@ -357,6 +368,10 @@ pub struct EntityView {
     pub level: Option<u32>,
     /// If this is a structure, its current/max raid `Durability`.
     pub durability: Option<(u32, u32)>,
+    /// How many fusions deep this (creature) entity's lineage is, 0 to
+    /// `MAX_FUSIONS` — see `components::FusionCount`. At `MAX_FUSIONS` it
+    /// can no longer be an input to a fusion, which the fuse menus show.
+    pub fusions: u32,
 }
 
 pub struct BattleView {
@@ -430,6 +445,10 @@ pub struct InspectView {
     /// This individual's rolled quality tier (see `components::Potential`),
     /// e.g. "Excellent (94%)" — `None` for an entity with no `Potential`.
     pub quality: Option<String>,
+    /// How many fusions deep this program's lineage is, 0 to `MAX_FUSIONS`
+    /// — see `components::FusionCount`. At `MAX_FUSIONS` it can no longer
+    /// be fused.
+    pub fusions: u32,
 }
 
 pub struct Game {
@@ -648,6 +667,7 @@ impl Game {
                 },
                 ZonePortal(c.zone),
                 StatusEffects::default(),
+                FusionCount(c.fusions),
             ));
             if let Some(name) = c.custom_name.clone() {
                 entity.insert(CustomName(name));
@@ -769,9 +789,21 @@ impl Game {
             Option<&ZonePortal>,
             Option<&CustomName>,
             Option<&Potential>,
+            Option<&FusionCount>,
         )>();
-        for (entity, creature, pos, stats, tamed, exp, task, spawn_zone, custom_name, potential) in
-            creature_query.iter(&self.world)
+        for (
+            entity,
+            creature,
+            pos,
+            stats,
+            tamed,
+            exp,
+            task,
+            spawn_zone,
+            custom_name,
+            potential,
+            fusions,
+        ) in creature_query.iter(&self.world)
         {
             let potential = potential.copied().unwrap_or(Potential::NEUTRAL);
             let cronjob = task.and_then(|t| {
@@ -806,6 +838,7 @@ impl Game {
                 atk_roll: potential.atk_roll,
                 def_roll: potential.def_roll,
                 growth_roll: potential.growth_roll,
+                fusions: fusions.map(|f| f.0).unwrap_or(0),
             });
         }
 
@@ -2331,6 +2364,8 @@ impl Game {
                 &mut stats,
                 amount,
                 progression::BASELINE_GROWTH_MULTIPLIER,
+                // The player has no level ceiling — only creatures do.
+                None,
             );
             (levels, exp.level)
         };
@@ -2381,7 +2416,13 @@ impl Game {
                 let Ok((mut exp, mut stats)) = query.get_mut(&mut self.world, companion) else {
                     continue;
                 };
-                progression::add_xp(&mut exp, &mut stats, amount, growth_multiplier) > 0
+                progression::add_xp(
+                    &mut exp,
+                    &mut stats,
+                    amount,
+                    growth_multiplier,
+                    Some(progression::CREATURE_MAX_LEVEL),
+                ) > 0
             };
             if leveled {
                 let name = self.creature_label(companion);
@@ -3507,6 +3548,17 @@ impl Game {
         }
     }
 
+    /// How many fusions deep `entity`'s lineage is (see
+    /// `components::FusionCount`) — 0 for anything caught or spawned
+    /// normally, up to `MAX_FUSIONS`, at which point it can't be fused
+    /// again.
+    pub fn fusion_count(&self, entity: Entity) -> u32 {
+        self.world
+            .get::<FusionCount>(entity)
+            .map(|f| f.0)
+            .unwrap_or(0)
+    }
+
     /// Display string for `entity`'s rolled `Potential`, e.g.
     /// "Excellent (94%)" — `None` if it has no `Potential` component (an
     /// old save predating it, or a non-creature entity).
@@ -3571,6 +3623,7 @@ impl Game {
                     is_companion: party.contains(&entity),
                     job_structure,
                     quality: self.potential_quality_label(entity),
+                    fusions: self.fusion_count(entity),
                 })
             })
             .collect()
@@ -3645,6 +3698,10 @@ impl Game {
     /// them (which would make repeated fusion runaway). A resource sink for
     /// duplicate catches: there's no separate item cost, since losing two
     /// programs to gain one is the cost.
+    ///
+    /// Fusion depth is capped: neither input may already be `MAX_FUSIONS`
+    /// deep (see `components::FusionCount`), and the result is one deeper
+    /// than its deepest input.
     /// `custom_name`, if given, is trimmed and truncated to
     /// `MAX_CUSTOM_NAME_LEN` characters and becomes the fused program's
     /// display name everywhere (see `CustomName`) instead of its species
@@ -3672,6 +3729,15 @@ impl Game {
                 return Err("You don't control both programs.".into());
             }
         }
+        for e in [a, b] {
+            if self.fusion_count(e) >= MAX_FUSIONS {
+                let name = self.creature_label(e);
+                return Err(format!(
+                    "{name} has already been fused {MAX_FUSIONS} times — it can't be fused again."
+                ));
+            }
+        }
+        let fused_depth = self.fusion_count(a).max(self.fusion_count(b)) + 1;
         let (species_a, exp_a, stats_a, potential_a) = (
             self.world.get::<Creature>(a).unwrap().species.clone(),
             *self.world.get::<Experience>(a).unwrap(),
@@ -3747,6 +3813,7 @@ impl Game {
             },
             ZonePortal(1),
             StatusEffects::default(),
+            FusionCount(fused_depth),
         ));
         if let Some(name) = &final_name {
             fused.insert(CustomName(name.clone()));
@@ -3933,6 +4000,7 @@ impl Game {
                     hp_fraction,
                     level,
                     durability,
+                    fusions: self.fusion_count(entity),
                 }
             })
             .collect()
@@ -3980,6 +4048,7 @@ impl Game {
             moves: species.moves.clone(),
             work_resource: species.work_resource,
             quality: self.potential_quality_label(entity),
+            fusions: self.fusion_count(entity),
         })
     }
 
@@ -4023,6 +4092,7 @@ impl Game {
                     .world
                     .get::<Durability>(entity)
                     .map(|d| (d.hp, d.max_hp)),
+                fusions: 0,
             })
             .collect()
     }
@@ -7656,6 +7726,131 @@ mod tests {
 
         assert!(!game.world.resource::<Party>().0.contains(&a));
         assert!(!game.world.resource::<Party>().0.contains(&b));
+    }
+
+    /// The player has no level ceiling, while their party members stop at
+    /// `progression::CREATURE_MAX_LEVEL` — one big XP award should push
+    /// the player past that ceiling and leave the companion pinned to it.
+    #[test]
+    fn player_levels_past_the_creature_cap_but_companions_dont() {
+        let mut game = Game::new(105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let companion = spawn_tamed(&mut game, 10, 3);
+        game.add_companion(companion).unwrap();
+
+        // Party members earn half the player's award (PARTY_XP_DIVISOR),
+        // so this is far past the cap for both of them.
+        game.award_player_xp(player, 1_000_000);
+
+        let player_level = game.world.get::<Experience>(player).unwrap().level;
+        let companion_level = game.world.get::<Experience>(companion).unwrap().level;
+        assert!(
+            player_level > progression::CREATURE_MAX_LEVEL,
+            "the player should keep leveling past the creature ceiling, got {player_level}"
+        );
+        assert_eq!(
+            companion_level,
+            progression::CREATURE_MAX_LEVEL,
+            "a companion should still stop at the creature ceiling"
+        );
+    }
+
+    /// Fuses `game`'s two freshest tamed programs together repeatedly to
+    /// build up a lineage `depth` fusions deep, returning that program.
+    fn fuse_to_depth(game: &mut Game, depth: u32) -> Entity {
+        let mut current = spawn_tamed(game, 10, 3);
+        for _ in 0..depth {
+            let partner = spawn_tamed(game, 10, 3);
+            game.fuse_companions(current, partner, None).unwrap();
+            current = game
+                .owned_pets()
+                .into_iter()
+                .max_by_key(|p| p.fusions)
+                .expect("the fusion result should be owned")
+                .entity;
+        }
+        current
+    }
+
+    #[test]
+    fn fusing_two_fresh_programs_gives_a_result_one_fusion_deep() {
+        let mut game = Game::new(101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let a = spawn_tamed(&mut game, 10, 3);
+        let b = spawn_tamed(&mut game, 10, 3);
+        assert_eq!(game.fusion_count(a), 0, "a caught program starts unfused");
+
+        game.fuse_companions(a, b, None).unwrap();
+
+        let pets = game.owned_pets();
+        assert_eq!(pets.len(), 1);
+        assert_eq!(pets[0].fusions, 1);
+    }
+
+    #[test]
+    fn a_fusion_result_is_one_deeper_than_its_deepest_input() {
+        let mut game = Game::new(102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let deep = fuse_to_depth(&mut game, 2);
+        let fresh = spawn_tamed(&mut game, 10, 3);
+        assert_eq!(game.fusion_count(deep), 2);
+
+        game.fuse_companions(deep, fresh, None).unwrap();
+
+        let result = game
+            .owned_pets()
+            .into_iter()
+            .max_by_key(|p| p.fusions)
+            .unwrap();
+        assert_eq!(
+            result.fusions, 3,
+            "depth should follow the deeper parent, not the sum of both"
+        );
+    }
+
+    #[test]
+    fn fuse_companions_rejects_a_program_already_at_the_fusion_cap() {
+        let mut game = Game::new(103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let maxed = fuse_to_depth(&mut game, MAX_FUSIONS);
+        assert_eq!(game.fusion_count(maxed), MAX_FUSIONS);
+        let fresh = spawn_tamed(&mut game, 10, 3);
+        let owned_before = game.owned_pets().len();
+
+        assert!(
+            game.fuse_companions(maxed, fresh, None).is_err(),
+            "a maxed-out program shouldn't be usable as a fusion input"
+        );
+        // ...in either slot.
+        assert!(game.fuse_companions(fresh, maxed, None).is_err());
+
+        assert_eq!(
+            game.owned_pets().len(),
+            owned_before,
+            "a rejected fusion shouldn't consume either input"
+        );
+    }
+
+    #[test]
+    fn fusion_depth_survives_a_save_load_round_trip() {
+        let mut game = Game::new(104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let maxed = fuse_to_depth(&mut game, MAX_FUSIONS);
+        game.add_companion(maxed).unwrap();
+
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_fusion_cap_test_{}.bin",
+            std::process::id()
+        ));
+        game.save(&path).unwrap();
+        let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        let restored = loaded
+            .owned_pets()
+            .into_iter()
+            .max_by_key(|p| p.fusions)
+            .expect("the fused program should survive the round trip");
+        assert_eq!(
+            restored.fusions, MAX_FUSIONS,
+            "a maxed lineage must stay maxed across a save, not reset to fusable"
+        );
     }
 
     #[test]

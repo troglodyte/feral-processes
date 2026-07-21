@@ -155,8 +155,13 @@ pub fn task_progress_system(
                     .map(|p| p.growth_roll)
                     .unwrap_or(Potential::NEUTRAL.growth_roll);
                 let growth_multiplier = species_growth * individual_roll;
-                let levels =
-                    progression::add_xp(&mut exp, &mut stats, WORK_XP_PER_CYCLE, growth_multiplier);
+                let levels = progression::add_xp(
+                    &mut exp,
+                    &mut stats,
+                    WORK_XP_PER_CYCLE,
+                    growth_multiplier,
+                    Some(progression::CREATURE_MAX_LEVEL),
+                );
                 if levels > 0 {
                     format!(" It levels up to {}!", exp.level)
                 } else {

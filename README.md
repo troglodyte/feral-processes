@@ -250,7 +250,7 @@ Shown in the status panel (always) and the intrusion screen (in battle):
 | **Integrity** | Your HP. Hits 0 and you flatline — final in Permadeath, a costly soft-reboot in Forgiving mode. Leveling up or recharging overnight (`r`) both fully restore it. |
 | **Power** | Your hunger-equivalent. Drains over time; hits 0 and you start taking Integrity damage each tick. Below 50%, your Attack also starts weakening — a linear falloff to half strength at 0 Power, on top of (not instead of) the tick damage. Restored by draining a Power Cell (`e`) or standing near a cooking Terminal. |
 | **Fatigue** | Drains over time; restored to full by recharging overnight (`r`). Commanding a companion in battle (`c`) also costs a flat chunk of it — rest also advances a lot of game time, so use both deliberately. |
-| **Level / XP** | Grows from defeating or decompiling rogue programs, or (for a compiled program) completing cronjob cycles. Each level-up grows Attack/Defense/max Integrity, fully heals, and grants 1 Perk Point — see [Perks](#perks). Capped at level 12 for everyone (you and every tamed program alike) — further XP from any source is simply ignored once maxed. |
+| **Level / XP** | Grows from defeating or decompiling rogue programs, or (for a compiled program) completing cronjob cycles. Each level-up grows Attack/Defense/max Integrity, fully heals, and grants 1 Perk Point — see [Perks](#perks). **You** have no level ceiling at all; **tamed programs** stop at level 12, and further XP from any source is simply ignored once one is maxed. |
 | **Attack** | How hard your hits land. Battle damage is roughly `move power + attacker's Attack − defender's Defense` (always at least 1). |
 | **Defense** | How much incoming damage you shrug off — see the Attack formula above. |
 | **Decompiler** | Player-only skill at cracking ICE. Grows by 1 every time you level up (starts at 0). Adds a flat bonus to your decompile odds — see Decompile chance below. Tamed programs never have this stat; only you attempt decompiles. |
@@ -429,6 +429,13 @@ then the second (anyone but the first). Both are consumed.
 - There's no separate item cost: losing two programs to gain one stronger
   one *is* the cost, which makes it a good way to turn duplicate catches
   into a single keeper.
+- **A program can only be fused 3 times.** The result of a fusion is one
+  fusion "deeper" than its deepest parent, and once a program reaches 3 it
+  can't be fed into another fusion at all — the pets and Fuse screens tag
+  it (e.g. `(fused 3/3 — maxed)`), and picking it anyway just tells you
+  why it's off the table. Fusing a 2-deep program with a freshly caught
+  one still gives a 3-deep result, so the cheapest way to reach the cap is
+  a chain, not a tournament bracket.
 - A fused program isn't placed in your party or on a cronjob automatically
   — add it with `p` or assign it with `w` like any other compiled program.
 
@@ -622,6 +629,19 @@ cargo test
 ## Changelog
 
 ### 2026-07-21
+
+- **Programs can only be fused 3 times**: every fusion result is one level
+  "deeper" than its deepest parent, and a program that's 3 fusions deep is
+  a finished product — it can't be an input to another fusion. The pets
+  (`p`), inspect (`i`), and Fuse (`f`) screens all show a program's fusion
+  depth, flagging a maxed one. This bounds chain-fusing, which previously
+  had no ceiling at all beyond your supply of duplicates. Persisted across
+  save/load (bumps the save format to **v6** — old saves need a new game)
+  — see [Fusing programs](#fusing-programs).
+- **The player's level cap is gone**: you now keep leveling forever
+  (gaining stats and a Perk Point each time), while tamed programs still
+  stop at level 12 as before. Long runs stay worth grinding instead of
+  dead-ending at the shared ceiling — see the Stats table.
 
 - **A busier, better-behaved wild population**: the world-wide cap on wild
   programs is up from 24 to 100, so an area you're exploring stays alive

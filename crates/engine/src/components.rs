@@ -452,6 +452,18 @@ impl Potential {
     }
 }
 
+/// How many fusions deep a creature's lineage is (see
+/// `Game::fuse_companions`). A creature that was caught or spawned
+/// normally has no such component at all, which reads as 0; a fusion's
+/// result carries `max(parent_a, parent_b) + 1`, so the number is the
+/// *depth* of the deepest chain behind it, not a count of ancestors.
+///
+/// Once it hits `MAX_FUSIONS` that creature is a finished product: it
+/// can't be used as an input to another fusion, which stops a player from
+/// laundering an endless supply of duplicates into one runaway program.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FusionCount(pub u32);
+
 /// A structure's remaining health against raids (see `Game::raid_check`).
 /// Every deployed structure gets one, sized from its
 /// `StructureDef::durability`; reaching 0 destroys the structure.

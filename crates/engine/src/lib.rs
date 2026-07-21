@@ -90,6 +90,13 @@ const PACK_SIZE_STEP_TILES: i32 = DISTANCE_STAT_STEP_TILES * 2;
 /// into one fight.
 const PACK_GATHER_RADIUS: i32 = 2;
 
+/// How far (per axis) from the player a `Hostile` creature still counts
+/// against `Game::maybe_spawn_wild_creature`'s population cap. Matches
+/// `app_core::MENU_SCAN_RADIUS`, the existing notion of "nearby" the scan
+/// command already uses — a creature farther away than this is somewhere
+/// the player has moved on from, not part of "this area."
+const WILD_POPULATION_CAP_RADIUS: i32 = 40;
+
 /// Battle rounds a companion's default rally buff (see
 /// `Game::rally_player`) lasts when its species defines no
 /// `special_ability`.
@@ -3077,8 +3084,28 @@ impl Game {
     }
 
     fn maybe_spawn_wild_creature(&mut self) {
-        let mut count_query = self.world.query_filtered::<(), With<Creature>>();
-        if count_query.iter(&self.world).count() >= 24 {
+        let player_pos = *self.world.get::<Position>(self.player_entity()).unwrap();
+        // Only wild (`Hostile`) creatures within `WILD_POPULATION_CAP_RADIUS`
+        // of the player count against this cap. Counting the whole map would
+        // let a population the player wandered away from — which never
+        // despawns on its own — permanently block new spawns whenever it
+        // added up to 24, no matter how empty the player's current area
+        // actually is; scoping it to nearby creatures keeps the cap doing
+        // its job (bounding how crowded *this* area gets) without that
+        // global lockout. A tamed program (party member or cronjob worker)
+        // is still a `Creature` but never counts here at all — it shouldn't
+        // crowd out wild spawns just by existing.
+        let nearby_hostiles = {
+            let mut query = self.world.query_filtered::<&Position, With<Hostile>>();
+            query
+                .iter(&self.world)
+                .filter(|p| {
+                    (p.x - player_pos.x).abs() <= WILD_POPULATION_CAP_RADIUS
+                        && (p.y - player_pos.y).abs() <= WILD_POPULATION_CAP_RADIUS
+                })
+                .count()
+        };
+        if nearby_hostiles >= 24 {
             return;
         }
         let roll = {
@@ -3088,7 +3115,6 @@ impl Game {
         if !roll {
             return;
         }
-        let player_pos = *self.world.get::<Position>(self.player_entity()).unwrap();
         let (dx, dy) = {
             let mut rng = self.world.resource_mut::<GameRng>();
             (rng.0.random_range(-12..=12), rng.0.random_range(-12..=12))
@@ -6619,6 +6645,84 @@ mod tests {
         assert!(
             max_hps.iter().any(|&hp| hp != max_hps[0]),
             "spawning the same species repeatedly should roll different individual stats, got {max_hps:?}"
+        );
+    }
+
+    #[test]
+    fn wild_spawn_cap_is_not_exhausted_by_tamed_creatures() {
+        let mut game = Game::new(422, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let species_id = game.species_defs().into_iter().next().unwrap().id;
+        for _ in 0..24 {
+            game.world.spawn((
+                Creature { species: species_id.clone() },
+                Position { x: 0, y: 0 },
+                Stats { hp: 10, max_hp: 10, atk: 1, def: 1 },
+                Tamed { owner: player },
+            ));
+        }
+
+        // `Game::new` already seeds 14 initial (hostile) wild creatures, so
+        // the true wild population here is 14 — comfortably under any
+        // reasonable cap — even though total `Creature` entities (wild +
+        // tamed) is 38.
+        let mut creature_query = game.world.query_filtered::<(), With<Creature>>();
+        let before = creature_query.iter(&game.world).count();
+
+        for _ in 0..500 {
+            game.maybe_spawn_wild_creature();
+        }
+
+        let after = creature_query.iter(&game.world).count();
+        assert!(
+            after > before,
+            "wild creatures should still be able to spawn even when the map already has \
+             24 tamed (non-hostile) programs on it, but the population stayed at {before} \
+             after 500 attempts"
+        );
+    }
+
+    #[test]
+    fn wild_spawn_cap_is_not_exhausted_by_creatures_far_from_the_player() {
+        let mut game = Game::new(423, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let species_id = game.species_defs().into_iter().next().unwrap().id;
+        let player_pos = *game
+            .world
+            .get::<Position>(game.player_entity())
+            .unwrap();
+
+        // A wild population the player wandered away from, far outside the
+        // (-12..=12) radius `maybe_spawn_wild_creature` ever spawns into
+        // around the player's *current* position.
+        for _ in 0..24 {
+            game.world.spawn((
+                Creature { species: species_id.clone() },
+                Position { x: player_pos.x + 500, y: player_pos.y + 500 },
+                Stats { hp: 10, max_hp: 10, atk: 1, def: 1 },
+                Hostile,
+            ));
+        }
+
+        let mut nearby_query = game.world.query_filtered::<&Position, With<Hostile>>();
+        let nearby_before = nearby_query
+            .iter(&game.world)
+            .filter(|p| (p.x - player_pos.x).abs() <= 20 && (p.y - player_pos.y).abs() <= 20)
+            .count();
+
+        for _ in 0..500 {
+            game.maybe_spawn_wild_creature();
+        }
+
+        let nearby_after = nearby_query
+            .iter(&game.world)
+            .filter(|p| (p.x - player_pos.x).abs() <= 20 && (p.y - player_pos.y).abs() <= 20)
+            .count();
+
+        assert!(
+            nearby_after > nearby_before,
+            "a wild population the player left behind elsewhere on the map shouldn't be able \
+             to block new spawns near the player's current position, but nothing spawned \
+             nearby in 500 attempts (nearby count stayed at {nearby_before})"
         );
     }
 

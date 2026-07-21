@@ -119,14 +119,28 @@ type CronjobWorker = (
 /// refills to its `capacity` on the next tick rather than stalling the
 /// cronjob forever. The same loop would drive future colonist-style jobs,
 /// not just base-building work.
+///
+/// Bevy injects one system param per query/resource, so the count here
+/// tracks the data the system touches, not incidental complexity worth
+/// refactoring away. TODO: fold the structure query and `StructureDb` into
+/// a `#[derive(SystemParam)]` bundle so this drops back under the lint
+/// threshold without suppressing it — this is the only `#[allow]` in the
+/// workspace and shouldn't set a precedent.
+#[allow(clippy::too_many_arguments)]
 pub fn task_progress_system(
     mut tasks: Query<CronjobWorker>,
     mut nodes: Query<&mut ResourceNode>,
     mut inventories: Query<&mut Inventory>,
+    structures: Query<&Structure>,
+    structure_db: Res<StructureDb>,
     species_db: Res<SpeciesDb>,
     mut log: ResMut<MessageLog>,
     mut rng: ResMut<GameRng>,
 ) {
+    let capacity = crate::structures::inventory_capacity_for(
+        structures.iter().map(|s| s.kind.as_str()),
+        &structure_db,
+    );
     for (mut task, tamed, creature, potential, mut exp, mut stats) in &mut tasks {
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
@@ -150,7 +164,12 @@ pub fn task_progress_system(
         }
         node.amount -= 1;
         if let Ok(mut inv) = inventories.get_mut(tamed.owner) {
-            inv.add(node.resource, 1);
+            if inv.add_capped(node.resource, 1, capacity) == 0 {
+                log.push(format!(
+                    "A cronjob yields {} but there's no room to store it.",
+                    node.resource.display_name()
+                ));
+            }
             let level_note = if exp.level < WORK_XP_LEVEL_CAP {
                 let species_growth = species_db
                     .get(&creature.species)
@@ -194,9 +213,14 @@ pub fn task_progress_system(
 pub fn passive_process_system(
     mut player: Query<(&Position, &mut Inventory), With<Player>>,
     mut structures: Query<(&Structure, &Position, &mut PassiveProcessor)>,
+    all_structures: Query<&Structure>,
     structure_db: Res<StructureDb>,
     mut log: ResMut<MessageLog>,
 ) {
+    let capacity = crate::structures::inventory_capacity_for(
+        all_structures.iter().map(|s| s.kind.as_str()),
+        &structure_db,
+    );
     for (player_pos, mut inventory) in &mut player {
         let player_pos = *player_pos;
         for (structure, pos, mut proc) in &mut structures {
@@ -216,6 +240,12 @@ pub fn passive_process_system(
                 continue;
             }
             proc.progress = 0;
+            // Check room before taking the input: this is a conversion, not
+            // an award, so a full buffer must refuse rather than consume the
+            // input for an output that never lands.
+            if !inventory.has_room(recipe.produces, 1, capacity) {
+                continue;
+            }
             if inventory.take(recipe.consumes, 1) == 1 {
                 inventory.add(recipe.produces, 1);
                 log.push_kind(
@@ -235,6 +265,84 @@ pub fn passive_process_system(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::items::ItemId;
+    use crate::structures::{BASE_INVENTORY_CAPACITY, StructureDb};
+
+    /// A conversion that consumes a banked currency (no cargo cost) and
+    /// produces ordinary cargo — unlike any shipped recipe, this can
+    /// actually grow cargo usage, so it's the only way to observe the
+    /// buffer-overflow bug a net-zero recipe like the real Terminal can't
+    /// expose. Written to a scratch temp dir and loaded through
+    /// `StructureDb::load_dir`, same fixture pattern `research.rs`'s tests
+    /// use, since `StructureDb`'s fields are private outside its module.
+    fn load_test_capacitor() -> StructureDb {
+        let dir =
+            std::env::temp_dir().join(format!("feral_passive_process_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("test_capacitor.ron"),
+            r#"(
+                id: "test_capacitor",
+                name: "Test Capacitor",
+                glyph: 'C',
+                color: Cyan,
+                build_cost: [],
+                work: None,
+                passive_process: Some((
+                    consumes: ResearchData,
+                    produces: CoreFragment,
+                    ticks_per_unit: 1,
+                    radius: 5,
+                )),
+            )"#,
+        )
+        .unwrap();
+        let (db, warnings) = StructureDb::load_dir(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            warnings.is_empty(),
+            "fixture should parse cleanly: {warnings:?}"
+        );
+        db
+    }
+
+    #[test]
+    fn passive_process_does_not_consume_input_when_output_has_no_room() {
+        let structure_db = load_test_capacitor();
+        let mut world = World::new();
+        world.insert_resource(structure_db);
+        world.insert_resource(MessageLog::default());
+
+        let mut inventory = Inventory::default();
+        inventory.add(ItemId::ResearchData, 5);
+        inventory.add(ItemId::CoreFragment, BASE_INVENTORY_CAPACITY);
+        world.spawn((Player, Position { x: 0, y: 0 }, inventory));
+        world.spawn((
+            Structure {
+                kind: "test_capacitor".to_string(),
+            },
+            Position { x: 0, y: 0 },
+            PassiveProcessor::default(),
+        ));
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(passive_process_system);
+        schedule.run(&mut world);
+
+        let mut query = world.query::<&Inventory>();
+        let inv = query.iter(&world).next().unwrap();
+        assert_eq!(
+            inv.count(ItemId::ResearchData),
+            5,
+            "the input must not be consumed when the produced unit has no room"
+        );
+        assert_eq!(
+            inv.count(ItemId::CoreFragment),
+            BASE_INVENTORY_CAPACITY,
+            "cargo must not grow past capacity"
+        );
+    }
 
     #[test]
     fn needs_decay_at_expected_rate() {

@@ -8,7 +8,7 @@ use macroquad::prelude::*;
 
 use feral_processes_app_core::{App, MENU_SCAN_RADIUS, Mode, TradeChoice};
 use feral_processes_engine::components::GlyphColor;
-use feral_processes_engine::items::ItemId;
+use feral_processes_engine::items::{ItemId, RESEARCH_DATA_BANK_LIMIT};
 use feral_processes_engine::world::Biome;
 use feral_processes_engine::{
     Entity, EntityView, Game, MAX_FUSIONS, MessageKind, PetInfo, ResearchState,
@@ -516,6 +516,9 @@ fn draw_mode_overlay(app: &mut App) {
         Mode::CraftQuantity => {
             draw_craft_quantity(game, app.pending_craft, &app.craft_quantity_input)
         }
+        Mode::EraseQuantity => {
+            draw_erase_quantity(game, app.pending_erase, &app.erase_quantity_input)
+        }
         Mode::Cronjob => draw_worker_menu(
             game,
             "Assign Cronjob",
@@ -605,6 +608,10 @@ fn draw_direction_prompt(title: &str, body: &str) {
 fn draw_build_menu(game: &mut Game, selected: usize) {
     let status = game.player_status();
     let defs = game.buildable_structure_defs();
+    let descriptions: Vec<String> = defs
+        .iter()
+        .map(|def| game.structure_description(def))
+        .collect();
     let mut rows = vec![
         text_row("Esc to cancel; Up/Down + Enter also work"),
         text_row(""),
@@ -616,27 +623,9 @@ fn draw_build_menu(game: &mut Game, selected: usize) {
             format!("[{}] {} - {}", i + 1, def.name, cost.join(", ")),
             i == selected,
         ));
-        rows.push(text_row(format!("    {}", structure_description(def))));
+        rows.push(text_row(format!("    {}", descriptions[i])));
     }
     draw_popup("Deploy", PopupSize::Large, &rows);
-}
-
-fn structure_description(def: &feral_processes_engine::structures::StructureDef) -> String {
-    let mut parts = Vec::new();
-    if let Some(work) = &def.work {
-        parts.push(format!("cronjob -> {}", work.produces.display_name()));
-    }
-    if let Some(passive) = &def.passive_process {
-        parts.push(format!(
-            "{} -> {}",
-            passive.consumes.display_name(),
-            passive.produces.display_name()
-        ));
-    }
-    if parts.is_empty() {
-        parts.push("no production".to_string());
-    }
-    parts.join(", ")
 }
 
 fn draw_craft_menu(game: &mut Game, selected: usize) {
@@ -694,6 +683,36 @@ fn draw_craft_quantity(game: &mut Game, pending: Option<ItemId>, quantity_input:
         "[F] Compile 5   [M] Compile max affordable   Esc to go back",
     ));
     draw_popup("Compile", PopupSize::Large, &rows);
+}
+
+fn draw_erase_quantity(game: &mut Game, item: Option<ItemId>, quantity_input: &str) {
+    let Some(item) = item else { return };
+    let status = game.player_status();
+    let held = status
+        .inventory
+        .iter()
+        .find(|(i, _)| *i == item)
+        .map(|(_, q)| *q)
+        .unwrap_or(0);
+    let shown = if quantity_input.is_empty() {
+        "1".to_string()
+    } else {
+        quantity_input.to_string()
+    };
+    let rows = vec![
+        text_row(format!("Erase how many {}?", item.display_name())),
+        text_row(""),
+        text_row(format!("Quantity: {shown}")),
+        text_row(""),
+        text_row(format!(
+            "You have: {held}        Buffer: {}/{}",
+            status.inventory_used, status.inventory_capacity
+        )),
+        text_row(""),
+        text_row("Type digits, Enter to erase"),
+        text_row("[A] Erase all   Esc to go back"),
+    ];
+    draw_popup("Erase", PopupSize::Large, &rows);
 }
 
 fn draw_worker_menu(game: &mut Game, title: &str, prompt: &str, selected: usize) {
@@ -982,7 +1001,10 @@ fn draw_inventory(game: &mut Game, selected: usize) {
         equipped_row(2, "Armor", status.armor, selected == 1),
         equipped_row(3, "Module", status.module, selected == 2),
         text_row(""),
-        text_row("Inventory (number to equip/erase):"),
+        text_row(format!(
+            "Inventory - Buffer {}/{} (number to equip/erase):",
+            status.inventory_used, status.inventory_capacity
+        )),
     ];
     if status.inventory.is_empty() {
         rows.push(text_row("(empty)"));
@@ -1435,7 +1457,10 @@ fn draw_research_menu(game: &mut Game, selected: usize) {
         .unwrap_or(0);
     let nodes = game.research_nodes();
     let mut rows = vec![
-        Row::TextColored(format!("Research Data: {held}"), CYAN),
+        Row::TextColored(
+            format!("Research Data: {held}/{}", RESEARCH_DATA_BANK_LIMIT),
+            CYAN,
+        ),
         text_row(""),
     ];
     for (i, node) in nodes.iter().enumerate() {

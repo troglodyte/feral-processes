@@ -1,8 +1,0 @@
-(
-    id: "cold_storage",
-    name: "Cold Storage",
-    description: "Persistent local storage. Unlocks the Data Cache.",
-    cost: 20,
-    requires: ["commerce"],
-    unlocks_structures: ["data_cache"],
-)

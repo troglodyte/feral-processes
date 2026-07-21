@@ -132,6 +132,14 @@ pub struct StructureDef {
     /// nothing, same as before it existed.
     #[serde(default)]
     pub raid_defense: u32,
+    /// How much this structure raises the player's inventory capacity while
+    /// it's deployed (see `Game::inventory_capacity`). Stacks additively
+    /// across every deployed structure that sets it, so several Data Caches
+    /// each add their bonus. `#[serde(default)]` so existing structure
+    /// files (including mods) contribute nothing, same as before it
+    /// existed.
+    #[serde(default)]
+    pub inventory_bonus: u32,
     /// If set, `Game::rest` is only allowed while the player stands within
     /// this structure's `radius` — resting has no other way to happen.
     /// `#[serde(default)]` so existing structure files (including mods)
@@ -148,6 +156,26 @@ pub struct StructureDef {
 
 fn default_durability() -> u32 {
     30
+}
+
+/// Inventory capacity with no capacity-granting structures deployed.
+pub const BASE_INVENTORY_CAPACITY: u32 = 20;
+
+/// Total carrying capacity given every currently-deployed structure kind.
+/// Takes the kinds rather than reading the ECS so `Game` and
+/// `systems::task_progress_system` — which see the world through very
+/// different borrows — can share one implementation. Unknown kinds are
+/// ignored, which keeps a save referencing a since-removed mod structure
+/// loadable.
+pub fn inventory_capacity_for<'a>(
+    deployed: impl Iterator<Item = &'a str>,
+    db: &StructureDb,
+) -> u32 {
+    BASE_INVENTORY_CAPACITY
+        + deployed
+            .filter_map(|kind| db.get(kind))
+            .map(|def| def.inventory_bonus)
+            .sum::<u32>()
 }
 
 #[derive(Resource, Default)]
@@ -213,5 +241,57 @@ impl StructureDb {
                 .then_with(|| a.id.cmp(&b.id))
         });
         defs.into_iter()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_db() -> StructureDb {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/structures");
+        StructureDb::load_dir(&dir)
+            .expect("assets/structures should load")
+            .0
+    }
+
+    #[test]
+    fn the_data_cache_is_the_only_structure_granting_buffer_space() {
+        let db = test_db();
+        let cache = db.get("data_cache").expect("data_cache.ron should load");
+        assert_eq!(cache.inventory_bonus, 10);
+        for def in db.all() {
+            if def.id != "data_cache" {
+                assert_eq!(
+                    def.inventory_bonus, 0,
+                    "{} should not grant buffer space",
+                    def.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn capacity_is_the_base_plus_every_deployed_bonus() {
+        let db = test_db();
+        assert_eq!(
+            inventory_capacity_for(std::iter::empty(), &db),
+            BASE_INVENTORY_CAPACITY,
+            "an empty base is just the baseline"
+        );
+        assert_eq!(
+            inventory_capacity_for(["data_cache"].into_iter(), &db),
+            BASE_INVENTORY_CAPACITY + 10
+        );
+        assert_eq!(
+            inventory_capacity_for(["data_cache", "data_cache", "home"].into_iter(), &db),
+            BASE_INVENTORY_CAPACITY + 20,
+            "caches stack; a Home contributes nothing"
+        );
+        assert_eq!(
+            inventory_capacity_for(["no_such_structure"].into_iter(), &db),
+            BASE_INVENTORY_CAPACITY,
+            "an unknown kind is ignored rather than panicking"
+        );
     }
 }

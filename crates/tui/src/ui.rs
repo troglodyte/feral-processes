@@ -6,7 +6,7 @@ use ratatui::widgets::{Block, Clear, Gauge, Paragraph, Wrap};
 
 use feral_processes_app_core::{App, MENU_SCAN_RADIUS, Mode, TradeChoice};
 use feral_processes_engine::components::{EquippedItem, GlyphColor};
-use feral_processes_engine::items::ItemId;
+use feral_processes_engine::items::{ItemId, RESEARCH_DATA_BANK_LIMIT};
 use feral_processes_engine::world::{Biome, Tile};
 use feral_processes_engine::{
     EntityView, Game, MAX_FUSIONS, MessageKind, PetInfo, PlayerStatus, ResearchState,
@@ -57,6 +57,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
         | Mode::InspectDetail
         | Mode::Inventory
         | Mode::InventoryItemAction
+        | Mode::EraseQuantity
         | Mode::Companion
         | Mode::Fuse
         | Mode::FuseSecond
@@ -134,6 +135,9 @@ fn render_playing(f: &mut Frame, app: &mut App) {
         Mode::Craft => render_craft_menu(f, area, game, selected),
         Mode::CraftQuantity => {
             render_craft_quantity_menu(f, area, game, app.pending_craft, &app.craft_quantity_input)
+        }
+        Mode::EraseQuantity => {
+            render_erase_quantity_menu(f, area, game, app.pending_erase, &app.erase_quantity_input)
         }
         Mode::Cronjob => render_cronjob_menu(f, area, game, selected),
         Mode::CronjobStructure => render_cronjob_structure_menu(f, area, game, selected),
@@ -519,11 +523,58 @@ fn render_craft_quantity_menu(
     );
 }
 
+fn render_erase_quantity_menu(
+    f: &mut Frame,
+    area: Rect,
+    game: &mut Game,
+    item: Option<ItemId>,
+    quantity_input: &str,
+) {
+    let popup = centered_rect(60, 40, area);
+    f.render_widget(Clear, popup);
+    let Some(item) = item else { return };
+    let status = game.player_status();
+    let held = status
+        .inventory
+        .iter()
+        .find(|(i, _)| *i == item)
+        .map(|(_, q)| *q)
+        .unwrap_or(0);
+    let shown = if quantity_input.is_empty() {
+        "1".to_string()
+    } else {
+        quantity_input.to_string()
+    };
+    let lines = vec![
+        Line::from(format!("Erase how many {}?", item.display_name())),
+        Line::from(""),
+        Line::from(format!("Quantity: {shown}")),
+        Line::from(""),
+        Line::from(format!(
+            "You have: {held}        Buffer: {}/{}",
+            status.inventory_used, status.inventory_capacity
+        )),
+        Line::from(""),
+        Line::from("Type digits, Enter to erase"),
+        Line::from("[A] Erase all   Esc to go back"),
+    ];
+    f.render_widget(
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: true })
+            .block(Block::bordered().title("Erase")),
+        popup,
+    );
+}
+
 fn render_build_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize) {
     let popup = centered_rect(70, 60, area);
     f.render_widget(Clear, popup);
     let status = game.player_status();
     let defs = game.buildable_structure_defs();
+    let descriptions: Vec<String> = defs
+        .iter()
+        .map(|def| game.structure_description(def))
+        .collect();
     let mut lines = vec![
         Line::from("Deploy what? (Esc to cancel; Up/Down + Enter also work)"),
         Line::from(""),
@@ -537,7 +588,7 @@ fn render_build_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize
         } else {
             Line::styled(text, Style::new().add_modifier(Modifier::BOLD))
         });
-        lines.push(Line::from(format!("    {}", structure_description(def))));
+        lines.push(Line::from(format!("    {}", descriptions[i])));
     }
     f.render_widget(
         Paragraph::new(lines)
@@ -545,27 +596,6 @@ fn render_build_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize
             .block(Block::bordered().title("Deploy")),
         popup,
     );
-}
-
-/// A one-sentence summary of what a structure does, derived from its
-/// `work`/`passive_process` recipe rather than a separate authored field —
-/// any structure a modder drops in automatically gets a sensible line here.
-fn structure_description(def: &feral_processes_engine::structures::StructureDef) -> String {
-    let mut parts = Vec::new();
-    if let Some(work) = &def.work {
-        parts.push(format!("cronjob → {}", work.produces.display_name()));
-    }
-    if let Some(passive) = &def.passive_process {
-        parts.push(format!(
-            "{} → {}",
-            passive.consumes.display_name(),
-            passive.produces.display_name()
-        ));
-    }
-    if parts.is_empty() {
-        parts.push("no production".to_string());
-    }
-    parts.join(", ")
 }
 
 fn render_build_direction(f: &mut Frame, area: Rect) {
@@ -1305,7 +1335,7 @@ fn render_research_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: us
     let nodes = game.research_nodes();
     let mut lines = vec![
         Line::styled(
-            format!("Research Data: {held}"),
+            format!("Research Data: {held}/{}", RESEARCH_DATA_BANK_LIMIT),
             Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD),
         ),
         Line::from(""),
@@ -1530,7 +1560,10 @@ fn render_inventory_screen(f: &mut Frame, area: Rect, game: &mut Game, selected:
         equipped_line(3, "Module", status.module, selected == 2),
         Line::from(""),
         Line::styled(
-            "Inventory (number to equip/erase):",
+            format!(
+                "Inventory — Buffer {}/{} (number to equip/erase):",
+                status.inventory_used, status.inventory_capacity
+            ),
             Style::new().add_modifier(Modifier::BOLD),
         ),
     ];

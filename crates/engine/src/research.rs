@@ -250,7 +250,7 @@ mod tests {
             warnings.is_empty(),
             "the shipped tree must not warn: {warnings:?}"
         );
-        assert_eq!(db.all().count(), 13, "13 nodes ship with the game");
+        assert_eq!(db.all().count(), 12, "12 nodes ship with the game");
         assert_eq!(
             db.get("cortex").map(|d| d.cost),
             Some(45),

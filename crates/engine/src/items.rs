@@ -1,5 +1,11 @@
 use serde::{Deserialize, Serialize};
 
+/// Hard ceiling on banked Research Data. Chosen against a full research
+/// tree cost of 275, so the bank deliberately cannot fund every node at
+/// once — research has to be spent along the way rather than hoarded to
+/// the end — while staying far above the priciest single node (45).
+pub const RESEARCH_DATA_BANK_LIMIT: u32 = 200;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ItemId {
     CoreFragment,
@@ -29,6 +35,20 @@ impl ItemId {
             ItemId::MonofilamentWhip => "Monofilament Whip",
             ItemId::AblativePlating => "Ablative Plating",
             ItemId::CortexHack => "Cortex Hack",
+        }
+    }
+
+    /// `Some(ceiling)` for a banked currency: exempt from the shared
+    /// inventory capacity and limited only by its own hard cap. `None` for
+    /// ordinary cargo, which counts against `Game::inventory_capacity`.
+    ///
+    /// Sharing the cargo cap would let an unrelated pile of Core Fragments
+    /// starve a Research Node's output, so the currency is measured
+    /// separately.
+    pub fn bank_limit(self) -> Option<u32> {
+        match self {
+            ItemId::ResearchData => Some(RESEARCH_DATA_BANK_LIMIT),
+            _ => None,
         }
     }
 
@@ -235,5 +255,33 @@ mod tests {
             4,
             "level 0 should clamp to level 1's unscaled base"
         );
+    }
+
+    #[test]
+    fn research_data_is_banked_and_everything_else_is_cargo() {
+        assert_eq!(
+            ItemId::ResearchData.bank_limit(),
+            Some(RESEARCH_DATA_BANK_LIMIT),
+            "Research Data is a currency with its own ceiling"
+        );
+        for item in [
+            ItemId::CoreFragment,
+            ItemId::PowerCell,
+            ItemId::IceBreaker,
+            ItemId::PortalFragment,
+            ItemId::OverclockCore,
+            ItemId::FirewallPlating,
+            ItemId::NeuralAmplifier,
+            ItemId::MonofilamentWhip,
+            ItemId::AblativePlating,
+            ItemId::CortexHack,
+        ] {
+            assert_eq!(
+                item.bank_limit(),
+                None,
+                "{} is cargo and should count against inventory capacity",
+                item.display_name()
+            );
+        }
     }
 }

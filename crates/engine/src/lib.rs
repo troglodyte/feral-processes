@@ -287,6 +287,14 @@ pub struct PlayerStatus {
     pub hunger: f32,
     pub fatigue: f32,
     pub inventory: Vec<(ItemId, u32)>,
+    /// Units of ordinary cargo currently carried — what
+    /// `inventory_capacity` limits. Excludes banked currency (see
+    /// `ItemId::bank_limit`), so it will not match the sum of `inventory`
+    /// when Research Data is held.
+    pub inventory_used: u32,
+    /// The player's current carrying capacity, base plus every deployed
+    /// structure's `inventory_bonus`.
+    pub inventory_capacity: u32,
     pub level: u32,
     pub xp: u32,
     pub xp_to_next: u32,
@@ -1205,6 +1213,34 @@ impl Game {
         self.tick();
     }
 
+    /// Awards unsolicited income — a scan find, battle loot, a boss cache —
+    /// clamped to whatever room is left, returning how many units landed.
+    /// Income clamps rather than refusing so a full buffer can never stall
+    /// a battle from resolving or a cronjob worker from running; the loss
+    /// is logged so it is never silent.
+    fn grant_loot(&mut self, item: ItemId, qty: u32) -> u32 {
+        let capacity = self.inventory_capacity();
+        let player = self.player_entity();
+        let added = self
+            .world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add_capped(item, qty, capacity);
+        if added < qty {
+            let lost = qty - added;
+            let label = if item.bank_limit().is_some() {
+                "Research bank"
+            } else {
+                "Buffer"
+            };
+            self.log(format!(
+                "{label} full — {lost} {} lost.",
+                item.display_name()
+            ));
+        }
+        added
+    }
+
     /// Scan the current sector for salvageable Core Fragments. Chance
     /// depends on the sector's biome; besides starting inventory and combat
     /// drops, this and structure cronjobs are the only ways to replenish
@@ -1227,14 +1263,12 @@ impl Game {
             rng.0.random_bool(chance)
         };
         if found {
-            self.world
-                .get_mut::<Inventory>(player)
-                .unwrap()
-                .add(ItemId::CoreFragment, 1);
-            self.log_kind(
-                MessageKind::Loot,
-                "You scan the sector and recover a core fragment.",
-            );
+            if self.grant_loot(ItemId::CoreFragment, 1) > 0 {
+                self.log_kind(
+                    MessageKind::Loot,
+                    "You scan the sector and recover a core fragment.",
+                );
+            }
         } else {
             self.log("You scan the sector but find nothing salvageable.");
         }
@@ -1533,6 +1567,7 @@ impl Game {
                 }
             }
         }
+        self.check_room(result, quantity)?;
         {
             let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
             for (item, qty) in &cost {
@@ -1647,6 +1682,17 @@ impl Game {
             return Err("Can't do that right now.".into());
         }
         let player = self.player_entity();
+        // Room must be checked before the item leaves its Equipment slot: a
+        // refusal after removal would leave the gear in neither place,
+        // destroying it.
+        let equipped_item = self
+            .world
+            .get::<Equipment>(player)
+            .and_then(|e| e.get(slot))
+            .map(|eq| eq.item);
+        if let Some(item) = equipped_item {
+            self.check_room(item, 1)?;
+        }
         let removed = {
             let mut equipment = self.world.get_mut::<Equipment>(player).unwrap();
             equipment.slot_mut(slot).take()
@@ -1911,12 +1957,11 @@ impl Game {
             self.world.despawn(target);
         }
 
-        let player = self.player_entity();
-        if !refund.is_empty() {
-            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
-            for (item, qty) in &refund {
-                inv.add(*item, *qty);
-            }
+        // Route through `grant_loot`, not a direct `add`: demolishing a Home
+        // cascades every other structure's refund in one shot, easily
+        // enough to blow past the buffer with no message.
+        for (item, qty) in &refund {
+            self.grant_loot(*item, *qty);
         }
         let refund_note = if refund.is_empty() {
             String::new()
@@ -2266,7 +2311,7 @@ impl Game {
         self.log("The rogue program crashes and deletes itself!");
         let wild_max_hp = self.world.get::<Stats>(front).unwrap().max_hp;
         self.award_player_xp(player, wild_max_hp as u32);
-        self.award_loot(player, front);
+        self.award_loot(front);
         let nest = self.world.get::<NestGuardian>(front).map(|g| g.nest);
         self.world.despawn(front);
         if let Some(nest) = nest
@@ -2450,7 +2495,7 @@ impl Game {
     /// Defeated (not tamed) rogue programs drop whatever resource their
     /// species is associated with, if any — the same `work_resource` used
     /// to decide what a tamed member of that species can gather.
-    fn award_loot(&mut self, player: Entity, wild: Entity) {
+    fn award_loot(&mut self, wild: Entity) {
         let Some(species_id) = self.world.get::<Creature>(wild).map(|c| c.species.clone()) else {
             return;
         };
@@ -2463,14 +2508,13 @@ impl Game {
                 let mut rng = self.world.resource_mut::<GameRng>();
                 rng.0.random_range(1..=2)
             };
-            self.world
-                .get_mut::<Inventory>(player)
-                .unwrap()
-                .add(resource, qty);
-            self.log_kind(
-                MessageKind::Loot,
-                format!("It drops {} {}.", qty, resource.display_name()),
-            );
+            let landed = self.grant_loot(resource, qty);
+            if landed > 0 {
+                self.log_kind(
+                    MessageKind::Loot,
+                    format!("It drops {} {}.", landed, resource.display_name()),
+                );
+            }
         }
 
         if let Some((item, chance)) = species.equipment_drop {
@@ -2478,11 +2522,7 @@ impl Game {
                 let mut rng = self.world.resource_mut::<GameRng>();
                 rng.0.random_bool(chance as f64)
             };
-            if roll {
-                self.world
-                    .get_mut::<Inventory>(player)
-                    .unwrap()
-                    .add(item, 1);
+            if roll && self.grant_loot(item, 1) > 0 {
                 self.log_kind(
                     MessageKind::Loot,
                     format!("It also drops a {}!", item.display_name()),
@@ -2495,24 +2535,19 @@ impl Game {
                 let mut rng = self.world.resource_mut::<GameRng>();
                 rng.0.random_range(BOSS_PORTAL_FRAGMENT_DROP)
             };
-            self.world
-                .get_mut::<Inventory>(player)
-                .unwrap()
-                .add(ItemId::PortalFragment, qty);
-            self.log_kind(
-                MessageKind::Loot,
-                format!("Its crash leaves behind a cache of {qty} portal fragments!"),
-            );
+            let landed = self.grant_loot(ItemId::PortalFragment, qty);
+            if landed > 0 {
+                self.log_kind(
+                    MessageKind::Loot,
+                    format!("Its crash leaves behind a cache of {landed} portal fragments!"),
+                );
+            }
         } else {
             let portal_fragment_roll = {
                 let mut rng = self.world.resource_mut::<GameRng>();
                 rng.0.random_bool(PORTAL_FRAGMENT_DROP_CHANCE)
             };
-            if portal_fragment_roll {
-                self.world
-                    .get_mut::<Inventory>(player)
-                    .unwrap()
-                    .add(ItemId::PortalFragment, 1);
+            if portal_fragment_roll && self.grant_loot(ItemId::PortalFragment, 1) > 0 {
                 self.log_kind(MessageKind::Loot, "It leaves behind a portal fragment.");
             }
         }
@@ -3621,6 +3656,7 @@ impl Game {
     }
 
     pub fn player_status(&self) -> PlayerStatus {
+        let inventory_capacity = self.inventory_capacity();
         let player = self.player_entity();
         let stats = self.world.get::<Stats>(player).unwrap();
         let needs = self.world.get::<Needs>(player).unwrap();
@@ -3651,6 +3687,8 @@ impl Game {
             hunger: needs.hunger,
             fatigue: needs.fatigue,
             inventory: inv.items.clone(),
+            inventory_used: inv.cargo_used(),
+            inventory_capacity,
             level: exp.level,
             xp: exp.xp,
             xp_to_next: exp.xp_to_next,
@@ -4398,6 +4436,119 @@ impl Game {
             .collect()
     }
 
+    /// A one-line summary of everything `def` actually does, for the build
+    /// menu. Derived from the def's capability fields plus the research db
+    /// rather than an authored `description` field, so a structure a modder
+    /// drops in gets an accurate line for free. Lives here rather than in
+    /// each renderer because the bench clause needs `ResearchDb`, which the
+    /// renderers can't see.
+    pub fn structure_description(&self, def: &StructureDef) -> String {
+        let mut parts = Vec::new();
+        if let Some(work) = &def.work {
+            parts.push(format!("cronjob -> {}", work.produces.display_name()));
+        }
+        if let Some(passive) = &def.passive_process {
+            parts.push(format!(
+                "passive within {} tiles: {} -> {}",
+                passive.radius,
+                passive.consumes.display_name(),
+                passive.produces.display_name()
+            ));
+        }
+        let bench_for: Vec<&str> = self
+            .world
+            .resource::<ResearchDb>()
+            .all()
+            .flat_map(|node| &node.unlocks_recipes)
+            .filter(|recipe| recipe.requires_structure.as_deref() == Some(def.id.as_str()))
+            .map(|recipe| recipe.result.display_name())
+            .collect();
+        if !bench_for.is_empty() {
+            parts.push(format!("compile bench: {}", bench_for.join(", ")));
+        }
+        if let Some(cost) = &def.teleport_cost {
+            let cost = cost
+                .iter()
+                .map(|(item, qty)| format!("{qty} {}", item.display_name()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            parts.push(format!("symlink target: teleport here for {cost}"));
+        }
+        if def.zone_portal {
+            parts.push("breaches to the next zone; cost scales with zone level".to_string());
+        }
+        if let Some(trade) = &def.trade {
+            let buys = trade
+                .buy
+                .iter()
+                .map(|(item, _)| item.display_name())
+                .collect::<Vec<_>>()
+                .join(", ");
+            parts.push(format!(
+                "trade: sell anything for {} Core Fragment each, buy {buys}",
+                trade.sell_rate
+            ));
+        }
+        if def.raid_defense > 0 {
+            parts.push(format!(
+                "-{} raid damage to every deployed structure",
+                def.raid_defense
+            ));
+        }
+        if def.inventory_bonus > 0 {
+            parts.push(format!("+{} inventory capacity", def.inventory_bonus));
+        }
+        if let Some(rest) = &def.enables_rest {
+            parts.push(format!("lets you recharge within {} tiles", rest.radius));
+        }
+        if let Some(temp) = &def.temporary {
+            parts.push(format!("collapses after {} ticks", temp.max_ticks));
+        }
+        if parts.is_empty() {
+            parts.push("no effect yet".to_string());
+        }
+        parts.join("; ")
+    }
+
+    /// How many units of cargo the player can carry right now: the base
+    /// capacity plus every deployed structure's `inventory_bonus`. Derived
+    /// on each call rather than cached, so a Data Cache lost to a raid
+    /// shrinks the buffer with no invalidation step and the save format
+    /// stays unchanged.
+    pub fn inventory_capacity(&self) -> u32 {
+        let kinds: Vec<StructureId> = self
+            .world
+            .iter_entities()
+            .filter_map(|e| e.get::<Structure>().map(|s| s.kind.clone()))
+            .collect();
+        let db = self.world.resource::<StructureDb>();
+        structures::inventory_capacity_for(kinds.iter().map(|k| k.as_str()), db)
+    }
+
+    /// Units of cargo currently carried, excluding banked currency.
+    pub fn inventory_used(&self) -> u32 {
+        self.world
+            .get::<Inventory>(self.player_entity())
+            .map(|inv| inv.cargo_used())
+            .unwrap_or(0)
+    }
+
+    /// `Ok(())` if `qty` more of `item` would fit. Used by the paths where
+    /// the player pays an input cost — compiling, buying, unequipping —
+    /// since clamping those would destroy value the player already spent.
+    fn check_room(&self, item: ItemId, qty: u32) -> Result<(), String> {
+        let capacity = self.inventory_capacity();
+        let inv = self.world.get::<Inventory>(self.player_entity()).unwrap();
+        let (used, ceiling, label) = match item.bank_limit() {
+            Some(limit) => (inv.count(item), limit, "Research bank"),
+            None => (inv.cargo_used(), capacity, "Buffer"),
+        };
+        if used + qty > ceiling {
+            return Err(format!("{label} full ({used}/{ceiling})."));
+        }
+        Ok(())
+    }
+
     /// The actual item cost to deploy `def` right now: `def.build_cost`
     /// unchanged for a normal structure, or each amount scaled by the
     /// current zone level for a zone-portal structure (see
@@ -4450,19 +4601,19 @@ impl Game {
             .trade_options(structure)
             .ok_or_else(|| "That structure doesn't trade.".to_string())?;
         let player = self.player_entity();
-        let taken = self
-            .world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .take(item, qty);
-        if taken == 0 {
+        let have = self.world.get::<Inventory>(player).unwrap().count(item);
+        if have == 0 {
             return Err(format!("You don't have any {}.", item.display_name()));
         }
+        let taken = have.min(qty);
         let payout = trade.sell_rate * taken;
-        self.world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .add(ItemId::CoreFragment, payout);
+        // Refuse rather than clamp: the item is already gone once `take`
+        // runs, so checking room only after taking would let a refusal
+        // destroy the sold item for nothing.
+        self.check_room(ItemId::CoreFragment, payout)?;
+        let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
+        inv.take(item, taken);
+        inv.add(ItemId::CoreFragment, payout);
         self.log(format!(
             "You sell {taken} {} for {payout} Core Fragments.",
             item.display_name()
@@ -4499,6 +4650,7 @@ impl Game {
         {
             return Err(format!("Not enough Core Fragments (need {total_cost})."));
         }
+        self.check_room(item, qty)?;
         {
             let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
             inv.take(ItemId::CoreFragment, total_cost);
@@ -4588,6 +4740,202 @@ mod tests {
             .add(ItemId::ResearchData, n);
     }
 
+    /// Deploys a Data Cache next to the player without going through
+    /// `place_structure`, sidestepping its Home/cost/radius requirements —
+    /// those aren't what the capacity tests are about.
+    fn spawn_data_cache(game: &mut Game, offset: i32) {
+        let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+        game.world.spawn((
+            Structure {
+                kind: "data_cache".to_string(),
+            },
+            Position {
+                x: pos.x + offset,
+                y: pos.y,
+            },
+        ));
+    }
+
+    #[test]
+    fn inventory_capacity_grows_with_each_deployed_data_cache() {
+        let mut game = Game::new(700, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        assert_eq!(game.inventory_capacity(), 20);
+
+        spawn_data_cache(&mut game, 1);
+        assert_eq!(game.inventory_capacity(), 30);
+
+        spawn_data_cache(&mut game, 2);
+        assert_eq!(game.inventory_capacity(), 40, "caches stack");
+    }
+
+    #[test]
+    fn destroying_a_data_cache_shrinks_the_capacity_back() {
+        let mut game = Game::new(701, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        spawn_data_cache(&mut game, 1);
+        assert_eq!(game.inventory_capacity(), 30);
+
+        let cache = game
+            .world
+            .iter_entities()
+            .find(|e| e.get::<Structure>().is_some_and(|s| s.kind == "data_cache"))
+            .map(|e| e.id())
+            .expect("the spawned cache should be findable");
+        game.world.despawn(cache);
+
+        assert_eq!(
+            game.inventory_capacity(),
+            20,
+            "capacity is derived, so a destroyed cache needs no invalidation"
+        );
+    }
+
+    /// Fills the player's cargo to exactly the current capacity so the next
+    /// pickup has nowhere to go.
+    fn fill_buffer(game: &mut Game) {
+        let capacity = game.inventory_capacity();
+        let player = game.player_entity();
+        let used = game.inventory_used();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::CoreFragment, capacity - used);
+    }
+
+    #[test]
+    fn compiling_into_a_full_buffer_refuses_and_consumes_nothing() {
+        let mut game = Game::new(705, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        fill_buffer(&mut game);
+        let player = game.player_entity();
+        let cores_before = game
+            .world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(ItemId::CoreFragment);
+
+        let err = game
+            .craft(ItemId::PowerCell, 1)
+            .expect_err("a full buffer should refuse a compile");
+
+        assert!(err.contains("Buffer full"), "got: {err}");
+        assert_eq!(
+            game.world
+                .get::<Inventory>(player)
+                .unwrap()
+                .count(ItemId::CoreFragment),
+            cores_before,
+            "a refused compile must not consume its inputs"
+        );
+    }
+
+    #[test]
+    fn unequipping_into_a_full_buffer_refuses_and_keeps_the_gear_equipped() {
+        let mut game = Game::new(706, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::OverclockCore, 1);
+        game.equip(ItemId::OverclockCore).unwrap();
+        fill_buffer(&mut game);
+
+        let err = game
+            .unequip(EquipmentSlot::Weapon)
+            .expect_err("a full buffer should refuse an unequip");
+
+        assert!(err.contains("Buffer full"), "got: {err}");
+        assert!(
+            game.player_status().weapon.is_some(),
+            "refused unequip must leave the gear equipped, not delete it"
+        );
+    }
+
+    #[test]
+    fn a_compile_still_works_with_exactly_enough_room() {
+        let mut game = Game::new(707, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let capacity = game.inventory_capacity();
+        let player = game.player_entity();
+        let used = game.inventory_used();
+        // `check_room` only ever measures the recipe's *output* quantity
+        // (1 Power Cell) against pre-consumption cargo, never the net of
+        // input minus output — so this passes because used(capacity - 1)
+        // + 1 <= capacity, regardless of what the recipe consumes.
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::CoreFragment, capacity - used - 1);
+
+        game.craft(ItemId::PowerCell, 1)
+            .expect("a compile that nets out under capacity should succeed");
+    }
+
+    #[test]
+    fn foraging_into_a_full_buffer_loses_the_find_and_says_so() {
+        let mut game = Game::new(703, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        fill_buffer(&mut game);
+        let before = game.inventory_used();
+
+        // Forage until the RNG grants a find, so the assertion doesn't
+        // depend on a specific seed's first roll.
+        for _ in 0..200 {
+            game.forage();
+        }
+
+        assert_eq!(
+            game.inventory_used(),
+            before,
+            "a full buffer must not grow, however many finds are rolled"
+        );
+        assert_eq!(
+            game.inventory_used(),
+            game.inventory_capacity(),
+            "and must stay exactly at capacity"
+        );
+    }
+
+    #[test]
+    fn a_partially_full_buffer_takes_only_what_fits() {
+        let mut game = Game::new(704, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let capacity = game.inventory_capacity();
+        let player = game.player_entity();
+        let used = game.inventory_used();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::CoreFragment, capacity - used - 1);
+        assert_eq!(game.inventory_used(), capacity - 1);
+
+        let landed = game.grant_loot(ItemId::PortalFragment, 6);
+
+        assert_eq!(landed, 1, "only the single unit of room should land");
+        assert_eq!(game.inventory_used(), capacity);
+        assert_eq!(
+            game.player_status()
+                .inventory
+                .iter()
+                .find(|(i, _)| *i == ItemId::PortalFragment)
+                .map(|(_, q)| *q),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn inventory_used_counts_cargo_but_not_research_data() {
+        let mut game = Game::new(702, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        // Starting inventory is 3 ICE Breaker + 3 Power Cell + 5 Core Fragment.
+        assert_eq!(game.inventory_used(), 11);
+
+        grant_research_data(&mut game, 90);
+        assert_eq!(
+            game.inventory_used(),
+            11,
+            "banked research must not consume carrying capacity"
+        );
+
+        let status = game.player_status();
+        assert_eq!(status.inventory_used, 11);
+        assert_eq!(status.inventory_capacity, 20);
+    }
+
     /// Unlocks `id` and every prerequisite it needs, funding the whole
     /// chain — so a test that just needs a research-gated structure on the
     /// map doesn't have to model the tree itself.
@@ -4620,6 +4968,65 @@ mod tests {
             .find(|(item, _)| *item == ItemId::ResearchData)
             .map(|(_, n)| *n)
             .unwrap_or(0)
+    }
+
+    /// Tames a program and puts it to work on a node producing `resource`,
+    /// so a cronjob is guaranteed to be running — the assertions below are
+    /// vacuous if nothing is assigned.
+    fn assign_worker_producing(game: &mut Game, resource: ItemId) {
+        let worker = spawn_tamed(game, 10, 3);
+        let structure = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "test_node".to_string(),
+                },
+                Position { x: 3, y: 4 },
+                ResourceNode {
+                    resource,
+                    amount: 20,
+                    capacity: 20,
+                    level: None,
+                },
+            ))
+            .id();
+        game.assign_cronjob(worker, structure).unwrap();
+    }
+
+    #[test]
+    fn a_cronjob_worker_cannot_overfill_the_buffer() {
+        let mut game = Game::new(708, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        assign_worker_producing(&mut game, ItemId::CoreFragment);
+        fill_buffer(&mut game);
+        let capacity = game.inventory_capacity();
+
+        for _ in 0..100 {
+            game.tick();
+        }
+
+        assert_eq!(
+            game.inventory_used(),
+            capacity,
+            "a working cronjob must fill the buffer to exactly capacity and stop"
+        );
+    }
+
+    #[test]
+    fn a_research_cronjob_keeps_banking_with_a_full_cargo_buffer() {
+        let mut game = Game::new(709, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        assign_worker_producing(&mut game, ItemId::ResearchData);
+        fill_buffer(&mut game);
+        let before = research_data_held(&game);
+
+        for _ in 0..100 {
+            game.tick();
+        }
+
+        assert!(
+            research_data_held(&game) > before,
+            "a full cargo buffer must not stop research from banking (was {before}, now {})",
+            research_data_held(&game)
+        );
     }
 
     #[test]
@@ -4723,6 +5130,7 @@ mod tests {
         assert_eq!(
             sorted,
             vec![
+                "data_cache".to_string(),
                 "home".to_string(),
                 "mining_node".to_string(),
                 "portal".to_string(),
@@ -4888,6 +5296,35 @@ mod tests {
     }
 
     #[test]
+    fn the_data_cache_is_buildable_without_any_research() {
+        let game = Game::new(710, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        assert!(
+            game.buildable_structure_defs()
+                .iter()
+                .any(|d| d.id == "data_cache"),
+            "buffer expansion must not be gated behind research the player \
+             can't afford while the cap is at its tightest"
+        );
+    }
+
+    #[test]
+    fn no_research_node_is_left_unlocking_nothing() {
+        let game = Game::new(711, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        for node in game.research_nodes() {
+            let def = game
+                .world
+                .resource::<ResearchDb>()
+                .get(&node.id)
+                .expect("a listed node should exist in the db");
+            assert!(
+                !def.unlocks_structures.is_empty() || !def.unlocks_recipes.is_empty(),
+                "{} unlocks nothing and is dead weight in the tree",
+                node.id
+            );
+        }
+    }
+
+    #[test]
     fn the_research_node_is_a_cronjob_worked_research_data_source() {
         let game = Game::new(60, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let def = game
@@ -4939,7 +5376,7 @@ mod tests {
             .id();
 
         let before = game.world.get::<Inventory>(player).unwrap().count(resource);
-        game.award_loot(player, wild);
+        game.award_loot(wild);
         let after = game.world.get::<Inventory>(player).unwrap().count(resource);
 
         assert!(
@@ -4997,7 +5434,7 @@ mod tests {
                 .sum()
         };
         let before = count_non_portal(&game);
-        game.award_loot(player, wild);
+        game.award_loot(wild);
         let after = count_non_portal(&game);
 
         assert_eq!(
@@ -5272,10 +5709,16 @@ mod tests {
         unlock_research_chain(&mut game, "armor_bench");
         unlock_research_chain(&mut game, "weapon_bench");
         let player = game.player_entity();
+        // Just enough Core Fragments to afford Home + armory + fabricator
+        // and no more: a big surplus (as a naive "plenty of buffer" amount
+        // would be) leaves cargo sitting at or above capacity once combined
+        // with starting gear, which would clamp the refund this test exists
+        // to check — see `removing_home_cascade_refund_is_capped_to_available_room`
+        // for that clamping behavior instead.
         game.world
             .get_mut::<Inventory>(player)
             .unwrap()
-            .add(ItemId::CoreFragment, 50);
+            .add(ItemId::CoreFragment, 31);
         place_home(&mut game, -1, 0);
         game.place_structure("armory", 1, 0).unwrap();
         game.place_structure("fabricator", 0, 1).unwrap();
@@ -5313,6 +5756,55 @@ mod tests {
     }
 
     #[test]
+    fn removing_home_cascade_refund_is_capped_to_available_room() {
+        let mut game = Game::new(305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        unlock_research_chain(&mut game, "armor_bench");
+        unlock_research_chain(&mut game, "weapon_bench");
+        let player = game.player_entity();
+        let capacity = game.inventory_capacity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::CoreFragment, 50);
+        place_home(&mut game, -1, 0);
+        game.place_structure("armory", 1, 0).unwrap();
+        game.place_structure("fabricator", 0, 1).unwrap();
+        let home = game
+            .view_entities(10, 10)
+            .into_iter()
+            .find(|e| e.is_home)
+            .unwrap()
+            .entity;
+
+        // Clear every starting item (gear plus leftover build materials)
+        // and refill with something the refund doesn't touch, leaving
+        // exactly 3 units of room — proving the cascade clamps rather than
+        // relying on an incidentally-near-empty buffer.
+        {
+            let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+            for item in [ItemId::IceBreaker, ItemId::PowerCell, ItemId::CoreFragment] {
+                let held = inv.count(item);
+                inv.take(item, held);
+            }
+            inv.add(ItemId::FirewallPlating, capacity - 3);
+        }
+
+        game.remove_structure(home).unwrap();
+
+        let inv = game.world.get::<Inventory>(player).unwrap();
+        assert!(
+            inv.cargo_used() <= capacity,
+            "a demolition refund cascade must never push cargo past capacity"
+        );
+        assert!(
+            game.message_log(10)
+                .iter()
+                .any(|(_, line)| line.contains("full")),
+            "a clamped refund should say so, same as any other unsolicited income"
+        );
+    }
+
+    #[test]
     fn armory_and_fabricator_are_not_cronjob_workable() {
         let game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         for id in ["armory", "fabricator"] {
@@ -5326,6 +5818,46 @@ mod tests {
                 "{id} should unlock crafting instead of being cronjob-workable"
             );
         }
+    }
+
+    #[test]
+    fn every_structure_describes_its_actual_capability() {
+        let game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        for def in game.structure_defs() {
+            // Every shipped structure now has a real capability, so "no effect
+            // yet" always means the description derivation is missing a field
+            // the structure actually uses — the Data Cache reached exactly that
+            // state when `inventory_bonus` was added without updating this.
+            assert_ne!(
+                game.structure_description(&def),
+                "no effect yet",
+                "{} has an undescribed effect",
+                def.id
+            );
+        }
+    }
+
+    #[test]
+    fn structure_descriptions_cover_non_production_capabilities() {
+        let game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let describe = |id: &str| {
+            let def = game
+                .structure_defs()
+                .into_iter()
+                .find(|d| d.id == id)
+                .unwrap_or_else(|| panic!("{id}.ron should load as a structure"));
+            game.structure_description(&def)
+        };
+        assert!(describe("armory").contains("Firewall Plating"));
+        assert!(describe("fabricator").contains("Cortex Hack"));
+        assert!(describe("home").contains("Power Cell"));
+        assert!(describe("turret").contains("raid damage"));
+        assert!(describe("data_cache").contains("inventory capacity"));
+        assert!(describe("recharger_node").contains("recharge"));
+        assert!(describe("portal").contains("next zone"));
+        assert!(describe("market").contains("trade"));
+        assert!(describe("compiler").contains("ICE Breaker"));
+        assert!(describe("terminal").contains("Power Cell"));
     }
 
     #[test]
@@ -5353,10 +5885,12 @@ mod tests {
             .expect("researching it and building an Armory should unlock the recipe");
         assert_eq!(recipe.cost, vec![(ItemId::PortalFragment, 6)]);
 
+        // Exactly the recipe's cost (6), not a padded amount: any excess
+        // pushes cargo over the inventory cap and the compile is refused.
         game.world
             .get_mut::<Inventory>(game.player_entity())
             .unwrap()
-            .add(ItemId::PortalFragment, 10);
+            .add(ItemId::PortalFragment, 6);
         game.craft(ItemId::FirewallPlating, 1).unwrap();
         assert_eq!(
             game.world
@@ -8581,6 +9115,59 @@ mod tests {
     }
 
     #[test]
+    fn sell_item_refuses_a_payout_that_would_overflow_the_buffer() {
+        use crate::items::RESEARCH_DATA_BANK_LIMIT;
+        let mut game = Game::new(92, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let def = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.trade.is_some())
+            .unwrap();
+        let market = game
+            .world
+            .spawn((
+                Structure {
+                    kind: def.id.clone(),
+                },
+                Position { x: 5, y: 5 },
+            ))
+            .id();
+
+        // Research Data is banked separately (200-unit limit) and exempt
+        // from the cargo cap, so a player can plausibly hold far more of it
+        // than the 20-unit buffer a fresh game starts with.
+        let capacity = game.inventory_capacity();
+        {
+            let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+            inv.add(ItemId::ResearchData, RESEARCH_DATA_BANK_LIMIT);
+            // Top up to exactly `capacity`, not on top of it — the player
+            // starts carrying a few units of gear already, and adding a
+            // full `capacity` worth on top would put cargo over the limit
+            // before the sale even runs.
+            let used = inv.cargo_used();
+            inv.add(ItemId::CoreFragment, capacity - used);
+        }
+
+        let result = game.sell_item(market, ItemId::ResearchData, RESEARCH_DATA_BANK_LIMIT);
+
+        assert!(
+            result.is_err(),
+            "selling a full Research Data bank must not blow past cargo capacity"
+        );
+        let inv = game.world.get::<Inventory>(player).unwrap();
+        assert_eq!(
+            inv.count(ItemId::ResearchData),
+            RESEARCH_DATA_BANK_LIMIT,
+            "a refused sale must not consume the item being sold"
+        );
+        assert!(
+            inv.cargo_used() <= capacity,
+            "cargo must never exceed capacity as a result of a sale"
+        );
+    }
+
+    #[test]
     fn sell_item_rejects_core_fragments_and_items_you_dont_have() {
         let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let def = game
@@ -9686,7 +10273,7 @@ mod tests {
             ))
             .id();
 
-        game.award_loot(player, wild);
+        game.award_loot(wild);
 
         let qty = game
             .world

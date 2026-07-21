@@ -91,6 +91,14 @@ is skipped with a warning logged in-game rather than crashing startup.
     // Turret structure works: `raid_defense: 4` with no `work` recipe.
     raid_defense: 4,
 
+    // Optional; can be left out entirely (defaults to 0). How much this
+    // structure raises the player's inventory capacity while it's deployed.
+    // Capacity is `20 + the sum of this across every deployed structure`,
+    // so several of them stack. This is how the Data Cache works:
+    // `inventory_bonus: 10` with no `work` recipe. Research Data is exempt
+    // from the capacity system entirely and has its own separate cap.
+    inventory_bonus: 10,
+
     // Optional; can be left out entirely (defaults to no rest capability).
     // If set, `Game::rest` (recharge/overnight rest) is only allowed while
     // the player stands within `radius` tiles of this structure — resting

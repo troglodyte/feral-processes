@@ -67,7 +67,7 @@ pub enum SoundEvent {
     Defeat,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     MainMenu,
     DifficultyPick,
@@ -99,6 +99,11 @@ pub enum Mode {
     InspectDetail,
     Inventory,
     InventoryItemAction,
+    /// Second page of the erase flow: asks how many units of
+    /// `pending_erase` to destroy before calling `Game::erase_item`. A
+    /// hard inventory cap makes partial erasure the common case — dumping a
+    /// whole stack to free two units of room is not a real option.
+    EraseQuantity,
     Companion,
     Fuse,
     FuseSecond,
@@ -164,6 +169,11 @@ pub struct App {
     /// Characters typed so far on the fuse-naming page (see `Mode::FuseName`).
     pub fuse_name_input: String,
     pub pending_inventory_item: Option<ItemId>,
+    /// The inventory item picked for erasure, awaiting a quantity from
+    /// `Mode::EraseQuantity`.
+    pub pending_erase: Option<ItemId>,
+    /// Digits typed so far on the erase-quantity page.
+    pub erase_quantity_input: String,
     /// The recipe result picked in `Mode::Craft`, awaiting a quantity from
     /// `Mode::CraftQuantity` before `Game::craft` is actually called.
     pub pending_craft: Option<ItemId>,
@@ -231,6 +241,8 @@ impl App {
             pending_fuse_second: None,
             fuse_name_input: String::new(),
             pending_inventory_item: None,
+            pending_erase: None,
+            erase_quantity_input: String::new(),
             pending_craft: None,
             craft_quantity_input: String::new(),
             pending_trade_structure: None,
@@ -449,6 +461,7 @@ impl App {
             Mode::InspectDetail => self.handle_inspect_detail_key(key),
             Mode::Inventory => self.handle_inventory_key(key),
             Mode::InventoryItemAction => self.handle_inventory_item_action_key(key),
+            Mode::EraseQuantity => self.handle_erase_quantity_key(key),
             Mode::Companion => self.handle_companion_key(key),
             Mode::Fuse => self.handle_fuse_key(key),
             Mode::FuseSecond => self.handle_fuse_second_key(key),
@@ -1492,11 +1505,17 @@ impl App {
                 GameKey::Char(c) => actions.iter().position(|&o| o == c.to_ascii_lowercase()),
                 _ => None,
             });
+        if idx.map(|i| actions[i]) == Some('x') {
+            self.pending_erase = Some(item);
+            self.erase_quantity_input.clear();
+            self.mode = Mode::EraseQuantity;
+            self.pending_inventory_item = None;
+            return;
+        }
         let Some(game) = &mut self.game else { return };
         let result = match idx.map(|i| actions[i]) {
             Some('e') => Some(game.equip(item)),
             Some('u') => Some(game.fuse_item(item)),
-            Some('x') => Some(game.erase_item(item, stack_qty)),
             _ => None,
         };
         let Some(result) = result else { return };
@@ -1506,6 +1525,71 @@ impl App {
         }
         self.pending_inventory_item = None;
         self.mode = Mode::Inventory;
+    }
+
+    /// Second page of the erase flow: how many units of `pending_erase` to
+    /// destroy. `[A]` erases the whole stack, matching the pre-cap
+    /// behavior. An empty input on Enter means 1.
+    fn handle_erase_quantity_key(&mut self, key: GameKey) {
+        let Some(item) = self.pending_erase else {
+            self.mode = Mode::Inventory;
+            return;
+        };
+        let stack_qty = self
+            .game
+            .as_ref()
+            .map(|g| {
+                g.player_status()
+                    .inventory
+                    .iter()
+                    .find(|(i, _)| *i == item)
+                    .map(|(_, q)| *q)
+                    .unwrap_or(0)
+            })
+            .unwrap_or(0);
+        match key {
+            GameKey::Esc => {
+                self.pending_erase = None;
+                self.erase_quantity_input.clear();
+                self.mode = Mode::Inventory;
+            }
+            GameKey::Backspace => {
+                self.erase_quantity_input.pop();
+            }
+            GameKey::Char(c) if c.is_ascii_digit() && self.erase_quantity_input.len() < 4 => {
+                self.erase_quantity_input.push(c);
+            }
+            GameKey::Char('a') | GameKey::Char('A') => {
+                self.commit_erase(item, stack_qty);
+            }
+            GameKey::Enter => {
+                let quantity: u32 = if self.erase_quantity_input.is_empty() {
+                    1
+                } else {
+                    self.erase_quantity_input.parse().unwrap_or(0)
+                };
+                self.commit_erase(item, quantity);
+            }
+            _ => {}
+        }
+    }
+
+    /// Calls `Game::erase_item` and returns to the inventory screen. A
+    /// quantity of 0 is a silent no-op rather than a round-trip to the
+    /// engine for an error, matching `commit_craft`.
+    fn commit_erase(&mut self, item: ItemId, quantity: u32) {
+        self.pending_erase = None;
+        self.erase_quantity_input.clear();
+        self.mode = Mode::Inventory;
+        if quantity == 0 {
+            return;
+        }
+        if let Some(game) = &mut self.game {
+            match game.erase_item(item, quantity) {
+                Ok(()) => self.status_line = None,
+                Err(e) => self.status_line = Some(e),
+            }
+        }
     }
 
     fn handle_help_key(&mut self) {
@@ -1828,5 +1912,78 @@ mod tests {
             start_tick + 1,
             "update_realtime shouldn't tick while paused on a non-Playing mode"
         );
+    }
+
+    #[test]
+    fn erasing_asks_for_a_quantity_and_removes_exactly_that_many() {
+        let mut app = test_app(900);
+        let before = app
+            .game
+            .as_ref()
+            .unwrap()
+            .player_status()
+            .inventory
+            .iter()
+            .find(|(i, _)| *i == ItemId::CoreFragment)
+            .map(|(_, q)| *q)
+            .unwrap();
+
+        app.pending_inventory_item = Some(ItemId::CoreFragment);
+        app.mode = Mode::InventoryItemAction;
+        app.handle_key(GameKey::Char('x'));
+        assert_eq!(
+            app.mode,
+            Mode::EraseQuantity,
+            "[X] should ask how many, not dump the whole stack"
+        );
+
+        app.handle_key(GameKey::Char('3'));
+        app.handle_key(GameKey::Enter);
+
+        let after = app
+            .game
+            .as_ref()
+            .unwrap()
+            .player_status()
+            .inventory
+            .iter()
+            .find(|(i, _)| *i == ItemId::CoreFragment)
+            .map(|(_, q)| *q)
+            .unwrap();
+        assert_eq!(after, before - 3);
+        assert_eq!(app.mode, Mode::Inventory);
+    }
+
+    #[test]
+    fn erase_all_dumps_the_whole_stack() {
+        let mut app = test_app(901);
+        app.pending_inventory_item = Some(ItemId::CoreFragment);
+        app.mode = Mode::InventoryItemAction;
+        app.handle_key(GameKey::Char('x'));
+        app.handle_key(GameKey::Char('a'));
+
+        let held = app
+            .game
+            .as_ref()
+            .unwrap()
+            .player_status()
+            .inventory
+            .iter()
+            .find(|(i, _)| *i == ItemId::CoreFragment)
+            .map(|(_, q)| *q);
+        assert_eq!(held, None, "[A] should clear the stack entirely");
+    }
+
+    #[test]
+    fn escaping_the_erase_prompt_erases_nothing() {
+        let mut app = test_app(902);
+        let before = app.game.as_ref().unwrap().player_status().inventory;
+        app.pending_inventory_item = Some(ItemId::CoreFragment);
+        app.mode = Mode::InventoryItemAction;
+        app.handle_key(GameKey::Char('x'));
+        app.handle_key(GameKey::Esc);
+
+        assert_eq!(app.mode, Mode::Inventory);
+        assert_eq!(app.game.as_ref().unwrap().player_status().inventory, before);
     }
 }

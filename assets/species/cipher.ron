@@ -7,6 +7,7 @@
     base_atk: 8,
     base_def: 6,
     taming_difficulty: 0.8,
+    growth_multiplier: 1.5,
     habitats: [Mainframe, StaticField],
     moves: [
         (name: "Encrypt", power: 6, effect: Some((kind: Stun, chance: 0.35, duration: 1, power: 0))),

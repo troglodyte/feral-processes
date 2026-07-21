@@ -874,9 +874,10 @@ fn render_companion_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: u
             .as_ref()
             .map(|s| format!(" (on a cronjob: {s})"))
             .unwrap_or_default();
+        let quality = p.quality.as_ref().map(|q| format!(" [{q}]")).unwrap_or_default();
         lines.push(menu_line(
             format!(
-                "[{}] {} Lv{} — HP {}/{}  ATK {}  DEF {}  PWR {}{}{}",
+                "[{}] {} Lv{} — HP {}/{}  ATK {}  DEF {}  PWR {}{}{}{}",
                 i + 1,
                 p.name,
                 p.level,
@@ -885,6 +886,7 @@ fn render_companion_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: u
                 p.atk,
                 p.def,
                 p.power,
+                quality,
                 active,
                 job
             ),
@@ -1263,19 +1265,9 @@ fn render_battle_companion_menu(f: &mut Frame, app: &mut App) {
     )];
     for (i, c) in party.iter().enumerate() {
         lines.push(menu_line(
-            format!(
-                "[{}] {} (HP {}/{}, ATK {}, PWR {}){}",
-                i + 1,
-                c.name,
-                c.hp,
-                c.max_hp,
-                c.atk,
-                c.power,
-                status_tag(&c.status)
-            ),
+            format!("[{}] {} ({}){}", i + 1, c.name, c.ability, status_tag(&c.status)),
             i == selected,
         ));
-        lines.push(Line::from(format!("    {}", c.ability)));
     }
     f.render_widget(
         Paragraph::new(lines)
@@ -1357,6 +1349,9 @@ fn render_inspect_detail(
             view.taming_difficulty * 100.0
         )),
     ];
+    if let Some(quality) = &view.quality {
+        lines.push(Line::from(format!("Potential: {quality}")));
+    }
     if view.is_hostile && !view.is_tamed {
         lines.push(Line::styled(
             format!(

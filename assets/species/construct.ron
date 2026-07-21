@@ -7,6 +7,7 @@
     base_atk: 9,
     base_def: 7,
     taming_difficulty: 0.7,
+    growth_multiplier: 1.5,
     habitats: [Mainframe],
     moves: [
         (name: "Crash", power: 13),

@@ -7,6 +7,7 @@
     base_atk: 6,
     base_def: 3,
     taming_difficulty: 0.5,
+    growth_multiplier: 1.25,
     habitats: [StaticField],
     moves: [
         (name: "Freeze", power: 7, effect: Some((kind: Stun, chance: 0.3, duration: 1, power: 0))),

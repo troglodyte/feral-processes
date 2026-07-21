@@ -89,6 +89,22 @@ is skipped with a warning logged in-game rather than crashing startup.
     // own Defense-based mitigation, so the two stack. This is how the
     // Turret structure works: `raid_defense: 4` with no `work` recipe.
     raid_defense: 4,
+
+    // Optional; can be left out entirely (defaults to no rest capability).
+    // If set, `Game::rest` (recharge/overnight rest) is only allowed while
+    // the player stands within `radius` tiles of this structure — resting
+    // has no other way to happen. This is how the Recharger Node works:
+    // `enables_rest: Some((radius: 2))`.
+    enables_rest: Some((radius: 2)),
+
+    // Optional; can be left out entirely (defaults to a permanent
+    // structure). If set, this structure automatically collapses once
+    // `max_ticks` ordinary game-clock ticks have passed since it was
+    // deployed — no refund, it just disappears. Ticks spent inside a
+    // `Game::rest` cycle don't count toward this, so a structure that also
+    // sets `enables_rest` (like the Recharger Node) isn't worn down any
+    // faster by actually being used to rest than by sitting there idle.
+    temporary: Some((max_ticks: 20)),
 )
 ```
 

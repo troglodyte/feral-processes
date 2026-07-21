@@ -1,0 +1,10 @@
+(
+    id: "recharger_node",
+    name: "Recharger Node",
+    glyph: 'z',
+    color: Orange,
+    build_cost: [(CoreFragment, 5)],
+    work: None,
+    enables_rest: Some((radius: 2)),
+    temporary: Some((max_ticks: 20)),
+)

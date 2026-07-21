@@ -7,6 +7,7 @@
     base_atk: 6,
     base_def: 2,
     taming_difficulty: 0.4,
+    growth_multiplier: 1.25,
     habitats: [NullSector, OpenGrid],
     moves: [
         (name: "Replicate", power: 5, effect: Some((kind: Bleed, chance: 0.4, duration: 2, power: 3))),

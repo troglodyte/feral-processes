@@ -96,7 +96,7 @@ change what gets stored — a save from a different build shows up as
 | `hjkl` / arrow keys | Move (bumping a rogue program starts an intrusion) |
 | `.` | Wait in place (advances one tick) |
 | `e` | Drain a Power Cell (restores Power) |
-| `r` | Recharge overnight (restores Fatigue and Integrity, costs Power) |
+| `r` | Recharge overnight (restores Fatigue and Integrity, costs Power) — requires standing near a deployed Recharger Node (see [Structures](#structures)) |
 | `g` | Scan the sector for Core Fragments |
 | `c` | Open the compile menu (compile an ICE Breaker — 3 Core Fragments — a Power Cell — 2 Core Fragments — and any future recipes). Then pick a quantity: type digits and Enter, or `[F]` for 5 at once, or `[M]` for the most you can currently afford |
 | `b` | Deploy a structure |
@@ -220,7 +220,8 @@ creature to work" mechanic.
      reliable than the other two. A missed attempt still resets the cycle,
      it just doesn't pay out. Cronjob XP stops entirely once a worker hits
      **level 10** — resources keep flowing, but leveling past that only
-     comes from battling, not idle cronjob work.
+     comes from battling, not idle cronjob work, up to the level 12 cap
+     everyone shares (see the Stats table below).
    - Every worked structure holds a stock capped at 5 units (the `capacity`
      in its `.ron` file, moddable per-structure). Each completed cycle draws
      one down; once mined to 0 it immediately refills back to capacity and
@@ -249,7 +250,7 @@ Shown in the status panel (always) and the intrusion screen (in battle):
 | **Integrity** | Your HP. Hits 0 and you flatline — final in Permadeath, a costly soft-reboot in Forgiving mode. Leveling up or recharging overnight (`r`) both fully restore it. |
 | **Power** | Your hunger-equivalent. Drains over time; hits 0 and you start taking Integrity damage each tick. Below 50%, your Attack also starts weakening — a linear falloff to half strength at 0 Power, on top of (not instead of) the tick damage. Restored by draining a Power Cell (`e`) or standing near a cooking Terminal. |
 | **Fatigue** | Drains over time; restored to full by recharging overnight (`r`). Commanding a companion in battle (`c`) also costs a flat chunk of it — rest also advances a lot of game time, so use both deliberately. |
-| **Level / XP** | Grows from defeating or decompiling rogue programs, or (for a compiled program) completing cronjob cycles. Each level-up grows Attack/Defense/max Integrity, fully heals, and grants 1 Perk Point — see [Perks](#perks). |
+| **Level / XP** | Grows from defeating or decompiling rogue programs, or (for a compiled program) completing cronjob cycles. Each level-up grows Attack/Defense/max Integrity, fully heals, and grants 1 Perk Point — see [Perks](#perks). Capped at level 12 for everyone (you and every tamed program alike) — further XP from any source is simply ignored once maxed. |
 | **Attack** | How hard your hits land. Battle damage is roughly `move power + attacker's Attack − defender's Defense` (always at least 1). |
 | **Defense** | How much incoming damage you shrug off — see the Attack formula above. |
 | **Decompiler** | Player-only skill at cracking ICE. Grows by 1 every time you level up (starts at 0). Adds a flat bonus to your decompile odds — see Decompile chance below. Tamed programs never have this stat; only you attempt decompiles. |
@@ -396,6 +397,22 @@ be active party members, fighting alongside you at once.
   alongside you. A tamed program that's idle or on a cronjob doesn't earn
   battle XP this way; only cronjob work cycles grow it (see
   [Getting started](#getting-started-building-and-running-cronjobs)).
+- **Tougher species grow faster.** Per-level stat growth for a tamed
+  program scales with its species' tier — Easy species grow at the
+  standard rate, Medium/Hard/boss species grow noticeably more per level
+  (see `assets/species/README.md`'s `growth_multiplier` field) — so a
+  higher-tier catch keeps pulling ahead of an easy one as both level up,
+  on top of already having tougher base stats.
+- **No two individuals of the same species are quite identical.** Every
+  creature rolls its own HP/Attack/Defense independently within ±20% of
+  the species/zone-scaled baseline when it's created, plus its own
+  ±20% roll on top of its species' growth rate for how fast it levels —
+  so two Scrappers can genuinely differ, not just look the same with the
+  same number. Its overall roll shows up as a **Potential** tag (e.g.
+  "Excellent (94%)") in the pets screen (`p`) and the inspect screen
+  (`i`) — Poor / Below Average / Average / Above Average / Excellent.
+  Fusing two programs (below) averages their rolls into the result rather
+  than rolling a fresh one.
 
 ### Fusing programs
 
@@ -503,6 +520,7 @@ enough of them, then walk onto it to breach into the next zone.
 | Zone Portal | 10 Portal Fragments *(× current zone level)* | Walk onto it to breach into the next zone — see [Zones and portals](#zones-and-portals) |
 | Black Market | 16 Core Fragments | `t` ("trade") to sell inventory items or buy consumables for Core Fragments — see [Trading](#trading) |
 | Turret | 16 Core Fragments | Passively reduces raid damage against **every** deployed structure by 4 — see [Base defense](#base-defense) |
+| Recharger Node | 5 Core Fragments | Required to `r` (recharge/rest) within 2 tiles of it — **temporary**: collapses on its own after 20 ticks of not resting near it (resting itself doesn't burn down this clock) |
 
 Home must be built before anything else — the build menu (`b`) always
 lists it first, followed by Mining Node then Compiler, with the rest
@@ -528,8 +546,14 @@ Home is a **symlink target** — a third category, neither cronjob nor
 passive: press `u`, pick it from the list of deployed symlink structures,
 and pay the Power Cell cost to warp there instantly, no matter how far
 away you are. Deploy more than one and `u` lists all of them.
-Any structure can define either or both via its `.ron` file — see
-[Modding](#modding).
+Recharger Node is a **rest gate** — a fourth category: `r` only works
+while you're within 2 tiles of one, and it's **temporary**, collapsing on
+its own once 20 ordinary game-clock ticks pass since it was deployed
+(ticks spent inside a rest cycle don't count against that clock, so
+resting near it doesn't wear it down any faster than leaving it idle
+would — you'd need to rebuild it if you let it sit unused that long).
+Any structure can define any combination of these via its `.ron` file —
+see [Modding](#modding).
 
 ### Base defense
 
@@ -611,6 +635,44 @@ cargo test
   frees any surviving guardians to wander normally and stops further
   respawns. New species schema field: `can_nest` — see
   `assets/species/README.md`.
+- **Individual creatures now roll their own stat variance**: every
+  creature independently rolls HP/Attack/Defense within ±20% of its
+  species/zone-scaled baseline when it's created (wild spawn or fusion
+  result), plus its own ±20% roll on its species' growth rate — so no two
+  individuals of the same species are quite identical, and some out-level
+  their littermates. Shown as a **Potential** tag (Poor through Excellent,
+  with a percent) in the pets screen (`p`) and inspect screen (`i`).
+  Fusing two programs averages their rolls into the result. Persisted
+  across save/load (bumps the save format to v5 — old saves need a new
+  game) — see [Companions](#companions).
+- **Level capped at 12 for everyone**: the player and every tamed program
+  alike now stop leveling — and stop accumulating XP at all — once they
+  hit level 12, regardless of source. This sits above the existing
+  level-10 cronjob-work cap (work still stops paying XP at 10; battling
+  can still carry a worker from 10 up to the new ceiling) — see the Stats
+  table and [Getting started](#getting-started-building-and-running-cronjobs).
+- **Tamed programs grow faster the higher their species' tier**: a new
+  per-species `growth_multiplier` (`assets/species/README.md`) scales a
+  tamed program's per-level stat gains — Easy species stay at the
+  standard rate, Medium is 1.25x, Hard is 1.5x, and both bosses are 2x —
+  so a tougher catch keeps out-leveling an easy one, not just starting
+  stronger. Player leveling is unaffected (the player has no species) —
+  see [Companions](#companions).
+- **Resting now requires a Recharger Node**: `r` (recharge/rest) only
+  works while you're within 2 tiles of a deployed Recharger Node (5 Core
+  Fragments to build) — there's no other way to rest anymore. The node is
+  also **temporary**: it collapses on its own after 20 ordinary
+  game-clock ticks with no one resting near it, though actually resting
+  near it doesn't burn down that clock any faster than leaving it idle
+  would — see [Structures](#structures).
+- **GUI default volume lowered to 20%** (was 60%) — still adjustable with
+  `[`/`]` in-game.
+- **Command Companion picker condensed to a single line**: each entry now
+  reads like `[1] Cipher (Rally Team)` — just the companion's name and a
+  terse name for its ability — instead of a stats line (HP/ATK/PWR)
+  followed by a separate line spelling out the exact numeric effect. Full
+  stats are still one keypress away in the pets screen (`p`) — see
+  [Companions](#companions).
 - **Buffer perk now scales with max Integrity**: each level adds 1% of
   your current max Integrity instead of a flat +10, with a +10 floor so
   it's never worse than before — a meaningful boost once your max HP has

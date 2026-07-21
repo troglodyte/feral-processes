@@ -23,9 +23,10 @@ use rand::{RngExt, SeedableRng};
 
 use components::{
     ActiveBuff, ActiveStatus, BuffKind, Creature, CustomName, Decompiler, Durability, Equipment,
-    EquippedItem, Experience, Glyph, GlyphColor, Hostile, Inventory, ItemFusions, Needs, Nest,
-    NestGuardian, PassiveProcessor, Perks, Player, PlayerBuff, Position, ResourceNode, Stats,
-    StatusEffects, StatusKind, Structure, Tamed, Task, TaskKind, WanderAi, ZonePortal,
+    EquippedItem, Experience, Glyph, GlyphColor, Hostile, Inventory, ItemFusions,
+    MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL, Needs, Nest, NestGuardian, PassiveProcessor, Perks,
+    Player, PlayerBuff, Position, Potential, ResourceNode, Stats, StatusEffects, StatusKind,
+    Structure, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
 };
 use items::{EquipmentSlot, ItemId};
 pub use perks::Perk;
@@ -282,6 +283,11 @@ pub struct PetInfo {
     pub is_companion: bool,
     /// The label of the structure this pet is cronjob-assigned to, if any.
     pub job_structure: Option<String>,
+    /// This individual's rolled quality tier (see `components::Potential`),
+    /// e.g. "Excellent (94%)" — `None` for a creature with no `Potential`
+    /// (shouldn't happen for anything spawned going forward, but possible
+    /// for an old save predating this component).
+    pub quality: Option<String>,
 }
 
 /// Snapshot of the player's active companion, shown in the status panel
@@ -299,10 +305,11 @@ pub struct CompanionInfo {
     /// `status_label`) — e.g. "Bleeding (2)". Always `None` outside a
     /// battle, since status effects are scoped to a single intrusion.
     pub status: Option<String>,
-    /// What commanding this companion in battle would do right now — see
-    /// `Game::companion_ability_label`. Shown in the Command Companion
-    /// picker so the player can see what they're about to use before
-    /// picking a party member with more than one active.
+    /// Terse name of what commanding this companion in battle would do
+    /// right now (e.g. "Rally Team") — see `Game::companion_ability_label`.
+    /// Shown in the Command Companion picker so the player can see what
+    /// they're about to use before picking a party member with more than
+    /// one active.
     pub ability: String,
 }
 
@@ -409,6 +416,9 @@ pub struct InspectView {
     pub habitats: Vec<Biome>,
     pub moves: Vec<MoveDef>,
     pub work_resource: Option<ItemId>,
+    /// This individual's rolled quality tier (see `components::Potential`),
+    /// e.g. "Excellent (94%)" — `None` for an entity with no `Potential`.
+    pub quality: Option<String>,
 }
 
 pub struct Game {
@@ -619,6 +629,12 @@ impl Game {
                     atk: c.atk,
                     def: c.def,
                 },
+                Potential {
+                    hp_roll: c.hp_roll,
+                    atk_roll: c.atk_roll,
+                    def_roll: c.def_roll,
+                    growth_roll: c.growth_roll,
+                },
                 ZonePortal(c.zone),
                 StatusEffects::default(),
             ));
@@ -741,10 +757,12 @@ impl Game {
             Option<&Task>,
             Option<&ZonePortal>,
             Option<&CustomName>,
+            Option<&Potential>,
         )>();
-        for (entity, creature, pos, stats, tamed, exp, task, spawn_zone, custom_name) in
+        for (entity, creature, pos, stats, tamed, exp, task, spawn_zone, custom_name, potential) in
             creature_query.iter(&self.world)
         {
+            let potential = potential.copied().unwrap_or(Potential::NEUTRAL);
             let cronjob = task.and_then(|t| {
                 self.world
                     .get::<Position>(t.target)
@@ -773,6 +791,10 @@ impl Game {
                 is_companion: party_entities.contains(&entity),
                 zone: spawn_zone.map(|z| z.0).unwrap_or(1),
                 custom_name: custom_name.map(|c| c.0.clone()),
+                hp_roll: potential.hp_roll,
+                atk_roll: potential.atk_roll,
+                def_roll: potential.def_roll,
+                growth_roll: potential.growth_roll,
             });
         }
 
@@ -903,6 +925,16 @@ impl Game {
     }
 
     fn tick(&mut self) {
+        self.tick_inner(true);
+    }
+
+    /// Shared implementation behind `tick`. `age_temporary` controls
+    /// whether this tick counts toward any `Temporary` structure's
+    /// remaining lifespan (see `age_temporary_structures`) — `rest`'s
+    /// internal loop passes `false` so resting near a Recharger Node
+    /// doesn't burn down its lifespan any faster than leaving it standing
+    /// idle would.
+    fn tick_inner(&mut self, age_temporary: bool) {
         if self.is_game_over().is_some() {
             return;
         }
@@ -911,7 +943,51 @@ impl Game {
         self.structure_regen();
         self.raid_check();
         self.nest_respawn_tick();
+        if age_temporary {
+            self.age_temporary_structures();
+        }
         self.world.resource_mut::<GameClock>().tick += 1;
+    }
+
+    /// Ages every deployed `Temporary` structure by one tick, collapsing
+    /// (despawning) any that just ran out — dropping a dangling
+    /// cronjob/guard `Task` pointed at it the same way `remove_structure`
+    /// does, but with no material refund since this is decay, not a
+    /// deliberate demolition.
+    fn age_temporary_structures(&mut self) {
+        let expired: Vec<Entity> = {
+            let mut query = self.world.query::<(Entity, &mut Temporary)>();
+            query
+                .iter_mut(&mut self.world)
+                .filter_map(|(entity, mut temp)| {
+                    temp.ticks_remaining = temp.ticks_remaining.saturating_sub(1);
+                    (temp.ticks_remaining == 0).then_some(entity)
+                })
+                .collect()
+        };
+        for entity in expired {
+            if let Some(kind) = self.world.get::<Structure>(entity).map(|s| s.kind.clone()) {
+                let name = self
+                    .world
+                    .resource::<StructureDb>()
+                    .get(&kind)
+                    .map(|d| d.name.clone())
+                    .unwrap_or(kind);
+                self.log(format!("The {name} burns out and collapses."));
+            }
+            let workers: Vec<Entity> = {
+                let mut tasks = self.world.query::<(Entity, &Task)>();
+                tasks
+                    .iter(&self.world)
+                    .filter(|(_, t)| t.target == entity)
+                    .map(|(w, _)| w)
+                    .collect()
+            };
+            for worker in workers {
+                self.world.entity_mut(worker).remove::<Task>();
+            }
+            self.world.despawn(entity);
+        }
     }
 
     pub fn move_player(&mut self, dx: i32, dy: i32) {
@@ -979,12 +1055,21 @@ impl Game {
     /// Power down for the night: many ticks pass at once (power reserves
     /// drain accordingly, tamed programs keep processing, rogue programs
     /// keep roaming), then Fatigue and Integrity are both restored to full.
-    /// There's no separate "rest" system beyond replaying the normal tick
-    /// loop plus a Fatigue/HP reset at the end. If Power runs out and you
+    /// Requires the player to be standing within a Recharger Node's radius
+    /// (`StructureDef::enables_rest`) — there's no other way to rest.
+    /// Beyond that gate, there's no separate "rest" system beyond replaying
+    /// the normal tick loop plus a Fatigue/HP reset at the end (via
+    /// `tick_inner(false)`, so these ticks don't age the Recharger Node
+    /// itself — see `age_temporary_structures`). If Power runs out and you
     /// take lethal damage mid-rest, the loop bails out via the
     /// `is_game_over` check before either restore happens.
     pub fn rest(&mut self) {
         if self.is_game_over().is_some() || self.has_active_battle() {
+            return;
+        }
+        let player_pos = *self.world.get::<Position>(self.player_entity()).unwrap();
+        if self.nearby_rest_structure(player_pos).is_none() {
+            self.log("You need to be near a Recharger Node to power down and rest.");
             return;
         }
         self.log("You drop into low-power standby to recharge.");
@@ -992,7 +1077,7 @@ impl Game {
             if self.is_game_over().is_some() {
                 return;
             }
-            self.tick();
+            self.tick_inner(false);
         }
         let player = self.player_entity();
         {
@@ -1540,6 +1625,11 @@ impl Game {
         }
         if def.passive_process.is_some() {
             entity.insert(PassiveProcessor::default());
+        }
+        if let Some(temp) = &def.temporary {
+            entity.insert(Temporary {
+                ticks_remaining: temp.max_ticks,
+            });
         }
         self.log(format!("You deploy a {}.", def.name));
         self.tick();
@@ -2225,7 +2315,12 @@ impl Game {
             let Ok((mut exp, mut stats)) = query.get_mut(&mut self.world, player) else {
                 return;
             };
-            let levels = progression::add_xp(&mut exp, &mut stats, amount);
+            let levels = progression::add_xp(
+                &mut exp,
+                &mut stats,
+                amount,
+                progression::BASELINE_GROWTH_MULTIPLIER,
+            );
             (levels, exp.level)
         };
         if levels > 0 {
@@ -2258,12 +2353,24 @@ impl Game {
         }
         let party = self.world.resource::<Party>().0.clone();
         for companion in party {
+            let species_growth = self
+                .world
+                .get::<Creature>(companion)
+                .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+                .map(|s| s.growth_multiplier)
+                .unwrap_or(progression::BASELINE_GROWTH_MULTIPLIER);
+            let individual_roll = self
+                .world
+                .get::<Potential>(companion)
+                .map(|p| p.growth_roll)
+                .unwrap_or(Potential::NEUTRAL.growth_roll);
+            let growth_multiplier = species_growth * individual_roll;
             let leveled = {
                 let mut query = self.world.query::<(&mut Experience, &mut Stats)>();
                 let Ok((mut exp, mut stats)) = query.get_mut(&mut self.world, companion) else {
                     continue;
                 };
-                progression::add_xp(&mut exp, &mut stats, amount) > 0
+                progression::add_xp(&mut exp, &mut stats, amount, growth_multiplier) > 0
             };
             if leveled {
                 let name = self.creature_label(companion);
@@ -2701,6 +2808,25 @@ impl Game {
             .map(|(_, p)| *p)
     }
 
+    /// Any deployed structure whose def sets `enables_rest` and is within
+    /// its radius of `player_pos` — gates `Game::rest`.
+    fn nearby_rest_structure(&mut self, player_pos: Position) -> Option<Entity> {
+        let mut query = self.world.query::<(Entity, &Structure, &Position)>();
+        let hits: Vec<(Entity, StructureId, Position)> = query
+            .iter(&self.world)
+            .map(|(e, s, p)| (e, s.kind.clone(), *p))
+            .collect();
+        let db = self.world.resource::<StructureDb>();
+        hits.into_iter().find_map(|(entity, kind, pos)| {
+            let radius = db.get(&kind)?.enables_rest.as_ref()?.radius;
+            if (pos.x - player_pos.x).abs() <= radius && (pos.y - player_pos.y).abs() <= radius {
+                Some(entity)
+            } else {
+                None
+            }
+        })
+    }
+
     /// Finds a zone-portal structure (`StructureDef::zone_portal`) at
     /// `(x, y)`, if any — checked before the generic blocking-structure
     /// check in `move_player` so walking onto one breaches the zone instead
@@ -2796,7 +2922,8 @@ impl Game {
         let mult = zone_level.stat_multiplier() as f32;
         let zone = zone_level.0;
         let dist_mult = self.distance_stat_multiplier(x, y);
-        let scale = |base: i32| ((base as f32) * mult * dist_mult).round() as i32;
+        let potential = self.roll_potential();
+        let scale = |base: i32, roll: f32| ((base as f32) * mult * dist_mult * roll).round() as i32;
         Some(
             self.world
                 .spawn((
@@ -2809,11 +2936,12 @@ impl Game {
                         color: species.color,
                     },
                     Stats {
-                        hp: scale(species.base_hp),
-                        max_hp: scale(species.base_hp),
-                        atk: scale(species.base_atk),
-                        def: scale(species.base_def),
+                        hp: scale(species.base_hp, potential.hp_roll),
+                        max_hp: scale(species.base_hp, potential.hp_roll),
+                        atk: scale(species.base_atk, potential.atk_roll),
+                        def: scale(species.base_def, potential.def_roll),
                     },
+                    potential,
                     Hostile,
                     WanderAi::default(),
                     ZonePortal(zone),
@@ -2890,6 +3018,20 @@ impl Game {
         let dist = (x - spawn.x).abs().max((y - spawn.y).abs());
         let mult = 1.0 + (dist / DISTANCE_STAT_STEP_TILES) as f32 * DISTANCE_STAT_STEP_BONUS;
         mult.min(MAX_DISTANCE_STAT_MULTIPLIER)
+    }
+
+    /// Rolls a fresh `Potential` for a newly created creature — see
+    /// `spawn_wild_creature`/`fuse_companions`. Each of the four fields is
+    /// independently uniform in `MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL`
+    /// — the "same species, different stats" mechanic.
+    fn roll_potential(&mut self) -> Potential {
+        let mut rng = self.world.resource_mut::<GameRng>();
+        Potential {
+            hp_roll: rng.0.random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
+            atk_roll: rng.0.random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
+            def_roll: rng.0.random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
+            growth_roll: rng.0.random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
+        }
     }
 
     /// Maximum wild pack size at `(x, y)`: capped at `zone + 1` (zone 1 →
@@ -3317,12 +3459,10 @@ impl Game {
         })
     }
 
-    /// What commanding `entity` in battle would do right now: its species'
-    /// own `special_ability` if it has one (see
-    /// `SpecialAbility::display_label`), or the generic Attack Rally
-    /// otherwise — computed the same way `rally_player` actually computes
-    /// it, from the companion's own current ATK, so this stays accurate as
-    /// it levels up rather than showing a stale number.
+    /// Terse label for what commanding `entity` in battle would do right
+    /// now: its species' own `special_ability` if it has one (see
+    /// `SpecialAbility::short_name`), or "Rally Team" for the generic
+    /// Attack Rally every companion falls back to otherwise.
     fn companion_ability_label(&self, entity: Entity) -> String {
         let ability = self
             .world
@@ -3330,13 +3470,21 @@ impl Game {
             .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
             .and_then(|s| s.special_ability.clone());
         match ability {
-            Some(ability) => ability.display_label(),
-            None => {
-                let atk = self.world.get::<Stats>(entity).map(|s| s.atk).unwrap_or(0);
-                let power = (atk / 3).max(1);
-                format!("Attack Rally: +{power} ATK for {RALLY_DURATION} rounds")
-            }
+            Some(ability) => ability.short_name().to_string(),
+            None => "Rally Team".to_string(),
         }
+    }
+
+    /// Display string for `entity`'s rolled `Potential`, e.g.
+    /// "Excellent (94%)" — `None` if it has no `Potential` component (an
+    /// old save predating it, or a non-creature entity).
+    fn potential_quality_label(&self, entity: Entity) -> Option<String> {
+        let potential = self.world.get::<Potential>(entity)?;
+        Some(format!(
+            "{} ({}%)",
+            potential.quality_label(),
+            potential.quality_percent()
+        ))
     }
 
     /// Snapshot of every current party member (see `resources::Party`), in
@@ -3390,6 +3538,7 @@ impl Game {
                     power: stats.power(),
                     is_companion: party.contains(&entity),
                     job_structure,
+                    quality: self.potential_quality_label(entity),
                 })
             })
             .collect()
@@ -3491,15 +3640,17 @@ impl Game {
                 return Err("You don't control both programs.".into());
             }
         }
-        let (species_a, exp_a, stats_a) = (
+        let (species_a, exp_a, stats_a, potential_a) = (
             self.world.get::<Creature>(a).unwrap().species.clone(),
             *self.world.get::<Experience>(a).unwrap(),
             *self.world.get::<Stats>(a).unwrap(),
+            self.world.get::<Potential>(a).copied().unwrap_or(Potential::NEUTRAL),
         );
-        let (species_b, exp_b, stats_b) = (
+        let (species_b, exp_b, stats_b, potential_b) = (
             self.world.get::<Creature>(b).unwrap().species.clone(),
             *self.world.get::<Experience>(b).unwrap(),
             *self.world.get::<Stats>(b).unwrap(),
+            self.world.get::<Potential>(b).copied().unwrap_or(Potential::NEUTRAL),
         );
         let (species_id, level) = if exp_a.level >= exp_b.level {
             (species_a, exp_a.level)
@@ -3519,6 +3670,7 @@ impl Game {
         let fused_hp = fuse_stat(stats_a.max_hp, stats_b.max_hp);
         let fused_atk = fuse_stat(stats_a.atk, stats_b.atk);
         let fused_def = fuse_stat(stats_a.def, stats_b.def);
+        let fused_potential = Potential::averaged(potential_a, potential_b);
 
         let name_a = self.creature_label(a);
         let name_b = self.creature_label(b);
@@ -3554,6 +3706,7 @@ impl Game {
                 atk: fused_atk,
                 def: fused_def,
             },
+            fused_potential,
             Tamed { owner: player },
             Experience {
                 level,
@@ -3794,6 +3947,7 @@ impl Game {
             habitats: species.habitats.clone(),
             moves: species.moves.clone(),
             work_resource: species.work_resource,
+            quality: self.potential_quality_label(entity),
         })
     }
 
@@ -5370,6 +5524,7 @@ mod tests {
             let mut needs = game.world.get_mut::<Needs>(player).unwrap();
             needs.fatigue = 10.0;
         }
+        spawn_recharger_node_at_player(&mut game);
 
         game.rest();
 
@@ -5388,6 +5543,7 @@ mod tests {
             let mut stats = game.world.get_mut::<Stats>(companion).unwrap();
             stats.hp = 1;
         }
+        spawn_recharger_node_at_player(&mut game);
 
         game.rest();
 
@@ -5869,6 +6025,36 @@ mod tests {
             .id()
     }
 
+    /// Deploys a Recharger Node directly on the player's current tile —
+    /// `Game::rest` requires one nearby, so tests exercising `rest` need
+    /// this in place first. Spawned directly rather than through
+    /// `place_structure` to sidestep its Home/cost/radius requirements,
+    /// which aren't what these tests are about — but still attaches
+    /// `Temporary` from the real `recharger_node.ron` schema, the same way
+    /// `place_structure` would, so its lifespan behaves identically.
+    fn spawn_recharger_node_at_player(game: &mut Game) {
+        let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+        let max_ticks = game
+            .world
+            .resource::<StructureDb>()
+            .get("recharger_node")
+            .and_then(|d| d.temporary.as_ref())
+            .expect("recharger_node.ron should define `temporary`")
+            .max_ticks;
+        game.world.spawn((
+            Structure {
+                kind: "recharger_node".to_string(),
+            },
+            Position {
+                x: player_pos.x,
+                y: player_pos.y,
+            },
+            Temporary {
+                ticks_remaining: max_ticks,
+            },
+        ));
+    }
+
     #[test]
     fn set_companion_rejects_a_wild_creature() {
         let mut game = Game::new(23, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -6292,9 +6478,8 @@ mod tests {
         game.add_companion(plain).unwrap();
         let plain_ability = game.player_status().companions[0].ability.clone();
         assert_eq!(
-            plain_ability,
-            format!("Attack Rally: +{} ATK for {RALLY_DURATION} rounds", (30_i32 / 3).max(1)),
-            "a species with no special_ability should show the computed default rally"
+            plain_ability, "Rally Team",
+            "a species with no special_ability should show the generic Rally Team fallback"
         );
 
         if let Some((species_id, expected)) = all_species
@@ -6322,8 +6507,8 @@ mod tests {
                 .clone();
             assert_eq!(
                 shown,
-                expected.display_label(),
-                "a species with a special_ability should show its own label, not the generic rally"
+                expected.short_name(),
+                "a species with a special_ability should show its own short name, not the generic rally"
             );
         }
     }
@@ -6368,6 +6553,218 @@ mod tests {
             exp.level, 2,
             "5 XP against a 5-XP requirement should level the companion up"
         );
+    }
+
+    #[test]
+    fn higher_growth_multiplier_species_out_grows_a_baseline_one_via_award_party_xp() {
+        let mut game = Game::new(419, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let species = game.species_defs();
+        let baseline_id = species
+            .iter()
+            .find(|s| s.growth_multiplier == progression::BASELINE_GROWTH_MULTIPLIER)
+            .expect("base roster should have at least one baseline-growth species")
+            .id
+            .clone();
+        let boosted_id = species
+            .iter()
+            .find(|s| s.growth_multiplier > progression::BASELINE_GROWTH_MULTIPLIER)
+            .expect("base roster should have at least one higher-growth species")
+            .id
+            .clone();
+
+        let spawn = |game: &mut Game, species: String| {
+            game.world
+                .spawn((
+                    Creature { species },
+                    Position { x: 3, y: 3 },
+                    Stats { hp: 100, max_hp: 100, atk: 10, def: 10 },
+                    Tamed { owner: player },
+                    Experience { level: 1, xp: 0, xp_to_next: 1 },
+                ))
+                .id()
+        };
+        let baseline = spawn(&mut game, baseline_id);
+        let boosted = spawn(&mut game, boosted_id);
+        game.add_companion(baseline).unwrap();
+        game.add_companion(boosted).unwrap();
+
+        // xp_to_next is rigged to 1 above, so any non-zero party XP levels
+        // both companions up exactly once.
+        game.award_player_xp(player, 2);
+
+        let baseline_hp = game.world.get::<Stats>(baseline).unwrap().max_hp;
+        let boosted_hp = game.world.get::<Stats>(boosted).unwrap().max_hp;
+        assert!(
+            boosted_hp > baseline_hp,
+            "a higher growth_multiplier species should out-grow a baseline one: {boosted_hp} vs {baseline_hp}"
+        );
+    }
+
+    #[test]
+    fn spawn_wild_creature_rolls_individual_stat_variance_within_a_species() {
+        let mut game = Game::new(420, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let species_id = game.species_defs().into_iter().next().unwrap().id;
+        for _ in 0..15 {
+            game.spawn_wild_creature(&species_id, 5, 5);
+        }
+
+        let mut query = game.world.query_filtered::<(&Position, &Stats), With<Hostile>>();
+        let max_hps: Vec<i32> = query
+            .iter(&game.world)
+            .filter(|(p, _)| p.x == 5 && p.y == 5)
+            .map(|(_, s)| s.max_hp)
+            .collect();
+        assert_eq!(max_hps.len(), 15);
+        assert!(
+            max_hps.iter().any(|&hp| hp != max_hps[0]),
+            "spawning the same species repeatedly should roll different individual stats, got {max_hps:?}"
+        );
+    }
+
+    #[test]
+    fn individual_growth_roll_scales_stat_gains_independently_of_species_growth_multiplier() {
+        let mut game = Game::new(421, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let species_id = game.species_defs().into_iter().next().unwrap().id;
+
+        let low_roll = game
+            .world
+            .spawn((
+                Creature { species: species_id.clone() },
+                Position { x: 3, y: 3 },
+                Stats { hp: 100, max_hp: 100, atk: 10, def: 10 },
+                Potential {
+                    hp_roll: 1.0,
+                    atk_roll: 1.0,
+                    def_roll: 1.0,
+                    growth_roll: MIN_INDIVIDUAL_ROLL,
+                },
+                Tamed { owner: player },
+                Experience { level: 1, xp: 0, xp_to_next: 1 },
+            ))
+            .id();
+        let high_roll = game
+            .world
+            .spawn((
+                Creature { species: species_id },
+                Position { x: 3, y: 3 },
+                Stats { hp: 100, max_hp: 100, atk: 10, def: 10 },
+                Potential {
+                    hp_roll: 1.0,
+                    atk_roll: 1.0,
+                    def_roll: 1.0,
+                    growth_roll: MAX_INDIVIDUAL_ROLL,
+                },
+                Tamed { owner: player },
+                Experience { level: 1, xp: 0, xp_to_next: 1 },
+            ))
+            .id();
+        game.add_companion(low_roll).unwrap();
+        game.add_companion(high_roll).unwrap();
+
+        // xp_to_next is rigged to 1 above, so any non-zero party XP levels
+        // both companions up exactly once, at the same species (and so the
+        // same growth_multiplier) — only their individual growth_roll differs.
+        game.award_player_xp(player, 2);
+
+        let low_hp = game.world.get::<Stats>(low_roll).unwrap().max_hp;
+        let high_hp = game.world.get::<Stats>(high_roll).unwrap().max_hp;
+        assert!(
+            high_hp > low_hp,
+            "a higher individual growth_roll should out-grow a lower one at the same species: {high_hp} vs {low_hp}"
+        );
+    }
+
+    #[test]
+    fn fuse_companions_averages_the_parents_potential() {
+        let mut game = Game::new(422, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let species = game.species_defs();
+        let species_a = species[0].id.clone();
+        let species_b = species[1 % species.len()].id.clone();
+
+        let a = game
+            .world
+            .spawn((
+                Creature { species: species_a },
+                Position { x: 3, y: 3 },
+                Stats { hp: 20, max_hp: 20, atk: 10, def: 4 },
+                Potential {
+                    hp_roll: 0.8,
+                    atk_roll: 0.8,
+                    def_roll: 0.8,
+                    growth_roll: 0.8,
+                },
+                Tamed { owner: player },
+                Experience { level: 5, xp: 3, xp_to_next: 100 },
+            ))
+            .id();
+        let b = game
+            .world
+            .spawn((
+                Creature { species: species_b },
+                Position { x: 4, y: 4 },
+                Stats { hp: 10, max_hp: 10, atk: 6, def: 2 },
+                Potential {
+                    hp_roll: 1.2,
+                    atk_roll: 1.2,
+                    def_roll: 1.2,
+                    growth_roll: 1.2,
+                },
+                Tamed { owner: player },
+                Experience { level: 2, xp: 1, xp_to_next: 40 },
+            ))
+            .id();
+
+        game.fuse_companions(a, b, None).unwrap();
+
+        let mut query = game.world.query::<(&Potential, &Tamed)>();
+        let (potential, _) = query
+            .iter(&game.world)
+            .find(|(_, t)| t.owner == player)
+            .expect("a fused creature should exist");
+        assert_eq!(potential.hp_roll, 1.0, "fused rolls should average the two parents'");
+        assert_eq!(potential.growth_roll, 1.0);
+    }
+
+    #[test]
+    fn a_creatures_potential_survives_save_and_load() {
+        let assets = test_assets_dir();
+        let mut game = Game::new(423, DifficultyMode::Forgiving, &assets).unwrap();
+        let player = game.player_entity();
+        let species = game.species_defs().into_iter().next().unwrap();
+        game.world.spawn((
+            Creature { species: species.id.clone() },
+            Position { x: 3, y: 3 },
+            Stats { hp: 10, max_hp: 10, atk: 1, def: 1 },
+            Potential {
+                hp_roll: 1.15,
+                atk_roll: 0.85,
+                def_roll: 1.05,
+                growth_roll: 1.2,
+            },
+            Tamed { owner: player },
+            Experience::default(),
+        ));
+
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_potential_test_{}.bin",
+            std::process::id()
+        ));
+        game.save(&path).unwrap();
+        let mut loaded = Game::load(&path, &assets).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        let mut query = loaded.world.query::<(&Potential, &Tamed)>();
+        let (potential, _) = query
+            .iter(&loaded.world)
+            .find(|(_, t)| t.owner == player)
+            .expect("restored creature should still have its Potential");
+        assert_eq!(potential.hp_roll, 1.15);
+        assert_eq!(potential.atk_roll, 0.85);
+        assert_eq!(potential.def_roll, 1.05);
+        assert_eq!(potential.growth_roll, 1.2);
     }
 
     #[test]
@@ -6789,11 +7186,73 @@ mod tests {
         for e in [a, b] {
             game.world.get_mut::<Stats>(e).unwrap().hp = 1;
         }
+        spawn_recharger_node_at_player(&mut game);
 
         game.rest();
 
         assert_eq!(game.world.get::<Stats>(a).unwrap().hp, 10);
         assert_eq!(game.world.get::<Stats>(b).unwrap().hp, 10);
+    }
+
+    #[test]
+    fn recharger_node_structure_loads_with_the_expected_rest_and_temporary_schema() {
+        let game = Game::new(400, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let def = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.id == "recharger_node")
+            .expect("recharger_node.ron should load");
+        assert_eq!(def.build_cost, vec![(ItemId::CoreFragment, 5)]);
+        assert_eq!(def.enables_rest.as_ref().unwrap().radius, 2);
+        assert_eq!(def.temporary.as_ref().unwrap().max_ticks, 20);
+    }
+
+    #[test]
+    fn rest_is_a_no_op_without_a_nearby_recharger_node() {
+        let mut game = Game::new(401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        {
+            let mut needs = game.world.get_mut::<Needs>(player).unwrap();
+            needs.fatigue = 10.0;
+        }
+
+        game.rest();
+
+        let needs = *game.world.get::<Needs>(player).unwrap();
+        assert_eq!(
+            needs.fatigue, 10.0,
+            "resting without a nearby Recharger Node shouldn't restore anything"
+        );
+    }
+
+    #[test]
+    fn recharger_node_collapses_after_its_lifespan_of_ordinary_ticks() {
+        let mut game = Game::new(402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        spawn_recharger_node_at_player(&mut game);
+
+        for _ in 0..20 {
+            game.wait();
+        }
+
+        let mut query = game.world.query::<&Structure>();
+        assert!(
+            query.iter(&game.world).all(|s| s.kind != "recharger_node"),
+            "the node should collapse once its 20-tick lifespan elapses"
+        );
+    }
+
+    #[test]
+    fn resting_does_not_age_the_recharger_node() {
+        let mut game = Game::new(403, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        spawn_recharger_node_at_player(&mut game);
+
+        game.rest(); // burns REST_TICKS (40) internally — past the node's own 20-tick lifespan
+
+        let mut query = game.world.query::<&Structure>();
+        assert!(
+            query.iter(&game.world).any(|s| s.kind == "recharger_node"),
+            "ticks spent resting shouldn't count against the node's own lifespan"
+        );
     }
 
     #[test]
@@ -7870,16 +8329,23 @@ mod tests {
             // Zone 2 doubles base stats at minimum (`ZoneLevel::stat_multiplier`);
             // `distance_stat_multiplier` can scale it up further (capped at
             // `MAX_DISTANCE_STAT_MULTIPLIER`) depending how far from the
-            // zone's entry point it spawned. Checked as a range rather than
-            // an exact figure since `WanderAi` may have already moved this
-            // creature from its spawn position by the time this runs.
+            // zone's entry point it spawned, and each spawn's individual
+            // `Potential::hp_roll` can additionally scale it within
+            // `MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL`. Checked as a range
+            // rather than an exact figure since `WanderAi` may have already
+            // moved this creature from its spawn position by the time this
+            // runs.
             assert!(
-                max_hp >= species.base_hp * 2,
-                "zone 2 wild creatures should have at least doubled stats"
+                (max_hp as f32) >= (species.base_hp as f32) * 2.0 * MIN_INDIVIDUAL_ROLL,
+                "zone 2 wild creatures should have at least doubled stats, times the roll floor"
             );
             assert!(
-                (max_hp as f32) <= (species.base_hp as f32) * 2.0 * MAX_DISTANCE_STAT_MULTIPLIER,
-                "zone 2 wild creatures shouldn't exceed the zone doubling times the distance cap"
+                (max_hp as f32)
+                    <= (species.base_hp as f32)
+                        * 2.0
+                        * MAX_DISTANCE_STAT_MULTIPLIER
+                        * MAX_INDIVIDUAL_ROLL,
+                "zone 2 wild creatures shouldn't exceed the zone doubling times the distance cap and roll ceiling"
             );
         }
     }
@@ -8187,6 +8653,19 @@ mod tests {
             .into_iter()
             .find(|s| !s.is_boss)
             .expect("at least one non-boss species should exist");
+
+        // Clear the world's own initial habitat population so the only
+        // hostiles in view are the two this test spawns itself below —
+        // otherwise a stray boss (or non-boss) from that initial spawn
+        // roll could land within view range and make the assertions below
+        // fragile to unrelated changes in spawn odds/roll counts.
+        let initial_hostiles: Vec<Entity> = {
+            let mut query = game.world.query_filtered::<Entity, With<Hostile>>();
+            query.iter(&game.world).collect()
+        };
+        for e in initial_hostiles {
+            game.world.despawn(e);
+        }
 
         let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
         let boss_entity = game
@@ -8548,6 +9027,28 @@ mod tests {
         let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
         let ppos = *game.world.get::<Position>(player).unwrap();
+
+        // Clear anything the world's own initial habitat spawn happened to
+        // place on the tiles this test is about to use for its own fixtures
+        // (portal, home, wild) — the exact initial layout isn't this test's
+        // concern, and asserting it stays untouched would make the test
+        // fragile to unrelated changes in spawn odds/roll counts.
+        let stray: Vec<Entity> = {
+            let mut query = game.world.query::<(Entity, &Position)>();
+            query
+                .iter(&game.world)
+                .filter(|(e, p)| {
+                    *e != player
+                        && ((p.x, p.y) == (ppos.x + 1, ppos.y)
+                            || (p.x, p.y) == (ppos.x + 3, ppos.y)
+                            || (p.x, p.y) == (ppos.x + 5, ppos.y))
+                })
+                .map(|(e, _)| e)
+                .collect()
+        };
+        for e in stray {
+            game.world.despawn(e);
+        }
 
         let companion = spawn_tamed(&mut game, 10, 3);
         game.add_companion(companion).unwrap();

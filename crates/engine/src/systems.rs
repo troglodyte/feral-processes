@@ -3,12 +3,13 @@ use rand::RngExt;
 
 use crate::NEST_TETHER_RADIUS;
 use crate::components::{
-    Experience, Inventory, Needs, Nest, NestGuardian, PassiveProcessor, Perks, Player, Position,
-    ResourceNode, Stats, Structure, Tamed, Task, TaskKind, WanderAi,
+    Creature, Experience, Inventory, Needs, Nest, NestGuardian, PassiveProcessor, Perks, Player,
+    Position, Potential, ResourceNode, Stats, Structure, Tamed, Task, TaskKind, WanderAi,
 };
 use crate::perks::Perk;
 use crate::progression;
 use crate::resources::{GameRng, MessageKind, MessageLog};
+use crate::species::SpeciesDb;
 use crate::structures::StructureDb;
 use crate::world::WorldMap;
 
@@ -17,9 +18,10 @@ const WORK_XP_PER_CYCLE: u32 = 5;
 
 /// A cronjob worker stops earning XP from `task_progress_system` once it
 /// reaches this level — structure work is meant to be a steady, low-effort
-/// income, not a way to grind a pet's level uncapped without ever
-/// battling. Levels above this only come from combat (`Game::award_xp` /
-/// `award_party_xp`), which has no such cap.
+/// income, not a way to grind a pet's level without ever battling. Levels
+/// above this only come from combat (`Game::award_player_xp` /
+/// `award_party_xp`), up to the separate, higher absolute ceiling every
+/// entity shares — see `progression::MAX_LEVEL`.
 pub(crate) const WORK_XP_LEVEL_CAP: u32 = 10;
 
 const HUNGER_DECAY_PER_TICK: f32 = 0.15;
@@ -106,13 +108,21 @@ fn mining_success_chance(level: u32) -> f64 {
 /// cronjob forever. The same loop would drive future colonist-style jobs,
 /// not just base-building work.
 pub fn task_progress_system(
-    mut tasks: Query<(&mut Task, &Tamed, &mut Experience, &mut Stats)>,
+    mut tasks: Query<(
+        &mut Task,
+        &Tamed,
+        &Creature,
+        Option<&Potential>,
+        &mut Experience,
+        &mut Stats,
+    )>,
     mut nodes: Query<&mut ResourceNode>,
     mut inventories: Query<&mut Inventory>,
+    species_db: Res<SpeciesDb>,
     mut log: ResMut<MessageLog>,
     mut rng: ResMut<GameRng>,
 ) {
-    for (mut task, tamed, mut exp, mut stats) in &mut tasks {
+    for (mut task, tamed, creature, potential, mut exp, mut stats) in &mut tasks {
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
         }
@@ -137,7 +147,16 @@ pub fn task_progress_system(
         if let Ok(mut inv) = inventories.get_mut(tamed.owner) {
             inv.add(node.resource, 1);
             let level_note = if exp.level < WORK_XP_LEVEL_CAP {
-                let levels = progression::add_xp(&mut exp, &mut stats, WORK_XP_PER_CYCLE);
+                let species_growth = species_db
+                    .get(&creature.species)
+                    .map(|s| s.growth_multiplier)
+                    .unwrap_or(progression::BASELINE_GROWTH_MULTIPLIER);
+                let individual_roll = potential
+                    .map(|p| p.growth_roll)
+                    .unwrap_or(Potential::NEUTRAL.growth_roll);
+                let growth_multiplier = species_growth * individual_roll;
+                let levels =
+                    progression::add_xp(&mut exp, &mut stats, WORK_XP_PER_CYCLE, growth_multiplier);
                 if levels > 0 {
                     format!(" It levels up to {}!", exp.level)
                 } else {

@@ -380,6 +380,78 @@ pub struct PlayerBuff {
     pub active: Option<ActiveBuff>,
 }
 
+/// Uniform random-roll range applied independently to each of a newly
+/// created creature's stats (baked into `Stats` at spawn) and to its
+/// growth rate (`Potential::growth_roll`) — see `Game::roll_potential`.
+/// The "same species, different stats" mechanic; doesn't apply to the
+/// player, who has no species.
+pub const MIN_INDIVIDUAL_ROLL: f32 = 0.8;
+pub const MAX_INDIVIDUAL_ROLL: f32 = 1.2;
+
+/// An individual creature's innate quality roll, set once when it's
+/// created (see `Game::spawn_wild_creature` / `Game::fuse_companions`)
+/// and carried for its lifetime. `hp_roll`/`atk_roll`/`def_roll` are baked
+/// into its starting `Stats` at creation time — this component doesn't
+/// reapply them later, it just remembers what was rolled so
+/// `quality_percent`/`quality_label` can describe it. `growth_roll`
+/// actively scales `progression::add_xp`'s growth on every level-up, on
+/// top of `SpeciesDef::growth_multiplier`.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Potential {
+    pub hp_roll: f32,
+    pub atk_roll: f32,
+    pub def_roll: f32,
+    pub growth_roll: f32,
+}
+
+impl Potential {
+    /// Fallback for an entity with no roll of its own (e.g. a legacy save,
+    /// or a test helper that spawns a creature directly) — every roll at
+    /// its neutral 1.0, contributing neither a bonus nor a penalty.
+    pub const NEUTRAL: Potential = Potential {
+        hp_roll: 1.0,
+        atk_roll: 1.0,
+        def_roll: 1.0,
+        growth_roll: 1.0,
+    };
+
+    /// A single 0-100 "how good is this individual" percentile: averages
+    /// all four rolls and maps `MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL`
+    /// onto 0-100. Purely a display aggregate — each roll still applies
+    /// independently to its own stat/growth.
+    pub fn quality_percent(&self) -> u32 {
+        let avg = (self.hp_roll + self.atk_roll + self.def_roll + self.growth_roll) / 4.0;
+        let pct =
+            (avg - MIN_INDIVIDUAL_ROLL) / (MAX_INDIVIDUAL_ROLL - MIN_INDIVIDUAL_ROLL) * 100.0;
+        pct.round().clamp(0.0, 100.0) as u32
+    }
+
+    /// A coarse, human-readable tier for `quality_percent` — shown next to
+    /// a creature in the pets and inspect screens.
+    pub fn quality_label(&self) -> &'static str {
+        match self.quality_percent() {
+            0..=19 => "Poor",
+            20..=39 => "Below Average",
+            40..=59 => "Average",
+            60..=79 => "Above Average",
+            _ => "Excellent",
+        }
+    }
+
+    /// Averages two parents' rolls into one — used when fusing two
+    /// companions into one (`Game::fuse_companions`), so the result's
+    /// quality reflects both parents rather than an independent fresh
+    /// roll.
+    pub fn averaged(a: Potential, b: Potential) -> Potential {
+        Potential {
+            hp_roll: (a.hp_roll + b.hp_roll) / 2.0,
+            atk_roll: (a.atk_roll + b.atk_roll) / 2.0,
+            def_roll: (a.def_roll + b.def_roll) / 2.0,
+            growth_roll: (a.growth_roll + b.growth_roll) / 2.0,
+        }
+    }
+}
+
 /// A structure's remaining health against raids (see `Game::raid_check`).
 /// Every deployed structure gets one, sized from its
 /// `StructureDef::durability`; reaching 0 destroys the structure.
@@ -414,6 +486,16 @@ pub struct NestGuardian {
     pub nest: Entity,
 }
 
+/// Present on a structure whose `StructureDef::temporary` is set (e.g. a
+/// Recharger Node) — counts down by one on every ordinary game tick (see
+/// `Game::tick_inner`) until it hits 0, at which point the structure
+/// collapses. Ticks spent inside a `Game::rest` cycle deliberately don't
+/// decrement this.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Temporary {
+    pub ticks_remaining: u32,
+}
+
 /// Player-only: accumulated Perk Points (earned 1 per level-up) and which
 /// perks have been bought with them. See `perks::Perk` — a perk can be
 /// bought more than once, so `unlocked` holds one entry per level bought
@@ -428,5 +510,76 @@ impl Perks {
     /// How many levels of `perk` have been bought — 0 if none.
     pub fn level(&self, perk: Perk) -> u32 {
         self.unlocked.iter().filter(|&&p| p == perk).count() as u32
+    }
+}
+
+#[cfg(test)]
+mod potential_tests {
+    use super::Potential;
+
+    #[test]
+    fn quality_percent_maps_the_roll_range_onto_0_to_100() {
+        let worst = Potential {
+            hp_roll: 0.8,
+            atk_roll: 0.8,
+            def_roll: 0.8,
+            growth_roll: 0.8,
+        };
+        let neutral = Potential::NEUTRAL;
+        let best = Potential {
+            hp_roll: 1.2,
+            atk_roll: 1.2,
+            def_roll: 1.2,
+            growth_roll: 1.2,
+        };
+        assert_eq!(worst.quality_percent(), 0);
+        assert_eq!(neutral.quality_percent(), 50);
+        assert_eq!(best.quality_percent(), 100);
+    }
+
+    #[test]
+    fn quality_label_buckets_the_percent_into_a_coarse_tier() {
+        assert_eq!(
+            Potential {
+                hp_roll: 0.8,
+                atk_roll: 0.8,
+                def_roll: 0.8,
+                growth_roll: 0.8,
+            }
+            .quality_label(),
+            "Poor"
+        );
+        assert_eq!(Potential::NEUTRAL.quality_label(), "Average");
+        assert_eq!(
+            Potential {
+                hp_roll: 1.2,
+                atk_roll: 1.2,
+                def_roll: 1.2,
+                growth_roll: 1.2,
+            }
+            .quality_label(),
+            "Excellent"
+        );
+    }
+
+    #[test]
+    fn averaged_splits_the_difference_between_two_parents() {
+        let a = Potential {
+            hp_roll: 0.8,
+            atk_roll: 1.0,
+            def_roll: 1.2,
+            growth_roll: 0.9,
+        };
+        let b = Potential {
+            hp_roll: 1.2,
+            atk_roll: 1.0,
+            def_roll: 0.8,
+            growth_roll: 1.1,
+        };
+        let fused = Potential::averaged(a, b);
+        assert_eq!(fused.hp_roll, 1.0);
+        assert_eq!(fused.atk_roll, 1.0);
+        assert_eq!(fused.def_roll, 1.0);
+        assert_eq!(fused.growth_roll, 1.0);
     }
 }

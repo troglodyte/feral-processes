@@ -7,6 +7,7 @@
     base_atk: 7,
     base_def: 10,
     taming_difficulty: 0.65,
+    growth_multiplier: 1.5,
     habitats: [StaticField],
     moves: [
         (name: "Barrier Slam", power: 9),

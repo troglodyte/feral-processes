@@ -708,6 +708,9 @@ fn draw_inspect_detail(game: &mut Game, entity: Option<Entity>) {
         text_row(format!("Attack {}   Defense {}   Power {}", view.atk, view.def, view.power)),
         text_row(format!("Decompile difficulty: {:.0}%", view.taming_difficulty * 100.0)),
     ];
+    if let Some(quality) = &view.quality {
+        rows.push(text_row(format!("Potential: {quality}")));
+    }
     if view.is_hostile && !view.is_tamed {
         rows.push(Row::TextColored(
             format!("Decompile chance right now: {:.0}%", view.decompile_chance * 100.0),
@@ -850,9 +853,10 @@ fn draw_companion_menu(game: &mut Game, selected: usize) {
     for (i, p) in pets.iter().enumerate() {
         let active = if p.is_companion { " (in party)" } else { "" };
         let job = p.job_structure.as_ref().map(|s| format!(" (on a cronjob: {s})")).unwrap_or_default();
+        let quality = p.quality.as_ref().map(|q| format!(" [{q}]")).unwrap_or_default();
         rows.push(item_row(
             format!(
-                "[{}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}{}{}",
+                "[{}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}{}{}{}",
                 i + 1,
                 p.name,
                 p.level,
@@ -861,6 +865,7 @@ fn draw_companion_menu(game: &mut Game, selected: usize) {
                 p.atk,
                 p.def,
                 p.power,
+                quality,
                 active,
                 job
             ),
@@ -1144,10 +1149,9 @@ fn draw_battle_companion_menu(app: &mut App) {
     let mut rows = vec![text_row("Command which companion? It'll buff you instead of attacking.")];
     for (i, c) in party.iter().enumerate() {
         rows.push(item_row(
-            format!("[{}] {} (HP {}/{}, ATK {}, PWR {}){}", i + 1, c.name, c.hp, c.max_hp, c.atk, c.power, status_tag(&c.status)),
+            format!("[{}] {} ({}){}", i + 1, c.name, c.ability, status_tag(&c.status)),
             i == selected,
         ));
-        rows.push(text_row(format!("    {}", c.ability)));
     }
     draw_popup("Command Companion", PopupSize::Large, &rows);
 }

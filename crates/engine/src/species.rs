@@ -31,9 +31,8 @@ pub enum SpecialAbility {
 }
 
 impl SpecialAbility {
-    /// Short display label for the Command Companion picker — what
-    /// commanding this companion would actually do, e.g. "Rally: +3 ATK
-    /// for 3 rounds".
+    /// Full display label — what commanding this companion would actually
+    /// do, e.g. "Rally: +3 ATK for 3 rounds".
     pub fn display_label(&self) -> String {
         match self {
             SpecialAbility::Rally { power, duration } => {
@@ -50,6 +49,20 @@ impl SpecialAbility {
                 };
                 format!("Debuff: {kind_name} ({power}, {duration} rounds)")
             }
+        }
+    }
+
+    /// Terse name for the Command Companion picker, e.g. "Rally Team" —
+    /// just what kind of ability it is, without the numeric effect.
+    pub fn short_name(&self) -> &'static str {
+        match self {
+            SpecialAbility::Rally { .. } => "Rally Team",
+            SpecialAbility::Shield { .. } => "Shield Team",
+            SpecialAbility::Heal { .. } => "Heal",
+            SpecialAbility::Debuff { kind, .. } => match kind {
+                StatusKind::Bleed => "Inflict Bleeding",
+                StatusKind::Stun => "Inflict Stun",
+            },
         }
     }
 }
@@ -122,6 +135,16 @@ pub struct SpeciesDef {
     /// ability.
     #[serde(default)]
     pub special_ability: Option<SpecialAbility>,
+    /// Multiplies this species' per-level stat growth (see
+    /// `progression::add_xp`) for a tamed member of it — 1.0 (the default)
+    /// grows at the same flat rate as before this field existed; a
+    /// higher-tier species can set e.g. `1.5` to out-grow an easy one
+    /// level for level. `#[serde(default)]` (via
+    /// `progression::BASELINE_GROWTH_MULTIPLIER`) so existing species
+    /// files (including mods) without this field keep growing exactly as
+    /// they did before.
+    #[serde(default = "default_growth_multiplier")]
+    pub growth_multiplier: f32,
     /// Whether this species can spawn as a Nest — a stationary,
     /// destructible object that keeps 2-5 guardians of this species
     /// tethered around it and respawns any that are killed/tamed, until
@@ -134,6 +157,10 @@ pub struct SpeciesDef {
     /// pick.
     #[serde(default)]
     pub can_nest: bool,
+}
+
+fn default_growth_multiplier() -> f32 {
+    crate::progression::BASELINE_GROWTH_MULTIPLIER
 }
 
 #[derive(Resource, Default)]
@@ -234,6 +261,26 @@ mod tests {
             bosses.iter().all(|s| s.is_boss),
             "boss_habitat_matches should only ever include boss species"
         );
+    }
+
+    #[test]
+    fn base_roster_growth_multiplier_rises_with_difficulty_tier() {
+        let (db, warnings) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+        assert!(warnings.is_empty(), "species assets should all load cleanly: {warnings:?}");
+
+        let get = |id: &str| db.get(id).unwrap().growth_multiplier;
+        // Easy-tier species (and SubProcess, Easy/Medium) omit the field
+        // entirely in their .ron file and should fall back to the default.
+        assert_eq!(get("sprite"), default_growth_multiplier());
+        assert_eq!(get("glitch"), default_growth_multiplier());
+        assert_eq!(get("sub_process"), default_growth_multiplier());
+        // Medium tier
+        assert_eq!(get("scrapper"), 1.25);
+        // Hard tier
+        assert_eq!(get("virus"), 1.5);
+        // Boss tier — the fastest-growing companions in the base roster.
+        assert_eq!(get("overseer"), 2.0);
+        assert_eq!(get("wintermute"), 2.0);
     }
 
     #[test]

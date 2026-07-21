@@ -73,6 +73,15 @@ pub struct CreatureSave {
     /// so it required bumping `SAVE_FORMAT_VERSION` (bincode has no
     /// granular field-level compatibility here — see that constant's docs).
     pub custom_name: Option<String>,
+    /// This creature's individual quality roll — see
+    /// `components::Potential`. Persisted so `growth_roll` keeps applying
+    /// consistently across save/load rather than resetting; `hp_roll`/
+    /// `atk_roll`/`def_roll` are along for the ride purely so
+    /// `Potential::quality_percent`/`quality_label` stay accurate too.
+    pub hp_roll: f32,
+    pub atk_roll: f32,
+    pub def_roll: f32,
+    pub growth_roll: f32,
 }
 
 /// Mirrors `components::TaskKind` for persistence — kept separate so the
@@ -147,7 +156,7 @@ pub struct SaveData {
 /// and every save written under the old version stops loading. That's an
 /// intentional, simple tradeoff for a single-player game rather than
 /// building real schema migration.
-pub const SAVE_FORMAT_VERSION: u32 = 4;
+pub const SAVE_FORMAT_VERSION: u32 = 5;
 
 pub fn save_to_file(path: &Path, data: &SaveData) -> io::Result<()> {
     let encoded = bincode::serde::encode_to_vec(data, bincode::config::standard())

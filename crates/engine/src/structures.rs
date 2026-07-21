@@ -57,6 +57,26 @@ pub struct TradeDef {
     pub buy: Vec<(ItemId, u32)>,
 }
 
+/// A structure's rest capability — see `StructureDef::enables_rest` and
+/// `Game::rest`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RestDef {
+    /// Chebyshev distance (in tiles) the player must be within to rest
+    /// using this structure.
+    pub radius: i32,
+}
+
+/// Marks a structure as temporary — see `StructureDef::temporary`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TemporaryDef {
+    /// How many ordinary game-clock ticks this structure survives after
+    /// being deployed before it automatically collapses. Ticks spent
+    /// inside a `Game::rest` cycle don't count toward this (see
+    /// `Game::tick_inner`) — resting near it doesn't wear it down any
+    /// faster than just leaving it standing idle would.
+    pub max_ticks: u32,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StructureDef {
     pub id: StructureId,
@@ -112,6 +132,18 @@ pub struct StructureDef {
     /// nothing, same as before it existed.
     #[serde(default)]
     pub raid_defense: u32,
+    /// If set, `Game::rest` is only allowed while the player stands within
+    /// this structure's `radius` — resting has no other way to happen.
+    /// `#[serde(default)]` so existing structure files (including mods)
+    /// without this field don't grant rest capability.
+    #[serde(default)]
+    pub enables_rest: Option<RestDef>,
+    /// If set, this structure is temporary: it automatically collapses
+    /// once `max_ticks` ordinary game-clock ticks have passed since it was
+    /// deployed. `#[serde(default)]` so existing (permanent) structure
+    /// files keep parsing.
+    #[serde(default)]
+    pub temporary: Option<TemporaryDef>,
 }
 
 fn default_durability() -> u32 {

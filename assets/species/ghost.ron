@@ -7,6 +7,7 @@
     base_atk: 11,
     base_def: 3,
     taming_difficulty: 0.65,
+    growth_multiplier: 1.5,
     habitats: [StaticField, NullSector],
     moves: [
         (name: "Haunt", power: 9, effect: Some((kind: Bleed, chance: 0.45, duration: 3, power: 4))),

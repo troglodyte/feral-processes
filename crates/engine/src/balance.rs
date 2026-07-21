@@ -65,7 +65,11 @@ fn best_case_gear_bonus(zone: u32) -> (i32, i32) {
 /// how `Experience::default()` plus `progression::add_xp` actually grows a
 /// tamed creature.
 fn companion_stats(species: &SpeciesDef, caught_zone: u32, level: u32) -> Stats {
-    stats_after_levels(wild_stats_at_zone(species, caught_zone), level.saturating_sub(1))
+    stats_after_levels(
+        wild_stats_at_zone(species, caught_zone),
+        level.saturating_sub(1),
+        species.growth_multiplier,
+    )
 }
 
 /// A deterministic stand-in for the real move selection
@@ -186,7 +190,11 @@ pub fn min_level_to_clear_zone(
         (0, 0)
     };
     for level in 1..=max_level {
-        let mut player = stats_after_levels(PLAYER_BASE_STATS, level - 1);
+        let mut player = stats_after_levels(
+            PLAYER_BASE_STATS,
+            level - 1,
+            crate::progression::BASELINE_GROWTH_MULTIPLIER,
+        );
         player.atk += gear_atk;
         player.def += gear_def;
         let companion_level = companion_level_for_player_level(level);

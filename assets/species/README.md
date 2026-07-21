@@ -87,6 +87,16 @@ is skipped with a warning logged in-game rather than crashing startup.
     //                                                      `effect`)
     special_ability: Some(Heal(power: 8)),
 
+    // Optional; can be left out entirely (defaults to 1.0). Multiplies this
+    // species' per-level stat growth (see `progression::add_xp`) for a tamed
+    // member of it — 1.0 grows at the standard flat rate; a higher-tier
+    // species can set e.g. 1.5 to out-grow an easy one level for level. Only
+    // affects a *tamed* member's growth as it levels up — a wild spawn's
+    // stats (`base_hp`/`base_atk`/`base_def`, zone-scaled) are unaffected.
+    // The base roster uses roughly 1.0 for Easy species, 1.25 for Medium,
+    // 1.5 for Hard, and 2.0 for bosses.
+    growth_multiplier: 1.25,
+
     // Optional; can be left out entirely (defaults to false). If true,
     // this species can spawn as a Nest instead of an ordinary lone
     // creature/pack during habitat spawning: a stationary, destructible

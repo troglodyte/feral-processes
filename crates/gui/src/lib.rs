@@ -47,7 +47,7 @@ fn window_conf() -> Conf {
     }
 }
 
-const DEFAULT_VOLUME: f32 = 0.6;
+const DEFAULT_VOLUME: f32 = 0.2;
 const VOLUME_STEP: f32 = 0.1;
 /// How long the "Volume: NN%" readout stays on screen after `[`/`]` last
 /// changed it, in seconds.

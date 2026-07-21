@@ -25,3 +25,4 @@ AGENTS.md
 .aider*
 .github/copilot-instructions.md
 .superpowers/
+.claude/settings.local.json

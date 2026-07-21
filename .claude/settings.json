@@ -1,0 +1,24 @@
+{
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+
+    "playwright@claude-plugins-official": false,
+    "typescript-lsp@claude-plugins-official": false,
+    "frontend-design@claude-plugins-official": false,
+    "skill-creator@claude-plugins-official": false,
+    "claude-code-setup@claude-plugins-official": false,
+    "ralph-loop@claude-plugins-official": false
+  },
+
+  "skillOverrides": {
+    "kotlin-mcp-server-generator": "off",
+    "stripe-best-practices": "off",
+    "vercel-composition-patterns": "off",
+    "vercel-react-best-practices": "off",
+    "vercel-react-view-transitions": "off",
+    "web-design-guidelines": "off",
+    "dataviz": "off",
+    "claude-in-chrome": "off",
+    "claude-api": "user-invocable-only"
+  }
+}

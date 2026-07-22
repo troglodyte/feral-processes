@@ -48,6 +48,11 @@ fn run_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resul
             // through — drain the queue so it doesn't grow unbounded over
             // a long session.
             let _ = app.take_sounds();
+            // Likewise for `VisualEffect`s: this frontend draws none, but
+            // an undrained queue would sit permanently at its cap.
+            if let Some(game) = &mut app.game {
+                let _ = game.take_effects();
+            }
         }
         app.update_realtime();
     }

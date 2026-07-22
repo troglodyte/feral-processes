@@ -6,7 +6,8 @@
 
 use macroquad::prelude::*;
 
-use feral_processes_app_core::{App, MENU_SCAN_RADIUS, Mode, TradeChoice};
+use crate::fx::Fx;
+use feral_processes_app_core::{App, MENU_SCAN_RADIUS, Mode, TradeChoice, menu_shortcut};
 use feral_processes_engine::components::GlyphColor;
 use feral_processes_engine::items::{ItemId, RESEARCH_DATA_BANK_LIMIT};
 use feral_processes_engine::world::Biome;
@@ -47,7 +48,32 @@ fn draw_message_line(kind: MessageKind, text: &str, x: f32, y: f32) {
     draw_text(text, x, y, FONT_SIZE, color);
 }
 
-pub fn draw(app: &mut App) {
+/// Whether `mode` needs `App::status_line` redrawn on top of whatever it
+/// just drew. `Playing` already shows it in the log pane, and the main-menu
+/// and save popups carry it as a row inside the panel; every other mode
+/// covers the log pane with a popup, which would otherwise bury the one
+/// message explaining why a menu pick was refused.
+fn needs_status_banner(mode: Mode) -> bool {
+    !matches!(mode, Mode::Playing | Mode::MainMenu | Mode::SaveAction)
+}
+
+/// Draws `status` in a strip along the bottom edge, below every popup —
+/// `draw_popup` caps a panel at 85% of the window height and centers it, so
+/// the bottom 7.5% is always clear.
+fn draw_status_banner(status: &str) {
+    let dims = measure_text(status, None, FONT_SIZE as u16, 1.0);
+    let baseline = screen_height() - 16.0;
+    draw_rectangle(
+        0.0,
+        baseline - dims.height - 8.0,
+        screen_width(),
+        dims.height + 16.0,
+        PANEL_BG,
+    );
+    draw_text(status, 12.0, baseline, FONT_SIZE, RED);
+}
+
+pub fn draw(app: &mut App, fx: &mut Fx) {
     clear_background(Color::new(0.02, 0.02, 0.03, 1.0));
     match app.mode {
         Mode::MainMenu => draw_main_menu(app),
@@ -55,19 +81,24 @@ pub fn draw(app: &mut App) {
         Mode::SaveAction => draw_save_action(app),
         Mode::DifficultyPick => draw_difficulty_pick(app.menu_selected),
         Mode::GameOver => draw_game_over(app),
-        Mode::Battle => draw_battle(app),
+        Mode::Battle => draw_battle(app, fx),
         Mode::BattleCompanion => {
-            draw_battle(app);
+            draw_battle(app, fx);
             draw_battle_companion_menu(app);
         }
         Mode::Help => {
-            draw_playing_base(app);
+            draw_playing_base(app, fx);
             draw_help();
         }
         _ => {
-            draw_playing_base(app);
+            draw_playing_base(app, fx);
             draw_mode_overlay(app);
         }
+    }
+    if let Some(status) = &app.status_line
+        && needs_status_banner(app.mode)
+    {
+        draw_status_banner(status);
     }
 }
 
@@ -270,7 +301,7 @@ fn biome_style(biome: Biome) -> (char, Color) {
 
 /// The world grid, status panel, and message feed — the base layer shown
 /// under `Mode::Playing` and every menu popup, same as `ui.rs::render_playing`.
-fn draw_playing_base(app: &mut App) {
+fn draw_playing_base(app: &mut App, fx: &Fx) {
     let zoom = app.zoom.clamp(1, 8) as f32;
     let status_line = app.status_line.clone();
     let Some(game) = &mut app.game else { return };
@@ -289,6 +320,7 @@ fn draw_playing_base(app: &mut App) {
         .filter(|e| !e.is_tamed)
         .collect();
     let spawn_point = game.zone_spawn_point();
+    let shield_outline = fx.shield_outline(game.raid_defense_active());
 
     draw_rectangle(0.0, 0.0, map_w, map_h, Color::new(0.03, 0.03, 0.05, 1.0));
     for (ry, row) in tiles.iter().enumerate() {
@@ -298,6 +330,8 @@ fn draw_playing_base(app: &mut App) {
             let py = ry as f32 * tile_px;
             let mut bold = false;
             let mut staffed = false;
+            let mut shielded = false;
+            let mut critical = false;
             for ev in &entities {
                 let erx = ev.pos.0 - status.position.0 + half_w;
                 let ery = ev.pos.1 - status.position.1 + half_h;
@@ -306,9 +340,18 @@ fn draw_playing_base(app: &mut App) {
                     color = glyph_color(ev.color);
                     bold = ev.is_structure || ev.is_boss;
                     staffed = ev.is_structure && ev.structure_worker.is_some();
+                    // Structures wear their raid damage: the glyph dims as
+                    // durability drops, and a nearly-destroyed one washes
+                    // its tile red, so the base's condition reads at a
+                    // glance instead of only from the inspect menu.
+                    (color, critical) = fx.structure_condition(ev.durability, color);
+                    shielded = ev.is_structure;
                 }
             }
-            let bg = Color::new(color.r * 0.18, color.g * 0.18, color.b * 0.18, 1.0);
+            let mut bg = Color::new(color.r * 0.18, color.g * 0.18, color.b * 0.18, 1.0);
+            if critical {
+                bg = Color::new((bg.r + 0.18).min(1.0), bg.g, bg.b, bg.a);
+            }
             draw_rectangle(px, py, tile_px - 1.0, tile_px - 1.0, bg);
             let font_size = (tile_px * 0.8).max(14.0);
             let glyph = ch.to_string();
@@ -339,6 +382,19 @@ fn draw_playing_base(app: &mut App) {
             if staffed {
                 draw_rectangle_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, YELLOW);
             }
+            // The shield network is base-wide, not per-structure, so every
+            // structure carries the same faint pulse while one is standing.
+            // Drawn under the flash so a raid still reads on top of it.
+            if let Some(pulse) = shield_outline.filter(|_| shielded) {
+                draw_rectangle_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, pulse);
+            }
+            let world = (
+                status.position.0 + rx as i32 - half_w,
+                status.position.1 + ry as i32 - half_h,
+            );
+            if let Some(flash) = fx.tile_flash(world) {
+                draw_rectangle(px, py, tile_px - 1.0, tile_px - 1.0, flash);
+            }
         }
     }
     draw_rectangle_lines(0.0, 0.0, map_w, map_h, 2.0, BORDER);
@@ -348,7 +404,14 @@ fn draw_playing_base(app: &mut App) {
     let log_y = map_h;
     let log_h = screen_height() - map_h;
     draw_rectangle(0.0, log_y, screen_width(), log_h, PANEL_BG);
-    draw_rectangle_lines(0.0, log_y, screen_width(), log_h, 2.0, BORDER);
+    draw_rectangle_lines(
+        0.0,
+        log_y,
+        screen_width(),
+        log_h,
+        2.0,
+        fx.log_border(BORDER),
+    );
     let mut ly = log_y + 22.0;
     if let Some(s) = &status_line {
         draw_text(s, 10.0, ly, FONT_SIZE, RED);
@@ -503,6 +566,25 @@ fn draw_bar(x: f32, y: f32, w: f32, label: &str, value: f32, max: f32, color: Co
     bar_y + 26.0
 }
 
+/// A lagging "ghost" band trailing a bar's real value, so a hit in battle
+/// reads as a visible drain rather than a jump. Call after `draw_bar` with
+/// the same geometry — `draw_bar` lays down an opaque track that would
+/// otherwise bury this — and it fills only the gap between the two values.
+fn draw_ghost_band(x: f32, y: f32, w: f32, value: f32, ghost: f32, max: f32, color: Color) {
+    let ratio = (value / max).clamp(0.0, 1.0);
+    let ghost_ratio = (ghost / max).clamp(0.0, 1.0);
+    if ghost_ratio <= ratio {
+        return;
+    }
+    draw_rectangle(
+        x + w * ratio,
+        y + 6.0,
+        w * (ghost_ratio - ratio),
+        14.0,
+        Color::new(color.r, color.g, color.b, 0.45),
+    );
+}
+
 fn draw_mode_overlay(app: &mut App) {
     let selected = app.menu_selected;
     let Some(game) = &mut app.game else { return };
@@ -620,7 +702,7 @@ fn draw_build_menu(game: &mut Game, selected: usize) {
         let raw_cost = game.structure_build_cost(def);
         let cost = cost_display(&raw_cost, &status.inventory);
         rows.push(item_row(
-            format!("[{}] {} - {}", i + 1, def.name, cost.join(", ")),
+            format!("[{}] {} - {}", menu_shortcut(i), def.name, cost.join(", ")),
             i == selected,
         ));
         rows.push(text_row(format!("    {}", descriptions[i])));
@@ -640,7 +722,7 @@ fn draw_craft_menu(game: &mut Game, selected: usize) {
         rows.push(item_row(
             format!(
                 "[{}] {} - {}",
-                i + 1,
+                menu_shortcut(i),
                 recipe.result.display_name(),
                 cost.join(", ")
             ),
@@ -746,7 +828,7 @@ fn draw_worker_menu(game: &mut Game, title: &str, prompt: &str, selected: usize)
         rows.push(item_row(
             format!(
                 "[{}] {}{}{} at ({}, {}){}{}",
-                i + 1,
+                menu_shortcut(i),
                 w.label,
                 w.level.map(|l| format!(" Lv{l}")).unwrap_or_default(),
                 power,
@@ -798,7 +880,7 @@ fn draw_structure_menu(
         rows.push(item_row(
             format!(
                 "[{}] {} at ({}, {}){}{}",
-                i + 1,
+                menu_shortcut(i),
                 s.label,
                 s.pos.0,
                 s.pos.1,
@@ -832,7 +914,7 @@ fn draw_remove_menu(game: &mut Game, selected: usize) {
         rows.push(item_row(
             format!(
                 "[{}] {} at ({}, {}){}{}",
-                i + 1,
+                menu_shortcut(i),
                 s.label,
                 s.pos.0,
                 s.pos.1,
@@ -881,7 +963,7 @@ fn draw_symlink_menu(game: &mut Game, selected: usize) {
         rows.push(item_row(
             format!(
                 "[{}] {} at ({}, {}){} - {}",
-                i + 1,
+                menu_shortcut(i),
                 t.label,
                 t.pos.0,
                 t.pos.1,
@@ -1002,7 +1084,7 @@ fn draw_inventory(game: &mut Game, selected: usize) {
         equipped_row(3, "Module", status.module, selected == 2),
         text_row(""),
         text_row(format!(
-            "Inventory - Buffer {}/{} (number to equip/erase):",
+            "Inventory - Buffer {}/{} (row key to equip/erase):",
             status.inventory_used, status.inventory_capacity
         )),
     ];
@@ -1012,7 +1094,13 @@ fn draw_inventory(game: &mut Game, selected: usize) {
     for (i, (item, qty)) in status.inventory.iter().enumerate() {
         let tag = equip_preview_tag(*item, status.zone, game.item_fusion_tier(*item));
         rows.push(item_row(
-            format!("[{}] {} x{}{}", i + 4, item.display_name(), qty, tag),
+            format!(
+                "[{}] {} x{}{}",
+                menu_shortcut(i + 3),
+                item.display_name(),
+                qty,
+                tag
+            ),
             selected == i + 3,
         ));
     }
@@ -1151,7 +1239,7 @@ fn draw_companion_menu(game: &mut Game, selected: usize) {
         rows.push(item_row(
             format!(
                 "[{}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}{}{}{}{}",
-                i + 1,
+                menu_shortcut(i),
                 p.name,
                 p.level,
                 p.hp,
@@ -1186,7 +1274,7 @@ fn fusion_tag(fusions: u32) -> String {
     }
 }
 
-fn fuse_candidate_label(num: usize, c: &EntityView, pets: &[PetInfo]) -> String {
+fn fuse_candidate_label(num: char, c: &EntityView, pets: &[PetInfo]) -> String {
     let fused = fusion_tag(c.fusions);
     match pets.iter().find(|p| p.entity == c.entity) {
         Some(p) => {
@@ -1222,7 +1310,7 @@ fn draw_fuse_menu(game: &mut Game, selected: usize) {
     }
     for (i, c) in candidates.iter().enumerate() {
         rows.push(item_row(
-            fuse_candidate_label(i + 1, c, &pets),
+            fuse_candidate_label(menu_shortcut(i), c, &pets),
             i == selected,
         ));
     }
@@ -1250,7 +1338,7 @@ fn draw_fuse_second_menu(game: &mut Game, first: Option<Entity>, selected: usize
     }
     for (i, c) in candidates.iter().enumerate() {
         rows.push(item_row(
-            fuse_candidate_label(i + 1, c, &pets),
+            fuse_candidate_label(menu_shortcut(i), c, &pets),
             i == selected,
         ));
     }
@@ -1315,7 +1403,7 @@ fn draw_trade_menu(game: &mut Game, selected: usize) {
         rows.push(item_row(
             format!(
                 "[{}] {} at ({}, {}){}",
-                i + 1,
+                menu_shortcut(i),
                 s.label,
                 s.pos.0,
                 s.pos.1,
@@ -1347,7 +1435,7 @@ fn draw_trade_action_menu(game: &mut Game, structure: Option<Entity>, selected: 
         rows.push(item_row(
             format!(
                 "[{}] Sell {} x{qty} ({} Core Fragments each)",
-                idx + 1,
+                menu_shortcut(idx),
                 item.display_name(),
                 trade.sell_rate
             ),
@@ -1361,7 +1449,7 @@ fn draw_trade_action_menu(game: &mut Game, structure: Option<Entity>, selected: 
         rows.push(item_row(
             format!(
                 "[{}] Buy {} ({cost} Core Fragments each)",
-                idx + 1,
+                menu_shortcut(idx),
                 item.display_name()
             ),
             idx == selected,
@@ -1433,7 +1521,7 @@ fn draw_perks_menu(game: &mut Game, selected: usize) {
         rows.push(item_row(
             format!(
                 "[{}] {} - {} Perk Points{}",
-                i + 1,
+                menu_shortcut(i),
                 perk.display_name(),
                 perk.cost(),
                 tag
@@ -1443,7 +1531,9 @@ fn draw_perks_menu(game: &mut Game, selected: usize) {
         rows.push(text_row(format!("    {}", perk.description())));
     }
     rows.push(text_row(""));
-    rows.push(text_row("Pick a number to buy another level. Esc to close"));
+    rows.push(text_row(
+        "Pick a row's key to buy another level. Esc to close",
+    ));
     draw_popup("Perks", PopupSize::Large, &rows);
 }
 
@@ -1472,7 +1562,7 @@ fn draw_research_menu(game: &mut Game, selected: usize) {
         rows.push(item_row(
             format!(
                 "[{}] {} - {} Research Data{tag}",
-                i + 1,
+                menu_shortcut(i),
                 node.name,
                 node.cost
             ),
@@ -1481,7 +1571,7 @@ fn draw_research_menu(game: &mut Game, selected: usize) {
         rows.push(text_row(format!("    {}", node.description)));
     }
     rows.push(text_row(""));
-    rows.push(text_row("Pick a number to research it. Esc to close"));
+    rows.push(text_row("Pick a row's key to research it. Esc to close"));
     draw_popup("Research", PopupSize::Large, &rows);
 }
 
@@ -1492,7 +1582,7 @@ fn status_tag(status: &Option<String>) -> String {
         .unwrap_or_default()
 }
 
-fn draw_battle(app: &mut App) {
+fn draw_battle(app: &mut App, fx: &mut Fx) {
     let Some(game) = &mut app.game else { return };
     let Some(view) = game.battle_view() else {
         return;
@@ -1505,6 +1595,8 @@ fn draw_battle(app: &mut App) {
     } else {
         String::new()
     };
+    let battle_fx = fx.battle_frame(view.wild_hp, view.player_hp, get_frame_time());
+    let wild_bar_y = y;
     y = draw_bar(
         20.0,
         y,
@@ -1523,7 +1615,17 @@ fn draw_battle(app: &mut App) {
         view.wild_max_hp.max(1) as f32,
         RED,
     );
+    draw_ghost_band(
+        20.0,
+        wild_bar_y,
+        w - 40.0,
+        view.wild_hp as f32,
+        battle_fx.wild_ghost,
+        view.wild_max_hp.max(1) as f32,
+        RED,
+    );
     y += 10.0;
+    let player_bar_y = y;
     y = draw_bar(
         20.0,
         y,
@@ -1540,7 +1642,36 @@ fn draw_battle(app: &mut App) {
         view.player_max_hp.max(1) as f32,
         CYAN,
     );
+    draw_ghost_band(
+        20.0,
+        player_bar_y,
+        w - 40.0,
+        view.player_hp as f32,
+        battle_fx.player_ghost,
+        view.player_max_hp.max(1) as f32,
+        CYAN,
+    );
     y += 10.0;
+
+    // Damage is inferred from the HP the view reports rather than from a
+    // dedicated engine event — a battle round resolves entirely between
+    // two frames, so the drop is unambiguous.
+    if battle_fx.wild_damage > 0 {
+        fx.spawn_float(
+            format!("-{}", battle_fx.wild_damage),
+            w / 2.0,
+            wild_bar_y,
+            RED,
+        );
+    }
+    if battle_fx.player_damage > 0 {
+        fx.spawn_float(
+            format!("-{}", battle_fx.player_damage),
+            w / 2.0,
+            player_bar_y,
+            TEXT,
+        );
+    }
 
     for companion in &view.companions {
         draw_text(
@@ -1603,6 +1734,8 @@ fn draw_battle(app: &mut App) {
         FONT_SIZE,
         TEXT,
     );
+
+    fx.draw_floats();
 }
 
 fn draw_battle_companion_menu(app: &mut App) {
@@ -1616,7 +1749,7 @@ fn draw_battle_companion_menu(app: &mut App) {
         rows.push(item_row(
             format!(
                 "[{}] {} ({}){}",
-                i + 1,
+                menu_shortcut(i),
                 c.name,
                 c.ability,
                 status_tag(&c.status)
@@ -1662,7 +1795,7 @@ fn draw_load_game(app: &App) {
             .as_deref()
             .unwrap_or("(incompatible save - can still be deleted)");
         rows.push(item_row(
-            format!("[{}] {} - {}", i + 1, save.name, summary),
+            format!("[{}] {} - {}", menu_shortcut(i), save.name, summary),
             i == app.menu_selected,
         ));
     }
@@ -1729,7 +1862,7 @@ fn draw_help() {
         text_row("g scan   c compile   b deploy   w cronjob   G guard   R demolish"),
         text_row("u symlink   i inspect   v inventory   p companions"),
         text_row("f fuse   t trade   x perks   T research   s save   q main menu"),
-        text_row("+/- zoom   [/] volume"),
+        text_row("+/- zoom   [/] volume   \\ visual effects"),
         text_row(""),
         text_row("Every numbered menu also takes Up/Down + Enter, on top of"),
         text_row("typing a row's own number/letter directly."),
@@ -1739,4 +1872,43 @@ fn draw_help() {
         text_row("Press any key to close"),
     ];
     draw_popup("Help", PopupSize::Large, &rows);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A refused menu pick ("Requires Automation first.") only reaches the
+    /// player through `App::status_line`, and every gameplay menu draws a
+    /// popup over the log pane that used to be the sole place it appeared —
+    /// which made a refusal indistinguishable from a dead keypress.
+    #[test]
+    fn every_mode_that_covers_the_log_pane_gets_the_status_banner() {
+        for mode in [
+            Mode::Research,
+            Mode::Build,
+            Mode::Craft,
+            Mode::Trade,
+            Mode::Inventory,
+            Mode::Battle,
+            Mode::BattleCompanion,
+            Mode::Help,
+            Mode::LoadGame,
+        ] {
+            assert!(
+                needs_status_banner(mode),
+                "{mode:?} draws over the log pane, so its refusals need the banner"
+            );
+        }
+    }
+
+    #[test]
+    fn modes_that_already_show_the_status_line_dont_double_up() {
+        for mode in [Mode::Playing, Mode::MainMenu, Mode::SaveAction] {
+            assert!(
+                !needs_status_banner(mode),
+                "{mode:?} already surfaces status_line itself"
+            );
+        }
+    }
 }

@@ -59,6 +59,52 @@ impl MessageLog {
     }
 }
 
+/// How many effects the queue holds before dropping its oldest — a
+/// backstop for a frontend that never calls `Game::take_effects`, matching
+/// the cap `MessageLog` puts on lines.
+pub const EFFECT_QUEUE_CAP: usize = 32;
+
+/// What happened to a structure a raid picked, for frontends that want to
+/// show it on the map. `Deflected` covers both no-damage outcomes — the
+/// shield network zeroing the damage out, and a cronjob worker fully
+/// mitigating it — since neither changes any state a renderer could
+/// otherwise observe.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EffectKind {
+    Hit,
+    Deflected,
+    Destroyed,
+}
+
+/// A transient "something happened here" cue, in world coordinates so a
+/// frontend can keep it pinned to its tile as the player moves.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VisualEffect {
+    pub pos: (i32, i32),
+    pub kind: EffectKind,
+}
+
+/// Effects queued since the last `Game::take_effects`. Deliberately not
+/// serialized — a cue mid-flight has nothing to say to a reloaded save.
+#[derive(Resource, Default)]
+pub struct EffectQueue {
+    effects: Vec<VisualEffect>,
+}
+
+impl EffectQueue {
+    pub fn push(&mut self, pos: (i32, i32), kind: EffectKind) {
+        self.effects.push(VisualEffect { pos, kind });
+        if self.effects.len() > EFFECT_QUEUE_CAP {
+            let excess = self.effects.len() - EFFECT_QUEUE_CAP;
+            self.effects.drain(0..excess);
+        }
+    }
+
+    pub fn take(&mut self) -> Vec<VisualEffect> {
+        std::mem::take(&mut self.effects)
+    }
+}
+
 #[derive(Resource, Default)]
 pub struct GameOver {
     pub reason: Option<String>,

@@ -1,6 +1,6 @@
 (
-    id: "turret",
-    name: "Turret",
+    id: "shield",
+    name: "Shield",
     glyph: '^',
     color: Red,
     build_cost: [(CoreFragment, 16)],

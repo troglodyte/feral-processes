@@ -4,7 +4,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Gauge, Paragraph, Wrap};
 
-use feral_processes_app_core::{App, MENU_SCAN_RADIUS, Mode, TradeChoice};
+use feral_processes_app_core::{App, MENU_SCAN_RADIUS, Mode, TradeChoice, menu_shortcut};
 use feral_processes_engine::components::{EquippedItem, GlyphColor};
 use feral_processes_engine::items::{ItemId, RESEARCH_DATA_BANK_LIMIT};
 use feral_processes_engine::world::{Biome, Tile};
@@ -460,7 +460,7 @@ fn render_craft_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize
         lines.push(menu_line(
             format!(
                 "[{}] {} — {}",
-                i + 1,
+                menu_shortcut(i),
                 recipe.result.display_name(),
                 cost.join(", ")
             ),
@@ -582,7 +582,7 @@ fn render_build_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize
     for (i, def) in defs.iter().enumerate() {
         let raw_cost = game.structure_build_cost(def);
         let cost = cost_display(&raw_cost, &status.inventory);
-        let text = format!("[{}] {} — {}", i + 1, def.name, cost.join(", "));
+        let text = format!("[{}] {} — {}", menu_shortcut(i), def.name, cost.join(", "));
         lines.push(if i == selected {
             menu_line(text, true)
         } else {
@@ -643,7 +643,7 @@ fn render_cronjob_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usi
         lines.push(menu_line(
             format!(
                 "[{}] {}{}{} at ({}, {}){}{}",
-                i + 1,
+                menu_shortcut(i),
                 w.label,
                 w.level.map(|l| format!(" Lv{l}")).unwrap_or_default(),
                 power,
@@ -688,7 +688,7 @@ fn render_cronjob_structure_menu(f: &mut Frame, area: Rect, game: &mut Game, sel
         lines.push(menu_line(
             format!(
                 "[{}] {} at ({}, {}){}{}",
-                i + 1,
+                menu_shortcut(i),
                 s.label,
                 s.pos.0,
                 s.pos.1,
@@ -734,7 +734,7 @@ fn render_guard_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize
         lines.push(menu_line(
             format!(
                 "[{}] {}{}{} at ({}, {}){}{}",
-                i + 1,
+                menu_shortcut(i),
                 w.label,
                 w.level.map(|l| format!(" Lv{l}")).unwrap_or_default(),
                 power,
@@ -779,7 +779,7 @@ fn render_guard_structure_menu(f: &mut Frame, area: Rect, game: &mut Game, selec
         lines.push(menu_line(
             format!(
                 "[{}] {} at ({}, {}){}{}",
-                i + 1,
+                menu_shortcut(i),
                 s.label,
                 s.pos.0,
                 s.pos.1,
@@ -818,7 +818,7 @@ fn render_remove_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usiz
         lines.push(menu_line(
             format!(
                 "[{}] {} at ({}, {}){}{}",
-                i + 1,
+                menu_shortcut(i),
                 s.label,
                 s.pos.0,
                 s.pos.1,
@@ -882,7 +882,7 @@ fn render_symlink_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usi
         lines.push(menu_line(
             format!(
                 "[{}] {} at ({}, {}){} — {}",
-                i + 1,
+                menu_shortcut(i),
                 t.label,
                 t.pos.0,
                 t.pos.1,
@@ -926,7 +926,7 @@ fn render_companion_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: u
         lines.push(menu_line(
             format!(
                 "[{}] {} Lv{} — HP {}/{}  ATK {}  DEF {}  PWR {}{}{}{}{}",
-                i + 1,
+                menu_shortcut(i),
                 p.name,
                 p.level,
                 p.hp,
@@ -967,7 +967,7 @@ fn fusion_tag(fusions: u32) -> String {
     }
 }
 
-fn fuse_candidate_label(num: usize, c: &EntityView, pets: &[PetInfo]) -> String {
+fn fuse_candidate_label(num: char, c: &EntityView, pets: &[PetInfo]) -> String {
     let fused = fusion_tag(c.fusions);
     match pets.iter().find(|p| p.entity == c.entity) {
         Some(p) => {
@@ -1007,7 +1007,7 @@ fn render_fuse_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize)
     }
     for (i, c) in candidates.iter().enumerate() {
         lines.push(menu_line(
-            fuse_candidate_label(i + 1, c, &pets),
+            fuse_candidate_label(menu_shortcut(i), c, &pets),
             i == selected,
         ));
     }
@@ -1048,7 +1048,7 @@ fn render_fuse_second_menu(
     }
     for (i, c) in candidates.iter().enumerate() {
         lines.push(menu_line(
-            fuse_candidate_label(i + 1, c, &pets),
+            fuse_candidate_label(menu_shortcut(i), c, &pets),
             i == selected,
         ));
     }
@@ -1129,7 +1129,7 @@ fn render_trade_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize
         lines.push(menu_line(
             format!(
                 "[{}] {} at ({}, {}){}",
-                i + 1,
+                menu_shortcut(i),
                 s.label,
                 s.pos.0,
                 s.pos.1,
@@ -1180,7 +1180,7 @@ fn render_trade_action_menu(
         lines.push(menu_line(
             format!(
                 "[{}] Sell {} x{qty} ({} Core Fragments each)",
-                idx + 1,
+                menu_shortcut(idx),
                 item.display_name(),
                 trade.sell_rate
             ),
@@ -1197,7 +1197,7 @@ fn render_trade_action_menu(
         lines.push(menu_line(
             format!(
                 "[{}] Buy {} ({cost} Core Fragments each)",
-                idx + 1,
+                menu_shortcut(idx),
                 item.display_name()
             ),
             idx == selected,
@@ -1301,7 +1301,7 @@ fn render_perks_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize
         lines.push(Line::styled(
             format!(
                 "{prefix}[{}] {} — {} Perk Points{}",
-                i + 1,
+                menu_shortcut(i),
                 perk.display_name(),
                 perk.cost(),
                 tag
@@ -1312,7 +1312,7 @@ fn render_perks_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize
     }
     lines.push(Line::from(""));
     lines.push(Line::from(
-        "Pick a number to buy another level (Up/Down + Enter also work). Esc to close",
+        "Pick a row's key to buy another level (Up/Down + Enter also work). Esc to close",
     ));
     f.render_widget(
         Paragraph::new(lines)
@@ -1359,7 +1359,7 @@ fn render_research_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: us
         lines.push(Line::styled(
             format!(
                 "{prefix}[{}] {} — {} Research Data{tag}",
-                i + 1,
+                menu_shortcut(i),
                 node.name,
                 node.cost
             ),
@@ -1369,7 +1369,7 @@ fn render_research_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: us
     }
     lines.push(Line::from(""));
     lines.push(Line::from(
-        "Pick a number to research it (Up/Down + Enter also work). Esc to close",
+        "Pick a row's key to research it (Up/Down + Enter also work). Esc to close",
     ));
     f.render_widget(
         Paragraph::new(lines)
@@ -1396,7 +1396,7 @@ fn render_battle_companion_menu(f: &mut Frame, app: &mut App) {
         lines.push(menu_line(
             format!(
                 "[{}] {} ({}){}",
-                i + 1,
+                menu_shortcut(i),
                 c.name,
                 c.ability,
                 status_tag(&c.status)
@@ -1561,7 +1561,7 @@ fn render_inventory_screen(f: &mut Frame, area: Rect, game: &mut Game, selected:
         Line::from(""),
         Line::styled(
             format!(
-                "Inventory — Buffer {}/{} (number to equip/erase):",
+                "Inventory — Buffer {}/{} (row key to equip/erase):",
                 status.inventory_used, status.inventory_capacity
             ),
             Style::new().add_modifier(Modifier::BOLD),
@@ -1573,7 +1573,13 @@ fn render_inventory_screen(f: &mut Frame, area: Rect, game: &mut Game, selected:
     for (i, (item, qty)) in status.inventory.iter().enumerate() {
         let tag = equip_preview_tag(*item, status.zone, game.item_fusion_tier(*item));
         lines.push(menu_line(
-            format!("[{}] {} x{}{}", i + 4, item.display_name(), qty, tag),
+            format!(
+                "[{}] {} x{}{}",
+                menu_shortcut(i + 3),
+                item.display_name(),
+                qty,
+                tag
+            ),
             selected == i + 3,
         ));
     }
@@ -1893,7 +1899,7 @@ fn render_load_game_menu(f: &mut Frame, app: &App) {
             .as_deref()
             .unwrap_or("(incompatible save — can still be deleted)");
         lines.push(menu_line(
-            format!("[{}] {} — {}", i + 1, save.name, summary),
+            format!("[{}] {} — {}", menu_shortcut(i), save.name, summary),
             i == app.menu_selected,
         ));
     }

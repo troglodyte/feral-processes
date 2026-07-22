@@ -17,6 +17,31 @@ use feral_processes_engine::{DifficultyMode, Entity, Game};
 /// visible viewport size.
 pub const MENU_SCAN_RADIUS: i32 = 40;
 
+/// How many menu rows the digits `1`-`9` can address before `menu_shortcut`
+/// switches to letters.
+const DIGIT_ROWS: usize = 9;
+
+/// The key that picks menu row `index` (0-based), and the label a renderer
+/// must print for it: `1`-`9` for the first nine rows, then `a`, `b`, `c`
+/// and so on. Several menus run past nine rows — a dozen research nodes,
+/// ten deployable structures, an inventory of any size — and a single digit
+/// can't address those, so they'd otherwise be reachable only by Up/Down +
+/// Enter. Menus that bind letters to their own actions all fit inside nine
+/// rows, so the two never overlap.
+///
+/// Rows past the 35th run out of letters and return `'-'`, which no key
+/// produces — they're reachable by Up/Down + Enter only, and the label says
+/// so rather than advertising a key that does nothing.
+pub fn menu_shortcut(index: usize) -> char {
+    if index < DIGIT_ROWS {
+        return char::from_digit(index as u32 + 1, 10).expect("a row under 9 is always a digit");
+    }
+    match u8::try_from(b'a' as usize + index - DIGIT_ROWS) {
+        Ok(c @ b'a'..=b'z') => c as char,
+        _ => '-',
+    }
+}
+
 /// How many game ticks (see `Game::current_tick`) pass between autosaves —
 /// paced against game time rather than wall-clock time, so it's the same
 /// whether the player is acting quickly or sitting on a menu.
@@ -404,12 +429,12 @@ impl App {
         self.mode = Mode::GameOver;
     }
 
-    /// Shared Up/Down/Enter handling layered on top of every numbered menu's
-    /// existing direct digit-key shortcuts (1-9) — this doesn't replace
-    /// them, it's just another way to pick the same row. `len` is how many
-    /// selectable rows the menu currently has. A typed digit 1-`len` resolves
-    /// immediately to that 0-based index, same as before; Up/Down instead
-    /// move `menu_selected` (wrapping) and return `None`; Enter resolves to
+    /// Shared Up/Down/Enter handling layered on top of every menu's direct
+    /// row shortcuts — this doesn't replace them, it's just another way to
+    /// pick the same row. `len` is how many selectable rows the menu
+    /// currently has. A typed shortcut (see `menu_shortcut`) resolves
+    /// immediately to that 0-based index; Up/Down instead move
+    /// `menu_selected` (wrapping) and return `None`; Enter resolves to
     /// whatever `menu_selected` currently highlights. Any other key, or an
     /// empty menu, returns `None`.
     fn selected_index(&mut self, key: GameKey, len: usize) -> Option<usize> {
@@ -417,10 +442,15 @@ impl App {
             return None;
         }
         if let GameKey::Char(c) = key {
-            return c.to_digit(10).and_then(|d| {
+            if let Some(d) = c.to_digit(10) {
                 let d = d as usize;
-                (d >= 1 && d <= len).then_some(d - 1)
-            });
+                return (d >= 1 && d <= len).then_some(d - 1);
+            }
+            if !c.is_ascii_alphabetic() {
+                return None;
+            }
+            let idx = DIGIT_ROWS + (c.to_ascii_lowercase() as usize - 'a' as usize);
+            return (idx < len).then_some(idx);
         }
         match key {
             GameKey::Up => {
@@ -769,6 +799,14 @@ impl App {
     }
 
     fn handle_battle_key(&mut self, key: GameKey) {
+        // Both renderers label these `[A]ttack`/`[D]ecompile`/`[C]ommand
+        // companion`/`[J]ack Out`, so a shifted keypress is the one the
+        // prompt actually asks for and has to resolve the same as an
+        // unshifted one.
+        let key = match key {
+            GameKey::Char(c) => GameKey::Char(c.to_ascii_lowercase()),
+            other => other,
+        };
         if key == GameKey::Char('c') {
             let Some(game) = &mut self.game else { return };
             let party = game.player_status().companions;
@@ -1872,6 +1910,111 @@ mod tests {
             app.take_sounds().is_empty(),
             "take_sounds should drain the queue, not just peek it"
         );
+    }
+
+    /// The invariant every menu renderer leans on: the key a row advertises
+    /// is the key that picks it. Twelve research nodes and ten deployable
+    /// structures both run past the nine rows a digit can address, and rows
+    /// beyond that used to be unreachable by shortcut entirely.
+    #[test]
+    fn every_row_shortcut_selects_the_row_it_labels() {
+        let mut app = test_app(920);
+        let len = 35;
+        for idx in 0..len {
+            let shortcut = menu_shortcut(idx);
+            assert_eq!(
+                app.selected_index(GameKey::Char(shortcut), len),
+                Some(idx),
+                "row {idx} is labelled [{shortcut}] but that key picks something else"
+            );
+        }
+    }
+
+    #[test]
+    fn row_shortcuts_run_digits_first_then_letters() {
+        assert_eq!(menu_shortcut(0), '1');
+        assert_eq!(menu_shortcut(8), '9');
+        assert_eq!(menu_shortcut(9), 'a');
+        assert_eq!(menu_shortcut(11), 'c');
+        assert_eq!(menu_shortcut(34), 'z');
+        assert_eq!(
+            menu_shortcut(35),
+            '-',
+            "past 'z' a row should advertise no key rather than a dead one"
+        );
+    }
+
+    /// The main-menu, save, difficulty and demolish-confirm handlers all
+    /// map letters to their own actions through `.or_else`, which only
+    /// works while `selected_index` leaves letters alone. They're short
+    /// menus, so the letter rows never come into play — but nothing else
+    /// enforces that, so lock it in.
+    #[test]
+    fn letters_pick_no_row_in_a_menu_shorter_than_ten_rows() {
+        let mut app = test_app(921);
+        for len in 1..=DIGIT_ROWS {
+            for c in ['a', 'l', 'n', 'q', 'x', 'y', 'f', 'm', 'p'] {
+                assert_eq!(
+                    app.selected_index(GameKey::Char(c), len),
+                    None,
+                    "[{c}] must stay free for a {len}-row menu's own shortcuts"
+                );
+            }
+        }
+    }
+
+    /// Scans seeds until one puts a wild program next to the player, then
+    /// bumps it to open a battle. Returns the app sitting in `Mode::Battle`
+    /// with the entry sounds already drained, so a caller can attribute
+    /// anything it observes afterwards to the key it pressed.
+    fn battling_app() -> App {
+        for seed in 0..200u32 {
+            let mut app = test_app(seed);
+            let game = app.game.as_mut().unwrap();
+            let player = game.player_status().position;
+            let target = game
+                .view_entities(12, 12)
+                .into_iter()
+                .filter(|e| e.is_hostile && !e.is_tamed && !e.is_structure)
+                .find(|e| (e.pos.0 - player.0).abs() + (e.pos.1 - player.1).abs() == 1);
+            let Some(target) = target else { continue };
+            app.handle_key(match (target.pos.0 - player.0, target.pos.1 - player.1) {
+                (1, 0) => GameKey::Right,
+                (-1, 0) => GameKey::Left,
+                (0, 1) => GameKey::Down,
+                _ => GameKey::Up,
+            });
+            if app.mode == Mode::Battle {
+                let _ = app.take_sounds();
+                return app;
+            }
+        }
+        panic!("no seed under 200 put a wild program next to the player — encounter setup changed");
+    }
+
+    /// Both renderers advertise the battle actions as `[A]ttack`,
+    /// `[D]ecompile`, `[C]ommand companion` and `[J]ack Out`, so a player
+    /// reading the prompt has every reason to hold Shift. Case is
+    /// normalized everywhere else a letter picks a menu row, and a battle
+    /// turn is the one place where swallowing the keypress silently costs
+    /// the player a round.
+    ///
+    /// Asserts only that the key was routed at all — which action each one
+    /// resolves to is the engine's business, and depends on gear and party
+    /// the seed happens to hand out.
+    #[test]
+    fn battle_action_keys_ignore_case() {
+        for upper in ['A', 'D', 'C', 'J'] {
+            let mut app = battling_app();
+            app.handle_key(GameKey::Char(upper));
+            let acted = !app.take_sounds().is_empty()
+                || app.status_line.is_some()
+                || app.mode != Mode::Battle;
+            assert!(
+                acted,
+                "[{upper}] is what the battle prompt advertises, but Shift+{upper} was swallowed"
+            );
+        }
     }
 
     /// `update_realtime` is the hook a frontend's own loop calls every

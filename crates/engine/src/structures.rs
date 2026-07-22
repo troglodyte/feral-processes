@@ -159,7 +159,7 @@ fn default_durability() -> u32 {
 }
 
 /// Inventory capacity with no capacity-granting structures deployed.
-pub const BASE_INVENTORY_CAPACITY: u32 = 20;
+pub const BASE_INVENTORY_CAPACITY: u32 = 30;
 
 /// Total carrying capacity given every currently-deployed structure kind.
 /// Takes the kinds rather than reading the ECS so `Game` and

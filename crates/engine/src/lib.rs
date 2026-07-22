@@ -34,10 +34,10 @@ pub use perks::Perk;
 use research::{ResearchDb, ResearchDef};
 pub use research::{ResearchId, ResearchRecipe};
 use resources::{
-    BattleState, GameClock, GameOver, GameRng, MAX_PARTY_SIZE, MessageLog, Party, PlayerEntity,
-    Research, ZoneLevel, ZoneSpawnPoint,
+    BattleState, EffectQueue, GameClock, GameOver, GameRng, MAX_PARTY_SIZE, MessageLog, Party,
+    PlayerEntity, Research, ZoneLevel, ZoneSpawnPoint,
 };
-pub use resources::{DifficultyMode, MessageKind};
+pub use resources::{DifficultyMode, EffectKind, MessageKind, VisualEffect};
 use species::{MoveDef, SpecialAbility, SpeciesDb, SpeciesDef, SpeciesId};
 use structures::{StructureDb, StructureDef, StructureId, TradeDef};
 use world::{Biome, Tile, WorldMap};
@@ -505,6 +505,7 @@ impl Game {
         world.insert_resource(GameClock::default());
         world.insert_resource(GameRng(StdRng::seed_from_u64(seed as u64)));
         world.insert_resource(MessageLog::default());
+        world.insert_resource(EffectQueue::default());
         world.insert_resource(GameOver::default());
         world.insert_resource(difficulty);
         world.insert_resource(Party::default());
@@ -586,6 +587,7 @@ impl Game {
         world.insert_resource(GameClock { tick: data.tick });
         world.insert_resource(GameRng(StdRng::seed_from_u64(data.seed as u64 ^ data.tick)));
         world.insert_resource(MessageLog::default());
+        world.insert_resource(EffectQueue::default());
         world.insert_resource(GameOver::default());
         world.insert_resource(data.difficulty);
         world.insert_resource(Party::default());
@@ -3451,10 +3453,36 @@ impl Game {
     /// program you own). A structure whose `Durability` reaches 0 is
     /// destroyed and any cronjob assignment on it is dropped.
     /// Total raid-damage reduction contributed by every deployed structure
-    /// with `StructureDef::raid_defense` set (e.g. a Turret) — a base-wide
+    /// with `StructureDef::raid_defense` set (e.g. a Shield) — a base-wide
     /// network, not tied to any one structure. Destroying one of these
     /// structures in a raid naturally shrinks this, since it's recomputed
     /// fresh from whatever's still standing.
+    /// Drains every `VisualEffect` queued since the last call — the visual
+    /// counterpart to `App::take_sounds`. A frontend without effects can
+    /// drop the result, but must still call it so the queue doesn't sit at
+    /// its cap.
+    pub fn take_effects(&mut self) -> Vec<VisualEffect> {
+        self.world.resource_mut::<EffectQueue>().take()
+    }
+
+    /// Queues `kind` at `structure`'s tile, if it has one. Raid targets are
+    /// selected by `With<Durability>`, which doesn't imply `Position` —
+    /// a flash on the wrong tile would be worse than none, so a positionless
+    /// entity queues nothing.
+    fn push_effect(&mut self, structure: Entity, kind: EffectKind) {
+        let Some(pos) = self.world.get::<Position>(structure).map(|p| (p.x, p.y)) else {
+            return;
+        };
+        self.world.resource_mut::<EffectQueue>().push(pos, kind);
+    }
+
+    /// Whether any deployed structure contributes raid defense — the seam
+    /// frontends use to show the shield network as active without reaching
+    /// into `StructureDb` themselves.
+    pub fn raid_defense_active(&self) -> bool {
+        self.total_raid_defense() > 0
+    }
+
     fn total_raid_defense(&self) -> u32 {
         let structure_db = self.world.resource::<StructureDb>();
         self.world
@@ -3502,8 +3530,9 @@ impl Game {
             if raid_damage > 0 {
                 self.damage_structure(target, raid_damage, &target_label);
             } else {
+                self.push_effect(target, EffectKind::Deflected);
                 self.log(format!(
-                    "Your turret network fends off a raid on {target_label} without a scratch!"
+                    "Your shield network fends off a raid on {target_label} without a scratch!"
                 ));
             }
             return;
@@ -3515,6 +3544,7 @@ impl Game {
         if mitigated > 0 {
             self.damage_structure(target, mitigated, &target_label);
         } else {
+            self.push_effect(target, EffectKind::Deflected);
             self.log(format!(
                 "{worker_label} fends off a raid on {target_label} without a scratch!"
             ));
@@ -3537,6 +3567,16 @@ impl Game {
         };
         durability.hp = durability.hp.saturating_sub(dmg);
         let destroyed = durability.hp == 0;
+        // Queued before the despawn below, which takes the `Position` the
+        // effect needs with it.
+        self.push_effect(
+            structure,
+            if destroyed {
+                EffectKind::Destroyed
+            } else {
+                EffectKind::Hit
+            },
+        );
         if destroyed {
             self.log_kind(
                 MessageKind::Raid,
@@ -4758,21 +4798,23 @@ mod tests {
 
     #[test]
     fn inventory_capacity_grows_with_each_deployed_data_cache() {
+        let base = structures::BASE_INVENTORY_CAPACITY;
         let mut game = Game::new(700, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        assert_eq!(game.inventory_capacity(), 20);
+        assert_eq!(game.inventory_capacity(), base);
 
         spawn_data_cache(&mut game, 1);
-        assert_eq!(game.inventory_capacity(), 30);
+        assert_eq!(game.inventory_capacity(), base + 10);
 
         spawn_data_cache(&mut game, 2);
-        assert_eq!(game.inventory_capacity(), 40, "caches stack");
+        assert_eq!(game.inventory_capacity(), base + 20, "caches stack");
     }
 
     #[test]
     fn destroying_a_data_cache_shrinks_the_capacity_back() {
+        let base = structures::BASE_INVENTORY_CAPACITY;
         let mut game = Game::new(701, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         spawn_data_cache(&mut game, 1);
-        assert_eq!(game.inventory_capacity(), 30);
+        assert_eq!(game.inventory_capacity(), base + 10);
 
         let cache = game
             .world
@@ -4784,7 +4826,7 @@ mod tests {
 
         assert_eq!(
             game.inventory_capacity(),
-            20,
+            base,
             "capacity is derived, so a destroyed cache needs no invalidation"
         );
     }
@@ -4933,7 +4975,10 @@ mod tests {
 
         let status = game.player_status();
         assert_eq!(status.inventory_used, 11);
-        assert_eq!(status.inventory_capacity, 20);
+        assert_eq!(
+            status.inventory_capacity,
+            structures::BASE_INVENTORY_CAPACITY
+        );
     }
 
     /// Unlocks `id` and every prerequisite it needs, funding the whole
@@ -5851,7 +5896,7 @@ mod tests {
         assert!(describe("armory").contains("Firewall Plating"));
         assert!(describe("fabricator").contains("Cortex Hack"));
         assert!(describe("home").contains("Power Cell"));
-        assert!(describe("turret").contains("raid damage"));
+        assert!(describe("shield").contains("raid damage"));
         assert!(describe("data_cache").contains("inventory capacity"));
         assert!(describe("recharger_node").contains("recharge"));
         assert!(describe("portal").contains("next zone"));
@@ -9382,36 +9427,36 @@ mod tests {
     }
 
     #[test]
-    fn turret_structure_loads_with_no_work_and_a_raid_defense_bonus() {
+    fn shield_structure_loads_with_no_work_and_a_raid_defense_bonus() {
         let game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let def = game
             .structure_defs()
             .into_iter()
-            .find(|d| d.id == "turret")
-            .expect("turret.ron should load as a structure");
+            .find(|d| d.id == "shield")
+            .expect("shield.ron should load as a structure");
         assert!(
             def.work.is_none(),
-            "a turret defends passively, not via cronjob work"
+            "a shield defends passively, not via cronjob work"
         );
         assert!(
             def.raid_defense > 0,
-            "a turret should contribute a nonzero raid_defense bonus"
+            "a shield should contribute a nonzero raid_defense bonus"
         );
     }
 
     #[test]
-    fn deployed_turrets_reduce_raid_damage_to_an_undefended_structure() {
+    fn deployed_shields_reduce_raid_damage_to_an_undefended_structure() {
         for seed in 0..300u32 {
             let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-            let turret_defense = game
+            let shield_defense = game
                 .structure_defs()
                 .into_iter()
-                .find(|d| d.id == "turret")
+                .find(|d| d.id == "shield")
                 .unwrap()
                 .raid_defense;
             game.world.spawn((
                 Structure {
-                    kind: "turret".to_string(),
+                    kind: "shield".to_string(),
                 },
                 Position { x: 1, y: 1 },
             ));
@@ -9434,13 +9479,252 @@ mod tests {
             if durability.hp < 30 {
                 assert_eq!(
                     durability.hp,
-                    30 - (RAID_DAMAGE - turret_defense),
-                    "a raid on an undefended structure should be reduced by the deployed turret's raid_defense"
+                    30 - (RAID_DAMAGE - shield_defense),
+                    "a raid on an undefended structure should be reduced by the deployed shield's raid_defense"
                 );
                 return;
             }
         }
         panic!("raid_check never rolled across 300 seeds — the raid roll may be broken");
+    }
+
+    #[test]
+    fn damaging_a_structure_queues_a_hit_effect_at_its_position() {
+        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let structure = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "mining_node".to_string(),
+                },
+                Position { x: 5, y: 5 },
+                Durability { hp: 30, max_hp: 30 },
+            ))
+            .id();
+
+        game.damage_structure(structure, 5, "Mining Node");
+
+        let effects = game.take_effects();
+        assert_eq!(effects.len(), 1, "one hit should queue one effect");
+        assert_eq!(effects[0].kind, EffectKind::Hit);
+        assert_eq!(effects[0].pos, (5, 5));
+    }
+
+    #[test]
+    fn destroying_a_structure_queues_a_destroyed_effect() {
+        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let structure = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "mining_node".to_string(),
+                },
+                Position { x: 2, y: 3 },
+                Durability { hp: 4, max_hp: 30 },
+            ))
+            .id();
+
+        game.damage_structure(structure, 10, "Mining Node");
+
+        let effects = game.take_effects();
+        assert_eq!(effects.len(), 1);
+        assert_eq!(
+            effects[0].kind,
+            EffectKind::Destroyed,
+            "a killing blow should queue Destroyed, not Hit"
+        );
+        assert_eq!(effects[0].pos, (2, 3));
+    }
+
+    #[test]
+    fn damaging_a_structure_with_no_position_queues_nothing() {
+        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let structure = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "mining_node".to_string(),
+                },
+                Durability { hp: 30, max_hp: 30 },
+            ))
+            .id();
+
+        game.damage_structure(structure, 5, "Mining Node");
+
+        assert!(
+            game.take_effects().is_empty(),
+            "a flash with no known tile is worse than no flash"
+        );
+    }
+
+    #[test]
+    fn a_raid_fully_absorbed_by_the_shield_network_queues_a_deflected_effect() {
+        for seed in 0..300u32 {
+            let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            // Enough shields that RAID_DAMAGE is reduced to zero.
+            let shield_defense = game
+                .structure_defs()
+                .into_iter()
+                .find(|d| d.id == "shield")
+                .unwrap()
+                .raid_defense
+                .max(1);
+            let needed = RAID_DAMAGE.div_ceil(shield_defense);
+            for _ in 0..needed {
+                game.world.spawn((
+                    Structure {
+                        kind: "shield".to_string(),
+                    },
+                    Position { x: 1, y: 1 },
+                ));
+            }
+            let structure = game
+                .world
+                .spawn((
+                    Structure {
+                        kind: "mining_node".to_string(),
+                    },
+                    Position { x: 5, y: 5 },
+                    Durability { hp: 30, max_hp: 30 },
+                ))
+                .id();
+
+            game.raid_check();
+
+            let effects = game.take_effects();
+            if effects.is_empty() {
+                continue;
+            }
+            let target = effects
+                .iter()
+                .find(|e| e.pos == (5, 5))
+                .expect("the raid should have targeted the only durable structure");
+            assert_eq!(
+                target.kind,
+                EffectKind::Deflected,
+                "a raid the shield network zeroes out should deflect, not hit"
+            );
+            assert_eq!(
+                game.world.get::<Durability>(structure).unwrap().hp,
+                30,
+                "a deflected raid should leave durability untouched"
+            );
+            return;
+        }
+        panic!("raid_check never rolled across 300 seeds — the raid roll may be broken");
+    }
+
+    #[test]
+    fn a_raid_fended_off_by_a_cronjob_worker_queues_a_deflected_effect() {
+        for seed in 0..300u32 {
+            let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            let structure = game
+                .world
+                .spawn((
+                    Structure {
+                        kind: "mining_node".to_string(),
+                    },
+                    Position { x: 5, y: 5 },
+                    Durability { hp: 30, max_hp: 30 },
+                ))
+                .id();
+            // Defense far above RAID_DAMAGE, so the worker fully mitigates.
+            game.world.spawn((
+                Stats {
+                    hp: 100,
+                    max_hp: 100,
+                    atk: 1,
+                    def: 500,
+                },
+                Position { x: 5, y: 5 },
+                Task {
+                    kind: TaskKind::Guard,
+                    target: structure,
+                    progress: 0,
+                    required: 10,
+                },
+            ));
+
+            game.raid_check();
+
+            let effects = game.take_effects();
+            if effects.is_empty() {
+                continue;
+            }
+            assert_eq!(effects[0].kind, EffectKind::Deflected);
+            assert_eq!(effects[0].pos, (5, 5));
+            assert_eq!(
+                game.world.get::<Durability>(structure).unwrap().hp,
+                30,
+                "a fully mitigated raid should leave durability untouched"
+            );
+            return;
+        }
+        panic!("raid_check never rolled across 300 seeds — the raid roll may be broken");
+    }
+
+    #[test]
+    fn take_effects_drains_the_queue() {
+        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let structure = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "mining_node".to_string(),
+                },
+                Position { x: 5, y: 5 },
+                Durability { hp: 30, max_hp: 30 },
+            ))
+            .id();
+
+        game.damage_structure(structure, 1, "Mining Node");
+
+        assert_eq!(game.take_effects().len(), 1);
+        assert!(
+            game.take_effects().is_empty(),
+            "a second drain should come back empty"
+        );
+    }
+
+    #[test]
+    fn the_effect_queue_drops_the_oldest_effects_past_its_cap() {
+        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let structure = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "mining_node".to_string(),
+                },
+                Position { x: 5, y: 5 },
+                Durability {
+                    hp: 10_000,
+                    max_hp: 10_000,
+                },
+            ))
+            .id();
+
+        for _ in 0..(resources::EFFECT_QUEUE_CAP + 10) {
+            game.damage_structure(structure, 1, "Mining Node");
+        }
+
+        assert_eq!(
+            game.take_effects().len(),
+            resources::EFFECT_QUEUE_CAP,
+            "a frontend that never drains must not grow the queue without bound"
+        );
+    }
+
+    #[test]
+    fn raid_defense_active_tracks_whether_any_shield_is_standing() {
+        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        assert!(!game.raid_defense_active());
+        game.world.spawn((
+            Structure {
+                kind: "shield".to_string(),
+            },
+            Position { x: 1, y: 1 },
+        ));
+        assert!(game.raid_defense_active());
     }
 
     #[test]

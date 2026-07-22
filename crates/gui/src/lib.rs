@@ -5,12 +5,14 @@
 //! renderer-agnostic `GameKey` — the state machine itself lives in
 //! `app-core` and knows nothing about macroquad.
 
+mod fx;
 mod render;
 mod sounds;
 
 use macroquad::prelude::*;
 
-use feral_processes_app_core::{App, GameKey};
+use feral_processes_app_core::{App, GameKey, Mode};
+use fx::Fx;
 use sounds::SoundBank;
 
 fn map_special_key(key: KeyCode) -> Option<GameKey> {
@@ -49,19 +51,17 @@ fn window_conf() -> Conf {
 
 const DEFAULT_VOLUME: f32 = 0.2;
 const VOLUME_STEP: f32 = 0.1;
-/// How long the "Volume: NN%" readout stays on screen after `[`/`]` last
-/// changed it, in seconds.
-const VOLUME_TOAST_SECONDS: f64 = 1.5;
+/// How long a readout ("Volume: NN%", "Effects: off") stays on screen
+/// after the key that changed it, in seconds.
+const TOAST_SECONDS: f64 = 1.5;
 
-/// Draws a brief centered "Volume: NN%" readout, on top of whatever
-/// `render::draw` just drew — volume is a GUI-only concern (`App` knows
-/// nothing about audio), so this stays local to the game loop rather than
-/// threading a volume parameter through `render::draw`.
-fn draw_volume_toast(volume: f32) {
-    let pct = (volume * 100.0).round() as i32;
-    let text = format!("Volume: {pct}%");
+/// Draws a brief centered readout, on top of whatever `render::draw` just
+/// drew — volume and effects are GUI-only concerns (`App` knows nothing
+/// about either), so they stay local to the game loop rather than being
+/// threaded through `render::draw`.
+fn draw_toast(text: &str) {
     let font_size = 28.0;
-    let dims = measure_text(&text, None, font_size as u16, 1.0);
+    let dims = measure_text(text, None, font_size as u16, 1.0);
     let x = (screen_width() - dims.width) / 2.0;
     let y = 44.0;
     draw_rectangle(
@@ -71,7 +71,7 @@ fn draw_volume_toast(volume: f32) {
         dims.height + 22.0,
         Color::new(0.06, 0.07, 0.10, 0.85),
     );
-    draw_text(&text, x, y, font_size, Color::new(0.92, 0.92, 0.92, 1.0));
+    draw_text(text, x, y, font_size, Color::new(0.92, 0.92, 0.92, 1.0));
 }
 
 /// Runs the graphics frontend to completion (until `app.quit`). Takes `App`
@@ -88,7 +88,9 @@ pub fn run(app: App) {
 async fn game_loop(mut app: App) {
     let sound_bank = SoundBank::load().await;
     let mut volume = DEFAULT_VOLUME;
-    let mut volume_toast_until = 0.0f64;
+    let mut fx = Fx::new();
+    let mut toast: Option<String> = None;
+    let mut toast_until = 0.0f64;
     loop {
         app.update_realtime();
         for &key in SPECIAL_KEYS {
@@ -105,11 +107,23 @@ async fn game_loop(mut app: App) {
         }
         if is_key_pressed(KeyCode::LeftBracket) {
             volume = (volume - VOLUME_STEP).max(0.0);
-            volume_toast_until = get_time() + VOLUME_TOAST_SECONDS;
+            toast = Some(format!("Volume: {}%", (volume * 100.0).round() as i32));
+            toast_until = get_time() + TOAST_SECONDS;
         }
         if is_key_pressed(KeyCode::RightBracket) {
             volume = (volume + VOLUME_STEP).min(1.0);
-            volume_toast_until = get_time() + VOLUME_TOAST_SECONDS;
+            toast = Some(format!("Volume: {}%", (volume * 100.0).round() as i32));
+            toast_until = get_time() + TOAST_SECONDS;
+        }
+        // Backslash rather than a letter: letters reach the game through
+        // `get_char_pressed` above and would collide with its bindings.
+        if is_key_pressed(KeyCode::Backslash) {
+            fx.enabled = !fx.enabled;
+            toast = Some(format!(
+                "Effects: {}",
+                if fx.enabled { "on" } else { "off" }
+            ));
+            toast_until = get_time() + TOAST_SECONDS;
         }
 
         for event in app.take_sounds() {
@@ -120,9 +134,21 @@ async fn game_loop(mut app: App) {
             break;
         }
 
-        render::draw(&mut app);
-        if get_time() < volume_toast_until {
-            draw_volume_toast(volume);
+        // Effects are drained every frame whether or not they'll be drawn,
+        // so a disabled `Fx` can't leave the engine's queue at its cap.
+        let in_battle = matches!(app.mode, Mode::Battle | Mode::BattleCompanion);
+        let (effects, last_log) = match &mut app.game {
+            Some(game) => (game.take_effects(), game.message_log(1).pop()),
+            None => (Vec::new(), None),
+        };
+        fx.begin_frame(get_time(), effects, in_battle);
+        fx.observe_log(last_log.as_ref());
+
+        render::draw(&mut app, &mut fx);
+        if let Some(text) = &toast
+            && get_time() < toast_until
+        {
+            draw_toast(text);
         }
         next_frame().await;
     }

@@ -526,7 +526,7 @@ enough of them, then walk onto it to breach into the next zone.
 | Home | 5 Core Fragments | `u` ("use symlink") instantly teleports you to it from anywhere on the map, for 4 Power Cells |
 | Zone Portal | 10 Portal Fragments *(× current zone level)* | Walk onto it to breach into the next zone — see [Zones and portals](#zones-and-portals) |
 | Black Market | 16 Core Fragments | `t` ("trade") to sell inventory items or buy consumables for Core Fragments — see [Trading](#trading) |
-| Turret | 16 Core Fragments | Passively reduces raid damage against **every** deployed structure by 4 — see [Base defense](#base-defense) |
+| Shield | 16 Core Fragments | Passively reduces raid damage against **every** deployed structure by 4 — see [Base defense](#base-defense) |
 | Recharger Node | 5 Core Fragments | Required to `r` (recharge/rest) within 2 tiles of it |
 
 Home must be built before anything else — the build menu (`b`) always
@@ -546,7 +546,7 @@ radius for a fresh one elsewhere.
 Mining Node, Power Conduit, and Compiler use **active** automation (an
 assigned cronjob produces over time); Terminal uses **passive** automation
 (it processes on its own whenever you're in range); Fabricator and Armory
-use neither — building one just unlocks a compile recipe; Turret uses
+use neither — building one just unlocks a compile recipe; Shield uses
 neither either — it just sits there passively defending (see
 [Base defense](#base-defense)).
 Home is a **symlink target** — a third category, neither cronjob nor
@@ -575,14 +575,14 @@ chance of a raid hitting a random deployed structure:
   on. It's the only way to defend those. A structure already cronjob-worked
   is already defended by its worker; guard it separately only if you want a
   program standing there purely for defense, doing no production.
-- Every deployed **Turret** shaves a flat amount (4) off *every* raid's
+- Every deployed **Shield** shaves a flat amount (4) off *every* raid's
   damage, against *any* structure it hits — not just itself, and it stacks
-  across however many Turrets you've built. This is applied before a
+  across however many Shields you've built. This is applied before a
   worker/guard's own Defense-based mitigation, so the two stack: a couple
-  of Turrets plus a guarded structure can fully no-sell a raid. A Turret
+  of Shields plus a guarded structure can fully no-sell a raid. A Shield
   has no cronjob recipe of its own — it just sits there defending, and it's
   a raid target like anything else, so it's not invulnerable.
-- An unassigned (and unguarded) structure — after Turret reduction — takes
+- An unassigned (and unguarded) structure — after Shield reduction — takes
   whatever raid damage is left. At 0 Durability it's destroyed outright,
   and any cronjob/guard assignment pointed at it is dropped.
 - Damaged structures slowly regenerate Durability over time regardless.
@@ -591,7 +591,7 @@ chance of a raid hitting a random deployed structure:
   raid while you were elsewhere.
 
 Keeping your key structures staffed is the cheapest defense early on; a
-Turret (or several) is the scalable version once you can afford one — an
+Shield (or several) is the scalable version once you can afford one — an
 idle Mining Node out on its own is the one most likely to get chipped away
 without either.
 
@@ -715,7 +715,7 @@ cargo test
   move/loot footnotes had drifted out of sync with an earlier balance
   commit (`fbd2bed`) that raised most build costs and sped up the
   Terminal. Data Cache, Mining Node, Power Conduit, Compiler, Fabricator,
-  Armory, Black Market, and Turret all cost more Core Fragments than
+  Armory, Black Market, and Shield all cost more Core Fragments than
   documented, and the Zone Portal costs 10 Portal Fragments per zone
   level, not 5 — see [Structures](#structures) and
   [Zones and portals](#zones-and-portals). The Terminal now cooks every
@@ -820,7 +820,7 @@ cargo test
 - **Gear now has levels**: every equipped item's bonus scales 150% per
   level above 1, unlocked by reaching the matching zone depth — see
   [Equipment](#equipment).
-- **Turret** structure added: passively reduces raid damage against every
+- **Shield** structure added: passively reduces raid damage against every
   deployed structure, stacking across however many you build — see
   [Structures](#structures) / [Base defense](#base-defense).
 - **Perks reworked**: no longer one-time unlocks — each perk can be bought

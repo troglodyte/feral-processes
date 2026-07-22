@@ -773,6 +773,7 @@ version = "0.1.0"
 dependencies = [
  "feral-processes-app-core",
  "feral-processes-engine",
+ "fontdue",
  "macroquad",
 ]
 

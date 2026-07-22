@@ -7,7 +7,10 @@
 use macroquad::prelude::*;
 
 use crate::fx::Fx;
-use feral_processes_app_core::{App, MENU_SCAN_RADIUS, Mode, TradeChoice, menu_shortcut};
+use crate::text::{Fonts, Metrics, map_cell, terrain_color, ui_metrics};
+use feral_processes_app_core::{
+    App, MENU_SCAN_RADIUS, Mode, TradeChoice, inventory_item_actions, menu_shortcut,
+};
 use feral_processes_engine::components::GlyphColor;
 use feral_processes_engine::items::{ItemId, RESEARCH_DATA_BANK_LIMIT};
 use feral_processes_engine::world::Biome;
@@ -15,8 +18,6 @@ use feral_processes_engine::{
     Entity, EntityView, Game, MAX_FUSIONS, MessageKind, PetInfo, ResearchState,
 };
 
-const FONT_SIZE: f32 = 24.0;
-const LINE_HEIGHT: f32 = 30.0;
 const PANEL_BG: Color = Color::new(0.06, 0.07, 0.10, 0.95);
 const BORDER: Color = Color::new(0.25, 0.65, 0.65, 1.0);
 const TEXT: Color = Color::new(0.92, 0.92, 0.92, 1.0);
@@ -32,10 +33,8 @@ const ORANGE: Color = Color::new(0.95, 0.55, 0.15, 1.0);
 
 /// Display styling for a message-log line, chosen by the engine-supplied
 /// `MessageKind` rather than by sniffing the text — low-priority chatter
-/// stays dim, gains/damage that matter get a color. macroquad has no bold
-/// font loaded, so `LevelUp` fakes weight by drawing the glyphs twice with
-/// a 1px horizontal offset.
-fn draw_message_line(kind: MessageKind, text: &str, x: f32, y: f32) {
+/// stays dim, gains/damage that matter get a color.
+fn draw_message_line(kind: MessageKind, text: &str, x: f32, y: f32, fonts: &Fonts, m: &Metrics) {
     let color = match kind {
         MessageKind::Info => TEXT_DIM,
         MessageKind::Loot => GREEN,
@@ -43,9 +42,10 @@ fn draw_message_line(kind: MessageKind, text: &str, x: f32, y: f32) {
         MessageKind::Raid => ORANGE,
     };
     if kind == MessageKind::LevelUp {
-        draw_text(text, x + 1.0, y, FONT_SIZE, color);
+        fonts.ui_bold(text, x, y, m.font_size, color);
+    } else {
+        fonts.ui(text, x, y, m.font_size, color);
     }
-    draw_text(text, x, y, FONT_SIZE, color);
 }
 
 /// Whether `mode` needs `App::status_line` redrawn on top of whatever it
@@ -60,45 +60,46 @@ fn needs_status_banner(mode: Mode) -> bool {
 /// Draws `status` in a strip along the bottom edge, below every popup —
 /// `draw_popup` caps a panel at 85% of the window height and centers it, so
 /// the bottom 7.5% is always clear.
-fn draw_status_banner(status: &str) {
-    let dims = measure_text(status, None, FONT_SIZE as u16, 1.0);
-    let baseline = screen_height() - 16.0;
+fn draw_status_banner(status: &str, fonts: &Fonts, m: &Metrics) {
+    let dims = fonts.measure_ui(status, m.font_size);
+    let baseline = screen_height() - m.pad;
     draw_rectangle(
         0.0,
-        baseline - dims.height - 8.0,
+        baseline - dims.height - m.pad / 2.0,
         screen_width(),
-        dims.height + 16.0,
+        dims.height + m.pad,
         PANEL_BG,
     );
-    draw_text(status, 12.0, baseline, FONT_SIZE, RED);
+    fonts.ui(status, m.inset, baseline, m.font_size, RED);
 }
 
-pub fn draw(app: &mut App, fx: &mut Fx) {
+pub fn draw(app: &mut App, fx: &mut Fx, fonts: &Fonts) {
+    let m = ui_metrics(screen_height());
     clear_background(Color::new(0.02, 0.02, 0.03, 1.0));
     match app.mode {
-        Mode::MainMenu => draw_main_menu(app),
-        Mode::LoadGame => draw_load_game(app),
-        Mode::SaveAction => draw_save_action(app),
-        Mode::DifficultyPick => draw_difficulty_pick(app.menu_selected),
-        Mode::GameOver => draw_game_over(app),
-        Mode::Battle => draw_battle(app, fx),
+        Mode::MainMenu => draw_main_menu(app, fonts, &m),
+        Mode::LoadGame => draw_load_game(app, fonts, &m),
+        Mode::SaveAction => draw_save_action(app, fonts, &m),
+        Mode::DifficultyPick => draw_difficulty_pick(app.menu_selected, fonts, &m),
+        Mode::GameOver => draw_game_over(app, fonts, &m),
+        Mode::Battle => draw_battle(app, fx, fonts, &m),
         Mode::BattleCompanion => {
-            draw_battle(app, fx);
-            draw_battle_companion_menu(app);
+            draw_battle(app, fx, fonts, &m);
+            draw_battle_companion_menu(app, fonts, &m);
         }
         Mode::Help => {
-            draw_playing_base(app, fx);
-            draw_help();
+            draw_playing_base(app, fx, fonts, &m);
+            draw_help(fonts, &m);
         }
         _ => {
-            draw_playing_base(app, fx);
-            draw_mode_overlay(app);
+            draw_playing_base(app, fx, fonts, &m);
+            draw_mode_overlay(app, fonts, &m);
         }
     }
     if let Some(status) = &app.status_line
         && needs_status_banner(app.mode)
     {
-        draw_status_banner(status);
+        draw_status_banner(status, fonts, &m);
     }
 }
 
@@ -145,22 +146,39 @@ enum PopupSize {
 /// scrollable body. Long lists (more structures/pets/etc. than fit the
 /// popup) auto-scroll to keep the highlighted row in view instead of
 /// silently running off the bottom with no way to see or reach it.
-fn draw_popup(title: &str, size: PopupSize, rows: &[Row]) {
+fn draw_popup(title: &str, size: PopupSize, rows: &[Row], fonts: &Fonts, m: &Metrics) {
     let (pct_w, pct_h) = match size {
         PopupSize::Large => (0.88, 0.85),
         PopupSize::Small => (0.5, 0.85),
     };
     let w = screen_width() * pct_w;
     let h = (screen_height() * pct_h)
-        .min(rows.len() as f32 * LINE_HEIGHT + 70.0)
-        .max(120.0);
+        .min(rows.len() as f32 * m.line_height + m.line_height * 2.0 + m.inset)
+        .max(m.line_height * 4.0);
     let x = (screen_width() - w) / 2.0;
     let y = (screen_height() - h) / 2.0;
 
     draw_rectangle(x, y, w, h, PANEL_BG);
     draw_rectangle_lines(x, y, w, h, 2.0, BORDER);
-    draw_text(title, x + 12.0, y + 24.0, FONT_SIZE + 4.0, CYAN);
-    draw_line(x + 8.0, y + 34.0, x + w - 8.0, y + 34.0, 1.0, BORDER);
+    fonts.ui(
+        title,
+        x + m.font_size as f32 / 2.0,
+        y + m.font_size as f32,
+        m.title(),
+        CYAN,
+    );
+    // Sits below the title's own size rather than a fixed offset, so a
+    // larger font pushes the rule down instead of striking through it.
+    let divider_y = y + m.title() as f32 + m.gap;
+    let divider_inset = m.pad / 2.0;
+    draw_line(
+        x + divider_inset,
+        divider_y,
+        x + w - divider_inset,
+        divider_y,
+        1.0,
+        BORDER,
+    );
 
     let first_item = rows.iter().position(|r| matches!(r, Row::Item(_, _)));
     let last_item = rows.iter().rposition(|r| matches!(r, Row::Item(_, _)));
@@ -169,15 +187,15 @@ fn draw_popup(title: &str, size: PopupSize, rows: &[Row]) {
         _ => (rows, &[], &[]),
     };
 
-    let mut cy = y + 60.0;
-    let max_y = y + h - 10.0;
+    let mut cy = y + m.line_height * 2.0;
+    let max_y = y + h - m.inset;
     for row in header {
-        cy = draw_row(row, x, w, cy, max_y);
+        cy = draw_row(row, x, w, cy, max_y, fonts, m);
     }
 
-    let footer_h = footer.len() as f32 * LINE_HEIGHT;
+    let footer_h = footer.len() as f32 * m.line_height;
     let body_bottom = (max_y - footer_h).max(cy);
-    let raw_capacity = ((body_bottom - cy) / LINE_HEIGHT).floor().max(0.0) as usize;
+    let raw_capacity = ((body_bottom - cy) / m.line_height).floor().max(0.0) as usize;
     let scrolling = body.len() > raw_capacity;
     // Scrolling reserves one line above and below for "N more" indicators,
     // so the item rows themselves never get a partial cut-off line.
@@ -201,33 +219,33 @@ fn draw_popup(title: &str, size: PopupSize, rows: &[Row]) {
 
         if scrolling {
             let text = if scroll_offset > 0 {
-                format!("^ {scroll_offset} more above")
+                format!("↑ {scroll_offset} more above")
             } else {
                 String::new()
             };
-            draw_text(&text, x + 16.0, cy, FONT_SIZE - 4.0, TEXT_DIM);
-            cy += LINE_HEIGHT;
+            fonts.ui(&text, x + m.pad, cy, m.small(), TEXT_DIM);
+            cy += m.line_height;
         }
 
         let visible_end = (scroll_offset + capacity).min(body.len());
         for row in &body[scroll_offset..visible_end] {
-            cy = draw_row(row, x, w, cy, max_y);
+            cy = draw_row(row, x, w, cy, max_y, fonts, m);
         }
 
         if scrolling {
             let below = body.len() - visible_end;
             let text = if below > 0 {
-                format!("v {below} more below")
+                format!("↓ {below} more below")
             } else {
                 String::new()
             };
-            draw_text(&text, x + 16.0, cy, FONT_SIZE - 4.0, TEXT_DIM);
-            cy += LINE_HEIGHT;
+            fonts.ui(&text, x + m.pad, cy, m.small(), TEXT_DIM);
+            cy += m.line_height;
         }
     }
 
     for row in footer {
-        cy = draw_row(row, x, w, cy, max_y);
+        cy = draw_row(row, x, w, cy, max_y, fonts, m);
     }
 }
 
@@ -235,26 +253,36 @@ fn draw_popup(title: &str, size: PopupSize, rows: &[Row]) {
 /// `max_y` is a last-resort safety clamp — normal layout keeps every row
 /// within bounds via `draw_popup`'s capacity accounting, so this only ever
 /// bites if that accounting is off by a line.
-fn draw_row(row: &Row, x: f32, w: f32, cy: f32, max_y: f32) -> f32 {
+fn draw_row(row: &Row, x: f32, w: f32, cy: f32, max_y: f32, fonts: &Fonts, m: &Metrics) -> f32 {
     if cy > max_y {
         return cy;
     }
     match row {
         Row::Text(s) => {
-            draw_text(s, x + 16.0, cy, FONT_SIZE, TEXT_DIM);
+            fonts.ui(s, x + m.pad, cy, m.font_size, TEXT_DIM);
         }
         Row::TextColored(s, color) => {
-            draw_text(s, x + 16.0, cy, FONT_SIZE, *color);
+            fonts.ui(s, x + m.pad, cy, m.font_size, *color);
         }
         Row::Item(s, selected) => {
             if *selected {
-                draw_rectangle(x + 6.0, cy - FONT_SIZE, w - 12.0, LINE_HEIGHT, SELECT_BG);
+                // Anchored to the same `m.pad` the row text uses, so the
+                // highlight keeps leading its text by one inset at every
+                // font size instead of drifting left as the text grows.
+                let bleed = m.pad - m.inset;
+                draw_rectangle(
+                    x + bleed,
+                    cy - m.font_size as f32,
+                    w - bleed * 2.0,
+                    m.line_height,
+                    SELECT_BG,
+                );
             }
             let prefix = if *selected { "> " } else { "  " };
-            draw_text(format!("{prefix}{s}"), x + 16.0, cy, FONT_SIZE, TEXT);
+            fonts.ui(format!("{prefix}{s}"), x + m.pad, cy, m.font_size, TEXT);
         }
     }
-    cy + LINE_HEIGHT
+    cy + m.line_height
 }
 
 /// Formats a `(item, quantity)` cost list, tagged `(have/need)` — same
@@ -301,14 +329,13 @@ fn biome_style(biome: Biome) -> (char, Color) {
 
 /// The world grid, status panel, and message feed — the base layer shown
 /// under `Mode::Playing` and every menu popup, same as `ui.rs::render_playing`.
-fn draw_playing_base(app: &mut App, fx: &Fx) {
-    let zoom = app.zoom.clamp(1, 8) as f32;
+fn draw_playing_base(app: &mut App, fx: &Fx, fonts: &Fonts, m: &Metrics) {
+    let (tile_px, glyph_px) = map_cell(app.zoom);
     let status_line = app.status_line.clone();
     let Some(game) = &mut app.game else { return };
 
     let map_w = screen_width() * 0.7;
     let map_h = screen_height() * 0.72;
-    let tile_px = 20.0 * zoom.min(3.0);
     let half_w = ((map_w / tile_px) / 2.0).max(1.0) as i32;
     let half_h = ((map_h / tile_px) / 2.0).max(1.0) as i32;
 
@@ -325,10 +352,15 @@ fn draw_playing_base(app: &mut App, fx: &Fx) {
     draw_rectangle(0.0, 0.0, map_w, map_h, Color::new(0.03, 0.03, 0.05, 1.0));
     for (ry, row) in tiles.iter().enumerate() {
         for (rx, tile) in row.iter().enumerate() {
-            let (mut ch, mut color) = biome_style(tile.biome);
+            let (mut ch, biome_color) = biome_style(tile.biome);
+            let mut color = terrain_color(biome_color);
+            // Background starts from the full-saturation biome color, not
+            // `color` — unlike the entity branch below, terrain's tile
+            // background is deliberately not desaturated, so bare ground
+            // keeps its biome identity instead of the whole map going grey.
+            let mut bg_source = biome_color;
             let px = rx as f32 * tile_px;
             let py = ry as f32 * tile_px;
-            let mut bold = false;
             let mut staffed = false;
             let mut shielded = false;
             let mut critical = false;
@@ -338,34 +370,34 @@ fn draw_playing_base(app: &mut App, fx: &Fx) {
                 if erx == rx as i32 && ery == ry as i32 {
                     ch = ev.glyph;
                     color = glyph_color(ev.color);
-                    bold = ev.is_structure || ev.is_boss;
                     staffed = ev.is_structure && ev.structure_worker.is_some();
                     // Structures wear their raid damage: the glyph dims as
                     // durability drops, and a nearly-destroyed one washes
                     // its tile red, so the base's condition reads at a
                     // glance instead of only from the inspect menu.
                     (color, critical) = fx.structure_condition(ev.durability, color);
+                    // Background follows the damage-dimmed glyph colour, so a
+                    // worn structure darkens its whole tile rather than just
+                    // its glyph.
+                    bg_source = color;
                     shielded = ev.is_structure;
                 }
             }
-            let mut bg = Color::new(color.r * 0.18, color.g * 0.18, color.b * 0.18, 1.0);
+            let mut bg = Color::new(
+                bg_source.r * 0.18,
+                bg_source.g * 0.18,
+                bg_source.b * 0.18,
+                1.0,
+            );
             if critical {
                 bg = Color::new((bg.r + 0.18).min(1.0), bg.g, bg.b, bg.a);
             }
             draw_rectangle(px, py, tile_px - 1.0, tile_px - 1.0, bg);
-            let font_size = (tile_px * 0.8).max(14.0);
             let glyph = ch.to_string();
-            let dims = measure_text(&glyph, None, font_size as u16, 1.0);
+            let dims = fonts.measure_map(&glyph, glyph_px);
             let tx = px + (tile_px - dims.width) / 2.0;
             let ty = py + (tile_px + dims.height) / 2.0;
-            // Same faux-bold trick `draw_message_line` uses — macroquad has
-            // no bold font loaded, so weight is drawing the glyph twice a
-            // pixel apart. Structures and bosses get it so they read out of
-            // the terrain, matching the TUI's bold styling for them.
-            if bold {
-                draw_text(&glyph, tx + 1.0, ty, font_size, color);
-            }
-            draw_text(&glyph, tx, ty, font_size, color);
+            fonts.map(&glyph, tx, ty, glyph_px, color);
             // Marks where the player materialized on breaching into this
             // zone (see `Game::zone_spawn_point`) — an outline rather than
             // replacing the glyph, so whatever's actually standing there
@@ -399,7 +431,7 @@ fn draw_playing_base(app: &mut App, fx: &Fx) {
     }
     draw_rectangle_lines(0.0, 0.0, map_w, map_h, 2.0, BORDER);
 
-    draw_status_panel(map_w, 0.0, screen_width() - map_w, map_h, &status);
+    draw_status_panel(map_w, 0.0, screen_width() - map_w, map_h, &status, fonts, m);
 
     let log_y = map_h;
     let log_h = screen_height() - map_h;
@@ -412,18 +444,18 @@ fn draw_playing_base(app: &mut App, fx: &Fx) {
         2.0,
         fx.log_border(BORDER),
     );
-    let mut ly = log_y + 22.0;
+    let mut ly = log_y + m.inset + m.font_size as f32 / 2.0;
     if let Some(s) = &status_line {
-        draw_text(s, 10.0, ly, FONT_SIZE, RED);
-        ly += LINE_HEIGHT;
+        fonts.ui(s, m.inset, ly, m.font_size, RED);
+        ly += m.line_height;
     }
-    let capacity = ((log_h - 30.0) / LINE_HEIGHT).max(1.0) as usize;
+    let capacity = ((log_h - m.line_height) / m.line_height).max(1.0) as usize;
     for (kind, line) in game.message_log(capacity) {
-        if ly > screen_height() - 6.0 {
+        if ly > screen_height() - m.gap {
             break;
         }
-        draw_message_line(kind, &line, 10.0, ly);
-        ly += LINE_HEIGHT;
+        draw_message_line(kind, &line, m.inset, ly, fonts, m);
+        ly += m.line_height;
     }
 }
 
@@ -433,39 +465,55 @@ fn draw_status_panel(
     w: f32,
     h: f32,
     status: &feral_processes_engine::PlayerStatus,
+    fonts: &Fonts,
+    m: &Metrics,
 ) {
     draw_rectangle(x, y, w, h, PANEL_BG);
     draw_rectangle_lines(x, y, w, h, 2.0, BORDER);
 
-    let mut cy = y + 22.0;
+    // Clears the panel border by one inset, then drops to the first
+    // baseline; both terms grow with the font the rows are drawn in.
+    let mut cy = y + m.inset + m.font_size as f32 / 2.0;
     cy = draw_bar(
-        x + 10.0,
-        cy,
-        w - 20.0,
+        BarGeometry {
+            x: x + m.inset,
+            y: cy,
+            w: w - m.inset * 2.0,
+        },
         "Integrity",
         status.hp as f32,
         status.max_hp.max(1) as f32,
         RED,
+        fonts,
+        m,
     );
     cy = draw_bar(
-        x + 10.0,
-        cy,
-        w - 20.0,
+        BarGeometry {
+            x: x + m.inset,
+            y: cy,
+            w: w - m.inset * 2.0,
+        },
         "Power",
         status.hunger,
         100.0,
         YELLOW,
+        fonts,
+        m,
     );
     cy = draw_bar(
-        x + 10.0,
-        cy,
-        w - 20.0,
+        BarGeometry {
+            x: x + m.inset,
+            y: cy,
+            w: w - m.inset * 2.0,
+        },
         "Fatigue",
         status.fatigue,
         100.0,
         BLUE,
+        fonts,
+        m,
     );
-    cy += 6.0;
+    cy += m.gap;
 
     let lines = [
         format!(
@@ -481,40 +529,40 @@ fn draw_status_panel(
         format!("Decompiler {}", status.decompiler),
     ];
     for line in &lines {
-        draw_text(line, x + 10.0, cy, FONT_SIZE, TEXT);
-        cy += LINE_HEIGHT;
+        fonts.ui(line, x + m.inset, cy, m.font_size, TEXT);
+        cy += m.line_height;
     }
-    draw_text(
+    fonts.ui(
         format!(
             "Party: {}/{}",
             status.companions.len(),
             feral_processes_engine::resources::MAX_PARTY_SIZE
         ),
-        x + 10.0,
+        x + m.inset,
         cy,
-        FONT_SIZE,
+        m.font_size,
         GREEN,
     );
-    cy += LINE_HEIGHT;
+    cy += m.line_height;
     for companion in &status.companions {
-        draw_text(
+        fonts.ui(
             format!(
                 "Companion: {} (HP {}/{}, PWR {})",
                 companion.name, companion.hp, companion.max_hp, companion.power
             ),
-            x + 10.0,
+            x + m.inset,
             cy,
-            FONT_SIZE,
+            m.font_size,
             GREEN,
         );
-        cy += LINE_HEIGHT;
+        cy += m.line_height;
     }
-    cy += 6.0;
-    draw_text("Inventory:", x + 10.0, cy, FONT_SIZE, TEXT);
-    cy += LINE_HEIGHT;
+    cy += m.gap;
+    fonts.ui("Inventory:", x + m.inset, cy, m.font_size, TEXT);
+    cy += m.line_height;
     if status.inventory.is_empty() {
-        draw_text("(empty)", x + 10.0, cy, FONT_SIZE, TEXT_DIM);
-        cy += LINE_HEIGHT;
+        fonts.ui("(empty)", x + m.inset, cy, m.font_size, TEXT_DIM);
+        cy += m.line_height;
     }
     let keys = [
         "hjkl/arrows move  . wait  e drain  r recharge",
@@ -523,89 +571,132 @@ fn draw_status_panel(
         "p companions  f fuse  t trade  x perks",
         "s save   q main menu   ? help   +/- zoom",
     ];
-    let keys_line_height = LINE_HEIGHT - 4.0;
-    let keys_block_h = keys.len() as f32 * keys_line_height + 10.0;
+    let keys_line_height = m.line_height - m.gap;
+    let keys_block_h = keys.len() as f32 * keys_line_height + m.inset;
     let keys_y = y + h - keys_block_h;
 
     for (item, qty) in &status.inventory {
-        if cy > keys_y - LINE_HEIGHT {
+        if cy > keys_y - m.line_height {
             break;
         }
-        draw_text(
+        fonts.ui(
             format!("{} x{}", item.display_name(), qty),
-            x + 10.0,
+            x + m.inset,
             cy,
-            FONT_SIZE,
+            m.font_size,
             TEXT_DIM,
         );
-        cy += LINE_HEIGHT;
+        cy += m.line_height;
     }
 
     let mut ky = keys_y;
     for k in keys {
-        draw_text(k, x + 10.0, ky, FONT_SIZE - 3.0, TEXT_DIM);
+        fonts.ui(k, x + m.inset, ky, m.small(), TEXT_DIM);
         ky += keys_line_height;
     }
 }
 
+/// Where a stat bar goes. `draw_bar` and the `draw_ghost_band` trailing it
+/// take one of these rather than three loose floats, so the two can't drift
+/// apart into a band that misses the bar it belongs to.
+#[derive(Clone, Copy)]
+struct BarGeometry {
+    x: f32,
+    y: f32,
+    w: f32,
+}
+
+impl BarGeometry {
+    /// Top of the track, shared so `draw_bar` and `draw_ghost_band` can't
+    /// disagree about where it is.
+    fn track_y(&self, m: &Metrics) -> f32 {
+        self.y + m.gap
+    }
+}
+
+/// A bar's track is a deliberate visual weight — a rule under the label,
+/// not a block — so unlike the text it flanks it stays put as the UI font
+/// scales.
+const BAR_TRACK_H: f32 = 14.0;
+
 /// Draws a labeled bar (HP/Power/Fatigue) and returns the y coordinate for
 /// whatever's drawn next.
-fn draw_bar(x: f32, y: f32, w: f32, label: &str, value: f32, max: f32, color: Color) -> f32 {
+fn draw_bar(
+    g: BarGeometry,
+    label: &str,
+    value: f32,
+    max: f32,
+    color: Color,
+    fonts: &Fonts,
+    m: &Metrics,
+) -> f32 {
     let ratio = (value / max).clamp(0.0, 1.0);
-    draw_text(
+    fonts.ui(
         format!("{label} {value:.0}/{max:.0}"),
-        x,
-        y,
-        FONT_SIZE - 2.0,
+        g.x,
+        g.y,
+        m.label(),
         TEXT,
     );
-    let bar_y = y + 6.0;
-    draw_rectangle(x, bar_y, w, 14.0, Color::new(0.15, 0.15, 0.15, 1.0));
-    draw_rectangle(x, bar_y, w * ratio, 14.0, color);
-    draw_rectangle_lines(x, bar_y, w, 14.0, 1.0, BORDER);
-    bar_y + 26.0
+    let bar_y = g.track_y(m);
+    draw_rectangle(
+        g.x,
+        bar_y,
+        g.w,
+        BAR_TRACK_H,
+        Color::new(0.15, 0.15, 0.15, 1.0),
+    );
+    draw_rectangle(g.x, bar_y, g.w * ratio, BAR_TRACK_H, color);
+    draw_rectangle_lines(g.x, bar_y, g.w, BAR_TRACK_H, 1.0, BORDER);
+    // Leaves the next row's label room above its own baseline, so stacked
+    // bars keep their spacing as the label grows.
+    bar_y + BAR_TRACK_H + m.font_size as f32 / 2.0
 }
 
 /// A lagging "ghost" band trailing a bar's real value, so a hit in battle
 /// reads as a visible drain rather than a jump. Call after `draw_bar` with
 /// the same geometry — `draw_bar` lays down an opaque track that would
 /// otherwise bury this — and it fills only the gap between the two values.
-fn draw_ghost_band(x: f32, y: f32, w: f32, value: f32, ghost: f32, max: f32, color: Color) {
+fn draw_ghost_band(g: BarGeometry, value: f32, ghost: f32, max: f32, color: Color, m: &Metrics) {
     let ratio = (value / max).clamp(0.0, 1.0);
     let ghost_ratio = (ghost / max).clamp(0.0, 1.0);
     if ghost_ratio <= ratio {
         return;
     }
     draw_rectangle(
-        x + w * ratio,
-        y + 6.0,
-        w * (ghost_ratio - ratio),
-        14.0,
+        g.x + g.w * ratio,
+        g.track_y(m),
+        g.w * (ghost_ratio - ratio),
+        BAR_TRACK_H,
         Color::new(color.r, color.g, color.b, 0.45),
     );
 }
 
-fn draw_mode_overlay(app: &mut App) {
+fn draw_mode_overlay(app: &mut App, fonts: &Fonts, m: &Metrics) {
     let selected = app.menu_selected;
     let Some(game) = &mut app.game else { return };
     match app.mode {
-        Mode::Build => draw_build_menu(game, selected),
+        Mode::Build => draw_build_menu(game, selected, fonts, m),
         Mode::BuildDirection => draw_direction_prompt(
             "Deploy Direction",
             "Choose a direction to deploy (arrows/hjkl), Esc to cancel",
+            fonts,
+            m,
         ),
-        Mode::Craft => draw_craft_menu(game, selected),
+        Mode::Craft => draw_craft_menu(game, selected, fonts, m),
         Mode::CraftQuantity => {
-            draw_craft_quantity(game, app.pending_craft, &app.craft_quantity_input)
+            draw_craft_quantity(game, app.pending_craft, &app.craft_quantity_input, fonts, m)
         }
         Mode::EraseQuantity => {
-            draw_erase_quantity(game, app.pending_erase, &app.erase_quantity_input)
+            draw_erase_quantity(game, app.pending_erase, &app.erase_quantity_input, fonts, m)
         }
         Mode::Cronjob => draw_worker_menu(
             game,
             "Assign Cronjob",
             "Assign which program to a cronjob?",
             selected,
+            fonts,
+            m,
         ),
         Mode::CronjobStructure => draw_structure_menu(
             game,
@@ -613,12 +704,16 @@ fn draw_mode_overlay(app: &mut App) {
             "Cronjob which structure?",
             true,
             selected,
+            fonts,
+            m,
         ),
         Mode::Guard => draw_worker_menu(
             game,
             "Assign Guard",
             "Assign which program to guard duty?",
             selected,
+            fonts,
+            m,
         ),
         Mode::GuardStructure => draw_structure_menu(
             game,
@@ -626,68 +721,69 @@ fn draw_mode_overlay(app: &mut App) {
             "Guard which structure? Any structure qualifies.",
             false,
             selected,
+            fonts,
+            m,
         ),
-        Mode::Remove => draw_remove_menu(game, selected),
-        Mode::RemoveConfirm => draw_remove_confirm(selected),
-        Mode::Symlink => draw_symlink_menu(game, selected),
+        Mode::Remove => draw_remove_menu(game, selected, fonts, m),
+        Mode::RemoveConfirm => draw_remove_confirm(selected, fonts, m),
+        Mode::Symlink => draw_symlink_menu(game, selected, fonts, m),
         Mode::InspectDirection => draw_direction_prompt(
             "Inspect Direction",
             "Choose a direction to inspect (arrows/hjkl), Esc to cancel",
+            fonts,
+            m,
         ),
-        Mode::InspectDetail => draw_inspect_detail(game, app.pending_inspect),
-        Mode::Inventory => draw_inventory(game, selected),
+        Mode::InspectDetail => draw_inspect_detail(game, app.pending_inspect, fonts, m),
+        Mode::Inventory => draw_inventory(game, selected, fonts, m),
         Mode::InventoryItemAction => {
-            let status = game.player_status();
-            let stack_qty = app
-                .pending_inventory_item
-                .and_then(|item| {
-                    status
-                        .inventory
-                        .iter()
-                        .find(|(i, _)| *i == item)
-                        .map(|(_, q)| *q)
-                })
-                .unwrap_or(0);
+            let zone = game.player_status().zone;
             let fusion_tier = app
                 .pending_inventory_item
                 .map(|item| game.item_fusion_tier(item))
                 .unwrap_or(0);
             draw_inventory_item_action(
                 app.pending_inventory_item,
-                status.zone,
-                stack_qty,
+                zone,
                 fusion_tier,
                 selected,
+                fonts,
+                m,
             )
         }
-        Mode::Companion => draw_companion_menu(game, selected),
-        Mode::Fuse => draw_fuse_menu(game, selected),
-        Mode::FuseSecond => draw_fuse_second_menu(game, app.pending_fuse_first, selected),
+        Mode::Companion => draw_companion_menu(game, selected, fonts, m),
+        Mode::Fuse => draw_fuse_menu(game, selected, fonts, m),
+        Mode::FuseSecond => draw_fuse_second_menu(game, app.pending_fuse_first, selected, fonts, m),
         Mode::FuseName => draw_fuse_name_menu(
             game,
             app.pending_fuse_first,
             app.pending_fuse_second,
             &app.fuse_name_input,
+            fonts,
+            m,
         ),
-        Mode::Trade => draw_trade_menu(game, selected),
-        Mode::TradeAction => draw_trade_action_menu(game, app.pending_trade_structure, selected),
+        Mode::Trade => draw_trade_menu(game, selected, fonts, m),
+        Mode::TradeAction => {
+            draw_trade_action_menu(game, app.pending_trade_structure, selected, fonts, m)
+        }
         Mode::TradeQuantity => draw_trade_quantity_menu(
             game,
             app.pending_trade_structure,
             app.pending_trade_choice,
             &app.trade_quantity_input,
+            fonts,
+            m,
         ),
-        Mode::Perks => draw_perks_menu(game, selected),
-        Mode::Research => draw_research_menu(game, selected),
+        Mode::Perks => draw_perks_menu(game, selected, fonts, m),
+        Mode::Research => draw_research_menu(game, selected, fonts, m),
         _ => {}
     }
 }
 
-fn draw_direction_prompt(title: &str, body: &str) {
-    draw_popup(title, PopupSize::Small, &[text_row(body)]);
+fn draw_direction_prompt(title: &str, body: &str, fonts: &Fonts, m: &Metrics) {
+    draw_popup(title, PopupSize::Small, &[text_row(body)], fonts, m);
 }
 
-fn draw_build_menu(game: &mut Game, selected: usize) {
+fn draw_build_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
     let status = game.player_status();
     let defs = game.buildable_structure_defs();
     let descriptions: Vec<String> = defs
@@ -707,10 +803,10 @@ fn draw_build_menu(game: &mut Game, selected: usize) {
         ));
         rows.push(text_row(format!("    {}", descriptions[i])));
     }
-    draw_popup("Deploy", PopupSize::Large, &rows);
+    draw_popup("Deploy", PopupSize::Large, &rows, fonts, m);
 }
 
-fn draw_craft_menu(game: &mut Game, selected: usize) {
+fn draw_craft_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
     let status = game.player_status();
     let recipes = game.craft_recipes();
     let mut rows = vec![
@@ -729,10 +825,16 @@ fn draw_craft_menu(game: &mut Game, selected: usize) {
             i == selected,
         ));
     }
-    draw_popup("Compile", PopupSize::Large, &rows);
+    draw_popup("Compile", PopupSize::Large, &rows, fonts, m);
 }
 
-fn draw_craft_quantity(game: &mut Game, pending: Option<ItemId>, quantity_input: &str) {
+fn draw_craft_quantity(
+    game: &mut Game,
+    pending: Option<ItemId>,
+    quantity_input: &str,
+    fonts: &Fonts,
+    m: &Metrics,
+) {
     let Some(result) = pending else { return };
     let status = game.player_status();
     let recipe = game
@@ -764,10 +866,16 @@ fn draw_craft_quantity(game: &mut Game, pending: Option<ItemId>, quantity_input:
     rows.push(text_row(
         "[F] Compile 5   [M] Compile max affordable   Esc to go back",
     ));
-    draw_popup("Compile", PopupSize::Large, &rows);
+    draw_popup("Compile", PopupSize::Large, &rows, fonts, m);
 }
 
-fn draw_erase_quantity(game: &mut Game, item: Option<ItemId>, quantity_input: &str) {
+fn draw_erase_quantity(
+    game: &mut Game,
+    item: Option<ItemId>,
+    quantity_input: &str,
+    fonts: &Fonts,
+    m: &Metrics,
+) {
     let Some(item) = item else { return };
     let status = game.player_status();
     let held = status
@@ -794,10 +902,17 @@ fn draw_erase_quantity(game: &mut Game, item: Option<ItemId>, quantity_input: &s
         text_row("Type digits, Enter to erase"),
         text_row("[A] Erase all   Esc to go back"),
     ];
-    draw_popup("Erase", PopupSize::Large, &rows);
+    draw_popup("Erase", PopupSize::Large, &rows, fonts, m);
 }
 
-fn draw_worker_menu(game: &mut Game, title: &str, prompt: &str, selected: usize) {
+fn draw_worker_menu(
+    game: &mut Game,
+    title: &str,
+    prompt: &str,
+    selected: usize,
+    fonts: &Fonts,
+    m: &Metrics,
+) {
     let workers: Vec<_> = game
         .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
         .into_iter()
@@ -840,7 +955,7 @@ fn draw_worker_menu(game: &mut Game, title: &str, prompt: &str, selected: usize)
             i == selected,
         ));
     }
-    draw_popup(title, PopupSize::Large, &rows);
+    draw_popup(title, PopupSize::Large, &rows, fonts, m);
 }
 
 fn draw_structure_menu(
@@ -849,6 +964,8 @@ fn draw_structure_menu(
     prompt: &str,
     workable_only: bool,
     selected: usize,
+    fonts: &Fonts,
+    m: &Metrics,
 ) {
     let structures: Vec<_> = game
         .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
@@ -890,10 +1007,10 @@ fn draw_structure_menu(
             i == selected,
         ));
     }
-    draw_popup(title, PopupSize::Large, &rows);
+    draw_popup(title, PopupSize::Large, &rows, fonts, m);
 }
 
-fn draw_remove_menu(game: &mut Game, selected: usize) {
+fn draw_remove_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
     let structures: Vec<_> = game
         .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
         .into_iter()
@@ -924,10 +1041,10 @@ fn draw_remove_menu(game: &mut Game, selected: usize) {
             i == selected,
         ));
     }
-    draw_popup("Demolish Structure", PopupSize::Large, &rows);
+    draw_popup("Demolish Structure", PopupSize::Large, &rows, fonts, m);
 }
 
-fn draw_remove_confirm(selected: usize) {
+fn draw_remove_confirm(selected: usize, fonts: &Fonts, m: &Metrics) {
     let rows = vec![
         Row::TextColored(
             "Removing Home destroys every other structure in this base and refunds".to_string(),
@@ -941,10 +1058,10 @@ fn draw_remove_confirm(selected: usize) {
         item_row("[y] Yes, demolish everything", selected == 0),
         item_row("[n] No, cancel", selected == 1),
     ];
-    draw_popup("Confirm Demolish Home", PopupSize::Small, &rows);
+    draw_popup("Confirm Demolish Home", PopupSize::Small, &rows, fonts, m);
 }
 
-fn draw_symlink_menu(game: &mut Game, selected: usize) {
+fn draw_symlink_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
     let status = game.player_status();
     let targets = game.symlink_targets();
     let mut rows = vec![text_row(
@@ -973,15 +1090,17 @@ fn draw_symlink_menu(game: &mut Game, selected: usize) {
             i == selected,
         ));
     }
-    draw_popup("Symlink", PopupSize::Large, &rows);
+    draw_popup("Symlink", PopupSize::Large, &rows, fonts, m);
 }
 
-fn draw_inspect_detail(game: &mut Game, entity: Option<Entity>) {
+fn draw_inspect_detail(game: &mut Game, entity: Option<Entity>, fonts: &Fonts, m: &Metrics) {
     let Some(view) = entity.and_then(|e| game.inspect(e)) else {
         draw_popup(
             "Inspect",
             PopupSize::Small,
             &[text_row("That program is gone. Press any key to go back.")],
+            fonts,
+            m,
         );
         return;
     };
@@ -1064,10 +1183,10 @@ fn draw_inspect_detail(game: &mut Game, entity: Option<Entity>) {
     }
     rows.push(text_row(""));
     rows.push(text_row("Press any key to go back, Esc to close"));
-    draw_popup("Inspect", PopupSize::Large, &rows);
+    draw_popup("Inspect", PopupSize::Large, &rows, fonts, m);
 }
 
-fn draw_inventory(game: &mut Game, selected: usize) {
+fn draw_inventory(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
     let status = game.player_status();
     let mut rows = vec![
         Row::TextColored(
@@ -1084,7 +1203,7 @@ fn draw_inventory(game: &mut Game, selected: usize) {
         equipped_row(3, "Module", status.module, selected == 2),
         text_row(""),
         text_row(format!(
-            "Inventory - Buffer {}/{} (row key to equip/erase):",
+            "Inventory - Buffer {}/{} (row key to equip/fuse/erase):",
             status.inventory_used, status.inventory_capacity
         )),
     ];
@@ -1106,7 +1225,7 @@ fn draw_inventory(game: &mut Game, selected: usize) {
     }
     rows.push(text_row(""));
     rows.push(text_row("Esc to close; Up/Down + Enter also work"));
-    draw_popup("Inventory", PopupSize::Large, &rows);
+    draw_popup("Inventory", PopupSize::Large, &rows, fonts, m);
 }
 
 /// Formats an equippable item's stat bonus as it would be *if equipped
@@ -1186,36 +1305,36 @@ fn equipped_row(
 fn draw_inventory_item_action(
     item: Option<ItemId>,
     zone_level: u32,
-    stack_qty: u32,
     fusion_tier: u32,
     selected: usize,
+    fonts: &Fonts,
+    m: &Metrics,
 ) {
     let Some(item) = item else {
-        draw_popup("Item", PopupSize::Small, &[text_row("Nothing selected.")]);
+        draw_popup(
+            "Item",
+            PopupSize::Small,
+            &[text_row("Nothing selected.")],
+            fonts,
+            m,
+        );
         return;
     };
-    let mut actions = vec!["[X] Erase".to_string()];
-    if item.equipment().is_some() {
-        if stack_qty >= feral_processes_engine::items::ITEM_FUSION_COST {
-            actions.insert(0, "[U] Fuse (2 -> +10% bonus)".to_string());
-        }
-        actions.insert(0, "[E]quip".to_string());
-    }
     let title = format!(
         "{}{}",
         item.display_name(),
         equip_preview_tag(item, zone_level, fusion_tier)
     );
     let mut rows = vec![Row::TextColored(title, TEXT), text_row("")];
-    for (i, action) in actions.iter().enumerate() {
-        rows.push(item_row(action.clone(), i == selected));
+    for (i, (_, label)) in inventory_item_actions(item).iter().enumerate() {
+        rows.push(item_row(label.clone(), i == selected));
     }
     rows.push(text_row(""));
     rows.push(text_row("Esc to cancel; Up/Down + Enter also work"));
-    draw_popup("Item", PopupSize::Large, &rows);
+    draw_popup("Item", PopupSize::Large, &rows, fonts, m);
 }
 
-fn draw_companion_menu(game: &mut Game, selected: usize) {
+fn draw_companion_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
     let pets = game.owned_pets();
     let mut rows = vec![text_row(
         "Pick a program to add to your party (max 3) - select a party member's own number to stand it down.",
@@ -1255,7 +1374,7 @@ fn draw_companion_menu(game: &mut Game, selected: usize) {
             i == selected,
         ));
     }
-    draw_popup("Party", PopupSize::Large, &rows);
+    draw_popup("Party", PopupSize::Large, &rows, fonts, m);
 }
 
 /// Formats one fuse-candidate row with its full stat line, cross-
@@ -1297,7 +1416,7 @@ fn fuse_candidate_label(num: char, c: &EntityView, pets: &[PetInfo]) -> String {
     }
 }
 
-fn draw_fuse_menu(game: &mut Game, selected: usize) {
+fn draw_fuse_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
     let candidates: Vec<_> = game
         .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
         .into_iter()
@@ -1314,10 +1433,16 @@ fn draw_fuse_menu(game: &mut Game, selected: usize) {
             i == selected,
         ));
     }
-    draw_popup("Fuse", PopupSize::Large, &rows);
+    draw_popup("Fuse", PopupSize::Large, &rows, fonts, m);
 }
 
-fn draw_fuse_second_menu(game: &mut Game, first: Option<Entity>, selected: usize) {
+fn draw_fuse_second_menu(
+    game: &mut Game,
+    first: Option<Entity>,
+    selected: usize,
+    fonts: &Fonts,
+    m: &Metrics,
+) {
     let Some(first) = first else { return };
     let nearby = game.view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS);
     let first_label = nearby
@@ -1342,7 +1467,7 @@ fn draw_fuse_second_menu(game: &mut Game, first: Option<Entity>, selected: usize
             i == selected,
         ));
     }
-    draw_popup("Fuse", PopupSize::Large, &rows);
+    draw_popup("Fuse", PopupSize::Large, &rows, fonts, m);
 }
 
 /// Free-text naming page shown after both fuse candidates are picked.
@@ -1352,6 +1477,8 @@ fn draw_fuse_name_menu(
     first: Option<Entity>,
     second: Option<Entity>,
     name_input: &str,
+    fonts: &Fonts,
+    m: &Metrics,
 ) {
     let (Some(first), Some(second)) = (first, second) else {
         return;
@@ -1382,10 +1509,10 @@ fn draw_fuse_name_menu(
         text_row("Type a name, Enter to fuse (blank keeps the default name)"),
         text_row("Esc to go back and re-pick the second program"),
     ];
-    draw_popup("Fuse", PopupSize::Small, &rows);
+    draw_popup("Fuse", PopupSize::Small, &rows, fonts, m);
 }
 
-fn draw_trade_menu(game: &mut Game, selected: usize) {
+fn draw_trade_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
     let structures: Vec<_> = game
         .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
         .into_iter()
@@ -1412,10 +1539,16 @@ fn draw_trade_menu(game: &mut Game, selected: usize) {
             i == selected,
         ));
     }
-    draw_popup("Trade", PopupSize::Large, &rows);
+    draw_popup("Trade", PopupSize::Large, &rows, fonts, m);
 }
 
-fn draw_trade_action_menu(game: &mut Game, structure: Option<Entity>, selected: usize) {
+fn draw_trade_action_menu(
+    game: &mut Game,
+    structure: Option<Entity>,
+    selected: usize,
+    fonts: &Fonts,
+    m: &Metrics,
+) {
     let Some(structure) = structure else { return };
     let Some(trade) = game.trade_options(structure) else {
         return;
@@ -1458,7 +1591,7 @@ fn draw_trade_action_menu(game: &mut Game, structure: Option<Entity>, selected: 
     }
     rows.push(text_row(""));
     rows.push(text_row("Esc to cancel; Up/Down + Enter also work"));
-    draw_popup("Trade", PopupSize::Large, &rows);
+    draw_popup("Trade", PopupSize::Large, &rows, fonts, m);
 }
 
 fn draw_trade_quantity_menu(
@@ -1466,6 +1599,8 @@ fn draw_trade_quantity_menu(
     structure: Option<Entity>,
     choice: Option<TradeChoice>,
     quantity_input: &str,
+    fonts: &Fonts,
+    m: &Metrics,
 ) {
     let (Some(structure), Some(choice)) = (structure, choice) else {
         return;
@@ -1502,10 +1637,10 @@ fn draw_trade_quantity_menu(
             verb.to_lowercase()
         )),
     ];
-    draw_popup("Trade", PopupSize::Large, &rows);
+    draw_popup("Trade", PopupSize::Large, &rows, fonts, m);
 }
 
-fn draw_perks_menu(game: &mut Game, selected: usize) {
+fn draw_perks_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
     let status = game.player_status();
     let mut rows = vec![
         Row::TextColored(format!("Perk Points: {}", status.perk_points), CYAN),
@@ -1534,10 +1669,10 @@ fn draw_perks_menu(game: &mut Game, selected: usize) {
     rows.push(text_row(
         "Pick a row's key to buy another level. Esc to close",
     ));
-    draw_popup("Perks", PopupSize::Large, &rows);
+    draw_popup("Perks", PopupSize::Large, &rows, fonts, m);
 }
 
-fn draw_research_menu(game: &mut Game, selected: usize) {
+fn draw_research_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
     let held = game
         .player_status()
         .inventory
@@ -1572,7 +1707,7 @@ fn draw_research_menu(game: &mut Game, selected: usize) {
     }
     rows.push(text_row(""));
     rows.push(text_row("Pick a row's key to research it. Esc to close"));
-    draw_popup("Research", PopupSize::Large, &rows);
+    draw_popup("Research", PopupSize::Large, &rows, fonts, m);
 }
 
 fn status_tag(status: &Option<String>) -> String {
@@ -1582,25 +1717,30 @@ fn status_tag(status: &Option<String>) -> String {
         .unwrap_or_default()
 }
 
-fn draw_battle(app: &mut App, fx: &mut Fx) {
+fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics) {
     let Some(game) = &mut app.game else { return };
     let Some(view) = game.battle_view() else {
         return;
     };
 
     let w = screen_width();
-    let mut y = 20.0;
+    // The battle screen sits straight on the window instead of inside a
+    // panel, so it holds off the edges by more than panel content does.
+    let margin = m.inset * 2.0;
+    let mut y = margin;
     let pack_tag = if view.pack_remaining > 0 {
         format!(" [+{} more in the pack]", view.pack_remaining)
     } else {
         String::new()
     };
     let battle_fx = fx.battle_frame(view.wild_hp, view.player_hp, get_frame_time());
-    let wild_bar_y = y;
-    y = draw_bar(
-        20.0,
+    let wild_bar = BarGeometry {
+        x: margin,
         y,
-        w - 40.0,
+        w: w - margin * 2.0,
+    };
+    y = draw_bar(
+        wild_bar,
         &format!(
             "{}{}{}{} (ATK {} / DEF {} / PWR {})",
             view.wild_name,
@@ -1614,22 +1754,25 @@ fn draw_battle(app: &mut App, fx: &mut Fx) {
         view.wild_hp as f32,
         view.wild_max_hp.max(1) as f32,
         RED,
+        fonts,
+        m,
     );
     draw_ghost_band(
-        20.0,
-        wild_bar_y,
-        w - 40.0,
+        wild_bar,
         view.wild_hp as f32,
         battle_fx.wild_ghost,
         view.wild_max_hp.max(1) as f32,
         RED,
+        m,
     );
-    y += 10.0;
-    let player_bar_y = y;
-    y = draw_bar(
-        20.0,
+    y += m.inset;
+    let player_bar = BarGeometry {
+        x: margin,
         y,
-        w - 40.0,
+        w: w - margin * 2.0,
+    };
+    y = draw_bar(
+        player_bar,
         &format!(
             "You{} (ATK {} / DEF {} / PWR {} / DECOMP {})",
             status_tag(&view.player_status_effect),
@@ -1641,17 +1784,18 @@ fn draw_battle(app: &mut App, fx: &mut Fx) {
         view.player_hp as f32,
         view.player_max_hp.max(1) as f32,
         CYAN,
+        fonts,
+        m,
     );
     draw_ghost_band(
-        20.0,
-        player_bar_y,
-        w - 40.0,
+        player_bar,
         view.player_hp as f32,
         battle_fx.player_ghost,
         view.player_max_hp.max(1) as f32,
         CYAN,
+        m,
     );
-    y += 10.0;
+    y += m.inset;
 
     // Damage is inferred from the HP the view reports rather than from a
     // dedicated engine event — a battle round resolves entirely between
@@ -1660,7 +1804,7 @@ fn draw_battle(app: &mut App, fx: &mut Fx) {
         fx.spawn_float(
             format!("-{}", battle_fx.wild_damage),
             w / 2.0,
-            wild_bar_y,
+            wild_bar.y,
             RED,
         );
     }
@@ -1668,13 +1812,13 @@ fn draw_battle(app: &mut App, fx: &mut Fx) {
         fx.spawn_float(
             format!("-{}", battle_fx.player_damage),
             w / 2.0,
-            player_bar_y,
+            player_bar.y,
             TEXT,
         );
     }
 
     for companion in &view.companions {
-        draw_text(
+        fonts.ui(
             format!(
                 "Companion: {} (HP {}/{}, ATK {}, PWR {}){}",
                 companion.name,
@@ -1684,15 +1828,15 @@ fn draw_battle(app: &mut App, fx: &mut Fx) {
                 companion.power,
                 status_tag(&companion.status)
             ),
-            20.0,
+            margin,
             y,
-            FONT_SIZE,
+            m.font_size,
             GREEN,
         );
-        y += LINE_HEIGHT;
+        y += m.line_height;
     }
 
-    draw_text(
+    fonts.ui(
         format!(
             "Decompile chance right now: {:.0}%{}",
             view.decompile_chance * 100.0,
@@ -1702,21 +1846,21 @@ fn draw_battle(app: &mut App, fx: &mut Fx) {
                 " (needs an ICE Breaker)"
             }
         ),
-        20.0,
+        margin,
         y,
-        FONT_SIZE,
+        m.font_size,
         MAGENTA,
     );
-    y += LINE_HEIGHT + 10.0;
+    y += m.line_height + m.inset;
 
-    let log_bottom = screen_height() - 60.0;
-    draw_rectangle(20.0, y, w - 40.0, log_bottom - y, PANEL_BG);
-    draw_rectangle_lines(20.0, y, w - 40.0, log_bottom - y, 2.0, BORDER);
-    let capacity = (((log_bottom - y) - 20.0) / LINE_HEIGHT).max(1.0) as usize;
-    let mut ly = y + 20.0;
+    let log_bottom = screen_height() - m.line_height * 2.0;
+    draw_rectangle(margin, y, w - margin * 2.0, log_bottom - y, PANEL_BG);
+    draw_rectangle_lines(margin, y, w - margin * 2.0, log_bottom - y, 2.0, BORDER);
+    let capacity = (((log_bottom - y) - margin) / m.line_height).max(1.0) as usize;
+    let mut ly = y + margin;
     for (kind, line) in game.message_log(capacity) {
-        draw_message_line(kind, &line, 30.0, ly);
-        ly += LINE_HEIGHT;
+        draw_message_line(kind, &line, margin + m.inset, ly, fonts, m);
+        ly += m.line_height;
     }
 
     let mut actions = vec!["[A]ttack".to_string()];
@@ -1727,18 +1871,18 @@ fn draw_battle(app: &mut App, fx: &mut Fx) {
         actions.push("[C]ommand companion".to_string());
     }
     actions.push("[J]ack Out".to_string());
-    draw_text(
+    fonts.ui(
         actions.join("   "),
-        20.0,
-        screen_height() - 24.0,
-        FONT_SIZE,
+        margin,
+        screen_height() - m.font_size as f32,
+        m.font_size,
         TEXT,
     );
 
-    fx.draw_floats();
+    fx.draw_floats(fonts, m);
 }
 
-fn draw_battle_companion_menu(app: &mut App) {
+fn draw_battle_companion_menu(app: &mut App, fonts: &Fonts, m: &Metrics) {
     let selected = app.menu_selected;
     let Some(game) = &mut app.game else { return };
     let party = game.player_status().companions;
@@ -1757,10 +1901,10 @@ fn draw_battle_companion_menu(app: &mut App) {
             i == selected,
         ));
     }
-    draw_popup("Command Companion", PopupSize::Large, &rows);
+    draw_popup("Command Companion", PopupSize::Large, &rows, fonts, m);
 }
 
-fn draw_main_menu(app: &App) {
+fn draw_main_menu(app: &App, fonts: &Fonts, m: &Metrics) {
     let mut options = vec!["[N] New Game".to_string()];
     if !app.list_saves().is_empty() {
         options.push("[L] Load Game".to_string());
@@ -1778,10 +1922,10 @@ fn draw_main_menu(app: &App) {
         rows.push(text_row(""));
         rows.push(Row::TextColored(s.clone(), RED));
     }
-    draw_popup("Main Menu", PopupSize::Large, &rows);
+    draw_popup("Main Menu", PopupSize::Large, &rows, fonts, m);
 }
 
-fn draw_load_game(app: &App) {
+fn draw_load_game(app: &App, fonts: &Fonts, m: &Metrics) {
     let saves = app.list_saves();
     let mut rows = vec![text_row(
         "Pick a save (Esc to cancel; Up/Down + Enter also work)",
@@ -1799,10 +1943,10 @@ fn draw_load_game(app: &App) {
             i == app.menu_selected,
         ));
     }
-    draw_popup("Load Game", PopupSize::Large, &rows);
+    draw_popup("Load Game", PopupSize::Large, &rows, fonts, m);
 }
 
-fn draw_save_action(app: &App) {
+fn draw_save_action(app: &App, fonts: &Fonts, m: &Metrics) {
     let name = app
         .pending_save
         .as_ref()
@@ -1821,10 +1965,10 @@ fn draw_save_action(app: &App) {
         rows.push(text_row(""));
         rows.push(Row::TextColored(s.clone(), RED));
     }
-    draw_popup("Save", PopupSize::Large, &rows);
+    draw_popup("Save", PopupSize::Large, &rows, fonts, m);
 }
 
-fn draw_difficulty_pick(selected: usize) {
+fn draw_difficulty_pick(selected: usize, fonts: &Fonts, m: &Metrics) {
     let rows = vec![
         item_row(
             "[P] Permadeath - flatlining is final; the session is archived to a log".to_string(),
@@ -1837,10 +1981,10 @@ fn draw_difficulty_pick(selected: usize) {
         text_row(""),
         text_row("Esc to go back; Up/Down + Enter also work"),
     ];
-    draw_popup("New Game", PopupSize::Large, &rows);
+    draw_popup("New Game", PopupSize::Large, &rows, fonts, m);
 }
 
-fn draw_game_over(app: &mut App) {
+fn draw_game_over(app: &mut App, fonts: &Fonts, m: &Metrics) {
     let summary = app
         .game
         .as_mut()
@@ -1853,10 +1997,10 @@ fn draw_game_over(app: &mut App) {
         text_row(""),
         text_row("Press any key to return to the main menu"),
     ];
-    draw_popup("Session Terminated", PopupSize::Large, &rows);
+    draw_popup("Session Terminated", PopupSize::Large, &rows, fonts, m);
 }
 
-fn draw_help() {
+fn draw_help(fonts: &Fonts, m: &Metrics) {
     let rows = vec![
         text_row("hjkl/arrows move   . wait   e drain   r recharge"),
         text_row("g scan   c compile   b deploy   w cronjob   G guard   R demolish"),
@@ -1871,7 +2015,7 @@ fn draw_help() {
         text_row(""),
         text_row("Press any key to close"),
     ];
-    draw_popup("Help", PopupSize::Large, &rows);
+    draw_popup("Help", PopupSize::Large, &rows, fonts, m);
 }
 
 #[cfg(test)]

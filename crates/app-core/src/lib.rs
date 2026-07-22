@@ -10,7 +10,9 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use feral_processes_engine::items::{EquipmentSlot, ITEM_FUSION_COST, ItemId};
+use feral_processes_engine::items::{
+    EquipmentSlot, ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, ItemId,
+};
 use feral_processes_engine::{DifficultyMode, Entity, Game};
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -40,6 +42,31 @@ pub fn menu_shortcut(index: usize) -> char {
         Ok(c @ b'a'..=b'z') => c as char,
         _ => '-',
     }
+}
+
+/// The actions offered for `item` on the `Mode::InventoryItemAction` page,
+/// in display order, as (shortcut key, label) pairs. Both renderers draw
+/// from this and `App::handle_inventory_item_action_key` dispatches from
+/// it, so the rows shown and the keys accepted can't drift apart.
+///
+/// Fuse is listed for any equippable item regardless of how many copies are
+/// held: hiding it below `ITEM_FUSION_COST` meant a player holding the
+/// usual single copy of a piece of gear never learned the action existed.
+/// `Game::fuse_item` refuses with a count when the stack is too small.
+pub fn inventory_item_actions(item: ItemId) -> Vec<(char, String)> {
+    let mut actions = Vec::new();
+    if item.equipment().is_some() {
+        actions.push(('e', "[E]quip".to_string()));
+        actions.push((
+            'u',
+            format!(
+                "[U] Fuse ({ITEM_FUSION_COST} -> +{}% bonus)",
+                (ITEM_FUSION_BONUS_PER_TIER * 100.0).round() as i32
+            ),
+        ));
+    }
+    actions.push(('x', "[X] Erase".to_string()));
+    actions
 }
 
 /// How many game ticks (see `Game::current_tick`) pass between autosaves —
@@ -1522,21 +1549,10 @@ impl App {
             self.mode = Mode::Inventory;
             return;
         };
-        let Some(game) = &self.game else { return };
-        let stack_qty = game
-            .player_status()
-            .inventory
-            .iter()
-            .find(|(i, _)| *i == item)
-            .map(|(_, q)| *q)
-            .unwrap_or(0);
-        let mut actions = vec!['x'];
-        if item.equipment().is_some() {
-            if stack_qty >= ITEM_FUSION_COST {
-                actions.insert(0, 'u');
-            }
-            actions.insert(0, 'e');
-        }
+        let actions: Vec<char> = inventory_item_actions(item)
+            .into_iter()
+            .map(|(k, _)| k)
+            .collect();
         let idx = self
             .selected_index(key, actions.len())
             .or_else(|| match key {
@@ -2128,5 +2144,51 @@ mod tests {
 
         assert_eq!(app.mode, Mode::Inventory);
         assert_eq!(app.game.as_ref().unwrap().player_status().inventory, before);
+    }
+
+    #[test]
+    fn every_equippable_item_offers_equip_fuse_and_erase() {
+        for item in [
+            ItemId::OverclockCore,
+            ItemId::MonofilamentWhip,
+            ItemId::FirewallPlating,
+            ItemId::AblativePlating,
+            ItemId::NeuralAmplifier,
+            ItemId::CortexHack,
+        ] {
+            let keys: Vec<char> = inventory_item_actions(item)
+                .into_iter()
+                .map(|(k, _)| k)
+                .collect();
+            assert_eq!(
+                keys,
+                vec!['e', 'u', 'x'],
+                "{} should offer fuse regardless of how many copies are held",
+                item.display_name()
+            );
+        }
+    }
+
+    #[test]
+    fn a_plain_resource_offers_only_erase() {
+        let keys: Vec<char> = inventory_item_actions(ItemId::CoreFragment)
+            .into_iter()
+            .map(|(k, _)| k)
+            .collect();
+        assert_eq!(keys, vec!['x']);
+    }
+
+    #[test]
+    fn fusing_without_enough_copies_explains_why_instead_of_ignoring_the_key() {
+        let mut app = test_app(903);
+        app.pending_inventory_item = Some(ItemId::OverclockCore);
+        app.mode = Mode::InventoryItemAction;
+        app.handle_key(GameKey::Char('u'));
+
+        assert_eq!(
+            app.status_line.as_deref(),
+            Some("Need 2 Overclock Core to fuse (have 0)."),
+            "[U] on a too-small stack must refuse out loud, not silently do nothing"
+        );
     }
 }

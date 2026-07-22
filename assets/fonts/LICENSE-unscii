@@ -1,0 +1,11 @@
+unscii-16.ttf — UNSCII by Viznut
+Source: https://github.com/viznut/unscii  (fontfiles/unscii-16.ttf)
+
+Upstream licensing statement, quoted from the project README:
+
+  "You can consider it Public Domain (or CC-0) except for the files
+  derived from or containing parts of Roman Czyborra's Unifont project
+  (unifont.hex, hex2bdf.pl, unscii-16-full.*) which fall under GPL."
+
+Only the base unscii-16.ttf is vendored here. unscii-16-full.* is GPL and
+is deliberately NOT included.

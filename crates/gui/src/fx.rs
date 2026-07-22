@@ -13,6 +13,7 @@
 
 use macroquad::prelude::*;
 
+use crate::text::{Fonts, Metrics};
 use feral_processes_engine::{EffectKind, MessageKind, VisualEffect};
 
 /// Alpha a tile flash starts at, before fading linearly to nothing. Chosen
@@ -258,11 +259,11 @@ impl Fx {
         });
     }
 
-    pub fn draw_floats(&self) {
+    pub fn draw_floats(&self, fonts: &Fonts, m: &Metrics) {
         for f in &self.floats {
             let t = ((self.now - f.start) / FLOAT_SECONDS) as f32;
             let color = Color::new(f.color.r, f.color.g, f.color.b, 1.0 - t);
-            draw_text(&f.text, f.x, f.y - FLOAT_RISE_PX * t, 22.0, color);
+            fonts.ui(&f.text, f.x, f.y - FLOAT_RISE_PX * t, m.label(), color);
         }
     }
 

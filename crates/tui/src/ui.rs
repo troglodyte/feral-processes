@@ -4,7 +4,9 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Gauge, Paragraph, Wrap};
 
-use feral_processes_app_core::{App, MENU_SCAN_RADIUS, Mode, TradeChoice, menu_shortcut};
+use feral_processes_app_core::{
+    App, MENU_SCAN_RADIUS, Mode, TradeChoice, inventory_item_actions, menu_shortcut,
+};
 use feral_processes_engine::components::{EquippedItem, GlyphColor};
 use feral_processes_engine::items::{ItemId, RESEARCH_DATA_BANK_LIMIT};
 use feral_processes_engine::world::{Biome, Tile};
@@ -150,18 +152,7 @@ fn render_playing(f: &mut Frame, app: &mut App) {
         Mode::InspectDetail => render_inspect_detail(f, area, game, app.pending_inspect),
         Mode::Inventory => render_inventory_screen(f, area, game, selected),
         Mode::InventoryItemAction => {
-            let status = game.player_status();
-            let zone = status.zone;
-            let stack_qty = app
-                .pending_inventory_item
-                .and_then(|item| {
-                    status
-                        .inventory
-                        .iter()
-                        .find(|(i, _)| *i == item)
-                        .map(|(_, q)| *q)
-                })
-                .unwrap_or(0);
+            let zone = game.player_status().zone;
             let fusion_tier = app
                 .pending_inventory_item
                 .map(|item| game.item_fusion_tier(item))
@@ -171,7 +162,6 @@ fn render_playing(f: &mut Frame, app: &mut App) {
                 area,
                 app.pending_inventory_item,
                 zone,
-                stack_qty,
                 fusion_tier,
                 selected,
             )
@@ -1561,7 +1551,7 @@ fn render_inventory_screen(f: &mut Frame, area: Rect, game: &mut Game, selected:
         Line::from(""),
         Line::styled(
             format!(
-                "Inventory — Buffer {}/{} (row key to equip/erase):",
+                "Inventory — Buffer {}/{} (row key to equip/fuse/erase):",
                 status.inventory_used, status.inventory_capacity
             ),
             Style::new().add_modifier(Modifier::BOLD),
@@ -1673,7 +1663,6 @@ fn render_inventory_item_action(
     area: Rect,
     item: Option<ItemId>,
     zone_level: u32,
-    stack_qty: u32,
     fusion_tier: u32,
     selected: usize,
 ) {
@@ -1686,13 +1675,7 @@ fn render_inventory_item_action(
         );
         return;
     };
-    let mut actions = vec!["[X] Erase".to_string()];
-    if item.equipment().is_some() {
-        if stack_qty >= feral_processes_engine::items::ITEM_FUSION_COST {
-            actions.insert(0, "[U] Fuse (2 -> +10% bonus)".to_string());
-        }
-        actions.insert(0, "[E]quip".to_string());
-    }
+    let actions = inventory_item_actions(item);
     let mut lines = vec![
         Line::styled(
             format!(
@@ -1704,8 +1687,8 @@ fn render_inventory_item_action(
         ),
         Line::from(""),
     ];
-    for (i, action) in actions.iter().enumerate() {
-        lines.push(menu_line(action.clone(), i == selected));
+    for (i, (_, label)) in actions.iter().enumerate() {
+        lines.push(menu_line(label.clone(), i == selected));
     }
     lines.push(Line::from(""));
     lines.push(Line::from("Esc to cancel; Up/Down + Enter also work"));

@@ -620,6 +620,15 @@ automatically next run, no recompiling needed. See the `README.md` in each
 of those directories for the schema. A malformed file is skipped with an
 in-game warning rather than crashing startup.
 
+## Fonts
+
+The GUI compiles two typefaces into the binary via `include_bytes!`: unscii
+(the pixel font used for the map grid) and DejaVu Sans Mono (used for
+everything else). unscii-16 is Public Domain / CC-0 (Viznut); DejaVu Sans
+Mono is licensed under the Bitstream Vera license, which requires its
+notice accompany all copies of the font. See `assets/fonts/LICENSE-unscii`
+and `assets/fonts/LICENSE-dejavu` for the full notices.
+
 ## Tests
 
 ```sh

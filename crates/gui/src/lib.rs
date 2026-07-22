@@ -8,6 +8,7 @@
 mod fx;
 mod render;
 mod sounds;
+mod text;
 
 use macroquad::prelude::*;
 
@@ -44,7 +45,13 @@ fn window_conf() -> Conf {
         window_title: "feral-processes".to_string(),
         window_width: 1440,
         window_height: 900,
-        high_dpi: true,
+        // Deliberately not high-DPI. macroquad rasterizes a font at
+        // `font_size * dpi_scale()`, and the map glyph ladder only stays
+        // pixel-crisp at whole multiples of unscii's native 16px cell
+        // (`text::MAP_GLYPH_NATIVE`). A fractional `dpi_scale()` — the
+        // GNOME/Windows default at 125%/150%/175% — pushes those multiples
+        // off the pixel grid, so leave this false and let `dpi_scale()`
+        // report 1.0 everywhere.
         ..Default::default()
     }
 }
@@ -59,19 +66,24 @@ const TOAST_SECONDS: f64 = 1.5;
 /// drew — volume and effects are GUI-only concerns (`App` knows nothing
 /// about either), so they stay local to the game loop rather than being
 /// threaded through `render::draw`.
-fn draw_toast(text: &str) {
-    let font_size = 28.0;
-    let dims = measure_text(text, None, font_size as u16, 1.0);
+fn draw_toast(text: &str, fonts: &text::Fonts) {
+    let m = text::ui_metrics(screen_height());
+    let font_size = m.title();
+    let dims = fonts.measure_ui(text, font_size);
     let x = (screen_width() - dims.width) / 2.0;
-    let y = 44.0;
+    let y = m.pad + m.title() as f32;
+    // The box's margins were hand-tuned (14 horizontal, 10 above the text,
+    // 12 below the baseline) rather than symmetric, so they're reproduced
+    // as arithmetic on pad/inset/gap instead of one uniform padding value.
+    let margin_x = m.pad + m.inset - 2.0 * m.gap;
     draw_rectangle(
-        x - 14.0,
-        y - dims.height - 10.0,
-        dims.width + 28.0,
-        dims.height + 22.0,
+        x - margin_x,
+        y - dims.height - m.inset,
+        dims.width + margin_x * 2.0,
+        dims.height + m.inset + m.gap * 2.0,
         Color::new(0.06, 0.07, 0.10, 0.85),
     );
-    draw_text(text, x, y, font_size, Color::new(0.92, 0.92, 0.92, 1.0));
+    fonts.ui(text, x, y, font_size, Color::new(0.92, 0.92, 0.92, 1.0));
 }
 
 /// Runs the graphics frontend to completion (until `app.quit`). Takes `App`
@@ -87,6 +99,7 @@ pub fn run(app: App) {
 
 async fn game_loop(mut app: App) {
     let sound_bank = SoundBank::load().await;
+    let fonts = text::Fonts::load();
     let mut volume = DEFAULT_VOLUME;
     let mut fx = Fx::new();
     let mut toast: Option<String> = None;
@@ -144,11 +157,11 @@ async fn game_loop(mut app: App) {
         fx.begin_frame(get_time(), effects, in_battle);
         fx.observe_log(last_log.as_ref());
 
-        render::draw(&mut app, &mut fx);
+        render::draw(&mut app, &mut fx, &fonts);
         if let Some(text) = &toast
             && get_time() < toast_until
         {
-            draw_toast(text);
+            draw_toast(text, &fonts);
         }
         next_frame().await;
     }

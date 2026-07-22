@@ -7,3 +7,6 @@ edition = "2024"
 feral-processes-app-core = { version = "0.1.0", path = "../app-core" }
 feral-processes-engine = { version = "0.1.0", path = "../engine" }
 macroquad = { version = "0.4", features = ["audio"] }
+
+[dev-dependencies]
+fontdue = "0.9"

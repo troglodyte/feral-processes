@@ -1,0 +1,6 @@
+(
+    id: "power_cell",
+    name: "Power Cell",
+    craftable: Some((cost: [("core_fragment", 2)])),
+    consume: Some((power: 25.0)),
+)

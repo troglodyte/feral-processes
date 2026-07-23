@@ -1,0 +1,1 @@
+(id: "research_data", name: "Research Data", role: Some(ResearchCurrency), bank_limit: Some(200))

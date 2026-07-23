@@ -1,0 +1,1 @@
+(id: "overclock_core", name: "Overclock Core", equipment: Some((Weapon, (atk: 3))))

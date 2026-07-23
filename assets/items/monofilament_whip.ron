@@ -1,0 +1,1 @@
+(id: "monofilament_whip", name: "Monofilament Whip", equipment: Some((Weapon, (atk: 4))))

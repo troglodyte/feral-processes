@@ -1,0 +1,1 @@
+(id: "cortex_hack", name: "Cortex Hack", equipment: Some((Module, (decompiler: 3))))

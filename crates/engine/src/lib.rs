@@ -3,6 +3,7 @@ pub mod battle;
 pub mod components;
 pub mod difficulty;
 pub mod items;
+pub mod items_db;
 pub mod perks;
 pub mod progression;
 pub mod research;

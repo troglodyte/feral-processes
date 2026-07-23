@@ -1,0 +1,232 @@
+use std::collections::HashMap;
+use std::path::Path;
+
+use bevy_ecs::prelude::Resource;
+use serde::{Deserialize, Serialize};
+
+use crate::components::BuffKind;
+use crate::items::{EquipmentSlot, EquipmentStats};
+
+/// A singleton economy anchor. The game has exactly one item per role;
+/// engine logic queries "the item with role X" instead of naming an id.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EconomyRole {
+    Currency,
+    ResearchCurrency,
+    CraftCurrency,
+}
+
+/// What `Game::use_item` does out of battle. All fields optional so one item
+/// can restore several resources and/or arm a pre-battle buff.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub struct ConsumeDef {
+    #[serde(default)]
+    pub power: f32,
+    #[serde(default)]
+    pub fatigue: f32,
+    #[serde(default)]
+    pub heal: i32,
+    #[serde(default)]
+    pub prebattle_buff: Option<PrebattleBuff>,
+}
+
+/// Arms a `PlayerBuff` that survives on the map and applies during the next
+/// intrusion — buffs only tick in battle (see `Game::tick_player_buff`).
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct PrebattleBuff {
+    pub kind: BuffKind,
+    pub power: i32,
+    pub rounds: u32,
+}
+
+/// An always-available ("starter") craft recipe declared by the item itself,
+/// replacing the two formerly-hardcoded starter recipes.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CraftableDef {
+    pub cost: Vec<(String, u32)>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ItemDef {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub bank_limit: Option<u32>,
+    #[serde(default)]
+    pub role: Option<EconomyRole>,
+    #[serde(default)]
+    pub equipment: Option<(EquipmentSlot, EquipmentStats)>,
+    #[serde(default)]
+    pub taming_potency: Option<f32>,
+    #[serde(default)]
+    pub consume: Option<ConsumeDef>,
+    #[serde(default)]
+    pub craftable: Option<CraftableDef>,
+}
+
+#[derive(Resource, Default)]
+pub struct ItemDb {
+    items: HashMap<String, ItemDef>,
+    currency: Option<String>,
+    research_currency: Option<String>,
+    craft_currency: Option<String>,
+}
+
+impl ItemDb {
+    /// Loads every `*.ron` item definition in `dir`. A malformed file is
+    /// skipped with a returned warning rather than aborting the load, same
+    /// as `StructureDb::load_dir`. A duplicated economy role also warns and
+    /// keeps the first-seen holder.
+    pub fn load_dir(dir: &Path) -> std::io::Result<(Self, Vec<String>)> {
+        let mut db = ItemDb::default();
+        let mut warnings = Vec::new();
+        for entry in std::fs::read_dir(dir)? {
+            let path = entry?.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("ron") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path)?;
+            match ron::from_str::<ItemDef>(&text) {
+                Ok(def) => {
+                    if let Some(role) = def.role {
+                        let slot = match role {
+                            EconomyRole::Currency => &mut db.currency,
+                            EconomyRole::ResearchCurrency => &mut db.research_currency,
+                            EconomyRole::CraftCurrency => &mut db.craft_currency,
+                        };
+                        if let Some(existing) = slot {
+                            warnings.push(format!(
+                                "item {:?} claims role {role:?} already held by {existing:?}; ignoring",
+                                def.id
+                            ));
+                        } else {
+                            *slot = Some(def.id.clone());
+                        }
+                    }
+                    db.items.insert(def.id.clone(), def);
+                }
+                Err(e) => warnings.push(format!("skipped invalid item file {path:?}: {e}")),
+            }
+        }
+        Ok((db, warnings))
+    }
+
+    pub fn get(&self, id: &str) -> Option<&ItemDef> {
+        self.items.get(id)
+    }
+
+    pub fn all(&self) -> impl Iterator<Item = &ItemDef> {
+        let mut defs: Vec<&ItemDef> = self.items.values().collect();
+        defs.sort_by(|a, b| a.id.cmp(&b.id));
+        defs.into_iter()
+    }
+
+    pub fn currency(&self) -> Option<&String> {
+        self.currency.as_ref()
+    }
+
+    pub fn research_currency(&self) -> Option<&String> {
+        self.research_currency.as_ref()
+    }
+
+    pub fn craft_currency(&self) -> Option<&String> {
+        self.craft_currency.as_ref()
+    }
+
+    /// Human-readable names of any economy role with no holder — empty when
+    /// the item set is complete. `Game::new`/`load` abort if this is
+    /// non-empty (the economy can't run without all three).
+    pub fn missing_roles(&self) -> Vec<&'static str> {
+        let mut missing = Vec::new();
+        if self.currency.is_none() {
+            missing.push("Currency");
+        }
+        if self.research_currency.is_none() {
+            missing.push("ResearchCurrency");
+        }
+        if self.craft_currency.is_none() {
+            missing.push("CraftCurrency");
+        }
+        missing
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    fn assets_items_dir() -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/items")
+    }
+
+    /// Writes `files` (filename, RON) to a unique scratch dir and loads them.
+    fn load_fixture(files: &[(&str, &str)]) -> (ItemDb, Vec<String>) {
+        static NEXT: AtomicU32 = AtomicU32::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "feral_itemdb_{}_{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for (n, b) in files {
+            std::fs::write(dir.join(n), b).unwrap();
+        }
+        let out = ItemDb::load_dir(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        out
+    }
+
+    #[test]
+    fn the_shipped_items_load_cleanly_with_all_roles_and_fields() {
+        let (db, warnings) = ItemDb::load_dir(&assets_items_dir()).unwrap();
+        assert!(
+            warnings.is_empty(),
+            "shipped items should parse clean: {warnings:?}"
+        );
+        assert!(
+            db.missing_roles().is_empty(),
+            "all three roles must be held"
+        );
+        assert_eq!(db.currency().unwrap(), "core_fragment");
+        assert_eq!(db.research_currency().unwrap(), "research_data");
+        assert_eq!(db.craft_currency().unwrap(), "portal_fragment");
+        assert_eq!(db.get("research_data").unwrap().bank_limit, Some(200));
+        assert_eq!(db.get("ice_breaker").unwrap().taming_potency, Some(0.4));
+        assert_eq!(db.get("power_cell").unwrap().consume.unwrap().power, 25.0);
+        let (slot, stats) = db.get("monofilament_whip").unwrap().equipment.unwrap();
+        assert_eq!(slot, EquipmentSlot::Weapon);
+        assert_eq!(stats.atk, 4);
+        assert_eq!(db.all().count(), 11);
+    }
+
+    #[test]
+    fn a_malformed_file_is_skipped_with_a_warning_not_a_panic() {
+        let (db, warnings) = load_fixture(&[
+            ("good.ron", r#"(id: "good", name: "Good")"#),
+            ("bad.ron", "(id: \"bad\", name:"),
+        ]);
+        assert_eq!(db.all().count(), 1);
+        assert!(warnings.iter().any(|w| w.contains("bad.ron")));
+    }
+
+    #[test]
+    fn a_duplicated_role_warns_and_keeps_the_first_holder() {
+        let (db, warnings) = load_fixture(&[
+            ("a.ron", r#"(id: "a", name: "A", role: Some(Currency))"#),
+            ("b.ron", r#"(id: "b", name: "B", role: Some(Currency))"#),
+        ]);
+        assert!(warnings.iter().any(|w| w.contains("role")));
+        assert!(db.currency().is_some());
+    }
+
+    #[test]
+    fn missing_roles_names_every_absent_anchor() {
+        let (db, _) = load_fixture(&[("a.ron", r#"(id: "a", name: "A")"#)]);
+        assert_eq!(
+            db.missing_roles(),
+            vec!["Currency", "ResearchCurrency", "CraftCurrency"]
+        );
+    }
+}

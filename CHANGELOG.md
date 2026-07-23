@@ -25,6 +25,19 @@ Release notes for [feral-processes](README.md).
   duplicate-economy-role warning stopped Debug-printing ids at modders
   (`ItemId("core_fragment")` now reads `core_fragment`) — see
   `assets/items/README.md`.
+- **README caught up with three systems it never documented**: the research
+  tree, nests, and audio had all shipped without a word in the README, and
+  the research tree in particular had silently invalidated its account of
+  the opening — the build menu, the Structures table, and the Equipment
+  recipes all described a game with no research gating. Now covered by new
+  [Research](README.md#research), [Nests](README.md#nests), and
+  [Audio](README.md#audio) sections, plus a rewrite of everything research
+  touches. Also corrected: the Data Cache's cost and purpose, the market's
+  name, the missing Research Node row, Portal Fragment and Research Data
+  missing from the Items table, the carrying-capacity rules, `T`/`[`/`]`/`\`
+  missing from the controls list, and a leftover claim that the player
+  shares the level-12 cap. The backdated entries above cover the same
+  ground from the release-notes side.
 
 ## 2026-07-22
 
@@ -55,6 +68,31 @@ Release notes for [feral-processes](README.md).
 
 ## 2026-07-21
 
+- **A research tree now gates most of the base**: press `T` to spend
+  **Research Data** on a tree of 12 nodes. Research Data comes from a new
+  **Research Node** structure (10 Core Fragments, buildable from the start)
+  worked by a cronjob like a Mining Node, and it banks separately from your
+  cargo rather than competing with it. Seven of the thirteen structures —
+  Compiler, Terminal, Power Conduit, iso Market, Shield, Fabricator, Armory
+  — plus every equipment recipe now sit behind a node, so the opening isn't
+  "build whatever you can afford" any more: Home, Mining Node, Research
+  Node, Recharger Node, Data Cache, and the Zone Portal are what you start
+  with, and the rest is earned. Unlocking is permanent, and a recipe node
+  grants only the blueprint — its bench still has to be deployed for the
+  recipe to appear in the compile menu. The tree is data, not code: each
+  node is a `.ron` file in `assets/research/`, and a structure named by no
+  research file stays buildable from turn one, so existing structure mods
+  keep working untouched — see [Research](README.md#research) and
+  `assets/research/README.md`.
+- **Carrying capacity is now a real constraint**: everything you carry
+  counts against a shared cargo limit — your **Buffer** — starting at 30
+  units. **Data Cache** is what raises it (+10 each, stacking, and its cost
+  dropped from 15 Core Fragments to 10 to match its new job); it was
+  previously just flavor. Paying an input cost that would overflow the
+  Buffer — compiling, buying, unequipping — is refused outright rather than
+  clamped, so nothing you already spent gets destroyed. Research Data is
+  exempt, banked against its own 200-unit ceiling, so a pile of loot can't
+  starve a Research Node's output — see [Items](README.md#items).
 - **Programs can only be fused 3 times**: every fusion result is one level
   "deeper" than its deepest parent, and a program that's 3 fusions deep is
   a finished product — it can't be an input to another fusion. The pets
@@ -85,6 +123,10 @@ Release notes for [feral-processes](README.md).
   within 15 tiles of your Home. Existing saves need no migration; a
   Recharger Node that was mid-countdown when this shipped simply stops
   decaying — see [Structures](README.md#structures).
+- **The Black Market is now the iso Market**: renamed in the same
+  structure-tuning pass (`fbd2bed`) that raised its cost. Nothing about how
+  it trades changed — same flat sell rate, same stock — see
+  [Trading](README.md#trading).
 - **Wild creature nests**: Scrapper, Worm, Wraith, and Trojan can now
   spawn as a stationary Nest instead of an ordinary lone creature/pack —
   it keeps 2-5 guardians of its species tethered within 5 tiles, and any
@@ -92,7 +134,7 @@ Release notes for [feral-processes](README.md).
   the nest itself to attack it (it never attacks back); destroying it
   frees any surviving guardians to wander normally and stops further
   respawns. New species schema field: `can_nest` — see
-  `assets/species/README.md`.
+  [Nests](README.md#nests) and `assets/species/README.md`.
 - **Individual creatures now roll their own stat variance**: every
   creature independently rolls HP/Attack/Defense within ±20% of its
   species/zone-scaled baseline when it's created (wild spawn or fusion
@@ -140,7 +182,7 @@ Release notes for [feral-processes](README.md).
   move/loot footnotes had drifted out of sync with an earlier balance
   commit (`fbd2bed`) that raised most build costs and sped up the
   Terminal. Data Cache, Mining Node, Power Conduit, Compiler, Fabricator,
-  Armory, Black Market, and Shield all cost more Core Fragments than
+  Armory, the market, and Shield all cost more Core Fragments than
   documented, and the Zone Portal costs 10 Portal Fragments per zone
   level, not 5 — see [Structures](README.md#structures) and
   [Zones and portals](README.md#zones-and-portals). The Terminal now cooks every

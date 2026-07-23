@@ -105,14 +105,17 @@ change what gets stored — a save from a different build shows up as
 | `R` | Demolish a nearby structure, refunding 30% of its materials — demolishing Home destroys every other base structure too, after a confirmation warning (see [Structures](#structures)) |
 | `u` | Use symlink: instantly teleport to a deployed symlink structure (e.g. Home), for its item cost |
 | `i` | Inspect: pick a direction, see stats/moves/decompile odds for the first program that way (no intrusion) |
-| `v` | Inventory/equipment: equip, unequip, erase items |
+| `v` | Inventory/equipment: equip, unequip, consume, fuse, erase items |
+| `T` | Research tree: spend Research Data to unlock structures and recipes — see [Research](#research) |
 | `p` | Your pets: full stats (level, HP, Attack, Defense) for every compiled program you own, wherever it is — add/stand down party members (max 3) here too |
 | `f` | Fuse two nearby compiled programs into one stronger one |
-| `t` | Trade with a nearby Black Market: sell items, buy consumables |
+| `t` | Trade with a nearby iso Market: sell items, buy consumables |
 | `x` | Perks: spend Perk Points on permanent passive unlocks |
 | `s` | Save |
 | `q` | Return to the main menu (unsaved progress is lost — `s` first if you want to keep it) |
 | `+` / `-` | Zoom the grid in/out |
+| `[` / `]` | Volume down/up in 10% steps (GUI only) — see [Audio](#audio) |
+| `\` | Toggle visual effects on/off (GUI only) |
 | `?` | In-game help / full control list |
 
 Every numbered or lettered menu (compile, deploy, cronjob, inventory,
@@ -192,9 +195,13 @@ creature to work" mechanic.
    walkable, is already occupied, or you don't have enough of the required
    item (see the [Structures](#structures) table for costs — all paid in
    Core Fragments except the Zone Portal, which costs Portal Fragments).
-   **Home** always comes first in the menu,
-   followed by **Mining Node** then **Compiler** — everything else after —
-   and nothing else can be built until a Home is standing. Zone transitions
+   **Home** always comes first in the menu, followed by **Mining Node** then
+   **Research Node**, then **Compiler** once it's researched — everything
+   else after — and nothing else can be built until a Home is standing.
+   The menu only lists structures you've actually unlocked: Home, Mining
+   Node, Research Node, Recharger Node, Data Cache, and the Zone Portal are
+   available from turn one, and the other seven each sit behind a research
+   node (see [Research](#research)). Zone transitions
    leave every structure behind (see [Zones and portals](#zones-and-portals)),
    so each new zone needs its own Home again before you can build anything
    else there.
@@ -221,9 +228,11 @@ creature to work" mechanic.
      it just doesn't pay out. Cronjob XP stops entirely once a worker hits
      **level 10** — resources keep flowing, but leveling past that only
      comes from battling, not idle cronjob work, up to the level 12 cap
-     everyone shares (see the Stats table below).
-   - Every worked structure holds a stock capped at 5 units (the `capacity`
-     in its `.ron` file, moddable per-structure). Each completed cycle draws
+     tamed programs share (see the Stats table below — you yourself have no
+     cap at all).
+   - Every worked structure holds a stock capped by the `capacity` in its
+     `.ron` file (5 by default; the Research Node's is 4). Each completed
+     cycle draws
      one down; once mined to 0 it immediately refills back to capacity and
      the worker keeps going — a worked node is an infinite, bursty resource,
      never a one-time deposit you can exhaust.
@@ -234,12 +243,53 @@ creature to work" mechanic.
    structure, and its in-progress tick count are all saved — reload and it
    picks up right where it left off, no need to reassign it with `w`.
 
-Once you have a Mining Node feeding a steady supply of Core Fragments, feed
-that into a Power Conduit (Power Cells) and a Compiler (ICE Breakers) to
-round out the consumable loop. Gear (Overclock Cores, Firewall Plating) is
-handled separately — see [Equipment](#equipment): build a Fabricator or
-Armory and it unlocks the matching craft recipe, paid in Portal Fragments
-rather than run as a cronjob.
+Once you have a Mining Node feeding a steady supply of Core Fragments, put a
+second program on a **Research Node** — its Research Data is what unlocks
+the Power Conduit (Power Cells) and Compiler (ICE Breakers) that round out
+the consumable loop, along with almost everything else worth building — see
+[Research](#research) for the tree. Gear sits at the far end of it, paid for
+in Portal Fragments rather than cronjob output — see
+[Equipment](#equipment).
+
+### Research
+
+Press `T` to open the research tree. **Research Data** is the currency:
+deploy a Research Node (10 Core Fragments, available from the start) and
+cronjob a compiled program onto it, exactly like a Mining Node — a cycle
+takes 14 ticks and, like a Mining Node, is level-gated, so a basic level-1
+node pays out only about half the time. Research Data doesn't count against
+your carrying capacity; it's banked separately, up to 200.
+
+Each node costs a flat amount of Research Data and may require others
+first. Unlocking is permanent and one-way — there's no refund and nothing
+to un-research. The menu lists available nodes first, then locked ones
+(tagged with what they still need), then what you've already taken, each
+group cheapest-first; it stays open so you can spend several times in one
+visit.
+
+| Node | Cost | Requires | Unlocks |
+| --- | --- | --- | --- |
+| Automation | 8 | — | Compiler |
+| Power Grid | 10 | — | Terminal, Power Conduit |
+| Isometric Commerce | 12 | — | iso Market |
+| Fortification | 15 | Power Grid | Shield |
+| Weapon Fabrication | 18 | Automation | Fabricator |
+| Reactive Armor | 18 | Automation | Armory |
+| Overclock Cores | 22 | Weapon Fabrication | Overclock Core recipe (6 Portal Fragments) |
+| Firewall Plating | 22 | Reactive Armor | Firewall Plating recipe (6) |
+| Neural Interfacing | 25 | Weapon Fabrication | Neural Amplifier recipe (6) |
+| Monofilament Edge | 40 | Overclock Cores | Monofilament Whip recipe (12) |
+| Ablative Lattice | 40 | Firewall Plating | Ablative Plating recipe (12) |
+| Cortex Hacking | 45 | Neural Interfacing | Cortex Hack recipe (12) |
+
+A recipe node only unlocks the *blueprint*. The recipe shows up in the
+compile menu (`c`) only while the bench it names is actually deployed — a
+Fabricator for the four weapon/module recipes, an Armory for the two armor
+ones — so a recipe node is worth taking only alongside its bench.
+
+The tree is data, not code: every node is a `.ron` file in
+`assets/research/`, and a structure named by no research file at all is
+buildable from turn one. See `assets/research/README.md` for the schema.
 
 ### Stats
 
@@ -273,9 +323,10 @@ on top of whatever you already have, at the same Perk Point cost every time:
 | Defender | 2 | +1 permanent Defense |
 | Buffer | 3 | +1% permanent max Integrity per level, minimum +10 (fully heals on purchase) |
 
-The `x` menu shows each perk's current level next to it. Perks are a small,
-fixed set of player-only progression choices rather than moddable content —
-see `CLAUDE.md` for the distinction.
+The `x` menu shows each perk's current level next to it. Unlike species,
+structures, items, and research, perks are a small fixed set of player-only
+progression choices rather than moddable content — adding one means editing
+`crates/engine/src/perks.rs`, not dropping in a file.
 
 ### Items
 
@@ -284,15 +335,28 @@ see `CLAUDE.md` for the distinction.
 | Core Fragment | Starting inventory; scan (`g`); dropped by Virus/Construct; a Mining Node cronjob | Deploy structures (2–6 each); compile an ICE Breaker (3 each) or a Power Cell (2 each) |
 | Power Cell | Starting inventory; compiled (`c`) from 2 Core Fragments; dropped by Scrapper/Glitch; cooked passively at a Terminal; a Power Conduit cronjob | Drain (`e`) to restore Power |
 | ICE Breaker | Starting inventory; compiled (`c`) from 3 Core Fragments; a Compiler cronjob | Attempt to decompile a rogue program in battle (`d`) |
+| Portal Fragment | 35% drop from any defeated wild program; a guaranteed 3–6 cache from a boss; buyable at an iso Market (8 Core Fragments) | Deploy a Zone Portal; pay for every equipment recipe |
+| Research Data | A Research Node cronjob | Unlock research nodes (`T`) — see [Research](#research) |
 
 A deliberately tight core-consumable economy: Core Fragment is the
 universal raw material — found by scanning (`g`) or harvested passively via
-a Mining Node — and the other two are refined from it (compiled with `c`,
-scavenged from creatures, or produced by a structure cronjob) for one
-specific purpose each. Equipment (below) is a separate, non-consumable item
-category. Items are data-driven `.ron` files under `assets/items/`, same as
+a Mining Node — and Power Cells and ICE Breakers are refined from it
+(compiled with `c`, scavenged from creatures, or produced by a structure
+cronjob) for one specific purpose each. Portal Fragments and Research Data
+are the two progression currencies, spent on zones and gear and on the
+research tree respectively. Equipment (below) is a separate,
+non-consumable item category. Items are data-driven `.ron` files under `assets/items/`, same as
 species and structures — see `assets/items/README.md` for the schema, the
 canonical id list, and how to add one.
+
+**Carrying capacity.** Everything you carry counts against a shared cargo
+limit — your **Buffer** — which starts at 30 units and grows by 10 for
+every Data Cache you have deployed. Paying an input cost that would
+overflow it (compiling, buying, unequipping into a full Buffer) is refused
+outright rather than clamped, so nothing you already spent gets destroyed.
+Research Data is the exception: it's banked separately against its own
+200-unit ceiling and never competes with cargo, so a pile of loot can't
+starve a Research Node's output.
 
 ### Equipment
 
@@ -300,23 +364,25 @@ Press `v` to open the inventory/equipment screen from anywhere while
 playing. It shows your stats, your three equipment slots, and your
 inventory, each item numbered for selection.
 
-| Item | Slot | Base bonus (level 1) | Source |
-| --- | --- | --- | --- |
-| Overclock Core | Weapon | +3 Attack | Compile at a Fabricator (Portal Fragments); loot chance from Scrapper, Construct, Trojan |
-| Monofilament Whip | Weapon | +4 Attack | Loot chance from Wintermute (boss) |
-| Firewall Plating | Armor | +3 Defense | Compile at an Armory (Portal Fragments); loot chance from Wraith, Sentinel |
-| Ablative Plating | Armor | +4 Defense | Loot chance from Rootkit |
-| Neural Amplifier | Module | +2 Decompiler | Loot chance from Virus, Phantom, Ghost, Overseer |
-| Cortex Hack | Module | +3 Decompiler | Loot chance from Cipher |
+| Item | Slot | Base bonus (level 1) | Compiled for | Also drops from |
+| --- | --- | --- | --- | --- |
+| Overclock Core | Weapon | +3 Attack | 6 Portal Fragments, at a Fabricator | Scrapper, Construct, Trojan |
+| Monofilament Whip | Weapon | +4 Attack | 12 Portal Fragments, at a Fabricator | Wintermute (boss) |
+| Firewall Plating | Armor | +3 Defense | 6 Portal Fragments, at an Armory | Wraith, Sentinel |
+| Ablative Plating | Armor | +4 Defense | 12 Portal Fragments, at an Armory | Rootkit |
+| Neural Amplifier | Module | +2 Decompiler | 6 Portal Fragments, at a Fabricator | Virus, Phantom, Ghost, Overseer |
+| Cortex Hack | Module | +3 Decompiler | 12 Portal Fragments, at a Fabricator | Cipher |
 
-Each slot now has two options — a common one from an ordinary program, and
-a tougher, slightly stronger one from a harder species or boss.
+Each slot has two options — a common one from an ordinary program, and a
+tougher, slightly stronger one from a harder species or boss.
 
-Overclock Core and Firewall Plating are compiled (`c`) like any other
-recipe, but only once you've built the matching workbench — a Fabricator or
-Armory respectively. Placing one doesn't run a cronjob; it just unlocks that
-recipe in the compile menu, paid in Portal Fragments instead of Core
-Fragments.
+Every one of them is compiled (`c`) like any other recipe, but each takes
+two unlocks, not one: the recipe's **research node** (see
+[Research](#research)) *and* the **bench** it names, deployed. A Fabricator
+or Armory runs no cronjob of its own — it just makes the recipes you've
+researched appear in the compile menu while it's standing. All six are paid
+in Portal Fragments rather than Core Fragments, which puts gear in direct
+competition with Zone Portals for the same currency.
 
 **Gear levels.** Every piece of equipment has a level, starting at 1, and
 each level above that **doubles** the bonus of the one before it (level 2
@@ -494,6 +560,30 @@ the next Zone Portal. The Overseer and Wintermute (above) are the two
 bosses in the base roster; mods can add more via `is_boss: true` in a
 species file (see `assets/species/README.md`).
 
+### Nests
+
+Some species build **nests** — an `N` on the map, in that species' color,
+surrounded by a cluster of its own kind. A wild program of a nesting
+species occasionally spawns one instead of spawning alone; Scrapper,
+Wraith, Trojan, and Worm nest in the base roster (`can_nest: true` in a
+species file).
+
+- A fresh nest comes with **2–5 guardians**, which behave like ordinary
+  hostiles except that they never wander more than 5 tiles from it.
+- While the nest stands it keeps replacing them: every guardian you defeat
+  or decompile is queued for respawn 10 ticks later, so grinding the
+  guardians alone is an endless (if farmable) fight.
+- **Walk into the nest to attack it.** That's a plain hit for your current
+  Attack against its 60 Durability — no intrusion screen, no defense on its
+  side, and no retaliation, so it's pure chip damage rather than a battle.
+- Destroying it frees every surviving guardian (they scatter into ordinary
+  wandering) and cancels any queued respawns.
+- Raids never target a nest; its Durability is only ever spent by you.
+
+A nest is a deliberate risk/reward pocket: a dense cluster of one species
+worth farming for that species' loot, at the cost of being outnumbered
+somewhere you can't retreat far from.
+
 ### Zones and portals
 
 Every creature is tagged with the zone sector it was spawned in, shown
@@ -519,24 +609,27 @@ enough of them, then walk onto it to breach into the next zone.
 
 ### Structures
 
-| Structure | Cost | Purpose |
-| --- | --- | --- |
-| Terminal | 3 Core Fragments | Passively cooks a Core Fragment into a Power Cell every tick while you're standing nearby — no cronjob needed |
-| Data Cache | 15 Core Fragments | Utility storage |
-| Mining Node | 12 Core Fragments | Cronjob a compiled program to it to produce Core Fragments over time (slower and level-gated — see [Getting started](#getting-started-building-and-running-cronjobs)) |
-| Power Conduit | 14 Core Fragments | Cronjob a compiled program to it to produce Power Cells over time |
-| Compiler | 16 Core Fragments | Cronjob a compiled program to it to produce ICE Breakers over time |
-| Fabricator | 18 Core Fragments | Not cronjob-workable — unlocks compiling Overclock Cores (see [Equipment](#equipment)) for Portal Fragments |
-| Armory | 18 Core Fragments | Not cronjob-workable — unlocks compiling Firewall Plating (see [Equipment](#equipment)) for Portal Fragments |
-| Home | 5 Core Fragments | `u` ("use symlink") instantly teleports you to it from anywhere on the map, for 4 Power Cells |
-| Zone Portal | 10 Portal Fragments *(× current zone level)* | Walk onto it to breach into the next zone — see [Zones and portals](#zones-and-portals) |
-| Black Market | 16 Core Fragments | `t` ("trade") to sell inventory items or buy consumables for Core Fragments — see [Trading](#trading) |
-| Shield | 16 Core Fragments | Passively reduces raid damage against **every** deployed structure by 4 — see [Base defense](#base-defense) |
-| Recharger Node | 5 Core Fragments | Required to `r` (recharge/rest) within 2 tiles of it |
+| Structure | Cost | Unlocked by | Purpose |
+| --- | --- | --- | --- |
+| Home | 5 Core Fragments | — | `u` ("use symlink") instantly teleports you to it from anywhere on the map, for 4 Power Cells |
+| Mining Node | 12 Core Fragments | — | Cronjob a compiled program to it to produce Core Fragments over time (slower and level-gated — see [Getting started](#getting-started-building-and-running-cronjobs)) |
+| Research Node | 10 Core Fragments | — | Cronjob a compiled program to it to produce Research Data over time (14 ticks a cycle, level-gated like a Mining Node) — see [Research](#research) |
+| Recharger Node | 5 Core Fragments | — | Required to `r` (recharge/rest) within 2 tiles of it |
+| Data Cache | 10 Core Fragments | — | Raises your carrying capacity (Buffer) by 10 while deployed; stacks with every other one |
+| Zone Portal | 10 Portal Fragments *(× current zone level)* | — | Walk onto it to breach into the next zone — see [Zones and portals](#zones-and-portals) |
+| Compiler | 16 Core Fragments | Automation | Cronjob a compiled program to it to produce ICE Breakers over time |
+| Terminal | 3 Core Fragments | Power Grid | Passively cooks a Core Fragment into a Power Cell every tick while you're standing within 2 tiles — no cronjob needed |
+| Power Conduit | 14 Core Fragments | Power Grid | Cronjob a compiled program to it to produce Power Cells over time |
+| iso Market | 16 Core Fragments | Isometric Commerce | `t` ("trade") to sell inventory items or buy consumables for Core Fragments — see [Trading](#trading) |
+| Shield | 16 Core Fragments | Fortification | Passively reduces raid damage against **every** deployed structure by 4 — see [Base defense](#base-defense) |
+| Fabricator | 18 Core Fragments | Weapon Fabrication | Not cronjob-workable — the bench for every researched weapon/module recipe (see [Equipment](#equipment)) |
+| Armory | 18 Core Fragments | Reactive Armor | Not cronjob-workable — the bench for every researched armor recipe (see [Equipment](#equipment)) |
 
-Home must be built before anything else — the build menu (`b`) always
-lists it first, followed by Mining Node then Compiler, with the rest
-after. This table is otherwise unordered; it's just a reference.
+The "Unlocked by" column is the research node you must take before the
+structure appears in the build menu at all (see [Research](#research)); a
+dash means it's available from turn one. Home must be built before anything
+else regardless — the build menu (`b`) always lists it first, followed by
+Mining Node then Research Node then Compiler, with the rest after.
 
 Only one Home can exist at a time, and every other structure must be
 deployed within 15 tiles of it — a base clusters around its Home rather
@@ -548,11 +641,12 @@ share), so `R` warns you and asks to confirm before Home specifically goes
 down. Remove Home to relocate the whole base, or to free up the 15-tile
 radius for a fresh one elsewhere.
 
-Mining Node, Power Conduit, and Compiler use **active** automation (an
-assigned cronjob produces over time); Terminal uses **passive** automation
-(it processes on its own whenever you're in range); Fabricator and Armory
-use neither — building one just unlocks a compile recipe; Shield uses
-neither either — it just sits there passively defending (see
+Mining Node, Research Node, Power Conduit, and Compiler use **active**
+automation (an assigned cronjob produces over time); Terminal uses
+**passive** automation (it processes on its own whenever you're in range);
+Fabricator and Armory use neither — they're benches, making already-
+researched recipes compilable while they stand; Shield uses neither either
+— it just sits there passively defending (see
 [Base defense](#base-defense)).
 Home is a **symlink target** — a third category, neither cronjob nor
 passive: press `u`, pick it from the list of deployed symlink structures,
@@ -602,15 +696,16 @@ without either.
 
 ### Trading
 
-Press `t` to trade with a nearby Black Market. Pick the structure, then a
-line item: sell offers (from your inventory) are numbered first, then buy
-offers, followed by a quantity prompt.
+Press `t` to trade with a nearby iso Market (unlocked by the Isometric
+Commerce research node). Pick the structure, then a line item: sell offers
+(from your inventory) are numbered first, then buy offers, followed by a
+quantity prompt.
 
 - **Sell** any inventory item (except Core Fragments — trading them for
   more Core Fragments is a no-op the game refuses) for Core Fragments at
-  the market's flat sell rate (1 each, for the base Black Market) — a
+  the market's flat sell rate (1 each, for the base iso Market) — a
   floor value for excess loot that would otherwise just sit there.
-- **Buy** whatever the market lists — the base Black Market sells ICE
+- **Buy** whatever the market lists — the base iso Market sells ICE
   Breakers (4 Core Fragments), Power Cells (3), and **Portal Fragments**
   (8), so a Core Fragment surplus (e.g. from a well-fed Mining Node) can
   fund zone progression even without much combat.
@@ -619,12 +714,24 @@ offers, followed by a quantity prompt.
 
 ## Modding
 
-Species, structures, and items are plain data files under
-`assets/species/*.ron`, `assets/structures/*.ron`, and `assets/items/*.ron`
-— drop in a new `.ron` file and it's picked up automatically next run, no
-recompiling needed. See the `README.md` in each of those directories for the
-schema. A malformed file is skipped with an in-game warning rather than
-crashing startup.
+Species, structures, items, and research nodes are plain data files under
+`assets/species/*.ron`, `assets/structures/*.ron`, `assets/items/*.ron`, and
+`assets/research/*.ron` — drop in a new `.ron` file and it's picked up
+automatically next run, no recompiling needed. See the `README.md` in each
+of those directories for the schema. A malformed file is skipped with an
+in-game warning rather than crashing startup.
+
+Perks are the one exception: they're a fixed, player-only set that lives in
+Rust (see [Perks](#perks)).
+
+## Audio
+
+The GUI plays short sound effects for movement, starting an intrusion,
+attacking, jacking out, winning, and flatlining, from `assets/sounds/`.
+Master volume starts at 20% and is adjustable in-game with `[` and `]` in
+10% steps (0–100%), showing a toast as it changes. `\` toggles visual
+effects on and off the same way. Both are GUI-only — the TUI fallback is
+silent, and sound is a frontend concern the simulation knows nothing about.
 
 ## Fonts
 
@@ -638,7 +745,7 @@ and `assets/fonts/LICENSE-dejavu` for the full notices.
 ## Tests
 
 ```sh
-cargo test
+cargo test --workspace
 ```
 
 ## Changelog

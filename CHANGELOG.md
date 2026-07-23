@@ -8,8 +8,9 @@ Release notes for [feral-processes](README.md).
   spends whichever item in your inventory declares the highest
   `taming_potency` (ties go to the first item id alphabetically), so a
   catalyst dropped in as a `.ron` file works exactly like the shipped ICE
-  Breaker, and a stronger one is used in preference to it. Nothing in the
-  engine names the ICE Breaker any more — see `assets/items/README.md`. The
+  Breaker, and a stronger one is used in preference to it. No engine logic
+  names the ICE Breaker any more — it's ordinary starting gear now, not a
+  privileged item — see `assets/items/README.md`. The
   decompile-odds readout changed to match: it quotes the odds for the
   catalyst you'd actually spend, and with no catalyst in hand it reads
   "needs a taming catalyst" instead of a percentage for an attempt you

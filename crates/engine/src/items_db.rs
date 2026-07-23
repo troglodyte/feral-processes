@@ -64,6 +64,24 @@ pub struct ItemDef {
     pub craftable: Option<CraftableDef>,
 }
 
+impl ItemDef {
+    /// Names the first field holding a NaN or infinity, if any. RON accepts
+    /// bare `NaN`/`inf` literals, and they survive every clamp downstream —
+    /// a NaN `taming_potency` outranks every real catalyst and then panics
+    /// the RNG. Cheaper to refuse the file at load, like any other malformed
+    /// one, than to defend every read.
+    fn non_finite_field(&self) -> Option<&'static str> {
+        if self.taming_potency.is_some_and(|p| !p.is_finite()) {
+            return Some("taming_potency");
+        }
+        match self.consume {
+            Some(c) if !c.power.is_finite() => Some("consume.power"),
+            Some(c) if !c.fatigue.is_finite() => Some("consume.fatigue"),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Resource, Default)]
 pub struct ItemDb {
     items: HashMap<String, ItemDef>,
@@ -88,6 +106,12 @@ impl ItemDb {
             let text = std::fs::read_to_string(&path)?;
             match ron::from_str::<ItemDef>(&text) {
                 Ok(def) => {
+                    if let Some(field) = def.non_finite_field() {
+                        warnings.push(format!(
+                            "skipped invalid item file {path:?}: {field} is not a finite number"
+                        ));
+                        continue;
+                    }
                     if let Some(role) = def.role {
                         let slot = match role {
                             EconomyRole::Currency => &mut db.currency,
@@ -96,8 +120,9 @@ impl ItemDb {
                         };
                         if let Some(existing) = slot {
                             warnings.push(format!(
-                                "item {:?} claims role {role:?} already held by {existing:?}; ignoring",
-                                def.id
+                                "item {} claims role {role:?} already held by {}; ignoring",
+                                def.id.as_str(),
+                                existing.as_str()
                             ));
                         } else {
                             *slot = Some(def.id.clone());
@@ -176,6 +201,32 @@ mod tests {
         let out = ItemDb::load_dir(&dir).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
         out
+    }
+
+    #[test]
+    fn an_item_with_a_non_finite_number_is_skipped_rather_than_loaded() {
+        // NaN survives every clamp downstream and reaches `random_bool`,
+        // which panics — and `total_cmp` ranks it above every real catalyst,
+        // so it would win the taming roll it then crashes.
+        let (db, warnings) = load_fixture(&[
+            (
+                "nan.ron",
+                r#"(id: "nan", name: "NaN", taming_potency: Some(NaN))"#,
+            ),
+            (
+                "inf.ron",
+                r#"(id: "inf", name: "Inf", consume: Some((power: inf)))"#,
+            ),
+            (
+                "ok.ron",
+                r#"(id: "ok", name: "Ok", taming_potency: Some(0.5))"#,
+            ),
+        ]);
+
+        assert!(db.get("nan").is_none(), "a NaN potency must not load");
+        assert!(db.get("inf").is_none(), "an infinite restore must not load");
+        assert!(db.get("ok").is_some(), "a valid neighbour still loads");
+        assert_eq!(warnings.len(), 2, "each skip warns: {warnings:?}");
     }
 
     #[test]

@@ -1696,7 +1696,7 @@ impl Game {
                 }
             }
         }
-        self.check_room(result.clone(), quantity)?;
+        self.check_room(result, quantity)?;
         {
             let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
             for (item, qty) in &cost {
@@ -1847,7 +1847,7 @@ impl Game {
         let Some((equipped, base_mods)) = self.slot_occupant_with_mods(player, slot)? else {
             return Err(format!("Nothing equipped in your {} slot.", slot.label()));
         };
-        self.check_room(equipped.item.clone(), 1)?;
+        self.check_room(&equipped.item, 1)?;
         {
             let mut equipment = self.world.get_mut::<Equipment>(player).unwrap();
             *equipment.slot_mut(slot) = None;
@@ -4780,12 +4780,12 @@ impl Game {
     /// `Ok(())` if `qty` more of `item` would fit. Used by the paths where
     /// the player pays an input cost — compiling, buying, unequipping —
     /// since clamping those would destroy value the player already spent.
-    fn check_room(&self, item: ItemId, qty: u32) -> Result<(), String> {
+    fn check_room(&self, item: &ItemId, qty: u32) -> Result<(), String> {
         let capacity = self.inventory_capacity();
         let db = self.world.resource::<ItemDb>();
         let inv = self.world.get::<Inventory>(self.player_entity()).unwrap();
         let (used, ceiling, label) = match db.get(item.as_str()).and_then(|d| d.bank_limit) {
-            Some(limit) => (inv.count(&item), limit, "Research bank"),
+            Some(limit) => (inv.count(item), limit, "Research bank"),
             None => (inv.cargo_used(db), capacity, "Buffer"),
         };
         if used + qty > ceiling {
@@ -4856,7 +4856,7 @@ impl Game {
         // Refuse rather than clamp: the item is already gone once `take`
         // runs, so checking room only after taking would let a refusal
         // destroy the sold item for nothing.
-        self.check_room(currency.clone(), payout)?;
+        self.check_room(&currency, payout)?;
         let name = self.item_name(&item).to_string();
         {
             let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
@@ -4899,7 +4899,7 @@ impl Game {
         {
             return Err(format!("Not enough Core Fragments (need {total_cost})."));
         }
-        self.check_room(item.clone(), qty)?;
+        self.check_room(&item, qty)?;
         let name = self.item_name(&item).to_string();
         {
             let mut inv = self.world.get_mut::<Inventory>(player).unwrap();

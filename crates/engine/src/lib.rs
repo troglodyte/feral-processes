@@ -12044,4 +12044,121 @@ mod tests {
 
         assert_eq!(game.world.get::<Needs>(player).unwrap().hunger, before);
     }
+
+    #[test]
+    fn use_power_source_restores_power_and_consumes_one() {
+        let mut game = Game::new(504, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
+        // The player already starts holding Power Cells (see `Game::new`);
+        // drain the default stock first so the stack is exactly 2 below.
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        let held = inv.count(ItemId::from(ids::POWER_CELL));
+        inv.take(ItemId::from(ids::POWER_CELL), held);
+        inv.add(ItemId::from(ids::POWER_CELL), 2);
+
+        game.use_power_source();
+
+        // `use_power_source` dispatches to `use_item`, which ends with
+        // `self.tick()` like every other player action, so
+        // `needs_decay_system` also shaves off one tick's worth of hunger
+        // (see `HUNGER_DECAY_PER_TICK` in systems.rs) on top of the +25
+        // restore — same shared-decay caveat as `use_item_applies_a_power_
+        // restore_and_consumes_one` above.
+        assert_eq!(game.world.get::<Needs>(player).unwrap().hunger, 75.0 - 0.15);
+        assert_eq!(
+            game.world
+                .get::<Inventory>(player)
+                .unwrap()
+                .count(ItemId::from(ids::POWER_CELL)),
+            1
+        );
+    }
+
+    #[test]
+    fn use_power_source_with_nothing_to_recharge_from_is_a_no_op() {
+        let mut game = Game::new(505, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        // Drain the default Power Cell stock (see `Game::new`) so no
+        // power-restoring item remains; the Core Fragments the player also
+        // starts with have no `consume` effect at all.
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        let held = inv.count(ItemId::from(ids::POWER_CELL));
+        inv.take(ItemId::from(ids::POWER_CELL), held);
+        let fragments_before = inv.count(ItemId::from(ids::CORE_FRAGMENT));
+        let hunger_before = game.world.get::<Needs>(player).unwrap().hunger;
+
+        game.use_power_source();
+
+        // No candidate item means no `use_item` dispatch, so unlike the
+        // success path above there's no trailing `tick()` and hunger must
+        // be untouched, not merely undecayed.
+        assert_eq!(
+            game.world.get::<Needs>(player).unwrap().hunger,
+            hunger_before,
+            "a failed recharge must not tick the game or touch Needs"
+        );
+        assert_eq!(
+            game.world
+                .get::<Inventory>(player)
+                .unwrap()
+                .count(ItemId::from(ids::CORE_FRAGMENT)),
+            fragments_before,
+            "a failed recharge must not consume an unrelated item"
+        );
+        assert!(
+            game.message_log(10)
+                .iter()
+                .any(|(_, line)| line == "You have nothing to recharge from."),
+            "expected the no-power-source message, got: {:?}",
+            game.message_log(10)
+        );
+    }
+
+    #[test]
+    fn use_power_source_picks_the_power_item_over_an_earlier_non_power_item() {
+        let mut game = Game::new(506, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
+        // Drain all three starting stacks (see `Game::new`: Ice Breaker,
+        // Power Cell, Core Fragment) and rebuild the inventory with the
+        // non-power item (Core Fragment) added *first*, so it's ahead of
+        // the Power Cell in `Inventory::items`. This pins selection to the
+        // `ConsumeDef.power > 0.0` predicate rather than to iteration
+        // order or to which `ItemId` happens to be checked first.
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        let ice_breaker_held = inv.count(ItemId::from(ids::ICE_BREAKER));
+        inv.take(ItemId::from(ids::ICE_BREAKER), ice_breaker_held);
+        let power_held = inv.count(ItemId::from(ids::POWER_CELL));
+        inv.take(ItemId::from(ids::POWER_CELL), power_held);
+        let fragments_held = inv.count(ItemId::from(ids::CORE_FRAGMENT));
+        inv.take(ItemId::from(ids::CORE_FRAGMENT), fragments_held);
+        inv.add(ItemId::from(ids::CORE_FRAGMENT), 5);
+        inv.add(ItemId::from(ids::POWER_CELL), 2);
+        assert_eq!(
+            inv.items[0].0,
+            ItemId::from(ids::CORE_FRAGMENT),
+            "test setup: the non-power item must be first in iteration order"
+        );
+
+        game.use_power_source();
+
+        assert_eq!(
+            game.world
+                .get::<Inventory>(player)
+                .unwrap()
+                .count(ItemId::from(ids::POWER_CELL)),
+            1,
+            "the power-restoring item should have been the one consumed"
+        );
+        assert_eq!(
+            game.world
+                .get::<Inventory>(player)
+                .unwrap()
+                .count(ItemId::from(ids::CORE_FRAGMENT)),
+            5,
+            "the earlier non-power item must be left untouched"
+        );
+        assert_eq!(game.world.get::<Needs>(player).unwrap().hunger, 75.0 - 0.15);
+    }
 }

@@ -75,6 +75,30 @@ is skipped with a warning logged in-game rather than crashing startup.
 The filename doesn't matter to the loader (only the `id` field does), but
 name it after the item for readability, e.g. `power_cell.ron`.
 
+## The shipped items
+
+The eleven items the base game ships. Other schema docs point here for the
+canonical id list, and mods that predate the data-driven item model named
+these in PascalCase — the second column is what to replace those with.
+
+| Old name | Id | What it is |
+| --- | --- | --- |
+| `CoreFragment` | `core_fragment` | `Currency` |
+| `PowerCell` | `power_cell` | Consumable, restores Power |
+| `IceBreaker` | `ice_breaker` | Taming catalyst |
+| `PortalFragment` | `portal_fragment` | `CraftCurrency` |
+| `ResearchData` | `research_data` | `ResearchCurrency`, banked |
+| `OverclockCore` | `overclock_core` | Weapon |
+| `MonofilamentWhip` | `monofilament_whip` | Weapon |
+| `FirewallPlating` | `firewall_plating` | Armor |
+| `AblativePlating` | `ablative_plating` | Armor |
+| `NeuralAmplifier` | `neural_amplifier` | Module |
+| `CortexHack` | `cortex_hack` | Module |
+
+Nothing privileges these over an item you add — they're ordinary `.ron`
+files in this directory, and any of them can be edited or removed (subject
+to the role rule below).
+
 ## The three economy roles
 
 The game needs exactly one item holding each of `Currency`,

@@ -53,9 +53,9 @@ is skipped with a warning logged in-game rather than crashing startup.
     // work_resource (above) and equipment_drop (below) both take any item
     // id from assets/items/*.ron — see assets/items/README.md for the
     // schema and the full set. The base roster's ids: core_fragment,
-    // power_cell, ice_breaker, portal_fragment, overclock_core,
-    // monofilament_whip (Weapon), firewall_plating, ablative_plating
-    // (Armor), neural_amplifier, cortex_hack (Module).
+    // power_cell, ice_breaker, portal_fragment, research_data,
+    // overclock_core, monofilament_whip (Weapon), firewall_plating,
+    // ablative_plating (Armor), neural_amplifier, cortex_hack (Module).
 
     // Optional; omit entirely for no chance of a gear drop. If set, defeating
     // or decompiling this species has a chance (0.0-1.0) to additionally

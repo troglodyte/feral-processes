@@ -1152,32 +1152,73 @@ impl Game {
         self.tick();
     }
 
-    pub fn eat(&mut self, item: ItemId) {
+    /// Consume one unit of `id` out of battle, applying its `ConsumeDef`:
+    /// restore Power/Fatigue/Integrity (each clamped) and/or arm a pre-battle
+    /// combat buff (see `use_item`'s `prebattle_buff`, applied at the next
+    /// intrusion). A non-consumable or an empty stack is a logged no-op.
+    pub fn use_item(&mut self, id: &ItemId) {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
-        // Task 4 replaces this whole method with data-driven `use_item` and
-        // deletes this transitional literal.
-        if item != ItemId::from(ids::POWER_CELL) {
-            self.log("You can't consume that.");
+        let Some(effect) = self
+            .world
+            .resource::<ItemDb>()
+            .get(id.as_str())
+            .and_then(|d| d.consume)
+        else {
+            self.log("You can't use that.");
             return;
-        }
+        };
         let player = self.player_entity();
-        let taken = self
+        if self
             .world
             .get_mut::<Inventory>(player)
             .unwrap()
-            .take(item, 1);
-        if taken == 0 {
-            self.log("You have no power cells.");
+            .take(id.clone(), 1)
+            == 0
+        {
+            self.log(format!("You have no {}.", self.item_name(id)));
             return;
         }
         {
             let mut needs = self.world.get_mut::<Needs>(player).unwrap();
-            needs.hunger = (needs.hunger + 25.0).min(100.0);
+            needs.hunger = (needs.hunger + effect.power).min(100.0);
+            needs.fatigue = (needs.fatigue + effect.fatigue).min(100.0);
         }
-        self.log("You drain a power cell. Reserves replenished somewhat.");
+        if effect.heal != 0 {
+            let mut stats = self.world.get_mut::<Stats>(player).unwrap();
+            stats.hp = (stats.hp + effect.heal).min(stats.max_hp);
+        }
+        if let Some(buff) = effect.prebattle_buff {
+            self.world.get_mut::<PlayerBuff>(player).unwrap().active = Some(ActiveBuff {
+                kind: buff.kind,
+                remaining: buff.rounds,
+                power: buff.power,
+            });
+        }
+        let name = self.item_name(id).to_string();
+        self.log(format!("You use a {name}."));
         self.tick();
+    }
+
+    /// The `e` shortcut: use the first inventory item that restores Power.
+    pub fn use_power_source(&mut self) {
+        let player = self.player_entity();
+        // Scope the DB + Inventory borrows so both release before use_item's
+        // &mut self: target is an owned Option<ItemId>.
+        let target = {
+            let db = self.world.resource::<ItemDb>();
+            let inv = self.world.get::<Inventory>(player).unwrap();
+            inv.items.iter().map(|(id, _)| id.clone()).find(|id| {
+                db.get(id.as_str())
+                    .and_then(|d| d.consume)
+                    .is_some_and(|c| c.power > 0.0)
+            })
+        };
+        match target {
+            Some(id) => self.use_item(&id),
+            None => self.log("You have nothing to recharge from."),
+        }
     }
 
     /// Power down for the night: many ticks pass at once (power reserves
@@ -11901,5 +11942,106 @@ mod tests {
             vec![4],
             "the two fired entries should be removed and the untouched entry decremented once"
         );
+    }
+
+    #[test]
+    fn use_item_applies_a_power_restore_and_consumes_one() {
+        let mut game = Game::new(500, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
+        // The player already starts holding Power Cells (see `Game::new`);
+        // drain the default stock first so the stack is exactly 2 below.
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        let held = inv.count(ItemId::from(ids::POWER_CELL));
+        inv.take(ItemId::from(ids::POWER_CELL), held);
+        inv.add(ItemId::from(ids::POWER_CELL), 2);
+
+        game.use_item(&ItemId::from(ids::POWER_CELL));
+
+        // `use_item` ends with `self.tick()` like every other player action,
+        // so `needs_decay_system` also shaves off one tick's worth of hunger
+        // (see `HUNGER_DECAY_PER_TICK` in systems.rs) on top of the +25
+        // restore — same shared-decay caveat documented on
+        // `commanding_a_companion_in_battle_costs_more_fatigue_than_a_stunned_one`.
+        assert_eq!(game.world.get::<Needs>(player).unwrap().hunger, 75.0 - 0.15);
+        assert_eq!(
+            game.world
+                .get::<Inventory>(player)
+                .unwrap()
+                .count(ItemId::from(ids::POWER_CELL)),
+            1
+        );
+    }
+
+    #[test]
+    fn use_item_clamps_power_at_full() {
+        let mut game = Game::new(501, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Needs>(player).unwrap().hunger = 90.0;
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::from(ids::POWER_CELL), 1);
+
+        game.use_item(&ItemId::from(ids::POWER_CELL));
+
+        // 90 + 25 clamps to 100 before the trailing tick's decay shaves off
+        // 0.15 (see the comment in the test above) — had the clamp not
+        // engaged, this would read 114.85 instead.
+        assert_eq!(
+            game.world.get::<Needs>(player).unwrap().hunger,
+            100.0 - 0.15
+        );
+    }
+
+    #[test]
+    fn use_item_rejects_a_non_consumable() {
+        let mut game = Game::new(502, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        // The player already starts holding Core Fragments (see
+        // `Game::new`), so compare against a captured baseline rather than
+        // an absolute count.
+        let before = game
+            .world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(ItemId::from(ids::CORE_FRAGMENT));
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::from(ids::CORE_FRAGMENT), 3);
+
+        game.use_item(&ItemId::from(ids::CORE_FRAGMENT));
+
+        assert_eq!(
+            game.world
+                .get::<Inventory>(player)
+                .unwrap()
+                .count(ItemId::from(ids::CORE_FRAGMENT)),
+            before + 3,
+            "a non-consumable must not be consumed"
+        );
+    }
+
+    #[test]
+    fn use_item_on_an_empty_stack_is_a_no_op() {
+        let mut game = Game::new(503, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        // The player starts holding Power Cells (see `Game::new`), so drain
+        // the stack to actually exercise the empty-stack path.
+        let held = game
+            .world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(ItemId::from(ids::POWER_CELL));
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .take(ItemId::from(ids::POWER_CELL), held);
+        let before = game.world.get::<Needs>(player).unwrap().hunger;
+
+        game.use_item(&ItemId::from(ids::POWER_CELL));
+
+        assert_eq!(game.world.get::<Needs>(player).unwrap().hunger, before);
     }
 }

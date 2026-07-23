@@ -10,8 +10,10 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+#[cfg(test)]
+use feral_processes_engine::items::ids;
 use feral_processes_engine::items::{
-    EquipmentSlot, ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, ItemId, ids,
+    EquipmentSlot, ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, ItemId,
 };
 use feral_processes_engine::{DifficultyMode, Entity, Game};
 
@@ -65,7 +67,9 @@ pub fn inventory_item_actions(game: &Game, item: &ItemId) -> Vec<(char, String)>
             ),
         ));
     }
-    // Task 4: Use action
+    if game.is_consumable(item) {
+        actions.push(('c', "[C]onsume".to_string()));
+    }
     actions.push(('x', "[X] Erase".to_string()));
     actions
 }
@@ -771,7 +775,7 @@ impl App {
                     true
                 }
                 GameKey::Char('e') => {
-                    game.eat(ItemId::from(ids::POWER_CELL));
+                    game.use_power_source();
                     true
                 }
                 GameKey::Char('r') => {
@@ -1570,6 +1574,14 @@ impl App {
             self.erase_quantity_input.clear();
             self.mode = Mode::EraseQuantity;
             self.pending_inventory_item = None;
+            return;
+        }
+        if idx.map(|i| actions[i]) == Some('c') {
+            let Some(game) = &mut self.game else { return };
+            game.use_item(&item);
+            self.status_line = None;
+            self.pending_inventory_item = None;
+            self.mode = Mode::Inventory;
             return;
         }
         let Some(game) = &mut self.game else { return };

@@ -1950,7 +1950,7 @@ fn render_help(f: &mut Frame) {
         Line::from(""),
         Line::from("hjkl / arrow keys   move (bumping a rogue program starts an intrusion)"),
         Line::from(".                   wait in place (advances one tick)"),
-        Line::from("e                   drain a power cell"),
+        Line::from("e                   use a power source from inventory to recharge"),
         Line::from(
             "r                   recharge overnight (restores fatigue and Integrity, uses power)",
         ),

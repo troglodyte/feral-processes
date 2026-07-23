@@ -34,8 +34,8 @@ Core Fragments.
 
     // Optional; defaults to none. Craft recipes this node makes available.
     unlocks_recipes: [(
-        // An item id — see assets/items/README.md for the schema and the
-        // full set of shipped ids.
+        // An item id — see assets/items/README.md for the schema, and the
+        // top-level README's "Item ids" for the full set of shipped ids.
         result: "overclock_core",
         // What one unit costs, as (item id, quantity) pairs.
         cost: [("portal_fragment", 6)],

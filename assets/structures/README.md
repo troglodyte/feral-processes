@@ -18,7 +18,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     // build_cost above, and every other item reference below (work.produces,
     // passive_process.consumes/produces, teleport_cost, trade.buy), all take
     // any item id from assets/items/*.ron — see assets/items/README.md for
-    // the schema and the full set.
+    // the schema, and the top-level README's "Item ids" for the full set.
 
     // Omit (`None`) for a purely decorative/utility structure. Set `Some(...)`
     // to make it assignable to a tamed creature via the cronjob menu — it'll

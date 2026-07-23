@@ -201,10 +201,9 @@ creature to work" mechanic.
    The menu only lists structures you've actually unlocked: Home, Mining
    Node, Research Node, Recharger Node, Data Cache, and the Zone Portal are
    available from turn one, and the other seven each sit behind a research
-   node (see [Research](#research)). Zone transitions
-   leave every structure behind (see [Zones and portals](#zones-and-portals)),
-   so each new zone needs its own Home again before you can build anything
-   else there.
+   node (see [Research](#research)). Zone transitions leave every structure
+   behind (see [Zones and portals](#zones-and-portals)), so each new zone
+   needs its own Home again before you can build anything else there.
 3. **Schedule a cronjob with `w`** — pick a compiled (tamed) program, then
    the structure to assign it to. This only works on structures with a
    `work` recipe (Mining Node, Power Conduit, Compiler); Fabricator, Armory,
@@ -232,10 +231,9 @@ creature to work" mechanic.
      cap at all).
    - Every worked structure holds a stock capped by the `capacity` in its
      `.ron` file (5 by default; the Research Node's is 4). Each completed
-     cycle draws
-     one down; once mined to 0 it immediately refills back to capacity and
-     the worker keeps going — a worked node is an infinite, bursty resource,
-     never a one-time deposit you can exhaust.
+     cycle draws one down; once mined to 0 it immediately refills back to
+     capacity and the worker keeps going — a worked node is an infinite,
+     bursty resource, never a one-time deposit you can exhaust.
    - Terminal works differently: it's **passive**, not cronjob-based — it
      auto-cooks a Core Fragment into a Power Cell every tick whenever
      you're standing within 2 tiles, no assignment needed.
@@ -344,10 +342,10 @@ a Mining Node — and Power Cells and ICE Breakers are refined from it
 (compiled with `c`, scavenged from creatures, or produced by a structure
 cronjob) for one specific purpose each. Portal Fragments and Research Data
 are the two progression currencies, spent on zones and gear and on the
-research tree respectively. Equipment (below) is a separate,
-non-consumable item category. Items are data-driven `.ron` files under `assets/items/`, same as
-species and structures — see `assets/items/README.md` for the schema, the
-canonical id list, and how to add one.
+research tree respectively. Equipment (below) is a separate, non-consumable
+item category. Items are data-driven `.ron` files under `assets/items/`,
+same as species and structures — see `assets/items/README.md` for the
+schema and [Item ids](#item-ids) for the canonical list.
 
 **Carrying capacity.** Everything you carry counts against a shared cargo
 limit — your **Buffer** — which starts at 30 units and grows by 10 for
@@ -723,6 +721,40 @@ in-game warning rather than crashing startup.
 
 Perks are the one exception: they're a fixed, player-only set that lives in
 Rust (see [Perks](#perks)).
+
+### Item ids
+
+The eleven items the base game ships. Species, structure, and research
+files all reference items by these ids, and mods that predate the
+data-driven item model named them in PascalCase — the second column is what
+to replace those with.
+
+| Old name | Id | What it is |
+| --- | --- | --- |
+| `CoreFragment` | `core_fragment` | `Currency` |
+| `PowerCell` | `power_cell` | Consumable, restores Power |
+| `IceBreaker` | `ice_breaker` | Taming catalyst |
+| `PortalFragment` | `portal_fragment` | `CraftCurrency` |
+| `ResearchData` | `research_data` | `ResearchCurrency`, banked |
+| `OverclockCore` | `overclock_core` | Weapon |
+| `MonofilamentWhip` | `monofilament_whip` | Weapon |
+| `FirewallPlating` | `firewall_plating` | Armor |
+| `AblativePlating` | `ablative_plating` | Armor |
+| `NeuralAmplifier` | `neural_amplifier` | Module |
+| `CortexHack` | `cortex_hack` | Module |
+
+Nothing privileges these over an item you add — they're ordinary `.ron`
+files in `assets/items/`, and any of them can be edited or removed (subject
+to the role rule below).
+
+### The three economy roles
+
+The game needs exactly one item holding each of `Currency`,
+`ResearchCurrency`, and `CraftCurrency` to start — these are the anchors
+every trade, research spend, and zone-portal cost reads through instead of
+naming a hardcoded item. Removing (or renaming without re-tagging) the item
+that holds a role, with nothing else claiming it, leaves the economy
+incomplete and the game won't start; see `ItemDb::missing_roles`.
 
 ## Audio
 

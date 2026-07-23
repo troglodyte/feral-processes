@@ -6898,6 +6898,27 @@ mod tests {
         );
     }
 
+    #[test]
+    fn every_shipped_asset_file_loads_without_a_warning() {
+        // A malformed shipped asset is warn-and-skipped like a mod's would
+        // be, so it costs the player content silently instead of failing the
+        // build. This is the only thing that catches it — a serde attribute
+        // missing from `ItemId` once made every asset load fail this way.
+        let game = Game::new(901, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+        let skipped: Vec<String> = game
+            .message_log(usize::MAX)
+            .into_iter()
+            .map(|(_, text)| text)
+            .filter(|text| text.contains("skipped invalid"))
+            .collect();
+
+        assert!(
+            skipped.is_empty(),
+            "shipped assets must all parse: {skipped:#?}"
+        );
+    }
+
     /// The initial world spawns 14 wild creatures scattered around the
     /// player, so directional-inspect tests clear whatever landed along
     /// their search ray first — otherwise they'd be at the mercy of the

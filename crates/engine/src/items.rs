@@ -1,110 +1,52 @@
 use serde::{Deserialize, Serialize};
 
-/// Hard ceiling on banked Research Data. Chosen against a full research
-/// tree cost of 275, so the bank deliberately cannot fund every node at
-/// once — research has to be spent along the way rather than hoarded to
-/// the end — while staying far above the priciest single node (45).
-pub const RESEARCH_DATA_BANK_LIMIT: u32 = 200;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum ItemId {
-    CoreFragment,
-    PowerCell,
-    IceBreaker,
-    OverclockCore,
-    FirewallPlating,
-    NeuralAmplifier,
-    PortalFragment,
-    ResearchData,
-    MonofilamentWhip,
-    AblativePlating,
-    CortexHack,
-}
+/// `#[serde(transparent)]` so an `ItemId` serializes as its bare inner string
+/// rather than as a `ItemId("...")` tuple-struct — the RON asset files spell
+/// item references as plain quoted strings (e.g. `work_resource: Some("power_cell")`),
+/// and bincode saves encode it identically to a `String`.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ItemId(pub String);
 
 impl ItemId {
-    pub fn display_name(self) -> &'static str {
-        match self {
-            ItemId::CoreFragment => "Core Fragment",
-            ItemId::PowerCell => "Power Cell",
-            ItemId::IceBreaker => "ICE Breaker",
-            ItemId::OverclockCore => "Overclock Core",
-            ItemId::FirewallPlating => "Firewall Plating",
-            ItemId::NeuralAmplifier => "Neural Amplifier",
-            ItemId::PortalFragment => "Portal Fragment",
-            ItemId::ResearchData => "Research Data",
-            ItemId::MonofilamentWhip => "Monofilament Whip",
-            ItemId::AblativePlating => "Ablative Plating",
-            ItemId::CortexHack => "Cortex Hack",
-        }
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
+}
 
-    /// `Some(ceiling)` for a banked currency: exempt from the shared
-    /// inventory capacity and limited only by its own hard cap. `None` for
-    /// ordinary cargo, which counts against `Game::inventory_capacity`.
-    ///
-    /// Sharing the cargo cap would let an unrelated pile of Core Fragments
-    /// starve a Research Node's output, so the currency is measured
-    /// separately.
-    pub fn bank_limit(self) -> Option<u32> {
-        match self {
-            ItemId::ResearchData => Some(RESEARCH_DATA_BANK_LIMIT),
-            _ => None,
-        }
+impl From<&str> for ItemId {
+    fn from(s: &str) -> Self {
+        ItemId(s.to_string())
     }
+}
 
-    /// `Some((slot, bonus))` for equippable items, `None` for plain
-    /// resources. The single source of truth for what makes an item gear.
-    pub fn equipment(self) -> Option<(EquipmentSlot, EquipmentStats)> {
-        match self {
-            ItemId::OverclockCore => Some((
-                EquipmentSlot::Weapon,
-                EquipmentStats {
-                    atk: 3,
-                    ..EquipmentStats::default()
-                },
-            )),
-            ItemId::MonofilamentWhip => Some((
-                EquipmentSlot::Weapon,
-                EquipmentStats {
-                    atk: 4,
-                    ..EquipmentStats::default()
-                },
-            )),
-            ItemId::FirewallPlating => Some((
-                EquipmentSlot::Armor,
-                EquipmentStats {
-                    def: 3,
-                    ..EquipmentStats::default()
-                },
-            )),
-            ItemId::AblativePlating => Some((
-                EquipmentSlot::Armor,
-                EquipmentStats {
-                    def: 4,
-                    ..EquipmentStats::default()
-                },
-            )),
-            ItemId::NeuralAmplifier => Some((
-                EquipmentSlot::Module,
-                EquipmentStats {
-                    decompiler: 2,
-                    ..EquipmentStats::default()
-                },
-            )),
-            ItemId::CortexHack => Some((
-                EquipmentSlot::Module,
-                EquipmentStats {
-                    decompiler: 3,
-                    ..EquipmentStats::default()
-                },
-            )),
-            ItemId::CoreFragment
-            | ItemId::PowerCell
-            | ItemId::IceBreaker
-            | ItemId::PortalFragment
-            | ItemId::ResearchData => None,
-        }
+impl From<String> for ItemId {
+    fn from(s: String) -> Self {
+        ItemId(s)
     }
+}
+
+impl std::fmt::Display for ItemId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+/// Canonical ids of the shipped items. Used by test setup and data-defined
+/// recipes for readability — never by engine *logic*, which goes through
+/// economy roles and `ItemDef` fields.
+pub mod ids {
+    pub const CORE_FRAGMENT: &str = "core_fragment";
+    pub const POWER_CELL: &str = "power_cell";
+    pub const ICE_BREAKER: &str = "ice_breaker";
+    pub const OVERCLOCK_CORE: &str = "overclock_core";
+    pub const FIREWALL_PLATING: &str = "firewall_plating";
+    pub const NEURAL_AMPLIFIER: &str = "neural_amplifier";
+    pub const PORTAL_FRAGMENT: &str = "portal_fragment";
+    pub const RESEARCH_DATA: &str = "research_data";
+    pub const MONOFILAMENT_WHIP: &str = "monofilament_whip";
+    pub const ABLATIVE_PLATING: &str = "ablative_plating";
+    pub const CORTEX_HACK: &str = "cortex_hack";
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -186,52 +128,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn research_data_is_a_plain_resource() {
-        assert!(
-            ItemId::ResearchData.equipment().is_none(),
-            "Research Data is spent on the tree, never worn"
-        );
-        assert_eq!(ItemId::ResearchData.display_name(), "Research Data");
-    }
-
-    #[test]
-    fn plain_resources_are_not_equippable() {
-        assert!(ItemId::CoreFragment.equipment().is_none());
-        assert!(ItemId::PowerCell.equipment().is_none());
-        assert!(ItemId::IceBreaker.equipment().is_none());
-    }
-
-    #[test]
-    fn each_equipment_item_maps_to_its_own_slot_and_bonus() {
-        let (slot, mods) = ItemId::OverclockCore.equipment().unwrap();
-        assert_eq!(slot, EquipmentSlot::Weapon);
-        assert_eq!((mods.atk, mods.def, mods.decompiler), (3, 0, 0));
-
-        let (slot, mods) = ItemId::FirewallPlating.equipment().unwrap();
-        assert_eq!(slot, EquipmentSlot::Armor);
-        assert_eq!((mods.atk, mods.def, mods.decompiler), (0, 3, 0));
-
-        let (slot, mods) = ItemId::NeuralAmplifier.equipment().unwrap();
-        assert_eq!(slot, EquipmentSlot::Module);
-        assert_eq!((mods.atk, mods.def, mods.decompiler), (0, 0, 2));
-    }
-
-    #[test]
-    fn each_new_equipment_item_shares_its_slot_with_an_existing_alternative() {
-        let (slot, mods) = ItemId::MonofilamentWhip.equipment().unwrap();
-        assert_eq!(slot, EquipmentSlot::Weapon);
-        assert_eq!((mods.atk, mods.def, mods.decompiler), (4, 0, 0));
-
-        let (slot, mods) = ItemId::AblativePlating.equipment().unwrap();
-        assert_eq!(slot, EquipmentSlot::Armor);
-        assert_eq!((mods.atk, mods.def, mods.decompiler), (0, 4, 0));
-
-        let (slot, mods) = ItemId::CortexHack.equipment().unwrap();
-        assert_eq!(slot, EquipmentSlot::Module);
-        assert_eq!((mods.atk, mods.def, mods.decompiler), (0, 0, 3));
-    }
-
-    #[test]
     fn scaled_for_level_grows_100_percent_per_level_above_1() {
         let base = EquipmentStats {
             atk: 4,
@@ -258,34 +154,6 @@ mod tests {
             4,
             "level 0 should clamp to level 1's unscaled base"
         );
-    }
-
-    #[test]
-    fn research_data_is_banked_and_everything_else_is_cargo() {
-        assert_eq!(
-            ItemId::ResearchData.bank_limit(),
-            Some(RESEARCH_DATA_BANK_LIMIT),
-            "Research Data is a currency with its own ceiling"
-        );
-        for item in [
-            ItemId::CoreFragment,
-            ItemId::PowerCell,
-            ItemId::IceBreaker,
-            ItemId::PortalFragment,
-            ItemId::OverclockCore,
-            ItemId::FirewallPlating,
-            ItemId::NeuralAmplifier,
-            ItemId::MonofilamentWhip,
-            ItemId::AblativePlating,
-            ItemId::CortexHack,
-        ] {
-            assert_eq!(
-                item.bank_limit(),
-                None,
-                "{} is cargo and should count against inventory capacity",
-                item.display_name()
-            );
-        }
     }
 
     #[test]

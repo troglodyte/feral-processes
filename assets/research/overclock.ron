@@ -5,8 +5,8 @@
     cost: 22,
     requires: ["weapon_bench"],
     unlocks_recipes: [(
-        result: OverclockCore,
-        cost: [(PortalFragment, 6)],
+        result: "overclock_core",
+        cost: [("portal_fragment", 6)],
         requires_structure: Some("fabricator"),
     )],
 )

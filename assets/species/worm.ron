@@ -13,6 +13,6 @@
         (name: "Replicate", power: 5, effect: Some((kind: Bleed, chance: 0.4, duration: 2, power: 3))),
         (name: "Burrow Strike", power: 8),
     ],
-    work_resource: Some(CoreFragment),
+    work_resource: Some("core_fragment"),
     can_nest: true,
 )

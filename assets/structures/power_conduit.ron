@@ -3,6 +3,6 @@
     name: "Power Conduit",
     glyph: '+',
     color: Yellow,
-    build_cost: [(CoreFragment, 14)],
-    work: Some((produces: PowerCell, ticks_per_unit: 6)),
+    build_cost: [("core_fragment", 14)],
+    work: Some((produces: "power_cell", ticks_per_unit: 6)),
 )

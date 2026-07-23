@@ -12,5 +12,5 @@
         (name: "Buzz", power: 4),
         (name: "Recon Ping", power: 3),
     ],
-    work_resource: Some(CoreFragment),
+    work_resource: Some("core_fragment"),
 )

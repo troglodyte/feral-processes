@@ -3,7 +3,7 @@
     name: "Shield",
     glyph: '^',
     color: Red,
-    build_cost: [(CoreFragment, 16)],
+    build_cost: [("core_fragment", 16)],
     work: None,
     raid_defense: 4,
 )

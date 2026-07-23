@@ -2,6 +2,7 @@ use bevy_ecs::prelude::{Component, Entity};
 use serde::{Deserialize, Serialize};
 
 use crate::items::{EquipmentSlot, ItemId};
+use crate::items_db::ItemDb;
 use crate::perks::Perk;
 use crate::species::SpeciesId;
 use crate::structures::StructureId;
@@ -159,7 +160,7 @@ pub struct Tamed {
 ///
 /// `fusion_tier` is likewise captured at equip time — see `ItemFusions` and
 /// `items::EquipmentStats::fused_for_tier`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EquippedItem {
     pub item: ItemId,
     pub level: u32,
@@ -167,11 +168,11 @@ pub struct EquippedItem {
 }
 
 /// Player-only: what's currently equipped in each slot. Each slot's
-/// level-scaled stat bonus (see `EquippedItem`, `ItemId::equipment`) is
+/// level-scaled stat bonus (see `EquippedItem`, `Game::equipment_of`) is
 /// added directly onto `Stats`/`Decompiler` when equipped and subtracted
 /// back on unequip — mirroring how leveling directly mutates `Stats`
 /// elsewhere, rather than maintaining a separate "base stats" layer.
-#[derive(Component, Default, Clone, Copy)]
+#[derive(Component, Default, Clone)]
 pub struct Equipment {
     pub weapon: Option<EquippedItem>,
     pub armor: Option<EquippedItem>,
@@ -189,9 +190,9 @@ impl Equipment {
 
     pub fn get(&self, slot: EquipmentSlot) -> Option<EquippedItem> {
         match slot {
-            EquipmentSlot::Weapon => self.weapon,
-            EquipmentSlot::Armor => self.armor,
-            EquipmentSlot::Module => self.module,
+            EquipmentSlot::Weapon => self.weapon.clone(),
+            EquipmentSlot::Armor => self.armor.clone(),
+            EquipmentSlot::Module => self.module.clone(),
         }
     }
 }
@@ -248,13 +249,13 @@ impl Inventory {
             .unwrap_or(0)
     }
 
-    /// Total units of ordinary cargo held. Banked currencies (see
-    /// `ItemId::bank_limit`) are excluded — this is the number measured
+    /// Total units of ordinary cargo held. Banked currencies (an item with
+    /// `ItemDef::bank_limit` set) are excluded — this is the number measured
     /// against `Game::inventory_capacity`.
-    pub fn cargo_used(&self) -> u32 {
+    pub fn cargo_used(&self, db: &ItemDb) -> u32 {
         self.items
             .iter()
-            .filter(|(item, _)| item.bank_limit().is_none())
+            .filter(|(item, _)| db.get(item.as_str()).and_then(|d| d.bank_limit).is_none())
             .map(|(_, qty)| *qty)
             .sum()
     }
@@ -267,10 +268,10 @@ impl Inventory {
     /// Holding more than the ceiling is legal (a save predating the cap, or
     /// a Data Cache destroyed while full) — this only refuses to make it
     /// worse, hence the saturating subtraction.
-    pub fn add_capped(&mut self, item: ItemId, qty: u32, capacity: u32) -> u32 {
-        let (used, ceiling) = match item.bank_limit() {
-            Some(limit) => (self.count(item), limit),
-            None => (self.cargo_used(), capacity),
+    pub fn add_capped(&mut self, item: ItemId, qty: u32, capacity: u32, db: &ItemDb) -> u32 {
+        let (used, ceiling) = match db.get(item.as_str()).and_then(|d| d.bank_limit) {
+            Some(limit) => (self.count(item.clone()), limit),
+            None => (self.cargo_used(db), capacity),
         };
         let added = qty.min(ceiling.saturating_sub(used));
         if added > 0 {
@@ -284,10 +285,10 @@ impl Inventory {
     /// check before committing to an action whose input cost it can't
     /// undo — see `passive_process_system`, which must not consume a
     /// conversion's input unless the output will actually land.
-    pub fn has_room(&self, item: ItemId, qty: u32, capacity: u32) -> bool {
-        let (used, ceiling) = match item.bank_limit() {
+    pub fn has_room(&self, item: ItemId, qty: u32, capacity: u32, db: &ItemDb) -> bool {
+        let (used, ceiling) = match db.get(item.as_str()).and_then(|d| d.bank_limit) {
             Some(limit) => (self.count(item), limit),
-            None => (self.cargo_used(), capacity),
+            None => (self.cargo_used(db), capacity),
         };
         used + qty <= ceiling
     }
@@ -641,34 +642,54 @@ mod potential_tests {
 #[cfg(test)]
 mod inventory_capacity_tests {
     use super::*;
-    use crate::items::RESEARCH_DATA_BANK_LIMIT;
+    use crate::items::ids;
+    use std::path::Path;
+
+    fn item_db() -> ItemDb {
+        ItemDb::load_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/items"))
+            .unwrap()
+            .0
+    }
+
+    fn research_data_bank_limit(db: &ItemDb) -> u32 {
+        db.get(ids::RESEARCH_DATA)
+            .and_then(|d| d.bank_limit)
+            .expect("research_data ships with a bank limit")
+    }
 
     #[test]
     fn cargo_used_ignores_banked_currency() {
+        let db = item_db();
         let mut inv = Inventory::default();
-        inv.add(ItemId::CoreFragment, 5);
-        inv.add(ItemId::PowerCell, 3);
-        inv.add(ItemId::ResearchData, 90);
-        assert_eq!(inv.cargo_used(), 8, "Research Data is banked, not carried");
+        inv.add(ItemId::from(ids::CORE_FRAGMENT), 5);
+        inv.add(ItemId::from(ids::POWER_CELL), 3);
+        inv.add(ItemId::from(ids::RESEARCH_DATA), 90);
+        assert_eq!(
+            inv.cargo_used(&db),
+            8,
+            "Research Data is banked, not carried"
+        );
     }
 
     #[test]
     fn add_capped_clamps_cargo_to_the_capacity() {
+        let db = item_db();
         let mut inv = Inventory::default();
-        inv.add(ItemId::CoreFragment, 18);
-        let added = inv.add_capped(ItemId::PowerCell, 5, 20);
+        inv.add(ItemId::from(ids::CORE_FRAGMENT), 18);
+        let added = inv.add_capped(ItemId::from(ids::POWER_CELL), 5, 20, &db);
         assert_eq!(added, 2, "only the 2 units of room should land");
-        assert_eq!(inv.count(ItemId::PowerCell), 2);
-        assert_eq!(inv.cargo_used(), 20);
+        assert_eq!(inv.count(ItemId::from(ids::POWER_CELL)), 2);
+        assert_eq!(inv.cargo_used(&db), 20);
     }
 
     #[test]
     fn add_capped_at_a_full_buffer_adds_nothing() {
+        let db = item_db();
         let mut inv = Inventory::default();
-        inv.add(ItemId::CoreFragment, 20);
-        assert_eq!(inv.add_capped(ItemId::PowerCell, 3, 20), 0);
+        inv.add(ItemId::from(ids::CORE_FRAGMENT), 20);
+        assert_eq!(inv.add_capped(ItemId::from(ids::POWER_CELL), 3, 20, &db), 0);
         assert_eq!(
-            inv.count(ItemId::PowerCell),
+            inv.count(ItemId::from(ids::POWER_CELL)),
             0,
             "a fully rejected add shouldn't leave an empty stack behind"
         );
@@ -676,34 +697,44 @@ mod inventory_capacity_tests {
 
     #[test]
     fn add_capped_measures_banked_currency_against_its_own_limit() {
+        let db = item_db();
         let mut inv = Inventory::default();
-        inv.add(ItemId::CoreFragment, 20);
-        let added = inv.add_capped(ItemId::ResearchData, 50, 20);
+        inv.add(ItemId::from(ids::CORE_FRAGMENT), 20);
+        let added = inv.add_capped(ItemId::from(ids::RESEARCH_DATA), 50, 20, &db);
         assert_eq!(
             added, 50,
             "a full cargo buffer must not block research income"
         );
-        assert_eq!(inv.count(ItemId::ResearchData), 50);
+        assert_eq!(inv.count(ItemId::from(ids::RESEARCH_DATA)), 50);
     }
 
     #[test]
     fn add_capped_clamps_research_data_at_its_bank_limit() {
+        let db = item_db();
+        let limit = research_data_bank_limit(&db);
         let mut inv = Inventory::default();
-        inv.add(ItemId::ResearchData, RESEARCH_DATA_BANK_LIMIT - 2);
-        assert_eq!(inv.add_capped(ItemId::ResearchData, 10, 20), 2);
-        assert_eq!(inv.count(ItemId::ResearchData), RESEARCH_DATA_BANK_LIMIT);
-        assert_eq!(inv.add_capped(ItemId::ResearchData, 1, 20), 0);
+        inv.add(ItemId::from(ids::RESEARCH_DATA), limit - 2);
+        assert_eq!(
+            inv.add_capped(ItemId::from(ids::RESEARCH_DATA), 10, 20, &db),
+            2
+        );
+        assert_eq!(inv.count(ItemId::from(ids::RESEARCH_DATA)), limit);
+        assert_eq!(
+            inv.add_capped(ItemId::from(ids::RESEARCH_DATA), 1, 20, &db),
+            0
+        );
     }
 
     #[test]
     fn add_capped_allows_going_over_an_already_exceeded_capacity_by_nothing() {
         // Mirrors a pre-cap save loaded with more than the buffer allows:
         // legal to hold, illegal to add to.
+        let db = item_db();
         let mut inv = Inventory::default();
-        inv.add(ItemId::CoreFragment, 200);
-        assert_eq!(inv.add_capped(ItemId::PowerCell, 1, 20), 0);
+        inv.add(ItemId::from(ids::CORE_FRAGMENT), 200);
+        assert_eq!(inv.add_capped(ItemId::from(ids::POWER_CELL), 1, 20, &db), 0);
         assert_eq!(
-            inv.count(ItemId::CoreFragment),
+            inv.count(ItemId::from(ids::CORE_FRAGMENT)),
             200,
             "existing stock is untouched"
         );

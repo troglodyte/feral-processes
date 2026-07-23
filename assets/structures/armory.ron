@@ -3,6 +3,6 @@
     name: "Armory",
     glyph: '%',
     color: Blue,
-    build_cost: [(CoreFragment, 18)],
+    build_cost: [("core_fragment", 18)],
     work: None,
 )

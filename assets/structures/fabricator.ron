@@ -3,6 +3,6 @@
     name: "Fabricator",
     glyph: '*',
     color: White,
-    build_cost: [(CoreFragment, 18)],
+    build_cost: [("core_fragment", 18)],
     work: None,
 )

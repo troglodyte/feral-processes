@@ -6,6 +6,7 @@ use crate::components::{
     Creature, Experience, Inventory, Needs, Nest, NestGuardian, PassiveProcessor, Perks, Player,
     Position, Potential, ResourceNode, Stats, Structure, Tamed, Task, TaskKind, WanderAi,
 };
+use crate::items_db::ItemDb;
 use crate::perks::Perk;
 use crate::progression;
 use crate::resources::{GameRng, MessageKind, MessageLog};
@@ -134,6 +135,7 @@ pub fn task_progress_system(
     structures: Query<&Structure>,
     structure_db: Res<StructureDb>,
     species_db: Res<SpeciesDb>,
+    item_db: Res<ItemDb>,
     mut log: ResMut<MessageLog>,
     mut rng: ResMut<GameRng>,
 ) {
@@ -164,10 +166,13 @@ pub fn task_progress_system(
         }
         node.amount -= 1;
         if let Ok(mut inv) = inventories.get_mut(tamed.owner) {
-            if inv.add_capped(node.resource, 1, capacity) == 0 {
+            let resource_name = item_db
+                .get(node.resource.as_str())
+                .map(|d| d.name.as_str())
+                .unwrap_or(node.resource.as_str());
+            if inv.add_capped(node.resource.clone(), 1, capacity, &item_db) == 0 {
                 log.push(format!(
-                    "A cronjob yields {} but there's no room to store it.",
-                    node.resource.display_name()
+                    "A cronjob yields {resource_name} but there's no room to store it."
                 ));
             }
             let level_note = if exp.level < WORK_XP_LEVEL_CAP {
@@ -196,10 +201,7 @@ pub fn task_progress_system(
             };
             log.push_kind(
                 MessageKind::Loot,
-                format!(
-                    "Your subroutine extracted a {}.{level_note}",
-                    node.resource.display_name()
-                ),
+                format!("Your subroutine extracted a {resource_name}.{level_note}"),
             );
         }
     }
@@ -215,6 +217,7 @@ pub fn passive_process_system(
     mut structures: Query<(&Structure, &Position, &mut PassiveProcessor)>,
     all_structures: Query<&Structure>,
     structure_db: Res<StructureDb>,
+    item_db: Res<ItemDb>,
     mut log: ResMut<MessageLog>,
 ) {
     let capacity = crate::structures::inventory_capacity_for(
@@ -243,18 +246,24 @@ pub fn passive_process_system(
             // Check room before taking the input: this is a conversion, not
             // an award, so a full buffer must refuse rather than consume the
             // input for an output that never lands.
-            if !inventory.has_room(recipe.produces, 1, capacity) {
+            if !inventory.has_room(recipe.produces.clone(), 1, capacity, &item_db) {
                 continue;
             }
-            if inventory.take(recipe.consumes, 1) == 1 {
-                inventory.add(recipe.produces, 1);
+            if inventory.take(recipe.consumes.clone(), 1) == 1 {
+                inventory.add(recipe.produces.clone(), 1);
+                let consumes_name = item_db
+                    .get(recipe.consumes.as_str())
+                    .map(|d| d.name.as_str())
+                    .unwrap_or(recipe.consumes.as_str());
+                let produces_name = item_db
+                    .get(recipe.produces.as_str())
+                    .map(|d| d.name.as_str())
+                    .unwrap_or(recipe.produces.as_str());
                 log.push_kind(
                     MessageKind::Loot,
                     format!(
-                        "The {} processes a {} into a {}.",
-                        def.name,
-                        recipe.consumes.display_name(),
-                        recipe.produces.display_name()
+                        "The {} processes a {consumes_name} into a {produces_name}.",
+                        def.name
                     ),
                 );
             }
@@ -265,8 +274,16 @@ pub fn passive_process_system(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::items::ItemId;
+    use crate::items::{ItemId, ids};
     use crate::structures::{BASE_INVENTORY_CAPACITY, StructureDb};
+
+    fn test_item_db() -> ItemDb {
+        ItemDb::load_dir(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/items"),
+        )
+        .unwrap()
+        .0
+    }
 
     /// A conversion that consumes a banked currency (no cargo cost) and
     /// produces ordinary cargo — unlike any shipped recipe, this can
@@ -290,8 +307,8 @@ mod tests {
                 build_cost: [],
                 work: None,
                 passive_process: Some((
-                    consumes: ResearchData,
-                    produces: CoreFragment,
+                    consumes: "research_data",
+                    produces: "core_fragment",
                     ticks_per_unit: 1,
                     radius: 5,
                 )),
@@ -312,11 +329,12 @@ mod tests {
         let structure_db = load_test_capacitor();
         let mut world = World::new();
         world.insert_resource(structure_db);
+        world.insert_resource(test_item_db());
         world.insert_resource(MessageLog::default());
 
         let mut inventory = Inventory::default();
-        inventory.add(ItemId::ResearchData, 5);
-        inventory.add(ItemId::CoreFragment, BASE_INVENTORY_CAPACITY);
+        inventory.add(ItemId::from(ids::RESEARCH_DATA), 5);
+        inventory.add(ItemId::from(ids::CORE_FRAGMENT), BASE_INVENTORY_CAPACITY);
         world.spawn((Player, Position { x: 0, y: 0 }, inventory));
         world.spawn((
             Structure {
@@ -333,12 +351,12 @@ mod tests {
         let mut query = world.query::<&Inventory>();
         let inv = query.iter(&world).next().unwrap();
         assert_eq!(
-            inv.count(ItemId::ResearchData),
+            inv.count(ItemId::from(ids::RESEARCH_DATA)),
             5,
             "the input must not be consumed when the produced unit has no room"
         );
         assert_eq!(
-            inv.count(ItemId::CoreFragment),
+            inv.count(ItemId::from(ids::CORE_FRAGMENT)),
             BASE_INVENTORY_CAPACITY,
             "cargo must not grow past capacity"
         );

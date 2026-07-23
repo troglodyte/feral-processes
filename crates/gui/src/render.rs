@@ -12,7 +12,7 @@ use feral_processes_app_core::{
     App, MENU_SCAN_RADIUS, Mode, TradeChoice, inventory_item_actions, menu_shortcut,
 };
 use feral_processes_engine::components::GlyphColor;
-use feral_processes_engine::items::{ItemId, RESEARCH_DATA_BANK_LIMIT};
+use feral_processes_engine::items::ItemId;
 use feral_processes_engine::world::Biome;
 use feral_processes_engine::{
     Entity, EntityView, Game, MAX_FUSIONS, MessageKind, PetInfo, ResearchState,
@@ -287,7 +287,7 @@ fn draw_row(row: &Row, x: f32, w: f32, cy: f32, max_y: f32, fonts: &Fonts, m: &M
 
 /// Formats a `(item, quantity)` cost list, tagged `(have/need)` — same
 /// convention as `ui.rs::cost_display`.
-fn cost_display(cost: &[(ItemId, u32)], inventory: &[(ItemId, u32)]) -> Vec<String> {
+fn cost_display(game: &Game, cost: &[(ItemId, u32)], inventory: &[(ItemId, u32)]) -> Vec<String> {
     cost.iter()
         .map(|(item, qty)| {
             let have = inventory
@@ -295,7 +295,7 @@ fn cost_display(cost: &[(ItemId, u32)], inventory: &[(ItemId, u32)]) -> Vec<Stri
                 .find(|(i, _)| i == item)
                 .map(|(_, q)| *q)
                 .unwrap_or(0);
-            format!("{} ({have}/{qty})", item.display_name())
+            format!("{} ({have}/{qty})", game.item_name(item))
         })
         .collect()
 }
@@ -431,7 +431,13 @@ fn draw_playing_base(app: &mut App, fx: &Fx, fonts: &Fonts, m: &Metrics) {
     }
     draw_rectangle_lines(0.0, 0.0, map_w, map_h, 2.0, BORDER);
 
-    draw_status_panel(map_w, 0.0, screen_width() - map_w, map_h, &status, fonts, m);
+    draw_status_panel(
+        Rect::new(map_w, 0.0, screen_width() - map_w, map_h),
+        &status,
+        game,
+        fonts,
+        m,
+    );
 
     let log_y = map_h;
     let log_h = screen_height() - map_h;
@@ -460,14 +466,13 @@ fn draw_playing_base(app: &mut App, fx: &Fx, fonts: &Fonts, m: &Metrics) {
 }
 
 fn draw_status_panel(
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
+    rect: Rect,
     status: &feral_processes_engine::PlayerStatus,
+    game: &Game,
     fonts: &Fonts,
     m: &Metrics,
 ) {
+    let Rect { x, y, w, h } = rect;
     draw_rectangle(x, y, w, h, PANEL_BG);
     draw_rectangle_lines(x, y, w, h, 2.0, BORDER);
 
@@ -580,7 +585,7 @@ fn draw_status_panel(
             break;
         }
         fonts.ui(
-            format!("{} x{}", item.display_name(), qty),
+            format!("{} x{}", game.item_name(item), qty),
             x + m.inset,
             cy,
             m.font_size,
@@ -684,12 +689,20 @@ fn draw_mode_overlay(app: &mut App, fonts: &Fonts, m: &Metrics) {
             m,
         ),
         Mode::Craft => draw_craft_menu(game, selected, fonts, m),
-        Mode::CraftQuantity => {
-            draw_craft_quantity(game, app.pending_craft, &app.craft_quantity_input, fonts, m)
-        }
-        Mode::EraseQuantity => {
-            draw_erase_quantity(game, app.pending_erase, &app.erase_quantity_input, fonts, m)
-        }
+        Mode::CraftQuantity => draw_craft_quantity(
+            game,
+            app.pending_craft.clone(),
+            &app.craft_quantity_input,
+            fonts,
+            m,
+        ),
+        Mode::EraseQuantity => draw_erase_quantity(
+            game,
+            app.pending_erase.clone(),
+            &app.erase_quantity_input,
+            fonts,
+            m,
+        ),
         Mode::Cronjob => draw_worker_menu(
             game,
             "Assign Cronjob",
@@ -739,10 +752,12 @@ fn draw_mode_overlay(app: &mut App, fonts: &Fonts, m: &Metrics) {
             let zone = game.player_status().zone;
             let fusion_tier = app
                 .pending_inventory_item
+                .clone()
                 .map(|item| game.item_fusion_tier(item))
                 .unwrap_or(0);
             draw_inventory_item_action(
-                app.pending_inventory_item,
+                game,
+                app.pending_inventory_item.clone(),
                 zone,
                 fusion_tier,
                 selected,
@@ -768,7 +783,7 @@ fn draw_mode_overlay(app: &mut App, fonts: &Fonts, m: &Metrics) {
         Mode::TradeQuantity => draw_trade_quantity_menu(
             game,
             app.pending_trade_structure,
-            app.pending_trade_choice,
+            app.pending_trade_choice.clone(),
             &app.trade_quantity_input,
             fonts,
             m,
@@ -796,7 +811,7 @@ fn draw_build_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics)
     ];
     for (i, def) in defs.iter().enumerate() {
         let raw_cost = game.structure_build_cost(def);
-        let cost = cost_display(&raw_cost, &status.inventory);
+        let cost = cost_display(game, &raw_cost, &status.inventory);
         rows.push(item_row(
             format!("[{}] {} - {}", menu_shortcut(i), def.name, cost.join(", ")),
             i == selected,
@@ -814,12 +829,12 @@ fn draw_craft_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics)
         text_row(""),
     ];
     for (i, recipe) in recipes.iter().enumerate() {
-        let cost = cost_display(&recipe.cost, &status.inventory);
+        let cost = cost_display(game, &recipe.cost, &status.inventory);
         rows.push(item_row(
             format!(
                 "[{}] {} - {}",
                 menu_shortcut(i),
-                recipe.result.display_name(),
+                game.item_name(&recipe.result),
                 cost.join(", ")
             ),
             i == selected,
@@ -842,11 +857,11 @@ fn draw_craft_quantity(
         .into_iter()
         .find(|r| r.result == result);
     let mut rows = vec![
-        text_row(format!("Compile how many {}?", result.display_name())),
+        text_row(format!("Compile how many {}?", game.item_name(&result))),
         text_row(""),
     ];
     if let Some(recipe) = &recipe {
-        let cost = cost_display(&recipe.cost, &status.inventory);
+        let cost = cost_display(game, &recipe.cost, &status.inventory);
         rows.push(text_row(format!("Cost per unit: {}", cost.join(", "))));
         rows.push(text_row(""));
     }
@@ -890,7 +905,7 @@ fn draw_erase_quantity(
         quantity_input.to_string()
     };
     let rows = vec![
-        text_row(format!("Erase how many {}?", item.display_name())),
+        text_row(format!("Erase how many {}?", game.item_name(&item))),
         text_row(""),
         text_row(format!("Quantity: {shown}")),
         text_row(""),
@@ -1072,7 +1087,7 @@ fn draw_symlink_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metric
     }
     for (i, t) in targets.iter().enumerate() {
         let raw_cost = game.symlink_cost(t.entity).unwrap_or_default();
-        let cost = cost_display(&raw_cost, &status.inventory);
+        let cost = cost_display(game, &raw_cost, &status.inventory);
         let durability = t
             .durability
             .map(|(hp, max)| format!(" [HP {hp}/{max}]"))
@@ -1179,7 +1194,7 @@ fn draw_inspect_detail(game: &mut Game, entity: Option<Entity>, fonts: &Fonts, m
         }
     )));
     if let Some(res) = view.work_resource {
-        rows.push(text_row(format!("Work aptitude: {}", res.display_name())));
+        rows.push(text_row(format!("Work aptitude: {}", game.item_name(&res))));
     }
     rows.push(text_row(""));
     rows.push(text_row("Press any key to go back, Esc to close"));
@@ -1198,9 +1213,9 @@ fn draw_inventory(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) 
         ),
         text_row(""),
         text_row("Equipped (number to unequip):"),
-        equipped_row(1, "Weapon", status.weapon, selected == 0),
-        equipped_row(2, "Armor", status.armor, selected == 1),
-        equipped_row(3, "Module", status.module, selected == 2),
+        equipped_row(1, "Weapon", status.weapon.clone(), selected == 0, game),
+        equipped_row(2, "Armor", status.armor.clone(), selected == 1, game),
+        equipped_row(3, "Module", status.module.clone(), selected == 2, game),
         text_row(""),
         text_row(format!(
             "Inventory - Buffer {}/{} (row key to equip/fuse/erase):",
@@ -1211,12 +1226,13 @@ fn draw_inventory(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) 
         rows.push(text_row("(empty)"));
     }
     for (i, (item, qty)) in status.inventory.iter().enumerate() {
-        let tag = equip_preview_tag(*item, status.zone, game.item_fusion_tier(*item));
+        let fusion_tier = game.item_fusion_tier(item.clone());
+        let tag = equip_preview_tag(game, item, status.zone, fusion_tier);
         rows.push(item_row(
             format!(
                 "[{}] {} x{}{}",
                 menu_shortcut(i + 3),
-                item.display_name(),
+                game.item_name(item),
                 qty,
                 tag
             ),
@@ -1233,8 +1249,8 @@ fn draw_inventory(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) 
 /// equip it (see `Game::equip`), so this previews that same number rather
 /// than a flat, unscaled base value. Empty string for a non-equippable
 /// item (in place of the old generic "(equippable)" tag).
-fn equip_preview_tag(item: ItemId, zone_level: u32, fusion_tier: u32) -> String {
-    let Some((_, base_mods)) = item.equipment() else {
+fn equip_preview_tag(game: &Game, item: &ItemId, zone_level: u32, fusion_tier: u32) -> String {
+    let Some((_, base_mods)) = game.equipment_of(item) else {
         return String::new();
     };
     let mods = base_mods
@@ -1261,8 +1277,9 @@ fn equipped_row(
     label: &str,
     equipped: Option<feral_processes_engine::components::EquippedItem>,
     selected: bool,
+    game: &Game,
 ) -> Row {
-    match equipped.and_then(|e| e.item.equipment().map(|(_, mods)| (e, mods))) {
+    match equipped.and_then(|e| game.equipment_of(&e.item).map(|(_, mods)| (e, mods))) {
         Some((equipped, mods)) => {
             let mods = mods
                 .scaled_for_level(equipped.level)
@@ -1292,7 +1309,7 @@ fn equipped_row(
             item_row(
                 format!(
                     "[{num}] {label}: {}{note} ({})",
-                    equipped.item.display_name(),
+                    game.item_name(&equipped.item),
                     parts.join(" ")
                 ),
                 selected,
@@ -1303,6 +1320,7 @@ fn equipped_row(
 }
 
 fn draw_inventory_item_action(
+    game: &Game,
     item: Option<ItemId>,
     zone_level: u32,
     fusion_tier: u32,
@@ -1322,11 +1340,11 @@ fn draw_inventory_item_action(
     };
     let title = format!(
         "{}{}",
-        item.display_name(),
-        equip_preview_tag(item, zone_level, fusion_tier)
+        game.item_name(&item),
+        equip_preview_tag(game, &item, zone_level, fusion_tier)
     );
     let mut rows = vec![Row::TextColored(title, TEXT), text_row("")];
-    for (i, (_, label)) in inventory_item_actions(item).iter().enumerate() {
+    for (i, (_, label)) in inventory_item_actions(game, &item).iter().enumerate() {
         rows.push(item_row(label.clone(), i == selected));
     }
     rows.push(text_row(""));
@@ -1554,11 +1572,12 @@ fn draw_trade_action_menu(
         return;
     };
     let inventory = game.player_status().inventory;
+    let currency = game.currency();
 
     let mut rows = vec![Row::TextColored("Sell (from inventory):".to_string(), TEXT)];
     let sellable: Vec<_> = inventory
         .iter()
-        .filter(|(item, _)| *item != ItemId::CoreFragment)
+        .filter(|(item, _)| *item != currency)
         .collect();
     if sellable.is_empty() {
         rows.push(text_row("(nothing to sell)"));
@@ -1569,7 +1588,7 @@ fn draw_trade_action_menu(
             format!(
                 "[{}] Sell {} x{qty} ({} Core Fragments each)",
                 menu_shortcut(idx),
-                item.display_name(),
+                game.item_name(item),
                 trade.sell_rate
             ),
             idx == selected,
@@ -1583,7 +1602,7 @@ fn draw_trade_action_menu(
             format!(
                 "[{}] Buy {} ({cost} Core Fragments each)",
                 menu_shortcut(idx),
-                item.display_name()
+                game.item_name(item)
             ),
             idx == selected,
         ));
@@ -1626,7 +1645,7 @@ fn draw_trade_quantity_menu(
         quantity_input
     };
     let rows = vec![
-        text_row(format!("{verb} how many {}?", item.display_name())),
+        text_row(format!("{verb} how many {}?", game.item_name(&item))),
         text_row(""),
         text_row(format!("Price: {unit_price} Core Fragments each")),
         text_row(""),
@@ -1673,19 +1692,18 @@ fn draw_perks_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics)
 }
 
 fn draw_research_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
+    let research_currency = game.research_currency();
     let held = game
         .player_status()
         .inventory
         .iter()
-        .find(|(item, _)| *item == ItemId::ResearchData)
+        .find(|(item, _)| *item == research_currency)
         .map(|(_, n)| *n)
         .unwrap_or(0);
+    let bank_limit = game.bank_limit_of(&research_currency).unwrap_or(0);
     let nodes = game.research_nodes();
     let mut rows = vec![
-        Row::TextColored(
-            format!("Research Data: {held}/{}", RESEARCH_DATA_BANK_LIMIT),
-            CYAN,
-        ),
+        Row::TextColored(format!("Research Data: {held}/{bank_limit}"), CYAN),
         text_row(""),
     ];
     for (i, node) in nodes.iter().enumerate() {

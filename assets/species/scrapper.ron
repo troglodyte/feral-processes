@@ -13,7 +13,7 @@
         (name: "Ram", power: 8),
         (name: "Shock", power: 11),
     ],
-    work_resource: Some(PowerCell),
-    equipment_drop: Some((OverclockCore, 0.15)),
+    work_resource: Some("power_cell"),
+    equipment_drop: Some(("overclock_core", 0.15)),
     can_nest: true,
 )

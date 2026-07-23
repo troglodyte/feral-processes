@@ -3,6 +3,6 @@
     name: "Research Node",
     glyph: 'R',
     color: Cyan,
-    build_cost: [(CoreFragment, 10)],
-    work: Some((produces: ResearchData, ticks_per_unit: 14, capacity: 4, level: Some(1))),
+    build_cost: [("core_fragment", 10)],
+    work: Some((produces: "research_data", ticks_per_unit: 14, capacity: 4, level: Some(1))),
 )

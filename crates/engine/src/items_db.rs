@@ -5,7 +5,7 @@ use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
 
 use crate::components::BuffKind;
-use crate::items::{EquipmentSlot, EquipmentStats};
+use crate::items::{EquipmentSlot, EquipmentStats, ItemId};
 
 /// A singleton economy anchor. The game has exactly one item per role;
 /// engine logic queries "the item with role X" instead of naming an id.
@@ -43,12 +43,12 @@ pub struct PrebattleBuff {
 /// replacing the two formerly-hardcoded starter recipes.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CraftableDef {
-    pub cost: Vec<(String, u32)>,
+    pub cost: Vec<(ItemId, u32)>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ItemDef {
-    pub id: String,
+    pub id: ItemId,
     pub name: String,
     #[serde(default)]
     pub bank_limit: Option<u32>,
@@ -67,9 +67,9 @@ pub struct ItemDef {
 #[derive(Resource, Default)]
 pub struct ItemDb {
     items: HashMap<String, ItemDef>,
-    currency: Option<String>,
-    research_currency: Option<String>,
-    craft_currency: Option<String>,
+    currency: Option<ItemId>,
+    research_currency: Option<ItemId>,
+    craft_currency: Option<ItemId>,
 }
 
 impl ItemDb {
@@ -103,7 +103,7 @@ impl ItemDb {
                             *slot = Some(def.id.clone());
                         }
                     }
-                    db.items.insert(def.id.clone(), def);
+                    db.items.insert(def.id.0.clone(), def);
                 }
                 Err(e) => warnings.push(format!("skipped invalid item file {path:?}: {e}")),
             }
@@ -117,19 +117,19 @@ impl ItemDb {
 
     pub fn all(&self) -> impl Iterator<Item = &ItemDef> {
         let mut defs: Vec<&ItemDef> = self.items.values().collect();
-        defs.sort_by(|a, b| a.id.cmp(&b.id));
+        defs.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
         defs.into_iter()
     }
 
-    pub fn currency(&self) -> Option<&String> {
+    pub fn currency(&self) -> Option<&ItemId> {
         self.currency.as_ref()
     }
 
-    pub fn research_currency(&self) -> Option<&String> {
+    pub fn research_currency(&self) -> Option<&ItemId> {
         self.research_currency.as_ref()
     }
 
-    pub fn craft_currency(&self) -> Option<&String> {
+    pub fn craft_currency(&self) -> Option<&ItemId> {
         self.craft_currency.as_ref()
     }
 
@@ -189,9 +189,15 @@ mod tests {
             db.missing_roles().is_empty(),
             "all three roles must be held"
         );
-        assert_eq!(db.currency().unwrap(), "core_fragment");
-        assert_eq!(db.research_currency().unwrap(), "research_data");
-        assert_eq!(db.craft_currency().unwrap(), "portal_fragment");
+        assert_eq!(db.currency().unwrap(), &ItemId::from("core_fragment"));
+        assert_eq!(
+            db.research_currency().unwrap(),
+            &ItemId::from("research_data")
+        );
+        assert_eq!(
+            db.craft_currency().unwrap(),
+            &ItemId::from("portal_fragment")
+        );
         assert_eq!(db.get("research_data").unwrap().bank_limit, Some(200));
         assert_eq!(db.get("ice_breaker").unwrap().taming_potency, Some(0.4));
         assert_eq!(db.get("power_cell").unwrap().consume.unwrap().power, 25.0);

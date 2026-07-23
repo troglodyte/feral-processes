@@ -14,5 +14,5 @@
         (name: "Kernel Panic", power: 12),
     ],
     work_resource: None,
-    equipment_drop: Some((AblativePlating, 0.3)),
+    equipment_drop: Some(("ablative_plating", 0.3)),
 )

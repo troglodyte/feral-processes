@@ -127,10 +127,13 @@ impl EquipmentSlot {
 /// Flat stat bonuses an equipped item grants while worn, at gear level 1
 /// (base). See `GEAR_LEVEL_GROWTH`/`EquipmentStats::scaled_for_level` for
 /// how a higher gear level scales these up.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct EquipmentStats {
+    #[serde(default)]
     pub atk: i32,
+    #[serde(default)]
     pub def: i32,
+    #[serde(default)]
     pub decompiler: i32,
 }
 
@@ -283,5 +286,14 @@ mod tests {
                 item.display_name()
             );
         }
+    }
+
+    #[test]
+    fn equipment_stats_round_trip_ron_with_omitted_zero_fields() {
+        let full: EquipmentStats = ron::from_str("(atk: 3, def: 0, decompiler: 0)").unwrap();
+        assert_eq!((full.atk, full.def, full.decompiler), (3, 0, 0));
+        // Zero fields may be omitted thanks to per-field serde defaults.
+        let partial: EquipmentStats = ron::from_str("(atk: 4)").unwrap();
+        assert_eq!((partial.atk, partial.def, partial.decompiler), (4, 0, 0));
     }
 }

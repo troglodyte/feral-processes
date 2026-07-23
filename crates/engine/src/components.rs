@@ -395,7 +395,7 @@ pub struct StatusEffects {
 
 /// Which stat a companion's rally/shield temporarily boosts — see
 /// `PlayerBuff`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BuffKind {
     Atk,
     Def,

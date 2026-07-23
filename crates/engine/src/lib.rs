@@ -7664,7 +7664,7 @@ mod tests {
     /// player's own tile, suitable to pass straight into `start_battle` —
     /// mirrors `spawn_tamed`'s pattern but without `Tamed`/`Experience`,
     /// since a wild pack member has neither.
-    fn spawn_wild_in_front_of_player(game: &mut Game) -> Entity {
+    fn spawn_wild_on_player_tile(game: &mut Game) -> Entity {
         let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
         let species = game
             .species_defs()
@@ -12090,7 +12090,7 @@ mod tests {
             power: 5,
         });
 
-        let wild = spawn_wild_in_front_of_player(&mut game);
+        let wild = spawn_wild_on_player_tile(&mut game);
         game.start_battle(vec![wild]);
 
         let buff = game.world.get::<PlayerBuff>(player).unwrap().active;

@@ -1643,6 +1643,33 @@ impl Game {
         }
     }
 
+    /// Peeks `slot`'s occupant and its base `EquipmentStats` without
+    /// mutating anything, erroring if the occupant's id no longer resolves
+    /// in `ItemDb` (a save naming a since-removed mod item). `equip` and
+    /// `unequip` both resolve the outgoing item this way *before* touching
+    /// the slot, so a refusal can't strand gear outside both `Equipment`
+    /// and `Inventory`.
+    fn slot_occupant_with_mods(
+        &self,
+        player: Entity,
+        slot: EquipmentSlot,
+    ) -> Result<Option<(EquippedItem, EquipmentStats)>, String> {
+        let Some(equipped) = self
+            .world
+            .get::<Equipment>(player)
+            .and_then(|e| e.get(slot))
+        else {
+            return Ok(None);
+        };
+        let Some((_, base_mods)) = self.equipment_of(&equipped.item) else {
+            return Err(format!(
+                "Your equipped {} is missing from the item set and can't be moved.",
+                self.item_name(&equipped.item)
+            ));
+        };
+        Ok(Some((equipped, base_mods)))
+    }
+
     /// Equips `item` from inventory into its slot, swapping out (and
     /// returning to inventory) whatever was there before. The bonus applied
     /// is scaled for the current `resources::ZoneLevel` — see
@@ -1656,6 +1683,10 @@ impl Game {
             return Err(format!("{} can't be equipped.", self.item_name(&item)));
         };
         let player = self.player_entity();
+        // The outgoing item's bonus must resolve before anything moves: a
+        // refusal after the swap would leave it in neither Equipment nor
+        // Inventory, destroying it.
+        let outgoing = self.slot_occupant_with_mods(player, slot)?;
         let taken = self
             .world
             .get_mut::<Inventory>(player)
@@ -1671,18 +1702,15 @@ impl Game {
             .map(|f| f.tier(item.clone()))
             .unwrap_or(0);
 
-        let old_item = {
+        {
             let mut equipment = self.world.get_mut::<Equipment>(player).unwrap();
-            equipment.slot_mut(slot).replace(EquippedItem {
+            *equipment.slot_mut(slot) = Some(EquippedItem {
                 item: item.clone(),
                 level,
                 fusion_tier,
-            })
-        };
-        if let Some(old) = old_item {
-            let (_, old_base_mods) = self
-                .equipment_of(&old.item)
-                .ok_or_else(|| format!("{} can't be equipped.", self.item_name(&old.item)))?;
+            });
+        }
+        if let Some((old, old_base_mods)) = outgoing {
             self.apply_equipment_delta(
                 player,
                 old_base_mods
@@ -1725,27 +1753,17 @@ impl Game {
             return Err("Can't do that right now.".into());
         }
         let player = self.player_entity();
-        // Room must be checked before the item leaves its Equipment slot: a
-        // refusal after removal would leave the gear in neither place,
+        // Every refusal must come before the item leaves its Equipment slot:
+        // a refusal after removal would leave the gear in neither place,
         // destroying it.
-        let equipped_item = self
-            .world
-            .get::<Equipment>(player)
-            .and_then(|e| e.get(slot))
-            .map(|eq| eq.item);
-        if let Some(item) = equipped_item {
-            self.check_room(item, 1)?;
-        }
-        let removed = {
-            let mut equipment = self.world.get_mut::<Equipment>(player).unwrap();
-            equipment.slot_mut(slot).take()
-        };
-        let Some(equipped) = removed else {
+        let Some((equipped, base_mods)) = self.slot_occupant_with_mods(player, slot)? else {
             return Err(format!("Nothing equipped in your {} slot.", slot.label()));
         };
-        let (_, base_mods) = self
-            .equipment_of(&equipped.item)
-            .ok_or_else(|| format!("{} can't be equipped.", self.item_name(&equipped.item)))?;
+        self.check_room(equipped.item.clone(), 1)?;
+        {
+            let mut equipment = self.world.get_mut::<Equipment>(player).unwrap();
+            *equipment.slot_mut(slot) = None;
+        }
         self.apply_equipment_delta(
             player,
             base_mods
@@ -6553,17 +6571,45 @@ mod tests {
         // the id by the time the player tries to unequip it.
         let mut game = Game::new(712, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
+        let broken = ItemId::from("a_removed_mod_item");
         game.world.get_mut::<Equipment>(player).unwrap().weapon = Some(EquippedItem {
-            item: ItemId::from("a_removed_mod_item"),
+            item: broken.clone(),
             level: 1,
             fusion_tier: 0,
         });
+        let inventory_before = game.world.get::<Inventory>(player).unwrap().items.clone();
+        let stats_before = {
+            let stats = game.world.get::<Stats>(player).unwrap();
+            (stats.atk, stats.def)
+        };
+        let decompiler_before = game.world.get::<Decompiler>(player).map(|d| d.skill);
 
         let result = game.unequip(EquipmentSlot::Weapon);
 
         assert!(
             result.is_err(),
             "unequipping an item absent from ItemDb should error, not panic"
+        );
+        assert_eq!(
+            game.player_status().weapon.map(|eq| eq.item),
+            Some(broken),
+            "a refused unequip must leave the item in its slot, not destroy it"
+        );
+        assert_eq!(
+            game.world.get::<Inventory>(player).unwrap().items,
+            inventory_before,
+            "a refused unequip must not touch the inventory"
+        );
+        let stats_after = game.world.get::<Stats>(player).unwrap();
+        assert_eq!(
+            (stats_after.atk, stats_after.def),
+            stats_before,
+            "a refused unequip must not alter stats"
+        );
+        assert_eq!(
+            game.world.get::<Decompiler>(player).map(|d| d.skill),
+            decompiler_before,
+            "a refused unequip must not alter decompiler skill"
         );
     }
 
@@ -6574,8 +6620,9 @@ mod tests {
         // slot whose old occupant's data is gone.
         let mut game = Game::new(713, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
+        let broken = ItemId::from("a_removed_mod_item");
         game.world.get_mut::<Equipment>(player).unwrap().weapon = Some(EquippedItem {
-            item: ItemId::from("a_removed_mod_item"),
+            item: broken.clone(),
             level: 1,
             fusion_tier: 0,
         });
@@ -6583,12 +6630,39 @@ mod tests {
             .get_mut::<Inventory>(player)
             .unwrap()
             .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
+        let inventory_before = game.world.get::<Inventory>(player).unwrap().items.clone();
+        let stats_before = {
+            let stats = game.world.get::<Stats>(player).unwrap();
+            (stats.atk, stats.def)
+        };
+        let decompiler_before = game.world.get::<Decompiler>(player).map(|d| d.skill);
 
         let result = game.equip(ItemId::from(ids::OVERCLOCK_CORE));
 
         assert!(
             result.is_err(),
             "equipping over a slot whose old item is absent from ItemDb should error, not panic"
+        );
+        assert_eq!(
+            game.player_status().weapon.map(|eq| eq.item),
+            Some(broken),
+            "a refused equip must leave the old item in its slot, not destroy it"
+        );
+        assert_eq!(
+            game.world.get::<Inventory>(player).unwrap().items,
+            inventory_before,
+            "a refused equip must not consume the new item from inventory"
+        );
+        let stats_after = game.world.get::<Stats>(player).unwrap();
+        assert_eq!(
+            (stats_after.atk, stats_after.def),
+            stats_before,
+            "a refused equip must not alter stats"
+        );
+        assert_eq!(
+            game.world.get::<Decompiler>(player).map(|d| d.skill),
+            decompiler_before,
+            "a refused equip must not alter decompiler skill"
         );
     }
 

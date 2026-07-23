@@ -1,0 +1,7 @@
+(
+    id: "probe_daemon",
+    name: "Probe Daemon",
+    equipment: Some((Module, (decompiler: 1))),
+    craftable: Some((cost: [("core_fragment", 5)])),
+    droppable: Some([("sprite", 0.09), ("glitch", 0.07)]),
+)

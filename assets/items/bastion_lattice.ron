@@ -1,0 +1,7 @@
+(
+    id: "bastion_lattice",
+    name: "Bastion Lattice",
+    equipment: Some((Armor, (def: 4))),
+    craftable: Some((cost: [("portal_fragment", 16)], requires_structure: Some("armory"))),
+    droppable: Some([("sentinel", 0.08), ("rootkit", 0.06)]),
+)

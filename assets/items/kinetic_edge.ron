@@ -1,0 +1,7 @@
+(
+    id: "kinetic_edge",
+    name: "Kinetic Edge",
+    equipment: Some((Weapon, (atk: 2))),
+    craftable: Some((cost: [("core_fragment", 7)])),
+    droppable: Some([("sub_process", 0.1), ("glitch", 0.08)]),
+)

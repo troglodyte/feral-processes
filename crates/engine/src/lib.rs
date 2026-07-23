@@ -1582,19 +1582,24 @@ impl Game {
         Ok(())
     }
 
-    /// The full list of things the player can compile right now: the
-    /// always-available starter recipes (every item declaring a `craftable`
-    /// def, see `assets/items/*.ron`), plus every recipe from an unlocked
-    /// research node whose bench (`ResearchRecipe::requires_structure`) is
-    /// currently deployed. Recipe data lives in `assets/{items,research}/*.ron`
-    /// so a mod can add one without touching Rust.
+    /// The full list of things the player can compile right now: every item
+    /// declaring a `craftable` def (see `assets/items/*.ron`) whose bench, if
+    /// it names one, is deployed, plus every recipe from an unlocked research
+    /// node whose bench (`ResearchRecipe::requires_structure`) is currently
+    /// deployed. Recipe data lives in `assets/{items,research}/*.ron` so a mod
+    /// can add one without touching Rust.
     pub fn craft_recipes(&self) -> Vec<CraftRecipe> {
         let mut recipes: Vec<CraftRecipe> = self
             .world
             .resource::<ItemDb>()
             .all()
             .filter_map(|def| {
-                def.craftable.as_ref().map(|c| CraftRecipe {
+                let c = def.craftable.as_ref()?;
+                let bench_ready = c
+                    .requires_structure
+                    .as_ref()
+                    .is_none_or(|s| self.has_structure(s));
+                bench_ready.then(|| CraftRecipe {
                     result: def.id.clone(),
                     cost: c.cost.clone(),
                 })
@@ -2641,6 +2646,33 @@ impl Game {
             })
     }
 
+    /// Every gear drop `species` can roll, from both directions the schema
+    /// allows it to be declared: the species' own `equipment_drop`, plus
+    /// every item whose `droppable` names this species. An item declared on
+    /// both sides is rolled once at the better chance rather than twice.
+    /// Sorted by item id so a seeded run always consumes its rolls in the
+    /// same order.
+    fn equipment_drops_for(&self, species: &SpeciesDef) -> Vec<(ItemId, f32)> {
+        let mut drops: Vec<(ItemId, f32)> = species.equipment_drop.iter().cloned().collect();
+        for def in self.world.resource::<ItemDb>().all() {
+            let Some(sources) = &def.droppable else {
+                continue;
+            };
+            for chance in sources
+                .iter()
+                .filter(|(id, _)| *id == species.id)
+                .map(|&(_, chance)| chance)
+            {
+                match drops.iter_mut().find(|(id, _)| *id == def.id) {
+                    Some(existing) => existing.1 = existing.1.max(chance),
+                    None => drops.push((def.id.clone(), chance)),
+                }
+            }
+        }
+        drops.sort_by(|a, b| a.0.as_str().cmp(b.0.as_str()));
+        drops
+    }
+
     /// Defeated (not tamed) rogue programs drop whatever resource their
     /// species is associated with, if any — the same `work_resource` used
     /// to decide what a tamed member of that species can gather.
@@ -2652,7 +2684,7 @@ impl Game {
             return;
         };
 
-        if let Some(resource) = species.work_resource {
+        if let Some(resource) = &species.work_resource {
             let qty = {
                 let mut rng = self.world.resource_mut::<GameRng>();
                 rng.0.random_range(1..=2)
@@ -2661,15 +2693,15 @@ impl Game {
             if landed > 0 {
                 self.log_kind(
                     MessageKind::Loot,
-                    format!("It drops {} {}.", landed, self.item_name(&resource)),
+                    format!("It drops {} {}.", landed, self.item_name(resource)),
                 );
             }
         }
 
-        if let Some((item, chance)) = species.equipment_drop {
+        for (item, chance) in self.equipment_drops_for(&species) {
             let roll = {
                 let mut rng = self.world.resource_mut::<GameRng>();
-                rng.0.random_bool(chance as f64)
+                rng.0.random_bool(chance.clamp(0.0, 1.0) as f64)
             };
             if roll && self.grant_loot(item.clone(), 1) > 0 {
                 self.log_kind(
@@ -5353,13 +5385,33 @@ mod tests {
         );
     }
 
+    /// Everything compilable from turn one: the two consumable starters plus
+    /// the Scavenged gear tier, which declares a `craftable` with no
+    /// `requires_structure`. Anything else must be gated behind research, a
+    /// bench, or both — so this set is pinned rather than counted.
     #[test]
-    fn the_two_starter_recipes_need_no_research() {
+    fn only_the_starters_and_scavenged_gear_need_no_research_or_bench() {
         let game = Game::new(80, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        let results: Vec<ItemId> = game.craft_recipes().into_iter().map(|r| r.result).collect();
-        assert!(results.contains(&ItemId::from(ids::ICE_BREAKER)));
-        assert!(results.contains(&ItemId::from(ids::POWER_CELL)));
-        assert_eq!(results.len(), 2, "nothing else is free");
+        let mut results: Vec<String> = game
+            .craft_recipes()
+            .into_iter()
+            .map(|r| r.result.as_str().to_string())
+            .collect();
+        results.sort();
+        assert_eq!(
+            results,
+            [
+                "handshake_forge",
+                "ice_breaker",
+                "kinetic_edge",
+                "packet_buffer",
+                "power_cell",
+                "probe_daemon",
+                "scrap_ward",
+                "shiv_routine",
+            ],
+            "nothing else is free"
+        );
     }
 
     #[test]
@@ -5402,6 +5454,99 @@ mod tests {
             !results.contains(&ItemId::from(ids::OVERCLOCK_CORE)),
             "the Fabricator is a bench now, not an unlock"
         );
+    }
+
+    /// The Standard/Premium gear tiers declare their own recipe with a
+    /// `requires_structure` bench and no research node of their own. Building
+    /// the bench is the whole unlock — but it is still a real gate.
+    #[test]
+    fn an_item_declared_recipe_stays_hidden_until_its_bench_is_built() {
+        let mut game = Game::new(90, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let arc_lance = ItemId::from("arc_lance");
+
+        assert!(
+            !game.craft_recipes().iter().any(|r| r.result == arc_lance),
+            "a bench-gated item recipe must not be free from turn one"
+        );
+
+        // The Fabricator itself is research-gated; that gates the bench, not
+        // the recipe, which has no research node of its own.
+        unlock_research_chain(&mut game, "weapon_bench");
+        place_home(&mut game, 1, 0);
+        let player = game.player_entity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::from(ids::CORE_FRAGMENT), 200);
+        game.place_structure("fabricator", 0, 1).unwrap();
+
+        assert!(
+            game.craft_recipes().iter().any(|r| r.result == arc_lance),
+            "standing the bench should be enough — no research node names this recipe"
+        );
+    }
+
+    /// Gear sources can be declared from either side. Both are honoured, an
+    /// item named twice is rolled once at the better chance, and the list is
+    /// ordered so a seeded run always spends its rolls the same way.
+    #[test]
+    fn equipment_drops_merge_both_declaration_sides_taking_the_better_chance() {
+        let game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let mut scrapper = game
+            .species_defs()
+            .into_iter()
+            .find(|s| s.id == "scrapper")
+            .expect("scrapper ships");
+        let arc_lance = ItemId::from("arc_lance");
+        let chance_of = |drops: &[(ItemId, f32)], id: &ItemId| {
+            drops
+                .iter()
+                .find(|(i, _)| i == id)
+                .unwrap_or_else(|| panic!("{} should be droppable here", id.as_str()))
+                .1
+        };
+
+        // Item side alone: arc_lance.ron names scrapper.
+        let drops = game.equipment_drops_for(&scrapper);
+        assert_eq!(chance_of(&drops, &arc_lance), 0.1);
+        let mut sorted = drops.clone();
+        sorted.sort_by(|a, b| a.0.as_str().cmp(b.0.as_str()));
+        assert_eq!(drops, sorted, "roll order must be deterministic");
+
+        // Declared on both sides: one entry, the better chance.
+        scrapper.equipment_drop = Some((arc_lance.clone(), 0.5));
+        let drops = game.equipment_drops_for(&scrapper);
+        assert_eq!(
+            drops.iter().filter(|(i, _)| *i == arc_lance).count(),
+            1,
+            "declared twice, rolled once"
+        );
+        assert_eq!(chance_of(&drops, &arc_lance), 0.5);
+
+        // The weaker of the two loses, whichever side it came from.
+        scrapper.equipment_drop = Some((arc_lance.clone(), 0.02));
+        let drops = game.equipment_drops_for(&scrapper);
+        assert_eq!(chance_of(&drops, &arc_lance), 0.1);
+    }
+
+    /// A species-side `equipment_drop` is legacy but still supported, so a
+    /// third-party species mod that predates item-side `droppable` keeps
+    /// dropping what it always did.
+    #[test]
+    fn a_species_side_equipment_drop_still_works_on_its_own() {
+        let game = Game::new(92, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let mut sprite = game
+            .species_defs()
+            .into_iter()
+            .find(|s| s.id == "sprite")
+            .expect("sprite ships");
+        // Nothing names power_cell in a `droppable`, so this can only arrive
+        // from the species side.
+        let power_cell = ItemId::from(ids::POWER_CELL);
+        sprite.equipment_drop = Some((power_cell.clone(), 0.25));
+
+        let drops = game.equipment_drops_for(&sprite);
+        assert!(drops.contains(&(power_cell, 0.25)));
     }
 
     #[test]
@@ -5714,8 +5859,8 @@ mod tests {
         let species = game
             .species_defs()
             .into_iter()
-            .find(|s| s.work_resource.is_none() && s.equipment_drop.is_none())
-            .expect("at least one species should have neither a work_resource nor an equipment_drop for this test");
+            .find(|s| s.work_resource.is_none())
+            .expect("at least one species should have no work_resource for this test");
 
         let wild = game
             .world
@@ -5733,22 +5878,31 @@ mod tests {
             ))
             .id();
 
-        // Portal Fragments are a universal drop independent of species, so
-        // count everything *except* those to check the species-specific
-        // channels stayed silent.
-        let count_non_portal = |game: &Game| -> u32 {
+        // Portal Fragments are a universal drop, and gear arrives on its own
+        // `droppable` channel — count neither, so this only measures whether
+        // the absent `work_resource` stayed silent.
+        let count_resources = |game: &Game| -> u32 {
+            let gear_ids: Vec<ItemId> = game
+                .world
+                .resource::<ItemDb>()
+                .all()
+                .filter(|d| d.equipment.is_some())
+                .map(|d| d.id.clone())
+                .collect();
             game.world
                 .get::<Inventory>(player)
                 .unwrap()
                 .items
                 .iter()
-                .filter(|(item, _)| *item != ItemId::from(ids::PORTAL_FRAGMENT))
+                .filter(|(item, _)| {
+                    *item != ItemId::from(ids::PORTAL_FRAGMENT) && !gear_ids.contains(item)
+                })
                 .map(|(_, q)| *q)
                 .sum()
         };
-        let before = count_non_portal(&game);
+        let before = count_resources(&game);
         game.award_loot(wild);
-        let after = count_non_portal(&game);
+        let after = count_resources(&game);
 
         assert_eq!(
             before, after,

@@ -1,0 +1,7 @@
+(
+    id: "wraithsteel_plate",
+    name: "Wraithsteel Plate",
+    equipment: Some((Armor, (def: 3, decompiler: 2))),
+    craftable: Some((cost: [("portal_fragment", 18)], requires_structure: Some("armory"))),
+    droppable: Some([("ghost", 0.06), ("cipher", 0.06)]),
+)

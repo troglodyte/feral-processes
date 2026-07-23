@@ -1,0 +1,7 @@
+(
+    id: "packet_buffer",
+    name: "Packet Buffer",
+    equipment: Some((Armor, (def: 2))),
+    craftable: Some((cost: [("core_fragment", 7)])),
+    droppable: Some([("drone", 0.1), ("sub_process", 0.08)]),
+)

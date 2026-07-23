@@ -1,0 +1,7 @@
+(
+    id: "sync_governor",
+    name: "Sync Governor",
+    equipment: Some((Module, (atk: 1, def: 1, decompiler: 1))),
+    craftable: Some((cost: [("core_fragment", 16)], requires_structure: Some("fabricator"))),
+    droppable: Some([("worm", 0.07), ("trojan", 0.06)]),
+)

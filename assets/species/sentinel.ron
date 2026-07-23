@@ -14,5 +14,4 @@
         (name: "Lockout", power: 7, effect: Some((kind: Stun, chance: 0.3, duration: 1, power: 0))),
     ],
     work_resource: None,
-    equipment_drop: Some(("firewall_plating", 0.35)),
 )

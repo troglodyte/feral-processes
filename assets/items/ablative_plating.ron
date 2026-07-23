@@ -1,1 +1,6 @@
-(id: "ablative_plating", name: "Ablative Plating", equipment: Some((Armor, (def: 4))))
+(
+    id: "ablative_plating",
+    name: "Ablative Plating",
+    equipment: Some((Armor, (def: 4))),
+    droppable: Some([("rootkit", 0.3)]),
+)

@@ -1,0 +1,7 @@
+(
+    id: "shiv_routine",
+    name: "Shiv Routine",
+    equipment: Some((Weapon, (atk: 1))),
+    craftable: Some((cost: [("core_fragment", 4)])),
+    droppable: Some([("sprite", 0.1), ("drone", 0.08)]),
+)

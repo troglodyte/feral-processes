@@ -1,0 +1,7 @@
+(
+    id: "black_ice_pick",
+    name: "Black ICE Pick",
+    equipment: Some((Weapon, (atk: 3, decompiler: 2))),
+    craftable: Some((cost: [("portal_fragment", 18)], requires_structure: Some("fabricator"))),
+    droppable: Some([("cipher", 0.07), ("rootkit", 0.06)]),
+)

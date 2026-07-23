@@ -1,0 +1,7 @@
+(
+    id: "siege_compiler",
+    name: "Siege Compiler",
+    equipment: Some((Weapon, (atk: 3, def: 2))),
+    craftable: Some((cost: [("portal_fragment", 18)], requires_structure: Some("fabricator"))),
+    droppable: Some([("construct", 0.07), ("sentinel", 0.06)]),
+)

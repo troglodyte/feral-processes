@@ -14,6 +14,5 @@
         (name: "Shock", power: 11),
     ],
     work_resource: Some("power_cell"),
-    equipment_drop: Some(("overclock_core", 0.15)),
     can_nest: true,
 )

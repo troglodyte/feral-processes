@@ -1,0 +1,7 @@
+(
+    id: "handshake_forge",
+    name: "Handshake Forge",
+    equipment: Some((Module, (decompiler: 2))),
+    craftable: Some((cost: [("core_fragment", 8)])),
+    droppable: Some([("drone", 0.09), ("sub_process", 0.07)]),
+)

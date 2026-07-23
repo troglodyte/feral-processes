@@ -14,5 +14,4 @@
         (name: "Cross-Reference", power: 9),
     ],
     work_resource: None,
-    equipment_drop: Some(("cortex_hack", 0.35)),
 )

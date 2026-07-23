@@ -14,5 +14,4 @@
         (name: "Lockdown", power: 6, effect: Some((kind: Stun, chance: 0.35, duration: 1, power: 0))),
     ],
     work_resource: Some("core_fragment"),
-    equipment_drop: Some(("overclock_core", 0.3)),
 )

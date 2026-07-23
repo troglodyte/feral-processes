@@ -1,0 +1,7 @@
+(
+    id: "daemon_fang",
+    name: "Daemon Fang",
+    equipment: Some((Weapon, (atk: 2, decompiler: 1))),
+    craftable: Some((cost: [("core_fragment", 14)], requires_structure: Some("fabricator"))),
+    droppable: Some([("worm", 0.09), ("scrapper", 0.07)]),
+)

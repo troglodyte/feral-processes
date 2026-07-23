@@ -53,14 +53,18 @@ is skipped with a warning logged in-game rather than crashing startup.
     // work_resource (above) and equipment_drop (below) both take any item
     // id from assets/items/*.ron — see assets/items/README.md for the
     // schema, and the top-level README's "Item ids" for the full set.
-    // The base roster's ids: core_fragment,
-    // power_cell, ice_breaker, portal_fragment, research_data,
-    // overclock_core, monofilament_whip (Weapon), firewall_plating,
-    // ablative_plating (Armor), neural_amplifier, cortex_hack (Module).
 
     // Optional; omit entirely for no chance of a gear drop. If set, defeating
     // or decompiling this species has a chance (0.0-1.0) to additionally
     // drop one piece of equipment, independent of `work_resource`.
+    //
+    // Prefer the item side for new content: an item's own `droppable` lists
+    // every species that drops it, so adding a piece of gear is one new file
+    // rather than an edit to each species that should drop it. No shipped
+    // species uses `equipment_drop` any more for that reason. It remains
+    // fully supported — a species mod written against it keeps working, and
+    // the two are merged per kill, an item named on both sides being rolled
+    // once at the better chance.
     equipment_drop: Some(("firewall_plating", 0.3)),
 
     // Optional; can be left out entirely (defaults to false). If true, this

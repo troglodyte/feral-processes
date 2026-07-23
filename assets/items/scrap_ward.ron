@@ -1,0 +1,7 @@
+(
+    id: "scrap_ward",
+    name: "Scrap Ward",
+    equipment: Some((Armor, (def: 1))),
+    craftable: Some((cost: [("core_fragment", 4)])),
+    droppable: Some([("glitch", 0.1), ("sprite", 0.08)]),
+)

@@ -1,0 +1,7 @@
+(
+    id: "arc_lance",
+    name: "Arc Lance",
+    equipment: Some((Weapon, (atk: 3))),
+    craftable: Some((cost: [("core_fragment", 12)], requires_structure: Some("fabricator"))),
+    droppable: Some([("scrapper", 0.1), ("worm", 0.08)]),
+)

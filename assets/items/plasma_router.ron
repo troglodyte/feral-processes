@@ -1,0 +1,7 @@
+(
+    id: "plasma_router",
+    name: "Plasma Router",
+    equipment: Some((Weapon, (atk: 4))),
+    craftable: Some((cost: [("portal_fragment", 16)], requires_structure: Some("fabricator"))),
+    droppable: Some([("construct", 0.08), ("virus", 0.06)]),
+)

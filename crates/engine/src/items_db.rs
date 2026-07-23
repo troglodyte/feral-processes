@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::components::BuffKind;
 use crate::items::{EquipmentSlot, EquipmentStats, ItemId};
+use crate::species::SpeciesId;
+use crate::structures::StructureId;
 
 /// A singleton economy anchor. The game has exactly one item per role;
 /// engine logic queries "the item with role X" instead of naming an id.
@@ -39,11 +41,15 @@ pub struct PrebattleBuff {
     pub rounds: u32,
 }
 
-/// An always-available ("starter") craft recipe declared by the item itself,
-/// replacing the two formerly-hardcoded starter recipes.
+/// A craft recipe declared by the item itself, replacing the two
+/// formerly-hardcoded starter recipes. With no `requires_structure` it is
+/// always available; naming a bench gates it on that structure standing,
+/// the same way a researched recipe is gated (see `Game::craft_recipes`).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CraftableDef {
     pub cost: Vec<(ItemId, u32)>,
+    #[serde(default)]
+    pub requires_structure: Option<StructureId>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -62,6 +68,12 @@ pub struct ItemDef {
     pub consume: Option<ConsumeDef>,
     #[serde(default)]
     pub craftable: Option<CraftableDef>,
+    /// Species that drop this item, each with its own 0.0-1.0 chance. The
+    /// inverse of `SpeciesDef::equipment_drop`: an item names its sources
+    /// instead of every species naming the item. Both are honoured and
+    /// merged per kill (see `Game::equipment_drops_for`).
+    #[serde(default)]
+    pub droppable: Option<Vec<(SpeciesId, f32)>>,
 }
 
 impl ItemDef {
@@ -73,6 +85,11 @@ impl ItemDef {
     fn non_finite_field(&self) -> Option<&'static str> {
         if self.taming_potency.is_some_and(|p| !p.is_finite()) {
             return Some("taming_potency");
+        }
+        if let Some(sources) = &self.droppable
+            && sources.iter().any(|(_, chance)| !chance.is_finite())
+        {
+            return Some("droppable chance");
         }
         match self.consume {
             Some(c) if !c.power.is_finite() => Some("consume.power"),
@@ -265,12 +282,41 @@ mod tests {
 
         // (id, slot, atk, def, decompiler) for every equippable that ships.
         let equipment = [
+            // Research-gated tier.
             ("monofilament_whip", EquipmentSlot::Weapon, 4, 0, 0),
             ("overclock_core", EquipmentSlot::Weapon, 3, 0, 0),
             ("firewall_plating", EquipmentSlot::Armor, 0, 3, 0),
             ("ablative_plating", EquipmentSlot::Armor, 0, 4, 0),
             ("neural_amplifier", EquipmentSlot::Module, 0, 0, 2),
             ("cortex_hack", EquipmentSlot::Module, 0, 0, 3),
+            // Scavenged tier — no bench.
+            ("shiv_routine", EquipmentSlot::Weapon, 1, 0, 0),
+            ("kinetic_edge", EquipmentSlot::Weapon, 2, 0, 0),
+            ("scrap_ward", EquipmentSlot::Armor, 0, 1, 0),
+            ("packet_buffer", EquipmentSlot::Armor, 0, 2, 0),
+            ("probe_daemon", EquipmentSlot::Module, 0, 0, 1),
+            ("handshake_forge", EquipmentSlot::Module, 0, 0, 2),
+            // Standard tier — bench, Core Fragments.
+            ("arc_lance", EquipmentSlot::Weapon, 3, 0, 0),
+            ("recursion_blade", EquipmentSlot::Weapon, 2, 1, 0),
+            ("daemon_fang", EquipmentSlot::Weapon, 2, 0, 1),
+            ("hardened_shell", EquipmentSlot::Armor, 0, 3, 0),
+            ("null_weave", EquipmentSlot::Armor, 1, 2, 0),
+            ("static_mesh", EquipmentSlot::Armor, 0, 2, 1),
+            ("trace_sniffer", EquipmentSlot::Module, 0, 0, 3),
+            ("logic_probe", EquipmentSlot::Module, 1, 0, 2),
+            ("entropy_damper", EquipmentSlot::Module, 0, 1, 2),
+            ("sync_governor", EquipmentSlot::Module, 1, 1, 1),
+            // Premium tier — bench, Portal Fragments.
+            ("plasma_router", EquipmentSlot::Weapon, 4, 0, 0),
+            ("black_ice_pick", EquipmentSlot::Weapon, 3, 0, 2),
+            ("siege_compiler", EquipmentSlot::Weapon, 3, 2, 0),
+            ("bastion_lattice", EquipmentSlot::Armor, 0, 4, 0),
+            ("phase_carapace", EquipmentSlot::Armor, 2, 3, 0),
+            ("wraithsteel_plate", EquipmentSlot::Armor, 0, 3, 2),
+            ("kernel_key", EquipmentSlot::Module, 0, 0, 4),
+            ("oracle_core", EquipmentSlot::Module, 2, 0, 3),
+            ("singularity_matrix", EquipmentSlot::Module, 3, 3, 3),
         ];
         for (id, want_slot, atk, def, decompiler) in equipment {
             let (slot, stats) = db.get(id).unwrap().equipment.unwrap();
@@ -286,7 +332,7 @@ mod tests {
             equipment.len(),
             "an equippable not in the table above is unpinned"
         );
-        assert_eq!(db.all().count(), 11);
+        assert_eq!(db.all().count(), 36);
     }
 
     #[test]
@@ -307,6 +353,66 @@ mod tests {
         ]);
         assert!(warnings.iter().any(|w| w.contains("role")));
         assert!(db.currency().is_some());
+    }
+
+    /// `requires_structure` and `droppable` were added after the item schema
+    /// shipped. Both default, so a mod's item file written before them keeps
+    /// loading — an always-available recipe and no drops.
+    #[test]
+    fn an_item_file_predating_the_newer_fields_still_loads() {
+        let (db, warnings) = load_fixture(&[(
+            "old.ron",
+            r#"(id: "old", name: "Old", craftable: Some((cost: [("core_fragment", 2)])))"#,
+        )]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let def = db.get("old").unwrap();
+        assert!(def.craftable.as_ref().unwrap().requires_structure.is_none());
+        assert!(def.droppable.is_none());
+    }
+
+    #[test]
+    fn a_droppable_entry_can_name_its_bench_and_sources() {
+        let (db, warnings) = load_fixture(&[(
+            "gear.ron",
+            r#"(
+                id: "gear",
+                name: "Gear",
+                equipment: Some((Weapon, (atk: 2, def: 1))),
+                craftable: Some((cost: [("core_fragment", 5)], requires_structure: Some("fabricator"))),
+                droppable: Some([("scrapper", 0.15), ("worm", 0.05)]),
+            )"#,
+        )]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let def = db.get("gear").unwrap();
+        assert_eq!(
+            def.craftable
+                .as_ref()
+                .unwrap()
+                .requires_structure
+                .as_deref(),
+            Some("fabricator")
+        );
+        assert_eq!(
+            def.droppable.as_deref(),
+            Some(&[("scrapper".to_string(), 0.15), ("worm".to_string(), 0.05)][..])
+        );
+        let (_, stats) = def.equipment.unwrap();
+        assert_eq!((stats.atk, stats.def), (2, 1), "hybrids stack two stats");
+    }
+
+    /// A non-finite drop chance would reach `random_bool` and panic the RNG,
+    /// the same hazard `taming_potency` already guards against.
+    #[test]
+    fn an_item_with_a_non_finite_drop_chance_is_skipped() {
+        let (db, warnings) = load_fixture(&[(
+            "bad.ron",
+            r#"(id: "bad", name: "Bad", droppable: Some([("scrapper", NaN)]))"#,
+        )]);
+        assert_eq!(db.all().count(), 0, "the whole file is refused");
+        assert!(
+            warnings.iter().any(|w| w.contains("droppable")),
+            "{warnings:?}"
+        );
     }
 
     #[test]

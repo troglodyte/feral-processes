@@ -1,0 +1,7 @@
+(
+    id: "phase_carapace",
+    name: "Phase Carapace",
+    equipment: Some((Armor, (def: 3, atk: 2))),
+    craftable: Some((cost: [("portal_fragment", 18)], requires_structure: Some("armory"))),
+    droppable: Some([("ghost", 0.07), ("virus", 0.06)]),
+)

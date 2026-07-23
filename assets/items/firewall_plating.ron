@@ -1,1 +1,6 @@
-(id: "firewall_plating", name: "Firewall Plating", equipment: Some((Armor, (def: 3))))
+(
+    id: "firewall_plating",
+    name: "Firewall Plating",
+    equipment: Some((Armor, (def: 3))),
+    droppable: Some([("sentinel", 0.35), ("wraith", 0.2)]),
+)

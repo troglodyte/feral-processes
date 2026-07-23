@@ -14,5 +14,4 @@
         (name: "Static Wail", power: 7),
     ],
     work_resource: None,
-    equipment_drop: Some(("neural_amplifier", 0.3)),
 )

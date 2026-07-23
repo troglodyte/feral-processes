@@ -82,10 +82,34 @@ disqualifies the whole file.
     )),
 
     // Optional; can be left out entirely (defaults to not craftable). If
-    // set, this item has an always-available ("starter") crafting recipe:
-    // a list of (item id, quantity) pairs the player must have in
-    // inventory to craft one unit of this item.
-    craftable: Some((cost: [("core_fragment", 2)])),
+    // set, this item has a crafting recipe: `cost` is a list of (item id,
+    // quantity) pairs the player must have in inventory to craft one unit.
+    //
+    // `requires_structure` is optional and defaults to none. Without it the
+    // recipe is always available ("starter"), like the Power Cell and ICE
+    // Breaker. Naming a structure id instead gates the recipe on one of
+    // those being deployed — it only appears in the compile menu while the
+    // bench stands, exactly like a researched recipe's own bench rule. The
+    // bench is the entire unlock: an item-declared recipe needs no research
+    // node of its own (though the bench itself may be research-gated to
+    // build, which is what paces this).
+    craftable: Some((
+        cost: [("core_fragment", 12)],
+        requires_structure: Some("fabricator"),
+    )),
+
+    // Optional; can be left out entirely (defaults to no drops). Species
+    // that drop this item when defeated or decompiled, each with its own
+    // 0.0-1.0 chance, rolled independently — so a kill can occasionally
+    // yield two different pieces. Chances outside 0.0-1.0 are clamped; a
+    // non-finite one disqualifies the whole file (see above).
+    //
+    // This is the inverse of a species file's `equipment_drop`, and the
+    // preferred direction: one item names all of its sources, instead of
+    // every species file naming the item. Both are still honoured and are
+    // merged per kill — an item declared on both sides is rolled once, at
+    // the better of the two chances.
+    droppable: Some([("scrapper", 0.1), ("worm", 0.08)]),
 )
 ```
 

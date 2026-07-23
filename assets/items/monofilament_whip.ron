@@ -1,1 +1,6 @@
-(id: "monofilament_whip", name: "Monofilament Whip", equipment: Some((Weapon, (atk: 4))))
+(
+    id: "monofilament_whip",
+    name: "Monofilament Whip",
+    equipment: Some((Weapon, (atk: 4))),
+    droppable: Some([("wintermute", 0.6)]),
+)

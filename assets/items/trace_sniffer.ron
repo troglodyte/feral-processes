@@ -1,0 +1,7 @@
+(
+    id: "trace_sniffer",
+    name: "Trace Sniffer",
+    equipment: Some((Module, (decompiler: 3))),
+    craftable: Some((cost: [("core_fragment", 13)], requires_structure: Some("fabricator"))),
+    droppable: Some([("phantom", 0.1), ("ghost", 0.07)]),
+)

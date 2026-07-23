@@ -1,1 +1,6 @@
-(id: "overclock_core", name: "Overclock Core", equipment: Some((Weapon, (atk: 3))))
+(
+    id: "overclock_core",
+    name: "Overclock Core",
+    equipment: Some((Weapon, (atk: 3))),
+    droppable: Some([("construct", 0.3), ("scrapper", 0.15), ("trojan", 0.2)]),
+)

@@ -1,0 +1,7 @@
+(
+    id: "hardened_shell",
+    name: "Hardened Shell",
+    equipment: Some((Armor, (def: 3))),
+    craftable: Some((cost: [("core_fragment", 12)], requires_structure: Some("armory"))),
+    droppable: Some([("wraith", 0.1), ("sentinel", 0.08)]),
+)

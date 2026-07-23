@@ -1,0 +1,7 @@
+(
+    id: "entropy_damper",
+    name: "Entropy Damper",
+    equipment: Some((Module, (decompiler: 2, def: 1))),
+    craftable: Some((cost: [("core_fragment", 15)], requires_structure: Some("fabricator"))),
+    droppable: Some([("wraith", 0.08), ("phantom", 0.07)]),
+)

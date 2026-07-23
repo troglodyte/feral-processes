@@ -1,1 +1,6 @@
-(id: "neural_amplifier", name: "Neural Amplifier", equipment: Some((Module, (decompiler: 2))))
+(
+    id: "neural_amplifier",
+    name: "Neural Amplifier",
+    equipment: Some((Module, (decompiler: 2))),
+    droppable: Some([("ghost", 0.3), ("overseer", 0.5), ("phantom", 0.3), ("virus", 0.25)]),
+)

@@ -98,7 +98,7 @@ change what gets stored — a save from a different build shows up as
 | `e` | Drain the first Power-restoring item in your inventory (a Power Cell, unless a mod adds another) |
 | `r` | Recharge overnight (restores Fatigue and Integrity, costs Power) — requires standing near a deployed Recharger Node (see [Structures](#structures)) |
 | `g` | Scan the sector for Core Fragments |
-| `c` | Open the compile menu (compile an ICE Breaker — 3 Core Fragments — a Power Cell — 2 Core Fragments — and any future recipes). Then pick a quantity: type digits and Enter, or `[F]` for 5 at once, or `[M]` for the most you can currently afford |
+| `c` | Open the compile menu — an ICE Breaker (3 Core Fragments), a Power Cell (2), the six Scavenged-tier gear pieces, and every other recipe whose research and/or bench you have (see [Equipment](#equipment)). Then pick a quantity: type digits and Enter, or `[F]` for 5 at once, or `[M]` for the most you can currently afford |
 | `b` | Deploy a structure |
 | `w` | Assign a compiled program to a cronjob (work a structure) |
 | `G` | Assign a compiled program to guard a structure against raids (any structure, not just a workable one — see [Base defense](#base-defense)) |
@@ -245,9 +245,9 @@ Once you have a Mining Node feeding a steady supply of Core Fragments, put a
 second program on a **Research Node** — its Research Data is what unlocks
 the Power Conduit (Power Cells) and Compiler (ICE Breakers) that round out
 the consumable loop, along with almost everything else worth building — see
-[Research](#research) for the tree. Gear sits at the far end of it, paid for
-in Portal Fragments rather than cronjob output — see
-[Equipment](#equipment).
+[Research](#research) for the tree. The strongest-per-Fragment gear sits at
+the far end of it, though most of the gear catalog needs only a bench, not a
+research node each — see [Equipment](#equipment).
 
 ### Research
 
@@ -362,6 +362,13 @@ Press `v` to open the inventory/equipment screen from anywhere while
 playing. It shows your stats, your three equipment slots, and your
 inventory, each item numbered for selection.
 
+There are **31 pieces of gear**, reachable by two different routes.
+
+**Route 1 — the research tree.** Six pieces need *two* unlocks, not one: the
+recipe's **research node** (see [Research](#research)) *and* the **bench** it
+names, deployed. They're the cheapest strong gear in the game, and that
+discount is what the research investment buys you.
+
 | Item | Slot | Base bonus (level 1) | Compiled for | Also drops from |
 | --- | --- | --- | --- | --- |
 | Overclock Core | Weapon | +3 Attack | 6 Portal Fragments, at a Fabricator | Scrapper, Construct, Trojan |
@@ -371,16 +378,68 @@ inventory, each item numbered for selection.
 | Neural Amplifier | Module | +2 Decompiler | 6 Portal Fragments, at a Fabricator | Virus, Phantom, Ghost, Overseer |
 | Cortex Hack | Module | +3 Decompiler | 12 Portal Fragments, at a Fabricator | Cipher |
 
-Each slot has two options — a common one from an ordinary program, and a
-tougher, slightly stronger one from a harder species or boss.
+**Route 2 — the open catalog.** The other 25 declare their own recipe in
+their `.ron` file and need **no research node at all**. Where one names a
+bench, standing that bench is the whole unlock — every recipe below appears
+in the compile menu the moment its Fabricator or Armory is up. The trade is
+price: they cost more raw material than the researched six do for comparable
+power, so research buys a discount rather than exclusive access.
 
-Every one of them is compiled (`c`) like any other recipe, but each takes
-two unlocks, not one: the recipe's **research node** (see
-[Research](#research)) *and* the **bench** it names, deployed. A Fabricator
-or Armory runs no cronjob of its own — it just makes the recipes you've
-researched appear in the compile menu while it's standing. All six are paid
-in Portal Fragments rather than Core Fragments, which puts gear in direct
-competition with Zone Portals for the same currency.
+**Scavenged tier** — no bench, compilable from turn one. What you make
+before you have a base worth the name.
+
+| Item | Slot | Base bonus | Compiled for | Drops from |
+| --- | --- | --- | --- | --- |
+| Shiv Routine | Weapon | +1 Attack | 4 Core Fragments | Sprite, Drone |
+| Kinetic Edge | Weapon | +2 Attack | 7 Core Fragments | SubProcess, Glitch |
+| Scrap Ward | Armor | +1 Defense | 4 Core Fragments | Glitch, Sprite |
+| Packet Buffer | Armor | +2 Defense | 7 Core Fragments | Drone, SubProcess |
+| Probe Daemon | Module | +1 Decompiler | 5 Core Fragments | Sprite, Glitch |
+| Handshake Forge | Module | +2 Decompiler | 8 Core Fragments | Drone, SubProcess |
+
+**Standard tier** — needs the bench, paid in Core Fragments. Where hybrids
+start: a piece that splits its budget across two stats gives up raw numbers
+for covering a weakness.
+
+| Item | Slot | Base bonus | Compiled for | Drops from |
+| --- | --- | --- | --- | --- |
+| Arc Lance | Weapon | +3 Attack | 12 Core Fragments, at a Fabricator | Scrapper, Worm |
+| Recursion Blade | Weapon | +2 Attack, +1 Defense | 14 Core Fragments, at a Fabricator | Trojan, Phantom |
+| Daemon Fang | Weapon | +2 Attack, +1 Decompiler | 14 Core Fragments, at a Fabricator | Worm, Scrapper |
+| Hardened Shell | Armor | +3 Defense | 12 Core Fragments, at an Armory | Wraith, Sentinel |
+| Null Weave | Armor | +2 Defense, +1 Attack | 14 Core Fragments, at an Armory | Phantom, Trojan |
+| Static Mesh | Armor | +2 Defense, +1 Decompiler | 14 Core Fragments, at an Armory | Wraith, Worm |
+| Trace Sniffer | Module | +3 Decompiler | 13 Core Fragments, at a Fabricator | Phantom, Ghost |
+| Logic Probe | Module | +2 Decompiler, +1 Attack | 15 Core Fragments, at a Fabricator | Trojan, Scrapper |
+| Entropy Damper | Module | +2 Decompiler, +1 Defense | 15 Core Fragments, at a Fabricator | Wraith, Phantom |
+| Sync Governor | Module | +1 Attack, +1 Defense, +1 Decompiler | 16 Core Fragments, at a Fabricator | Worm, Trojan |
+
+**Premium tier** — needs the bench, paid in Portal Fragments, so it competes
+with Zone Portals and the researched six for the same currency. Drops come
+off Hard species and bosses.
+
+| Item | Slot | Base bonus | Compiled for | Drops from |
+| --- | --- | --- | --- | --- |
+| Plasma Router | Weapon | +4 Attack | 16 Portal Fragments, at a Fabricator | Construct, Virus |
+| Black ICE Pick | Weapon | +3 Attack, +2 Decompiler | 18 Portal Fragments, at a Fabricator | Cipher, Rootkit |
+| Siege Compiler | Weapon | +3 Attack, +2 Defense | 18 Portal Fragments, at a Fabricator | Construct, Sentinel |
+| Bastion Lattice | Armor | +4 Defense | 16 Portal Fragments, at an Armory | Sentinel, Rootkit |
+| Phase Carapace | Armor | +3 Defense, +2 Attack | 18 Portal Fragments, at an Armory | Ghost, Virus |
+| Wraithsteel Plate | Armor | +3 Defense, +2 Decompiler | 18 Portal Fragments, at an Armory | Ghost, Cipher |
+| Kernel Key | Module | +4 Decompiler | 16 Portal Fragments, at a Fabricator | Cipher, Virus |
+| Oracle Core | Module | +3 Decompiler, +2 Attack | 18 Portal Fragments, at a Fabricator | Overseer (boss), Rootkit |
+| Singularity Matrix | Module | +3 Attack, +3 Defense, +3 Decompiler | 24 Portal Fragments, at a Fabricator | Wintermute (boss), Overseer (boss) |
+
+The Singularity Matrix is the only piece that pays into all three stats at
+full value, and it's priced and gated to match — the two bosses are its only
+drop sources.
+
+A Fabricator or Armory runs no cronjob of its own. It just makes recipes
+appear in the compile menu while it's standing: the ones you've researched,
+plus every catalog recipe that names it. Note that the benches themselves are
+research-gated *to build* (Weapon Fabrication, Reactive Armor), so the
+Standard and Premium tiers still sit behind research — just not behind a
+research node each.
 
 **Gear levels.** Every piece of equipment has a level, starting at 1, and
 each level above that **doubles** the bonus of the one before it (level 2
@@ -532,10 +591,12 @@ then the second (anyone but the first). Both are consumed.
 | Overseer (`B`) — **boss** | Very Hard | OpenGrid, Mainframe, NullSector, StaticField | — |
 | Wintermute (`W`) — **boss** | Very Hard | OpenGrid, Mainframe, NullSector, StaticField | — |
 
-Scrapper, Wraith, Virus, Construct, Sentinel, Phantom, Trojan, Rootkit,
-Ghost, Cipher, and Wintermute also each have a chance to drop a piece of
-equipment on top of their listed resource — see [Equipment](#equipment)
-for which item and odds.
+**Every** species on this list has a chance to drop equipment on top of its
+listed resource, and most drop several different pieces, each rolled
+separately — a single kill can occasionally yield two. Which species drops
+what runs roughly by difficulty: Easy programs shed Scavenged-tier gear,
+Medium ones Standard tier, Hard ones and bosses Premium tier. See
+[Equipment](#equipment) for the per-item sources and odds.
 
 Some moves also have a chance to inflict a status condition alongside their
 damage, shown bracketed on the intrusion screen (e.g. `[Bleeding (2)]`).
@@ -622,8 +683,8 @@ enough of them, then walk onto it to breach into the next zone.
 | Power Conduit | 14 Core Fragments | Power Grid | Cronjob a compiled program to it to produce Power Cells over time |
 | iso Market | 16 Core Fragments | Isometric Commerce | `t` ("trade") to sell inventory items or buy consumables for Core Fragments — see [Trading](#trading) |
 | Shield | 16 Core Fragments | Fortification | Passively reduces raid damage against **every** deployed structure by 4 — see [Base defense](#base-defense) |
-| Fabricator | 18 Core Fragments | Weapon Fabrication | Not cronjob-workable — the bench for every researched weapon/module recipe (see [Equipment](#equipment)) |
-| Armory | 18 Core Fragments | Reactive Armor | Not cronjob-workable — the bench for every researched armor recipe (see [Equipment](#equipment)) |
+| Fabricator | 18 Core Fragments | Weapon Fabrication | Not cronjob-workable — the bench for every researched weapon/module recipe, plus the 13 catalog recipes that name it (see [Equipment](#equipment)) |
+| Armory | 18 Core Fragments | Reactive Armor | Not cronjob-workable — the bench for every researched armor recipe, plus the 6 catalog armor recipes that name it (see [Equipment](#equipment)) |
 
 The "Unlocked by" column is the research node you must take before the
 structure appears in the build menu at all (see [Research](#research)); a
@@ -721,15 +782,25 @@ automatically next run, no recompiling needed. See the `README.md` in each
 of those directories for the schema. A malformed file is skipped with an
 in-game warning rather than crashing startup.
 
+A new piece of equipment is a **single file** and no Rust at all: `equipment`
+gives it a slot and any mix of Attack/Defense/Decompiler, `craftable` gives it
+a recipe (optionally naming a bench that must be standing), and `droppable`
+lists the species that drop it and at what odds. The 25-piece catalog in
+[Equipment](#equipment) is written exactly this way — nothing about it is
+privileged over gear you add yourself.
+
 Perks are the one exception: they're a fixed, player-only set that lives in
 Rust (see [Perks](#perks)).
 
 ### Item ids
 
-The eleven items the base game ships. Species, structure, and research
-files all reference items by these ids, and mods that predate the
-data-driven item model named them in PascalCase — the second column is what
-to replace those with.
+The base game ships **36** items: the eleven below, plus the 25-piece gear
+catalog in [Equipment](#equipment) (whose ids are the snake_case form of
+their names — `arc_lance`, `singularity_matrix`, and so on).
+
+Species, structure, and research files all reference items by id. The eleven
+originals predate the data-driven item model and mods named them in
+PascalCase back then — the second column is what to replace those with.
 
 | Old name | Id | What it is |
 | --- | --- | --- |

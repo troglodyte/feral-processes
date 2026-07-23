@@ -1,0 +1,7 @@
+(
+    id: "oracle_core",
+    name: "Oracle Core",
+    equipment: Some((Module, (decompiler: 3, atk: 2))),
+    craftable: Some((cost: [("portal_fragment", 18)], requires_structure: Some("fabricator"))),
+    droppable: Some([("overseer", 0.12), ("rootkit", 0.05)]),
+)

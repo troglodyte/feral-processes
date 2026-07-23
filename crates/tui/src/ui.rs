@@ -163,7 +163,7 @@ fn render_playing(f: &mut Frame, app: &mut App) {
             let zone = game.player_status().zone;
             let fusion_tier = app
                 .pending_inventory_item
-                .clone()
+                .as_ref()
                 .map(|item| game.item_fusion_tier(item))
                 .unwrap_or(0);
             render_inventory_item_action(
@@ -508,7 +508,7 @@ fn render_craft_quantity_menu(
     lines.push(Line::from(""));
     lines.push(Line::from(format!(
         "Max affordable right now: {}",
-        game.max_craftable(result)
+        game.max_craftable(&result)
     )));
     lines.push(Line::from(""));
     lines.push(Line::from("Type digits, Enter to compile"));
@@ -1574,7 +1574,7 @@ fn render_inventory_screen(f: &mut Frame, area: Rect, game: &mut Game, selected:
         lines.push(Line::from("  (empty)"));
     }
     for (i, (item, qty)) in status.inventory.iter().enumerate() {
-        let fusion_tier = game.item_fusion_tier(item.clone());
+        let fusion_tier = game.item_fusion_tier(item);
         let tag = equip_preview_tag(game, item, status.zone, fusion_tier);
         lines.push(menu_line(
             format!(

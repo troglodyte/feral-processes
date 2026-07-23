@@ -970,7 +970,7 @@ impl App {
                     self.mode = Mode::Playing;
                     return;
                 };
-                let max = game.max_craftable(result.clone());
+                let max = game.max_craftable(&result);
                 if max == 0 {
                     let name = game.item_name(&result).to_string();
                     self.status_line = Some(format!("Not enough resources to compile any {name}."));
@@ -1006,7 +1006,7 @@ impl App {
             return;
         }
         if let Some(game) = &mut self.game {
-            match game.craft(result, quantity) {
+            match game.craft(&result, quantity) {
                 Ok(()) => self.status_line = None,
                 Err(e) => self.status_line = Some(e),
             }
@@ -1586,8 +1586,8 @@ impl App {
         }
         let Some(game) = &mut self.game else { return };
         let result = match idx.map(|i| actions[i]) {
-            Some('e') => Some(game.equip(item)),
-            Some('u') => Some(game.fuse_item(item)),
+            Some('e') => Some(game.equip(&item)),
+            Some('u') => Some(game.fuse_item(&item)),
             _ => None,
         };
         let Some(result) = result else { return };
@@ -1657,7 +1657,7 @@ impl App {
             return;
         }
         if let Some(game) = &mut self.game {
-            match game.erase_item(item, quantity) {
+            match game.erase_item(&item, quantity) {
                 Ok(()) => self.status_line = None,
                 Err(e) => self.status_line = Some(e),
             }

@@ -215,10 +215,10 @@ pub struct ItemFusions {
 }
 
 impl ItemFusions {
-    pub fn tier(&self, item: ItemId) -> u32 {
+    pub fn tier(&self, item: &ItemId) -> u32 {
         self.tiers
             .iter()
-            .find(|(i, _)| *i == item)
+            .find(|(i, _)| i == item)
             .map(|(_, t)| *t)
             .unwrap_or(0)
     }
@@ -241,10 +241,10 @@ impl Inventory {
         }
     }
 
-    pub fn count(&self, item: ItemId) -> u32 {
+    pub fn count(&self, item: &ItemId) -> u32 {
         self.items
             .iter()
-            .find(|(i, _)| *i == item)
+            .find(|(i, _)| i == item)
             .map(|(_, q)| *q)
             .unwrap_or(0)
     }
@@ -270,7 +270,7 @@ impl Inventory {
     /// worse, hence the saturating subtraction.
     pub fn add_capped(&mut self, item: ItemId, qty: u32, capacity: u32, db: &ItemDb) -> u32 {
         let (used, ceiling) = match db.get(item.as_str()).and_then(|d| d.bank_limit) {
-            Some(limit) => (self.count(item.clone()), limit),
+            Some(limit) => (self.count(&item), limit),
             None => (self.cargo_used(db), capacity),
         };
         let added = qty.min(ceiling.saturating_sub(used));
@@ -285,7 +285,7 @@ impl Inventory {
     /// check before committing to an action whose input cost it can't
     /// undo — see `passive_process_system`, which must not consume a
     /// conversion's input unless the output will actually land.
-    pub fn has_room(&self, item: ItemId, qty: u32, capacity: u32, db: &ItemDb) -> bool {
+    pub fn has_room(&self, item: &ItemId, qty: u32, capacity: u32, db: &ItemDb) -> bool {
         let (used, ceiling) = match db.get(item.as_str()).and_then(|d| d.bank_limit) {
             Some(limit) => (self.count(item), limit),
             None => (self.cargo_used(db), capacity),
@@ -678,7 +678,7 @@ mod inventory_capacity_tests {
         inv.add(ItemId::from(ids::CORE_FRAGMENT), 18);
         let added = inv.add_capped(ItemId::from(ids::POWER_CELL), 5, 20, &db);
         assert_eq!(added, 2, "only the 2 units of room should land");
-        assert_eq!(inv.count(ItemId::from(ids::POWER_CELL)), 2);
+        assert_eq!(inv.count(&ItemId::from(ids::POWER_CELL)), 2);
         assert_eq!(inv.cargo_used(&db), 20);
     }
 
@@ -689,7 +689,7 @@ mod inventory_capacity_tests {
         inv.add(ItemId::from(ids::CORE_FRAGMENT), 20);
         assert_eq!(inv.add_capped(ItemId::from(ids::POWER_CELL), 3, 20, &db), 0);
         assert_eq!(
-            inv.count(ItemId::from(ids::POWER_CELL)),
+            inv.count(&ItemId::from(ids::POWER_CELL)),
             0,
             "a fully rejected add shouldn't leave an empty stack behind"
         );
@@ -705,7 +705,7 @@ mod inventory_capacity_tests {
             added, 50,
             "a full cargo buffer must not block research income"
         );
-        assert_eq!(inv.count(ItemId::from(ids::RESEARCH_DATA)), 50);
+        assert_eq!(inv.count(&ItemId::from(ids::RESEARCH_DATA)), 50);
     }
 
     #[test]
@@ -718,7 +718,7 @@ mod inventory_capacity_tests {
             inv.add_capped(ItemId::from(ids::RESEARCH_DATA), 10, 20, &db),
             2
         );
-        assert_eq!(inv.count(ItemId::from(ids::RESEARCH_DATA)), limit);
+        assert_eq!(inv.count(&ItemId::from(ids::RESEARCH_DATA)), limit);
         assert_eq!(
             inv.add_capped(ItemId::from(ids::RESEARCH_DATA), 1, 20, &db),
             0
@@ -734,7 +734,7 @@ mod inventory_capacity_tests {
         inv.add(ItemId::from(ids::CORE_FRAGMENT), 200);
         assert_eq!(inv.add_capped(ItemId::from(ids::POWER_CELL), 1, 20, &db), 0);
         assert_eq!(
-            inv.count(ItemId::from(ids::CORE_FRAGMENT)),
+            inv.count(&ItemId::from(ids::CORE_FRAGMENT)),
             200,
             "existing stock is untouched"
         );

@@ -246,7 +246,7 @@ pub fn passive_process_system(
             // Check room before taking the input: this is a conversion, not
             // an award, so a full buffer must refuse rather than consume the
             // input for an output that never lands.
-            if !inventory.has_room(recipe.produces.clone(), 1, capacity, &item_db) {
+            if !inventory.has_room(&recipe.produces, 1, capacity, &item_db) {
                 continue;
             }
             if inventory.take(recipe.consumes.clone(), 1) == 1 {
@@ -351,12 +351,12 @@ mod tests {
         let mut query = world.query::<&Inventory>();
         let inv = query.iter(&world).next().unwrap();
         assert_eq!(
-            inv.count(ItemId::from(ids::RESEARCH_DATA)),
+            inv.count(&ItemId::from(ids::RESEARCH_DATA)),
             5,
             "the input must not be consumed when the produced unit has no room"
         );
         assert_eq!(
-            inv.count(ItemId::from(ids::CORE_FRAGMENT)),
+            inv.count(&ItemId::from(ids::CORE_FRAGMENT)),
             BASE_INVENTORY_CAPACITY,
             "cargo must not grow past capacity"
         );

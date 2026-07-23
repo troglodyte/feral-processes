@@ -201,9 +201,40 @@ mod tests {
         assert_eq!(db.get("research_data").unwrap().bank_limit, Some(200));
         assert_eq!(db.get("ice_breaker").unwrap().taming_potency, Some(0.4));
         assert_eq!(db.get("power_cell").unwrap().consume.unwrap().power, 25.0);
-        let (slot, stats) = db.get("monofilament_whip").unwrap().equipment.unwrap();
-        assert_eq!(slot, EquipmentSlot::Weapon);
-        assert_eq!(stats.atk, 4);
+
+        // Banking is what exempts an item from the cargo cap (see
+        // `Inventory::cargo_used`), so a second banked item would silently
+        // widen the buffer the player is supposed to be squeezed by.
+        let banked: Vec<&str> = db
+            .all()
+            .filter(|d| d.bank_limit.is_some())
+            .map(|d| d.id.as_str())
+            .collect();
+        assert_eq!(banked, ["research_data"], "only Research Data is banked");
+
+        // (id, slot, atk, def, decompiler) for every equippable that ships.
+        let equipment = [
+            ("monofilament_whip", EquipmentSlot::Weapon, 4, 0, 0),
+            ("overclock_core", EquipmentSlot::Weapon, 3, 0, 0),
+            ("firewall_plating", EquipmentSlot::Armor, 0, 3, 0),
+            ("ablative_plating", EquipmentSlot::Armor, 0, 4, 0),
+            ("neural_amplifier", EquipmentSlot::Module, 0, 0, 2),
+            ("cortex_hack", EquipmentSlot::Module, 0, 0, 3),
+        ];
+        for (id, want_slot, atk, def, decompiler) in equipment {
+            let (slot, stats) = db.get(id).unwrap().equipment.unwrap();
+            assert_eq!(slot, want_slot, "{id} slot");
+            assert_eq!(
+                (stats.atk, stats.def, stats.decompiler),
+                (atk, def, decompiler),
+                "{id} stats"
+            );
+        }
+        assert_eq!(
+            db.all().filter(|d| d.equipment.is_some()).count(),
+            equipment.len(),
+            "an equippable not in the table above is unpinned"
+        );
         assert_eq!(db.all().count(), 11);
     }
 

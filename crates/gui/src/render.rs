@@ -752,7 +752,7 @@ fn draw_mode_overlay(app: &mut App, fonts: &Fonts, m: &Metrics) {
             let zone = game.player_status().zone;
             let fusion_tier = app
                 .pending_inventory_item
-                .clone()
+                .as_ref()
                 .map(|item| game.item_fusion_tier(item))
                 .unwrap_or(0);
             draw_inventory_item_action(
@@ -874,7 +874,7 @@ fn draw_craft_quantity(
     rows.push(text_row(""));
     rows.push(text_row(format!(
         "Max affordable right now: {}",
-        game.max_craftable(result)
+        game.max_craftable(&result)
     )));
     rows.push(text_row(""));
     rows.push(text_row("Type digits, Enter to compile"));
@@ -1223,7 +1223,7 @@ fn draw_inventory(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) 
         rows.push(text_row("(empty)"));
     }
     for (i, (item, qty)) in status.inventory.iter().enumerate() {
-        let fusion_tier = game.item_fusion_tier(item.clone());
+        let fusion_tier = game.item_fusion_tier(item);
         let tag = equip_preview_tag(game, item, status.zone, fusion_tier);
         rows.push(item_row(
             format!(

@@ -482,27 +482,59 @@ pub struct Game {
     schedule: Schedule,
 }
 
+/// Every asset database a `Game` needs, plus the per-file warnings the loads
+/// accumulated for the caller to push into the message log.
+struct AssetDbs {
+    species: SpeciesDb,
+    structures: StructureDb,
+    research: ResearchDb,
+    items: ItemDb,
+    warnings: Vec<String>,
+}
+
+/// Loads all four asset directories and refuses an item set that leaves any
+/// economy role unfilled. Both `Game::new` and `Game::load` must go through
+/// here: `Game::currency`/`research_currency`/`craft_currency` each
+/// `.expect("validated at startup")`, so a door into the world that skipped
+/// this check would turn a modder's incomplete item set into a panic mid-play
+/// instead of a startup error.
+fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
+    let (species, mut warnings) = SpeciesDb::load_dir(&assets_dir.join("species"))?;
+    let (structures, structure_warnings) = StructureDb::load_dir(&assets_dir.join("structures"))?;
+    warnings.extend(structure_warnings);
+    let (research, research_warnings) =
+        ResearchDb::load_dir(&assets_dir.join("research"), &structures)?;
+    warnings.extend(research_warnings);
+    let (items, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"))?;
+    warnings.extend(item_warnings);
+    let missing = items.missing_roles();
+    if !missing.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "item set is missing required economy role(s): {}",
+                missing.join(", ")
+            ),
+        ));
+    }
+    Ok(AssetDbs {
+        species,
+        structures,
+        research,
+        items,
+        warnings,
+    })
+}
+
 impl Game {
     pub fn new(seed: u32, difficulty: DifficultyMode, assets_dir: &Path) -> std::io::Result<Self> {
-        let (species_db, mut load_warnings) = SpeciesDb::load_dir(&assets_dir.join("species"))?;
-        let (structure_db, structure_warnings) =
-            StructureDb::load_dir(&assets_dir.join("structures"))?;
-        load_warnings.extend(structure_warnings);
-        let (research_db, research_warnings) =
-            ResearchDb::load_dir(&assets_dir.join("research"), &structure_db)?;
-        load_warnings.extend(research_warnings);
-        let (item_db, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"))?;
-        load_warnings.extend(item_warnings);
-        let missing = item_db.missing_roles();
-        if !missing.is_empty() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!(
-                    "item set is missing required economy role(s): {}",
-                    missing.join(", ")
-                ),
-            ));
-        }
+        let AssetDbs {
+            species: species_db,
+            structures: structure_db,
+            research: research_db,
+            items: item_db,
+            warnings: load_warnings,
+        } = load_asset_dbs(assets_dir)?;
 
         let mut world_map = WorldMap::new(seed);
         let start = find_walkable_start(&mut world_map);
@@ -578,25 +610,13 @@ impl Game {
 
     pub fn load(path: &Path, assets_dir: &Path) -> std::io::Result<Self> {
         let data = save::load_from_file(path)?;
-        let (species_db, mut load_warnings) = SpeciesDb::load_dir(&assets_dir.join("species"))?;
-        let (structure_db, structure_warnings) =
-            StructureDb::load_dir(&assets_dir.join("structures"))?;
-        load_warnings.extend(structure_warnings);
-        let (research_db, research_warnings) =
-            ResearchDb::load_dir(&assets_dir.join("research"), &structure_db)?;
-        load_warnings.extend(research_warnings);
-        let (item_db, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"))?;
-        load_warnings.extend(item_warnings);
-        let missing = item_db.missing_roles();
-        if !missing.is_empty() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!(
-                    "item set is missing required economy role(s): {}",
-                    missing.join(", ")
-                ),
-            ));
-        }
+        let AssetDbs {
+            species: species_db,
+            structures: structure_db,
+            research: research_db,
+            items: item_db,
+            warnings: load_warnings,
+        } = load_asset_dbs(assets_dir)?;
 
         let mut world_map = WorldMap::new(data.seed);
         let overrides: HashMap<(i32, i32), Tile> = data.tile_overrides.into_iter().collect();
@@ -1484,7 +1504,7 @@ impl Game {
         let held = self
             .world
             .get::<Inventory>(self.player_entity())
-            .map(|inv| inv.count(research_currency))
+            .map(|inv| inv.count(&research_currency))
             .unwrap_or(0);
         let mut nodes: Vec<ResearchStatus> = self
             .world
@@ -1546,7 +1566,7 @@ impl Game {
             .world
             .get::<Inventory>(player)
             .unwrap()
-            .count(research_currency.clone());
+            .count(&research_currency);
         if held < def.cost {
             return Err(format!("Not enough Research Data ({held}/{}).", def.cost));
         }
@@ -1616,11 +1636,11 @@ impl Game {
     /// `LEAN_COMPILER_DISCOUNT_PER_LEVEL` for every level of
     /// `Perk::LeanCompiler` (down to a minimum of 1 each). Empty if
     /// `result` has no recipe.
-    pub fn craft_cost(&self, result: ItemId) -> Vec<(ItemId, u32)> {
+    pub fn craft_cost(&self, result: &ItemId) -> Vec<(ItemId, u32)> {
         let Some(recipe) = self
             .craft_recipes()
             .into_iter()
-            .find(|r| r.result == result)
+            .find(|r| &r.result == result)
         else {
             return Vec::new();
         };
@@ -1637,39 +1657,39 @@ impl Game {
     /// right now, given `craft_cost` (already Lean-Compiler-adjusted) and
     /// their current inventory. 0 if `result` has no recipe or they can't
     /// afford even one unit yet.
-    pub fn max_craftable(&self, result: ItemId) -> u32 {
+    pub fn max_craftable(&self, result: &ItemId) -> u32 {
         let cost = self.craft_cost(result);
         if cost.is_empty() {
             return 0;
         }
         let inv = self.world.get::<Inventory>(self.player_entity()).unwrap();
         cost.iter()
-            .map(|(item, qty)| inv.count(item.clone()) / (*qty).max(1))
+            .map(|(item, qty)| inv.count(item) / (*qty).max(1))
             .min()
             .unwrap_or(0)
     }
 
     /// Compiles `quantity` units of `result` per its `craft_recipes` entry.
-    pub fn craft(&mut self, result: ItemId, quantity: u32) -> Result<(), String> {
+    pub fn craft(&mut self, result: &ItemId, quantity: u32) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
         if quantity == 0 {
             return Err("Compile at least 1.".into());
         }
-        if self.craft_recipes().iter().all(|r| r.result != result) {
-            return Err(format!("{} can't be compiled.", self.item_name(&result)));
+        if self.craft_recipes().iter().all(|r| &r.result != result) {
+            return Err(format!("{} can't be compiled.", self.item_name(result)));
         }
         let player = self.player_entity();
-        let cost = self.craft_cost(result.clone());
+        let cost = self.craft_cost(result);
         {
             let inv = self.world.get::<Inventory>(player).unwrap();
             for (item, qty) in &cost {
-                if inv.count(item.clone()) < *qty * quantity {
+                if inv.count(item) < *qty * quantity {
                     return Err(format!(
                         "Compiling {} {} needs {} {}.",
                         quantity,
-                        self.item_name(&result),
+                        self.item_name(result),
                         qty * quantity,
                         self.item_name(item)
                     ));
@@ -1689,7 +1709,7 @@ impl Game {
             format!(
                 "You compile {} {} from salvaged components.",
                 quantity,
-                self.item_name(&result)
+                self.item_name(result)
             ),
         );
         self.tick();
@@ -1743,12 +1763,12 @@ impl Game {
     /// is scaled for the current `resources::ZoneLevel` — see
     /// `items::EquipmentStats::scaled_for_level` — so gear equipped after
     /// breaching deeper is stronger than the same item equipped earlier.
-    pub fn equip(&mut self, item: ItemId) -> Result<(), String> {
+    pub fn equip(&mut self, item: &ItemId) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        let Some((slot, base_mods)) = self.equipment_of(&item) else {
-            return Err(format!("{} can't be equipped.", self.item_name(&item)));
+        let Some((slot, base_mods)) = self.equipment_of(item) else {
+            return Err(format!("{} can't be equipped.", self.item_name(item)));
         };
         let player = self.player_entity();
         // The outgoing item's bonus must resolve before anything moves: a
@@ -1761,13 +1781,13 @@ impl Game {
             .unwrap()
             .take(item.clone(), 1);
         if taken == 0 {
-            return Err(format!("You don't have a {}.", self.item_name(&item)));
+            return Err(format!("You don't have a {}.", self.item_name(item)));
         }
         let level = self.world.resource::<ZoneLevel>().0;
         let fusion_tier = self
             .world
             .get::<ItemFusions>(player)
-            .map(|f| f.tier(item.clone()))
+            .map(|f| f.tier(item))
             .unwrap_or(0);
 
         {
@@ -1810,7 +1830,7 @@ impl Game {
         } else {
             format!(" ({})", notes.join(", "))
         };
-        self.log(format!("You equip {}{note}.", self.item_name(&item)));
+        self.log(format!("You equip {}{note}.", self.item_name(item)));
         self.tick();
         Ok(())
     }
@@ -1849,7 +1869,7 @@ impl Game {
     }
 
     /// How many times `item` has been fused so far — see `fuse_item`.
-    pub fn item_fusion_tier(&self, item: ItemId) -> u32 {
+    pub fn item_fusion_tier(&self, item: &ItemId) -> u32 {
         self.world
             .get::<ItemFusions>(self.player_entity())
             .map(|f| f.tier(item))
@@ -1863,14 +1883,14 @@ impl Game {
     /// you're not going to wear multiple of. Only equippable items qualify;
     /// the new tier applies the next time the item is equipped, not
     /// retroactively to a copy already worn.
-    pub fn fuse_item(&mut self, item: ItemId) -> Result<(), String> {
+    pub fn fuse_item(&mut self, item: &ItemId) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        if self.equipment_of(&item).is_none() {
-            return Err(format!("{} can't be fused.", self.item_name(&item)));
+        if self.equipment_of(item).is_none() {
+            return Err(format!("{} can't be fused.", self.item_name(item)));
         }
-        let name = self.item_name(&item).to_string();
+        let name = self.item_name(item).to_string();
         let player = self.player_entity();
         let taken = self
             .world
@@ -1901,7 +1921,7 @@ impl Game {
 
     /// Permanently removes `qty` of `item` from inventory. Only ever acts on
     /// unequipped inventory stock; an equipped item must be unequipped first.
-    pub fn erase_item(&mut self, item: ItemId, qty: u32) -> Result<(), String> {
+    pub fn erase_item(&mut self, item: &ItemId, qty: u32) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
@@ -1912,9 +1932,9 @@ impl Game {
             .unwrap()
             .take(item.clone(), qty);
         if taken == 0 {
-            return Err(format!("You don't have any {}.", self.item_name(&item)));
+            return Err(format!("You don't have any {}.", self.item_name(item)));
         }
-        self.log(format!("You erase {taken} {}.", self.item_name(&item)));
+        self.log(format!("You erase {taken} {}.", self.item_name(item)));
         self.tick();
         Ok(())
     }
@@ -1964,7 +1984,7 @@ impl Game {
         {
             let inv = self.world.get::<Inventory>(player).unwrap();
             for (item, qty) in &build_cost {
-                if inv.count(item.clone()) < *qty {
+                if inv.count(item) < *qty {
                     return Err(format!("Not enough {}.", self.item_name(item)));
                 }
             }
@@ -4543,7 +4563,7 @@ impl Game {
         {
             let inv = self.world.get::<Inventory>(player).unwrap();
             for (item, qty) in &cost {
-                if inv.count(item.clone()) < *qty {
+                if inv.count(item) < *qty {
                     return Err(format!("Not enough {}.", self.item_name(item)));
                 }
             }
@@ -4765,7 +4785,7 @@ impl Game {
         let db = self.world.resource::<ItemDb>();
         let inv = self.world.get::<Inventory>(self.player_entity()).unwrap();
         let (used, ceiling, label) = match db.get(item.as_str()).and_then(|d| d.bank_limit) {
-            Some(limit) => (inv.count(item), limit, "Research bank"),
+            Some(limit) => (inv.count(&item), limit, "Research bank"),
             None => (inv.cargo_used(db), capacity, "Buffer"),
         };
         if used + qty > ceiling {
@@ -4827,11 +4847,7 @@ impl Game {
             .trade_options(structure)
             .ok_or_else(|| "That structure doesn't trade.".to_string())?;
         let player = self.player_entity();
-        let have = self
-            .world
-            .get::<Inventory>(player)
-            .unwrap()
-            .count(item.clone());
+        let have = self.world.get::<Inventory>(player).unwrap().count(&item);
         if have == 0 {
             return Err(format!("You don't have any {}.", self.item_name(&item)));
         }
@@ -4878,7 +4894,7 @@ impl Game {
             .world
             .get::<Inventory>(player)
             .unwrap()
-            .count(currency.clone())
+            .count(&currency)
             < total_cost
         {
             return Err(format!("Not enough Core Fragments (need {total_cost})."));
@@ -5096,10 +5112,10 @@ mod tests {
             .world
             .get::<Inventory>(player)
             .unwrap()
-            .count(ItemId::from(ids::CORE_FRAGMENT));
+            .count(&ItemId::from(ids::CORE_FRAGMENT));
 
         let err = game
-            .craft(ItemId::from(ids::POWER_CELL), 1)
+            .craft(&ItemId::from(ids::POWER_CELL), 1)
             .expect_err("a full buffer should refuse a compile");
 
         assert!(err.contains("Buffer full"), "got: {err}");
@@ -5107,7 +5123,7 @@ mod tests {
             game.world
                 .get::<Inventory>(player)
                 .unwrap()
-                .count(ItemId::from(ids::CORE_FRAGMENT)),
+                .count(&ItemId::from(ids::CORE_FRAGMENT)),
             cores_before,
             "a refused compile must not consume its inputs"
         );
@@ -5121,7 +5137,7 @@ mod tests {
             .get_mut::<Inventory>(player)
             .unwrap()
             .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
-        game.equip(ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
+        game.equip(&ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
         fill_buffer(&mut game);
 
         let err = game
@@ -5150,7 +5166,7 @@ mod tests {
             .unwrap()
             .add(ItemId::from(ids::CORE_FRAGMENT), capacity - used - 1);
 
-        game.craft(ItemId::from(ids::POWER_CELL), 1)
+        game.craft(&ItemId::from(ids::POWER_CELL), 1)
             .expect("a compile that nets out under capacity should succeed");
     }
 
@@ -5401,7 +5417,7 @@ mod tests {
         game.place_structure("fabricator", 0, 1).unwrap();
 
         assert_eq!(
-            game.craft_cost(ItemId::from(ids::OVERCLOCK_CORE)),
+            game.craft_cost(&ItemId::from(ids::OVERCLOCK_CORE)),
             vec![(ItemId::from(ids::PORTAL_FRAGMENT), 6)]
         );
     }
@@ -5668,13 +5684,13 @@ mod tests {
             .world
             .get::<Inventory>(player)
             .unwrap()
-            .count(resource.clone());
+            .count(&resource);
         game.award_loot(wild);
         let after = game
             .world
             .get::<Inventory>(player)
             .unwrap()
-            .count(resource.clone());
+            .count(&resource);
 
         assert!(
             after > before,
@@ -5823,12 +5839,7 @@ mod tests {
         }
         let before: Vec<u32> = cost
             .iter()
-            .map(|(item, _)| {
-                game.world
-                    .get::<Inventory>(player)
-                    .unwrap()
-                    .count(item.clone())
-            })
+            .map(|(item, _)| game.world.get::<Inventory>(player).unwrap().count(item))
             .collect();
 
         let targets = game.symlink_targets();
@@ -5846,11 +5857,7 @@ mod tests {
             "symlink should teleport the player onto the structure"
         );
         for ((item, qty), before) in cost.iter().zip(before) {
-            let after = game
-                .world
-                .get::<Inventory>(player)
-                .unwrap()
-                .count(item.clone());
+            let after = game.world.get::<Inventory>(player).unwrap().count(item);
             assert_eq!(
                 after,
                 before - qty,
@@ -5990,13 +5997,13 @@ mod tests {
             .world
             .get::<Inventory>(player)
             .unwrap()
-            .count(ItemId::from(ids::CORE_FRAGMENT));
+            .count(&ItemId::from(ids::CORE_FRAGMENT));
         game.remove_structure(armory).unwrap();
         let after = game
             .world
             .get::<Inventory>(player)
             .unwrap()
-            .count(ItemId::from(ids::CORE_FRAGMENT));
+            .count(&ItemId::from(ids::CORE_FRAGMENT));
 
         assert!(
             after > before,
@@ -6042,13 +6049,13 @@ mod tests {
             .world
             .get::<Inventory>(player)
             .unwrap()
-            .count(ItemId::from(ids::CORE_FRAGMENT));
+            .count(&ItemId::from(ids::CORE_FRAGMENT));
         game.remove_structure(home).unwrap();
         let after = game
             .world
             .get::<Inventory>(player)
             .unwrap()
-            .count(ItemId::from(ids::CORE_FRAGMENT));
+            .count(&ItemId::from(ids::CORE_FRAGMENT));
 
         assert_eq!(
             game.view_entities(10, 10)
@@ -6096,7 +6103,7 @@ mod tests {
                 ItemId::from(ids::POWER_CELL),
                 ItemId::from(ids::CORE_FRAGMENT),
             ] {
-                let held = inv.count(item.clone());
+                let held = inv.count(&item);
                 inv.take(item, held);
             }
             inv.add(ItemId::from(ids::FIREWALL_PLATING), capacity - 3);
@@ -6203,12 +6210,12 @@ mod tests {
             .get_mut::<Inventory>(game.player_entity())
             .unwrap()
             .add(ItemId::from(ids::PORTAL_FRAGMENT), 6);
-        game.craft(ItemId::from(ids::FIREWALL_PLATING), 1).unwrap();
+        game.craft(&ItemId::from(ids::FIREWALL_PLATING), 1).unwrap();
         assert_eq!(
             game.world
                 .get::<Inventory>(game.player_entity())
                 .unwrap()
-                .count(ItemId::from(ids::FIREWALL_PLATING)),
+                .count(&ItemId::from(ids::FIREWALL_PLATING)),
             1
         );
     }
@@ -6439,7 +6446,7 @@ mod tests {
             .world
             .get::<Inventory>(player)
             .unwrap()
-            .count(ItemId::from(ids::CORE_FRAGMENT));
+            .count(&ItemId::from(ids::CORE_FRAGMENT));
 
         for _ in 0..40 {
             game.tick();
@@ -6449,7 +6456,7 @@ mod tests {
             .world
             .get::<Inventory>(player)
             .unwrap()
-            .count(ItemId::from(ids::CORE_FRAGMENT))
+            .count(&ItemId::from(ids::CORE_FRAGMENT))
             - starting_fragments;
         assert!(
             gained < 40,
@@ -6505,7 +6512,7 @@ mod tests {
             .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
         let atk_before = game.player_status().atk;
 
-        game.equip(ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
+        game.equip(&ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
 
         let status = game.player_status();
         assert_eq!(
@@ -6541,7 +6548,7 @@ mod tests {
             .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
         let atk_before = game.player_status().atk;
 
-        game.equip(ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
+        game.equip(&ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
 
         let status = game.player_status();
         // Base +3 ATK, scaled 2x per level above 1: level 3 = 3 * 2^2 = 12.
@@ -6577,12 +6584,12 @@ mod tests {
             .add(ItemId::from(ids::OVERCLOCK_CORE), 2);
         let atk_before = game.player_status().atk;
 
-        game.equip(ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
+        game.equip(&ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
         assert_eq!(game.player_status().atk, atk_before + 3);
 
         // Equipping into an already-occupied slot swaps the old item back
         // to inventory and must not stack the bonus a second time.
-        game.equip(ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
+        game.equip(&ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
         let status = game.player_status();
         assert_eq!(
             status.atk,
@@ -6609,7 +6616,7 @@ mod tests {
             .unwrap()
             .add(ItemId::from(ids::FIREWALL_PLATING), 1);
         let def_before = game.player_status().def;
-        game.equip(ItemId::from(ids::FIREWALL_PLATING)).unwrap();
+        game.equip(&ItemId::from(ids::FIREWALL_PLATING)).unwrap();
         assert_eq!(game.player_status().def, def_before + 3);
 
         game.unequip(EquipmentSlot::Armor).unwrap();
@@ -6708,7 +6715,7 @@ mod tests {
         };
         let decompiler_before = game.world.get::<Decompiler>(player).map(|d| d.skill);
 
-        let result = game.equip(ItemId::from(ids::OVERCLOCK_CORE));
+        let result = game.equip(&ItemId::from(ids::OVERCLOCK_CORE));
 
         assert!(
             result.is_err(),
@@ -6746,9 +6753,9 @@ mod tests {
             .unwrap()
             .add(ItemId::from(ids::OVERCLOCK_CORE), 3);
 
-        game.fuse_item(ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
+        game.fuse_item(&ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
 
-        assert_eq!(game.item_fusion_tier(ItemId::from(ids::OVERCLOCK_CORE)), 1);
+        assert_eq!(game.item_fusion_tier(&ItemId::from(ids::OVERCLOCK_CORE)), 1);
         assert_eq!(
             game.player_status()
                 .inventory
@@ -6772,7 +6779,7 @@ mod tests {
             .add(ItemId::from(ids::ABLATIVE_PLATING), 6);
 
         let def_before = game.player_status().def;
-        game.equip(ItemId::from(ids::ABLATIVE_PLATING)).unwrap();
+        game.equip(&ItemId::from(ids::ABLATIVE_PLATING)).unwrap();
         assert_eq!(
             game.player_status().def,
             def_before + 4,
@@ -6780,14 +6787,16 @@ mod tests {
         );
         game.unequip(EquipmentSlot::Armor).unwrap();
 
-        game.fuse_item(ItemId::from(ids::ABLATIVE_PLATING)).unwrap();
-        game.fuse_item(ItemId::from(ids::ABLATIVE_PLATING)).unwrap();
+        game.fuse_item(&ItemId::from(ids::ABLATIVE_PLATING))
+            .unwrap();
+        game.fuse_item(&ItemId::from(ids::ABLATIVE_PLATING))
+            .unwrap();
         assert_eq!(
-            game.item_fusion_tier(ItemId::from(ids::ABLATIVE_PLATING)),
+            game.item_fusion_tier(&ItemId::from(ids::ABLATIVE_PLATING)),
             2
         );
 
-        game.equip(ItemId::from(ids::ABLATIVE_PLATING)).unwrap();
+        game.equip(&ItemId::from(ids::ABLATIVE_PLATING)).unwrap();
         assert_eq!(
             game.player_status().def,
             def_before + 5,
@@ -6800,7 +6809,7 @@ mod tests {
         let mut game = Game::new(202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
         assert!(
-            game.fuse_item(ItemId::from(ids::CORE_FRAGMENT)).is_err(),
+            game.fuse_item(&ItemId::from(ids::CORE_FRAGMENT)).is_err(),
             "plain resources aren't equipment and can't be fused"
         );
 
@@ -6809,7 +6818,7 @@ mod tests {
             .unwrap()
             .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
         assert!(
-            game.fuse_item(ItemId::from(ids::OVERCLOCK_CORE)).is_err(),
+            game.fuse_item(&ItemId::from(ids::OVERCLOCK_CORE)).is_err(),
             "fusing needs 2 copies, only 1 is available"
         );
         assert_eq!(
@@ -6832,7 +6841,7 @@ mod tests {
             .get_mut::<Inventory>(player)
             .unwrap()
             .add(ItemId::from(ids::OVERCLOCK_CORE), 2);
-        game.fuse_item(ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
+        game.fuse_item(&ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
 
         let path = std::env::temp_dir().join(format!(
             "feral_processes_fusion_test_{}.bin",
@@ -6843,7 +6852,7 @@ mod tests {
         let _ = std::fs::remove_file(&path);
 
         assert_eq!(
-            loaded.item_fusion_tier(ItemId::from(ids::OVERCLOCK_CORE)),
+            loaded.item_fusion_tier(&ItemId::from(ids::OVERCLOCK_CORE)),
             1
         );
     }
@@ -6857,7 +6866,7 @@ mod tests {
             .unwrap()
             .add(ItemId::from(ids::NEURAL_AMPLIFIER), 3);
 
-        game.erase_item(ItemId::from(ids::NEURAL_AMPLIFIER), 3)
+        game.erase_item(&ItemId::from(ids::NEURAL_AMPLIFIER), 3)
             .unwrap();
         assert!(
             game.player_status()
@@ -6867,7 +6876,7 @@ mod tests {
         );
 
         assert!(
-            game.erase_item(ItemId::from(ids::NEURAL_AMPLIFIER), 1)
+            game.erase_item(&ItemId::from(ids::NEURAL_AMPLIFIER), 1)
                 .is_err(),
             "erasing from an empty stack should error"
         );
@@ -6881,7 +6890,7 @@ mod tests {
             .get_mut::<Inventory>(player)
             .unwrap()
             .add(ItemId::from(ids::NEURAL_AMPLIFIER), 1);
-        game.equip(ItemId::from(ids::NEURAL_AMPLIFIER)).unwrap();
+        game.equip(&ItemId::from(ids::NEURAL_AMPLIFIER)).unwrap();
         let decompiler_after_equip = game.player_status().decompiler;
 
         let path = std::env::temp_dir().join(format!(
@@ -6918,6 +6927,38 @@ mod tests {
         // use `Result::expect_err` / `unwrap_err`.
         let Err(err) = result else {
             panic!("startup should abort rather than run with no item holding the Currency role");
+        };
+        assert!(
+            err.to_string().contains("Currency"),
+            "error should name the missing role: {err}"
+        );
+    }
+
+    #[test]
+    fn game_load_aborts_when_the_item_set_is_missing_the_currency_role() {
+        // Resuming a save is the other door into the same world, and it
+        // reaches the same `Game::currency()` `.expect("validated at
+        // startup")` — so an item set that lost its Currency-role holder
+        // between saving and loading has to be refused here too, not only
+        // in `Game::new`.
+        let mut game = Game::new(902, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let path = std::env::temp_dir().join(format!(
+            "feral_missing_currency_load_{}.bin",
+            std::process::id()
+        ));
+        game.save(&path).unwrap();
+
+        let dir = assets_dir_missing_currency_item();
+        let result = Game::load(&path, &dir);
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_file(&path);
+
+        // `Game` isn't `Debug` (it wraps a `bevy_ecs::World`), so this can't
+        // use `Result::expect_err` / `unwrap_err`.
+        let Err(err) = result else {
+            panic!(
+                "loading should abort rather than resume with no item holding the Currency role"
+            );
         };
         assert!(
             err.to_string().contains("Currency"),
@@ -7332,12 +7373,12 @@ mod tests {
 
         let inv = game.world.get::<Inventory>(game.player_entity()).unwrap();
         assert_eq!(
-            inv.count(ItemId::from("master_key")),
+            inv.count(&ItemId::from("master_key")),
             0,
             "the strongest catalyst held should be the one spent"
         );
         assert_eq!(
-            inv.count(ItemId::from(ids::ICE_BREAKER)),
+            inv.count(&ItemId::from(ids::ICE_BREAKER)),
             1,
             "the weaker catalyst must be left untouched"
         );
@@ -7401,11 +7442,11 @@ mod tests {
 
         let inv = game.world.get::<Inventory>(game.player_entity()).unwrap();
         assert_eq!(
-            inv.count(ItemId::from("alpha_key")),
+            inv.count(&ItemId::from("alpha_key")),
             0,
             "a tie should resolve to the first item id alphabetically"
         );
-        assert_eq!(inv.count(ItemId::from("omega_key")), 1);
+        assert_eq!(inv.count(&ItemId::from("omega_key")), 1);
     }
 
     #[test]
@@ -7489,7 +7530,7 @@ mod tests {
             game.world
                 .get::<Inventory>(player)
                 .unwrap()
-                .count(ItemId::from(ids::ICE_BREAKER)),
+                .count(&ItemId::from(ids::ICE_BREAKER)),
             50 - attempts,
             "one ICE Breaker per attempt, same as before"
         );
@@ -7688,16 +7729,16 @@ mod tests {
             inv.add(ItemId::from(ids::CORE_FRAGMENT), ICE_BREAKER_CORE_COST);
         }
 
-        game.craft(ItemId::from(ids::ICE_BREAKER), 1).unwrap();
+        game.craft(&ItemId::from(ids::ICE_BREAKER), 1).unwrap();
 
         let inv = game.world.get::<Inventory>(player).unwrap();
         assert_eq!(
-            inv.count(ItemId::from(ids::CORE_FRAGMENT)),
+            inv.count(&ItemId::from(ids::CORE_FRAGMENT)),
             0,
             "cost should be fully consumed"
         );
         assert_eq!(
-            inv.count(ItemId::from(ids::ICE_BREAKER)),
+            inv.count(&ItemId::from(ids::ICE_BREAKER)),
             1,
             "the recipe's result should be granted"
         );
@@ -7713,16 +7754,16 @@ mod tests {
             inv.add(ItemId::from(ids::CORE_FRAGMENT), ICE_BREAKER_CORE_COST * 3);
         }
 
-        game.craft(ItemId::from(ids::ICE_BREAKER), 3).unwrap();
+        game.craft(&ItemId::from(ids::ICE_BREAKER), 3).unwrap();
 
         let inv = game.world.get::<Inventory>(player).unwrap();
         assert_eq!(
-            inv.count(ItemId::from(ids::CORE_FRAGMENT)),
+            inv.count(&ItemId::from(ids::CORE_FRAGMENT)),
             0,
             "cost should scale with quantity"
         );
         assert_eq!(
-            inv.count(ItemId::from(ids::ICE_BREAKER)),
+            inv.count(&ItemId::from(ids::ICE_BREAKER)),
             3,
             "quantity units should be granted"
         );
@@ -7743,7 +7784,7 @@ mod tests {
             );
         }
 
-        assert_eq!(game.max_craftable(ItemId::from(ids::ICE_BREAKER)), 2);
+        assert_eq!(game.max_craftable(&ItemId::from(ids::ICE_BREAKER)), 2);
     }
 
     #[test]
@@ -7757,12 +7798,12 @@ mod tests {
             .clear();
 
         assert_eq!(
-            game.max_craftable(ItemId::from(ids::ICE_BREAKER)),
+            game.max_craftable(&ItemId::from(ids::ICE_BREAKER)),
             0,
             "no resources at all"
         );
         assert_eq!(
-            game.max_craftable(ItemId::from(ids::CORE_FRAGMENT)),
+            game.max_craftable(&ItemId::from(ids::CORE_FRAGMENT)),
             0,
             "no recipe exists for this item"
         );
@@ -7777,12 +7818,12 @@ mod tests {
             inv.items.clear();
         }
 
-        assert!(game.craft(ItemId::from(ids::ICE_BREAKER), 1).is_err());
+        assert!(game.craft(&ItemId::from(ids::ICE_BREAKER), 1).is_err());
         assert_eq!(
             game.world
                 .get::<Inventory>(player)
                 .unwrap()
-                .count(ItemId::from(ids::ICE_BREAKER)),
+                .count(&ItemId::from(ids::ICE_BREAKER)),
             0
         );
     }
@@ -7790,7 +7831,7 @@ mod tests {
     #[test]
     fn craft_rejects_a_result_with_no_recipe() {
         let mut game = Game::new(22, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        assert!(game.craft(ItemId::from(ids::CORE_FRAGMENT), 1).is_err());
+        assert!(game.craft(&ItemId::from(ids::CORE_FRAGMENT), 1).is_err());
     }
 
     #[test]
@@ -9805,20 +9846,20 @@ mod tests {
             .world
             .get::<Inventory>(player)
             .unwrap()
-            .count(ItemId::from(ids::CORE_FRAGMENT));
+            .count(&ItemId::from(ids::CORE_FRAGMENT));
 
         game.sell_item(market, ItemId::from(ids::FIREWALL_PLATING), 2)
             .unwrap();
 
         let inv = game.world.get::<Inventory>(player).unwrap();
         assert_eq!(
-            inv.count(ItemId::from(ids::FIREWALL_PLATING)),
+            inv.count(&ItemId::from(ids::FIREWALL_PLATING)),
             1,
             "only the sold quantity should leave the inventory"
         );
         let sell_rate = def.trade.as_ref().unwrap().sell_rate;
         assert_eq!(
-            inv.count(ItemId::from(ids::CORE_FRAGMENT)),
+            inv.count(&ItemId::from(ids::CORE_FRAGMENT)),
             cf_before + sell_rate * 2
         );
     }
@@ -9872,7 +9913,7 @@ mod tests {
             .world
             .get::<Inventory>(player)
             .unwrap()
-            .count(ItemId::from(ids::RESEARCH_DATA));
+            .count(&ItemId::from(ids::RESEARCH_DATA));
         assert_eq!(
             held, research_bank_limit,
             "a refused sale must not consume the item being sold"
@@ -9941,11 +9982,11 @@ mod tests {
 
         let inv = game.world.get::<Inventory>(player).unwrap();
         assert_eq!(
-            inv.count(ItemId::from(ids::CORE_FRAGMENT)),
+            inv.count(&ItemId::from(ids::CORE_FRAGMENT)),
             0,
             "the full cost should be charged"
         );
-        assert_eq!(inv.count(buy_item), 2);
+        assert_eq!(inv.count(&buy_item), 2);
     }
 
     #[test]
@@ -10761,7 +10802,7 @@ mod tests {
     fn lean_compiler_discounts_craft_cost_per_level_but_never_below_one_each() {
         let mut game = Game::new(113, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
-        let base_cost = game.craft_cost(ItemId::from(ids::POWER_CELL));
+        let base_cost = game.craft_cost(&ItemId::from(ids::POWER_CELL));
         assert_eq!(
             base_cost,
             vec![(ItemId::from(ids::CORE_FRAGMENT), POWER_CELL_CORE_COST)]
@@ -10769,7 +10810,7 @@ mod tests {
 
         game.world.get_mut::<Perks>(player).unwrap().points = 10;
         game.unlock_perk(Perk::LeanCompiler).unwrap();
-        let discounted = game.craft_cost(ItemId::from(ids::POWER_CELL));
+        let discounted = game.craft_cost(&ItemId::from(ids::POWER_CELL));
         assert_eq!(
             discounted,
             vec![(
@@ -10782,7 +10823,7 @@ mod tests {
             game.world.get_mut::<Perks>(player).unwrap().points = 10;
             let _ = game.unlock_perk(Perk::LeanCompiler);
         }
-        let floored = game.craft_cost(ItemId::from(ids::POWER_CELL));
+        let floored = game.craft_cost(&ItemId::from(ids::POWER_CELL));
         assert_eq!(
             floored,
             vec![(ItemId::from(ids::CORE_FRAGMENT), 1)],
@@ -11239,7 +11280,7 @@ mod tests {
             .world
             .get::<Inventory>(player)
             .unwrap()
-            .count(ItemId::from(ids::PORTAL_FRAGMENT));
+            .count(&ItemId::from(ids::PORTAL_FRAGMENT));
         assert!(
             BOSS_PORTAL_FRAGMENT_DROP.contains(&qty),
             "boss kill should guarantee a portal fragment cache in {BOSS_PORTAL_FRAGMENT_DROP:?}, got {qty}"
@@ -11742,7 +11783,7 @@ mod tests {
             game.world
                 .get::<Inventory>(player)
                 .unwrap()
-                .count(ItemId::from(ids::PORTAL_FRAGMENT)),
+                .count(&ItemId::from(ids::PORTAL_FRAGMENT)),
             0,
             "zone 1 portal should cost the base rate"
         );
@@ -11772,7 +11813,7 @@ mod tests {
             game.world
                 .get::<Inventory>(player)
                 .unwrap()
-                .count(ItemId::from(ids::PORTAL_FRAGMENT)),
+                .count(&ItemId::from(ids::PORTAL_FRAGMENT)),
             0,
             "zone 2 portal should cost double the base rate"
         );
@@ -12239,7 +12280,7 @@ mod tests {
         // The player already starts holding Power Cells (see `Game::new`);
         // drain the default stock first so the stack is exactly 2 below.
         let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
-        let held = inv.count(ItemId::from(ids::POWER_CELL));
+        let held = inv.count(&ItemId::from(ids::POWER_CELL));
         inv.take(ItemId::from(ids::POWER_CELL), held);
         inv.add(ItemId::from(ids::POWER_CELL), 2);
 
@@ -12255,7 +12296,7 @@ mod tests {
             game.world
                 .get::<Inventory>(player)
                 .unwrap()
-                .count(ItemId::from(ids::POWER_CELL)),
+                .count(&ItemId::from(ids::POWER_CELL)),
             1
         );
     }
@@ -12292,7 +12333,7 @@ mod tests {
             .world
             .get::<Inventory>(player)
             .unwrap()
-            .count(ItemId::from(ids::CORE_FRAGMENT));
+            .count(&ItemId::from(ids::CORE_FRAGMENT));
         game.world
             .get_mut::<Inventory>(player)
             .unwrap()
@@ -12304,7 +12345,7 @@ mod tests {
             game.world
                 .get::<Inventory>(player)
                 .unwrap()
-                .count(ItemId::from(ids::CORE_FRAGMENT)),
+                .count(&ItemId::from(ids::CORE_FRAGMENT)),
             before + 3,
             "a non-consumable must not be consumed"
         );
@@ -12320,7 +12361,7 @@ mod tests {
             .world
             .get::<Inventory>(player)
             .unwrap()
-            .count(ItemId::from(ids::POWER_CELL));
+            .count(&ItemId::from(ids::POWER_CELL));
         game.world
             .get_mut::<Inventory>(player)
             .unwrap()
@@ -12368,7 +12409,7 @@ mod tests {
         // The player already starts holding Power Cells (see `Game::new`);
         // drain the default stock first so the stack is exactly 2 below.
         let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
-        let held = inv.count(ItemId::from(ids::POWER_CELL));
+        let held = inv.count(&ItemId::from(ids::POWER_CELL));
         inv.take(ItemId::from(ids::POWER_CELL), held);
         inv.add(ItemId::from(ids::POWER_CELL), 2);
 
@@ -12385,7 +12426,7 @@ mod tests {
             game.world
                 .get::<Inventory>(player)
                 .unwrap()
-                .count(ItemId::from(ids::POWER_CELL)),
+                .count(&ItemId::from(ids::POWER_CELL)),
             1
         );
     }
@@ -12398,9 +12439,9 @@ mod tests {
         // power-restoring item remains; the Core Fragments the player also
         // starts with have no `consume` effect at all.
         let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
-        let held = inv.count(ItemId::from(ids::POWER_CELL));
+        let held = inv.count(&ItemId::from(ids::POWER_CELL));
         inv.take(ItemId::from(ids::POWER_CELL), held);
-        let fragments_before = inv.count(ItemId::from(ids::CORE_FRAGMENT));
+        let fragments_before = inv.count(&ItemId::from(ids::CORE_FRAGMENT));
         let hunger_before = game.world.get::<Needs>(player).unwrap().hunger;
 
         game.use_power_source();
@@ -12417,7 +12458,7 @@ mod tests {
             game.world
                 .get::<Inventory>(player)
                 .unwrap()
-                .count(ItemId::from(ids::CORE_FRAGMENT)),
+                .count(&ItemId::from(ids::CORE_FRAGMENT)),
             fragments_before,
             "a failed recharge must not consume an unrelated item"
         );
@@ -12442,11 +12483,11 @@ mod tests {
         // `ConsumeDef.power > 0.0` predicate rather than to iteration
         // order or to which `ItemId` happens to be checked first.
         let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
-        let ice_breaker_held = inv.count(ItemId::from(ids::ICE_BREAKER));
+        let ice_breaker_held = inv.count(&ItemId::from(ids::ICE_BREAKER));
         inv.take(ItemId::from(ids::ICE_BREAKER), ice_breaker_held);
-        let power_held = inv.count(ItemId::from(ids::POWER_CELL));
+        let power_held = inv.count(&ItemId::from(ids::POWER_CELL));
         inv.take(ItemId::from(ids::POWER_CELL), power_held);
-        let fragments_held = inv.count(ItemId::from(ids::CORE_FRAGMENT));
+        let fragments_held = inv.count(&ItemId::from(ids::CORE_FRAGMENT));
         inv.take(ItemId::from(ids::CORE_FRAGMENT), fragments_held);
         inv.add(ItemId::from(ids::CORE_FRAGMENT), 5);
         inv.add(ItemId::from(ids::POWER_CELL), 2);
@@ -12462,7 +12503,7 @@ mod tests {
             game.world
                 .get::<Inventory>(player)
                 .unwrap()
-                .count(ItemId::from(ids::POWER_CELL)),
+                .count(&ItemId::from(ids::POWER_CELL)),
             1,
             "the power-restoring item should have been the one consumed"
         );
@@ -12470,7 +12511,7 @@ mod tests {
             game.world
                 .get::<Inventory>(player)
                 .unwrap()
-                .count(ItemId::from(ids::CORE_FRAGMENT)),
+                .count(&ItemId::from(ids::CORE_FRAGMENT)),
             5,
             "the earlier non-power item must be left untouched"
         );

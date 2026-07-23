@@ -409,7 +409,9 @@ level and its actual scaled bonus.
   equip it and removed the moment you unequip it — it shows up immediately
   in the status panel and the intrusion screen.
 
-**Fusing items.** Got a duplicate piece of gear? Select a numbered
+### Fusing items
+
+Got a duplicate piece of gear? Select a numbered
 inventory item with 2 or more copies, then `[U]` to fuse: it permanently
 consumes 2 copies of that item and adds another +10% to *that item type's*
 equipped bonus (stacking every time you fuse it again — tier 2 is +20%,

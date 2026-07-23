@@ -2210,6 +2210,9 @@ impl Game {
 
     fn start_battle(&mut self, pack: Vec<Entity>) {
         let player = self.player_entity();
+        // A `PlayerBuff` armed on the map by a consumable (see `use_item`'s
+        // `prebattle_buff`) must carry into the fight it was armed for —
+        // intentionally left untouched here, unlike `clear_battle_status_effects`.
         let anchor = pack[0];
         let name = self
             .world
@@ -7657,6 +7660,37 @@ mod tests {
             .id()
     }
 
+    /// Spawns a minimal wild (untamed, `Hostile`) `Creature` on the
+    /// player's own tile, suitable to pass straight into `start_battle` —
+    /// mirrors `spawn_tamed`'s pattern but without `Tamed`/`Experience`,
+    /// since a wild pack member has neither.
+    fn spawn_wild_in_front_of_player(game: &mut Game) -> Entity {
+        let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+        let species = game
+            .species_defs()
+            .into_iter()
+            .next()
+            .expect("at least one species");
+        game.world
+            .spawn((
+                Creature {
+                    species: species.id.clone(),
+                },
+                Hostile,
+                Position {
+                    x: player_pos.x,
+                    y: player_pos.y,
+                },
+                Stats {
+                    hp: 10,
+                    max_hp: 10,
+                    atk: 0,
+                    def: 1,
+                },
+            ))
+            .id()
+    }
+
     /// Deploys a Recharger Node directly on the player's current tile —
     /// `Game::rest` requires one nearby, so tests exercising `rest` need
     /// this in place first. Spawned directly rather than through
@@ -12043,6 +12077,34 @@ mod tests {
         game.use_item(&ItemId::from(ids::POWER_CELL));
 
         assert_eq!(game.world.get::<Needs>(player).unwrap().hunger, before);
+    }
+
+    #[test]
+    fn a_prebattle_buff_armed_on_the_map_is_live_at_the_next_intrusion() {
+        let mut game = Game::new(504, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        // Arm an Atk buff directly (models what a prebattle_buff consumable does).
+        game.world.get_mut::<PlayerBuff>(player).unwrap().active = Some(ActiveBuff {
+            kind: BuffKind::Atk,
+            remaining: 3,
+            power: 5,
+        });
+
+        let wild = spawn_wild_in_front_of_player(&mut game);
+        game.start_battle(vec![wild]);
+
+        let buff = game.world.get::<PlayerBuff>(player).unwrap().active;
+        assert!(
+            matches!(
+                buff,
+                Some(ActiveBuff {
+                    kind: BuffKind::Atk,
+                    power: 5,
+                    ..
+                })
+            ),
+            "a buff armed before the fight must still be active when it starts"
+        );
     }
 
     #[test]

@@ -1170,10 +1170,7 @@ fn draw_inspect_detail(game: &mut Game, entity: Option<Entity>, fonts: &Fonts, m
     }
     if view.is_hostile && !view.is_tamed {
         rows.push(Row::TextColored(
-            format!(
-                "Decompile chance right now: {:.0}%",
-                view.decompile_chance * 100.0
-            ),
+            decompile_chance_line(view.decompile_chance),
             MAGENTA,
         ));
     }
@@ -1728,6 +1725,18 @@ fn draw_research_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metri
     draw_popup("Research", PopupSize::Large, &rows, fonts, m);
 }
 
+/// The decompile-odds readout shared by the battle and inspect panels. With
+/// no taming catalyst in inventory there are no odds to quote — decompiling
+/// isn't available at all — so the line says what's missing instead of a
+/// percentage. It stays deliberately generic: which item is a catalyst is
+/// item data, not something a renderer gets to name.
+fn decompile_chance_line(chance: Option<f32>) -> String {
+    match chance {
+        Some(c) => format!("Decompile chance right now: {:.0}%", c * 100.0),
+        None => "Decompile chance right now: needs a taming catalyst".to_string(),
+    }
+}
+
 fn status_tag(status: &Option<String>) -> String {
     status
         .as_ref()
@@ -1855,15 +1864,7 @@ fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics) {
     }
 
     fonts.ui(
-        format!(
-            "Decompile chance right now: {:.0}%{}",
-            view.decompile_chance * 100.0,
-            if view.can_tame {
-                ""
-            } else {
-                " (needs an ICE Breaker)"
-            }
-        ),
+        decompile_chance_line(view.decompile_chance),
         margin,
         y,
         m.font_size,
@@ -1882,7 +1883,7 @@ fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics) {
     }
 
     let mut actions = vec!["[A]ttack".to_string()];
-    if view.can_tame {
+    if view.decompile_chance.is_some() {
         actions.push("[D]ecompile".to_string());
     }
     if !view.companions.is_empty() {

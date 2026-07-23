@@ -2,6 +2,20 @@
 
 Release notes for [feral-processes](README.md).
 
+## 2026-07-23
+
+- **Taming catalysts are data, not one named item**: a decompile attempt now
+  spends whichever item in your inventory declares the highest
+  `taming_potency` (ties go to the first item id alphabetically), so a
+  catalyst dropped in as a `.ron` file works exactly like the shipped ICE
+  Breaker, and a stronger one is used in preference to it. Nothing in the
+  engine names the ICE Breaker any more — see `assets/items/README.md`. The
+  decompile-odds readout changed to match: it quotes the odds for the
+  catalyst you'd actually spend, and with no catalyst in hand it reads
+  "needs a taming catalyst" instead of a percentage for an attempt you
+  can't make — see [Decompile chance](README.md#stats). For a player
+  carrying only ICE Breakers, taming plays exactly as before.
+
 ## 2026-07-22
 
 - **Items are now data-driven**: every item (Core Fragment, Power Cell, ICE

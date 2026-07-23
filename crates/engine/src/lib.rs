@@ -417,12 +417,13 @@ pub struct BattleView {
     pub player_power: i32,
     pub player_decompiler: i32,
     pub log: Vec<String>,
-    pub can_tame: bool,
     /// Estimated chance (0.0-1.0) that a decompile attempt would succeed
-    /// right now, given the wild program's current HP fraction and its
-    /// species' difficulty. Shown to the player even if they have no ICE
-    /// Breaker yet, so they can decide whether it's worth going to compile one.
-    pub decompile_chance: f32,
+    /// right now, given the wild program's current HP fraction, its
+    /// species' difficulty, and the potency of the catalyst the attempt
+    /// would spend (see `Game::taming_catalyst`). `None` when the player
+    /// holds no catalyst: there's no potency to quote odds for, and the
+    /// decompile action isn't available at all.
+    pub decompile_chance: Option<f32>,
     /// The player's active battle party (see `resources::Party`), in
     /// party-slot order.
     pub companions: Vec<CompanionInfo>,
@@ -461,8 +462,9 @@ pub struct InspectView {
     pub is_boss: bool,
     pub taming_difficulty: f32,
     /// Estimated decompile chance if an intrusion started right now, using
-    /// the creature's current HP fraction — same formula as `BattleView`.
-    pub decompile_chance: f32,
+    /// the creature's current HP fraction — same formula and same `None`
+    /// meaning as `BattleView::decompile_chance`.
+    pub decompile_chance: Option<f32>,
     pub habitats: Vec<Biome>,
     pub moves: Vec<MoveDef>,
     pub work_resource: Option<ItemId>,
@@ -1376,6 +1378,31 @@ impl Game {
         base + EXPLOIT_FOCUS_BONUS_PER_LEVEL * self.player_perk_level(Perk::ExploitFocus) as i32
     }
 
+    /// The taming catalyst a decompile attempt would spend, paired with its
+    /// `ItemDef::taming_potency`: whichever item in the player's inventory
+    /// declares the highest potency. Which item that is comes purely from
+    /// the item data, so a mod's stronger catalyst wins over a shipped one
+    /// without any code knowing its id. Ties break on item id, so a stocked
+    /// pair of equal catalysts always spends the same stack first. `None`
+    /// when the player carries no catalyst at all — the single source of
+    /// truth for "decompiling isn't available right now".
+    fn taming_catalyst(&self) -> Option<(ItemId, f32)> {
+        let db = self.world.resource::<ItemDb>();
+        let inv = self.world.get::<Inventory>(self.player_entity())?;
+        inv.items
+            .iter()
+            .filter(|(_, qty)| *qty > 0)
+            .filter_map(|(id, _)| {
+                db.get(id.as_str())
+                    .and_then(|d| d.taming_potency)
+                    .map(|potency| (id.clone(), potency))
+            })
+            .max_by(|a, b| {
+                a.1.total_cmp(&b.1)
+                    .then_with(|| b.0.as_str().cmp(a.0.as_str()))
+            })
+    }
+
     /// Spends Perk Points to buy another level of `perk` (see
     /// `perks::Perk`). Perks are repeatable — there's no cap on levels,
     /// only on how many Perk Points you've earned.
@@ -2262,23 +2289,14 @@ impl Game {
         let taming_difficulty = species.map(|s| s.taming_difficulty).unwrap_or(0.5);
         let player_stats = self.world.get::<Stats>(battle.player)?;
         let decompiler_skill = self.player_decompiler_skill();
-        let can_tame = self
-            .world
-            .get::<Inventory>(battle.player)
-            .map(|i| i.count(ItemId::from(ids::ICE_BREAKER)) > 0)
-            .unwrap_or(false);
-        let potency = self
-            .world
-            .resource::<ItemDb>()
-            .get(ids::ICE_BREAKER)
-            .and_then(|d| d.taming_potency)
-            .unwrap_or(0.0);
-        let decompile_chance = taming::capture_chance(
-            wild_stats.hp_fraction(),
-            potency,
-            taming_difficulty,
-            decompiler_skill,
-        );
+        let decompile_chance = self.taming_catalyst().map(|(_, potency)| {
+            taming::capture_chance(
+                wild_stats.hp_fraction(),
+                potency,
+                taming_difficulty,
+                decompiler_skill,
+            )
+        });
         let player_atk = self.effective_atk(battle.player);
         let player_def = self.effective_def(battle.player);
         Some(BattleView {
@@ -2296,7 +2314,6 @@ impl Game {
             player_def,
             player_decompiler: decompiler_skill,
             log: battle.log.clone(),
-            can_tame,
             decompile_chance,
             pack_remaining,
             player_status_effect: self.status_label(battle.player),
@@ -2768,15 +2785,14 @@ impl Game {
             return;
         }
 
-        let taken = self
-            .world
+        let Some((catalyst, potency)) = self.taming_catalyst() else {
+            self.log("You have no taming catalyst.");
+            return;
+        };
+        self.world
             .get_mut::<Inventory>(player)
             .unwrap()
-            .take(ItemId::from(ids::ICE_BREAKER), 1);
-        if taken == 0 {
-            self.log("You have no ICE Breaker.");
-            return;
-        }
+            .take(catalyst, 1);
 
         let Some(front) = self.front_wild_creature() else {
             return;
@@ -2792,12 +2808,6 @@ impl Game {
             .get(&species_id)
             .map(|s| s.taming_difficulty)
             .unwrap_or(0.5);
-        let potency = self
-            .world
-            .resource::<ItemDb>()
-            .get(ids::ICE_BREAKER)
-            .and_then(|d| d.taming_potency)
-            .unwrap_or(0.0);
         let decompiler_skill = self.player_decompiler_skill();
         let chance =
             taming::capture_chance(hp_fraction, potency, taming_difficulty, decompiler_skill);
@@ -4424,18 +4434,14 @@ impl Game {
         let is_hostile = self.world.get::<Hostile>(entity).is_some();
         let is_tamed = self.world.get::<Tamed>(entity).is_some();
         let decompiler_skill = self.player_decompiler_skill();
-        let potency = self
-            .world
-            .resource::<ItemDb>()
-            .get(ids::ICE_BREAKER)
-            .and_then(|d| d.taming_potency)
-            .unwrap_or(0.0);
-        let decompile_chance = taming::capture_chance(
-            stats.hp_fraction(),
-            potency,
-            species.taming_difficulty,
-            decompiler_skill,
-        );
+        let decompile_chance = self.taming_catalyst().map(|(_, potency)| {
+            taming::capture_chance(
+                stats.hp_fraction(),
+                potency,
+                species.taming_difficulty,
+                decompiler_skill,
+            )
+        });
         let display_name = self
             .world
             .get::<CustomName>(entity)
@@ -4965,14 +4971,20 @@ mod tests {
     }
 
     /// Copies the shipped `species`/`structures`/`research`/`items` asset
-    /// dirs into a scratch dir, omitting `core_fragment.ron` — the item
-    /// that holds the Currency economy role — so `Game::new`'s
-    /// missing-role startup abort (see `ItemDb::missing_roles`) can be
-    /// exercised against an otherwise-valid item set.
-    fn assets_dir_missing_currency_item() -> std::path::PathBuf {
+    /// dirs into a fresh scratch dir, skipping the item files named in
+    /// `omit_items` and writing `extra_items` (filename, RON body) on top —
+    /// a stand-in for a modded install. The caller removes the directory
+    /// once its `Game` is done with it.
+    fn modded_assets_dir(
+        tag: &str,
+        omit_items: &[&str],
+        extra_items: &[(&str, &str)],
+    ) -> std::path::PathBuf {
+        static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let dir = std::env::temp_dir().join(format!(
-            "feral_processes_missing_currency_{}",
-            std::process::id()
+            "feral_processes_{tag}_{}_{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ));
         let _ = std::fs::remove_dir_all(&dir);
         let shipped = test_assets_dir();
@@ -4981,13 +4993,25 @@ mod tests {
             std::fs::create_dir_all(&dst).unwrap();
             for entry in std::fs::read_dir(shipped.join(sub)).unwrap() {
                 let entry = entry.unwrap();
-                if sub == "items" && entry.file_name().to_str() == Some("core_fragment.ron") {
+                let name = entry.file_name();
+                if sub == "items" && omit_items.contains(&name.to_str().unwrap_or_default()) {
                     continue;
                 }
-                std::fs::copy(entry.path(), dst.join(entry.file_name())).unwrap();
+                std::fs::copy(entry.path(), dst.join(name)).unwrap();
             }
         }
+        for (name, body) in extra_items {
+            std::fs::write(dir.join("items").join(name), body).unwrap();
+        }
         dir
+    }
+
+    /// A modded install missing `core_fragment.ron` — the item that holds
+    /// the Currency economy role — so `Game::new`'s missing-role startup
+    /// abort (see `ItemDb::missing_roles`) can be exercised against an
+    /// otherwise-valid item set.
+    fn assets_dir_missing_currency_item() -> std::path::PathBuf {
+        modded_assets_dir("missing_currency", &["core_fragment.ron"], &[])
     }
 
     /// Gives the player `n` Research Data, bypassing the Research Node so
@@ -5749,7 +5773,10 @@ mod tests {
         assert!(view.is_hostile);
         assert!(!view.is_tamed);
         assert_eq!(view.max_hp, species.base_hp);
-        assert!((0.0..=1.0).contains(&view.decompile_chance));
+        let chance = view
+            .decompile_chance
+            .expect("the starting kit includes a taming catalyst");
+        assert!((0.0..=1.0).contains(&chance));
         assert!(
             !game.has_active_battle(),
             "inspecting must not trigger an intrusion"
@@ -7260,6 +7287,211 @@ mod tests {
         assert!(
             game.world.get::<WanderAi>(wild).is_none(),
             "a tamed creature must stop roaming like a wild one"
+        );
+    }
+
+    /// Replaces the player's whole inventory with `stock`, so a taming test
+    /// states exactly which catalysts are on hand instead of inheriting
+    /// whatever `Game::new`'s starting kit holds.
+    fn set_inventory(game: &mut Game, stock: &[(&str, u32)]) {
+        let player = game.player_entity();
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        inv.items.clear();
+        for (id, qty) in stock {
+            inv.add(ItemId::from(*id), *qty);
+        }
+    }
+
+    /// Spawns a wild program on the player's tile and opens an intrusion on
+    /// it — the state `battle_decompile` needs.
+    fn start_battle_with_a_wild_program(game: &mut Game) -> Entity {
+        let wild = spawn_wild_on_player_tile(game);
+        game.start_battle(vec![wild]);
+        wild
+    }
+
+    #[test]
+    fn decompile_spends_the_highest_potency_catalyst_held_not_the_shipped_one() {
+        // The mod case `taming_potency` exists for: a dropped-in catalyst
+        // stronger than the shipped ICE Breaker must be the one resolved
+        // and consumed, with no Rust change.
+        let dir = modded_assets_dir(
+            "strong_catalyst",
+            &[],
+            &[(
+                "master_key.ron",
+                r#"(id: "master_key", name: "Master Key", taming_potency: Some(0.9))"#,
+            )],
+        );
+        let mut game = Game::new(3100, DifficultyMode::Forgiving, &dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        start_battle_with_a_wild_program(&mut game);
+        set_inventory(&mut game, &[(ids::ICE_BREAKER, 1), ("master_key", 1)]);
+
+        game.battle_decompile();
+
+        let inv = game.world.get::<Inventory>(game.player_entity()).unwrap();
+        assert_eq!(
+            inv.count(ItemId::from("master_key")),
+            0,
+            "the strongest catalyst held should be the one spent"
+        );
+        assert_eq!(
+            inv.count(ItemId::from(ids::ICE_BREAKER)),
+            1,
+            "the weaker catalyst must be left untouched"
+        );
+    }
+
+    #[test]
+    fn decompiling_with_no_catalyst_is_refused_without_naming_a_shipped_item() {
+        let mut game = Game::new(3101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let wild = start_battle_with_a_wild_program(&mut game);
+        set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 5)]);
+
+        game.battle_decompile();
+
+        assert!(
+            game.world.get::<Tamed>(wild).is_none(),
+            "a decompile with no catalyst must not tame anything"
+        );
+        let refusal = game
+            .message_log(usize::MAX)
+            .into_iter()
+            .map(|(_, line)| line)
+            .find(|line| line.starts_with("You have no"))
+            .expect("the refusal should be logged");
+        let shipped_names: Vec<String> = game
+            .world
+            .resource::<ItemDb>()
+            .all()
+            .map(|d| d.name.clone())
+            .collect();
+        for name in shipped_names {
+            assert!(
+                !refusal.contains(&name),
+                "the refusal must not name a specific item, got: {refusal}"
+            );
+        }
+    }
+
+    #[test]
+    fn two_catalysts_of_equal_potency_resolve_to_the_first_id_alphabetically() {
+        let dir = modded_assets_dir(
+            "tied_catalysts",
+            &[],
+            &[
+                (
+                    "alpha_key.ron",
+                    r#"(id: "alpha_key", name: "Alpha Key", taming_potency: Some(0.5))"#,
+                ),
+                (
+                    "omega_key.ron",
+                    r#"(id: "omega_key", name: "Omega Key", taming_potency: Some(0.5))"#,
+                ),
+            ],
+        );
+        let mut game = Game::new(3102, DifficultyMode::Forgiving, &dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        start_battle_with_a_wild_program(&mut game);
+        // Stocked in reverse so the tie can't be won by inventory order.
+        set_inventory(&mut game, &[("omega_key", 1), ("alpha_key", 1)]);
+
+        game.battle_decompile();
+
+        let inv = game.world.get::<Inventory>(game.player_entity()).unwrap();
+        assert_eq!(
+            inv.count(ItemId::from("alpha_key")),
+            0,
+            "a tie should resolve to the first item id alphabetically"
+        );
+        assert_eq!(inv.count(ItemId::from("omega_key")), 1);
+    }
+
+    #[test]
+    fn the_decompile_preview_follows_the_catalyst_held_not_a_fixed_item() {
+        let dir = modded_assets_dir(
+            "preview_catalyst",
+            &[],
+            &[(
+                "master_key.ron",
+                r#"(id: "master_key", name: "Master Key", taming_potency: Some(0.9))"#,
+            )],
+        );
+        let mut game = Game::new(3104, DifficultyMode::Forgiving, &dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let wild = spawn_wild_on_player_tile(&mut game);
+
+        set_inventory(&mut game, &[(ids::ICE_BREAKER, 1)]);
+        let with_shipped = game
+            .inspect(wild)
+            .unwrap()
+            .decompile_chance
+            .expect("holding a catalyst should quote odds");
+        set_inventory(&mut game, &[("master_key", 1)]);
+        let with_mod = game
+            .inspect(wild)
+            .unwrap()
+            .decompile_chance
+            .expect("holding a catalyst should quote odds");
+        assert!(
+            with_mod > with_shipped,
+            "a stronger catalyst must preview better odds: {with_mod} vs {with_shipped}"
+        );
+
+        set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 1)]);
+        assert!(
+            game.inspect(wild).unwrap().decompile_chance.is_none(),
+            "with no catalyst there are no odds to quote — the action is unavailable"
+        );
+    }
+
+    #[test]
+    fn battle_view_offers_no_decompile_odds_without_a_catalyst() {
+        let mut game = Game::new(3105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        start_battle_with_a_wild_program(&mut game);
+        assert!(
+            game.battle_view().unwrap().decompile_chance.is_some(),
+            "the starting kit holds a catalyst"
+        );
+
+        set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 5)]);
+
+        // This is also what gates the renderers' [D]ecompile action.
+        assert!(game.battle_view().unwrap().decompile_chance.is_none());
+    }
+
+    #[test]
+    fn the_shipped_ice_breaker_still_tames_for_a_player_holding_only_it() {
+        let mut game = Game::new(3103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let wild = start_battle_with_a_wild_program(&mut game);
+        set_inventory(&mut game, &[(ids::ICE_BREAKER, 50)]);
+        // Maxed Decompiler skill pins capture_chance to its 0.95 clamp, so
+        // 50 seeded attempts succeed without the test depending on a
+        // particular roll.
+        game.world.get_mut::<Decompiler>(player).unwrap().skill = 50;
+
+        let mut attempts = 0;
+        for _ in 0..50 {
+            if game.world.get::<Tamed>(wild).is_some() {
+                break;
+            }
+            game.battle_decompile();
+            attempts += 1;
+        }
+
+        assert!(
+            game.world.get::<Tamed>(wild).is_some(),
+            "the shipped catalyst must still tame exactly as before"
+        );
+        assert_eq!(
+            game.world
+                .get::<Inventory>(player)
+                .unwrap()
+                .count(ItemId::from(ids::ICE_BREAKER)),
+            50 - attempts,
+            "one ICE Breaker per attempt, same as before"
         );
     }
 

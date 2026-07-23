@@ -1503,10 +1503,7 @@ fn render_inspect_detail(
     }
     if view.is_hostile && !view.is_tamed {
         lines.push(Line::styled(
-            format!(
-                "Decompile chance right now: {:.0}%",
-                view.decompile_chance * 100.0
-            ),
+            decompile_chance_line(view.decompile_chance),
             Style::new().fg(Color::Magenta),
         ));
     }
@@ -1717,6 +1714,18 @@ fn render_inventory_item_action(
     );
 }
 
+/// The decompile-odds readout shared by the battle and inspect panels. With
+/// no taming catalyst in inventory there are no odds to quote — decompiling
+/// isn't available at all — so the line says what's missing instead of a
+/// percentage. It stays deliberately generic: which item is a catalyst is
+/// item data, not something a renderer gets to name.
+fn decompile_chance_line(chance: Option<f32>) -> String {
+    match chance {
+        Some(c) => format!("Decompile chance right now: {:.0}%", c * 100.0),
+        None => "Decompile chance right now: needs a taming catalyst".to_string(),
+    }
+}
+
 /// Formats an active battle status effect (e.g. "Bleeding (2)") as a
 /// bracketed suffix for a title/label — `" [Bleeding (2)]"` — or an empty
 /// string if there's no active condition.
@@ -1812,15 +1821,7 @@ fn render_battle(f: &mut Frame, app: &mut App) {
 
     f.render_widget(
         Paragraph::new(Line::styled(
-            format!(
-                "Decompile chance right now: {:.0}%{}",
-                view.decompile_chance * 100.0,
-                if view.can_tame {
-                    ""
-                } else {
-                    " (needs an ICE Breaker)"
-                }
-            ),
+            decompile_chance_line(view.decompile_chance),
             Style::new().fg(Color::Magenta),
         )),
         chunks[i],
@@ -1842,7 +1843,7 @@ fn render_battle(f: &mut Frame, app: &mut App) {
     i += 1;
 
     let mut actions = vec!["[A]ttack".to_string()];
-    if view.can_tame {
+    if view.decompile_chance.is_some() {
         actions.push("[D]ecompile".to_string());
     }
     if !view.companions.is_empty() {
@@ -1995,7 +1996,7 @@ fn render_help(f: &mut Frame) {
         Line::from("Every numbered/lettered menu can also be navigated with Up/Down + Enter,"),
         Line::from("on top of typing a row's own number or letter directly."),
         Line::from(""),
-        Line::from("In an intrusion:  a attack   d decompile (needs an ICE Breaker)"),
+        Line::from("In an intrusion:  a attack   d decompile (needs a taming catalyst)"),
         Line::from(
             "                  c command a companion to buff you (picks one if more than one is active)   j jack out",
         ),

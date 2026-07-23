@@ -41,9 +41,22 @@ is skipped with a warning logged in-game rather than crashing startup.
     // fusion tier — see `EquipmentStats::scaled_for_level`/`fused_for_tier`.
     equipment: Some((Weapon, (atk: 4))),
 
-    // Optional; can be left out entirely (defaults to not usable for
-    // taming). If set, using this item during a taming attempt contributes
-    // this much to the taming roll — higher is stronger.
+    // Optional; can be left out entirely (defaults to not a catalyst). If
+    // set, this item is a taming catalyst: a decompile attempt spends one
+    // of it and it contributes this much to the taming roll — higher is
+    // stronger. No item id is privileged here; a catalyst you drop in works
+    // exactly like the shipped ICE Breaker does.
+    //
+    // Carrying several catalysts is fine. Each attempt resolves to the one
+    // in inventory with the *highest* `taming_potency` and spends one of
+    // that stack, so a stronger catalyst is never held back for a weaker
+    // one. An exact tie resolves to whichever item id sorts first
+    // alphabetically, so the same stack is always spent first.
+    //
+    // Carrying no catalyst at all makes decompiling unavailable: the action
+    // is refused, and the odds readout in an intrusion and on the inspect
+    // panel reads "needs a taming catalyst" rather than quoting a
+    // percentage for an attempt that can't be made.
     taming_potency: Some(0.4),
 
     // Optional; can be left out entirely (defaults to no out-of-battle

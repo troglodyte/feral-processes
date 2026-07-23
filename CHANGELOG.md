@@ -2,6 +2,33 @@
 
 Release notes for [feral-processes](README.md).
 
+## 2026-07-22
+
+- **Items are now data-driven**: every item (Core Fragment, Power Cell, ICE
+  Breaker, Overclock Core, Firewall Plating, Neural Amplifier, Portal
+  Fragment, Research Data, Monofilament Whip, Ablative Plating, Cortex Hack)
+  is now a `.ron` file under `assets/items/` instead of a hardcoded `ItemId`
+  Rust enum variant, and `ItemId` itself is now a string newtype rather than
+  an enum — drop a new item in as data, same as species and structures, no
+  recompiling needed. This changes what a save stores, bumping the save
+  format to **v8** (old saves need a new game). **Breaking for mods**: any
+  species/structure/research file that named an item the old bare-variant
+  way (e.g. `CoreFragment`) must switch to its quoted string id (e.g.
+  `"core_fragment"`) — see `assets/items/README.md` for the schema and the
+  full id mapping — see [Items](README.md#items) and
+  [Modding](README.md#modding).
+- **Crafting gained a data-declared starter-recipe path**: an item's own
+  `.ron` file can now define its always-available "starter" recipe via a
+  `craftable` field, rather than the two starter recipes (ICE Breaker,
+  Power Cell) being hardcoded in Rust — see `assets/items/README.md`.
+- **Consume action added to the inventory item menu**: `[C]onsume` now
+  appears for any item that declares a `consume` block, applying whatever
+  mix of Power/Fatigue/heal/pre-battle buff it defines. The `e` key changed
+  to match: it now drains the first Power-restoring item found in inventory
+  instead of being hardwired to Power Cells specifically. No player-facing
+  mechanic changed — the 11 shipped items behave exactly as before — see
+  [Items](README.md#items).
+
 ## 2026-07-21
 
 - **Programs can only be fused 3 times**: every fusion result is one level

@@ -34,10 +34,11 @@ Core Fragments.
 
     // Optional; defaults to none. Craft recipes this node makes available.
     unlocks_recipes: [(
-        // An ItemId — see crates/engine/src/items.rs for the full list.
-        result: OverclockCore,
-        // What one unit costs, as (ItemId, quantity) pairs.
-        cost: [(PortalFragment, 6)],
+        // An item id — see assets/items/README.md for the schema and the
+        // full set of shipped ids.
+        result: "overclock_core",
+        // What one unit costs, as (item id, quantity) pairs.
+        cost: [("portal_fragment", 6)],
         // Optional; defaults to no bench requirement. The recipe only
         // appears in the compile menu while a structure of this kind is
         // deployed — researching the blueprint is not enough on its own.

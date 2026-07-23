@@ -290,8 +290,9 @@ universal raw material — found by scanning (`g`) or harvested passively via
 a Mining Node — and the other two are refined from it (compiled with `c`,
 scavenged from creatures, or produced by a structure cronjob) for one
 specific purpose each. Equipment (below) is a separate, non-consumable item
-category. Items aren't yet data-driven the way species and structures are —
-see `CLAUDE.md` for the moddability note on adding a new one.
+category. Items are data-driven `.ron` files under `assets/items/`, same as
+species and structures — see `assets/items/README.md` for the schema and
+`CLAUDE.md` for the moddability note on adding a new one.
 
 ### Equipment
 
@@ -614,11 +615,12 @@ offers, followed by a quantity prompt.
 
 ## Modding
 
-Species and structures are plain data files under `assets/species/*.ron`
-and `assets/structures/*.ron` — drop in a new `.ron` file and it's picked up
-automatically next run, no recompiling needed. See the `README.md` in each
-of those directories for the schema. A malformed file is skipped with an
-in-game warning rather than crashing startup.
+Species, structures, and items are plain data files under
+`assets/species/*.ron`, `assets/structures/*.ron`, and `assets/items/*.ron`
+— drop in a new `.ron` file and it's picked up automatically next run, no
+recompiling needed. See the `README.md` in each of those directories for the
+schema. A malformed file is skipped with an in-game warning rather than
+crashing startup.
 
 ## Fonts
 

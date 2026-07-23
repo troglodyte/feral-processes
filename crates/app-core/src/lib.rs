@@ -10,6 +10,8 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+#[cfg(test)]
+use feral_processes_engine::items::ids;
 use feral_processes_engine::items::{
     EquipmentSlot, ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, ItemId,
 };
@@ -53,9 +55,9 @@ pub fn menu_shortcut(index: usize) -> char {
 /// held: hiding it below `ITEM_FUSION_COST` meant a player holding the
 /// usual single copy of a piece of gear never learned the action existed.
 /// `Game::fuse_item` refuses with a count when the stack is too small.
-pub fn inventory_item_actions(item: ItemId) -> Vec<(char, String)> {
+pub fn inventory_item_actions(game: &Game, item: &ItemId) -> Vec<(char, String)> {
     let mut actions = Vec::new();
-    if item.equipment().is_some() {
+    if game.is_equippable(item) {
         actions.push(('e', "[E]quip".to_string()));
         actions.push((
             'u',
@@ -64,6 +66,9 @@ pub fn inventory_item_actions(item: ItemId) -> Vec<(char, String)> {
                 (ITEM_FUSION_BONUS_PER_TIER * 100.0).round() as i32
             ),
         ));
+    }
+    if game.is_consumable(item) {
+        actions.push(('c', "[C]onsume".to_string()));
     }
     actions.push(('x', "[X] Erase".to_string()));
     actions
@@ -179,7 +184,7 @@ pub enum Mode {
 /// A line item picked in `Mode::TradeAction`, awaiting a quantity from
 /// `Mode::TradeQuantity` before `Game::sell_item`/`Game::buy_item` is
 /// actually called.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub enum TradeChoice {
     Sell(ItemId),
     Buy(ItemId),
@@ -770,7 +775,7 @@ impl App {
                     true
                 }
                 GameKey::Char('e') => {
-                    game.eat(ItemId::PowerCell);
+                    game.use_power_source();
                     true
                 }
                 GameKey::Char('r') => {
@@ -924,7 +929,7 @@ impl App {
         let Some(game) = &mut self.game else { return };
         let recipes = game.craft_recipes();
         if let Some(idx) = self.selected_index(key, recipes.len()) {
-            self.pending_craft = Some(recipes[idx].result);
+            self.pending_craft = Some(recipes[idx].result.clone());
             self.craft_quantity_input.clear();
             self.mode = Mode::CraftQuantity;
         }
@@ -961,16 +966,14 @@ impl App {
                     return;
                 };
                 self.craft_quantity_input.clear();
-                let max = self
-                    .game
-                    .as_ref()
-                    .map(|g| g.max_craftable(result))
-                    .unwrap_or(0);
+                let Some(game) = &self.game else {
+                    self.mode = Mode::Playing;
+                    return;
+                };
+                let max = game.max_craftable(&result);
                 if max == 0 {
-                    self.status_line = Some(format!(
-                        "Not enough resources to compile any {}.",
-                        result.display_name()
-                    ));
+                    let name = game.item_name(&result).to_string();
+                    self.status_line = Some(format!("Not enough resources to compile any {name}."));
                     self.mode = Mode::Playing;
                     return;
                 }
@@ -1003,7 +1006,7 @@ impl App {
             return;
         }
         if let Some(game) = &mut self.game {
-            match game.craft(result, quantity) {
+            match game.craft(&result, quantity) {
                 Ok(()) => self.status_line = None,
                 Err(e) => self.status_line = Some(e),
             }
@@ -1353,20 +1356,21 @@ impl App {
             self.mode = Mode::Playing;
             return;
         };
+        let currency = game.currency();
         let sell_items: Vec<ItemId> = game
             .player_status()
             .inventory
             .iter()
-            .map(|(item, _)| *item)
-            .filter(|item| *item != ItemId::CoreFragment)
+            .map(|(item, _)| item.clone())
+            .filter(|item| *item != currency)
             .collect();
-        let buy_items: Vec<ItemId> = trade.buy.iter().map(|(item, _)| *item).collect();
+        let buy_items: Vec<ItemId> = trade.buy.iter().map(|(item, _)| item.clone()).collect();
         let total = sell_items.len() + buy_items.len();
         if let Some(idx) = self.selected_index(key, total) {
             let choice = if idx < sell_items.len() {
-                TradeChoice::Sell(sell_items[idx])
+                TradeChoice::Sell(sell_items[idx].clone())
             } else {
-                TradeChoice::Buy(buy_items[idx - sell_items.len()])
+                TradeChoice::Buy(buy_items[idx - sell_items.len()].clone())
             };
             self.pending_trade_choice = Some(choice);
             self.trade_quantity_input.clear();
@@ -1533,8 +1537,8 @@ impl App {
             }
             return;
         }
-        if let Some(&(item, _)) = inventory.get(idx - 3) {
-            self.pending_inventory_item = Some(item);
+        if let Some((item, _)) = inventory.get(idx - 3) {
+            self.pending_inventory_item = Some(item.clone());
             self.mode = Mode::InventoryItemAction;
         }
     }
@@ -1545,14 +1549,20 @@ impl App {
             self.mode = Mode::Inventory;
             return;
         }
-        let Some(item) = self.pending_inventory_item else {
+        let Some(item) = self.pending_inventory_item.clone() else {
             self.mode = Mode::Inventory;
             return;
         };
-        let actions: Vec<char> = inventory_item_actions(item)
-            .into_iter()
-            .map(|(k, _)| k)
-            .collect();
+        let actions: Vec<char> = {
+            let Some(game) = &self.game else {
+                self.mode = Mode::Inventory;
+                return;
+            };
+            inventory_item_actions(game, &item)
+                .into_iter()
+                .map(|(k, _)| k)
+                .collect()
+        };
         let idx = self
             .selected_index(key, actions.len())
             .or_else(|| match key {
@@ -1566,10 +1576,18 @@ impl App {
             self.pending_inventory_item = None;
             return;
         }
+        if idx.map(|i| actions[i]) == Some('c') {
+            let Some(game) = &mut self.game else { return };
+            game.use_item(&item);
+            self.status_line = None;
+            self.pending_inventory_item = None;
+            self.mode = Mode::Inventory;
+            return;
+        }
         let Some(game) = &mut self.game else { return };
         let result = match idx.map(|i| actions[i]) {
-            Some('e') => Some(game.equip(item)),
-            Some('u') => Some(game.fuse_item(item)),
+            Some('e') => Some(game.equip(&item)),
+            Some('u') => Some(game.fuse_item(&item)),
             _ => None,
         };
         let Some(result) = result else { return };
@@ -1585,7 +1603,7 @@ impl App {
     /// destroy. `[A]` erases the whole stack, matching the pre-cap
     /// behavior. An empty input on Enter means 1.
     fn handle_erase_quantity_key(&mut self, key: GameKey) {
-        let Some(item) = self.pending_erase else {
+        let Some(item) = self.pending_erase.clone() else {
             self.mode = Mode::Inventory;
             return;
         };
@@ -1639,7 +1657,7 @@ impl App {
             return;
         }
         if let Some(game) = &mut self.game {
-            match game.erase_item(item, quantity) {
+            match game.erase_item(&item, quantity) {
                 Ok(()) => self.status_line = None,
                 Err(e) => self.status_line = Some(e),
             }
@@ -2083,11 +2101,11 @@ mod tests {
             .player_status()
             .inventory
             .iter()
-            .find(|(i, _)| *i == ItemId::CoreFragment)
+            .find(|(i, _)| *i == ItemId::from(ids::CORE_FRAGMENT))
             .map(|(_, q)| *q)
             .unwrap();
 
-        app.pending_inventory_item = Some(ItemId::CoreFragment);
+        app.pending_inventory_item = Some(ItemId::from(ids::CORE_FRAGMENT));
         app.mode = Mode::InventoryItemAction;
         app.handle_key(GameKey::Char('x'));
         assert_eq!(
@@ -2106,7 +2124,7 @@ mod tests {
             .player_status()
             .inventory
             .iter()
-            .find(|(i, _)| *i == ItemId::CoreFragment)
+            .find(|(i, _)| *i == ItemId::from(ids::CORE_FRAGMENT))
             .map(|(_, q)| *q)
             .unwrap();
         assert_eq!(after, before - 3);
@@ -2116,7 +2134,7 @@ mod tests {
     #[test]
     fn erase_all_dumps_the_whole_stack() {
         let mut app = test_app(901);
-        app.pending_inventory_item = Some(ItemId::CoreFragment);
+        app.pending_inventory_item = Some(ItemId::from(ids::CORE_FRAGMENT));
         app.mode = Mode::InventoryItemAction;
         app.handle_key(GameKey::Char('x'));
         app.handle_key(GameKey::Char('a'));
@@ -2128,7 +2146,7 @@ mod tests {
             .player_status()
             .inventory
             .iter()
-            .find(|(i, _)| *i == ItemId::CoreFragment)
+            .find(|(i, _)| *i == ItemId::from(ids::CORE_FRAGMENT))
             .map(|(_, q)| *q);
         assert_eq!(held, None, "[A] should clear the stack entirely");
     }
@@ -2137,7 +2155,7 @@ mod tests {
     fn escaping_the_erase_prompt_erases_nothing() {
         let mut app = test_app(902);
         let before = app.game.as_ref().unwrap().player_status().inventory;
-        app.pending_inventory_item = Some(ItemId::CoreFragment);
+        app.pending_inventory_item = Some(ItemId::from(ids::CORE_FRAGMENT));
         app.mode = Mode::InventoryItemAction;
         app.handle_key(GameKey::Char('x'));
         app.handle_key(GameKey::Esc);
@@ -2148,15 +2166,17 @@ mod tests {
 
     #[test]
     fn every_equippable_item_offers_equip_fuse_and_erase() {
+        let app = test_app(904);
+        let game = app.game.as_ref().unwrap();
         for item in [
-            ItemId::OverclockCore,
-            ItemId::MonofilamentWhip,
-            ItemId::FirewallPlating,
-            ItemId::AblativePlating,
-            ItemId::NeuralAmplifier,
-            ItemId::CortexHack,
+            ItemId::from(ids::OVERCLOCK_CORE),
+            ItemId::from(ids::MONOFILAMENT_WHIP),
+            ItemId::from(ids::FIREWALL_PLATING),
+            ItemId::from(ids::ABLATIVE_PLATING),
+            ItemId::from(ids::NEURAL_AMPLIFIER),
+            ItemId::from(ids::CORTEX_HACK),
         ] {
-            let keys: Vec<char> = inventory_item_actions(item)
+            let keys: Vec<char> = inventory_item_actions(game, &item)
                 .into_iter()
                 .map(|(k, _)| k)
                 .collect();
@@ -2164,14 +2184,16 @@ mod tests {
                 keys,
                 vec!['e', 'u', 'x'],
                 "{} should offer fuse regardless of how many copies are held",
-                item.display_name()
+                game.item_name(&item)
             );
         }
     }
 
     #[test]
     fn a_plain_resource_offers_only_erase() {
-        let keys: Vec<char> = inventory_item_actions(ItemId::CoreFragment)
+        let app = test_app(905);
+        let game = app.game.as_ref().unwrap();
+        let keys: Vec<char> = inventory_item_actions(game, &ItemId::from(ids::CORE_FRAGMENT))
             .into_iter()
             .map(|(k, _)| k)
             .collect();
@@ -2181,7 +2203,7 @@ mod tests {
     #[test]
     fn fusing_without_enough_copies_explains_why_instead_of_ignoring_the_key() {
         let mut app = test_app(903);
-        app.pending_inventory_item = Some(ItemId::OverclockCore);
+        app.pending_inventory_item = Some(ItemId::from(ids::OVERCLOCK_CORE));
         app.mode = Mode::InventoryItemAction;
         app.handle_key(GameKey::Char('u'));
 

@@ -95,7 +95,7 @@ change what gets stored — a save from a different build shows up as
 | --- | --- |
 | `hjkl` / arrow keys | Move (bumping a rogue program starts an intrusion) |
 | `.` | Wait in place (advances one tick) |
-| `e` | Drain a Power Cell (restores Power) |
+| `e` | Drain the first Power-restoring item in your inventory (a Power Cell, unless a mod adds another) |
 | `r` | Recharge overnight (restores Fatigue and Integrity, costs Power) — requires standing near a deployed Recharger Node (see [Structures](#structures)) |
 | `g` | Scan the sector for Core Fragments |
 | `c` | Open the compile menu (compile an ICE Breaker — 3 Core Fragments — a Power Cell — 2 Core Fragments — and any future recipes). Then pick a quantity: type digits and Enter, or `[F]` for 5 at once, or `[M]` for the most you can currently afford |
@@ -125,7 +125,7 @@ a row's own number or letter directly.
 | Key | Action |
 | --- | --- |
 | `a` | Attack |
-| `d` | Decompile (attempt to compile/tame the program — needs an ICE Breaker) |
+| `d` | Decompile (attempt to compile/tame the program — needs a taming catalyst, which the ICE Breaker is) |
 | `c` | Command your active companion to buff you instead of attacking — a rally (ATK boost) by default, or its species' own special ability if it has one (only shown if you have a companion) |
 | `j` | Jack out (flee) — costs a mild XP setback, same as flatlining |
 
@@ -254,7 +254,7 @@ Shown in the status panel (always) and the intrusion screen (in battle):
 | **Attack** | How hard your hits land. Battle damage is roughly `move power + attacker's Attack − defender's Defense` (always at least 1). |
 | **Defense** | How much incoming damage you shrug off — see the Attack formula above. |
 | **Decompiler** | Player-only skill at cracking ICE. Grows by 1 every time you level up (starts at 0). Adds a flat bonus to your decompile odds — see Decompile chance below. Tamed programs never have this stat; only you attempt decompiles. |
-| **Decompile chance** | Shown live during an intrusion. Your odds of successfully compiling (taming) the program *this attempt*, given its remaining HP fraction, its species' difficulty, and your Decompiler stat — weakening it first, and leveling up over time, both raise your odds. Shown even without an ICE Breaker in hand, so you can decide whether it's worth going to compile one. |
+| **Decompile chance** | Shown live during an intrusion and on the inspect panel. Your odds of successfully compiling (taming) the program *this attempt*, given its remaining HP fraction, its species' difficulty, your Decompiler stat, and the potency of the taming catalyst the attempt would spend — weakening it first, leveling up over time, and carrying a stronger catalyst all raise your odds. With no catalyst in hand there's nothing to quote (you can't attempt at all), so the readout says "needs a taming catalyst" instead. |
 
 ### Perks
 
@@ -290,8 +290,9 @@ universal raw material — found by scanning (`g`) or harvested passively via
 a Mining Node — and the other two are refined from it (compiled with `c`,
 scavenged from creatures, or produced by a structure cronjob) for one
 specific purpose each. Equipment (below) is a separate, non-consumable item
-category. Items aren't yet data-driven the way species and structures are —
-see `CLAUDE.md` for the moddability note on adding a new one.
+category. Items are data-driven `.ron` files under `assets/items/`, same as
+species and structures — see `assets/items/README.md` for the schema, the
+canonical id list, and how to add one.
 
 ### Equipment
 
@@ -334,6 +335,10 @@ level and its actual scaled bonus.
   can only ever have one item per slot.
 - **Unequip**: press the number of an occupied slot (1 Weapon, 2 Armor, 3
   Module) directly from the main inventory screen.
+- **Consume**: select a numbered inventory item, then `[C]`. Offered only for
+  items that declare a `consume` block in their `.ron` file; it spends one
+  and applies whatever mix of Power, Fatigue, Integrity, and pre-battle buff
+  that item defines. The `e` key is the shortcut for the Power case.
 - **Erase**: select a numbered inventory item, then `[X]`. Permanently
   removes it from your inventory — there's no way to get it back.
 - An equipped item's (level-scaled) stat bonus is added the moment you
@@ -614,11 +619,12 @@ offers, followed by a quantity prompt.
 
 ## Modding
 
-Species and structures are plain data files under `assets/species/*.ron`
-and `assets/structures/*.ron` — drop in a new `.ron` file and it's picked up
-automatically next run, no recompiling needed. See the `README.md` in each
-of those directories for the schema. A malformed file is skipped with an
-in-game warning rather than crashing startup.
+Species, structures, and items are plain data files under
+`assets/species/*.ron`, `assets/structures/*.ron`, and `assets/items/*.ron`
+— drop in a new `.ron` file and it's picked up automatically next run, no
+recompiling needed. See the `README.md` in each of those directories for the
+schema. A malformed file is skipped with an in-game warning rather than
+crashing startup.
 
 ## Fonts
 

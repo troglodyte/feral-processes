@@ -6,7 +6,7 @@
 
 use crate::battle::compute_damage;
 use crate::components::{PLAYER_BASE_STATS, Stats};
-use crate::items::ItemId;
+use crate::items::EquipmentStats;
 use crate::progression::stats_after_levels;
 use crate::resources::{MAX_PARTY_SIZE, ZoneLevel};
 use crate::species::{SpeciesDb, SpeciesDef};
@@ -48,12 +48,12 @@ fn wild_stats_at_zone(species: &SpeciesDef, zone: u32) -> Stats {
 
 /// Best-in-slot Weapon + Armor bonus (no fusion) at the gear level `zone`
 /// unlocks — see `items::GEAR_LEVEL_GROWTH`/`Game::equip`, where gear level
-/// is capped by `ZoneLevel`. Reuses the real item defs/scaling rather than
-/// re-deriving the numbers, so this tracks any future item rebalance.
-/// Modules are skipped: their bonus is `decompiler`, not combat ATK/DEF.
-fn best_case_gear_bonus(zone: u32) -> (i32, i32) {
-    let (_, weapon) = ItemId::MonofilamentWhip.equipment().unwrap();
-    let (_, armor) = ItemId::AblativePlating.equipment().unwrap();
+/// is capped by `ZoneLevel`. Takes the two items' base `EquipmentStats`
+/// (the strongest shipped weapon/armor, resolved from `ItemDb` by the
+/// caller) and applies the real `scaled_for_level` scaling, so this tracks
+/// any future item rebalance. Modules are skipped: their bonus is
+/// `decompiler`, not combat ATK/DEF.
+fn best_case_gear_bonus(zone: u32, weapon: EquipmentStats, armor: EquipmentStats) -> (i32, i32) {
     let weapon = weapon.scaled_for_level(zone);
     let armor = armor.scaled_for_level(zone);
     (weapon.atk, armor.def)
@@ -176,21 +176,26 @@ pub fn simulate_battle(
 /// `simulate_battle`. `None` means scaling has broken down outright — not
 /// just a long grind, but no level up to `max_level` clears it.
 ///
-/// `with_gear` adds `best_case_gear_bonus(zone)` to the player's ATK/DEF
-/// (companions never carry equipment — see `components::Equipment`, only
-/// ever fetched for the player entity) — set it to `false` for a
-/// gear-free, pure-grind floor, `true` for the fully-intended progression
-/// path where the player re-equips zone-appropriate gear as they go.
+/// `with_gear` adds `best_case_gear_bonus(zone, weapon, armor)` to the
+/// player's ATK/DEF (companions never carry equipment — see
+/// `components::Equipment`, only ever fetched for the player entity) — set
+/// it to `false` for a gear-free, pure-grind floor, `true` for the
+/// fully-intended progression path where the player re-equips
+/// zone-appropriate gear as they go. `weapon`/`armor` are the base
+/// `EquipmentStats` of the strongest shipped gear, resolved from `ItemDb`
+/// by the caller; ignored when `with_gear` is `false`.
 pub fn min_level_to_clear_zone(
     species: &SpeciesDef,
     zone: u32,
     max_level: u32,
     with_gear: bool,
+    weapon: EquipmentStats,
+    armor: EquipmentStats,
 ) -> Option<(u32, BattleOutcome)> {
     let wild = wild_stats_at_zone(species, zone);
     let move_power = average_move_power(species);
     let (gear_atk, gear_def) = if with_gear {
-        best_case_gear_bonus(zone)
+        best_case_gear_bonus(zone, weapon, armor)
     } else {
         (0, 0)
     };
@@ -221,6 +226,19 @@ mod tests {
 
     fn species_assets_dir() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/species")
+    }
+
+    /// Base `EquipmentStats` of the strongest shipped weapon/armor, resolved
+    /// from the item db the same way `Game` does — passed into
+    /// `min_level_to_clear_zone` for the geared sweep.
+    fn best_gear_stats() -> (EquipmentStats, EquipmentStats) {
+        use crate::items::ids;
+        use crate::items_db::ItemDb;
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/items");
+        let (db, _) = ItemDb::load_dir(&dir).unwrap();
+        let weapon = db.get(ids::MONOFILAMENT_WHIP).unwrap().equipment.unwrap().1;
+        let armor = db.get(ids::ABLATIVE_PLATING).unwrap().equipment.unwrap().1;
+        (weapon, armor)
     }
 
     /// How deep to sweep the gear-free grind baseline. Zones are actually
@@ -260,11 +278,12 @@ mod tests {
             "species assets should all load cleanly: {warnings:?}"
         );
         let toughest = toughest_ordinary_species(&db);
+        let (weapon, armor) = best_gear_stats();
 
         let mut required_levels = Vec::new();
         for zone in 1..=MAX_GRIND_ONLY_ZONE_SWEPT {
             let Some((level, outcome)) =
-                min_level_to_clear_zone(toughest, zone, MAX_LEVEL_SEARCHED, false)
+                min_level_to_clear_zone(toughest, zone, MAX_LEVEL_SEARCHED, false, weapon, armor)
             else {
                 panic!(
                     "zone {zone} ({}) isn't clearable by level {MAX_LEVEL_SEARCHED} on pure grind \
@@ -313,11 +332,12 @@ mod tests {
             "species assets should all load cleanly: {warnings:?}"
         );
         let toughest = toughest_ordinary_species(&db);
+        let (weapon, armor) = best_gear_stats();
 
         let mut required_levels = Vec::new();
         for zone in 1..=MAX_GEARED_ZONE_SWEPT {
             let Some((geared_level, outcome)) =
-                min_level_to_clear_zone(toughest, zone, MAX_LEVEL_SEARCHED, true)
+                min_level_to_clear_zone(toughest, zone, MAX_LEVEL_SEARCHED, true, weapon, armor)
             else {
                 panic!(
                     "zone {zone} ({}) isn't clearable by level {MAX_LEVEL_SEARCHED} even fully \
@@ -338,7 +358,7 @@ mod tests {
             // within MAX_LEVEL_SEARCHED (see the other test), so gear
             // being strictly *required* there is expected, not a failure.
             if let Some((grind_only_level, _)) =
-                min_level_to_clear_zone(toughest, zone, MAX_LEVEL_SEARCHED, false)
+                min_level_to_clear_zone(toughest, zone, MAX_LEVEL_SEARCHED, false, weapon, armor)
             {
                 assert!(
                     geared_level <= grind_only_level,

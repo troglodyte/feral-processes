@@ -12,5 +12,5 @@
         (name: "Fork Bomb", power: 6, effect: Some((kind: Bleed, chance: 0.35, duration: 3, power: 2))),
         (name: "Signal Spam", power: 4),
     ],
-    work_resource: Some(PowerCell),
+    work_resource: Some("power_cell"),
 )

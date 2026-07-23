@@ -1,0 +1,6 @@
+(
+    id: "ice_breaker",
+    name: "ICE Breaker",
+    taming_potency: Some(0.4),
+    craftable: Some((cost: [("core_fragment", 3)])),
+)

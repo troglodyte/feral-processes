@@ -1,25 +1,3 @@
-use crate::items::ItemId;
-
-/// How effective an item is as a base multiplier in [`capture_chance`].
-pub fn item_potency(item: ItemId) -> f32 {
-    match item {
-        // Lowered from 0.55 — decompile odds were landing too high even at
-        // full HP against easy species, making the HP-weakening step feel
-        // optional rather than the intended core tension.
-        ItemId::IceBreaker => 0.4,
-        ItemId::CoreFragment
-        | ItemId::PowerCell
-        | ItemId::OverclockCore
-        | ItemId::FirewallPlating
-        | ItemId::NeuralAmplifier
-        | ItemId::PortalFragment
-        | ItemId::ResearchData
-        | ItemId::MonofilamentWhip
-        | ItemId::AblativePlating
-        | ItemId::CortexHack => 0.0,
-    }
-}
-
 /// Percentage-point bonus to decompile chance per point of the player's
 /// `Decompiler` stat (see `components::Decompiler`). Lowered from 0.03
 /// alongside `item_potency` — a well-leveled player was able to stack

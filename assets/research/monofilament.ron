@@ -5,8 +5,8 @@
     cost: 40,
     requires: ["overclock"],
     unlocks_recipes: [(
-        result: MonofilamentWhip,
-        cost: [(PortalFragment, 12)],
+        result: "monofilament_whip",
+        cost: [("portal_fragment", 12)],
         requires_structure: Some("fabricator"),
     )],
 )

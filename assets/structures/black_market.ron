@@ -3,14 +3,14 @@
     name: "iso Market",
     glyph: '$',
     color: Yellow,
-    build_cost: [(CoreFragment, 16)],
+    build_cost: [("core_fragment", 16)],
     work: None,
     trade: Some((
         sell_rate: 1,
         buy: [
-            (IceBreaker, 4),
-            (PowerCell, 3),
-            (PortalFragment, 8),
+            ("ice_breaker", 4),
+            ("power_cell", 3),
+            ("portal_fragment", 8),
         ],
     )),
 )

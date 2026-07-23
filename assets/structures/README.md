@@ -14,11 +14,11 @@ is skipped with a warning logged in-game rather than crashing startup.
     color: Magenta,                // one of: White, Gray, Green, DarkGreen, Red,
                                     //         Yellow, Blue, Magenta, Cyan, Brown,
                                     //         Orange
-    build_cost: [(CoreFragment, 3)],  // list of (item, quantity) pairs
-    // Item options: CoreFragment, PowerCell, IceBreaker, PortalFragment,
-    //               ResearchData, OverclockCore, MonofilamentWhip,
-    //               FirewallPlating, AblativePlating, NeuralAmplifier,
-    //               CortexHack
+    build_cost: [("core_fragment", 3)],  // list of (item id, quantity) pairs
+    // build_cost above, and every other item reference below (work.produces,
+    // passive_process.consumes/produces, teleport_cost, trade.buy), all take
+    // any item id from assets/items/*.ron — see assets/items/README.md for
+    // the schema and the full set.
 
     // Omit (`None`) for a purely decorative/utility structure. Set `Some(...)`
     // to make it assignable to a tamed creature via the cronjob menu — it'll
@@ -34,15 +34,15 @@ is skipped with a warning logged in-game rather than crashing startup.
     // cycle. Higher levels succeed more reliably. Leave it out entirely for
     // a node that always yields on completion, same as before this field
     // existed.
-    work: Some((produces: CoreFragment, ticks_per_unit: 5, capacity: 5, level: Some(1))),
+    work: Some((produces: "core_fragment", ticks_per_unit: 5, capacity: 5, level: Some(1))),
 
     // Optional; can be left out entirely (defaults to no passive processing).
     // If set, the structure automatically converts one `consumes` into one
     // `produces` every `ticks_per_unit` ticks whenever the player is standing
     // within `radius` tiles of it — no assigned worker needed, unlike `work`.
     passive_process: Some((
-        consumes: CoreFragment,
-        produces: PowerCell,
+        consumes: "core_fragment",
+        produces: "power_cell",
         ticks_per_unit: 15,
         radius: 2,
     )),
@@ -51,7 +51,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     // this structure is a symlink target: the player can "use symlink" (`u`
     // in the TUI) to instantly teleport to it from anywhere on the map,
     // paying the listed item cost.
-    teleport_cost: Some([(PowerCell, 4)]),
+    teleport_cost: Some([("power_cell", 4)]),
 
     // Optional; can be left out entirely (defaults to false). If true,
     // walking onto this structure breaches the player into the next zone
@@ -66,12 +66,12 @@ is skipped with a warning logged in-game rather than crashing startup.
 
     // Optional; can be left out entirely (defaults to no trading). If set,
     // this structure is a trading post: the player can "trade" (`t` in the
-    // TUI) with it to sell any inventory item (except CoreFragment) for
+    // TUI) with it to sell any inventory item (except Core Fragment) for
     // `sell_rate` Core Fragments per unit, or buy any item listed in `buy`
     // for its Core Fragment cost.
     trade: Some((
         sell_rate: 1,
-        buy: [(IceBreaker, 4), (PowerCell, 3)],
+        buy: [("ice_breaker", 4), ("power_cell", 3)],
     )),
 
     // Optional; can be left out entirely (defaults to 30). How much damage

@@ -49,16 +49,18 @@ is skipped with a warning logged in-game rather than crashing startup.
             power: 3,
         ))),
     ],
-    work_resource: Some(CoreFragment),  // or `None` if it shouldn't be assignable to a cronjob
-    // Item options: CoreFragment, PowerCell, IceBreaker, PortalFragment,
-    //               OverclockCore, MonofilamentWhip (Weapon),
-    //               FirewallPlating, AblativePlating (Armor),
-    //               NeuralAmplifier, CortexHack (Module)
+    work_resource: Some("core_fragment"),  // or `None` if it shouldn't be assignable to a cronjob
+    // work_resource (above) and equipment_drop (below) both take any item
+    // id from assets/items/*.ron — see assets/items/README.md for the
+    // schema and the full set. The base roster's ids: core_fragment,
+    // power_cell, ice_breaker, portal_fragment, research_data,
+    // overclock_core, monofilament_whip (Weapon), firewall_plating,
+    // ablative_plating (Armor), neural_amplifier, cortex_hack (Module).
 
     // Optional; omit entirely for no chance of a gear drop. If set, defeating
     // or decompiling this species has a chance (0.0-1.0) to additionally
     // drop one piece of equipment, independent of `work_resource`.
-    equipment_drop: Some((FirewallPlating, 0.3)),
+    equipment_drop: Some(("firewall_plating", 0.3)),
 
     // Optional; can be left out entirely (defaults to false). If true, this
     // species is a boss: it's excluded from the normal per-tile habitat spawn

@@ -12,5 +12,5 @@
         (name: "Flicker", power: 4),
         (name: "Static Burst", power: 6),
     ],
-    work_resource: Some(PowerCell),
+    work_resource: Some("power_cell"),
 )

@@ -5,8 +5,8 @@
     cost: 25,
     requires: ["weapon_bench"],
     unlocks_recipes: [(
-        result: NeuralAmplifier,
-        cost: [(PortalFragment, 6)],
+        result: "neural_amplifier",
+        cost: [("portal_fragment", 6)],
         requires_structure: Some("fabricator"),
     )],
 )

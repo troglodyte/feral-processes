@@ -3,7 +3,7 @@
     name: "Home",
     glyph: 'H',
     color: Green,
-    build_cost: [(CoreFragment, 5)],
+    build_cost: [("core_fragment", 5)],
     work: None,
-    teleport_cost: Some([(PowerCell, 4)]),
+    teleport_cost: Some([("power_cell", 4)]),
 )

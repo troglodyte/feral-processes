@@ -14,6 +14,6 @@
         (name: "Corrupt", power: 9, effect: Some((kind: Bleed, chance: 0.4, duration: 3, power: 3))),
     ],
     work_resource: None,
-    equipment_drop: Some((FirewallPlating, 0.2)),
+    equipment_drop: Some(("firewall_plating", 0.2)),
     can_nest: true,
 )

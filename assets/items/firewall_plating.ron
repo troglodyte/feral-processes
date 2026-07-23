@@ -1,0 +1,1 @@
+(id: "firewall_plating", name: "Firewall Plating", equipment: Some((Armor, (def: 3))))

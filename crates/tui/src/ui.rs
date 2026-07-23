@@ -8,7 +8,7 @@ use feral_processes_app_core::{
     App, MENU_SCAN_RADIUS, Mode, TradeChoice, inventory_item_actions, menu_shortcut,
 };
 use feral_processes_engine::components::{EquippedItem, GlyphColor};
-use feral_processes_engine::items::{ItemId, RESEARCH_DATA_BANK_LIMIT};
+use feral_processes_engine::items::ItemId;
 use feral_processes_engine::world::{Biome, Tile};
 use feral_processes_engine::{
     EntityView, Game, MAX_FUSIONS, MessageKind, PetInfo, PlayerStatus, ResearchState,
@@ -111,7 +111,7 @@ fn render_playing(f: &mut Frame, app: &mut App) {
         ),
         viewport_area,
     );
-    render_status_panel(f, top[1], &status);
+    render_status_panel(f, top[1], &status, game);
 
     let mut log_lines: Vec<Line> = Vec::new();
     if let Some(s) = &status_line {
@@ -135,12 +135,20 @@ fn render_playing(f: &mut Frame, app: &mut App) {
         Mode::Build => render_build_menu(f, area, game, selected),
         Mode::BuildDirection => render_build_direction(f, area),
         Mode::Craft => render_craft_menu(f, area, game, selected),
-        Mode::CraftQuantity => {
-            render_craft_quantity_menu(f, area, game, app.pending_craft, &app.craft_quantity_input)
-        }
-        Mode::EraseQuantity => {
-            render_erase_quantity_menu(f, area, game, app.pending_erase, &app.erase_quantity_input)
-        }
+        Mode::CraftQuantity => render_craft_quantity_menu(
+            f,
+            area,
+            game,
+            app.pending_craft.clone(),
+            &app.craft_quantity_input,
+        ),
+        Mode::EraseQuantity => render_erase_quantity_menu(
+            f,
+            area,
+            game,
+            app.pending_erase.clone(),
+            &app.erase_quantity_input,
+        ),
         Mode::Cronjob => render_cronjob_menu(f, area, game, selected),
         Mode::CronjobStructure => render_cronjob_structure_menu(f, area, game, selected),
         Mode::Guard => render_guard_menu(f, area, game, selected),
@@ -155,15 +163,17 @@ fn render_playing(f: &mut Frame, app: &mut App) {
             let zone = game.player_status().zone;
             let fusion_tier = app
                 .pending_inventory_item
+                .as_ref()
                 .map(|item| game.item_fusion_tier(item))
                 .unwrap_or(0);
             render_inventory_item_action(
                 f,
                 area,
-                app.pending_inventory_item,
+                app.pending_inventory_item.clone(),
                 zone,
                 fusion_tier,
                 selected,
+                game,
             )
         }
         Mode::Companion => render_companion_menu(f, area, game, selected),
@@ -188,7 +198,7 @@ fn render_playing(f: &mut Frame, app: &mut App) {
             area,
             game,
             app.pending_trade_structure,
-            app.pending_trade_choice,
+            app.pending_trade_choice.clone(),
             &app.trade_quantity_input,
         ),
         Mode::Perks => render_perks_menu(f, area, game, selected),
@@ -317,7 +327,7 @@ fn glyph_color(c: GlyphColor) -> Color {
     }
 }
 
-fn render_status_panel(f: &mut Frame, area: Rect, status: &PlayerStatus) {
+fn render_status_panel(f: &mut Frame, area: Rect, status: &PlayerStatus, game: &Game) {
     let chunks = Layout::vertical([
         Constraint::Length(3),
         Constraint::Length(3),
@@ -398,7 +408,7 @@ fn render_status_panel(f: &mut Frame, area: Rect, status: &PlayerStatus) {
         lines.push(Line::from("  (empty)"));
     }
     for (item, qty) in &status.inventory {
-        lines.push(Line::from(format!("  {} x{}", item.display_name(), qty)));
+        lines.push(Line::from(format!("  {} x{}", game.item_name(item), qty)));
     }
     lines.push(Line::from(""));
     lines.push(Line::from("hjkl/arrows move  . wait   e drain  r recharge"));
@@ -423,7 +433,7 @@ fn render_status_panel(f: &mut Frame, area: Rect, status: &PlayerStatus) {
 /// they have plenty. Shared by every dialog that spends items (compile,
 /// deploy, symlink) so the player can see at a glance whether they can
 /// afford it without leaving the menu.
-fn cost_display(cost: &[(ItemId, u32)], inventory: &[(ItemId, u32)]) -> Vec<String> {
+fn cost_display(game: &Game, cost: &[(ItemId, u32)], inventory: &[(ItemId, u32)]) -> Vec<String> {
     cost.iter()
         .map(|(item, qty)| {
             let have = inventory
@@ -431,7 +441,7 @@ fn cost_display(cost: &[(ItemId, u32)], inventory: &[(ItemId, u32)]) -> Vec<Stri
                 .find(|(i, _)| i == item)
                 .map(|(_, q)| *q)
                 .unwrap_or(0);
-            format!("{} ({have}/{qty})", item.display_name())
+            format!("{} ({have}/{qty})", game.item_name(item))
         })
         .collect()
 }
@@ -446,12 +456,12 @@ fn render_craft_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize
         Line::from(""),
     ];
     for (i, recipe) in recipes.iter().enumerate() {
-        let cost = cost_display(&recipe.cost, &status.inventory);
+        let cost = cost_display(game, &recipe.cost, &status.inventory);
         lines.push(menu_line(
             format!(
                 "[{}] {} — {}",
                 menu_shortcut(i),
-                recipe.result.display_name(),
+                game.item_name(&recipe.result),
                 cost.join(", ")
             ),
             i == selected,
@@ -481,11 +491,11 @@ fn render_craft_quantity_menu(
         .into_iter()
         .find(|r| r.result == result);
     let mut lines = vec![
-        Line::from(format!("Compile how many {}?", result.display_name())),
+        Line::from(format!("Compile how many {}?", game.item_name(&result))),
         Line::from(""),
     ];
     if let Some(recipe) = &recipe {
-        let cost = cost_display(&recipe.cost, &status.inventory);
+        let cost = cost_display(game, &recipe.cost, &status.inventory);
         lines.push(Line::from(format!("Cost per unit: {}", cost.join(", "))));
         lines.push(Line::from(""));
     }
@@ -498,7 +508,7 @@ fn render_craft_quantity_menu(
     lines.push(Line::from(""));
     lines.push(Line::from(format!(
         "Max affordable right now: {}",
-        game.max_craftable(result)
+        game.max_craftable(&result)
     )));
     lines.push(Line::from(""));
     lines.push(Line::from("Type digits, Enter to compile"));
@@ -536,7 +546,7 @@ fn render_erase_quantity_menu(
         quantity_input.to_string()
     };
     let lines = vec![
-        Line::from(format!("Erase how many {}?", item.display_name())),
+        Line::from(format!("Erase how many {}?", game.item_name(&item))),
         Line::from(""),
         Line::from(format!("Quantity: {shown}")),
         Line::from(""),
@@ -571,7 +581,7 @@ fn render_build_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize
     ];
     for (i, def) in defs.iter().enumerate() {
         let raw_cost = game.structure_build_cost(def);
-        let cost = cost_display(&raw_cost, &status.inventory);
+        let cost = cost_display(game, &raw_cost, &status.inventory);
         let text = format!("[{}] {} — {}", menu_shortcut(i), def.name, cost.join(", "));
         lines.push(if i == selected {
             menu_line(text, true)
@@ -864,7 +874,7 @@ fn render_symlink_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usi
     }
     for (i, t) in targets.iter().enumerate() {
         let raw_cost = game.symlink_cost(t.entity).unwrap_or_default();
-        let cost = cost_display(&raw_cost, &status.inventory);
+        let cost = cost_display(game, &raw_cost, &status.inventory);
         let durability = t
             .durability
             .map(|(hp, max)| format!(" [HP {hp}/{max}]"))
@@ -1153,6 +1163,7 @@ fn render_trade_action_menu(
         return;
     };
     let inventory = game.player_status().inventory;
+    let currency = game.currency();
 
     let mut lines = vec![Line::styled(
         "Sell (from inventory):",
@@ -1160,7 +1171,7 @@ fn render_trade_action_menu(
     )];
     let sellable: Vec<_> = inventory
         .iter()
-        .filter(|(item, _)| *item != ItemId::CoreFragment)
+        .filter(|(item, _)| *item != currency)
         .collect();
     if sellable.is_empty() {
         lines.push(Line::from("  (nothing to sell)"));
@@ -1171,7 +1182,7 @@ fn render_trade_action_menu(
             format!(
                 "[{}] Sell {} x{qty} ({} Core Fragments each)",
                 menu_shortcut(idx),
-                item.display_name(),
+                game.item_name(item),
                 trade.sell_rate
             ),
             idx == selected,
@@ -1188,7 +1199,7 @@ fn render_trade_action_menu(
             format!(
                 "[{}] Buy {} ({cost} Core Fragments each)",
                 menu_shortcut(idx),
-                item.display_name()
+                game.item_name(item)
             ),
             idx == selected,
         ));
@@ -1240,7 +1251,7 @@ fn render_trade_quantity_menu(
         quantity_input
     };
     let lines = vec![
-        Line::from(format!("{verb} how many {}?", item.display_name())),
+        Line::from(format!("{verb} how many {}?", game.item_name(&item))),
         Line::from(""),
         Line::from(format!("Price: {unit_price} Core Fragments each")),
         Line::from(""),
@@ -1315,17 +1326,19 @@ fn render_perks_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize
 fn render_research_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize) {
     let popup = centered_rect(70, 65, area);
     f.render_widget(Clear, popup);
+    let research_currency = game.research_currency();
     let held = game
         .player_status()
         .inventory
         .iter()
-        .find(|(item, _)| *item == ItemId::ResearchData)
+        .find(|(item, _)| *item == research_currency)
         .map(|(_, n)| *n)
         .unwrap_or(0);
+    let bank_limit = game.bank_limit_of(&research_currency).unwrap_or(0);
     let nodes = game.research_nodes();
     let mut lines = vec![
         Line::styled(
-            format!("Research Data: {held}/{}", RESEARCH_DATA_BANK_LIMIT),
+            format!("Research Data: {held}/{bank_limit}"),
             Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD),
         ),
         Line::from(""),
@@ -1490,10 +1503,7 @@ fn render_inspect_detail(
     }
     if view.is_hostile && !view.is_tamed {
         lines.push(Line::styled(
-            format!(
-                "Decompile chance right now: {:.0}%",
-                view.decompile_chance * 100.0
-            ),
+            decompile_chance_line(view.decompile_chance),
             Style::new().fg(Color::Magenta),
         ));
     }
@@ -1514,7 +1524,10 @@ fn render_inspect_detail(
         }
     )));
     if let Some(res) = view.work_resource {
-        lines.push(Line::from(format!("Work aptitude: {}", res.display_name())));
+        lines.push(Line::from(format!(
+            "Work aptitude: {}",
+            game.item_name(&res)
+        )));
     }
     lines.push(Line::from(""));
     lines.push(Line::from("Press any key to go back, Esc to close"));
@@ -1545,9 +1558,9 @@ fn render_inventory_screen(f: &mut Frame, area: Rect, game: &mut Game, selected:
             "Equipped (number to unequip):",
             Style::new().add_modifier(Modifier::BOLD),
         ),
-        equipped_line(1, "Weapon", status.weapon, selected == 0),
-        equipped_line(2, "Armor", status.armor, selected == 1),
-        equipped_line(3, "Module", status.module, selected == 2),
+        equipped_line(1, "Weapon", status.weapon.clone(), selected == 0, game),
+        equipped_line(2, "Armor", status.armor.clone(), selected == 1, game),
+        equipped_line(3, "Module", status.module.clone(), selected == 2, game),
         Line::from(""),
         Line::styled(
             format!(
@@ -1561,12 +1574,13 @@ fn render_inventory_screen(f: &mut Frame, area: Rect, game: &mut Game, selected:
         lines.push(Line::from("  (empty)"));
     }
     for (i, (item, qty)) in status.inventory.iter().enumerate() {
-        let tag = equip_preview_tag(*item, status.zone, game.item_fusion_tier(*item));
+        let fusion_tier = game.item_fusion_tier(item);
+        let tag = equip_preview_tag(game, item, status.zone, fusion_tier);
         lines.push(menu_line(
             format!(
                 "[{}] {} x{}{}",
                 menu_shortcut(i + 3),
-                item.display_name(),
+                game.item_name(item),
                 qty,
                 tag
             ),
@@ -1589,8 +1603,9 @@ fn equipped_line(
     label: &str,
     equipped: Option<EquippedItem>,
     selected: bool,
+    game: &Game,
 ) -> Line<'static> {
-    match equipped.and_then(|e| e.item.equipment().map(|(_, mods)| (e, mods))) {
+    match equipped.and_then(|e| game.equipment_of(&e.item).map(|(_, mods)| (e, mods))) {
         Some((equipped, mods)) => {
             let mods = mods
                 .scaled_for_level(equipped.level)
@@ -1620,7 +1635,7 @@ fn equipped_line(
             menu_line(
                 format!(
                     "[{num}] {label}: {}{note} ({})",
-                    equipped.item.display_name(),
+                    game.item_name(&equipped.item),
                     parts.join(" ")
                 ),
                 selected,
@@ -1635,8 +1650,8 @@ fn equipped_line(
 /// equip it (see `Game::equip`), so this previews that same number rather
 /// than a flat, unscaled base value. Empty string for a non-equippable
 /// item (in place of the old generic "(equippable)" tag).
-fn equip_preview_tag(item: ItemId, zone_level: u32, fusion_tier: u32) -> String {
-    let Some((_, base_mods)) = item.equipment() else {
+fn equip_preview_tag(game: &Game, item: &ItemId, zone_level: u32, fusion_tier: u32) -> String {
+    let Some((_, base_mods)) = game.equipment_of(item) else {
         return String::new();
     };
     let mods = base_mods
@@ -1665,6 +1680,7 @@ fn render_inventory_item_action(
     zone_level: u32,
     fusion_tier: u32,
     selected: usize,
+    game: &Game,
 ) {
     let popup = centered_rect(50, 30, area);
     f.render_widget(Clear, popup);
@@ -1675,13 +1691,13 @@ fn render_inventory_item_action(
         );
         return;
     };
-    let actions = inventory_item_actions(item);
+    let actions = inventory_item_actions(game, &item);
     let mut lines = vec![
         Line::styled(
             format!(
                 "{}{}",
-                item.display_name(),
-                equip_preview_tag(item, zone_level, fusion_tier)
+                game.item_name(&item),
+                equip_preview_tag(game, &item, zone_level, fusion_tier)
             ),
             Style::new().add_modifier(Modifier::BOLD),
         ),
@@ -1696,6 +1712,18 @@ fn render_inventory_item_action(
         Paragraph::new(lines).block(Block::bordered().title("Item")),
         popup,
     );
+}
+
+/// The decompile-odds readout shared by the battle and inspect panels. With
+/// no taming catalyst in inventory there are no odds to quote — decompiling
+/// isn't available at all — so the line says what's missing instead of a
+/// percentage. It stays deliberately generic: which item is a catalyst is
+/// item data, not something a renderer gets to name.
+fn decompile_chance_line(chance: Option<f32>) -> String {
+    match chance {
+        Some(c) => format!("Decompile chance right now: {:.0}%", c * 100.0),
+        None => "Decompile chance right now: needs a taming catalyst".to_string(),
+    }
 }
 
 /// Formats an active battle status effect (e.g. "Bleeding (2)") as a
@@ -1793,15 +1821,7 @@ fn render_battle(f: &mut Frame, app: &mut App) {
 
     f.render_widget(
         Paragraph::new(Line::styled(
-            format!(
-                "Decompile chance right now: {:.0}%{}",
-                view.decompile_chance * 100.0,
-                if view.can_tame {
-                    ""
-                } else {
-                    " (needs an ICE Breaker)"
-                }
-            ),
+            decompile_chance_line(view.decompile_chance),
             Style::new().fg(Color::Magenta),
         )),
         chunks[i],
@@ -1823,7 +1843,7 @@ fn render_battle(f: &mut Frame, app: &mut App) {
     i += 1;
 
     let mut actions = vec!["[A]ttack".to_string()];
-    if view.can_tame {
+    if view.decompile_chance.is_some() {
         actions.push("[D]ecompile".to_string());
     }
     if !view.companions.is_empty() {
@@ -1931,7 +1951,7 @@ fn render_help(f: &mut Frame) {
         Line::from(""),
         Line::from("hjkl / arrow keys   move (bumping a rogue program starts an intrusion)"),
         Line::from(".                   wait in place (advances one tick)"),
-        Line::from("e                   drain a power cell"),
+        Line::from("e                   use a power source from inventory to recharge"),
         Line::from(
             "r                   recharge overnight (restores fatigue and Integrity, uses power)",
         ),
@@ -1976,7 +1996,7 @@ fn render_help(f: &mut Frame) {
         Line::from("Every numbered/lettered menu can also be navigated with Up/Down + Enter,"),
         Line::from("on top of typing a row's own number or letter directly."),
         Line::from(""),
-        Line::from("In an intrusion:  a attack   d decompile (needs an ICE Breaker)"),
+        Line::from("In an intrusion:  a attack   d decompile (needs a taming catalyst)"),
         Line::from(
             "                  c command a companion to buff you (picks one if more than one is active)   j jack out",
         ),

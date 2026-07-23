@@ -3,6 +3,6 @@
     name: "Compiler",
     glyph: '&',
     color: Green,
-    build_cost: [(CoreFragment, 16)],
-    work: Some((produces: IceBreaker, ticks_per_unit: 8)),
+    build_cost: [("core_fragment", 16)],
+    work: Some((produces: "ice_breaker", ticks_per_unit: 8)),
 )

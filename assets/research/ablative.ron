@@ -5,8 +5,8 @@
     cost: 40,
     requires: ["firewall"],
     unlocks_recipes: [(
-        result: AblativePlating,
-        cost: [(PortalFragment, 12)],
+        result: "ablative_plating",
+        cost: [("portal_fragment", 12)],
         requires_structure: Some("armory"),
     )],
 )

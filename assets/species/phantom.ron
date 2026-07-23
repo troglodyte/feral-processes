@@ -14,5 +14,5 @@
         (name: "Spoof", power: 9),
     ],
     work_resource: None,
-    equipment_drop: Some((NeuralAmplifier, 0.3)),
+    equipment_drop: Some(("neural_amplifier", 0.3)),
 )

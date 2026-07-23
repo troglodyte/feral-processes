@@ -1680,7 +1680,9 @@ impl Game {
             })
         };
         if let Some(old) = old_item {
-            let (_, old_base_mods) = self.equipment_of(&old.item).unwrap();
+            let (_, old_base_mods) = self
+                .equipment_of(&old.item)
+                .ok_or_else(|| format!("{} can't be equipped.", self.item_name(&old.item)))?;
             self.apply_equipment_delta(
                 player,
                 old_base_mods
@@ -1741,7 +1743,9 @@ impl Game {
         let Some(equipped) = removed else {
             return Err(format!("Nothing equipped in your {} slot.", slot.label()));
         };
-        let (_, base_mods) = self.equipment_of(&equipped.item).unwrap();
+        let (_, base_mods) = self
+            .equipment_of(&equipped.item)
+            .ok_or_else(|| format!("{} can't be equipped.", self.item_name(&equipped.item)))?;
         self.apply_equipment_delta(
             player,
             base_mods
@@ -4898,6 +4902,32 @@ mod tests {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
     }
 
+    /// Copies the shipped `species`/`structures`/`research`/`items` asset
+    /// dirs into a scratch dir, omitting `core_fragment.ron` — the item
+    /// that holds the Currency economy role — so `Game::new`'s
+    /// missing-role startup abort (see `ItemDb::missing_roles`) can be
+    /// exercised against an otherwise-valid item set.
+    fn assets_dir_missing_currency_item() -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "feral_processes_missing_currency_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let shipped = test_assets_dir();
+        for sub in ["species", "structures", "research", "items"] {
+            let dst = dir.join(sub);
+            std::fs::create_dir_all(&dst).unwrap();
+            for entry in std::fs::read_dir(shipped.join(sub)).unwrap() {
+                let entry = entry.unwrap();
+                if sub == "items" && entry.file_name().to_str() == Some("core_fragment.ron") {
+                    continue;
+                }
+                std::fs::copy(entry.path(), dst.join(entry.file_name())).unwrap();
+            }
+        }
+        dir
+    }
+
     /// Gives the player `n` Research Data, bypassing the Research Node so
     /// the test doesn't depend on tick timing or a tamed worker.
     fn grant_research_data(game: &mut Game, n: u32) {
@@ -6515,6 +6545,54 @@ mod tests {
     }
 
     #[test]
+    fn unequipping_an_item_with_no_itemdb_entry_errors_instead_of_panicking() {
+        // A save can restore an `EquippedItem` id that `ItemDb::load_dir`
+        // has since warned-and-skipped (the mod's .ron was renamed, broken,
+        // or removed) — `Game::load` doesn't validate equipment slots
+        // against the item set, so `equipment_of` can no longer resolve
+        // the id by the time the player tries to unequip it.
+        let mut game = Game::new(712, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Equipment>(player).unwrap().weapon = Some(EquippedItem {
+            item: ItemId::from("a_removed_mod_item"),
+            level: 1,
+            fusion_tier: 0,
+        });
+
+        let result = game.unequip(EquipmentSlot::Weapon);
+
+        assert!(
+            result.is_err(),
+            "unequipping an item absent from ItemDb should error, not panic"
+        );
+    }
+
+    #[test]
+    fn equipping_over_a_slot_holding_an_item_with_no_itemdb_entry_errors_instead_of_panicking() {
+        // Same failure mode as the unequip case above, but hit via the
+        // swap-out path when equipping a new item into an already-occupied
+        // slot whose old occupant's data is gone.
+        let mut game = Game::new(713, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Equipment>(player).unwrap().weapon = Some(EquippedItem {
+            item: ItemId::from("a_removed_mod_item"),
+            level: 1,
+            fusion_tier: 0,
+        });
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
+
+        let result = game.equip(ItemId::from(ids::OVERCLOCK_CORE));
+
+        assert!(
+            result.is_err(),
+            "equipping over a slot whose old item is absent from ItemDb should error, not panic"
+        );
+    }
+
+    #[test]
     fn fuse_item_consumes_two_copies_and_raises_the_fusion_tier() {
         let mut game = Game::new(200, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
@@ -6679,6 +6757,27 @@ mod tests {
             })
         );
         assert_eq!(status.decompiler, decompiler_after_equip);
+    }
+
+    #[test]
+    fn game_new_aborts_startup_when_the_item_set_is_missing_the_currency_role() {
+        // The economy can't run without a Currency-role item — see
+        // `ItemDb::missing_roles` — so `Game::new` must abort before the
+        // world is built rather than let play reach `Game::currency()`'s
+        // `.expect("validated at startup")` deep in gameplay.
+        let dir = assets_dir_missing_currency_item();
+        let result = Game::new(900, DifficultyMode::Forgiving, &dir);
+        let _ = std::fs::remove_dir_all(&dir);
+
+        // `Game` isn't `Debug` (it wraps a `bevy_ecs::World`), so this can't
+        // use `Result::expect_err` / `unwrap_err`.
+        let Err(err) = result else {
+            panic!("startup should abort rather than run with no item holding the Currency role");
+        };
+        assert!(
+            err.to_string().contains("Currency"),
+            "error should name the missing role: {err}"
+        );
     }
 
     /// The initial world spawns 14 wild creatures scattered around the

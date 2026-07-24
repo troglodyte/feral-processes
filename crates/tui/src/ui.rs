@@ -43,6 +43,10 @@ pub fn render(f: &mut Frame, app: &mut App) {
             render_battle(f, app);
             render_battle_target_menu(f, app);
         }
+        Mode::BattleItem => {
+            render_battle(f, app);
+            render_battle_item_menu(f, app);
+        }
         Mode::BattleResolve => {
             render_battle(f, app);
             render_battle_resolve(f, app);
@@ -1899,6 +1903,34 @@ fn render_battle_target_menu(f: &mut Frame, app: &mut App) {
     f.render_widget(
         Paragraph::new(lines)
             .block(Block::bordered().title("Pick a target"))
+            .wrap(Wrap { trim: true }),
+        popup,
+    );
+}
+
+/// Overlay for `Mode::BattleItem`: which consumable does this slot spend?
+/// Lists only what's actually usable, so an empty list can't be reached —
+/// the action is greyed out with a reason before it gets here.
+fn render_battle_item_menu(f: &mut Frame, app: &mut App) {
+    let area = f.area();
+    let popup = centered_rect(60, 40, area);
+    f.render_widget(Clear, popup);
+    let selected = app.menu_selected;
+    let Some(game) = &mut app.game else { return };
+    let items = game.battle_usable_items();
+
+    let mut lines = vec![Line::from(
+        "Use which item? It costs this member their round. (Esc to cancel)",
+    )];
+    for (i, item) in items.iter().enumerate() {
+        lines.push(menu_line(
+            format!("[{}] {}", menu_shortcut(i), game.item_name(item)),
+            i == selected,
+        ));
+    }
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(Block::bordered().title("Use an item"))
             .wrap(Wrap { trim: true }),
         popup,
     );

@@ -2777,8 +2777,10 @@ impl Game {
     }
 
     /// Consumable items the player is actually holding — the pool
-    /// `BattleAction::UseItem` draws from.
-    fn battle_usable_items(&self) -> Vec<ItemId> {
+    /// `BattleAction::UseItem` draws from, and what the in-battle item
+    /// picker lists. The map's inventory screen is a different flow: there
+    /// an item is spent for free, in battle it costs that slot its round.
+    pub fn battle_usable_items(&self) -> Vec<ItemId> {
         let player = self.player_entity();
         let db = self.world.resource::<ItemDb>();
         let Some(inv) = self.world.get::<Inventory>(player) else {

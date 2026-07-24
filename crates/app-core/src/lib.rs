@@ -173,6 +173,11 @@ pub enum Mode {
     /// Picking which enemy group the pending action targets. Entered from
     /// `Mode::Battle` when the chosen option has `TargetSpec::EnemyGroup`.
     BattleTarget,
+    /// Picking which consumable the pending action spends. Entered from
+    /// `Mode::Battle` when the chosen option has `TargetSpec::InventoryItem`.
+    /// Distinct from `Mode::Inventory`: on the map an item is spent for
+    /// free, in battle it costs that slot its round.
+    BattleItem,
     /// Paging through the narration of a resolved round before the next
     /// planning phase begins.
     BattleResolve,
@@ -579,6 +584,7 @@ impl App {
             Mode::Playing => self.handle_playing_key(key),
             Mode::Battle => self.handle_battle_key(key),
             Mode::BattleTarget => self.handle_battle_target_key(key),
+            Mode::BattleItem => self.handle_battle_item_key(key),
             Mode::BattleResolve => self.handle_battle_resolve_key(key),
             Mode::Build => self.handle_build_key(key),
             Mode::BuildDirection => self.handle_build_direction_key(key),
@@ -964,7 +970,7 @@ impl App {
             TargetSpec::InventoryItem => {
                 self.pending_battle_action = Some(option.kind);
                 self.menu_selected = 0;
-                self.mode = Mode::Inventory;
+                self.mode = Mode::BattleItem;
             }
         }
     }
@@ -996,6 +1002,31 @@ impl App {
             return;
         };
         let Some(action) = action_from(kind, Some(group), None) else {
+            return;
+        };
+        self.pending_battle_action = None;
+        self.commit_battle_action(slot, action);
+    }
+
+    /// Picks which consumable the action chosen in `Mode::Battle` spends.
+    fn handle_battle_item_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.pending_battle_action = None;
+            self.mode = Mode::Battle;
+            return;
+        }
+        let Some(game) = &self.game else { return };
+        let Some(slot) = game.battle_active_slot() else {
+            return;
+        };
+        let items = game.battle_usable_items();
+        let Some(idx) = self.selected_index(key, items.len()) else {
+            return;
+        };
+        let Some(kind) = self.pending_battle_action else {
+            return;
+        };
+        let Some(action) = action_from(kind, None, Some(items[idx].clone())) else {
             return;
         };
         self.pending_battle_action = None;
@@ -2295,6 +2326,95 @@ mod tests {
         app.handle_key(GameKey::Esc);
         assert_eq!(app.mode, Mode::Battle);
         assert!(app.pending_battle_action.is_none());
+    }
+
+    /// Every action the engine offers must lead somewhere that can actually
+    /// complete. `[U]se item` originally routed to the map's inventory
+    /// screen, whose flow calls `Game::use_item` — which refuses outright
+    /// during an intrusion. The action appeared in the menu, swallowed the
+    /// player's pick, and did nothing.
+    #[test]
+    fn every_offered_action_reaches_a_state_that_can_complete_it() {
+        let probe = battling_app();
+        let options = probe.game.as_ref().unwrap().battle_action_options(0);
+        assert!(
+            options.iter().any(|o| o.kind == ActionKind::UseItem),
+            "the starting kit holds consumables, so Use Item should be offered"
+        );
+
+        for option in options {
+            if option.unavailable.is_some() {
+                continue;
+            }
+            let mut app = battling_app();
+            app.handle_key(GameKey::Char(option.key));
+            assert_ne!(
+                app.mode,
+                Mode::Inventory,
+                "[{}] dead-ends in the map inventory, which refuses to act mid-battle",
+                option.key
+            );
+            // Either it resolved the round outright, or it opened a picker
+            // that belongs to the battle flow.
+            assert!(
+                matches!(
+                    app.mode,
+                    Mode::Battle
+                        | Mode::BattleTarget
+                        | Mode::BattleItem
+                        | Mode::BattleResolve
+                        | Mode::Playing
+                        | Mode::GameOver
+                ),
+                "[{}] left the app in {:?}, which isn't part of the battle flow",
+                option.key,
+                app.mode
+            );
+        }
+    }
+
+    /// Following the item picker through to a pick must actually spend the
+    /// item and resolve the round, not just look like it did.
+    #[test]
+    fn using_an_item_in_battle_spends_it_and_costs_the_round() {
+        let mut app = battling_app();
+        // The first row of the picker is what pressing `1` selects.
+        let target = app.game.as_ref().unwrap().battle_usable_items()[0].clone();
+        let held = |app: &App| -> u32 {
+            app.game
+                .as_ref()
+                .unwrap()
+                .player_status()
+                .inventory
+                .iter()
+                .find(|(id, _)| *id == target)
+                .map(|(_, n)| *n)
+                .unwrap_or(0)
+        };
+        let before = held(&app);
+        assert!(before > 0, "the starting kit should hold a consumable");
+
+        app.handle_key(GameKey::Char('u'));
+        assert_eq!(app.mode, Mode::BattleItem);
+        app.handle_key(GameKey::Char('1'));
+
+        assert!(
+            app.pending_battle_action.is_none(),
+            "the pending action should have been consumed, not left dangling"
+        );
+        assert_eq!(
+            held(&app),
+            before - 1,
+            "exactly one {target:?} should have been spent"
+        );
+        assert!(
+            matches!(
+                app.mode,
+                Mode::BattleResolve | Mode::Playing | Mode::GameOver
+            ),
+            "the only slot was planned, so the round should have resolved; got {:?}",
+            app.mode
+        );
     }
 
     /// A solo player is a one-slot party, so choosing an untargeted action

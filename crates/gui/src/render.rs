@@ -106,6 +106,10 @@ pub fn draw(app: &mut App, fx: &mut Fx, fonts: &Fonts) {
             draw_battle(app, fx, fonts, &m);
             draw_battle_target_menu(app, fonts, &m);
         }
+        Mode::BattleItem => {
+            draw_battle(app, fx, fonts, &m);
+            draw_battle_item_menu(app, fonts, &m);
+        }
         Mode::BattleResolve => {
             draw_battle(app, fx, fonts, &m);
             draw_battle_resolve(app, fonts, &m);
@@ -1974,6 +1978,24 @@ fn draw_battle_target_menu(app: &mut App, fonts: &Fonts, m: &Metrics) {
     draw_popup("Pick a target", PopupSize::Large, &rows, fonts, m);
 }
 
+/// Which consumable does this slot spend? Lists only what's actually
+/// usable — the action is greyed out with a reason before it gets here.
+fn draw_battle_item_menu(app: &mut App, fonts: &Fonts, m: &Metrics) {
+    let selected = app.menu_selected;
+    let Some(game) = &mut app.game else { return };
+    let items = game.battle_usable_items();
+    let mut rows = vec![text_row(
+        "Use which item? It costs this member their round.",
+    )];
+    for (i, item) in items.iter().enumerate() {
+        rows.push(item_row(
+            format!("[{}] {}", menu_shortcut(i), game.item_name(item)),
+            i == selected,
+        ));
+    }
+    draw_popup("Use an item", PopupSize::Large, &rows, fonts, m);
+}
+
 /// The narration of the round that just resolved, paged past with any key.
 fn draw_battle_resolve(app: &mut App, fonts: &Fonts, m: &Metrics) {
     let mark = app.battle_log_mark;
@@ -2134,6 +2156,7 @@ mod tests {
             Mode::Inventory,
             Mode::Battle,
             Mode::BattleTarget,
+            Mode::BattleItem,
             Mode::BattleResolve,
             Mode::Help,
             Mode::LoadGame,

@@ -52,8 +52,10 @@ const REST_TICKS: u32 = 40;
 /// program in its own right, not invulnerable cover.
 const COMPANION_RETALIATION_CHANCE: f64 = 0.3;
 
-/// Tile distance from `ZoneSpawnPoint` per step of `DISTANCE_STAT_STEP_BONUS`
-/// — see `Game::distance_stat_multiplier`.
+/// Tile distance per step of `DISTANCE_STAT_STEP_BONUS`, counted from
+/// `Game::distance_from_danger_origin` — the base platform's edge once a
+/// Home exists, `ZoneSpawnPoint` before then. See
+/// `Game::distance_stat_multiplier`.
 const DISTANCE_STAT_STEP_TILES: i32 = 15;
 
 /// Stat growth added per `DISTANCE_STAT_STEP_TILES` step away from the
@@ -68,8 +70,9 @@ const DISTANCE_STAT_STEP_BONUS: f32 = 0.25;
 /// really is unbounded.
 const MAX_DISTANCE_STAT_MULTIPLIER: f32 = 3.0;
 
-/// Tile distance from `ZoneSpawnPoint` per extra pack member a wild spawn
-/// can roll — see `Game::max_pack_size`. Twice `DISTANCE_STAT_STEP_TILES`:
+/// Tile distance per extra pack member a wild spawn can roll, counted from
+/// the same origin as `DISTANCE_STAT_STEP_TILES` (the platform's edge once
+/// a Home exists) — see `Game::max_pack_size`. Twice `DISTANCE_STAT_STEP_TILES`:
 /// packs grow into their zone's cap more gradually than per-creature stats
 /// do.
 const PACK_SIZE_STEP_TILES: i32 = DISTANCE_STAT_STEP_TILES * 2;
@@ -3640,10 +3643,25 @@ impl Game {
     /// `spawn_wild_creature` — venturing away from where you breached in
     /// is its own escalating risk, independent of zone depth.
     fn distance_stat_multiplier(&self, x: i32, y: i32) -> f32 {
-        let spawn = self.world.resource::<ZoneSpawnPoint>();
-        let dist = (x - spawn.x).abs().max((y - spawn.y).abs());
+        let dist = self.distance_from_danger_origin(x, y);
         let mult = 1.0 + (dist / DISTANCE_STAT_STEP_TILES) as f32 * DISTANCE_STAT_STEP_BONUS;
         mult.min(MAX_DISTANCE_STAT_MULTIPLIER)
+    }
+
+    /// Chebyshev distance from `(x, y)` to the edge of safe territory: the
+    /// platform's edge once a Home exists, the bare `ZoneSpawnPoint` before
+    /// then. Both danger curves measure from this rather than straight from
+    /// the spawn point, so the whole base counts as distance zero instead
+    /// of sitting exactly on the first escalation step — the build radius
+    /// and `DISTANCE_STAT_STEP_TILES` are both 15.
+    fn distance_from_danger_origin(&self, x: i32, y: i32) -> i32 {
+        let spawn = self.world.resource::<ZoneSpawnPoint>();
+        let dist = (x - spawn.x).abs().max((y - spawn.y).abs());
+        if self.world.resource::<Platform>().center.is_some() {
+            (dist - MAX_BUILD_DISTANCE_FROM_HOME).max(0)
+        } else {
+            dist
+        }
     }
 
     /// Rolls a fresh `Potential` for a newly created creature — see
@@ -3678,8 +3696,7 @@ impl Game {
     fn max_pack_size(&self, x: i32, y: i32) -> u32 {
         let zone = self.world.resource::<ZoneLevel>().0;
         let cap = zone + 1;
-        let spawn = self.world.resource::<ZoneSpawnPoint>();
-        let dist = (x - spawn.x).abs().max((y - spawn.y).abs());
+        let dist = self.distance_from_danger_origin(x, y);
         let grown = 1 + (dist / PACK_SIZE_STEP_TILES) as u32;
         grown.min(cap)
     }
@@ -11770,7 +11787,7 @@ mod tests {
     }
 
     #[test]
-    fn distance_stat_multiplier_grows_with_distance_from_the_zone_spawn_point_and_caps() {
+    fn distance_stat_multiplier_measures_from_the_zone_spawn_point_when_no_home_exists() {
         let game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let spawn = *game.world.resource::<ZoneSpawnPoint>();
 
@@ -11804,7 +11821,75 @@ mod tests {
     }
 
     #[test]
+    fn distance_stat_multiplier_treats_the_whole_platform_as_distance_zero() {
+        let mut game = Game::new(930, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let spawn = *game.world.resource::<ZoneSpawnPoint>();
+        place_home(&mut game, 0, 0);
+
+        assert_eq!(
+            game.distance_stat_multiplier(spawn.x + MAX_BUILD_DISTANCE_FROM_HOME, spawn.y),
+            1.0,
+            "the platform edge is still perfectly safe territory"
+        );
+        assert_eq!(
+            game.distance_stat_multiplier(
+                spawn.x + MAX_BUILD_DISTANCE_FROM_HOME + DISTANCE_STAT_STEP_TILES - 1,
+                spawn.y
+            ),
+            1.0,
+            "one tile short of the first step past the edge is still unscaled"
+        );
+        assert!(
+            (game.distance_stat_multiplier(
+                spawn.x + MAX_BUILD_DISTANCE_FROM_HOME + DISTANCE_STAT_STEP_TILES,
+                spawn.y
+            ) - 1.25)
+                .abs()
+                < f32::EPSILON,
+            "the first step up lands one full step past the platform edge — 30 tiles from Home"
+        );
+        assert_eq!(
+            game.distance_stat_multiplier(spawn.x + 10_000, spawn.y),
+            MAX_DISTANCE_STAT_MULTIPLIER,
+            "the cap is unchanged"
+        );
+    }
+
+    #[test]
+    fn max_pack_size_also_counts_from_the_platform_edge() {
+        let mut game = Game::new(931, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.world.resource_mut::<ZoneLevel>().0 = 4;
+        let spawn = *game.world.resource::<ZoneSpawnPoint>();
+        place_home(&mut game, 0, 0);
+
+        assert_eq!(
+            game.max_pack_size(spawn.x + MAX_BUILD_DISTANCE_FROM_HOME, spawn.y),
+            1,
+            "packs shouldn't grow inside territory that's still stat-x1.0"
+        );
+        // The discriminating case: without the platform offset this is a
+        // full PACK_SIZE_STEP_TILES from spawn and would already allow a
+        // packmate. Measured from the platform edge it's only half a step.
+        assert_eq!(
+            game.max_pack_size(spawn.x + PACK_SIZE_STEP_TILES, spawn.y),
+            1,
+            "a full step from spawn is only half a step from the platform edge"
+        );
+        assert_eq!(
+            game.max_pack_size(
+                spawn.x + MAX_BUILD_DISTANCE_FROM_HOME + PACK_SIZE_STEP_TILES,
+                spawn.y
+            ),
+            2,
+            "the first pack-size step lands one full step past the platform edge"
+        );
+    }
+
+    #[test]
     fn max_pack_size_grows_with_zone_and_distance_and_caps_per_zone() {
+        // No Home is placed, so there's no platform and distances count
+        // straight from the spawn point — see the platform-edge test below
+        // for the case where one exists.
         let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let spawn = *game.world.resource::<ZoneSpawnPoint>();
 

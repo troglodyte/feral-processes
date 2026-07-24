@@ -2,6 +2,8 @@ use bevy_ecs::prelude::{Entity, Resource};
 use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 
+use crate::battle::EnemyGroup;
+
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum DifficultyMode {
     Permadeath,
@@ -116,16 +118,16 @@ pub struct GameOver {
 #[derive(Resource, Clone, Copy)]
 pub struct PlayerEntity(pub Entity);
 
-/// Active turn-based encounter between the player and one or more wild
-/// creatures spawned together as a pack (see `Game::gather_pack`).
-/// `wild_creatures[0]` is always the "front" target — the only one the
-/// player can actually attack or decompile — while every other entry is a
-/// reinforcement waiting its turn; all of them retaliate each round
-/// regardless. Removing this resource ends the battle.
+/// Active turn-based encounter between the player's party and one or more
+/// wild species groups (see `battle::EnemyGroup`), partitioned out of the
+/// pack `Game::gather_pack` collected. Groups 0 and 1 are engaged and can
+/// melee; anything further back needs a move flagged `ranged` to reach the
+/// party. Removing this resource ends the battle.
 #[derive(Resource)]
 pub struct BattleState {
     pub player: Entity,
-    pub wild_creatures: Vec<Entity>,
+    pub groups: Vec<EnemyGroup>,
+    pub round: u32,
     pub log: Vec<String>,
     pub finished: bool,
     pub player_won: bool,

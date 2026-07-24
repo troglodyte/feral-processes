@@ -1,3 +1,23 @@
+use bevy_ecs::prelude::Entity;
+
+use crate::species::SpeciesId;
+
+/// One species' worth of the wild pack in an active intrusion.
+/// `members[0]` is the front — the only member that takes hits and the only
+/// one whose HP the roster shows. Emptying a group removes it from
+/// `resources::BattleState::groups`, which promotes whatever sat behind it.
+#[derive(Debug, Clone)]
+pub struct EnemyGroup {
+    pub species: SpeciesId,
+    pub members: Vec<Entity>,
+}
+
+impl EnemyGroup {
+    pub fn front(&self) -> Option<Entity> {
+        self.members.first().copied()
+    }
+}
+
 /// Damage always deals at least 1, so battles can't stall out on high-defense
 /// matchups.
 pub fn compute_damage(atk: i32, def: i32, move_power: i32) -> i32 {

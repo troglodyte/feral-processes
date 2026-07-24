@@ -23,6 +23,7 @@ use bevy_ecs::prelude::*;
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 
+use battle::EnemyGroup;
 use components::{
     ActiveBuff, ActiveStatus, BuffKind, Creature, CustomName, Decompiler, Durability, Equipment,
     EquippedItem, Experience, FusionCount, Glyph, GlyphColor, Hostile, Inventory, ItemFusions,
@@ -88,6 +89,12 @@ const PACK_SIZE_STEP_TILES: i32 = DISTANCE_STAT_STEP_TILES * 2;
 /// same radius so a whole spawned cluster is guaranteed to pull together
 /// into one fight.
 const PACK_GATHER_RADIUS: i32 = 2;
+
+/// How many distinct species groups can engage in one intrusion. A cluster
+/// with more species than this engages its largest groups and leaves the
+/// remainder standing on the map as ordinary hostiles — they're met on the
+/// next bump rather than silently despawned.
+const MAX_ENEMY_GROUPS: usize = 4;
 
 /// How many `Hostile` creatures may exist across the whole map at once.
 /// Wild creatures never despawn on their own, so without a bound the
@@ -451,9 +458,9 @@ pub struct BattleView {
     pub player_status_effect: Option<String>,
     /// The wild program's current battle status condition, if any.
     pub wild_status_effect: Option<String>,
-    /// How many more wild programs are waiting behind the current one in
-    /// this pack (see `resources::BattleState::wild_creatures`) — 0 for an
-    /// ordinary solo encounter.
+    /// How many more wild programs are still standing behind the current
+    /// one, across every group (see `resources::BattleState::groups`) — 0
+    /// for an ordinary solo encounter.
     pub pack_remaining: usize,
 }
 
@@ -2448,22 +2455,58 @@ impl Game {
         pack
     }
 
+    /// Partitions `pack` into one group per species, in first-appearance
+    /// order. A cluster spanning more than `MAX_ENEMY_GROUPS` species keeps
+    /// only its largest groups; the rest are *not* returned and stay on the
+    /// map as ordinary hostiles.
+    fn group_pack(&self, pack: Vec<Entity>) -> Vec<EnemyGroup> {
+        let mut groups: Vec<EnemyGroup> = Vec::new();
+        for entity in pack {
+            let Some(species) = self
+                .world
+                .get::<Creature>(entity)
+                .map(|c| c.species.clone())
+            else {
+                continue;
+            };
+            match groups.iter_mut().find(|g| g.species == species) {
+                Some(group) => group.members.push(entity),
+                None => groups.push(EnemyGroup {
+                    species,
+                    members: vec![entity],
+                }),
+            }
+        }
+        // `sort_by_key` is stable, so equal-sized groups keep
+        // first-appearance order and the truncation stays deterministic for
+        // seeded tests.
+        if groups.len() > MAX_ENEMY_GROUPS {
+            groups.sort_by_key(|g| std::cmp::Reverse(g.members.len()));
+            groups.truncate(MAX_ENEMY_GROUPS);
+        }
+        groups
+    }
+
     fn start_battle(&mut self, pack: Vec<Entity>) {
         let player = self.player_entity();
         // A `PlayerBuff` armed on the map by a consumable (see `use_item`'s
         // `prebattle_buff`) must carry into the fight it was armed for —
         // intentionally left untouched here, unlike `clear_battle_status_effects`.
-        let anchor = pack[0];
-        let name = self
-            .world
-            .get::<Creature>(anchor)
-            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+        let groups = self.group_pack(pack);
+        let name = groups
+            .first()
+            .and_then(|g| self.world.resource::<SpeciesDb>().get(&g.species))
             .map(|s| s.name.clone())
             .unwrap_or_else(|| "program".to_string());
-        let others = pack.len() - 1;
+        let others = groups
+            .iter()
+            .map(|g| g.members.len())
+            .sum::<usize>()
+            .saturating_sub(1);
         self.world.insert_resource(BattleState {
             player,
-            wild_creatures: pack,
+            groups,
+            round: 1,
             log: Vec::new(),
             finished: false,
             player_won: false,
@@ -2477,20 +2520,40 @@ impl Game {
         }
     }
 
-    /// The front pack member of the active battle, if any — see
-    /// `resources::BattleState::wild_creatures`.
-    fn front_wild_creature(&self) -> Option<Entity> {
+    /// The front member of `group` — the only one that takes hits.
+    fn front_of_group(&self, group: usize) -> Option<Entity> {
         self.world
             .get_resource::<BattleState>()?
-            .wild_creatures
-            .first()
-            .copied()
+            .groups
+            .get(group)?
+            .front()
+    }
+
+    /// How many groups are still standing.
+    fn living_group_count(&self) -> usize {
+        self.world
+            .get_resource::<BattleState>()
+            .map(|b| b.groups.len())
+            .unwrap_or(0)
+    }
+
+    /// Every living enemy across every group, in group-then-slot order.
+    fn all_living_enemies(&self) -> Vec<Entity> {
+        let Some(battle) = self.world.get_resource::<BattleState>() else {
+            return Vec::new();
+        };
+        battle
+            .groups
+            .iter()
+            .flat_map(|g| g.members.iter().copied())
+            .filter(|&e| self.creature_alive(e))
+            .collect()
     }
 
     pub fn battle_view(&self) -> Option<BattleView> {
         let battle = self.world.get_resource::<BattleState>()?;
-        let wild = *battle.wild_creatures.first()?;
-        let pack_remaining = battle.wild_creatures.len() - 1;
+        let wild = battle.groups.first()?.front()?;
+        let pack_remaining = self.all_living_enemies().len().saturating_sub(1);
         let wild_stats = self.world.get::<Stats>(wild)?;
         let wild_creature = self.world.get::<Creature>(wild)?;
         let species_db = self.world.get_resource::<SpeciesDb>()?;
@@ -2542,7 +2605,7 @@ impl Game {
         let Some((player, front)) = self
             .world
             .get_resource::<BattleState>()
-            .and_then(|b| b.wild_creatures.first().map(|&w| (b.player, w)))
+            .and_then(|b| b.groups.first()?.front().map(|w| (b.player, w)))
         else {
             return;
         };
@@ -2558,7 +2621,7 @@ impl Game {
             self.apply_damage(front, dmg);
             self.log(format!("You unleash a data strike for {dmg} damage."));
 
-            if !self.creature_alive(front) && self.finish_front_pack_member(player) {
+            if !self.creature_alive(front) && self.finish_group_member(0, player) {
                 self.tick();
                 return;
             }
@@ -2591,7 +2654,7 @@ impl Game {
         if self.is_stunned(companion) {
             self.log(format!("{name} stalls — stunned, it can't act!"));
         } else {
-            let Some(front) = self.front_wild_creature() else {
+            let Some(front) = self.front_of_group(0) else {
                 return;
             };
             let ability = self
@@ -2617,38 +2680,36 @@ impl Game {
     /// more dangerous than a solo encounter of the same species. Each one
     /// independently rolls its own move and target (see `wild_retaliate`).
     fn all_wild_retaliate(&mut self, player: Entity) {
-        let Some(battle) = self.world.get_resource::<BattleState>() else {
-            return;
-        };
-        let pack = battle.wild_creatures.clone();
-        for wild in pack {
-            if self.creature_alive(wild) {
-                self.wild_retaliate(wild, player);
-            }
+        for wild in self.all_living_enemies() {
+            self.wild_retaliate(wild, player);
         }
     }
 
-    /// Drops the current front pack member from
-    /// `BattleState::wild_creatures` (the caller is responsible for
-    /// whatever happened to it — a kill or a successful tame). Returns
-    /// whether that emptied the pack.
-    fn pop_front_pack_member(&mut self) -> bool {
+    /// Drops `group`'s front member (the caller is responsible for whatever
+    /// happened to it — a kill or a successful tame), removing the group
+    /// entirely if that emptied it. Returns whether the whole pack is gone.
+    fn pop_group_member(&mut self, group: usize) -> bool {
         let mut battle = self.world.resource_mut::<BattleState>();
-        if !battle.wild_creatures.is_empty() {
-            battle.wild_creatures.remove(0);
+        let Some(g) = battle.groups.get_mut(group) else {
+            return battle.groups.is_empty();
+        };
+        if !g.members.is_empty() {
+            g.members.remove(0);
         }
-        battle.wild_creatures.is_empty()
+        if g.members.is_empty() {
+            battle.groups.remove(group);
+        }
+        battle.groups.is_empty()
     }
 
-    /// Handles the front pack member dying (from a direct hit or a status
+    /// Handles `group`'s front member dying (from a direct hit or a status
     /// tick): logs the kill, awards its loot/XP, despawns it, and drops it
-    /// from the pack. If that was the last member, the whole encounter
-    /// ends in a win (`BattleState` removed) and this returns `true`;
-    /// otherwise the next pack member becomes the new front and the fight
-    /// continues, returning `false`.
-    fn finish_front_pack_member(&mut self, player: Entity) -> bool {
-        let Some(front) = self.front_wild_creature() else {
-            return true;
+    /// from the group. If that emptied the last standing group, the whole
+    /// encounter ends in a win (`BattleState` removed) and this returns
+    /// `true`; otherwise the fight continues, returning `false`.
+    fn finish_group_member(&mut self, group: usize, player: Entity) -> bool {
+        let Some(front) = self.front_of_group(group) else {
+            return self.living_group_count() == 0;
         };
         self.log("The rogue program crashes and deletes itself!");
         let wild_max_hp = self.world.get::<Stats>(front).unwrap().max_hp;
@@ -2661,7 +2722,7 @@ impl Game {
         {
             n.pending_respawns.push(NEST_RESPAWN_TICKS);
         }
-        if self.pop_front_pack_member() {
+        if self.pop_group_member(group) {
             self.clear_battle_status_effects(player, front);
             self.world.remove_resource::<BattleState>();
             true
@@ -2679,12 +2740,12 @@ impl Game {
     /// would be.
     fn resolve_post_action(&mut self, player: Entity) {
         self.all_wild_retaliate(player);
-        let Some(front) = self.front_wild_creature() else {
+        let Some(front) = self.front_of_group(0) else {
             return;
         };
         self.tick_all_status_effects(front, player);
         if !self.creature_alive(front) {
-            self.finish_front_pack_member(player);
+            self.finish_group_member(0, player);
             return;
         }
         if !self.creature_alive(player) {
@@ -3045,7 +3106,7 @@ impl Game {
             .unwrap()
             .take(catalyst, 1);
 
-        let Some(front) = self.front_wild_creature() else {
+        let Some(front) = self.front_of_group(0) else {
             return;
         };
         let (hp_fraction, species_id) = {
@@ -3083,7 +3144,7 @@ impl Game {
             }
             self.log("ICE breached! The program now runs under your control.");
             self.award_player_xp(player, wild_max_hp as u32);
-            if self.pop_front_pack_member() {
+            if self.pop_group_member(0) {
                 self.clear_battle_status_effects(player, front);
                 self.world.remove_resource::<BattleState>();
                 self.tick();
@@ -3125,7 +3186,7 @@ impl Game {
                 self.log(format!("Bailing out costs you {xp_lost} XP."));
             }
         }
-        if let Some(front) = self.front_wild_creature() {
+        if let Some(front) = self.front_of_group(0) {
             self.clear_battle_status_effects(player, front);
         }
         self.world.remove_resource::<BattleState>();
@@ -5406,6 +5467,24 @@ mod tests {
 
     fn test_assets_dir() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+    }
+
+    /// Starts a battle against `enemies`, partitioned into species groups
+    /// exactly as `start_battle` does. Tests that use this build their
+    /// combatants by hand to pin down the precise stats a case needs, which
+    /// `start_battle`'s own spawn path can't express — this keeps them
+    /// saying "these programs are in the fight" without restating the
+    /// partition, and without the opening log line.
+    fn insert_battle(game: &mut Game, player: Entity, enemies: Vec<Entity>) {
+        let groups = game.group_pack(enemies);
+        game.world.insert_resource(BattleState {
+            player,
+            groups,
+            round: 1,
+            log: Vec::new(),
+            finished: false,
+            player_won: false,
+        });
     }
 
     /// Copies the shipped `species`/`structures`/`research`/`items` asset
@@ -7970,13 +8049,8 @@ mod tests {
         );
 
         let player = game.player_entity();
-        game.world.insert_resource(BattleState {
-            player,
-            wild_creatures: vec![player],
-            log: Vec::new(),
-            finished: false,
-            player_won: false,
-        });
+        let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        insert_battle(&mut game, player, vec![wild]);
         game.idle_tick();
         assert_eq!(
             game.current_tick(),
@@ -8054,13 +8128,7 @@ mod tests {
                 },
             ))
             .id();
-        game.world.insert_resource(BattleState {
-            player,
-            wild_creatures: vec![wild],
-            log: Vec::new(),
-            finished: false,
-            player_won: false,
-        });
+        insert_battle(&mut game, player, vec![wild]);
         // Near-dead target + maxed decompiler skill + plenty of breakers,
         // so the capture-chance clamp (95%) makes a handful of attempts
         // succeed for certain, without needing to control the RNG directly.
@@ -8668,13 +8736,7 @@ mod tests {
                 },
             ))
             .id();
-        game.world.insert_resource(BattleState {
-            player,
-            wild_creatures: vec![wild],
-            log: Vec::new(),
-            finished: false,
-            player_won: false,
-        });
+        insert_battle(&mut game, player, vec![wild]);
 
         game.battle_flee();
 
@@ -8957,13 +9019,7 @@ mod tests {
                 StatusEffects::default(),
             ))
             .id();
-        game.world.insert_resource(BattleState {
-            player,
-            wild_creatures: vec![wild],
-            log: Vec::new(),
-            finished: false,
-            player_won: false,
-        });
+        insert_battle(&mut game, player, vec![wild]);
 
         game.battle_command_companion(companion);
 
@@ -9019,13 +9075,7 @@ mod tests {
                 StatusEffects::default(),
             ))
             .id();
-        game.world.insert_resource(BattleState {
-            player,
-            wild_creatures: vec![wild],
-            log: Vec::new(),
-            finished: false,
-            player_won: false,
-        });
+        insert_battle(&mut game, player, vec![wild]);
 
         let fatigue_before = game.world.get::<Needs>(player).unwrap().fatigue;
         game.battle_command_companion(companion);
@@ -9082,13 +9132,7 @@ mod tests {
                 StatusEffects::default(),
             ))
             .id();
-        game.world.insert_resource(BattleState {
-            player,
-            wild_creatures: vec![wild],
-            log: Vec::new(),
-            finished: false,
-            player_won: false,
-        });
+        insert_battle(&mut game, player, vec![wild]);
 
         game.battle_attack();
 
@@ -9786,13 +9830,7 @@ mod tests {
                 },
             ))
             .id();
-        game.world.insert_resource(BattleState {
-            player,
-            wild_creatures: vec![wild],
-            log: Vec::new(),
-            finished: false,
-            player_won: false,
-        });
+        insert_battle(&mut game, player, vec![wild]);
 
         game.battle_attack();
 
@@ -9844,13 +9882,7 @@ mod tests {
                     },
                 ))
                 .id();
-            game.world.insert_resource(BattleState {
-                player,
-                wild_creatures: vec![wild],
-                log: Vec::new(),
-                finished: false,
-                player_won: false,
-            });
+            insert_battle(&mut game, player, vec![wild]);
 
             game.battle_attack();
 
@@ -9941,13 +9973,7 @@ mod tests {
                     },
                 ))
                 .id();
-            game.world.insert_resource(BattleState {
-                player,
-                wild_creatures: vec![wild],
-                log: Vec::new(),
-                finished: false,
-                player_won: false,
-            });
+            insert_battle(&mut game, player, vec![wild]);
 
             game.wild_retaliate(wild, player);
             if game.world.get::<Stats>(companion).unwrap().hp == 0 {
@@ -10206,13 +10232,7 @@ mod tests {
                 },
             ))
             .id();
-        game.world.insert_resource(BattleState {
-            player,
-            wild_creatures: vec![wild],
-            log: Vec::new(),
-            finished: false,
-            player_won: false,
-        });
+        insert_battle(&mut game, player, vec![wild]);
 
         game.battle_command_companion(not_in_party);
 
@@ -12209,13 +12229,7 @@ mod tests {
                 },
             ))
             .id();
-        game.world.insert_resource(BattleState {
-            player,
-            wild_creatures: vec![front, second],
-            log: Vec::new(),
-            finished: false,
-            player_won: false,
-        });
+        insert_battle(&mut game, player, vec![front, second]);
 
         game.battle_attack();
 
@@ -12233,6 +12247,93 @@ mod tests {
         assert_eq!(
             view.wild_hp, 500,
             "the new front should be the untouched second pack member"
+        );
+    }
+
+    /// A pack partitions into one group per species, in first-appearance
+    /// order. `gather_pack` walks an ECS query, so the deterministic order
+    /// has to come from the partition step itself — an incidental query
+    /// order is exactly the kind of thing that produced this repo's
+    /// unsorted-habitat-lookup flake.
+    #[test]
+    fn a_mixed_pack_partitions_into_one_group_per_species_in_first_appearance_order() {
+        let mut game = Game::new(77, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let a = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        let b = game.spawn_wild_creature("scrapper", 5, 6).unwrap();
+        let c = game.spawn_wild_creature("glitch", 5, 7).unwrap();
+        let d = game.spawn_wild_creature("scrapper", 6, 5).unwrap();
+
+        game.start_battle(vec![a, b, c, d]);
+
+        let battle = game.world.resource::<BattleState>();
+        assert_eq!(battle.groups.len(), 2, "two species means two groups");
+        assert_eq!(battle.groups[0].species, "glitch", "glitch appeared first");
+        assert_eq!(battle.groups[0].members, vec![a, c]);
+        assert_eq!(battle.groups[1].species, "scrapper");
+        assert_eq!(battle.groups[1].members, vec![b, d]);
+    }
+
+    /// Only `MAX_ENEMY_GROUPS` species can engage at once. The overflow stays
+    /// on the map as ordinary hostiles rather than being despawned — the
+    /// player meets them on the next bump.
+    #[test]
+    fn a_pack_of_more_than_four_species_engages_the_four_largest_and_leaves_the_rest() {
+        let mut game = Game::new(78, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        // glitch x3, scrapper x2, virus x2, worm x2, sprite x1 -> sprite is
+        // the smallest group and the one left out.
+        let mut spawned = Vec::new();
+        for (species, count) in [
+            ("glitch", 3),
+            ("scrapper", 2),
+            ("virus", 2),
+            ("worm", 2),
+            ("sprite", 1),
+        ] {
+            for i in 0..count {
+                spawned.push(game.spawn_wild_creature(species, 5, 5 + i).unwrap());
+            }
+        }
+        let sprite = *spawned.last().unwrap();
+
+        game.start_battle(spawned.clone());
+
+        let battle = game.world.resource::<BattleState>();
+        assert_eq!(battle.groups.len(), MAX_ENEMY_GROUPS);
+        assert!(
+            battle.groups.iter().all(|g| g.species != "sprite"),
+            "the smallest group should be the one left out"
+        );
+        assert!(
+            game.world.get_entity(sprite).is_ok(),
+            "an un-engaged hostile must stay on the map, never be despawned"
+        );
+    }
+
+    /// Wiping the front group promotes whatever sat behind it — the central
+    /// tension of the reach rule: clearing front-to-back is not
+    /// automatically correct, because it walks the back rank into melee.
+    #[test]
+    fn wiping_the_front_group_promotes_the_group_behind_it() {
+        let mut game = Game::new(79, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let glitch = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        let scrapper = game.spawn_wild_creature("scrapper", 5, 6).unwrap();
+        game.start_battle(vec![glitch, scrapper]);
+        let player = game.player_entity();
+
+        assert_eq!(
+            game.world.resource::<BattleState>().groups[0].species,
+            "glitch"
+        );
+
+        game.world.get_mut::<Stats>(glitch).unwrap().hp = 0;
+        let battle_over = game.finish_group_member(0, player);
+
+        assert!(!battle_over, "the scrapper group is still standing");
+        let battle = game.world.resource::<BattleState>();
+        assert_eq!(battle.groups.len(), 1);
+        assert_eq!(
+            battle.groups[0].species, "scrapper",
+            "the surviving group should have shifted into index 0"
         );
     }
 
@@ -12588,13 +12689,7 @@ mod tests {
                 StatusEffects::default(),
             ))
             .id();
-        game.world.insert_resource(BattleState {
-            player,
-            wild_creatures: vec![wild],
-            log: Vec::new(),
-            finished: false,
-            player_won: false,
-        });
+        insert_battle(&mut game, player, vec![wild]);
         game.world.get_mut::<StatusEffects>(player).unwrap().active = Some(ActiveStatus {
             kind: StatusKind::Stun,
             remaining: 1,
@@ -12654,13 +12749,7 @@ mod tests {
                 },
             ))
             .id();
-        game.world.insert_resource(BattleState {
-            player,
-            wild_creatures: vec![wild],
-            log: Vec::new(),
-            finished: false,
-            player_won: false,
-        });
+        insert_battle(&mut game, player, vec![wild]);
         let player_atk = game.world.get::<Stats>(player).unwrap().atk;
         let expected_attack_dmg = battle::compute_damage(player_atk, 0, 5);
 
@@ -12729,13 +12818,7 @@ mod tests {
                 StatusEffects::default(),
             ))
             .id();
-        game.world.insert_resource(BattleState {
-            player,
-            wild_creatures: vec![wild],
-            log: Vec::new(),
-            finished: false,
-            player_won: false,
-        });
+        insert_battle(&mut game, player, vec![wild]);
         game.world.get_mut::<StatusEffects>(player).unwrap().active = Some(ActiveStatus {
             kind: StatusKind::Bleed,
             remaining: 5,
@@ -13513,13 +13596,7 @@ mod tests {
                 },
             ))
             .id();
-        game.world.insert_resource(BattleState {
-            player,
-            wild_creatures: vec![guardian],
-            log: Vec::new(),
-            finished: false,
-            player_won: false,
-        });
+        insert_battle(&mut game, player, vec![guardian]);
 
         game.battle_attack();
 
@@ -13596,13 +13673,7 @@ mod tests {
                 },
             ))
             .id();
-        game.world.insert_resource(BattleState {
-            player,
-            wild_creatures: vec![guardian],
-            log: Vec::new(),
-            finished: false,
-            player_won: false,
-        });
+        insert_battle(&mut game, player, vec![guardian]);
         game.world
             .get_mut::<Inventory>(player)
             .unwrap()
@@ -13655,13 +13726,7 @@ mod tests {
                 },
             ))
             .id();
-        game.world.insert_resource(BattleState {
-            player,
-            wild_creatures: vec![guardian],
-            log: Vec::new(),
-            finished: false,
-            player_won: false,
-        });
+        insert_battle(&mut game, player, vec![guardian]);
 
         // Should not panic even though `gone_nest` has no Nest component.
         game.battle_attack();

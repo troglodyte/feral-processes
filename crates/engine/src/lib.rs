@@ -2720,17 +2720,28 @@ impl Game {
         rolled.into_iter().map(|(_, actor)| actor).collect()
     }
 
-    /// The party slot currently awaiting an action, or `None` when the
-    /// round is fully planned.
+    /// Whether `slot` still holds a combatant able to act. A party member
+    /// knocked offline is dropped from `Party` (see `wild_retaliate`) while
+    /// `BattleState::planned` keeps its fixed length, so the slot outlives
+    /// the member — and an empty slot must not hold the round open, since
+    /// nothing can ever fill it.
+    fn slot_can_act(&self, slot: usize) -> bool {
+        self.actor_entity(battle::Actor::Party(slot))
+            .is_some_and(|entity| self.creature_alive(entity))
+    }
+
+    /// The party slot currently awaiting an action, or `None` when every
+    /// slot that can still act has one.
     pub fn battle_active_slot(&self) -> Option<usize> {
         let battle = self.world.get_resource::<BattleState>()?;
-        battle.planned.iter().position(|a| a.is_none())
+        (0..battle.planned.len())
+            .find(|&slot| battle.planned[slot].is_none() && self.slot_can_act(slot))
     }
 
     pub fn battle_round_ready(&self) -> bool {
-        self.world
-            .get_resource::<BattleState>()
-            .is_some_and(|b| b.planned.iter().all(|a| a.is_some()))
+        self.world.get_resource::<BattleState>().is_some_and(|b| {
+            (0..b.planned.len()).all(|slot| b.planned[slot].is_some() || !self.slot_can_act(slot))
+        })
     }
 
     pub fn battle_set_action(&mut self, slot: usize, action: BattleAction) -> Result<(), String> {
@@ -12884,6 +12895,45 @@ mod tests {
         assert_eq!(
             view.groups[0].front_hp, 500,
             "the new front should be the untouched second pack member"
+        );
+    }
+
+    /// A companion knocked offline mid-fight is dropped from `Party`, but
+    /// `planned` keeps its fixed length — so its slot outlives it. That
+    /// slot must stop counting toward the round, or it sits forever
+    /// awaiting an action that nothing can supply: the menu for a dead slot
+    /// is empty, so no keypress can fill it and the round can never
+    /// resolve. The player would be stuck with Jack Out as their only move.
+    #[test]
+    fn a_slot_whose_member_was_knocked_out_stops_holding_the_round_open() {
+        let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let pet = spawn_tamed(&mut game, 30, 5);
+        game.add_companion(pet).unwrap();
+        let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        game.start_battle(vec![wild]);
+        assert_eq!(game.world.resource::<BattleState>().planned.len(), 2);
+
+        // Exactly what `wild_retaliate` does when a companion hits 0 HP.
+        game.world.get_mut::<Stats>(pet).unwrap().hp = 0;
+        game.world.resource_mut::<Party>().0.retain(|&e| e != pet);
+
+        game.battle_set_action(0, BattleAction::Attack { group: 0 })
+            .unwrap();
+        assert_eq!(
+            game.battle_active_slot(),
+            None,
+            "the empty slot must not be waiting on an action nothing can give it"
+        );
+        assert!(
+            game.battle_round_ready(),
+            "with the only living member planned, the round has to be resolvable"
+        );
+
+        let hp_before = game.world.get::<Stats>(wild).unwrap().hp;
+        game.battle_resolve_round();
+        assert!(
+            game.world.get::<Stats>(wild).unwrap().hp < hp_before,
+            "the round should actually have resolved"
         );
     }
 

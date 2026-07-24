@@ -5,5 +5,5 @@
     color: Gray,
     build_cost: [("core_fragment", 10)],
     work: None,
-    inventory_bonus: 10,
+    pet_slot_bonus: 2,
 )

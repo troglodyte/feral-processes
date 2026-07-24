@@ -135,6 +135,13 @@ pub struct BattleState {
 /// programs at once.
 pub const MAX_PARTY_SIZE: usize = 3;
 
+/// How many tamed programs the player may own in total (across the active
+/// party, cronjob workers, and idle pets) before any capacity-granting
+/// structures — see `StructureDef::pet_slot_bonus` and `Game::pet_capacity`,
+/// which add to this base. Distinct from `MAX_PARTY_SIZE`, which caps only
+/// how many of those pets can fight at once.
+pub const BASE_PET_CAPACITY: usize = 3;
+
 /// The player's active battle party: up to `MAX_PARTY_SIZE` tamed programs
 /// that fight alongside them and can be commanded to attack during an
 /// intrusion. Membership is mutually exclusive with an active cronjob

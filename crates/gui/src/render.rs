@@ -550,6 +550,14 @@ fn draw_status_panel(
         GREEN,
     );
     cy += m.line_height;
+    fonts.ui(
+        format!("Pets: {}/{}", status.pet_count, status.pet_capacity),
+        x + m.inset,
+        cy,
+        m.font_size,
+        GREEN,
+    );
+    cy += m.line_height;
     for companion in &status.companions {
         fonts.ui(
             format!(
@@ -911,8 +919,8 @@ fn draw_erase_quantity(
         text_row(format!("Quantity: {shown}")),
         text_row(""),
         text_row(format!(
-            "You have: {held}        Buffer: {}/{}",
-            status.inventory_used, status.inventory_capacity
+            "You have: {held}        Buffer: {}",
+            status.inventory_used
         )),
         text_row(""),
         text_row("Type digits, Enter to erase"),
@@ -1216,8 +1224,8 @@ fn draw_inventory(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) 
         equipped_row(3, "Module", status.module.clone(), selected == 2, game),
         text_row(""),
         text_row(format!(
-            "Inventory - Buffer {}/{} (row key to equip/fuse/erase):",
-            status.inventory_used, status.inventory_capacity
+            "Inventory - Buffer {} (row key to equip/fuse/erase):",
+            status.inventory_used
         )),
     ];
     if status.inventory.is_empty() {

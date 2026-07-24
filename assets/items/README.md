@@ -15,12 +15,11 @@ disqualifies the whole file.
     id: "unique_snake_case_id",   // must be unique across all item files
     name: "Display Name",
 
-    // Optional; can be left out entirely (defaults to no bank limit). If
-    // set, this item is exempt from the shared inventory capacity and
-    // capped only by this ceiling instead — Research Data does this so an
-    // unrelated pile of cargo can't starve a Research Node's output. Leave
-    // it out for ordinary cargo, which counts against
-    // `Game::inventory_capacity`.
+    // Optional; can be left out entirely (defaults to no bank limit). The
+    // ordinary Buffer (cargo) is unbounded; setting this makes an item a
+    // banked currency instead, capped only by this ceiling — Research Data
+    // does this so its own stockpile has a hard limit separate from cargo.
+    // Leave it out for ordinary cargo, which is never capped.
     bank_limit: Some(200),
 
     // Optional; can be left out entirely (defaults to no economy role). If

@@ -36,8 +36,8 @@ pub use perks::Perk;
 use research::{ResearchDb, ResearchDef};
 pub use research::{ResearchId, ResearchRecipe};
 use resources::{
-    BattleState, EffectQueue, GameClock, GameOver, GameRng, MAX_PARTY_SIZE, MessageLog, Party,
-    PlayerEntity, Research, ZoneLevel, ZoneSpawnPoint,
+    BASE_PET_CAPACITY, BattleState, EffectQueue, GameClock, GameOver, GameRng, MAX_PARTY_SIZE,
+    MessageLog, Party, PlayerEntity, Research, ZoneLevel, ZoneSpawnPoint,
 };
 pub use resources::{DifficultyMode, EffectKind, MessageKind, VisualEffect};
 use species::{MoveDef, SpecialAbility, SpeciesDb, SpeciesDef, SpeciesId};
@@ -288,14 +288,17 @@ pub struct PlayerStatus {
     pub hunger: f32,
     pub fatigue: f32,
     pub inventory: Vec<(ItemId, u32)>,
-    /// Units of ordinary cargo currently carried — what
-    /// `inventory_capacity` limits. Excludes banked currency (see
+    /// Units of ordinary cargo currently carried. The Buffer is unbounded, so
+    /// this is just how much is stored; it excludes banked currency (see
     /// `ItemId::bank_limit`), so it will not match the sum of `inventory`
     /// when Research Data is held.
     pub inventory_used: u32,
-    /// The player's current carrying capacity, base plus every deployed
-    /// structure's `inventory_bonus`.
-    pub inventory_capacity: u32,
+    /// How many tamed programs the player owns in total right now, and the
+    /// cap on that total (see `Game::pet_count`/`Game::pet_capacity`) — party
+    /// members, cronjob workers, and idle pets all count. Distinct from
+    /// `companions`, which is only the active battle party.
+    pub pet_count: usize,
+    pub pet_capacity: usize,
     pub level: u32,
     pub xp: u32,
     pub xp_to_next: u32,
@@ -1327,17 +1330,14 @@ impl Game {
     /// a battle from resolving or a cronjob worker from running; the loss
     /// is logged so it is never silent.
     fn grant_loot(&mut self, item: ItemId, qty: u32) -> u32 {
-        let capacity = self.inventory_capacity();
         let player = self.player_entity();
         let added = self
             .world
             .resource_scope(|world, db: bevy_ecs::prelude::Mut<ItemDb>| {
-                world.get_mut::<Inventory>(player).unwrap().add_capped(
-                    item.clone(),
-                    qty,
-                    capacity,
-                    &db,
-                )
+                world
+                    .get_mut::<Inventory>(player)
+                    .unwrap()
+                    .add_capped(item.clone(), qty, &db)
             });
         if added < qty {
             let lost = qty - added;
@@ -1891,47 +1891,90 @@ impl Game {
             .unwrap_or(0)
     }
 
-    /// Consumes `items::ITEM_FUSION_COST` copies of `item` from inventory to
-    /// permanently boost that item type's equipped bonus by another
+    /// Consumes `items::ITEM_FUSION_COST` copies of `item` to permanently
+    /// boost that item type's equipped bonus by another
     /// `items::ITEM_FUSION_BONUS_PER_TIER` (see `ItemFusions`,
-    /// `EquipmentStats::fused_for_tier`) — a sink for extra copies of gear
-    /// you're not going to wear multiple of. Only equippable items qualify;
-    /// the new tier applies the next time the item is equipped, not
-    /// retroactively to a copy already worn.
-    pub fn fuse_item(&mut self, item: &ItemId) -> Result<(), String> {
+    /// `EquipmentStats::fused_for_tier`) — a sink for extra copies of gear.
+    /// Only equippable items qualify.
+    ///
+    /// A copy currently worn in the item's slot counts as one of those
+    /// copies, so wearing it plus a single spare is enough to fuse; that worn
+    /// copy stays equipped and picks up the new tier's bonus immediately
+    /// rather than only on the next re-equip. Returns the confirmation line on
+    /// success so the caller can surface it — unlike equipping, a fusion
+    /// changes nothing else the player can see.
+    pub fn fuse_item(&mut self, item: &ItemId) -> Result<String, String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        if self.equipment_of(item).is_none() {
+        let Some((slot, base_mods)) = self.equipment_of(item) else {
             return Err(format!("{} can't be fused.", self.item_name(item)));
-        }
+        };
         let name = self.item_name(item).to_string();
         let player = self.player_entity();
+
+        let worn = self
+            .world
+            .get::<Equipment>(player)
+            .and_then(|e| e.get(slot))
+            .filter(|eq| &eq.item == item);
+        let from_inventory = items::ITEM_FUSION_COST - u32::from(worn.is_some());
+
         let taken = self
             .world
             .get_mut::<Inventory>(player)
             .unwrap()
-            .take(item.clone(), items::ITEM_FUSION_COST);
-        if taken < items::ITEM_FUSION_COST {
+            .take(item.clone(), from_inventory);
+        if taken < from_inventory {
             self.world
                 .get_mut::<Inventory>(player)
                 .unwrap()
                 .add(item.clone(), taken);
             return Err(format!(
-                "Need {} {name} to fuse (have {taken}).",
-                items::ITEM_FUSION_COST,
+                "Need {from_inventory} {name} to fuse (have {taken})."
             ));
         }
-        let mut fusions = self.world.get_mut::<ItemFusions>(player).unwrap();
-        fusions.increment(item.clone());
-        let tier = fusions.tier(item);
-        self.log(format!(
+
+        let tier = {
+            let mut fusions = self.world.get_mut::<ItemFusions>(player).unwrap();
+            fusions.increment(item.clone());
+            fusions.tier(item)
+        };
+
+        // Swap the worn copy's equip-time bonus for the new tier's so the
+        // boost is felt at once, not only after an unequip/re-equip.
+        if let Some(worn) = worn {
+            self.apply_equipment_delta(
+                player,
+                base_mods
+                    .scaled_for_level(worn.level)
+                    .fused_for_tier(worn.fusion_tier),
+                -1,
+            );
+            if let Some(eq) = self
+                .world
+                .get_mut::<Equipment>(player)
+                .unwrap()
+                .slot_mut(slot)
+                .as_mut()
+            {
+                eq.fusion_tier = tier;
+            }
+            self.apply_equipment_delta(
+                player,
+                base_mods.scaled_for_level(worn.level).fused_for_tier(tier),
+                1,
+            );
+        }
+
+        let msg = format!(
             "You fuse {} {name} into a tier {tier} bonus ({}% stronger equipped).",
             items::ITEM_FUSION_COST,
             (tier as f64 * items::ITEM_FUSION_BONUS_PER_TIER * 100.0).round() as i32
-        ));
+        );
+        self.log(msg.clone());
         self.tick();
-        Ok(())
+        Ok(msg)
     }
 
     /// Permanently removes `qty` of `item` from inventory. Only ever acts on
@@ -2861,6 +2904,17 @@ impl Game {
             self.log("Your process stalls — stunned, you lose this turn!");
             self.resolve_post_action(player);
             self.tick();
+            return;
+        }
+
+        // Refuse before spending the catalyst (or the turn) if the roster is
+        // already full — a captured program has to live somewhere.
+        let capacity = self.pet_capacity();
+        let owned = self.pet_count();
+        if owned >= capacity {
+            self.log(format!(
+                "Your roster is full ({owned}/{capacity}) — fuse two programs together or deploy a Data Cache to make room."
+            ));
             return;
         }
 
@@ -3900,7 +3954,8 @@ impl Game {
     }
 
     pub fn player_status(&self) -> PlayerStatus {
-        let inventory_capacity = self.inventory_capacity();
+        let pet_count = self.pet_count();
+        let pet_capacity = self.pet_capacity();
         let player = self.player_entity();
         let stats = self.world.get::<Stats>(player).unwrap();
         let needs = self.world.get::<Needs>(player).unwrap();
@@ -3933,7 +3988,8 @@ impl Game {
             fatigue: needs.fatigue,
             inventory: inv.items.clone(),
             inventory_used: inv.cargo_used(db),
-            inventory_capacity,
+            pet_count,
+            pet_capacity,
             level: exp.level,
             xp: exp.xp,
             xp_to_next: exp.xp_to_next,
@@ -4797,8 +4853,8 @@ impl Game {
                 def.raid_defense
             ));
         }
-        if def.inventory_bonus > 0 {
-            parts.push(format!("+{} inventory capacity", def.inventory_bonus));
+        if def.pet_slot_bonus > 0 {
+            parts.push(format!("+{} pet slots", def.pet_slot_bonus));
         }
         if let Some(rest) = &def.enables_rest {
             parts.push(format!("lets you recharge within {} tiles", rest.radius));
@@ -4813,18 +4869,36 @@ impl Game {
     }
 
     /// How many units of cargo the player can carry right now: the base
-    /// capacity plus every deployed structure's `inventory_bonus`. Derived
-    /// on each call rather than cached, so a Data Cache lost to a raid
-    /// shrinks the buffer with no invalidation step and the save format
-    /// stays unchanged.
-    pub fn inventory_capacity(&self) -> u32 {
+    /// How many tamed programs the active battle party can hold right now:
+    /// How many tamed programs the player may own in total right now:
+    /// `BASE_PET_CAPACITY` plus every deployed structure's `pet_slot_bonus`
+    /// (a Data Cache adds two). Derived on each call rather than cached, so a
+    /// cache lost to a raid shrinks the limit with no invalidation step and
+    /// the save format stays unchanged.
+    pub fn pet_capacity(&self) -> usize {
         let kinds: Vec<StructureId> = self
             .world
             .iter_entities()
             .filter_map(|e| e.get::<Structure>().map(|s| s.kind.clone()))
             .collect();
         let db = self.world.resource::<StructureDb>();
-        structures::inventory_capacity_for(kinds.iter().map(|k| k.as_str()), db)
+        let bonus: u32 = kinds
+            .iter()
+            .filter_map(|k| db.get(k.as_str()))
+            .map(|def| def.pet_slot_bonus)
+            .sum();
+        BASE_PET_CAPACITY + bonus as usize
+    }
+
+    /// How many tamed programs the player currently owns, wherever they are —
+    /// active party, cronjob workers, and idle pets all count against
+    /// `pet_capacity`.
+    pub fn pet_count(&self) -> usize {
+        let player = self.player_entity();
+        self.world
+            .iter_entities()
+            .filter(|e| e.get::<Tamed>().is_some_and(|t| t.owner == player))
+            .count()
     }
 
     /// Units of cargo currently carried, excluding banked currency.
@@ -4836,19 +4910,24 @@ impl Game {
             .unwrap_or(0)
     }
 
-    /// `Ok(())` if `qty` more of `item` would fit. Used by the paths where
-    /// the player pays an input cost — compiling, buying, unequipping —
-    /// since clamping those would destroy value the player already spent.
+    /// `Ok(())` if `qty` more of `item` would fit. Ordinary cargo (the
+    /// Buffer) is unbounded, so this only ever refuses a banked currency (an
+    /// item with `ItemDef::bank_limit`, e.g. Research Data) that would exceed
+    /// its own separate cap. Used by the paths where the player pays an input
+    /// cost — compiling, buying, unequipping — since letting a bank overflow
+    /// would destroy value the player already spent.
     fn check_room(&self, item: &ItemId, qty: u32) -> Result<(), String> {
-        let capacity = self.inventory_capacity();
         let db = self.world.resource::<ItemDb>();
-        let inv = self.world.get::<Inventory>(self.player_entity()).unwrap();
-        let (used, ceiling, label) = match db.get(item.as_str()).and_then(|d| d.bank_limit) {
-            Some(limit) => (inv.count(item), limit, "Research bank"),
-            None => (inv.cargo_used(db), capacity, "Buffer"),
+        let Some(limit) = db.get(item.as_str()).and_then(|d| d.bank_limit) else {
+            return Ok(());
         };
-        if used + qty > ceiling {
-            return Err(format!("{label} full ({used}/{ceiling})."));
+        let used = self
+            .world
+            .get::<Inventory>(self.player_entity())
+            .unwrap()
+            .count(item);
+        if used.saturating_add(qty) > limit {
+            return Err(format!("Research bank full ({used}/{limit})."));
         }
         Ok(())
     }
@@ -5116,24 +5195,22 @@ mod tests {
     }
 
     #[test]
-    fn inventory_capacity_grows_with_each_deployed_data_cache() {
-        let base = structures::BASE_INVENTORY_CAPACITY;
+    fn pet_capacity_grows_with_each_deployed_data_cache() {
         let mut game = Game::new(700, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        assert_eq!(game.inventory_capacity(), base);
+        assert_eq!(game.pet_capacity(), BASE_PET_CAPACITY);
 
         spawn_data_cache(&mut game, 1);
-        assert_eq!(game.inventory_capacity(), base + 10);
+        assert_eq!(game.pet_capacity(), BASE_PET_CAPACITY + 2);
 
         spawn_data_cache(&mut game, 2);
-        assert_eq!(game.inventory_capacity(), base + 20, "caches stack");
+        assert_eq!(game.pet_capacity(), BASE_PET_CAPACITY + 4, "caches stack");
     }
 
     #[test]
-    fn destroying_a_data_cache_shrinks_the_capacity_back() {
-        let base = structures::BASE_INVENTORY_CAPACITY;
+    fn destroying_a_data_cache_shrinks_the_pet_capacity_back() {
         let mut game = Game::new(701, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         spawn_data_cache(&mut game, 1);
-        assert_eq!(game.inventory_capacity(), base + 10);
+        assert_eq!(game.pet_capacity(), BASE_PET_CAPACITY + 2);
 
         let cache = game
             .world
@@ -5144,138 +5221,9 @@ mod tests {
         game.world.despawn(cache);
 
         assert_eq!(
-            game.inventory_capacity(),
-            base,
+            game.pet_capacity(),
+            BASE_PET_CAPACITY,
             "capacity is derived, so a destroyed cache needs no invalidation"
-        );
-    }
-
-    /// Fills the player's cargo to exactly the current capacity so the next
-    /// pickup has nowhere to go.
-    fn fill_buffer(game: &mut Game) {
-        let capacity = game.inventory_capacity();
-        let player = game.player_entity();
-        let used = game.inventory_used();
-        game.world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .add(ItemId::from(ids::CORE_FRAGMENT), capacity - used);
-    }
-
-    #[test]
-    fn compiling_into_a_full_buffer_refuses_and_consumes_nothing() {
-        let mut game = Game::new(705, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        fill_buffer(&mut game);
-        let player = game.player_entity();
-        let cores_before = game
-            .world
-            .get::<Inventory>(player)
-            .unwrap()
-            .count(&ItemId::from(ids::CORE_FRAGMENT));
-
-        let err = game
-            .craft(&ItemId::from(ids::POWER_CELL), 1)
-            .expect_err("a full buffer should refuse a compile");
-
-        assert!(err.contains("Buffer full"), "got: {err}");
-        assert_eq!(
-            game.world
-                .get::<Inventory>(player)
-                .unwrap()
-                .count(&ItemId::from(ids::CORE_FRAGMENT)),
-            cores_before,
-            "a refused compile must not consume its inputs"
-        );
-    }
-
-    #[test]
-    fn unequipping_into_a_full_buffer_refuses_and_keeps_the_gear_equipped() {
-        let mut game = Game::new(706, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        let player = game.player_entity();
-        game.world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
-        game.equip(&ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
-        fill_buffer(&mut game);
-
-        let err = game
-            .unequip(EquipmentSlot::Weapon)
-            .expect_err("a full buffer should refuse an unequip");
-
-        assert!(err.contains("Buffer full"), "got: {err}");
-        assert!(
-            game.player_status().weapon.is_some(),
-            "refused unequip must leave the gear equipped, not delete it"
-        );
-    }
-
-    #[test]
-    fn a_compile_still_works_with_exactly_enough_room() {
-        let mut game = Game::new(707, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        let capacity = game.inventory_capacity();
-        let player = game.player_entity();
-        let used = game.inventory_used();
-        // `check_room` only ever measures the recipe's *output* quantity
-        // (1 Power Cell) against pre-consumption cargo, never the net of
-        // input minus output — so this passes because used(capacity - 1)
-        // + 1 <= capacity, regardless of what the recipe consumes.
-        game.world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .add(ItemId::from(ids::CORE_FRAGMENT), capacity - used - 1);
-
-        game.craft(&ItemId::from(ids::POWER_CELL), 1)
-            .expect("a compile that nets out under capacity should succeed");
-    }
-
-    #[test]
-    fn foraging_into_a_full_buffer_loses_the_find_and_says_so() {
-        let mut game = Game::new(703, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        fill_buffer(&mut game);
-        let before = game.inventory_used();
-
-        // Forage until the RNG grants a find, so the assertion doesn't
-        // depend on a specific seed's first roll.
-        for _ in 0..200 {
-            game.forage();
-        }
-
-        assert_eq!(
-            game.inventory_used(),
-            before,
-            "a full buffer must not grow, however many finds are rolled"
-        );
-        assert_eq!(
-            game.inventory_used(),
-            game.inventory_capacity(),
-            "and must stay exactly at capacity"
-        );
-    }
-
-    #[test]
-    fn a_partially_full_buffer_takes_only_what_fits() {
-        let mut game = Game::new(704, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        let capacity = game.inventory_capacity();
-        let player = game.player_entity();
-        let used = game.inventory_used();
-        game.world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .add(ItemId::from(ids::CORE_FRAGMENT), capacity - used - 1);
-        assert_eq!(game.inventory_used(), capacity - 1);
-
-        let landed = game.grant_loot(ItemId::from(ids::PORTAL_FRAGMENT), 6);
-
-        assert_eq!(landed, 1, "only the single unit of room should land");
-        assert_eq!(game.inventory_used(), capacity);
-        assert_eq!(
-            game.player_status()
-                .inventory
-                .iter()
-                .find(|(i, _)| *i == ItemId::from(ids::PORTAL_FRAGMENT))
-                .map(|(_, q)| *q),
-            Some(1)
         );
     }
 
@@ -5292,11 +5240,25 @@ mod tests {
             "banked research must not consume carrying capacity"
         );
 
-        let status = game.player_status();
-        assert_eq!(status.inventory_used, 11);
+        assert_eq!(game.player_status().inventory_used, 11);
+    }
+
+    #[test]
+    fn the_buffer_is_unbounded_so_cargo_actions_never_refuse_for_space() {
+        let mut game = Game::new(705, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        // Pile on far more cargo than the old 30-unit cap ever allowed.
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::from(ids::CORE_FRAGMENT), 10_000);
+
+        game.craft(&ItemId::from(ids::POWER_CELL), 1)
+            .expect("compiling never runs out of Buffer space now");
+        let landed = game.grant_loot(ItemId::from(ids::PORTAL_FRAGMENT), 6);
         assert_eq!(
-            status.inventory_capacity,
-            structures::BASE_INVENTORY_CAPACITY
+            landed, 6,
+            "every looted unit lands — the Buffer can't fill up"
         );
     }
 
@@ -5358,28 +5320,25 @@ mod tests {
     }
 
     #[test]
-    fn a_cronjob_worker_cannot_overfill_the_buffer() {
+    fn a_cronjob_worker_fills_the_unbounded_buffer_past_the_old_cap() {
         let mut game = Game::new(708, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         assign_worker_producing(&mut game, ItemId::from(ids::CORE_FRAGMENT));
-        fill_buffer(&mut game);
-        let capacity = game.inventory_capacity();
+        let before = game.inventory_used();
 
         for _ in 0..100 {
             game.tick();
         }
 
-        assert_eq!(
-            game.inventory_used(),
-            capacity,
-            "a working cronjob must fill the buffer to exactly capacity and stop"
+        assert!(
+            game.inventory_used() > before,
+            "a working cronjob keeps depositing cargo — the Buffer never fills up"
         );
     }
 
     #[test]
-    fn a_research_cronjob_keeps_banking_with_a_full_cargo_buffer() {
+    fn a_research_cronjob_banks_research_data_over_time() {
         let mut game = Game::new(709, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         assign_worker_producing(&mut game, ItemId::from(ids::RESEARCH_DATA));
-        fill_buffer(&mut game);
         let before = research_data_held(&game);
 
         for _ in 0..100 {
@@ -5388,7 +5347,7 @@ mod tests {
 
         assert!(
             research_data_held(&game) > before,
-            "a full cargo buffer must not stop research from banking (was {before}, now {})",
+            "a research cronjob must bank research over time (was {before}, now {})",
             research_data_held(&game)
         );
     }
@@ -6253,58 +6212,6 @@ mod tests {
     }
 
     #[test]
-    fn removing_home_cascade_refund_is_capped_to_available_room() {
-        let mut game = Game::new(305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        unlock_research_chain(&mut game, "armor_bench");
-        unlock_research_chain(&mut game, "weapon_bench");
-        let player = game.player_entity();
-        let capacity = game.inventory_capacity();
-        game.world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .add(ItemId::from(ids::CORE_FRAGMENT), 50);
-        place_home(&mut game, -1, 0);
-        game.place_structure("armory", 1, 0).unwrap();
-        game.place_structure("fabricator", 0, 1).unwrap();
-        let home = game
-            .view_entities(10, 10)
-            .into_iter()
-            .find(|e| e.is_home)
-            .unwrap()
-            .entity;
-
-        // Clear every starting item (gear plus leftover build materials)
-        // and refill with something the refund doesn't touch, leaving
-        // exactly 3 units of room — proving the cascade clamps rather than
-        // relying on an incidentally-near-empty buffer.
-        {
-            let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
-            for item in [
-                ItemId::from(ids::ICE_BREAKER),
-                ItemId::from(ids::POWER_CELL),
-                ItemId::from(ids::CORE_FRAGMENT),
-            ] {
-                let held = inv.count(&item);
-                inv.take(item, held);
-            }
-            inv.add(ItemId::from(ids::FIREWALL_PLATING), capacity - 3);
-        }
-
-        game.remove_structure(home).unwrap();
-
-        assert!(
-            game.inventory_used() <= capacity,
-            "a demolition refund cascade must never push cargo past capacity"
-        );
-        assert!(
-            game.message_log(10)
-                .iter()
-                .any(|(_, line)| line.contains("full")),
-            "a clamped refund should say so, same as any other unsolicited income"
-        );
-    }
-
-    #[test]
     fn armory_and_fabricator_are_not_cronjob_workable() {
         let game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         for id in ["armory", "fabricator"] {
@@ -6327,7 +6234,7 @@ mod tests {
             // Every shipped structure now has a real capability, so "no effect
             // yet" always means the description derivation is missing a field
             // the structure actually uses — the Data Cache reached exactly that
-            // state when `inventory_bonus` was added without updating this.
+            // state when `pet_slot_bonus` was added without updating this.
             assert_ne!(
                 game.structure_description(&def),
                 "no effect yet",
@@ -6352,7 +6259,7 @@ mod tests {
         assert!(describe("fabricator").contains("Cortex Hack"));
         assert!(describe("home").contains("Power Cell"));
         assert!(describe("shield").contains("raid damage"));
-        assert!(describe("data_cache").contains("inventory capacity"));
+        assert!(describe("data_cache").contains("pet slots"));
         assert!(describe("recharger_node").contains("recharge"));
         assert!(describe("portal").contains("next zone"));
         assert!(describe("market").contains("trade"));
@@ -7010,6 +6917,109 @@ mod tests {
                 .map(|(_, q)| *q),
             Some(1),
             "a failed fuse should not consume the lone copy"
+        );
+    }
+
+    #[test]
+    fn fusing_a_worn_item_counts_it_and_upgrades_the_worn_copy_live() {
+        let armor = ItemId::from(ids::ABLATIVE_PLATING);
+        let mut game = Game::new(704, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        // One copy to wear, two spares.
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(armor.clone(), 3);
+        let base_def = game.player_status().def;
+
+        game.equip(&armor).unwrap();
+        assert_eq!(
+            game.player_status().def,
+            base_def + 4,
+            "Ablative Plating's base is +4 def while worn, unfused"
+        );
+
+        let held = |g: &Game| {
+            g.player_status()
+                .inventory
+                .iter()
+                .find(|(i, _)| *i == armor)
+                .map(|(_, q)| *q)
+                .unwrap_or(0)
+        };
+        assert_eq!(held(&game), 2, "equipping consumed one of the three copies");
+
+        // The worn copy counts as one of the two a fusion needs, so a single
+        // spare is enough.
+        game.fuse_item(&armor).unwrap();
+        assert_eq!(game.item_fusion_tier(&armor), 1);
+        assert_eq!(
+            held(&game),
+            1,
+            "only one spare consumed — the worn copy counted for the other"
+        );
+
+        // Second fuse reaches tier 2, where +20% is visible: 4 * 1.2 = 4.8 -> 5.
+        game.fuse_item(&armor).unwrap();
+        assert_eq!(game.item_fusion_tier(&armor), 2);
+        assert_eq!(held(&game), 0);
+        assert_eq!(
+            game.player_status().def,
+            base_def + 5,
+            "the worn copy picks up the new tier live, without a re-equip"
+        );
+    }
+
+    #[test]
+    fn fusing_a_worn_item_still_needs_one_spare() {
+        let armor = ItemId::from(ids::ABLATIVE_PLATING);
+        let mut game = Game::new(705, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(armor.clone(), 1);
+        game.equip(&armor).unwrap(); // now zero spares held
+        let err = game.fuse_item(&armor).unwrap_err();
+        assert_eq!(err, "Need 1 Ablative Plating to fuse (have 0).");
+        assert_eq!(
+            game.item_fusion_tier(&armor),
+            0,
+            "a refused fuse changes nothing"
+        );
+    }
+
+    #[test]
+    fn fusing_needs_two_spares_when_a_different_item_is_worn() {
+        let worn = ItemId::from(ids::FIREWALL_PLATING); // armor
+        let target = ItemId::from(ids::ABLATIVE_PLATING); // also armor, different item
+        let mut game = Game::new(706, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        {
+            let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+            inv.add(worn.clone(), 1);
+            inv.add(target.clone(), 1);
+        }
+        game.equip(&worn).unwrap(); // Firewall Plating occupies the Armor slot
+        // The worn armor is a different item, so it can't count toward fusing
+        // Ablative Plating — that still needs two spares.
+        let err = game.fuse_item(&target).unwrap_err();
+        assert_eq!(err, "Need 2 Ablative Plating to fuse (have 1).");
+    }
+
+    #[test]
+    fn a_successful_fuse_returns_its_confirmation_line() {
+        let core = ItemId::from(ids::OVERCLOCK_CORE);
+        let mut game = Game::new(707, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(core.clone(), 2);
+        let msg = game.fuse_item(&core).unwrap();
+        assert!(
+            msg.contains("fuse") && msg.contains('%'),
+            "a fuse must hand back a confirmation to surface, got: {msg}"
         );
     }
 
@@ -9474,6 +9484,61 @@ mod tests {
     }
 
     #[test]
+    fn pet_count_tallies_every_owned_program_regardless_of_party_membership() {
+        let mut game = Game::new(73, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        assert_eq!(game.pet_count(), 0);
+        let a = spawn_tamed(&mut game, 10, 3);
+        let _b = spawn_tamed(&mut game, 10, 3);
+        assert_eq!(game.pet_count(), 2, "both owned programs count as pets");
+        // Adding one to the active party doesn't change the total owned.
+        game.add_companion(a).unwrap();
+        assert_eq!(game.pet_count(), 2, "a party member is still a pet");
+    }
+
+    #[test]
+    fn taming_is_refused_when_the_roster_is_full_and_a_data_cache_makes_room() {
+        let mut game = Game::new(72, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        // Fill the base roster of 3 owned pets.
+        for _ in 0..BASE_PET_CAPACITY {
+            spawn_tamed(&mut game, 10, 3);
+        }
+        assert_eq!(game.pet_count(), BASE_PET_CAPACITY);
+
+        start_battle_with_a_wild_program(&mut game);
+        set_inventory(&mut game, &[(ids::ICE_BREAKER, 1)]);
+        game.battle_decompile();
+
+        let held = |g: &Game| {
+            g.world
+                .get::<Inventory>(g.player_entity())
+                .unwrap()
+                .count(&ItemId::from(ids::ICE_BREAKER))
+        };
+        assert_eq!(
+            held(&game),
+            1,
+            "a full roster must refuse before the catalyst is spent"
+        );
+        assert!(
+            game.message_log(usize::MAX)
+                .into_iter()
+                .any(|(_, l)| l.contains("roster is full")),
+            "the refusal should say the roster is full"
+        );
+
+        // A Data Cache raises the cap to 5, so the same attempt now has room
+        // and runs (spending the catalyst) instead of being refused.
+        spawn_data_cache(&mut game, 1);
+        assert_eq!(game.pet_capacity(), BASE_PET_CAPACITY + 2);
+        game.battle_decompile();
+        assert_eq!(
+            held(&game),
+            0,
+            "with a cache deployed the roster has room, so the decompile runs and spends the catalyst"
+        );
+    }
+
+    #[test]
     fn adding_the_same_companion_twice_is_rejected() {
         let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let companion = spawn_tamed(&mut game, 10, 3);
@@ -10089,66 +10154,6 @@ mod tests {
         assert_eq!(
             inv.count(&ItemId::from(ids::CORE_FRAGMENT)),
             cf_before + sell_rate * 2
-        );
-    }
-
-    #[test]
-    fn sell_item_refuses_a_payout_that_would_overflow_the_buffer() {
-        let mut game = Game::new(92, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        let player = game.player_entity();
-        let research_bank_limit = game
-            .bank_limit_of(&ItemId::from(ids::RESEARCH_DATA))
-            .expect("research_data ships with a bank limit");
-        let def = game
-            .structure_defs()
-            .into_iter()
-            .find(|d| d.trade.is_some())
-            .unwrap();
-        let market = game
-            .world
-            .spawn((
-                Structure {
-                    kind: def.id.clone(),
-                },
-                Position { x: 5, y: 5 },
-            ))
-            .id();
-
-        // Research Data is banked separately (200-unit limit) and exempt
-        // from the cargo cap, so a player can plausibly hold far more of it
-        // than the 20-unit buffer a fresh game starts with. `used` is read
-        // before the fill — banked Research Data never counts as cargo, so
-        // adding it first wouldn't change the number anyway.
-        let capacity = game.inventory_capacity();
-        let used = game.inventory_used();
-        {
-            let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
-            inv.add(ItemId::from(ids::RESEARCH_DATA), research_bank_limit);
-            inv.add(ItemId::from(ids::CORE_FRAGMENT), capacity - used);
-        }
-
-        let result = game.sell_item(
-            market,
-            ItemId::from(ids::RESEARCH_DATA),
-            research_bank_limit,
-        );
-
-        assert!(
-            result.is_err(),
-            "selling a full Research Data bank must not blow past cargo capacity"
-        );
-        let held = game
-            .world
-            .get::<Inventory>(player)
-            .unwrap()
-            .count(&ItemId::from(ids::RESEARCH_DATA));
-        assert_eq!(
-            held, research_bank_limit,
-            "a refused sale must not consume the item being sold"
-        );
-        assert!(
-            game.inventory_used() <= capacity,
-            "cargo must never exceed capacity as a result of a sale"
         );
     }
 

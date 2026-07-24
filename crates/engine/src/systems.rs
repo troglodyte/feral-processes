@@ -127,22 +127,15 @@ type CronjobWorker = (
 /// a `#[derive(SystemParam)]` bundle so this drops back under the lint
 /// threshold without suppressing it — this is the only `#[allow]` in the
 /// workspace and shouldn't set a precedent.
-#[allow(clippy::too_many_arguments)]
 pub fn task_progress_system(
     mut tasks: Query<CronjobWorker>,
     mut nodes: Query<&mut ResourceNode>,
     mut inventories: Query<&mut Inventory>,
-    structures: Query<&Structure>,
-    structure_db: Res<StructureDb>,
     species_db: Res<SpeciesDb>,
     item_db: Res<ItemDb>,
     mut log: ResMut<MessageLog>,
     mut rng: ResMut<GameRng>,
 ) {
-    let capacity = crate::structures::inventory_capacity_for(
-        structures.iter().map(|s| s.kind.as_str()),
-        &structure_db,
-    );
     for (mut task, tamed, creature, potential, mut exp, mut stats) in &mut tasks {
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
@@ -170,7 +163,7 @@ pub fn task_progress_system(
                 .get(node.resource.as_str())
                 .map(|d| d.name.as_str())
                 .unwrap_or(node.resource.as_str());
-            if inv.add_capped(node.resource.clone(), 1, capacity, &item_db) == 0 {
+            if inv.add_capped(node.resource.clone(), 1, &item_db) == 0 {
                 log.push(format!(
                     "A cronjob yields {resource_name} but there's no room to store it."
                 ));
@@ -215,15 +208,10 @@ pub fn task_progress_system(
 pub fn passive_process_system(
     mut player: Query<(&Position, &mut Inventory), With<Player>>,
     mut structures: Query<(&Structure, &Position, &mut PassiveProcessor)>,
-    all_structures: Query<&Structure>,
     structure_db: Res<StructureDb>,
     item_db: Res<ItemDb>,
     mut log: ResMut<MessageLog>,
 ) {
-    let capacity = crate::structures::inventory_capacity_for(
-        all_structures.iter().map(|s| s.kind.as_str()),
-        &structure_db,
-    );
     for (player_pos, mut inventory) in &mut player {
         let player_pos = *player_pos;
         for (structure, pos, mut proc) in &mut structures {
@@ -244,9 +232,11 @@ pub fn passive_process_system(
             }
             proc.progress = 0;
             // Check room before taking the input: this is a conversion, not
-            // an award, so a full buffer must refuse rather than consume the
-            // input for an output that never lands.
-            if !inventory.has_room(&recipe.produces, 1, capacity, &item_db) {
+            // an award, so a full bank must refuse rather than consume the
+            // input for an output that never lands. (Ordinary cargo is
+            // unbounded and always has room; only a banked output can be
+            // full.)
+            if !inventory.has_room(&recipe.produces, 1, &item_db) {
                 continue;
             }
             if inventory.take(recipe.consumes.clone(), 1) == 1 {
@@ -275,7 +265,7 @@ pub fn passive_process_system(
 mod tests {
     use super::*;
     use crate::items::{ItemId, ids};
-    use crate::structures::{BASE_INVENTORY_CAPACITY, StructureDb};
+    use crate::structures::StructureDb;
 
     fn test_item_db() -> ItemDb {
         ItemDb::load_dir(
@@ -285,13 +275,13 @@ mod tests {
         .0
     }
 
-    /// A conversion that consumes a banked currency (no cargo cost) and
-    /// produces ordinary cargo — unlike any shipped recipe, this can
-    /// actually grow cargo usage, so it's the only way to observe the
-    /// buffer-overflow bug a net-zero recipe like the real Terminal can't
-    /// expose. Written to a scratch temp dir and loaded through
-    /// `StructureDb::load_dir`, same fixture pattern `research.rs`'s tests
-    /// use, since `StructureDb`'s fields are private outside its module.
+    /// A conversion that consumes ordinary cargo and produces a *banked*
+    /// currency. The Buffer is unbounded now, so a banked output is the only
+    /// kind that can still be "full" — this is how we observe the guard that
+    /// won't consume the input unless the output will land. Written to a
+    /// scratch temp dir and loaded through `StructureDb::load_dir`, same
+    /// fixture pattern `research.rs`'s tests use, since `StructureDb`'s
+    /// fields are private outside its module.
     fn load_test_capacitor() -> StructureDb {
         let dir =
             std::env::temp_dir().join(format!("feral_passive_process_test_{}", std::process::id()));
@@ -307,8 +297,8 @@ mod tests {
                 build_cost: [],
                 work: None,
                 passive_process: Some((
-                    consumes: "research_data",
-                    produces: "core_fragment",
+                    consumes: "core_fragment",
+                    produces: "research_data",
                     ticks_per_unit: 1,
                     radius: 5,
                 )),
@@ -325,16 +315,22 @@ mod tests {
     }
 
     #[test]
-    fn passive_process_does_not_consume_input_when_output_has_no_room() {
+    fn passive_process_does_not_consume_input_when_a_banked_output_is_full() {
         let structure_db = load_test_capacitor();
+        let item_db = test_item_db();
+        let limit = item_db
+            .get(ids::RESEARCH_DATA)
+            .and_then(|d| d.bank_limit)
+            .expect("research_data ships with a bank limit");
+
         let mut world = World::new();
         world.insert_resource(structure_db);
-        world.insert_resource(test_item_db());
+        world.insert_resource(item_db);
         world.insert_resource(MessageLog::default());
 
         let mut inventory = Inventory::default();
-        inventory.add(ItemId::from(ids::RESEARCH_DATA), 5);
-        inventory.add(ItemId::from(ids::CORE_FRAGMENT), BASE_INVENTORY_CAPACITY);
+        inventory.add(ItemId::from(ids::RESEARCH_DATA), limit); // bank already full
+        inventory.add(ItemId::from(ids::CORE_FRAGMENT), 10);
         world.spawn((Player, Position { x: 0, y: 0 }, inventory));
         world.spawn((
             Structure {
@@ -351,14 +347,14 @@ mod tests {
         let mut query = world.query::<&Inventory>();
         let inv = query.iter(&world).next().unwrap();
         assert_eq!(
-            inv.count(&ItemId::from(ids::RESEARCH_DATA)),
-            5,
-            "the input must not be consumed when the produced unit has no room"
+            inv.count(&ItemId::from(ids::CORE_FRAGMENT)),
+            10,
+            "the input must not be consumed when the banked output has no room"
         );
         assert_eq!(
-            inv.count(&ItemId::from(ids::CORE_FRAGMENT)),
-            BASE_INVENTORY_CAPACITY,
-            "cargo must not grow past capacity"
+            inv.count(&ItemId::from(ids::RESEARCH_DATA)),
+            limit,
+            "the bank must not grow past its limit"
         );
     }
 

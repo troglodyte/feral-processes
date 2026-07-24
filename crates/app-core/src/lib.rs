@@ -1616,16 +1616,20 @@ impl App {
             return;
         }
         let Some(game) = &mut self.game else { return };
-        let result = match idx.map(|i| actions[i]) {
-            Some('e') => Some(game.equip(&item)),
-            Some('u') => Some(game.fuse_item(&item)),
+        // Equipping clears the status line (its result shows in the equipment
+        // panel); a fuse hands back a confirmation to surface, since it
+        // changes nothing else visible from behind the inventory popup. Both
+        // report a refusal on the status line.
+        let outcome = match idx.map(|i| actions[i]) {
+            Some('e') => Some(game.equip(&item).err()),
+            Some('u') => Some(match game.fuse_item(&item) {
+                Ok(msg) => Some(msg),
+                Err(e) => Some(e),
+            }),
             _ => None,
         };
-        let Some(result) = result else { return };
-        match result {
-            Ok(()) => self.status_line = None,
-            Err(e) => self.status_line = Some(e),
-        }
+        let Some(outcome) = outcome else { return };
+        self.status_line = outcome;
         self.pending_inventory_item = None;
         self.mode = Mode::Inventory;
     }

@@ -396,6 +396,10 @@ fn render_status_panel(f: &mut Frame, area: Rect, status: &PlayerStatus, game: &
             ),
             Style::new().fg(Color::Green),
         ),
+        Line::styled(
+            format!("Pets: {}/{}", status.pet_count, status.pet_capacity),
+            Style::new().fg(Color::Green),
+        ),
     ];
     for companion in &status.companions {
         lines.push(Line::from(format!(
@@ -552,8 +556,8 @@ fn render_erase_quantity_menu(
         Line::from(format!("Quantity: {shown}")),
         Line::from(""),
         Line::from(format!(
-            "You have: {held}        Buffer: {}/{}",
-            status.inventory_used, status.inventory_capacity
+            "You have: {held}        Buffer: {}",
+            status.inventory_used
         )),
         Line::from(""),
         Line::from("Type digits, Enter to erase"),
@@ -1565,8 +1569,8 @@ fn render_inventory_screen(f: &mut Frame, area: Rect, game: &mut Game, selected:
         Line::from(""),
         Line::styled(
             format!(
-                "Inventory — Buffer {}/{} (row key to equip/fuse/erase):",
-                status.inventory_used, status.inventory_capacity
+                "Inventory — Buffer {} (row key to equip/fuse/erase):",
+                status.inventory_used
             ),
             Style::new().add_modifier(Modifier::BOLD),
         ),

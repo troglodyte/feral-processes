@@ -1,4 +1,5 @@
 use bevy_ecs::prelude::*;
+use bevy_ecs::system::SystemParam;
 use rand::RngExt;
 
 use crate::NEST_TETHER_RADIUS;
@@ -9,7 +10,7 @@ use crate::components::{
 use crate::items_db::ItemDb;
 use crate::perks::Perk;
 use crate::progression;
-use crate::resources::{GameRng, MessageKind, MessageLog};
+use crate::resources::{GameRng, MessageKind, MessageLog, ZoneLevel};
 use crate::species::SpeciesDb;
 use crate::structures::StructureDb;
 use crate::world::WorldMap;
@@ -114,28 +115,37 @@ type CronjobWorker = (
     &'static mut Stats,
 );
 
+/// The read-only lookups `task_progress_system` needs, bundled so bevy's
+/// one-param-per-resource injection doesn't push the system past clippy's
+/// argument-count threshold. Bundling beats an `#[allow]` here because the
+/// grouping is real: all three are immutable reference data consulted while
+/// resolving a completed gather cycle.
+#[derive(SystemParam)]
+pub struct CronjobLookups<'w> {
+    species: Res<'w, SpeciesDb>,
+    items: Res<'w, ItemDb>,
+    zone: Res<'w, ZoneLevel>,
+}
+
 /// Generic job progression: any entity with a `Task` advances it once per
-/// tick against its `target`; on completion the producing node hands a unit
-/// of resource to the worker's owner. A node that's been mined down to 0
+/// tick against its `target`; on completion the producing node hands its
+/// payout to the worker's owner. A node that's been mined down to 0
 /// refills to its `capacity` on the next tick rather than stalling the
 /// cronjob forever. The same loop would drive future colonist-style jobs,
 /// not just base-building work.
-///
-/// Bevy injects one system param per query/resource, so the count here
-/// tracks the data the system touches, not incidental complexity worth
-/// refactoring away. TODO: fold the structure query and `StructureDb` into
-/// a `#[derive(SystemParam)]` bundle so this drops back under the lint
-/// threshold without suppressing it — this is the only `#[allow]` in the
-/// workspace and shouldn't set a precedent.
 pub fn task_progress_system(
     mut tasks: Query<CronjobWorker>,
     mut nodes: Query<&mut ResourceNode>,
     mut inventories: Query<&mut Inventory>,
-    species_db: Res<SpeciesDb>,
-    item_db: Res<ItemDb>,
+    db: CronjobLookups,
     mut log: ResMut<MessageLog>,
     mut rng: ResMut<GameRng>,
 ) {
+    let CronjobLookups {
+        species: species_db,
+        items: item_db,
+        zone,
+    } = db;
     for (mut task, tamed, creature, potential, mut exp, mut stats) in &mut tasks {
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
@@ -159,11 +169,26 @@ pub fn task_progress_system(
         }
         node.amount -= 1;
         if let Ok(mut inv) = inventories.get_mut(tamed.owner) {
-            let resource_name = item_db
-                .get(node.resource.as_str())
+            let def = item_db.get(node.resource.as_str());
+            let resource_name = def
                 .map(|d| d.name.as_str())
                 .unwrap_or(node.resource.as_str());
-            if inv.add_capped(node.resource.clone(), 1, &item_db) == 0 {
+            // Payout tracks zone depth on the same doubling base as wild
+            // stats and GEAR_LEVEL_GROWTH — a flat base economy against an
+            // exponential curve is what made settling never worth the time.
+            // Read per cycle rather than baked in at deploy, so a base that
+            // travels to a deeper zone immediately earns at the new rate.
+            //
+            // A banked resource is excluded: its bank limit is the pacing
+            // mechanism, and an exponential payout would just overflow it
+            // every few cycles.
+            let payout = if def.and_then(|d| d.bank_limit).is_some() {
+                1
+            } else {
+                zone.stat_multiplier() as u32
+            };
+            let landed = inv.add_capped(node.resource.clone(), payout, &item_db);
+            if landed == 0 {
                 log.push(format!(
                     "A cronjob yields {resource_name} but there's no room to store it."
                 ));
@@ -194,7 +219,7 @@ pub fn task_progress_system(
             };
             log.push_kind(
                 MessageKind::Loot,
-                format!("Your subroutine extracted a {resource_name}.{level_note}"),
+                format!("Your subroutine extracted {landed} {resource_name}.{level_note}"),
             );
         }
     }

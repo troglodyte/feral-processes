@@ -5955,6 +5955,51 @@ mod tests {
         game.place_structure("home", dx, dy).unwrap();
     }
 
+    /// How many of `id` the player is holding.
+    fn count_item(game: &Game, id: &str) -> u32 {
+        let player = game.player_entity();
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(id))
+    }
+
+    /// Runs exactly one completed gather cycle against a hand-built node
+    /// producing `resource`, and returns how many units landed in the
+    /// player's inventory.
+    ///
+    /// `level: None` means the node always yields (see
+    /// `systems::mining_success_chance`), which is what keeps the payout
+    /// assertions off the RNG entirely.
+    fn run_one_full_gather_cycle(game: &mut Game, resource: &str) -> u32 {
+        let worker = spawn_tamed(game, 10, 3);
+        let structure = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "mining_node".to_string(),
+                },
+                Position { x: 3, y: 4 },
+                ResourceNode {
+                    resource: ItemId::from(resource),
+                    amount: 5,
+                    capacity: 5,
+                    level: None,
+                },
+            ))
+            .id();
+        game.world.entity_mut(worker).insert(Task {
+            kind: TaskKind::GatherResource,
+            target: structure,
+            progress: 0,
+            required: 1,
+        });
+
+        let before = count_item(game, resource);
+        game.tick();
+        count_item(game, resource) - before
+    }
+
     fn find_structure_by_kind(game: &mut Game, kind: &str) -> Option<Entity> {
         let mut query = game.world.query::<(Entity, &Structure)>();
         query
@@ -12599,6 +12644,52 @@ mod tests {
             find_structure_by_kind(game, "home").unwrap(),
             find_structure_by_kind(game, "mining_node").unwrap(),
         )
+    }
+
+    #[test]
+    fn a_worked_node_pays_out_more_the_deeper_the_zone() {
+        let mut game = Game::new(960, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.world.resource_mut::<ZoneLevel>().0 = 4;
+        assert_eq!(
+            game.world.resource::<ZoneLevel>().stat_multiplier(),
+            8,
+            "zone 4's multiplier is 1 << 3"
+        );
+
+        let gained = run_one_full_gather_cycle(&mut game, ids::CORE_FRAGMENT);
+
+        assert_eq!(gained, 8, "a zone-4 node pays 8x what a zone-1 node pays");
+    }
+
+    #[test]
+    fn a_zone_one_node_still_pays_exactly_one() {
+        let mut game = Game::new(962, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        assert_eq!(
+            game.world.resource::<ZoneLevel>().0,
+            1,
+            "runs start at zone 1"
+        );
+
+        let gained = run_one_full_gather_cycle(&mut game, ids::CORE_FRAGMENT);
+
+        assert_eq!(
+            gained, 1,
+            "zone 1's multiplier is 1 << 0 == 1, so the opening game is unchanged"
+        );
+    }
+
+    #[test]
+    fn a_banked_resource_never_scales_with_zone_depth() {
+        let mut game = Game::new(961, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.world.resource_mut::<ZoneLevel>().0 = 5;
+
+        let gained = run_one_full_gather_cycle(&mut game, ids::RESEARCH_DATA);
+
+        assert_eq!(
+            gained, 1,
+            "research_data has a bank_limit of 200 — scaling it would fill the bank in ~13 \
+             cycles and turn the research economy into 'no room to store it' spam"
+        );
     }
 
     #[test]

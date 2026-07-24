@@ -7377,17 +7377,17 @@ mod tests {
         place_home(&mut game, 0, 1);
 
         // Walk far enough away that the next placement lands outside the
-        // 15-tile build radius from Home.
+        // build radius from Home.
         game.world.get_mut::<Position>(player).unwrap().x += 20;
         let err = game
             .place_structure("armory", 1, 0)
-            .expect_err("structures more than 15 tiles from Home shouldn't be buildable");
+            .expect_err("structures beyond MAX_BUILD_DISTANCE_FROM_HOME shouldn't be buildable");
         assert!(err.contains("Too far from Home"), "unexpected error: {err}");
 
         // Walking back within range should make it buildable again.
         game.world.get_mut::<Position>(player).unwrap().x -= 20;
         game.place_structure("armory", 1, 0)
-            .expect("building back within 15 tiles of Home should succeed");
+            .expect("building back within range of Home should succeed");
     }
 
     #[test]
@@ -9003,7 +9003,7 @@ mod tests {
 
         set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 5)]);
 
-        // This is also what gates the engine-emitted [D]ecompile option.
+        // This is also what gates the engine-emitted de[c]ompile option.
         assert!(
             game.battle_view().unwrap().groups[0]
                 .decompile_chance

@@ -133,11 +133,18 @@ always offer exactly the same set:
 | Key | Action |
 | --- | --- |
 | `a` | Attack — then pick which enemy group to hit |
-| `f` | Defend — brace for the round: a Defense bonus, and you draw more of the incoming fire |
+| `d` | Defend — brace for the round: a Defense bonus, and you draw more of the incoming fire |
 | `s` | Special (party members only) — a rally (ATK boost) by default, or the species' own ability if it has one. Costs you a flat chunk of Fatigue |
-| `d` | Decompile (you only) — attempt to compile/tame a group's front program. Needs a taming catalyst, which the ICE Breaker is |
+| `c` | Decompile (you only) — attempt to compile/tame a group's front program. Needs a taming catalyst, which the ICE Breaker is |
 | `u` | Use item (you only) — spend a consumable as that slot's action for the round |
 | `j` | Jack out (flee) — costs a mild XP setback, same as flatlining. A party-level command, not a per-member action |
+| `A` | All attack — every unplanned slot attacks. Asks which group only if more than one is left |
+| `D` | All defend — every unplanned slot braces |
+
+**Shift means "everyone".** A lowercase key acts for the member currently
+choosing; its uppercase counterpart acts for the whole party at once, filling
+every slot you haven't already decided for and resolving the round. `A` and
+`D` never overwrite a choice you made deliberately.
 
 Enemy groups are addressed by letter (`A`, `B`, ...). `Esc` backs the
 planning cursor up a slot if you mis-pick — it also clears the slots after
@@ -346,8 +353,10 @@ at 6 to the Sprite at 14; you roll from 11.
 
 The screen lists hostile groups on top and your party below, each with HP,
 Attack and Defense. Back-rank groups are dimmed. You choose an action for
-every party member, the round resolves in initiative order, and you page
-through what happened before planning the next one.
+every party member and the round resolves in initiative order, with the
+narration landing in the log pane below — rounds are separated there by a
+dim `── round N ──` line, so you read what happened without leaving the
+planning screen.
 
 ### Stats
 
@@ -724,9 +733,9 @@ enough of them, then walk onto it to breach into the next zone.
   zone 3 quadruples it, and so on.
 - Wandering away from your base adds its own scaling on top: every 15 tiles
   past the edge of your base platform adds another **25%** to wild stats,
-  capping out at **3×** far enough out. Since the platform is itself 15
-  tiles across from Home, the first step up lands **30 tiles from Home** —
-  the whole base counts as safe territory, not just its centre. Before
+  capping out at **3×** far enough out. Since the platform reaches 7 tiles
+  from Home, the first step up lands **22 tiles from Home** — the whole
+  base counts as safe territory, not just its centre. Before
   you've placed your first Home there's no platform, so it measures from
   where you breached in instead.
 - Deploying a Zone Portal costs 10 Portal Fragments **times your current
@@ -768,7 +777,7 @@ else regardless — the build menu (`b`) always lists it first, followed by
 Mining Node then Research Node then Compiler, with the rest after.
 
 Only one Home can exist at a time, and every other structure must be
-deployed within 15 tiles of it — a base clusters around its Home rather
+deployed within 7 tiles of it — a base clusters around its Home rather
 than sprawling across the map. `R` demolishes a nearby structure and
 refunds 30% of its materials; demolishing Home is a special case, since
 without it nothing else could exist out of range anyway — it cascades to

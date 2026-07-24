@@ -1129,7 +1129,7 @@ impl App {
             return;
         };
         if slot == 0 {
-            self.status_line = Some("Nothing to undo — pick an action, or [J]ack Out.".to_string());
+            self.status_line = Some("Nothing to undo — pick an action, or [j]ack out.".to_string());
             return;
         }
         game.battle_clear_action(slot - 1);
@@ -2431,7 +2431,7 @@ mod tests {
     }
 
     /// Every action the engine offers must lead somewhere that can actually
-    /// complete. `[U]se item` originally routed to the map's inventory
+    /// complete. `[u]se item` originally routed to the map's inventory
     /// screen, whose flow calls `Game::use_item` — which refuses outright
     /// during an intrusion. The action appeared in the menu, swallowed the
     /// player's pick, and did nothing.

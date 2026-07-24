@@ -71,7 +71,7 @@ pub struct ActionOption {
     pub kind: ActionKind,
     /// Hotkey the engine assigns, so the two renderers cannot drift.
     pub key: char,
-    /// e.g. "[A]ttack"
+    /// e.g. "[a]ttack"
     pub label: String,
     /// e.g. "Rally: +3 ATK for 3 rounds"
     pub detail: String,

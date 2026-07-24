@@ -11,6 +11,31 @@ shares one version, set in the root `Cargo.toml`.
 
 Dated entries below `0.2.0` predate versioning and are kept as written.
 
+## Unreleased
+
+### Combat flow
+
+- **The round-resolve page is gone.** A resolved round used to open a
+  full-screen narration overlay that had to be dismissed before planning the
+  next one. It never had anything to show — its log source was never written
+  to — while the battle screen's own log pane was already carrying the real
+  narration. Rounds now resolve straight back into planning, separated in the
+  log by a dim `── round N ──` line.
+- **`[A]ll attack` and `[D] all defend`** plan every open party slot in one
+  keypress. All-attack asks which group only when more than one is still up.
+  Neither overwrites a slot you already chose for.
+- **Battle keys are lowercase, and Decompile moved to `c`.** Defend takes `d`,
+  so the per-slot keys `a`/`d` and their party-wide counterparts `A`/`D` line
+  up: shift means "everyone does this". Nothing sits one shift key away from a
+  different action.
+
+### Balance
+
+- **The base platform shrank from a 15-tile radius to 7.** The platform edge
+  is also where the danger curve starts measuring, so hostiles now get tougher
+  8 tiles nearer to home — the first stat-escalation step moves from 30 tiles
+  out to 22.
+
 ## 0.2.0 — 2026-07-24
 
 ### Breaking

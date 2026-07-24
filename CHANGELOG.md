@@ -2,6 +2,67 @@
 
 Release notes for [feral-processes](README.md).
 
+## Unreleased
+
+### Breaking
+
+- **Saves from earlier versions no longer load.** Party order is now
+  persisted, because it decides which members stand in the front slots and
+  draw more enemy fire — so it can't be rebuilt from creature-iteration
+  order the way it used to be. That changes the shape of a saved program
+  record, and the save format has no field-level compatibility.
+  `SAVE_FORMAT_VERSION` is **v10**; a v9 save is rejected up front with a
+  clear message rather than decoding into corruption.
+
+### Party roster battles
+
+- **Intrusions are now a party-versus-party round battle**, not a duel with
+  an audience. The whole battle screen is replaced: hostile groups listed on
+  top, your party listed below, both with HP and stats, and an action chosen
+  for **every** party member before the round resolves.
+- **Enemies fight as species groups.** A pack is sorted by species, so three
+  Glitches are one addressable unit (`A  3 Glitches`) rather than three
+  rows. Only a group's front member can be hit; empty a group and it drops
+  off the list, promoting whatever stood behind it. At most four groups
+  engage at once — a bigger cluster sends its four largest and leaves the
+  rest on the map rather than despawning them.
+- **Companions fight.** A party member that Attacks rolls one of its own
+  species' moves and deals real damage. The old `[C]ommand companion`
+  action is gone; its buff is now the **Special** action, one of the options
+  that member can be given for the round, and still costs you Fatigue.
+- **Only the front two enemy groups can reach you.** A group further back
+  can use only moves its species flags `ranged`, and does nothing at all if
+  it has none. This is the valve that keeps a twelve-program pack
+  survivable, and it makes clearing front-to-back a real decision — wiping
+  the front group promotes a back group into melee range.
+- **Initiative is rolled every round.** Every combatant on both sides rolls
+  `base_speed + d10` and acts in one interleaved order. `base_speed` is new
+  per-species data, spanning 6 (Construct) to 14 (Sprite); the player rolls
+  from 11. Both new species fields are optional, so existing mods keep
+  loading untouched — see `assets/species/README.md`.
+- **Defend** is a new action: a Defense bonus for the round, plus a much
+  larger share of the incoming fire. It's applied before anyone acts, so
+  bracing covers you against a faster enemy rather than being a coin flip on
+  the initiative roll.
+- **Soft ranks.** Enemy targeting is now weighted by party slot instead of a
+  flat 30% chance to hit a companion. The first three slots draw noticeably
+  more fire than the ones behind them, but every member stays reachable — a
+  back slot is safer, never safe.
+- **Bigger fights.** Party capacity goes 3 → 5, and a pack can reach 12
+  programs (3 per zone level) instead of one more than the zone number.
+- **The action menu is engine-generated.** Both frontends draw whatever the
+  engine offers, including the reason an action is currently unusable, so
+  the two can't drift and a new action needs no renderer change.
+
+### Fixed
+
+- **A seeded game is reproducible again.** The habitat spawn pools were
+  returned in `HashMap` iteration order, which is randomized per process,
+  and the per-tile spawn roll indexes into them — so two runs on the same
+  seed picked different species and diverged from there. Only ever visible
+  as intermittently-failing tests, never as a wrong-looking game, but it
+  made any seeded test unreliable.
+
 ## 2026-07-24
 
 - **Your base travels between zones**: breaching used to despawn every

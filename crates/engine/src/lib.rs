@@ -12898,6 +12898,40 @@ mod tests {
         );
     }
 
+    /// The loss path: a round that kills the player has to end the fight,
+    /// clearing `BattleState` so the game-over handling isn't left running
+    /// against a battle that's still notionally active.
+    /// Permadeath rather than Forgiving, because a Forgiving flatline
+    /// soft-reboots the player back to life within the same tick — which
+    /// would make "did the player die?" unobservable after the fact.
+    #[test]
+    fn a_round_that_kills_the_player_ends_the_battle() {
+        let mut game = Game::new(96, DifficultyMode::Permadeath, &test_assets_dir()).unwrap();
+        // A wild program that hits far harder than the player can survive,
+        // and with enough HP that the player can't end it first.
+        let wild = game.spawn_wild_creature("construct", 5, 5).unwrap();
+        {
+            let mut w = game.world.get_mut::<Stats>(wild).unwrap();
+            w.hp = 100_000;
+            w.max_hp = 100_000;
+            w.atk = 100_000;
+        }
+        game.start_battle(vec![wild]);
+
+        game.battle_set_action(0, BattleAction::Attack { group: 0 })
+            .unwrap();
+        game.battle_resolve_round();
+
+        assert!(
+            game.is_game_over().is_some(),
+            "the setup should have flatlined the player outright"
+        );
+        assert!(
+            !game.has_active_battle(),
+            "a fight the player lost has to be over, not left active"
+        );
+    }
+
     /// A companion knocked offline mid-fight is dropped from `Party`, but
     /// `planned` keeps its fixed length — so its slot outlives it. That
     /// slot must stop counting toward the round, or it sits forever

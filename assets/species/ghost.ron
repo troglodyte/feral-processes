@@ -12,7 +12,7 @@
     base_speed: 10,
     moves: [
         (name: "Haunt", power: 9, effect: Some((kind: Bleed, chance: 0.45, duration: 3, power: 4))),
-        (name: "Static Wail", power: 7),
+        (name: "Static Wail", power: 7, ranged: true),
     ],
     work_resource: None,
 )

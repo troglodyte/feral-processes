@@ -96,6 +96,13 @@ const PACK_GATHER_RADIUS: i32 = 2;
 /// next bump rather than silently despawned.
 const MAX_ENEMY_GROUPS: usize = 4;
 
+/// How many enemy groups are in melee range of the party. Groups past this
+/// index can only act with a move flagged `ranged`, which is what keeps a
+/// four-group pack from simply quadrupling incoming damage — and what makes
+/// wiping the front group a real decision, since it promotes a back group
+/// into reach.
+const ENGAGED_GROUPS: usize = 2;
+
 /// How many `Hostile` creatures may exist across the whole map at once.
 /// Wild creatures never despawn on their own, so without a bound the
 /// world-wide population — and the per-tick AI cost of simulating it —
@@ -3647,26 +3654,31 @@ impl Game {
     /// The wild creature strikes back at whoever's exposed: normally the
     /// player, but if a companion is fighting alongside them, there's a
     /// `COMPANION_RETALIATION_CHANCE` chance it eats the hit instead.
-    fn wild_retaliate(&mut self, wild: Entity, _group: usize, player: Entity) {
+    fn wild_retaliate(&mut self, wild: Entity, group: usize, player: Entity) {
         let species_id = self.world.get::<Creature>(wild).unwrap().species.clone();
-        let move_count = self
+        // Only the front `ENGAGED_GROUPS` are close enough to swing; anything
+        // further back has to shoot, and idles if it has nothing that reaches.
+        let engaged = group < ENGAGED_GROUPS;
+        let candidates: Vec<MoveDef> = self
             .world
             .resource::<SpeciesDb>()
             .get(&species_id)
             .unwrap()
             .moves
-            .len();
+            .iter()
+            .filter(|m| engaged || m.ranged)
+            .cloned()
+            .collect();
+        if candidates.is_empty() {
+            let name = self.creature_label(wild);
+            self.log(format!("{name} circles beyond reach, unable to strike."));
+            return;
+        }
         let idx = {
             let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_range(0..move_count)
+            rng.0.random_range(0..candidates.len())
         };
-        let mv = self
-            .world
-            .resource::<SpeciesDb>()
-            .get(&species_id)
-            .unwrap()
-            .moves[idx]
-            .clone();
+        let mv = candidates[idx].clone();
 
         let party = self.world.resource::<Party>().0.clone();
         let targets_companion = !party.is_empty() && {
@@ -12850,6 +12862,74 @@ mod tests {
         );
         game.battle_clear_action(0);
         assert_eq!(game.battle_active_slot(), Some(0));
+    }
+
+    /// The reach rule is the balance valve that makes a big multi-group
+    /// fight survivable. A back group with only melee moves can't connect
+    /// at all.
+    #[test]
+    fn a_back_group_with_only_melee_moves_cannot_reach_the_party() {
+        let mut game = Game::new(86, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        // Scrapper, Sentinel and Construct are authored melee-only.
+        let a = game.spawn_wild_creature("scrapper", 5, 5).unwrap();
+        let b = game.spawn_wild_creature("sentinel", 5, 6).unwrap();
+        let c = game.spawn_wild_creature("construct", 5, 7).unwrap();
+        game.start_battle(vec![a, b, c]);
+        let player = game.player_entity();
+        let hp_before = game.world.get::<Stats>(player).unwrap().hp;
+
+        // Group 2 (Construct) is behind the engaged pair and melee-only.
+        let construct = game.front_of_group(2).unwrap();
+        for _ in 0..20 {
+            game.wild_retaliate(construct, 2, player);
+        }
+
+        assert_eq!(
+            game.world.get::<Stats>(player).unwrap().hp,
+            hp_before,
+            "a melee-only back group must deal no damage"
+        );
+    }
+
+    /// ...but a back group holding a ranged move connects normally. Without
+    /// this half, the test above would pass just as well against a bug that
+    /// makes back groups unconditionally inert.
+    #[test]
+    fn a_back_group_with_a_ranged_move_still_connects() {
+        let mut game = Game::new(87, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let a = game.spawn_wild_creature("scrapper", 5, 5).unwrap();
+        let b = game.spawn_wild_creature("sentinel", 5, 6).unwrap();
+        // Glitch's "Static Burst" is authored ranged.
+        let c = game.spawn_wild_creature("glitch", 5, 7).unwrap();
+        game.start_battle(vec![a, b, c]);
+        let player = game.player_entity();
+        let hp_before = game.world.get::<Stats>(player).unwrap().hp;
+
+        let glitch = game.front_of_group(2).unwrap();
+        game.wild_retaliate(glitch, 2, player);
+
+        assert!(
+            game.world.get::<Stats>(player).unwrap().hp < hp_before,
+            "a ranged back group must be able to land a hit"
+        );
+    }
+
+    /// An engaged group picks from its whole moveset, ranged or not —
+    /// the restriction is about distance, not about the moves themselves.
+    #[test]
+    fn an_engaged_group_still_uses_its_melee_moves() {
+        let mut game = Game::new(88, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let construct = game.spawn_wild_creature("construct", 5, 5).unwrap();
+        game.start_battle(vec![construct]);
+        let player = game.player_entity();
+        let hp_before = game.world.get::<Stats>(player).unwrap().hp;
+
+        game.wild_retaliate(construct, 0, player);
+
+        assert!(
+            game.world.get::<Stats>(player).unwrap().hp < hp_before,
+            "a melee-only species in the front rank must still hit"
+        );
     }
 
     /// A planned target can die earlier in the same round than the member

@@ -11,7 +11,7 @@
     habitats: [OpenGrid, Mainframe, NullSector, StaticField],
     base_speed: 12,
     moves: [
-        (name: "Purge", power: 24, effect: Some((kind: Bleed, chance: 0.5, duration: 3, power: 5))),
+        (name: "Purge", power: 24, ranged: true, effect: Some((kind: Bleed, chance: 0.5, duration: 3, power: 5))),
         (name: "Kernel Panic", power: 18, effect: Some((kind: Stun, chance: 0.4, duration: 1, power: 0))),
     ],
     work_resource: None,

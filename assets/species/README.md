@@ -50,6 +50,15 @@ is skipped with a warning logged in-game rather than crashing startup.
         (name: "Move Name", power: 8),
         (name: "Other Move", power: 5),
 
+        // Optional per-move (defaults to false). A pack fights as species
+        // groups, and only the front two are close enough to swing — a
+        // group standing further back can use *only* its moves flagged
+        // `ranged: true`, and idles with a flavour line if it has none.
+        // Leaving this out makes a move melee, exactly how every move
+        // behaved before the field existed. Give a species at least one
+        // melee move regardless, or it does nothing in the front rank.
+        (name: "Reaching Move", power: 6, ranged: true),
+
         // Optional per-move; omit `effect` entirely for a plain damage-only
         // move. If set, landing this move has a `chance` (0.0-1.0) to also
         // inflict a status condition on the target for `duration` battle

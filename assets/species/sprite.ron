@@ -10,7 +10,7 @@
     habitats: [OpenGrid, Mainframe],
     base_speed: 14,
     moves: [
-        (name: "Ping", power: 5),
+        (name: "Ping", power: 5, ranged: true),
         (name: "Pulse", power: 8),
     ],
     work_resource: None,

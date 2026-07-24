@@ -96,6 +96,13 @@ pub struct MoveDef {
     /// without this field keep parsing as plain damage-only moves.
     #[serde(default)]
     pub effect: Option<MoveEffect>,
+    /// Whether this move reaches past the front line. A group standing
+    /// behind `crate::ENGAGED_GROUPS` can only use its ranged moves, and
+    /// idles if it has none. `#[serde(default)]` so existing species files
+    /// (including mods) without this field keep parsing as melee, exactly
+    /// as they behaved before it existed.
+    #[serde(default)]
+    pub ranged: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -312,6 +319,37 @@ mod tests {
         )
         .expect("a species file with no base_speed must still parse");
         assert_eq!(def.base_speed, crate::DEFAULT_BASE_SPEED);
+    }
+
+    #[test]
+    fn ranged_defaults_to_melee_when_a_move_omits_it() {
+        let def: MoveDef = ron::from_str(r#"(name: "Poke", power: 3)"#)
+            .expect("a move with no `ranged` field must still parse");
+        assert!(!def.ranged, "moves default to melee");
+    }
+
+    /// The three melee-only bruisers are load-bearing: the reach tests in
+    /// `lib.rs` use them as back groups that genuinely cannot connect. If
+    /// someone gives one of them a ranged move, those tests would start
+    /// passing for the wrong reason.
+    #[test]
+    fn the_melee_only_species_stay_melee_only_and_everything_else_has_reach() {
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+        for id in ["scrapper", "sentinel", "construct"] {
+            let species = db.get(id).unwrap();
+            assert!(
+                species.moves.iter().all(|m| !m.ranged),
+                "{id} is a melee-only bruiser by design"
+            );
+        }
+        for species in db.all() {
+            assert!(
+                species.moves.iter().any(|m| !m.ranged),
+                "{} must keep at least one melee move, or its front-rank \
+                 behaviour changes too",
+                species.id
+            );
+        }
     }
 
     #[test]

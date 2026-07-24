@@ -12,7 +12,7 @@
     base_speed: 12,
     moves: [
         (name: "Backdoor", power: 12),
-        (name: "Spoof", power: 9),
+        (name: "Spoof", power: 9, ranged: true),
     ],
     work_resource: None,
 )

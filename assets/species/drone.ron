@@ -11,7 +11,7 @@
     base_speed: 13,
     moves: [
         (name: "Buzz", power: 4),
-        (name: "Recon Ping", power: 3),
+        (name: "Recon Ping", power: 3, ranged: true),
     ],
     work_resource: Some("core_fragment"),
 )

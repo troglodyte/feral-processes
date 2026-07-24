@@ -23,7 +23,7 @@ use bevy_ecs::prelude::*;
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 
-use battle::EnemyGroup;
+use battle::{ActionKind, ActionOption, BattleAction, EnemyGroup, TargetSpec};
 use components::{
     ActiveBuff, ActiveStatus, BuffKind, Creature, CustomName, Decompiler, Durability, Equipment,
     EquippedItem, Experience, FusionCount, Glyph, GlyphColor, Hostile, Inventory, ItemFusions,
@@ -121,6 +121,14 @@ const PLAYER_BASE_SPEED: i32 = 11;
 /// and acts in descending order. Sized so a 4-point speed gap still loses
 /// the roll sometimes — order should be a tendency, not a lookup table.
 const INITIATIVE_DIE: i32 = 10;
+
+/// Move power behind the player's own basic strike. The player has no
+/// `Creature` component and so no species moveset — this is their one move,
+/// with `Stats::atk` and equipment carrying the rest of the scaling.
+const PLAYER_STRIKE_POWER: i32 = 5;
+
+/// DEF granted for the round by the Defend action.
+const DEFEND_DEF_BONUS: i32 = 6;
 
 /// Battle rounds a companion's default rally buff (see
 /// `Game::rally_player`) lasts when its species defines no
@@ -1253,9 +1261,24 @@ impl Game {
     /// combat buff (see `use_item`'s `prebattle_buff`, applied at the next
     /// intrusion). A non-consumable or an empty stack is a logged no-op.
     pub fn use_item(&mut self, id: &ItemId) {
+        // Still refused mid-intrusion: in battle an item is a *planned
+        // action* costing that slot its round (`BattleAction::UseItem`), not
+        // something the inventory screen can spend for free.
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
+        if self.consume_item(id) {
+            self.tick();
+        }
+    }
+
+    /// Spends one `id` and applies its consume effect to the player,
+    /// *without* advancing the clock. Shared by the map's `use_item` and the
+    /// battle's `BattleAction::UseItem`, which tick on their own schedules —
+    /// a round already ticks once at the end of `battle_resolve_round`, so
+    /// an item used mid-round must not tick a second time. Returns whether
+    /// an item was actually consumed.
+    fn consume_item(&mut self, id: &ItemId) -> bool {
         let Some(effect) = self
             .world
             .resource::<ItemDb>()
@@ -1263,7 +1286,7 @@ impl Game {
             .and_then(|d| d.consume)
         else {
             self.log("You can't use that.");
-            return;
+            return false;
         };
         let player = self.player_entity();
         if self
@@ -1274,7 +1297,7 @@ impl Game {
             == 0
         {
             self.log(format!("You have no {}.", self.item_name(id)));
-            return;
+            return false;
         }
         {
             let mut needs = self.world.get_mut::<Needs>(player).unwrap();
@@ -1294,7 +1317,7 @@ impl Game {
         }
         let name = self.item_name(id).to_string();
         self.log(format!("You use a {name}."));
-        self.tick();
+        true
     }
 
     /// The `e` shortcut: use the first inventory item that restores Power.
@@ -2518,10 +2541,12 @@ impl Game {
             .map(|g| g.members.len())
             .sum::<usize>()
             .saturating_sub(1);
+        let slots = self.world.resource::<Party>().0.len() + 1;
         self.world.insert_resource(BattleState {
             player,
             groups,
             round: 1,
+            planned: vec![None; slots],
             log: Vec::new(),
             finished: false,
             player_won: false,
@@ -2637,6 +2662,321 @@ impl Game {
         rolled.into_iter().map(|(_, actor)| actor).collect()
     }
 
+    /// The party slot currently awaiting an action, or `None` when the
+    /// round is fully planned.
+    pub fn battle_active_slot(&self) -> Option<usize> {
+        let battle = self.world.get_resource::<BattleState>()?;
+        battle.planned.iter().position(|a| a.is_none())
+    }
+
+    pub fn battle_round_ready(&self) -> bool {
+        self.world
+            .get_resource::<BattleState>()
+            .is_some_and(|b| b.planned.iter().all(|a| a.is_some()))
+    }
+
+    pub fn battle_set_action(&mut self, slot: usize, action: BattleAction) -> Result<(), String> {
+        let group_count = self.living_group_count();
+        let Some(battle) = self.world.get_resource::<BattleState>() else {
+            return Err("No active intrusion.".to_string());
+        };
+        if slot >= battle.planned.len() {
+            return Err(format!("Slot {slot} isn't in your party."));
+        }
+        let target_group = match &action {
+            BattleAction::Attack { group }
+            | BattleAction::Special { group }
+            | BattleAction::Decompile { group } => Some(*group),
+            _ => None,
+        };
+        if let Some(group) = target_group
+            && group >= group_count
+        {
+            return Err("That group is already down.".to_string());
+        }
+        self.world.resource_mut::<BattleState>().planned[slot] = Some(action);
+        Ok(())
+    }
+
+    /// Clears `slot`'s plan and every slot after it, so the cursor lands
+    /// back on `slot` — the player is correcting a choice, and everything
+    /// they picked *after* it was picked in light of the mistake.
+    pub fn battle_clear_action(&mut self, slot: usize) {
+        let Some(mut battle) = self.world.get_resource_mut::<BattleState>() else {
+            return;
+        };
+        for entry in battle.planned.iter_mut().skip(slot) {
+            *entry = None;
+        }
+    }
+
+    /// `entity`'s species `special_ability`, if it has one.
+    fn companion_ability(&self, entity: Entity) -> Option<SpecialAbility> {
+        self.world
+            .get::<Creature>(entity)
+            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+            .and_then(|s| s.special_ability.clone())
+    }
+
+    /// Consumable items the player is actually holding — the pool
+    /// `BattleAction::UseItem` draws from.
+    fn battle_usable_items(&self) -> Vec<ItemId> {
+        let player = self.player_entity();
+        let db = self.world.resource::<ItemDb>();
+        let Some(inv) = self.world.get::<Inventory>(player) else {
+            return Vec::new();
+        };
+        inv.items
+            .iter()
+            .filter(|(id, count)| {
+                *count > 0 && db.get(id.as_str()).is_some_and(|d| d.consume.is_some())
+            })
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
+
+    /// The action menu for party `slot`. This is the single place the
+    /// action set is defined; both renderers draw whatever this returns.
+    pub fn battle_action_options(&self, slot: usize) -> Vec<ActionOption> {
+        let Some(entity) = self.actor_entity(battle::Actor::Party(slot)) else {
+            return Vec::new();
+        };
+        let is_player = slot == 0;
+        let mut options = vec![
+            ActionOption {
+                kind: ActionKind::Attack,
+                key: 'a',
+                label: "[A]ttack".to_string(),
+                detail: "Strike a hostile group".to_string(),
+                target: TargetSpec::EnemyGroup,
+                unavailable: None,
+            },
+            ActionOption {
+                kind: ActionKind::Defend,
+                key: 'f',
+                label: "De[f]end".to_string(),
+                detail: format!("+{DEFEND_DEF_BONUS} DEF this round, and draw fire"),
+                target: TargetSpec::None,
+                unavailable: None,
+            },
+        ];
+
+        if !is_player {
+            options.push(ActionOption {
+                kind: ActionKind::Special,
+                key: 's',
+                label: "[S]pecial".to_string(),
+                detail: self
+                    .companion_ability(entity)
+                    .map(|a| a.display_label())
+                    .unwrap_or_else(|| "Rally: boost your attack".to_string()),
+                target: TargetSpec::EnemyGroup,
+                unavailable: None,
+            });
+        }
+
+        if is_player {
+            options.push(ActionOption {
+                kind: ActionKind::Decompile,
+                key: 'd',
+                label: "[D]ecompile".to_string(),
+                detail: "Attempt to capture a group's front program".to_string(),
+                target: TargetSpec::EnemyGroup,
+                unavailable: match (
+                    self.taming_catalyst(),
+                    self.pet_count() >= self.pet_capacity(),
+                ) {
+                    (None, _) => Some("no taming catalyst".to_string()),
+                    (_, true) => Some("roster is full".to_string()),
+                    _ => None,
+                },
+            });
+            options.push(ActionOption {
+                kind: ActionKind::UseItem,
+                key: 'u',
+                label: "[U]se item".to_string(),
+                detail: "Spend a consumable".to_string(),
+                target: TargetSpec::InventoryItem,
+                unavailable: self
+                    .battle_usable_items()
+                    .is_empty()
+                    .then(|| "no usable items".to_string()),
+            });
+        }
+
+        options
+    }
+
+    /// A planned target group may have died earlier in the round. Fall back
+    /// to the lowest surviving group rather than wasting the turn.
+    fn retarget(&self, group: usize) -> Option<usize> {
+        let count = self.living_group_count();
+        if count == 0 {
+            None
+        } else if group < count {
+            Some(group)
+        } else {
+            Some(0)
+        }
+    }
+
+    /// Resolves the planned round: everyone rolls initiative, acts in
+    /// order, and the plan is cleared for the next round. A no-op unless
+    /// every slot is planned.
+    pub fn battle_resolve_round(&mut self) {
+        if !self.battle_round_ready() || self.is_game_over().is_some() {
+            return;
+        }
+        let player = self.world.resource::<BattleState>().player;
+        let plan = self.world.resource::<BattleState>().planned.clone();
+
+        for actor in self.roll_initiative() {
+            if self.world.get_resource::<BattleState>().is_none() {
+                break;
+            }
+            let Some(entity) = self.actor_entity(actor) else {
+                continue;
+            };
+            // Anything that died earlier this round doesn't get its turn —
+            // initiative was rolled before any damage landed.
+            if !self.creature_alive(entity) {
+                continue;
+            }
+            if self.is_stunned(entity) {
+                let name = self.actor_label(actor, entity);
+                self.log(format!("{name} stalls — stunned, and loses the turn!"));
+                continue;
+            }
+            match actor {
+                battle::Actor::Party(slot) => {
+                    if let Some(Some(action)) = plan.get(slot) {
+                        self.resolve_one_action(slot, entity, action.clone(), player);
+                    }
+                }
+                battle::Actor::Enemy { group, .. } => self.wild_retaliate(entity, group, player),
+            }
+        }
+
+        if let Some(mut battle) = self.world.get_resource_mut::<BattleState>() {
+            battle.round += 1;
+            let slots = battle.planned.len();
+            battle.planned = vec![None; slots];
+        }
+        self.tick_round_status_effects(player);
+        self.tick();
+    }
+
+    /// How to name `actor` in the battle log.
+    fn actor_label(&self, actor: battle::Actor, entity: Entity) -> String {
+        match actor {
+            battle::Actor::Party(0) => "Your process".to_string(),
+            _ => self.creature_label(entity),
+        }
+    }
+
+    /// Executes one party member's chosen action. Every `BattleAction`
+    /// variant is handled here — this match is the one place a new action
+    /// needs an arm.
+    fn resolve_one_action(
+        &mut self,
+        slot: usize,
+        entity: Entity,
+        action: BattleAction,
+        player: Entity,
+    ) {
+        match action {
+            BattleAction::Attack { group } => {
+                let Some(group) = self.retarget(group) else {
+                    return;
+                };
+                self.party_member_attacks(slot, entity, group, player);
+            }
+            BattleAction::Special { group } => {
+                let Some(group) = self.retarget(group) else {
+                    return;
+                };
+                let Some(front) = self.front_of_group(group) else {
+                    return;
+                };
+                let name = self.creature_label(entity);
+                match self.companion_ability(entity) {
+                    Some(ability) => self.use_special_ability(&ability, &name, player, front),
+                    None => self.rally_player(entity, &name, player),
+                }
+            }
+            BattleAction::Defend => self.begin_defend(entity),
+            BattleAction::Decompile { group } => {
+                let Some(group) = self.retarget(group) else {
+                    return;
+                };
+                self.attempt_decompile(group, player);
+            }
+            BattleAction::UseItem { item } => {
+                self.consume_item(&item);
+            }
+        }
+    }
+
+    /// One party member's attack on `group`'s front. The player (slot 0)
+    /// has no `Creature` component and so no moveset, and keeps the flat
+    /// strike they always had; a companion rolls from its species moves the
+    /// way `wild_retaliate` does. Returns whether that ended the battle.
+    fn party_member_attacks(
+        &mut self,
+        slot: usize,
+        entity: Entity,
+        group: usize,
+        player: Entity,
+    ) -> bool {
+        let Some(front) = self.front_of_group(group) else {
+            return false;
+        };
+        let (move_name, move_power) = if slot == 0 {
+            ("data strike".to_string(), PLAYER_STRIKE_POWER)
+        } else {
+            match self.roll_species_move(entity) {
+                Some(mv) => (mv.name.clone(), mv.power),
+                None => ("a raw signal burst".to_string(), PLAYER_STRIKE_POWER),
+            }
+        };
+        let (atk, def) = (
+            self.effective_atk(entity),
+            self.world.get::<Stats>(front).unwrap().def,
+        );
+        let dmg = battle::compute_damage(atk, def, move_power);
+        self.apply_damage(front, dmg);
+        if slot == 0 {
+            self.log(format!("You unleash a {move_name} for {dmg} damage."));
+        } else {
+            let name = self.creature_label(entity);
+            self.log(format!("{name} executes {move_name} for {dmg} damage."));
+        }
+
+        if !self.creature_alive(front) {
+            return self.finish_group_member(group, player);
+        }
+        false
+    }
+
+    /// A uniformly-random move from `entity`'s species moveset, or `None`
+    /// if it has no `Creature` component or an empty moveset.
+    fn roll_species_move(&mut self, entity: Entity) -> Option<MoveDef> {
+        let species_id = self.world.get::<Creature>(entity)?.species.clone();
+        let moves = self
+            .world
+            .resource::<SpeciesDb>()
+            .get(&species_id)
+            .map(|s| s.moves.clone())?;
+        if moves.is_empty() {
+            return None;
+        }
+        let idx = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_range(0..moves.len())
+        };
+        Some(moves[idx].clone())
+    }
+
     pub fn battle_view(&self) -> Option<BattleView> {
         let battle = self.world.get_resource::<BattleState>()?;
         let wild = battle.groups.first()?.front()?;
@@ -2704,7 +3044,7 @@ impl Game {
                 let w = *self.world.get::<Stats>(front).unwrap();
                 (self.effective_atk(player), w.def)
             };
-            let dmg = battle::compute_damage(p_atk, w_def, 5);
+            let dmg = battle::compute_damage(p_atk, w_def, PLAYER_STRIKE_POWER);
             self.apply_damage(front, dmg);
             self.log(format!("You unleash a data strike for {dmg} damage."));
 
@@ -2771,14 +3111,14 @@ impl Game {
         // a fast pack member lands its hit before a slow one — the party
         // side joins this order in `battle_resolve_round`.
         for actor in self.roll_initiative() {
-            if !matches!(actor, battle::Actor::Enemy { .. }) {
+            let battle::Actor::Enemy { group, .. } = actor else {
                 continue;
-            }
+            };
             let Some(wild) = self.actor_entity(actor) else {
                 continue;
             };
             if self.creature_alive(wild) {
-                self.wild_retaliate(wild, player);
+                self.wild_retaliate(wild, group, player);
             }
         }
     }
@@ -3169,21 +3509,14 @@ impl Game {
         }
     }
 
-    pub fn battle_decompile(&mut self) {
-        if self.is_game_over().is_some() {
-            return;
-        }
-        let Some(player) = self.world.get_resource::<BattleState>().map(|b| b.player) else {
-            return;
-        };
-
-        if self.is_stunned(player) {
-            self.log("Your process stalls — stunned, you lose this turn!");
-            self.resolve_post_action(player);
-            self.tick();
-            return;
-        }
-
+    /// One decompile attempt against `group`'s front program: spends a
+    /// catalyst, rolls `taming::capture_chance`, and on success converts the
+    /// target into a tamed program and drops it from the group.
+    ///
+    /// `None` means the attempt was refused before anything was spent — no
+    /// catalyst, or no room on the roster — so the caller must not charge a
+    /// turn for it. `Some(battle_over)` means the attempt happened.
+    fn attempt_decompile(&mut self, group: usize, player: Entity) -> Option<bool> {
         // Refuse before spending the catalyst (or the turn) if the roster is
         // already full — a captured program has to live somewhere.
         let capacity = self.pet_capacity();
@@ -3192,21 +3525,19 @@ impl Game {
             self.log(format!(
                 "Your roster is full ({owned}/{capacity}) — fuse two programs together or deploy a Data Cache to make room."
             ));
-            return;
+            return None;
         }
 
         let Some((catalyst, potency)) = self.taming_catalyst() else {
             self.log("You have no taming catalyst.");
-            return;
+            return None;
         };
+        let front = self.front_of_group(group)?;
         self.world
             .get_mut::<Inventory>(player)
             .unwrap()
             .take(catalyst, 1);
 
-        let Some(front) = self.front_of_group(0) else {
-            return;
-        };
         let (hp_fraction, species_id) = {
             let stats = *self.world.get::<Stats>(front).unwrap();
             let species = self.world.get::<Creature>(front).unwrap().species.clone();
@@ -3226,37 +3557,59 @@ impl Game {
             rng.0.random_bool(chance as f64)
         };
 
-        if roll {
-            let wild_max_hp = self.world.get::<Stats>(front).unwrap().max_hp;
-            let nest = self.world.get::<NestGuardian>(front).map(|g| g.nest);
-            self.world
-                .entity_mut(front)
-                .remove::<(Hostile, WanderAi, NestGuardian)>();
-            self.world
-                .entity_mut(front)
-                .insert((Tamed { owner: player }, Experience::default()));
-            if let Some(nest) = nest
-                && let Some(mut n) = self.world.get_mut::<Nest>(nest)
-            {
-                n.pending_respawns.push(NEST_RESPAWN_TICKS);
-            }
-            self.log("ICE breached! The program now runs under your control.");
-            self.award_player_xp(player, wild_max_hp as u32);
-            if self.pop_group_member(0) {
-                self.clear_battle_status_effects(player, front);
-                self.world.remove_resource::<BattleState>();
-                self.tick();
-                return;
-            }
-            self.log("Another rogue program from the pack engages!");
+        if !roll {
+            self.log("The program's ICE holds — decompile failed!");
+            return Some(false);
+        }
+
+        let wild_max_hp = self.world.get::<Stats>(front).unwrap().max_hp;
+        let nest = self.world.get::<NestGuardian>(front).map(|g| g.nest);
+        self.world
+            .entity_mut(front)
+            .remove::<(Hostile, WanderAi, NestGuardian)>();
+        self.world
+            .entity_mut(front)
+            .insert((Tamed { owner: player }, Experience::default()));
+        if let Some(nest) = nest
+            && let Some(mut n) = self.world.get_mut::<Nest>(nest)
+        {
+            n.pending_respawns.push(NEST_RESPAWN_TICKS);
+        }
+        self.log("ICE breached! The program now runs under your control.");
+        self.award_player_xp(player, wild_max_hp as u32);
+        if self.pop_group_member(group) {
+            self.clear_battle_status_effects(player, front);
+            self.world.remove_resource::<BattleState>();
+            return Some(true);
+        }
+        self.log("Another rogue program from the pack engages!");
+        Some(false)
+    }
+
+    pub fn battle_decompile(&mut self) {
+        if self.is_game_over().is_some() {
+            return;
+        }
+        let Some(player) = self.world.get_resource::<BattleState>().map(|b| b.player) else {
+            return;
+        };
+
+        if self.is_stunned(player) {
+            self.log("Your process stalls — stunned, you lose this turn!");
             self.resolve_post_action(player);
             self.tick();
             return;
         }
 
-        self.log("The program's ICE holds — decompile failed!");
-        self.resolve_post_action(player);
-        self.tick();
+        match self.attempt_decompile(0, player) {
+            // Refused before spending anything — the turn isn't consumed.
+            None => {}
+            Some(true) => self.tick(),
+            Some(false) => {
+                self.resolve_post_action(player);
+                self.tick();
+            }
+        }
     }
 
     pub fn battle_flee(&mut self) {
@@ -3294,7 +3647,7 @@ impl Game {
     /// The wild creature strikes back at whoever's exposed: normally the
     /// player, but if a companion is fighting alongside them, there's a
     /// `COMPANION_RETALIATION_CHANCE` chance it eats the hit instead.
-    fn wild_retaliate(&mut self, wild: Entity, player: Entity) {
+    fn wild_retaliate(&mut self, wild: Entity, _group: usize, player: Entity) {
         let species_id = self.world.get::<Creature>(wild).unwrap().species.clone();
         let move_count = self
             .world
@@ -3456,11 +3809,11 @@ impl Game {
         }
     }
 
-    /// End-of-round upkeep for the player's active combat buff (see
+    /// End-of-round upkeep for one combatant's active combat buff (see
     /// `PlayerBuff`) — ticks its remaining-rounds counter down, clearing it
     /// (with a log line) once it expires.
-    fn tick_player_buff(&mut self, player: Entity) {
-        let Some(mut buff) = self.world.get_mut::<PlayerBuff>(player) else {
+    fn tick_player_buff(&mut self, entity: Entity) {
+        let Some(mut buff) = self.world.get_mut::<PlayerBuff>(entity) else {
             return;
         };
         let Some(active) = buff.active else {
@@ -3480,8 +3833,85 @@ impl Game {
                 BuffKind::Atk => "attack",
                 BuffKind::Def => "defense",
             };
-            self.log(format!("Your {stat} boost fades."));
+            if entity == self.player_entity() {
+                self.log(format!("Your {stat} boost fades."));
+            } else {
+                let name = self.creature_label(entity);
+                self.log(format!("{name}'s {stat} boost fades."));
+            }
         }
+    }
+
+    /// Braces `entity` for the round: a DEF bonus that expires in the same
+    /// round's `tick_round_status_effects`. The buff slot is inserted on
+    /// demand — only the player is spawned holding one, so without this a
+    /// companion's Defend would log its message and change nothing.
+    fn begin_defend(&mut self, entity: Entity) {
+        let buff = ActiveBuff {
+            kind: BuffKind::Def,
+            remaining: 1,
+            power: DEFEND_DEF_BONUS,
+        };
+        match self.world.get_mut::<PlayerBuff>(entity) {
+            // A single `active` slot, so bracing overwrites a Rally the
+            // member was still carrying — a real cost of the choice.
+            Some(mut existing) => existing.active = Some(buff),
+            None => {
+                self.world
+                    .entity_mut(entity)
+                    .insert(PlayerBuff { active: Some(buff) });
+            }
+        }
+        let name = self.creature_label(entity);
+        self.log(format!("{name} braces against the next strike."));
+    }
+
+    /// End-of-round status upkeep across every combatant in the fight: each
+    /// living enemy in every group, the player, and every party member,
+    /// plus each of their combat buffs. Anything a lingering Bleed finished
+    /// off is then cleared out of its group.
+    fn tick_round_status_effects(&mut self, player: Entity) {
+        for wild in self.all_living_enemies() {
+            let label = self.entity_label(wild);
+            self.tick_status_effects(wild, &label);
+        }
+        let player_label = self.entity_label(player);
+        self.tick_status_effects(player, &player_label);
+        self.tick_player_buff(player);
+        for companion in self.world.resource::<Party>().0.clone() {
+            let label = self.creature_label(companion);
+            self.tick_status_effects(companion, &label);
+            self.tick_player_buff(companion);
+        }
+        if self.reap_dead_fronts(player) {
+            return;
+        }
+        if !self.creature_alive(player)
+            && let Some(front) = self.front_of_group(0)
+        {
+            self.clear_battle_status_effects(player, front);
+            self.world.remove_resource::<BattleState>();
+        }
+    }
+
+    /// Clears out any group whose front died to a status tick, awarding
+    /// loot and XP exactly as a direct kill would. Walks back to front so
+    /// removing a group can't shift a later one out from under the loop.
+    /// Returns whether that ended the battle.
+    fn reap_dead_fronts(&mut self, player: Entity) -> bool {
+        let mut group = self.living_group_count();
+        while group > 0 {
+            group -= 1;
+            while let Some(front) = self.front_of_group(group) {
+                if self.creature_alive(front) {
+                    break;
+                }
+                if self.finish_group_member(group, player) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     /// Ticks end-of-round status upkeep for every combatant that could
@@ -5575,10 +6005,12 @@ mod tests {
     /// partition, and without the opening log line.
     fn insert_battle(game: &mut Game, player: Entity, enemies: Vec<Entity>) {
         let groups = game.group_pack(enemies);
+        let slots = game.world.resource::<Party>().0.len() + 1;
         game.world.insert_resource(BattleState {
             player,
             groups,
             round: 1,
+            planned: vec![None; slots],
             log: Vec::new(),
             finished: false,
             player_won: false,
@@ -10073,7 +10505,7 @@ mod tests {
                 .id();
             insert_battle(&mut game, player, vec![wild]);
 
-            game.wild_retaliate(wild, player);
+            game.wild_retaliate(wild, 0, player);
             if game.world.get::<Stats>(companion).unwrap().hp == 0 {
                 assert!(
                     game.player_status().companions.is_empty(),
@@ -12345,6 +12777,160 @@ mod tests {
         assert_eq!(
             view.wild_hp, 500,
             "the new front should be the untouched second pack member"
+        );
+    }
+
+    /// The planning API is the whole extensibility story: the engine emits
+    /// the menu, renderers dispatch off it. A slot that does not exist must
+    /// be refused rather than silently ignored.
+    #[test]
+    fn battle_set_action_refuses_a_slot_that_is_not_in_the_party() {
+        let mut game = Game::new(80, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        game.start_battle(vec![wild]);
+
+        // Slot 0 is the player and always exists; slot 1 needs a companion.
+        assert!(
+            game.battle_set_action(0, BattleAction::Attack { group: 0 })
+                .is_ok()
+        );
+        let err = game
+            .battle_set_action(1, BattleAction::Attack { group: 0 })
+            .unwrap_err();
+        assert!(
+            err.contains("party"),
+            "expected a party-slot error, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn battle_resolve_round_is_a_no_op_until_every_slot_is_planned() {
+        let mut game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let pet = spawn_tamed(&mut game, 30, 6);
+        game.add_companion(pet).unwrap();
+        let wild = game.spawn_wild_creature("construct", 5, 5).unwrap();
+        game.start_battle(vec![wild]);
+
+        let hp_before = game.world.get::<Stats>(wild).unwrap().hp;
+        game.battle_set_action(0, BattleAction::Attack { group: 0 })
+            .unwrap();
+        assert!(
+            !game.battle_round_ready(),
+            "the companion has no action yet"
+        );
+        game.battle_resolve_round();
+        assert_eq!(
+            game.world.get::<Stats>(wild).unwrap().hp,
+            hp_before,
+            "resolving a half-planned round must do nothing at all"
+        );
+
+        game.battle_set_action(1, BattleAction::Attack { group: 0 })
+            .unwrap();
+        assert!(game.battle_round_ready());
+        game.battle_resolve_round();
+        assert!(game.world.get::<Stats>(wild).unwrap().hp < hp_before);
+    }
+
+    /// Backing up a slot is how the player corrects a misclick — the cursor
+    /// has to walk back, not just blank the entry.
+    #[test]
+    fn battle_clear_action_walks_the_active_slot_back() {
+        let mut game = Game::new(82, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        game.start_battle(vec![wild]);
+
+        assert_eq!(game.battle_active_slot(), Some(0));
+        game.battle_set_action(0, BattleAction::Attack { group: 0 })
+            .unwrap();
+        assert_eq!(
+            game.battle_active_slot(),
+            None,
+            "solo party is fully planned"
+        );
+        game.battle_clear_action(0);
+        assert_eq!(game.battle_active_slot(), Some(0));
+    }
+
+    /// A planned target can die earlier in the same round than the member
+    /// who aimed at it, leaving a stale group index behind. Falling back to
+    /// the front group is the difference between a wasted turn and an
+    /// out-of-bounds panic.
+    #[test]
+    fn a_stale_target_group_index_falls_back_to_the_front_group() {
+        let mut game = Game::new(84, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let glitch = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        let scrapper = game.spawn_wild_creature("scrapper", 5, 6).unwrap();
+        game.start_battle(vec![glitch, scrapper]);
+
+        assert_eq!(game.retarget(1), Some(1), "group 1 is standing");
+
+        game.world.get_mut::<Stats>(scrapper).unwrap().hp = 0;
+        game.finish_group_member(1, player);
+
+        assert_eq!(
+            game.retarget(1),
+            Some(0),
+            "a stale index must fall back to the lowest surviving group"
+        );
+    }
+
+    /// The whole party plans against the same group, and the first hit
+    /// wipes it — so every later actor in the initiative order is holding a
+    /// plan against a group that no longer exists, in a battle that has
+    /// already ended. The round must unwind cleanly rather than panic.
+    #[test]
+    fn a_round_survives_its_target_dying_before_every_member_has_acted() {
+        let mut game = Game::new(85, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let pet = spawn_tamed(&mut game, 40, 8);
+        game.add_companion(pet).unwrap();
+        let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        game.start_battle(vec![wild]);
+        // One HP, so whoever wins initiative ends the fight outright.
+        game.world.get_mut::<Stats>(wild).unwrap().hp = 1;
+
+        game.battle_set_action(0, BattleAction::Attack { group: 0 })
+            .unwrap();
+        game.battle_set_action(1, BattleAction::Attack { group: 0 })
+            .unwrap();
+        game.battle_resolve_round();
+
+        assert!(
+            !game.has_active_battle(),
+            "the fight should have ended the moment the only group was wiped"
+        );
+    }
+
+    /// The menu is data, not renderer strings. Decompile must report *why*
+    /// it is unavailable so the UI can grey it with a reason instead of
+    /// hiding it and leaving the player guessing.
+    #[test]
+    fn decompile_is_offered_with_a_reason_when_no_catalyst_is_held() {
+        let mut game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        // `Inventory` exposes no `clear` — `items` is a public
+        // `Vec<(ItemId, u32)>`, so empty it directly.
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .items
+            .clear();
+        let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        game.start_battle(vec![wild]);
+
+        let options = game.battle_action_options(0);
+        let decompile = options
+            .iter()
+            .find(|o| o.kind == ActionKind::Decompile)
+            .expect("Decompile must be listed even when unusable");
+        assert!(
+            decompile
+                .unavailable
+                .as_deref()
+                .is_some_and(|r| r.contains("catalyst")),
+            "expected a catalyst reason, got {:?}",
+            decompile.unavailable
         );
     }
 

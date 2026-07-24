@@ -1,8 +1,9 @@
 //! Offline balance projections for level/zone scaling: pure, deterministic
 //! simulations of the player (plus a full party) fighting zone-scaled wild
 //! species, decoupled from the ECS so they run as fast regression tests.
-//! See the `zone_scaling_stays_survivable_with_a_full_party` test for the
-//! actual regression check this module exists to support.
+//! See `grind_only_zone_scaling_grows_predictably` and
+//! `geared_zone_scaling_grows_predictably_and_beats_grind_only` for the
+//! actual regression checks this module exists to support.
 
 use crate::battle::compute_damage;
 use crate::components::{PLAYER_BASE_STATS, Stats};
@@ -91,6 +92,22 @@ pub fn toughest_ordinary_species(db: &SpeciesDb) -> &SpeciesDef {
         .filter(|s| !s.is_boss)
         .max_by_key(|s| s.base_hp + s.base_atk + s.base_def)
         .expect("species db should have at least one ordinary species")
+}
+
+/// The median non-boss species by the same flat stat total — the party
+/// these projections assume. A player tames what the habitat gives them,
+/// so three copies of the strongest creature in the game is a best case,
+/// not a baseline; a mid-grade party is what the survivability sweeps
+/// need to hold for. `SpeciesDb::all` is sorted by id and the sort below
+/// is stable, so ties resolve deterministically.
+pub fn median_ordinary_species(db: &SpeciesDb) -> &SpeciesDef {
+    let mut ordinary: Vec<&SpeciesDef> = db.all().filter(|s| !s.is_boss).collect();
+    assert!(
+        !ordinary.is_empty(),
+        "species db should have at least one ordinary species"
+    );
+    ordinary.sort_by_key(|s| s.base_hp + s.base_atk + s.base_def);
+    ordinary[ordinary.len() / 2]
 }
 
 /// Ticks of a single worked, tiered node needed to fund one Portal at
@@ -198,11 +215,17 @@ pub fn simulate_battle(
 }
 
 /// Searches player levels `1..=max_level` for the lowest one at which a
-/// full party (`MAX_PARTY_SIZE` companions, all tamed from `species` while
-/// breached into `zone` and leveled per
-/// `companion_level_for_player_level`) beats `species` scaled to `zone` in
-/// `simulate_battle`. `None` means scaling has broken down outright — not
-/// just a long grind, but no level up to `max_level` clears it.
+/// full party (`MAX_PARTY_SIZE` companions, all tamed from `party_species`
+/// while breached into `zone` and leveled per
+/// `companion_level_for_player_level`) beats `wild_species` scaled to
+/// `zone` in `simulate_battle`. `None` means scaling has broken down
+/// outright — not just a long grind, but no level up to `max_level` clears
+/// it.
+///
+/// `party_species` is deliberately separate from `wild_species`: the party
+/// a player actually fields is whatever they tamed along the way, not a
+/// mirror of the toughest thing they have to fight. Pass
+/// `median_ordinary_species` for the realistic baseline.
 ///
 /// `with_gear` adds `best_case_gear_bonus(zone, weapon, armor)` to the
 /// player's ATK/DEF (companions never carry equipment — see
@@ -213,15 +236,16 @@ pub fn simulate_battle(
 /// `EquipmentStats` of the strongest shipped gear, resolved from `ItemDb`
 /// by the caller; ignored when `with_gear` is `false`.
 pub fn min_level_to_clear_zone(
-    species: &SpeciesDef,
+    wild_species: &SpeciesDef,
+    party_species: &SpeciesDef,
     zone: u32,
     max_level: u32,
     with_gear: bool,
     weapon: EquipmentStats,
     armor: EquipmentStats,
 ) -> Option<(u32, BattleOutcome)> {
-    let wild = wild_stats_at_zone(species, zone);
-    let move_power = average_move_power(species);
+    let wild = wild_stats_at_zone(wild_species, zone);
+    let move_power = average_move_power(wild_species);
     let (gear_atk, gear_def) = if with_gear {
         best_case_gear_bonus(zone, weapon, armor)
     } else {
@@ -237,7 +261,7 @@ pub fn min_level_to_clear_zone(
         player.def += gear_def;
         let companion_level = companion_level_for_player_level(level);
         let companions: Vec<Stats> = (0..MAX_PARTY_SIZE)
-            .map(|_| companion_stats(species, zone, companion_level))
+            .map(|_| companion_stats(party_species, zone, companion_level))
             .collect();
         let outcome = simulate_battle(player, &companions, wild, move_power);
         if outcome.player_won {
@@ -410,22 +434,32 @@ mod tests {
             "species assets should all load cleanly: {warnings:?}"
         );
         let toughest = toughest_ordinary_species(&db);
+        let party = median_ordinary_species(&db);
         let (weapon, armor) = best_gear_stats();
 
         let mut required_levels = Vec::new();
         for zone in 1..=MAX_GRIND_ONLY_ZONE_SWEPT {
-            let Some((level, outcome)) =
-                min_level_to_clear_zone(toughest, zone, MAX_LEVEL_SEARCHED, false, weapon, armor)
-            else {
+            let Some((level, outcome)) = min_level_to_clear_zone(
+                toughest,
+                party,
+                zone,
+                MAX_LEVEL_SEARCHED,
+                false,
+                weapon,
+                armor,
+            ) else {
                 panic!(
                     "zone {zone} ({}) isn't clearable by level {MAX_LEVEL_SEARCHED} on pure grind \
-                     with a full party — the curve got steeper than expected",
-                    toughest.name
+                     with a full party of {}s — the curve got steeper than expected",
+                    toughest.name, party.name
                 );
             };
             eprintln!(
-                "[no gear] zone {zone} vs {}: needs level {level} ({} turns, {:.0}% player HP left)",
+                "[no gear] zone {zone} vs {}, party of {} {}s: needs level {level} ({} turns, \
+                 {:.0}% player HP left)",
                 toughest.name,
+                MAX_PARTY_SIZE,
+                party.name,
                 outcome.turns,
                 outcome.player_hp_fraction * 100.0
             );
@@ -464,23 +498,32 @@ mod tests {
             "species assets should all load cleanly: {warnings:?}"
         );
         let toughest = toughest_ordinary_species(&db);
+        let party = median_ordinary_species(&db);
         let (weapon, armor) = best_gear_stats();
 
         let mut required_levels = Vec::new();
         for zone in 1..=MAX_GEARED_ZONE_SWEPT {
-            let Some((geared_level, outcome)) =
-                min_level_to_clear_zone(toughest, zone, MAX_LEVEL_SEARCHED, true, weapon, armor)
-            else {
+            let Some((geared_level, outcome)) = min_level_to_clear_zone(
+                toughest,
+                party,
+                zone,
+                MAX_LEVEL_SEARCHED,
+                true,
+                weapon,
+                armor,
+            ) else {
                 panic!(
                     "zone {zone} ({}) isn't clearable by level {MAX_LEVEL_SEARCHED} even fully \
-                     geared with a full party — that's a real lockout",
-                    toughest.name
+                     geared with a full party of {}s — that's a real lockout",
+                    toughest.name, party.name
                 );
             };
             eprintln!(
-                "[geared] zone {zone} vs {}: needs level {geared_level} ({} turns, {:.0}% player \
-                 HP left)",
+                "[geared] zone {zone} vs {}, party of {} {}s: needs level {geared_level} ({} \
+                 turns, {:.0}% player HP left)",
                 toughest.name,
+                MAX_PARTY_SIZE,
+                party.name,
                 outcome.turns,
                 outcome.player_hp_fraction * 100.0
             );
@@ -489,9 +532,15 @@ mod tests {
             // that range gear-free is already established as unclearable
             // within MAX_LEVEL_SEARCHED (see the other test), so gear
             // being strictly *required* there is expected, not a failure.
-            if let Some((grind_only_level, _)) =
-                min_level_to_clear_zone(toughest, zone, MAX_LEVEL_SEARCHED, false, weapon, armor)
-            {
+            if let Some((grind_only_level, _)) = min_level_to_clear_zone(
+                toughest,
+                party,
+                zone,
+                MAX_LEVEL_SEARCHED,
+                false,
+                weapon,
+                armor,
+            ) {
                 assert!(
                     geared_level <= grind_only_level,
                     "gear should never require a *higher* level than going without it: zone \

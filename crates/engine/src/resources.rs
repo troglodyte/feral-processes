@@ -2,7 +2,7 @@ use bevy_ecs::prelude::{Entity, Resource};
 use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 
-use crate::battle::EnemyGroup;
+use crate::battle::{BattleAction, EnemyGroup};
 
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum DifficultyMode {
@@ -128,6 +128,10 @@ pub struct BattleState {
     pub player: Entity,
     pub groups: Vec<EnemyGroup>,
     pub round: u32,
+    /// This round's chosen action per party slot — index 0 is the player,
+    /// 1.. are party members in roster order. `None` means "not yet
+    /// chosen"; a round resolves only once every slot is `Some`.
+    pub planned: Vec<Option<BattleAction>>,
     pub log: Vec<String>,
     pub finished: bool,
     pub player_won: bool,

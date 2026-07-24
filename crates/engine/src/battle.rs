@@ -1,5 +1,6 @@
 use bevy_ecs::prelude::Entity;
 
+use crate::items::ItemId;
 use crate::species::SpeciesId;
 
 /// One species' worth of the wild pack in an active intrusion.
@@ -29,6 +30,54 @@ pub enum Actor {
         group: usize,
         slot: usize,
     },
+}
+
+/// What a party member is doing this round. Adding a variant here plus an
+/// arm in `Game::resolve_one_action` and a rule in
+/// `Game::battle_action_options` is the *entire* cost of a new battle action
+/// — no renderer changes, by design.
+#[derive(Debug, Clone, PartialEq)]
+pub enum BattleAction {
+    Attack { group: usize },
+    Special { group: usize },
+    Defend,
+    Decompile { group: usize },
+    UseItem { item: ItemId },
+}
+
+/// The menu-facing identity of an action, without its parameters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActionKind {
+    Attack,
+    Special,
+    Defend,
+    Decompile,
+    UseItem,
+}
+
+/// What the UI must collect before an `ActionKind` becomes a
+/// `BattleAction`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TargetSpec {
+    None,
+    EnemyGroup,
+    InventoryItem,
+}
+
+/// One row of a party member's action menu. Renderers draw this verbatim and
+/// never author an action string of their own.
+#[derive(Debug, Clone)]
+pub struct ActionOption {
+    pub kind: ActionKind,
+    /// Hotkey the engine assigns, so the two renderers cannot drift.
+    pub key: char,
+    /// e.g. "[A]ttack"
+    pub label: String,
+    /// e.g. "Rally: +3 ATK for 3 rounds"
+    pub detail: String,
+    pub target: TargetSpec,
+    /// `Some(reason)` means render it greyed with the reason shown.
+    pub unavailable: Option<String>,
 }
 
 /// Damage always deals at least 1, so battles can't stall out on high-defense

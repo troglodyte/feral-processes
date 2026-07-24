@@ -111,10 +111,6 @@ pub fn draw(app: &mut App, fx: &mut Fx, fonts: &Fonts) {
             draw_battle(app, fx, fonts, &m);
             draw_battle_item_menu(app, fonts, &m);
         }
-        Mode::BattleResolve => {
-            draw_battle(app, fx, fonts, &m);
-            draw_battle_resolve(app, fonts, &m);
-        }
         Mode::Help => {
             draw_playing_base(app, fx, fonts, &m);
             draw_help(fonts, &m);
@@ -1997,34 +1993,6 @@ fn draw_battle_item_menu(app: &mut App, fonts: &Fonts, m: &Metrics) {
     draw_popup("Use an item", PopupSize::Large, &rows, fonts, m);
 }
 
-/// The narration of the round that just resolved, paged past with any key.
-fn draw_battle_resolve(app: &mut App, fonts: &Fonts, m: &Metrics) {
-    let mark = app.battle_log_mark;
-    let Some(game) = &mut app.game else { return };
-    let Some(view) = game.battle_view() else {
-        return;
-    };
-    let round = view.round.saturating_sub(1);
-    let mut rows: Vec<Row> = view
-        .log
-        .iter()
-        .skip(mark)
-        .map(|line| text_row(line.clone()))
-        .collect();
-    if rows.is_empty() {
-        rows.push(text_row("The round passes quietly."));
-    }
-    rows.push(text_row(""));
-    rows.push(Row::TextColored("[Space] next round".to_string(), CYAN));
-    draw_popup(
-        &format!("Round {round} resolves"),
-        PopupSize::Large,
-        &rows,
-        fonts,
-        m,
-    );
-}
-
 fn draw_main_menu(app: &App, fonts: &Fonts, m: &Metrics) {
     let mut options = vec!["[N] New Game".to_string()];
     if !app.list_saves().is_empty() {
@@ -2158,7 +2126,6 @@ mod tests {
             Mode::Battle,
             Mode::BattleTarget,
             Mode::BattleItem,
-            Mode::BattleResolve,
             Mode::Help,
             Mode::LoadGame,
         ] {

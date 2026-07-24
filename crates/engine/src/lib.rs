@@ -535,7 +535,6 @@ pub struct BattleView {
     /// `Game::battle_action_options`.
     pub options: Vec<ActionOption>,
     pub round: u32,
-    pub log: Vec<String>,
     pub player_decompiler: i32,
 }
 
@@ -2607,7 +2606,6 @@ impl Game {
             groups,
             round: 1,
             planned: vec![None; slots],
-            log: Vec::new(),
             finished: false,
             player_won: false,
         });
@@ -3216,7 +3214,6 @@ impl Game {
                 .map(|slot| self.battle_action_options(slot))
                 .unwrap_or_default(),
             round: battle.round,
-            log: battle.log.clone(),
             player_decompiler: decompiler_skill,
         })
     }
@@ -6161,7 +6158,6 @@ mod tests {
             groups,
             round: 1,
             planned: vec![None; slots],
-            log: Vec::new(),
             finished: false,
             player_won: false,
         });

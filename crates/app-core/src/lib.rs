@@ -178,9 +178,6 @@ pub enum Mode {
     /// Distinct from `Mode::Inventory`: on the map an item is spent for
     /// free, in battle it costs that slot its round.
     BattleItem,
-    /// Paging through the narration of a resolved round before the next
-    /// planning phase begins.
-    BattleResolve,
     Build,
     BuildDirection,
     Craft,
@@ -295,10 +292,6 @@ pub struct App {
     /// The action kind picked in `Mode::Battle`, awaiting an enemy group
     /// from `Mode::BattleTarget` before it becomes a `BattleAction`.
     pub pending_battle_action: Option<ActionKind>,
-    /// How many log lines the battle log held when the last round started —
-    /// everything after this index is that round's narration, which
-    /// `Mode::BattleResolve` pages through.
-    pub battle_log_mark: usize,
     pub pending_inventory_item: Option<ItemId>,
     /// The inventory item picked for erasure, awaiting a quantity from
     /// `Mode::EraseQuantity`.
@@ -372,7 +365,6 @@ impl App {
             pending_fuse_second: None,
             fuse_name_input: String::new(),
             pending_battle_action: None,
-            battle_log_mark: 0,
             pending_inventory_item: None,
             pending_erase: None,
             erase_quantity_input: String::new(),
@@ -585,7 +577,6 @@ impl App {
             Mode::Battle => self.handle_battle_key(key),
             Mode::BattleTarget => self.handle_battle_target_key(key),
             Mode::BattleItem => self.handle_battle_item_key(key),
-            Mode::BattleResolve => self.handle_battle_resolve_key(key),
             Mode::Build => self.handle_build_key(key),
             Mode::BuildDirection => self.handle_build_direction_key(key),
             Mode::Craft => self.handle_craft_key(key),
@@ -1033,17 +1024,6 @@ impl App {
         self.commit_battle_action(slot, action);
     }
 
-    /// Pages past a resolved round's narration back into planning, or out to
-    /// the map if the fight is over.
-    fn handle_battle_resolve_key(&mut self, _key: GameKey) {
-        let still_active = self.game.as_ref().is_some_and(|g| g.has_active_battle());
-        self.mode = if still_active {
-            Mode::Battle
-        } else {
-            Mode::Playing
-        };
-    }
-
     /// Records `action` for `slot`, and resolves the round once every slot
     /// has one.
     fn commit_battle_action(&mut self, slot: usize, action: BattleAction) {
@@ -1056,11 +1036,10 @@ impl App {
         if !game.battle_round_ready() {
             return;
         }
-        self.battle_log_mark = game.battle_view().map(|v| v.log.len()).unwrap_or(0);
         game.battle_resolve_round();
         let still_active = game.has_active_battle();
         self.mode = if still_active {
-            Mode::BattleResolve
+            Mode::Battle
         } else {
             Mode::Playing
         };
@@ -2362,7 +2341,6 @@ mod tests {
                     Mode::Battle
                         | Mode::BattleTarget
                         | Mode::BattleItem
-                        | Mode::BattleResolve
                         | Mode::Playing
                         | Mode::GameOver
                 ),
@@ -2408,19 +2386,19 @@ mod tests {
             "exactly one {target:?} should have been spent"
         );
         assert!(
-            matches!(
-                app.mode,
-                Mode::BattleResolve | Mode::Playing | Mode::GameOver
-            ),
-            "the only slot was planned, so the round should have resolved; got {:?}",
+            matches!(app.mode, Mode::Battle | Mode::Playing | Mode::GameOver),
+            "the only slot was planned, so the round should have resolved straight \
+             back into planning; got {:?}",
             app.mode
         );
     }
 
     /// A solo player is a one-slot party, so choosing an untargeted action
-    /// completes the round immediately and moves to the narration page.
+    /// completes the round immediately and drops straight back into planning.
+    /// No narration page in between: the battle screen's log pane already
+    /// shows what happened.
     #[test]
-    fn completing_every_slot_resolves_the_round_and_shows_the_narration() {
+    fn completing_every_slot_resolves_the_round_without_a_narration_page() {
         let mut app = battling_app();
         let slots = app
             .game
@@ -2432,14 +2410,12 @@ mod tests {
             .len();
         assert_eq!(slots, 1, "the test seed's player starts with no companions");
 
-        app.handle_key(GameKey::Char('f'));
+        app.handle_key(GameKey::Char('d'));
 
         assert!(
-            matches!(
-                app.mode,
-                Mode::BattleResolve | Mode::Playing | Mode::GameOver
-            ),
-            "the only slot was planned, so the round should have resolved; got {:?}",
+            matches!(app.mode, Mode::Battle | Mode::Playing | Mode::GameOver),
+            "the only slot was planned, so the round should have resolved straight \
+             back into planning; got {:?}",
             app.mode
         );
     }

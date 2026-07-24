@@ -48,10 +48,6 @@ pub fn render(f: &mut Frame, app: &mut App) {
             render_battle(f, app);
             render_battle_item_menu(f, app);
         }
-        Mode::BattleResolve => {
-            render_battle(f, app);
-            render_battle_resolve(f, app);
-        }
         Mode::Help => render_help(f),
         Mode::Playing
         | Mode::Build
@@ -1932,42 +1928,6 @@ fn render_battle_item_menu(f: &mut Frame, app: &mut App) {
     f.render_widget(
         Paragraph::new(lines)
             .block(Block::bordered().title("Use an item"))
-            .wrap(Wrap { trim: true }),
-        popup,
-    );
-}
-
-/// Overlay for `Mode::BattleResolve`: the narration of the round that just
-/// resolved, paged past with any key.
-fn render_battle_resolve(f: &mut Frame, app: &mut App) {
-    let area = f.area();
-    let popup = centered_rect(70, 60, area);
-    f.render_widget(Clear, popup);
-    let mark = app.battle_log_mark;
-    let Some(game) = &mut app.game else { return };
-    let Some(view) = game.battle_view() else {
-        return;
-    };
-
-    let mut lines: Vec<Line> = view
-        .log
-        .iter()
-        .skip(mark)
-        .map(|text| Line::from(text.clone()))
-        .collect();
-    if lines.is_empty() {
-        lines.push(Line::from("The round passes quietly."));
-    }
-    lines.push(Line::from(""));
-    lines.push(Line::styled(
-        "[Space] next round",
-        Style::new().add_modifier(Modifier::REVERSED),
-    ));
-    f.render_widget(
-        Paragraph::new(lines)
-            .block(
-                Block::bordered().title(format!("Round {} resolves", view.round.saturating_sub(1))),
-            )
             .wrap(Wrap { trim: true }),
         popup,
     );

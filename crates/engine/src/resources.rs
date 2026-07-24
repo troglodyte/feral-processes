@@ -136,7 +136,6 @@ pub struct BattleState {
     /// 1.. are party members in roster order. `None` means "not yet
     /// chosen"; a round resolves only once every slot is `Some`.
     pub planned: Vec<Option<BattleAction>>,
-    pub log: Vec<String>,
     pub finished: bool,
     pub player_won: bool,
 }

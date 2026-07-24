@@ -28,7 +28,7 @@ use components::{
     EquippedItem, Experience, FusionCount, Glyph, GlyphColor, Hostile, Inventory, ItemFusions,
     MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL, Needs, Nest, NestGuardian, PassiveProcessor, Perks,
     Player, PlayerBuff, Position, Potential, ResourceNode, Stats, StatusEffects, StatusKind,
-    Structure, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
+    Structure, StructureTier, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
 };
 use items::{EquipmentSlot, EquipmentStats, ItemId, ids};
 use items_db::ItemDb;
@@ -386,6 +386,10 @@ pub struct EntityView {
     /// the 15-tile build radius, and the one whose removal cascades to
     /// every other structure (see `Game::remove_structure`).
     pub is_home: bool,
+    /// This (structure) entity's upgrade tier, or `None` if its def
+    /// declares no upgrade path — see `StructureDef::upgrade`. Frontends
+    /// use `Some` as "this is upgradeable" when listing candidates.
+    pub tier: Option<u32>,
     pub is_boss: bool,
     pub can_work: bool,
     /// Whether this (structure) entity is a trading post (see
@@ -839,6 +843,18 @@ impl Game {
             if def.passive_process.is_some() {
                 entity.insert(PassiveProcessor::default());
             }
+            if def.upgrade.is_some() {
+                let tier = s.tier.unwrap_or(1);
+                entity.insert(StructureTier(tier));
+                // WorkDef::level only carries the tier-1 baseline, so a
+                // restored node's reliability has to be re-derived from its
+                // tier or a Mk3 would come back extracting like a Mk1.
+                if let Some(mut node) = entity.get_mut::<ResourceNode>()
+                    && node.level.is_some()
+                {
+                    node.level = Some(tier);
+                }
+            }
         }
 
         // The slab's tiles come back through SaveData::tile_overrides; only
@@ -957,13 +973,15 @@ impl Game {
             &Position,
             Option<&ResourceNode>,
             Option<&Durability>,
+            Option<&StructureTier>,
         )>();
-        for (structure, pos, node, durability) in structure_query.iter(&self.world) {
+        for (structure, pos, node, durability, tier) in structure_query.iter(&self.world) {
             structures.push(save::StructureSave {
                 kind: structure.kind.clone(),
                 position: (pos.x, pos.y),
                 resource_amount: node.map(|n| n.amount),
                 durability: durability.map(|d| d.hp),
+                tier: tier.map(|t| t.0),
             });
         }
 
@@ -2102,6 +2120,9 @@ impl Game {
                 ticks_remaining: temp.max_ticks,
             });
         }
+        if def.upgrade.is_some() {
+            entity.insert(StructureTier(1));
+        }
         if def.id == HOME_STRUCTURE_ID {
             self.stamp_platform(x, y);
         }
@@ -2118,6 +2139,76 @@ impl Game {
     /// Frontends are expected to warn the player about that cascade before
     /// calling this for a Home — this method itself performs the removal
     /// unconditionally, with no confirmation step of its own.
+    /// Advances `structure` one upgrade tier, charging its `UpgradeDef`
+    /// cost scaled by the tier being reached. The new tier both multiplies
+    /// the structure's work payout (see `systems::task_progress_system`)
+    /// and becomes its `ResourceNode::level`, so extraction gets more
+    /// reliable as well as more productive — reusing the existing
+    /// `mining_success_chance` curve rather than adding a second one.
+    pub fn upgrade_structure(&mut self, structure: Entity) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        let Some(kind) = self
+            .world
+            .get::<Structure>(structure)
+            .map(|s| s.kind.clone())
+        else {
+            return Err("That structure is already gone.".into());
+        };
+        let def = self
+            .world
+            .resource::<StructureDb>()
+            .get(&kind)
+            .cloned()
+            .ok_or_else(|| "Unknown structure".to_string())?;
+        let Some(upgrade) = def.upgrade else {
+            return Err(format!("{} can't be upgraded.", def.name));
+        };
+        let tier = self
+            .world
+            .get::<StructureTier>(structure)
+            .map(|t| t.0)
+            .unwrap_or(1);
+        if tier >= upgrade.max_tier {
+            return Err(format!("{} is already fully upgraded.", def.name));
+        }
+        let next = tier + 1;
+        let cost: Vec<(ItemId, u32)> = upgrade
+            .cost
+            .iter()
+            .map(|(item, qty)| (item.clone(), qty * next))
+            .collect();
+
+        let player = self.player_entity();
+        {
+            let inv = self.world.get::<Inventory>(player).unwrap();
+            for (item, qty) in &cost {
+                if inv.count(item) < *qty {
+                    return Err(format!("Not enough {}.", self.item_name(item)));
+                }
+            }
+        }
+        {
+            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
+            for (item, qty) in &cost {
+                inv.take(item.clone(), *qty);
+            }
+        }
+
+        self.world.entity_mut(structure).insert(StructureTier(next));
+        // A node that opted into chance-based yield tracks its tier as its
+        // level; one that always succeeds (level None) stays that way.
+        if let Some(mut node) = self.world.get_mut::<ResourceNode>(structure)
+            && node.level.is_some()
+        {
+            node.level = Some(next);
+        }
+        self.log(format!("You upgrade the {} to Mk{next}.", def.name));
+        self.tick();
+        Ok(())
+    }
+
     pub fn remove_structure(&mut self, structure: Entity) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -4665,6 +4756,7 @@ impl Game {
                     .get::<Structure>(entity)
                     .is_some_and(|s| s.kind == HOME_STRUCTURE_ID);
                 let is_boss = self.is_boss_creature(entity);
+                let tier = self.world.get::<StructureTier>(entity).map(|t| t.0);
                 let can_work = self.world.get::<ResourceNode>(entity).is_some();
                 let can_trade = self.trade_options(entity).is_some();
                 let task_target = self.world.get::<Task>(entity).map(|t| t.target);
@@ -4709,6 +4801,7 @@ impl Game {
                     is_hostile,
                     is_structure,
                     is_home,
+                    tier,
                     is_boss,
                     can_work,
                     can_trade,
@@ -4800,6 +4893,7 @@ impl Game {
                 is_hostile: false,
                 is_structure: true,
                 is_home: kind == HOME_STRUCTURE_ID,
+                tier: self.world.get::<StructureTier>(entity).map(|t| t.0),
                 is_boss: false,
                 can_work: false,
                 can_trade: false,
@@ -5964,30 +6058,39 @@ mod tests {
             .count(&ItemId::from(id))
     }
 
+    fn run_one_full_gather_cycle(game: &mut Game, resource: &str) -> u32 {
+        run_one_full_gather_cycle_at_tier(game, resource, None)
+    }
+
     /// Runs exactly one completed gather cycle against a hand-built node
-    /// producing `resource`, and returns how many units landed in the
-    /// player's inventory.
+    /// producing `resource` at `tier`, and returns how many units landed in
+    /// the player's inventory.
     ///
-    /// `level: None` means the node always yields (see
+    /// `level: None` on the node means it always yields (see
     /// `systems::mining_success_chance`), which is what keeps the payout
     /// assertions off the RNG entirely.
-    fn run_one_full_gather_cycle(game: &mut Game, resource: &str) -> u32 {
+    fn run_one_full_gather_cycle_at_tier(
+        game: &mut Game,
+        resource: &str,
+        tier: Option<u32>,
+    ) -> u32 {
         let worker = spawn_tamed(game, 10, 3);
-        let structure = game
-            .world
-            .spawn((
-                Structure {
-                    kind: "mining_node".to_string(),
-                },
-                Position { x: 3, y: 4 },
-                ResourceNode {
-                    resource: ItemId::from(resource),
-                    amount: 5,
-                    capacity: 5,
-                    level: None,
-                },
-            ))
-            .id();
+        let mut structure = game.world.spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 3, y: 4 },
+            ResourceNode {
+                resource: ItemId::from(resource),
+                amount: 5,
+                capacity: 5,
+                level: None,
+            },
+        ));
+        if let Some(t) = tier {
+            structure.insert(StructureTier(t));
+        }
+        let structure = structure.id();
         game.world.entity_mut(worker).insert(Task {
             kind: TaskKind::GatherResource,
             target: structure,
@@ -12644,6 +12747,145 @@ mod tests {
             find_structure_by_kind(game, "home").unwrap(),
             find_structure_by_kind(game, "mining_node").unwrap(),
         )
+    }
+
+    /// Deploys a Mining Node beside a Home with materials to spare, and
+    /// returns it.
+    fn deploy_upgradeable_node(game: &mut Game) -> Entity {
+        place_home(game, 0, 1);
+        game.world
+            .get_mut::<Inventory>(game.player_entity())
+            .unwrap()
+            .add(ItemId::from(ids::CORE_FRAGMENT), 12);
+        game.place_structure("mining_node", 1, 1).unwrap();
+        find_structure_by_kind(game, "mining_node").unwrap()
+    }
+
+    #[test]
+    fn upgrading_a_node_costs_materials_and_raises_its_tier() {
+        let mut game = Game::new(970, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let node = deploy_upgradeable_node(&mut game);
+        game.world
+            .get_mut::<Inventory>(game.player_entity())
+            .unwrap()
+            .add(ItemId::from(ids::CORE_FRAGMENT), 20);
+
+        assert_eq!(
+            game.world.get::<StructureTier>(node).unwrap().0,
+            1,
+            "structures deploy at Mk1"
+        );
+        let before = count_item(&game, ids::CORE_FRAGMENT);
+
+        game.upgrade_structure(node).unwrap();
+
+        assert_eq!(game.world.get::<StructureTier>(node).unwrap().0, 2);
+        assert_eq!(
+            before - count_item(&game, ids::CORE_FRAGMENT),
+            20,
+            "reaching tier 2 costs the def's 10 per tier x 2"
+        );
+    }
+
+    #[test]
+    fn upgrading_a_node_makes_its_extraction_more_reliable() {
+        let mut game = Game::new(971, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let node = deploy_upgradeable_node(&mut game);
+        game.world
+            .get_mut::<Inventory>(game.player_entity())
+            .unwrap()
+            .add(ItemId::from(ids::CORE_FRAGMENT), 200);
+
+        assert_eq!(game.world.get::<ResourceNode>(node).unwrap().level, Some(1));
+        game.upgrade_structure(node).unwrap();
+        assert_eq!(
+            game.world.get::<ResourceNode>(node).unwrap().level,
+            Some(2),
+            "tier feeds ResourceNode.level, which already drives mining_success_chance"
+        );
+    }
+
+    #[test]
+    fn upgrading_refuses_past_max_tier_and_without_materials() {
+        let mut game = Game::new(972, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let node = deploy_upgradeable_node(&mut game);
+
+        let err = game
+            .upgrade_structure(node)
+            .expect_err("no materials left after building it");
+        assert!(err.contains("Not enough"), "unexpected error: {err}");
+
+        game.world
+            .get_mut::<Inventory>(game.player_entity())
+            .unwrap()
+            .add(ItemId::from(ids::CORE_FRAGMENT), 1000);
+        let max = game
+            .world
+            .resource::<StructureDb>()
+            .get("mining_node")
+            .unwrap()
+            .upgrade
+            .as_ref()
+            .unwrap()
+            .max_tier;
+        for _ in 1..max {
+            game.upgrade_structure(node).unwrap();
+        }
+        let err = game
+            .upgrade_structure(node)
+            .expect_err("a maxed node can't be upgraded further");
+        assert!(err.contains("fully upgraded"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn a_structure_without_an_upgrade_def_cannot_be_upgraded() {
+        let mut game = Game::new(973, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game, 0, 1);
+        let home = find_structure_by_kind(&mut game, "home").unwrap();
+        let err = game
+            .upgrade_structure(home)
+            .expect_err("Home declares no upgrade path");
+        assert!(err.contains("can't be upgraded"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn tier_multiplies_payout_on_top_of_the_zone_multiplier() {
+        let mut game = Game::new(974, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.world.resource_mut::<ZoneLevel>().0 = 3; // stat_multiplier() == 4
+
+        let gained = run_one_full_gather_cycle_at_tier(&mut game, ids::CORE_FRAGMENT, Some(3));
+
+        assert_eq!(gained, 12, "tier 3 x zone multiplier 4");
+    }
+
+    #[test]
+    fn a_structures_tier_survives_a_save_and_load_round_trip() {
+        let mut game = Game::new(975, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let node = deploy_upgradeable_node(&mut game);
+        game.world
+            .get_mut::<Inventory>(game.player_entity())
+            .unwrap()
+            .add(ItemId::from(ids::CORE_FRAGMENT), 200);
+        game.upgrade_structure(node).unwrap();
+        game.upgrade_structure(node).unwrap();
+
+        let path = std::env::temp_dir().join(format!("feral_tier_save_{}.bin", std::process::id()));
+        game.save(&path).unwrap();
+        let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        let restored = find_structure_by_kind(&mut loaded, "mining_node").unwrap();
+        assert_eq!(
+            loaded.world.get::<StructureTier>(restored).unwrap().0,
+            3,
+            "a Mk3 node must not come back as Mk1"
+        );
+        assert_eq!(
+            loaded.world.get::<ResourceNode>(restored).unwrap().level,
+            Some(3),
+            "and its extraction reliability with it — WorkDef::level only carries the \
+             tier-1 baseline"
+        );
     }
 
     #[test]

@@ -5,4 +5,5 @@
     color: Green,
     build_cost: [("core_fragment", 16)],
     work: Some((produces: "ice_breaker", ticks_per_unit: 8)),
+    upgrade: Some((max_tier: 5, cost: [("core_fragment", 12)])),
 )

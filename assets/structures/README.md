@@ -34,6 +34,19 @@ is skipped with a warning logged in-game rather than crashing startup.
     // cycle. Higher levels succeed more reliably. Leave it out entirely for
     // a node that always yields on completion, same as before this field
     // existed.
+    //
+    // How much a completed cycle actually pays out is not one unit: it's
+    // multiplied by the current zone level's stat multiplier (doubling per
+    // zone — zone 1 pays x1, zone 2 x2, zone 3 x4) and again by the
+    // structure's upgrade tier if it has one (see `upgrade` below). The
+    // multiplier is read when the cycle completes, not when the structure
+    // was deployed, so a base carried into a deeper zone immediately earns
+    // at the deeper rate.
+    //
+    // The one exception is a `produces` item that declares a `bank_limit`
+    // (see `assets/items/README.md`) — Research Data, for instance. Banked
+    // resources always pay exactly one unit per cycle, because their cap is
+    // what paces them and an exponential payout would just overflow it.
     work: Some((produces: "core_fragment", ticks_per_unit: 5, capacity: 5, level: Some(1))),
 
     // Optional; can be left out entirely (defaults to no passive processing).
@@ -130,6 +143,19 @@ is skipped with a warning logged in-game rather than crashing startup.
     // sets `enables_rest` isn't worn down any faster by actually being
     // used to rest than by sitting there idle.
     temporary: Some((max_ticks: 20)),
+
+    // Optional; can be left out entirely (defaults to un-upgradeable). If
+    // set, the player can upgrade this structure (`U` in the TUI) through
+    // tiers, starting at Mk1 and stopping at `max_tier`. The cost to reach
+    // tier N is each quantity in `cost` multiplied by N — so with the
+    // 10 Core Fragments below, Mk1->Mk2 costs 20 and Mk2->Mk3 costs 30.
+    //
+    // A structure's tier does two things at once. It multiplies its `work`
+    // payout (on top of the zone multiplier — see `work` above), and it
+    // becomes the node's effective `level`, which raises the odds a gather
+    // cycle actually yields. That reliability saturates at level 6 (100%),
+    // so tiers past that add payout only.
+    upgrade: Some((max_tier: 5, cost: [("core_fragment", 10)])),
 )
 ```
 

@@ -315,6 +315,11 @@ pub struct Structure {
     pub kind: StructureId,
 }
 
+/// A structure's current upgrade tier, starting at 1. Present only on
+/// structures whose definition sets `StructureDef::upgrade`.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct StructureTier(pub u32);
+
 #[derive(Component)]
 pub struct ResourceNode {
     pub resource: ItemId,

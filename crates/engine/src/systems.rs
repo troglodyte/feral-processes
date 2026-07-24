@@ -5,7 +5,8 @@ use rand::RngExt;
 use crate::NEST_TETHER_RADIUS;
 use crate::components::{
     Creature, Experience, Inventory, Needs, Nest, NestGuardian, PassiveProcessor, Perks, Player,
-    Position, Potential, ResourceNode, Stats, Structure, Tamed, Task, TaskKind, WanderAi,
+    Position, Potential, ResourceNode, Stats, Structure, StructureTier, Tamed, Task, TaskKind,
+    WanderAi,
 };
 use crate::items_db::ItemDb;
 use crate::perks::Perk;
@@ -135,7 +136,7 @@ pub struct CronjobLookups<'w> {
 /// not just base-building work.
 pub fn task_progress_system(
     mut tasks: Query<CronjobWorker>,
-    mut nodes: Query<&mut ResourceNode>,
+    mut nodes: Query<(&mut ResourceNode, Option<&StructureTier>)>,
     mut inventories: Query<&mut Inventory>,
     db: CronjobLookups,
     mut log: ResMut<MessageLog>,
@@ -150,7 +151,7 @@ pub fn task_progress_system(
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
         }
-        let Ok(mut node) = nodes.get_mut(task.target) else {
+        let Ok((mut node, tier)) = nodes.get_mut(task.target) else {
             continue;
         };
         if node.amount == 0 {
@@ -185,7 +186,7 @@ pub fn task_progress_system(
             let payout = if def.and_then(|d| d.bank_limit).is_some() {
                 1
             } else {
-                zone.stat_multiplier() as u32
+                tier.map(|t| t.0).unwrap_or(1) * zone.stat_multiplier() as u32
             };
             let landed = inv.add_capped(node.resource.clone(), payout, &item_db);
             if landed == 0 {

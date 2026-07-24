@@ -77,6 +77,15 @@ pub struct TemporaryDef {
     pub max_ticks: u32,
 }
 
+/// A structure's upgrade path — see `Game::upgrade_structure`. The cost to
+/// reach tier N is each amount in `cost` multiplied by N, so upgrades get
+/// steadily more expensive without needing a per-tier table.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UpgradeDef {
+    pub max_tier: u32,
+    pub cost: Vec<(ItemId, u32)>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StructureDef {
     pub id: StructureId,
@@ -160,6 +169,14 @@ pub struct StructureDef {
     /// files keep parsing.
     #[serde(default)]
     pub temporary: Option<TemporaryDef>,
+    /// If set, this structure can be upgraded through tiers (see
+    /// `Game::upgrade_structure`). Each tier multiplies the structure's work
+    /// payout and becomes its `ResourceNode::level`, so extraction gets more
+    /// reliable as well as more productive. `#[serde(default)]` so existing
+    /// structure files (including mods) stay un-upgradeable, exactly as
+    /// before this field existed.
+    #[serde(default)]
+    pub upgrade: Option<UpgradeDef>,
 }
 
 fn default_durability() -> u32 {

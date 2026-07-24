@@ -116,6 +116,9 @@ pub struct StructureSave {
     pub resource_amount: Option<u32>,
     /// Current raid durability — see `components::Durability`.
     pub durability: Option<u32>,
+    /// Current upgrade tier — see `components::StructureTier`. `None` for a
+    /// structure whose def declares no upgrade path.
+    pub tier: Option<u32>,
 }
 
 /// Only the world seed and the sparse tile overlay are persisted; unmodified

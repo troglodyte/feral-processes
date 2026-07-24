@@ -2767,6 +2767,26 @@ impl Game {
         Ok(())
     }
 
+    /// Assigns `action` to every slot that is still unplanned and able to act
+    /// — the party-wide `[A]`/`[D]` commands. Slots that already hold a choice
+    /// keep it, and a slot failing `slot_can_act` (a knocked-out companion) is
+    /// left alone, matching what `battle_active_slot` would have skipped.
+    pub fn battle_plan_remaining(&mut self, action: BattleAction) -> Result<(), String> {
+        let Some(battle) = self.world.get_resource::<BattleState>() else {
+            return Err("No active intrusion.".to_string());
+        };
+        let open: Vec<usize> = (0..battle.planned.len())
+            .filter(|&slot| battle.planned[slot].is_none())
+            .collect();
+        for slot in open {
+            if !self.slot_can_act(slot) {
+                continue;
+            }
+            self.battle_set_action(slot, action.clone())?;
+        }
+        Ok(())
+    }
+
     /// Clears `slot`'s plan and every slot after it, so the cursor lands
     /// back on `slot` — the player is correcting a choice, and everything
     /// they picked *after* it was picked in light of the mistake.
@@ -12899,6 +12919,71 @@ mod tests {
         assert_eq!(
             view.groups[0].front_hp, 500,
             "the new front should be the untouched second pack member"
+        );
+    }
+
+    /// `[A]`/`[D]` fill the party in one keypress, but must never overwrite a
+    /// choice the player already made deliberately — they pressed it partway
+    /// through planning, not before starting.
+    #[test]
+    fn battle_plan_remaining_fills_only_unplanned_slots() {
+        let mut game = Game::new(79, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let species = game.species_defs().into_iter().next().unwrap().id;
+        let companion = game.spawn_wild_creature(&species, 4, 5).unwrap();
+        game.world.resource_mut::<Party>().0.push(companion);
+        let wild = game.spawn_wild_creature(&species, 5, 5).unwrap();
+        insert_battle(&mut game, player, vec![wild]);
+
+        // Slot 0 (the player) picks for itself; slot 1 is left open.
+        game.battle_set_action(0, BattleAction::Attack { group: 0 })
+            .unwrap();
+        game.battle_plan_remaining(BattleAction::Defend).unwrap();
+
+        let planned = &game.world.resource::<BattleState>().planned;
+        assert_eq!(
+            planned[0],
+            Some(BattleAction::Attack { group: 0 }),
+            "the slot that was already planned must keep its own choice"
+        );
+        assert_eq!(
+            planned[1],
+            Some(BattleAction::Defend),
+            "the open slot should have been filled"
+        );
+        assert!(
+            game.battle_round_ready(),
+            "every actionable slot is planned"
+        );
+    }
+
+    /// A knocked-out companion's slot is skipped by `battle_active_slot` and
+    /// doesn't block `battle_round_ready`. Filling it would hand an action to
+    /// a member that can't take one.
+    #[test]
+    fn battle_plan_remaining_skips_a_slot_that_cannot_act() {
+        let mut game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let species = game.species_defs().into_iter().next().unwrap().id;
+        let companion = game.spawn_wild_creature(&species, 4, 5).unwrap();
+        game.world.resource_mut::<Party>().0.push(companion);
+        let wild = game.spawn_wild_creature(&species, 5, 5).unwrap();
+        insert_battle(&mut game, player, vec![wild]);
+
+        // Drop the companion, so slot 1 can no longer act.
+        game.world.get_mut::<Stats>(companion).unwrap().hp = 0;
+        assert!(
+            !game.slot_can_act(1),
+            "a companion at 0 HP should not be able to act — test premise is wrong"
+        );
+
+        game.battle_plan_remaining(BattleAction::Defend).unwrap();
+
+        let planned = &game.world.resource::<BattleState>().planned;
+        assert_eq!(planned[0], Some(BattleAction::Defend));
+        assert_eq!(
+            planned[1], None,
+            "a slot that can't act must stay unplanned, not be handed an action"
         );
     }
 

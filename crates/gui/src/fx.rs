@@ -11,6 +11,8 @@
 //! The timing math lives in free functions so it can be unit-tested;
 //! everything that touches macroquad's draw calls can't be.
 
+use std::collections::HashMap;
+
 use macroquad::prelude::*;
 
 use crate::text::{Fonts, Metrics};
@@ -109,21 +111,19 @@ struct FloatingNumber {
     start: f64,
 }
 
-/// What `Fx::battle_frame` hands back for one frame of the battle screen.
-pub struct BattleFx {
-    pub wild_ghost: f32,
-    pub player_ghost: f32,
-    /// HP lost since the previous frame, for spawning a floating number.
-    pub wild_damage: i32,
-    pub player_damage: i32,
+/// What `Fx::bar_ghost` hands back for one frame of one HP bar.
+pub struct BarFx {
+    /// The trailing value the ghost band is drawn at, easing toward the
+    /// real one.
+    pub ghost: f32,
+    /// Value lost since the previous frame, for spawning a floating number.
+    pub damage: i32,
 }
 
-#[derive(Default)]
-struct BattleTracking {
-    wild_hp: Option<i32>,
-    player_hp: Option<i32>,
-    wild_ghost: f32,
-    player_ghost: f32,
+#[derive(Clone, Copy)]
+struct BarTracking {
+    value: i32,
+    ghost: f32,
 }
 
 pub struct Fx {
@@ -131,7 +131,7 @@ pub struct Fx {
     now: f64,
     flashes: Vec<TileFlash>,
     floats: Vec<FloatingNumber>,
-    battle: BattleTracking,
+    bars: HashMap<u64, BarTracking>,
     log_flash_until: f64,
     last_log_line: Option<(MessageKind, String)>,
 }
@@ -143,7 +143,7 @@ impl Fx {
             now: 0.0,
             flashes: Vec::new(),
             floats: Vec::new(),
-            battle: BattleTracking::default(),
+            bars: HashMap::new(),
             log_flash_until: 0.0,
             last_log_line: None,
         }
@@ -168,7 +168,7 @@ impl Fx {
             .retain(|f| now - f.start < effect_duration(f.kind));
         self.floats.retain(|f| now - f.start < FLOAT_SECONDS);
         if !in_battle {
-            self.battle = BattleTracking::default();
+            self.clear_bars();
         }
     }
 
@@ -216,34 +216,34 @@ impl Fx {
         Some(Color::new(0.4, 0.8, 1.0, shield_pulse_alpha(self.now)))
     }
 
-    pub fn battle_frame(&mut self, wild_hp: i32, player_hp: i32, dt: f32) -> BattleFx {
-        let wild_damage = self.battle.wild_hp.map_or(0, |prev| prev - wild_hp).max(0);
-        let player_damage = self
-            .battle
-            .player_hp
-            .map_or(0, |prev| prev - player_hp)
-            .max(0);
-        // A first frame with no prior reading seeds the ghosts at the real
-        // values, so entering a battle doesn't animate a drain from zero.
-        if self.battle.wild_hp.is_none() {
-            self.battle.wild_ghost = wild_hp as f32;
-            self.battle.player_ghost = player_hp as f32;
-        }
-        self.battle.wild_hp = Some(wild_hp);
-        self.battle.player_hp = Some(player_hp);
-        if self.enabled {
-            self.battle.wild_ghost = ghost_step(self.battle.wild_ghost, wild_hp as f32, dt);
-            self.battle.player_ghost = ghost_step(self.battle.player_ghost, player_hp as f32, dt);
+    /// One frame of the trailing "ghost" band behind an HP bar, tracked
+    /// per `key` so every roster row — each enemy group and each party slot
+    /// — animates independently. A shared tracker would make every bar jump
+    /// whenever any one of them changed.
+    ///
+    /// Callers pick the key; `render` uses the group index for enemies and
+    /// `PARTY_BAR_KEY_BASE + slot` for the party, which cannot collide.
+    pub fn bar_ghost(&mut self, key: u64, value: i32, dt: f32) -> BarFx {
+        // A first frame with no prior reading seeds the ghost at the real
+        // value, so entering a battle doesn't animate a drain from zero.
+        let previous = self.bars.get(&key).copied();
+        let damage = previous.map_or(0, |prev| prev.value - value).max(0);
+        let mut ghost = previous.map_or(value as f32, |prev| prev.ghost);
+        ghost = if self.enabled {
+            ghost_step(ghost, value as f32, dt)
         } else {
-            self.battle.wild_ghost = wild_hp as f32;
-            self.battle.player_ghost = player_hp as f32;
-        }
-        BattleFx {
-            wild_ghost: self.battle.wild_ghost,
-            player_ghost: self.battle.player_ghost,
-            wild_damage,
-            player_damage,
-        }
+            value as f32
+        };
+        self.bars.insert(key, BarTracking { value, ghost });
+        BarFx { ghost, damage }
+    }
+
+    /// Drops every bar tracker, so the next battle seeds its ghosts fresh
+    /// rather than easing down from the last fight's numbers. Group indices
+    /// are reused between battles, which is exactly when stale state would
+    /// show.
+    pub fn clear_bars(&mut self) {
+        self.bars.clear();
     }
 
     pub fn spawn_float(&mut self, text: String, x: f32, y: f32, color: Color) {
@@ -302,6 +302,49 @@ impl Fx {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The ghost trail used to track exactly two HP scalars. A roster has
+    /// one bar per enemy group and per party slot, and they must animate
+    /// independently — a shared ghost would make every bar jump whenever
+    /// any one of them changed.
+    #[test]
+    fn bar_ghosts_are_tracked_independently_per_key() {
+        let mut fx = Fx::new();
+        fx.bar_ghost(1, 100, 0.0);
+        fx.bar_ghost(2, 100, 0.0);
+
+        let a = fx.bar_ghost(1, 40, 0.016);
+        let b = fx.bar_ghost(2, 100, 0.016);
+
+        assert_eq!(a.damage, 60, "key 1 took the hit");
+        assert_eq!(b.damage, 0, "key 2 was untouched and must not inherit it");
+        assert!(
+            b.ghost > a.ghost,
+            "the two ghosts must not share state: {} vs {}",
+            a.ghost,
+            b.ghost
+        );
+    }
+
+    /// Entering a battle must not animate a drain from zero, and group
+    /// indices are reused between fights — so a stale tracker would show
+    /// the next battle draining from the last one's numbers.
+    #[test]
+    fn a_bars_first_frame_seeds_its_ghost_rather_than_draining_from_zero() {
+        let mut fx = Fx::new();
+        let first = fx.bar_ghost(7, 250, 0.016);
+        assert_eq!(first.ghost, 250.0);
+        assert_eq!(first.damage, 0);
+
+        fx.bar_ghost(7, 10, 0.016);
+        fx.clear_bars();
+        let fresh = fx.bar_ghost(7, 250, 0.016);
+        assert_eq!(
+            fresh.ghost, 250.0,
+            "a cleared tracker must seed fresh, not ease down from the old fight"
+        );
+        assert_eq!(fresh.damage, 0);
+    }
 
     #[test]
     fn flash_alpha_is_at_peak_the_instant_a_flash_starts() {

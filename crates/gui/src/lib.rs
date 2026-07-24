@@ -161,7 +161,10 @@ async fn game_loop(mut app: App) {
 
         // Effects are drained every frame whether or not they'll be drawn,
         // so a disabled `Fx` can't leave the engine's queue at its cap.
-        let in_battle = matches!(app.mode, Mode::Battle | Mode::BattleCompanion);
+        let in_battle = matches!(
+            app.mode,
+            Mode::Battle | Mode::BattleTarget | Mode::BattleResolve
+        );
         let (effects, last_log) = match &mut app.game {
             Some(game) => (game.take_effects(), game.message_log(1).pop()),
             None => (Vec::new(), None),

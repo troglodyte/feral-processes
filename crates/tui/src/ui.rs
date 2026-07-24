@@ -39,9 +39,13 @@ pub fn render(f: &mut Frame, app: &mut App) {
         Mode::DifficultyPick => render_difficulty_pick(f, app.menu_selected),
         Mode::GameOver => render_game_over(f, app),
         Mode::Battle => render_battle(f, app),
-        Mode::BattleCompanion => {
+        Mode::BattleTarget => {
             render_battle(f, app);
-            render_battle_companion_menu(f, app);
+            render_battle_target_menu(f, app);
+        }
+        Mode::BattleResolve => {
+            render_battle(f, app);
+            render_battle_resolve(f, app);
         }
         Mode::Help => render_help(f),
         Mode::Playing
@@ -1424,39 +1428,6 @@ fn render_research_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: us
     );
 }
 
-/// Popup shown over the battle screen (`Mode::BattleCompanion`) when more
-/// than one companion is active, to pick which one acts this round. A
-/// single active companion skips this and is commanded directly.
-fn render_battle_companion_menu(f: &mut Frame, app: &mut App) {
-    let area = f.area();
-    let popup = centered_rect(60, 40, area);
-    f.render_widget(Clear, popup);
-    let selected = app.menu_selected;
-    let Some(game) = &mut app.game else { return };
-    let party = game.player_status().companions;
-    let mut lines = vec![Line::from(
-        "Command which companion? It'll buff you instead of attacking. (Esc to cancel; Up/Down + Enter also work)",
-    )];
-    for (i, c) in party.iter().enumerate() {
-        lines.push(menu_line(
-            format!(
-                "[{}] {} ({}){}",
-                menu_shortcut(i),
-                c.name,
-                c.ability,
-                status_tag(&c.status)
-            ),
-            i == selected,
-        ));
-    }
-    f.render_widget(
-        Paragraph::new(lines)
-            .wrap(Wrap { trim: true })
-            .block(Block::bordered().title("Command Companion")),
-        popup,
-    );
-}
-
 fn render_inspect_direction(f: &mut Frame, area: Rect) {
     let popup = centered_rect(50, 20, area);
     f.render_widget(Clear, popup);
@@ -1750,6 +1721,20 @@ fn status_tag(status: &Option<String>) -> String {
         .unwrap_or_default()
 }
 
+/// A textual HP bar, so a group and a party member can share a row with
+/// their stats instead of each needing a full-width `Gauge`.
+fn hp_bar(hp: i32, max_hp: i32, width: usize) -> String {
+    let ratio = (hp as f64 / max_hp.max(1) as f64).clamp(0.0, 1.0);
+    let filled = (ratio * width as f64).round() as usize;
+    format!(
+        "[{}{}]",
+        "#".repeat(filled),
+        "-".repeat(width.saturating_sub(filled))
+    )
+}
+
+const HP_BAR_WIDTH: usize = 10;
+
 fn render_battle(f: &mut Frame, app: &mut App) {
     let area = f.area();
     let Some(game) = &mut app.game else { return };
@@ -1757,92 +1742,83 @@ fn render_battle(f: &mut Frame, app: &mut App) {
         return;
     };
 
-    let mut constraints = vec![Constraint::Length(3), Constraint::Length(3)];
-    if !view.companions.is_empty() {
-        constraints.push(Constraint::Length(view.companions.len() as u16));
-    }
-    constraints.push(Constraint::Length(1));
-    constraints.push(Constraint::Min(5));
-    constraints.push(Constraint::Length(3));
-    let chunks = Layout::vertical(constraints).split(area);
-    let mut i = 0;
+    let chunks = Layout::vertical([
+        Constraint::Length(view.groups.len() as u16 + 2),
+        Constraint::Length(view.party.len() as u16 + 2),
+        Constraint::Min(4),
+        Constraint::Length(3),
+    ])
+    .split(area);
 
-    let wild_ratio = (view.wild_hp as f64 / view.wild_max_hp.max(1) as f64).clamp(0.0, 1.0);
-    let pack_tag = if view.pack_remaining > 0 {
-        format!(" [+{} more in the pack]", view.pack_remaining)
-    } else {
-        String::new()
-    };
+    // Enemy groups, addressed by letter. Back groups are dimmed so the
+    // reach rule is legible at a glance rather than something the player
+    // has to infer from the log.
+    let group_lines: Vec<Line> = view
+        .groups
+        .iter()
+        .map(|g| {
+            let name = if g.count > 1 {
+                format!("{} {}s", g.count, g.species_name)
+            } else {
+                g.species_name.clone()
+            };
+            let text = format!(
+                "{}  {:<22} {} {:>4}/{:<4} ATK {:<3} DEF {:<3} {}{}",
+                g.letter,
+                name,
+                hp_bar(g.front_hp, g.front_max_hp, HP_BAR_WIDTH),
+                g.front_hp,
+                g.front_max_hp,
+                g.atk,
+                g.def,
+                if g.engaged { "<engaged>" } else { "<back>" },
+                status_tag(&g.status_effect),
+            );
+            let style = if !g.engaged {
+                Style::new().fg(Color::DarkGray)
+            } else if g.is_boss {
+                Style::new().fg(Color::Magenta)
+            } else {
+                Style::new().fg(Color::Red)
+            };
+            Line::styled(text, style)
+        })
+        .collect();
     f.render_widget(
-        Gauge::default()
-            .block(Block::bordered().title(format!(
-                "{}{}{}{} (ATK {} / DEF {} / PWR {})",
-                view.wild_name,
-                if view.wild_is_boss { " [BOSS]" } else { "" },
-                status_tag(&view.wild_status_effect),
-                pack_tag,
-                view.wild_atk,
-                view.wild_def,
-                view.wild_power
-            )))
-            .gauge_style(Style::new().fg(Color::Red))
-            .ratio(wild_ratio)
-            .label(format!("{}/{}", view.wild_hp, view.wild_max_hp)),
-        chunks[i],
+        Paragraph::new(group_lines)
+            .block(Block::bordered().title(format!("Hostile programs — round {}", view.round))),
+        chunks[0],
     );
-    i += 1;
 
-    let player_ratio = (view.player_hp as f64 / view.player_max_hp.max(1) as f64).clamp(0.0, 1.0);
+    // The party roster, with each member's chosen action once picked.
+    let party_lines: Vec<Line> = view
+        .party
+        .iter()
+        .map(|p| {
+            let text = format!(
+                "{}  {:<18} {} {:>4}/{:<4} ATK {:<3} DEF {:<3} {:<8} {}{}",
+                p.slot + 1,
+                p.name,
+                hp_bar(p.hp, p.max_hp, HP_BAR_WIDTH),
+                p.hp,
+                p.max_hp,
+                p.atk,
+                p.def,
+                if p.front { "front" } else { "back" },
+                p.planned.clone().unwrap_or_else(|| "...".to_string()),
+                status_tag(&p.status_effect),
+            );
+            menu_line(text, view.active_slot == Some(p.slot))
+        })
+        .collect();
     f.render_widget(
-        Gauge::default()
-            .block(Block::bordered().title(format!(
-                "You{} (ATK {} / DEF {} / PWR {} / DECOMP {})",
-                status_tag(&view.player_status_effect),
-                view.player_atk,
-                view.player_def,
-                view.player_power,
-                view.player_decompiler
-            )))
-            .gauge_style(Style::new().fg(Color::Cyan))
-            .ratio(player_ratio)
-            .label(format!("{}/{}", view.player_hp, view.player_max_hp)),
-        chunks[i],
+        Paragraph::new(party_lines).block(
+            Block::bordered().title(format!("Your party — DECOMP {}", view.player_decompiler)),
+        ),
+        chunks[1],
     );
-    i += 1;
 
-    if !view.companions.is_empty() {
-        let lines: Vec<Line> = view
-            .companions
-            .iter()
-            .map(|companion| {
-                Line::styled(
-                    format!(
-                        "Companion: {} (HP {}/{}, ATK {}, PWR {}){}",
-                        companion.name,
-                        companion.hp,
-                        companion.max_hp,
-                        companion.atk,
-                        companion.power,
-                        status_tag(&companion.status)
-                    ),
-                    Style::new().fg(Color::Green),
-                )
-            })
-            .collect();
-        f.render_widget(Paragraph::new(lines), chunks[i]);
-        i += 1;
-    }
-
-    f.render_widget(
-        Paragraph::new(Line::styled(
-            decompile_chance_line(view.decompile_chance),
-            Style::new().fg(Color::Magenta),
-        )),
-        chunks[i],
-    );
-    i += 1;
-
-    let log_capacity = chunks[i].height.saturating_sub(2) as usize;
+    let log_capacity = chunks[2].height.saturating_sub(2) as usize;
     let log_lines: Vec<Line> = game
         .message_log(log_capacity.max(1))
         .into_iter()
@@ -1852,21 +1828,115 @@ fn render_battle(f: &mut Frame, app: &mut App) {
         Paragraph::new(log_lines)
             .block(Block::bordered().title("Intrusion"))
             .wrap(Wrap { trim: true }),
-        chunks[i],
+        chunks[2],
     );
-    i += 1;
 
-    let mut actions = vec!["[A]ttack".to_string()];
-    if view.decompile_chance.is_some() {
-        actions.push("[D]ecompile".to_string());
-    }
-    if !view.companions.is_empty() {
-        actions.push("[C]ommand companion".to_string());
-    }
-    actions.push("[J]ack Out".to_string());
+    // The action bar is drawn from whatever the engine offers, never from
+    // strings authored here — that indirection is the whole point, so a new
+    // action reaches both renderers without either being touched.
+    let mut actions: Vec<Span> = view
+        .options
+        .iter()
+        .flat_map(|o| {
+            let span = match &o.unavailable {
+                None => Span::styled(o.label.clone(), Style::new().fg(Color::White)),
+                Some(reason) => Span::styled(
+                    format!("{} ({reason})", o.label),
+                    Style::new().fg(Color::DarkGray),
+                ),
+            };
+            [span, Span::raw("   ")]
+        })
+        .collect();
+    // Jack Out is a party-level command, deliberately not an ActionOption.
+    actions.push(Span::styled("[J]ack Out", Style::new().fg(Color::White)));
+
+    let prompt = match view.active_slot.and_then(|s| view.party.get(s)) {
+        Some(slot) => format!("{} acts — [Esc] undo", slot.name),
+        None => "Round ready".to_string(),
+    };
     f.render_widget(
-        Paragraph::new(Line::from(actions.join("   "))).block(Block::bordered()),
-        chunks[i],
+        Paragraph::new(Line::from(actions)).block(Block::bordered().title(prompt)),
+        chunks[3],
+    );
+}
+
+/// Overlay for `Mode::BattleTarget`: which group does the pending action
+/// hit? Shows per-group decompile odds, since that's the one action where
+/// the choice of target is a real gamble rather than a preference.
+fn render_battle_target_menu(f: &mut Frame, app: &mut App) {
+    let area = f.area();
+    let popup = centered_rect(60, 40, area);
+    f.render_widget(Clear, popup);
+    let selected = app.menu_selected;
+    let Some(game) = &mut app.game else { return };
+    let Some(view) = game.battle_view() else {
+        return;
+    };
+
+    let mut lines = vec![Line::from(
+        "Target which group? (Esc to cancel; Up/Down + Enter also work)",
+    )];
+    for (i, g) in view.groups.iter().enumerate() {
+        let odds = match g.decompile_chance {
+            Some(c) => format!(" — decompile {:.0}%", c * 100.0),
+            None => String::new(),
+        };
+        lines.push(menu_line(
+            format!(
+                "[{}] {} x{} — {}/{} HP {}{}",
+                g.letter,
+                g.species_name,
+                g.count,
+                g.front_hp,
+                g.front_max_hp,
+                if g.engaged { "<engaged>" } else { "<back>" },
+                odds,
+            ),
+            i == selected,
+        ));
+    }
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(Block::bordered().title("Pick a target"))
+            .wrap(Wrap { trim: true }),
+        popup,
+    );
+}
+
+/// Overlay for `Mode::BattleResolve`: the narration of the round that just
+/// resolved, paged past with any key.
+fn render_battle_resolve(f: &mut Frame, app: &mut App) {
+    let area = f.area();
+    let popup = centered_rect(70, 60, area);
+    f.render_widget(Clear, popup);
+    let mark = app.battle_log_mark;
+    let Some(game) = &mut app.game else { return };
+    let Some(view) = game.battle_view() else {
+        return;
+    };
+
+    let mut lines: Vec<Line> = view
+        .log
+        .iter()
+        .skip(mark)
+        .map(|text| Line::from(text.clone()))
+        .collect();
+    if lines.is_empty() {
+        lines.push(Line::from("The round passes quietly."));
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::styled(
+        "[Space] next round",
+        Style::new().add_modifier(Modifier::REVERSED),
+    ));
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(
+                Block::bordered().title(format!("Round {} resolves", view.round.saturating_sub(1))),
+            )
+            .wrap(Wrap { trim: true }),
+        popup,
     );
 }
 

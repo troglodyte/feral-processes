@@ -10,6 +10,7 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use feral_processes_engine::battle::{ActionKind, BattleAction, TargetSpec};
 #[cfg(test)]
 use feral_processes_engine::items::ids;
 use feral_processes_engine::items::{
@@ -165,8 +166,16 @@ pub enum Mode {
     /// Load-or-delete choice for the save picked from `Mode::LoadGame`.
     SaveAction,
     Playing,
+    /// Picking an action for the party member in `Game::battle_active_slot`.
+    /// The menu comes from `Game::battle_action_options`, so the action set
+    /// lives in exactly one place and the two renderers cannot drift.
     Battle,
-    BattleCompanion,
+    /// Picking which enemy group the pending action targets. Entered from
+    /// `Mode::Battle` when the chosen option has `TargetSpec::EnemyGroup`.
+    BattleTarget,
+    /// Paging through the narration of a resolved round before the next
+    /// planning phase begins.
+    BattleResolve,
     Build,
     BuildDirection,
     Craft,
@@ -228,6 +237,24 @@ pub enum TradeChoice {
 pub const MIN_ZOOM: u16 = 1;
 pub const MAX_ZOOM: u16 = 4;
 
+/// Builds the `BattleAction` an `ActionKind` becomes once the UI has
+/// collected whatever its `TargetSpec` called for. One arm per kind, so a
+/// new action is added here rather than by editing the key handlers.
+/// `None` means the required target wasn't supplied.
+fn action_from(
+    kind: ActionKind,
+    group: Option<usize>,
+    item: Option<ItemId>,
+) -> Option<BattleAction> {
+    match kind {
+        ActionKind::Attack => Some(BattleAction::Attack { group: group? }),
+        ActionKind::Special => Some(BattleAction::Special { group: group? }),
+        ActionKind::Defend => Some(BattleAction::Defend),
+        ActionKind::Decompile => Some(BattleAction::Decompile { group: group? }),
+        ActionKind::UseItem => Some(BattleAction::UseItem { item: item? }),
+    }
+}
+
 pub struct App {
     pub mode: Mode,
     pub game: Option<Game>,
@@ -260,6 +287,13 @@ pub struct App {
     pub pending_fuse_second: Option<Entity>,
     /// Characters typed so far on the fuse-naming page (see `Mode::FuseName`).
     pub fuse_name_input: String,
+    /// The action kind picked in `Mode::Battle`, awaiting an enemy group
+    /// from `Mode::BattleTarget` before it becomes a `BattleAction`.
+    pub pending_battle_action: Option<ActionKind>,
+    /// How many log lines the battle log held when the last round started —
+    /// everything after this index is that round's narration, which
+    /// `Mode::BattleResolve` pages through.
+    pub battle_log_mark: usize,
     pub pending_inventory_item: Option<ItemId>,
     /// The inventory item picked for erasure, awaiting a quantity from
     /// `Mode::EraseQuantity`.
@@ -332,6 +366,8 @@ impl App {
             pending_fuse_first: None,
             pending_fuse_second: None,
             fuse_name_input: String::new(),
+            pending_battle_action: None,
+            battle_log_mark: 0,
             pending_inventory_item: None,
             pending_erase: None,
             erase_quantity_input: String::new(),
@@ -542,7 +578,8 @@ impl App {
             Mode::DifficultyPick => self.handle_difficulty_key(key),
             Mode::Playing => self.handle_playing_key(key),
             Mode::Battle => self.handle_battle_key(key),
-            Mode::BattleCompanion => self.handle_battle_companion_key(key),
+            Mode::BattleTarget => self.handle_battle_target_key(key),
+            Mode::BattleResolve => self.handle_battle_resolve_key(key),
             Mode::Build => self.handle_build_key(key),
             Mode::BuildDirection => self.handle_build_direction_key(key),
             Mode::Craft => self.handle_craft_key(key),
@@ -870,82 +907,148 @@ impl App {
         }
     }
 
+    /// Chooses this round's action for the active party slot. Every key
+    /// except the party-level Jack Out comes from
+    /// `Game::battle_action_options`, so adding a battle action needs no
+    /// change here and the two renderers cannot drift apart.
     fn handle_battle_key(&mut self, key: GameKey) {
-        // Both renderers label these `[A]ttack`/`[D]ecompile`/`[C]ommand
-        // companion`/`[J]ack Out`, so a shifted keypress is the one the
-        // prompt actually asks for and has to resolve the same as an
-        // unshifted one.
-        let key = match key {
-            GameKey::Char(c) => GameKey::Char(c.to_ascii_lowercase()),
-            other => other,
-        };
-        if key == GameKey::Char('c') {
+        if key == GameKey::Esc {
+            self.battle_back_up();
+            return;
+        }
+        // Both renderers label these `[A]ttack`, `De[f]end` and so on, so a
+        // shifted keypress is the one the prompt actually asks for and has
+        // to resolve the same as an unshifted one.
+        let GameKey::Char(c) = key else { return };
+        let c = c.to_ascii_lowercase();
+
+        // Jack Out is a party-level command, not a per-member action, so it
+        // is deliberately not an `ActionOption`.
+        if c == 'j' {
             let Some(game) = &mut self.game else { return };
-            let party = game.player_status().companions;
-            match party.len() {
-                0 => self.status_line = Some("You have no active companion.".to_string()),
-                1 => {
-                    let entity = party[0].entity;
-                    game.battle_command_companion(entity);
-                    let still_active = game.has_active_battle();
-                    if !still_active {
-                        self.mode = Mode::Playing;
-                    }
-                    self.push_battle_outcome_sounds(SoundEvent::Attack, still_active);
-                }
-                _ => self.mode = Mode::BattleCompanion,
+            game.battle_flee();
+            let still_active = game.has_active_battle();
+            if !still_active {
+                self.mode = Mode::Playing;
             }
+            self.push_battle_outcome_sounds(SoundEvent::Flee, still_active);
             return;
         }
 
-        let (still_active, action_sound) = {
-            let Some(game) = &mut self.game else { return };
-            let sound = match key {
-                GameKey::Char('a') => {
-                    game.battle_attack();
-                    SoundEvent::Attack
-                }
-                GameKey::Char('d') => {
-                    game.battle_decompile();
-                    SoundEvent::Attack
-                }
-                GameKey::Char('j') => {
-                    game.battle_flee();
-                    SoundEvent::Flee
-                }
-                _ => return,
-            };
-            (game.has_active_battle(), sound)
+        let Some(game) = &self.game else { return };
+        let Some(slot) = game.battle_active_slot() else {
+            return;
         };
-        if !still_active {
-            self.mode = Mode::Playing;
+        let Some(option) = game
+            .battle_action_options(slot)
+            .into_iter()
+            .find(|o| o.key == c)
+        else {
+            return;
+        };
+        if let Some(reason) = option.unavailable {
+            self.status_line = Some(format!("Can't do that — {reason}."));
+            return;
         }
-        self.push_battle_outcome_sounds(action_sound, still_active);
+        match option.target {
+            TargetSpec::None => {
+                if let Some(action) = action_from(option.kind, None, None) {
+                    self.commit_battle_action(slot, action);
+                }
+            }
+            TargetSpec::EnemyGroup => {
+                self.pending_battle_action = Some(option.kind);
+                self.menu_selected = 0;
+                self.mode = Mode::BattleTarget;
+            }
+            TargetSpec::InventoryItem => {
+                self.pending_battle_action = Some(option.kind);
+                self.menu_selected = 0;
+                self.mode = Mode::Inventory;
+            }
+        }
     }
 
-    /// Picks which party member acts this round when there's more than one
-    /// active companion (a single companion is commanded directly from
-    /// `handle_battle_key` with no extra step).
-    fn handle_battle_companion_key(&mut self, key: GameKey) {
+    /// Picks which enemy group the action chosen in `Mode::Battle` hits.
+    fn handle_battle_target_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
+            self.pending_battle_action = None;
             self.mode = Mode::Battle;
             return;
         }
         let Some(game) = &self.game else { return };
-        let party = game.player_status().companions;
-        let Some(idx) = self.selected_index(key, party.len()) else {
+        let Some(view) = game.battle_view() else {
             return;
         };
-        let entity = party[idx].entity;
-        let Some(game) = &mut self.game else { return };
-        game.battle_command_companion(entity);
-        let still_active = game.has_active_battle();
+        let Some(slot) = view.active_slot else { return };
+        let group_count = view.groups.len();
+        // Groups are addressed by letter on screen, so accept the letter as
+        // well as the row number `selected_index` already handles.
+        let picked = match key {
+            GameKey::Char(c) if c.is_ascii_alphabetic() => {
+                let idx = (c.to_ascii_lowercase() as u8 - b'a') as usize;
+                (idx < group_count).then_some(idx)
+            }
+            other => self.selected_index(other, group_count),
+        };
+        let Some(group) = picked else { return };
+        let Some(kind) = self.pending_battle_action else {
+            return;
+        };
+        let Some(action) = action_from(kind, Some(group), None) else {
+            return;
+        };
+        self.pending_battle_action = None;
+        self.commit_battle_action(slot, action);
+    }
+
+    /// Pages past a resolved round's narration back into planning, or out to
+    /// the map if the fight is over.
+    fn handle_battle_resolve_key(&mut self, _key: GameKey) {
+        let still_active = self.game.as_ref().is_some_and(|g| g.has_active_battle());
         self.mode = if still_active {
             Mode::Battle
         } else {
             Mode::Playing
         };
+    }
+
+    /// Records `action` for `slot`, and resolves the round once every slot
+    /// has one.
+    fn commit_battle_action(&mut self, slot: usize, action: BattleAction) {
+        let Some(game) = &mut self.game else { return };
+        if let Err(reason) = game.battle_set_action(slot, action) {
+            self.status_line = Some(reason);
+            return;
+        }
+        self.mode = Mode::Battle;
+        if !game.battle_round_ready() {
+            return;
+        }
+        self.battle_log_mark = game.battle_view().map(|v| v.log.len()).unwrap_or(0);
+        game.battle_resolve_round();
+        let still_active = game.has_active_battle();
+        self.mode = if still_active {
+            Mode::BattleResolve
+        } else {
+            Mode::Playing
+        };
         self.push_battle_outcome_sounds(SoundEvent::Attack, still_active);
+    }
+
+    /// Backs the planning cursor up one slot, so a misclick can be undone.
+    /// Clearing a slot also clears every slot after it — the player chose
+    /// those in light of the choice they're now taking back.
+    fn battle_back_up(&mut self) {
+        let Some(game) = &mut self.game else { return };
+        let Some(slot) = game.battle_active_slot() else {
+            return;
+        };
+        if slot == 0 {
+            self.status_line = Some("Nothing to undo — pick an action, or [J]ack Out.".to_string());
+            return;
+        }
+        game.battle_clear_action(slot - 1);
     }
 
     fn handle_build_key(&mut self, key: GameKey) {
@@ -2130,19 +2233,40 @@ mod tests {
         panic!("no seed under 200 put a wild program next to the player — encounter setup changed");
     }
 
-    /// Both renderers advertise the battle actions as `[A]ttack`,
-    /// `[D]ecompile`, `[C]ommand companion` and `[J]ack Out`, so a player
-    /// reading the prompt has every reason to hold Shift. Case is
-    /// normalized everywhere else a letter picks a menu row, and a battle
-    /// turn is the one place where swallowing the keypress silently costs
-    /// the player a round.
+    /// The action set lives in the engine. If app-core or a renderer
+    /// hardcoded a key, the two frontends would drift the moment an action
+    /// was added — which is the exact failure this indirection exists to
+    /// prevent. So the keys under test are read from the engine rather
+    /// than written here.
     ///
-    /// Asserts only that the key was routed at all — which action each one
-    /// resolves to is the engine's business, and depends on gear and party
-    /// the seed happens to hand out.
+    /// Both renderers advertise them as `[A]ttack`, `De[f]end` and so on,
+    /// so a player reading the prompt has every reason to hold Shift. Case
+    /// is normalized everywhere else a letter picks a menu row, and a
+    /// battle turn is the one place where swallowing the keypress silently
+    /// costs the player a round.
+    ///
+    /// Asserts only that each key was routed at all — which action it
+    /// resolves to is the engine's business, and depends on the gear and
+    /// party the seed happens to hand out.
     #[test]
-    fn battle_action_keys_ignore_case() {
-        for upper in ['A', 'D', 'C', 'J'] {
+    fn battle_action_keys_come_from_the_engine_and_ignore_case() {
+        let probe = battling_app();
+        let game = probe.game.as_ref().unwrap();
+        let mut keys: Vec<char> = game
+            .battle_action_options(0)
+            .iter()
+            .map(|o| o.key)
+            .collect();
+        assert!(
+            keys.contains(&'a') && keys.contains(&'f'),
+            "the engine should always offer at least Attack and Defend, got {keys:?}"
+        );
+        // Jack Out is the one party-level command, deliberately not an
+        // ActionOption — but it still has to survive a shifted keypress.
+        keys.push('j');
+
+        for key in keys {
+            let upper = key.to_ascii_uppercase();
             let mut app = battling_app();
             app.handle_key(GameKey::Char(upper));
             let acted = !app.take_sounds().is_empty()
@@ -2150,9 +2274,54 @@ mod tests {
                 || app.mode != Mode::Battle;
             assert!(
                 acted,
-                "[{upper}] is what the battle prompt advertises, but Shift+{upper} was swallowed"
+                "[{upper}] is advertised by the engine, but Shift+{upper} was swallowed"
             );
         }
+    }
+
+    /// Picking an action that needs a target must not resolve the round on
+    /// the spot — it has to stop and ask which group.
+    #[test]
+    fn a_targeted_action_stops_to_ask_which_group() {
+        let mut app = battling_app();
+        app.handle_key(GameKey::Char('a'));
+        assert_eq!(
+            app.mode,
+            Mode::BattleTarget,
+            "Attack needs a target, so it should open the group picker"
+        );
+
+        // Esc backs out without spending the round.
+        app.handle_key(GameKey::Esc);
+        assert_eq!(app.mode, Mode::Battle);
+        assert!(app.pending_battle_action.is_none());
+    }
+
+    /// A solo player is a one-slot party, so choosing an untargeted action
+    /// completes the round immediately and moves to the narration page.
+    #[test]
+    fn completing_every_slot_resolves_the_round_and_shows_the_narration() {
+        let mut app = battling_app();
+        let slots = app
+            .game
+            .as_ref()
+            .unwrap()
+            .battle_view()
+            .unwrap()
+            .party
+            .len();
+        assert_eq!(slots, 1, "the test seed's player starts with no companions");
+
+        app.handle_key(GameKey::Char('f'));
+
+        assert!(
+            matches!(
+                app.mode,
+                Mode::BattleResolve | Mode::Playing | Mode::GameOver
+            ),
+            "the only slot was planned, so the round should have resolved; got {:?}",
+            app.mode
+        );
     }
 
     /// `update_realtime` is the hook a frontend's own loop calls every

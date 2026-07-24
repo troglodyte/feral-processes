@@ -32,6 +32,24 @@ const MAGENTA: Color = Color::new(0.8, 0.35, 0.85, 1.0);
 const GREEN: Color = Color::new(0.35, 0.85, 0.4, 1.0);
 const ORANGE: Color = Color::new(0.95, 0.55, 0.15, 1.0);
 
+/// Offset that keeps party-slot bar keys clear of the enemy-group keys they
+/// share `Fx::bar_ghost`'s map with. Far above `MAX_ENEMY_GROUPS`, so the
+/// two ranges can never meet.
+const PARTY_BAR_KEY_BASE: u64 = 1000;
+
+/// How far toward grey a back-rank group's bar is pulled — enough to read
+/// as "can't reach you" beside an engaged group without becoming
+/// unreadable.
+const BACK_RANK_DESATURATION: f32 = 0.55;
+
+/// Pulls `color` toward its own grey, for drawing something that's present
+/// but not currently in play.
+fn desaturate(color: Color) -> Color {
+    let grey = (color.r + color.g + color.b) / 3.0;
+    let mix = |c: f32| c + (grey - c) * BACK_RANK_DESATURATION;
+    Color::new(mix(color.r), mix(color.g), mix(color.b), color.a)
+}
+
 /// Display styling for a message-log line, chosen by the engine-supplied
 /// `MessageKind` rather than by sniffing the text — low-priority chatter
 /// stays dim, gains/damage that matter get a color.
@@ -84,9 +102,13 @@ pub fn draw(app: &mut App, fx: &mut Fx, fonts: &Fonts) {
         Mode::DifficultyPick => draw_difficulty_pick(app.menu_selected, fonts, &m),
         Mode::GameOver => draw_game_over(app, fonts, &m),
         Mode::Battle => draw_battle(app, fx, fonts, &m),
-        Mode::BattleCompanion => {
+        Mode::BattleTarget => {
             draw_battle(app, fx, fonts, &m);
-            draw_battle_companion_menu(app, fonts, &m);
+            draw_battle_target_menu(app, fonts, &m);
+        }
+        Mode::BattleResolve => {
+            draw_battle(app, fx, fonts, &m);
+            draw_battle_resolve(app, fonts, &m);
         }
         Mode::Help => {
             draw_playing_base(app, fx, fonts, &m);
@@ -1766,122 +1788,125 @@ fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics) {
     // panel, so it holds off the edges by more than panel content does.
     let margin = m.inset * 2.0;
     let mut y = margin;
-    let pack_tag = if view.pack_remaining > 0 {
-        format!(" [+{} more in the pack]", view.pack_remaining)
-    } else {
-        String::new()
-    };
-    let battle_fx = fx.battle_frame(view.wild_hp, view.player_hp, get_frame_time());
-    let wild_bar = BarGeometry {
-        x: margin,
-        y,
-        w: w - margin * 2.0,
-    };
-    y = draw_bar(
-        wild_bar,
-        &format!(
-            "{}{}{}{} (ATK {} / DEF {} / PWR {})",
-            view.wild_name,
-            if view.wild_is_boss { " [BOSS]" } else { "" },
-            status_tag(&view.wild_status_effect),
-            pack_tag,
-            view.wild_atk,
-            view.wild_def,
-            view.wild_power
-        ),
-        view.wild_hp as f32,
-        view.wild_max_hp.max(1) as f32,
-        RED,
-        fonts,
-        m,
-    );
-    draw_ghost_band(
-        wild_bar,
-        view.wild_hp as f32,
-        battle_fx.wild_ghost,
-        view.wild_max_hp.max(1) as f32,
-        RED,
-        m,
-    );
-    y += m.inset;
-    let player_bar = BarGeometry {
-        x: margin,
-        y,
-        w: w - margin * 2.0,
-    };
-    y = draw_bar(
-        player_bar,
-        &format!(
-            "You{} (ATK {} / DEF {} / PWR {} / DECOMP {})",
-            status_tag(&view.player_status_effect),
-            view.player_atk,
-            view.player_def,
-            view.player_power,
-            view.player_decompiler
-        ),
-        view.player_hp as f32,
-        view.player_max_hp.max(1) as f32,
-        CYAN,
-        fonts,
-        m,
-    );
-    draw_ghost_band(
-        player_bar,
-        view.player_hp as f32,
-        battle_fx.player_ghost,
-        view.player_max_hp.max(1) as f32,
-        CYAN,
-        m,
-    );
-    y += m.inset;
-
-    // Damage is inferred from the HP the view reports rather than from a
-    // dedicated engine event — a battle round resolves entirely between
-    // two frames, so the drop is unambiguous.
-    if battle_fx.wild_damage > 0 {
-        fx.spawn_float(
-            format!("-{}", battle_fx.wild_damage),
-            w / 2.0,
-            wild_bar.y,
-            RED,
-        );
-    }
-    if battle_fx.player_damage > 0 {
-        fx.spawn_float(
-            format!("-{}", battle_fx.player_damage),
-            w / 2.0,
-            player_bar.y,
-            TEXT,
-        );
-    }
-
-    for companion in &view.companions {
-        fonts.ui(
-            format!(
-                "Companion: {} (HP {}/{}, ATK {}, PWR {}){}",
-                companion.name,
-                companion.hp,
-                companion.max_hp,
-                companion.atk,
-                companion.power,
-                status_tag(&companion.status)
-            ),
-            margin,
-            y,
-            m.font_size,
-            GREEN,
-        );
-        y += m.line_height;
-    }
+    let dt = get_frame_time();
 
     fonts.ui(
-        decompile_chance_line(view.decompile_chance),
+        format!("Hostile programs — round {}", view.round),
         margin,
         y,
         m.font_size,
-        MAGENTA,
+        TEXT,
     );
-    y += m.line_height + m.inset;
+    y += m.line_height;
+
+    for (idx, g) in view.groups.iter().enumerate() {
+        let bar = BarGeometry {
+            x: margin,
+            y,
+            w: w - margin * 2.0,
+        };
+        let ghost = fx.bar_ghost(idx as u64, g.front_hp, dt);
+        let name = if g.count > 1 {
+            format!("{} {}s", g.count, g.species_name)
+        } else {
+            g.species_name.clone()
+        };
+        // Back groups are desaturated so the reach rule is legible at a
+        // glance, rather than something to infer from the log.
+        let color = if !g.engaged {
+            desaturate(RED)
+        } else if g.is_boss {
+            MAGENTA
+        } else {
+            RED
+        };
+        y = draw_bar(
+            bar,
+            &format!(
+                "{}  {}{} {} (ATK {} / DEF {}){}",
+                g.letter,
+                name,
+                if g.is_boss { " [BOSS]" } else { "" },
+                if g.engaged { "<engaged>" } else { "<back>" },
+                g.atk,
+                g.def,
+                status_tag(&g.status_effect),
+            ),
+            g.front_hp as f32,
+            g.front_max_hp.max(1) as f32,
+            color,
+            fonts,
+            m,
+        );
+        draw_ghost_band(
+            bar,
+            g.front_hp as f32,
+            ghost.ghost,
+            g.front_max_hp.max(1) as f32,
+            color,
+            m,
+        );
+        // Damage is inferred from the HP the view reports rather than from
+        // a dedicated engine event — a round resolves entirely between two
+        // frames, so the drop is unambiguous. Floats spawn at their own
+        // row now that there is more than one bar to attribute them to.
+        if ghost.damage > 0 {
+            fx.spawn_float(format!("-{}", ghost.damage), w / 2.0, bar.y, RED);
+        }
+        y += m.inset;
+    }
+
+    y += m.inset;
+    fonts.ui(
+        format!("Your party — DECOMP {}", view.player_decompiler),
+        margin,
+        y,
+        m.font_size,
+        TEXT,
+    );
+    y += m.line_height;
+
+    for p in &view.party {
+        let bar = BarGeometry {
+            x: margin,
+            y,
+            w: w - margin * 2.0,
+        };
+        let ghost = fx.bar_ghost(PARTY_BAR_KEY_BASE + p.slot as u64, p.hp, dt);
+        let active = view.active_slot == Some(p.slot);
+        let color = if active { CYAN } else { GREEN };
+        y = draw_bar(
+            bar,
+            &format!(
+                "{}{}  (ATK {} / DEF {}) {} — {}{}",
+                if active { "> " } else { "  " },
+                p.name,
+                p.atk,
+                p.def,
+                if p.front { "front" } else { "back" },
+                p.planned.clone().unwrap_or_else(|| "...".to_string()),
+                status_tag(&p.status_effect),
+            ),
+            p.hp as f32,
+            p.max_hp.max(1) as f32,
+            color,
+            fonts,
+            m,
+        );
+        draw_ghost_band(
+            bar,
+            p.hp as f32,
+            ghost.ghost,
+            p.max_hp.max(1) as f32,
+            color,
+            m,
+        );
+        if ghost.damage > 0 {
+            fx.spawn_float(format!("-{}", ghost.damage), w / 2.0, bar.y, TEXT);
+        }
+        y += m.inset;
+    }
+    y += m.inset;
 
     let log_bottom = screen_height() - m.line_height * 2.0;
     draw_rectangle(margin, y, w - margin * 2.0, log_bottom - y, PANEL_BG);
@@ -1893,13 +1918,18 @@ fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics) {
         ly += m.line_height;
     }
 
-    let mut actions = vec!["[A]ttack".to_string()];
-    if view.decompile_chance.is_some() {
-        actions.push("[D]ecompile".to_string());
-    }
-    if !view.companions.is_empty() {
-        actions.push("[C]ommand companion".to_string());
-    }
+    // The action bar is drawn from whatever the engine offers, never from
+    // strings authored here — so a new action reaches both renderers
+    // without either being touched.
+    let mut actions: Vec<String> = view
+        .options
+        .iter()
+        .map(|o| match &o.unavailable {
+            None => o.label.clone(),
+            Some(reason) => format!("{} ({reason})", o.label),
+        })
+        .collect();
+    // Jack Out is a party-level command, deliberately not an ActionOption.
     actions.push("[J]ack Out".to_string());
     fonts.ui(
         actions.join("   "),
@@ -1912,26 +1942,64 @@ fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics) {
     fx.draw_floats(fonts, m);
 }
 
-fn draw_battle_companion_menu(app: &mut App, fonts: &Fonts, m: &Metrics) {
+/// Which group does the pending action hit? Shows per-group decompile odds,
+/// since that's the one action where the choice of target is a real gamble
+/// rather than a preference.
+fn draw_battle_target_menu(app: &mut App, fonts: &Fonts, m: &Metrics) {
     let selected = app.menu_selected;
     let Some(game) = &mut app.game else { return };
-    let party = game.player_status().companions;
-    let mut rows = vec![text_row(
-        "Command which companion? It'll buff you instead of attacking.",
-    )];
-    for (i, c) in party.iter().enumerate() {
+    let Some(view) = game.battle_view() else {
+        return;
+    };
+    let mut rows = vec![text_row("Target which group?")];
+    for (i, g) in view.groups.iter().enumerate() {
+        let odds = match g.decompile_chance {
+            Some(c) => format!(" — decompile {:.0}%", c * 100.0),
+            None => String::new(),
+        };
         rows.push(item_row(
             format!(
-                "[{}] {} ({}){}",
-                menu_shortcut(i),
-                c.name,
-                c.ability,
-                status_tag(&c.status)
+                "[{}] {} x{} — {}/{} HP {}{}",
+                g.letter,
+                g.species_name,
+                g.count,
+                g.front_hp,
+                g.front_max_hp,
+                if g.engaged { "<engaged>" } else { "<back>" },
+                odds,
             ),
             i == selected,
         ));
     }
-    draw_popup("Command Companion", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Pick a target", PopupSize::Large, &rows, fonts, m);
+}
+
+/// The narration of the round that just resolved, paged past with any key.
+fn draw_battle_resolve(app: &mut App, fonts: &Fonts, m: &Metrics) {
+    let mark = app.battle_log_mark;
+    let Some(game) = &mut app.game else { return };
+    let Some(view) = game.battle_view() else {
+        return;
+    };
+    let round = view.round.saturating_sub(1);
+    let mut rows: Vec<Row> = view
+        .log
+        .iter()
+        .skip(mark)
+        .map(|line| text_row(line.clone()))
+        .collect();
+    if rows.is_empty() {
+        rows.push(text_row("The round passes quietly."));
+    }
+    rows.push(text_row(""));
+    rows.push(Row::TextColored("[Space] next round".to_string(), CYAN));
+    draw_popup(
+        &format!("Round {round} resolves"),
+        PopupSize::Large,
+        &rows,
+        fonts,
+        m,
+    );
 }
 
 fn draw_main_menu(app: &App, fonts: &Fonts, m: &Metrics) {
@@ -2065,7 +2133,8 @@ mod tests {
             Mode::Trade,
             Mode::Inventory,
             Mode::Battle,
-            Mode::BattleCompanion,
+            Mode::BattleTarget,
+            Mode::BattleResolve,
             Mode::Help,
             Mode::LoadGame,
         ] {

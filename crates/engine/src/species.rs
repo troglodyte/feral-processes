@@ -11,8 +11,8 @@ use crate::world::Biome;
 pub type SpeciesId = String;
 
 /// A companion's unique battle action, used in place of the default rally
-/// buff when a party member commands it — see
-/// `Game::battle_command_companion`.
+/// buff when its Special is chosen for the round — see
+/// `BattleAction::Special` and `Game::resolve_one_action`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum SpecialAbility {
     /// Boosts the player's ATK by `power` for `duration` rounds.
@@ -56,8 +56,9 @@ impl SpecialAbility {
         }
     }
 
-    /// Terse name for the Command Companion picker, e.g. "Rally Team" —
-    /// just what kind of ability it is, without the numeric effect.
+    /// Terse name for this ability, e.g. "Rally Team" — just what kind it
+    /// is, without the numeric effect. Used where the full `display_label`
+    /// would not fit.
     pub fn short_name(&self) -> &'static str {
         match self {
             SpecialAbility::Rally { .. } => "Rally Team",
@@ -145,9 +146,9 @@ pub struct SpeciesDef {
     /// non-boss species.
     #[serde(default)]
     pub is_boss: bool,
-    /// If set, commanding a tamed member of this species in battle (see
-    /// `Game::battle_command_companion`) triggers this ability instead of
-    /// the default rally buff every companion gets otherwise.
+    /// If set, choosing Special for a tamed member of this species in
+    /// battle triggers this ability instead of the default rally buff every
+    /// companion gets otherwise.
     /// `#[serde(default)]` so existing species files (including mods)
     /// without this field keep parsing as companions with no special
     /// ability.

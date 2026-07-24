@@ -80,12 +80,17 @@ becomes a legible ramp instead of a cliff.
 Most raid tests reference the constants symbolically (`lib.rs:10551`,
 `10641`, `10987`) and adapt with no edit.
 
-The exposure is four seed-hunting tests — `raid_check_can_damage_an_undefended_structure`
-(`lib.rs:10437`), `raid_damage_message_is_tagged_message_kind_raid` (`10470`),
-`deployed_shields_reduce_raid_damage_to_an_undefended_structure` (`10517`),
-and `a_raid_fully_absorbed_by_the_shield_network_queues_a_deflected_effect`
-(`10630`). Each sweeps 300 seeds calling `raid_check` **once** per seed and
-panics if no raid ever fires.
+The exposure is six seed-hunting tests, each sweeping 300 seeds and calling
+`raid_check` **once** per seed, panicking if no raid ever fires:
+
+| Test | Line |
+|---|---|
+| `raid_check_can_damage_an_undefended_structure` | 10439 |
+| `raid_damage_message_is_tagged_message_kind_raid` | 10472 |
+| `deployed_shields_reduce_raid_damage_to_an_undefended_structure` | 10517 |
+| `a_raid_fully_absorbed_by_the_shield_network_queues_a_deflected_effect` | 10630 |
+| `a_raid_fended_off_by_a_cronjob_worker_queues_a_deflected_effect` | 10686 |
+| `raid_check_defended_by_a_worker_reduces_structure_damage_and_hurts_the_worker` | 10926 |
 
 Dropping the roll to 0.012 moves the odds of an all-miss sweep from
 `0.98^300` ≈ 0.23% to `0.988^300` ≈ 2.7%. These are seeded and therefore
@@ -93,17 +98,37 @@ nominally deterministic, but unsorted habitat lookup can shift RNG
 consumption between runs, so an all-miss sweep is a live flake rather than a
 stable pass — and CLAUDE.md forbids flaky tests.
 
-**Fix:** call `raid_check` up to 7 times per seed, breaking on the first
-observed hit. Seven hits at 4 damage is 28, below the 30 durability floor, so
-the structure can't be destroyed mid-sweep and invalidate the assertion. This
-keeps the ~300 `Game::new` calls (the expensive part) while taking all-miss
-odds to `0.988^2100` ≈ 1e-11.
+**Fix:** call `raid_check` up to 7 times per seed, evaluating the success
+condition after **each** call and returning on the first fire. Detecting on
+the first fire is not optional: `deployed_shields_reduce_raid_damage_to_an_undefended_structure`
+asserts `hp == 30 - (RAID_DAMAGE - shield_defense)` and
+`raid_check_defended_by_a_worker_reduces_structure_damage_and_hurts_the_worker`
+asserts `worker_hp == 50 - RAID_DEFENDER_DAMAGE` — both are exact values that
+only hold after exactly one raid. Because every loop returns on first fire, no
+structure or worker ever accumulates a second hit, so the retune's damage
+values don't constrain the attempt count.
+
+Seven is chosen purely for miss probability: it takes all-miss odds from
+`0.988^300` ≈ 2.7% to `0.988^2100` ≈ 1e-11, while keeping the ~300
+`Game::new` calls that dominate runtime unchanged.
 
 ## New coverage
 
-- `RAID_DAMAGE` cannot one-shot a `default_durability` structure.
-- A single deployed Shield leaves raid damage nonzero — a regression guard
-  against `raid_defense` silently drifting back to total immunity.
+Three deterministic tests (no seed sweep — they drive `damage_structure` and
+`structure_regen` directly), each of which is red at the current constants
+except where noted:
+
+- `a_structure_survives_seven_raids_worth_of_damage` — seven hits at
+  `RAID_DAMAGE` must not destroy a default-durability structure. Pins the
+  "eight hits to destroy" property without hardcoding either constant.
+- `one_regen_interval_fully_undoes_one_raids_damage` — one
+  `STRUCTURE_REGEN_INTERVAL` restores exactly one raid's damage. This is the
+  attrition race, expressed as an assertion.
+- `a_single_shield_reduces_raid_damage_without_erasing_it` — asserts
+  `0 < raid_defense < RAID_DAMAGE`. Green today, and goes red the moment
+  `RAID_DAMAGE` drops to 4 before `shield.ron` follows; it is the regression
+  guard against `raid_defense` drifting back into granting total immunity for
+  a single build.
 
 ## Out of scope
 

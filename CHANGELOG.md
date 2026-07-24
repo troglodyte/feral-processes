@@ -4,6 +4,27 @@ Release notes for [feral-processes](README.md).
 
 ## 2026-07-23
 
+- **Home can no longer be raided**: raids used to pick from every deployed
+  structure, Home included, so a bad roll could destroy the one structure
+  that gates every other build, anchors your symlinks, and can only exist
+  once — stranding you rather than costing you something. Home is now a
+  **non-raidable** structure: it has no Durability, shows no `[HP x/y]`
+  anywhere, and is never selected as a raid target. Posting a guard on it
+  (`G`) is refused outright now instead of silently wasting a program on a
+  raid that will never come — see [Base defense](README.md#base-defense).
+  This is data, not a special case in Rust: any structure `.ron` file can
+  set `raidable: false` and get the same protection, and every file that
+  omits the field stays raidable exactly as before, mods included — see
+  `assets/structures/README.md`. You can still demolish Home yourself with
+  `R`, cascade and all; non-attackable isn't indestructible.
+- **The inventory screen now says which slot an item would take**: an
+  equippable item's preview tag leads with its slot — `(WEP +4 ATK)`,
+  `(ARM +4 DEF)`, `(MOD +3 DECOMP)` — instead of showing the bonus alone
+  and leaving you to infer the slot from which stat moved. That inference
+  was only ever reliable while every weapon happened to be pure Attack, and
+  the 25-piece catalog's hybrids (a Recursion Blade is +2 Attack **and** +1
+  Defense) broke it. Shows on both the inventory list and the item action
+  menu, in both frontends — see [Equipment](README.md#equipment).
 - **Taming catalysts are data, not one named item**: a decompile attempt now
   spends whichever item in your inventory declares the highest
   `taming_potency` (ties go to the first item id alphabetically), so a

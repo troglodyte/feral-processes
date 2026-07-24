@@ -2198,10 +2198,13 @@ impl Game {
     /// Posts `worker` (a tamed program you own) to guard `structure`
     /// against raids (see `raid_check`), without assigning it a cronjob.
     /// Unlike `assign_cronjob`, this works on any structure — including
-    /// ones with no `work` recipe at all, like a Home or Terminal — since
-    /// defending doesn't require producing anything. A structure that's
-    /// already cronjob-worked is already defended by its worker; this is
-    /// for posting a guard on structures that otherwise have no defender.
+    /// ones with no `work` recipe at all, like a Terminal — since defending
+    /// doesn't require producing anything. A structure that's already
+    /// cronjob-worked is already defended by its worker; this is for posting
+    /// a guard on structures that otherwise have no defender. A structure
+    /// raids can't target at all (`StructureDef::raidable`, e.g. Home) is
+    /// refused, since a guard there would wait forever for a raid that never
+    /// comes.
     pub fn assign_guard(&mut self, worker: Entity, structure: Entity) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -2214,8 +2217,20 @@ impl Game {
         if owner != self.player_entity() {
             return Err("You don't control that program.".into());
         }
-        if self.world.get::<Structure>(structure).is_none() {
-            return Err("That's not a structure.".into());
+        let kind = self
+            .world
+            .get::<Structure>(structure)
+            .ok_or_else(|| "That's not a structure.".to_string())?
+            .kind
+            .clone();
+        let unraidable = self
+            .world
+            .resource::<StructureDb>()
+            .get(&kind)
+            .filter(|def| !def.raidable)
+            .map(|def| def.name.clone());
+        if let Some(name) = unraidable {
+            return Err(format!("{name} can't be raided — it doesn't need a guard."));
         }
         if self.world.resource::<Party>().0.contains(&worker) {
             self.world
@@ -10735,13 +10750,39 @@ mod tests {
     }
 
     #[test]
-    fn assign_guard_defends_a_structure_with_no_work_recipe() {
-        let mut game = Game::new(4, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        let structure = game
+    fn assign_guard_refuses_a_structure_that_cant_be_raided() {
+        let mut game = Game::new(705, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let home = game
             .world
             .spawn((
                 Structure {
                     kind: "home".to_string(),
+                },
+                Position { x: 5, y: 5 },
+            ))
+            .id();
+        let worker = spawn_tamed(&mut game, 50, 3);
+
+        let err = game
+            .assign_guard(worker, home)
+            .expect_err("guarding a non-raidable structure should be refused");
+        assert!(err.contains("can't be raided"), "unexpected error: {err}");
+        assert!(
+            game.world.get::<Task>(worker).is_none(),
+            "a refused guard must not leave a Task behind"
+        );
+    }
+
+    #[test]
+    fn assign_guard_defends_a_structure_with_no_work_recipe() {
+        let mut game = Game::new(4, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        // Terminal, not Home: Home is non-raidable now, so it's the one
+        // structure a guard is refused on.
+        let structure = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "terminal".to_string(),
                 },
                 Position { x: 5, y: 5 },
                 Durability { hp: 30, max_hp: 30 },
@@ -10799,11 +10840,12 @@ mod tests {
     #[test]
     fn guard_assignment_on_a_non_resource_structure_survives_save_and_load() {
         let mut game = Game::new(6, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        // Terminal, not Home: Home is non-raidable, so guarding it is refused.
         let structure = game
             .world
             .spawn((
                 Structure {
-                    kind: "home".to_string(),
+                    kind: "terminal".to_string(),
                 },
                 Position { x: 3, y: 3 },
                 Durability { hp: 30, max_hp: 30 },

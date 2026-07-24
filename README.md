@@ -362,6 +362,12 @@ Press `v` to open the inventory/equipment screen from anywhere while
 playing. It shows your stats, your three equipment slots, and your
 inventory, each item numbered for selection.
 
+Every equippable item in that list is tagged with the **slot it would take**
+and the bonus it would give at your current zone level — `(WEP +4 ATK)`,
+`(ARM +4 DEF)`, `(MOD +3 DECOMP)` — so you can see at a glance what a piece
+competes with before you equip it. Anything that isn't equipment carries no
+tag at all.
+
 There are **31 pieces of gear**, reachable by two different routes.
 
 **Route 1 — the research tree.** Six pieces need *two* unlocks, not one: the
@@ -672,7 +678,7 @@ enough of them, then walk onto it to breach into the next zone.
 
 | Structure | Cost | Unlocked by | Purpose |
 | --- | --- | --- | --- |
-| Home | 5 Core Fragments | — | `u` ("use symlink") instantly teleports you to it from anywhere on the map, for 4 Power Cells |
+| Home | 5 Core Fragments | — | `u` ("use symlink") instantly teleports you to it from anywhere on the map, for 4 Power Cells. Can't be raided — see [Base defense](#base-defense) |
 | Mining Node | 12 Core Fragments | — | Cronjob a compiled program to it to produce Core Fragments over time (slower and level-gated — see [Getting started](#getting-started-building-and-running-cronjobs)) |
 | Research Node | 10 Core Fragments | — | Cronjob a compiled program to it to produce Research Data over time (14 ticks a cycle, level-gated like a Mining Node) — see [Research](#research) |
 | Recharger Node | 5 Core Fragments | — | Required to `r` (recharge/rest) within 2 tiles of it |
@@ -720,9 +726,13 @@ see [Modding](#modding).
 
 ### Base defense
 
-Every deployed structure has raid **Durability** (30 by default), shown as
-`[HP x/y]` in the cronjob, symlink, and trade menus. Each tick has a small
-chance of a raid hitting a random deployed structure:
+Every deployed structure except Home has raid **Durability** (30 by
+default), shown as `[HP x/y]` in the cronjob, symlink, and trade menus.
+Home can't be raided at all — it has no Durability, shows no `[HP x/y]`,
+and is never picked as a raid target. Losing the structure that gates every
+other build, anchors your symlinks, and can only exist once would strand
+you rather than cost you something. Each tick has a small chance of a raid
+hitting a random one of your *other* deployed structures:
 
 - If a compiled program is assigned to it — either cronjob-working it (`w`)
   or just posted to guard it (`G`) — it fights the raid off: the
@@ -730,11 +740,13 @@ chance of a raid hitting a random deployed structure:
   defender still takes a flat cost to its own HP for defending — win or
   lose. A defender knocked to 0 HP stands down (like a knocked-out
   companion), but isn't destroyed.
-- `G` (guard) works on **any** structure, including ones with no cronjob
-  recipe at all — Home, Terminal, Data Cache, Fabricator, Armory, and so
+- `G` (guard) works on **any** raidable structure, including ones with no
+  cronjob recipe at all — Terminal, Data Cache, Fabricator, Armory, and so
   on. It's the only way to defend those. A structure already cronjob-worked
   is already defended by its worker; guard it separately only if you want a
-  program standing there purely for defense, doing no production.
+  program standing there purely for defense, doing no production. Guarding
+  Home is refused outright — there's no raid coming for it, so a program
+  posted there would wait forever instead of doing something useful.
 - Every deployed **Shield** shaves a flat amount (4) off *every* raid's
   damage, against *any* structure it hits — not just itself, and it stacks
   across however many Shields you've built. This is applied before a
@@ -788,6 +800,12 @@ a recipe (optionally naming a bench that must be standing), and `droppable`
 lists the species that drop it and at what odds. The 25-piece catalog in
 [Equipment](#equipment) is written exactly this way — nothing about it is
 privileged over gear you add yourself.
+
+Structures are equally open-ended: a single `.ron` file decides whether a
+structure is cronjob-workable, passively processing, a symlink target, a
+rest gate, a trading post, temporary, and — via `raidable: false` — whether
+raids can target it at all. That last flag is the whole of what makes Home
+safe; any structure you add can claim the same protection.
 
 Perks are the one exception: they're a fixed, player-only set that lives in
 Rust (see [Perks](#perks)).

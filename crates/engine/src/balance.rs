@@ -1,15 +1,25 @@
 //! Offline balance projections for level/zone scaling: pure, deterministic
-//! simulations of the player (plus a full party) fighting zone-scaled wild
-//! species, decoupled from the ECS so they run as fast regression tests.
-//! See `grind_only_zone_scaling_grows_predictably` and
-//! `geared_zone_scaling_grows_predictably_and_beats_grind_only` for the
-//! actual regression checks this module exists to support.
+//! simulations of the player and their party fighting a zone-scaled *pack*,
+//! partitioned into species groups the way a real intrusion is, decoupled
+//! from the ECS so they run as fast regression tests.
+//!
+//! `simulate_roster_fight` mirrors `Game::battle_resolve_round`: everyone on
+//! both sides acts each round, the reach rule keeps back groups from
+//! swinging, and incoming damage is spread across the roster by the same
+//! aggro weights `Game::roll_enemy_target` rolls. No RNG lives here — mean
+//! move power and expected damage share stand in for the real rolls, so
+//! these are projections rather than samples.
+//!
+//! See `grind_only_zone_scaling_grows_predictably`,
+//! `geared_zone_scaling_grows_predictably_and_beats_grind_only`, and
+//! `a_full_party_survives_a_full_pack_at_each_zone` for the actual
+//! regression checks this module exists to support.
 
 use crate::battle::compute_damage;
 use crate::components::{PLAYER_BASE_STATS, Stats};
 use crate::items::EquipmentStats;
 use crate::progression::stats_after_levels;
-use crate::resources::{MAX_PARTY_SIZE, ZoneLevel};
+use crate::resources::{BASE_PET_CAPACITY, ZoneLevel};
 use crate::species::{SpeciesDb, SpeciesDef};
 
 /// Rounds to let a simulated fight run before scoring it a loss —
@@ -17,11 +27,6 @@ use crate::species::{SpeciesDb, SpeciesDef};
 /// genuine stalemate (defense permanently outpacing attack, short of
 /// `compute_damage`'s floor of 1).
 const TURN_CAP: u32 = 300;
-
-/// Round cadence for commanding a companion to rally instead of attacking:
-/// matches the real default rally's `RALLY_DURATION` (3 rounds, see
-/// `crate::RALLY_DURATION`) so the buff is refreshed right as it expires.
-const RALLY_CADENCE: u32 = 4;
 
 /// A companion levels at half the player's XP rate (`PARTY_XP_DIVISOR` in
 /// `crate::lib`). XP cost per level grows linearly with level
@@ -79,6 +84,24 @@ fn companion_stats(species: &SpeciesDef, caught_zone: u32, level: u32) -> Stats 
 fn average_move_power(species: &SpeciesDef) -> i32 {
     let total: i32 = species.moves.iter().map(|m| m.power).sum();
     (total as f64 / species.moves.len().max(1) as f64).round() as i32
+}
+
+/// The same mean, but over only the moves that reach past the front line —
+/// what a back-rank group actually gets to pick from (see
+/// `crate::ENGAGED_GROUPS`). `None` when the species has no ranged move at
+/// all, which is the case that leaves a back group inert.
+fn average_ranged_move_power(species: &SpeciesDef) -> Option<i32> {
+    let ranged: Vec<i32> = species
+        .moves
+        .iter()
+        .filter(|m| m.ranged)
+        .map(|m| m.power)
+        .collect();
+    if ranged.is_empty() {
+        return None;
+    }
+    let total: i32 = ranged.iter().sum();
+    Some((total as f64 / ranged.len() as f64).round() as i32)
 }
 
 /// The strongest non-boss species (by flat `base_hp+base_atk+base_def`)
@@ -144,62 +167,176 @@ pub struct BattleOutcome {
     pub player_hp_fraction: f32,
 }
 
-/// Deterministic turn-based simulation of a player (commanding up to
-/// `companions.len()` party members) fighting one wild creature, mirroring
-/// `Game::battle_attack` / `battle_command_companion` / `wild_retaliate`
-/// closely enough for balance projections:
+/// One enemy group in a projection: `count` identical members of a species,
+/// of which only the front one can be hit (see `battle::EnemyGroup`).
+#[derive(Clone, Copy)]
+pub struct GroupSim {
+    pub stats: Stats,
+    pub count: u32,
+    /// Mean power of every move, used while this group is in melee range.
+    pub move_power: i32,
+    /// Mean power of its *ranged* moves — `None` for a melee-only species,
+    /// which can do nothing at all from the back rank.
+    pub ranged_move_power: Option<i32>,
+}
+
+/// One member of the player's side, tracked with fractional HP so incoming
+/// damage can be spread across the roster by aggro weight rather than
+/// sampled. See `simulate_roster_fight`.
+#[derive(Clone, Copy)]
+struct Fighter {
+    hp: f64,
+    max_hp: f64,
+    atk: i32,
+    def: i32,
+    move_power: i32,
+    /// Share of incoming fire, matching `Game::roll_enemy_target`'s weights.
+    aggro: f64,
+}
+
+/// Splits a pack of `pack_size` into at most `MAX_ENEMY_GROUPS` groups of
+/// one species, as evenly as the real first-appearance partition tends to
+/// come out. Front-loaded, so any remainder lands in the groups that are
+/// actually in melee range — the pessimistic reading.
+fn split_into_groups(species: &SpeciesDef, zone: u32, pack_size: u32) -> Vec<GroupSim> {
+    let group_count = (pack_size as usize).clamp(1, crate::MAX_ENEMY_GROUPS);
+    let base = pack_size / group_count as u32;
+    let remainder = pack_size % group_count as u32;
+    (0..group_count as u32)
+        .map(|i| GroupSim {
+            stats: wild_stats_at_zone(species, zone),
+            count: base + u32::from(i < remainder),
+            move_power: average_move_power(species),
+            ranged_move_power: average_ranged_move_power(species),
+        })
+        .collect()
+}
+
+/// The pack one intrusion throws at the player deep in `zone` — the cap
+/// `Game::max_pack_size` allows once distance growth is fully unlocked.
+fn full_pack_at_zone(species: &SpeciesDef, zone: u32) -> Vec<GroupSim> {
+    let pack_size = (zone * crate::PACK_SIZE_PER_ZONE).clamp(1, crate::MAX_PACK_SIZE);
+    split_into_groups(species, zone, pack_size)
+}
+
+/// Deterministic simulation of the roster round loop: the player and every
+/// party member act each round, then every enemy that can reach the party
+/// does. Mirrors `Game::battle_resolve_round` closely enough for balance
+/// projections:
 ///
-/// - The player attacks with the real fixed move power (5) every round,
-///   except every `RALLY_CADENCE`th round, when it instead commands its
-///   strongest companion for the generic ATK rally (a third of that
-///   companion's ATK, for 3 rounds) — the fallback every companion species
-///   without a `special_ability` gets.
-/// - The wild creature retaliates against the player every round with its
-///   `average_move_power` — a simplification of the real random move pick
-///   and the real chance to hit a companion instead
-///   (`COMPANION_RETALIATION_CHANCE`). Always targeting the player is the
-///   conservative case: in the real game some hits land on a companion
-///   instead, which only helps the player's own HP hold out longer.
+/// - **Everyone attacks.** Companions deal damage now rather than only
+///   granting the player a buff, so the party's damage is the sum across
+///   the roster. The player uses the flat `PLAYER_STRIKE_POWER`; companions
+///   use their species' `average_move_power`.
+/// - **The party focuses the front group,** which is what a player does and
+///   what the reach rule rewards — overkill spills into the next member of
+///   the same group, then into the group behind it as one empties.
+/// - **Reach is enforced.** Groups past `ENGAGED_GROUPS` only act if their
+///   species has a ranged move, and then at its `ranged_move_power`.
+/// - **Incoming damage is spread by aggro weight** rather than all landing
+///   on the player. Deterministic expectation, not a sample: each hit is
+///   divided across the living roster in the same proportions
+///   `Game::roll_enemy_target` rolls, which is why HP is tracked as `f64`.
+///   Assuming every hit lands on the player would overstate the damage a
+///   full roster takes by roughly 4x and drive the tuning badly wrong.
+///
+/// Initiative is not modelled: over a fight of any length, who goes first
+/// each round averages out, and modelling it would need RNG this module
+/// deliberately has none of.
 ///
 /// Runs for at most `TURN_CAP` rounds; a fight that hasn't resolved by then
-/// is scored as a loss — a stalemate that long isn't survivable in
-/// practice (Power/Fatigue would run out first).
-pub fn simulate_battle(
-    mut player: Stats,
+/// is scored as a loss — a stalemate that long isn't survivable in practice
+/// (Power/Fatigue would run out first).
+pub fn simulate_roster_fight(
+    player: Stats,
     companions: &[Stats],
-    mut wild: Stats,
-    wild_move_power: i32,
+    companion_move_power: i32,
+    groups: &[GroupSim],
 ) -> BattleOutcome {
-    let strongest_companion_atk = companions.iter().map(|c| c.atk).max().unwrap_or(0);
-    let mut rally_power = 0;
-    let mut rally_rounds_left = 0u32;
+    let mut roster: Vec<Fighter> = std::iter::once((player, crate::PLAYER_STRIKE_POWER))
+        .chain(companions.iter().map(|c| (*c, companion_move_power)))
+        .enumerate()
+        .map(|(slot, (stats, move_power))| Fighter {
+            hp: stats.hp as f64,
+            max_hp: stats.max_hp as f64,
+            atk: stats.atk,
+            def: stats.def,
+            move_power,
+            aggro: if slot < crate::FRONT_SLOTS {
+                crate::FRONT_SLOT_AGGRO_WEIGHT as f64
+            } else {
+                crate::BACK_SLOT_AGGRO_WEIGHT as f64
+            },
+        })
+        .collect();
+
+    // Remaining HP of the front member of each still-standing group, plus
+    // how many members are still behind it.
+    let mut groups: Vec<(GroupSim, i32, u32)> = groups
+        .iter()
+        .filter(|g| g.count > 0)
+        .map(|g| (*g, g.stats.hp, g.count))
+        .collect();
+
+    let player_hp_fraction = |roster: &[Fighter]| (roster[0].hp / roster[0].max_hp).max(0.0) as f32;
 
     for turn in 1..=TURN_CAP {
-        if !companions.is_empty() && turn % RALLY_CADENCE == 0 {
-            rally_power = (strongest_companion_atk / 3).max(1);
-            rally_rounds_left = 3;
-        } else {
-            let effective_atk = player.atk
-                + if rally_rounds_left > 0 {
-                    rally_power
-                } else {
-                    0
-                };
-            let dmg = compute_damage(effective_atk, wild.def, 5);
-            wild.hp -= dmg;
-            if wild.hp <= 0 {
-                return BattleOutcome {
-                    player_won: true,
-                    turns: turn,
-                    player_hp_fraction: (player.hp as f32 / player.max_hp as f32).max(0.0),
-                };
+        let mut incoming: i32 = roster
+            .iter()
+            .filter(|f| f.hp > 0.0)
+            .map(|f| compute_damage(f.atk, groups[0].0.stats.def, f.move_power))
+            .sum();
+        // Focus fire: overkill rolls into the next member of the group, and
+        // then into the group behind it once this one is empty.
+        while incoming > 0 && !groups.is_empty() {
+            let (group, front_hp, remaining) = &mut groups[0];
+            let dealt = incoming.min(*front_hp);
+            *front_hp -= dealt;
+            incoming -= dealt;
+            if *front_hp > 0 {
+                break;
+            }
+            *remaining -= 1;
+            if *remaining == 0 {
+                groups.remove(0);
+            } else {
+                *front_hp = group.stats.hp;
             }
         }
-        rally_rounds_left = rally_rounds_left.saturating_sub(1);
+        if groups.is_empty() {
+            return BattleOutcome {
+                player_won: true,
+                turns: turn,
+                player_hp_fraction: player_hp_fraction(&roster),
+            };
+        }
 
-        let dmg = compute_damage(wild.atk, player.def, wild_move_power);
-        player.hp -= dmg;
-        if player.hp <= 0 {
+        let total_aggro: f64 = roster.iter().filter(|f| f.hp > 0.0).map(|f| f.aggro).sum();
+        if total_aggro <= 0.0 {
+            return BattleOutcome {
+                player_won: false,
+                turns: turn,
+                player_hp_fraction: 0.0,
+            };
+        }
+        for (idx, (group, _, remaining)) in groups.iter().enumerate() {
+            let power = if idx < crate::ENGAGED_GROUPS {
+                group.move_power
+            } else {
+                match group.ranged_move_power {
+                    Some(power) => power,
+                    // Melee-only and out of reach: this group does nothing.
+                    None => continue,
+                }
+            };
+            for _ in 0..*remaining {
+                for fighter in roster.iter_mut().filter(|f| f.hp > 0.0) {
+                    let dealt = compute_damage(group.stats.atk, fighter.def, power) as f64;
+                    fighter.hp -= dealt * fighter.aggro / total_aggro;
+                }
+            }
+        }
+        if roster[0].hp <= 0.0 {
             return BattleOutcome {
                 player_won: false,
                 turns: turn,
@@ -210,17 +347,29 @@ pub fn simulate_battle(
     BattleOutcome {
         player_won: false,
         turns: TURN_CAP,
-        player_hp_fraction: (player.hp as f32 / player.max_hp as f32).max(0.0),
+        player_hp_fraction: player_hp_fraction(&roster),
     }
 }
 
 /// Searches player levels `1..=max_level` for the lowest one at which a
 /// full party (`MAX_PARTY_SIZE` companions, all tamed from `party_species`
 /// while breached into `zone` and leveled per
-/// `companion_level_for_player_level`) beats `wild_species` scaled to
-/// `zone` in `simulate_battle`. `None` means scaling has broken down
-/// outright — not just a long grind, but no level up to `max_level` clears
-/// it.
+/// `companion_level_for_player_level`) beats a **full pack** of
+/// `wild_species` scaled to `zone` in `simulate_roster_fight`. `None` means
+/// scaling has broken down outright — not just a long grind, but no level
+/// up to `max_level` clears it.
+///
+/// The pack, rather than a lone creature, is the meaningful unit now: with
+/// every party member attacking, one wild program is no contest at any
+/// level, and a sweep against one would report level 1 everywhere and catch
+/// nothing.
+///
+/// The party is `BASE_PET_CAPACITY` strong, not `MAX_PARTY_SIZE`. Fielding
+/// a full roster takes Data Caches (see `Game::pet_capacity`), so it is an
+/// achievement rather than the baseline these progression sweeps are
+/// supposed to describe — and modelling the ceiling here would report that
+/// early zones need level 1, which says nothing about the curve. The full
+/// roster is projected separately, against a full pack.
 ///
 /// `party_species` is deliberately separate from `wild_species`: the party
 /// a player actually fields is whatever they tamed along the way, not a
@@ -244,8 +393,8 @@ pub fn min_level_to_clear_zone(
     weapon: EquipmentStats,
     armor: EquipmentStats,
 ) -> Option<(u32, BattleOutcome)> {
-    let wild = wild_stats_at_zone(wild_species, zone);
-    let move_power = average_move_power(wild_species);
+    let groups = full_pack_at_zone(wild_species, zone);
+    let companion_move_power = average_move_power(party_species);
     let (gear_atk, gear_def) = if with_gear {
         best_case_gear_bonus(zone, weapon, armor)
     } else {
@@ -260,10 +409,10 @@ pub fn min_level_to_clear_zone(
         player.atk += gear_atk;
         player.def += gear_def;
         let companion_level = companion_level_for_player_level(level);
-        let companions: Vec<Stats> = (0..MAX_PARTY_SIZE)
+        let companions: Vec<Stats> = (0..BASE_PET_CAPACITY)
             .map(|_| companion_stats(party_species, zone, companion_level))
             .collect();
-        let outcome = simulate_battle(player, &companions, wild, move_power);
+        let outcome = simulate_roster_fight(player, &companions, companion_move_power, &groups);
         if outcome.player_won {
             return Some((level, outcome));
         }
@@ -274,6 +423,7 @@ pub fn min_level_to_clear_zone(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resources::MAX_PARTY_SIZE;
     use std::path::Path;
 
     fn species_assets_dir() -> std::path::PathBuf {
@@ -421,6 +571,116 @@ mod tests {
     const MAX_GEARED_ZONE_SWEPT: u32 = 6;
     const MAX_LEVEL_SEARCHED: u32 = 200;
 
+    /// The party-size change compounds three ways: `party_stat_bonus`
+    /// feeds a share of every companion's ATK/DEF into the player's own
+    /// effective stats, so 3 -> 5 raises the player's *passive* stats as
+    /// well as adding two more attackers and two more bodies to absorb
+    /// hits. The pack-size increase is the counterweight. This test is the
+    /// only evidence that ratio is survivable before anyone plays it.
+    ///
+    /// Deliberately fought against the *toughest* ordinary species with a
+    /// *median* party — a player tames what the habitat gives them, and has
+    /// to survive the worst thing it spawns.
+    #[test]
+    fn a_full_party_survives_a_full_pack_at_each_zone() {
+        let (db, warnings) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+        assert!(
+            warnings.is_empty(),
+            "species assets should load cleanly: {warnings:?}"
+        );
+        let toughest = toughest_ordinary_species(&db);
+        let party = median_ordinary_species(&db);
+        let (weapon, armor) = best_gear_stats();
+
+        for zone in 1..=5u32 {
+            let Some((level, outcome)) = min_level_to_clear_zone(
+                toughest,
+                party,
+                zone,
+                MAX_LEVEL_SEARCHED,
+                true,
+                weapon,
+                armor,
+            ) else {
+                panic!(
+                    "zone {zone}: a full party can't clear a full pack of {}s at any level up \
+                     to {MAX_LEVEL_SEARCHED} — the pack/party ratio is off",
+                    toughest.name
+                );
+            };
+            eprintln!(
+                "[roster] zone {zone}: pack of {} {}s needs level {level} ({} rounds, {:.0}% \
+                 player HP left)",
+                (zone * crate::PACK_SIZE_PER_ZONE).clamp(1, crate::MAX_PACK_SIZE),
+                toughest.name,
+                outcome.turns,
+                outcome.player_hp_fraction * 100.0
+            );
+            assert!(
+                outcome.turns > 2,
+                "zone {zone}: won in {} rounds, which means the fight is trivial — a roster \
+                 battle the player never gets to make a second decision in isn't one",
+                outcome.turns
+            );
+        }
+    }
+
+    /// The reach rule has to actually be doing work. A pack big enough to
+    /// fill every group must be meaningfully easier than the same number of
+    /// enemies all standing in melee range — that gap *is* the valve that
+    /// makes a twelve-enemy fight survivable.
+    #[test]
+    fn the_reach_rule_measurably_softens_a_full_pack() {
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+        let toughest = toughest_ordinary_species(&db);
+        let party = median_ordinary_species(&db);
+        let companion_power = average_move_power(party);
+        let zone = 4;
+
+        let with_reach = full_pack_at_zone(toughest, zone);
+        // The same pack with every group in melee range — the fight this
+        // would be without the reach rule.
+        let all_engaged: Vec<GroupSim> = with_reach
+            .iter()
+            .map(|g| GroupSim {
+                ranged_move_power: Some(g.move_power),
+                ..*g
+            })
+            .collect();
+
+        // Compared by the level each version demands rather than by HP
+        // left: past a certain depth both versions are losses at a given
+        // level, and "0% vs 0%" measures nothing.
+        let level_needed = |groups: &[GroupSim]| {
+            (1..=MAX_LEVEL_SEARCHED).find(|&level| {
+                let player = stats_after_levels(
+                    PLAYER_BASE_STATS,
+                    level - 1,
+                    crate::progression::BASELINE_GROWTH_MULTIPLIER,
+                );
+                let companions: Vec<Stats> = (0..MAX_PARTY_SIZE)
+                    .map(|_| companion_stats(party, zone, companion_level_for_player_level(level)))
+                    .collect();
+                simulate_roster_fight(player, &companions, companion_power, groups).player_won
+            })
+        };
+
+        let reached = level_needed(&with_reach).expect("the reach case must be clearable");
+        let unreached = level_needed(&all_engaged);
+        eprintln!(
+            "zone {zone} pack of {}: level {reached} with the reach rule, {} without",
+            toughest.name,
+            unreached
+                .map(|l| l.to_string())
+                .unwrap_or_else(|| format!("none up to {MAX_LEVEL_SEARCHED}")),
+        );
+        assert!(
+            unreached.is_none_or(|unreached| reached < unreached),
+            "the reach rule must lower the level a full pack demands, or ENGAGED_GROUPS is \
+             buying nothing: {reached} with it, {unreached:?} without"
+        );
+    }
+
     /// Pure-grind floor: no gear equipped, ever. Confirms the level
     /// required to clear a zone with a full (leveled, zone-caught) party
     /// grows roughly geometrically with zone depth — expected, since wild
@@ -557,6 +817,13 @@ mod tests {
                 "deeper zones should never require a *lower* level to clear, geared: \
                  {required_levels:?}"
             );
+            // A zone that comes out at level 1 is reporting the floor of the
+            // search, not a measurement — best-in-slot gear genuinely
+            // trivializes zone 1 — so the growth ratio has nothing real to
+            // compare against there. Every pair after that is a measurement.
+            if prev == 1 {
+                continue;
+            }
             assert!(
                 next <= prev * 3 + 5,
                 "geared level requirement jumped from {prev} to {next} one zone deeper — the \

@@ -8750,7 +8750,7 @@ mod tests {
             let mut needs = game.world.get_mut::<Needs>(player).unwrap();
             needs.fatigue = 10.0;
         }
-        spawn_recharger_node_at_player(&mut game);
+        spawn_rest_structure_at_player(&mut game);
 
         game.rest();
 
@@ -8769,7 +8769,7 @@ mod tests {
             let mut stats = game.world.get_mut::<Stats>(companion).unwrap();
             stats.hp = 1;
         }
-        spawn_recharger_node_at_player(&mut game);
+        spawn_rest_structure_at_player(&mut game);
 
         game.rest();
 
@@ -9489,18 +9489,16 @@ mod tests {
             .id()
     }
 
-    /// Deploys a Recharger Node directly on the player's current tile —
-    /// `Game::rest` requires one nearby, so tests exercising `rest` need
-    /// this in place first. Spawned directly rather than through
-    /// `place_structure` to sidestep its Home/cost/radius requirements,
-    /// which aren't what these tests are about. The real Recharger Node is
-    /// a permanent structure (no `Temporary` component), so this doesn't
-    /// attach one either.
-    fn spawn_recharger_node_at_player(game: &mut Game) {
+    /// Deploys a Home directly on the player's current tile — `Game::rest`
+    /// requires a rest-enabling structure nearby, so tests exercising `rest`
+    /// need one in place first. Spawned directly rather than through
+    /// `place_structure` to sidestep its cost and one-Home-only
+    /// requirements, which aren't what these tests are about.
+    fn spawn_rest_structure_at_player(game: &mut Game) {
         let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
         game.world.spawn((
             Structure {
-                kind: "recharger_node".to_string(),
+                kind: "home".to_string(),
             },
             Position {
                 x: player_pos.x,
@@ -10938,7 +10936,7 @@ mod tests {
         for e in [a, b] {
             game.world.get_mut::<Stats>(e).unwrap().hp = 1;
         }
-        spawn_recharger_node_at_player(&mut game);
+        spawn_rest_structure_at_player(&mut game);
 
         game.rest();
 
@@ -10963,7 +10961,25 @@ mod tests {
     }
 
     #[test]
-    fn rest_is_a_no_op_without_a_nearby_recharger_node() {
+    fn home_enables_rest_across_the_whole_base_footprint() {
+        let game = Game::new(402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let def = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.id == "home")
+            .expect("home.ron should load");
+        assert_eq!(
+            def.enables_rest
+                .as_ref()
+                .expect("Home should be the rest gate")
+                .radius,
+            MAX_BUILD_DISTANCE_FROM_HOME,
+            "Home's rest radius should cover exactly the base footprint"
+        );
+    }
+
+    #[test]
+    fn rest_is_a_no_op_without_a_nearby_rest_structure() {
         let mut game = Game::new(401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
         {
@@ -10976,7 +10992,7 @@ mod tests {
         let needs = *game.world.get::<Needs>(player).unwrap();
         assert_eq!(
             needs.fatigue, 10.0,
-            "resting without a nearby Recharger Node shouldn't restore anything"
+            "resting with no Home in range shouldn't restore anything"
         );
     }
 

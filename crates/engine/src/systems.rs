@@ -30,6 +30,10 @@ pub(crate) const WORK_XP_LEVEL_CAP: u32 = 10;
 const HUNGER_DECAY_PER_TICK: f32 = 0.15;
 const FATIGUE_DECAY_PER_TICK: f32 = 0.08;
 
+/// The ceiling for Power, per the 0..=100 range documented on
+/// `components::Needs`.
+const MAX_POWER: f32 = 100.0;
+
 /// One tick of hunger/fatigue decay; pulled out of the system so the rates
 /// are unit-testable without spinning up an ECS `World`. `hunger_multiplier`
 /// scales only the hunger rate (e.g. `Perk::LowPowerMode`'s per-level
@@ -287,11 +291,217 @@ pub fn passive_process_system(
     }
 }
 
+/// Restores the player's Power once per tick for every in-range structure
+/// whose def sets `power_regen` — no worker and no input item, unlike
+/// `task_progress_system` and `passive_process_system`.
+///
+/// Chained ahead of `needs_decay_system` (see `Game::build_schedule`), and
+/// that order is load-bearing: run the other way round, a player limping
+/// into range at 0.1 Power is driven to 0 first, docked an Integrity point
+/// and shown the "power reserves are critical!" warning on the very tick
+/// the structure was about to cover them.
+pub fn power_regen_system(
+    mut player: Query<(&Position, &mut Needs), With<Player>>,
+    structures: Query<(&Structure, &Position)>,
+    structure_db: Res<StructureDb>,
+) {
+    for (player_pos, mut needs) in &mut player {
+        let player_pos = *player_pos;
+        for (structure, pos) in &structures {
+            let Some(regen) = structure_db
+                .get(&structure.kind)
+                .and_then(|def| def.power_regen.as_ref())
+            else {
+                continue;
+            };
+            if (pos.x - player_pos.x).abs() > regen.radius
+                || (pos.y - player_pos.y).abs() > regen.radius
+            {
+                continue;
+            }
+            needs.hunger = (needs.hunger + regen.per_tick).min(MAX_POWER);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::components::PLAYER_BASE_STATS;
     use crate::items::{ItemId, ids};
     use crate::structures::StructureDb;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    /// Writes `files` (filename, RON body) into a scratch dir and loads them
+    /// through `StructureDb::load_dir` — `StructureDb`'s map is private
+    /// outside its own module, so a fixture db has to come from disk. The
+    /// counter disambiguates the directory per call: the pid alone repeats
+    /// for every test in a run, so two tests loading fixtures in parallel
+    /// would delete each other's directory mid-read.
+    fn load_fixture_db(files: &[(&str, &str)]) -> StructureDb {
+        static NEXT_DIR: AtomicU32 = AtomicU32::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "feral_structure_fixture_{}_{}",
+            std::process::id(),
+            NEXT_DIR.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for (name, body) in files {
+            std::fs::write(dir.join(name), body).unwrap();
+        }
+        let (db, warnings) = StructureDb::load_dir(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            warnings.is_empty(),
+            "fixture should parse cleanly: {warnings:?}"
+        );
+        db
+    }
+
+    /// A structure that only regenerates Power. `per_tick` and `radius` are
+    /// deliberately unlike the shipped Recharger Node's (1.0 / 7) so a test
+    /// asserting on them can't accidentally pass against real game data
+    /// instead of this fixture.
+    fn load_test_recharger() -> StructureDb {
+        load_fixture_db(&[(
+            "test_recharger.ron",
+            r#"(
+                id: "test_recharger",
+                name: "Test Recharger",
+                glyph: 'z',
+                color: Orange,
+                build_cost: [],
+                work: None,
+                power_regen: Some((
+                    per_tick: 2.0,
+                    radius: 3,
+                )),
+            )"#,
+        )])
+    }
+
+    /// A player at the origin with `hunger` Power, plus one structure of
+    /// `kind` at each of `structure_positions`.
+    fn power_regen_world(
+        db: StructureDb,
+        kind: &str,
+        hunger: f32,
+        structure_positions: &[(i32, i32)],
+    ) -> (World, Entity) {
+        let mut world = World::new();
+        world.insert_resource(db);
+        world.insert_resource(MessageLog::default());
+        let player = world
+            .spawn((
+                Player,
+                Position { x: 0, y: 0 },
+                Needs {
+                    hunger,
+                    fatigue: 100.0,
+                },
+                PLAYER_BASE_STATS,
+            ))
+            .id();
+        for (x, y) in structure_positions {
+            world.spawn((
+                Structure {
+                    kind: kind.to_string(),
+                },
+                Position { x: *x, y: *y },
+            ));
+        }
+        (world, player)
+    }
+
+    /// Runs `power_regen_system` alone for one tick and returns the player's
+    /// resulting Power.
+    fn run_regen_once(db: StructureDb, kind: &str, hunger: f32, at: &[(i32, i32)]) -> f32 {
+        let (mut world, player) = power_regen_world(db, kind, hunger, at);
+        let mut schedule = Schedule::default();
+        schedule.add_systems(power_regen_system);
+        schedule.run(&mut world);
+        world.get::<Needs>(player).unwrap().hunger
+    }
+
+    #[test]
+    fn power_regen_restores_per_tick_while_in_range() {
+        let hunger = run_regen_once(load_test_recharger(), "test_recharger", 50.0, &[(0, 0)]);
+        assert_eq!(
+            hunger, 52.0,
+            "an in-range structure should add its per_tick"
+        );
+    }
+
+    #[test]
+    fn power_regen_clamps_at_full_power() {
+        let hunger = run_regen_once(load_test_recharger(), "test_recharger", 99.0, &[(0, 0)]);
+        assert_eq!(hunger, 100.0, "Power must never exceed the 0..=100 range");
+    }
+
+    #[test]
+    fn power_regen_ignores_a_structure_past_its_radius_on_either_axis() {
+        for at in [(4, 0), (0, 4), (-4, 0), (0, -4)] {
+            let hunger = run_regen_once(load_test_recharger(), "test_recharger", 50.0, &[at]);
+            assert_eq!(
+                hunger, 50.0,
+                "a structure at {at:?} is outside radius 3 and should do nothing"
+            );
+        }
+    }
+
+    #[test]
+    fn power_regen_applies_at_exactly_the_radius_boundary() {
+        let hunger = run_regen_once(load_test_recharger(), "test_recharger", 50.0, &[(3, 3)]);
+        assert_eq!(
+            hunger, 52.0,
+            "radius is inclusive, matching passive_process"
+        );
+    }
+
+    #[test]
+    fn power_regen_stacks_across_in_range_structures() {
+        let hunger = run_regen_once(
+            load_test_recharger(),
+            "test_recharger",
+            50.0,
+            &[(0, 0), (1, 1)],
+        );
+        assert_eq!(
+            hunger, 54.0,
+            "each in-range structure adds its own per_tick"
+        );
+    }
+
+    #[test]
+    fn a_structure_without_power_regen_does_not_restore_power() {
+        let hunger = run_regen_once(load_test_capacitor(), "test_capacitor", 50.0, &[(0, 0)]);
+        assert_eq!(
+            hunger, 50.0,
+            "a def that sets no power_regen must be inert here"
+        );
+    }
+
+    #[test]
+    fn power_regen_runs_before_decay_so_arriving_drained_costs_no_integrity() {
+        let (mut world, player) =
+            power_regen_world(load_test_recharger(), "test_recharger", 0.1, &[(0, 0)]);
+        let mut schedule = Schedule::default();
+        schedule.add_systems((power_regen_system, needs_decay_system).chain());
+        schedule.run(&mut world);
+
+        let stats = *world.get::<Stats>(player).unwrap();
+        let needs = *world.get::<Needs>(player).unwrap();
+        assert_eq!(
+            stats.hp, stats.max_hp,
+            "regen must cover the player before decay can starve them"
+        );
+        assert!(
+            (needs.hunger - (0.1 + 2.0 - HUNGER_DECAY_PER_TICK)).abs() < 1e-5,
+            "expected regen then decay, got {}",
+            needs.hunger
+        );
+    }
 
     fn test_item_db() -> ItemDb {
         ItemDb::load_dir(
@@ -309,12 +519,8 @@ mod tests {
     /// fixture pattern `research.rs`'s tests use, since `StructureDb`'s
     /// fields are private outside its module.
     fn load_test_capacitor() -> StructureDb {
-        let dir =
-            std::env::temp_dir().join(format!("feral_passive_process_test_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(
-            dir.join("test_capacitor.ron"),
+        load_fixture_db(&[(
+            "test_capacitor.ron",
             r#"(
                 id: "test_capacitor",
                 name: "Test Capacitor",
@@ -329,15 +535,7 @@ mod tests {
                     radius: 5,
                 )),
             )"#,
-        )
-        .unwrap();
-        let (db, warnings) = StructureDb::load_dir(&dir).unwrap();
-        let _ = std::fs::remove_dir_all(&dir);
-        assert!(
-            warnings.is_empty(),
-            "fixture should parse cleanly: {warnings:?}"
-        );
-        db
+        )])
     }
 
     #[test]

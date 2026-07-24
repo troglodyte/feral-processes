@@ -46,6 +46,19 @@ pub struct PassiveProcessDef {
     pub radius: i32,
 }
 
+/// A structure's power-regeneration capability — see
+/// `StructureDef::power_regen` and `systems::power_regen_system`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PowerRegenDef {
+    /// Power (`components::Needs::hunger`) restored per tick while the
+    /// player is in range. Stacks additively across every in-range
+    /// structure that sets it.
+    pub per_tick: f32,
+    /// Chebyshev distance (in tiles) the player must be within for this to
+    /// run, same box-radius style as `PassiveProcessDef::radius`.
+    pub radius: i32,
+}
+
 /// A structure's trading post capability: sell any item here for a flat
 /// per-unit payout, and buy specific items back for Core Fragments.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -103,6 +116,13 @@ pub struct StructureDef {
     /// parse (defaulting to no passive processing).
     #[serde(default)]
     pub passive_process: Option<PassiveProcessDef>,
+    /// If set, this structure restores the player's Power every tick while
+    /// they stand within `radius` tiles — no assigned worker and no input
+    /// item, unlike `work` and `passive_process`. `#[serde(default)]` so
+    /// existing structure files (including mods) written before this field
+    /// existed still parse (defaulting to no regeneration).
+    #[serde(default)]
+    pub power_regen: Option<PowerRegenDef>,
     /// If set, this structure is a symlink target: `Game::use_symlink` can
     /// teleport the player to it for this item cost, from anywhere on the
     /// map. `#[serde(default)]` so existing structure files written before

@@ -692,14 +692,7 @@ impl Game {
             .id();
         world.insert_resource(PlayerEntity(player));
 
-        let mut schedule = Schedule::default();
-        schedule.add_systems((
-            systems::needs_decay_system,
-            systems::wander_ai_system,
-            systems::task_progress_system,
-            systems::passive_process_system,
-            difficulty::death_handling_system,
-        ));
+        let schedule = Self::build_schedule();
 
         let mut game = Self { world, schedule };
         for warning in load_warnings {
@@ -708,6 +701,21 @@ impl Game {
         game.spawn_initial_creatures(14);
         game.log("Connection established. You materialize at the edge of the Grid.");
         Ok(game)
+    }
+
+    /// The system schedule every tick runs, shared by `new` and `load` so
+    /// the two can't drift — the chained pair below is exactly the kind of
+    /// constraint that gets added to one copy and forgotten in the other.
+    fn build_schedule() -> Schedule {
+        let mut schedule = Schedule::default();
+        schedule.add_systems((
+            (systems::power_regen_system, systems::needs_decay_system).chain(),
+            systems::wander_ai_system,
+            systems::task_progress_system,
+            systems::passive_process_system,
+            difficulty::death_handling_system,
+        ));
+        schedule
     }
 
     pub fn load(path: &Path, assets_dir: &Path) -> std::io::Result<Self> {
@@ -807,14 +815,7 @@ impl Game {
             .id();
         world.insert_resource(PlayerEntity(player));
 
-        let mut schedule = Schedule::default();
-        schedule.add_systems((
-            systems::needs_decay_system,
-            systems::wander_ai_system,
-            systems::task_progress_system,
-            systems::passive_process_system,
-            difficulty::death_handling_system,
-        ));
+        let schedule = Self::build_schedule();
 
         let mut game = Self { world, schedule };
         for warning in load_warnings {

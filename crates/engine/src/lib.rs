@@ -2817,15 +2817,15 @@ impl Game {
             ActionOption {
                 kind: ActionKind::Attack,
                 key: 'a',
-                label: "[A]ttack".to_string(),
+                label: "[a]ttack".to_string(),
                 detail: "Strike a hostile group".to_string(),
                 target: TargetSpec::EnemyGroup,
                 unavailable: None,
             },
             ActionOption {
                 kind: ActionKind::Defend,
-                key: 'f',
-                label: "De[f]end".to_string(),
+                key: 'd',
+                label: "[d]efend".to_string(),
                 detail: format!("+{DEFEND_DEF_BONUS} DEF this round, and draw fire"),
                 target: TargetSpec::None,
                 unavailable: None,
@@ -2836,7 +2836,7 @@ impl Game {
             options.push(ActionOption {
                 kind: ActionKind::Special,
                 key: 's',
-                label: "[S]pecial".to_string(),
+                label: "[s]pecial".to_string(),
                 detail: self
                     .companion_ability(entity)
                     .map(|a| a.display_label())
@@ -2849,8 +2849,8 @@ impl Game {
         if is_player {
             options.push(ActionOption {
                 kind: ActionKind::Decompile,
-                key: 'd',
-                label: "[D]ecompile".to_string(),
+                key: 'c',
+                label: "de[c]ompile".to_string(),
                 detail: "Attempt to capture a group's front program".to_string(),
                 target: TargetSpec::EnemyGroup,
                 unavailable: match (
@@ -2865,7 +2865,7 @@ impl Game {
             options.push(ActionOption {
                 kind: ActionKind::UseItem,
                 key: 'u',
-                label: "[U]se item".to_string(),
+                label: "[u]se item".to_string(),
                 detail: "Spend a consumable".to_string(),
                 target: TargetSpec::InventoryItem,
                 unavailable: self
@@ -12900,6 +12900,42 @@ mod tests {
             view.groups[0].front_hp, 500,
             "the new front should be the untouched second pack member"
         );
+    }
+
+    /// Uppercase A and D became party-wide commands, which only works if the
+    /// per-slot keys underneath them are Attack and Defend. Decompile moved
+    /// off `d` to make room. Pinned here so a future re-key cannot silently
+    /// swap a brace for a capture attempt that spends a taming catalyst.
+    #[test]
+    fn battle_action_keys_are_lowercase_with_defend_on_d_and_decompile_on_c() {
+        let mut game = Game::new(78, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        insert_battle(&mut game, player, vec![wild]);
+
+        let options = game.battle_action_options(0);
+        let key_for = |kind: ActionKind| {
+            options
+                .iter()
+                .find(|o| o.kind == kind)
+                .unwrap_or_else(|| panic!("the player's menu should offer {kind:?}"))
+                .key
+        };
+        assert_eq!(key_for(ActionKind::Attack), 'a');
+        assert_eq!(key_for(ActionKind::Defend), 'd');
+        assert_eq!(key_for(ActionKind::Decompile), 'c');
+        assert_eq!(key_for(ActionKind::UseItem), 'u');
+
+        for option in &options {
+            assert!(
+                option.label.contains(&format!("[{}]", option.key)),
+                "{:?} advertises key {:?} but its label is {:?} — the bracketed \
+                 letter must be the lowercase key the player actually presses",
+                option.kind,
+                option.key,
+                option.label
+            );
+        }
     }
 
     /// The resolve popup used to title itself with the round number. With the

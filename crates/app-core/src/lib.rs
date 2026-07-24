@@ -2289,7 +2289,7 @@ mod tests {
             .map(|o| o.key)
             .collect();
         assert!(
-            keys.contains(&'a') && keys.contains(&'f'),
+            keys.contains(&'a') && keys.contains(&'d'),
             "the engine should always offer at least Attack and Defend, got {keys:?}"
         );
         // Jack Out is the one party-level command, deliberately not an

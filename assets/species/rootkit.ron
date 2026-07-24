@@ -9,6 +9,7 @@
     taming_difficulty: 0.75,
     growth_multiplier: 1.5,
     habitats: [Mainframe, NullSector],
+    base_speed: 9,
     moves: [
         (name: "Privilege Escalation", power: 10, effect: Some((kind: Stun, chance: 0.4, duration: 1, power: 0))),
         (name: "Kernel Panic", power: 12),

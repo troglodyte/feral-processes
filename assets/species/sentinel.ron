@@ -9,6 +9,7 @@
     taming_difficulty: 0.65,
     growth_multiplier: 1.5,
     habitats: [StaticField],
+    base_speed: 7,
     moves: [
         (name: "Barrier Slam", power: 9),
         (name: "Lockout", power: 7, effect: Some((kind: Stun, chance: 0.3, duration: 1, power: 0))),

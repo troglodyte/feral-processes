@@ -107,6 +107,21 @@ const MAX_ENEMY_GROUPS: usize = 4;
 /// all; they shouldn't crowd out wild spawns just by existing.
 const WILD_CREATURE_CAP: usize = 100;
 
+/// Initiative baseline for a species whose `.ron` file omits `base_speed` —
+/// the midpoint of the shipped roster's range, so an un-annotated mod
+/// species is neither free initiative nor dead weight.
+pub(crate) const DEFAULT_BASE_SPEED: i32 = 10;
+
+/// The player's initiative baseline. A shade above `DEFAULT_BASE_SPEED`: the
+/// player acts first against an average opponent, but loses the roll to
+/// anything genuinely fast.
+const PLAYER_BASE_SPEED: i32 = 11;
+
+/// Each round every combatant rolls `base_speed + rng(0..=INITIATIVE_DIE)`
+/// and acts in descending order. Sized so a 4-point speed gap still loses
+/// the roll sometimes — order should be a tendency, not a lookup table.
+const INITIATIVE_DIE: i32 = 10;
+
 /// Battle rounds a companion's default rally buff (see
 /// `Game::rally_player`) lasts when its species defines no
 /// `special_ability`.
@@ -2550,6 +2565,78 @@ impl Game {
             .collect()
     }
 
+    /// The entity an `Actor` currently refers to, or `None` if that slot is
+    /// empty (a party member stood down, an enemy already despawned).
+    fn actor_entity(&self, actor: battle::Actor) -> Option<Entity> {
+        match actor {
+            battle::Actor::Party(0) => Some(self.player_entity()),
+            battle::Actor::Party(i) => self.world.resource::<Party>().0.get(i - 1).copied(),
+            battle::Actor::Enemy { group, slot } => self
+                .world
+                .get_resource::<BattleState>()?
+                .groups
+                .get(group)?
+                .members
+                .get(slot)
+                .copied(),
+        }
+    }
+
+    /// `entity`'s species `base_speed`, or the roster default if it has no
+    /// `Creature` component (the player, who rolls from
+    /// `PLAYER_BASE_SPEED` instead).
+    fn species_base_speed(&self, entity: Entity) -> i32 {
+        self.world
+            .get::<Creature>(entity)
+            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+            .map(|s| s.base_speed)
+            .unwrap_or(DEFAULT_BASE_SPEED)
+    }
+
+    /// Every living combatant in descending initiative order. Ties break on
+    /// a stable key — party before enemies, then slot / group index — so a
+    /// seeded run always produces the same order.
+    fn roll_initiative(&mut self) -> Vec<battle::Actor> {
+        let Some(battle_state) = self.world.get_resource::<BattleState>() else {
+            return Vec::new();
+        };
+        let group_sizes: Vec<usize> = battle_state
+            .groups
+            .iter()
+            .map(|g| g.members.len())
+            .collect();
+        let party_len = self.world.resource::<Party>().0.len();
+
+        // Built in tie-break order — player, party in slot order, then
+        // enemies group-then-slot — so the stable sort below leaves equal
+        // initiative rolls in exactly this order.
+        let mut actors: Vec<battle::Actor> = (0..=party_len).map(battle::Actor::Party).collect();
+        for (group, size) in group_sizes.into_iter().enumerate() {
+            actors.extend((0..size).map(|slot| battle::Actor::Enemy { group, slot }));
+        }
+
+        let mut rolled: Vec<(i32, battle::Actor)> = Vec::new();
+        for actor in actors {
+            let Some(entity) = self.actor_entity(actor) else {
+                continue;
+            };
+            if !self.creature_alive(entity) {
+                continue;
+            }
+            let base = match actor {
+                battle::Actor::Party(0) => PLAYER_BASE_SPEED,
+                _ => self.species_base_speed(entity),
+            };
+            let roll = {
+                let mut rng = self.world.resource_mut::<GameRng>();
+                rng.0.random_range(0..=INITIATIVE_DIE)
+            };
+            rolled.push((base + roll, actor));
+        }
+        rolled.sort_by_key(|&(initiative, _)| std::cmp::Reverse(initiative));
+        rolled.into_iter().map(|(_, actor)| actor).collect()
+    }
+
     pub fn battle_view(&self) -> Option<BattleView> {
         let battle = self.world.get_resource::<BattleState>()?;
         let wild = battle.groups.first()?.front()?;
@@ -2680,8 +2767,19 @@ impl Game {
     /// more dangerous than a solo encounter of the same species. Each one
     /// independently rolls its own move and target (see `wild_retaliate`).
     fn all_wild_retaliate(&mut self, player: Entity) {
-        for wild in self.all_living_enemies() {
-            self.wild_retaliate(wild, player);
+        // Ordered by the same initiative roll the full round loop uses, so
+        // a fast pack member lands its hit before a slow one — the party
+        // side joins this order in `battle_resolve_round`.
+        for actor in self.roll_initiative() {
+            if !matches!(actor, battle::Actor::Enemy { .. }) {
+                continue;
+            }
+            let Some(wild) = self.actor_entity(actor) else {
+                continue;
+            };
+            if self.creature_alive(wild) {
+                self.wild_retaliate(wild, player);
+            }
         }
     }
 
@@ -12247,6 +12345,50 @@ mod tests {
         assert_eq!(
             view.wild_hp, 500,
             "the new front should be the untouched second pack member"
+        );
+    }
+
+    /// Initiative order must be reproducible under a fixed seed. Every roll
+    /// goes through the existing `GameRng`, so a seeded test can assert an
+    /// exact order without touching the wall clock.
+    #[test]
+    fn initiative_order_is_reproducible_under_a_fixed_seed() {
+        let order_for = |seed: u32| {
+            let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            let a = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+            let b = game.spawn_wild_creature("construct", 5, 6).unwrap();
+            game.start_battle(vec![a, b]);
+            game.roll_initiative()
+        };
+        assert_eq!(order_for(1234), order_for(1234), "same seed, same order");
+    }
+
+    /// Speed has to actually bias the order, or the stat is decoration.
+    /// Sampled rather than asserted per-round: a d10 on top of an 8-point
+    /// gap still lets the Construct win occasionally, and a test that
+    /// forbade that would be asserting the die doesn't exist.
+    #[test]
+    fn a_faster_species_wins_initiative_far_more_often_than_a_slower_one() {
+        let mut sprite_first = 0;
+        for seed in 0..200u32 {
+            let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            let sprite = game.spawn_wild_creature("sprite", 5, 5).unwrap();
+            let construct = game.spawn_wild_creature("construct", 5, 6).unwrap();
+            game.start_battle(vec![sprite, construct]);
+            let order = game.roll_initiative();
+            let pos = |e: Entity| {
+                order
+                    .iter()
+                    .position(|a| game.actor_entity(*a) == Some(e))
+                    .unwrap()
+            };
+            if pos(sprite) < pos(construct) {
+                sprite_first += 1;
+            }
+        }
+        assert!(
+            sprite_first > 150,
+            "a Sprite (14) should beat a Construct (6) far more often than not, got {sprite_first}/200"
         );
     }
 

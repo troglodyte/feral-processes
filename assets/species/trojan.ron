@@ -9,6 +9,7 @@
     taming_difficulty: 0.5,
     growth_multiplier: 1.25,
     habitats: [Mainframe, OpenGrid],
+    base_speed: 10,
     moves: [
         (name: "Backdoor Access", power: 9, effect: Some((kind: Stun, chance: 0.3, duration: 1, power: 0))),
         (name: "Payload Drop", power: 7),

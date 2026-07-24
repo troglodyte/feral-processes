@@ -110,6 +110,13 @@ pub struct SpeciesDef {
     /// 0.0 (trivial) .. 1.0 (very hard) to tame.
     pub taming_difficulty: f32,
     pub habitats: Vec<Biome>,
+    /// This species' initiative baseline — each round every combatant rolls
+    /// `base_speed + d10` and acts in descending order (see
+    /// `Game::roll_initiative`). `#[serde(default)]` so existing species
+    /// files (including mods) without this field keep parsing at the roster
+    /// average.
+    #[serde(default = "default_base_speed")]
+    pub base_speed: i32,
     pub moves: Vec<MoveDef>,
     /// If set, a tamed member of this species can work a matching resource node.
     pub work_resource: Option<ItemId>,
@@ -165,6 +172,10 @@ pub struct SpeciesDef {
 
 fn default_growth_multiplier() -> f32 {
     crate::progression::BASELINE_GROWTH_MULTIPLIER
+}
+
+fn default_base_speed() -> i32 {
+    crate::DEFAULT_BASE_SPEED
 }
 
 #[derive(Resource, Default)]
@@ -236,6 +247,42 @@ mod tests {
 
     fn species_assets_dir() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/species")
+    }
+
+    /// `base_speed` must be `#[serde(default)]` — a mod author's existing
+    /// species file predating the field has to keep loading untouched. That
+    /// is the modding contract, not a nicety.
+    #[test]
+    fn base_speed_defaults_when_a_species_file_omits_it() {
+        let def: SpeciesDef = ron::from_str(
+            r#"(
+                id: "testmon",
+                name: "Testmon",
+                glyph: 't',
+                color: Green,
+                base_hp: 10,
+                base_atk: 1,
+                base_def: 1,
+                taming_difficulty: 0.5,
+                habitats: [OpenGrid],
+                moves: [(name: "Poke", power: 1)],
+                work_resource: None,
+            )"#,
+        )
+        .expect("a species file with no base_speed must still parse");
+        assert_eq!(def.base_speed, crate::DEFAULT_BASE_SPEED);
+    }
+
+    #[test]
+    fn shipped_species_speeds_span_a_meaningful_range() {
+        let (db, warnings) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+        assert!(
+            warnings.is_empty(),
+            "species assets should load cleanly: {warnings:?}"
+        );
+        // A Construct is a wall and a Sprite is a spark; if those two ever
+        // collapse to the same number, initiative has stopped meaning anything.
+        assert!(db.get("sprite").unwrap().base_speed > db.get("construct").unwrap().base_speed);
     }
 
     #[test]

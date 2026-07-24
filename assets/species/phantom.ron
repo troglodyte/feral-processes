@@ -9,6 +9,7 @@
     taming_difficulty: 0.55,
     growth_multiplier: 1.25,
     habitats: [Mainframe, StaticField],
+    base_speed: 12,
     moves: [
         (name: "Backdoor", power: 12),
         (name: "Spoof", power: 9),

@@ -9,6 +9,7 @@
     taming_difficulty: 0.7,
     growth_multiplier: 1.5,
     habitats: [Mainframe],
+    base_speed: 6,
     moves: [
         (name: "Crash", power: 13),
         (name: "Lockdown", power: 6, effect: Some((kind: Stun, chance: 0.35, duration: 1, power: 0))),

@@ -18,6 +18,19 @@ impl EnemyGroup {
     }
 }
 
+/// One combatant in an initiative order — an index rather than an `Entity`,
+/// so a resolution walk can survive members dying mid-round and can address
+/// a party slot that has since emptied.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Actor {
+    /// Slot 0 is the player; 1.. are party members in roster order.
+    Party(usize),
+    Enemy {
+        group: usize,
+        slot: usize,
+    },
+}
+
 /// Damage always deals at least 1, so battles can't stall out on high-defense
 /// matchups.
 pub fn compute_damage(atk: i32, def: i32, move_power: i32) -> i32 {

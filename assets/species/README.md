@@ -34,6 +34,18 @@ is skipped with a warning logged in-game rather than crashing startup.
     // zones. No shipped species lists it, which is exactly what makes a base free of wild
     // spawns. Listing it here will make your species spawn inside player bases; do that
     // deliberately, not by accident.
+
+    // Optional; can be left out entirely (defaults to 10). This species'
+    // initiative baseline. Each round every combatant in the fight — your
+    // whole party and every wild program — rolls `base_speed + d10` and
+    // acts in descending order, so a faster species tends to strike first
+    // without ever being guaranteed to. The shipped roster spans 6
+    // (Construct, a wall) to 14 (Sprite, a spark); the player rolls from
+    // 11. Leaving this out puts your species at the roster average, which
+    // is why an existing species file predating this field keeps working
+    // untouched.
+    base_speed: 12,
+
     moves: [
         (name: "Move Name", power: 8),
         (name: "Other Move", power: 5),

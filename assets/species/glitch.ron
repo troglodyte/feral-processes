@@ -8,6 +8,7 @@
     base_def: 1,
     taming_difficulty: 0.15,
     habitats: [OpenGrid, NullSector],
+    base_speed: 13,
     moves: [
         (name: "Flicker", power: 4),
         (name: "Static Burst", power: 6),

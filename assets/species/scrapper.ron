@@ -9,6 +9,7 @@
     taming_difficulty: 0.45,
     growth_multiplier: 1.25,
     habitats: [OpenGrid, NullSector],
+    base_speed: 9,
     moves: [
         (name: "Ram", power: 8),
         (name: "Shock", power: 11),

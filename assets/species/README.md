@@ -104,13 +104,15 @@ is skipped with a warning logged in-game rather than crashing startup.
     // still double per zone level like any other species, on top of this).
     is_boss: true,
 
-    // Optional; can be left out entirely (defaults to `None`). A tamed
+    // Optional; can be left out entirely (defaults to empty). A tamed
     // program no longer attacks directly when commanded in battle — it
-    // grants the player a buff instead. With no `special_ability` set, that's
-    // a generic rally (a temporary ATK boost). Setting this gives a tamed
-    // member of this species its own unique action instead, triggered the
-    // same way (commanding it in battle):
-    //   Rally(power: 4, duration: 3)                   — boosts player ATK
+    // grants the player a buff instead. Left empty, that's a generic rally
+    // (a temporary ATK boost scaled off the companion's own ATK). List one
+    // or more here and a tamed member of this species offers them as a menu
+    // when commanded: choosing Special asks which ability, then which group
+    // it lands on. Listing exactly one still shows the menu, with that one
+    // row — the order you write them in is the order they appear.
+    //   Rally(power: 4, duration: 3)                    — boosts player ATK
     //   Shield(power: 4, duration: 3)                   — boosts player DEF
     //   Heal(power: 8)                                  — heals the player now
     //   Debuff(kind: Bleed, power: 3, duration: 3)      — afflicts the wild
@@ -118,7 +120,10 @@ is skipped with a warning logged in-game rather than crashing startup.
     //                                                      `Bleed` or `Stun`,
     //                                                      same as a move's
     //                                                      `effect`)
-    special_ability: Some(Heal(power: 8)),
+    special_abilities: [
+        Heal(power: 8),
+        Shield(power: 4, duration: 3),
+    ],
 
     // Optional; can be left out entirely (defaults to 1.0). Multiplies this
     // species' per-level stat growth (see `progression::add_xp`) for a tamed

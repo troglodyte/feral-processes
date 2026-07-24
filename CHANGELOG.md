@@ -24,6 +24,18 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 - **`[A]ll attack` and `[D] all defend`** plan every open party slot in one
   keypress. All-attack asks which group only when more than one is still up.
   Neither overwrites a slot you already chose for.
+- **Choosing Special now asks which ability.** Commanding a party member
+  opens a picker of that member's abilities before asking who it lands on,
+  and the target screen names your choice — `Pick a target (Heal)` rather
+  than a bare prompt. Backing out with Esc steps back one screen at a time.
+  A planned Special also reads on the roster as the ability it will spend
+  (`Heal -> A`) instead of the generic word.
+- **Species can define more than one special ability.** `special_ability`
+  becomes `special_abilities`, a list — see `assets/species/README.md`.
+  Modders: rename the field and wrap the value in `[]`. A file still using
+  the old singular name keeps loading, but its ability is ignored and the
+  companion falls back to the generic rally. No shipped species declared one,
+  so nothing in the base game changes yet.
 - **The log moved between the two rosters.** Hostiles stay on top, your party
   is now along the bottom, and the narration sits between them, so the two
   sides face each other across the account of what passed between them.

@@ -178,6 +178,12 @@ pub enum Mode {
     /// Distinct from `Mode::Inventory`: on the map an item is spent for
     /// free, in battle it costs that slot its round.
     BattleItem,
+    /// Picking which of the acting member's special abilities to spend.
+    /// Entered from `Mode::Battle` when the chosen option has
+    /// `TargetSpec::SpecialAbilityThenGroup`, and followed by
+    /// `Mode::BattleTarget` — the ability and its target are separate
+    /// choices, so they are separate steps.
+    BattleSpecial,
     Build,
     BuildDirection,
     Craft,
@@ -247,10 +253,14 @@ fn action_from(
     kind: ActionKind,
     group: Option<usize>,
     item: Option<ItemId>,
+    ability: Option<usize>,
 ) -> Option<BattleAction> {
     match kind {
         ActionKind::Attack => Some(BattleAction::Attack { group: group? }),
-        ActionKind::Special => Some(BattleAction::Special { group: group? }),
+        ActionKind::Special => Some(BattleAction::Special {
+            group: group?,
+            ability: ability?,
+        }),
         ActionKind::Defend => Some(BattleAction::Defend),
         ActionKind::Decompile => Some(BattleAction::Decompile { group: group? }),
         ActionKind::UseItem => Some(BattleAction::UseItem { item: item? }),
@@ -296,6 +306,9 @@ pub struct App {
     /// attack` rather than by one slot's Attack — the group picked then plans
     /// every open slot instead of just `battle_active_slot`.
     pub pending_party_attack: bool,
+    /// The ability index picked in `Mode::BattleSpecial`, awaiting a group
+    /// from `Mode::BattleTarget` before it becomes a `BattleAction::Special`.
+    pub pending_special_ability: Option<usize>,
     pub pending_inventory_item: Option<ItemId>,
     /// The inventory item picked for erasure, awaiting a quantity from
     /// `Mode::EraseQuantity`.
@@ -370,6 +383,7 @@ impl App {
             fuse_name_input: String::new(),
             pending_battle_action: None,
             pending_party_attack: false,
+            pending_special_ability: None,
             pending_inventory_item: None,
             pending_erase: None,
             erase_quantity_input: String::new(),
@@ -582,6 +596,7 @@ impl App {
             Mode::Battle => self.handle_battle_key(key),
             Mode::BattleTarget => self.handle_battle_target_key(key),
             Mode::BattleItem => self.handle_battle_item_key(key),
+            Mode::BattleSpecial => self.handle_battle_special_key(key),
             Mode::Build => self.handle_build_key(key),
             Mode::BuildDirection => self.handle_build_direction_key(key),
             Mode::Craft => self.handle_craft_key(key),
@@ -960,7 +975,7 @@ impl App {
         }
         match option.target {
             TargetSpec::None => {
-                if let Some(action) = action_from(option.kind, None, None) {
+                if let Some(action) = action_from(option.kind, None, None, None) {
                     self.commit_battle_action(slot, action);
                 }
             }
@@ -968,6 +983,12 @@ impl App {
                 self.pending_battle_action = Some(option.kind);
                 self.menu_selected = 0;
                 self.mode = Mode::BattleTarget;
+            }
+            TargetSpec::SpecialAbilityThenGroup => {
+                self.pending_battle_action = Some(option.kind);
+                self.pending_special_ability = None;
+                self.menu_selected = 0;
+                self.mode = Mode::BattleSpecial;
             }
             TargetSpec::InventoryItem => {
                 self.pending_battle_action = Some(option.kind);
@@ -1034,6 +1055,13 @@ impl App {
     /// either one slot's, or the party-wide `[A]ll attack`.
     fn handle_battle_target_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
+            // A Special got here through the ability picker, so backing out
+            // returns there rather than discarding both choices at once.
+            if self.pending_special_ability.take().is_some() {
+                self.menu_selected = 0;
+                self.mode = Mode::BattleSpecial;
+                return;
+            }
             self.pending_battle_action = None;
             self.pending_party_attack = false;
             self.mode = Mode::Battle;
@@ -1066,11 +1094,68 @@ impl App {
         let Some(kind) = self.pending_battle_action else {
             return;
         };
-        let Some(action) = action_from(kind, Some(group), None) else {
+        let Some(action) = action_from(kind, Some(group), None, self.pending_special_ability)
+        else {
             return;
         };
         self.pending_battle_action = None;
+        self.pending_special_ability = None;
         self.commit_battle_action(slot, action);
+    }
+
+    /// Title for the target picker, naming the action being aimed — e.g.
+    /// `Pick a target (Heal)`. Lives here rather than in either renderer so
+    /// the two can't drift, and reads every name out of the engine's own
+    /// option lists rather than authoring one.
+    pub fn battle_target_title(&self) -> String {
+        let plain = || "Pick a target".to_string();
+        let (Some(game), Some(kind)) = (&self.game, self.pending_battle_action) else {
+            return plain();
+        };
+        let Some(slot) = game.battle_active_slot() else {
+            return plain();
+        };
+        // A Special is named by the ability picked a step earlier, not by
+        // the generic "[s]pecial" the action menu shows.
+        let name = if kind == ActionKind::Special {
+            self.pending_special_ability.and_then(|i| {
+                game.battle_special_options(slot)
+                    .into_iter()
+                    .find(|o| o.index == i)
+                    .map(|o| o.name)
+            })
+        } else {
+            game.battle_action_options(slot)
+                .into_iter()
+                .find(|o| o.kind == kind)
+                .map(|o| o.label.replace(['[', ']'], ""))
+        };
+        match name {
+            Some(name) => format!("Pick a target ({name})"),
+            None => plain(),
+        }
+    }
+
+    /// Picks which of the acting member's abilities a Special spends, then
+    /// hands off to `Mode::BattleTarget` for who it lands on.
+    fn handle_battle_special_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.pending_battle_action = None;
+            self.pending_special_ability = None;
+            self.mode = Mode::Battle;
+            return;
+        }
+        let Some(game) = &self.game else { return };
+        let Some(slot) = game.battle_active_slot() else {
+            return;
+        };
+        let options = game.battle_special_options(slot);
+        let Some(idx) = self.selected_index(key, options.len()) else {
+            return;
+        };
+        self.pending_special_ability = Some(options[idx].index);
+        self.menu_selected = 0;
+        self.mode = Mode::BattleTarget;
     }
 
     /// Picks which consumable the action chosen in `Mode::Battle` spends.
@@ -1091,7 +1176,7 @@ impl App {
         let Some(kind) = self.pending_battle_action else {
             return;
         };
-        let Some(action) = action_from(kind, None, Some(items[idx].clone())) else {
+        let Some(action) = action_from(kind, None, Some(items[idx].clone()), None) else {
             return;
         };
         self.pending_battle_action = None;
@@ -2464,6 +2549,7 @@ mod tests {
                     Mode::Battle
                         | Mode::BattleTarget
                         | Mode::BattleItem
+                        | Mode::BattleSpecial
                         | Mode::Playing
                         | Mode::GameOver
                 ),
@@ -2472,6 +2558,60 @@ mod tests {
                 app.mode
             );
         }
+    }
+
+    /// A Special needs both an ability and a group, and `action_from` is the
+    /// one place that pairing is enforced. Tested directly because the flow
+    /// that produces it needs a companion in the party, which every battle
+    /// reachable from `battling_app` lacks — the player is slot 0 and is
+    /// never offered Special.
+    #[test]
+    fn a_special_is_only_built_once_both_the_ability_and_the_group_are_known() {
+        assert_eq!(
+            action_from(ActionKind::Special, Some(2), None, Some(1)),
+            Some(BattleAction::Special {
+                group: 2,
+                ability: 1
+            })
+        );
+        assert_eq!(
+            action_from(ActionKind::Special, Some(2), None, None),
+            None,
+            "a group without an ability must not fall back to some default special"
+        );
+        assert_eq!(
+            action_from(ActionKind::Special, None, None, Some(1)),
+            None,
+            "an ability without a target isn't an action yet"
+        );
+    }
+
+    /// Backing out of the target picker for a Special returns to the ability
+    /// picker rather than discarding both choices — one Esc, one step.
+    #[test]
+    fn esc_from_the_target_picker_steps_back_to_the_ability_picker() {
+        let mut app = battling_app();
+        app.mode = Mode::BattleTarget;
+        app.pending_battle_action = Some(ActionKind::Special);
+        app.pending_special_ability = Some(1);
+
+        app.handle_key(GameKey::Esc);
+
+        assert_eq!(app.mode, Mode::BattleSpecial);
+        assert_eq!(
+            app.pending_special_ability, None,
+            "the ability is re-picked on the way back, not kept"
+        );
+        assert_eq!(
+            app.pending_battle_action,
+            Some(ActionKind::Special),
+            "the action itself is still pending — only its ability was undone"
+        );
+
+        // A second Esc leaves the Special flow entirely.
+        app.handle_key(GameKey::Esc);
+        assert_eq!(app.mode, Mode::Battle);
+        assert_eq!(app.pending_battle_action, None);
     }
 
     /// Following the item picker through to a pick must actually spend the

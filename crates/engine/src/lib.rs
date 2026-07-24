@@ -24,7 +24,8 @@ use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 
 use battle::{
-    ActionKind, ActionOption, BattleAction, EnemyGroup, PartyCommand, PartyCommandKind, TargetSpec,
+    ActionKind, ActionOption, BattleAction, EnemyGroup, PartyCommand, PartyCommandKind,
+    SpecialOption, TargetSpec,
 };
 use components::{
     ActiveBuff, ActiveStatus, BuffKind, CombatBuff, Creature, CustomName, Decompiler, Durability,
@@ -2755,7 +2756,7 @@ impl Game {
         }
         let target_group = match &action {
             BattleAction::Attack { group }
-            | BattleAction::Special { group }
+            | BattleAction::Special { group, .. }
             | BattleAction::Decompile { group } => Some(*group),
             _ => None,
         };
@@ -2800,12 +2801,28 @@ impl Game {
         }
     }
 
-    /// `entity`'s species `special_ability`, if it has one.
-    fn companion_ability(&self, entity: Entity) -> Option<SpecialAbility> {
-        self.world
+    /// Every ability `entity` can be commanded to use, in menu order.
+    ///
+    /// Never empty: a species that declares no `special_abilities` yields
+    /// the generic rally every companion has always had, scaled off its own
+    /// ATK. Resolving the fallback here rather than at each call site is
+    /// what lets `BattleAction::Special` carry a plain index and the menu
+    /// list one row instead of zero.
+    fn companion_abilities(&self, entity: Entity) -> Vec<SpecialAbility> {
+        let declared = self
+            .world
             .get::<Creature>(entity)
             .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
-            .and_then(|s| s.special_ability.clone())
+            .map(|s| s.special_abilities.clone())
+            .unwrap_or_default();
+        if !declared.is_empty() {
+            return declared;
+        }
+        let atk = self.world.get::<Stats>(entity).map(|s| s.atk).unwrap_or(3);
+        vec![SpecialAbility::Rally {
+            power: (atk / 3).max(1),
+            duration: RALLY_DURATION,
+        }]
     }
 
     /// Consumable items the player is actually holding — the pool
@@ -2824,6 +2841,27 @@ impl Game {
                 *count > 0 && db.get(id.as_str()).is_some_and(|d| d.consume.is_some())
             })
             .map(|(id, _)| id.clone())
+            .collect()
+    }
+
+    /// The abilities party `slot` can choose between for a Special, as
+    /// engine-authored menu rows. Both renderers draw these verbatim, same
+    /// contract as `battle_action_options` — a species that gains an ability
+    /// reaches both without either being touched.
+    ///
+    /// Never empty for a real slot: see `Game::companion_abilities`.
+    pub fn battle_special_options(&self, slot: usize) -> Vec<SpecialOption> {
+        let Some(entity) = self.actor_entity(battle::Actor::Party(slot)) else {
+            return Vec::new();
+        };
+        self.companion_abilities(entity)
+            .into_iter()
+            .enumerate()
+            .map(|(index, ability)| SpecialOption {
+                index,
+                name: ability.short_name().to_string(),
+                detail: ability.display_label(),
+            })
             .collect()
     }
 
@@ -2858,11 +2896,8 @@ impl Game {
                 kind: ActionKind::Special,
                 key: 's',
                 label: "[s]pecial".to_string(),
-                detail: self
-                    .companion_ability(entity)
-                    .map(|a| a.display_label())
-                    .unwrap_or_else(|| "Rally: boost your attack".to_string()),
-                target: TargetSpec::EnemyGroup,
+                detail: self.companion_ability_label(entity),
+                target: TargetSpec::SpecialAbilityThenGroup,
                 unavailable: None,
             });
         }
@@ -3031,7 +3066,7 @@ impl Game {
                 };
                 self.party_member_attacks(slot, entity, group, player);
             }
-            BattleAction::Special { group } => {
+            BattleAction::Special { group, ability } => {
                 let Some(group) = self.retarget(group) else {
                     return;
                 };
@@ -3039,9 +3074,16 @@ impl Game {
                     return;
                 };
                 let name = self.creature_label(entity);
-                match self.companion_ability(entity) {
-                    Some(ability) => self.use_special_ability(&ability, &name, player, front),
-                    None => self.rally_player(entity, &name, player),
+                let abilities = self.companion_abilities(entity);
+                // Falls back to the first rather than skipping the turn: the
+                // index was valid when planned, and a party edited mid-round
+                // shouldn't silently cost a member its action.
+                let chosen = abilities
+                    .get(ability)
+                    .or_else(|| abilities.first())
+                    .cloned();
+                if let Some(ability) = chosen {
+                    self.use_special_ability(&ability, &name, player, front);
                 }
                 // Directing a companion's ability still costs the player
                 // fatigue, as commanding one always did — the action moved
@@ -3126,12 +3168,23 @@ impl Game {
         Some(moves[idx].clone())
     }
 
-    /// How a planned action reads on the roster.
-    fn action_label(&self, action: &BattleAction) -> String {
+    /// How a planned action reads on the roster. Takes the acting entity so
+    /// a planned Special names the ability it will use rather than the
+    /// generic word — which of several a member is about to spend is the
+    /// part worth reading back.
+    fn action_label(&self, actor: Entity, action: &BattleAction) -> String {
         let group_letter = |group: usize| (b'A' + group as u8) as char;
         match action {
             BattleAction::Attack { group } => format!("Attack {}", group_letter(*group)),
-            BattleAction::Special { group } => format!("Special -> {}", group_letter(*group)),
+            BattleAction::Special { group, ability } => {
+                let abilities = self.companion_abilities(actor);
+                let name = abilities
+                    .get(*ability)
+                    .or_else(|| abilities.first())
+                    .map(|a| a.short_name().to_string())
+                    .unwrap_or_else(|| "Special".to_string());
+                format!("{name} -> {}", group_letter(*group))
+            }
             BattleAction::Defend => "Defend".to_string(),
             BattleAction::Decompile { group } => format!("Decompile {}", group_letter(*group)),
             BattleAction::UseItem { item } => format!("Use {}", self.item_name(item)),
@@ -3200,7 +3253,7 @@ impl Game {
                     status_effect: self.status_label(entity),
                     planned: battle.planned[slot]
                         .as_ref()
-                        .map(|action| self.action_label(action)),
+                        .map(|action| self.action_label(entity, action)),
                     front: slot < FRONT_SLOTS,
                 })
             })
@@ -3291,19 +3344,7 @@ impl Game {
     /// `special_ability`: rallies the player, temporarily boosting their
     /// ATK by a third of the companion's own — a stronger companion grants
     /// a stronger rally.
-    fn rally_player(&mut self, companion: Entity, name: &str, player: Entity) {
-        let power = (self.world.get::<Stats>(companion).unwrap().atk / 3).max(1);
-        if let Some(mut buff) = self.world.get_mut::<CombatBuff>(player) {
-            buff.active = Some(ActiveBuff {
-                kind: BuffKind::Atk,
-                remaining: RALLY_DURATION,
-                power,
-            });
-        }
-        self.log(format!("{name} rallies you, boosting your attack!"));
-    }
-
-    /// Executes `ability` (a companion's `SpeciesDef::special_ability`) on
+    /// Executes `ability` (one of `Game::companion_abilities`) on
     /// behalf of a chosen Special — see `Game::resolve_one_action`.
     fn use_special_ability(
         &mut self,
@@ -5024,18 +5065,17 @@ impl Game {
     }
 
     /// Terse label for what commanding `entity` in battle would do right
-    /// now: its species' own `special_ability` if it has one (see
-    /// `SpecialAbility::short_name`), or "Rally Team" for the generic
-    /// Attack Rally every companion falls back to otherwise.
+    /// now (see `SpecialAbility::short_name`). A member with several
+    /// abilities reads as a count, since no one of them is *the* answer
+    /// until the player picks in `Mode::BattleSpecial`.
     fn companion_ability_label(&self, entity: Entity) -> String {
-        let ability = self
-            .world
-            .get::<Creature>(entity)
-            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
-            .and_then(|s| s.special_ability.clone());
-        match ability {
-            Some(ability) => ability.short_name().to_string(),
-            None => "Rally Team".to_string(),
+        let abilities = self.companion_abilities(entity);
+        match abilities.len() {
+            0 | 1 => abilities
+                .first()
+                .map(|a| a.short_name().to_string())
+                .unwrap_or_else(|| "Rally Team".to_string()),
+            n => format!("{n} abilities"),
         }
     }
 
@@ -6125,7 +6165,7 @@ mod tests {
     /// species ability that commanding it used to trigger) and everyone
     /// else braces. Defend deals no damage, so anything that happens to the
     /// enemy in such a round is attributable to the Special alone.
-    fn companion_uses_special(game: &mut Game, companion: Entity) {
+    fn companion_uses_special(game: &mut Game, companion: Entity, ability: usize) {
         let slot = game
             .world
             .resource::<Party>()
@@ -6143,7 +6183,7 @@ mod tests {
             .unwrap_or(0);
         for other in 0..slots {
             let action = if other == slot {
-                BattleAction::Special { group: 0 }
+                BattleAction::Special { group: 0, ability }
             } else {
                 BattleAction::Defend
             };
@@ -6180,6 +6220,7 @@ mod tests {
         tag: &str,
         omit_items: &[&str],
         extra_items: &[(&str, &str)],
+        extra_species: &[(&str, &str)],
     ) -> std::path::PathBuf {
         static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let dir = std::env::temp_dir().join(format!(
@@ -6204,6 +6245,9 @@ mod tests {
         for (name, body) in extra_items {
             std::fs::write(dir.join("items").join(name), body).unwrap();
         }
+        for (name, body) in extra_species {
+            std::fs::write(dir.join("species").join(name), body).unwrap();
+        }
         dir
     }
 
@@ -6212,7 +6256,7 @@ mod tests {
     /// abort (see `ItemDb::missing_roles`) can be exercised against an
     /// otherwise-valid item set.
     fn assets_dir_missing_currency_item() -> std::path::PathBuf {
-        modded_assets_dir("missing_currency", &["core_fragment.ron"], &[])
+        modded_assets_dir("missing_currency", &["core_fragment.ron"], &[], &[])
     }
 
     /// Gives the player `n` Research Data, bypassing the Research Node so
@@ -8873,6 +8917,7 @@ mod tests {
                 "master_key.ron",
                 r#"(id: "master_key", name: "Master Key", taming_potency: Some(0.9))"#,
             )],
+            &[],
         );
         let mut game = Game::new(3100, DifficultyMode::Forgiving, &dir).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
@@ -8941,6 +8986,7 @@ mod tests {
                     r#"(id: "omega_key", name: "Omega Key", taming_potency: Some(0.5))"#,
                 ),
             ],
+            &[],
         );
         let mut game = Game::new(3102, DifficultyMode::Forgiving, &dir).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
@@ -8968,6 +9014,7 @@ mod tests {
                 "master_key.ron",
                 r#"(id: "master_key", name: "Master Key", taming_potency: Some(0.9))"#,
             )],
+            &[],
         );
         let mut game = Game::new(3104, DifficultyMode::Forgiving, &dir).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
@@ -9710,7 +9757,7 @@ mod tests {
             .id();
         insert_battle(&mut game, player, vec![wild]);
 
-        companion_uses_special(&mut game, companion);
+        companion_uses_special(&mut game, companion, 0);
 
         let wild_hp = game.world.get::<Stats>(wild).unwrap().hp;
         assert_eq!(
@@ -9767,7 +9814,7 @@ mod tests {
         insert_battle(&mut game, player, vec![wild]);
 
         let fatigue_before = game.world.get::<Needs>(player).unwrap().fatigue;
-        companion_uses_special(&mut game, companion);
+        companion_uses_special(&mut game, companion, 0);
         let fatigue_after = game.world.get::<Needs>(player).unwrap().fatigue;
         fatigue_before - fatigue_after
     }
@@ -9893,6 +9940,27 @@ mod tests {
         );
     }
 
+    /// A species declaring two abilities, so the multi-ability paths can be
+    /// exercised without waiting on shipped content to grow any — no shipped
+    /// species declares `special_abilities` at all yet.
+    const TWO_ABILITY_SPECIES: &str = r#"(
+        id: "test_medic",
+        name: "Test Medic",
+        glyph: 'm',
+        color: Cyan,
+        base_hp: 10,
+        base_atk: 4,
+        base_def: 2,
+        taming_difficulty: 0.5,
+        habitats: [OpenGrid],
+        base_speed: 10,
+        moves: [(name: "Poke", power: 3)],
+        special_abilities: [
+            Heal(power: 8),
+            Shield(power: 4, duration: 3),
+        ],
+    )"#;
+
     #[test]
     fn companion_ability_label_shows_special_ability_or_a_computed_attack_rally() {
         let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -9900,7 +9968,7 @@ mod tests {
         let all_species = game.species_defs();
         let no_ability_species = all_species
             .iter()
-            .find(|s| s.special_ability.is_none())
+            .find(|s| s.special_abilities.is_empty())
             .expect("at least one species with no special ability")
             .id
             .clone();
@@ -9928,43 +9996,96 @@ mod tests {
             plain_ability, "Rally Team",
             "a species with no special_ability should show the generic Rally Team fallback"
         );
+    }
 
-        if let Some((species_id, expected)) = all_species
-            .iter()
-            .find_map(|s| s.special_ability.clone().map(|a| (s.id.clone(), a)))
-        {
-            let with_ability = game
-                .world
-                .spawn((
-                    Creature {
-                        species: species_id,
-                    },
-                    Position { x: 3, y: 3 },
-                    Stats {
-                        hp: 10,
-                        max_hp: 10,
-                        atk: 5,
-                        def: 1,
-                    },
-                    Tamed { owner: player },
-                    Experience::default(),
-                ))
-                .id();
-            game.add_companion(with_ability).unwrap();
-            let shown = game
-                .player_status()
-                .companions
-                .iter()
-                .find(|c| c.entity == with_ability)
-                .unwrap()
-                .ability
-                .clone();
-            assert_eq!(
-                shown,
-                expected.short_name(),
-                "a species with a special_ability should show its own short name, not the generic rally"
-            );
-        }
+    /// Spawns a tamed member of `TWO_ABILITY_SPECIES` into the party of a
+    /// game built on a modded install that ships it.
+    fn game_with_two_ability_companion() -> (Game, Entity) {
+        let dir = modded_assets_dir(
+            "two_ability_species",
+            &[],
+            &[],
+            &[("test_medic.ron", TWO_ABILITY_SPECIES)],
+        );
+        let mut game = Game::new(94, DifficultyMode::Forgiving, &dir).unwrap();
+        let player = game.player_entity();
+        let medic = game
+            .world
+            .spawn((
+                Creature {
+                    species: "test_medic".to_string(),
+                },
+                Position { x: 3, y: 3 },
+                Stats {
+                    hp: 10,
+                    max_hp: 10,
+                    atk: 5,
+                    def: 1,
+                },
+                Tamed { owner: player },
+                Experience::default(),
+            ))
+            .id();
+        game.add_companion(medic).unwrap();
+        (game, medic)
+    }
+
+    #[test]
+    fn a_species_with_several_abilities_offers_each_one_in_menu_order() {
+        let (game, _) = game_with_two_ability_companion();
+        let options = game.battle_special_options(1);
+        assert_eq!(
+            options.iter().map(|o| o.name.as_str()).collect::<Vec<_>>(),
+            vec!["Heal", "Shield Team"],
+            "the picker should list the species' abilities in declaration order"
+        );
+        assert_eq!(
+            options.iter().map(|o| o.index).collect::<Vec<_>>(),
+            vec![0, 1],
+            "index is what BattleAction::Special carries, so it must match position"
+        );
+        assert_eq!(options[0].detail, "Heal: +8 HP");
+    }
+
+    #[test]
+    fn a_companion_declaring_no_abilities_still_offers_exactly_the_fallback_rally() {
+        let mut game = Game::new(95, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let companion = spawn_tamed(&mut game, 10, 3);
+        game.add_companion(companion).unwrap();
+
+        let options = game.battle_special_options(1);
+        assert_eq!(
+            options.len(),
+            1,
+            "the fallback is resolved into the list, so the menu is never empty"
+        );
+        assert_eq!(options[0].name, "Rally Team");
+    }
+
+    #[test]
+    fn the_chosen_ability_index_decides_which_special_resolves() {
+        let (mut game, medic) = game_with_two_ability_companion();
+        let player = game.player_entity();
+        game.world.get_mut::<Stats>(player).unwrap().hp = 1;
+        start_battle_with_a_wild_program(&mut game);
+
+        // Index 1 is Shield, which buffs DEF and must not heal.
+        companion_uses_special(&mut game, medic, 1);
+        assert_eq!(
+            game.world.get::<Stats>(player).unwrap().hp,
+            1,
+            "picking Shield must not run Heal, the ability at index 0"
+        );
+        assert!(
+            matches!(
+                game.world.get::<CombatBuff>(player).and_then(|b| b.active),
+                Some(ActiveBuff {
+                    kind: BuffKind::Def,
+                    ..
+                })
+            ),
+            "picking Shield should raise DEF"
+        );
     }
 
     #[test]
@@ -10923,7 +11044,7 @@ mod tests {
             .id();
         insert_battle(&mut game, player, vec![wild]);
 
-        companion_uses_special(&mut game, not_in_party);
+        companion_uses_special(&mut game, not_in_party, 0);
 
         let wild_hp = game.world.get::<Stats>(wild).unwrap().hp;
         assert_eq!(

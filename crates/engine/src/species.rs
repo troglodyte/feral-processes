@@ -146,14 +146,15 @@ pub struct SpeciesDef {
     /// non-boss species.
     #[serde(default)]
     pub is_boss: bool,
-    /// If set, choosing Special for a tamed member of this species in
-    /// battle triggers this ability instead of the default rally buff every
-    /// companion gets otherwise.
+    /// The abilities a tamed member of this species can choose between when
+    /// commanded with Special in battle. Left empty, the companion falls
+    /// back to the default rally buff every companion gets otherwise — see
+    /// `Game::companion_abilities`, which is what resolves that fallback, so
+    /// no caller has to special-case an empty list.
     /// `#[serde(default)]` so existing species files (including mods)
-    /// without this field keep parsing as companions with no special
-    /// ability.
+    /// without this field keep parsing as fallback-rally companions.
     #[serde(default)]
-    pub special_ability: Option<SpecialAbility>,
+    pub special_abilities: Vec<SpecialAbility>,
     /// Multiplies this species' per-level stat growth (see
     /// `progression::add_xp`) for a tamed member of it — 1.0 (the default)
     /// grows at the same flat rate as before this field existed; a
@@ -455,6 +456,35 @@ mod tests {
         assert!(
             db.all().all(|s| !(s.is_boss && s.can_nest)),
             "no boss species should have can_nest set"
+        );
+    }
+}
+
+#[cfg(test)]
+mod migration_tests {
+    use super::*;
+
+    /// `special_ability` (singular) became `special_abilities` (a list). A
+    /// mod still using the old name must not be *rejected* — an unknown
+    /// field is ignored, so the file still loads and its companion falls
+    /// back to the generic rally. Pinned because the failure mode otherwise
+    /// is the whole species vanishing from the roster, which reads as a
+    /// missing mod rather than a renamed field.
+    #[test]
+    fn a_species_using_the_old_singular_field_still_loads_and_falls_back() {
+        let body = r#"(
+            id: "old_style", name: "Old Style", glyph: 'o', color: Cyan,
+            base_hp: 10, base_atk: 4, base_def: 2, taming_difficulty: 0.5,
+            habitats: [OpenGrid], base_speed: 10,
+            moves: [(name: "Poke", power: 3)],
+            special_ability: Some(Heal(power: 8)),
+        )"#;
+        let def = ron::from_str::<SpeciesDef>(body)
+            .expect("an unknown field must not make the whole species unloadable");
+        assert_eq!(def.id, "old_style");
+        assert!(
+            def.special_abilities.is_empty(),
+            "the old field is ignored, not migrated — the companion gets the fallback rally"
         );
     }
 }

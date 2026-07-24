@@ -111,6 +111,10 @@ pub fn draw(app: &mut App, fx: &mut Fx, fonts: &Fonts) {
             draw_battle(app, fx, fonts, &m);
             draw_battle_item_menu(app, fonts, &m);
         }
+        Mode::BattleSpecial => {
+            draw_battle(app, fx, fonts, &m);
+            draw_battle_special_menu(app, fonts, &m);
+        }
         Mode::Help => {
             draw_playing_base(app, fx, fonts, &m);
             draw_help(fonts, &m);
@@ -2011,11 +2015,30 @@ fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics) {
     fx.draw_floats(fonts, m);
 }
 
+/// Which of the acting member's abilities does the Special spend? Rows come
+/// from the engine, same contract as the action bar.
+fn draw_battle_special_menu(app: &mut App, fonts: &Fonts, m: &Metrics) {
+    let selected = app.menu_selected;
+    let Some(game) = &mut app.game else { return };
+    let Some(slot) = game.battle_active_slot() else {
+        return;
+    };
+    let mut rows = vec![text_row("Which ability?")];
+    for (i, o) in game.battle_special_options(slot).into_iter().enumerate() {
+        rows.push(creature_row(
+            format!("[{}] {}", i + 1, o.detail),
+            i == selected,
+        ));
+    }
+    draw_popup("Pick a special", PopupSize::Large, &rows, fonts, m);
+}
+
 /// Which group does the pending action hit? Shows per-group decompile odds,
 /// since that's the one action where the choice of target is a real gamble
 /// rather than a preference.
 fn draw_battle_target_menu(app: &mut App, fonts: &Fonts, m: &Metrics) {
     let selected = app.menu_selected;
+    let title = app.battle_target_title();
     let Some(game) = &mut app.game else { return };
     let Some(view) = game.battle_view() else {
         return;
@@ -2040,7 +2063,7 @@ fn draw_battle_target_menu(app: &mut App, fonts: &Fonts, m: &Metrics) {
             i == selected,
         ));
     }
-    draw_popup("Pick a target", PopupSize::Large, &rows, fonts, m);
+    draw_popup(&title, PopupSize::Large, &rows, fonts, m);
 }
 
 /// Which consumable does this slot spend? Lists only what's actually

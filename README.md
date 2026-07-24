@@ -134,7 +134,7 @@ always offer exactly the same set:
 | --- | --- |
 | `a` | Attack — then pick which enemy group to hit |
 | `d` | Defend — brace for the round: a Defense bonus, and you draw more of the incoming fire |
-| `s` | Special (party members only) — a rally (ATK boost) by default, or the species' own ability if it has one. Costs you a flat chunk of Fatigue |
+| `s` | Special (party members only) — picks one of that member's abilities, then a target. A rally (ATK boost) by default, or the species' own abilities if it defines any. Costs you a flat chunk of Fatigue |
 | `c` | Decompile (you only) — attempt to compile/tame a group's front program. Needs a taming catalyst, which the ICE Breaker is |
 | `u` | Use item (you only) — spend a consumable as that slot's action for the round |
 | `j` | Jack out (flee) — costs a mild XP setback, same as flatlining. A party-level command, not a per-member action |
@@ -582,10 +582,12 @@ be active party members, fighting alongside you at once.
 - During an intrusion **every** party member acts each round, and you pick
   what each of them does — they're combatants, not buff dispensers. A member
   that Attacks rolls one of its species' own moves. Choosing its Special
-  instead gives up that attack for a temporary Attack rally, or the species'
-  own ability if one is defined (a bigger Attack/Defense buff, a heal, or a
-  debuff on the wild program — see `assets/species/README.md`), and costs
-  you a flat chunk of Fatigue.
+  instead gives up that attack, and asks which ability to spend before asking
+  who it lands on — the target picker names the one you chose. A species that
+  defines no abilities of its own offers a single temporary Attack rally;
+  define some (a bigger Attack/Defense buff, a heal, or a debuff on the wild
+  program — see `assets/species/README.md`) and each is a row in that menu.
+  Either way it costs you a flat chunk of Fatigue.
 - Enemy retaliation picks a target by weight rather than a flat chance.
   Ranks are **soft**: the first three slots — you and your first two
   companions — draw noticeably more fire than the ones behind them, but

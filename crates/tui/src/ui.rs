@@ -48,6 +48,10 @@ pub fn render(f: &mut Frame, app: &mut App) {
             render_battle(f, app);
             render_battle_item_menu(f, app);
         }
+        Mode::BattleSpecial => {
+            render_battle(f, app);
+            render_battle_special_menu(f, app);
+        }
         Mode::Help => render_help(f),
         Mode::Playing
         | Mode::Build
@@ -1882,11 +1886,43 @@ fn render_battle(f: &mut Frame, app: &mut App) {
 /// Overlay for `Mode::BattleTarget`: which group does the pending action
 /// hit? Shows per-group decompile odds, since that's the one action where
 /// the choice of target is a real gamble rather than a preference.
+/// Overlay for `Mode::BattleSpecial`: which of this member's abilities does
+/// the Special spend? Rows come from the engine, same contract as the action
+/// bar — a species that gains an ability reaches both renderers untouched.
+fn render_battle_special_menu(f: &mut Frame, app: &mut App) {
+    let area = f.area();
+    let popup = centered_rect(60, 40, area);
+    f.render_widget(Clear, popup);
+    let selected = app.menu_selected;
+    let Some(game) = &mut app.game else { return };
+    let Some(slot) = game.battle_active_slot() else {
+        return;
+    };
+
+    let mut lines = vec![Line::from(
+        "Which ability? (Esc to cancel; Up/Down + Enter also work)",
+    )];
+    for (i, o) in game.battle_special_options(slot).into_iter().enumerate() {
+        lines.push(styled_menu_line(
+            format!("[{}] {}", i + 1, o.detail),
+            i == selected,
+            BATTLE_SELECTION,
+        ));
+    }
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(Block::bordered().title("Pick a special"))
+            .wrap(Wrap { trim: true }),
+        popup,
+    );
+}
+
 fn render_battle_target_menu(f: &mut Frame, app: &mut App) {
     let area = f.area();
     let popup = centered_rect(60, 40, area);
     f.render_widget(Clear, popup);
     let selected = app.menu_selected;
+    let title = app.battle_target_title();
     let Some(game) = &mut app.game else { return };
     let Some(view) = game.battle_view() else {
         return;
@@ -1917,7 +1953,7 @@ fn render_battle_target_menu(f: &mut Frame, app: &mut App) {
     }
     f.render_widget(
         Paragraph::new(lines)
-            .block(Block::bordered().title("Pick a target"))
+            .block(Block::bordered().title(title))
             .wrap(Wrap { trim: true }),
         popup,
     );

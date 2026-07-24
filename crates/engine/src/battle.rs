@@ -38,11 +38,24 @@ pub enum Actor {
 /// — no renderer changes, by design.
 #[derive(Debug, Clone, PartialEq)]
 pub enum BattleAction {
-    Attack { group: usize },
-    Special { group: usize },
+    Attack {
+        group: usize,
+    },
+    Special {
+        group: usize,
+        /// Index into `Game::companion_abilities` for the acting member —
+        /// which of its abilities this is. Always valid by construction;
+        /// resolution falls back to the first if a stale index survives a
+        /// party change mid-round.
+        ability: usize,
+    },
     Defend,
-    Decompile { group: usize },
-    UseItem { item: ItemId },
+    Decompile {
+        group: usize,
+    },
+    UseItem {
+        item: ItemId,
+    },
 }
 
 /// The menu-facing identity of an action, without its parameters.
@@ -62,6 +75,10 @@ pub enum TargetSpec {
     None,
     EnemyGroup,
     InventoryItem,
+    /// Pick one of the acting member's special abilities, *then* an enemy
+    /// group — the only two-step collection, because which ability is used
+    /// and who it is aimed at are independent choices.
+    SpecialAbilityThenGroup,
 }
 
 /// One row of a party member's action menu. Renderers draw this verbatim and
@@ -78,6 +95,20 @@ pub struct ActionOption {
     pub target: TargetSpec,
     /// `Some(reason)` means render it greyed with the reason shown.
     pub unavailable: Option<String>,
+}
+
+/// One row of the special-ability picker — which of a companion's abilities
+/// a Special will spend. Renderers draw this verbatim, same contract as
+/// `ActionOption`; see `Game::battle_special_options`.
+#[derive(Debug, Clone)]
+pub struct SpecialOption {
+    /// Position in `Game::companion_abilities`, and what
+    /// `BattleAction::Special::ability` is set to.
+    pub index: usize,
+    /// e.g. "Heal"
+    pub name: String,
+    /// e.g. "Heal: 8 HP"
+    pub detail: String,
 }
 
 /// A command that applies to the whole party at once rather than to the slot

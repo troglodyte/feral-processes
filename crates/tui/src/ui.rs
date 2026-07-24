@@ -5,7 +5,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Gauge, Paragraph, Wrap};
 
 use feral_processes_app_core::{
-    App, MENU_SCAN_RADIUS, Mode, TradeChoice, inventory_item_actions, menu_shortcut,
+    App, MENU_SCAN_RADIUS, Mode, TradeChoice, equip_preview_tag, inventory_item_actions,
+    menu_shortcut,
 };
 use feral_processes_engine::components::{EquippedItem, GlyphColor};
 use feral_processes_engine::items::ItemId;
@@ -1643,34 +1644,6 @@ fn equipped_line(
         }
         None => menu_line(format!("[{num}] {label}: (empty)"), selected),
     }
-}
-
-/// Formats an equippable item's stat bonus as it would be *if equipped
-/// right now* — gear scales with the current zone level at the moment you
-/// equip it (see `Game::equip`), so this previews that same number rather
-/// than a flat, unscaled base value. Empty string for a non-equippable
-/// item (in place of the old generic "(equippable)" tag).
-fn equip_preview_tag(game: &Game, item: &ItemId, zone_level: u32, fusion_tier: u32) -> String {
-    let Some((_, base_mods)) = game.equipment_of(item) else {
-        return String::new();
-    };
-    let mods = base_mods
-        .scaled_for_level(zone_level)
-        .fused_for_tier(fusion_tier);
-    let mut parts = Vec::new();
-    if mods.atk != 0 {
-        parts.push(format!("+{} ATK", mods.atk));
-    }
-    if mods.def != 0 {
-        parts.push(format!("+{} DEF", mods.def));
-    }
-    if mods.decompiler != 0 {
-        parts.push(format!("+{} DECOMP", mods.decompiler));
-    }
-    if fusion_tier > 0 {
-        parts.push(format!("fusion T{fusion_tier}"));
-    }
-    format!(" ({})", parts.join(" "))
 }
 
 fn render_inventory_item_action(

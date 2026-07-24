@@ -74,6 +74,36 @@ pub fn inventory_item_actions(game: &Game, item: &ItemId) -> Vec<(char, String)>
     actions
 }
 
+/// Formats an equippable item's stat bonus as it would be *if equipped right
+/// now* — gear scales with the current zone level at the moment you equip it
+/// (see `Game::equip`), so this previews that same number rather than a flat,
+/// unscaled base value. Empty string for a non-equippable item.
+///
+/// Lives here rather than in either renderer because both draw the identical
+/// tag, on both the inventory list and the item-action page.
+pub fn equip_preview_tag(game: &Game, item: &ItemId, zone_level: u32, fusion_tier: u32) -> String {
+    let Some((_, base_mods)) = game.equipment_of(item) else {
+        return String::new();
+    };
+    let mods = base_mods
+        .scaled_for_level(zone_level)
+        .fused_for_tier(fusion_tier);
+    let mut parts = Vec::new();
+    if mods.atk != 0 {
+        parts.push(format!("+{} ATK", mods.atk));
+    }
+    if mods.def != 0 {
+        parts.push(format!("+{} DEF", mods.def));
+    }
+    if mods.decompiler != 0 {
+        parts.push(format!("+{} DECOMP", mods.decompiler));
+    }
+    if fusion_tier > 0 {
+        parts.push(format!("fusion T{fusion_tier}"));
+    }
+    format!(" ({})", parts.join(" "))
+}
+
 /// How many game ticks (see `Game::current_tick`) pass between autosaves —
 /// paced against game time rather than wall-clock time, so it's the same
 /// whether the player is acting quickly or sitting on a menu.

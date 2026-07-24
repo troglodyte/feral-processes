@@ -133,7 +133,14 @@ pub fn draw(app: &mut App, fx: &mut Fx, fonts: &Fonts) {
 enum Row {
     Text(String),
     TextColored(String, Color),
-    Item(String, bool),
+    Item {
+        text: String,
+        selected: bool,
+        /// Draws the row in the bold face when selected. Reserved for lists
+        /// where the row is a *creature you are addressing* rather than a
+        /// command you are picking — see `draw_battle_target_menu`.
+        bold: bool,
+    },
 }
 
 fn text_row(s: impl Into<String>) -> Row {
@@ -141,7 +148,20 @@ fn text_row(s: impl Into<String>) -> Row {
 }
 
 fn item_row(s: impl Into<String>, selected: bool) -> Row {
-    Row::Item(s.into(), selected)
+    Row::Item {
+        text: s.into(),
+        selected,
+        bold: false,
+    }
+}
+
+/// `item_row` for a list of creatures — see `Row::Item::bold`.
+fn creature_row(s: impl Into<String>, selected: bool) -> Row {
+    Row::Item {
+        text: s.into(),
+        selected,
+        bold: true,
+    }
 }
 
 /// How much of the window a popup claims. Height always shrinks to fit
@@ -204,8 +224,8 @@ fn draw_popup(title: &str, size: PopupSize, rows: &[Row], fonts: &Fonts, m: &Met
         BORDER,
     );
 
-    let first_item = rows.iter().position(|r| matches!(r, Row::Item(_, _)));
-    let last_item = rows.iter().rposition(|r| matches!(r, Row::Item(_, _)));
+    let first_item = rows.iter().position(|r| matches!(r, Row::Item { .. }));
+    let last_item = rows.iter().rposition(|r| matches!(r, Row::Item { .. }));
     let (header, body, footer): (&[Row], &[Row], &[Row]) = match (first_item, last_item) {
         (Some(first), Some(last)) => (&rows[..first], &rows[first..=last], &rows[last + 1..]),
         _ => (rows, &[], &[]),
@@ -232,7 +252,7 @@ fn draw_popup(title: &str, size: PopupSize, rows: &[Row], fonts: &Fonts, m: &Met
     if !body.is_empty() {
         let selected_idx = body
             .iter()
-            .position(|r| matches!(r, Row::Item(_, true)))
+            .position(|r| matches!(r, Row::Item { selected: true, .. }))
             .unwrap_or(0);
         let scroll_offset = if body.len() <= capacity {
             0
@@ -288,7 +308,11 @@ fn draw_row(row: &Row, x: f32, w: f32, cy: f32, max_y: f32, fonts: &Fonts, m: &M
         Row::TextColored(s, color) => {
             fonts.ui(s, x + m.pad, cy, m.font_size, *color);
         }
-        Row::Item(s, selected) => {
+        Row::Item {
+            text: s,
+            selected,
+            bold,
+        } => {
             if *selected {
                 // Anchored to the same `m.pad` the row text uses, so the
                 // highlight keeps leading its text by one inset at every
@@ -303,7 +327,12 @@ fn draw_row(row: &Row, x: f32, w: f32, cy: f32, max_y: f32, fonts: &Fonts, m: &M
                 );
             }
             let prefix = if *selected { "> " } else { "  " };
-            fonts.ui(format!("{prefix}{s}"), x + m.pad, cy, m.font_size, TEXT);
+            let label = format!("{prefix}{s}");
+            if *selected && *bold {
+                fonts.ui_bold(label, x + m.pad, cy, m.font_size, TEXT);
+            } else {
+                fonts.ui(label, x + m.pad, cy, m.font_size, TEXT);
+            }
         }
     }
     cy + m.line_height
@@ -513,7 +542,7 @@ fn draw_status_panel(
         "Integrity",
         status.hp as f32,
         status.max_hp.max(1) as f32,
-        RED,
+        BarStyle::plain(RED),
         fonts,
         m,
     );
@@ -526,7 +555,7 @@ fn draw_status_panel(
         "Power",
         status.hunger,
         100.0,
-        YELLOW,
+        BarStyle::plain(YELLOW),
         fonts,
         m,
     );
@@ -539,7 +568,7 @@ fn draw_status_panel(
         "Fatigue",
         status.fatigue,
         100.0,
-        BLUE,
+        BarStyle::plain(BLUE),
         fonts,
         m,
     );
@@ -657,6 +686,24 @@ impl BarGeometry {
 /// scales.
 const BAR_TRACK_H: f32 = 14.0;
 
+/// How a bar is painted, as opposed to where `BarGeometry` puts it. Bundled
+/// rather than passed loose because the two together push `draw_bar` past
+/// clippy's argument threshold, same reasoning as `BarGeometry` itself.
+#[derive(Clone, Copy)]
+struct BarStyle {
+    color: Color,
+    /// Draws the label in the bold face — reserved for the party member
+    /// currently choosing an action, so the row you're addressing wins
+    /// against the colour the rest of the roster is already using.
+    bold: bool,
+}
+
+impl BarStyle {
+    fn plain(color: Color) -> Self {
+        Self { color, bold: false }
+    }
+}
+
 /// Draws a labeled bar (HP/Power/Fatigue) and returns the y coordinate for
 /// whatever's drawn next.
 fn draw_bar(
@@ -664,18 +711,18 @@ fn draw_bar(
     label: &str,
     value: f32,
     max: f32,
-    color: Color,
+    style: BarStyle,
     fonts: &Fonts,
     m: &Metrics,
 ) -> f32 {
+    let BarStyle { color, bold } = style;
     let ratio = (value / max).clamp(0.0, 1.0);
-    fonts.ui(
-        format!("{label} {value:.0}/{max:.0}"),
-        g.x,
-        g.y,
-        m.label(),
-        TEXT,
-    );
+    let text = format!("{label} {value:.0}/{max:.0}");
+    if bold {
+        fonts.ui_bold(text, g.x, g.y, m.label(), TEXT);
+    } else {
+        fonts.ui(text, g.x, g.y, m.label(), TEXT);
+    }
     let bar_y = g.track_y(m);
     draw_rectangle(
         g.x,
@@ -689,6 +736,14 @@ fn draw_bar(
     // Leaves the next row's label room above its own baseline, so stacked
     // bars keep their spacing as the label grows.
     bar_y + BAR_TRACK_H + m.font_size as f32 / 2.0
+}
+
+/// How far one stacked bar row advances y, including the trailing `m.inset`
+/// every caller adds between rows. Mirrors `draw_bar`'s return value, so the
+/// two have to move together — it exists because `draw_battle` bottom-anchors
+/// the party block and therefore has to know its height *before* drawing it.
+fn bar_row_height(m: &Metrics) -> f32 {
+    m.gap + BAR_TRACK_H + m.font_size as f32 / 2.0 + m.inset
 }
 
 /// A lagging "ghost" band trailing a bar's real value, so a hit in battle
@@ -1835,7 +1890,7 @@ fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics) {
             ),
             g.front_hp as f32,
             g.front_max_hp.max(1) as f32,
-            color,
+            BarStyle::plain(color),
             fonts,
             m,
         );
@@ -1858,6 +1913,26 @@ fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics) {
     }
 
     y += m.inset;
+
+    // Hostiles on top, your party on the bottom, with the log between them —
+    // the two rosters read as opposing sides with the narration of what
+    // passed between them in the middle. The party block is bottom-anchored
+    // above the action bar so the log can take exactly the slack left over,
+    // which is why its height has to be computed rather than accumulated.
+    let log_bottom = screen_height() - m.line_height * 2.0;
+    let party_height = m.line_height + view.party.len() as f32 * bar_row_height(m) + m.inset;
+    let party_top = (log_bottom - party_height).max(y);
+
+    draw_rectangle(margin, y, w - margin * 2.0, party_top - y, PANEL_BG);
+    draw_rectangle_lines(margin, y, w - margin * 2.0, party_top - y, 2.0, BORDER);
+    let capacity = (((party_top - y) - margin) / m.line_height).max(1.0) as usize;
+    let mut ly = y + margin;
+    for (kind, line) in game.message_log(capacity) {
+        draw_message_line(kind, &line, margin + m.inset, ly, fonts, m);
+        ly += m.line_height;
+    }
+
+    y = party_top;
     fonts.ui(
         format!("Your party — DECOMP {}", view.player_decompiler),
         margin,
@@ -1890,7 +1965,10 @@ fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics) {
             ),
             p.hp as f32,
             p.max_hp.max(1) as f32,
-            color,
+            BarStyle {
+                color,
+                bold: active,
+            },
             fonts,
             m,
         );
@@ -1906,17 +1984,6 @@ fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics) {
             fx.spawn_float(format!("-{}", ghost.damage), w / 2.0, bar.y, TEXT);
         }
         y += m.inset;
-    }
-    y += m.inset;
-
-    let log_bottom = screen_height() - m.line_height * 2.0;
-    draw_rectangle(margin, y, w - margin * 2.0, log_bottom - y, PANEL_BG);
-    draw_rectangle_lines(margin, y, w - margin * 2.0, log_bottom - y, 2.0, BORDER);
-    let capacity = (((log_bottom - y) - margin) / m.line_height).max(1.0) as usize;
-    let mut ly = y + margin;
-    for (kind, line) in game.message_log(capacity) {
-        draw_message_line(kind, &line, margin + m.inset, ly, fonts, m);
-        ly += m.line_height;
     }
 
     // The action bar is drawn from whatever the engine offers, never from
@@ -1959,7 +2026,7 @@ fn draw_battle_target_menu(app: &mut App, fonts: &Fonts, m: &Metrics) {
             Some(c) => format!(" — decompile {:.0}%", c * 100.0),
             None => String::new(),
         };
-        rows.push(item_row(
+        rows.push(creature_row(
             format!(
                 "[{}] {} x{} — {}/{} HP {}{}",
                 g.letter,

@@ -24,6 +24,13 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 - **`[A]ll attack` and `[D] all defend`** plan every open party slot in one
   keypress. All-attack asks which group only when more than one is still up.
   Neither overwrites a slot you already chose for.
+- **The log moved between the two rosters.** Hostiles stay on top, your party
+  is now along the bottom, and the narration sits between them, so the two
+  sides face each other across the account of what passed between them.
+- **The creature you're addressing is bold.** The party member currently
+  choosing an action, and the group highlighted in the target picker, are
+  drawn in bold on top of the existing highlight — those rows sit among others
+  already coloured by faction and reach, and needed to win against that.
 - **Battle keys are lowercase, and Decompile moved to `c`.** Defend takes `d`,
   so the per-slot keys `a`/`d` and their party-wide counterparts `A`/`D` line
   up: shift means "everyone does this". Nothing sits one shift key away from a

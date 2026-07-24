@@ -351,11 +351,14 @@ fast species tends to strike first without ever being guaranteed to. Speed
 is per-species data (see `assets/species/README.md`), spanning the Construct
 at 6 to the Sprite at 14; you roll from 11.
 
-The screen lists hostile groups on top and your party below, each with HP,
-Attack and Defense. Back-rank groups are dimmed. You choose an action for
-every party member and the round resolves in initiative order, with the
-narration landing in the log pane below — rounds are separated there by a
-dim `── round N ──` line, so you read what happened without leaving the
+The screen lists hostile groups on top and your party along the bottom, each
+with HP, Attack and Defense, with the log between them — the two sides face
+each other across the narration of what passed between them. Back-rank groups
+are dimmed, and whichever creature you're addressing is bold: the party member
+currently choosing, and the group highlighted in the target picker. You choose
+an action for every party member and the round resolves in initiative order,
+with the narration landing in that middle pane — rounds are separated there by
+a dim `── round N ──` line, so you read what happened without leaving the
 planning screen.
 
 ### Stats

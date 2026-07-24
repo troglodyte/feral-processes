@@ -220,15 +220,25 @@ fn render_playing(f: &mut Frame, app: &mut App) {
 /// layered on top of the row's own direct-key shortcut, which still works
 /// no matter which row is highlighted.
 fn menu_line(text: String, selected: bool) -> Line<'static> {
+    styled_menu_line(text, selected, Modifier::REVERSED)
+}
+
+/// `menu_line` with the selected row's emphasis spelled out. The battle
+/// screen picks out *which creature you are addressing* — the acting party
+/// member, the group being targeted — and adds bold on top of the reverse
+/// video, since those rows sit among other rows styled by faction and reach
+/// and have to win against that colour.
+fn styled_menu_line(text: String, selected: bool, emphasis: Modifier) -> Line<'static> {
     if selected {
-        Line::styled(
-            format!("> {text}"),
-            Style::new().add_modifier(Modifier::REVERSED),
-        )
+        Line::styled(format!("> {text}"), Style::new().add_modifier(emphasis))
     } else {
         Line::from(format!("  {text}"))
     }
 }
+
+/// The emphasis for the battle screen's "this is the creature in question"
+/// rows — see `styled_menu_line`.
+const BATTLE_SELECTION: Modifier = Modifier::REVERSED.union(Modifier::BOLD);
 
 fn build_map_paragraph<'a>(
     tiles: &[Vec<Tile>],
@@ -1743,10 +1753,13 @@ fn render_battle(f: &mut Frame, app: &mut App) {
         return;
     };
 
+    // Hostiles on top, your party on the bottom, with the log between them —
+    // the two rosters read as opposing sides with the narration of what
+    // passed between them in the middle.
     let chunks = Layout::vertical([
         Constraint::Length(view.groups.len() as u16 + 2),
-        Constraint::Length(view.party.len() as u16 + 2),
         Constraint::Min(4),
+        Constraint::Length(view.party.len() as u16 + 2),
         Constraint::Length(3),
     ])
     .split(area);
@@ -1809,17 +1822,17 @@ fn render_battle(f: &mut Frame, app: &mut App) {
                 p.planned.clone().unwrap_or_else(|| "...".to_string()),
                 status_tag(&p.status_effect),
             );
-            menu_line(text, view.active_slot == Some(p.slot))
+            styled_menu_line(text, view.active_slot == Some(p.slot), BATTLE_SELECTION)
         })
         .collect();
     f.render_widget(
         Paragraph::new(party_lines).block(
             Block::bordered().title(format!("Your party — DECOMP {}", view.player_decompiler)),
         ),
-        chunks[1],
+        chunks[2],
     );
 
-    let log_capacity = chunks[2].height.saturating_sub(2) as usize;
+    let log_capacity = chunks[1].height.saturating_sub(2) as usize;
     let log_lines: Vec<Line> = game
         .message_log(log_capacity.max(1))
         .into_iter()
@@ -1829,7 +1842,7 @@ fn render_battle(f: &mut Frame, app: &mut App) {
         Paragraph::new(log_lines)
             .block(Block::bordered().title("Intrusion"))
             .wrap(Wrap { trim: true }),
-        chunks[2],
+        chunks[1],
     );
 
     // The action bar is drawn from whatever the engine offers, never from
@@ -1887,7 +1900,7 @@ fn render_battle_target_menu(f: &mut Frame, app: &mut App) {
             Some(c) => format!(" — decompile {:.0}%", c * 100.0),
             None => String::new(),
         };
-        lines.push(menu_line(
+        lines.push(styled_menu_line(
             format!(
                 "[{}] {} x{} — {}/{} HP {}{}",
                 g.letter,
@@ -1899,6 +1912,7 @@ fn render_battle_target_menu(f: &mut Frame, app: &mut App) {
                 odds,
             ),
             i == selected,
+            BATTLE_SELECTION,
         ));
     }
     f.render_widget(

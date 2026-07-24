@@ -93,6 +93,34 @@ pub fn toughest_ordinary_species(db: &SpeciesDb) -> &SpeciesDef {
         .expect("species db should have at least one ordinary species")
 }
 
+/// Ticks of a single worked, tiered node needed to fund one Portal at
+/// `zone`, routed through the Market's `portal_fragment` buy price.
+///
+/// Deliberately arithmetic rather than a live sim: this is the check that
+/// the base economy keeps pace with the doubling curve, which is the whole
+/// reason the travelling-base work happened. See
+/// `docs/superpowers/specs/2026-07-24-travelling-base-design.md`.
+///
+/// Mirrors the real payout in `systems::task_progress_system` (tier ×
+/// `ZoneLevel::stat_multiplier`) and the real reliability curve in
+/// `systems::mining_success_chance`, so a rebalance of either shows up here.
+pub fn ticks_to_afford_portal(
+    zone: u32,
+    tier: u32,
+    ticks_per_unit: u32,
+    portal_fragment_rate: u32,
+    market_price: u32,
+) -> f64 {
+    let payout = (tier * ZoneLevel(zone).stat_multiplier() as u32) as f64;
+    let success = (0.4 + tier as f64 * 0.1).min(1.0);
+    let per_tick = payout * success / ticks_per_unit as f64;
+    // A Portal's build_cost is a per-zone-level rate (see
+    // `StructureDef::zone_portal`), and fragments are bought with the
+    // currency the base actually produces.
+    let needed = (portal_fragment_rate * zone * market_price) as f64;
+    needed / per_tick
+}
+
 pub struct BattleOutcome {
     pub player_won: bool,
     pub turns: u32,
@@ -239,6 +267,110 @@ mod tests {
         let weapon = db.get(ids::MONOFILAMENT_WHIP).unwrap().equipment.unwrap().1;
         let armor = db.get(ids::ABLATIVE_PLATING).unwrap().equipment.unwrap().1;
         (weapon, armor)
+    }
+
+    /// The shipped economy numbers `ticks_to_afford_portal` needs, read from
+    /// the real structure assets rather than hardcoded, so a rebalance of
+    /// any `.ron` file shows up in these projections instead of silently
+    /// invalidating them.
+    fn shipped_economy() -> (u32, u32, u32) {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/structures");
+        let (db, _) = crate::structures::StructureDb::load_dir(&dir).unwrap();
+
+        let node = db.get("mining_node").expect("mining_node.ron should load");
+        let ticks_per_unit = node.work.as_ref().unwrap().ticks_per_unit;
+
+        let portal = db.get("portal").expect("portal.ron should load");
+        let portal_fragment_rate = portal
+            .build_cost
+            .iter()
+            .find(|(item, _)| item.as_str() == crate::items::ids::PORTAL_FRAGMENT)
+            .map(|(_, qty)| *qty)
+            .expect("a portal is bought with portal fragments");
+
+        let market = db.get("market").expect("black_market.ron should load");
+        let market_price = market
+            .trade
+            .as_ref()
+            .unwrap()
+            .buy
+            .iter()
+            .find(|(item, _)| item.as_str() == crate::items::ids::PORTAL_FRAGMENT)
+            .map(|(_, cost)| *cost)
+            .expect("the market should sell portal fragments");
+
+        (ticks_per_unit, portal_fragment_rate, market_price)
+    }
+
+    /// The check this whole change exists to satisfy: a base that's been
+    /// invested in must out-earn its own rising portal cost as it goes
+    /// deeper. If this fails, settling is still a losing move and the
+    /// travelling-base work did not achieve its goal — report the numbers
+    /// rather than relaxing the assertion.
+    #[test]
+    fn a_tiered_base_funds_deeper_portals_faster_than_a_fresh_one_funds_shallow_ones() {
+        let (ticks, rate, price) = shipped_economy();
+
+        let shallow = ticks_to_afford_portal(1, 1, ticks, rate, price);
+        let deep = ticks_to_afford_portal(4, 3, ticks, rate, price);
+
+        eprintln!("zone 1 Mk1: {shallow:.0} ticks/portal; zone 4 Mk3: {deep:.0} ticks/portal");
+        assert!(
+            deep < shallow,
+            "a tiered base at depth must out-earn its own rising portal cost, or settling \
+             is still a losing move: zone 1 Mk1 = {shallow:.0} ticks, zone 4 Mk3 = {deep:.0}"
+        );
+    }
+
+    /// At a fixed tier, funding time must not blow up with depth — the
+    /// payout doubles per zone while the portal cost only grows linearly
+    /// with it, so deeper zones should get *easier* to fund, not harder.
+    #[test]
+    fn base_income_outpaces_portal_cost_across_every_zone() {
+        let (ticks, rate, price) = shipped_economy();
+
+        let mut previous = f64::MAX;
+        for zone in 1..=6 {
+            let t = ticks_to_afford_portal(zone, 3, ticks, rate, price);
+            eprintln!("[Mk3] zone {zone}: {t:.1} ticks/portal");
+            assert!(
+                t <= previous,
+                "portal funding time must not grow with depth — it did at zone {zone} \
+                 ({t:.1} ticks vs {previous:.1} one zone shallower)"
+            );
+            previous = t;
+        }
+    }
+
+    /// Pins the *shape* of the un-upgraded curve, which is subtler than it
+    /// looks. Payout scales exponentially with depth (`2^(zone-1)`) while a
+    /// Portal's cost scales only linearly (`build_cost × zone`), so the
+    /// ratio is 1/1 at zone 1, 2/2 at zone 2 — **exactly break-even, the
+    /// first step is free of both gain and loss** — and only starts paying
+    /// off at zone 3 (4/3) and beyond.
+    ///
+    /// So a player who never upgrades treads water on their first breach and
+    /// gains ground after that. Upgrading is what turns the first step into
+    /// a gain; see the tiered projection above.
+    #[test]
+    fn an_unupgraded_base_breaks_even_on_the_first_breach_then_gains_ground() {
+        let (ticks, rate, price) = shipped_economy();
+        let at = |zone| ticks_to_afford_portal(zone, 1, ticks, rate, price);
+
+        assert!(
+            (at(2) - at(1)).abs() < f64::EPSILON,
+            "zone 1 -> 2 is exactly break-even for a Mk1 base (payout x2, cost x2): \
+             {:.0} vs {:.0}",
+            at(1),
+            at(2)
+        );
+        assert!(
+            at(3) < at(1),
+            "from zone 3 on, exponential payout pulls ahead of linear portal cost: \
+             {:.0} -> {:.0}",
+            at(1),
+            at(3)
+        );
     }
 
     /// How deep to sweep the gear-free grind baseline. Zones are actually

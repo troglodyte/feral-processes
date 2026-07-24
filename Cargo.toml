@@ -2,5 +2,18 @@
 resolver = "2"
 members = ["crates/engine", "crates/app-core", "crates/tui", "crates/gui", "crates/launcher"]
 
+# The whole workspace ships as one game, so every crate carries the same
+# version and it lives here rather than in five files that can drift apart.
+# Semantic versioning: while this is 0.x, a breaking change bumps the minor.
+# "Breaking" for this project means a save-format bump above all — see
+# `save::SAVE_FORMAT_VERSION` and the CHANGELOG.
 [workspace.package]
+version = "0.2.0"
 edition = "2024"
+
+# Internal crates are declared once here so a version bump is a single edit.
+[workspace.dependencies]
+feral-processes-engine = { version = "0.2.0", path = "crates/engine" }
+feral-processes-app-core = { version = "0.2.0", path = "crates/app-core" }
+feral-processes-tui = { version = "0.2.0", path = "crates/tui" }
+feral-processes-gui = { version = "0.2.0", path = "crates/gui" }

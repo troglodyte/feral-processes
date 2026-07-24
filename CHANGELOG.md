@@ -2,7 +2,16 @@
 
 Release notes for [feral-processes](README.md).
 
-## Unreleased
+Versions follow [semantic versioning](https://semver.org). While the project
+is `0.x`, a **breaking** change bumps the minor version and a compatible one
+bumps the patch. For a single-player game with no public API, "breaking"
+means one thing above all: **a save-format bump**, where existing saves stop
+loading (see `save::SAVE_FORMAT_VERSION`). Every crate in the workspace
+shares one version, set in the root `Cargo.toml`.
+
+Dated entries below `0.2.0` predate versioning and are kept as written.
+
+## 0.2.0 — 2026-07-24
 
 ### Breaking
 

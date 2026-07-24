@@ -1,10 +1,10 @@
 [package]
 name = "feral-processes-tui"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
 crossterm = "0.29.0"
-feral-processes-app-core = { version = "0.1.0", path = "../app-core" }
-feral-processes-engine = { version = "0.1.0", path = "../engine" }
+feral-processes-app-core = { workspace = true }
+feral-processes-engine = { workspace = true }
 ratatui = "0.30.2"

@@ -741,7 +741,7 @@ dependencies = [
 
 [[package]]
 name = "feral-processes"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "feral-processes-app-core",
  "feral-processes-gui",
@@ -750,14 +750,14 @@ dependencies = [
 
 [[package]]
 name = "feral-processes-app-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "feral-processes-engine",
 ]
 
 [[package]]
 name = "feral-processes-engine"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bevy_ecs",
  "bincode",
@@ -769,7 +769,7 @@ dependencies = [
 
 [[package]]
 name = "feral-processes-gui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "feral-processes-app-core",
  "feral-processes-engine",
@@ -779,7 +779,7 @@ dependencies = [
 
 [[package]]
 name = "feral-processes-tui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "crossterm",
  "feral-processes-app-core",

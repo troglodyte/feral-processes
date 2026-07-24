@@ -1,7 +1,7 @@
 [package]
 name = "feral-processes-app-core"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-feral-processes-engine = { version = "0.1.0", path = "../engine" }
+feral-processes-engine = { workspace = true }

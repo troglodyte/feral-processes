@@ -123,6 +123,12 @@ impl WorldMap {
     pub fn set_override(&mut self, x: i32, y: i32, tile: Tile) {
         self.overrides.insert((x, y), tile);
     }
+
+    /// Drops any override at `(x, y)`, so the tile reverts to whatever the
+    /// seed generates there.
+    pub fn clear_override(&mut self, x: i32, y: i32) {
+        self.overrides.remove(&(x, y));
+    }
 }
 
 #[cfg(test)]

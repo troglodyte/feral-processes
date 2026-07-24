@@ -150,6 +150,23 @@ pub const BASE_PET_CAPACITY: usize = 3;
 #[derive(Resource, Default, Clone)]
 pub struct Party(pub Vec<Entity>);
 
+/// Center of the player's base platform — the slab of `Biome::Platform`
+/// stamped across `MAX_BUILD_DISTANCE_FROM_HOME` when a Home is deployed.
+/// `None` until the run's first Home goes down, which is why the opening
+/// minutes of a run scale danger exactly as they did before platforms
+/// existed.
+///
+/// Exists as a resource rather than being looked up from the Home entity
+/// because `Game::distance_stat_multiplier` and `Game::max_pack_size` take
+/// `&self`, while querying for the Home needs `&mut self`.
+///
+/// Deliberately not serialized: it's reconstructed on load from the Home's
+/// own position, which `save::SaveData::structures` already carries.
+#[derive(Resource, Default, Clone, Copy)]
+pub struct Platform {
+    pub center: Option<(i32, i32)>,
+}
+
 /// Which zone sector the player is currently breached into. Starts at 1
 /// (the sector the run begins in); breaching a zone portal increments it.
 /// Deeper zones regenerate their terrain from a different seed and spawn

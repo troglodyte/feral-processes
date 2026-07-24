@@ -37,7 +37,7 @@ use research::{ResearchDb, ResearchDef};
 pub use research::{ResearchId, ResearchRecipe};
 use resources::{
     BASE_PET_CAPACITY, BattleState, EffectQueue, GameClock, GameOver, GameRng, MAX_PARTY_SIZE,
-    MessageLog, Party, PlayerEntity, Research, ZoneLevel, ZoneSpawnPoint,
+    MessageLog, Party, Platform, PlayerEntity, Research, ZoneLevel, ZoneSpawnPoint,
 };
 pub use resources::{DifficultyMode, EffectKind, MessageKind, VisualEffect};
 use species::{MoveDef, SpecialAbility, SpeciesDb, SpeciesDef, SpeciesId};
@@ -562,6 +562,7 @@ impl Game {
         world.insert_resource(Party::default());
         world.insert_resource(Research::default());
         world.insert_resource(ZoneLevel::default());
+        world.insert_resource(Platform::default());
         world.insert_resource(ZoneSpawnPoint {
             x: start.0,
             y: start.1,
@@ -645,6 +646,7 @@ impl Game {
         world.insert_resource(Party::default());
         world.insert_resource(Research(data.researched.into_iter().collect()));
         world.insert_resource(ZoneLevel(data.zone));
+        world.insert_resource(Platform::default());
         world.insert_resource(ZoneSpawnPoint {
             x: data.spawn_point.0,
             y: data.spawn_point.1,
@@ -834,6 +836,12 @@ impl Game {
             if def.passive_process.is_some() {
                 entity.insert(PassiveProcessor::default());
             }
+        }
+
+        // The slab's tiles come back through SaveData::tile_overrides; only
+        // its center needs rediscovering, and the Home's position is it.
+        if let Some(home) = game.home_position() {
+            game.world.resource_mut::<Platform>().center = Some((home.x, home.y));
         }
 
         // Reconnect each restored cronjob to its target structure now that
@@ -2086,6 +2094,9 @@ impl Game {
                 ticks_remaining: temp.max_ticks,
             });
         }
+        if def.id == HOME_STRUCTURE_ID {
+            self.stamp_platform(x, y);
+        }
         self.log(format!("You deploy a {}.", def.name));
         self.tick();
         Ok(())
@@ -2165,6 +2176,9 @@ impl Game {
                 self.world.entity_mut(worker).remove::<Task>();
             }
             self.world.despawn(target);
+        }
+        if is_home {
+            self.clear_platform();
         }
 
         // Route through `grant_loot`, not a direct `add`: demolishing a Home
@@ -3291,23 +3305,108 @@ impl Game {
         let destroyed = durability.hp == 0;
         if destroyed {
             self.log(format!("The {label} crashes and collapses!"));
-            let guardians: Vec<Entity> = {
-                let mut query = self.world.query::<(Entity, &NestGuardian)>();
-                query
-                    .iter(&self.world)
-                    .filter(|(_, g)| g.nest == nest)
-                    .map(|(e, _)| e)
-                    .collect()
-            };
-            for guardian in guardians {
-                self.world.entity_mut(guardian).remove::<NestGuardian>();
-            }
-            self.world.despawn(nest);
+            self.despawn_nest(nest);
         } else {
             self.log(format!(
                 "You unleash a data strike into the {label} for {dmg} damage."
             ));
         }
+    }
+
+    /// Despawns `nest`, first stripping `NestGuardian` from every creature
+    /// tethered to it so none is left pointing at a dead entity — they
+    /// resume ordinary wandering. Despawning implicitly cancels anything
+    /// left in `Nest::pending_respawns`.
+    fn despawn_nest(&mut self, nest: Entity) {
+        let guardians: Vec<Entity> = {
+            let mut query = self.world.query::<(Entity, &NestGuardian)>();
+            query
+                .iter(&self.world)
+                .filter(|(_, g)| g.nest == nest)
+                .map(|(e, _)| e)
+                .collect()
+        };
+        for guardian in guardians {
+            self.world.entity_mut(guardian).remove::<NestGuardian>();
+        }
+        self.world.despawn(nest);
+    }
+
+    /// Stamps the base platform centered on `(cx, cy)`: every tile within
+    /// `MAX_BUILD_DISTANCE_FROM_HOME` (Chebyshev) becomes walkable
+    /// `Biome::Platform`, and every hostile and nest standing inside is
+    /// obliterated. Deploying a Home and breaching into a new zone are the
+    /// only callers.
+    fn stamp_platform(&mut self, cx: i32, cy: i32) {
+        {
+            let mut map = self.world.resource_mut::<WorldMap>();
+            for dy in -MAX_BUILD_DISTANCE_FROM_HOME..=MAX_BUILD_DISTANCE_FROM_HOME {
+                for dx in -MAX_BUILD_DISTANCE_FROM_HOME..=MAX_BUILD_DISTANCE_FROM_HOME {
+                    map.set_override(
+                        cx + dx,
+                        cy + dy,
+                        Tile {
+                            biome: Biome::Platform,
+                            walkable: true,
+                        },
+                    );
+                }
+            }
+        }
+
+        let inside = |p: &Position| {
+            (p.x - cx).abs() <= MAX_BUILD_DISTANCE_FROM_HOME
+                && (p.y - cy).abs() <= MAX_BUILD_DISTANCE_FROM_HOME
+        };
+        let hostiles: Vec<Entity> = {
+            let mut query = self
+                .world
+                .query_filtered::<(Entity, &Position), With<Hostile>>();
+            query
+                .iter(&self.world)
+                .filter(|(_, p)| inside(p))
+                .map(|(e, _)| e)
+                .collect()
+        };
+        for e in hostiles {
+            self.world.despawn(e);
+        }
+        // Nests route through despawn_nest rather than a bare despawn: a
+        // guardian can be standing outside the slab while its nest is
+        // inside it, and would otherwise be left tethered to a dead entity.
+        let nests: Vec<Entity> = {
+            let mut query = self
+                .world
+                .query_filtered::<(Entity, &Position), With<Nest>>();
+            query
+                .iter(&self.world)
+                .filter(|(_, p)| inside(p))
+                .map(|(e, _)| e)
+                .collect()
+        };
+        for nest in nests {
+            self.despawn_nest(nest);
+        }
+
+        self.world.resource_mut::<Platform>().center = Some((cx, cy));
+    }
+
+    /// Removes the platform slab, restoring natural terrain underneath.
+    /// Called when the Home is demolished — the slab is defined as
+    /// "centered on the current Home", so no Home means no slab.
+    fn clear_platform(&mut self) {
+        let Some((cx, cy)) = self.world.resource::<Platform>().center else {
+            return;
+        };
+        {
+            let mut map = self.world.resource_mut::<WorldMap>();
+            for dy in -MAX_BUILD_DISTANCE_FROM_HOME..=MAX_BUILD_DISTANCE_FROM_HOME {
+                for dx in -MAX_BUILD_DISTANCE_FROM_HOME..=MAX_BUILD_DISTANCE_FROM_HOME {
+                    map.clear_override(cx + dx, cy + dy);
+                }
+            }
+        }
+        self.world.resource_mut::<Platform>().center = None;
     }
 
     fn find_blocking_structure_at(&mut self, x: i32, y: i32) -> Option<Entity> {
@@ -5786,6 +5885,178 @@ mod tests {
             .unwrap()
             .add(ItemId::from(ids::CORE_FRAGMENT), 5);
         game.place_structure("home", dx, dy).unwrap();
+    }
+
+    fn find_structure_by_kind(game: &mut Game, kind: &str) -> Option<Entity> {
+        let mut query = game.world.query::<(Entity, &Structure)>();
+        query
+            .iter(&game.world)
+            .find(|(_, s)| s.kind == kind)
+            .map(|(e, _)| e)
+    }
+
+    #[test]
+    fn placing_a_home_stamps_a_walkable_platform_across_the_build_radius() {
+        let mut game = Game::new(920, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+        place_home(&mut game, 0, 1);
+        let (hx, hy) = (ppos.x, ppos.y + 1);
+
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for (dx, dy) in [
+            (0, 0),
+            (MAX_BUILD_DISTANCE_FROM_HOME, MAX_BUILD_DISTANCE_FROM_HOME),
+            (-MAX_BUILD_DISTANCE_FROM_HOME, MAX_BUILD_DISTANCE_FROM_HOME),
+        ] {
+            let tile = map.tile(hx + dx, hy + dy);
+            assert_eq!(
+                tile.biome,
+                Biome::Platform,
+                "({dx}, {dy}) from Home should be platform floor"
+            );
+            assert!(tile.walkable, "platform floor must always be walkable");
+        }
+        assert_ne!(
+            map.tile(hx + MAX_BUILD_DISTANCE_FROM_HOME + 1, hy).biome,
+            Biome::Platform,
+            "one tile past the build radius should still be natural terrain"
+        );
+    }
+
+    #[test]
+    fn placing_a_home_obliterates_hostiles_and_nests_inside_the_radius_only() {
+        let mut game = Game::new(921, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+
+        let inside = game
+            .world
+            .spawn((
+                Hostile,
+                Position {
+                    x: ppos.x + 3,
+                    y: ppos.y + 3,
+                },
+            ))
+            .id();
+        let outside = game
+            .world
+            .spawn((
+                Hostile,
+                Position {
+                    x: ppos.x + MAX_BUILD_DISTANCE_FROM_HOME + 2,
+                    y: ppos.y,
+                },
+            ))
+            .id();
+        let nest_inside = game
+            .world
+            .spawn((
+                Nest {
+                    species: "sprite".to_string(),
+                    pending_respawns: Vec::new(),
+                },
+                Position {
+                    x: ppos.x - 2,
+                    y: ppos.y + 1,
+                },
+            ))
+            .id();
+
+        place_home(&mut game, 0, 0);
+
+        assert!(
+            game.world.get_entity(inside).is_err(),
+            "a hostile inside the radius is obliterated"
+        );
+        assert!(
+            game.world.get_entity(nest_inside).is_err(),
+            "a nest inside the radius is obliterated"
+        );
+        assert!(
+            game.world.get_entity(outside).is_ok(),
+            "a hostile outside the radius survives"
+        );
+    }
+
+    #[test]
+    fn obliterating_a_nest_untethers_a_guardian_standing_outside_the_radius() {
+        let mut game = Game::new(922, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+
+        let nest = game
+            .world
+            .spawn((
+                Nest {
+                    species: "sprite".to_string(),
+                    pending_respawns: Vec::new(),
+                },
+                Position {
+                    x: ppos.x + 1,
+                    y: ppos.y,
+                },
+            ))
+            .id();
+        let guardian = game
+            .world
+            .spawn((
+                NestGuardian { nest },
+                Position {
+                    x: ppos.x + MAX_BUILD_DISTANCE_FROM_HOME + 3,
+                    y: ppos.y,
+                },
+            ))
+            .id();
+
+        place_home(&mut game, 0, 0);
+
+        assert!(
+            game.world.get::<NestGuardian>(guardian).is_none(),
+            "a guardian outside the slab must lose its tether when its nest is obliterated, \
+             not keep pointing at a despawned entity"
+        );
+    }
+
+    #[test]
+    fn demolishing_the_home_clears_the_platform_back_to_natural_terrain() {
+        let mut game = Game::new(923, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+        place_home(&mut game, 0, 1);
+
+        let home = find_structure_by_kind(&mut game, "home").expect("the Home should be deployed");
+        game.remove_structure(home).unwrap();
+
+        assert_ne!(
+            game.world
+                .resource_mut::<WorldMap>()
+                .tile(ppos.x, ppos.y + 1)
+                .biome,
+            Biome::Platform,
+            "demolishing the Home should leave no orphan sanctuary behind"
+        );
+        assert!(
+            game.world.resource::<Platform>().center.is_none(),
+            "the platform resource should forget its center once the Home is gone"
+        );
+    }
+
+    #[test]
+    fn no_wild_creature_ever_spawns_on_platform_floor() {
+        let mut game = Game::new(924, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+        place_home(&mut game, 0, 0);
+
+        for _ in 0..400 {
+            game.try_spawn_habitat_creature(ppos.x + 2, ppos.y + 2);
+        }
+        let spawned = game
+            .world
+            .query_filtered::<Entity, With<Hostile>>()
+            .iter(&game.world)
+            .count();
+        assert_eq!(
+            spawned, 0,
+            "platform floor has no habitat species, so nothing can spawn on it"
+        );
     }
 
     #[test]

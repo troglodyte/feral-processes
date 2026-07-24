@@ -3471,31 +3471,64 @@ impl Game {
     }
 
     /// Breaches the player (and any tamed programs they own) forward into
-    /// the next zone sector: wild programs and all structures in the
-    /// current zone are left behind (despawned — there's no portal back
-    /// down), a fresh sector is generated from a new seed, and wild
-    /// programs there spawn with stats scaled by the new zone's
-    /// `ZoneLevel::stat_multiplier`.
+    /// the next zone sector: wild programs and nests are left behind
+    /// (despawned — there's no portal back down), a fresh sector is
+    /// generated from a new seed, and wild programs there spawn with stats
+    /// scaled by the new zone's `ZoneLevel::stat_multiplier`.
+    ///
+    /// The player's base travels with them. Every structure is repositioned
+    /// around the new spawn point at its existing offset from the Home, and
+    /// the platform slab is re-stamped beneath it, so the base arrives in
+    /// exactly the layout it left in. The Portal itself is consumed by
+    /// `move_player` before this runs, so it never makes the trip.
     fn enter_next_zone(&mut self) {
         let stale: Vec<Entity> = {
             let mut query = self
                 .world
-                .query_filtered::<Entity, Or<(With<Hostile>, With<Structure>, With<Nest>)>>();
+                .query_filtered::<Entity, Or<(With<Hostile>, With<Nest>)>>();
             query.iter(&self.world).collect()
         };
         for e in stale {
             self.world.despawn(e);
         }
-        // Any cronjob a tamed program was running just lost its target
-        // structure above; drop the dangling task rather than leave it
-        // pointing at a despawned entity.
-        let dangling_tasks: Vec<Entity> = {
-            let mut query = self.world.query_filtered::<Entity, With<Task>>();
-            query.iter(&self.world).collect()
+
+        // Snapshot each structure's offset from the Home before the map is
+        // swapped, so the base can be rebuilt in the same layout around the
+        // new spawn point. No Home means there's no base to carry — every
+        // structure is left behind instead, the way all of them used to be,
+        // and any cronjob pointing at one is dropped rather than left
+        // dangling. Unreachable through the public API (a Portal can't be
+        // built without a Home, and demolishing a Home cascades to the
+        // Portal), but cheaper to handle than to prove impossible.
+        let home = self.home_position();
+        let offsets: Vec<(Entity, (i32, i32))> = match home {
+            Some(home) => {
+                let mut query = self
+                    .world
+                    .query_filtered::<(Entity, &Position), With<Structure>>();
+                query
+                    .iter(&self.world)
+                    .map(|(e, p)| (e, (p.x - home.x, p.y - home.y)))
+                    .collect()
+            }
+            None => {
+                let orphans: Vec<Entity> = {
+                    let mut query = self.world.query_filtered::<Entity, With<Structure>>();
+                    query.iter(&self.world).collect()
+                };
+                for e in orphans {
+                    self.world.despawn(e);
+                }
+                let dangling: Vec<Entity> = {
+                    let mut query = self.world.query_filtered::<Entity, With<Task>>();
+                    query.iter(&self.world).collect()
+                };
+                for e in dangling {
+                    self.world.entity_mut(e).remove::<Task>();
+                }
+                Vec::new()
+            }
         };
-        for e in dangling_tasks {
-            self.world.entity_mut(e).remove::<Task>();
-        }
 
         let new_level = {
             let mut zone = self.world.resource_mut::<ZoneLevel>();
@@ -3514,6 +3547,19 @@ impl Game {
             x: start.0,
             y: start.1,
         });
+
+        for (e, (dx, dy)) in offsets {
+            if let Some(mut pos) = self.world.get_mut::<Position>(e) {
+                pos.x = start.0 + dx;
+                pos.y = start.1 + dy;
+            }
+        }
+        // The departed zone's slab went with the old WorldMap — a freshly
+        // generated one starts with an empty override overlay — so there's
+        // nothing to clean up and only ever one slab in existence.
+        if home.is_some() {
+            self.stamp_platform(start.0, start.1);
+        }
 
         let travelers: Vec<Entity> = {
             let mut query = self
@@ -12526,8 +12572,130 @@ mod tests {
         );
     }
 
+    /// Deploys a Home plus a Mining Node beside it, returning both entities
+    /// so a caller can assert on what survives a breach.
+    fn build_a_base(game: &mut Game) -> (Entity, Entity) {
+        place_home(game, 0, 1);
+        game.world
+            .get_mut::<Inventory>(game.player_entity())
+            .unwrap()
+            .add(ItemId::from(ids::CORE_FRAGMENT), 12);
+        game.place_structure("mining_node", 1, 1).unwrap();
+        (
+            find_structure_by_kind(game, "home").unwrap(),
+            find_structure_by_kind(game, "mining_node").unwrap(),
+        )
+    }
+
     #[test]
-    fn zone_transition_carries_tamed_companions_but_leaves_structures_and_wild_creatures_behind() {
+    fn breaching_carries_every_structure_and_its_offset_from_home() {
+        let mut game = Game::new(940, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let (home, node) = build_a_base(&mut game);
+        let before = {
+            let h = *game.world.get::<Position>(home).unwrap();
+            let n = *game.world.get::<Position>(node).unwrap();
+            (n.x - h.x, n.y - h.y)
+        };
+
+        game.enter_next_zone();
+
+        assert!(
+            game.world.get_entity(home).is_ok(),
+            "the Home travels through the breach"
+        );
+        assert!(
+            game.world.get_entity(node).is_ok(),
+            "so does everything built around it"
+        );
+        let h = *game.world.get::<Position>(home).unwrap();
+        let n = *game.world.get::<Position>(node).unwrap();
+        assert_eq!(
+            (n.x - h.x, n.y - h.y),
+            before,
+            "the base's layout must be preserved exactly, not reshuffled"
+        );
+        let spawn = *game.world.resource::<ZoneSpawnPoint>();
+        assert_eq!(
+            (h.x, h.y),
+            (spawn.x, spawn.y),
+            "the Home lands at the new spawn point"
+        );
+    }
+
+    #[test]
+    fn breaching_preserves_structure_durability_and_node_stock() {
+        let mut game = Game::new(941, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let (_home, node) = build_a_base(&mut game);
+        game.world.get_mut::<Durability>(node).unwrap().hp = 7;
+        game.world.get_mut::<ResourceNode>(node).unwrap().amount = 2;
+
+        game.enter_next_zone();
+
+        assert_eq!(
+            game.world.get::<Durability>(node).unwrap().hp,
+            7,
+            "damage travels with the structure"
+        );
+        assert_eq!(
+            game.world.get::<ResourceNode>(node).unwrap().amount,
+            2,
+            "so does mined-down stock"
+        );
+    }
+
+    #[test]
+    fn breaching_restamps_the_platform_around_the_new_spawn_point() {
+        let mut game = Game::new(942, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        build_a_base(&mut game);
+
+        game.enter_next_zone();
+
+        let spawn = *game.world.resource::<ZoneSpawnPoint>();
+        assert_eq!(
+            game.world
+                .resource_mut::<WorldMap>()
+                .tile(spawn.x, spawn.y)
+                .biome,
+            Biome::Platform,
+            "the slab is re-stamped on the new map"
+        );
+        assert_eq!(
+            game.world.resource::<Platform>().center,
+            Some((spawn.x, spawn.y)),
+            "and the resource follows it"
+        );
+    }
+
+    #[test]
+    fn breaching_leaves_a_cronjob_assignment_pointing_at_a_live_structure() {
+        let mut game = Game::new(943, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let (_home, node) = build_a_base(&mut game);
+        let worker = spawn_tamed(&mut game, 10, 3);
+        game.world.entity_mut(worker).insert(Task {
+            kind: TaskKind::GatherResource,
+            target: node,
+            progress: 0,
+            required: 10,
+        });
+
+        game.enter_next_zone();
+
+        let task = game
+            .world
+            .get::<Task>(worker)
+            .expect("the cronjob survives the breach");
+        assert_eq!(
+            task.target, node,
+            "and still points at the structure that travelled with it"
+        );
+        assert!(
+            game.world.get_entity(task.target).is_ok(),
+            "which is still alive"
+        );
+    }
+
+    #[test]
+    fn zone_transition_carries_tamed_companions_and_the_base_but_leaves_wild_creatures_behind() {
         let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
         let ppos = *game.world.get::<Position>(player).unwrap();
@@ -12613,8 +12781,8 @@ mod tests {
             "wild creatures should be left behind, not carried through the portal"
         );
         assert!(
-            game.world.get::<Structure>(home).is_none(),
-            "structures should be left behind when breaching a zone"
+            game.world.get::<Structure>(home).is_some(),
+            "the base travels through the breach with the player"
         );
         let companion_pos = *game.world.get::<Position>(companion).unwrap();
         let player_pos = *game.world.get::<Position>(player).unwrap();
@@ -12647,10 +12815,9 @@ mod tests {
 
         game.move_player(1, 0);
         assert_eq!(game.player_status().zone, 2);
-        // Zone transitions leave structures behind (see
-        // `zone_transition_carries_tamed_companions_but_leaves_structures_and_wild_creatures_behind`),
-        // so the new zone needs its own Home before anything else.
-        place_home(&mut game, -1, 0);
+        // The Home travelled through the breach with the rest of the base
+        // (see `breaching_carries_every_structure_and_its_offset_from_home`),
+        // so the new zone needs no fresh Home before building.
 
         // Zone 2: cost should now be doubled (10 * zone level 2 = 20).
         game.world

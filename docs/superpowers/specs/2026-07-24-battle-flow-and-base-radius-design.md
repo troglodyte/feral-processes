@@ -132,11 +132,25 @@ and `a` are indistinguishable today. The uppercase commands are matched
 Both fill only *unplanned* slots. Pressing `A` three members into a round
 never clobbers a choice already made deliberately.
 
-Routing the target menu back to a party-wide fill needs one new `App` field
-alongside `pending_battle_action`, recording that the menu was opened by `A`
-rather than by a single slot's attack. `handle_battle_target_key`
-(`app-core/src/lib.rs:979`) branches on it at the point where it currently
-calls `commit_battle_action`.
+Routing the target menu back to a party-wide fill needs one new `App` field,
+`pending_party_attack: bool`, alongside `pending_battle_action`, recording
+that the menu was opened by `A` rather than by a single slot's attack.
+`handle_battle_target_key` (`app-core/src/lib.rs:979`) branches on it at the
+point where it currently calls `commit_battle_action`.
+
+Matching party commands on the raw char *before* the existing case fold, then
+retrying on the lowercased char, gives the whole dispatch in one lookup and
+retires the special-cased `if c == 'j'` block:
+
+| Pressed | Exact match in `['A','D','j']` | Lowercased match | Result |
+|---|---|---|---|
+| `A` | AllAttack | — | party-wide attack |
+| `a` | none | none | per-slot Attack |
+| `D` | AllDefend | — | party-wide defend |
+| `d` | none | none | per-slot Defend |
+| `j` | JackOut | — | flee |
+| `J` | none | JackOut | flee |
+| `s`/`c`/`u` | none | none | per-slot, case-folded as before |
 
 **Where the party-wide commands live.** Jack out is a party-level command
 hardcoded in both renderers, outside the `ActionOption` list. Adding two more
@@ -144,12 +158,51 @@ in the same style would mean three literal strings duplicated across two
 renderers, against CLAUDE.md's rule that renderers never author action
 strings.
 
-Instead: add `Game::battle_party_commands() -> Vec<ActionOption>` returning
-jack-out, all-attack and all-defend, and have both renderers append that list
-to `view.options` the way they already draw the per-slot list. All-attack and
-all-defend carry no `unavailable` reason; whether the target menu appears is
-decided by `living_group_count()` at keypress time, not advertised in the
-label. This also retires the existing jack-out duplication.
+Instead: add `Game::battle_party_commands() -> Vec<PartyCommand>` returning
+jack-out, all-attack and all-defend, and have both renderers draw that list
+next to the per-slot one. This also retires the existing jack-out duplication.
+
+`PartyCommand` is a new type in `engine/src/battle.rs`, deliberately not an
+`ActionOption`: these never become one slot's `BattleAction`, so sharing
+`ActionKind` would force meaningless arms into `action_from` and
+`resolve_one_action`.
+
+```rust
+pub enum PartyCommandKind { AllAttack, AllDefend, JackOut }
+
+pub struct PartyCommand {
+    pub kind: PartyCommandKind,
+    pub key: char,
+    pub label: String,
+    pub needs_target: bool,
+}
+```
+
+Whether all-attack needs a target is decided by the engine, in
+`battle_party_commands`, rather than by app-core reading `groups.len()` at
+keypress time. Both are one expression; the engine is where it can be tested.
+See "Where the logic lives" below.
+
+Likewise the fill itself is an engine method,
+`Game::battle_plan_remaining(action) -> Result<(), String>`, which assigns
+`action` to every slot that is unplanned *and* passes `slot_can_act`. That
+predicate matters: `battle_active_slot` and `battle_round_ready` both skip
+slots failing it, so handing an action to a knocked-out companion would undo
+the fix in commit `fe3fcde`.
+
+### Where the logic lives
+
+A bump-battle reachable from app-core is always exactly one enemy group and
+one party slot. This was measured, not assumed: across seeds 0..200, every
+battle `battling_app()` can open is `(groups: 1, slots: 1)`. Near the base
+`max_pack_size` returns 1 (`lib.rs:4470`, distance 0 from the danger origin),
+and `spawn_wild_creature` is private to the engine, so app-core tests have no
+way to construct anything larger.
+
+So multi-slot and multi-group behaviour can only be asserted in the engine,
+where the private `insert_battle` helper builds both directly. Everything
+about *which slots get filled* and *whether a target is needed* therefore
+lives in the engine; app-core keeps only the key-to-command wiring.
 
 `battle_party_commands` supplies labels only. Key dispatch stays hand-written
 in `handle_battle_key`, as jack-out's already is: the three commands do three
@@ -200,25 +253,39 @@ branch either way.
 
 Reproducers first, per the repo's bug-fix rule.
 
-**`app-core`:**
-
-- `A` with two living groups routes to `Mode::BattleTarget`; picking a group
-  plans every slot with an attack on it and resolves.
-- `A` with one living group plans and resolves without ever entering
-  `Mode::BattleTarget`.
-- `D` fills only unplanned slots — a slot already set to something else keeps
-  its choice.
-- Committing the final slot's action lands in `Mode::Battle`, never a resolve
-  screen. This replaces the `Mode::BattleResolve` assertions in the existing
-  tests at `app-core/src/lib.rs:2413` and `:2440`.
+Coverage is split along the line set out in "Where the logic lives": anything
+needing more than one group or one slot is an engine test.
 
 **`engine`:**
 
+- `battle_plan_remaining` fills only unplanned slots — a slot already set to
+  something else keeps its choice.
+- `battle_plan_remaining` skips a slot failing `slot_can_act`, so a
+  knocked-out companion is not handed an action.
+- `battle_party_commands` sets `needs_target` on all-attack only while more
+  than one group is alive (asserted against both a one-group and a two-group
+  `insert_battle`).
+- `battle_party_commands` offers all-attack, all-defend and jack-out, keyed
+  `A`/`D`/`j`, each label carrying its own bracketed key.
 - `battle_action_options` pins `d` to Defend and `c` to Decompile, so a future
-  re-key cannot silently swap them.
-- `battle_party_commands` offers all-attack, all-defend and jack-out.
+  re-key cannot silently swap them, and every label's bracketed letter matches
+  its key.
 - A resolved round logs exactly one `MessageKind::Round` line, numbered to
   match the planning header rather than the post-increment round.
+
+**`app-core`:**
+
+- `A` with one living group — the only battle a bump can open — plans and
+  resolves without ever entering `Mode::BattleTarget`.
+- `D` plans every slot and resolves.
+- Committing the final slot's action lands in `Mode::Battle`, never a resolve
+  screen. This replaces the `Mode::BattleResolve` assertions in the existing
+  tests at `app-core/src/lib.rs:2413` and `:2440`.
+- The existing `battle_action_keys_come_from_the_engine_and_ignore_case`
+  (`app-core/src/lib.rs:2282`) is rewritten, not patched: its premise — the
+  prompt reads `[A]ttack`, so shift is harmless and case is normalized — is
+  exactly what this change inverts. The replacement asserts that `A` and `D`
+  do *not* fold while every other battle key still does.
 
 No test may depend on wall-clock time or unseeded RNG. `cargo test
 --workspace`, `cargo clippy --workspace` and `cargo fmt` are the gate before

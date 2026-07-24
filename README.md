@@ -103,6 +103,7 @@ change what gets stored — a save from a different build shows up as
 | `w` | Assign a compiled program to a cronjob (work a structure) |
 | `G` | Assign a compiled program to guard a structure against raids (any structure, not just a workable one — see [Base defense](#base-defense)) |
 | `R` | Demolish a nearby structure, refunding 30% of its materials — demolishing Home destroys every other base structure too, after a confirmation warning (see [Structures](#structures)) |
+| `U` | Upgrade a nearby structure one tier — each tier costs more and yields more (see [Structures](#structures)) |
 | `u` | Use symlink: instantly teleport to a deployed symlink structure (e.g. Home), for its item cost |
 | `i` | Inspect: pick a direction, see stats/moves/decompile odds for the first program that way (no intrusion) |
 | `v` | Inventory/equipment: equip, unequip, consume, fuse, erase items |
@@ -217,14 +218,24 @@ creature to work" mechanic.
    where you are or what you're doing:
    - Each tick, the assigned program's progress advances by 1.
    - Once progress reaches the structure's `ticks_per_unit` (Mining Node 10,
-     Power Conduit 6, Compiler 8), a completed cycle drops one unit of
-     output straight into *your* inventory, progress resets, and the worker
+     Power Conduit 6, Compiler 8), a completed cycle drops its output
+     straight into *your* inventory, progress resets, and the worker
      gains 5 flat XP (enough to level up mid-cycle sometimes) — **except** a
      Mining Node, which is gated behind a level-based percentage chance
-     (a basic level-1 node succeeds only about half the time) on top of
+     (a basic Mk1 node succeeds only about half the time) on top of
      its doubled `ticks_per_unit`, so it's meaningfully slower and less
      reliable than the other two. A missed attempt still resets the cycle,
-     it just doesn't pay out. Cronjob XP stops entirely once a worker hits
+     it just doesn't pay out.
+   - **How much a cycle pays is not one unit.** It's multiplied by your
+     current zone level the same way wild programs' stats are — zone 1 pays
+     ×1, zone 2 ×2, zone 3 ×4, and so on — and again by the structure's
+     upgrade tier (see [Structures](#structures)). A Mk3 Mining Node in
+     zone 4 drops 24 Core Fragments a cycle where a fresh one in zone 1
+     drops 1. That's what makes settling in and building up worth the time
+     rather than rushing for the next portal. Research Data is the
+     exception: it's capped at 200 in your Buffer, so it always pays
+     exactly one unit a cycle regardless of depth. Cronjob XP stops
+     entirely once a worker hits
      **level 10** — resources keep flowing, but leveling past that only
      comes from battling, not idle cronjob work, up to the level 12 cap
      tamed programs share (see the Stats table below — you yourself have no
@@ -254,9 +265,12 @@ research node each — see [Equipment](#equipment).
 Press `T` to open the research tree. **Research Data** is the currency:
 deploy a Research Node (10 Core Fragments, available from the start) and
 cronjob a compiled program onto it, exactly like a Mining Node — a cycle
-takes 14 ticks and, like a Mining Node, is level-gated, so a basic level-1
+takes 14 ticks and, like a Mining Node, is level-gated, so a basic Mk1
 node pays out only about half the time. Research Data doesn't count against
-your carrying capacity; it's banked separately, up to 200.
+your carrying capacity; it's banked separately, up to 200. That cap is also
+why Research Data is the one output that **doesn't** scale with zone depth
+— it always pays one unit a cycle, so upgrading a Research Node buys you
+reliability rather than volume.
 
 Each node costs a flat amount of Research Data and may require others
 first. Unlocking is permanent and one-way — there's no refund and nothing
@@ -661,16 +675,24 @@ enough of them, then walk onto it to breach into the next zone.
 - Each zone level **doubles** wild programs' stats compared to the last —
   zone 2 creatures hit twice as hard and survive twice as long as zone 1's,
   zone 3 quadruples it, and so on.
-- Wandering away from where you breached in adds its own scaling on top:
-  every 15 tiles from that zone's entry point adds another **25%** to wild
-  stats, capping out at **3×** far enough out. Staying close to your entry
-  point (and any structures you've rebuilt there) is the safer play;
-  venturing out is riskier, zone level for zone level.
+- Wandering away from your base adds its own scaling on top: every 15 tiles
+  past the edge of your base platform adds another **25%** to wild stats,
+  capping out at **3×** far enough out. Since the platform is itself 15
+  tiles across from Home, the first step up lands **30 tiles from Home** —
+  the whole base counts as safe territory, not just its centre. Before
+  you've placed your first Home there's no platform, so it measures from
+  where you breached in instead.
 - Deploying a Zone Portal costs 10 Portal Fragments **times your current
   zone level** — breaching deeper costs more raw material each time, so
   fragments gathered in zone 2 only ever fund the zone-3 portal.
-- Your active party travels with you through a portal; deployed structures
-  and wild programs are left behind, and **there's no portal back down**.
+- **Your whole base travels with you.** Your active party, every deployed
+  structure, and the platform floor under them all rematerialize around the
+  new zone's entry point in exactly the layout they left in — damage,
+  stored resources and running cronjobs included. Wild programs and nests
+  are left behind, and **there's no portal back down**.
+- **A Zone Portal is consumed when you step onto it.** It's the one
+  structure that doesn't make the trip, so every breach costs a fresh
+  build.
 - A defeated boss's guaranteed fragment cache is the fastest way to afford
   the next portal without a long grind.
 
@@ -678,13 +700,13 @@ enough of them, then walk onto it to breach into the next zone.
 
 | Structure | Cost | Unlocked by | Purpose |
 | --- | --- | --- | --- |
-| Home | 5 Core Fragments | — | `u` ("use symlink") instantly teleports you to it from anywhere on the map, for 4 Power Cells. Can't be raided — see [Base defense](#base-defense) |
-| Mining Node | 12 Core Fragments | — | Cronjob a compiled program to it to produce Core Fragments over time (slower and level-gated — see [Getting started](#getting-started-building-and-running-cronjobs)) |
-| Research Node | 10 Core Fragments | — | Cronjob a compiled program to it to produce Research Data over time (14 ticks a cycle, level-gated like a Mining Node) — see [Research](#research) |
+| Home | 5 Core Fragments | — | Anchors your base platform (see below). `u` ("use symlink") instantly teleports you to it from anywhere on the map, for 4 Power Cells. Can't be raided — see [Base defense](#base-defense) |
+| Mining Node | 12 Core Fragments | — | Cronjob a compiled program to it to produce Core Fragments over time (slower and level-gated — see [Getting started](#getting-started-building-and-running-cronjobs)). Upgradeable to Mk5 |
+| Research Node | 10 Core Fragments | — | Cronjob a compiled program to it to produce Research Data over time (14 ticks a cycle, level-gated like a Mining Node) — see [Research](#research). Upgradeable to Mk5 |
 | Recharger Node | 5 Core Fragments | — | Required to `r` (recharge/rest) within 2 tiles of it |
 | Data Cache | 10 Core Fragments | — | Raises your carrying capacity (Buffer) by 10 while deployed; stacks with every other one |
-| Zone Portal | 10 Portal Fragments *(× current zone level)* | — | Walk onto it to breach into the next zone — see [Zones and portals](#zones-and-portals) |
-| Compiler | 16 Core Fragments | Automation | Cronjob a compiled program to it to produce ICE Breakers over time |
+| Zone Portal | 10 Portal Fragments *(× current zone level)* | — | Walk onto it to breach into the next zone. Consumed on use — see [Zones and portals](#zones-and-portals) |
+| Compiler | 16 Core Fragments | Automation | Cronjob a compiled program to it to produce ICE Breakers over time. Upgradeable to Mk5 |
 | Terminal | 3 Core Fragments | Power Grid | Passively cooks a Core Fragment into a Power Cell every tick while you're standing within 2 tiles — no cronjob needed |
 | Power Conduit | 14 Core Fragments | Power Grid | Cronjob a compiled program to it to produce Power Cells over time |
 | iso Market | 16 Core Fragments | Isometric Commerce | `t` ("trade") to sell inventory items or buy consumables for Core Fragments — see [Trading](#trading) |
@@ -707,6 +729,28 @@ demolish **every** other base structure too (each refunding its own 30%
 share), so `R` warns you and asks to confirm before Home specifically goes
 down. Remove Home to relocate the whole base, or to free up the 15-tile
 radius for a fresh one elsewhere.
+
+**Deploying a Home lays a platform.** Every tile within that 15-tile build
+radius is flattened into base flooring, obliterating the terrain, nests and
+rogue programs that were standing there. Nothing wild ever spawns on
+platform flooring, so your base is a genuine safe haven — the only threat
+that reaches it is a raid (see [Base defense](#base-defense)). There's
+nothing to scavenge on it either: `g` always comes up empty on your own
+floor. Demolishing Home tears the platform up again and the natural terrain
+underneath comes back. The platform travels with you between zones, so a
+base founded in zone 1 is the same base you're still standing in at zone 6
+— see [Zones and portals](#zones-and-portals).
+
+**Upgrade tiers.** Structures that produce something can be upgraded with
+`U`, one tier at a time up to Mk5. Reaching tier N costs that structure's
+upgrade price **times N**, so a Mining Node's Mk1→Mk2 costs 20 Core
+Fragments and Mk2→Mk3 costs 30. A tier does two things at once: it
+multiplies what a finished cronjob cycle pays out, and it makes cycles more
+likely to succeed at all — a Mk1 node pays out on about **50%** of its
+cycles, rising 10 points a tier to **90%** at Mk5.
+Upgrades ride through a portal with the rest of the base, so they're the
+main thing worth pouring materials into — an upgraded base is what keeps
+your income ahead of each zone's rising portal cost.
 
 Mining Node, Research Node, Power Conduit, and Compiler use **active**
 automation (an assigned cronjob produces over time); Terminal uses

@@ -11733,6 +11733,12 @@ mod tests {
             0.0,
             "an unwalkable biome's 0% chance shouldn't be boosted into a nonzero one"
         );
+        assert_eq!(
+            forage_chance(Biome::Platform, 3),
+            0.0,
+            "a base platform is manufactured floor with nothing to scavenge, and no amount \
+             of Keen Scavenger should turn a safe haven into a risk-free forage spot"
+        );
     }
 
     #[test]

@@ -2,6 +2,61 @@
 
 Release notes for [feral-processes](README.md).
 
+## 2026-07-24
+
+- **Your base travels between zones**: breaching used to despawn every
+  structure you'd deployed, which made staying anywhere long enough to
+  build one a bad trade — the base was the only part of your progress that
+  got deleted when you advanced, and the only one whose output never grew.
+  Deploying a **Home** now lays a 15-tile **platform** under your base:
+  flattened flooring that obliterates the terrain, nests and rogue programs
+  in that radius, and that nothing wild will ever spawn on again. Step
+  through a Zone Portal and the whole thing — platform, every structure on
+  it, their damage, their stored resources, and their running cronjobs —
+  rematerializes around the new sector's entry point in exactly the layout
+  it left in. A base founded in zone 1 is the same base you're standing in
+  at zone 6. Demolishing Home tears the platform up and the natural terrain
+  comes back. See [Zones and portals](README.md#zones-and-portals).
+- **A Zone Portal is consumed when you step onto it**: it's the one
+  structure that doesn't make the trip. Without that, a portal carried
+  forward with the rest of the base would make every breach after the first
+  one free, and the 10-fragments-per-zone-level cost would stop meaning
+  anything after zone 1.
+- **Cronjob output scales with zone depth**: a finished cycle no longer
+  drops exactly one unit. It's multiplied by your zone level on the same
+  doubling curve wild programs' stats already used — zone 2 pays double
+  zone 1, zone 3 quadruple — so a base keeps pace with the sector it's
+  sitting in instead of falling further behind every time you breach. A Mk3
+  Mining Node in zone 4 drops 24 Core Fragments a cycle where a fresh one
+  in zone 1 drops 1. Research Data is the exception: it's banked against a
+  200 cap, so it still pays one unit a cycle at any depth. See
+  [Getting started](README.md#getting-started-building-and-running-cronjobs).
+- **Structures can be upgraded (`U`)**: producing structures now have tiers,
+  Mk1 through Mk5. Reaching tier N costs that structure's upgrade price
+  times N, and a tier both multiplies what a cycle pays out and raises the
+  odds the cycle pays out at all — a Mk1 Mining Node fizzles about half the
+  time, a Mk5 about one time in ten. Upgrades ride through a portal with
+  everything else, so they're the thing worth pouring materials into across
+  a whole run. This is data, not Rust: any structure `.ron` file can
+  declare an `upgrade` block, and every file that omits one stays
+  un-upgradeable exactly as before, mods included — see
+  `assets/structures/README.md` and [Structures](README.md#structures).
+- **Danger now scales from your base's edge, not its centre**: wild stats
+  still climb 25% every 15 tiles you wander out, but that count starts at
+  the platform boundary instead of the tile you materialized on. Since the
+  platform is itself 15 tiles across, the first step up moved from 15 tiles
+  from Home to **30** — the whole base reads as safe territory rather than
+  sitting exactly on the first escalation step. Pack sizes moved with it.
+  Before your first Home there's no platform, so it measures from the entry
+  point exactly as it always did.
+- **Your base is a genuine safe haven**: because platform flooring lists no
+  species as living there, nothing wild spawns inside your build radius at
+  any zone depth. Raids are the only threat that still reaches it (see
+  [Base defense](README.md#base-defense)). There's nothing to scavenge on
+  it either — `g` always comes up empty on your own floor.
+- **Save format bumped to v9.** Saves written by earlier versions no longer
+  load.
+
 ## 2026-07-23
 
 - **Home can no longer be raided**: raids used to pick from every deployed

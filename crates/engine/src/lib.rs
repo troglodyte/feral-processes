@@ -70,6 +70,11 @@ const DISTANCE_STAT_STEP_BONUS: f32 = 0.25;
 /// really is unbounded.
 const MAX_DISTANCE_STAT_MULTIPLIER: f32 = 3.0;
 
+/// How far from the player a zone's opening wild programs scatter (see
+/// `Game::spawn_initial_creatures`). Widened by the platform radius when
+/// the player has a base, since nothing can spawn on platform floor.
+const INITIAL_SPAWN_SCATTER_TILES: i32 = 15;
+
 /// Tile distance per extra pack member a wild spawn can roll, counted from
 /// the same origin as `DISTANCE_STAT_STEP_TILES` (the platform's edge once
 /// a Home exists) — see `Game::max_pack_size`. Twice `DISTANCE_STAT_STEP_TILES`:
@@ -3855,13 +3860,27 @@ impl Game {
     /// forever instead of just spawning fewer than `count`.
     fn spawn_initial_creatures(&mut self, count: usize) {
         let player_pos = *self.world.get::<Position>(self.player_entity()).unwrap();
+        // A base platform lists no habitat species, so every roll landing
+        // inside one is a guaranteed miss. The platform is exactly as wide
+        // as the default scatter and the player materializes at its center,
+        // so without pushing the scatter out past its edge a zone breached
+        // into with a base would be born completely empty.
+        let reach = INITIAL_SPAWN_SCATTER_TILES
+            + if self.world.resource::<Platform>().center.is_some() {
+                MAX_BUILD_DISTANCE_FROM_HOME
+            } else {
+                0
+            };
         let mut spawned = 0;
         let mut attempts = 0;
         while spawned < count && attempts < count * 20 {
             attempts += 1;
             let (dx, dy) = {
                 let mut rng = self.world.resource_mut::<GameRng>();
-                (rng.0.random_range(-15..=15), rng.0.random_range(-15..=15))
+                (
+                    rng.0.random_range(-reach..=reach),
+                    rng.0.random_range(-reach..=reach),
+                )
             };
             if self.try_spawn_habitat_creature(player_pos.x + dx, player_pos.y + dy) {
                 spawned += 1;
@@ -12737,7 +12756,10 @@ mod tests {
     /// Deploys a Home plus a Mining Node beside it, returning both entities
     /// so a caller can assert on what survives a breach.
     fn build_a_base(game: &mut Game) -> (Entity, Entity) {
-        place_home(game, 0, 1);
+        // On the player's own tile, which is walkable by definition — the
+        // Home's slab then guarantees everything around it is too, so this
+        // works for any seed.
+        place_home(game, 0, 0);
         game.world
             .get_mut::<Inventory>(game.player_entity())
             .unwrap()
@@ -12994,6 +13016,28 @@ mod tests {
             (spawn.x, spawn.y),
             "the Home lands at the new spawn point"
         );
+    }
+
+    #[test]
+    fn breaching_with_a_base_still_populates_the_new_zone() {
+        for seed in 0u32..12 {
+            let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            build_a_base(&mut game);
+
+            game.enter_next_zone();
+
+            let hostiles = {
+                let mut query = game.world.query_filtered::<Entity, With<Hostile>>();
+                query.iter(&game.world).count()
+            };
+            assert!(
+                hostiles > 0,
+                "seed {seed}: a zone breached into with a base must still have wild programs \
+                 in it. The platform has no habitat species and is exactly as wide as the \
+                 initial spawn scatter, so a scatter that never reaches past its edge leaves \
+                 the whole zone empty."
+            );
+        }
     }
 
     #[test]

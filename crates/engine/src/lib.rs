@@ -7339,6 +7339,53 @@ mod tests {
         assert_eq!(status.power, status.max_hp + status.atk + status.def);
     }
 
+    /// The map's Integrity gauge and the battle screen's "You" bar are two
+    /// readouts of one number. Nothing may fork them — not the entity they
+    /// resolve, not a buff, not a stale view.
+    #[test]
+    fn battle_view_integrity_matches_the_map_status_panel() {
+        let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let wild = start_battle_with_a_wild_program(&mut game);
+        let player = game.player_entity();
+        assert_eq!(
+            game.world.resource::<BattleState>().player,
+            player,
+            "the battle must be fought by the entity the map panel reads"
+        );
+
+        // Outlast the pack without killing it: a fight that ends mid-loop
+        // would drop the battle view and stop comparing.
+        {
+            let mut w = game.world.get_mut::<Stats>(wild).unwrap();
+            w.hp = 10_000;
+            w.max_hp = 10_000;
+            w.atk = 50;
+        }
+        {
+            let mut p = game.world.get_mut::<Stats>(player).unwrap();
+            p.hp = 5_000;
+            p.max_hp = 5_000;
+        }
+
+        let start_hp = game.player_status().hp;
+        for round in 0..10 {
+            game.battle_attack();
+            let status = game.player_status();
+            let view = game
+                .battle_view()
+                .unwrap_or_else(|| panic!("battle ended early at round {round}"));
+            assert_eq!(view.player_hp, status.hp, "hp diverged at round {round}");
+            assert_eq!(
+                view.player_max_hp, status.max_hp,
+                "max_hp diverged at round {round}"
+            );
+        }
+        assert!(
+            game.player_status().hp < start_hp,
+            "the wild program never landed a hit, so the comparison proved nothing"
+        );
+    }
+
     #[test]
     fn wait_advances_one_tick_without_moving() {
         let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -10386,10 +10433,17 @@ mod tests {
         );
     }
 
+    /// How many `raid_check` rolls each seed gets in the sweeps below.
+    /// `RAID_CHANCE_PER_TICK` is a per-call roll, so a single call per seed
+    /// leaves a ~2.7% chance of a 300-seed sweep never firing at all — which
+    /// unsorted habitat lookup can turn from a stable pass into a flake by
+    /// shifting RNG consumption between runs. Seven attempts takes that to
+    /// ~1e-11. Every sweep returns on the first fire, so no target ever takes
+    /// a second hit.
+    const RAID_ATTEMPTS_PER_SEED: u32 = 7;
+
     #[test]
     fn raid_check_can_damage_an_undefended_structure() {
-        // RAID_CHANCE_PER_TICK is a per-call roll; drive many seeds until it
-        // fires at least once, same pattern as the wild-retaliation test.
         for seed in 0..300u32 {
             let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
             let structure = game
@@ -10403,15 +10457,16 @@ mod tests {
                 ))
                 .id();
 
-            game.raid_check();
+            for _ in 0..RAID_ATTEMPTS_PER_SEED {
+                game.raid_check();
 
-            let Some(durability) = game.world.get::<Durability>(structure) else {
-                // Destroyed outright (30 durability, RAID_DAMAGE 10 — shouldn't
-                // happen in one hit, but tolerate it rather than assume).
-                return;
-            };
-            if durability.hp < 30 {
-                return;
+                let Some(durability) = game.world.get::<Durability>(structure) else {
+                    // Destroyed outright — tolerate rather than assume it can't happen.
+                    return;
+                };
+                if durability.hp < 30 {
+                    return;
+                }
             }
         }
         panic!(
@@ -10421,8 +10476,6 @@ mod tests {
 
     #[test]
     fn raid_damage_message_is_tagged_message_kind_raid() {
-        // Same seed-hunting pattern as raid_check_can_damage_an_undefended_structure
-        // — RAID_CHANCE_PER_TICK is a per-call roll, so drive seeds until it fires.
         for seed in 0..300u32 {
             let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
             game.world.spawn((
@@ -10433,14 +10486,16 @@ mod tests {
                 Durability { hp: 30, max_hp: 30 },
             ));
 
-            game.raid_check();
+            for _ in 0..RAID_ATTEMPTS_PER_SEED {
+                game.raid_check();
 
-            let tagged = game
-                .message_log(10)
-                .into_iter()
-                .any(|(kind, _)| kind == MessageKind::Raid);
-            if tagged {
-                return;
+                let tagged = game
+                    .message_log(10)
+                    .into_iter()
+                    .any(|(kind, _)| kind == MessageKind::Raid);
+                if tagged {
+                    return;
+                }
             }
         }
         panic!(
@@ -10493,18 +10548,20 @@ mod tests {
                 ))
                 .id();
 
-            game.raid_check();
+            for _ in 0..RAID_ATTEMPTS_PER_SEED {
+                game.raid_check();
 
-            let Some(durability) = game.world.get::<Durability>(structure) else {
-                return;
-            };
-            if durability.hp < 30 {
-                assert_eq!(
-                    durability.hp,
-                    30 - (RAID_DAMAGE - shield_defense),
-                    "a raid on an undefended structure should be reduced by the deployed shield's raid_defense"
-                );
-                return;
+                let Some(durability) = game.world.get::<Durability>(structure) else {
+                    return;
+                };
+                if durability.hp < 30 {
+                    assert_eq!(
+                        durability.hp,
+                        30 - (RAID_DAMAGE - shield_defense),
+                        "a raid on an undefended structure should be reduced by the deployed shield's raid_defense"
+                    );
+                    return;
+                }
             }
         }
         panic!("raid_check never rolled across 300 seeds — the raid roll may be broken");
@@ -10611,27 +10668,29 @@ mod tests {
                 ))
                 .id();
 
-            game.raid_check();
+            for _ in 0..RAID_ATTEMPTS_PER_SEED {
+                game.raid_check();
 
-            let effects = game.take_effects();
-            if effects.is_empty() {
-                continue;
+                let effects = game.take_effects();
+                if effects.is_empty() {
+                    continue;
+                }
+                let target = effects
+                    .iter()
+                    .find(|e| e.pos == (5, 5))
+                    .expect("the raid should have targeted the only durable structure");
+                assert_eq!(
+                    target.kind,
+                    EffectKind::Deflected,
+                    "a raid the shield network zeroes out should deflect, not hit"
+                );
+                assert_eq!(
+                    game.world.get::<Durability>(structure).unwrap().hp,
+                    30,
+                    "a deflected raid should leave durability untouched"
+                );
+                return;
             }
-            let target = effects
-                .iter()
-                .find(|e| e.pos == (5, 5))
-                .expect("the raid should have targeted the only durable structure");
-            assert_eq!(
-                target.kind,
-                EffectKind::Deflected,
-                "a raid the shield network zeroes out should deflect, not hit"
-            );
-            assert_eq!(
-                game.world.get::<Durability>(structure).unwrap().hp,
-                30,
-                "a deflected raid should leave durability untouched"
-            );
-            return;
         }
         panic!("raid_check never rolled across 300 seeds — the raid roll may be broken");
     }
@@ -10667,20 +10726,22 @@ mod tests {
                 },
             ));
 
-            game.raid_check();
+            for _ in 0..RAID_ATTEMPTS_PER_SEED {
+                game.raid_check();
 
-            let effects = game.take_effects();
-            if effects.is_empty() {
-                continue;
+                let effects = game.take_effects();
+                if effects.is_empty() {
+                    continue;
+                }
+                assert_eq!(effects[0].kind, EffectKind::Deflected);
+                assert_eq!(effects[0].pos, (5, 5));
+                assert_eq!(
+                    game.world.get::<Durability>(structure).unwrap().hp,
+                    30,
+                    "a fully mitigated raid should leave durability untouched"
+                );
+                return;
             }
-            assert_eq!(effects[0].kind, EffectKind::Deflected);
-            assert_eq!(effects[0].pos, (5, 5));
-            assert_eq!(
-                game.world.get::<Durability>(structure).unwrap().hp,
-                30,
-                "a fully mitigated raid should leave durability untouched"
-            );
-            return;
         }
         panic!("raid_check never rolled across 300 seeds — the raid roll may be broken");
     }
@@ -10899,20 +10960,22 @@ mod tests {
                 required: 5,
             });
 
-            game.raid_check();
+            for _ in 0..RAID_ATTEMPTS_PER_SEED {
+                game.raid_check();
 
-            let worker_hp = game.world.get::<Stats>(worker).unwrap().hp;
-            if worker_hp < 50 {
-                // The raid rolled this attempt: the structure should be
-                // untouched (fully mitigated) and the worker should have
-                // taken the defender's cost.
-                assert_eq!(
-                    game.world.get::<Durability>(structure).unwrap().hp,
-                    30,
-                    "a worker with overwhelming Defense should fully mitigate the raid"
-                );
-                assert_eq!(worker_hp, 50 - RAID_DEFENDER_DAMAGE);
-                return;
+                let worker_hp = game.world.get::<Stats>(worker).unwrap().hp;
+                if worker_hp < 50 {
+                    // The raid rolled this attempt: the structure should be
+                    // untouched (fully mitigated) and the worker should have
+                    // taken the defender's cost.
+                    assert_eq!(
+                        game.world.get::<Durability>(structure).unwrap().hp,
+                        30,
+                        "a worker with overwhelming Defense should fully mitigate the raid"
+                    );
+                    assert_eq!(worker_hp, 50 - RAID_DEFENDER_DAMAGE);
+                    return;
+                }
             }
         }
         panic!("raid_check never rolled across 300 seeds — the raid roll may be broken");

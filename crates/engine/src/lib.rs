@@ -25,11 +25,11 @@ use rand::{RngExt, SeedableRng};
 
 use battle::{ActionKind, ActionOption, BattleAction, EnemyGroup, TargetSpec};
 use components::{
-    ActiveBuff, ActiveStatus, BuffKind, Creature, CustomName, Decompiler, Durability, Equipment,
-    EquippedItem, Experience, FusionCount, Glyph, GlyphColor, Hostile, Inventory, ItemFusions,
-    MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL, Needs, Nest, NestGuardian, PassiveProcessor, Perks,
-    Player, PlayerBuff, Position, Potential, ResourceNode, Stats, StatusEffects, StatusKind,
-    Structure, StructureTier, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
+    ActiveBuff, ActiveStatus, BuffKind, CombatBuff, Creature, CustomName, Decompiler, Durability,
+    Equipment, EquippedItem, Experience, FusionCount, Glyph, GlyphColor, Hostile, Inventory,
+    ItemFusions, MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL, Needs, Nest, NestGuardian,
+    PassiveProcessor, Perks, Player, Position, Potential, ResourceNode, Stats, StatusEffects,
+    StatusKind, Structure, StructureTier, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
 };
 use items::{EquipmentSlot, EquipmentStats, ItemId, ids};
 use items_db::ItemDb;
@@ -48,10 +48,20 @@ use world::{Biome, Tile, WorldMap};
 /// How many ticks a full night's recharge cycle advances the clock by.
 const REST_TICKS: u32 = 40;
 
-/// Chance a wild program's retaliation targets the active companion instead
-/// of the player, if one is present. The companion is a battle-worthy
-/// program in its own right, not invulnerable cover.
-const COMPANION_RETALIATION_CHANCE: f64 = 0.3;
+/// Relative weight each party member carries in a wild program's target
+/// roll. Ranks are *soft*: everyone stays targetable, slot order only
+/// changes the odds — a back-slot member is hit
+/// `FRONT_SLOT_AGGRO_WEIGHT / BACK_SLOT_AGGRO_WEIGHT` times less often than
+/// a front-slot one, never zero times. Bracing (see `Game::begin_defend`)
+/// adds `DEFEND_AGGRO_WEIGHT` on top, which is what makes Defend a
+/// party-level play rather than a selfish one.
+const FRONT_SLOT_AGGRO_WEIGHT: u32 = 3;
+const BACK_SLOT_AGGRO_WEIGHT: u32 = 1;
+const DEFEND_AGGRO_WEIGHT: u32 = 4;
+
+/// How many party slots count as the front line for `FRONT_SLOT_AGGRO_WEIGHT`
+/// — the player plus the first two companions.
+const FRONT_SLOTS: usize = 3;
 
 /// Tile distance per step of `DISTANCE_STAT_STEP_BONUS`, counted from
 /// `Game::distance_from_danger_origin` — the base platform's edge once a
@@ -88,7 +98,16 @@ const PACK_SIZE_STEP_TILES: i32 = DISTANCE_STAT_STEP_TILES * 2;
 /// searches from whichever member the player bumped into — both use the
 /// same radius so a whole spawned cluster is guaranteed to pull together
 /// into one fight.
-const PACK_GATHER_RADIUS: i32 = 2;
+const PACK_GATHER_RADIUS: i32 = 3;
+
+/// Pack-size headroom each zone level unlocks, against `MAX_PACK_SIZE`.
+/// Packs fight as species groups now, so a big pack is several small groups
+/// with only the front two in melee range (`ENGAGED_GROUPS`) rather than a
+/// flat multiplier on incoming damage.
+const PACK_SIZE_PER_ZONE: u32 = 3;
+
+/// Hard ceiling on one intrusion's wild pack, across every group.
+const MAX_PACK_SIZE: u32 = 12;
 
 /// How many distinct species groups can engage in one intrusion. A cluster
 /// with more species than this engages its largest groups and leaves the
@@ -642,7 +661,7 @@ impl Game {
                 },
                 ItemFusions::default(),
                 StatusEffects::default(),
-                PlayerBuff::default(),
+                CombatBuff::default(),
                 Perks::default(),
             ))
             .id();
@@ -754,7 +773,7 @@ impl Game {
                     tiers: data.player.item_fusions,
                 },
                 StatusEffects::default(),
-                PlayerBuff::default(),
+                CombatBuff::default(),
                 Perks {
                     points: data.player.perk_points,
                     unlocked: data.player.unlocked_perks,
@@ -778,12 +797,15 @@ impl Game {
         }
 
         let mut pending_cronjobs: Vec<(Entity, save::CronjobSave)> = Vec::new();
-        let mut party: Vec<Entity> = Vec::new();
+        // Collected with their slot index and sorted below: creatures come
+        // back in whatever order they were written, which is no longer the
+        // roster order, and roster order is now mechanically meaningful.
+        let mut party_slots: Vec<(u32, Entity)> = Vec::new();
         for c in data.creatures {
             let Some(species) = game.world.resource::<SpeciesDb>().get(&c.species).cloned() else {
                 continue;
             };
-            let is_companion = c.is_companion;
+            let party_slot = c.party_slot;
             let mut entity = game.world.spawn((
                 Creature {
                     species: species.id.clone(),
@@ -825,8 +847,8 @@ impl Game {
                         xp_to_next: c.xp_to_next,
                     },
                 ));
-                if is_companion {
-                    party.push(creature_id);
+                if let Some(slot) = party_slot {
+                    party_slots.push((slot, creature_id));
                 } else if let Some(cronjob) = c.cronjob {
                     pending_cronjobs.push((creature_id, cronjob));
                 }
@@ -834,6 +856,8 @@ impl Game {
                 entity.insert((Hostile, WanderAi::default()));
             }
         }
+        party_slots.sort_by_key(|&(slot, _)| slot);
+        let mut party: Vec<Entity> = party_slots.into_iter().map(|(_, e)| e).collect();
         party.truncate(MAX_PARTY_SIZE);
         game.world.insert_resource(Party(party));
 
@@ -998,7 +1022,10 @@ impl Game {
                 xp: exp.map(|e| e.xp).unwrap_or(0),
                 xp_to_next: exp.map(|e| e.xp_to_next).unwrap_or(20),
                 cronjob,
-                is_companion: party_entities.contains(&entity),
+                party_slot: party_entities
+                    .iter()
+                    .position(|&e| e == entity)
+                    .map(|i| i as u32),
                 zone: spawn_zone.map(|z| z.0).unwrap_or(1),
                 custom_name: custom_name.map(|c| c.0.clone()),
                 hp_roll: potential.hp_roll,
@@ -1316,7 +1343,7 @@ impl Game {
             stats.hp = (stats.hp + effect.heal).min(stats.max_hp);
         }
         if let Some(buff) = effect.prebattle_buff {
-            self.world.get_mut::<PlayerBuff>(player).unwrap().active = Some(ActiveBuff {
+            self.world.get_mut::<CombatBuff>(player).unwrap().active = Some(ActiveBuff {
                 kind: buff.kind,
                 remaining: buff.rounds,
                 power: buff.power,
@@ -2534,7 +2561,7 @@ impl Game {
 
     fn start_battle(&mut self, pack: Vec<Entity>) {
         let player = self.player_entity();
-        // A `PlayerBuff` armed on the map by a consumable (see `use_item`'s
+        // A `CombatBuff` armed on the map by a consumable (see `use_item`'s
         // `prebattle_buff`) must carry into the fight it was armed for —
         // intentionally left untouched here, unlike `clear_battle_status_effects`.
         let groups = self.group_pack(pack);
@@ -2837,6 +2864,23 @@ impl Game {
         let player = self.world.resource::<BattleState>().player;
         let plan = self.world.resource::<BattleState>().planned.clone();
 
+        // Bracing is a stance held for the whole round, not an action that
+        // only pays off when you win initiative — so it is applied before
+        // anyone acts. A defender is therefore already covered against a
+        // faster enemy, and already drawing extra fire when targets are
+        // rolled.
+        for (slot, action) in plan.iter().enumerate() {
+            if !matches!(action, Some(BattleAction::Defend)) {
+                continue;
+            }
+            let Some(entity) = self.actor_entity(battle::Actor::Party(slot)) else {
+                continue;
+            };
+            if self.creature_alive(entity) && !self.is_stunned(entity) {
+                self.begin_defend(entity);
+            }
+        }
+
         for actor in self.roll_initiative() {
             if self.world.get_resource::<BattleState>().is_none() {
                 break;
@@ -2911,7 +2955,10 @@ impl Game {
                     None => self.rally_player(entity, &name, player),
                 }
             }
-            BattleAction::Defend => self.begin_defend(entity),
+            // Already applied up front in `battle_resolve_round`, so that
+            // bracing covers the whole round rather than only what happens
+            // after this member's place in the initiative order.
+            BattleAction::Defend => {}
             BattleAction::Decompile { group } => {
                 let Some(group) = self.retarget(group) else {
                     return;
@@ -3205,7 +3252,7 @@ impl Game {
     /// a stronger rally.
     fn rally_player(&mut self, companion: Entity, name: &str, player: Entity) {
         let power = (self.world.get::<Stats>(companion).unwrap().atk / 3).max(1);
-        if let Some(mut buff) = self.world.get_mut::<PlayerBuff>(player) {
+        if let Some(mut buff) = self.world.get_mut::<CombatBuff>(player) {
             buff.active = Some(ActiveBuff {
                 kind: BuffKind::Atk,
                 remaining: RALLY_DURATION,
@@ -3226,7 +3273,7 @@ impl Game {
     ) {
         match *ability {
             SpecialAbility::Rally { power, duration } => {
-                if let Some(mut buff) = self.world.get_mut::<PlayerBuff>(player) {
+                if let Some(mut buff) = self.world.get_mut::<CombatBuff>(player) {
                     buff.active = Some(ActiveBuff {
                         kind: BuffKind::Atk,
                         remaining: duration,
@@ -3236,7 +3283,7 @@ impl Game {
                 self.log(format!("{name} rallies you, boosting your attack!"));
             }
             SpecialAbility::Shield { power, duration } => {
-                if let Some(mut buff) = self.world.get_mut::<PlayerBuff>(player) {
+                if let Some(mut buff) = self.world.get_mut::<CombatBuff>(player) {
                     buff.active = Some(ActiveBuff {
                         kind: BuffKind::Def,
                         remaining: duration,
@@ -3274,7 +3321,7 @@ impl Game {
     }
 
     /// `entity`'s effective ATK for damage purposes: its real `Stats`
-    /// value, plus an active `PlayerBuff::Atk` bonus if any. If `entity` is
+    /// value, plus an active `CombatBuff::Atk` bonus if any. If `entity` is
     /// the player, this also adds the standing party bonus (see
     /// `party_stat_bonus`) and applies the low-power attack penalty (see
     /// `battle::power_attack_multiplier`) — both are player-only effects.
@@ -3286,7 +3333,7 @@ impl Game {
         let base = self.world.get::<Stats>(entity).map(|s| s.atk).unwrap_or(0);
         let bonus = self
             .world
-            .get::<PlayerBuff>(entity)
+            .get::<CombatBuff>(entity)
             .and_then(|b| b.active)
             .filter(|a| a.kind == BuffKind::Atk)
             .map(|a| a.power)
@@ -3304,14 +3351,14 @@ impl Game {
     }
 
     /// `entity`'s effective DEF against incoming damage: its real `Stats`
-    /// value, plus an active `PlayerBuff::Def` bonus if any, plus the
+    /// value, plus an active `CombatBuff::Def` bonus if any, plus the
     /// standing party bonus (see `party_stat_bonus`) if `entity` is the
     /// player. Same non-player-safe behavior as `effective_atk`.
     fn effective_def(&self, entity: Entity) -> i32 {
         let base = self.world.get::<Stats>(entity).map(|s| s.def).unwrap_or(0);
         let bonus = self
             .world
-            .get::<PlayerBuff>(entity)
+            .get::<CombatBuff>(entity)
             .and_then(|b| b.active)
             .filter(|a| a.kind == BuffKind::Def)
             .map(|a| a.power)
@@ -3651,9 +3698,54 @@ impl Game {
         self.tick();
     }
 
+    /// Whether `entity` is holding the Defend stance this round.
+    fn is_defending(&self, entity: Entity) -> bool {
+        self.world
+            .get::<CombatBuff>(entity)
+            .and_then(|b| b.active)
+            .is_some_and(|a| a.kind == BuffKind::Def && a.power == DEFEND_DEF_BONUS)
+    }
+
+    /// Weighted target roll across the player and every living party
+    /// member: front slots draw more fire than back ones, and a bracing
+    /// member draws more still. Soft ranks — every member stays targetable,
+    /// slot order only changes the odds.
+    fn roll_enemy_target(&mut self, player: Entity) -> Entity {
+        let party = self.world.resource::<Party>().0.clone();
+        let mut pool: Vec<(Entity, u32)> = Vec::new();
+        for (slot, entity) in std::iter::once(player).chain(party).enumerate() {
+            if !self.creature_alive(entity) {
+                continue;
+            }
+            let mut weight = if slot < FRONT_SLOTS {
+                FRONT_SLOT_AGGRO_WEIGHT
+            } else {
+                BACK_SLOT_AGGRO_WEIGHT
+            };
+            if self.is_defending(entity) {
+                weight += DEFEND_AGGRO_WEIGHT;
+            }
+            pool.push((entity, weight));
+        }
+        let total: u32 = pool.iter().map(|(_, w)| w).sum();
+        if total == 0 {
+            return player;
+        }
+        let mut roll = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_range(0..total)
+        };
+        for (entity, weight) in &pool {
+            if roll < *weight {
+                return *entity;
+            }
+            roll -= weight;
+        }
+        player
+    }
+
     /// The wild creature strikes back at whoever's exposed: normally the
-    /// player, but if a companion is fighting alongside them, there's a
-    /// `COMPANION_RETALIATION_CHANCE` chance it eats the hit instead.
+    /// player or a party member, weighted by slot — see `roll_enemy_target`.
     fn wild_retaliate(&mut self, wild: Entity, group: usize, player: Entity) {
         let species_id = self.world.get::<Creature>(wild).unwrap().species.clone();
         // Only the front `ENGAGED_GROUPS` are close enough to swing; anything
@@ -3680,20 +3772,8 @@ impl Game {
         };
         let mv = candidates[idx].clone();
 
-        let party = self.world.resource::<Party>().0.clone();
-        let targets_companion = !party.is_empty() && {
-            let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_bool(COMPANION_RETALIATION_CHANCE)
-        };
-        let target = if targets_companion {
-            let idx = {
-                let mut rng = self.world.resource_mut::<GameRng>();
-                rng.0.random_range(0..party.len())
-            };
-            party[idx]
-        } else {
-            player
-        };
+        let target = self.roll_enemy_target(player);
+        let targets_companion = target != player;
 
         let (w_atk, t_def) = {
             let w = *self.world.get::<Stats>(wild).unwrap();
@@ -3822,10 +3902,10 @@ impl Game {
     }
 
     /// End-of-round upkeep for one combatant's active combat buff (see
-    /// `PlayerBuff`) — ticks its remaining-rounds counter down, clearing it
+    /// `CombatBuff`) — ticks its remaining-rounds counter down, clearing it
     /// (with a log line) once it expires.
-    fn tick_player_buff(&mut self, entity: Entity) {
-        let Some(mut buff) = self.world.get_mut::<PlayerBuff>(entity) else {
+    fn tick_combat_buff(&mut self, entity: Entity) {
+        let Some(mut buff) = self.world.get_mut::<CombatBuff>(entity) else {
             return;
         };
         let Some(active) = buff.active else {
@@ -3864,14 +3944,14 @@ impl Game {
             remaining: 1,
             power: DEFEND_DEF_BONUS,
         };
-        match self.world.get_mut::<PlayerBuff>(entity) {
+        match self.world.get_mut::<CombatBuff>(entity) {
             // A single `active` slot, so bracing overwrites a Rally the
             // member was still carrying — a real cost of the choice.
             Some(mut existing) => existing.active = Some(buff),
             None => {
                 self.world
                     .entity_mut(entity)
-                    .insert(PlayerBuff { active: Some(buff) });
+                    .insert(CombatBuff { active: Some(buff) });
             }
         }
         let name = self.creature_label(entity);
@@ -3889,11 +3969,11 @@ impl Game {
         }
         let player_label = self.entity_label(player);
         self.tick_status_effects(player, &player_label);
-        self.tick_player_buff(player);
+        self.tick_combat_buff(player);
         for companion in self.world.resource::<Party>().0.clone() {
             let label = self.creature_label(companion);
             self.tick_status_effects(companion, &label);
-            self.tick_player_buff(companion);
+            self.tick_combat_buff(companion);
         }
         if self.reap_dead_fronts(player) {
             return;
@@ -3930,13 +4010,13 @@ impl Game {
     /// have one: the wild creature, the player, and the active companion
     /// (if any) — `wild_retaliate`'s target selection means the companion
     /// can pick up a status even on a round where it didn't act. Also ticks
-    /// the player's active combat buff, if any (see `PlayerBuff`).
+    /// the player's active combat buff, if any (see `CombatBuff`).
     fn tick_all_status_effects(&mut self, wild: Entity, player: Entity) {
         let wild_label = self.entity_label(wild);
         self.tick_status_effects(wild, &wild_label);
         let player_label = self.entity_label(player);
         self.tick_status_effects(player, &player_label);
-        self.tick_player_buff(player);
+        self.tick_combat_buff(player);
         let party = self.world.resource::<Party>().0.clone();
         for companion in party {
             let companion_label = self.creature_label(companion);
@@ -3946,7 +4026,7 @@ impl Game {
 
     /// Clears any residual status effects from the player, `wild`, and
     /// every party member, and the player's active combat buff (see
-    /// `PlayerBuff`). Status conditions are scoped to a single intrusion, so
+    /// `CombatBuff`). Status conditions are scoped to a single intrusion, so
     /// nothing should carry forward once one ends, however it ends. `wild`
     /// may already be despawned (a kill), in which case clearing it is a
     /// no-op.
@@ -3954,7 +4034,7 @@ impl Game {
         if let Some(mut s) = self.world.get_mut::<StatusEffects>(player) {
             s.active = None;
         }
-        if let Some(mut b) = self.world.get_mut::<PlayerBuff>(player) {
+        if let Some(mut b) = self.world.get_mut::<CombatBuff>(player) {
             b.active = None;
         }
         if let Some(mut s) = self.world.get_mut::<StatusEffects>(wild) {
@@ -4443,7 +4523,7 @@ impl Game {
     /// can ever end up in one fight (`gather_pack`).
     fn max_pack_size(&self, x: i32, y: i32) -> u32 {
         let zone = self.world.resource::<ZoneLevel>().0;
-        let cap = zone + 1;
+        let cap = (zone * PACK_SIZE_PER_ZONE).clamp(1, MAX_PACK_SIZE);
         let dist = self.distance_from_danger_origin(x, y);
         let grown = 1 + (dist / PACK_SIZE_STEP_TILES) as u32;
         grown.min(cap)
@@ -9570,7 +9650,7 @@ mod tests {
             wild_hp, 100,
             "commanding a companion should never damage the wild creature directly"
         );
-        let buff = game.world.get::<PlayerBuff>(player).unwrap().active;
+        let buff = game.world.get::<CombatBuff>(player).unwrap().active;
         assert!(
             buff.is_some_and(|b| b.kind == BuffKind::Atk),
             "commanding a companion with no special ability should rally (ATK buff) the player"
@@ -9646,7 +9726,7 @@ mod tests {
     fn an_atk_buff_increases_damage_dealt_and_expires_after_its_duration() {
         let mut game = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
-        game.world.get_mut::<PlayerBuff>(player).unwrap().active = Some(ActiveBuff {
+        game.world.get_mut::<CombatBuff>(player).unwrap().active = Some(ActiveBuff {
             kind: BuffKind::Atk,
             remaining: 1,
             power: 50,
@@ -9685,7 +9765,7 @@ mod tests {
         );
         assert!(
             game.world
-                .get::<PlayerBuff>(player)
+                .get::<CombatBuff>(player)
                 .unwrap()
                 .active
                 .is_none(),
@@ -12701,12 +12781,12 @@ mod tests {
         assert_eq!(
             game.max_pack_size(spawn.x + PACK_SIZE_STEP_TILES, spawn.y),
             2,
-            "one full step away should allow a packmate, and zone 1's cap is 2"
+            "one full step away should allow a packmate"
         );
         assert_eq!(
             game.max_pack_size(spawn.x + PACK_SIZE_STEP_TILES * 10, spawn.y),
-            2,
-            "zone 1's cap of 2 should hold even far past the first step"
+            PACK_SIZE_PER_ZONE,
+            "zone 1's cap should hold even far past the first step"
         );
 
         game.world.resource_mut::<ZoneLevel>().0 = 2;
@@ -12716,9 +12796,18 @@ mod tests {
             "zone 2 grows the same way per step, just with a higher cap"
         );
         assert_eq!(
-            game.max_pack_size(spawn.x + PACK_SIZE_STEP_TILES * 2, spawn.y),
-            3,
-            "two steps away should reach zone 2's cap of 3"
+            game.max_pack_size(spawn.x + PACK_SIZE_STEP_TILES * 10, spawn.y),
+            2 * PACK_SIZE_PER_ZONE,
+            "far out in zone 2, the cap should be twice zone 1's"
+        );
+
+        // The absolute ceiling holds regardless of how deep the run gets —
+        // otherwise a late-zone pack outgrows MAX_ENEMY_GROUPS entirely.
+        game.world.resource_mut::<ZoneLevel>().0 = 99;
+        assert_eq!(
+            game.max_pack_size(spawn.x + PACK_SIZE_STEP_TILES * 100, spawn.y),
+            MAX_PACK_SIZE,
+            "no zone may push a pack past MAX_PACK_SIZE"
         );
     }
 
@@ -12862,6 +12951,155 @@ mod tests {
         );
         game.battle_clear_action(0);
         assert_eq!(game.battle_active_slot(), Some(0));
+    }
+
+    /// Defend has to actually reduce incoming damage, or it's a wasted turn
+    /// dressed up as a choice. Same seed both times: neither Defend nor the
+    /// player's flat strike draws from the RNG, so the two runs stay in
+    /// lockstep and the only difference is the DEF bonus.
+    #[test]
+    fn defending_reduces_the_damage_a_party_member_takes_this_round() {
+        let damage_taken = |defend: bool| {
+            let mut game = Game::new(89, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            let wild = game.spawn_wild_creature("scrapper", 5, 5).unwrap();
+            game.start_battle(vec![wild]);
+            let player = game.player_entity();
+            let before = game.world.get::<Stats>(player).unwrap().hp;
+            game.battle_set_action(
+                0,
+                if defend {
+                    BattleAction::Defend
+                } else {
+                    BattleAction::Attack { group: 0 }
+                },
+            )
+            .unwrap();
+            game.battle_resolve_round();
+            before - game.world.get::<Stats>(player).unwrap().hp
+        };
+        assert!(
+            damage_taken(true) < damage_taken(false),
+            "a defended round must cost less HP than an undefended one"
+        );
+    }
+
+    /// Defend is offered to companions, so a companion must be able to hold
+    /// the buff it grants. Only the player is spawned carrying a buff slot,
+    /// so without inserting one on demand a companion's Defend would log
+    /// its message and change nothing.
+    #[test]
+    fn a_companion_can_hold_the_buff_defend_grants() {
+        let mut game = Game::new(90, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let pet = spawn_tamed(&mut game, 30, 5);
+        game.add_companion(pet).unwrap();
+        let raw_def = game.world.get::<Stats>(pet).unwrap().def;
+
+        game.begin_defend(pet);
+
+        assert_eq!(
+            game.effective_def(pet),
+            raw_def + DEFEND_DEF_BONUS,
+            "a bracing companion must actually gain the DEF, not silently no-op"
+        );
+    }
+
+    /// Soft ranks, not hard ones: a back-slot member is hit *less*, never
+    /// *not at all*. Both halves matter — a version that made back slots
+    /// untouchable would pass a front-heavy assertion just as well, and
+    /// would quietly turn the roster into a wall of invulnerable reserves.
+    #[test]
+    fn back_slot_party_members_draw_less_fire_but_are_still_reachable() {
+        let mut game = Game::new(92, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let mut slots = vec![player];
+        for _ in 0..MAX_PARTY_SIZE {
+            // Huge HP pools so nobody drops out of the pool mid-sample.
+            let pet = spawn_tamed(&mut game, 100_000, 1);
+            game.add_companion(pet).unwrap();
+            slots.push(pet);
+        }
+        assert!(
+            slots.len() > FRONT_SLOTS,
+            "the sample needs at least one back slot to be meaningful"
+        );
+
+        let mut hits = vec![0u32; slots.len()];
+        for _ in 0..4000 {
+            let target = game.roll_enemy_target(player);
+            let idx = slots.iter().position(|&e| e == target).unwrap();
+            hits[idx] += 1;
+        }
+
+        let (front, back) = hits.split_at(FRONT_SLOTS);
+        assert!(
+            back.iter().all(|&h| h > 0),
+            "every back slot must still be reachable, got {hits:?}"
+        );
+        let front_min = *front.iter().min().unwrap();
+        let back_max = *back.iter().max().unwrap();
+        assert!(
+            front_min > back_max,
+            "every front slot should outdraw every back slot, got {hits:?}"
+        );
+    }
+
+    /// Bracing draws fire — that is what makes Defend a party-level play
+    /// rather than a selfish one.
+    #[test]
+    fn a_bracing_member_draws_more_fire_than_it_otherwise_would() {
+        let sample = |brace: bool| {
+            let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            let player = game.player_entity();
+            let pet = spawn_tamed(&mut game, 100_000, 1);
+            game.add_companion(pet).unwrap();
+            if brace {
+                game.begin_defend(pet);
+            }
+            (0..4000)
+                .filter(|_| game.roll_enemy_target(player) == pet)
+                .count()
+        };
+        assert!(
+            sample(true) > sample(false),
+            "a bracing companion must take more of the incoming fire"
+        );
+    }
+
+    /// Party order is mechanically meaningful under soft ranks — front
+    /// slots draw more fire — so it has to survive a save/load round trip.
+    /// The roster order here deliberately differs from spawn order, which
+    /// is what the party used to be rebuilt from.
+    #[test]
+    fn party_order_survives_a_save_load_round_trip() {
+        let dir = std::env::temp_dir().join("feral_party_order_roundtrip");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        // Distinct max HP is the identity that has to come back in order.
+        let a = spawn_tamed(&mut game, 31, 3);
+        let b = spawn_tamed(&mut game, 47, 3);
+        let c = spawn_tamed(&mut game, 53, 3);
+        for pet in [c, a, b] {
+            game.add_companion(pet).unwrap();
+        }
+        let path = dir.join("slot.sav");
+        game.save(&path).unwrap();
+
+        let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+        let order: Vec<i32> = loaded
+            .world
+            .resource::<Party>()
+            .0
+            .iter()
+            .filter_map(|&e| loaded.world.get::<Stats>(e).map(|s| s.max_hp))
+            .collect();
+        assert_eq!(
+            order,
+            vec![53, 31, 47],
+            "party order must round-trip exactly, not fall back to spawn order"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The reach rule is the balance valve that makes a big multi-group
@@ -13188,14 +13426,10 @@ mod tests {
             pack[0], anchor,
             "the creature actually bumped into should always be the pack's front"
         );
-        assert!(
-            pack.len() <= 2,
-            "zone 1's pack cap is 2 even with 3 other Hostiles nearby, got {}",
-            pack.len()
-        );
-        assert!(
-            pack.len() >= 2,
-            "at least one nearby Hostile should have joined the anchor"
+        assert_eq!(
+            pack.len(),
+            PACK_SIZE_PER_ZONE as usize,
+            "zone 1's pack cap should bind with 3 other Hostiles in range"
         );
     }
 
@@ -14699,7 +14933,7 @@ mod tests {
         let mut game = Game::new(504, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
         // Arm an Atk buff directly (models what a prebattle_buff consumable does).
-        game.world.get_mut::<PlayerBuff>(player).unwrap().active = Some(ActiveBuff {
+        game.world.get_mut::<CombatBuff>(player).unwrap().active = Some(ActiveBuff {
             kind: BuffKind::Atk,
             remaining: 3,
             power: 5,
@@ -14708,7 +14942,7 @@ mod tests {
         let wild = spawn_wild_on_player_tile(&mut game);
         game.start_battle(vec![wild]);
 
-        let buff = game.world.get::<PlayerBuff>(player).unwrap().active;
+        let buff = game.world.get::<CombatBuff>(player).unwrap().active;
         assert!(
             matches!(
                 buff,

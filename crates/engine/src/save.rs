@@ -61,9 +61,13 @@ pub struct CreatureSave {
     /// identified by position rather than entity id, since entity ids
     /// aren't stable across a save/load round trip.
     pub cronjob: Option<CronjobSave>,
-    /// Only meaningful when `tamed` is true: whether this program is the
-    /// player's active battle companion.
-    pub is_companion: bool,
+    /// This program's index in the player's active party, or `None` if it
+    /// isn't a party member. Party order is mechanically meaningful under
+    /// soft ranks — front slots draw more enemy fire — so it can't be
+    /// rebuilt from creature-iteration order the way it was before.
+    /// Supersedes the old `is_companion` flag, which `party_slot.is_some()`
+    /// now says.
+    pub party_slot: Option<u32>,
     /// Which zone sector this creature was originally spawned in (see
     /// `components::ZonePortal`).
     pub zone: u32,
@@ -168,7 +172,7 @@ pub struct SaveData {
 /// and every save written under the old version stops loading. That's an
 /// intentional, simple tradeoff for a single-player game rather than
 /// building real schema migration.
-pub const SAVE_FORMAT_VERSION: u32 = 9;
+pub const SAVE_FORMAT_VERSION: u32 = 10;
 
 pub fn save_to_file(path: &Path, data: &SaveData) -> io::Result<()> {
     let encoded = bincode::serde::encode_to_vec(data, bincode::config::standard())

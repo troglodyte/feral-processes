@@ -138,8 +138,10 @@ pub struct BattleState {
 }
 
 /// The player's active battle party can hold at most this many tamed
-/// programs at once.
-pub const MAX_PARTY_SIZE: usize = 3;
+/// programs at once. With soft ranks, the slots past `FRONT_SLOTS` draw
+/// less enemy fire than the ones in front of them, so a full roster is
+/// deeper as well as bigger.
+pub const MAX_PARTY_SIZE: usize = 5;
 
 /// How many tamed programs the player may own in total (across the active
 /// party, cronjob workers, and idle pets) before any capacity-granting

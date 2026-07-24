@@ -32,8 +32,8 @@ pub struct ConsumeDef {
     pub prebattle_buff: Option<PrebattleBuff>,
 }
 
-/// Arms a `PlayerBuff` that survives on the map and applies during the next
-/// intrusion — buffs only tick in battle (see `Game::tick_player_buff`).
+/// Arms a `CombatBuff` that survives on the map and applies during the next
+/// intrusion — buffs only tick in battle (see `Game::tick_combat_buff`).
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct PrebattleBuff {
     pub kind: BuffKind,

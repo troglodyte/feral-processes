@@ -399,7 +399,7 @@ pub struct StatusEffects {
 }
 
 /// Which stat a companion's rally/shield temporarily boosts — see
-/// `PlayerBuff`.
+/// `CombatBuff`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BuffKind {
     Atk,
@@ -415,17 +415,21 @@ pub struct ActiveBuff {
     pub power: i32,
 }
 
-/// A temporary combat buff a companion grants the player by being commanded
-/// (see `Game::battle_command_companion`) instead of attacking directly.
-/// Player-only. Kept separate from `StatusEffects` because that component is
-/// reserved for conditions a hostile move can inflict (always unwanted) —
-/// buffs are always player-directed and shouldn't be clobbered by (or
-/// clobber) an unrelated bleed/stun. Like `StatusEffects`, holds at most one
-/// buff at a time: commanding a companion again overwrites whatever's still
-/// active. Scoped to a single intrusion, cleared with everything else when a
-/// battle ends.
+/// A temporary combat buff on any one combatant — the player from a
+/// companion's Special or a pre-battle consumable, a companion from bracing
+/// (see `Game::begin_defend`). Kept separate from `StatusEffects` because
+/// that component is reserved for conditions a hostile move can inflict
+/// (always unwanted), which shouldn't be clobbered by — or clobber — a buff.
+///
+/// Holds at most one buff at a time, so a fresh one overwrites whatever was
+/// still active: a companion that braces gives up a Rally it was carrying,
+/// which is a real cost of the choice.
+///
+/// Only the player is spawned holding this component; `begin_defend`
+/// inserts it on demand for anyone else. Scoped to a single intrusion,
+/// cleared with everything else when a battle ends.
 #[derive(Component, Default, Clone, Copy)]
-pub struct PlayerBuff {
+pub struct CombatBuff {
     pub active: Option<ActiveBuff>,
 }
 

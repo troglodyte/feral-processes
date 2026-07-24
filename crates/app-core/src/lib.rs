@@ -10,7 +10,7 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use feral_processes_engine::battle::{ActionKind, BattleAction, TargetSpec};
+use feral_processes_engine::battle::{ActionKind, BattleAction, PartyCommandKind, TargetSpec};
 #[cfg(test)]
 use feral_processes_engine::items::ids;
 use feral_processes_engine::items::{
@@ -292,6 +292,10 @@ pub struct App {
     /// The action kind picked in `Mode::Battle`, awaiting an enemy group
     /// from `Mode::BattleTarget` before it becomes a `BattleAction`.
     pub pending_battle_action: Option<ActionKind>,
+    /// Set when `Mode::BattleTarget` was opened by the party-wide `[A]ll
+    /// attack` rather than by one slot's Attack — the group picked then plans
+    /// every open slot instead of just `battle_active_slot`.
+    pub pending_party_attack: bool,
     pub pending_inventory_item: Option<ItemId>,
     /// The inventory item picked for erasure, awaiting a quantity from
     /// `Mode::EraseQuantity`.
@@ -365,6 +369,7 @@ impl App {
             pending_fuse_second: None,
             fuse_name_input: String::new(),
             pending_battle_action: None,
+            pending_party_attack: false,
             pending_inventory_item: None,
             pending_erase: None,
             erase_quantity_input: String::new(),
@@ -904,33 +909,39 @@ impl App {
         }
     }
 
-    /// Chooses this round's action for the active party slot. Every key
-    /// except the party-level Jack Out comes from
-    /// `Game::battle_action_options`, so adding a battle action needs no
+    /// Chooses this round's action for the active party slot, or runs a
+    /// party-level command. Every key comes from `Game::battle_action_options`
+    /// or `Game::battle_party_commands`, so adding a battle action needs no
     /// change here and the two renderers cannot drift apart.
     fn handle_battle_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.battle_back_up();
             return;
         }
-        // Both renderers label these `[A]ttack`, `De[f]end` and so on, so a
-        // shifted keypress is the one the prompt actually asks for and has
-        // to resolve the same as an unshifted one.
-        let GameKey::Char(c) = key else { return };
-        let c = c.to_ascii_lowercase();
+        let GameKey::Char(raw) = key else { return };
 
-        // Jack Out is a party-level command, not a per-member action, so it
-        // is deliberately not an `ActionOption`.
-        if c == 'j' {
-            let Some(game) = &mut self.game else { return };
-            game.battle_flee();
-            let still_active = game.has_active_battle();
-            if !still_active {
-                self.mode = Mode::Playing;
-            }
-            self.push_battle_outcome_sounds(SoundEvent::Flee, still_active);
+        // Party-wide commands are matched on the raw char first, so uppercase
+        // `A`/`D` stay distinct from the lowercase per-slot Attack/Defend. The
+        // lowercase retry is what lets a shifted `J` still jack out; `a`/`d`
+        // can't match it, so they fall through to the per-slot menu below.
+        let party = self
+            .game
+            .as_ref()
+            .map(|g| g.battle_party_commands())
+            .unwrap_or_default();
+        if let Some(command) = party
+            .iter()
+            .find(|c| c.key == raw)
+            .or_else(|| party.iter().find(|c| c.key == raw.to_ascii_lowercase()))
+        {
+            self.run_party_command(command.kind, command.needs_target);
             return;
         }
+
+        // Every other battle key folds case: the prompt's bracketed letter is
+        // lowercase, so a shifted press is a slip, and swallowing it would
+        // cost the player a round.
+        let c = raw.to_ascii_lowercase();
 
         let Some(game) = &self.game else { return };
         let Some(slot) = game.battle_active_slot() else {
@@ -966,10 +977,65 @@ impl App {
         }
     }
 
-    /// Picks which enemy group the action chosen in `Mode::Battle` hits.
+    /// Runs a party-level command: jacking out, or planning every open slot
+    /// at once. All-attack defers to `Mode::BattleTarget` when the engine
+    /// says there is more than one group to choose between.
+    fn run_party_command(&mut self, kind: PartyCommandKind, needs_target: bool) {
+        match kind {
+            PartyCommandKind::JackOut => {
+                // Bound inside the arm, not before the match: the other two
+                // arms call `&mut self` methods, and a `game` borrow held
+                // across the match would collide with them.
+                let Some(game) = &mut self.game else { return };
+                game.battle_flee();
+                let still_active = game.has_active_battle();
+                if !still_active {
+                    self.mode = Mode::Playing;
+                }
+                self.push_battle_outcome_sounds(SoundEvent::Flee, still_active);
+            }
+            PartyCommandKind::AllDefend => self.plan_every_slot(BattleAction::Defend),
+            PartyCommandKind::AllAttack => {
+                if needs_target {
+                    self.pending_party_attack = true;
+                    self.menu_selected = 0;
+                    self.mode = Mode::BattleTarget;
+                } else {
+                    self.plan_every_slot(BattleAction::Attack { group: 0 });
+                }
+            }
+        }
+    }
+
+    /// Plans every open slot with `action` and resolves the round. The
+    /// resolve-and-transition tail matches `commit_battle_action`'s, since a
+    /// full party is a full party however it got there.
+    fn plan_every_slot(&mut self, action: BattleAction) {
+        let Some(game) = &mut self.game else { return };
+        if let Err(reason) = game.battle_plan_remaining(action) {
+            self.status_line = Some(reason);
+            return;
+        }
+        if !game.battle_round_ready() {
+            self.mode = Mode::Battle;
+            return;
+        }
+        game.battle_resolve_round();
+        let still_active = game.has_active_battle();
+        self.mode = if still_active {
+            Mode::Battle
+        } else {
+            Mode::Playing
+        };
+        self.push_battle_outcome_sounds(SoundEvent::Attack, still_active);
+    }
+
+    /// Picks which enemy group the action chosen in `Mode::Battle` hits —
+    /// either one slot's, or the party-wide `[A]ll attack`.
     fn handle_battle_target_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.pending_battle_action = None;
+            self.pending_party_attack = false;
             self.mode = Mode::Battle;
             return;
         }
@@ -977,7 +1043,7 @@ impl App {
         let Some(view) = game.battle_view() else {
             return;
         };
-        let Some(slot) = view.active_slot else { return };
+        let active_slot = view.active_slot;
         let group_count = view.groups.len();
         // Groups are addressed by letter on screen, so accept the letter as
         // well as the row number `selected_index` already handles.
@@ -989,6 +1055,14 @@ impl App {
             other => self.selected_index(other, group_count),
         };
         let Some(group) = picked else { return };
+        // Checked before `active_slot`: a party-wide fill plans every open
+        // slot, so it has no one slot to be waiting on.
+        if self.pending_party_attack {
+            self.pending_party_attack = false;
+            self.plan_every_slot(BattleAction::Attack { group });
+            return;
+        }
+        let Some(slot) = active_slot else { return };
         let Some(kind) = self.pending_battle_action else {
             return;
         };
@@ -2249,44 +2323,93 @@ mod tests {
     /// prevent. So the keys under test are read from the engine rather
     /// than written here.
     ///
-    /// Both renderers advertise them as `[A]ttack`, `De[f]end` and so on,
-    /// so a player reading the prompt has every reason to hold Shift. Case
-    /// is normalized everywhere else a letter picks a menu row, and a
-    /// battle turn is the one place where swallowing the keypress silently
-    /// costs the player a round.
+    /// Case handling is deliberately split. The per-slot prompts are
+    /// lowercase (`[a]ttack`, `[d]efend`), and uppercase `A`/`D` are the
+    /// party-wide commands — so those two must NOT fold. Every other battle
+    /// key still folds, since a shifted keypress there is a slip, and
+    /// swallowing it costs the player a round.
     ///
     /// Asserts only that each key was routed at all — which action it
     /// resolves to is the engine's business, and depends on the gear and
     /// party the seed happens to hand out.
     #[test]
-    fn battle_action_keys_come_from_the_engine_and_ignore_case() {
+    fn battle_action_keys_come_from_the_engine_with_only_the_party_pair_case_sensitive() {
         let probe = battling_app();
         let game = probe.game.as_ref().unwrap();
-        let mut keys: Vec<char> = game
+        let per_slot: Vec<char> = game
             .battle_action_options(0)
             .iter()
             .map(|o| o.key)
             .collect();
         assert!(
-            keys.contains(&'a') && keys.contains(&'d'),
-            "the engine should always offer at least Attack and Defend, got {keys:?}"
+            per_slot.contains(&'a') && per_slot.contains(&'d'),
+            "the engine should always offer at least Attack and Defend, got {per_slot:?}"
         );
-        // Jack Out is the one party-level command, deliberately not an
-        // ActionOption — but it still has to survive a shifted keypress.
-        keys.push('j');
+        let party: Vec<char> = game.battle_party_commands().iter().map(|c| c.key).collect();
+        assert_eq!(party, vec!['A', 'D', 'j']);
 
-        for key in keys {
-            let upper = key.to_ascii_uppercase();
+        // Every key the engine advertises must route as pressed, and the
+        // shifted form of each lowercase one must route too.
+        let mut probes: Vec<char> = per_slot.clone();
+        probes.extend(per_slot.iter().map(|k| k.to_ascii_uppercase()));
+        probes.extend(party.iter().copied());
+        probes.push('J');
+
+        for key in probes {
             let mut app = battling_app();
-            app.handle_key(GameKey::Char(upper));
+            app.handle_key(GameKey::Char(key));
             let acted = !app.take_sounds().is_empty()
                 || app.status_line.is_some()
                 || app.mode != Mode::Battle;
             assert!(
                 acted,
-                "[{upper}] is advertised by the engine, but Shift+{upper} was swallowed"
+                "[{key}] is advertised by the engine, but the keypress was swallowed"
             );
         }
+    }
+
+    /// The complaint that started this work: with one group left there is no
+    /// focus-fire choice to make, so all-attack must resolve on the single
+    /// keypress instead of stopping to ask.
+    #[test]
+    fn all_attack_with_one_group_resolves_without_opening_the_target_picker() {
+        let mut app = battling_app();
+        assert_eq!(
+            app.game
+                .as_mut()
+                .unwrap()
+                .battle_view()
+                .unwrap()
+                .groups
+                .len(),
+            1,
+            "a bump battle is a single group — test premise"
+        );
+
+        app.handle_key(GameKey::Char('A'));
+
+        assert_ne!(
+            app.mode,
+            Mode::BattleTarget,
+            "one group means no choice, so all-attack shouldn't open the picker"
+        );
+        assert!(
+            app.pending_battle_action.is_none(),
+            "nothing should be left pending once the round resolved"
+        );
+    }
+
+    /// `D` is a party-wide command, not the per-slot Defend that `d` runs.
+    /// Both have to reach the engine.
+    #[test]
+    fn all_defend_resolves_the_round() {
+        let mut app = battling_app();
+        app.handle_key(GameKey::Char('D'));
+        assert!(
+            matches!(app.mode, Mode::Battle | Mode::Playing | Mode::GameOver),
+            "all-defend plans every slot, so the round should have resolved; got {:?}",
+            app.mode
+        );
     }
 
     /// Picking an action that needs a target must not resolve the round on

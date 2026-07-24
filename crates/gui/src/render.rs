@@ -1930,8 +1930,9 @@ fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics) {
             Some(reason) => format!("{} ({reason})", o.label),
         })
         .collect();
-    // Jack Out is a party-level command, deliberately not an ActionOption.
-    actions.push("[J]ack Out".to_string());
+    // Party-level commands come from the engine too, so the two renderers
+    // cannot drift on them either.
+    actions.extend(game.battle_party_commands().into_iter().map(|c| c.label));
     fonts.ui(
         actions.join("   "),
         margin,

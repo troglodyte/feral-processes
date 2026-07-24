@@ -1849,8 +1849,12 @@ fn render_battle(f: &mut Frame, app: &mut App) {
             [span, Span::raw("   ")]
         })
         .collect();
-    // Jack Out is a party-level command, deliberately not an ActionOption.
-    actions.push(Span::styled("[J]ack Out", Style::new().fg(Color::White)));
+    // Party-level commands come from the engine too, so the two renderers
+    // cannot drift on them either.
+    for command in game.battle_party_commands() {
+        actions.push(Span::styled(command.label, Style::new().fg(Color::Cyan)));
+        actions.push(Span::raw("   "));
+    }
 
     let prompt = match view.active_slot.and_then(|s| view.party.get(s)) {
         Some(slot) => format!("{} acts — [Esc] undo", slot.name),

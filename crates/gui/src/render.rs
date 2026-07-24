@@ -325,6 +325,7 @@ fn biome_style(biome: Biome) -> (char, Color) {
         Biome::OpenGrid => ('.', GREEN),
         Biome::NullSector => (':', GRAY),
         Biome::StaticField => ('%', WHITE),
+        Biome::Platform => ('_', DARKGRAY),
     }
 }
 

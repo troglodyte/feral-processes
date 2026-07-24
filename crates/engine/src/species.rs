@@ -239,6 +239,20 @@ mod tests {
     }
 
     #[test]
+    fn no_shipped_species_lives_on_the_platform_biome() {
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+        assert!(
+            db.habitat_matches(Biome::Platform).is_empty(),
+            "a base platform must have no ordinary habitat species — an empty candidate \
+             pool is the entire mechanism behind a base being free of wild spawns"
+        );
+        assert!(
+            db.boss_habitat_matches(Biome::Platform).is_empty(),
+            "a base platform must have no boss species either"
+        );
+    }
+
+    #[test]
     fn habitat_matches_excludes_bosses_and_boss_habitat_matches_includes_only_them() {
         let (db, warnings) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
         assert!(

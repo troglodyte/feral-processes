@@ -5061,7 +5061,11 @@ fn forage_chance(biome: Biome, keen_scavenger_level: u32) -> f64 {
         Biome::Mainframe | Biome::OpenGrid => 0.6,
         Biome::NullSector => 0.3,
         Biome::StaticField => 0.15,
-        Biome::DataVoid | Biome::BlackIce => 0.0,
+        // A base platform is a manufactured floor, not terrain — there's
+        // nothing on it to scavenge. Keeping it at 0.0 also stops a base
+        // from being a risk-free forage spot, which would undercut the
+        // whole reason to leave the platform.
+        Biome::DataVoid | Biome::BlackIce | Biome::Platform => 0.0,
     };
     if chance > 0.0 && keen_scavenger_level > 0 {
         (chance + KEEN_SCAVENGER_BONUS_PER_LEVEL * keen_scavenger_level as f64).min(1.0)

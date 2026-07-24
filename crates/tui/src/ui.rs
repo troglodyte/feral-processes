@@ -309,6 +309,7 @@ fn tile_style(biome: Biome) -> (char, Color) {
         Biome::OpenGrid => ('.', Color::Green),
         Biome::NullSector => (':', Color::Gray),
         Biome::StaticField => ('%', Color::White),
+        Biome::Platform => ('_', Color::DarkGray),
     }
 }
 

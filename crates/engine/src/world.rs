@@ -14,6 +14,13 @@ pub enum Biome {
     Mainframe,
     OpenGrid,
     BlackIce,
+    /// The floor of a player base, stamped across the build radius when a
+    /// Home is deployed (`Game::stamp_platform`) and never produced by
+    /// `classify`. No shipped species lists it as a habitat, which is the
+    /// entire mechanism behind a base being a safe haven:
+    /// `Game::try_spawn_habitat_creature` already bails when both candidate
+    /// pools come back empty, so no spawn-suppression code exists anywhere.
+    Platform,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -138,6 +145,20 @@ mod tests {
         let biomes_a: Vec<_> = (0..40).map(|x| a.tile(x, 0).biome).collect();
         let biomes_b: Vec<_> = (0..40).map(|x| b.tile(x, 0).biome).collect();
         assert_ne!(biomes_a, biomes_b);
+    }
+
+    #[test]
+    fn classify_never_produces_the_platform_biome() {
+        let mut map = WorldMap::new(4242);
+        for x in -60..60 {
+            for y in -60..60 {
+                assert_ne!(
+                    map.tile(x, y).biome,
+                    Biome::Platform,
+                    "Platform is stamped where a Home is deployed, never generated — ({x}, {y})"
+                );
+            }
+        }
     }
 
     #[test]

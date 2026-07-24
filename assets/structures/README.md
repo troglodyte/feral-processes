@@ -62,6 +62,10 @@ is skipped with a warning logged in-game rather than crashing startup.
     // amount actually charged when deploying it is each quantity
     // multiplied by the current zone level (so building the portal out of
     // zone 2 costs twice as much as building it out of zone 1).
+    // A zone-portal structure is consumed when the player steps onto it: it
+    // does not travel to the next zone the way the rest of the base does
+    // (see `enables_rest`/`Game::enter_next_zone`), so every breach costs a
+    // fresh build.
     zone_portal: true,
 
     // Optional; can be left out entirely (defaults to no trading). If set,

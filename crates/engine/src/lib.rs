@@ -1181,7 +1181,12 @@ impl Game {
             self.tick();
             return;
         }
-        if self.find_zone_portal_at(nx, ny).is_some() {
+        if let Some(portal) = self.find_zone_portal_at(nx, ny) {
+            // Consumed before enter_next_zone snapshots the base, so it
+            // isn't carried forward. Load-bearing now that structures
+            // survive a breach: a portal that travelled would make every
+            // breach after the first free, bypassing its per-zone cost.
+            self.world.despawn(portal);
             self.enter_next_zone();
             self.tick();
             return;
@@ -6111,13 +6116,22 @@ mod tests {
         for _ in 0..400 {
             game.try_spawn_habitat_creature(ppos.x + 2, ppos.y + 2);
         }
-        let spawned = game
-            .world
-            .query_filtered::<Entity, With<Hostile>>()
-            .iter(&game.world)
-            .count();
+
+        // Counted by position, not as a global Hostile tally: Game::new
+        // seeds the zone with wild programs and only those inside the build
+        // radius are obliterated, so survivors further out are expected and
+        // have nothing to do with what this test is asserting.
+        let on_platform = {
+            let mut query = game.world.query_filtered::<&Position, With<Hostile>>();
+            let positions: Vec<Position> = query.iter(&game.world).copied().collect();
+            let mut map = game.world.resource_mut::<WorldMap>();
+            positions
+                .iter()
+                .filter(|p| map.tile(p.x, p.y).biome == Biome::Platform)
+                .count()
+        };
         assert_eq!(
-            spawned, 0,
+            on_platform, 0,
             "platform floor has no habitat species, so nothing can spawn on it"
         );
     }
@@ -12585,6 +12599,33 @@ mod tests {
             find_structure_by_kind(game, "home").unwrap(),
             find_structure_by_kind(game, "mining_node").unwrap(),
         )
+    }
+
+    #[test]
+    fn stepping_through_a_portal_consumes_it_so_it_never_travels() {
+        let mut game = Game::new(950, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game, 0, 1);
+        game.world
+            .get_mut::<Inventory>(game.player_entity())
+            .unwrap()
+            .add(ItemId::from(ids::PORTAL_FRAGMENT), 10);
+        game.place_structure("portal", 1, 0).unwrap();
+
+        game.move_player(1, 0);
+
+        assert_eq!(
+            game.world.resource::<ZoneLevel>().0,
+            2,
+            "stepping onto the portal breaches"
+        );
+        assert!(
+            find_structure_by_kind(&mut game, "portal").is_none(),
+            "a portal is one-use — carrying it forward would make every later breach free"
+        );
+        assert!(
+            find_structure_by_kind(&mut game, "home").is_some(),
+            "consuming the portal must not take the rest of the base with it"
+        );
     }
 
     #[test]

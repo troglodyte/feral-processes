@@ -208,11 +208,14 @@ const DIFFICULTY_TOUGH_MAX: f64 = 1.6;
 
 /// Chance per tick (see `Game::raid_check`) that a random deployed
 /// structure comes under raid, if any exist.
-const RAID_CHANCE_PER_TICK: f64 = 0.02;
+const RAID_CHANCE_PER_TICK: f64 = 0.012;
 
 /// Damage a raid deals to a structure's `Durability` when it has no
-/// assigned cronjob worker defending it.
-const RAID_DAMAGE: u32 = 10;
+/// assigned cronjob worker defending it. Deliberately small relative to
+/// `structures::default_durability` (30): a raid is meant to be attrition
+/// the base can recover from, not a three-hit countdown to losing the
+/// structure outright.
+const RAID_DAMAGE: u32 = 4;
 
 /// Damage a defending cronjob worker takes fending off a raid on its
 /// structure — win or lose, defending has a cost. The raid's damage to the
@@ -243,8 +246,10 @@ const STRUCTURE_REMOVAL_REFUND_PERCENT: u32 = 30;
 const STRUCTURE_REGEN_INTERVAL: u64 = 20;
 
 /// How much `Durability` a damaged structure regenerates every
-/// `STRUCTURE_REGEN_INTERVAL` ticks.
-const STRUCTURE_REGEN_AMOUNT: u32 = 2;
+/// `STRUCTURE_REGEN_INTERVAL` ticks — set to match `RAID_DAMAGE` so one
+/// interval fully undoes one raid. Below that, a base loses the attrition
+/// race no matter how it's played.
+const STRUCTURE_REGEN_AMOUNT: u32 = 4;
 
 /// One node of the research tree as the menus see it — see
 /// `Game::research_nodes`.
@@ -10979,6 +10984,98 @@ mod tests {
             }
         }
         panic!("raid_check never rolled across 300 seeds — the raid roll may be broken");
+    }
+
+    /// Raids should be survivable attrition, not a countdown. Eight hits to
+    /// destroy a default-durability structure is the property; the exact
+    /// constants are free to move underneath it.
+    #[test]
+    fn a_structure_survives_seven_raids_worth_of_damage() {
+        let mut game = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let durability = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.id == "mining_node")
+            .expect("mining_node.ron should load")
+            .durability;
+        let structure = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "mining_node".to_string(),
+                },
+                Position { x: 5, y: 5 },
+                Durability {
+                    hp: durability,
+                    max_hp: durability,
+                },
+            ))
+            .id();
+
+        for _ in 0..7 {
+            game.damage_structure(structure, RAID_DAMAGE, "Mining Node");
+        }
+
+        assert!(
+            game.world.get::<Durability>(structure).is_some(),
+            "seven raids should not destroy a structure at full durability"
+        );
+    }
+
+    /// One regen interval has to fully undo one raid, or the base loses the
+    /// attrition race no matter how the player plays.
+    #[test]
+    fn one_regen_interval_fully_undoes_one_raids_damage() {
+        let mut game = Game::new(12, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let structure = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "mining_node".to_string(),
+                },
+                Position { x: 5, y: 5 },
+                Durability { hp: 30, max_hp: 30 },
+            ))
+            .id();
+
+        game.damage_structure(structure, RAID_DAMAGE, "Mining Node");
+        assert_eq!(
+            game.world.get::<Durability>(structure).unwrap().hp,
+            30 - RAID_DAMAGE,
+            "the raid should have landed before regen is tested"
+        );
+
+        game.world.resource_mut::<GameClock>().tick = STRUCTURE_REGEN_INTERVAL;
+        game.structure_regen();
+
+        assert_eq!(
+            game.world.get::<Durability>(structure).unwrap().hp,
+            30,
+            "one regen interval should fully undo one raid's damage"
+        );
+    }
+
+    /// The shield network should ramp, not cliff: the first Shield has to
+    /// leave damage on the table, or `raid_defense` has drifted into
+    /// granting total immunity for one build.
+    #[test]
+    fn a_single_shield_reduces_raid_damage_without_erasing_it() {
+        let game = Game::new(13, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let shield_defense = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.id == "shield")
+            .expect("shield.ron should load")
+            .raid_defense;
+
+        assert!(
+            shield_defense > 0,
+            "a Shield that reduces nothing is not a Shield"
+        );
+        assert!(
+            shield_defense < RAID_DAMAGE,
+            "one Shield must not fully absorb a raid — the network should ramp, not cliff"
+        );
     }
 
     #[test]

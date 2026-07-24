@@ -5,5 +5,5 @@
     color: Red,
     build_cost: [("core_fragment", 16)],
     work: None,
-    raid_defense: 4,
+    raid_defense: 2,
 )

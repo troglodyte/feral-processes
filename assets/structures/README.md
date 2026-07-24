@@ -99,8 +99,9 @@ is skipped with a warning logged in-game rather than crashing startup.
     // and it stacks additively across every deployed structure that sets
     // this (e.g. several Shields). Applied before an assigned worker/guard's
     // own Defense-based mitigation, so the two stack. This is how the
-    // Shield structure works: `raid_defense: 4` with no `work` recipe.
-    raid_defense: 4,
+    // Shield structure works: `raid_defense: 2` with no `work` recipe — one
+    // Shield halves an ordinary raid, two absorb it entirely.
+    raid_defense: 2,
 
     // Optional; can be left out entirely (defaults to 0). How much this
     // structure raises the player's inventory capacity while it's deployed.

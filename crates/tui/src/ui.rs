@@ -55,6 +55,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
         | Mode::GuardStructure
         | Mode::Remove
         | Mode::RemoveConfirm
+        | Mode::Upgrade
         | Mode::Symlink
         | Mode::InspectDirection
         | Mode::InspectDetail
@@ -156,6 +157,7 @@ fn render_playing(f: &mut Frame, app: &mut App) {
         Mode::GuardStructure => render_guard_structure_menu(f, area, game, selected),
         Mode::Remove => render_remove_menu(f, area, game, selected),
         Mode::RemoveConfirm => render_remove_confirm(f, area, selected),
+        Mode::Upgrade => render_upgrade_menu(f, area, game, selected),
         Mode::Symlink => render_symlink_menu(f, area, game, selected),
         Mode::InspectDirection => render_inspect_direction(f, area),
         Mode::InspectDetail => render_inspect_detail(f, area, game, app.pending_inspect),
@@ -421,6 +423,7 @@ fn render_status_panel(f: &mut Frame, area: Rect, status: &PlayerStatus, game: &
     lines.push(Line::from("g scan    c compile"));
     lines.push(Line::from("b deploy  w assign cronjob  G assign guard"));
     lines.push(Line::from("R demolish structure"));
+    lines.push(Line::from("U upgrade structure"));
     lines.push(Line::from("u use symlink"));
     lines.push(Line::from("i inspect (pick a direction)"));
     lines.push(Line::from("v inventory/equipment"));
@@ -836,6 +839,39 @@ fn render_remove_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usiz
     }
     f.render_widget(
         Paragraph::new(lines).block(Block::bordered().title("Demolish Structure")),
+        popup,
+    );
+}
+
+fn render_upgrade_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize) {
+    let popup = centered_rect(60, 50, area);
+    f.render_widget(Clear, popup);
+    let structures: Vec<_> = game
+        .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
+        .into_iter()
+        .filter(|e| e.is_structure && e.tier.is_some())
+        .collect();
+    let mut lines = vec![Line::from(
+        "Upgrade which structure? Each tier costs more and yields more. (Esc to cancel; Up/Down + Enter also work)",
+    )];
+    if structures.is_empty() {
+        lines.push(Line::from("(no upgradeable structures nearby)"));
+    }
+    for (i, s) in structures.iter().enumerate() {
+        lines.push(menu_line(
+            format!(
+                "[{}] {} at ({}, {}) [Mk{}]",
+                menu_shortcut(i),
+                s.label,
+                s.pos.0,
+                s.pos.1,
+                s.tier.unwrap_or(1),
+            ),
+            i == selected,
+        ));
+    }
+    f.render_widget(
+        Paragraph::new(lines).block(Block::bordered().title("Upgrade Structure")),
         popup,
     );
 }
@@ -1944,6 +1980,9 @@ fn render_help(f: &mut Frame) {
         ),
         Line::from(
             "R                   demolish a nearby structure (30% material refund; demolishing Home destroys the whole base)",
+        ),
+        Line::from(
+            "U                   upgrade a nearby structure a tier (costs more and yields more each time)",
         ),
         Line::from(
             "u                   use symlink: instantly teleport to a deployed symlink structure (e.g. Home)",

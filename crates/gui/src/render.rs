@@ -749,6 +749,7 @@ fn draw_mode_overlay(app: &mut App, fonts: &Fonts, m: &Metrics) {
         ),
         Mode::Remove => draw_remove_menu(game, selected, fonts, m),
         Mode::RemoveConfirm => draw_remove_confirm(selected, fonts, m),
+        Mode::Upgrade => draw_upgrade_menu(game, selected, fonts, m),
         Mode::Symlink => draw_symlink_menu(game, selected, fonts, m),
         Mode::InspectDirection => draw_direction_prompt(
             "Inspect Direction",
@@ -1067,6 +1068,34 @@ fn draw_remove_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics
         ));
     }
     draw_popup("Demolish Structure", PopupSize::Large, &rows, fonts, m);
+}
+
+fn draw_upgrade_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
+    let structures: Vec<_> = game
+        .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
+        .into_iter()
+        .filter(|e| e.is_structure && e.tier.is_some())
+        .collect();
+    let mut rows = vec![text_row(
+        "Upgrade which structure? Each tier costs more and yields more. (Esc to cancel; Up/Down + Enter also work)",
+    )];
+    if structures.is_empty() {
+        rows.push(text_row("(no upgradeable structures nearby)"));
+    }
+    for (i, s) in structures.iter().enumerate() {
+        rows.push(item_row(
+            format!(
+                "[{}] {} at ({}, {}) [Mk{}]",
+                menu_shortcut(i),
+                s.label,
+                s.pos.0,
+                s.pos.1,
+                s.tier.unwrap_or(1),
+            ),
+            i == selected,
+        ));
+    }
+    draw_popup("Upgrade Structure", PopupSize::Large, &rows, fonts, m);
 }
 
 fn draw_remove_confirm(selected: usize, fonts: &Fonts, m: &Metrics) {

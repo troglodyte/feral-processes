@@ -182,6 +182,10 @@ pub enum Mode {
     /// Warns that demolishing the Home destroys every other base structure
     /// too, before `Game::remove_structure` is actually called.
     RemoveConfirm,
+    /// Lists nearby structures that declare an upgrade path (see
+    /// `Game::upgrade_structure`); picking one advances it a tier. Anything
+    /// un-upgradeable is filtered out rather than offered and then refused.
+    Upgrade,
     Symlink,
     InspectDirection,
     InspectDetail,
@@ -549,6 +553,7 @@ impl App {
             Mode::GuardStructure => self.handle_guard_structure_key(key),
             Mode::Remove => self.handle_remove_key(key),
             Mode::RemoveConfirm => self.handle_remove_confirm_key(key),
+            Mode::Upgrade => self.handle_upgrade_key(key),
             Mode::Symlink => self.handle_symlink_key(key),
             Mode::InspectDirection => self.handle_inspect_direction_key(key),
             Mode::InspectDetail => self.handle_inspect_detail_key(key),
@@ -712,6 +717,10 @@ impl App {
             }
             GameKey::Char('R') => {
                 self.mode = Mode::Remove;
+                return;
+            }
+            GameKey::Char('U') => {
+                self.mode = Mode::Upgrade;
                 return;
             }
             GameKey::Char('u') => {
@@ -1181,6 +1190,31 @@ impl App {
             }
             let Some(game) = &mut self.game else { return };
             match game.remove_structure(picked_entity) {
+                Ok(()) => self.status_line = None,
+                Err(e) => self.status_line = Some(e),
+            }
+            self.mode = Mode::Playing;
+        }
+    }
+
+    fn handle_upgrade_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.mode = Mode::Playing;
+            return;
+        }
+        let Some(game) = &mut self.game else { return };
+        // Filtered on `tier`, not just `is_structure`: offering an
+        // un-upgradeable structure and then refusing it would be a worse
+        // menu than not listing it.
+        let structures: Vec<_> = game
+            .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
+            .into_iter()
+            .filter(|e| e.is_structure && e.tier.is_some())
+            .collect();
+        if let Some(idx) = self.selected_index(key, structures.len()) {
+            let picked = structures[idx].entity;
+            let Some(game) = &mut self.game else { return };
+            match game.upgrade_structure(picked) {
                 Ok(()) => self.status_line = None,
                 Err(e) => self.status_line = Some(e),
             }
@@ -1789,6 +1823,41 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&saves_dir);
+    }
+
+    #[test]
+    fn pressing_u_opens_the_upgrade_picker_and_esc_closes_it() {
+        let mut app = test_app(230);
+
+        app.handle_key(GameKey::Char('U'));
+        assert!(
+            app.mode == Mode::Upgrade,
+            "'U' should open the upgrade menu"
+        );
+
+        app.handle_key(GameKey::Esc);
+        assert!(app.mode == Mode::Playing, "Esc should return to play");
+    }
+
+    #[test]
+    fn the_upgrade_picker_skips_structures_with_no_upgrade_path() {
+        let mut app = test_app(231);
+
+        // Home is the first entry in the build menu and declares no upgrade
+        // path — same b/Enter/Up sequence the remove-flow test drives.
+        app.handle_key(GameKey::Char('b'));
+        app.handle_key(GameKey::Enter);
+        app.handle_key(GameKey::Up);
+        assert_eq!(structure_count(&mut app), 1, "Home should now be deployed");
+
+        app.handle_key(GameKey::Char('U'));
+        assert!(app.mode == Mode::Upgrade);
+        app.handle_key(GameKey::Enter);
+        assert!(
+            app.mode == Mode::Upgrade,
+            "with nothing upgradeable nearby the picker has no entry to select, so Enter \
+             should leave the player in the menu rather than firing a doomed upgrade"
+        );
     }
 
     fn structure_count(app: &mut App) -> usize {

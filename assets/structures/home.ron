@@ -6,4 +6,5 @@
     build_cost: [("core_fragment", 5)],
     work: None,
     teleport_cost: Some([("power_cell", 4)]),
+    raidable: false,
 )

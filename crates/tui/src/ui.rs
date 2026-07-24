@@ -5,7 +5,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Gauge, Paragraph, Wrap};
 
 use feral_processes_app_core::{
-    App, MENU_SCAN_RADIUS, Mode, TradeChoice, inventory_item_actions, menu_shortcut,
+    App, MENU_SCAN_RADIUS, Mode, TradeChoice, equip_preview_tag, inventory_item_actions,
+    menu_shortcut,
 };
 use feral_processes_engine::components::{EquippedItem, GlyphColor};
 use feral_processes_engine::items::ItemId;
@@ -1645,34 +1646,6 @@ fn equipped_line(
     }
 }
 
-/// Formats an equippable item's stat bonus as it would be *if equipped
-/// right now* — gear scales with the current zone level at the moment you
-/// equip it (see `Game::equip`), so this previews that same number rather
-/// than a flat, unscaled base value. Empty string for a non-equippable
-/// item (in place of the old generic "(equippable)" tag).
-fn equip_preview_tag(game: &Game, item: &ItemId, zone_level: u32, fusion_tier: u32) -> String {
-    let Some((_, base_mods)) = game.equipment_of(item) else {
-        return String::new();
-    };
-    let mods = base_mods
-        .scaled_for_level(zone_level)
-        .fused_for_tier(fusion_tier);
-    let mut parts = Vec::new();
-    if mods.atk != 0 {
-        parts.push(format!("+{} ATK", mods.atk));
-    }
-    if mods.def != 0 {
-        parts.push(format!("+{} DEF", mods.def));
-    }
-    if mods.decompiler != 0 {
-        parts.push(format!("+{} DECOMP", mods.decompiler));
-    }
-    if fusion_tier > 0 {
-        parts.push(format!("fusion T{fusion_tier}"));
-    }
-    format!(" ({})", parts.join(" "))
-}
-
 fn render_inventory_item_action(
     f: &mut Frame,
     area: Rect,
@@ -2051,18 +2024,17 @@ fn render_help(f: &mut Frame) {
         Line::from("each round; Stunned costs the afflicted side their next action. Only"),
         Line::from("one condition is active at a time — a fresh one overwrites the old."),
         Line::from(""),
-        Line::from("Every deployed structure has raid Durability (shown [HP x/y] in the"),
-        Line::from("cronjob/symlink/trade menus). Occasionally a raid damages a random"),
-        Line::from("structure: a program assigned to it — whether cronjob-working it (w)"),
-        Line::from("or just posted to guard it (G) — fights the raid off, reducing the"),
-        Line::from("damage by its Defense at a flat cost to its own HP (it stands down if"),
-        Line::from("knocked out, but isn't destroyed); an unassigned structure just takes"),
-        Line::from("the full hit. Guarding works on any structure, including ones with no"),
-        Line::from(
-            "cronjob recipe at all. Durability regenerates slowly over time either way, and",
-        ),
-        Line::from("recharging overnight (r) fully heals every tamed program you own, not"),
-        Line::from("just your active party — including one left behind defending a raid."),
+        Line::from("Every deployed structure except Home has raid Durability (shown"),
+        Line::from("[HP x/y] in the cronjob/symlink/trade menus); Home can't be raided at"),
+        Line::from("all. Occasionally a raid damages a random structure: a program assigned"),
+        Line::from("to it — whether cronjob-working it (w) or just posted to guard it (G) —"),
+        Line::from("fights the raid off, reducing the damage by its Defense at a flat cost"),
+        Line::from("to its own HP (it stands down if knocked out, but isn't destroyed); an"),
+        Line::from("unassigned structure just takes the full hit. Guarding works on any"),
+        Line::from("structure, including ones with no cronjob recipe at all. Durability"),
+        Line::from("regenerates slowly over time either way, and recharging overnight (r)"),
+        Line::from("fully heals every tamed program you own, not just your active party —"),
+        Line::from("including one left behind defending a raid."),
         Line::from(""),
         Line::from("Every level-up also grants a Perk Point (shown in the status panel)."),
         Line::from("Spend them (x) on permanent passive unlocks: Keen Scavenger (+15%"),

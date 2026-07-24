@@ -796,11 +796,16 @@ impl Game {
                     ch: def.glyph,
                     color: def.color,
                 },
-                Durability {
+            ));
+            // A save written before `raidable` existed still records a
+            // durability for what is now a non-raidable structure; the def
+            // wins, so that stored value is simply dropped.
+            if def.raidable {
+                entity.insert(Durability {
                     hp: s.durability.unwrap_or(def.durability).min(def.durability),
                     max_hp: def.durability,
-                },
-            ));
+                });
+            }
             let structure_id = entity.id();
             structure_positions.insert(s.position, structure_id);
             if let Some(amount) = s.resource_amount {
@@ -2010,11 +2015,13 @@ impl Game {
                 ch: def.glyph,
                 color: def.color,
             },
-            Durability {
+        ));
+        if def.raidable {
+            entity.insert(Durability {
                 hp: def.durability,
                 max_hp: def.durability,
-            },
-        ));
+            });
+        }
         if let Some(work) = &def.work {
             entity.insert(ResourceNode {
                 resource: work.produces.clone(),
@@ -10232,6 +10239,135 @@ mod tests {
         assert!(
             game.world.get::<Structure>(structure).is_some(),
             "a structure with remaining durability should survive"
+        );
+    }
+
+    /// Finds the deployed Home, if any. Home is the only structure of its
+    /// kind, so the first match is the only match.
+    fn find_home(game: &mut Game) -> Option<Entity> {
+        let mut query = game.world.query::<(Entity, &Structure)>();
+        query
+            .iter(&game.world)
+            .find(|(_, s)| s.kind == HOME_STRUCTURE_ID)
+            .map(|(e, _)| e)
+    }
+
+    #[test]
+    fn home_loads_as_non_raidable_and_other_structures_default_to_raidable() {
+        let game = Game::new(700, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let defs = game.structure_defs();
+
+        let home = defs
+            .iter()
+            .find(|d| d.id == "home")
+            .expect("home should load");
+        assert!(!home.raidable, "home.ron must set raidable: false");
+
+        let mining = defs
+            .iter()
+            .find(|d| d.id == "mining_node")
+            .expect("mining_node should load");
+        assert!(
+            mining.raidable,
+            "a structure file that omits `raidable` must default to raidable"
+        );
+    }
+
+    #[test]
+    fn deploying_home_gives_it_no_durability_pool() {
+        let mut game = Game::new(701, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game, -1, 0);
+        let home = find_home(&mut game).expect("place_home should have spawned a Home");
+
+        assert!(
+            game.world.get::<Durability>(home).is_none(),
+            "a non-raidable structure must not carry a Durability pool at all"
+        );
+    }
+
+    #[test]
+    fn deploying_a_raidable_structure_still_gives_it_a_durability_pool() {
+        // Seed 300 is known to have walkable terrain at both offsets — it's
+        // the seed `place_structure_rejects_anything_but_home_until_a_home_exists`
+        // already places two structures on.
+        let mut game = Game::new(300, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game, -1, 0);
+        let player = game.player_entity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::from(ids::CORE_FRAGMENT), 20);
+        game.place_structure("mining_node", 1, 0).unwrap();
+
+        let node = {
+            let mut query = game.world.query::<(Entity, &Structure)>();
+            query
+                .iter(&game.world)
+                .find(|(_, s)| s.kind == "mining_node")
+                .map(|(e, _)| e)
+                .expect("the mining node should have been deployed")
+        };
+
+        let durability = game
+            .world
+            .get::<Durability>(node)
+            .expect("a raidable structure must still get its Durability pool");
+        assert_eq!(durability.hp, durability.max_hp);
+        assert!(durability.max_hp > 0);
+    }
+
+    #[test]
+    fn raid_check_never_targets_home_even_as_the_only_structure() {
+        let mut game = Game::new(702, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        // Strip every pre-existing Durability holder (habitat nests and
+        // anything else the world seeded) so a raid has no legal target left
+        // at all if Home genuinely isn't one.
+        let existing: Vec<Entity> = {
+            let mut query = game.world.query_filtered::<Entity, With<Durability>>();
+            query.iter(&game.world).collect()
+        };
+        for e in existing {
+            game.world.despawn(e);
+        }
+        place_home(&mut game, -1, 0);
+
+        for _ in 0..500 {
+            game.raid_check();
+        }
+
+        let home_still_standing = {
+            let mut query = game.world.query::<&Structure>();
+            query.iter(&game.world).any(|s| s.kind == HOME_STRUCTURE_ID)
+        };
+        assert!(
+            home_still_standing,
+            "Home must survive every raid roll — it can't be a raid target at all"
+        );
+        let home = find_home(&mut game).expect("checked above: Home is standing");
+        assert!(
+            game.world.get::<Durability>(home).is_none(),
+            "Home must still have no Durability pool after the raid rolls"
+        );
+    }
+
+    #[test]
+    fn home_survives_save_and_load_without_gaining_a_durability_pool() {
+        let assets = test_assets_dir();
+        let mut game = Game::new(703, DifficultyMode::Forgiving, &assets).unwrap();
+        place_home(&mut game, -1, 0);
+
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_home_raidable_test_{}.bin",
+            std::process::id()
+        ));
+        game.save(&path).unwrap();
+        let mut loaded = Game::load(&path, &assets).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        let home = find_home(&mut loaded).expect("Home should survive a save/load round trip");
+        assert!(
+            loaded.world.get::<Durability>(home).is_none(),
+            "the load path must not re-attach Durability to a non-raidable structure"
         );
     }
 

@@ -24,6 +24,7 @@ fn message_style(kind: MessageKind) -> Style {
         MessageKind::Loot => Style::new().fg(Color::Green),
         MessageKind::LevelUp => Style::new().fg(Color::Green).add_modifier(Modifier::BOLD),
         MessageKind::Raid => Style::new().fg(Color::Rgb(255, 140, 0)),
+        MessageKind::Round => Style::new().fg(Color::DarkGray),
     }
 }
 

@@ -2898,6 +2898,10 @@ impl Game {
         if !self.battle_round_ready() || self.is_game_over().is_some() {
             return;
         }
+        // Read before the increment at the end of this method, so the number
+        // matches the planning screen's own "round N" header.
+        let round = self.world.resource::<BattleState>().round;
+        self.log_kind(MessageKind::Round, format!("── round {round} ──"));
         let player = self.world.resource::<BattleState>().player;
         let plan = self.world.resource::<BattleState>().planned.clone();
 
@@ -12895,6 +12899,39 @@ mod tests {
         assert_eq!(
             view.groups[0].front_hp, 500,
             "the new front should be the untouched second pack member"
+        );
+    }
+
+    /// The resolve popup used to title itself with the round number. With the
+    /// popup gone the log is the only place that boundary exists, so the
+    /// separator has to be logged exactly once and numbered to match the
+    /// planning header — not the post-increment round.
+    #[test]
+    fn resolving_a_round_logs_one_round_separator_numbered_for_the_round_that_ran() {
+        let mut game = Game::new(77, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        insert_battle(&mut game, player, vec![wild]);
+
+        let round_before = game.battle_view().unwrap().round;
+        game.battle_set_action(0, BattleAction::Defend).unwrap();
+        game.battle_resolve_round();
+
+        let separators: Vec<String> = game
+            .message_log(200)
+            .into_iter()
+            .filter(|(kind, _)| *kind == MessageKind::Round)
+            .map(|(_, text)| text)
+            .collect();
+        assert_eq!(
+            separators.len(),
+            1,
+            "one resolved round should log exactly one separator, got {separators:?}"
+        );
+        assert!(
+            separators[0].contains(&round_before.to_string()),
+            "the separator should name the round that just ran ({round_before}), got {:?}",
+            separators[0]
         );
     }
 

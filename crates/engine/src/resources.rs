@@ -35,6 +35,10 @@ pub enum MessageKind {
     Loot,
     LevelUp,
     Raid,
+    /// Marks where one resolved battle round ends and the next begins. The
+    /// battle screen's log pane is continuous, so without this the narration
+    /// of six rounds reads as one undifferentiated block.
+    Round,
 }
 
 #[derive(Resource, Default)]

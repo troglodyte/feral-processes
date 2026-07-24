@@ -59,6 +59,7 @@ fn draw_message_line(kind: MessageKind, text: &str, x: f32, y: f32, fonts: &Font
         MessageKind::Loot => GREEN,
         MessageKind::LevelUp => GREEN,
         MessageKind::Raid => ORANGE,
+        MessageKind::Round => TEXT_DIM,
     };
     if kind == MessageKind::LevelUp {
         fonts.ui_bold(text, x, y, m.font_size, color);

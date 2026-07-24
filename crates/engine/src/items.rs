@@ -64,6 +64,17 @@ impl EquipmentSlot {
             EquipmentSlot::Module => "Module",
         }
     }
+
+    /// Compact form for space-constrained rows — see the inventory list's
+    /// equip tag, where it sits beside `ATK`/`DEF`/`DECOMP` and so matches
+    /// their case. `label` stays the name for headers and prose.
+    pub fn short_label(self) -> &'static str {
+        match self {
+            EquipmentSlot::Weapon => "WEP",
+            EquipmentSlot::Armor => "ARM",
+            EquipmentSlot::Module => "MOD",
+        }
+    }
 }
 
 /// Flat stat bonuses an equipped item grants while worn, at gear level 1

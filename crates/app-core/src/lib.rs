@@ -74,21 +74,22 @@ pub fn inventory_item_actions(game: &Game, item: &ItemId) -> Vec<(char, String)>
     actions
 }
 
-/// Formats an equippable item's stat bonus as it would be *if equipped right
-/// now* — gear scales with the current zone level at the moment you equip it
-/// (see `Game::equip`), so this previews that same number rather than a flat,
-/// unscaled base value. Empty string for a non-equippable item.
+/// Formats the slot an equippable item would occupy plus its stat bonus as it
+/// would be *if equipped right now* — gear scales with the current zone level
+/// at the moment you equip it (see `Game::equip`), so this previews that same
+/// number rather than a flat, unscaled base value. Empty string for a
+/// non-equippable item.
 ///
 /// Lives here rather than in either renderer because both draw the identical
 /// tag, on both the inventory list and the item-action page.
 pub fn equip_preview_tag(game: &Game, item: &ItemId, zone_level: u32, fusion_tier: u32) -> String {
-    let Some((_, base_mods)) = game.equipment_of(item) else {
+    let Some((slot, base_mods)) = game.equipment_of(item) else {
         return String::new();
     };
     let mods = base_mods
         .scaled_for_level(zone_level)
         .fused_for_tier(fusion_tier);
-    let mut parts = Vec::new();
+    let mut parts = vec![slot.short_label().to_string()];
     if mods.atk != 0 {
         parts.push(format!("+{} ATK", mods.atk));
     }
@@ -2241,6 +2242,50 @@ mod tests {
             app.status_line.as_deref(),
             Some("Need 2 Overclock Core to fuse (have 0)."),
             "[U] on a too-small stack must refuse out loud, not silently do nothing"
+        );
+    }
+
+    #[test]
+    fn equip_preview_tag_leads_with_the_slot_the_item_would_take() {
+        let app = test_app(900);
+        let game = app.game.as_ref().expect("test_app builds a game");
+
+        assert_eq!(
+            equip_preview_tag(game, &ItemId::from(ids::MONOFILAMENT_WHIP), 1, 0),
+            " (WEP +4 ATK)"
+        );
+        assert_eq!(
+            equip_preview_tag(game, &ItemId::from(ids::ABLATIVE_PLATING), 1, 0),
+            " (ARM +4 DEF)"
+        );
+        assert_eq!(
+            equip_preview_tag(game, &ItemId::from(ids::CORTEX_HACK), 1, 0),
+            " (MOD +3 DECOMP)"
+        );
+    }
+
+    #[test]
+    fn equip_preview_tag_stays_empty_for_a_non_equippable_item() {
+        let app = test_app(901);
+        let game = app.game.as_ref().expect("test_app builds a game");
+
+        assert_eq!(
+            equip_preview_tag(game, &ItemId::from(ids::CORE_FRAGMENT), 1, 0),
+            "",
+            "a non-equippable item must contribute no tag at all, not a bare slot"
+        );
+    }
+
+    #[test]
+    fn equip_preview_tag_keeps_showing_level_scaling_and_fusion_beside_the_slot() {
+        let app = test_app(902);
+        let game = app.game.as_ref().expect("test_app builds a game");
+
+        // Zone 2 doubles the base bonus (GEAR_LEVEL_GROWTH), and one fusion
+        // tier adds ITEM_FUSION_BONUS_PER_TIER on top: 4 -> 8 -> 9.
+        assert_eq!(
+            equip_preview_tag(game, &ItemId::from(ids::MONOFILAMENT_WHIP), 2, 1),
+            " (WEP +9 ATK fusion T1)"
         );
     }
 }

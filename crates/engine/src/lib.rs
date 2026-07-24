@@ -23,7 +23,9 @@ use bevy_ecs::prelude::*;
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 
-use battle::{ActionKind, ActionOption, BattleAction, EnemyGroup, TargetSpec};
+use battle::{
+    ActionKind, ActionOption, BattleAction, EnemyGroup, PartyCommand, PartyCommandKind, TargetSpec,
+};
 use components::{
     ActiveBuff, ActiveStatus, BuffKind, CombatBuff, Creature, CustomName, Decompiler, Durability,
     Equipment, EquippedItem, Experience, FusionCount, Glyph, GlyphColor, Hostile, Inventory,
@@ -2896,6 +2898,33 @@ impl Game {
         }
 
         options
+    }
+
+    /// The party-level commands, which apply to every slot at once instead of
+    /// to `battle_active_slot`. Kept here rather than as renderer literals so
+    /// the two frontends cannot drift — the same reason
+    /// `battle_action_options` exists.
+    pub fn battle_party_commands(&self) -> Vec<PartyCommand> {
+        vec![
+            PartyCommand {
+                kind: PartyCommandKind::AllAttack,
+                key: 'A',
+                label: "[A]ll attack".to_string(),
+                needs_target: self.living_group_count() > 1,
+            },
+            PartyCommand {
+                kind: PartyCommandKind::AllDefend,
+                key: 'D',
+                label: "[D] all defend".to_string(),
+                needs_target: false,
+            },
+            PartyCommand {
+                kind: PartyCommandKind::JackOut,
+                key: 'j',
+                label: "[j]ack out".to_string(),
+                needs_target: false,
+            },
+        ]
     }
 
     /// A planned target group may have died earlier in the round. Fall back
@@ -12920,6 +12949,72 @@ mod tests {
             view.groups[0].front_hp, 500,
             "the new front should be the untouched second pack member"
         );
+    }
+
+    /// All-attack asks which group only when there is a choice to make. With
+    /// a single group left the prompt is pure friction, which is the whole
+    /// complaint this work started from.
+    #[test]
+    fn all_attack_needs_a_target_only_while_more_than_one_group_lives() {
+        let mut game = Game::new(82, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let mut species = game.species_defs().into_iter().map(|s| s.id);
+        let first = species.next().unwrap();
+        let second = species.next().expect("assets ship at least two species");
+
+        let solo = game.spawn_wild_creature(&first, 5, 5).unwrap();
+        insert_battle(&mut game, player, vec![solo]);
+        let needs = |game: &Game| {
+            game.battle_party_commands()
+                .into_iter()
+                .find(|c| c.kind == PartyCommandKind::AllAttack)
+                .expect("all-attack should always be offered")
+                .needs_target
+        };
+        assert!(
+            !needs(&game),
+            "one group means no choice, so all-attack shouldn't open a picker"
+        );
+
+        let a = game.spawn_wild_creature(&first, 5, 5).unwrap();
+        let b = game.spawn_wild_creature(&second, 6, 5).unwrap();
+        insert_battle(&mut game, player, vec![a, b]);
+        assert_eq!(
+            game.battle_view().unwrap().groups.len(),
+            2,
+            "two different species should partition into two groups — test premise"
+        );
+        assert!(
+            needs(&game),
+            "two groups means a real focus-fire choice, so all-attack must ask"
+        );
+    }
+
+    /// The renderers draw this list verbatim instead of hardcoding strings.
+    #[test]
+    fn battle_party_commands_offers_all_attack_all_defend_and_jack_out() {
+        let mut game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let species = game.species_defs().into_iter().next().unwrap().id;
+        let wild = game.spawn_wild_creature(&species, 5, 5).unwrap();
+        insert_battle(&mut game, player, vec![wild]);
+
+        let commands = game.battle_party_commands();
+        let keys: Vec<char> = commands.iter().map(|c| c.key).collect();
+        assert_eq!(
+            keys,
+            vec!['A', 'D', 'j'],
+            "uppercase for the party-wide pair, lowercase for jack out"
+        );
+        for command in &commands {
+            assert!(
+                command.label.contains(&format!("[{}]", command.key)),
+                "{:?} advertises key {:?} but its label is {:?}",
+                command.kind,
+                command.key,
+                command.label
+            );
+        }
     }
 
     /// `[A]`/`[D]` fill the party in one keypress, but must never overwrite a

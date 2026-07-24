@@ -80,6 +80,31 @@ pub struct ActionOption {
     pub unavailable: Option<String>,
 }
 
+/// A command that applies to the whole party at once rather than to the slot
+/// currently choosing. Deliberately not an `ActionOption`: these never become
+/// one slot's `BattleAction`, so sharing `ActionKind` would force meaningless
+/// arms into `action_from` and `Game::resolve_one_action`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PartyCommandKind {
+    AllAttack,
+    AllDefend,
+    JackOut,
+}
+
+/// One party-level entry in the battle action bar. Renderers draw this
+/// verbatim, exactly as they do `ActionOption`.
+#[derive(Debug, Clone)]
+pub struct PartyCommand {
+    pub kind: PartyCommandKind,
+    /// Uppercase for the party-wide pair, so shift reads as "everyone does
+    /// this" against the lowercase per-slot keys.
+    pub key: char,
+    pub label: String,
+    /// Whether the UI must collect an enemy group before this can run.
+    /// All-attack sets it only while more than one group is alive.
+    pub needs_target: bool,
+}
+
 /// Damage always deals at least 1, so battles can't stall out on high-defense
 /// matchups.
 pub fn compute_damage(atk: i32, def: i32, move_power: i32) -> i32 {

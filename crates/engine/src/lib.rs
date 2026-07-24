@@ -299,7 +299,7 @@ const HOME_STRUCTURE_ID: &str = "home";
 /// axis, same box-radius style as `StructureDef::passive_process`'s
 /// `radius`) of the Home structure — a base clusters around its Home
 /// rather than sprawling across the map.
-const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 15;
+const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 7;
 
 /// Fraction of a structure's current build cost refunded when it's removed
 /// (see `Game::remove_structure`), rounded down per item. Applies uniformly
@@ -4475,9 +4475,10 @@ impl Game {
     /// Chebyshev distance from `(x, y)` to the edge of safe territory: the
     /// platform's edge once a Home exists, the bare `ZoneSpawnPoint` before
     /// then. Both danger curves measure from this rather than straight from
-    /// the spawn point, so the whole base counts as distance zero instead
-    /// of sitting exactly on the first escalation step — the build radius
-    /// and `DISTANCE_STAT_STEP_TILES` are both 15.
+    /// the spawn point, so the whole base counts as distance zero instead of
+    /// sitting part-way up the first escalation step. The build radius (7)
+    /// and `DISTANCE_STAT_STEP_TILES` (15) are independent dials: shrinking
+    /// the platform pulls the first step inward, to 22 tiles from spawn.
     fn distance_from_danger_origin(&self, x: i32, y: i32) -> i32 {
         let spawn = self.world.resource::<ZoneSpawnPoint>();
         let dist = (x - spawn.x).abs().max((y - spawn.y).abs());

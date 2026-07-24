@@ -212,21 +212,24 @@ impl SpeciesDb {
     }
 
     /// Ordinary (non-boss) species that can inhabit `biome` — the pool the
-    /// normal per-tile spawn roll draws from.
+    /// normal per-tile spawn roll draws from. Sorted by `id` for the same
+    /// reason `all` is, and more urgently: the spawn roll picks out of this
+    /// pool *by index*, so an unsorted `HashMap` order makes two
+    /// `Game::new(seed)` runs spawn different species and diverge.
     pub fn habitat_matches(&self, biome: Biome) -> Vec<&SpeciesDef> {
-        self.species
-            .values()
-            .filter(|s| !s.is_boss && s.habitats.contains(&biome))
-            .collect()
+        self.sorted_matches(|s| !s.is_boss && s.habitats.contains(&biome))
     }
 
     /// Boss species that can inhabit `biome` — a separate, much rarer pool
-    /// than `habitat_matches`.
+    /// than `habitat_matches`, sorted for the same reason.
     pub fn boss_habitat_matches(&self, biome: Biome) -> Vec<&SpeciesDef> {
-        self.species
-            .values()
-            .filter(|s| s.is_boss && s.habitats.contains(&biome))
-            .collect()
+        self.sorted_matches(|s| s.is_boss && s.habitats.contains(&biome))
+    }
+
+    fn sorted_matches(&self, keep: impl Fn(&SpeciesDef) -> bool) -> Vec<&SpeciesDef> {
+        let mut matches: Vec<&SpeciesDef> = self.species.values().filter(|s| keep(s)).collect();
+        matches.sort_by(|a, b| a.id.cmp(&b.id));
+        matches
     }
 
     /// Every loaded species, sorted by `id` for a stable, reproducible
@@ -247,6 +250,44 @@ mod tests {
 
     fn species_assets_dir() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/species")
+    }
+
+    /// The habitat pools feed the per-tile spawn roll by index
+    /// (`Game::try_spawn_habitat_creature`), and the species it lands on
+    /// decides whether a further `can_nest` draw happens. Backed by a
+    /// `HashMap`, whose iteration order is randomized per instance, two
+    /// `Game::new(seed)` runs therefore pick different species, take a
+    /// different number of RNG draws, and diverge — the same hazard
+    /// `SpeciesDb::all` is sorted to avoid.
+    #[test]
+    fn habitat_pools_are_ordered_stably_across_instances() {
+        let ids =
+            |defs: Vec<&SpeciesDef>| -> Vec<String> { defs.iter().map(|s| s.id.clone()).collect() };
+        let (a, _) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+        let (b, _) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+
+        for biome in [
+            Biome::OpenGrid,
+            Biome::Mainframe,
+            Biome::NullSector,
+            Biome::StaticField,
+        ] {
+            let pool = ids(a.habitat_matches(biome));
+            let mut sorted = pool.clone();
+            sorted.sort();
+            assert_eq!(pool, sorted, "{biome:?} habitat pool must be sorted by id");
+            assert_eq!(
+                pool,
+                ids(b.habitat_matches(biome)),
+                "{biome:?} habitat pool must not vary between db instances"
+            );
+
+            let bosses = ids(a.boss_habitat_matches(biome));
+            let mut sorted_bosses = bosses.clone();
+            sorted_bosses.sort();
+            assert_eq!(bosses, sorted_bosses, "{biome:?} boss pool must be sorted");
+            assert_eq!(bosses, ids(b.boss_habitat_matches(biome)));
+        }
     }
 
     /// `base_speed` must be `#[serde(default)]` — a mod author's existing

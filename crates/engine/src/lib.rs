@@ -5772,6 +5772,12 @@ impl Game {
                 self.item_name(&passive.produces)
             ));
         }
+        if let Some(regen) = &def.power_regen {
+            parts.push(format!(
+                "recharges {} Power per tick within {} tiles",
+                regen.per_tick, regen.radius
+            ));
+        }
         let bench_for: Vec<&str> = self
             .world
             .resource::<ResearchDb>()
@@ -10945,18 +10951,95 @@ mod tests {
     }
 
     #[test]
-    fn recharger_node_structure_loads_with_the_expected_rest_schema_and_is_permanent() {
+    fn recharger_node_loads_as_a_permanent_base_wide_power_source() {
         let game = Game::new(400, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let def = game
             .structure_defs()
             .into_iter()
             .find(|d| d.id == "recharger_node")
             .expect("recharger_node.ron should load");
-        assert_eq!(def.build_cost, vec![(ItemId::from(ids::CORE_FRAGMENT), 5)]);
-        assert_eq!(def.enables_rest.as_ref().unwrap().radius, 2);
+        assert_eq!(def.build_cost, vec![(ItemId::from(ids::CORE_FRAGMENT), 10)]);
+        let regen = def
+            .power_regen
+            .as_ref()
+            .expect("the Recharger Node should regenerate Power");
+        assert_eq!(regen.per_tick, 1.0);
+        assert_eq!(
+            regen.radius, MAX_BUILD_DISTANCE_FROM_HOME,
+            "the Recharger Node should cover the whole base"
+        );
+        assert!(
+            def.enables_rest.is_none(),
+            "resting moved to Home; the Recharger Node is no longer a rest gate"
+        );
         assert!(
             def.temporary.is_none(),
             "the Recharger Node should be a permanent structure"
+        );
+    }
+
+    /// Deploys a Recharger Node `dx`/`dy` tiles from the player, bypassing
+    /// `place_structure`'s Home and cost requirements — this is about the
+    /// regen system, not the build rules.
+    fn spawn_recharger_node(game: &mut Game, dx: i32, dy: i32) {
+        let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+        game.world.spawn((
+            Structure {
+                kind: "recharger_node".to_string(),
+            },
+            Position {
+                x: player_pos.x + dx,
+                y: player_pos.y + dy,
+            },
+        ));
+    }
+
+    #[test]
+    fn a_recharger_node_in_range_nets_power_upward_on_a_real_tick() {
+        let mut game = Game::new(403, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
+        spawn_recharger_node(&mut game, 0, 0);
+
+        game.wait();
+
+        let hunger = game.world.get::<Needs>(player).unwrap().hunger;
+        assert!(
+            (hunger - 50.85).abs() < 1e-4,
+            "expected +1.0 regen less 0.15 decay, got {hunger}"
+        );
+    }
+
+    #[test]
+    fn a_recharger_node_past_the_base_footprint_does_not_reach_the_player() {
+        let mut game = Game::new(404, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
+        spawn_recharger_node(&mut game, MAX_BUILD_DISTANCE_FROM_HOME + 1, 0);
+
+        game.wait();
+
+        let hunger = game.world.get::<Needs>(player).unwrap().hunger;
+        assert!(
+            (hunger - 49.85).abs() < 1e-4,
+            "expected decay only, got {hunger}"
+        );
+    }
+
+    #[test]
+    fn reaching_a_recharger_node_while_drained_costs_no_integrity() {
+        let mut game = Game::new(405, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Needs>(player).unwrap().hunger = 0.1;
+        let before = *game.world.get::<Stats>(player).unwrap();
+        spawn_recharger_node(&mut game, 0, 0);
+
+        game.wait();
+
+        let after = *game.world.get::<Stats>(player).unwrap();
+        assert_eq!(
+            after.hp, before.hp,
+            "regen runs before decay, so arriving drained must not cost Integrity"
         );
     }
 

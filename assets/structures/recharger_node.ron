@@ -3,7 +3,10 @@
     name: "Recharger Node",
     glyph: 'z',
     color: Orange,
-    build_cost: [("core_fragment", 5)],
+    build_cost: [("core_fragment", 10)],
     work: None,
-    enables_rest: Some((radius: 2)),
+    power_regen: Some((
+        per_tick: 1.0,
+        radius: 7,
+    )),
 )

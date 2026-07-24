@@ -29,6 +29,25 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   up: shift means "everyone does this". Nothing sits one shift key away from a
   different action.
 
+### Structures
+
+- **The Recharger Node actually recharges you now.** Instead of gating rest,
+  it passively restores 1 Power per tick anywhere within 7 tiles — the whole
+  base footprint — with no assigned worker and no input item. Being home
+  means never watching your reserves drain. Its cost rises from 5 to 10 Core
+  Fragments to match. Power Cells and the Terminal are now expedition gear
+  rather than daily upkeep.
+- **Resting moved to Home.** `r` (recharge overnight) now works anywhere
+  within 7 tiles of Home rather than within 2 tiles of a Recharger Node, so
+  the base you already built is the place you rest. Existing saves need no
+  migration and nobody is locked out — Home has always had to be built before
+  anything else. A Recharger Node deployed under the old rules simply stops
+  gating rest and starts regenerating Power, at the price you already paid —
+  see [Structures](README.md#structures).
+- **Modders get a `power_regen` field.** Any structure can restore Power in a
+  radius by setting it; nothing in the engine names a structure id to do it.
+  See `assets/structures/README.md`.
+
 ### Balance
 
 - **The base platform shrank from a 15-tile radius to 7.** The platform edge

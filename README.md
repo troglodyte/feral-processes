@@ -96,7 +96,7 @@ change what gets stored — a save from a different build shows up as
 | `hjkl` / arrow keys | Move (bumping a rogue program starts an intrusion) |
 | `.` | Wait in place (advances one tick) |
 | `e` | Drain the first Power-restoring item in your inventory (a Power Cell, unless a mod adds another) |
-| `r` | Recharge overnight (restores Fatigue and Integrity, costs Power) — requires standing near a deployed Recharger Node (see [Structures](#structures)) |
+| `r` | Recharge overnight (restores Fatigue and Integrity, costs Power) — requires standing within your base, near Home (see [Structures](#structures)) |
 | `g` | Scan the sector for Core Fragments |
 | `c` | Open the compile menu — an ICE Breaker (3 Core Fragments), a Power Cell (2), the six Scavenged-tier gear pieces, and every other recipe whose research and/or bench you have (see [Equipment](#equipment)). Then pick a quantity: type digits and Enter, or `[F]` for 5 at once, or `[M]` for the most you can currently afford |
 | `b` | Deploy a structure |
@@ -365,7 +365,7 @@ Shown in the status panel (always) and the intrusion screen (in battle):
 | Stat | What it means |
 | --- | --- |
 | **Integrity** | Your HP. Hits 0 and you flatline — final in Permadeath, a costly soft-reboot in Forgiving mode. Leveling up or recharging overnight (`r`) both fully restore it. |
-| **Power** | Your hunger-equivalent. Drains over time; hits 0 and you start taking Integrity damage each tick. Below 50%, your Attack also starts weakening — a linear falloff to half strength at 0 Power, on top of (not instead of) the tick damage. Restored by draining a Power Cell (`e`) or standing near a cooking Terminal. |
+| **Power** | Your hunger-equivalent. Drains over time; hits 0 and you start taking Integrity damage each tick. Below 50%, your Attack also starts weakening — a linear falloff to half strength at 0 Power, on top of (not instead of) the tick damage. Restored by draining a Power Cell (`e`), standing near a cooking Terminal, or passively anywhere in a base with a Recharger Node. |
 | **Fatigue** | Drains over time; restored to full by recharging overnight (`r`). Directing a party member's Special in battle (`s`) also costs a flat chunk of it — rest also advances a lot of game time, so use both deliberately. |
 | **Level / XP** | Grows from defeating or decompiling rogue programs, or (for a compiled program) completing cronjob cycles. Each level-up grows Attack/Defense/max Integrity, fully heals, and grants 1 Perk Point — see [Perks](#perks). **You** have no level ceiling at all; **tamed programs** stop at level 12, and further XP from any source is simply ignored once one is maxed. |
 | **Attack** | How hard your hits land. Battle damage is roughly `move power + attacker's Attack − defender's Defense` (always at least 1). The same formula covers every combatant: your own strike has a fixed move power, while a program — yours or wild — rolls one of its species' moves. |
@@ -756,10 +756,10 @@ enough of them, then walk onto it to breach into the next zone.
 
 | Structure | Cost | Unlocked by | Purpose |
 | --- | --- | --- | --- |
-| Home | 5 Core Fragments | — | Anchors your base platform (see below). `u` ("use symlink") instantly teleports you to it from anywhere on the map, for 4 Power Cells. Can't be raided — see [Base defense](#base-defense) |
+| Home | 5 Core Fragments | — | Anchors your base platform (see below). `u` ("use symlink") instantly teleports you to it from anywhere on the map, for 4 Power Cells. Also lets you `r` (recharge/rest) anywhere in the base. Can't be raided — see [Base defense](#base-defense) |
 | Mining Node | 12 Core Fragments | — | Cronjob a compiled program to it to produce Core Fragments over time (slower and level-gated — see [Getting started](#getting-started-building-and-running-cronjobs)). Upgradeable to Mk5 |
 | Research Node | 10 Core Fragments | — | Cronjob a compiled program to it to produce Research Data over time (14 ticks a cycle, level-gated like a Mining Node) — see [Research](#research). Upgradeable to Mk5 |
-| Recharger Node | 5 Core Fragments | — | Required to `r` (recharge/rest) within 2 tiles of it |
+| Recharger Node | 10 Core Fragments | — | Passively refills your Power anywhere within 7 tiles — the whole base |
 | Data Cache | 10 Core Fragments | — | Raises your carrying capacity (Buffer) by 10 while deployed; stacks with every other one |
 | Zone Portal | 10 Portal Fragments *(× current zone level)* | — | Walk onto it to breach into the next zone. Consumed on use — see [Zones and portals](#zones-and-portals) |
 | Compiler | 16 Core Fragments | Automation | Cronjob a compiled program to it to produce ICE Breakers over time. Upgradeable to Mk5 |
@@ -819,8 +819,10 @@ Home is a **symlink target** — a third category, neither cronjob nor
 passive: press `u`, pick it from the list of deployed symlink structures,
 and pay the Power Cell cost to warp there instantly, no matter how far
 away you are. Deploy more than one and `u` lists all of them.
-Recharger Node is a **rest gate** — a fourth category: `r` only works
-while you're within 2 tiles of one.
+Recharger Node is a **passive power source** — a fourth category: it
+refills your Power every tick you're inside its 7-tile radius, with no
+worker and no input item. Home doubles as the **rest gate**: `r` only
+works within 7 tiles of it, which is exactly the base footprint.
 Any structure can define any combination of these via its `.ron` file —
 see [Modding](#modding).
 
@@ -903,7 +905,8 @@ privileged over gear you add yourself.
 
 Structures are equally open-ended: a single `.ron` file decides whether a
 structure is cronjob-workable, passively processing, a symlink target, a
-rest gate, a trading post, temporary, and — via `raidable: false` — whether
+rest gate, a power source, a trading post, temporary, and — via
+`raidable: false` — whether
 raids can target it at all. That last flag is the whole of what makes Home
 safe; any structure you add can claim the same protection.
 

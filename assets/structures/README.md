@@ -60,6 +60,19 @@ is skipped with a warning logged in-game rather than crashing startup.
         radius: 2,
     )),
 
+    // Optional; can be left out entirely (defaults to no regeneration).
+    // If set, the structure restores `per_tick` Power to the player every
+    // tick that they're standing within `radius` tiles of it — no assigned
+    // worker and no input item, unlike `work` and `passive_process`.
+    // Stacks additively across every in-range structure that sets it, and
+    // clamps at full Power. This is how the Recharger Node works:
+    // `power_regen: Some((per_tick: 1.0, radius: 7))`, a radius chosen to
+    // cover a whole base (structures must be built within 7 tiles of Home).
+    power_regen: Some((
+        per_tick: 1.0,
+        radius: 7,
+    )),
+
     // Optional; can be left out entirely (defaults to no symlink). If set,
     // this structure is a symlink target: the player can "use symlink" (`u`
     // in the TUI) to instantly teleport to it from anywhere on the map,
@@ -131,9 +144,9 @@ is skipped with a warning logged in-game rather than crashing startup.
     // Optional; can be left out entirely (defaults to no rest capability).
     // If set, `Game::rest` (recharge/overnight rest) is only allowed while
     // the player stands within `radius` tiles of this structure — resting
-    // has no other way to happen. This is how the Recharger Node works:
-    // `enables_rest: Some((radius: 2))`.
-    enables_rest: Some((radius: 2)),
+    // has no other way to happen. This is how Home works:
+    // `enables_rest: Some((radius: 7))`, which covers the whole base.
+    enables_rest: Some((radius: 7)),
 
     // Optional; can be left out entirely (defaults to a permanent
     // structure). If set, this structure automatically collapses once

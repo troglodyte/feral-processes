@@ -79,8 +79,19 @@ is skipped with a warning logged in-game rather than crashing startup.
     // being destroyed. An assigned cronjob worker/guard fights a raid off,
     // reducing the damage by its Defense stat; an unassigned structure
     // takes the raid's full damage (less any raid_defense below).
-    // Damaged structures slowly regenerate over time regardless.
+    // Damaged structures slowly regenerate over time regardless. Ignored
+    // entirely when `raidable: false` (see below).
     durability: 30,
+
+    // Optional; can be left out entirely (defaults to true). Set to false
+    // to make the structure impossible to raid: it's deployed with no
+    // durability pool at all, so `Game::raid_check` can never select it,
+    // it never takes damage, and no [HP x/y] is shown for it anywhere.
+    // `durability` above is inert when this is false. This is how Home
+    // works — losing the structure that gates every other build, anchors
+    // symlinks, and can only exist once would strand the player rather
+    // than cost them something.
+    raidable: false,
 
     // Optional; can be left out entirely (defaults to 0). Flat raid-damage
     // reduction this structure contributes to *every* raid, against *any*

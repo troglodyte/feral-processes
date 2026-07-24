@@ -123,6 +123,14 @@ pub struct StructureDef {
     /// rather than 0, which would let the very next raid destroy them.
     #[serde(default = "default_durability")]
     pub durability: u32,
+    /// Whether raids can target this structure. A non-raidable structure is
+    /// spawned with no `Durability` component at all, which is what keeps
+    /// `Game::raid_check` — whose target query is `With<Durability>` — from
+    /// ever selecting it, and leaves `durability` above inert.
+    /// `#[serde(default = "default_raidable")]` so existing structure files
+    /// (including mods) stay raidable, exactly as before this field existed.
+    #[serde(default = "default_raidable")]
+    pub raidable: bool,
     /// How much this structure reduces raid damage by, for *every* raid
     /// against *any* deployed structure — not just itself — while it's
     /// standing (see `Game::raid_check`). Stacks additively across every
@@ -156,6 +164,10 @@ pub struct StructureDef {
 
 fn default_durability() -> u32 {
     30
+}
+
+fn default_raidable() -> bool {
+    true
 }
 
 /// Inventory capacity with no capacity-granting structures deployed.

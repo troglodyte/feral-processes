@@ -5,7 +5,7 @@ use super::support::*;
 use crate::*;
 
 #[test]
-fn gather_pack_pulls_in_nearby_hostiles_and_caps_at_the_local_group_size() {
+fn gather_pack_pulls_in_nearby_hostiles_and_caps_the_pack_at_max_enemy_groups_worth() {
     let species_id = {
         let game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         game.species_defs()
@@ -18,7 +18,9 @@ fn gather_pack_pulls_in_nearby_hostiles_and_caps_at_the_local_group_size() {
     let mut game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     // Zone 3 caps a group at 9; one step out doubles to 2. That is the
     // per-*group* size, and the whole pack may carry `MAX_ENEMY_GROUPS` of
-    // them, so all four hostiles in range gather.
+    // them — so the ceiling here is 8, and there are deliberately more than
+    // 8 hostiles in range, or the pack size would just be however many the
+    // radius happened to reach and the ceiling would go untested.
     game.world.resource_mut::<ZoneLevel>().0 = 3;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
     let (ax, ay) = (spawn.x + GROUP_SIZE_STEP_TILES, spawn.y);
@@ -40,8 +42,10 @@ fn gather_pack_pulls_in_nearby_hostiles_and_caps_at_the_local_group_size() {
             .id()
     };
     let anchor = spawn_hostile(&mut game, ax, ay);
-    for i in 1..=3 {
-        spawn_hostile(&mut game, ax + i, ay);
+    // Twelve in total, all inside the gather radius of 3 and all still one
+    // step out, so every one of them reports the same group size of 2.
+    for i in 0..11 {
+        spawn_hostile(&mut game, ax + i % 4, ay + i % 3);
     }
 
     let pack = game.gather_pack(anchor);
@@ -52,9 +56,9 @@ fn gather_pack_pulls_in_nearby_hostiles_and_caps_at_the_local_group_size() {
     );
     assert_eq!(
         pack.len(),
-        4,
-        "the ceiling that binds a gathered pack is per-group (2 here) times \
-         MAX_ENEMY_GROUPS, not the group size on its own"
+        8,
+        "twelve are in range, but a pack is capped at the per-group size (2 \
+         one step out in zone 3) times MAX_ENEMY_GROUPS"
     );
 }
 

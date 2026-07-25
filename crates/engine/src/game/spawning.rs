@@ -15,8 +15,14 @@ pub(crate) fn zone_group_cap(zone: u32) -> u32 {
 }
 
 /// How far a group of `n` scatters when it spawns, and how far `gather_pack`
-/// searches from the member the player bumped — the same radius from the
-/// same input, so a spawned cluster always pulls into exactly one fight.
+/// searches from the member the player bumped — the same formula, but not
+/// the same input: spawning passes the size it actually rolled at the spawn
+/// tile, gathering passes `max_group_size` at the anchor's tile, which is a
+/// different tile and a ceiling rather than a roll. So a scattered cluster
+/// usually pulls into one fight, not always — a fringe member can be left
+/// for the next bump. That is why the *ceiling* reads every gathered member
+/// instead (see `Game::widest_group_size`): a radius that errs narrow costs
+/// a member, where a ceiling that errs narrow would cost half the cluster.
 /// `PACK_GATHER_RADIUS` stays the floor: nothing gets tighter than it was.
 pub(crate) fn swarm_radius(n: u32) -> i32 {
     PACK_GATHER_RADIUS.max(crate::battle::ceil_sqrt(n) as i32)

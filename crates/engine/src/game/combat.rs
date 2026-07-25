@@ -5,8 +5,12 @@ use crate::*;
 
 impl Game {
     /// The widest `max_group_size` among `members`' own tiles — the ceiling
-    /// a gathered cluster fights under, in both `gather_pack` and
-    /// `group_pack` so the two cannot disagree about what a pack may hold.
+    /// a gathered cluster fights under, measured the same way in both
+    /// `gather_pack` and `group_pack`. Measured the same way, not guaranteed
+    /// equal: `gather_pack` truncates *after* measuring, so a widest member
+    /// sitting past the cut leaves `group_pack` measuring a narrower ceiling
+    /// from the survivors and holding fewer than the pack carries. Benign —
+    /// the surplus stays standing, like every other overflow here.
     ///
     /// Read from every member rather than from the cluster's anchor because
     /// group size *doubles* every `GROUP_SIZE_STEP_TILES`: the spawn roll
@@ -72,6 +76,12 @@ impl Game {
     /// that a single deep roll would fight as one column rather than as the
     /// groups the danger curve allows. Neither surplus is returned: both
     /// stay on the map as ordinary hostiles, met on the next bump.
+    ///
+    /// Members are expected to carry a `Position`, since that ceiling is
+    /// read from the ground they stand on; a pack with none falls back to
+    /// one member per group. Worth knowing when assembling a pack by hand
+    /// rather than from `gather_pack` (see the tests' `insert_battle`) —
+    /// place the entities somewhere, or the fight comes out a single file.
     pub(crate) fn group_pack(&self, pack: Vec<Entity>) -> Vec<EnemyGroup> {
         let cap = self.widest_group_size(&pack);
         let mut groups: Vec<EnemyGroup> = Vec::new();

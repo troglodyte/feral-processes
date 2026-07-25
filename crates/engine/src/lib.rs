@@ -427,7 +427,7 @@ pub struct CompanionInfo {
     /// battle, since status effects are scoped to a single intrusion.
     pub status: Option<String>,
     /// Terse name of what commanding this companion in battle would do
-    /// right now (e.g. "Rally Team") — see `Game::companion_ability_label`.
+    /// right now (e.g. "Rally") — see `Game::companion_ability_label`.
     /// Shown wherever a companion is listed outside battle, so the player
     /// can see what its Special would do. In battle the action menu carries
     /// the full label instead (see `Game::battle_action_options`).
@@ -10176,8 +10176,8 @@ mod tests {
         game.add_companion(plain).unwrap();
         let plain_ability = game.player_status().companions[0].ability.clone();
         assert_eq!(
-            plain_ability, "Rally Team",
-            "a species with no special_ability should show the generic Rally Team fallback"
+            plain_ability, "Rally",
+            "a species with no special_abilities should show the generic rally fallback"
         );
     }
 
@@ -10219,7 +10219,7 @@ mod tests {
         let options = game.battle_special_options(1);
         assert_eq!(
             options.iter().map(|o| o.name.as_str()).collect::<Vec<_>>(),
-            vec!["Heal", "Shield Team"],
+            vec!["Heal", "Shield"],
             "the picker should list the species' abilities in declaration order"
         );
         assert_eq!(
@@ -10242,7 +10242,7 @@ mod tests {
             1,
             "the fallback is resolved into the list, so the menu is never empty"
         );
-        assert_eq!(options[0].name, "Rally Team");
+        assert_eq!(options[0].name, "Rally");
     }
 
     #[test]

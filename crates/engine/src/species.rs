@@ -10,16 +10,19 @@ use crate::world::Biome;
 
 pub type SpeciesId = String;
 
-/// A companion's unique battle action, used in place of the default rally
-/// buff when its Special is chosen for the round — see
+/// One of a companion's battle abilities — the menu its Special offers for
+/// the round, in place of the default rally buff. See
 /// `BattleAction::Special` and `Game::resolve_one_action`.
+///
+/// Every variant lands on a single target the player picks: `targeting`
+/// decides whether that picker lists your own side or the enemy groups.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum SpecialAbility {
-    /// Boosts the player's ATK by `power` for `duration` rounds.
+    /// Boosts one party member's ATK by `power` for `duration` rounds.
     Rally { power: i32, duration: u32 },
-    /// Boosts the player's DEF by `power` for `duration` rounds.
+    /// Boosts one party member's DEF by `power` for `duration` rounds.
     Shield { power: i32, duration: u32 },
-    /// Heals the player for `power` HP immediately.
+    /// Heals one party member for `power` HP immediately.
     Heal { power: i32 },
     /// Inflicts `kind` (`Bleed` or `Stun`) on the wild program, same as a
     /// `MoveEffect` would.
@@ -77,13 +80,18 @@ impl SpecialAbility {
         }
     }
 
-    /// Terse name for this ability, e.g. "Rally Team" — just what kind it
-    /// is, without the numeric effect. Used where the full `display_label`
-    /// would not fit.
+    /// Terse name for this ability, e.g. "Rally" — just what kind it is,
+    /// without the numeric effect. Used where the full `display_label`
+    /// would not fit: the ability picker, the roster's planned-action
+    /// column, and the target picker's header.
+    ///
+    /// Not "Rally Team"/"Shield Team", which is what these read as before
+    /// buffs became aimable: the player saw "Rally Team" on four screens
+    /// and was then asked to choose the single member it lands on.
     pub fn short_name(&self) -> &'static str {
         match self {
-            SpecialAbility::Rally { .. } => "Rally Team",
-            SpecialAbility::Shield { .. } => "Shield Team",
+            SpecialAbility::Rally { .. } => "Rally",
+            SpecialAbility::Shield { .. } => "Shield",
             SpecialAbility::Heal { .. } => "Heal",
             SpecialAbility::Debuff { kind, .. } => match kind {
                 StatusKind::Bleed => "Inflict Bleeding",
@@ -176,6 +184,14 @@ pub struct SpeciesDef {
     /// without this field keep parsing as fallback-rally companions.
     #[serde(default)]
     pub special_abilities: Vec<SpecialAbility>,
+    /// The pre-list spelling of the field above. Kept only so a mod written
+    /// against it does not silently lose its ability: serde ignores unknown
+    /// fields, so without this the file would load looking healthy while
+    /// the companion quietly fell back to the generic rally.
+    /// `SpeciesDb::load_dir` folds it into `special_abilities` and warns,
+    /// and is the only thing that should ever read it.
+    #[serde(default, rename = "special_ability")]
+    pub legacy_special_ability: Option<SpecialAbility>,
     /// Multiplies this species' per-level stat growth (see
     /// `progression::add_xp`) for a tamed member of it — 1.0 (the default)
     /// grows at the same flat rate as before this field existed; a
@@ -228,7 +244,21 @@ impl SpeciesDb {
             }
             let text = std::fs::read_to_string(&path)?;
             match ron::from_str::<SpeciesDef>(&text) {
-                Ok(def) => {
+                Ok(mut def) => {
+                    if let Some(legacy) = def.legacy_special_ability.take() {
+                        if def.special_abilities.is_empty() {
+                            def.special_abilities.push(legacy);
+                            warnings.push(format!(
+                                "species {:?}: `special_ability` is now `special_abilities`, a list — migrated it for you. Rename the field and wrap its value in [] to silence this.",
+                                def.id
+                            ));
+                        } else {
+                            warnings.push(format!(
+                                "species {:?}: sets both `special_ability` and `special_abilities`; the obsolete singular one was dropped.",
+                                def.id
+                            ));
+                        }
+                    }
                     db.species.insert(def.id.clone(), def);
                 }
                 Err(e) => warnings.push(format!("skipped invalid species file {path:?}: {e}")),
@@ -486,13 +516,14 @@ mod migration_tests {
     use super::*;
 
     /// `special_ability` (singular) became `special_abilities` (a list). A
-    /// mod still using the old name must not be *rejected* — an unknown
-    /// field is ignored, so the file still loads and its companion falls
-    /// back to the generic rally. Pinned because the failure mode otherwise
-    /// is the whole species vanishing from the roster, which reads as a
-    /// missing mod rather than a renamed field.
+    /// mod still using the old name must not be rejected — and must not
+    /// quietly lose its ability either. Serde ignores unknown fields, so
+    /// before the compatibility field existed such a file loaded looking
+    /// perfectly healthy while its companion fell back to the generic
+    /// rally, with nothing said. That is the worst of both worlds for a
+    /// modder: no error to search for, and a creature that is subtly wrong.
     #[test]
-    fn a_species_using_the_old_singular_field_still_loads_and_falls_back() {
+    fn a_species_using_the_old_singular_field_keeps_its_ability() {
         let body = r#"(
             id: "old_style", name: "Old Style", glyph: 'o', color: Cyan,
             base_hp: 10, base_atk: 4, base_def: 2, taming_difficulty: 0.5,
@@ -501,11 +532,48 @@ mod migration_tests {
             special_ability: Some(Heal(power: 8)),
         )"#;
         let def = ron::from_str::<SpeciesDef>(body)
-            .expect("an unknown field must not make the whole species unloadable");
+            .expect("the old field must not make the whole species unloadable");
         assert_eq!(def.id, "old_style");
         assert!(
-            def.special_abilities.is_empty(),
-            "the old field is ignored, not migrated — the companion gets the fallback rally"
+            def.legacy_special_ability.is_some(),
+            "the old field has to survive parsing for load_dir to migrate it"
         );
+    }
+
+    /// Parsing keeps the legacy field; `load_dir` is what folds it into the
+    /// list and tells the modder to rename it.
+    #[test]
+    fn load_dir_migrates_the_old_singular_field_and_says_so() {
+        let dir = std::env::temp_dir().join(format!(
+            "feral_processes_species_migration_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("old_style.ron"),
+            r#"(
+                id: "old_style", name: "Old Style", glyph: 'o', color: Cyan,
+                base_hp: 10, base_atk: 4, base_def: 2, taming_difficulty: 0.5,
+                habitats: [OpenGrid], base_speed: 10,
+                moves: [(name: "Poke", power: 3)],
+                special_ability: Some(Heal(power: 8)),
+            )"#,
+        )
+        .unwrap();
+
+        let (db, warnings) = SpeciesDb::load_dir(&dir).unwrap();
+        let def = db.get("old_style").expect("the species still loads");
+        assert_eq!(
+            def.special_abilities.len(),
+            1,
+            "the ability must be carried into the list, not dropped"
+        );
+        assert!(
+            warnings.iter().any(|w| w.contains("special_abilities")),
+            "the modder has to be told to rename it, got {warnings:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -38,9 +38,10 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 - **Species can define more than one special ability.** `special_ability`
   becomes `special_abilities`, a list — see `assets/species/README.md`.
   Modders: rename the field and wrap the value in `[]`. A file still using
-  the old singular name keeps loading, but its ability is ignored and the
-  companion falls back to the generic rally. No shipped species declared one,
-  so nothing in the base game changes yet.
+  the old singular name keeps working — its ability is migrated into the
+  list and a warning names the file — rather than loading healthy while the
+  companion silently falls back to the generic rally. No shipped species
+  declared one, so nothing in the base game changes yet.
 - **The trade screen shows equipment tags.** Sell and buy rows now carry the
   same `(WEP +3 ATK)` tag the inventory does, so you can tell a weapon from a
   module — and check a fusion tier — without backing out to compare. Sell

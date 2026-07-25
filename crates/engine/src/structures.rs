@@ -68,6 +68,18 @@ pub struct TradeDef {
     pub sell_rate: u32,
     /// Items purchasable here, each as `(item, cost in Core Fragments)`.
     pub buy: Vec<(ItemId, u32)>,
+    /// Divisor applied to a tamed program's `Stats::power()` to price it
+    /// when sold here — 10 pays a tenth of its power, rounded down, with a
+    /// floor of 1.
+    ///
+    /// `None` (the default) means this trader deals in items only. A
+    /// structure field rather than an engine constant so no code names a
+    /// structure id and a modded trader can pay differently or refuse
+    /// programs; defaulting to `None` so an existing structure file does not
+    /// start buying creatures just because the game learned how.
+    /// `Some(0)` is treated as `None` rather than dividing by zero.
+    #[serde(default)]
+    pub program_sell_divisor: Option<u32>,
 }
 
 /// A structure's rest capability — see `StructureDef::enables_rest` and
@@ -282,6 +294,50 @@ mod tests {
         StructureDb::load_dir(&dir)
             .expect("assets/structures should load")
             .0
+    }
+
+    /// Buying programs is opt-in per trader. The shipped Market takes them
+    /// at a tenth of their power; every other structure — and any modded one
+    /// written before the field existed — deals in items only, rather than
+    /// silently gaining the ability to buy creatures.
+    #[test]
+    fn only_the_market_buys_programs_and_it_pays_a_tenth_of_power() {
+        let db = test_db();
+        let market = db.get("market").expect("black_market.ron should load");
+        assert_eq!(
+            market
+                .trade
+                .as_ref()
+                .expect("the market trades")
+                .program_sell_divisor,
+            Some(10)
+        );
+        for def in db.all() {
+            if def.id != "market"
+                && let Some(trade) = &def.trade
+            {
+                assert_eq!(
+                    trade.program_sell_divisor, None,
+                    "{} should not buy programs",
+                    def.id
+                );
+            }
+        }
+    }
+
+    /// A structure file written before this field existed keeps parsing.
+    #[test]
+    fn a_trade_block_without_the_field_defaults_to_not_buying_programs() {
+        let def: StructureDef = ron::from_str(
+            r#"(
+                id: "old_trader", name: "Old Trader", glyph: '$', color: Yellow,
+                build_cost: [],
+                work: None,
+                trade: Some((sell_rate: 1, buy: [])),
+            )"#,
+        )
+        .expect("an older trade block must still parse");
+        assert_eq!(def.trade.unwrap().program_sell_divisor, None);
     }
 
     #[test]

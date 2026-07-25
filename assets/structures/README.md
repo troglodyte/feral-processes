@@ -99,8 +99,17 @@ is skipped with a warning logged in-game rather than crashing startup.
     // it to sell any inventory item (except Core Fragment) for
     // `sell_rate` Core Fragments per unit, or buy any item listed in `buy`
     // for its Core Fragment cost.
+    //
+    // `program_sell_divisor` is optional inside the trade block (defaults to
+    // None — items only). Set it and this trader also buys the player's
+    // tamed programs, paying `power / divisor` Core Fragments rounded down,
+    // where power is the program's max HP + Attack + Defense. The payout
+    // never drops below 1. Selling despawns the program permanently and
+    // frees the roster slot it occupied, so this is the player's way out of
+    // a full roster. A divisor of 0 means the same as omitting it.
     trade: Some((
         sell_rate: 1,
+        program_sell_divisor: Some(10),
         buy: [("ice_breaker", 4), ("power_cell", 3)],
     )),
 

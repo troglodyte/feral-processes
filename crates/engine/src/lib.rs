@@ -387,6 +387,23 @@ pub struct PlayerStatus {
 /// Full stats for one tamed program the player owns, wherever it is on the
 /// map — shown by the pets/roster screen so you can check on (or manage) a
 /// cronjob worker without walking over to it. See `Game::owned_pets`.
+/// One sellable program at a trading post, already priced — see
+/// `Game::program_sale_options`. Renderers draw these verbatim and never
+/// compute a payout of their own.
+pub struct ProgramSaleOption {
+    pub entity: Entity,
+    pub name: String,
+    pub level: u32,
+    /// `components::Stats::power()` — what the payout is derived from, shown
+    /// so the price is explicable rather than arbitrary.
+    pub power: i32,
+    pub payout: u32,
+    /// What this sale would also cancel, worded for display: e.g. "leaves
+    /// your battle party", "stops working the Mining Node". Empty when the
+    /// program is idle.
+    pub detaches: Vec<String>,
+}
+
 pub struct PetInfo {
     pub entity: Entity,
     pub name: String,
@@ -6182,6 +6199,115 @@ impl Game {
         Ok(())
     }
 
+    /// The divisor `structure` prices programs by, if it buys them at all.
+    /// `Some(0)` collapses to `None` rather than dividing by zero.
+    fn program_sell_divisor(&self, structure: Entity) -> Option<u32> {
+        self.trade_options(structure)?
+            .program_sell_divisor
+            .filter(|&d| d > 0)
+    }
+
+    /// What `structure` would pay for `creature`: a fraction of its
+    /// `Stats::power()`, floored at 1 so a sale can never destroy a program
+    /// for nothing.
+    fn program_payout(&self, structure: Entity, creature: Entity) -> Option<u32> {
+        let divisor = self.program_sell_divisor(structure)?;
+        let power = self.world.get::<Stats>(creature)?.power().max(0) as u32;
+        Some((power / divisor).max(1))
+    }
+
+    /// Every tamed program the player could sell at `structure`, priced.
+    /// Empty when `structure` doesn't buy programs — renderers draw these
+    /// rows verbatim and never work a price out themselves.
+    pub fn program_sale_options(&mut self, structure: Entity) -> Vec<ProgramSaleOption> {
+        if self.program_sell_divisor(structure).is_none() {
+            return Vec::new();
+        }
+        self.owned_pets()
+            .into_iter()
+            .filter_map(|pet| {
+                Some(ProgramSaleOption {
+                    entity: pet.entity,
+                    name: pet.name,
+                    level: pet.level,
+                    power: pet.power,
+                    payout: self.program_payout(structure, pet.entity)?,
+                    detaches: self.sale_detachments(pet.entity),
+                })
+            })
+            .collect()
+    }
+
+    /// What selling `creature` would also cancel, worded for display. Built
+    /// here rather than in a renderer because it has to name a structure and
+    /// know what a `Task` kind means.
+    fn sale_detachments(&self, creature: Entity) -> Vec<String> {
+        let mut out = Vec::new();
+        if self.world.resource::<Party>().0.contains(&creature) {
+            out.push("leaves your battle party".to_string());
+        }
+        if let Some(task) = self.world.get::<Task>(creature) {
+            let target = self.entity_label(task.target);
+            out.push(match task.kind {
+                TaskKind::GatherResource => format!("stops working {target}"),
+                TaskKind::Guard => format!("stops guarding {target}"),
+            });
+        }
+        out
+    }
+
+    /// Sells `creature` to the trading post `structure` for a share of its
+    /// power, despawning it and freeing the roster slot it held — the only
+    /// way to shed a tamed program without fusing it into another.
+    ///
+    /// Whatever the program was doing is cancelled: a party slot, a cronjob,
+    /// a guard post. Each is logged, so a structure that stops producing
+    /// says so rather than going quiet.
+    ///
+    /// The payout is checked for room *before* the program is destroyed, for
+    /// the reason `sell_item` documents about its own ordering: the currency
+    /// can be bank-limited, and discovering that after despawning would eat
+    /// the program for nothing.
+    pub fn sell_companion(&mut self, structure: Entity, creature: Entity) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        if self.program_sell_divisor(structure).is_none() {
+            return Err("That trader doesn't deal in programs.".into());
+        }
+        let owner = self
+            .world
+            .get::<Tamed>(creature)
+            .ok_or_else(|| "That program isn't compiled under your control.".to_string())?
+            .owner;
+        if owner != self.player_entity() {
+            return Err("You don't control that program.".into());
+        }
+        let payout = self
+            .program_payout(structure, creature)
+            .ok_or_else(|| "That program can't be appraised.".to_string())?;
+        let currency = self.currency();
+        self.check_room(&currency, payout)?;
+
+        let name = self.creature_label(creature);
+        for detached in self.sale_detachments(creature) {
+            self.log(format!("{name} {detached}."));
+        }
+        self.world
+            .resource_mut::<Party>()
+            .0
+            .retain(|&e| e != creature);
+        self.world.entity_mut(creature).remove::<Task>();
+        self.world.despawn(creature);
+        self.world
+            .get_mut::<Inventory>(self.player_entity())
+            .unwrap()
+            .add(currency, payout);
+        self.log(format!("You sell {name} for {payout} Core Fragments."));
+        self.tick();
+        Ok(())
+    }
+
     /// Buys `qty` of `item` from the trading post `structure`, at its
     /// listed per-unit Core Fragment cost.
     pub fn buy_item(&mut self, structure: Entity, item: ItemId, qty: u32) -> Result<(), String> {
@@ -11876,6 +12002,203 @@ mod tests {
             restored.fusions, MAX_FUSIONS,
             "a maxed lineage must stay maxed across a save, not reset to fusable"
         );
+    }
+
+    /// A trading structure, spawned without paying for it.
+    fn spawn_market(game: &mut Game) -> Entity {
+        let kind = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| {
+                d.trade
+                    .as_ref()
+                    .is_some_and(|t| t.program_sell_divisor.is_some())
+            })
+            .expect("a trader that buys programs should ship")
+            .id
+            .clone();
+        game.world
+            .spawn((Structure { kind }, Position { x: 5, y: 5 }))
+            .id()
+    }
+
+    fn fragments(game: &Game) -> u32 {
+        game.world
+            .get::<Inventory>(game.player_entity())
+            .unwrap()
+            .count(&ItemId::from(ids::CORE_FRAGMENT))
+    }
+
+    #[test]
+    fn selling_a_program_pays_a_tenth_of_its_power_and_despawns_it() {
+        let mut game = Game::new(120, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let market = spawn_market(&mut game);
+        // power = max_hp + atk + def = 60 + 8 + 2 = 70, so 70/10 = 7.
+        let pet = spawn_tamed(&mut game, 60, 8);
+        game.world.get_mut::<Stats>(pet).unwrap().def = 2;
+
+        let before = fragments(&game);
+        game.sell_companion(market, pet).unwrap();
+
+        assert_eq!(fragments(&game), before + 7, "a tenth of 70 power");
+        assert!(
+            game.world.get::<Stats>(pet).is_none(),
+            "the sold program has to be gone, not merely stood down"
+        );
+    }
+
+    /// The floor exists so a sale can never destroy a program for nothing.
+    #[test]
+    fn a_program_too_weak_to_price_still_sells_for_one_fragment() {
+        let mut game = Game::new(121, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let market = spawn_market(&mut game);
+        let pet = spawn_tamed(&mut game, 2, 1);
+        game.world.get_mut::<Stats>(pet).unwrap().def = 0;
+
+        let before = fragments(&game);
+        game.sell_companion(market, pet).unwrap();
+        assert_eq!(fragments(&game), before + 1, "3 power still pays 1, not 0");
+    }
+
+    /// `sell_companion` checks room for the payout before despawning, the
+    /// same ordering `sell_item` documents. That guard cannot currently fire:
+    /// `check_room` only refuses a bank-limited item, and the only shipped
+    /// item with a `bank_limit` is Research Data, not the trade currency.
+    ///
+    /// It stays anyway, because which item is currency and whether it is
+    /// banked are both `assets/items/` data — a mod can make this reachable
+    /// without touching Rust. This test pins the assumption that makes the
+    /// guard currently inert, so that if a future change banks the currency
+    /// it fails here and points at the ordering rather than surfacing as
+    /// programs vanishing for no payment.
+    #[test]
+    fn the_trade_currency_is_unbanked_so_a_payout_can_always_land() {
+        let game = Game::new(122, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let currency = game.currency();
+        assert_eq!(
+            game.world
+                .resource::<ItemDb>()
+                .get(currency.as_str())
+                .and_then(|d| d.bank_limit),
+            None,
+            "if the currency gains a bank_limit, re-check sell_companion's \
+             check_room-before-despawn ordering — a refusal after the despawn \
+             would destroy the program for nothing"
+        );
+    }
+
+    /// Whatever the reason, a refused sale must leave the program alive.
+    #[test]
+    fn a_refused_sale_never_destroys_the_program() {
+        let mut game = Game::new(127, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let market = spawn_market(&mut game);
+        let pet = spawn_tamed(&mut game, 30, 5);
+
+        // Not the player's to sell.
+        let stranger = game.world.spawn(()).id();
+        game.world.get_mut::<Tamed>(pet).unwrap().owner = stranger;
+        assert!(game.sell_companion(market, pet).is_err());
+        assert!(game.world.get::<Stats>(pet).is_some());
+
+        // Mid-battle.
+        game.world.get_mut::<Tamed>(pet).unwrap().owner = game.player_entity();
+        let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        game.start_battle(vec![wild]);
+        assert!(game.sell_companion(market, pet).is_err());
+        assert!(
+            game.world.get::<Stats>(pet).is_some(),
+            "a program must survive a sale refused mid-intrusion"
+        );
+    }
+
+    #[test]
+    fn a_trader_that_does_not_buy_programs_refuses() {
+        let mut game = Game::new(123, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let kind = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.trade.is_none())
+            .expect("plenty of structures don't trade")
+            .id
+            .clone();
+        let not_a_trader = game
+            .world
+            .spawn((Structure { kind }, Position { x: 5, y: 5 }))
+            .id();
+        let pet = spawn_tamed(&mut game, 30, 5);
+
+        assert!(game.sell_companion(not_a_trader, pet).is_err());
+        assert!(game.world.get::<Stats>(pet).is_some());
+    }
+
+    #[test]
+    fn selling_detaches_the_program_from_its_party_slot_and_its_job() {
+        let mut game = Game::new(124, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let market = spawn_market(&mut game);
+        let worker = spawn_tamed(&mut game, 30, 5);
+        let fighter = spawn_tamed(&mut game, 30, 5);
+        game.add_companion(fighter).unwrap();
+        game.assign_guard(worker, market).unwrap();
+        assert!(game.world.get::<Task>(worker).is_some());
+
+        game.sell_companion(market, worker).unwrap();
+        game.sell_companion(market, fighter).unwrap();
+
+        assert!(
+            !game.world.resource::<Party>().0.contains(&fighter),
+            "a sold party member must leave the party"
+        );
+        assert!(
+            game.player_status().companions.is_empty(),
+            "nothing sold should still be listed"
+        );
+    }
+
+    /// The whole point of the feature: a full roster stops being a dead end.
+    #[test]
+    fn selling_a_program_frees_a_roster_slot() {
+        let mut game = Game::new(125, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let market = spawn_market(&mut game);
+        let capacity = game.pet_capacity();
+        let pets: Vec<Entity> = (0..capacity)
+            .map(|_| spawn_tamed(&mut game, 30, 5))
+            .collect();
+        assert_eq!(game.pet_count(), capacity, "roster should be full");
+
+        game.sell_companion(market, pets[0]).unwrap();
+
+        assert_eq!(
+            game.pet_count(),
+            capacity - 1,
+            "selling has to free the slot, or the feature does nothing"
+        );
+    }
+
+    #[test]
+    fn program_sale_options_price_each_program_and_are_empty_for_a_non_buyer() {
+        let mut game = Game::new(126, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let market = spawn_market(&mut game);
+        let pet = spawn_tamed(&mut game, 60, 8);
+        game.world.get_mut::<Stats>(pet).unwrap().def = 2;
+
+        let options = game.program_sale_options(market);
+        assert_eq!(options.len(), 1);
+        assert_eq!(options[0].entity, pet);
+        assert_eq!(options[0].power, 70);
+        assert_eq!(options[0].payout, 7);
+
+        let kind = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.trade.is_none())
+            .unwrap()
+            .id
+            .clone();
+        let plain = game
+            .world
+            .spawn((Structure { kind }, Position { x: 6, y: 6 }))
+            .id();
+        assert!(game.program_sale_options(plain).is_empty());
     }
 
     #[test]

@@ -7,6 +7,9 @@
     work: None,
     trade: Some((
         sell_rate: 1,
+        // Buys tamed programs at a tenth of their power (max_hp + atk + def),
+        // rounded down, minimum 1 Core Fragment. Omit to deal in items only.
+        program_sell_divisor: Some(10),
         buy: [
             ("ice_breaker", 4),
             ("power_cell", 3),

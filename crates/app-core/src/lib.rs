@@ -10,12 +10,15 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use feral_processes_engine::battle::{ActionKind, BattleAction, PartyCommandKind, TargetSpec};
+use feral_processes_engine::battle::{
+    ActionKind, BattleAction, PartyCommandKind, SpecialTarget, TargetSpec,
+};
 #[cfg(test)]
 use feral_processes_engine::items::ids;
 use feral_processes_engine::items::{
     EquipmentSlot, ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, ItemId,
 };
+use feral_processes_engine::species::SpecialTargeting;
 use feral_processes_engine::{DifficultyMode, Entity, Game};
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -180,10 +183,14 @@ pub enum Mode {
     BattleItem,
     /// Picking which of the acting member's special abilities to spend.
     /// Entered from `Mode::Battle` when the chosen option has
-    /// `TargetSpec::SpecialAbilityThenGroup`, and followed by
-    /// `Mode::BattleTarget` — the ability and its target are separate
-    /// choices, so they are separate steps.
+    /// `TargetSpec::SpecialAbility`, and followed by whichever picker that
+    /// ability calls for — the ability and its target are separate choices,
+    /// so they are separate steps.
     BattleSpecial,
+    /// Picking which party member a buff or heal lands on. Entered from
+    /// `Mode::BattleSpecial` when the chosen ability is `Ally`-targeted,
+    /// where an enemy-targeted one goes to `Mode::BattleTarget` instead.
+    BattleAlly,
     Build,
     BuildDirection,
     Craft,
@@ -249,21 +256,34 @@ pub const MAX_ZOOM: u16 = 4;
 /// collected whatever its `TargetSpec` called for. One arm per kind, so a
 /// new action is added here rather than by editing the key handlers.
 /// `None` means the required target wasn't supplied.
-fn action_from(
-    kind: ActionKind,
+/// Everything the pickers can have collected by the time an `ActionKind`
+/// becomes a `BattleAction`. Bundled rather than passed as a row of
+/// positional `Option`s, which is what it was becoming.
+#[derive(Default, Clone)]
+struct Collected {
     group: Option<usize>,
     item: Option<ItemId>,
     ability: Option<usize>,
-) -> Option<BattleAction> {
+    /// The party slot a buff or heal was aimed at.
+    ally: Option<usize>,
+}
+
+fn action_from(kind: ActionKind, c: Collected) -> Option<BattleAction> {
     match kind {
-        ActionKind::Attack => Some(BattleAction::Attack { group: group? }),
+        ActionKind::Attack => Some(BattleAction::Attack { group: c.group? }),
         ActionKind::Special => Some(BattleAction::Special {
-            group: group?,
-            ability: ability?,
+            ability: c.ability?,
+            // Whichever picker ran second supplies the target; an ability
+            // that needs neither never becomes an action.
+            target: match (c.ally, c.group) {
+                (Some(slot), _) => SpecialTarget::Ally { slot },
+                (None, Some(group)) => SpecialTarget::EnemyGroup { group },
+                (None, None) => return None,
+            },
         }),
         ActionKind::Defend => Some(BattleAction::Defend),
-        ActionKind::Decompile => Some(BattleAction::Decompile { group: group? }),
-        ActionKind::UseItem => Some(BattleAction::UseItem { item: item? }),
+        ActionKind::Decompile => Some(BattleAction::Decompile { group: c.group? }),
+        ActionKind::UseItem => Some(BattleAction::UseItem { item: c.item? }),
     }
 }
 
@@ -597,6 +617,7 @@ impl App {
             Mode::BattleTarget => self.handle_battle_target_key(key),
             Mode::BattleItem => self.handle_battle_item_key(key),
             Mode::BattleSpecial => self.handle_battle_special_key(key),
+            Mode::BattleAlly => self.handle_battle_ally_key(key),
             Mode::Build => self.handle_build_key(key),
             Mode::BuildDirection => self.handle_build_direction_key(key),
             Mode::Craft => self.handle_craft_key(key),
@@ -975,7 +996,7 @@ impl App {
         }
         match option.target {
             TargetSpec::None => {
-                if let Some(action) = action_from(option.kind, None, None, None) {
+                if let Some(action) = action_from(option.kind, Collected::default()) {
                     self.commit_battle_action(slot, action);
                 }
             }
@@ -984,7 +1005,7 @@ impl App {
                 self.menu_selected = 0;
                 self.mode = Mode::BattleTarget;
             }
-            TargetSpec::SpecialAbilityThenGroup => {
+            TargetSpec::SpecialAbility => {
                 self.pending_battle_action = Some(option.kind);
                 self.pending_special_ability = None;
                 self.menu_selected = 0;
@@ -1094,8 +1115,14 @@ impl App {
         let Some(kind) = self.pending_battle_action else {
             return;
         };
-        let Some(action) = action_from(kind, Some(group), None, self.pending_special_ability)
-        else {
+        let Some(action) = action_from(
+            kind,
+            Collected {
+                group: Some(group),
+                ability: self.pending_special_ability,
+                ..Collected::default()
+            },
+        ) else {
             return;
         };
         self.pending_battle_action = None;
@@ -1153,9 +1180,51 @@ impl App {
         let Some(idx) = self.selected_index(key, options.len()) else {
             return;
         };
-        self.pending_special_ability = Some(options[idx].index);
+        let chosen = &options[idx];
+        // Which picker comes next is the ability's own business, read off the
+        // engine's option rather than decided here.
+        let next = match chosen.targeting {
+            SpecialTargeting::Ally => Mode::BattleAlly,
+            SpecialTargeting::Enemy => Mode::BattleTarget,
+        };
+        self.pending_special_ability = Some(chosen.index);
         self.menu_selected = 0;
-        self.mode = Mode::BattleTarget;
+        self.mode = next;
+    }
+
+    /// Picks which party member a buff or heal lands on, completing a
+    /// party-facing Special.
+    fn handle_battle_ally_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.pending_special_ability = None;
+            self.menu_selected = 0;
+            self.mode = Mode::BattleSpecial;
+            return;
+        }
+        let Some(game) = &self.game else { return };
+        let Some(slot) = game.battle_active_slot() else {
+            return;
+        };
+        let allies = game.battle_ally_options();
+        let Some(idx) = self.selected_index(key, allies.len()) else {
+            return;
+        };
+        let Some(kind) = self.pending_battle_action else {
+            return;
+        };
+        let Some(action) = action_from(
+            kind,
+            Collected {
+                ability: self.pending_special_ability,
+                ally: Some(allies[idx].slot),
+                ..Collected::default()
+            },
+        ) else {
+            return;
+        };
+        self.pending_battle_action = None;
+        self.pending_special_ability = None;
+        self.commit_battle_action(slot, action);
     }
 
     /// Picks which consumable the action chosen in `Mode::Battle` spends.
@@ -1176,7 +1245,13 @@ impl App {
         let Some(kind) = self.pending_battle_action else {
             return;
         };
-        let Some(action) = action_from(kind, None, Some(items[idx].clone()), None) else {
+        let Some(action) = action_from(
+            kind,
+            Collected {
+                item: Some(items[idx].clone()),
+                ..Collected::default()
+            },
+        ) else {
             return;
         };
         self.pending_battle_action = None;
@@ -2550,6 +2625,7 @@ mod tests {
                         | Mode::BattleTarget
                         | Mode::BattleItem
                         | Mode::BattleSpecial
+                        | Mode::BattleAlly
                         | Mode::Playing
                         | Mode::GameOver
                 ),
@@ -2566,23 +2642,57 @@ mod tests {
     /// reachable from `battling_app` lacks — the player is slot 0 and is
     /// never offered Special.
     #[test]
-    fn a_special_is_only_built_once_both_the_ability_and_the_group_are_known() {
+    fn a_special_is_only_built_once_both_the_ability_and_a_target_are_known() {
         assert_eq!(
-            action_from(ActionKind::Special, Some(2), None, Some(1)),
+            action_from(
+                ActionKind::Special,
+                Collected {
+                    group: Some(2),
+                    ability: Some(1),
+                    ..Collected::default()
+                }
+            ),
             Some(BattleAction::Special {
-                group: 2,
-                ability: 1
+                ability: 1,
+                target: SpecialTarget::EnemyGroup { group: 2 }
             })
         );
         assert_eq!(
-            action_from(ActionKind::Special, Some(2), None, None),
-            None,
-            "a group without an ability must not fall back to some default special"
+            action_from(
+                ActionKind::Special,
+                Collected {
+                    ally: Some(3),
+                    ability: Some(0),
+                    ..Collected::default()
+                }
+            ),
+            Some(BattleAction::Special {
+                ability: 0,
+                target: SpecialTarget::Ally { slot: 3 }
+            }),
+            "a buff aimed at a party member targets that slot, with no group involved"
         );
         assert_eq!(
-            action_from(ActionKind::Special, None, None, Some(1)),
+            action_from(
+                ActionKind::Special,
+                Collected {
+                    group: Some(2),
+                    ..Collected::default()
+                }
+            ),
             None,
-            "an ability without a target isn't an action yet"
+            "a target without an ability must not fall back to some default special"
+        );
+        assert_eq!(
+            action_from(
+                ActionKind::Special,
+                Collected {
+                    ability: Some(1),
+                    ..Collected::default()
+                }
+            ),
+            None,
+            "an ability with nobody to land on isn't an action yet"
         );
     }
 
@@ -2612,6 +2722,25 @@ mod tests {
         app.handle_key(GameKey::Esc);
         assert_eq!(app.mode, Mode::Battle);
         assert_eq!(app.pending_battle_action, None);
+    }
+
+    /// The ally picker is the other second step, and backs out the same way.
+    #[test]
+    fn esc_from_the_ally_picker_steps_back_to_the_ability_picker() {
+        let mut app = battling_app();
+        app.mode = Mode::BattleAlly;
+        app.pending_battle_action = Some(ActionKind::Special);
+        app.pending_special_ability = Some(0);
+
+        app.handle_key(GameKey::Esc);
+
+        assert_eq!(app.mode, Mode::BattleSpecial);
+        assert_eq!(app.pending_special_ability, None);
+        assert_eq!(
+            app.pending_battle_action,
+            Some(ActionKind::Special),
+            "only the ability was undone, not the whole action"
+        );
     }
 
     /// Following the item picker through to a pick must actually spend the

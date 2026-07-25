@@ -1,7 +1,7 @@
 use bevy_ecs::prelude::Entity;
 
 use crate::items::ItemId;
-use crate::species::SpeciesId;
+use crate::species::{SpecialTargeting, SpeciesId};
 
 /// One species' worth of the wild pack in an active intrusion.
 /// `members[0]` is the front — the only member that takes hits and the only
@@ -42,12 +42,14 @@ pub enum BattleAction {
         group: usize,
     },
     Special {
-        group: usize,
         /// Index into `Game::companion_abilities` for the acting member —
         /// which of its abilities this is. Always valid by construction;
         /// resolution falls back to the first if a stale index survives a
         /// party change mid-round.
         ability: usize,
+        /// Who it lands on, which side depending on the ability — see
+        /// `species::SpecialAbility::targeting`.
+        target: SpecialTarget,
     },
     Defend,
     Decompile {
@@ -55,6 +57,21 @@ pub enum BattleAction {
     },
     UseItem {
         item: ItemId,
+    },
+}
+
+/// Who a `BattleAction::Special` lands on. A buff or heal picks a party
+/// member; a debuff picks an enemy group — so unlike every other targeted
+/// action, a Special's target isn't always a group.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpecialTarget {
+    /// A party slot, indexed as `battle::Actor::Party` — slot 0 is the
+    /// player.
+    Ally {
+        slot: usize,
+    },
+    EnemyGroup {
+        group: usize,
     },
 }
 
@@ -75,10 +92,12 @@ pub enum TargetSpec {
     None,
     EnemyGroup,
     InventoryItem,
-    /// Pick one of the acting member's special abilities, *then* an enemy
-    /// group — the only two-step collection, because which ability is used
-    /// and who it is aimed at are independent choices.
-    SpecialAbilityThenGroup,
+    /// Pick one of the acting member's special abilities, *then* whoever it
+    /// lands on — the only two-step collection, because which ability is
+    /// used and who it is aimed at are independent choices. Which picker
+    /// comes second depends on the ability chosen: a buff or heal lists the
+    /// party, a debuff lists enemy groups (see `SpecialOption::targeting`).
+    SpecialAbility,
 }
 
 /// One row of a party member's action menu. Renderers draw this verbatim and
@@ -108,6 +127,23 @@ pub struct SpecialOption {
     /// e.g. "Heal"
     pub name: String,
     /// e.g. "Heal: 8 HP"
+    pub detail: String,
+    /// Which picker follows this choice — an ally list or an enemy group
+    /// list. Carried here so neither renderer has to know which abilities
+    /// are buffs.
+    pub targeting: SpecialTargeting,
+}
+
+/// One row of the ally picker — who a party-facing Special lands on. Same
+/// verbatim-render contract as `ActionOption`; see
+/// `Game::battle_ally_options`.
+#[derive(Debug, Clone)]
+pub struct AllyOption {
+    /// Party slot, and what `SpecialTarget::Ally` is set to.
+    pub slot: usize,
+    /// e.g. "You" or the companion's display name.
+    pub name: String,
+    /// e.g. "12/30 HP"
     pub detail: String,
 }
 

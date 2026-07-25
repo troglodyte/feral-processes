@@ -30,7 +30,28 @@ pub enum SpecialAbility {
     },
 }
 
+/// Which side a `SpecialAbility` is aimed at, and therefore which picker the
+/// UI opens after the ability is chosen — see `battle::SpecialTarget`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpecialTargeting {
+    /// Lands on a party member: the player or any companion.
+    Ally,
+    /// Lands on an enemy group's front member.
+    Enemy,
+}
+
 impl SpecialAbility {
+    /// Who this ability is aimed at. Buffs and heals go to a party member of
+    /// the player's choosing; only a debuff crosses to the other side.
+    pub fn targeting(&self) -> SpecialTargeting {
+        match self {
+            SpecialAbility::Rally { .. }
+            | SpecialAbility::Shield { .. }
+            | SpecialAbility::Heal { .. } => SpecialTargeting::Ally,
+            SpecialAbility::Debuff { .. } => SpecialTargeting::Enemy,
+        }
+    }
+
     /// Full display label — what commanding this companion would actually
     /// do, e.g. "Rally: +3 ATK for 3 rounds".
     pub fn display_label(&self) -> String {

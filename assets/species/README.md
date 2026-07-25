@@ -109,9 +109,14 @@ is skipped with a warning logged in-game rather than crashing startup.
     // grants the player a buff instead. Left empty, that's a generic rally
     // (a temporary ATK boost scaled off the companion's own ATK). List one
     // or more here and a tamed member of this species offers them as a menu
-    // when commanded: choosing Special asks which ability, then which group
-    // it lands on. Listing exactly one still shows the menu, with that one
-    // row — the order you write them in is the order they appear.
+    // when commanded: choosing Special asks which ability, then who it lands
+    // on. Listing exactly one still shows the menu, with that one row — the
+    // order you write them in is the order they appear.
+    //
+    // Which second picker appears follows from the ability itself: Rally,
+    // Shield and Heal are aimed at your own side, so they list you and your
+    // companions and can be used on any of them. Debuff is aimed at the
+    // other side, so it lists enemy groups.
     //   Rally(power: 4, duration: 3)                    — boosts player ATK
     //   Shield(power: 4, duration: 3)                   — boosts player DEF
     //   Heal(power: 8)                                  — heals the player now

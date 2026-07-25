@@ -52,6 +52,10 @@ pub fn render(f: &mut Frame, app: &mut App) {
             render_battle(f, app);
             render_battle_special_menu(f, app);
         }
+        Mode::BattleAlly => {
+            render_battle(f, app);
+            render_battle_ally_menu(f, app);
+        }
         Mode::Help => render_help(f),
         Mode::Playing
         | Mode::Build
@@ -485,11 +489,16 @@ fn render_craft_menu(f: &mut Frame, area: Rect, game: &mut Game, selected: usize
     ];
     for (i, recipe) in recipes.iter().enumerate() {
         let cost = cost_display(game, &recipe.cost, &status.inventory);
+        let blurb = game
+            .item_blurb(&recipe.result)
+            .map(|b| format!(" ({b})"))
+            .unwrap_or_default();
         lines.push(menu_line(
             format!(
-                "[{}] {} — {}",
+                "[{}] {}{} — {}",
                 menu_shortcut(i),
                 game.item_name(&recipe.result),
+                blurb,
                 cost.join(", ")
             ),
             i == selected,
@@ -1912,6 +1921,34 @@ fn render_battle_special_menu(f: &mut Frame, app: &mut App) {
     f.render_widget(
         Paragraph::new(lines)
             .block(Block::bordered().title("Pick a special"))
+            .wrap(Wrap { trim: true }),
+        popup,
+    );
+}
+
+/// Overlay for `Mode::BattleAlly`: who does this buff or heal land on? Lists
+/// you and every standing companion — the whole point of aiming one.
+fn render_battle_ally_menu(f: &mut Frame, app: &mut App) {
+    let area = f.area();
+    let popup = centered_rect(60, 40, area);
+    f.render_widget(Clear, popup);
+    let selected = app.menu_selected;
+    let title = app.battle_target_title();
+    let Some(game) = &mut app.game else { return };
+
+    let mut lines = vec![Line::from(
+        "Apply to whom? (Esc to cancel; Up/Down + Enter also work)",
+    )];
+    for (i, a) in game.battle_ally_options().into_iter().enumerate() {
+        lines.push(styled_menu_line(
+            format!("[{}] {} — {}", i + 1, a.name, a.detail),
+            i == selected,
+            BATTLE_SELECTION,
+        ));
+    }
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(Block::bordered().title(title))
             .wrap(Wrap { trim: true }),
         popup,
     );

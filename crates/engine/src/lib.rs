@@ -24,7 +24,7 @@ use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 
 use battle::{
-    ActionKind, ActionOption, BattleAction, EnemyGroup, PartyCommand, PartyCommandKind,
+    ActionKind, ActionOption, AllyOption, BattleAction, EnemyGroup, PartyCommand, PartyCommandKind,
     SpecialOption, TargetSpec,
 };
 use components::{
@@ -2755,9 +2755,12 @@ impl Game {
             return Err(format!("Slot {slot} isn't in your party."));
         }
         let target_group = match &action {
-            BattleAction::Attack { group }
-            | BattleAction::Special { group, .. }
-            | BattleAction::Decompile { group } => Some(*group),
+            BattleAction::Attack { group } | BattleAction::Decompile { group } => Some(*group),
+            // A party-facing Special has no group to validate at all.
+            BattleAction::Special {
+                target: battle::SpecialTarget::EnemyGroup { group },
+                ..
+            } => Some(*group),
             _ => None,
         };
         if let Some(group) = target_group
@@ -2861,6 +2864,35 @@ impl Game {
                 index,
                 name: ability.short_name().to_string(),
                 detail: ability.display_label(),
+                targeting: ability.targeting(),
+            })
+            .collect()
+    }
+
+    /// The party members a buff or heal can be aimed at, as engine-authored
+    /// menu rows — you and every companion, including ones already planned
+    /// this round. Knocked-out members are left out: a buff on a downed
+    /// member would be spent for nothing.
+    pub fn battle_ally_options(&self) -> Vec<AllyOption> {
+        let Some(battle) = self.world.get_resource::<BattleState>() else {
+            return Vec::new();
+        };
+        (0..battle.planned.len())
+            .filter_map(|slot| {
+                let entity = self.actor_entity(battle::Actor::Party(slot))?;
+                let stats = self.world.get::<Stats>(entity)?;
+                if stats.hp <= 0 {
+                    return None;
+                }
+                Some(AllyOption {
+                    slot,
+                    name: if slot == 0 {
+                        "You".to_string()
+                    } else {
+                        self.creature_label(entity)
+                    },
+                    detail: format!("{}/{} HP", stats.hp, stats.max_hp),
+                })
             })
             .collect()
     }
@@ -2897,7 +2929,7 @@ impl Game {
                 key: 's',
                 label: "[s]pecial".to_string(),
                 detail: self.companion_ability_label(entity),
-                target: TargetSpec::SpecialAbilityThenGroup,
+                target: TargetSpec::SpecialAbility,
                 unavailable: None,
             });
         }
@@ -3066,13 +3098,7 @@ impl Game {
                 };
                 self.party_member_attacks(slot, entity, group, player);
             }
-            BattleAction::Special { group, ability } => {
-                let Some(group) = self.retarget(group) else {
-                    return;
-                };
-                let Some(front) = self.front_of_group(group) else {
-                    return;
-                };
+            BattleAction::Special { ability, target } => {
                 let name = self.creature_label(entity);
                 let abilities = self.companion_abilities(entity);
                 // Falls back to the first rather than skipping the turn: the
@@ -3082,8 +3108,20 @@ impl Game {
                     .get(ability)
                     .or_else(|| abilities.first())
                     .cloned();
-                if let Some(ability) = chosen {
-                    self.use_special_ability(&ability, &name, player, front);
+                // Resolved here rather than at plan time so a group that dies
+                // before this member acts still retargets, and so an ally
+                // knocked out in the meantime drops the ability instead of
+                // landing it on a corpse.
+                let recipient = match target {
+                    battle::SpecialTarget::Ally { slot } => {
+                        self.actor_entity(battle::Actor::Party(slot))
+                    }
+                    battle::SpecialTarget::EnemyGroup { group } => {
+                        self.retarget(group).and_then(|g| self.front_of_group(g))
+                    }
+                };
+                if let (Some(ability), Some(recipient)) = (chosen, recipient) {
+                    self.use_special_ability(&ability, &name, recipient);
                 }
                 // Directing a companion's ability still costs the player
                 // fatigue, as commanding one always did — the action moved
@@ -3176,14 +3214,27 @@ impl Game {
         let group_letter = |group: usize| (b'A' + group as u8) as char;
         match action {
             BattleAction::Attack { group } => format!("Attack {}", group_letter(*group)),
-            BattleAction::Special { group, ability } => {
+            BattleAction::Special { ability, target } => {
                 let abilities = self.companion_abilities(actor);
                 let name = abilities
                     .get(*ability)
                     .or_else(|| abilities.first())
                     .map(|a| a.short_name().to_string())
                     .unwrap_or_else(|| "Special".to_string());
-                format!("{name} -> {}", group_letter(*group))
+                let on = match target {
+                    battle::SpecialTarget::EnemyGroup { group } => group_letter(*group).to_string(),
+                    battle::SpecialTarget::Ally { slot } => self
+                        .actor_entity(battle::Actor::Party(*slot))
+                        .map(|e| {
+                            if *slot == 0 {
+                                "you".to_string()
+                            } else {
+                                self.creature_label(e)
+                            }
+                        })
+                        .unwrap_or_else(|| "?".to_string()),
+                };
+                format!("{name} -> {on}")
             }
             BattleAction::Defend => "Defend".to_string(),
             BattleAction::Decompile { group } => format!("Decompile {}", group_letter(*group)),
@@ -3340,52 +3391,59 @@ impl Game {
         }
     }
 
-    /// Default companion command when its species defines no
-    /// `special_ability`: rallies the player, temporarily boosting their
-    /// ATK by a third of the companion's own — a stronger companion grants
-    /// a stronger rally.
-    /// Executes `ability` (one of `Game::companion_abilities`) on
-    /// behalf of a chosen Special — see `Game::resolve_one_action`.
-    fn use_special_ability(
-        &mut self,
-        ability: &SpecialAbility,
-        name: &str,
-        player: Entity,
-        wild: Entity,
-    ) {
+    /// How an entity reads as the *object* of a log line — "you" for the
+    /// player, its own name otherwise. `creature_label` is the subject form
+    /// and returns "You" for the player, which reads wrong mid-sentence.
+    fn target_label(&self, entity: Entity) -> String {
+        if entity == self.player_entity() {
+            "you".to_string()
+        } else {
+            self.creature_label(entity)
+        }
+    }
+
+    /// Executes `ability` (one of `Game::companion_abilities`) on `recipient`
+    /// — a party member for a buff or heal, an enemy's front for a debuff.
+    /// See `Game::resolve_one_action`, which resolves which entity that is.
+    fn use_special_ability(&mut self, ability: &SpecialAbility, name: &str, recipient: Entity) {
+        // A buff can land on the player or on a companion now, so the log
+        // names whoever got it rather than assuming "you".
+        let on = self.target_label(recipient);
         match *ability {
             SpecialAbility::Rally { power, duration } => {
-                if let Some(mut buff) = self.world.get_mut::<CombatBuff>(player) {
-                    buff.active = Some(ActiveBuff {
+                self.arm_buff(
+                    recipient,
+                    ActiveBuff {
                         kind: BuffKind::Atk,
                         remaining: duration,
                         power,
-                    });
-                }
-                self.log(format!("{name} rallies you, boosting your attack!"));
+                    },
+                );
+                self.log(format!("{name} rallies {on}, boosting attack!"));
             }
             SpecialAbility::Shield { power, duration } => {
-                if let Some(mut buff) = self.world.get_mut::<CombatBuff>(player) {
-                    buff.active = Some(ActiveBuff {
+                self.arm_buff(
+                    recipient,
+                    ActiveBuff {
                         kind: BuffKind::Def,
                         remaining: duration,
                         power,
-                    });
-                }
-                self.log(format!("{name} shields you, boosting your defense!"));
+                    },
+                );
+                self.log(format!("{name} shields {on}, boosting defense!"));
             }
             SpecialAbility::Heal { power } => {
-                if let Some(mut stats) = self.world.get_mut::<Stats>(player) {
+                if let Some(mut stats) = self.world.get_mut::<Stats>(recipient) {
                     stats.hp = (stats.hp + power).min(stats.max_hp);
                 }
-                self.log(format!("{name} patches your process for {power} HP."));
+                self.log(format!("{name} patches {on} for {power} HP."));
             }
             SpecialAbility::Debuff {
                 kind,
                 power,
                 duration,
             } => {
-                if let Some(mut statuses) = self.world.get_mut::<StatusEffects>(wild) {
+                if let Some(mut statuses) = self.world.get_mut::<StatusEffects>(recipient) {
                     statuses.active = Some(ActiveStatus {
                         kind,
                         remaining: duration,
@@ -3994,15 +4052,14 @@ impl Game {
     /// round's `tick_round_status_effects`. The buff slot is inserted on
     /// demand — only the player is spawned holding one, so without this a
     /// companion's Defend would log its message and change nothing.
-    fn begin_defend(&mut self, entity: Entity) {
-        let buff = ActiveBuff {
-            kind: BuffKind::Def,
-            remaining: 1,
-            power: DEFEND_DEF_BONUS,
-        };
+    /// Arms `buff` on `entity`, inserting the slot if it has none. Only the
+    /// player is spawned holding a `CombatBuff`, so anything that buffs a
+    /// companion has to go through here or it silently changes nothing.
+    ///
+    /// A single `active` slot, so this overwrites whatever the target was
+    /// still carrying — a real cost of the choice.
+    fn arm_buff(&mut self, entity: Entity, buff: ActiveBuff) {
         match self.world.get_mut::<CombatBuff>(entity) {
-            // A single `active` slot, so bracing overwrites a Rally the
-            // member was still carrying — a real cost of the choice.
             Some(mut existing) => existing.active = Some(buff),
             None => {
                 self.world
@@ -4010,6 +4067,17 @@ impl Game {
                     .insert(CombatBuff { active: Some(buff) });
             }
         }
+    }
+
+    fn begin_defend(&mut self, entity: Entity) {
+        self.arm_buff(
+            entity,
+            ActiveBuff {
+                kind: BuffKind::Def,
+                remaining: 1,
+                power: DEFEND_DEF_BONUS,
+            },
+        );
         let name = self.creature_label(entity);
         self.log(format!("{name} braces against the next strike."));
     }
@@ -5720,6 +5788,56 @@ impl Game {
             .unwrap_or_else(|| id.as_str())
     }
 
+    /// A two-or-three word gloss of what an item *does*, for menus that list
+    /// items by name and cost without saying why you'd want one.
+    ///
+    /// Derived from the item's own definition rather than authored per item,
+    /// so a modded item gets one for free and no blurb can drift out of step
+    /// with the mechanics it describes. `None` for an item whose definition
+    /// says nothing worth glossing — a plain currency reads fine as itself.
+    pub fn item_blurb(&self, id: &ItemId) -> Option<String> {
+        let def = self.world.resource::<ItemDb>().get(id.as_str())?;
+        if let Some((slot, stats)) = &def.equipment {
+            let mut parts = Vec::new();
+            if stats.atk != 0 {
+                parts.push(format!("+{} atk", stats.atk));
+            }
+            if stats.def != 0 {
+                parts.push(format!("+{} def", stats.def));
+            }
+            if stats.decompiler != 0 {
+                parts.push(format!("+{} decomp", stats.decompiler));
+            }
+            return Some(if parts.is_empty() {
+                slot.label().to_string()
+            } else {
+                parts.join(" ")
+            });
+        }
+        if let Some(c) = &def.consume {
+            let mut parts = Vec::new();
+            if c.power != 0.0 {
+                parts.push(format!("+{:.0} power", c.power));
+            }
+            if c.fatigue != 0.0 {
+                parts.push(format!("+{:.0} rest", c.fatigue));
+            }
+            if c.heal != 0 {
+                parts.push(format!("+{} HP", c.heal));
+            }
+            if c.prebattle_buff.is_some() {
+                parts.push("pre-battle buff".to_string());
+            }
+            if !parts.is_empty() {
+                return Some(parts.join(" "));
+            }
+        }
+        if def.taming_potency.is_some() {
+            return Some("taming catalyst".to_string());
+        }
+        None
+    }
+
     pub fn is_equippable(&self, id: &ItemId) -> bool {
         self.equipment_of(id).is_some()
     }
@@ -6165,7 +6283,12 @@ mod tests {
     /// species ability that commanding it used to trigger) and everyone
     /// else braces. Defend deals no damage, so anything that happens to the
     /// enemy in such a round is attributable to the Special alone.
-    fn companion_uses_special(game: &mut Game, companion: Entity, ability: usize) {
+    fn companion_uses_special(
+        game: &mut Game,
+        companion: Entity,
+        ability: usize,
+        target: battle::SpecialTarget,
+    ) {
         let slot = game
             .world
             .resource::<Party>()
@@ -6183,7 +6306,7 @@ mod tests {
             .unwrap_or(0);
         for other in 0..slots {
             let action = if other == slot {
-                BattleAction::Special { group: 0, ability }
+                BattleAction::Special { ability, target }
             } else {
                 BattleAction::Defend
             };
@@ -9757,7 +9880,12 @@ mod tests {
             .id();
         insert_battle(&mut game, player, vec![wild]);
 
-        companion_uses_special(&mut game, companion, 0);
+        companion_uses_special(
+            &mut game,
+            companion,
+            0,
+            battle::SpecialTarget::Ally { slot: 0 },
+        );
 
         let wild_hp = game.world.get::<Stats>(wild).unwrap().hp;
         assert_eq!(
@@ -9814,7 +9942,12 @@ mod tests {
         insert_battle(&mut game, player, vec![wild]);
 
         let fatigue_before = game.world.get::<Needs>(player).unwrap().fatigue;
-        companion_uses_special(&mut game, companion, 0);
+        companion_uses_special(
+            &mut game,
+            companion,
+            0,
+            battle::SpecialTarget::Ally { slot: 0 },
+        );
         let fatigue_after = game.world.get::<Needs>(player).unwrap().fatigue;
         fatigue_before - fatigue_after
     }
@@ -9916,7 +10049,7 @@ mod tests {
             ))
             .id();
 
-        game.use_special_ability(&SpecialAbility::Heal { power: 8 }, "TestBot", player, wild);
+        game.use_special_ability(&SpecialAbility::Heal { power: 8 }, "TestBot", player);
         let hp = game.world.get::<Stats>(player).unwrap().hp;
         assert_eq!(
             hp, 13,
@@ -9930,7 +10063,6 @@ mod tests {
                 duration: 2,
             },
             "TestBot",
-            player,
             wild,
         );
         let active = game.world.get::<StatusEffects>(wild).unwrap().active;
@@ -10063,6 +10195,131 @@ mod tests {
     }
 
     #[test]
+    fn item_blurbs_gloss_what_a_shipped_item_actually_does() {
+        let game = Game::new(96, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        assert_eq!(
+            game.item_blurb(&ItemId::from(ids::POWER_CELL)).as_deref(),
+            Some("+25 power"),
+            "a consumable should quote what it restores"
+        );
+        assert_eq!(
+            game.item_blurb(&ItemId::from("arc_lance")).as_deref(),
+            Some("+3 atk"),
+            "equipment should quote the stats it grants"
+        );
+        assert_eq!(
+            game.item_blurb(&ItemId::from("black_ice_pick")).as_deref(),
+            Some("+3 atk +2 decomp"),
+            "an item granting several stats should list each"
+        );
+        assert_eq!(
+            game.item_blurb(&ItemId::from(ids::CORE_FRAGMENT)),
+            None,
+            "a plain currency has nothing to gloss and reads fine as itself"
+        );
+    }
+
+    #[test]
+    fn every_compilable_item_either_has_a_blurb_or_is_plain_currency() {
+        let game = Game::new(97, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        for recipe in game.craft_recipes() {
+            let blurb = game.item_blurb(&recipe.result);
+            assert!(
+                blurb.is_some(),
+                "{} is compilable but the compile menu would say nothing about it",
+                recipe.result
+            );
+        }
+    }
+
+    #[test]
+    fn buffs_and_heals_aim_at_the_party_while_debuffs_aim_at_the_enemy() {
+        use species::SpecialTargeting;
+        assert_eq!(
+            SpecialAbility::Heal { power: 8 }.targeting(),
+            SpecialTargeting::Ally
+        );
+        assert_eq!(
+            SpecialAbility::Rally {
+                power: 3,
+                duration: 2
+            }
+            .targeting(),
+            SpecialTargeting::Ally
+        );
+        assert_eq!(
+            SpecialAbility::Shield {
+                power: 3,
+                duration: 2
+            }
+            .targeting(),
+            SpecialTargeting::Ally
+        );
+        assert_eq!(
+            SpecialAbility::Debuff {
+                kind: StatusKind::Bleed,
+                power: 3,
+                duration: 2
+            }
+            .targeting(),
+            SpecialTargeting::Enemy
+        );
+    }
+
+    /// The whole point of aiming a buff: it has to land on a companion, not
+    /// just the player. Only the player is *spawned* holding a `CombatBuff`,
+    /// so this is the case that silently did nothing before `arm_buff`.
+    #[test]
+    fn a_buff_aimed_at_a_companion_actually_reaches_it() {
+        let (mut game, medic) = game_with_two_ability_companion();
+        start_battle_with_a_wild_program(&mut game);
+        let before = game.effective_def(medic);
+
+        // Slot 1 is the medic itself; index 1 is its Shield.
+        companion_uses_special(&mut game, medic, 1, battle::SpecialTarget::Ally { slot: 1 });
+
+        assert!(
+            matches!(
+                game.world.get::<CombatBuff>(medic).and_then(|b| b.active),
+                Some(ActiveBuff {
+                    kind: BuffKind::Def,
+                    ..
+                })
+            ),
+            "a companion with no CombatBuff component must have one inserted, not be skipped"
+        );
+        assert!(
+            game.effective_def(medic) > before,
+            "the buff has to actually raise the companion's defense"
+        );
+    }
+
+    /// A party-facing Special must not need a living enemy group to resolve,
+    /// since its target isn't a group at all.
+    #[test]
+    fn healing_an_ally_does_not_depend_on_a_valid_enemy_group() {
+        let (mut game, _) = game_with_two_ability_companion();
+        let player = game.player_entity();
+        game.world.get_mut::<Stats>(player).unwrap().hp = 5;
+        start_battle_with_a_wild_program(&mut game);
+
+        game.battle_set_action(
+            1,
+            BattleAction::Special {
+                ability: 0,
+                target: battle::SpecialTarget::Ally { slot: 0 },
+            },
+        )
+        .expect("an ally-targeted Special has no group to reject");
+
+        assert_eq!(
+            game.world.get::<Stats>(player).unwrap().hp,
+            5,
+            "planning alone shouldn't heal — that happens on resolve"
+        );
+    }
+
+    #[test]
     fn the_chosen_ability_index_decides_which_special_resolves() {
         let (mut game, medic) = game_with_two_ability_companion();
         let player = game.player_entity();
@@ -10070,7 +10327,7 @@ mod tests {
         start_battle_with_a_wild_program(&mut game);
 
         // Index 1 is Shield, which buffs DEF and must not heal.
-        companion_uses_special(&mut game, medic, 1);
+        companion_uses_special(&mut game, medic, 1, battle::SpecialTarget::Ally { slot: 0 });
         assert_eq!(
             game.world.get::<Stats>(player).unwrap().hp,
             1,
@@ -11044,7 +11301,12 @@ mod tests {
             .id();
         insert_battle(&mut game, player, vec![wild]);
 
-        companion_uses_special(&mut game, not_in_party, 0);
+        companion_uses_special(
+            &mut game,
+            not_in_party,
+            0,
+            battle::SpecialTarget::Ally { slot: 0 },
+        );
 
         let wild_hp = game.world.get::<Stats>(wild).unwrap().hp;
         assert_eq!(

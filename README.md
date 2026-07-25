@@ -583,11 +583,12 @@ be active party members, fighting alongside you at once.
   what each of them does — they're combatants, not buff dispensers. A member
   that Attacks rolls one of its species' own moves. Choosing its Special
   instead gives up that attack, and asks which ability to spend before asking
-  who it lands on — the target picker names the one you chose. A species that
+  who it lands on — the picker names the one you chose. Buffs and heals list
+  **your own side**, so you can rally, shield or patch up any party member,
+  not just yourself; a debuff lists enemy groups instead. A species that
   defines no abilities of its own offers a single temporary Attack rally;
-  define some (a bigger Attack/Defense buff, a heal, or a debuff on the wild
-  program — see `assets/species/README.md`) and each is a row in that menu.
-  Either way it costs you a flat chunk of Fatigue.
+  define some (see `assets/species/README.md`) and each is a row in that
+  menu. Either way it costs you a flat chunk of Fatigue.
 - Enemy retaliation picks a target by weight rather than a flat chance.
   Ranks are **soft**: the first three slots — you and your first two
   companions — draw noticeably more fire than the ones behind them, but

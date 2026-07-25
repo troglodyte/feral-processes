@@ -115,6 +115,10 @@ pub fn draw(app: &mut App, fx: &mut Fx, fonts: &Fonts) {
             draw_battle(app, fx, fonts, &m);
             draw_battle_special_menu(app, fonts, &m);
         }
+        Mode::BattleAlly => {
+            draw_battle(app, fx, fonts, &m);
+            draw_battle_ally_menu(app, fonts, &m);
+        }
         Mode::Help => {
             draw_playing_base(app, fx, fonts, &m);
             draw_help(fonts, &m);
@@ -923,11 +927,16 @@ fn draw_craft_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics)
     ];
     for (i, recipe) in recipes.iter().enumerate() {
         let cost = cost_display(game, &recipe.cost, &status.inventory);
+        let blurb = game
+            .item_blurb(&recipe.result)
+            .map(|b| format!(" ({b})"))
+            .unwrap_or_default();
         rows.push(item_row(
             format!(
-                "[{}] {} - {}",
+                "[{}] {}{} - {}",
                 menu_shortcut(i),
                 game.item_name(&recipe.result),
+                blurb,
                 cost.join(", ")
             ),
             i == selected,
@@ -2031,6 +2040,22 @@ fn draw_battle_special_menu(app: &mut App, fonts: &Fonts, m: &Metrics) {
         ));
     }
     draw_popup("Pick a special", PopupSize::Large, &rows, fonts, m);
+}
+
+/// Who does this buff or heal land on? Lists you and every standing
+/// companion — the whole point of aiming one.
+fn draw_battle_ally_menu(app: &mut App, fonts: &Fonts, m: &Metrics) {
+    let selected = app.menu_selected;
+    let title = app.battle_target_title();
+    let Some(game) = &mut app.game else { return };
+    let mut rows = vec![text_row("Apply to whom?")];
+    for (i, a) in game.battle_ally_options().into_iter().enumerate() {
+        rows.push(creature_row(
+            format!("[{}] {} — {}", i + 1, a.name, a.detail),
+            i == selected,
+        ));
+    }
+    draw_popup(&title, PopupSize::Large, &rows, fonts, m);
 }
 
 /// Which group does the pending action hit? Shows per-group decompile odds,

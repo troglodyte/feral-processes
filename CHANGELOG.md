@@ -24,18 +24,28 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 - **`[A]ll attack` and `[D] all defend`** plan every open party slot in one
   keypress. All-attack asks which group only when more than one is still up.
   Neither overwrites a slot you already chose for.
-- **Choosing Special now asks which ability.** Commanding a party member
-  opens a picker of that member's abilities before asking who it lands on,
-  and the target screen names your choice — `Pick a target (Heal)` rather
-  than a bare prompt. Backing out with Esc steps back one screen at a time.
-  A planned Special also reads on the roster as the ability it will spend
-  (`Heal -> A`) instead of the generic word.
+- **Choosing Special now asks which ability, then who gets it.** Commanding a
+  party member opens a picker of that member's abilities, and the screen that
+  follows names your choice — `Pick a target (Heal)` rather than a bare
+  prompt. Backing out with Esc steps back one screen at a time. A planned
+  Special also reads on the roster as the ability it will spend (`Heal -> A`)
+  instead of the generic word.
+- **Buffs and heals can be aimed at any party member.** A Rally, Shield or
+  Heal now lists your own side — you and every standing companion — instead
+  of always landing on you. A debuff still picks an enemy group. Companions
+  could never actually hold a buff before this: only the player is spawned
+  with a buff slot, so one aimed elsewhere would have changed nothing.
 - **Species can define more than one special ability.** `special_ability`
   becomes `special_abilities`, a list — see `assets/species/README.md`.
   Modders: rename the field and wrap the value in `[]`. A file still using
   the old singular name keeps loading, but its ability is ignored and the
   companion falls back to the generic rally. No shipped species declared one,
   so nothing in the base game changes yet.
+- **The compile screen says what each item does.** Every recipe now carries a
+  short gloss next to its name — `Power Cell (+25 power)`, `Arc Lance
+  (+3 atk)` — so you can tell what you're building without leaving the menu.
+  Read off each item's own definition rather than written per item, so a
+  modded item gets one too.
 - **The log moved between the two rosters.** Hostiles stay on top, your party
   is now along the bottom, and the narration sits between them, so the two
   sides face each other across the account of what passed between them.

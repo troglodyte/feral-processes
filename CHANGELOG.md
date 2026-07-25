@@ -89,6 +89,17 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   8 tiles nearer to home — the first stat-escalation step moves from 30 tiles
   out to 22.
 
+### Frontend
+
+- **The text (TUI) frontend is gone.** It had not been user-selectable for
+  some time — the launcher kept it only as a fallback for machines with no
+  display and for GUI crashes — and maintaining a second renderer meant every
+  screen change was made twice. The macroquad GUI is now the only frontend.
+- **A graphical display is required.** Running with no `DISPLAY` or
+  `WAYLAND_DISPLAY` now exits with `No display detected; feral-processes needs
+  a graphical display.` instead of falling back to text. Playing over SSH or
+  on a headless box is no longer possible.
+
 ## 0.2.0 — 2026-07-24
 
 ### Breaking

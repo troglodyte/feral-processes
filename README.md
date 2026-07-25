@@ -8,9 +8,8 @@ Fortress (procedural world, needs simulation, configurable permadeath).
 
 Single-player, built in Rust. The graphical (GUI) frontend, shown above,
 sits on top of a simulation that stays fully decoupled from presentation
-so a client/server split is possible later too. A terminal (TUI) frontend
-still exists internally as a fallback for headless environments, but it's
-no longer user-selectable.
+so a client/server split is possible later too. A graphical display is
+required; there is no text mode.
 
 ## Installing
 
@@ -962,8 +961,8 @@ The GUI plays short sound effects for movement, starting an intrusion,
 attacking, jacking out, winning, and flatlining, from `assets/sounds/`.
 Master volume starts at 20% and is adjustable in-game with `[` and `]` in
 10% steps (0–100%), showing a toast as it changes. `\` toggles visual
-effects on and off the same way. Both are GUI-only — the TUI fallback is
-silent, and sound is a frontend concern the simulation knows nothing about.
+effects on and off the same way. Sound is a frontend concern the simulation
+knows nothing about.
 
 ## Fonts
 

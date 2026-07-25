@@ -1,8 +1,7 @@
-//! All drawing for the graphics frontend. Mirrors what
-//! `feral-processes-tui`'s `ui.rs` shows for each `Mode` — same engine data,
-//! same information — laid out with macroquad's immediate-mode primitives
-//! (filled rects for bars/tiles, drawn text for menus) instead of ratatui
-//! widgets.
+//! All drawing for the graphics frontend: one screen per `Mode`, laid out
+//! with macroquad's immediate-mode primitives (filled rects for bars and
+//! tiles, drawn text for menus). Reads engine data through `App` and never
+//! touches the ECS `World`.
 
 use macroquad::prelude::*;
 

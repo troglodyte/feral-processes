@@ -1,6 +1,5 @@
-//! macroquad renderer for `feral-processes-app-core::App`. Same role as
-//! `feral-processes-tui`, just a different presentation: a real window with
-//! colored tiles and drawn bars instead of terminal glyphs. Owns the
+//! macroquad renderer for `feral-processes-app-core::App` — the game's only
+//! frontend: a real window with colored tiles and drawn bars. Owns the
 //! window/event loop and the mapping from macroquad's `KeyCode` to the
 //! renderer-agnostic `GameKey` — the state machine itself lives in
 //! `app-core` and knows nothing about macroquad.
@@ -101,10 +100,8 @@ fn draw_toast(text: &str, fonts: &text::Fonts) {
 /// Runs the graphics frontend to completion (until `app.quit`). Takes `App`
 /// by value — macroquad's `Window::from_config` requires a `'static`
 /// future, so the loop owns the state machine outright rather than
-/// borrowing it; there's nothing for a caller to do with `App` afterward
-/// (the process exits either way once a frontend's loop ends), so this
-/// isn't a real loss of capability, just a different shape than
-/// `feral_processes_tui::run(&mut App)`.
+/// borrowing it. Nothing is lost by that: the process exits once this
+/// returns, so there is nothing for a caller to do with `App` afterward.
 pub fn run(app: App) {
     macroquad::Window::from_config(window_conf(), game_loop(app));
 }

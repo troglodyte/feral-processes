@@ -2,10 +2,10 @@
 //!
 //! This crate owns `App`/`Mode` — what pressing a key does in a given
 //! screen, save/load orchestration, autosave pacing — but knows nothing
-//! about terminals or windows. Frontends (currently `feral-processes-tui`
-//! and `feral-processes-gui`) translate their own input events into
-//! `GameKey` and call `App::handle_key`, then read `App`'s public fields to
-//! render however they like.
+//! about terminals or windows. The frontend (currently just
+//! `feral-processes-gui`) translates its own input events into `GameKey` and
+//! calls `App::handle_key`, then reads `App`'s public fields to render
+//! however it likes.
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -138,7 +138,7 @@ pub enum GameKey {
 /// handles keys, drained by whichever frontend cares (`App::take_sounds`).
 /// `App` itself never touches an audio device; this is just the same
 /// renderer-agnostic seam `GameKey` is, in the other direction. A frontend
-/// with no audio (the TUI) is free to just drop what it drains.
+/// without audio is free to just drop what it drains.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SoundEvent {
     /// A movement key actually moved the player (or was blocked/no-op —
@@ -422,7 +422,7 @@ impl App {
 
     /// Drains every `SoundEvent` queued since the last call — a frontend
     /// with audio calls this once per frame and plays whatever comes back;
-    /// one with none (the TUI) can just drop the result.
+    /// one without can just drop the result.
     pub fn take_sounds(&mut self) -> Vec<SoundEvent> {
         std::mem::take(&mut self.pending_sounds)
     }

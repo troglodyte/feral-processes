@@ -2723,10 +2723,10 @@ impl Game {
     }
 
     /// Whether `slot` still holds a combatant able to act. A party member
-    /// knocked offline is dropped from `Party` (see `wild_retaliate`) while
-    /// `BattleState::planned` keeps its fixed length, so the slot outlives
-    /// the member — and an empty slot must not hold the round open, since
-    /// nothing can ever fill it.
+    /// knocked offline keeps its slot for the rest of the battle (it only
+    /// leaves `Party` in `end_battle`, because these indices are positional
+    /// into it), so the slot is still occupied — just by someone at 0 HP,
+    /// who must not hold the round open, since nothing can fill it.
     fn slot_can_act(&self, slot: usize) -> bool {
         self.actor_entity(battle::Actor::Party(slot))
             .is_some_and(|entity| self.creature_alive(entity))
@@ -2754,6 +2754,7 @@ impl Game {
         if slot >= battle.planned.len() {
             return Err(format!("Slot {slot} isn't in your party."));
         }
+        let planned_len = battle.planned.len();
         let target_group = match &action {
             BattleAction::Attack { group } | BattleAction::Decompile { group } => Some(*group),
             // A party-facing Special has no group to validate at all.
@@ -2767,6 +2768,21 @@ impl Game {
             && group >= group_count
         {
             return Err("That group is already down.".to_string());
+        }
+        // An ally-targeted Special carries two more indices that reach the
+        // world unchecked otherwise: the recipient's slot and which of the
+        // acting member's abilities to spend. Both resolve to `None` at
+        // resolve time and silently cost the member its round — while still
+        // charging the player fatigue — so they are refused here instead.
+        if let BattleAction::Special { ability, target } = &action {
+            if let battle::SpecialTarget::Ally { slot: ally } = target
+                && *ally >= planned_len
+            {
+                return Err(format!("Slot {ally} isn't in your party."));
+            }
+            if *ability >= self.battle_special_options(slot).len() {
+                return Err("That party member has no such ability.".to_string());
+            }
         }
         self.world.resource_mut::<BattleState>().planned[slot] = Some(action);
         Ok(())
@@ -3382,8 +3398,7 @@ impl Game {
             n.pending_respawns.push(NEST_RESPAWN_TICKS);
         }
         if self.pop_group_member(group) {
-            self.clear_battle_status_effects(player, front);
-            self.world.remove_resource::<BattleState>();
+            self.end_battle(player, Some(front));
             true
         } else {
             self.log("Another rogue program from the pack engages!");
@@ -3772,8 +3787,7 @@ impl Game {
         self.log("ICE breached! The program now runs under your control.");
         self.award_player_xp(player, wild_max_hp as u32);
         if self.pop_group_member(group) {
-            self.clear_battle_status_effects(player, front);
-            self.world.remove_resource::<BattleState>();
+            self.end_battle(player, Some(front));
             return Some(true);
         }
         self.log("Another rogue program from the pack engages!");
@@ -3805,10 +3819,8 @@ impl Game {
                 self.log(format!("Bailing out costs you {xp_lost} XP."));
             }
         }
-        if let Some(front) = self.front_of_group(0) {
-            self.clear_battle_status_effects(player, front);
-        }
-        self.world.remove_resource::<BattleState>();
+        let front = self.front_of_group(0);
+        self.end_battle(player, front);
         self.tick();
     }
 
@@ -3904,10 +3916,11 @@ impl Game {
             ));
             if !self.creature_alive(target) {
                 self.log(format!("{name} is knocked offline and stands down."));
-                self.world
-                    .resource_mut::<Party>()
-                    .0
-                    .retain(|&e| e != target);
+                // It leaves `Party` at the end of the battle, not here —
+                // `BattleState::planned` indexes `Party` positionally, so
+                // removing a member mid-battle shifts everyone behind it
+                // into the wrong slot. `slot_can_act` is what keeps the
+                // empty-handed slot from holding the round open until then.
             } else if let Some(effect) = &mv.effect {
                 self.apply_status_effect(target, effect, &name);
             }
@@ -4102,11 +4115,9 @@ impl Game {
         if self.reap_dead_fronts(player) {
             return;
         }
-        if !self.creature_alive(player)
-            && let Some(front) = self.front_of_group(0)
-        {
-            self.clear_battle_status_effects(player, front);
-            self.world.remove_resource::<BattleState>();
+        if !self.creature_alive(player) {
+            let front = self.front_of_group(0);
+            self.end_battle(player, front);
         }
     }
 
@@ -4134,16 +4145,17 @@ impl Game {
     /// every party member, and the player's active combat buff (see
     /// `CombatBuff`). Status conditions are scoped to a single intrusion, so
     /// nothing should carry forward once one ends, however it ends. `wild`
-    /// may already be despawned (a kill), in which case clearing it is a
-    /// no-op.
-    fn clear_battle_status_effects(&mut self, player: Entity, wild: Entity) {
+    /// is `None` when the pack is already gone, and may name an entity that
+    /// is already despawned (a kill), in which case clearing it is a no-op —
+    /// neither case may skip clearing your own side.
+    fn clear_battle_status_effects(&mut self, player: Entity, wild: Option<Entity>) {
         if let Some(mut s) = self.world.get_mut::<StatusEffects>(player) {
             s.active = None;
         }
         if let Some(mut b) = self.world.get_mut::<CombatBuff>(player) {
             b.active = None;
         }
-        if let Some(mut s) = self.world.get_mut::<StatusEffects>(wild) {
+        if let Some(mut s) = wild.and_then(|w| self.world.get_mut::<StatusEffects>(w)) {
             s.active = None;
         }
         let party = self.world.resource::<Party>().0.clone();
@@ -4151,7 +4163,47 @@ impl Game {
             if let Some(mut s) = self.world.get_mut::<StatusEffects>(companion) {
                 s.active = None;
             }
+            // Companions hold `CombatBuff` too, now that a Rally or Shield
+            // can be aimed at one. Left set, it never ticks down outside a
+            // battle and `effective_def`/`effective_atk` read it
+            // unconditionally, so it would be a permanent free stat.
+            if let Some(mut b) = self.world.get_mut::<CombatBuff>(companion) {
+                b.active = None;
+            }
         }
+    }
+
+    /// Tears the current battle down: every combat-only effect cleared from
+    /// both sides, companions knocked offline during the fight finally stood
+    /// down, and `BattleState` dropped.
+    ///
+    /// Standing the fallen down happens here rather than the moment they
+    /// fall because `BattleState::planned` indexes `Party` positionally (see
+    /// `actor_entity`) — removing a member mid-battle shifts every member
+    /// behind it into the wrong slot.
+    ///
+    /// `wild` is passed in rather than looked up because two of the callers
+    /// have already popped the group: the entity whose status must be
+    /// cleared is the one that just died or was decompiled, not whatever
+    /// stepped up behind it. A freshly tamed program joining the party still
+    /// Bleeding is the bug this guards.
+    fn end_battle(&mut self, player: Entity, wild: Option<Entity>) {
+        self.clear_battle_status_effects(player, wild);
+        let downed: Vec<Entity> = self
+            .world
+            .resource::<Party>()
+            .0
+            .iter()
+            .copied()
+            .filter(|&e| !self.creature_alive(e))
+            .collect();
+        if !downed.is_empty() {
+            self.world
+                .resource_mut::<Party>()
+                .0
+                .retain(|e| !downed.contains(e));
+        }
+        self.world.remove_resource::<BattleState>();
     }
 
     fn find_wild_creature_at(&mut self, x: i32, y: i32) -> Option<Entity> {
@@ -11002,7 +11054,7 @@ mod tests {
     }
 
     #[test]
-    fn a_knocked_out_companion_stands_down() {
+    fn a_knocked_out_companion_stands_down_once_the_battle_ends() {
         let species_id = {
             let game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
             game.species_defs()
@@ -11044,9 +11096,18 @@ mod tests {
 
             game.wild_retaliate(wild, 0, player);
             if game.world.get::<Stats>(companion).unwrap().hp == 0 {
+                // It keeps its place while the fight runs: `planned` indexes
+                // `Party` positionally, so removing it here would shift every
+                // member behind it into the wrong slot.
+                assert_eq!(
+                    game.player_status().companions.len(),
+                    1,
+                    "a downed companion holds its slot until the battle ends"
+                );
+                game.battle_flee();
                 assert!(
                     game.player_status().companions.is_empty(),
-                    "0 HP should have stood the companion down"
+                    "ending the battle should have stood the downed companion down"
                 );
                 return;
             }
@@ -13665,11 +13726,10 @@ mod tests {
         );
     }
 
-    /// A companion knocked offline mid-fight is dropped from `Party`, but
-    /// `planned` keeps its fixed length — so its slot outlives it. That
+    /// A companion knocked offline mid-fight keeps its slot, at 0 HP. That
     /// slot must stop counting toward the round, or it sits forever
-    /// awaiting an action that nothing can supply: the menu for a dead slot
-    /// is empty, so no keypress can fill it and the round can never
+    /// awaiting an action that nothing can supply: the menu for a downed
+    /// slot is empty, so no keypress can fill it and the round can never
     /// resolve. The player would be stuck with Jack Out as their only move.
     #[test]
     fn a_slot_whose_member_was_knocked_out_stops_holding_the_round_open() {
@@ -13680,9 +13740,9 @@ mod tests {
         game.start_battle(vec![wild]);
         assert_eq!(game.world.resource::<BattleState>().planned.len(), 2);
 
-        // Exactly what `wild_retaliate` does when a companion hits 0 HP.
+        // Exactly what `wild_retaliate` leaves behind when a companion hits
+        // 0 HP: still in the party, holding its slot, unable to act.
         game.world.get_mut::<Stats>(pet).unwrap().hp = 0;
-        game.world.resource_mut::<Party>().0.retain(|&e| e != pet);
 
         game.battle_set_action(0, BattleAction::Attack { group: 0 })
             .unwrap();
@@ -13702,6 +13762,78 @@ mod tests {
             game.world.get::<Stats>(wild).unwrap().hp < hp_before,
             "the round should actually have resolved"
         );
+    }
+
+    /// `BattleState::planned` indexes `Party` positionally (see
+    /// `actor_entity`), so dropping a member the instant it falls shifts
+    /// every member behind it forward a slot: the survivor answers to the
+    /// fallen member's slot, inherits whatever was planned for it, and takes
+    /// over its roster row. Membership therefore has to hold still for the
+    /// whole battle, with `slot_can_act` — not removal — keeping a downed
+    /// slot from holding the round open.
+    #[test]
+    fn a_companion_knocked_offline_keeps_its_slot_for_the_rest_of_the_battle() {
+        let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let first = spawn_tamed(&mut game, 12, 5);
+        let second = spawn_tamed(&mut game, 12, 5);
+        game.add_companion(first).unwrap();
+        game.add_companion(second).unwrap();
+
+        let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        {
+            let mut w = game.world.get_mut::<Stats>(wild).unwrap();
+            w.hp = 10_000;
+            w.max_hp = 10_000;
+            w.atk = 400;
+        }
+        game.start_battle(vec![wild]);
+        // The player has to outlast the companions, or the battle ends
+        // before the invariant can be observed.
+        {
+            let mut p = game.world.get_mut::<Stats>(game.player_entity()).unwrap();
+            p.hp = 100_000;
+            p.max_hp = 100_000;
+        }
+
+        let slot_owner: Vec<Entity> = game
+            .battle_view()
+            .unwrap()
+            .party
+            .iter()
+            .map(|p| p.entity)
+            .collect();
+        assert_eq!(slot_owner.len(), 3, "player plus two companions");
+
+        // Resolve until something falls. Bounded, and every round is a
+        // no-choice Defend, so nothing here depends on the RNG landing a
+        // particular way — only on the pack eventually connecting.
+        let mut downed = false;
+        for _ in 0..30 {
+            if !game.has_active_battle() {
+                break;
+            }
+            game.battle_plan_remaining(BattleAction::Defend).unwrap();
+            game.battle_resolve_round();
+            downed = [first, second]
+                .iter()
+                .any(|&e| game.world.get::<Stats>(e).is_none_or(|s| s.hp <= 0));
+            if downed {
+                break;
+            }
+        }
+        assert!(downed, "the setup should have knocked a companion offline");
+        assert!(
+            game.has_active_battle(),
+            "the fight has to still be running"
+        );
+
+        for (slot, &expected) in slot_owner.iter().enumerate() {
+            assert_eq!(
+                game.actor_entity(battle::Actor::Party(slot)),
+                Some(expected),
+                "slot {slot} changed hands mid-battle"
+            );
+        }
     }
 
     /// The planning API is the whole extensibility story: the engine emits
@@ -13724,6 +13856,99 @@ mod tests {
         assert!(
             err.contains("party"),
             "expected a party-slot error, got {err:?}"
+        );
+    }
+
+    /// A Rally or Shield aimed at a companion has to die with the battle.
+    /// `CombatBuff` only ticks down inside one, and `effective_atk` /
+    /// `effective_def` read it unconditionally, so a survivor carries a free
+    /// stat bonus onto the overworld and into every fight after it.
+    #[test]
+    fn a_buff_aimed_at_a_companion_does_not_outlive_the_battle() {
+        let mut game = Game::new(23, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let pet = spawn_tamed(&mut game, 30, 5);
+        game.add_companion(pet).unwrap();
+        let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        game.start_battle(vec![wild]);
+
+        let def_before = game.effective_def(pet);
+        game.use_special_ability(
+            &SpecialAbility::Shield {
+                power: 4,
+                duration: 3,
+            },
+            "Test",
+            pet,
+        );
+        assert!(
+            game.effective_def(pet) > def_before,
+            "the shield should be up while the fight runs"
+        );
+
+        game.battle_flee();
+        assert_eq!(
+            game.effective_def(pet),
+            def_before,
+            "the buff must not outlive the battle"
+        );
+    }
+
+    /// The same argument, for the two indices an ally-targeted Special
+    /// carries beyond the acting slot. Unchecked, both resolve to `None`
+    /// mid-round and cost the member its turn in silence — while the player
+    /// is still charged the fatigue for commanding it.
+    #[test]
+    fn battle_set_action_refuses_an_out_of_range_ally_slot_or_ability() {
+        let mut game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let pet = spawn_tamed(&mut game, 20, 5);
+        game.add_companion(pet).unwrap();
+        let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        game.start_battle(vec![wild]);
+
+        let abilities = game.battle_special_options(1).len();
+        assert!(
+            abilities >= 1,
+            "every companion has at least the fallback rally"
+        );
+
+        let err = game
+            .battle_set_action(
+                1,
+                BattleAction::Special {
+                    ability: 0,
+                    target: battle::SpecialTarget::Ally { slot: 42 },
+                },
+            )
+            .unwrap_err();
+        assert!(
+            err.contains("party"),
+            "expected a party-slot error, got {err:?}"
+        );
+
+        let err = game
+            .battle_set_action(
+                1,
+                BattleAction::Special {
+                    ability: abilities,
+                    target: battle::SpecialTarget::Ally { slot: 0 },
+                },
+            )
+            .unwrap_err();
+        assert!(
+            err.contains("ability"),
+            "expected an ability error, got {err:?}"
+        );
+
+        assert!(
+            game.battle_set_action(
+                1,
+                BattleAction::Special {
+                    ability: 0,
+                    target: battle::SpecialTarget::Ally { slot: 0 },
+                },
+            )
+            .is_ok(),
+            "a valid ability aimed at a real slot must still be accepted"
         );
     }
 

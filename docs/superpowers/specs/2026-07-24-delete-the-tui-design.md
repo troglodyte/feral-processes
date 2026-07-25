@@ -59,12 +59,34 @@ Delete `crates/tui/` outright.
 
 `crates/launcher/Cargo.toml`: drop the `feral-processes-tui` dependency.
 
-No other crate is coupled to it. `crates/app-core/Cargo.toml` depends only
-on `feral-processes-engine`, and `crossterm`/`ratatui` appear nowhere
-outside `crates/tui` — the one remaining mention anywhere else is a
-comparative aside in `crates/gui/src/render.rs:4` ("instead of ratatui"),
-which is now a reference to something that does not exist and gets
-rewritten.
+No other crate is coupled to it *in code*. `crates/app-core/Cargo.toml`
+depends only on `feral-processes-engine`, and `crossterm`/`ratatui` appear
+nowhere outside `crates/tui`.
+
+Six doc comments elsewhere do name it, though, and all six become references
+to a crate that no longer exists. None is behavioural; all get corrected in
+[§4](#4-documentation):
+
+- `crates/gui/src/lib.rs:1–6` — "Same role as `feral-processes-tui`, just a
+  different presentation".
+- `crates/gui/src/lib.rs:101–107` — `run`'s docstring closes by contrasting
+  its by-value signature with `feral_processes_tui::run(&mut App)`.
+- `crates/gui/src/render.rs:1–5` — "Mirrors what `feral-processes-tui`'s
+  `ui.rs` shows for each `Mode` … instead of ratatui widgets". Two mentions
+  in one paragraph.
+- `crates/app-core/src/lib.rs:5–6` — "Frontends (currently
+  `feral-processes-tui` and `feral-processes-gui`)".
+- `crates/app-core/src/lib.rs:141` — "A frontend with no audio (the TUI) is
+  free to just drop what it drains."
+- `crates/app-core/src/lib.rs:425` — "one with none (the TUI) can just drop
+  the result."
+
+The last two are worth reading closely rather than deleting: each documents a
+seam (`SoundEvent`, `App::take_sounds`) whose *justification* was "a
+renderer might not have audio." With the silent renderer gone that
+justification is gone too, and the honest correction is to say the seam is
+kept because audio is a frontend concern, not because there is a second
+frontend without it.
 
 ### 2. No-display becomes an error, not a fallback
 
@@ -73,15 +95,26 @@ caller changes from selecting a renderer to failing cleanly:
 
 ```rust
 if !graphics_available() {
-    return Err(io::Error::other(
-        "No display detected; feral-processes needs a graphical display.",
-    ));
+    eprintln!("No display detected; feral-processes needs a graphical display.");
+    std::process::exit(1);
 }
 ```
 
-That prints `Error: No display detected; feral-processes needs a graphical
-display.` to stderr and exits non-zero. `main` keeps its `io::Result<()>`
-return type regardless — `std::fs::create_dir_all(&saves_dir)?` needs it.
+That prints exactly that line to stderr and exits 1. `main` keeps its
+`io::Result<()>` return type regardless — `std::fs::create_dir_all(&saves_dir)?`
+needs it.
+
+**Not** `return Err(io::Error::other(..))`, which would be the more idiomatic-
+looking choice. `Termination` for `Result<T, E>` prints the error's `Debug`
+form, and `io::Error`'s `Debug` for a custom error is a struct dump. Measured:
+
+```
+Error: Custom { kind: Other, error: "No display detected; feral-processes needs a graphical display." }
+```
+
+`eprintln!` plus `process::exit(1)` is what actually produces a readable
+message. Nothing needs dropping at that point — only a few `PathBuf`s are
+live — so skipping destructors costs nothing.
 
 ### 3. The GUI-crash fallback goes away entirely
 
@@ -131,7 +164,10 @@ Also:
   currently carries `### Combat flow`, `### Structures`, and `### Balance`.)
   `CHANGELOG.md:434` mentions the text UI but is a historical release note;
   release history is not rewritten.
-- `crates/gui/src/render.rs:4` loses its ratatui comparison.
+- All six doc comments listed in [§1](#1-remove-the-crate-and-its-wiring)
+  get corrected. Comment discipline applies: these explain *why* a seam
+  exists, so the fix is to restate the real reason, not to strike the
+  sentence and leave a bare *what*.
 - `CLAUDE.md`'s five-crate table and its `crates/tui` line go stale. That
   file is gitignored, so the edit will not ship with the branch — it is
   worth making locally, but it is not part of the diff.
@@ -174,9 +210,11 @@ The TUI has no tests, so there are none to port or delete.
 
 - Any change to the GUI beyond the one stale comment. The battle-screen
   redesign is the next change, not this one.
-- Any change to `app-core`. Its `Mode`/`GameKey` surface was shared by both
-  renderers and is entirely reusable by the one that remains; nothing in it
-  is TUI-shaped.
+- Any *behavioural* change to `app-core`. Its `Mode`/`GameKey` surface was
+  shared by both renderers and is entirely reusable by the one that remains;
+  nothing in it is TUI-shaped. Three of its doc comments do name the TUI and
+  are corrected, but no code in it changes — in particular `SoundEvent` and
+  `App::take_sounds` stay exactly as they are.
 - Rewriting CHANGELOG history.
 
 ## Next

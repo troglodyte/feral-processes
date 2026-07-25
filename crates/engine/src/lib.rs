@@ -30,7 +30,7 @@ use battle::{
 use components::{
     ActiveBuff, ActiveStatus, BuffKind, CombatBuff, Creature, CustomName, Decompiler, Durability,
     Equipment, EquippedItem, Experience, FusionCount, Glyph, GlyphColor, Hostile, Inventory,
-    ItemFusions, MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL, Needs, Nest, NestGuardian,
+    ItemFusions, MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL, NEED_MAX, Needs, Nest, NestGuardian,
     PassiveProcessor, Perks, Player, Position, Potential, ResourceNode, Stats, StatusEffects,
     StatusKind, Structure, StructureTier, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
 };
@@ -1217,9 +1217,8 @@ impl Game {
     /// Shared implementation behind `tick`. `age_temporary` controls
     /// whether this tick counts toward any `Temporary` structure's
     /// remaining lifespan (see `age_temporary_structures`) — `rest`'s
-    /// internal loop passes `false` so resting near a Recharger Node
-    /// doesn't burn down its lifespan any faster than leaving it standing
-    /// idle would.
+    /// internal loop passes `false` so resting at a structure doesn't burn
+    /// down its lifespan any faster than leaving it standing idle would.
     fn tick_inner(&mut self, age_temporary: bool) {
         if self.is_game_over().is_some() {
             return;
@@ -1362,8 +1361,8 @@ impl Game {
         }
         {
             let mut needs = self.world.get_mut::<Needs>(player).unwrap();
-            needs.hunger = (needs.hunger + effect.power).min(100.0);
-            needs.fatigue = (needs.fatigue + effect.fatigue).min(100.0);
+            needs.hunger = (needs.hunger + effect.power).min(NEED_MAX);
+            needs.fatigue = (needs.fatigue + effect.fatigue).min(NEED_MAX);
         }
         if effect.heal != 0 {
             let mut stats = self.world.get_mut::<Stats>(player).unwrap();
@@ -1404,11 +1403,12 @@ impl Game {
     /// Power down for the night: many ticks pass at once (power reserves
     /// drain accordingly, tamed programs keep processing, rogue programs
     /// keep roaming), then Fatigue and Integrity are both restored to full.
-    /// Requires the player to be standing within a Recharger Node's radius
-    /// (`StructureDef::enables_rest`) — there's no other way to rest.
-    /// Beyond that gate, there's no separate "rest" system beyond replaying
-    /// the normal tick loop plus a Fatigue/HP reset at the end (via
-    /// `tick_inner(false)`, so these ticks don't age the Recharger Node
+    /// Requires the player to be standing within the radius of a structure
+    /// that sets `StructureDef::enables_rest` — Home, and only Home, among
+    /// the shipped structures — and there's no other way to rest. Beyond
+    /// that gate, there's no separate "rest" system beyond replaying the
+    /// normal tick loop plus a Fatigue/HP reset at the end (via
+    /// `tick_inner(false)`, so these ticks don't age the rest structure
     /// itself — see `age_temporary_structures`). If Power runs out and you
     /// take lethal damage mid-rest, the loop bails out via the
     /// `is_game_over` check before either restore happens.
@@ -1418,7 +1418,7 @@ impl Game {
         }
         let player_pos = *self.world.get::<Position>(self.player_entity()).unwrap();
         if self.nearby_rest_structure(player_pos).is_none() {
-            self.log("You need to be near a Recharger Node to power down and rest.");
+            self.log("You need to be within your base, near Home, to power down and rest.");
             return;
         }
         self.log("You drop into low-power standby to recharge.");
@@ -5190,12 +5190,11 @@ impl Game {
     /// until the player picks in `Mode::BattleSpecial`.
     fn companion_ability_label(&self, entity: Entity) -> String {
         let abilities = self.companion_abilities(entity);
-        match abilities.len() {
-            0 | 1 => abilities
-                .first()
-                .map(|a| a.short_name().to_string())
-                .unwrap_or_else(|| "Rally Team".to_string()),
-            n => format!("{n} abilities"),
+        match abilities.as_slice() {
+            [only] => only.short_name().to_string(),
+            // `companion_abilities` synthesizes the fallback rally rather
+            // than returning nothing, so there is no empty case to handle.
+            many => format!("{} abilities", many.len()),
         }
     }
 

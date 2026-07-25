@@ -4,9 +4,9 @@ use rand::RngExt;
 
 use crate::NEST_TETHER_RADIUS;
 use crate::components::{
-    Creature, Experience, Inventory, Needs, Nest, NestGuardian, PassiveProcessor, Perks, Player,
-    Position, Potential, ResourceNode, Stats, Structure, StructureTier, Tamed, Task, TaskKind,
-    WanderAi,
+    Creature, Experience, Inventory, NEED_MAX, NEED_MIN, Needs, Nest, NestGuardian,
+    PassiveProcessor, Perks, Player, Position, Potential, ResourceNode, Stats, Structure,
+    StructureTier, Tamed, Task, TaskKind, WanderAi,
 };
 use crate::items_db::ItemDb;
 use crate::perks::Perk;
@@ -29,10 +29,6 @@ pub(crate) const WORK_XP_LEVEL_CAP: u32 = 10;
 
 const HUNGER_DECAY_PER_TICK: f32 = 0.15;
 const FATIGUE_DECAY_PER_TICK: f32 = 0.08;
-
-/// The ceiling for Power, per the 0..=100 range documented on
-/// `components::Needs`.
-const MAX_POWER: f32 = 100.0;
 
 /// One tick of hunger/fatigue decay; pulled out of the system so the rates
 /// are unit-testable without spinning up an ECS `World`. `hunger_multiplier`
@@ -319,7 +315,15 @@ pub fn power_regen_system(
             {
                 continue;
             }
-            needs.hunger = (needs.hunger + regen.per_tick).min(MAX_POWER);
+            // `per_tick` is mod-supplied, so it is clamped at both ends
+            // rather than trusted. A negative value would drain Power past
+            // 0 through a field named "regen", and NaN would pin it at the
+            // ceiling forever — `f32::min` returns the non-NaN operand, so
+            // a bare `.min(NEED_MAX)` silently yields NEED_MAX.
+            if !regen.per_tick.is_finite() {
+                continue;
+            }
+            needs.hunger = (needs.hunger + regen.per_tick.max(0.0)).clamp(NEED_MIN, NEED_MAX);
         }
     }
 }
@@ -437,6 +441,46 @@ mod tests {
     fn power_regen_clamps_at_full_power() {
         let hunger = run_regen_once(load_test_recharger(), "test_recharger", 99.0, &[(0, 0)]);
         assert_eq!(hunger, 100.0, "Power must never exceed the 0..=100 range");
+    }
+
+    /// `per_tick` comes from a mod file, so it is not trusted. A negative
+    /// one would drain Power through a field named "regen", past 0 and out
+    /// of the range `Needs` documents. NaN is worse: `f32::min` returns the
+    /// non-NaN operand, so clamping with a bare `.min(NEED_MAX)` turns it
+    /// into *permanently full* Power rather than rejecting it.
+    #[test]
+    fn power_regen_neither_drains_nor_pins_power_on_a_malformed_per_tick() {
+        for (id, per_tick) in [("drainer", "-5.0"), ("nonsense", "NaN")] {
+            let db = load_fixture_db(&[(
+                &format!("{id}.ron"),
+                &format!(
+                    r#"(
+                        id: "{id}",
+                        name: "Malformed",
+                        glyph: 'z',
+                        color: Orange,
+                        build_cost: [],
+                        work: None,
+                        power_regen: Some((
+                            per_tick: {per_tick},
+                            radius: 3,
+                        )),
+                    )"#
+                ),
+            )]);
+            // Without this the NaN case could pass vacuously: a fixture RON
+            // refuses to parse loads as an empty db, and a structure with no
+            // def is skipped before `per_tick` is ever read.
+            assert!(
+                db.get(id).is_some_and(|d| d.power_regen.is_some()),
+                "the {id} fixture has to actually load, or this proves nothing"
+            );
+            let hunger = run_regen_once(db, id, 50.0, &[(0, 0)]);
+            assert_eq!(
+                hunger, 50.0,
+                "per_tick: {per_tick} must leave Power untouched, not move it"
+            );
+        }
     }
 
     #[test]

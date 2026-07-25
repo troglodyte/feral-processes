@@ -93,7 +93,17 @@ pub const PLAYER_BASE_STATS: Stats = Stats {
     def: 2,
 };
 
-/// Hunger/fatigue both run 0..=100; 100 is fully satisfied, 0 is critical.
+/// The satisfied end of a need's range. Lives here beside `Needs` rather
+/// than in `balance`, because it is the type's own documented invariant
+/// rather than a tuning knob: anything writing `hunger` or `fatigue` has to
+/// clamp to it.
+pub const NEED_MAX: f32 = 100.0;
+/// The critical end. Below it a need is meaningless, and `Needs` readers
+/// (the status bars, `battle::power_attack_multiplier`) assume it holds.
+pub const NEED_MIN: f32 = 0.0;
+
+/// Hunger/fatigue both run `NEED_MIN..=NEED_MAX`; full is satisfied, 0 is
+/// critical.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Needs {
     pub hunger: f32,
@@ -103,8 +113,8 @@ pub struct Needs {
 impl Default for Needs {
     fn default() -> Self {
         Self {
-            hunger: 100.0,
-            fatigue: 100.0,
+            hunger: NEED_MAX,
+            fatigue: NEED_MAX,
         }
     }
 }

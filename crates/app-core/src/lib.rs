@@ -1264,6 +1264,11 @@ impl App {
         let Some(game) = &mut self.game else { return };
         if let Err(reason) = game.battle_set_action(slot, action) {
             self.status_line = Some(reason);
+            // Back to the roster even on failure. Whichever picker led here
+            // cleared its pending action before calling, so leaving the
+            // popup up strands the player: every row bails on the missing
+            // pending state, making Esc the only way out.
+            self.mode = Mode::Battle;
             return;
         }
         self.mode = Mode::Battle;
@@ -2740,6 +2745,37 @@ mod tests {
             app.pending_battle_action,
             Some(ActionKind::Special),
             "only the ability was undone, not the whole action"
+        );
+    }
+
+    /// A picker that fails to commit must still close. Every picker clears
+    /// its pending action *before* calling `commit_battle_action`, so a
+    /// popup left up after a rejected action is inert — its rows all bail
+    /// on the now-missing pending state, leaving Esc as the only way out.
+    ///
+    /// Called directly rather than driven through `handle_key`: the engine
+    /// never ends a battle on its own, so the only way to reach the error
+    /// branch from a keypress would be a rejection the pickers cannot
+    /// currently produce. The branch is the contract being pinned here.
+    #[test]
+    fn a_failed_commit_still_returns_to_the_roster() {
+        let mut app = battling_app();
+        app.mode = Mode::BattleAlly;
+        // The state each picker leaves behind before it commits.
+        app.pending_battle_action = None;
+        app.pending_special_ability = None;
+        app.game.as_mut().unwrap().battle_flee();
+
+        app.commit_battle_action(0, BattleAction::Defend);
+
+        assert_eq!(
+            app.mode,
+            Mode::Battle,
+            "the ally picker must not be left on screen after a failed commit"
+        );
+        assert!(
+            app.status_line.is_some(),
+            "and the player has to be told why"
         );
     }
 

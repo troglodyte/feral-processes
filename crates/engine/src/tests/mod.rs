@@ -9,6 +9,7 @@ mod assets;
 mod building;
 mod catalog;
 mod combat;
+mod combat_abilities;
 mod combat_rewards;
 mod combat_specials;
 mod crafting;

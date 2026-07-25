@@ -322,7 +322,7 @@ impl Game {
             self.tick_status_effects(companion, &label);
             self.tick_combat_buff(companion);
         }
-        if self.reap_dead_fronts(player) {
+        if self.reap_dead_members(player) {
             return;
         }
         if !self.creature_alive(player) {
@@ -335,15 +335,28 @@ impl Game {
     /// loot and XP exactly as a direct kill would. Walks back to front so
     /// removing a group can't shift a later one out from under the loop.
     /// Returns whether that ended the battle.
-    pub(crate) fn reap_dead_fronts(&mut self, player: Entity) -> bool {
+    pub(crate) fn reap_dead_members(&mut self, player: Entity) -> bool {
         let mut group = self.living_group_count();
         while group > 0 {
             group -= 1;
-            while let Some(front) = self.front_of_group(group) {
-                if self.creature_alive(front) {
-                    break;
+            let mut index = self
+                .world
+                .get_resource::<BattleState>()
+                .and_then(|b| b.groups.get(group))
+                .map(|g| g.members.len())
+                .unwrap_or(0);
+            while index > 0 {
+                index -= 1;
+                let alive = self
+                    .world
+                    .get_resource::<BattleState>()
+                    .and_then(|b| b.groups.get(group))
+                    .and_then(|g| g.members.get(index))
+                    .is_some_and(|&e| self.creature_alive(e));
+                if alive {
+                    continue;
                 }
-                if self.finish_group_member(group, player) {
+                if self.finish_member(group, index, player) {
                     return true;
                 }
             }

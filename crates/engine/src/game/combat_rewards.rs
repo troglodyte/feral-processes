@@ -248,7 +248,7 @@ impl Game {
         }
         self.log("ICE breached! The program now runs under your control.");
         self.award_player_xp(player, wild_max_hp as u32);
-        if self.pop_group_member(group) {
+        if self.remove_member(group, 0) {
             self.end_battle(player, Some(front));
             return Some(true);
         }

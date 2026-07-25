@@ -355,16 +355,17 @@ impl Game {
         }
     }
 
-    /// Drops `group`'s front member (the caller is responsible for whatever
-    /// happened to it — a kill or a successful tame), removing the group
-    /// entirely if that emptied it. Returns whether the whole pack is gone.
-    pub(crate) fn pop_group_member(&mut self, group: usize) -> bool {
+    /// Drops `group`'s member at `index` (the caller is responsible for
+    /// whatever happened to it — a kill or a successful tame), removing the
+    /// group entirely if that emptied it. Returns whether the whole pack is
+    /// gone.
+    pub(crate) fn remove_member(&mut self, group: usize, index: usize) -> bool {
         let mut battle = self.world.resource_mut::<BattleState>();
         let Some(g) = battle.groups.get_mut(group) else {
             return battle.groups.is_empty();
         };
-        if !g.members.is_empty() {
-            g.members.remove(0);
+        if index < g.members.len() {
+            g.members.remove(index);
         }
         if g.members.is_empty() {
             battle.groups.remove(group);
@@ -372,33 +373,48 @@ impl Game {
         battle.groups.is_empty()
     }
 
-    /// Handles `group`'s front member dying (from a direct hit or a status
-    /// tick): logs the kill, awards its loot/XP, despawns it, and drops it
-    /// from the group. If that emptied the last standing group, the whole
-    /// encounter ends in a win (`BattleState` removed) and this returns
-    /// `true`; otherwise the fight continues, returning `false`.
-    pub(crate) fn finish_group_member(&mut self, group: usize, player: Entity) -> bool {
-        let Some(front) = self.front_of_group(group) else {
+    /// Handles `group`'s member at `index` dying (from a direct hit, an area
+    /// effect, or a status tick): logs the kill, awards its loot/XP,
+    /// despawns it, and drops it from the group. If that emptied the last
+    /// standing group, the whole encounter ends in a win (`BattleState`
+    /// removed) and this returns `true`; otherwise the fight continues,
+    /// returning `false`.
+    pub(crate) fn finish_member(&mut self, group: usize, index: usize, player: Entity) -> bool {
+        let Some(victim) = self
+            .world
+            .get_resource::<BattleState>()
+            .and_then(|b| b.groups.get(group))
+            .and_then(|g| g.members.get(index))
+            .copied()
+        else {
             return self.living_group_count() == 0;
         };
         self.log("The rogue program crashes and deletes itself!");
-        let wild_max_hp = self.world.get::<Stats>(front).unwrap().max_hp;
+        let wild_max_hp = self.world.get::<Stats>(victim).unwrap().max_hp;
         self.award_player_xp(player, wild_max_hp as u32);
-        self.award_loot(front);
-        let nest = self.world.get::<NestGuardian>(front).map(|g| g.nest);
-        self.world.despawn(front);
+        self.award_loot(victim);
+        let nest = self.world.get::<NestGuardian>(victim).map(|g| g.nest);
+        self.world.despawn(victim);
         if let Some(nest) = nest
             && let Some(mut n) = self.world.get_mut::<Nest>(nest)
         {
             n.pending_respawns.push(NEST_RESPAWN_TICKS);
         }
-        if self.pop_group_member(group) {
-            self.end_battle(player, Some(front));
+        if self.remove_member(group, index) {
+            self.end_battle(player, Some(victim));
             true
         } else {
-            self.log("Another rogue program from the pack engages!");
+            // Only a front kill promotes someone into the line of fire; a
+            // back-rank death changes nothing the player can see.
+            if index == 0 {
+                self.log("Another rogue program from the pack engages!");
+            }
             false
         }
+    }
+
+    pub(crate) fn finish_group_member(&mut self, group: usize, player: Entity) -> bool {
+        self.finish_member(group, 0, player)
     }
 
     /// How an entity reads as the *object* of a log line — "you" for the

@@ -229,8 +229,12 @@ fn full_pack_at_zone(species: &SpeciesDef, zone: u32) -> Vec<GroupSim> {
 ///   the roster. The player uses the flat `PLAYER_STRIKE_POWER`; companions
 ///   use their species' `average_move_power`.
 /// - **The party focuses the front group,** which is what a player does and
-///   what the reach rule rewards — overkill spills into the next member of
-///   the same group, then into the group behind it as one empties.
+///   what the reach rule rewards. Each fighter's hit lands on that group's
+///   front member and any overkill is discarded — the real battle can only
+///   ever address the front of a group, so one action removes at most one
+///   member however hard it lands.
+/// - **Only `battle::attackers_in_group` of a group swing back,** the same
+///   rule the real round loop applies in `Game::roll_initiative`.
 /// - **Reach is enforced.** Groups past `ENGAGED_GROUPS` only act if their
 ///   species has a ranged move, and then at its `ranged_move_power`.
 /// - **Incoming damage is spread by aggro weight** rather than all landing
@@ -281,26 +285,25 @@ pub fn simulate_roster_fight(
     let player_hp_fraction = |roster: &[Fighter]| (roster[0].hp / roster[0].max_hp).max(0.0) as f32;
 
     for turn in 1..=TURN_CAP {
-        let mut incoming: i32 = roster
-            .iter()
-            .filter(|f| f.hp > 0.0)
-            .map(|f| compute_damage(f.atk, groups[0].0.stats.def, f.move_power))
-            .sum();
-        // Focus fire: overkill rolls into the next member of the group, and
-        // then into the group behind it once this one is empty.
-        while incoming > 0 && !groups.is_empty() {
-            let (group, front_hp, remaining) = &mut groups[0];
-            let dealt = incoming.min(*front_hp);
-            *front_hp -= dealt;
-            incoming -= dealt;
-            if *front_hp > 0 {
-                break;
+        // Focus fire on the front group, one fighter at a time, discarding
+        // overkill. Only a group's front member is targetable in the real
+        // battle, so a single action kills at most one member — pooling the
+        // roster's damage would let a big group evaporate at a rate nothing
+        // in the game can reproduce.
+        for fighter in &roster {
+            if fighter.hp <= 0.0 || groups.is_empty() {
+                continue;
             }
-            *remaining -= 1;
-            if *remaining == 0 {
-                groups.remove(0);
-            } else {
-                *front_hp = group.stats.hp;
+            let dealt = compute_damage(fighter.atk, groups[0].0.stats.def, fighter.move_power);
+            let (group, front_hp, remaining) = &mut groups[0];
+            *front_hp -= dealt;
+            if *front_hp <= 0 {
+                *remaining -= 1;
+                if *remaining == 0 {
+                    groups.remove(0);
+                } else {
+                    *front_hp = group.stats.hp;
+                }
             }
         }
         if groups.is_empty() {
@@ -329,7 +332,7 @@ pub fn simulate_roster_fight(
                     None => continue,
                 }
             };
-            for _ in 0..*remaining {
+            for _ in 0..crate::battle::attackers_in_group(*remaining as usize) {
                 for fighter in roster.iter_mut().filter(|f| f.hp > 0.0) {
                     let dealt = compute_damage(group.stats.atk, fighter.def, power) as f64;
                     fighter.hp -= dealt * fighter.aggro / total_aggro;
@@ -562,7 +565,7 @@ mod tests {
     /// unbounded, but wild stats double every zone
     /// (`ZoneLevel::stat_multiplier`) against the player's flat linear
     /// per-level growth, so the level needed to keep pace roughly doubles
-    /// too (confirmed empirically: 7, 15, 29, 57, 111 for zones 1-5) —
+    /// too (confirmed empirically: 3, 13, 30, 58, 112 for zones 1-5) —
     /// zone 6 alone needs north of `MAX_LEVEL_SEARCHED`. That cliff is
     /// real and expected without gear; this sweep stays inside the range
     /// where a pure-grind path is still supposed to work, so a regression

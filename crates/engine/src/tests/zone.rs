@@ -135,83 +135,111 @@ fn distance_stat_multiplier_treats_the_whole_platform_as_distance_zero() {
 }
 
 #[test]
-fn max_pack_size_also_counts_from_the_platform_edge() {
+fn zone_group_cap_is_geometric_and_never_passes_max_group_size() {
+    use crate::game::spawning::zone_group_cap;
+    assert_eq!(
+        zone_group_cap(1),
+        1,
+        "zone 1 is solo, whatever else is true"
+    );
+    assert_eq!(zone_group_cap(2), 3);
+    assert_eq!(zone_group_cap(3), 9);
+    assert_eq!(zone_group_cap(4), 27);
+    assert_eq!(zone_group_cap(5), 81);
+    assert_eq!(
+        zone_group_cap(6),
+        MAX_GROUP_SIZE,
+        "3^5 is 243, so zone 6 clamps"
+    );
+    assert_eq!(
+        zone_group_cap(99),
+        MAX_GROUP_SIZE,
+        "a deep zone must clamp rather than overflow the pow"
+    );
+}
+
+#[test]
+fn max_group_size_also_counts_from_the_platform_edge() {
     let mut game = Game::new(931, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.resource_mut::<ZoneLevel>().0 = 4;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
     place_home(&mut game, 0, 0);
 
     assert_eq!(
-        game.max_pack_size(spawn.x + MAX_BUILD_DISTANCE_FROM_HOME, spawn.y),
+        game.max_group_size(spawn.x + MAX_BUILD_DISTANCE_FROM_HOME, spawn.y),
         1,
-        "packs shouldn't grow inside territory that's still stat-x1.0"
+        "groups shouldn't grow inside territory that's still stat-x1.0"
     );
-    // The discriminating case: without the platform offset this is a
-    // full PACK_SIZE_STEP_TILES from spawn and would already allow a
-    // packmate. Measured from the platform edge it's only half a step.
+    // The discriminating case: without the platform offset this is a full
+    // GROUP_SIZE_STEP_TILES from spawn and would already have doubled.
     assert_eq!(
-        game.max_pack_size(spawn.x + PACK_SIZE_STEP_TILES, spawn.y),
+        game.max_group_size(spawn.x + GROUP_SIZE_STEP_TILES, spawn.y),
         1,
         "a full step from spawn is only half a step from the platform edge"
     );
     assert_eq!(
-        game.max_pack_size(
-            spawn.x + MAX_BUILD_DISTANCE_FROM_HOME + PACK_SIZE_STEP_TILES,
+        game.max_group_size(
+            spawn.x + MAX_BUILD_DISTANCE_FROM_HOME + GROUP_SIZE_STEP_TILES,
             spawn.y
         ),
         2,
-        "the first pack-size step lands one full step past the platform edge"
+        "the first doubling lands one full step past the platform edge"
     );
 }
 
 #[test]
-fn max_pack_size_grows_with_zone_and_distance_and_caps_per_zone() {
-    // No Home is placed, so there's no platform and distances count
-    // straight from the spawn point — see the platform-edge test below
-    // for the case where one exists.
+fn max_group_size_doubles_with_distance_and_caps_per_zone() {
+    // No Home is placed, so distances count straight from the spawn point —
+    // see the platform-edge test above for the case where one exists.
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let at = |game: &Game, steps: i32| {
+        game.max_group_size(spawn.x + GROUP_SIZE_STEP_TILES * steps, spawn.y)
+    };
 
+    assert_eq!(at(&game, 0), 1, "right at spawn, groups are always solo");
     assert_eq!(
-        game.max_pack_size(spawn.x, spawn.y),
+        at(&game, 10),
         1,
-        "right at spawn, packs should always be solo"
-    );
-    assert_eq!(
-        game.max_pack_size(spawn.x + PACK_SIZE_STEP_TILES - 1, spawn.y),
-        1,
-        "just short of a full step away should still be solo"
-    );
-    assert_eq!(
-        game.max_pack_size(spawn.x + PACK_SIZE_STEP_TILES, spawn.y),
-        2,
-        "one full step away should allow a packmate"
-    );
-    assert_eq!(
-        game.max_pack_size(spawn.x + PACK_SIZE_STEP_TILES * 10, spawn.y),
-        PACK_SIZE_PER_ZONE,
-        "zone 1's cap should hold even far past the first step"
+        "zone 1 is solo however far you walk — that is the whole point of zone 1"
     );
 
     game.world.resource_mut::<ZoneLevel>().0 = 2;
+    assert_eq!(at(&game, 0), 1, "every zone starts solo at its entry point");
+    assert_eq!(at(&game, 1), 2, "one step out doubles");
     assert_eq!(
-        game.max_pack_size(spawn.x + PACK_SIZE_STEP_TILES, spawn.y),
-        2,
-        "zone 2 grows the same way per step, just with a higher cap"
+        at(&game, 2),
+        3,
+        "two steps would be 4, but zone 2 caps at 3"
+    );
+    assert_eq!(at(&game, 10), 3, "and it stays capped however far out");
+
+    game.world.resource_mut::<ZoneLevel>().0 = 5;
+    assert_eq!(
+        at(&game, 6),
+        64,
+        "six steps is 2^6, still under zone 5's cap of 81"
     );
     assert_eq!(
-        game.max_pack_size(spawn.x + PACK_SIZE_STEP_TILES * 10, spawn.y),
-        2 * PACK_SIZE_PER_ZONE,
-        "far out in zone 2, the cap should be twice zone 1's"
+        at(&game, 7),
+        81,
+        "seven steps would be 128, so the zone cap binds"
     );
 
-    // The absolute ceiling holds regardless of how deep the run gets —
-    // otherwise a late-zone pack outgrows MAX_ENEMY_GROUPS entirely.
+    game.world.resource_mut::<ZoneLevel>().0 = 6;
+    assert_eq!(
+        at(&game, 7),
+        MAX_GROUP_SIZE,
+        "zone 6 is where the hard ceiling is reachable"
+    );
+
+    // The exponent is clamped, so an absurd distance must not shift past
+    // the width of the type.
     game.world.resource_mut::<ZoneLevel>().0 = 99;
     assert_eq!(
-        game.max_pack_size(spawn.x + PACK_SIZE_STEP_TILES * 100, spawn.y),
-        MAX_PACK_SIZE,
-        "no zone may push a pack past MAX_PACK_SIZE"
+        game.max_group_size(spawn.x + 10_000, spawn.y),
+        MAX_GROUP_SIZE,
+        "no zone or distance may push a group past MAX_GROUP_SIZE"
     );
 }
 

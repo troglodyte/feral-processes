@@ -5,7 +5,7 @@ use super::support::*;
 use crate::*;
 
 #[test]
-fn gather_pack_pulls_in_nearby_hostiles_and_caps_at_max_pack_size() {
+fn gather_pack_pulls_in_nearby_hostiles_and_caps_at_the_local_group_size() {
     let species_id = {
         let game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         game.species_defs()
@@ -16,9 +16,11 @@ fn gather_pack_pulls_in_nearby_hostiles_and_caps_at_max_pack_size() {
             .clone()
     };
     let mut game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // Zone 3 caps a group at 9; one step out doubles to 2, which is what
+    // this fixture pins — a cap that binds with three others in range.
+    game.world.resource_mut::<ZoneLevel>().0 = 3;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    // Far enough out that zone 1's pack cap (2) is fully unlocked.
-    let (ax, ay) = (spawn.x + PACK_SIZE_STEP_TILES * 5, spawn.y);
+    let (ax, ay) = (spawn.x + GROUP_SIZE_STEP_TILES, spawn.y);
     let spawn_hostile = |game: &mut Game, x: i32, y: i32| {
         game.world
             .spawn((
@@ -49,8 +51,9 @@ fn gather_pack_pulls_in_nearby_hostiles_and_caps_at_max_pack_size() {
     );
     assert_eq!(
         pack.len(),
-        PACK_SIZE_PER_ZONE as usize,
-        "zone 1's pack cap should bind with 3 other Hostiles in range"
+        2,
+        "one step out in zone 3 allows groups of 2, and that is the whole \
+         pack's ceiling too until it becomes per-group"
     );
 }
 

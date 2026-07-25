@@ -12,7 +12,7 @@
 //!
 //! See `grind_only_zone_scaling_grows_predictably`,
 //! `geared_zone_scaling_grows_predictably_and_beats_grind_only`, and
-//! `a_full_party_survives_a_full_pack_at_each_zone` for the actual
+//! `a_full_party_survives_a_full_group_at_each_zone` for the actual
 //! regression checks this module exists to support.
 
 use crate::battle::compute_damage;
@@ -22,11 +22,21 @@ use crate::progression::stats_after_levels;
 use crate::resources::{BASE_PET_CAPACITY, ZoneLevel};
 use crate::species::{SpeciesDb, SpeciesDef};
 
-/// Rounds to let a simulated fight run before scoring it a loss —
-/// generously above any realistic fight length, so it only fires on a
-/// genuine stalemate (defense permanently outpacing attack, short of
-/// `compute_damage`'s floor of 1).
-const TURN_CAP: u32 = 300;
+/// Rounds to let a simulated fight run before scoring it a loss. The cap
+/// exists to catch a genuine stalemate — defense permanently outpacing
+/// attack, short of `compute_damage`'s floor of 1 — and nothing else.
+///
+/// It was 300 back when a zone's whole pack was twelve programs. At swarm
+/// scale that stopped being "generously above any realistic fight length":
+/// only a group's front member is targetable and overkill is discarded, so
+/// clearing a full-size group is a 100+ round fight *by construction* — a
+/// zone-5 group of 81 needs over 800. At 300 the cap was scoring ordinary
+/// deep-zone wins as stalemates, which is the one thing it must not do.
+///
+/// Power and Fatigue decay still aren't modelled here, so this is not a
+/// stand-in for "how long a fight the player can actually sustain" — that
+/// gap predates this constant's retuning and is not closed by it.
+const TURN_CAP: u32 = 2000;
 
 /// A companion levels at half the player's XP rate (`PARTY_XP_DIVISOR` in
 /// `crate::lib`). XP cost per level grows linearly with level
@@ -194,29 +204,29 @@ struct Fighter {
     aggro: f64,
 }
 
-/// Splits a pack of `pack_size` into at most `MAX_ENEMY_GROUPS` groups of
-/// one species, as evenly as the real first-appearance partition tends to
-/// come out. Front-loaded, so any remainder lands in the groups that are
-/// actually in melee range — the pessimistic reading.
-fn split_into_groups(species: &SpeciesDef, zone: u32, pack_size: u32) -> Vec<GroupSim> {
-    let group_count = (pack_size as usize).clamp(1, crate::MAX_ENEMY_GROUPS);
-    let base = pack_size / group_count as u32;
-    let remainder = pack_size % group_count as u32;
-    (0..group_count as u32)
-        .map(|i| GroupSim {
-            stats: wild_stats_at_zone(species, zone),
-            count: base + u32::from(i < remainder),
-            move_power: average_move_power(species),
-            ranged_move_power: average_ranged_move_power(species),
-        })
-        .collect()
+/// The swarm one intrusion throws at the player deep in `zone`: a full
+/// `MAX_ENEMY_GROUPS` groups, each at the zone's group cap — what
+/// `Game::max_group_size` allows once distance growth is fully unlocked.
+/// Only the reach-rule test scores a swarm this size; the progression
+/// sweeps project against `full_group_at_zone`.
+#[cfg(test)]
+fn full_pack_at_zone(species: &SpeciesDef, zone: u32) -> Vec<GroupSim> {
+    let group = full_group_at_zone(species, zone);
+    std::iter::repeat_n(group[0], crate::MAX_ENEMY_GROUPS).collect()
 }
 
-/// The pack one intrusion throws at the player deep in `zone` — the cap
-/// `Game::max_pack_size` allows once distance growth is fully unlocked.
-fn full_pack_at_zone(species: &SpeciesDef, zone: u32) -> Vec<GroupSim> {
-    let pack_size = (zone * crate::PACK_SIZE_PER_ZONE).clamp(1, crate::MAX_PACK_SIZE);
-    split_into_groups(species, zone, pack_size)
+/// One species group at `zone`'s cap — the unit `min_level_to_clear_zone`
+/// projects against. The four-group swarm is the reach rule's test case
+/// (`the_reach_rule_measurably_softens_a_full_pack`), not the progression
+/// baseline: the sim models no abilities, and AoE is what a four-group
+/// swarm is answered with.
+fn full_group_at_zone(species: &SpeciesDef, zone: u32) -> Vec<GroupSim> {
+    vec![GroupSim {
+        stats: wild_stats_at_zone(species, zone),
+        count: crate::game::spawning::zone_group_cap(zone),
+        move_power: average_move_power(species),
+        ranged_move_power: average_ranged_move_power(species),
+    }]
 }
 
 /// Deterministic simulation of the roster round loop: the player and every
@@ -362,10 +372,11 @@ pub fn simulate_roster_fight(
 /// scaling has broken down outright — not just a long grind, but no level
 /// up to `max_level` clears it.
 ///
-/// The pack, rather than a lone creature, is the meaningful unit now: with
-/// every party member attacking, one wild program is no contest at any
-/// level, and a sweep against one would report level 1 everywhere and catch
-/// nothing.
+/// The unit is one full-size *group* — every member of one species, at the
+/// zone's cap. A lone creature is no contest at any level and would report
+/// level 1 everywhere; the full four-group swarm is not something the sim
+/// can score, because its intended answer is AoE and no ability is
+/// modelled here.
 ///
 /// The party is `BASE_PET_CAPACITY` strong, not `MAX_PARTY_SIZE`. Fielding
 /// a full roster takes Data Caches (see `Game::pet_capacity`), so it is an
@@ -396,7 +407,7 @@ pub fn min_level_to_clear_zone(
     weapon: EquipmentStats,
     armor: EquipmentStats,
 ) -> Option<(u32, BattleOutcome)> {
-    let groups = full_pack_at_zone(wild_species, zone);
+    let groups = full_group_at_zone(wild_species, zone);
     let companion_move_power = average_move_power(party_species);
     let (gear_atk, gear_def) = if with_gear {
         best_case_gear_bonus(zone, weapon, armor)
@@ -562,41 +573,50 @@ mod tests {
     }
 
     /// How deep to sweep the gear-free grind baseline. Zones are actually
-    /// unbounded, but wild stats double every zone
-    /// (`ZoneLevel::stat_multiplier`) against the player's flat linear
-    /// per-level growth, so the level needed to keep pace roughly doubles
-    /// too (confirmed empirically: 3, 13, 30, 58, 112 for zones 1-5) —
-    /// zone 6 alone needs north of `MAX_LEVEL_SEARCHED`. That cliff is
-    /// real and expected without gear; this sweep stays inside the range
-    /// where a pure-grind path is still supposed to work, so a regression
-    /// in the *shape* of that curve (not its eventual end) still gets
-    /// caught.
+    /// unbounded, and two things compound with depth: wild stats double
+    /// every zone (`ZoneLevel::stat_multiplier`) and a group triples
+    /// (`zone_group_cap`), both against the player's flat linear per-level
+    /// growth. So the level needed to keep pace grows geometrically too
+    /// (confirmed empirically: 1, 8, 29, 61, 138 for zones 1-5) — zone 6
+    /// alone needs north of `MAX_LEVEL_SEARCHED`. That cliff is real and
+    /// expected; this sweep stays inside the range where a pure-grind path
+    /// is still supposed to work, so a regression in the *shape* of that
+    /// curve (not its eventual end) still gets caught.
     const MAX_GRIND_ONLY_ZONE_SWEPT: u32 = 5;
     /// How deep to sweep the fully-geared scenario. `GEAR_LEVEL_GROWTH`
-    /// now matches `ZoneLevel::stat_multiplier`'s doubling-per-zone base
-    /// (see `items::GEAR_LEVEL_GROWTH`'s doc comment), so gear no longer
-    /// overtakes and trivializes deep zones the way the old 2.5x factor
-    /// did — it consistently roughly halves the level a zone needs
-    /// (confirmed empirically: 4/8/16/28/53/109 geared vs. 7/15/29/57/111
-    /// gear-free for zones 1-6), rather than collapsing to "level 1 clears
-    /// everything" past a certain depth. It's still the same doubling
-    /// curve shape, though, so it hits `MAX_LEVEL_SEARCHED` one zone later
-    /// than the gear-free sweep.
-    const MAX_GEARED_ZONE_SWEPT: u32 = 6;
+    /// matches `ZoneLevel::stat_multiplier`'s doubling-per-zone base (see
+    /// `items::GEAR_LEVEL_GROWTH`'s doc comment), so gear neither overtakes
+    /// deep zones the way the old 2.5x factor did nor collapses to "level 1
+    /// clears everything" (confirmed empirically: 1, 5, 20, 45, 127 geared
+    /// vs. 1, 8, 29, 61, 138 gear-free for zones 1-5).
+    ///
+    /// Gear's advantage narrows with depth rather than holding at a
+    /// constant fraction, because a full-size group makes the fight about
+    /// how long the party takes to chew through it — a per-hit ATK/DEF
+    /// bonus moves that less and less as the bodies multiply.
+    ///
+    /// Stops at 5, not 6, for the same reason the gear-free sweep does: a
+    /// zone 6 group is `MAX_GROUP_SIZE` members, which needs more than
+    /// `MAX_LEVEL_SEARCHED` even fully geared. That is not a lockout in the
+    /// game — this sim models no abilities, and a swarm that size is
+    /// answered with AoE (`cascade_overflow`, `broadcast_storm`) rather
+    /// than with more levels — so sweeping it would only pin a number the
+    /// real game never asks the player to reach.
+    const MAX_GEARED_ZONE_SWEPT: u32 = 5;
     const MAX_LEVEL_SEARCHED: u32 = 200;
 
     /// The party-size change compounds three ways: `party_stat_bonus`
     /// feeds a share of every companion's ATK/DEF into the player's own
     /// effective stats, so 3 -> 5 raises the player's *passive* stats as
     /// well as adding two more attackers and two more bodies to absorb
-    /// hits. The pack-size increase is the counterweight. This test is the
+    /// hits. The group-size increase is the counterweight. This test is the
     /// only evidence that ratio is survivable before anyone plays it.
     ///
     /// Deliberately fought against the *toughest* ordinary species with a
     /// *median* party — a player tames what the habitat gives them, and has
     /// to survive the worst thing it spawns.
     #[test]
-    fn a_full_party_survives_a_full_pack_at_each_zone() {
+    fn a_full_party_survives_a_full_group_at_each_zone() {
         let (db, warnings) =
             SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
         assert!(
@@ -618,15 +638,15 @@ mod tests {
                 armor,
             ) else {
                 panic!(
-                    "zone {zone}: a full party can't clear a full pack of {}s at any level up \
-                     to {MAX_LEVEL_SEARCHED} — the pack/party ratio is off",
+                    "zone {zone}: a full party can't clear a full group of {}s at any level up \
+                     to {MAX_LEVEL_SEARCHED} — the group/party ratio is off",
                     toughest.name
                 );
             };
             eprintln!(
-                "[roster] zone {zone}: pack of {} {}s needs level {level} ({} rounds, {:.0}% \
+                "[roster] zone {zone}: group of {} {}s needs level {level} ({} rounds, {:.0}% \
                  player HP left)",
-                (zone * crate::PACK_SIZE_PER_ZONE).clamp(1, crate::MAX_PACK_SIZE),
+                crate::game::spawning::zone_group_cap(zone),
                 toughest.name,
                 outcome.turns,
                 outcome.player_hp_fraction * 100.0
@@ -643,14 +663,20 @@ mod tests {
     /// The reach rule has to actually be doing work. A pack big enough to
     /// fill every group must be meaningfully easier than the same number of
     /// enemies all standing in melee range — that gap *is* the valve that
-    /// makes a twelve-enemy fight survivable.
+    /// makes a swarm fight survivable.
+    ///
+    /// Zone 3 (four groups of 9) rather than deeper: past that the fight is
+    /// decided by how long the party takes to chew through the front group
+    /// against `TURN_CAP`, not by how much damage comes back, and both
+    /// versions land on the same level — the valve stops being measurable
+    /// long before it stops mattering.
     #[test]
     fn the_reach_rule_measurably_softens_a_full_pack() {
         let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
         let toughest = toughest_ordinary_species(&db);
         let party = median_ordinary_species(&db);
         let companion_power = average_move_power(party);
-        let zone = 4;
+        let zone = 3;
 
         let with_reach = full_pack_at_zone(toughest, zone);
         // The same pack with every group in melee range — the fight this

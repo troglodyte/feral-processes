@@ -9,7 +9,7 @@ impl Game {
     /// roll placed together (see `try_spawn_habitat_creature`) joins the
     /// fight at once when the player bumps into any one of them. `anchor`
     /// is always first, becoming the initial front target. Truncated to
-    /// `max_pack_size` at `anchor`'s own position as a safety cap, in case
+    /// `max_group_size` at `anchor`'s own position as a safety cap, in case
     /// unrelated wandering creatures happened to drift into the same
     /// cluster since they spawned.
     pub(crate) fn gather_pack(&mut self, anchor: Entity) -> Vec<Entity> {
@@ -31,7 +31,7 @@ impl Game {
                 pack.push(e);
             }
         }
-        let cap = (self.max_pack_size(anchor_pos.x, anchor_pos.y) as usize).max(1);
+        let cap = (self.max_group_size(anchor_pos.x, anchor_pos.y) as usize).max(1);
         pack.truncate(cap);
         pack
     }

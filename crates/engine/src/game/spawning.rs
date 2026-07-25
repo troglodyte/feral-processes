@@ -3,6 +3,17 @@
 
 use crate::*;
 
+/// The zone's ceiling on one species group: zone 1 is solo, every level
+/// after multiplies by `ZONE_GROUP_GROWTH`, and `MAX_GROUP_SIZE` is the
+/// hard stop. `checked_pow` because zones are unbounded and `3^21`
+/// overflows `u32` long before the clamp would catch it.
+pub(crate) fn zone_group_cap(zone: u32) -> u32 {
+    ZONE_GROUP_GROWTH
+        .checked_pow(zone.saturating_sub(1))
+        .unwrap_or(MAX_GROUP_SIZE)
+        .clamp(1, MAX_GROUP_SIZE)
+}
+
 impl Game {
     /// Spawns a wild creature of `species_id` at `(x, y)`, returning its
     /// `Entity` — `None` only if `species_id` isn't in `SpeciesDb` (every
@@ -168,19 +179,21 @@ impl Game {
         }
     }
 
-    /// Maximum wild pack size at `(x, y)`: capped at `zone + 1` (zone 1 →
-    /// 2, zone 2 → 3, ...), reached gradually the farther `(x, y)` is from
-    /// `ZoneSpawnPoint` — solo right at spawn, then one more potential
-    /// packmate every `PACK_SIZE_STEP_TILES`. Used both to pick how many
-    /// creatures a group spawn roll places together
-    /// (`try_spawn_habitat_creature`) and as a hard ceiling on how many
-    /// can ever end up in one fight (`gather_pack`).
-    pub(crate) fn max_pack_size(&self, x: i32, y: i32) -> u32 {
-        let zone = self.world.resource::<ZoneLevel>().0;
-        let cap = (zone * PACK_SIZE_PER_ZONE).clamp(1, MAX_PACK_SIZE);
+    /// Maximum size of one wild species group at `(x, y)`: capped by the
+    /// zone (`zone_group_cap`), and reached by doubling every
+    /// `GROUP_SIZE_STEP_TILES` from the danger origin — solo at your base,
+    /// a swarm deep in the field. Used to pick how many creatures a group
+    /// spawn roll places together (`try_spawn_habitat_creature`), as the
+    /// per-group ceiling on one fight (`gather_pack`/`group_pack`), and to
+    /// size the room a spawn roll needs (`maybe_spawn_wild_creature`).
+    pub(crate) fn max_group_size(&self, x: i32, y: i32) -> u32 {
+        let cap = zone_group_cap(self.world.resource::<ZoneLevel>().0);
         let dist = self.distance_from_danger_origin(x, y);
-        let grown = 1 + (dist / PACK_SIZE_STEP_TILES) as u32;
-        grown.min(cap)
+        // The map is unbounded and a shift of 32 or more is a panic in
+        // debug; `1 << 7` already exceeds MAX_GROUP_SIZE, so clamping the
+        // exponent there is exact rather than a fudge.
+        let steps = (dist / GROUP_SIZE_STEP_TILES).clamp(0, 7) as u32;
+        (1u32 << steps).min(cap)
     }
 
     /// Spawns `count` wild creatures near the player, retrying with a fresh
@@ -268,7 +281,7 @@ impl Game {
 
     /// Attempts to spawn one habitat-appropriate wild creature (or, away
     /// from the zone's spawn point, a small pack of the same species — see
-    /// `max_pack_size`) at `(x, y)`, returning whether it actually spawned
+    /// `max_group_size`) at `(x, y)`, returning whether it actually spawned
     /// anything — `false` on an unwalkable tile or a biome with no
     /// matching species, so callers (see `spawn_initial_creatures`) can
     /// retry elsewhere instead of silently losing that spawn slot.
@@ -337,9 +350,9 @@ impl Game {
         let group_size = if spawn_boss {
             1
         } else {
-            let max_pack = self.max_pack_size(x, y);
+            let max_group = self.max_group_size(x, y);
             let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_range(1..=max_pack)
+            rng.0.random_range(1..=max_group)
         };
         for i in 0..group_size {
             // The first member anchors the roll's own tile; the rest

@@ -168,7 +168,7 @@ pub struct Party(pub Vec<Entity>);
 /// existed.
 ///
 /// Exists as a resource rather than being looked up from the Home entity
-/// because `Game::distance_stat_multiplier` and `Game::max_pack_size` take
+/// because `Game::distance_stat_multiplier` and `Game::max_group_size` take
 /// `&self`, while querying for the Home needs `&mut self`.
 ///
 /// Deliberately not serialized: it's reconstructed on load from the Home's

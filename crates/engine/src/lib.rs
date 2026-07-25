@@ -95,12 +95,12 @@ const MAX_DISTANCE_STAT_MULTIPLIER: f32 = 3.0;
 /// the player has a base, since nothing can spawn on platform floor.
 const INITIAL_SPAWN_SCATTER_TILES: i32 = 15;
 
-/// Tile distance per extra pack member a wild spawn can roll, counted from
-/// the same origin as `DISTANCE_STAT_STEP_TILES` (the platform's edge once
-/// a Home exists) — see `Game::max_pack_size`. Twice `DISTANCE_STAT_STEP_TILES`:
-/// packs grow into their zone's cap more gradually than per-creature stats
-/// do.
-const PACK_SIZE_STEP_TILES: i32 = DISTANCE_STAT_STEP_TILES * 2;
+/// Tile distance per doubling of a wild group's size, counted from the same
+/// origin as `DISTANCE_STAT_STEP_TILES` (the platform's edge once a Home
+/// exists) — see `Game::max_group_size`. Deliberately equal to
+/// `DISTANCE_STAT_STEP_TILES`: how many programs meet you and how hard each
+/// one hits escalate on the same footing as you push out.
+const GROUP_SIZE_STEP_TILES: i32 = DISTANCE_STAT_STEP_TILES;
 
 /// How tightly a pack's members cluster around the tile a spawn roll
 /// picked (`Game::try_spawn_habitat_creature`), and how far `gather_pack`
@@ -109,14 +109,16 @@ const PACK_SIZE_STEP_TILES: i32 = DISTANCE_STAT_STEP_TILES * 2;
 /// into one fight.
 const PACK_GATHER_RADIUS: i32 = 3;
 
-/// Pack-size headroom each zone level unlocks, against `MAX_PACK_SIZE`.
-/// Packs fight as species groups now, so a big pack is several small groups
-/// with only the front two in melee range (`ENGAGED_GROUPS`) rather than a
-/// flat multiplier on incoming damage.
-const PACK_SIZE_PER_ZONE: u32 = 3;
+/// Geometric base for the group size each zone level allows: zone 1 is solo,
+/// and every level after multiplies the cap by this against `MAX_GROUP_SIZE`
+/// (1, 3, 9, 27, 81, 100). Only `battle::attackers_in_group` of a group
+/// swing per round, so a deep swarm is an attrition wall rather than a
+/// linear multiplier on incoming damage.
+const ZONE_GROUP_GROWTH: u32 = 3;
 
-/// Hard ceiling on one intrusion's wild pack, across every group.
-const MAX_PACK_SIZE: u32 = 12;
+/// Hard ceiling on a single species group. With `MAX_ENEMY_GROUPS` groups on
+/// the field, one intrusion tops out at four hundred programs.
+const MAX_GROUP_SIZE: u32 = 100;
 
 /// How many distinct species groups can engage in one intrusion. A cluster
 /// with more species than this engages its largest groups and leaves the

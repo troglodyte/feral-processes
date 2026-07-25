@@ -239,7 +239,12 @@ for it, recorded here so they survive the gap:
 - **Enemy groups stay lettered** (`A`, `B`, …) rather than numbered as Bard's
   Tale had them. `EnemyGroupView::letter` is engine-owned and the target
   picker keys off it; renumbering is an engine change, which is out of scope.
-- **Still open:** where the GUI's column widths and header strings live, and
-  how a header row sits above rows whose HP is a graphical bar rather than
-  text. The GUI's UI font is unscii-16, monospace
-  (`crates/gui/src/text.rs:16`), so real columns are achievable there.
+- **Resolved, in
+  `2026-07-24-bards-tale-battle-ledger-design.md`:** the column widths live
+  as constants in `render.rs` (with one renderer there is nothing to share
+  them with), and each row keeps its full-width bar with the columns on the
+  label line above it. The UI font is DejaVu Sans Mono
+  (`crates/gui/src/text.rs:41`) — monospace, so real columns work. Note for
+  anyone reading the history: an earlier draft of this section named
+  unscii-16 as the UI font. unscii is the *map* font; the conclusion held
+  only because both are monospace.

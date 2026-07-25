@@ -113,6 +113,19 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   is also where the danger curve starts measuring, so hostiles now get tougher
   8 tiles nearer to home — the first stat-escalation step moves from 30 tiles
   out to 22.
+- **Your fragments and cores no longer survive a zone breach.** Portal
+  Fragments and Core Fragments are cleared as you step through the portal, so
+  each zone has to fund its own exit instead of being chain-breached on a
+  stockpile farmed somewhere safer. Research Data is banked progress and is
+  kept, as are gear, supplies, fusion tiers, your party and your whole base.
+  Modders: the wipe is keyed on the `Currency` and `CraftCurrency` economy
+  roles, so a custom currency item resets too — see
+  `assets/structures/README.md`.
+- **A Zone Portal's cost ramp softened from ×zone to +50% per zone.** It cost
+  10 Portal Fragments times your zone level; it now costs 10 plus half that
+  again per zone — 10 / 15 / 20 / 25 / 30 through zone 5, where it used to
+  reach 50. With currency no longer surviving the trip, the old ramp would
+  have been a from-zero grind of ~143 kills for a zone-5 breach.
 
 ### Frontend
 

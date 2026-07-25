@@ -237,9 +237,9 @@ creature to work" mechanic.
    The menu only lists structures you've actually unlocked: Home, Mining
    Node, Research Node, Recharger Node, Data Cache, and the Zone Portal are
    available from turn one, and the other seven each sit behind a research
-   node (see [Research](#research)). Zone transitions leave every structure
-   behind (see [Zones and portals](#zones-and-portals)), so each new zone
-   needs its own Home again before you can build anything else there.
+   node (see [Research](#research)). Your base travels with you through a
+   zone transition (see [Zones and portals](#zones-and-portals)), so you
+   only ever need to place a Home once.
 3. **Schedule a cronjob with `w`** — pick a compiled (tamed) program, then
    the structure to assign it to. This only works on structures with a
    `work` recipe (Mining Node, Power Conduit, Compiler); Fabricator, Armory,
@@ -760,14 +760,20 @@ enough of them, then walk onto it to breach into the next zone.
   base counts as safe territory, not just its centre. Before
   you've placed your first Home there's no platform, so it measures from
   where you breached in instead.
-- Deploying a Zone Portal costs 10 Portal Fragments **times your current
-  zone level** — breaching deeper costs more raw material each time, so
-  fragments gathered in zone 2 only ever fund the zone-3 portal.
+- Deploying a Zone Portal costs 10 Portal Fragments, **plus half that again
+  for every zone below your current one** — 10 in zone 1, 15 in zone 2, 20
+  in zone 3. Breaching deeper costs more raw material each time.
+- **Your fragments and cores don't survive the breach.** Portal Fragments
+  and Core Fragments are cleared as you step through, so every zone has to
+  fund its own exit — you can't farm zone 1 rich and then chain-breach on
+  the stockpile. Research Data is banked progress and is kept, as are your
+  gear, your supplies, and your fusion tiers.
 - **Your whole base travels with you.** Your active party, every deployed
   structure, and the platform floor under them all rematerialize around the
-  new zone's entry point in exactly the layout they left in — damage,
-  stored resources and running cronjobs included. Wild programs and nests
-  are left behind, and **there's no portal back down**.
+  new zone's entry point in exactly the layout they left in — damage, node
+  stock and running cronjobs included (the currency in your own Buffer is
+  the exception, above). Wild programs and nests are left behind, and
+  **there's no portal back down**.
 - **A Zone Portal is consumed when you step onto it.** It's the one
   structure that doesn't make the trip, so every breach costs a fresh
   build.
@@ -783,7 +789,7 @@ enough of them, then walk onto it to breach into the next zone.
 | Research Node | 10 Core Fragments | — | Cronjob a compiled program to it to produce Research Data over time (14 ticks a cycle, level-gated like a Mining Node) — see [Research](#research). Upgradeable to Mk5 |
 | Recharger Node | 10 Core Fragments | — | Passively refills your Power anywhere within 7 tiles — the whole base |
 | Data Cache | 10 Core Fragments | — | Raises your carrying capacity (Buffer) by 10 while deployed; stacks with every other one |
-| Zone Portal | 10 Portal Fragments *(× current zone level)* | — | Walk onto it to breach into the next zone. Consumed on use — see [Zones and portals](#zones-and-portals) |
+| Zone Portal | 10 Portal Fragments *(+50% of that per zone level)* | — | Walk onto it to breach into the next zone. Consumed on use, and your fragments and cores don't survive the trip — see [Zones and portals](#zones-and-portals) |
 | Compiler | 16 Core Fragments | Automation | Cronjob a compiled program to it to produce ICE Breakers over time. Upgradeable to Mk5 |
 | Terminal | 3 Core Fragments | Power Grid | Passively cooks a Core Fragment into a Power Cell every tick while you're standing within 2 tiles — no cronjob needed |
 | Power Conduit | 14 Core Fragments | Power Grid | Cronjob a compiled program to it to produce Power Cells over time |

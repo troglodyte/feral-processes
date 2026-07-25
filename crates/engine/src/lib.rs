@@ -4457,6 +4457,10 @@ impl Game {
     /// the platform slab is re-stamped beneath it, so the base arrives in
     /// exactly the layout it left in. The Portal itself is consumed by
     /// `move_player` before this runs, so it never makes the trip.
+    ///
+    /// Spendable currency doesn't make the trip either — see the wipe at the
+    /// end of this function. Gear, supplies, fusion tiers and banked Research
+    /// Data all do.
     fn enter_next_zone(&mut self) {
         let stale: Vec<Entity> = {
             let mut query = self
@@ -4550,9 +4554,37 @@ impl Game {
             }
         }
 
+        // Currency is zone-local: the next breach has to be funded in the
+        // zone you leave from, so a stockpile can't chain breaches past
+        // content it never engaged with. Keyed on economy role, so a mod's
+        // own currency item resets without an engine change. Research Data
+        // is banked progress rather than spending money and survives.
+        let spendable = [self.currency(), self.craft_currency()];
+        let player = self.player_entity();
+        let lost: Vec<(ItemId, u32)> = {
+            let mut inventory = self.world.get_mut::<Inventory>(player).unwrap();
+            spendable
+                .into_iter()
+                .filter_map(|item| {
+                    let qty = inventory.take(item.clone(), u32::MAX);
+                    (qty > 0).then_some((item, qty))
+                })
+                .collect()
+        };
+
         self.log(format!(
             "You breach the portal and materialize in a level {new_level} sector. Hostile signal strength has spiked."
         ));
+        if !lost.is_empty() {
+            let manifest = lost
+                .iter()
+                .map(|(item, qty)| format!("{qty} {}", self.item_name(item)))
+                .collect::<Vec<_>>()
+                .join(" and ");
+            self.log(format!(
+                "Your caches decohere in transit — {manifest} lost to the breach."
+            ));
+        }
         self.spawn_initial_creatures(14);
     }
 
@@ -6031,7 +6063,9 @@ impl Game {
             parts.push(format!("symlink target: teleport here for {cost}"));
         }
         if def.zone_portal {
-            parts.push("breaches to the next zone; cost scales with zone level".to_string());
+            parts.push(
+                "breaches to the next zone; fragments and cores don't survive the trip".to_string(),
+            );
         }
         if let Some(trade) = &def.trade {
             let buys = trade
@@ -15818,6 +15852,108 @@ mod tests {
         assert_eq!(
             companion_pos, player_pos,
             "the companion should travel with the player into the new zone"
+        );
+    }
+
+    #[test]
+    fn breaching_wipes_the_currency_and_craft_currency_stacks() {
+        let mut game = Game::new(945, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        {
+            let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+            inv.add(ItemId::from(ids::PORTAL_FRAGMENT), 25);
+            inv.add(ItemId::from(ids::CORE_FRAGMENT), 40);
+        }
+
+        game.enter_next_zone();
+
+        assert_eq!(
+            count_item(&game, ids::PORTAL_FRAGMENT),
+            0,
+            "the next zone's portal has to be funded in the zone you leave from"
+        );
+        assert_eq!(
+            count_item(&game, ids::CORE_FRAGMENT),
+            0,
+            "and so does everything the base is bought with"
+        );
+    }
+
+    #[test]
+    fn breaching_keeps_everything_that_is_not_spendable_currency() {
+        let mut game = Game::new(946, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        {
+            let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+            inv.add(ItemId::from(ids::RESEARCH_DATA), 60);
+            inv.add(ItemId::from(ids::POWER_CELL), 4);
+        }
+        game.world
+            .get_mut::<ItemFusions>(player)
+            .unwrap()
+            .increment(ItemId::from(ids::ICE_BREAKER));
+
+        game.enter_next_zone();
+
+        assert_eq!(
+            count_item(&game, ids::RESEARCH_DATA),
+            60,
+            "banked research is progress, not pocket money"
+        );
+        assert_eq!(
+            count_item(&game, ids::POWER_CELL),
+            7,
+            "3 from the starting kit plus the 4 added; supplies are carried, not confiscated"
+        );
+        assert_eq!(
+            count_item(&game, ids::ICE_BREAKER),
+            3,
+            "the starting kit's catalysts make the trip too"
+        );
+        assert_eq!(
+            game.world
+                .get::<ItemFusions>(player)
+                .unwrap()
+                .tier(&ItemId::from(ids::ICE_BREAKER)),
+            1,
+            "fusion progress is not currency"
+        );
+    }
+
+    #[test]
+    fn the_decohere_message_only_fires_when_there_was_something_to_lose() {
+        let mut game = Game::new(947, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .take(ItemId::from(ids::CORE_FRAGMENT), u32::MAX);
+
+        game.enter_next_zone();
+
+        assert!(
+            !game
+                .message_log(20)
+                .iter()
+                .any(|(_, m)| m.contains("decohere")),
+            "an empty wallet shouldn't be announced as a loss"
+        );
+
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::from(ids::PORTAL_FRAGMENT), 3);
+        game.enter_next_zone();
+
+        // "{qty} {name}", the same unpluralized shape `describe_structure`
+        // uses for a teleport cost — item names are modder-supplied data, not
+        // English to inflect.
+        assert!(
+            game.message_log(20)
+                .iter()
+                .any(|(_, m)| m.contains("3 Portal Fragment")),
+            "a real loss is named and counted: {:?}",
+            game.message_log(20)
         );
     }
 

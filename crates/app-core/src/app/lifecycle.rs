@@ -1,0 +1,192 @@
+//! Starting, saving, loading and ending a session.
+
+use crate::*;
+
+impl App {
+    pub fn new(assets_dir: PathBuf, saves_dir: PathBuf, history_path: PathBuf) -> Self {
+        Self {
+            mode: Mode::MainMenu,
+            game: None,
+            status_line: None,
+            history_written: false,
+            assets_dir,
+            saves_dir,
+            current_save_path: None,
+            pending_save: None,
+            history_path,
+            quit: false,
+            pending_structure: None,
+            pending_worker: None,
+            pending_remove_structure: None,
+            pending_inspect: None,
+            pending_fuse_first: None,
+            pending_fuse_second: None,
+            fuse_name_input: String::new(),
+            pending_battle_action: None,
+            pending_party_attack: false,
+            pending_special_ability: None,
+            pending_inventory_item: None,
+            pending_erase: None,
+            erase_quantity_input: String::new(),
+            pending_craft: None,
+            craft_quantity_input: String::new(),
+            pending_trade_structure: None,
+            pending_trade_choice: None,
+            pending_trade_program: None,
+            trade_quantity_input: String::new(),
+            zoom: 2,
+            menu_selected: 0,
+            last_autosave_tick: 0,
+            pending_sounds: Vec::new(),
+            last_realtime_tick: Instant::now(),
+        }
+    }
+
+    /// Drains every `SoundEvent` queued since the last call — a frontend
+    /// with audio calls this once per frame and plays whatever comes back;
+    /// one without can just drop the result.
+    pub fn take_sounds(&mut self) -> Vec<SoundEvent> {
+        std::mem::take(&mut self.pending_sounds)
+    }
+
+    /// Every `*.bin` file in the saves directory, newest first. Missing
+    /// directory reads as no saves rather than an error — nothing to show
+    /// on a first run before anything's ever been saved.
+    pub fn list_saves(&self) -> Vec<SaveEntry> {
+        let Ok(entries) = std::fs::read_dir(&self.saves_dir) else {
+            return Vec::new();
+        };
+        let mut saves: Vec<(std::time::SystemTime, SaveEntry)> = entries
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "bin"))
+            .map(|e| {
+                let path = e.path();
+                let modified = e
+                    .metadata()
+                    .and_then(|m| m.modified())
+                    .unwrap_or(std::time::UNIX_EPOCH);
+                let name = path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| path.to_string_lossy().into_owned());
+                let summary = feral_processes_engine::save::load_from_file(&path)
+                    .ok()
+                    .map(|data| {
+                        format!(
+                            "Lv{} · Zone {} · {:?} · tick {}",
+                            data.player.level, data.zone, data.difficulty, data.tick
+                        )
+                    });
+                (
+                    modified,
+                    SaveEntry {
+                        path,
+                        name,
+                        summary,
+                    },
+                )
+            })
+            .collect();
+        saves.sort_by_key(|(modified, _)| std::cmp::Reverse(*modified));
+        saves.into_iter().map(|(_, entry)| entry).collect()
+    }
+
+    /// A fresh, filesystem-safe save filename for a just-started game —
+    /// unique enough for one-per-second play sessions, which is the only
+    /// case that matters here.
+    fn new_save_path(&self) -> PathBuf {
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        self.saves_dir.join(format!("save_{ts}.bin"))
+    }
+
+    pub(crate) fn start_new_game(&mut self, difficulty: DifficultyMode) {
+        let seed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs() as u32)
+            .unwrap_or(1);
+        match Game::new(seed, difficulty, &self.assets_dir) {
+            Ok(game) => {
+                self.last_autosave_tick = game.current_tick();
+                self.game = Some(game);
+                self.current_save_path = Some(self.new_save_path());
+                self.history_written = false;
+                self.status_line = None;
+                self.mode = Mode::Playing;
+                // Save immediately so the new slot shows up in the load
+                // list (and survives a crash) even before the first
+                // autosave interval elapses.
+                self.save_game();
+            }
+            Err(e) => self.status_line = Some(format!("Failed to start game: {e}")),
+        }
+    }
+
+    pub(crate) fn load_game(&mut self, path: PathBuf) {
+        match Game::load(&path, &self.assets_dir) {
+            Ok(game) => {
+                self.last_autosave_tick = game.current_tick();
+                self.game = Some(game);
+                self.current_save_path = Some(path);
+                self.history_written = false;
+                self.status_line = None;
+                self.mode = Mode::Playing;
+            }
+            Err(e) => self.status_line = Some(format!("Failed to load game: {e}")),
+        }
+    }
+
+    pub(crate) fn save_game(&mut self) {
+        let Some(path) = &self.current_save_path else {
+            return;
+        };
+        if let Some(game) = &mut self.game {
+            match game.save(path) {
+                Ok(()) => self.status_line = Some("Game saved.".to_string()),
+                Err(e) => self.status_line = Some(format!("Save failed: {e}")),
+            }
+        }
+    }
+
+    /// Silently saves to the same slot `s` does, once at least
+    /// `AUTOSAVE_INTERVAL_TICKS` game ticks have passed since the last one —
+    /// checked after every keypress so it fires no matter which action
+    /// (movement, rest, a cronjob cycle, ...) advanced the clock. Doesn't
+    /// touch `status_line` on success so it doesn't cover up a more useful
+    /// message from whatever the player just did; a failure does surface,
+    /// since silently failing to protect their progress would be worse.
+    pub(crate) fn maybe_autosave(&mut self) {
+        let Some(path) = self.current_save_path.clone() else {
+            return;
+        };
+        let Some(game) = &mut self.game else { return };
+        let current = game.current_tick();
+        if current.saturating_sub(self.last_autosave_tick) < AUTOSAVE_INTERVAL_TICKS {
+            return;
+        }
+        self.last_autosave_tick = current;
+        if let Err(e) = game.save(&path) {
+            self.status_line = Some(format!("Autosave failed: {e}"));
+        }
+    }
+
+    pub(crate) fn check_game_over(&mut self) {
+        let over = self
+            .game
+            .as_ref()
+            .map(|g| g.is_game_over().is_some())
+            .unwrap_or(false);
+        if !over {
+            return;
+        }
+        if !self.history_written {
+            if let Some(game) = &mut self.game {
+                let _ = game.write_history(&self.history_path);
+            }
+            self.history_written = true;
+        }
+        self.mode = Mode::GameOver;
+    }
+}

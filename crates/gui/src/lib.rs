@@ -5,6 +5,7 @@
 //! `app-core` and knows nothing about macroquad.
 
 mod fx;
+mod keys;
 mod render;
 mod sounds;
 mod text;
@@ -14,6 +15,7 @@ use macroquad::prelude::*;
 
 use feral_processes_app_core::{App, GameKey};
 use fx::Fx;
+use keys::KeyRepeat;
 use sounds::SoundBank;
 
 fn map_special_key(key: KeyCode) -> Option<GameKey> {
@@ -29,11 +31,14 @@ fn map_special_key(key: KeyCode) -> Option<GameKey> {
     }
 }
 
+/// Delivered from the held state via `KeyRepeat` rather than from
+/// `is_key_pressed`, so holding one keeps moving (and keeps scrolling, in
+/// the menus that read the same keys).
+const REPEATING_KEYS: &[KeyCode] = &[KeyCode::Up, KeyCode::Down, KeyCode::Left, KeyCode::Right];
+
+/// Edge-triggered: these commit or cancel, and a held Escape unwinding
+/// several modes at once is nobody's intent.
 const SPECIAL_KEYS: &[KeyCode] = &[
-    KeyCode::Up,
-    KeyCode::Down,
-    KeyCode::Left,
-    KeyCode::Right,
     KeyCode::Enter,
     KeyCode::KpEnter,
     KeyCode::Escape,
@@ -113,8 +118,20 @@ async fn game_loop(mut app: App) {
     let mut fx = Fx::new();
     let mut toast: Option<String> = None;
     let mut toast_until = 0.0f64;
+    let mut key_repeat = KeyRepeat::new();
+    let mut last_mode = app.mode;
     loop {
         app.update_realtime();
+        let held: Vec<KeyCode> = REPEATING_KEYS
+            .iter()
+            .copied()
+            .filter(|&key| is_key_down(key))
+            .collect();
+        for key in key_repeat.tick(get_time(), &held) {
+            if let Some(game_key) = map_special_key(key) {
+                app.handle_key(game_key);
+            }
+        }
         for &key in SPECIAL_KEYS {
             if is_key_pressed(key)
                 && let Some(game_key) = map_special_key(key)
@@ -126,6 +143,13 @@ async fn game_loop(mut app: App) {
             if !c.is_control() {
                 app.handle_key(GameKey::Char(c));
             }
+        }
+        // A held key that changed the screen out from under itself — walking
+        // into a wild creature, say — must not go on driving the screen it
+        // landed on.
+        if app.mode != last_mode {
+            key_repeat.block_held();
+            last_mode = app.mode;
         }
         if is_key_pressed(KeyCode::LeftBracket) {
             volume = (volume - VOLUME_STEP).max(0.0);

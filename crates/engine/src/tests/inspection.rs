@@ -55,6 +55,54 @@ fn inspect_returns_none_for_non_creature_entities() {
 }
 
 #[test]
+fn a_creatures_display_label_is_tagged_with_its_spawn_zone() {
+    let mut game = Game::new(50, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = game.species_defs().into_iter().next().unwrap();
+
+    let zone1 = game
+        .world
+        .spawn((
+            Creature {
+                species: species.id.clone(),
+            },
+            Hostile,
+            Position { x: 3, y: 3 },
+            Stats {
+                hp: 1,
+                max_hp: 1,
+                atk: 1,
+                def: 1,
+            },
+            ZonePortal(1),
+        ))
+        .id();
+    let zone2 = game
+        .world
+        .spawn((
+            Creature {
+                species: species.id.clone(),
+            },
+            Hostile,
+            Position { x: 4, y: 4 },
+            Stats {
+                hp: 2,
+                max_hp: 2,
+                atk: 2,
+                def: 2,
+            },
+            ZonePortal(2),
+        ))
+        .id();
+
+    assert_eq!(game.entity_label(zone1), format!("{} 1", species.name));
+    assert_eq!(game.entity_label(zone2), format!("{} 2", species.name));
+    assert_eq!(
+        game.inspect(zone2).unwrap().name,
+        format!("{} 2", species.name)
+    );
+}
+
+#[test]
 fn use_symlink_teleports_the_player_to_the_structure_and_charges_the_cost() {
     let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let def = game

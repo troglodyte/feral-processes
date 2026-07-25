@@ -237,6 +237,8 @@ impl Game {
                             }
                         })
                         .unwrap_or_else(|| "?".to_string()),
+                    battle::SpecialTarget::WholeParty => "the party".to_string(),
+                    battle::SpecialTarget::AllEnemies => "all groups".to_string(),
                 };
                 format!("{name} -> {on}")
             }

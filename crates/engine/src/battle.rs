@@ -85,6 +85,11 @@ pub enum SpecialTarget {
     EnemyGroup {
         group: usize,
     },
+    /// Every living party member. Carries no index because the player makes
+    /// no choice — see `SpecialTargeting::None`.
+    WholeParty,
+    /// Every living enemy in every group. Same no-choice rationale.
+    AllEnemies,
 }
 
 /// The menu-facing identity of an action, without its parameters.
@@ -144,6 +149,10 @@ pub struct SpecialOption {
     /// list. Carried here so neither renderer has to know which abilities
     /// are buffs.
     pub targeting: SpecialTargeting,
+    /// For a `SpecialTargeting::None` ability, which side it sweeps —
+    /// carried here so neither renderer has to know what any ability does.
+    /// Meaningless (and always `false`) for abilities that open a picker.
+    pub sweeps_party: bool,
 }
 
 /// One row of the ally picker — who a party-facing Special lands on. Same

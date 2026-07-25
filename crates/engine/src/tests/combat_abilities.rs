@@ -123,3 +123,152 @@ fn reaping_walks_every_index_so_two_deaths_in_one_group_both_resolve() {
         "the survivors keep their relative order"
     );
 }
+
+/// A game whose species ships the three new multi-target abilities, so the
+/// shapes can be exercised without depending on shipped kit assignments.
+fn game_with_a_sweeper() -> (Game, Entity) {
+    const SWEEPER: &str = r#"(
+        id: "test_sweeper",
+        name: "Test Sweeper",
+        glyph: 's',
+        color: Red,
+        base_hp: 30,
+        base_atk: 10,
+        base_def: 2,
+        taming_difficulty: 0.5,
+        habitats: [OpenGrid],
+        base_speed: 10,
+        moves: [(name: "Poke", power: 3)],
+        abilities: [
+            (id: "cascade_overflow"),
+            (id: "broadcast_storm"),
+            (id: "redundancy_sync"),
+        ],
+    )"#;
+    let dir = modded_assets_dir("sweeper", &[], &[], &[("test_sweeper.ron", SWEEPER)]);
+    let mut game = Game::new(31, DifficultyMode::Forgiving, &dir).unwrap();
+    let player = game.player_entity();
+    let sweeper = game
+        .world
+        .spawn((
+            Creature {
+                species: "test_sweeper".to_string(),
+            },
+            Position { x: 3, y: 3 },
+            Stats {
+                hp: 30,
+                max_hp: 30,
+                atk: 10,
+                def: 2,
+            },
+            Tamed { owner: player },
+            Experience::default(),
+        ))
+        .id();
+    game.add_companion(sweeper).unwrap();
+    (game, sweeper)
+}
+
+#[test]
+fn a_whole_group_ability_damages_every_member_not_just_the_front() {
+    let (mut game, sweeper) = game_with_a_sweeper();
+    let pack = battle_with_a_pack_of(&mut game, 3, 50);
+
+    companion_uses_special(
+        &mut game,
+        sweeper,
+        0, // cascade_overflow
+        battle::SpecialTarget::EnemyGroup { group: 0 },
+    );
+
+    for (rank, member) in pack.iter().enumerate() {
+        let hp = game.world.get::<Stats>(*member).unwrap().hp;
+        assert!(
+            hp < 50,
+            "the member at rank {rank} should have taken damage, still at {hp}"
+        );
+    }
+}
+
+#[test]
+fn an_all_enemies_ability_reaches_every_group_including_past_engagement_range() {
+    let (mut game, sweeper) = game_with_a_sweeper();
+    let player = game.player_entity();
+    // Four distinct species so `group_pack` yields four groups — more than
+    // ENGAGED_GROUPS, which is the point.
+    let species: Vec<String> = game
+        .species_defs()
+        .into_iter()
+        .take(4)
+        .map(|s| s.id.clone())
+        .collect();
+    assert_eq!(species.len(), 4, "the shipped set must supply four species");
+    let enemies: Vec<Entity> = species
+        .iter()
+        .enumerate()
+        .map(|(i, id)| {
+            game.world
+                .spawn((
+                    Creature {
+                        species: id.clone(),
+                    },
+                    Hostile,
+                    Position {
+                        x: 5 + i as i32,
+                        y: 5,
+                    },
+                    Stats {
+                        hp: 50,
+                        max_hp: 50,
+                        atk: 0,
+                        def: 0,
+                    },
+                    StatusEffects::default(),
+                ))
+                .id()
+        })
+        .collect();
+    insert_battle(&mut game, player, enemies.clone());
+    assert_eq!(game.living_group_count(), 4, "four species, four groups");
+
+    companion_uses_special(
+        &mut game,
+        sweeper,
+        1, // broadcast_storm
+        battle::SpecialTarget::AllEnemies,
+    );
+
+    for (group, enemy) in enemies.iter().enumerate() {
+        let hp = game.world.get::<Stats>(*enemy).unwrap().hp;
+        assert!(hp < 50, "group {group} should have been hit, still at {hp}");
+    }
+}
+
+#[test]
+fn a_whole_party_heal_raises_every_living_member_and_skips_the_downed() {
+    let (mut game, sweeper) = game_with_a_sweeper();
+    let player = game.player_entity();
+    let downed = spawn_tamed(&mut game, 20, 5);
+    game.add_companion(downed).unwrap();
+    battle_with_a_pack_of(&mut game, 1, 200);
+
+    for (entity, hp) in [(player, 10), (sweeper, 10), (downed, 0)] {
+        game.world.get_mut::<Stats>(entity).unwrap().hp = hp;
+    }
+
+    companion_uses_special(&mut game, sweeper, 2, battle::SpecialTarget::WholeParty);
+
+    assert!(
+        game.world.get::<Stats>(player).unwrap().hp > 10,
+        "the player is part of the party"
+    );
+    assert!(
+        game.world.get::<Stats>(sweeper).unwrap().hp > 10,
+        "the caster heals itself too"
+    );
+    assert_eq!(
+        game.world.get::<Stats>(downed).unwrap().hp,
+        0,
+        "a heal spent on a downed member would be wasted"
+    );
+}

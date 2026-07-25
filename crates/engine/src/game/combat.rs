@@ -374,6 +374,7 @@ impl Game {
                 name: ability.name.clone(),
                 detail: ability.description.clone(),
                 targeting: ability.target.targeting(),
+                sweeps_party: ability.target == AbilityTarget::WholeParty,
             })
             .collect()
     }

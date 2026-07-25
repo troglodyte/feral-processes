@@ -1252,16 +1252,29 @@ impl App {
         let chosen = &options[idx];
         // Which picker comes next is the ability's own business, read off the
         // engine's option rather than decided here.
-        let next = match chosen.targeting {
-            SpecialTargeting::Ally => Mode::BattleAlly,
-            SpecialTargeting::Enemy => Mode::BattleTarget,
-            // No shipped species declares a sweeping ability yet, so this is
-            // unreachable in play until kits are assigned.
-            SpecialTargeting::None => Mode::Battle,
-        };
         self.pending_special_ability = Some(chosen.index);
         self.menu_selected = 0;
-        self.mode = next;
+        match chosen.targeting {
+            SpecialTargeting::Ally => self.mode = Mode::BattleAlly,
+            SpecialTargeting::Enemy => self.mode = Mode::BattleTarget,
+            // Nothing left to choose — commit the action now rather than
+            // opening a picker with one meaningless row. Which side it
+            // sweeps is the engine's answer, not a guess made here.
+            SpecialTargeting::None => {
+                let target = if chosen.sweeps_party {
+                    SpecialTarget::WholeParty
+                } else {
+                    SpecialTarget::AllEnemies
+                };
+                let action = BattleAction::Special {
+                    ability: chosen.index,
+                    target,
+                };
+                self.pending_battle_action = None;
+                self.pending_special_ability = None;
+                self.commit_battle_action(slot, action);
+            }
+        }
     }
 
     /// Picks which party member a buff or heal lands on, completing a

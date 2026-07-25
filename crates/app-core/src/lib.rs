@@ -2994,6 +2994,38 @@ mod tests {
         );
     }
 
+    /// The trade screen tags its rows with the same helper the inventory
+    /// uses, so anything a trading post stocks has to produce a real
+    /// WEP/ARM/MOD tag — an empty one there is a blank column, not a
+    /// harmless omission.
+    #[test]
+    fn every_equippable_item_a_trading_post_stocks_has_a_slot_tag() {
+        let app = test_app(902);
+        let game = app.game.as_ref().expect("test_app builds a game");
+
+        let stocked: Vec<ItemId> = game
+            .structure_defs()
+            .into_iter()
+            .filter_map(|d| d.trade)
+            .flat_map(|t| t.buy.into_iter().map(|(item, _)| item))
+            .collect();
+        assert!(
+            !stocked.is_empty(),
+            "a shipped trading post should stock something to buy"
+        );
+
+        for item in stocked {
+            if !game.is_equippable(&item) {
+                continue;
+            }
+            let tag = equip_preview_tag(game, &item, 1, 0);
+            assert!(
+                tag.contains("WEP") || tag.contains("ARM") || tag.contains("MOD"),
+                "{item} is equippable stock but its trade row would show {tag:?}"
+            );
+        }
+    }
+
     #[test]
     fn equip_preview_tag_stays_empty_for_a_non_equippable_item() {
         let app = test_app(901);

@@ -41,6 +41,11 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   the old singular name keeps loading, but its ability is ignored and the
   companion falls back to the generic rally. No shipped species declared one,
   so nothing in the base game changes yet.
+- **The trade screen shows equipment tags.** Sell and buy rows now carry the
+  same `(WEP +3 ATK)` tag the inventory does, so you can tell a weapon from a
+  module — and check a fusion tier — without backing out to compare. Sell
+  rows show the tier of the copy you actually hold; buy rows show unfused
+  stock.
 - **The compile screen says what each item does.** Every recipe now carries a
   short gloss next to its name — `Power Cell (+25 power)`, `Arc Lance
   (+3 atk)` — so you can tell what you're building without leaving the menu.

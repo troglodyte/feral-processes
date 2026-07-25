@@ -1232,7 +1232,8 @@ fn render_trade_action_menu(
     let Some(trade) = game.trade_options(structure) else {
         return;
     };
-    let inventory = game.player_status().inventory;
+    let status = game.player_status();
+    let inventory = status.inventory.clone();
     let currency = game.currency();
 
     let mut lines = vec![Line::styled(
@@ -1248,11 +1249,16 @@ fn render_trade_action_menu(
     }
     let mut idx = 0;
     for (item, qty) in &sellable {
+        // Same tag the inventory shows, so what you're about to part with
+        // reads identically on both screens — fusion tier included, since
+        // that's exactly what you'd want to check before selling.
+        let tag = equip_preview_tag(game, item, status.zone, game.item_fusion_tier(item));
         lines.push(menu_line(
             format!(
-                "[{}] Sell {} x{qty} ({} Core Fragments each)",
+                "[{}] Sell {} x{qty}{} ({} Core Fragments each)",
                 menu_shortcut(idx),
                 game.item_name(item),
+                tag,
                 trade.sell_rate
             ),
             idx == selected,
@@ -1265,11 +1271,15 @@ fn render_trade_action_menu(
         Style::new().add_modifier(Modifier::BOLD),
     ));
     for (item, cost) in &trade.buy {
+        // Fusion tier 0: stock is unfused, so the tag shows what you'd get
+        // buying it, not what some copy in your buffer happens to be.
+        let tag = equip_preview_tag(game, item, status.zone, 0);
         lines.push(menu_line(
             format!(
-                "[{}] Buy {} ({cost} Core Fragments each)",
+                "[{}] Buy {}{} ({cost} Core Fragments each)",
                 menu_shortcut(idx),
-                game.item_name(item)
+                game.item_name(item),
+                tag
             ),
             idx == selected,
         ));

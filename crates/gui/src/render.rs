@@ -546,7 +546,7 @@ fn draw_status_panel(
             y: cy,
             w: w - m.inset * 2.0,
         },
-        "Integrity",
+        &format!("Integrity {}/{}", status.hp, status.max_hp.max(1)),
         status.hp as f32,
         status.max_hp.max(1) as f32,
         BarStyle::plain(RED),
@@ -559,7 +559,7 @@ fn draw_status_panel(
             y: cy,
             w: w - m.inset * 2.0,
         },
-        "Power",
+        &format!("Power {:.0}/100", status.hunger),
         status.hunger,
         100.0,
         BarStyle::plain(YELLOW),
@@ -572,7 +572,7 @@ fn draw_status_panel(
             y: cy,
             w: w - m.inset * 2.0,
         },
-        "Fatigue",
+        &format!("Fatigue {:.0}/100", status.fatigue),
         status.fatigue,
         100.0,
         BarStyle::plain(BLUE),
@@ -724,11 +724,14 @@ fn draw_bar(
 ) -> f32 {
     let BarStyle { color, bold } = style;
     let ratio = (value / max).clamp(0.0, 1.0);
-    let text = format!("{label} {value:.0}/{max:.0}");
+    // `label` is drawn exactly as given. This used to append
+    // `" {value}/{max}"`, which pinned HP to the end of the text and made
+    // the battle rosters' HP column impossible — a drawing primitive is the
+    // wrong place to be deciding text layout.
     if bold {
-        fonts.ui_bold(text, g.x, g.y, m.label(), TEXT);
+        fonts.ui_bold(label, g.x, g.y, m.label(), TEXT);
     } else {
-        fonts.ui(text, g.x, g.y, m.label(), TEXT);
+        fonts.ui(label, g.x, g.y, m.label(), TEXT);
     }
     let bar_y = g.track_y(m);
     draw_rectangle(
@@ -1891,14 +1894,12 @@ fn right(s: &str, width: usize) -> String {
 const MARK_W: usize = 3;
 const NAME_W: usize = 18;
 /// `hp/max` is one cell, so a single `HP` header can sit over the pair.
-const HP_W: usize = 11;
+/// Nine fits `9999/9999`; deep-zone stat scaling doubles per zone, so four
+/// digits a side is already well past anything reachable.
+const HP_W: usize = 9;
 const STAT_W: usize = 3;
 /// Widest value is `ENGAGED`.
 const REACH_W: usize = 7;
-/// Where the ragged last column starts: every fixed cell, plus the single
-/// space separating each pair of them.
-const TAIL_COL: usize = MARK_W + NAME_W + 1 + HP_W + 1 + STAT_W + 1 + STAT_W + 1 + REACH_W + 1;
-
 /// The one line shape both rosters and both headers are built from, so a
 /// column cannot move in a row without moving in its header too.
 fn roster_line(
@@ -1974,6 +1975,8 @@ fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics) {
         TEXT,
     );
     y += m.line_height;
+    fonts.ui(hostile_header(), margin, y, m.label(), TEXT_DIM);
+    y += m.line_height;
 
     for (idx, g) in view.groups.iter().enumerate() {
         let bar = BarGeometry {
@@ -1998,15 +2001,22 @@ fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics) {
         };
         y = draw_bar(
             bar,
-            &format!(
-                "{}  {}{} {} (ATK {} / DEF {}){}",
-                g.letter,
-                name,
-                if g.is_boss { " [BOSS]" } else { "" },
-                if g.engaged { "<engaged>" } else { "<back>" },
+            &roster_row(
+                &format!("{}  ", g.letter),
+                &format!("{name}{}", if g.is_boss { " [BOSS]" } else { "" }),
+                &format!("{}/{}", g.front_hp, g.front_max_hp),
                 g.atk,
                 g.def,
-                status_tag(&g.status_effect),
+                if g.engaged { "ENGAGED" } else { "BACK" },
+                // The engine owns the wording of a condition
+                // ("Bleeding (2)"); upper-casing is presentation, but
+                // abbreviating a vocabulary this renderer does not define
+                // would not be. `OK` rather than blank, because an empty
+                // cell in a ledger reads as missing data.
+                &g.status_effect
+                    .as_deref()
+                    .map(str::to_uppercase)
+                    .unwrap_or_else(|| "OK".to_string()),
             ),
             g.front_hp as f32,
             g.front_max_hp.max(1) as f32,
@@ -2040,7 +2050,10 @@ fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics) {
     // above the action bar so the log can take exactly the slack left over,
     // which is why its height has to be computed rather than accumulated.
     let log_bottom = screen_height() - m.line_height * 2.0;
-    let party_height = m.line_height + view.party.len() as f32 * bar_row_height(m) + m.inset;
+    // Two line heights, not one: the block's title *and* its column header
+    // sit above the first bar. Getting this wrong shifts the whole party
+    // block, since it is bottom-anchored off this figure.
+    let party_height = m.line_height * 2.0 + view.party.len() as f32 * bar_row_height(m) + m.inset;
     let party_top = (log_bottom - party_height).max(y);
 
     let log_height = party_top - y;
@@ -2069,6 +2082,8 @@ fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics) {
         TEXT,
     );
     y += m.line_height;
+    fonts.ui(party_header(), margin, y, m.label(), TEXT_DIM);
+    y += m.line_height;
 
     for p in &view.party {
         let bar = BarGeometry {
@@ -2081,15 +2096,21 @@ fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics) {
         let color = if active { CYAN } else { GREEN };
         y = draw_bar(
             bar,
-            &format!(
-                "{}{}  (ATK {} / DEF {}) {} — {}{}",
-                if active { "> " } else { "  " },
-                p.name,
+            &roster_row(
+                &format!("{}{} ", if active { ">" } else { " " }, p.slot + 1),
+                &p.name,
+                &format!("{}/{}", p.hp, p.max_hp),
                 p.atk,
                 p.def,
-                if p.front { "front" } else { "back" },
-                p.planned.clone().unwrap_or_else(|| "...".to_string()),
-                status_tag(&p.status_effect),
+                if p.front { "FRONT" } else { "BACK" },
+                // A member's own condition rides in the ACTION column
+                // rather than getting a seventh fixed cell that would be
+                // empty on almost every row.
+                &format!(
+                    "{}{}",
+                    p.planned.as_deref().unwrap_or("—"),
+                    status_tag(&p.status_effect),
+                ),
             ),
             p.hp as f32,
             p.max_hp.max(1) as f32,
@@ -2348,8 +2369,15 @@ mod tests {
     /// player through `App::status_line`, and every gameplay menu draws a
     /// popup over the log pane that used to be the sole place it appeared —
     /// which made a refusal indistinguishable from a dead keypress.
-    /// Reads the `n` chars of `line` starting at char offset `col` — the
-    /// rows are monospace, so a char offset *is* a screen column.
+    /// Where the ragged last column must start: every fixed cell plus the
+    /// single space separating each pair. Spelled out here rather than in
+    /// the layout itself, so it is an independent expectation the tests hold
+    /// `roster_line` to — if the format string gains or loses a separator,
+    /// these tests fail instead of quietly agreeing with it.
+    const TAIL_COL: usize = MARK_W + NAME_W + 1 + HP_W + 1 + STAT_W + 1 + STAT_W + 1 + REACH_W + 1;
+
+    /// Reads `line` from char offset `col` — the rows are monospace, so a
+    /// char offset *is* a screen column.
     fn at(line: &str, col: usize) -> String {
         line.chars().skip(col).collect()
     }
@@ -2387,6 +2415,36 @@ mod tests {
         assert!(at(&lines[1], TAIL_COL).starts_with("BLEEDING"));
         assert!(at(&lines[3], TAIL_COL).starts_with("ACTION"));
         assert!(at(&lines[4], TAIL_COL).starts_with("Attack A"));
+    }
+
+    /// A whole roster block, character-exact. The other tests assert the
+    /// invariants; this one shows what the screen actually reads like, so a
+    /// change to any width is reviewable as a diff of the output rather than
+    /// of arithmetic.
+    #[test]
+    fn a_roster_block_reads_as_an_aligned_table() {
+        let block = [
+            hostile_header(),
+            roster_row(
+                "A  ",
+                "4 Null Daemons",
+                "18/30",
+                9,
+                4,
+                "ENGAGED",
+                "BLEEDING (2)",
+            ),
+            roster_row("B  ", "Warden Process", "44/44", 14, 9, "BACK", "OK"),
+            roster_row("C  ", "Sentinel [BOSS]", "120/120", 22, 15, "BACK", "OK"),
+        ]
+        .join("\n");
+        assert_eq!(
+            block,
+            "   GROUP              HP        ATK DEF RANGE   STATUS\n\
+             A  4 Null Daemons     18/30       9   4 ENGAGED BLEEDING (2)\n\
+             B  Warden Process     44/44      14   9 BACK    OK\n\
+             C  Sentinel [BOSS]    120/120    22  15 BACK    OK"
+        );
     }
 
     /// And each header label sits over the column it names.

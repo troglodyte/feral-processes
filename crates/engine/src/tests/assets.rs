@@ -74,3 +74,33 @@ fn every_shipped_asset_file_loads_without_a_warning() {
         "shipped assets must all parse: {skipped:#?}"
     );
 }
+
+#[test]
+fn the_shipped_species_kits_reference_only_real_abilities() {
+    let game = Game::new(3, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let db = game.world.resource::<crate::abilities::AbilityDb>();
+    let mut declared = 0;
+    for species in game.species_defs() {
+        for ability in &species.abilities {
+            assert!(
+                db.get(&ability.id).is_some(),
+                "species {:?} names unknown ability {:?}",
+                species.id,
+                ability.id
+            );
+            assert!(
+                ability.level >= 1 && ability.level <= crate::progression::CREATURE_MAX_LEVEL,
+                "species {:?}: ability {:?} unlocks at level {}, outside 1..={}",
+                species.id,
+                ability.id,
+                ability.level,
+                crate::progression::CREATURE_MAX_LEVEL
+            );
+            declared += 1;
+        }
+    }
+    assert!(
+        declared >= 10,
+        "the shipped roster should actually use the ability system, found {declared}"
+    );
+}

@@ -15,4 +15,5 @@
         (name: "Cross-Reference", power: 9, ranged: true),
     ],
     work_resource: None,
+    abilities: [(id: "memory_leak"), (id: "null_route", level: 8)],
 )

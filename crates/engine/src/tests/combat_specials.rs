@@ -168,7 +168,7 @@ fn special_ability_heal_restores_player_hp_and_debuff_afflicts_the_wild_creature
 }
 
 #[test]
-fn companion_ability_label_shows_special_ability_or_a_computed_attack_rally() {
+fn companion_ability_label_shows_the_ability_name_or_the_fallback() {
     let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let all_species = game.species_defs();

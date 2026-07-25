@@ -21,6 +21,19 @@ pub(super) fn ability(game: &Game, id: &str) -> crate::abilities::AbilityDef {
         .unwrap_or_else(|| panic!("{id} ships with the game"))
 }
 
+/// The species `spawn_tamed` builds its companions from: deliberately one
+/// that declares no abilities, so the generic-companion helper yields the
+/// fallback rather than whatever kit the shipped roster happens to give
+/// its first species. Tests that need to name that species must read it
+/// through here rather than re-deriving it, or the two silently drift when
+/// kits are reassigned.
+pub(super) fn generic_species(game: &Game) -> SpeciesDef {
+    game.species_defs()
+        .into_iter()
+        .find(|s| s.abilities.is_empty())
+        .expect("at least one species with no declared abilities")
+}
+
 /// Sets `entity`'s level directly, for tests that need a level-gated
 /// ability unlocked without grinding XP into it.
 pub(super) fn set_level(game: &mut Game, entity: Entity, level: u32) {
@@ -366,11 +379,7 @@ pub(super) fn start_battle_with_a_wild_program(game: &mut Game) -> Entity {
 
 pub(super) fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
     let player = game.player_entity();
-    let species = game
-        .species_defs()
-        .into_iter()
-        .next()
-        .expect("at least one species");
+    let species = generic_species(game);
     game.world
         .spawn((
             Creature {

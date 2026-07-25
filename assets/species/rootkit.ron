@@ -15,4 +15,5 @@
         (name: "Kernel Panic", power: 12, ranged: true),
     ],
     work_resource: None,
+    abilities: [(id: "deadlock"), (id: "memory_leak", level: 4)],
 )

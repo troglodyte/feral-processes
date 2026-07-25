@@ -385,7 +385,7 @@ Shown in the status panel (always) and the intrusion screen (in battle):
 | --- | --- |
 | **Integrity** | Your HP. Hits 0 and you flatline — final in Permadeath, a costly soft-reboot in Forgiving mode. Leveling up or recharging overnight (`r`) both fully restore it. |
 | **Power** | Your hunger-equivalent. Drains over time; hits 0 and you start taking Integrity damage each tick. Below 50%, your Attack also starts weakening — a linear falloff to half strength at 0 Power, on top of (not instead of) the tick damage. Restored by draining a Power Cell (`e`), standing near a cooking Terminal, or passively anywhere in a base with a Recharger Node. |
-| **Fatigue** | Drains over time; restored to full by recharging overnight (`r`). Directing a party member's Special in battle (`s`) also costs a flat chunk of it — rest also advances a lot of game time, so use both deliberately. |
+| **Fatigue** | Drains over time; restored to full by recharging overnight (`r`). Directing a party member's Special in battle (`s`) also costs some of it — how much is the ability's own business, so a field-wide sweep bites far harder than an ordinary command. Run short and that ability is refused until you rest. Rest also advances a lot of game time, so use both deliberately. |
 | **Level / XP** | Grows from defeating or decompiling rogue programs, or (for a compiled program) completing cronjob cycles. Each level-up grows Attack/Defense/max Integrity, fully heals, and grants 1 Perk Point — see [Perks](#perks). **You** have no level ceiling at all; **tamed programs** stop at level 12, and further XP from any source is simply ignored once one is maxed. |
 | **Attack** | How hard your hits land. Battle damage is roughly `move power + attacker's Attack − defender's Defense` (always at least 1). The same formula covers every combatant: your own strike has a fixed move power, while a program — yours or wild — rolls one of its species' moves. |
 | **Defense** | How much incoming damage you shrug off — see the Attack formula above. |
@@ -410,9 +410,9 @@ on top of whatever you already have, at the same Perk Point cost every time:
 | Buffer | 3 | +1% permanent max Integrity per level, minimum +10 (fully heals on purchase) |
 
 The `x` menu shows each perk's current level next to it. Unlike species,
-structures, items, and research, perks are a small fixed set of player-only
-progression choices rather than moddable content — adding one means editing
-`crates/engine/src/perks.rs`, not dropping in a file.
+structures, items, abilities, and research, perks are a small fixed set of
+player-only progression choices rather than moddable content — adding one
+means editing `crates/engine/src/perks.rs`, not dropping in a file.
 
 ### Items
 
@@ -600,11 +600,21 @@ be active party members, fighting alongside you at once.
   that Attacks rolls one of its species' own moves. Choosing its Special
   instead gives up that attack, and asks which ability to spend before asking
   who it lands on — the picker names the one you chose. Buffs and heals list
-  **your own side**, so you can rally, shield or patch up any party member,
-  not just yourself; a debuff lists enemy groups instead. A species that
-  defines no abilities of its own offers a single temporary Attack rally;
-  define some (see `assets/species/README.md`) and each is a row in that
-  menu. Either way it costs you a flat chunk of Fatigue.
+  **your own side**, so you can boost or patch up any party member, not just
+  yourself; a debuff lists enemy groups instead. Some abilities need no
+  target at all: a whole-party heal or a field-wide sweep commits the moment
+  you pick it.
+- **A companion's kit grows as it levels.** Its species names which abilities
+  it gets and the level each unlocks at, so a program you've fought with for
+  a while does things a freshly tamed one can't. A species that declares
+  none falls back to a single temporary Attack boost. Abilities are data —
+  see `assets/abilities/README.md` for what one can do and
+  `assets/species/README.md` for how a species claims them.
+- **Powerful abilities are paced by cooldowns and Fatigue.** Each declares
+  how many rounds it sits out afterwards and how much Fatigue commanding it
+  costs you. One that's still cooling, or that you can't afford, is greyed in
+  the picker with the reason and can't be chosen — it never silently eats the
+  round. Cooldowns last the one intrusion.
 - Enemy retaliation picks a target by weight rather than a flat chance.
   Ranks are **soft**: the first three slots — you and your first two
   companions — draw noticeably more fire than the ones behind them, but
@@ -926,12 +936,13 @@ goes straight to a confirmation.
 
 ## Modding
 
-Species, structures, items, and research nodes are plain data files under
-`assets/species/*.ron`, `assets/structures/*.ron`, `assets/items/*.ron`, and
-`assets/research/*.ron` — drop in a new `.ron` file and it's picked up
-automatically next run, no recompiling needed. See the `README.md` in each
-of those directories for the schema. A malformed file is skipped with an
-in-game warning rather than crashing startup.
+Species, structures, items, abilities, and research nodes are plain data
+files under `assets/species/*.ron`, `assets/structures/*.ron`,
+`assets/items/*.ron`, `assets/abilities/*.ron`, and `assets/research/*.ron` —
+drop in a new `.ron` file and it's picked up automatically next run, no
+recompiling needed. See the `README.md` in each of those directories for the
+schema. A malformed file is skipped with an in-game warning rather than
+crashing startup.
 
 A new piece of equipment is a **single file** and no Rust at all: `equipment`
 gives it a slot and any mix of Attack/Defense/Decompiler, `craftable` gives it
@@ -939,6 +950,13 @@ a recipe (optionally naming a bench that must be standing), and `droppable`
 lists the species that drop it and at what odds. The 25-piece catalog in
 [Equipment](#equipment) is written exactly this way — nothing about it is
 privileged over gear you add yourself.
+
+A new combat ability is likewise a single file: `target` picks who it lands
+on (one ally, the whole party, one enemy group's front, a whole enemy group,
+or every hostile on the field), `effect` picks what it does (damage with an
+optional status rider, a heal, a stat buff, or a status debuff), and
+`cooldown`/`fatigue_cost` price it. A species claims one by naming its id and
+the level it unlocks at — see `assets/abilities/README.md`.
 
 Structures are equally open-ended: a single `.ron` file decides whether a
 structure is cronjob-workable, passively processing, a symlink target, a

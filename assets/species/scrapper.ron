@@ -16,4 +16,5 @@
     ],
     work_resource: Some("power_cell"),
     can_nest: true,
+    abilities: [(id: "cascade_overflow", level: 3)],
 )

@@ -26,22 +26,40 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   Neither overwrites a slot you already chose for.
 - **Choosing Special now asks which ability, then who gets it.** Commanding a
   party member opens a picker of that member's abilities, and the screen that
-  follows names your choice — `Pick a target (Heal)` rather than a bare
+  follows names your choice — `Pick a target (Hot Patch)` rather than a bare
   prompt. Backing out with Esc steps back one screen at a time. A planned
-  Special also reads on the roster as the ability it will spend (`Heal -> A`)
-  instead of the generic word.
-- **Buffs and heals can be aimed at any party member.** A Rally, Shield or
-  Heal now lists your own side — you and every standing companion — instead
+  Special also reads on the roster as the ability it will spend
+  (`Hot Patch -> A`) instead of the generic word.
+- **Buffs and heals can be aimed at any party member.** A buff or heal now
+  lists your own side — you and every standing companion — instead
   of always landing on you. A debuff still picks an enemy group. Companions
   could never actually hold a buff before this: only the player is spawned
   with a buff slot, so one aimed elsewhere would have changed nothing.
-- **Species can define more than one special ability.** `special_ability`
-  becomes `special_abilities`, a list — see `assets/species/README.md`.
-  Modders: rename the field and wrap the value in `[]`. A file still using
-  the old singular name keeps working — its ability is migrated into the
-  list and a warning names the file — rather than loading healthy while the
-  companion silently falls back to the generic rally. No shipped species
-  declared one, so nothing in the base game changes yet.
+- **Abilities are moddable data.** Drop a `.ron` file in `assets/abilities/`
+  and it's picked up at startup, same as a species, structure or item — see
+  `assets/abilities/README.md`. What used to be a fixed set of four things
+  in Rust (rally, shield, heal, debuff) is now whatever the files say. A
+  species names the ability ids it grants and the companion level each
+  unlocks at, so a program's kit grows as it levels instead of being fixed
+  when it's tamed. Ten abilities ship; seven species now declare kits, and
+  the rest still fall back to Priority Boost.
+- **Abilities can hit more than one target.** Three new shapes: every member
+  of one enemy group (Cascade Overflow), every hostile program on the field
+  (Broadcast Storm, Null Route), and the whole party at once (Redundancy
+  Sync, Overclock Array). A sweeping ability skips the target picker
+  entirely — there's nothing left to choose — and a party-facing one skips
+  members who are already down rather than wasting the heal.
+- **Rogue programs can now be destroyed from any rank.** Only a group's
+  front member could ever take damage or die. Anything behind it was
+  untouchable, which is what made area effects impossible; a back-rank
+  program killed by one now drops out of its group and pays out its loot and
+  XP exactly as a front kill does.
+- **Abilities have cooldowns and their own Fatigue costs.** A sweep is a
+  decision rather than a rotation: Broadcast Storm sits out four rounds and
+  costs 15 Fatigue against the flat 5 an ordinary command charges. An
+  ability that's cooling or that you can't afford is greyed in the picker
+  with the reason, and can't be planned at all — no silently wasted round.
+  Cooldowns last one intrusion and are never saved.
 - **The trade screen shows equipment tags.** Sell and buy rows now carry the
   same `(WEP +3 ATK)` tag the inventory does, so you can tell a weapon from a
   module — and check a fusion tier — without backing out to compare. Sell

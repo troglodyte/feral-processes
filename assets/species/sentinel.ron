@@ -15,4 +15,5 @@
         (name: "Lockout", power: 7, effect: Some((kind: Stun, chance: 0.3, duration: 1, power: 0))),
     ],
     work_resource: None,
+    abilities: [(id: "sandbox"), (id: "redundancy_sync", level: 6)],
 )

@@ -801,12 +801,11 @@ fn fuse_companions_applies_a_custom_name_truncated_to_the_max_length() {
 #[test]
 fn fuse_companions_with_no_name_or_blank_name_keeps_the_species_name() {
     let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    // `spawn_tamed` always uses this same species (`species_defs()` is
-    // stably sorted), and fusing two same-level, same-species programs
-    // keeps it — capturing it directly here avoids having to pick the
-    // fused entity back out of a world that also has 14 unrelated wild
-    // creatures in it from `Game::new`.
-    let species_name = game.species_defs().into_iter().next().unwrap().name;
+    // `spawn_tamed` always uses this same species, and fusing two
+    // same-level, same-species programs keeps it — capturing it directly
+    // here avoids having to pick the fused entity back out of a world that
+    // also has 14 unrelated wild creatures in it from `Game::new`.
+    let species_name = generic_species(&game).name;
     let a = spawn_tamed(&mut game, 10, 3);
     let b = spawn_tamed(&mut game, 10, 3);
     game.fuse_companions(a, b, None).unwrap();

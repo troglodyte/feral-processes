@@ -106,37 +106,31 @@ is skipped with a warning logged in-game rather than crashing startup.
 
     // Optional; can be left out entirely (defaults to empty). A tamed
     // program no longer attacks directly when commanded in battle — it
-    // spends its round on an ability instead. Left empty, that's a generic
-    // rally (a temporary ATK boost scaled off the companion's own ATK).
-    // List one or more here and a tamed member of this species offers them
-    // as a menu when commanded: choosing Special asks which ability, then
-    // who it lands on. Listing exactly one still shows the menu, with that
-    // one row — the order you write them in is the order they appear.
+    // spends its round on an ability instead. Left empty, that's the
+    // fallback `priority_boost`. List one or more here and a tamed member
+    // of this species offers them as a menu when commanded: choosing
+    // Special asks which ability, then who it lands on (if that ability
+    // needs a choice at all). Listing exactly one still shows the menu,
+    // with that one row — the order you write them in is the order they
+    // appear.
     //
-    // Every ability lands on a single target the player picks. Which picker
-    // appears follows from the ability itself: Rally, Shield and Heal are
-    // aimed at your own side, so they list you and every standing
-    // companion. Debuff is aimed at the other side, so it lists enemy
-    // groups.
-    //   Rally(power: 4, duration: 3)                    — +ATK for one party
-    //                                                      member
-    //   Shield(power: 4, duration: 3)                   — +DEF for one party
-    //                                                      member
-    //   Heal(power: 8)                                  — heals one party
-    //                                                      member now
-    //   Debuff(kind: Bleed, power: 3, duration: 3)      — afflicts one enemy
-    //                                                      group (kind is
-    //                                                      `Bleed` or `Stun`,
-    //                                                      same as a move's
-    //                                                      `effect`)
+    // Abilities themselves are data: each entry names an `id` from
+    // `assets/abilities/`, whose README documents what an ability can do
+    // (single- and multi-target damage, debuffs, heals and buffs, plus
+    // cooldowns and Fatigue costs). Nothing about an ability is defined
+    // here — only which ones this species gets, and when.
     //
-    // Renamed from the singular `special_ability` in 0.2.x. A file still
-    // using the old name keeps working — its ability is migrated into this
-    // list — but logs a warning until you rename the field and wrap the
-    // value in `[]`.
-    special_abilities: [
-        Heal(power: 8),
-        Shield(power: 4, duration: 3),
+    // `level` is optional and defaults to 1, meaning the ability is
+    // available as soon as the program is tamed. A higher number gates it
+    // until the companion reaches that level; companions cap at level 12,
+    // so anything above that is permanently unreachable.
+    //
+    // An id that doesn't exist is dropped with a logged warning and the
+    // rest of the species still loads — a program missing one ability is
+    // still perfectly playable.
+    abilities: [
+        (id: "hot_patch"),
+        (id: "redundancy_sync", level: 7),
     ],
 
     // Optional; can be left out entirely (defaults to 1.0). Multiplies this

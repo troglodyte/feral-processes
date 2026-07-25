@@ -10,4 +10,3 @@ path = "src/main.rs"
 [dependencies]
 feral-processes-app-core = { workspace = true }
 feral-processes-gui = { workspace = true }
-feral-processes-tui = { workspace = true }

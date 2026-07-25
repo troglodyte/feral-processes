@@ -204,8 +204,16 @@ fn max_group_size_doubles_with_distance_and_caps_per_zone() {
         "zone 1 is solo however far you walk — that is the whole point of zone 1"
     );
 
+    // Zone 2, not zone 1: a cap of 3 leaves the first two doublings visible,
+    // so the boundary case below is measuring the division and not the clamp.
     game.world.resource_mut::<ZoneLevel>().0 = 2;
     assert_eq!(at(&game, 0), 1, "every zone starts solo at its entry point");
+    assert_eq!(
+        game.max_group_size(spawn.x + GROUP_SIZE_STEP_TILES - 1, spawn.y),
+        1,
+        "one tile short of a full step is still solo — the doubling is keyed \
+         to whole steps, and an off-by-one here would double a step early"
+    );
     assert_eq!(at(&game, 1), 2, "one step out doubles");
     assert_eq!(
         at(&game, 2),

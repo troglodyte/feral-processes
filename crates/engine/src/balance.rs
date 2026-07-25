@@ -367,7 +367,7 @@ pub fn simulate_roster_fight(
 /// Searches player levels `1..=max_level` for the lowest one at which a
 /// full party (`MAX_PARTY_SIZE` companions, all tamed from `party_species`
 /// while breached into `zone` and leveled per
-/// `companion_level_for_player_level`) beats a **full pack** of
+/// `companion_level_for_player_level`) beats a **full-size group** of
 /// `wild_species` scaled to `zone` in `simulate_roster_fight`. `None` means
 /// scaling has broken down outright — not just a long grind, but no level
 /// up to `max_level` clears it.
@@ -382,8 +382,7 @@ pub fn simulate_roster_fight(
 /// a full roster takes Data Caches (see `Game::pet_capacity`), so it is an
 /// achievement rather than the baseline these progression sweeps are
 /// supposed to describe — and modelling the ceiling here would report that
-/// early zones need level 1, which says nothing about the curve. The full
-/// roster is projected separately, against a full pack.
+/// early zones need level 1, which says nothing about the curve.
 ///
 /// `party_species` is deliberately separate from `wild_species`: the party
 /// a player actually fields is whatever they tamed along the way, not a

@@ -9,9 +9,17 @@ impl Game {
     /// roll placed together (see `try_spawn_habitat_creature`) joins the
     /// fight at once when the player bumps into any one of them. `anchor`
     /// is always first, becoming the initial front target. Truncated to
-    /// `max_group_size` at `anchor`'s own position as a safety cap, in case
-    /// unrelated wandering creatures happened to drift into the same
-    /// cluster since they spawned.
+    /// `max_group_size` at `anchor`'s own position, so how deep a fight
+    /// this tile can produce is bounded by the same danger curve that
+    /// decided how many spawned here.
+    ///
+    /// The spawn roll sized the cluster from *its* tile and scattered
+    /// members around it, so a cluster straddling a distance step gathers
+    /// short: group size doubles every `GROUP_SIZE_STEP_TILES`, so an
+    /// anchor sitting just inward of a boundary halves the cap — a cluster
+    /// spawned at distance 90 whose anchor drifted to 87 pulls 32 of its 64.
+    /// The remainder stays standing on the map and is met on the next bump,
+    /// which is what surplus groups already do.
     pub(crate) fn gather_pack(&mut self, anchor: Entity) -> Vec<Entity> {
         let Some(anchor_pos) = self.world.get::<Position>(anchor).copied() else {
             return vec![anchor];

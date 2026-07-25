@@ -1945,11 +1945,19 @@ fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics) {
     let party_height = m.line_height + view.party.len() as f32 * bar_row_height(m) + m.inset;
     let party_top = (log_bottom - party_height).max(y);
 
-    draw_rectangle(margin, y, w - margin * 2.0, party_top - y, PANEL_BG);
-    draw_rectangle_lines(margin, y, w - margin * 2.0, party_top - y, 2.0, BORDER);
-    let capacity = (((party_top - y) - margin) / m.line_height).max(1.0) as usize;
+    let log_height = party_top - y;
+    draw_rectangle(margin, y, w - margin * 2.0, log_height, PANEL_BG);
+    draw_rectangle_lines(margin, y, w - margin * 2.0, log_height, 2.0, BORDER);
+    // Floors at 0, not 1. On a window too short to seat both rosters this
+    // pane collapses to nothing, and forcing a line into it drew narration
+    // at the party block's first row — which the party header then painted
+    // over.
+    let capacity = ((log_height - margin) / m.line_height).max(0.0) as usize;
     let mut ly = y + margin;
     for (kind, line) in game.message_log(capacity) {
+        if ly + m.line_height > party_top {
+            break;
+        }
         draw_message_line(kind, &line, margin + m.inset, ly, fonts, m);
         ly += m.line_height;
     }

@@ -240,6 +240,62 @@ pub enum Mode {
     GameOver,
 }
 
+impl Mode {
+    /// Whether this screen belongs to an intrusion — the battle roster
+    /// itself, or any of the pickers layered over it while it stays drawn
+    /// underneath. Renderers use it to keep battle-only state alive across
+    /// a popup: the GUI's HP ghost bars and pending damage floats are
+    /// discarded the moment this reads false.
+    ///
+    /// Matched exhaustively on purpose. This began as an inline `matches!`
+    /// in the GUI's frame loop and fell behind three times as battle
+    /// pickers were added, each time silently wiping the ghost bars
+    /// mid-animation. Listing every mode makes a new variant a compile
+    /// error until it is classified, rather than a quiet `false`.
+    pub fn is_battle(self) -> bool {
+        match self {
+            Mode::Battle
+            | Mode::BattleTarget
+            | Mode::BattleItem
+            | Mode::BattleSpecial
+            | Mode::BattleAlly => true,
+            Mode::MainMenu
+            | Mode::DifficultyPick
+            | Mode::LoadGame
+            | Mode::SaveAction
+            | Mode::Playing
+            | Mode::Build
+            | Mode::BuildDirection
+            | Mode::Craft
+            | Mode::CraftQuantity
+            | Mode::Cronjob
+            | Mode::CronjobStructure
+            | Mode::Guard
+            | Mode::GuardStructure
+            | Mode::Remove
+            | Mode::RemoveConfirm
+            | Mode::Upgrade
+            | Mode::Symlink
+            | Mode::InspectDirection
+            | Mode::InspectDetail
+            | Mode::Inventory
+            | Mode::InventoryItemAction
+            | Mode::EraseQuantity
+            | Mode::Companion
+            | Mode::Fuse
+            | Mode::FuseSecond
+            | Mode::FuseName
+            | Mode::Trade
+            | Mode::TradeAction
+            | Mode::TradeQuantity
+            | Mode::Perks
+            | Mode::Research
+            | Mode::Help
+            | Mode::GameOver => false,
+        }
+    }
+}
+
 /// A line item picked in `Mode::TradeAction`, awaiting a quantity from
 /// `Mode::TradeQuantity` before `Game::sell_item`/`Game::buy_item` is
 /// actually called.
@@ -2746,6 +2802,26 @@ mod tests {
             Some(ActionKind::Special),
             "only the ability was undone, not the whole action"
         );
+    }
+
+    /// Every picker layered over the battle roster has to count as being in
+    /// a battle, or the renderer discards battle-only state the moment one
+    /// opens. Pinned as a test as well as an exhaustive match, so the intent
+    /// survives someone "simplifying" the match into a wildcard.
+    #[test]
+    fn every_battle_screen_counts_as_being_in_a_battle() {
+        for mode in [
+            Mode::Battle,
+            Mode::BattleTarget,
+            Mode::BattleItem,
+            Mode::BattleSpecial,
+            Mode::BattleAlly,
+        ] {
+            assert!(mode.is_battle(), "{mode:?} is drawn over the battle roster");
+        }
+        for mode in [Mode::Playing, Mode::Inventory, Mode::Trade, Mode::GameOver] {
+            assert!(!mode.is_battle(), "{mode:?} is not part of an intrusion");
+        }
     }
 
     /// A picker that fails to commit must still close. Every picker clears

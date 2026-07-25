@@ -12,7 +12,7 @@ mod text;
 use macroquad::miniquad::conf::{LinuxBackend, Platform};
 use macroquad::prelude::*;
 
-use feral_processes_app_core::{App, GameKey, Mode};
+use feral_processes_app_core::{App, GameKey};
 use fx::Fx;
 use sounds::SoundBank;
 
@@ -158,7 +158,7 @@ async fn game_loop(mut app: App) {
 
         // Effects are drained every frame whether or not they'll be drawn,
         // so a disabled `Fx` can't leave the engine's queue at its cap.
-        let in_battle = matches!(app.mode, Mode::Battle | Mode::BattleTarget);
+        let in_battle = app.mode.is_battle();
         let (effects, last_log) = match &mut app.game {
             Some(game) => (game.take_effects(), game.message_log(1).pop()),
             None => (Vec::new(), None),

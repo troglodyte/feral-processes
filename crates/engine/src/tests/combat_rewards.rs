@@ -335,3 +335,47 @@ fn player_levels_past_the_creature_cap_but_companions_dont() {
         "a companion should still stop at the creature ceiling"
     );
 }
+
+/// Each member of a group pays its own XP when it dies — five kills pay
+/// five times, not once. A swarm's whole reward curve rests on this, and
+/// `finish_member` is reached from every death path (attack, ability,
+/// status tick), so it is worth pinning independently of any of them.
+#[test]
+fn every_member_of_a_group_pays_its_own_xp_when_it_dies() {
+    let mut game = Game::new(88, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 6;
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    // Deep and far, so the per-group ceiling this fixture will live under
+    // once Task 5 lands is 100 rather than 1.
+    let (x, y) = (spawn.x + DISTANCE_STAT_STEP_TILES * 8, spawn.y);
+    let player = game.player_entity();
+
+    let members: Vec<Entity> = (0..5)
+        .map(|i| game.spawn_wild_creature("glitch", x, y + i).unwrap())
+        .collect();
+    // Uniform, tiny HP: XP awarded per kill is the victim's max_hp, and
+    // 5 x 3 stays under xp_for_level(1) = 20 so no level-up spends the
+    // total being measured.
+    for &m in &members {
+        let mut stats = game.world.get_mut::<Stats>(m).unwrap();
+        stats.max_hp = 3;
+        stats.hp = 3;
+    }
+    game.start_battle(members.clone());
+    let before = game.world.get::<Experience>(player).unwrap().xp;
+
+    for _ in 0..members.len() {
+        game.finish_member(0, 0, player);
+    }
+
+    let exp = game.world.get::<Experience>(player).unwrap();
+    assert_eq!(
+        exp.level, 1,
+        "the fixture must not level up, or the XP total below measures nothing"
+    );
+    assert_eq!(
+        exp.xp - before,
+        3 * members.len() as u32,
+        "every vanquished member should pay its own max_hp in XP"
+    );
+}

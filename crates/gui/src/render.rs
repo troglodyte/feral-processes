@@ -1855,6 +1855,104 @@ fn status_tag(status: &Option<String>) -> String {
         .unwrap_or_default()
 }
 
+/// Pads `s` to exactly `width` monospace cells, truncating with `…` when it
+/// overruns. Exactness is the contract, not a suggestion: the header row and
+/// every roster row are assembled from these, so a cell that comes out the
+/// wrong width shifts every column after it and the ledger stops lining up.
+///
+/// Chars, not bytes — a species name carries a zone tag and a companion name
+/// is player-chosen, so either can hold multi-byte glyphs that byte slicing
+/// would panic on. The UI font advances `…` exactly like every other glyph;
+/// `tests/font_rasterization.rs` checks that.
+fn cell(s: &str, width: usize) -> String {
+    if s.chars().count() > width {
+        s.chars()
+            .take(width.saturating_sub(1))
+            .chain(std::iter::once('…'))
+            .collect()
+    } else {
+        format!("{s:<width$}")
+    }
+}
+
+/// `cell`, but flushed right. Numeric columns align on their last digit so a
+/// column of them can be compared by scanning down it.
+fn right(s: &str, width: usize) -> String {
+    if s.chars().count() > width {
+        cell(s, width)
+    } else {
+        format!("{s:>width$}")
+    }
+}
+
+/// Column widths for both battle rosters, in monospace cells. Constants here
+/// rather than in `app-core`: there is one renderer to serve, so there is
+/// nothing to share them with and nothing to drift against.
+const MARK_W: usize = 3;
+const NAME_W: usize = 18;
+/// `hp/max` is one cell, so a single `HP` header can sit over the pair.
+const HP_W: usize = 11;
+const STAT_W: usize = 3;
+/// Widest value is `ENGAGED`.
+const REACH_W: usize = 7;
+/// Where the ragged last column starts: every fixed cell, plus the single
+/// space separating each pair of them.
+const TAIL_COL: usize = MARK_W + NAME_W + 1 + HP_W + 1 + STAT_W + 1 + STAT_W + 1 + REACH_W + 1;
+
+/// The one line shape both rosters and both headers are built from, so a
+/// column cannot move in a row without moving in its header too.
+fn roster_line(
+    mark: &str,
+    name: &str,
+    hp: &str,
+    atk: &str,
+    def: &str,
+    reach: &str,
+    tail: &str,
+) -> String {
+    format!(
+        "{}{} {} {} {} {} {}",
+        cell(mark, MARK_W),
+        cell(name, NAME_W),
+        cell(hp, HP_W),
+        right(atk, STAT_W),
+        right(def, STAT_W),
+        cell(reach, REACH_W),
+        tail,
+    )
+}
+
+/// `RANGE` because a hostile group's third column is its reach, not a
+/// front/back rank the player chose.
+fn hostile_header() -> String {
+    roster_line("   ", "GROUP", "HP", "ATK", "DEF", "RANGE", "STATUS")
+}
+
+fn party_header() -> String {
+    roster_line("   ", "NAME", "HP", "ATK", "DEF", "POS", "ACTION")
+}
+
+/// `roster_line` with the two stat columns taken as the numbers they are.
+fn roster_row(
+    mark: &str,
+    name: &str,
+    hp: &str,
+    atk: i32,
+    def: i32,
+    reach: &str,
+    tail: &str,
+) -> String {
+    roster_line(
+        mark,
+        name,
+        hp,
+        &atk.to_string(),
+        &def.to_string(),
+        reach,
+        tail,
+    )
+}
+
 fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics) {
     let Some(game) = &mut app.game else { return };
     let Some(view) = game.battle_view() else {
@@ -2250,6 +2348,123 @@ mod tests {
     /// player through `App::status_line`, and every gameplay menu draws a
     /// popup over the log pane that used to be the sole place it appeared —
     /// which made a refusal indistinguishable from a dead keypress.
+    /// Reads the `n` chars of `line` starting at char offset `col` — the
+    /// rows are monospace, so a char offset *is* a screen column.
+    fn at(line: &str, col: usize) -> String {
+        line.chars().skip(col).collect()
+    }
+
+    /// The header and every row are assembled from one set of widths, so the
+    /// ragged last column begins at the same offset on every line of a
+    /// roster block. That alignment is the whole ledger effect — asserted
+    /// rather than left to two format strings staying in step by hand.
+    #[test]
+    fn every_roster_line_puts_its_tail_at_the_same_column() {
+        let lines = [
+            hostile_header(),
+            roster_row(
+                "A  ",
+                "4 Null Daemons",
+                "18/30",
+                9,
+                4,
+                "ENGAGED",
+                "BLEEDING (2)",
+            ),
+            roster_row("B  ", "Warden Process", "44/44", 14, 9, "BACK", "OK"),
+            party_header(),
+            roster_row(">1 ", "You", "21/30", 11, 6, "FRONT", "Attack A"),
+            roster_row(" 2 ", "Sparkgrub", "18/18", 7, 3, "FRONT", "Defend"),
+        ];
+        for line in &lines {
+            assert_eq!(
+                line.chars().take(TAIL_COL).count(),
+                TAIL_COL,
+                "{line:?} is shorter than the fixed columns"
+            );
+        }
+        assert!(at(&lines[0], TAIL_COL).starts_with("STATUS"));
+        assert!(at(&lines[1], TAIL_COL).starts_with("BLEEDING"));
+        assert!(at(&lines[3], TAIL_COL).starts_with("ACTION"));
+        assert!(at(&lines[4], TAIL_COL).starts_with("Attack A"));
+    }
+
+    /// And each header label sits over the column it names.
+    #[test]
+    fn the_header_labels_sit_over_their_columns() {
+        let h = party_header();
+        assert!(at(&h, MARK_W).starts_with("NAME"));
+        assert!(at(&h, MARK_W + NAME_W + 1).starts_with("HP"));
+        assert!(at(&h, TAIL_COL).starts_with("ACTION"));
+    }
+
+    /// An over-long name is clipped rather than allowed to shove the stats
+    /// rightward — the failure this whole design exists to prevent.
+    #[test]
+    fn a_long_name_does_not_shift_the_columns_after_it() {
+        let long = roster_row(
+            "A  ",
+            "4 Corrupted Null Daemons of Yendor",
+            "8/8",
+            3,
+            1,
+            "ENGAGED",
+            "OK",
+        );
+        assert_eq!(long.chars().take(TAIL_COL).count(), TAIL_COL);
+        assert!(long.contains('…'), "the clipped name has to show it");
+        assert!(at(&long, TAIL_COL).starts_with("OK"));
+    }
+
+    /// Numbers right-align so a column of them can be compared by scanning
+    /// down it, which is the reason for having columns at all.
+    #[test]
+    fn stat_columns_are_right_aligned() {
+        let row = roster_row("A  ", "Glitch", "8/8", 3, 1, "ENGAGED", "OK");
+        let atk = MARK_W + NAME_W + 1 + HP_W + 1;
+        assert_eq!(
+            row.chars().skip(atk).take(STAT_W).collect::<String>(),
+            "  3"
+        );
+        assert_eq!(
+            row.chars()
+                .skip(atk + STAT_W + 1)
+                .take(STAT_W)
+                .collect::<String>(),
+            "  1"
+        );
+    }
+
+    #[test]
+    fn cell_pads_short_content_to_exactly_the_column_width() {
+        assert_eq!(cell("You", 8), "You     ");
+        assert_eq!(cell("", 3), "   ");
+        assert_eq!(cell("exact", 5), "exact");
+    }
+
+    /// A name longer than its column has to lose its tail. Letting it
+    /// through would push every column after it right, which defeats the
+    /// entire point of a ledger.
+    #[test]
+    fn cell_truncates_over_width_content_and_marks_it() {
+        let out = cell("4 Corrupted Null Daemons", 12);
+        assert_eq!(out.chars().count(), 12);
+        assert!(
+            out.ends_with('…'),
+            "a clipped cell has to show that it was clipped, got {out:?}"
+        );
+    }
+
+    /// Counted in chars, not bytes: `zone_tagged_name` and a player-chosen
+    /// companion name can both hold multi-byte glyphs, and slicing one
+    /// mid-glyph would panic.
+    #[test]
+    fn cell_counts_characters_not_bytes() {
+        assert_eq!(cell("Ünïcödé", 7).chars().count(), 7);
+        assert_eq!(cell("Ünïcödé", 4).chars().count(), 4);
+        assert_eq!(cell("Ünïcödé", 9).chars().count(), 9);
+    }
+
     #[test]
     fn every_mode_that_covers_the_log_pane_gets_the_status_banner() {
         for mode in [

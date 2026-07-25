@@ -102,6 +102,22 @@ impl AbilityDef {
     }
 }
 
+impl AbilityTarget {
+    /// Which picker the UI opens after this ability is chosen. `None` means
+    /// it resolves immediately — there is nothing left for the player to
+    /// choose.
+    pub fn targeting(self) -> crate::battle::SpecialTargeting {
+        use crate::battle::SpecialTargeting;
+        match self {
+            AbilityTarget::OneAlly => SpecialTargeting::Ally,
+            AbilityTarget::OneEnemyGroupFront | AbilityTarget::WholeEnemyGroup => {
+                SpecialTargeting::Enemy
+            }
+            AbilityTarget::WholeParty | AbilityTarget::AllEnemies => SpecialTargeting::None,
+        }
+    }
+}
+
 #[derive(Resource, Default)]
 pub struct AbilityDb {
     abilities: HashMap<AbilityId, AbilityDef>,

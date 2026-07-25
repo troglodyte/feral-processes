@@ -26,7 +26,7 @@ use bevy_ecs::prelude::*;
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 
-use abilities::AbilityDb;
+use abilities::{AbilityDb, AbilityDef, AbilityEffect, AbilityTarget};
 use battle::{
     ActionKind, ActionOption, AllyOption, BattleAction, EnemyGroup, PartyCommand, PartyCommandKind,
     SpecialOption, TargetSpec,
@@ -48,7 +48,7 @@ use resources::{
     MessageLog, Party, Platform, PlayerEntity, Research, ZoneLevel, ZoneSpawnPoint,
 };
 pub use resources::{DifficultyMode, EffectKind, MessageKind, VisualEffect};
-use species::{MoveDef, SpecialAbility, SpeciesDb, SpeciesDef, SpeciesId};
+use species::{MoveDef, SpeciesDb, SpeciesDef, SpeciesId};
 use structures::{StructureDb, StructureDef, StructureId, TradeDef};
 pub use views::*;
 use world::{Biome, Tile, WorldMap};
@@ -163,11 +163,6 @@ const PLAYER_STRIKE_POWER: i32 = 5;
 
 /// DEF granted for the round by the Defend action.
 const DEFEND_DEF_BONUS: i32 = 6;
-
-/// Battle rounds a companion's default rally buff (see
-/// `Game::rally_player`) lasts when its species defines no
-/// `special_ability`.
-const RALLY_DURATION: u32 = 3;
 
 /// Fatigue the player spends each time they command a companion in battle
 /// (see `BattleAction::Special`) — the rally/special-ability

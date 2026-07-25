@@ -430,6 +430,16 @@ mod tests {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/species")
     }
 
+    /// The shipped ability set, which `SpeciesDb::load_dir` validates
+    /// species kits against.
+    fn shipped_abilities() -> crate::abilities::AbilityDb {
+        crate::abilities::AbilityDb::load_dir(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/abilities"),
+        )
+        .unwrap()
+        .0
+    }
+
     /// Base `EquipmentStats` of the strongest shipped weapon/armor, resolved
     /// from the item db the same way `Game` does — passed into
     /// `min_level_to_clear_zone` for the geared sweep.
@@ -584,7 +594,8 @@ mod tests {
     /// to survive the worst thing it spawns.
     #[test]
     fn a_full_party_survives_a_full_pack_at_each_zone() {
-        let (db, warnings) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+        let (db, warnings) =
+            SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
         assert!(
             warnings.is_empty(),
             "species assets should load cleanly: {warnings:?}"
@@ -632,7 +643,7 @@ mod tests {
     /// makes a twelve-enemy fight survivable.
     #[test]
     fn the_reach_rule_measurably_softens_a_full_pack() {
-        let (db, _) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
         let toughest = toughest_ordinary_species(&db);
         let party = median_ordinary_species(&db);
         let companion_power = average_move_power(party);
@@ -689,7 +700,8 @@ mod tests {
     /// catches any *sharper* blowup than that as a regression.
     #[test]
     fn grind_only_zone_scaling_grows_predictably() {
-        let (db, warnings) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+        let (db, warnings) =
+            SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
         assert!(
             warnings.is_empty(),
             "species assets should all load cleanly: {warnings:?}"
@@ -753,7 +765,8 @@ mod tests {
     /// also checks it stays under the gear-free requirement at every zone.
     #[test]
     fn geared_zone_scaling_grows_predictably_and_beats_grind_only() {
-        let (db, warnings) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+        let (db, warnings) =
+            SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
         assert!(
             warnings.is_empty(),
             "species assets should all load cleanly: {warnings:?}"

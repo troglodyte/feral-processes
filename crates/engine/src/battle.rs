@@ -1,7 +1,7 @@
 use bevy_ecs::prelude::Entity;
 
 use crate::items::ItemId;
-use crate::species::{SpecialTargeting, SpeciesId};
+use crate::species::SpeciesId;
 
 /// One species' worth of the wild pack in an active intrusion.
 /// `members[0]` is the front — the only member that takes hits and the only
@@ -58,6 +58,18 @@ pub enum BattleAction {
     UseItem {
         item: ItemId,
     },
+}
+
+/// Which picker the UI opens after an ability is chosen — see
+/// `abilities::AbilityTarget::targeting`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpecialTargeting {
+    /// Lands on a party member: the player or any companion.
+    Ally,
+    /// Lands on an enemy group.
+    Enemy,
+    /// Needs no choice at all — it resolves the moment it is picked.
+    None,
 }
 
 /// Who a `BattleAction::Special` lands on. A buff or heal picks a party

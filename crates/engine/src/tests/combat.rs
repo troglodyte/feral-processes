@@ -589,14 +589,8 @@ fn a_buff_aimed_at_a_companion_does_not_outlive_the_battle() {
     game.start_battle(vec![wild]);
 
     let def_before = game.effective_def(pet);
-    game.use_special_ability(
-        &SpecialAbility::Shield {
-            power: 4,
-            duration: 3,
-        },
-        "Test",
-        pet,
-    );
+    let shield = ability(&game, "sandbox");
+    game.use_ability(&shield, pet, "Test", &[pet]);
     assert!(
         game.effective_def(pet) > def_before,
         "the shield should be up while the fight runs"

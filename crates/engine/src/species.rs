@@ -10,95 +10,20 @@ use crate::world::Biome;
 
 pub type SpeciesId = String;
 
-/// One of a companion's battle abilities — the menu its Special offers for
-/// the round, in place of the default rally buff. See
-/// `BattleAction::Special` and `Game::resolve_one_action`.
-///
-/// Every variant lands on a single target the player picks: `targeting`
-/// decides whether that picker lists your own side or the enemy groups.
+/// One ability a species grants a tamed member, and the level it unlocks
+/// at. The ability itself is data — see `assets/abilities/` and
+/// `crate::abilities::AbilityDef`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum SpecialAbility {
-    /// Boosts one party member's ATK by `power` for `duration` rounds.
-    Rally { power: i32, duration: u32 },
-    /// Boosts one party member's DEF by `power` for `duration` rounds.
-    Shield { power: i32, duration: u32 },
-    /// Heals one party member for `power` HP immediately.
-    Heal { power: i32 },
-    /// Inflicts `kind` (`Bleed` or `Stun`) on the wild program, same as a
-    /// `MoveEffect` would.
-    Debuff {
-        kind: StatusKind,
-        power: i32,
-        duration: u32,
-    },
+pub struct SpeciesAbility {
+    pub id: crate::abilities::AbilityId,
+    /// Companion level at which this becomes usable. `#[serde(default)]` to
+    /// 1 — available as soon as the program is tamed.
+    #[serde(default = "default_learn_level")]
+    pub level: u32,
 }
 
-/// Which side a `SpecialAbility` is aimed at, and therefore which picker the
-/// UI opens after the ability is chosen — see `battle::SpecialTarget`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SpecialTargeting {
-    /// Lands on a party member: the player or any companion.
-    Ally,
-    /// Lands on an enemy group's front member.
-    Enemy,
-}
-
-impl SpecialAbility {
-    /// Who this ability is aimed at. Buffs and heals go to a party member of
-    /// the player's choosing; only a debuff crosses to the other side.
-    pub fn targeting(&self) -> SpecialTargeting {
-        match self {
-            SpecialAbility::Rally { .. }
-            | SpecialAbility::Shield { .. }
-            | SpecialAbility::Heal { .. } => SpecialTargeting::Ally,
-            SpecialAbility::Debuff { .. } => SpecialTargeting::Enemy,
-        }
-    }
-
-    /// Full display label — what commanding this companion would actually
-    /// do, e.g. "Rally: +3 ATK for 3 rounds".
-    pub fn display_label(&self) -> String {
-        match self {
-            SpecialAbility::Rally { power, duration } => {
-                format!("Rally: +{power} ATK for {duration} rounds")
-            }
-            SpecialAbility::Shield { power, duration } => {
-                format!("Shield: +{power} DEF for {duration} rounds")
-            }
-            SpecialAbility::Heal { power } => format!("Heal: +{power} HP"),
-            SpecialAbility::Debuff {
-                kind,
-                power,
-                duration,
-            } => {
-                let kind_name = match kind {
-                    StatusKind::Bleed => "Bleeding",
-                    StatusKind::Stun => "Stun",
-                };
-                format!("Debuff: {kind_name} ({power}, {duration} rounds)")
-            }
-        }
-    }
-
-    /// Terse name for this ability, e.g. "Rally" — just what kind it is,
-    /// without the numeric effect. Used where the full `display_label`
-    /// would not fit: the ability picker, the roster's planned-action
-    /// column, and the target picker's header.
-    ///
-    /// Not "Rally Team"/"Shield Team", which is what these read as before
-    /// buffs became aimable: the player saw "Rally Team" on four screens
-    /// and was then asked to choose the single member it lands on.
-    pub fn short_name(&self) -> &'static str {
-        match self {
-            SpecialAbility::Rally { .. } => "Rally",
-            SpecialAbility::Shield { .. } => "Shield",
-            SpecialAbility::Heal { .. } => "Heal",
-            SpecialAbility::Debuff { kind, .. } => match kind {
-                StatusKind::Bleed => "Inflict Bleeding",
-                StatusKind::Stun => "Inflict Stun",
-            },
-        }
-    }
+fn default_learn_level() -> u32 {
+    1
 }
 
 /// A status condition a move has a chance to inflict on top of its direct
@@ -175,23 +100,15 @@ pub struct SpeciesDef {
     /// non-boss species.
     #[serde(default)]
     pub is_boss: bool,
-    /// The abilities a tamed member of this species can choose between when
-    /// commanded with Special in battle. Left empty, the companion falls
-    /// back to the default rally buff every companion gets otherwise — see
-    /// `Game::companion_abilities`, which is what resolves that fallback, so
-    /// no caller has to special-case an empty list.
-    /// `#[serde(default)]` so existing species files (including mods)
-    /// without this field keep parsing as fallback-rally companions.
+    /// The abilities a tamed member of this species can be commanded to use,
+    /// in menu order, each gated on the companion's level. Left empty, the
+    /// companion falls back to `abilities::FALLBACK_ABILITY_ID` — see
+    /// `Game::companion_abilities`, which resolves that fallback so no
+    /// caller has to special-case an empty list. `#[serde(default)]` so
+    /// existing species files (including mods) without this field keep
+    /// parsing.
     #[serde(default)]
-    pub special_abilities: Vec<SpecialAbility>,
-    /// The pre-list spelling of the field above. Kept only so a mod written
-    /// against it does not silently lose its ability: serde ignores unknown
-    /// fields, so without this the file would load looking healthy while
-    /// the companion quietly fell back to the generic rally.
-    /// `SpeciesDb::load_dir` folds it into `special_abilities` and warns,
-    /// and is the only thing that should ever read it.
-    #[serde(default, rename = "special_ability")]
-    pub legacy_special_ability: Option<SpecialAbility>,
+    pub abilities: Vec<SpeciesAbility>,
     /// Multiplies this species' per-level stat growth (see
     /// `progression::add_xp`) for a tamed member of it — 1.0 (the default)
     /// grows at the same flat rate as before this field existed; a
@@ -234,7 +151,15 @@ impl SpeciesDb {
     /// skipped (with a returned warning) rather than aborting the whole
     /// load — a single bad custom/mod file shouldn't be able to crash
     /// startup for everything else.
-    pub fn load_dir(dir: &Path) -> std::io::Result<(Self, Vec<String>)> {
+    ///
+    /// An entry in `abilities` naming an ability `db` doesn't know is
+    /// dropped with a warning rather than taking the species down with it —
+    /// a program missing one of its abilities is still perfectly playable,
+    /// unlike a research node whose prerequisite doesn't exist.
+    pub fn load_dir(
+        dir: &Path,
+        abilities: &crate::abilities::AbilityDb,
+    ) -> std::io::Result<(Self, Vec<String>)> {
         let mut db = SpeciesDb::default();
         let mut warnings = Vec::new();
         for entry in std::fs::read_dir(dir)? {
@@ -245,20 +170,17 @@ impl SpeciesDb {
             let text = std::fs::read_to_string(&path)?;
             match ron::from_str::<SpeciesDef>(&text) {
                 Ok(mut def) => {
-                    if let Some(legacy) = def.legacy_special_ability.take() {
-                        if def.special_abilities.is_empty() {
-                            def.special_abilities.push(legacy);
+                    let id = def.id.clone();
+                    def.abilities.retain(|a| {
+                        let known = abilities.get(&a.id).is_some();
+                        if !known {
                             warnings.push(format!(
-                                "species {:?}: `special_ability` is now `special_abilities`, a list — migrated it for you. Rename the field and wrap its value in [] to silence this.",
-                                def.id
-                            ));
-                        } else {
-                            warnings.push(format!(
-                                "species {:?}: sets both `special_ability` and `special_abilities`; the obsolete singular one was dropped.",
-                                def.id
+                                "species {id:?}: unknown ability {:?} — dropped",
+                                a.id
                             ));
                         }
-                    }
+                        known
+                    });
                     db.species.insert(def.id.clone(), def);
                 }
                 Err(e) => warnings.push(format!("skipped invalid species file {path:?}: {e}")),
@@ -312,6 +234,16 @@ mod tests {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/species")
     }
 
+    /// The shipped ability set, which `load_dir` validates species kits
+    /// against.
+    fn shipped_abilities() -> crate::abilities::AbilityDb {
+        crate::abilities::AbilityDb::load_dir(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/abilities"),
+        )
+        .unwrap()
+        .0
+    }
+
     /// The habitat pools feed the per-tile spawn roll by index
     /// (`Game::try_spawn_habitat_creature`), and the species it lands on
     /// decides whether a further `can_nest` draw happens. Backed by a
@@ -323,8 +255,8 @@ mod tests {
     fn habitat_pools_are_ordered_stably_across_instances() {
         let ids =
             |defs: Vec<&SpeciesDef>| -> Vec<String> { defs.iter().map(|s| s.id.clone()).collect() };
-        let (a, _) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
-        let (b, _) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+        let (a, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
+        let (b, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
 
         for biome in [
             Biome::OpenGrid,
@@ -387,7 +319,7 @@ mod tests {
     /// passing for the wrong reason.
     #[test]
     fn the_melee_only_species_stay_melee_only_and_everything_else_has_reach() {
-        let (db, _) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
         for id in ["scrapper", "sentinel", "construct"] {
             let species = db.get(id).unwrap();
             assert!(
@@ -407,7 +339,8 @@ mod tests {
 
     #[test]
     fn shipped_species_speeds_span_a_meaningful_range() {
-        let (db, warnings) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+        let (db, warnings) =
+            SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
         assert!(
             warnings.is_empty(),
             "species assets should load cleanly: {warnings:?}"
@@ -419,7 +352,7 @@ mod tests {
 
     #[test]
     fn no_shipped_species_lives_on_the_platform_biome() {
-        let (db, _) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
         assert!(
             db.habitat_matches(Biome::Platform).is_empty(),
             "a base platform must have no ordinary habitat species — an empty candidate \
@@ -433,7 +366,8 @@ mod tests {
 
     #[test]
     fn habitat_matches_excludes_bosses_and_boss_habitat_matches_includes_only_them() {
-        let (db, warnings) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+        let (db, warnings) =
+            SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
         assert!(
             warnings.is_empty(),
             "species assets should all load cleanly: {warnings:?}"
@@ -462,7 +396,8 @@ mod tests {
 
     #[test]
     fn base_roster_growth_multiplier_rises_with_difficulty_tier() {
-        let (db, warnings) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+        let (db, warnings) =
+            SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
         assert!(
             warnings.is_empty(),
             "species assets should all load cleanly: {warnings:?}"
@@ -485,7 +420,8 @@ mod tests {
 
     #[test]
     fn can_nest_is_set_only_for_the_intended_swarm_flavored_species() {
-        let (db, warnings) = SpeciesDb::load_dir(&species_assets_dir()).unwrap();
+        let (db, warnings) =
+            SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
         assert!(
             warnings.is_empty(),
             "species assets should all load cleanly: {warnings:?}"
@@ -508,72 +444,5 @@ mod tests {
             db.all().all(|s| !(s.is_boss && s.can_nest)),
             "no boss species should have can_nest set"
         );
-    }
-}
-
-#[cfg(test)]
-mod migration_tests {
-    use super::*;
-
-    /// `special_ability` (singular) became `special_abilities` (a list). A
-    /// mod still using the old name must not be rejected — and must not
-    /// quietly lose its ability either. Serde ignores unknown fields, so
-    /// before the compatibility field existed such a file loaded looking
-    /// perfectly healthy while its companion fell back to the generic
-    /// rally, with nothing said. That is the worst of both worlds for a
-    /// modder: no error to search for, and a creature that is subtly wrong.
-    #[test]
-    fn a_species_using_the_old_singular_field_keeps_its_ability() {
-        let body = r#"(
-            id: "old_style", name: "Old Style", glyph: 'o', color: Cyan,
-            base_hp: 10, base_atk: 4, base_def: 2, taming_difficulty: 0.5,
-            habitats: [OpenGrid], base_speed: 10,
-            moves: [(name: "Poke", power: 3)],
-            special_ability: Some(Heal(power: 8)),
-        )"#;
-        let def = ron::from_str::<SpeciesDef>(body)
-            .expect("the old field must not make the whole species unloadable");
-        assert_eq!(def.id, "old_style");
-        assert!(
-            def.legacy_special_ability.is_some(),
-            "the old field has to survive parsing for load_dir to migrate it"
-        );
-    }
-
-    /// Parsing keeps the legacy field; `load_dir` is what folds it into the
-    /// list and tells the modder to rename it.
-    #[test]
-    fn load_dir_migrates_the_old_singular_field_and_says_so() {
-        let dir = std::env::temp_dir().join(format!(
-            "feral_processes_species_migration_{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(
-            dir.join("old_style.ron"),
-            r#"(
-                id: "old_style", name: "Old Style", glyph: 'o', color: Cyan,
-                base_hp: 10, base_atk: 4, base_def: 2, taming_difficulty: 0.5,
-                habitats: [OpenGrid], base_speed: 10,
-                moves: [(name: "Poke", power: 3)],
-                special_ability: Some(Heal(power: 8)),
-            )"#,
-        )
-        .unwrap();
-
-        let (db, warnings) = SpeciesDb::load_dir(&dir).unwrap();
-        let def = db.get("old_style").expect("the species still loads");
-        assert_eq!(
-            def.special_abilities.len(),
-            1,
-            "the ability must be carried into the list, not dropped"
-        );
-        assert!(
-            warnings.iter().any(|w| w.contains("special_abilities")),
-            "the modder has to be told to rename it, got {warnings:?}"
-        );
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -11,6 +11,22 @@ pub(super) const ICE_BREAKER_CORE_COST: u32 = 3;
 
 pub(super) const POWER_CELL_CORE_COST: u32 = 2;
 
+/// A shipped ability by id, for tests that call `Game::use_ability`
+/// directly rather than going through a companion's menu.
+pub(super) fn ability(game: &Game, id: &str) -> crate::abilities::AbilityDef {
+    game.world
+        .resource::<crate::abilities::AbilityDb>()
+        .get(id)
+        .cloned()
+        .unwrap_or_else(|| panic!("{id} ships with the game"))
+}
+
+/// Sets `entity`'s level directly, for tests that need a level-gated
+/// ability unlocked without grinding XP into it.
+pub(super) fn set_level(game: &mut Game, entity: Entity, level: u32) {
+    game.world.get_mut::<Experience>(entity).unwrap().level = level;
+}
+
 pub(super) fn test_assets_dir() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
 }
@@ -476,8 +492,9 @@ pub(super) fn fatigue_spent_commanding_companion(seed: u32, stunned: bool) -> f3
 }
 
 /// A species declaring two abilities, so the multi-ability paths can be
-/// exercised without waiting on shipped content to grow any — no shipped
-/// species declares `special_abilities` at all yet.
+/// exercised without depending on shipped kit assignments. The second is
+/// gated above a fresh companion's level 1, which is what pins down
+/// `Game::companion_abilities`' level filtering.
 pub(super) const TWO_ABILITY_SPECIES: &str = r#"(
     id: "test_medic",
     name: "Test Medic",
@@ -490,9 +507,9 @@ pub(super) const TWO_ABILITY_SPECIES: &str = r#"(
     habitats: [OpenGrid],
     base_speed: 10,
     moves: [(name: "Poke", power: 3)],
-    special_abilities: [
-        Heal(power: 8),
-        Shield(power: 4, duration: 3),
+    abilities: [
+        (id: "hot_patch"),
+        (id: "sandbox", level: 5),
     ],
 )"#;
 

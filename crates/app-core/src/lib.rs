@@ -10,6 +10,7 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use feral_processes_engine::battle::SpecialTargeting;
 use feral_processes_engine::battle::{
     ActionKind, BattleAction, PartyCommandKind, SpecialTarget, TargetSpec,
 };
@@ -18,7 +19,6 @@ use feral_processes_engine::items::ids;
 use feral_processes_engine::items::{
     EquipmentSlot, ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, ItemId,
 };
-use feral_processes_engine::species::SpecialTargeting;
 use feral_processes_engine::{DifficultyMode, Entity, Game, ProgramSaleOption};
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -1255,6 +1255,9 @@ impl App {
         let next = match chosen.targeting {
             SpecialTargeting::Ally => Mode::BattleAlly,
             SpecialTargeting::Enemy => Mode::BattleTarget,
+            // No shipped species declares a sweeping ability yet, so this is
+            // unreachable in play until kits are assigned.
+            SpecialTargeting::None => Mode::Battle,
         };
         self.pending_special_ability = Some(chosen.index);
         self.menu_selected = 0;

@@ -119,26 +119,19 @@ impl Game {
                     .get(ability)
                     .or_else(|| abilities.first())
                     .cloned();
-                // Resolved here rather than at plan time so a group that dies
-                // before this member acts still retargets, and so an ally
-                // knocked out in the meantime drops the ability instead of
-                // landing it on a corpse.
-                let recipient = match target {
-                    battle::SpecialTarget::Ally { slot } => {
-                        self.actor_entity(battle::Actor::Party(slot))
+                if let Some(ability) = chosen {
+                    let recipients = self.ability_recipients(ability.target, &target);
+                    self.use_ability(&ability, entity, &name, &recipients);
+                    // An area effect can drop members from any rank, and a
+                    // corpse left in a group would be promoted to front and
+                    // then attacked as though alive.
+                    self.reap_dead_members(player);
+                    // Directing a companion's ability still costs the player
+                    // fatigue, as commanding one always did — the action
+                    // moved into the round loop, the price didn't go away.
+                    if let Some(mut needs) = self.world.get_mut::<Needs>(player) {
+                        needs.fatigue = (needs.fatigue - ability.fatigue_cost).max(0.0);
                     }
-                    battle::SpecialTarget::EnemyGroup { group } => {
-                        self.retarget(group).and_then(|g| self.front_of_group(g))
-                    }
-                };
-                if let (Some(ability), Some(recipient)) = (chosen, recipient) {
-                    self.use_special_ability(&ability, &name, recipient);
-                }
-                // Directing a companion's ability still costs the player
-                // fatigue, as commanding one always did — the action moved
-                // into the round loop, the price didn't go away.
-                if let Some(mut needs) = self.world.get_mut::<Needs>(player) {
-                    needs.fatigue = (needs.fatigue - COMPANION_COMMAND_FATIGUE_COST).max(0.0);
                 }
             }
             // Already applied up front in `battle_resolve_round`, so that
@@ -230,7 +223,7 @@ impl Game {
                 let name = abilities
                     .get(*ability)
                     .or_else(|| abilities.first())
-                    .map(|a| a.short_name().to_string())
+                    .map(|a| a.name.clone())
                     .unwrap_or_else(|| "Special".to_string());
                 let on = match target {
                     battle::SpecialTarget::EnemyGroup { group } => group_letter(*group).to_string(),
@@ -428,64 +421,133 @@ impl Game {
         }
     }
 
-    /// Executes `ability` (one of `Game::companion_abilities`) on `recipient`
-    /// — a party member for a buff or heal, an enemy's front for a debuff.
-    /// See `Game::resolve_one_action`, which resolves which entity that is.
-    pub(crate) fn use_special_ability(
+    /// Which entities an ability actually lands on this round, resolved at
+    /// resolve time rather than plan time — so a group that died before the
+    /// acting member's turn retargets, and an ally knocked out in the
+    /// meantime is skipped instead of being healed as a corpse.
+    pub(crate) fn ability_recipients(
+        &self,
+        target: AbilityTarget,
+        chosen: &battle::SpecialTarget,
+    ) -> Vec<Entity> {
+        match target {
+            AbilityTarget::OneAlly => match chosen {
+                battle::SpecialTarget::Ally { slot } => self
+                    .actor_entity(battle::Actor::Party(*slot))
+                    .filter(|&e| self.creature_alive(e))
+                    .into_iter()
+                    .collect(),
+                _ => Vec::new(),
+            },
+            AbilityTarget::WholeParty => (0..self
+                .world
+                .get_resource::<BattleState>()
+                .map(|b| b.planned.len())
+                .unwrap_or(0))
+                .filter_map(|slot| self.actor_entity(battle::Actor::Party(slot)))
+                .filter(|&e| self.creature_alive(e))
+                .collect(),
+            AbilityTarget::OneEnemyGroupFront => match chosen {
+                battle::SpecialTarget::EnemyGroup { group } => self
+                    .retarget(*group)
+                    .and_then(|g| self.front_of_group(g))
+                    .into_iter()
+                    .collect(),
+                _ => Vec::new(),
+            },
+            AbilityTarget::WholeEnemyGroup => match chosen {
+                battle::SpecialTarget::EnemyGroup { group } => self
+                    .retarget(*group)
+                    .and_then(|g| {
+                        self.world
+                            .get_resource::<BattleState>()
+                            .and_then(|b| b.groups.get(g))
+                            .map(|grp| grp.members.clone())
+                    })
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|&e| self.creature_alive(e))
+                    .collect(),
+                _ => Vec::new(),
+            },
+            AbilityTarget::AllEnemies => self.all_living_enemies(),
+        }
+    }
+
+    /// Executes `ability` (one of `Game::companion_abilities`) on every
+    /// entity in `recipients` — party members for a buff or heal, enemies
+    /// for damage or a debuff. See `Game::ability_recipients`, which
+    /// resolves which entities those are. `actor` is who is spending the
+    /// ability, which a damage effect needs for its ATK.
+    pub(crate) fn use_ability(
         &mut self,
-        ability: &SpecialAbility,
+        ability: &AbilityDef,
+        actor: Entity,
         name: &str,
-        recipient: Entity,
+        recipients: &[Entity],
     ) {
-        // A buff can land on the player or on a companion now, so the log
-        // names whoever got it rather than assuming "you".
-        let on = self.target_label(recipient);
-        match *ability {
-            SpecialAbility::Rally { power, duration } => {
-                self.arm_buff(
-                    recipient,
-                    ActiveBuff {
-                        kind: BuffKind::Atk,
-                        remaining: duration,
-                        power,
-                    },
-                );
-                self.log(format!("{name} rallies {on}, boosting attack!"));
-            }
-            SpecialAbility::Shield { power, duration } => {
-                self.arm_buff(
-                    recipient,
-                    ActiveBuff {
-                        kind: BuffKind::Def,
-                        remaining: duration,
-                        power,
-                    },
-                );
-                self.log(format!("{name} shields {on}, boosting defense!"));
-            }
-            SpecialAbility::Heal { power } => {
-                if let Some(mut stats) = self.world.get_mut::<Stats>(recipient) {
-                    stats.hp = (stats.hp + power).min(stats.max_hp);
+        for &recipient in recipients {
+            // A buff can land on the player or on a companion, so the log
+            // names whoever got it rather than assuming "you".
+            let on = self.target_label(recipient);
+            match &ability.effect {
+                AbilityEffect::Buff {
+                    kind,
+                    power,
+                    duration,
+                } => {
+                    self.arm_buff(
+                        recipient,
+                        ActiveBuff {
+                            kind: *kind,
+                            remaining: *duration,
+                            power: *power,
+                        },
+                    );
+                    let stat = match kind {
+                        BuffKind::Atk => "attack",
+                        BuffKind::Def => "defense",
+                    };
+                    self.log(format!(
+                        "{name} runs {} on {on}, boosting {stat}!",
+                        ability.name
+                    ));
                 }
-                self.log(format!("{name} patches {on} for {power} HP."));
-            }
-            SpecialAbility::Debuff {
-                kind,
-                power,
-                duration,
-            } => {
-                if let Some(mut statuses) = self.world.get_mut::<StatusEffects>(recipient) {
-                    statuses.active = Some(ActiveStatus {
-                        kind,
-                        remaining: duration,
-                        power,
-                    });
-                }
-                match kind {
-                    StatusKind::Bleed => {
-                        self.log(format!("{name} corrupts the rogue program's data!"))
+                AbilityEffect::Heal { power } => {
+                    if let Some(mut stats) = self.world.get_mut::<Stats>(recipient) {
+                        stats.hp = (stats.hp + power).min(stats.max_hp);
                     }
-                    StatusKind::Stun => self.log(format!("{name} locks up the rogue program!")),
+                    self.log(format!("{name} patches {on} for {power} HP."));
+                }
+                AbilityEffect::Debuff {
+                    kind,
+                    power,
+                    duration,
+                } => {
+                    if let Some(mut statuses) = self.world.get_mut::<StatusEffects>(recipient) {
+                        statuses.active = Some(ActiveStatus {
+                            kind: *kind,
+                            remaining: *duration,
+                            power: *power,
+                        });
+                    }
+                    match kind {
+                        StatusKind::Bleed => self.log(format!("{name} corrupts {on}'s data!")),
+                        StatusKind::Stun => self.log(format!("{name} locks up {on}!")),
+                    }
+                }
+                AbilityEffect::Damage { power, status } => {
+                    let def = self
+                        .world
+                        .get::<Stats>(recipient)
+                        .map(|s| s.def)
+                        .unwrap_or(0);
+                    let dmg = battle::compute_damage(self.effective_atk(actor), def, *power);
+                    self.apply_damage(recipient, dmg);
+                    self.log(format!("{name} hits {on} for {dmg} damage."));
+                    if let Some(effect) = status.clone() {
+                        self.apply_status_effect(recipient, &effect, &on);
+                    }
                 }
             }
         }

@@ -302,28 +302,39 @@ impl Game {
         }
     }
 
-    /// Every ability `entity` can be commanded to use, in menu order.
+    /// Every ability `entity` can be commanded to use right now, in menu
+    /// order — its species' declared list, filtered to what its level has
+    /// unlocked.
     ///
-    /// Never empty: a species that declares no `special_abilities` yields
-    /// the generic rally every companion has always had, scaled off its own
-    /// ATK. Resolving the fallback here rather than at each call site is
-    /// what lets `BattleAction::Special` carry a plain index and the menu
-    /// list one row instead of zero.
-    pub(crate) fn companion_abilities(&self, entity: Entity) -> Vec<SpecialAbility> {
-        let declared = self
+    /// Never empty: a species that declares none, or whose whole list is
+    /// still level-gated, yields `abilities::FALLBACK_ABILITY_ID`. Resolving
+    /// the fallback here rather than at each call site is what lets
+    /// `BattleAction::Special` carry a plain index and the menu list one row
+    /// instead of zero.
+    pub(crate) fn companion_abilities(&self, entity: Entity) -> Vec<AbilityDef> {
+        let db = self.world.resource::<AbilityDb>();
+        let level = self
+            .world
+            .get::<Experience>(entity)
+            .map(|e| e.level)
+            .unwrap_or(1);
+        let declared: Vec<AbilityDef> = self
             .world
             .get::<Creature>(entity)
             .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
-            .map(|s| s.special_abilities.clone())
-            .unwrap_or_default();
+            .map(|s| s.abilities.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|a| a.level <= level)
+            .filter_map(|a| db.get(&a.id).cloned())
+            .collect();
         if !declared.is_empty() {
             return declared;
         }
-        let atk = self.world.get::<Stats>(entity).map(|s| s.atk).unwrap_or(3);
-        vec![SpecialAbility::Rally {
-            power: (atk / 3).max(1),
-            duration: RALLY_DURATION,
-        }]
+        db.get(abilities::FALLBACK_ABILITY_ID)
+            .cloned()
+            .into_iter()
+            .collect()
     }
 
     /// Consumable items the player is actually holding — the pool
@@ -360,9 +371,9 @@ impl Game {
             .enumerate()
             .map(|(index, ability)| SpecialOption {
                 index,
-                name: ability.short_name().to_string(),
-                detail: ability.display_label(),
-                targeting: ability.targeting(),
+                name: ability.name.clone(),
+                detail: ability.description.clone(),
+                targeting: ability.target.targeting(),
             })
             .collect()
     }

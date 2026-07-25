@@ -150,26 +150,20 @@ fn special_ability_heal_restores_player_hp_and_debuff_afflicts_the_wild_creature
         ))
         .id();
 
-    game.use_special_ability(&SpecialAbility::Heal { power: 8 }, "TestBot", player);
+    let heal = ability(&game, "hot_patch");
+    game.use_ability(&heal, player, "TestBot", &[player]);
     let hp = game.world.get::<Stats>(player).unwrap().hp;
     assert_eq!(
         hp, 13,
         "Heal should restore the player's HP by its power, capped at max_hp"
     );
 
-    game.use_special_ability(
-        &SpecialAbility::Debuff {
-            kind: StatusKind::Bleed,
-            power: 4,
-            duration: 2,
-        },
-        "TestBot",
-        wild,
-    );
+    let debuff = ability(&game, "memory_leak");
+    game.use_ability(&debuff, player, "TestBot", &[wild]);
     let active = game.world.get::<StatusEffects>(wild).unwrap().active;
     assert!(
-        active.is_some_and(|a| a.kind == StatusKind::Bleed && a.power == 4 && a.remaining == 2),
-        "Debuff should inflict the given status condition on the wild creature"
+        active.is_some_and(|a| a.kind == StatusKind::Bleed && a.power == 2 && a.remaining == 3),
+        "Debuff should inflict the status condition memory_leak declares"
     );
 }
 
@@ -180,8 +174,8 @@ fn companion_ability_label_shows_special_ability_or_a_computed_attack_rally() {
     let all_species = game.species_defs();
     let no_ability_species = all_species
         .iter()
-        .find(|s| s.special_abilities.is_empty())
-        .expect("at least one species with no special ability")
+        .find(|s| s.abilities.is_empty())
+        .expect("at least one species with no declared abilities")
         .id
         .clone();
 
@@ -205,18 +199,21 @@ fn companion_ability_label_shows_special_ability_or_a_computed_attack_rally() {
     game.add_companion(plain).unwrap();
     let plain_ability = game.player_status().companions[0].ability.clone();
     assert_eq!(
-        plain_ability, "Rally",
-        "a species with no special_abilities should show the generic rally fallback"
+        plain_ability, "Priority Boost",
+        "a species declaring no abilities should show the fallback"
     );
 }
 
 #[test]
 fn a_species_with_several_abilities_offers_each_one_in_menu_order() {
-    let (game, _) = game_with_two_ability_companion();
+    let (mut game, medic) = game_with_two_ability_companion();
+    // The medic's second ability is gated at level 5; this test is about
+    // menu order, so unlock it rather than asserting on a one-row list.
+    set_level(&mut game, medic, 5);
     let options = game.battle_special_options(1);
     assert_eq!(
         options.iter().map(|o| o.name.as_str()).collect::<Vec<_>>(),
-        vec!["Heal", "Shield"],
+        vec!["Hot Patch", "Sandbox"],
         "the picker should list the species' abilities in declaration order"
     );
     assert_eq!(
@@ -224,11 +221,29 @@ fn a_species_with_several_abilities_offers_each_one_in_menu_order() {
         vec![0, 1],
         "index is what BattleAction::Special carries, so it must match position"
     );
-    assert_eq!(options[0].detail, "Heal: +8 HP");
+    assert_eq!(options[0].detail, "Restore 8 Integrity to one ally");
 }
 
 #[test]
-fn a_companion_declaring_no_abilities_still_offers_exactly_the_fallback_rally() {
+fn an_ability_above_the_companions_level_is_not_offered_yet() {
+    let (game, medic) = game_with_two_ability_companion();
+    assert_eq!(
+        game.world.get::<Experience>(medic).unwrap().level,
+        1,
+        "a freshly tamed program starts at level 1"
+    );
+
+    let options = game.battle_special_options(1);
+    assert_eq!(
+        options.len(),
+        1,
+        "the level-5 ability must stay hidden until it is earned"
+    );
+    assert_eq!(options[0].name, "Hot Patch");
+}
+
+#[test]
+fn a_companion_declaring_no_abilities_still_offers_exactly_the_fallback() {
     let mut game = Game::new(95, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
     game.add_companion(companion).unwrap();
@@ -239,40 +254,31 @@ fn a_companion_declaring_no_abilities_still_offers_exactly_the_fallback_rally() 
         1,
         "the fallback is resolved into the list, so the menu is never empty"
     );
-    assert_eq!(options[0].name, "Rally");
+    assert_eq!(options[0].name, "Priority Boost");
 }
 
 #[test]
 fn buffs_and_heals_aim_at_the_party_while_debuffs_aim_at_the_enemy() {
-    use species::SpecialTargeting;
+    use crate::abilities::AbilityTarget;
+    use battle::SpecialTargeting;
+    assert_eq!(AbilityTarget::OneAlly.targeting(), SpecialTargeting::Ally);
     assert_eq!(
-        SpecialAbility::Heal { power: 8 }.targeting(),
-        SpecialTargeting::Ally
-    );
-    assert_eq!(
-        SpecialAbility::Rally {
-            power: 3,
-            duration: 2
-        }
-        .targeting(),
-        SpecialTargeting::Ally
-    );
-    assert_eq!(
-        SpecialAbility::Shield {
-            power: 3,
-            duration: 2
-        }
-        .targeting(),
-        SpecialTargeting::Ally
-    );
-    assert_eq!(
-        SpecialAbility::Debuff {
-            kind: StatusKind::Bleed,
-            power: 3,
-            duration: 2
-        }
-        .targeting(),
+        AbilityTarget::OneEnemyGroupFront.targeting(),
         SpecialTargeting::Enemy
+    );
+    assert_eq!(
+        AbilityTarget::WholeEnemyGroup.targeting(),
+        SpecialTargeting::Enemy
+    );
+    // The two sweeping shapes leave the player nothing to choose, so they
+    // open no second picker at all.
+    assert_eq!(
+        AbilityTarget::WholeParty.targeting(),
+        SpecialTargeting::None
+    );
+    assert_eq!(
+        AbilityTarget::AllEnemies.targeting(),
+        SpecialTargeting::None
     );
 }
 
@@ -282,10 +288,11 @@ fn buffs_and_heals_aim_at_the_party_while_debuffs_aim_at_the_enemy() {
 #[test]
 fn a_buff_aimed_at_a_companion_actually_reaches_it() {
     let (mut game, medic) = game_with_two_ability_companion();
+    set_level(&mut game, medic, 5);
     start_battle_with_a_wild_program(&mut game);
     let before = game.effective_def(medic);
 
-    // Slot 1 is the medic itself; index 1 is its Shield.
+    // Slot 1 is the medic itself; index 1 is its Sandbox.
     companion_uses_special(&mut game, medic, 1, battle::SpecialTarget::Ally { slot: 1 });
 
     assert!(
@@ -332,16 +339,17 @@ fn healing_an_ally_does_not_depend_on_a_valid_enemy_group() {
 #[test]
 fn the_chosen_ability_index_decides_which_special_resolves() {
     let (mut game, medic) = game_with_two_ability_companion();
+    set_level(&mut game, medic, 5);
     let player = game.player_entity();
     game.world.get_mut::<Stats>(player).unwrap().hp = 1;
     start_battle_with_a_wild_program(&mut game);
 
-    // Index 1 is Shield, which buffs DEF and must not heal.
+    // Index 1 is Sandbox, which buffs DEF and must not heal.
     companion_uses_special(&mut game, medic, 1, battle::SpecialTarget::Ally { slot: 0 });
     assert_eq!(
         game.world.get::<Stats>(player).unwrap().hp,
         1,
-        "picking Shield must not run Heal, the ability at index 0"
+        "picking Sandbox must not run Hot Patch, the ability at index 0"
     );
     assert!(
         matches!(
@@ -351,6 +359,6 @@ fn the_chosen_ability_index_decides_which_special_resolves() {
                 ..
             })
         ),
-        "picking Shield should raise DEF"
+        "picking Sandbox should raise DEF"
     );
 }

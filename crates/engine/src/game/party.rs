@@ -125,9 +125,9 @@ impl Game {
     pub(crate) fn companion_ability_label(&self, entity: Entity) -> String {
         let abilities = self.companion_abilities(entity);
         match abilities.as_slice() {
-            [only] => only.short_name().to_string(),
-            // `companion_abilities` synthesizes the fallback rally rather
-            // than returning nothing, so there is no empty case to handle.
+            [only] => only.name.clone(),
+            // `companion_abilities` resolves the fallback rather than
+            // returning nothing, so there is no empty case to handle.
             many => format!("{} abilities", many.len()),
         }
     }

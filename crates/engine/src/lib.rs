@@ -1189,8 +1189,8 @@ impl Game {
     }
 
     /// How many ticks (see `tick`) have elapsed this session. Exposed so a
-    /// caller (e.g. the TUI's autosave timer) can pace itself against game
-    /// time rather than wall-clock time or its own separate counter.
+    /// caller (e.g. an autosave timer) can pace itself against game time
+    /// rather than wall-clock time or its own separate counter.
     pub fn current_tick(&self) -> u64 {
         self.world.resource::<GameClock>().tick
     }
@@ -5441,9 +5441,9 @@ impl Game {
     }
 
     /// Where the player materialized on breaching into the current zone —
-    /// see `resources::ZoneSpawnPoint`. Both frontends mark this on the map
-    /// so a player can navigate back toward the (comparatively) safer
-    /// ground near it, per `distance_stat_multiplier`.
+    /// see `resources::ZoneSpawnPoint`. Marked on the map so a player can
+    /// navigate back toward the (comparatively) safer ground near it, per
+    /// `distance_stat_multiplier`.
     pub fn zone_spawn_point(&self) -> (i32, i32) {
         let p = self.world.resource::<ZoneSpawnPoint>();
         (p.x, p.y)
@@ -5718,8 +5718,8 @@ impl Game {
     }
 
     /// The item cost to symlink to `target`, if it's a symlink-capable
-    /// structure — used both by `use_symlink` itself and by the TUI to show
-    /// the cost before the player commits to it.
+    /// structure — used both by `use_symlink` itself and by the renderer to
+    /// show the cost before the player commits to it.
     pub fn symlink_cost(&self, target: Entity) -> Option<Vec<(ItemId, u32)>> {
         let kind = self.world.get::<Structure>(target)?.kind.clone();
         self.world
@@ -6078,7 +6078,7 @@ impl Game {
 
     /// `entity`'s trading-post terms (see `StructureDef::trade`), if it's a
     /// structure with any — used both by `sell_item`/`buy_item` and by the
-    /// TUI to show prices before the player commits.
+    /// renderer to show prices before the player commits.
     pub fn trade_options(&self, entity: Entity) -> Option<TradeDef> {
         let kind = self.world.get::<Structure>(entity)?.kind.clone();
         self.world

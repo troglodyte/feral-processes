@@ -110,8 +110,8 @@ const BASE_TILE_PX: f32 = 20.0;
 /// Tile edge and glyph size in pixels for a zoom step.
 ///
 /// Map sizing is driven by zoom alone and never by window size: a larger
-/// window shows *more tiles at the same size*, which is what the TUI
-/// already does and what reads correctly for a grid.
+/// window shows *more tiles at the same size*, which is what reads
+/// correctly for a grid.
 pub fn map_cell(zoom: u16) -> (f32, u16) {
     let z = zoom.clamp(MIN_ZOOM, MAX_ZOOM);
     (BASE_TILE_PX * z as f32, MAP_GLYPH_NATIVE * z)

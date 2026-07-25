@@ -74,9 +74,9 @@ is skipped with a warning logged in-game rather than crashing startup.
     )),
 
     // Optional; can be left out entirely (defaults to no symlink). If set,
-    // this structure is a symlink target: the player can "use symlink" (`u`
-    // in the TUI) to instantly teleport to it from anywhere on the map,
-    // paying the listed item cost.
+    // this structure is a symlink target: the player can "use symlink" (`u`)
+    // to instantly teleport to it from anywhere on the map, paying the
+    // listed item cost.
     teleport_cost: Some([("power_cell", 4)]),
 
     // Optional; can be left out entirely (defaults to false). If true,
@@ -95,8 +95,8 @@ is skipped with a warning logged in-game rather than crashing startup.
     zone_portal: true,
 
     // Optional; can be left out entirely (defaults to no trading). If set,
-    // this structure is a trading post: the player can "trade" (`t` in the
-    // TUI) with it to sell any inventory item (except Core Fragment) for
+    // this structure is a trading post: the player can "trade" (`t`) with
+    // it to sell any inventory item (except Core Fragment) for
     // `sell_rate` Core Fragments per unit, or buy any item listed in `buy`
     // for its Core Fragment cost.
     trade: Some((
@@ -158,7 +158,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     temporary: Some((max_ticks: 20)),
 
     // Optional; can be left out entirely (defaults to un-upgradeable). If
-    // set, the player can upgrade this structure (`U` in the TUI) through
+    // set, the player can upgrade this structure (`U`) through
     // tiers, starting at Mk1 and stopping at `max_tier`. The cost to reach
     // tier N is each quantity in `cost` multiplied by N — so with the
     // 10 Core Fragments below, Mk1->Mk2 costs 20 and Mk2->Mk3 costs 30.

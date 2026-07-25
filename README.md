@@ -145,6 +145,23 @@ choosing; its uppercase counterpart acts for the whole party at once, filling
 every slot you haven't already decided for and resolving the round. `A` and
 `D` never overwrite a choice you made deliberately.
 
+Both sides are listed as a stat table with a column header, so a value can
+be compared by scanning down its column:
+
+```
+   GROUP              HP        ATK DEF RANGE   STATUS
+A  4 Null Daemons     18/30       9   4 ENGAGED BLEEDING (2)
+B  Warden Process     44/44      14   9 BACK    OK
+
+   NAME               HP        ATK DEF POS   ACTION
+>1 You                21/30      11   6 FRONT Attack A
+ 2 Sparkgrub          18/18       7   3 FRONT Defend
+```
+
+`RANGE` is whether a hostile group can reach you at all (see above); `POS`
+is your own member's rank. `>` marks the member currently choosing. Each row
+also carries the HP bar the table's numbers summarise.
+
 Enemy groups are addressed by letter (`A`, `B`, ...). `Esc` backs the
 planning cursor up a slot if you mis-pick — it also clears the slots after
 it, since you chose those in light of the choice you're taking back. An

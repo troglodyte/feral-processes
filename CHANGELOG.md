@@ -59,6 +59,13 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   choosing an action, and the group highlighted in the target picker, are
   drawn in bold on top of the existing highlight — those rows sit among others
   already coloured by faction and reach, and needed to win against that.
+- **Both battle rosters are a stat table now.** Each side gets a column
+  header and hard columns — `GROUP`/`NAME`, `HP`, `ATK`, `DEF`,
+  `RANGE`/`POS`, `STATUS`/`ACTION` — with the numbers right-aligned, so you
+  can compare two groups' DEF by scanning down a column instead of reading
+  two sentences. Reach and status conditions move out of inline
+  `<engaged>`-style tags into columns of their own, and a member with no
+  condition reads `OK` rather than blank. The HP bars are unchanged.
 - **Battle keys are lowercase, and Decompile moved to `c`.** Defend takes `d`,
   so the per-slot keys `a`/`d` and their party-wide counterparts `A`/`D` line
   up: shift means "everyone does this". Nothing sits one shift key away from a

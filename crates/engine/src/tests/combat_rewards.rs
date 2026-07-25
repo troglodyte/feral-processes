@@ -116,6 +116,45 @@ fn award_loot_grants_nothing_for_species_without_a_work_resource() {
 }
 
 #[test]
+fn defeating_a_boss_guarantees_a_cache_of_portal_fragments() {
+    let mut game = Game::new(51, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let boss = game
+        .species_defs()
+        .into_iter()
+        .find(|s| s.is_boss)
+        .expect("at least one boss species should exist in assets/species for this test");
+
+    let wild = game
+        .world
+        .spawn((
+            Creature {
+                species: boss.id.clone(),
+            },
+            Position { x: 0, y: 0 },
+            Stats {
+                hp: 1,
+                max_hp: 1,
+                atk: 1,
+                def: 1,
+            },
+        ))
+        .id();
+
+    game.award_loot(wild);
+
+    let qty = game
+        .world
+        .get::<Inventory>(player)
+        .unwrap()
+        .count(&ItemId::from(ids::PORTAL_FRAGMENT));
+    assert!(
+        BOSS_PORTAL_FRAGMENT_DROP.contains(&qty),
+        "boss kill should guarantee a portal fragment cache in {BOSS_PORTAL_FRAGMENT_DROP:?}, got {qty}"
+    );
+}
+
+#[test]
 fn award_player_xp_also_grants_party_members_half_as_much() {
     let mut game = Game::new(36, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();

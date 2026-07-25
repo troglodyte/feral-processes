@@ -1,0 +1,9 @@
+(
+    id: "overclock_array",
+    name: "Overclock Array",
+    description: "+3 ATK to the whole party for 3 rounds",
+    target: WholeParty,
+    effect: Buff(kind: Atk, power: 3, duration: 3),
+    cooldown: 3,
+    fatigue_cost: 10.0,
+)

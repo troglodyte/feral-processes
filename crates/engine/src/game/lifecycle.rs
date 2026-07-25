@@ -10,6 +10,7 @@ use crate::*;
 impl Game {
     pub fn new(seed: u32, difficulty: DifficultyMode, assets_dir: &Path) -> std::io::Result<Self> {
         let AssetDbs {
+            abilities: ability_db,
             species: species_db,
             structures: structure_db,
             research: research_db,
@@ -21,6 +22,7 @@ impl Game {
         let start = find_walkable_start(&mut world_map);
 
         let mut world = World::new();
+        world.insert_resource(ability_db);
         world.insert_resource(species_db);
         world.insert_resource(structure_db);
         world.insert_resource(research_db);
@@ -101,6 +103,7 @@ impl Game {
     pub fn load(path: &Path, assets_dir: &Path) -> std::io::Result<Self> {
         let data = save::load_from_file(path)?;
         let AssetDbs {
+            abilities: ability_db,
             species: species_db,
             structures: structure_db,
             research: research_db,
@@ -113,6 +116,7 @@ impl Game {
         world_map.restore_overrides(overrides);
 
         let mut world = World::new();
+        world.insert_resource(ability_db);
         world.insert_resource(species_db);
         world.insert_resource(structure_db);
         world.insert_resource(research_db);
@@ -551,6 +555,7 @@ impl Game {
 /// Every asset database a `Game` needs, plus the per-file warnings the loads
 /// accumulated for the caller to push into the message log.
 struct AssetDbs {
+    abilities: AbilityDb,
     species: SpeciesDb,
     structures: StructureDb,
     research: ResearchDb,
@@ -565,7 +570,9 @@ struct AssetDbs {
 /// this check would turn a modder's incomplete item set into a panic mid-play
 /// instead of a startup error.
 fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
-    let (species, mut warnings) = SpeciesDb::load_dir(&assets_dir.join("species"))?;
+    let (abilities, mut warnings) = AbilityDb::load_dir(&assets_dir.join("abilities"))?;
+    let (species, species_warnings) = SpeciesDb::load_dir(&assets_dir.join("species"))?;
+    warnings.extend(species_warnings);
     let (structures, structure_warnings) = StructureDb::load_dir(&assets_dir.join("structures"))?;
     warnings.extend(structure_warnings);
     let (research, research_warnings) =
@@ -583,7 +590,18 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
             ),
         ));
     }
+    if abilities.get(abilities::FALLBACK_ABILITY_ID).is_none() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "ability set is missing the fallback ability {:?}, which every \
+                 companion without a declared kit relies on",
+                abilities::FALLBACK_ABILITY_ID
+            ),
+        ));
+    }
     Ok(AssetDbs {
+        abilities,
         species,
         structures,
         research,

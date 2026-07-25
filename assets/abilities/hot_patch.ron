@@ -1,0 +1,8 @@
+(
+    id: "hot_patch",
+    name: "Hot Patch",
+    description: "Restore 8 Integrity to one ally",
+    target: OneAlly,
+    effect: Heal(power: 8),
+    cooldown: 1,
+)

@@ -1,0 +1,9 @@
+(
+    id: "null_route",
+    name: "Null Route",
+    description: "Stun every hostile program for 1 round",
+    target: AllEnemies,
+    effect: Debuff(kind: Stun, power: 0, duration: 1),
+    cooldown: 5,
+    fatigue_cost: 15.0,
+)

@@ -1,3 +1,4 @@
+pub mod abilities;
 pub mod balance;
 pub mod battle;
 pub mod components;
@@ -25,6 +26,7 @@ use bevy_ecs::prelude::*;
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 
+use abilities::AbilityDb;
 use battle::{
     ActionKind, ActionOption, AllyOption, BattleAction, EnemyGroup, PartyCommand, PartyCommandKind,
     SpecialOption, TargetSpec,

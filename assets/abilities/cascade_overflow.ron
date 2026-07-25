@@ -1,0 +1,9 @@
+(
+    id: "cascade_overflow",
+    name: "Cascade Overflow",
+    description: "Damage 6 to every member of one group",
+    target: WholeEnemyGroup,
+    effect: Damage(power: 6),
+    cooldown: 2,
+    fatigue_cost: 8.0,
+)

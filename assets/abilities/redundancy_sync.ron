@@ -1,0 +1,9 @@
+(
+    id: "redundancy_sync",
+    name: "Redundancy Sync",
+    description: "Restore 10 Integrity to the whole party",
+    target: WholeParty,
+    effect: Heal(power: 10),
+    cooldown: 3,
+    fatigue_cost: 12.0,
+)

@@ -17,7 +17,8 @@
 - Comments explain *why*, never *what*. No `// removed` markers, no backwards-compat shims.
 - No flaky tests: no `sleep()`, no wall-clock dependence, no unseeded RNG. Background systems (habitat spawning, nests) will interfere with naive assertions.
 - Run `cargo fmt` and `cargo clippy --workspace` after every task; fix warnings rather than silencing them.
-- `cargo test --workspace` is the gate at every task boundary. Baseline before starting: **433 tests, ~3s**. Each task states an expected count (437 → 440 → 439 → 442 → 447 → 448); treat these as a sanity check, not a hard gate — an off-by-one from a test you reasonably split or merged is fine, a drop of several is not.
+- `cargo test --workspace` is the gate at every task boundary. Measured baseline: **469 workspace tests (engine 392, app-core 37, gui 38, font 2)**. CLAUDE.md's "433 tests" is stale — ignore it.
+- All new tests land in the engine crate. Expected engine counts per task: **396 → 399 → 398 → 401 → 406 → 407** (workspace 484 at the end). Treat these as a sanity check, not a hard gate — an off-by-one from a test reasonably split or merged is fine, a drop of several is not.
 - Reference values, already verified in the tree: `PLAYER_STRIKE_POWER` 5, `DEFEND_DEF_BONUS` 6, `RALLY_DURATION` 3, `COMPANION_COMMAND_FATIGUE_COST` 5.0, `MAX_ENEMY_GROUPS` 4, `ENGAGED_GROUPS` 2, `FRONT_SLOTS` 3, `MAX_PARTY_SIZE` 5, `CREATURE_MAX_LEVEL` 12.
 - `Needs.fatigue` is displayed as **"Fatigue"**; `Needs.hunger` is displayed as **"Power"**. Ability costs come off `fatigue`.
 
@@ -62,6 +63,7 @@ Purely additive — nothing consumes the database yet, so the suite stays green 
 - Create: `assets/abilities/README.md`
 - Modify: `crates/engine/src/lib.rs` (module declaration)
 - Modify: `crates/engine/src/game/lifecycle.rs:551-592` (`AssetDbs`, `load_asset_dbs`, resource insertion)
+- Modify: `crates/engine/src/tests/support.rs` (`modded_assets_dir` copy loop)
 
 **Interfaces:**
 - Produces:
@@ -73,6 +75,8 @@ Purely additive — nothing consumes the database yet, so the suite stays green 
   - `abilities::AbilityDb::get(&self, id: &str) -> Option<&AbilityDef>`
   - `abilities::AbilityDb::all(&self) -> impl Iterator<Item = &AbilityDef>`
   - `abilities::FALLBACK_ABILITY_ID: &str = "priority_boost"`
+
+**Not in this task:** `AbilityTarget::targeting()` is added in Task 3, not here. It returns `SpecialTargeting::None`, a variant that does not exist until Task 3 moves and extends that enum — writing it here does not compile. Nothing in Task 1 needs it.
 
 - [ ] **Step 1: Write the failing loader tests**
 
@@ -844,31 +848,7 @@ Behavior-preserving swap. The suite must end green with the same abilities doing
 
 These are the callers that tell you whether the swap is behavior-preserving, so change them before the implementation.
 
-In `crates/engine/src/tests/support.rs`, extend `modded_assets_dir` to copy and extend the new asset dir. Change the signature and the copy loop:
-
-```rust
-pub(super) fn modded_assets_dir(
-    tag: &str,
-    omit_items: &[&str],
-    extra_items: &[(&str, &str)],
-    extra_species: &[(&str, &str)],
-    extra_abilities: &[(&str, &str)],
-) -> std::path::PathBuf {
-```
-
-```rust
-    for sub in ["species", "structures", "research", "items", "abilities"] {
-```
-
-and after the `extra_species` write loop:
-
-```rust
-    for (name, body) in extra_abilities {
-        std::fs::write(dir.join("abilities").join(name), body).unwrap();
-    }
-```
-
-Update the two existing callers to pass `&[]` for the new parameter: `assets_dir_missing_currency_item` (line ~150) and `game_with_two_ability_companion`.
+(`modded_assets_dir`'s copy loop already gained `"abilities"` in Task 1 — it had to, since `load_asset_dbs` reads that directory from Task 1 onward and every modded-install test fails without it. No signature change is needed: no test writes a custom ability file, so there is no `extra_abilities` parameter.)
 
 Replace `TWO_ABILITY_SPECIES` with the id-referencing form. It keeps naming a heal and a shield so `combat_specials.rs`'s expectations still hold, and adds a level gate so Task 3's filtering is exercised:
 
@@ -899,7 +879,7 @@ pub(super) const TWO_ABILITY_SPECIES: &str = r#"(
 - [ ] **Step 2: Run the suite to verify it fails**
 
 Run: `cargo test -p feral-processes-engine`
-Expected: FAIL — `abilities` is an unknown field on `SpeciesDef` (serde ignores it, so the medic loads with no abilities and the specials tests break), plus arity errors on `modded_assets_dir`.
+Expected: FAIL — `abilities` is an unknown field on `SpeciesDef`; serde ignores it, so the medic loads with no abilities and the `combat_specials` tests break.
 
 - [ ] **Step 3: Move `SpecialTargeting` and extend it**
 
@@ -1301,7 +1281,7 @@ fn game_with_a_sweeper() -> (Game, Entity) {
             (id: "redundancy_sync"),
         ],
     )"#;
-    let dir = modded_assets_dir("sweeper", &[], &[], &[("test_sweeper.ron", SWEEPER)], &[]);
+    let dir = modded_assets_dir("sweeper", &[], &[], &[("test_sweeper.ron", SWEEPER)]);
     let mut game = Game::new(31, DifficultyMode::Forgiving, &dir).unwrap();
     let player = game.player_entity();
     let sweeper = game

@@ -390,6 +390,11 @@ pub struct PlayerStatus {
 /// One sellable program at a trading post, already priced — see
 /// `Game::program_sale_options`. Renderers draw these verbatim and never
 /// compute a payout of their own.
+///
+/// `Clone` because the confirmation screen holds the row the player picked
+/// rather than re-querying: the price and the detach list it is asking them
+/// to agree to must be the ones they were shown.
+#[derive(Clone)]
 pub struct ProgramSaleOption {
     pub entity: Entity,
     pub name: String,
@@ -3749,7 +3754,7 @@ impl Game {
         let owned = self.pet_count();
         if owned >= capacity {
             self.log(format!(
-                "Your roster is full ({owned}/{capacity}) — fuse two programs together or deploy a Data Cache to make room."
+                "Your roster is full ({owned}/{capacity}) — sell a program at a Market, fuse two together, or deploy a Data Cache to make room."
             ));
             return None;
         }

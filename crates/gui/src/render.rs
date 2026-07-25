@@ -15,7 +15,7 @@ use feral_processes_engine::components::GlyphColor;
 use feral_processes_engine::items::ItemId;
 use feral_processes_engine::world::Biome;
 use feral_processes_engine::{
-    Entity, EntityView, Game, MAX_FUSIONS, MessageKind, PetInfo, ResearchState,
+    Entity, EntityView, Game, MAX_FUSIONS, MessageKind, PetInfo, ProgramSaleOption, ResearchState,
 };
 
 const PANEL_BG: Color = Color::new(0.06, 0.07, 0.10, 0.95);
@@ -887,6 +887,9 @@ fn draw_mode_overlay(app: &mut App, fonts: &Fonts, m: &Metrics) {
             fonts,
             m,
         ),
+        Mode::TradeProgramConfirm => {
+            draw_trade_program_confirm(app.pending_trade_program.as_ref(), fonts, m)
+        }
         Mode::Perks => draw_perks_menu(game, selected, fonts, m),
         Mode::Research => draw_research_menu(game, selected, fonts, m),
         _ => {}
@@ -1719,9 +1722,60 @@ fn draw_trade_action_menu(
         ));
         idx += 1;
     }
+    // Only shown by a trader that buys programs — see
+    // `TradeDef::program_sell_divisor`. Omitted entirely otherwise, rather
+    // than shown empty, so an items-only trader's screen is unchanged.
+    let programs = game.program_sale_options(structure);
+    if !programs.is_empty() {
+        rows.push(text_row(""));
+        rows.push(Row::TextColored(
+            "Sell programs (permanent):".to_string(),
+            TEXT,
+        ));
+        for program in &programs {
+            rows.push(item_row(
+                format!(
+                    "[{}] Sell {} Lv{} — power {} → {} Core Fragments",
+                    menu_shortcut(idx),
+                    program.name,
+                    program.level,
+                    program.power,
+                    program.payout,
+                ),
+                idx == selected,
+            ));
+            idx += 1;
+        }
+    }
     rows.push(text_row(""));
     rows.push(text_row("Esc to cancel; Up/Down + Enter also work"));
     draw_popup("Trade", PopupSize::Large, &rows, fonts, m);
+}
+
+/// Confirms a program sale. The only screen that says what else the sale
+/// takes down, since selling detaches the program from its party slot,
+/// cronjob or guard post without asking.
+fn draw_trade_program_confirm(option: Option<&ProgramSaleOption>, fonts: &Fonts, m: &Metrics) {
+    let Some(option) = option else { return };
+    let mut rows = vec![
+        text_row(format!(
+            "Sell {} (Lv {}, power {}) for {} Core Fragments?",
+            option.name, option.level, option.power, option.payout
+        )),
+        Row::TextColored(
+            "This erases the program for good. It cannot be undone.".to_string(),
+            RED,
+        ),
+    ];
+    if !option.detaches.is_empty() {
+        rows.push(text_row(""));
+        for detached in &option.detaches {
+            rows.push(Row::TextColored(format!("It {detached}."), ORANGE));
+        }
+    }
+    rows.push(text_row(""));
+    rows.push(text_row("[y] sell    [n] keep it    Esc to cancel"));
+    draw_popup("Confirm sale", PopupSize::Small, &rows, fonts, m);
 }
 
 fn draw_trade_quantity_menu(

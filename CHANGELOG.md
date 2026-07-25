@@ -71,6 +71,23 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   up: shift means "everyone does this". Nothing sits one shift key away from a
   different action.
 
+### Programs
+
+- **You can sell a compiled program at an iso Market.** Until now there was
+  no way to get rid of one: standing a program down with `p` frees a battle
+  slot but leaves it owned and still counting against your roster cap, and
+  fusing needs a second program you are also willing to lose. So a roster
+  full of programs you had outgrown was a dead end, with decompiling refused
+  outright at the cap. Selling pays a tenth of the program's power (max HP +
+  Attack + Defense, rounded down, never less than 1) and frees the slot.
+- **It is permanent, and it says so.** The sale erases the program, and the
+  confirmation names anything the sale cancels — a party slot, a cronjob, a
+  guard post — since it takes those down for you rather than refusing.
+- **Modders:** whether a trader buys programs, and what it pays, is the new
+  `program_sell_divisor` inside a structure's `trade` block. Omit it and the
+  trader deals in items only, so existing structure files are unaffected. See
+  `assets/structures/README.md`.
+
 ### Structures
 
 - **The Recharger Node actually recharges you now.** Instead of gating rest,

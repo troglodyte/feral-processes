@@ -19,7 +19,7 @@ use feral_processes_engine::items::{
     EquipmentSlot, ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, ItemId,
 };
 use feral_processes_engine::species::SpecialTargeting;
-use feral_processes_engine::{DifficultyMode, Entity, Game};
+use feral_processes_engine::{DifficultyMode, Entity, Game, ProgramSaleOption};
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
 /// visible viewport size.
@@ -232,6 +232,11 @@ pub enum Mode {
     Trade,
     TradeAction,
     TradeQuantity,
+    /// Confirming the sale of the program picked in `Mode::TradeAction`.
+    /// Programs take a confirmation where items don't: the sale is
+    /// irreversible, and it silently cancels whatever the program was doing,
+    /// which this screen is the only place to say out loud.
+    TradeProgramConfirm,
     Perks,
     /// The research tree (see `Game::research_nodes`). Stays open after each
     /// unlock so several nodes can be taken in one visit.
@@ -288,6 +293,7 @@ impl Mode {
             | Mode::Trade
             | Mode::TradeAction
             | Mode::TradeQuantity
+            | Mode::TradeProgramConfirm
             | Mode::Perks
             | Mode::Research
             | Mode::Help
@@ -403,6 +409,11 @@ pub struct App {
     /// quantity from `Mode::TradeQuantity` before `Game::sell_item`/
     /// `Game::buy_item` is actually called.
     pub pending_trade_choice: Option<TradeChoice>,
+    /// The program picked in `Mode::TradeAction`, awaiting confirmation in
+    /// `Mode::TradeProgramConfirm`. Holds the whole priced row rather than
+    /// just the entity, so the confirmation shows the payout and detach list
+    /// the player was actually offered.
+    pub pending_trade_program: Option<ProgramSaleOption>,
     /// Digits typed so far on the trade-quantity page.
     pub trade_quantity_input: String,
     /// How many screen characters render each world tile along each axis.
@@ -467,6 +478,7 @@ impl App {
             craft_quantity_input: String::new(),
             pending_trade_structure: None,
             pending_trade_choice: None,
+            pending_trade_program: None,
             trade_quantity_input: String::new(),
             zoom: 2,
             menu_selected: 0,
@@ -684,6 +696,7 @@ impl App {
             Mode::GuardStructure => self.handle_guard_structure_key(key),
             Mode::Remove => self.handle_remove_key(key),
             Mode::RemoveConfirm => self.handle_remove_confirm_key(key),
+            Mode::TradeProgramConfirm => self.handle_trade_program_confirm_key(key),
             Mode::Upgrade => self.handle_upgrade_key(key),
             Mode::Symlink => self.handle_symlink_key(key),
             Mode::InspectDirection => self.handle_inspect_direction_key(key),
@@ -1838,8 +1851,19 @@ impl App {
             .filter(|item| *item != currency)
             .collect();
         let buy_items: Vec<ItemId> = trade.buy.iter().map(|(item, _)| item.clone()).collect();
-        let total = sell_items.len() + buy_items.len();
+        // Programs come last, and are empty for a trader that deals in items
+        // only — so this screen is unchanged at such a trader.
+        let programs = game.program_sale_options(structure);
+        let total = sell_items.len() + buy_items.len() + programs.len();
         if let Some(idx) = self.selected_index(key, total) {
+            if idx >= sell_items.len() + buy_items.len() {
+                // A program needs no quantity — there is exactly one of it —
+                // so it skips the quantity page and goes to confirmation.
+                self.pending_trade_program =
+                    Some(programs[idx - sell_items.len() - buy_items.len()].clone());
+                self.mode = Mode::TradeProgramConfirm;
+                return;
+            }
             let choice = if idx < sell_items.len() {
                 TradeChoice::Sell(sell_items[idx].clone())
             } else {
@@ -1849,6 +1873,39 @@ impl App {
             self.trade_quantity_input.clear();
             self.mode = Mode::TradeQuantity;
         }
+    }
+
+    /// Confirms or abandons the program sale picked in `Mode::TradeAction`.
+    /// `y` sells; Esc and `n` both back out, because a mis-hit on a screen
+    /// that permanently destroys a levelled program must not be a sale.
+    fn handle_trade_program_confirm_key(&mut self, key: GameKey) {
+        let confirmed = match key {
+            GameKey::Char('y') | GameKey::Char('Y') => true,
+            GameKey::Esc | GameKey::Char('n') | GameKey::Char('N') => false,
+            _ => return,
+        };
+        let Some(option) = self.pending_trade_program.take() else {
+            self.mode = Mode::Trade;
+            return;
+        };
+        if !confirmed {
+            self.mode = Mode::TradeAction;
+            return;
+        }
+        let Some(structure) = self.pending_trade_structure else {
+            self.mode = Mode::Playing;
+            return;
+        };
+        if let Some(game) = &mut self.game {
+            match game.sell_companion(structure, option.entity) {
+                Ok(()) => self.status_line = None,
+                Err(e) => self.status_line = Some(e),
+            }
+        }
+        // Matches an item sale: the visit ends rather than looping back into
+        // a list whose rows have just shifted under the player.
+        self.pending_trade_structure = None;
+        self.mode = Mode::Playing;
     }
 
     /// Types a quantity for the pending sell/buy line item; Enter commits it.
@@ -2822,6 +2879,64 @@ mod tests {
         for mode in [Mode::Playing, Mode::Inventory, Mode::Trade, Mode::GameOver] {
             assert!(!mode.is_battle(), "{mode:?} is not part of an intrusion");
         }
+    }
+
+    /// Esc out of the sale confirmation abandons it and steps back to the
+    /// trade list, leaving the program alive and nothing pending.
+    ///
+    /// The sale itself is not driven from here: staging a trading post needs
+    /// a Home, build clearance and 16 Core Fragments, and there is no public
+    /// way to grant those — the same reach limit that keeps multi-group
+    /// battle logic in engine tests. `sell_companion` is covered there.
+    #[test]
+    fn escaping_the_program_sale_confirmation_sells_nothing() {
+        let mut app = test_app(910);
+        app.mode = Mode::TradeProgramConfirm;
+        app.pending_trade_program = Some(ProgramSaleOption {
+            entity: Entity::from_raw_u32(1).unwrap(),
+            name: "Sparkgrub".to_string(),
+            level: 4,
+            power: 62,
+            payout: 6,
+            detaches: vec!["leaves your battle party".to_string()],
+        });
+
+        app.handle_key(GameKey::Esc);
+
+        assert_eq!(app.mode, Mode::TradeAction);
+        assert!(
+            app.pending_trade_program.is_none(),
+            "backing out has to drop the pending sale, not leave it armed"
+        );
+    }
+
+    /// Declining is not the same key as backing out, but has to do the same
+    /// thing — a mis-hit `n` must never sell.
+    #[test]
+    fn declining_the_program_sale_confirmation_sells_nothing() {
+        let mut app = test_app(911);
+        app.mode = Mode::TradeProgramConfirm;
+        app.pending_trade_program = Some(ProgramSaleOption {
+            entity: Entity::from_raw_u32(1).unwrap(),
+            name: "Sparkgrub".to_string(),
+            level: 4,
+            power: 62,
+            payout: 6,
+            detaches: Vec::new(),
+        });
+
+        app.handle_key(GameKey::Char('n'));
+
+        assert_eq!(app.mode, Mode::TradeAction);
+        assert!(app.pending_trade_program.is_none());
+    }
+
+    /// The confirmation screen is not part of an intrusion, and the
+    /// exhaustive match in `Mode::is_battle` is what forces that to be
+    /// decided rather than defaulted.
+    #[test]
+    fn the_program_sale_confirmation_is_not_a_battle_screen() {
+        assert!(!Mode::TradeProgramConfirm.is_battle());
     }
 
     /// A picker that fails to commit must still close. Every picker clears

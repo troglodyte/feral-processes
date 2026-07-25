@@ -107,9 +107,9 @@ change what gets stored — a save from a different build shows up as
 | `i` | Inspect: pick a direction, see stats/moves/decompile odds for the first program that way (no intrusion) |
 | `v` | Inventory/equipment: equip, unequip, consume, fuse, erase items |
 | `T` | Research tree: spend Research Data to unlock structures and recipes — see [Research](#research) |
-| `p` | Your pets: full stats (level, HP, Attack, Defense) for every compiled program you own, wherever it is — add/stand down party members (max 5) here too |
+| `p` | Your pets: full stats (level, HP, Attack, Defense) for every compiled program you own, wherever it is — add/stand down party members (max 5) here too. Standing one down frees a battle slot, not a roster slot; to shed a program for good, sell it at a Market (`t`) or fuse it (`f`) |
 | `f` | Fuse two nearby compiled programs into one stronger one |
-| `t` | Trade with a nearby iso Market: sell items, buy consumables |
+| `t` | Trade with a nearby iso Market: sell items or compiled programs, buy consumables |
 | `x` | Perks: spend Perk Points on permanent passive unlocks |
 | `s` | Save |
 | `q` | Return to the main menu (unsaved progress is lost — `s` first if you want to keep it) |
@@ -787,7 +787,7 @@ enough of them, then walk onto it to breach into the next zone.
 | Compiler | 16 Core Fragments | Automation | Cronjob a compiled program to it to produce ICE Breakers over time. Upgradeable to Mk5 |
 | Terminal | 3 Core Fragments | Power Grid | Passively cooks a Core Fragment into a Power Cell every tick while you're standing within 2 tiles — no cronjob needed |
 | Power Conduit | 14 Core Fragments | Power Grid | Cronjob a compiled program to it to produce Power Cells over time |
-| iso Market | 16 Core Fragments | Isometric Commerce | `t` ("trade") to sell inventory items or buy consumables for Core Fragments — see [Trading](#trading) |
+| iso Market | 16 Core Fragments | Isometric Commerce | `t` ("trade") to sell inventory items or compiled programs, or buy consumables, for Core Fragments — see [Trading](#trading) |
 | Shield | 16 Core Fragments | Fortification | Passively reduces raid damage against **every** deployed structure by 4 — see [Base defense](#base-defense) |
 | Fabricator | 18 Core Fragments | Weapon Fabrication | Not cronjob-workable — the bench for every researched weapon/module recipe, plus the 13 catalog recipes that name it (see [Equipment](#equipment)) |
 | Armory | 18 Core Fragments | Reactive Armor | Not cronjob-workable — the bench for every researched armor recipe, plus the 6 catalog armor recipes that name it (see [Equipment](#equipment)) |
@@ -895,13 +895,22 @@ without either.
 
 Press `t` to trade with a nearby iso Market (unlocked by the Isometric
 Commerce research node). Pick the structure, then a line item: sell offers
-(from your inventory) are numbered first, then buy offers, followed by a
-quantity prompt.
+(from your inventory) are numbered first, then buy offers, then any programs
+the market will take. Items and buys go on to a quantity prompt; a program
+goes straight to a confirmation.
 
 - **Sell** any inventory item (except Core Fragments — trading them for
   more Core Fragments is a no-op the game refuses) for Core Fragments at
   the market's flat sell rate (1 each, for the base iso Market) — a
   floor value for excess loot that would otherwise just sit there.
+- **Sell a compiled program** for a tenth of its power (max HP + Attack +
+  Defense, rounded down, never less than 1). This is the only way to get rid
+  of a program short of fusing it into another, so it's your way out of a
+  full roster — standing one down with `p` frees a battle slot but not a
+  roster slot. It's permanent: the program is erased, and the confirmation
+  says so along with anything it was doing (a cronjob or guard post is
+  cancelled by the sale). A level-1 Glitch is worth about 4 Core Fragments;
+  a heavily levelled fusion, tens.
 - **Buy** whatever the market lists — the base iso Market sells ICE
   Breakers (4 Core Fragments), Power Cells (3), and **Portal Fragments**
   (8), so a Core Fragment surplus (e.g. from a well-fed Mining Node) can

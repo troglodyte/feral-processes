@@ -11,6 +11,11 @@ use super::support::*;
 /// starts a battle against them, so back-rank indices actually exist.
 /// Stats are set by hand rather than rolled, because these tests assert on
 /// exact HP.
+///
+/// Placed deep and far on purpose: a group's size ceiling is the local
+/// `max_group_size`, which at a zone-1 spawn point is one member — there
+/// would be no back rank to test. The hand-set stats are what make the move
+/// free, since nothing here reads the distance or zone scaling it implies.
 fn battle_with_a_pack_of(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
     let player = game.player_entity();
     let species = game
@@ -18,6 +23,9 @@ fn battle_with_a_pack_of(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> 
         .into_iter()
         .next()
         .expect("at least one species");
+    game.world.resource_mut::<ZoneLevel>().0 = 3;
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let (x, y) = (spawn.x + GROUP_SIZE_STEP_TILES * 7, spawn.y);
     let members: Vec<Entity> = (0..count)
         .map(|i| {
             game.world
@@ -26,10 +34,7 @@ fn battle_with_a_pack_of(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> 
                         species: species.id.clone(),
                     },
                     Hostile,
-                    Position {
-                        x: 5 + i as i32,
-                        y: 5,
-                    },
+                    Position { x: x + i as i32, y },
                     Stats {
                         hp,
                         max_hp: hp,

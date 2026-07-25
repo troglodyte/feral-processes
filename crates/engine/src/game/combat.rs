@@ -4,26 +4,48 @@
 use crate::*;
 
 impl Game {
-    /// Every alive `Hostile` creature within `PACK_GATHER_RADIUS` tiles of
+    /// The widest `max_group_size` among `members`' own tiles — the ceiling
+    /// a gathered cluster fights under, in both `gather_pack` and
+    /// `group_pack` so the two cannot disagree about what a pack may hold.
+    ///
+    /// Read from every member rather than from the cluster's anchor because
+    /// group size *doubles* every `GROUP_SIZE_STEP_TILES`: the spawn roll
+    /// sized the cluster from its own tile and scattered members up to
+    /// `swarm_radius` around it, so an anchor that drifted a few tiles
+    /// inward of a step boundary would otherwise halve the fight — a cluster
+    /// spawned at distance 90 whose anchor sits at 87 would field 32 of its
+    /// 64. A max over a set is order-independent, so this stays
+    /// deterministic under a seed without sorting anything.
+    fn widest_group_size(&self, members: &[Entity]) -> usize {
+        members
+            .iter()
+            .filter_map(|&e| self.world.get::<Position>(e))
+            .map(|p| self.max_group_size(p.x, p.y) as usize)
+            .max()
+            .unwrap_or(1)
+    }
+
+    /// Every alive `Hostile` creature within `swarm_radius` tiles of
     /// `anchor` (Chebyshev distance) — the whole cluster a group spawn
     /// roll placed together (see `try_spawn_habitat_creature`) joins the
     /// fight at once when the player bumps into any one of them. `anchor`
     /// is always first, becoming the initial front target. Truncated to
-    /// `max_group_size` at `anchor`'s own position, so how deep a fight
-    /// this tile can produce is bounded by the same danger curve that
-    /// decided how many spawned here.
-    ///
-    /// The spawn roll sized the cluster from *its* tile and scattered
-    /// members around it, so a cluster straddling a distance step gathers
-    /// short: group size doubles every `GROUP_SIZE_STEP_TILES`, so an
-    /// anchor sitting just inward of a boundary halves the cap — a cluster
-    /// spawned at distance 90 whose anchor drifted to 87 pulls 32 of its 64.
-    /// The remainder stays standing on the map and is met on the next bump,
-    /// which is what surplus groups already do.
+    /// `MAX_ENEMY_GROUPS` groups' worth of `widest_group_size`, so how deep
+    /// a fight this ground can produce is bounded by the same danger curve
+    /// that decided how many spawned here, and never exceeds what
+    /// `group_pack` can then hold. The remainder stays standing on the map
+    /// and is met on the next bump, which is what surplus groups already do.
     pub(crate) fn gather_pack(&mut self, anchor: Entity) -> Vec<Entity> {
         let Some(anchor_pos) = self.world.get::<Position>(anchor).copied() else {
             return vec![anchor];
         };
+        // The *radius* is the one thing that can only come from the anchor:
+        // there are no members to read until the search has already run.
+        // Deliberately asymmetric with the ceiling below — a radius that
+        // errs small leaves a member at the fringe, where a ceiling that
+        // errs small leaves half the cluster.
+        let radius =
+            crate::game::spawning::swarm_radius(self.max_group_size(anchor_pos.x, anchor_pos.y));
         let mut pack = vec![anchor];
         let mut query = self
             .world
@@ -35,20 +57,23 @@ impl Game {
             let dist = (pos.x - anchor_pos.x)
                 .abs()
                 .max((pos.y - anchor_pos.y).abs());
-            if dist <= PACK_GATHER_RADIUS {
+            if dist <= radius {
                 pack.push(e);
             }
         }
-        let cap = (self.max_group_size(anchor_pos.x, anchor_pos.y) as usize).max(1);
-        pack.truncate(cap);
+        pack.truncate(self.widest_group_size(&pack) * MAX_ENEMY_GROUPS);
         pack
     }
 
     /// Partitions `pack` into one group per species, in first-appearance
     /// order. A cluster spanning more than `MAX_ENEMY_GROUPS` species keeps
-    /// only its largest groups; the rest are *not* returned and stay on the
-    /// map as ordinary hostiles.
+    /// only its largest groups, and each group is itself capped at
+    /// `widest_group_size` — a spawn roll places one species, so without
+    /// that a single deep roll would fight as one column rather than as the
+    /// groups the danger curve allows. Neither surplus is returned: both
+    /// stay on the map as ordinary hostiles, met on the next bump.
     pub(crate) fn group_pack(&self, pack: Vec<Entity>) -> Vec<EnemyGroup> {
+        let cap = self.widest_group_size(&pack);
         let mut groups: Vec<EnemyGroup> = Vec::new();
         for entity in pack {
             let Some(species) = self
@@ -59,7 +84,13 @@ impl Game {
                 continue;
             };
             match groups.iter_mut().find(|g| g.species == species) {
-                Some(group) => group.members.push(entity),
+                Some(group) => {
+                    // Over the ceiling: left standing on the map, met on the
+                    // next bump — what surplus groups already do.
+                    if group.members.len() < cap {
+                        group.members.push(entity);
+                    }
+                }
                 None => groups.push(EnemyGroup {
                     species,
                     members: vec![entity],

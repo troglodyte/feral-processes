@@ -14,6 +14,14 @@ pub(crate) fn zone_group_cap(zone: u32) -> u32 {
         .clamp(1, MAX_GROUP_SIZE)
 }
 
+/// How far a group of `n` scatters when it spawns, and how far `gather_pack`
+/// searches from the member the player bumped — the same radius from the
+/// same input, so a spawned cluster always pulls into exactly one fight.
+/// `PACK_GATHER_RADIUS` stays the floor: nothing gets tighter than it was.
+pub(crate) fn swarm_radius(n: u32) -> i32 {
+    PACK_GATHER_RADIUS.max(crate::battle::ceil_sqrt(n) as i32)
+}
+
 impl Game {
     /// Spawns a wild creature of `species_id` at `(x, y)`, returning its
     /// `Entity` — `None` only if `species_id` isn't in `SpeciesDb` (every
@@ -354,6 +362,9 @@ impl Game {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_range(1..=max_group)
         };
+        // Hoisted above the loop deliberately: it takes no RNG, so the
+        // seeded sequence every spawn test depends on is untouched.
+        let radius = swarm_radius(group_size);
         for i in 0..group_size {
             // The first member anchors the roll's own tile; the rest
             // cluster loosely around it (walkability isn't rechecked for
@@ -363,8 +374,8 @@ impl Game {
             } else {
                 let mut rng = self.world.resource_mut::<GameRng>();
                 (
-                    x + rng.0.random_range(-PACK_GATHER_RADIUS..=PACK_GATHER_RADIUS),
-                    y + rng.0.random_range(-PACK_GATHER_RADIUS..=PACK_GATHER_RADIUS),
+                    x + rng.0.random_range(-radius..=radius),
+                    y + rng.0.random_range(-radius..=radius),
                 )
             };
             self.spawn_wild_creature(&pick, gx, gy);

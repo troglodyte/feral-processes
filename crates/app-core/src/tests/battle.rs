@@ -7,6 +7,12 @@ use crate::*;
 /// bumps it to open a battle. Returns the app sitting in `Mode::Battle`
 /// with the entry sounds already drained, so a caller can attribute
 /// anything it observes afterwards to the key it pressed.
+///
+/// Seeds whose bump gathers more than one species are skipped: a pack may
+/// now carry `MAX_ENEMY_GROUPS` groups even where each holds a single
+/// member, and several tests below are about what the UI does with exactly
+/// one group. Multi-group behaviour belongs to the engine's own tests,
+/// which can build a pack directly instead of fishing for a seed.
 fn battling_app() -> App {
     for seed in 0..200u32 {
         let mut app = test_app(seed);
@@ -24,12 +30,19 @@ fn battling_app() -> App {
             (0, 1) => GameKey::Down,
             _ => GameKey::Up,
         });
-        if app.mode == Mode::Battle {
+        let single_group = app
+            .game
+            .as_ref()
+            .and_then(|g| g.battle_view())
+            .is_some_and(|v| v.groups.len() == 1);
+        if app.mode == Mode::Battle && single_group {
             let _ = app.take_sounds();
             return app;
         }
     }
-    panic!("no seed under 200 put a wild program next to the player — encounter setup changed");
+    panic!(
+        "no seed under 200 put a lone wild program next to the player — encounter setup changed"
+    );
 }
 
 /// The action set lives in the engine. If app-core or a renderer

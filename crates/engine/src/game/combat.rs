@@ -262,8 +262,12 @@ impl Game {
             {
                 return Err(format!("Slot {ally} isn't in your party."));
             }
-            if *ability >= self.battle_special_options(slot).len() {
+            let options = self.battle_special_options(slot);
+            if *ability >= options.len() {
                 return Err("That party member has no such ability.".to_string());
+            }
+            if let Some(reason) = &options[*ability].unavailable {
+                return Err(format!("That ability isn't ready: {reason}."));
             }
         }
         self.world.resource_mut::<BattleState>().planned[slot] = Some(action);
@@ -356,6 +360,33 @@ impl Game {
             .collect()
     }
 
+    /// Why `entity` can't spend `ability` right now, or `None` if it can.
+    /// Both reasons are refused in `battle_set_action` too, so a greyed row
+    /// can never be planned and silently waste the member's round.
+    pub(crate) fn ability_unavailable(
+        &self,
+        entity: Entity,
+        ability: &AbilityDef,
+    ) -> Option<String> {
+        let remaining = self
+            .world
+            .get::<AbilityCooldowns>(entity)
+            .and_then(|c| c.0.get(&ability.id).copied())
+            .unwrap_or(0);
+        if remaining > 0 {
+            return Some(format!("{remaining} more rounds"));
+        }
+        let fatigue = self
+            .world
+            .get::<Needs>(self.player_entity())
+            .map(|n| n.fatigue)
+            .unwrap_or(0.0);
+        if fatigue < ability.fatigue_cost {
+            return Some("not enough Fatigue".to_string());
+        }
+        None
+    }
+
     /// The abilities party `slot` can choose between for a Special, as
     /// engine-authored menu rows. Both renderers draw these verbatim, same
     /// contract as `battle_action_options` — a species that gains an ability
@@ -375,6 +406,7 @@ impl Game {
                 detail: ability.description.clone(),
                 targeting: ability.target.targeting(),
                 sweeps_party: ability.target == AbilityTarget::WholeParty,
+                unavailable: self.ability_unavailable(entity, &ability),
             })
             .collect()
     }

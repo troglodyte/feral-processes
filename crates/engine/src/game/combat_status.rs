@@ -281,6 +281,19 @@ impl Game {
     ///
     /// A single `active` slot, so this overwrites whatever the target was
     /// still carrying — a real cost of the choice.
+    /// Counts one round off every cooldown `entity` is carrying, dropping
+    /// the entries that reach zero so the map doesn't grow across a long
+    /// fight.
+    pub(crate) fn tick_ability_cooldowns(&mut self, entity: Entity) {
+        let Some(mut cooldowns) = self.world.get_mut::<AbilityCooldowns>(entity) else {
+            return;
+        };
+        cooldowns.0.retain(|_, remaining| {
+            *remaining = remaining.saturating_sub(1);
+            *remaining > 0
+        });
+    }
+
     pub(crate) fn arm_buff(&mut self, entity: Entity, buff: ActiveBuff) {
         match self.world.get_mut::<CombatBuff>(entity) {
             Some(mut existing) => existing.active = Some(buff),
@@ -317,10 +330,12 @@ impl Game {
         let player_label = self.entity_label(player);
         self.tick_status_effects(player, &player_label);
         self.tick_combat_buff(player);
+        self.tick_ability_cooldowns(player);
         for companion in self.world.resource::<Party>().0.clone() {
             let label = self.creature_label(companion);
             self.tick_status_effects(companion, &label);
             self.tick_combat_buff(companion);
+            self.tick_ability_cooldowns(companion);
         }
         if self.reap_dead_members(player) {
             return;
@@ -378,6 +393,9 @@ impl Game {
         if let Some(mut b) = self.world.get_mut::<CombatBuff>(player) {
             b.active = None;
         }
+        if let Some(mut c) = self.world.get_mut::<AbilityCooldowns>(player) {
+            c.0.clear();
+        }
         if let Some(mut s) = wild.and_then(|w| self.world.get_mut::<StatusEffects>(w)) {
             s.active = None;
         }
@@ -392,6 +410,9 @@ impl Game {
             // unconditionally, so it would be a permanent free stat.
             if let Some(mut b) = self.world.get_mut::<CombatBuff>(companion) {
                 b.active = None;
+            }
+            if let Some(mut c) = self.world.get_mut::<AbilityCooldowns>(companion) {
+                c.0.clear();
             }
         }
     }

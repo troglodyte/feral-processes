@@ -443,6 +443,13 @@ pub struct CombatBuff {
     pub active: Option<ActiveBuff>,
 }
 
+/// Rounds remaining before each ability this combatant has spent can be
+/// used again. Battle-scoped exactly like `CombatBuff` and `StatusEffects`
+/// — armed during a fight, ticked at end of round, cleared when the
+/// intrusion ends — so nothing here is ever persisted.
+#[derive(Component, Default)]
+pub struct AbilityCooldowns(pub std::collections::HashMap<crate::abilities::AbilityId, u32>);
+
 /// Uniform random-roll range applied independently to each of a newly
 /// created creature's stats (baked into `Stats` at spawn) and to its
 /// growth rate (`Potential::growth_roll`) — see `Game::roll_potential`.

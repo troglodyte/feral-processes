@@ -153,6 +153,9 @@ pub struct SpecialOption {
     /// carried here so neither renderer has to know what any ability does.
     /// Meaningless (and always `false`) for abilities that open a picker.
     pub sweeps_party: bool,
+    /// `Some(reason)` means render it greyed with the reason shown — same
+    /// contract as `ActionOption::unavailable`.
+    pub unavailable: Option<String>,
 }
 
 /// One row of the ally picker — who a party-facing Special lands on. Same

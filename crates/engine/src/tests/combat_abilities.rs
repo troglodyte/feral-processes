@@ -272,3 +272,116 @@ fn a_whole_party_heal_raises_every_living_member_and_skips_the_downed() {
         "a heal spent on a downed member would be wasted"
     );
 }
+
+#[test]
+fn an_ability_on_cooldown_is_offered_but_refused() {
+    let (mut game, sweeper) = game_with_a_sweeper();
+    battle_with_a_pack_of(&mut game, 2, 200);
+    let slot = 1;
+
+    companion_uses_special(
+        &mut game,
+        sweeper,
+        0, // cascade_overflow, cooldown 2
+        battle::SpecialTarget::EnemyGroup { group: 0 },
+    );
+
+    let options = game.battle_special_options(slot);
+    assert!(
+        options[0].unavailable.is_some(),
+        "an ability just spent must render greyed, not silently fail"
+    );
+    assert!(
+        game.battle_set_action(
+            slot,
+            BattleAction::Special {
+                ability: 0,
+                target: battle::SpecialTarget::EnemyGroup { group: 0 },
+            }
+        )
+        .is_err(),
+        "planning a cooling ability must be refused, not burn the round"
+    );
+}
+
+#[test]
+fn a_cooldown_expires_after_its_declared_rounds() {
+    let (mut game, sweeper) = game_with_a_sweeper();
+    battle_with_a_pack_of(&mut game, 2, 500);
+
+    companion_uses_special(
+        &mut game,
+        sweeper,
+        0, // cooldown 2
+        battle::SpecialTarget::EnemyGroup { group: 0 },
+    );
+    assert!(game.battle_special_options(1)[0].unavailable.is_some());
+
+    for _ in 0..2 {
+        resolve_round_with(&mut game, BattleAction::Defend);
+    }
+
+    assert!(
+        game.battle_special_options(1)[0].unavailable.is_none(),
+        "a 2-round cooldown must be clear two rounds later"
+    );
+}
+
+#[test]
+fn cooldowns_do_not_survive_the_battle_that_set_them() {
+    let (mut game, sweeper) = game_with_a_sweeper();
+    battle_with_a_pack_of(&mut game, 1, 1);
+
+    companion_uses_special(
+        &mut game,
+        sweeper,
+        0,
+        battle::SpecialTarget::EnemyGroup { group: 0 },
+    );
+
+    assert!(
+        game.world.get_resource::<BattleState>().is_none(),
+        "the one 1-HP enemy should have died, ending the fight"
+    );
+    let cooldowns = game.world.get::<AbilityCooldowns>(sweeper);
+    assert!(
+        cooldowns.is_none_or(|c| c.0.values().all(|&r| r == 0)),
+        "cooldowns are scoped to one intrusion, like every other combat status"
+    );
+}
+
+#[test]
+fn a_costly_ability_charges_its_own_fatigue_not_the_flat_command_cost() {
+    let (mut game, sweeper) = game_with_a_sweeper();
+    let player = game.player_entity();
+    battle_with_a_pack_of(&mut game, 2, 500);
+
+    let before = game.world.get::<Needs>(player).unwrap().fatigue;
+    companion_uses_special(
+        &mut game,
+        sweeper,
+        0, // cascade_overflow declares fatigue_cost 8.0
+        battle::SpecialTarget::EnemyGroup { group: 0 },
+    );
+    let spent = before - game.world.get::<Needs>(player).unwrap().fatigue;
+
+    assert!(
+        spent > COMPANION_COMMAND_FATIGUE_COST,
+        "cascade_overflow's 8.0 must cost more than the flat 5.0 default, spent {spent}"
+    );
+}
+
+#[test]
+fn an_ability_costing_more_fatigue_than_you_have_is_unavailable() {
+    let (mut game, sweeper) = game_with_a_sweeper();
+    let player = game.player_entity();
+    battle_with_a_pack_of(&mut game, 2, 500);
+    game.world.get_mut::<Needs>(player).unwrap().fatigue = 1.0;
+
+    let options = game.battle_special_options(1);
+    assert!(
+        options[1].unavailable.is_some(),
+        "broadcast_storm costs 15.0 Fatigue and must be refused at 1.0"
+    );
+    let _ = sweeper;
+}

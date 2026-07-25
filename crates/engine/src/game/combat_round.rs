@@ -120,18 +120,38 @@ impl Game {
                     .or_else(|| abilities.first())
                     .cloned();
                 if let Some(ability) = chosen {
-                    let recipients = self.ability_recipients(ability.target, &target);
-                    self.use_ability(&ability, entity, &name, &recipients);
-                    // An area effect can drop members from any rank, and a
-                    // corpse left in a group would be promoted to front and
-                    // then attacked as though alive.
-                    self.reap_dead_members(player);
+                    // Paid before the effect resolves, not after: a killing
+                    // blow ends the battle inside `reap_dead_members`, and
+                    // `end_battle` wipes every battle-scoped component — so a
+                    // cooldown armed afterwards would be written back onto an
+                    // entity that has already been cleaned up, and survive
+                    // into the next fight.
+                    if ability.cooldown > 0 {
+                        let mut cooldowns = self
+                            .world
+                            .get::<AbilityCooldowns>(entity)
+                            .map(|c| c.0.clone())
+                            .unwrap_or_default();
+                        // +1 so the tick at the end of this same round
+                        // doesn't eat a round the player never got.
+                        cooldowns.insert(ability.id.clone(), ability.cooldown + 1);
+                        self.world
+                            .entity_mut(entity)
+                            .insert(AbilityCooldowns(cooldowns));
+                    }
                     // Directing a companion's ability still costs the player
                     // fatigue, as commanding one always did — the action
                     // moved into the round loop, the price didn't go away.
                     if let Some(mut needs) = self.world.get_mut::<Needs>(player) {
                         needs.fatigue = (needs.fatigue - ability.fatigue_cost).max(0.0);
                     }
+
+                    let recipients = self.ability_recipients(ability.target, &target);
+                    self.use_ability(&ability, entity, &name, &recipients);
+                    // An area effect can drop members from any rank, and a
+                    // corpse left in a group would be promoted to front and
+                    // then attacked as though alive.
+                    self.reap_dead_members(player);
                 }
             }
             // Already applied up front in `battle_resolve_round`, so that

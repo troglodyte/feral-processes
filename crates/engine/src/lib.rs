@@ -32,11 +32,12 @@ use battle::{
     SpecialOption, TargetSpec,
 };
 use components::{
-    ActiveBuff, ActiveStatus, BuffKind, CombatBuff, Creature, CustomName, Decompiler, Durability,
-    Equipment, EquippedItem, Experience, FusionCount, Glyph, GlyphColor, Hostile, Inventory,
-    ItemFusions, MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL, NEED_MAX, Needs, Nest, NestGuardian,
-    PassiveProcessor, Perks, Player, Position, Potential, ResourceNode, Stats, StatusEffects,
-    StatusKind, Structure, StructureTier, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
+    AbilityCooldowns, ActiveBuff, ActiveStatus, BuffKind, CombatBuff, Creature, CustomName,
+    Decompiler, Durability, Equipment, EquippedItem, Experience, FusionCount, Glyph, GlyphColor,
+    Hostile, Inventory, ItemFusions, MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL, NEED_MAX, Needs,
+    Nest, NestGuardian, PassiveProcessor, Perks, Player, Position, Potential, ResourceNode, Stats,
+    StatusEffects, StatusKind, Structure, StructureTier, Tamed, Task, TaskKind, Temporary,
+    WanderAi, ZonePortal,
 };
 use items::{EquipmentSlot, EquipmentStats, ItemId, ids};
 use items_db::ItemDb;

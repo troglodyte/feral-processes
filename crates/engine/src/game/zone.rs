@@ -1,0 +1,380 @@
+//! The zone the player currently stands in: locating things on the map,
+//! stamping the base platform, and stepping through a portal to the next
+//! zone.
+
+use crate::*;
+
+impl Game {
+    pub(crate) fn find_wild_creature_at(&mut self, x: i32, y: i32) -> Option<Entity> {
+        let mut query = self
+            .world
+            .query_filtered::<(Entity, &Position), (With<Creature>, Without<Tamed>)>();
+        query
+            .iter(&self.world)
+            .find(|(_, p)| p.x == x && p.y == y)
+            .map(|(e, _)| e)
+    }
+
+    /// Finds a `Nest` at `(x, y)`, if any — checked in `move_player`
+    /// before the ordinary blocking-structure check, so walking into a
+    /// nest tile attacks it instead of just being blocked.
+    pub(crate) fn find_nest_at(&mut self, x: i32, y: i32) -> Option<Entity> {
+        let mut query = self
+            .world
+            .query_filtered::<(Entity, &Position), With<Nest>>();
+        query
+            .iter(&self.world)
+            .find(|(_, p)| p.x == x && p.y == y)
+            .map(|(e, _)| e)
+    }
+
+    /// Deals one hit of the player's `effective_atk` (against no defense
+    /// — a nest has none, only a `Durability` pool) to `nest`. A nest
+    /// never retaliates, unlike an ordinary wild-creature encounter — see
+    /// the nests design doc for why this deliberately isn't routed
+    /// through `BattleState`. Destroying it strips `NestGuardian` from
+    /// every creature tethered to it (they resume ordinary wandering) and
+    /// despawns the nest, which implicitly cancels anything left in its
+    /// `Nest::pending_respawns`.
+    pub(crate) fn attack_nest(&mut self, nest: Entity) {
+        let player = self.player_entity();
+        let label = self.entity_label(nest);
+        let dmg = battle::compute_damage(self.effective_atk(player), 0, 5) as u32;
+        let Some(mut durability) = self.world.get_mut::<Durability>(nest) else {
+            return;
+        };
+        durability.hp = durability.hp.saturating_sub(dmg);
+        let destroyed = durability.hp == 0;
+        if destroyed {
+            self.log(format!("The {label} crashes and collapses!"));
+            self.despawn_nest(nest);
+        } else {
+            self.log(format!(
+                "You unleash a data strike into the {label} for {dmg} damage."
+            ));
+        }
+    }
+
+    /// Despawns `nest`, first stripping `NestGuardian` from every creature
+    /// tethered to it so none is left pointing at a dead entity — they
+    /// resume ordinary wandering. Despawning implicitly cancels anything
+    /// left in `Nest::pending_respawns`.
+    pub(crate) fn despawn_nest(&mut self, nest: Entity) {
+        let guardians: Vec<Entity> = {
+            let mut query = self.world.query::<(Entity, &NestGuardian)>();
+            query
+                .iter(&self.world)
+                .filter(|(_, g)| g.nest == nest)
+                .map(|(e, _)| e)
+                .collect()
+        };
+        for guardian in guardians {
+            self.world.entity_mut(guardian).remove::<NestGuardian>();
+        }
+        self.world.despawn(nest);
+    }
+
+    /// Stamps the base platform centered on `(cx, cy)`: every tile within
+    /// `MAX_BUILD_DISTANCE_FROM_HOME` (Chebyshev) becomes walkable
+    /// `Biome::Platform`, and every hostile and nest standing inside is
+    /// obliterated. Deploying a Home and breaching into a new zone are the
+    /// only callers.
+    pub(crate) fn stamp_platform(&mut self, cx: i32, cy: i32) {
+        {
+            let mut map = self.world.resource_mut::<WorldMap>();
+            for dy in -MAX_BUILD_DISTANCE_FROM_HOME..=MAX_BUILD_DISTANCE_FROM_HOME {
+                for dx in -MAX_BUILD_DISTANCE_FROM_HOME..=MAX_BUILD_DISTANCE_FROM_HOME {
+                    map.set_override(
+                        cx + dx,
+                        cy + dy,
+                        Tile {
+                            biome: Biome::Platform,
+                            walkable: true,
+                        },
+                    );
+                }
+            }
+        }
+
+        let inside = |p: &Position| {
+            (p.x - cx).abs() <= MAX_BUILD_DISTANCE_FROM_HOME
+                && (p.y - cy).abs() <= MAX_BUILD_DISTANCE_FROM_HOME
+        };
+        let hostiles: Vec<Entity> = {
+            let mut query = self
+                .world
+                .query_filtered::<(Entity, &Position), With<Hostile>>();
+            query
+                .iter(&self.world)
+                .filter(|(_, p)| inside(p))
+                .map(|(e, _)| e)
+                .collect()
+        };
+        for e in hostiles {
+            self.world.despawn(e);
+        }
+        // Nests route through despawn_nest rather than a bare despawn: a
+        // guardian can be standing outside the slab while its nest is
+        // inside it, and would otherwise be left tethered to a dead entity.
+        let nests: Vec<Entity> = {
+            let mut query = self
+                .world
+                .query_filtered::<(Entity, &Position), With<Nest>>();
+            query
+                .iter(&self.world)
+                .filter(|(_, p)| inside(p))
+                .map(|(e, _)| e)
+                .collect()
+        };
+        for nest in nests {
+            self.despawn_nest(nest);
+        }
+
+        self.world.resource_mut::<Platform>().center = Some((cx, cy));
+    }
+
+    /// Removes the platform slab, restoring natural terrain underneath.
+    /// Called when the Home is demolished — the slab is defined as
+    /// "centered on the current Home", so no Home means no slab.
+    pub(crate) fn clear_platform(&mut self) {
+        let Some((cx, cy)) = self.world.resource::<Platform>().center else {
+            return;
+        };
+        {
+            let mut map = self.world.resource_mut::<WorldMap>();
+            for dy in -MAX_BUILD_DISTANCE_FROM_HOME..=MAX_BUILD_DISTANCE_FROM_HOME {
+                for dx in -MAX_BUILD_DISTANCE_FROM_HOME..=MAX_BUILD_DISTANCE_FROM_HOME {
+                    map.clear_override(cx + dx, cy + dy);
+                }
+            }
+        }
+        self.world.resource_mut::<Platform>().center = None;
+    }
+
+    pub(crate) fn find_blocking_structure_at(&mut self, x: i32, y: i32) -> Option<Entity> {
+        let mut query = self
+            .world
+            .query_filtered::<(Entity, &Position), With<Structure>>();
+        query
+            .iter(&self.world)
+            .find(|(_, p)| p.x == x && p.y == y)
+            .map(|(e, _)| e)
+    }
+
+    /// The Home structure's position, if one is deployed anywhere right
+    /// now — the anchor `place_structure` measures the build radius from.
+    pub(crate) fn home_position(&mut self) -> Option<Position> {
+        let mut query = self.world.query::<(&Structure, &Position)>();
+        query
+            .iter(&self.world)
+            .find(|(s, _)| s.kind == HOME_STRUCTURE_ID)
+            .map(|(_, p)| *p)
+    }
+
+    /// Any deployed structure whose def sets `enables_rest` and is within
+    /// its radius of `player_pos` — gates `Game::rest`.
+    pub(crate) fn nearby_rest_structure(&mut self, player_pos: Position) -> Option<Entity> {
+        let mut query = self.world.query::<(Entity, &Structure, &Position)>();
+        let hits: Vec<(Entity, StructureId, Position)> = query
+            .iter(&self.world)
+            .map(|(e, s, p)| (e, s.kind.clone(), *p))
+            .collect();
+        let db = self.world.resource::<StructureDb>();
+        hits.into_iter().find_map(|(entity, kind, pos)| {
+            let radius = db.get(&kind)?.enables_rest.as_ref()?.radius;
+            if (pos.x - player_pos.x).abs() <= radius && (pos.y - player_pos.y).abs() <= radius {
+                Some(entity)
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Finds a zone-portal structure (`StructureDef::zone_portal`) at
+    /// `(x, y)`, if any — checked before the generic blocking-structure
+    /// check in `move_player` so walking onto one breaches the zone instead
+    /// of just bumping into it.
+    pub(crate) fn find_zone_portal_at(&mut self, x: i32, y: i32) -> Option<Entity> {
+        let mut query = self
+            .world
+            .query_filtered::<(Entity, &Position, &Structure), ()>();
+        let (entity, kind) = query
+            .iter(&self.world)
+            .find(|(_, p, _)| p.x == x && p.y == y)
+            .map(|(e, _, s)| (e, s.kind.clone()))?;
+        self.world
+            .resource::<StructureDb>()
+            .get(&kind)
+            .is_some_and(|d| d.zone_portal)
+            .then_some(entity)
+    }
+
+    /// Breaches the player (and any tamed programs they own) forward into
+    /// the next zone sector: wild programs and nests are left behind
+    /// (despawned — there's no portal back down), a fresh sector is
+    /// generated from a new seed, and wild programs there spawn with stats
+    /// scaled by the new zone's `ZoneLevel::stat_multiplier`.
+    ///
+    /// The player's base travels with them. Every structure is repositioned
+    /// around the new spawn point at its existing offset from the Home, and
+    /// the platform slab is re-stamped beneath it, so the base arrives in
+    /// exactly the layout it left in. The Portal itself is consumed by
+    /// `move_player` before this runs, so it never makes the trip.
+    ///
+    /// Spendable currency doesn't make the trip either — see the wipe at the
+    /// end of this function. Gear, supplies, fusion tiers and banked Research
+    /// Data all do.
+    pub(crate) fn enter_next_zone(&mut self) {
+        let stale: Vec<Entity> = {
+            let mut query = self
+                .world
+                .query_filtered::<Entity, Or<(With<Hostile>, With<Nest>)>>();
+            query.iter(&self.world).collect()
+        };
+        for e in stale {
+            self.world.despawn(e);
+        }
+
+        // Snapshot each structure's offset from the Home before the map is
+        // swapped, so the base can be rebuilt in the same layout around the
+        // new spawn point. No Home means there's no base to carry — every
+        // structure is left behind instead, the way all of them used to be,
+        // and any cronjob pointing at one is dropped rather than left
+        // dangling. Unreachable through the public API (a Portal can't be
+        // built without a Home, and demolishing a Home cascades to the
+        // Portal), but cheaper to handle than to prove impossible.
+        let home = self.home_position();
+        let offsets: Vec<(Entity, (i32, i32))> = match home {
+            Some(home) => {
+                let mut query = self
+                    .world
+                    .query_filtered::<(Entity, &Position), With<Structure>>();
+                query
+                    .iter(&self.world)
+                    .map(|(e, p)| (e, (p.x - home.x, p.y - home.y)))
+                    .collect()
+            }
+            None => {
+                let orphans: Vec<Entity> = {
+                    let mut query = self.world.query_filtered::<Entity, With<Structure>>();
+                    query.iter(&self.world).collect()
+                };
+                for e in orphans {
+                    self.world.despawn(e);
+                }
+                let dangling: Vec<Entity> = {
+                    let mut query = self.world.query_filtered::<Entity, With<Task>>();
+                    query.iter(&self.world).collect()
+                };
+                for e in dangling {
+                    self.world.entity_mut(e).remove::<Task>();
+                }
+                Vec::new()
+            }
+        };
+
+        let new_level = {
+            let mut zone = self.world.resource_mut::<ZoneLevel>();
+            zone.0 += 1;
+            zone.0
+        };
+        let new_seed = self
+            .world
+            .resource::<WorldMap>()
+            .seed()
+            .wrapping_add(0x9E37_79B9);
+        let mut new_map = WorldMap::new(new_seed);
+        let start = find_walkable_start(&mut new_map);
+        self.world.insert_resource(new_map);
+        self.world.insert_resource(ZoneSpawnPoint {
+            x: start.0,
+            y: start.1,
+        });
+
+        for (e, (dx, dy)) in offsets {
+            if let Some(mut pos) = self.world.get_mut::<Position>(e) {
+                pos.x = start.0 + dx;
+                pos.y = start.1 + dy;
+            }
+        }
+        // The departed zone's slab went with the old WorldMap — a freshly
+        // generated one starts with an empty override overlay — so there's
+        // nothing to clean up and only ever one slab in existence.
+        if home.is_some() {
+            self.stamp_platform(start.0, start.1);
+        }
+
+        let travelers: Vec<Entity> = {
+            let mut query = self
+                .world
+                .query_filtered::<Entity, Or<(With<Player>, With<Tamed>)>>();
+            query.iter(&self.world).collect()
+        };
+        for e in travelers {
+            if let Some(mut pos) = self.world.get_mut::<Position>(e) {
+                pos.x = start.0;
+                pos.y = start.1;
+            }
+        }
+
+        // Currency is zone-local: the next breach has to be funded in the
+        // zone you leave from, so a stockpile can't chain breaches past
+        // content it never engaged with. Keyed on economy role, so a mod's
+        // own currency item resets without an engine change. Research Data
+        // is banked progress rather than spending money and survives.
+        let spendable = [self.currency(), self.craft_currency()];
+        let player = self.player_entity();
+        let lost: Vec<(ItemId, u32)> = {
+            let mut inventory = self.world.get_mut::<Inventory>(player).unwrap();
+            spendable
+                .into_iter()
+                .filter_map(|item| {
+                    let qty = inventory.take(item.clone(), u32::MAX);
+                    (qty > 0).then_some((item, qty))
+                })
+                .collect()
+        };
+
+        self.log(format!(
+            "You breach the portal and materialize in a level {new_level} sector. Hostile signal strength has spiked."
+        ));
+        if !lost.is_empty() {
+            let manifest = lost
+                .iter()
+                .map(|(item, qty)| format!("{qty} {}", self.item_name(item)))
+                .collect::<Vec<_>>()
+                .join(" and ");
+            self.log(format!(
+                "Your caches decohere in transit — {manifest} lost to the breach."
+            ));
+        }
+        self.spawn_initial_creatures(14);
+    }
+
+    /// Where the player materialized on breaching into the current zone —
+    /// see `resources::ZoneSpawnPoint`. Marked on the map so a player can
+    /// navigate back toward the (comparatively) safer ground near it, per
+    /// `distance_stat_multiplier`.
+    pub fn zone_spawn_point(&self) -> (i32, i32) {
+        let p = self.world.resource::<ZoneSpawnPoint>();
+        (p.x, p.y)
+    }
+}
+
+/// The first walkable tile found spiralling out from the origin — where the
+/// player is dropped when a zone is generated.
+pub(crate) fn find_walkable_start(world_map: &mut WorldMap) -> (i32, i32) {
+    for r in 0..64i32 {
+        for dx in -r..=r {
+            for dy in -r..=r {
+                if r != 0 && dx.abs() != r && dy.abs() != r {
+                    continue;
+                }
+                if world_map.tile(dx, dy).walkable {
+                    return (dx, dy);
+                }
+            }
+        }
+    }
+    (0, 0)
+}

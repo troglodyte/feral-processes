@@ -283,3 +283,51 @@ fn a_stale_target_group_index_falls_back_to_the_front_group() {
         "a stale index must fall back to the lowest surviving group"
     );
 }
+
+#[test]
+fn ceil_sqrt_is_exact_at_perfect_squares() {
+    for (n, expected) in [
+        (0, 0),
+        (1, 1),
+        (2, 2),
+        (3, 2),
+        (4, 2),
+        (9, 3),
+        (10, 4),
+        (81, 9),
+        (100, 10),
+    ] {
+        assert_eq!(
+            crate::battle::ceil_sqrt(n),
+            expected,
+            "ceil_sqrt({n}) should be {expected} — a float sqrt().ceil() rounds \
+             the wrong way at perfect squares"
+        );
+    }
+}
+
+/// A swarm is an attrition wall, not a linear damage multiplier: only the
+/// front `ceil(sqrt(n))` members of a group get an initiative slot.
+#[test]
+fn only_the_front_ceil_sqrt_of_a_group_acts_each_round() {
+    let mut game = Game::new(5, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 6;
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let (x, y) = (spawn.x + DISTANCE_STAT_STEP_TILES * 8, spawn.y);
+
+    let members: Vec<Entity> = (0..9)
+        .map(|i| game.spawn_wild_creature("glitch", x, y + i).unwrap())
+        .collect();
+    game.start_battle(members);
+
+    let acting = game
+        .roll_initiative()
+        .into_iter()
+        .filter(|a| matches!(a, crate::battle::Actor::Enemy { .. }))
+        .count();
+
+    assert_eq!(
+        acting, 3,
+        "a group of nine should swing three at a time, not nine"
+    );
+}

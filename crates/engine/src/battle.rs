@@ -19,6 +19,23 @@ impl EnemyGroup {
     }
 }
 
+/// Smallest `k` where `k * k >= n`. Integer throughout: `(n as f64).sqrt().ceil()`
+/// can round the wrong way at perfect squares, and both callers need 81 to
+/// give exactly 9.
+pub(crate) fn ceil_sqrt(n: u32) -> u32 {
+    let root = n.isqrt();
+    if root * root == n { root } else { root + 1 }
+}
+
+/// How many of a group's `n` living members can bring weapons to bear in one
+/// round. A hundred-strong swarm cannot all reach the party at once, so it
+/// swings ten at a time — which is what makes a swarm an attrition problem
+/// rather than an instant wipe. Shared with `crate::balance` so the offline
+/// projections and the real round loop cannot drift.
+pub(crate) fn attackers_in_group(n: usize) -> usize {
+    ceil_sqrt(n as u32) as usize
+}
+
 /// One combatant in an initiative order — an index rather than an `Entity`,
 /// so a resolution walk can survive members dying mid-round and can address
 /// a party slot that has since emptied.

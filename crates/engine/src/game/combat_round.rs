@@ -349,10 +349,11 @@ impl Game {
         })
     }
 
-    /// Every currently-alive member of the active pack retaliates this
-    /// round — the core of what makes a multi-creature pack meaningfully
-    /// more dangerous than a solo encounter of the same species. Each one
-    /// independently rolls its own move and target (see `wild_retaliate`).
+    /// The front `battle::attackers_in_group` members of each reachable
+    /// group retaliate this round — enough of a pack to make it more
+    /// dangerous than a solo encounter, without a hundred-strong swarm
+    /// simply deleting the party. Each one independently rolls its own move
+    /// and target (see `wild_retaliate`).
     pub(crate) fn all_wild_retaliate(&mut self, player: Entity) {
         // Ordered by the same initiative roll the full round loop uses, so
         // a fast pack member lands its hit before a slow one — the party

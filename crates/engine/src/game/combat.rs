@@ -179,7 +179,10 @@ impl Game {
         // initiative rolls in exactly this order.
         let mut actors: Vec<battle::Actor> = (0..=party_len).map(battle::Actor::Party).collect();
         for (group, size) in group_sizes.into_iter().enumerate() {
-            actors.extend((0..size).map(|slot| battle::Actor::Enemy { group, slot }));
+            actors.extend(
+                (0..battle::attackers_in_group(size))
+                    .map(|slot| battle::Actor::Enemy { group, slot }),
+            );
         }
 
         let mut rolled: Vec<(i32, battle::Actor)> = Vec::new();

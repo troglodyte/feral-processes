@@ -1051,28 +1051,19 @@ fn draw_worker_menu(
         rows.push(text_row("(no compiled programs nearby)"));
     }
     for (i, w) in workers.iter().enumerate() {
-        let companion = if w.is_companion { " (in party)" } else { "" };
-        let job = w
-            .job_structure
-            .as_ref()
-            .map(|s| format!(" (on a cronjob: {s})"))
-            .unwrap_or_default();
-        let power = pets
-            .iter()
-            .find(|p| p.entity == w.entity)
-            .map(|p| format!(" PWR {}", p.power))
-            .unwrap_or_default();
+        let pet = pets.iter().find(|p| p.entity == w.entity);
+        let power = pet.map(|p| format!(" PWR {}", p.power)).unwrap_or_default();
+        let activity = pet.map(|p| activity_tag(&p.activity)).unwrap_or_default();
         rows.push(item_row(
             format!(
-                "[{}] {}{}{} at ({}, {}){}{}",
+                "[{}] {}{}{} at ({}, {}){}",
                 menu_shortcut(i),
                 w.label,
                 w.level.map(|l| format!(" Lv{l}")).unwrap_or_default(),
                 power,
                 w.pos.0,
                 w.pos.1,
-                companion,
-                job
+                activity
             ),
             i == selected,
         ));
@@ -1465,12 +1456,7 @@ fn draw_companion_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metr
         rows.push(text_row("(you don't have any compiled programs yet)"));
     }
     for (i, p) in pets.iter().enumerate() {
-        let active = if p.is_companion { " (in party)" } else { "" };
-        let job = p
-            .job_structure
-            .as_ref()
-            .map(|s| format!(" (on a cronjob: {s})"))
-            .unwrap_or_default();
+        let activity = activity_tag(&p.activity);
         let quality = p
             .quality
             .as_ref()
@@ -1479,7 +1465,7 @@ fn draw_companion_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metr
         let fused = fusion_tag(p.fusions);
         rows.push(item_row(
             format!(
-                "[{}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}{}{}{}{}",
+                "[{}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}{}{}{}",
                 menu_shortcut(i),
                 p.name,
                 p.level,
@@ -1490,8 +1476,7 @@ fn draw_companion_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metr
                 p.power,
                 quality,
                 fused,
-                active,
-                job
+                activity
             ),
             i == selected,
         ));
@@ -1519,14 +1504,9 @@ fn fuse_candidate_label(num: char, c: &EntityView, pets: &[PetInfo]) -> String {
     let fused = fusion_tag(c.fusions);
     match pets.iter().find(|p| p.entity == c.entity) {
         Some(p) => {
-            let active = if p.is_companion { " (in party)" } else { "" };
-            let job = p
-                .job_structure
-                .as_ref()
-                .map(|s| format!(" (on a cronjob: {s})"))
-                .unwrap_or_default();
+            let activity = activity_tag(&p.activity);
             format!(
-                "[{num}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}{fused}{active}{job}",
+                "[{num}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}{fused}{activity}",
                 c.label, p.level, p.hp, p.max_hp, p.atk, p.def, p.power
             )
         }
@@ -1735,12 +1715,13 @@ fn draw_trade_action_menu(
         for program in &programs {
             rows.push(item_row(
                 format!(
-                    "[{}] Sell {} Lv{} — power {} → {} Core Fragments",
+                    "[{}] Sell {} Lv{} — power {} → {} Core Fragments{}",
                     menu_shortcut(idx),
                     program.name,
                     program.level,
                     program.power,
                     program.payout,
+                    activity_tag(&program.activity),
                 ),
                 idx == selected,
             ));
@@ -1903,6 +1884,14 @@ fn decompile_chance_line(chance: Option<f32>) -> String {
         Some(c) => format!("Decompile chance right now: {:.0}%", c * 100.0),
         None => "Decompile chance right now: needs a taming catalyst".to_string(),
     }
+}
+
+/// A program's current activity as a bracketed suffix — `" (in party)"`,
+/// `" (Mining Node)"`, `" (guarding Data Cache)"`, `" (idle)"`. The wording
+/// itself is `Game::program_activity`'s; every dialog that lists programs
+/// appends it through here so they cannot drift apart.
+fn activity_tag(activity: &str) -> String {
+    format!(" ({activity})")
 }
 
 fn status_tag(status: &Option<String>) -> String {

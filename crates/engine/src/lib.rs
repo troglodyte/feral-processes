@@ -403,9 +403,14 @@ pub struct ProgramSaleOption {
     /// so the price is explicable rather than arbitrary.
     pub power: i32,
     pub payout: u32,
+    /// What the program is doing right now — see `Game::program_activity`.
+    /// Shown on the row, so the screen that permanently erases a program
+    /// says what it was in the middle of.
+    pub activity: String,
     /// What this sale would also cancel, worded for display: e.g. "leaves
     /// your battle party", "stops working the Mining Node". Empty when the
-    /// program is idle.
+    /// program is idle. The same facts as `activity`, worded as consequences
+    /// — the confirmation screen warns, the row informs.
     pub detaches: Vec<String>,
 }
 
@@ -420,8 +425,8 @@ pub struct PetInfo {
     /// A rough overall-strength scalar — see `components::Stats::power`.
     pub power: i32,
     pub is_companion: bool,
-    /// The label of the structure this pet is cronjob-assigned to, if any.
-    pub job_structure: Option<String>,
+    /// What this pet is doing right now — see `Game::program_activity`.
+    pub activity: String,
     /// This individual's rolled quality tier (see `components::Potential`),
     /// e.g. "Excellent (94%)" — `None` for a creature with no `Potential`
     /// (shouldn't happen for anything spawned going forward, but possible
@@ -481,11 +486,6 @@ pub struct EntityView {
     /// Whether this (structure) entity is a trading post (see
     /// `StructureDef::trade`).
     pub can_trade: bool,
-    /// Whether this (tamed) entity is currently assigned to a cronjob.
-    pub has_job: bool,
-    /// If `has_job`, the label of the structure this (tamed) entity is
-    /// assigned to.
-    pub job_structure: Option<String>,
     /// If this is a structure, the label of the (tamed) entity currently
     /// working it via cronjob, if any.
     pub structure_worker: Option<String>,
@@ -5278,11 +5278,6 @@ impl Game {
                     .get::<Experience>(entity)
                     .map(|e| e.level)
                     .unwrap_or(1);
-                let job_structure = self
-                    .world
-                    .get::<Task>(entity)
-                    .map(|t| t.target)
-                    .map(|target| self.entity_label(target));
                 Some(PetInfo {
                     entity,
                     name: self.creature_label(entity),
@@ -5293,7 +5288,7 @@ impl Game {
                     def: stats.def,
                     power: stats.power(),
                     is_companion: party.contains(&entity),
-                    job_structure,
+                    activity: self.program_activity(entity),
                     quality: self.potential_quality_label(entity),
                     fusions: self.fusion_count(entity),
                 })
@@ -5638,9 +5633,6 @@ impl Game {
                 let tier = self.world.get::<StructureTier>(entity).map(|t| t.0);
                 let can_work = self.world.get::<ResourceNode>(entity).is_some();
                 let can_trade = self.trade_options(entity).is_some();
-                let task_target = self.world.get::<Task>(entity).map(|t| t.target);
-                let has_job = task_target.is_some();
-                let job_structure = task_target.map(|target| self.entity_label(target));
                 let structure_worker = if is_structure {
                     worker_by_structure
                         .get(&entity)
@@ -5684,8 +5676,6 @@ impl Game {
                     is_boss,
                     can_work,
                     can_trade,
-                    has_job,
-                    job_structure,
                     structure_worker,
                     hp_fraction,
                     level,
@@ -5776,8 +5766,6 @@ impl Game {
                 is_boss: false,
                 can_work: false,
                 can_trade: false,
-                has_job: false,
-                job_structure: None,
                 structure_worker: None,
                 hp_fraction: None,
                 level: None,
@@ -6237,10 +6225,37 @@ impl Game {
                     level: pet.level,
                     power: pet.power,
                     payout: self.program_payout(structure, pet.entity)?,
+                    activity: pet.activity,
                     detaches: self.sale_detachments(pet.entity),
                 })
             })
             .collect()
+    }
+
+    /// What `creature` is doing right now, as a terse status for any dialog
+    /// that lists programs: `"in party"`, the bare name of the structure it
+    /// works, `"guarding <structure>"`, or `"idle"`.
+    ///
+    /// A worker reads as the bare structure name and a guard carries the
+    /// verb, because that is the only thing distinguishing them. Owned by the
+    /// engine rather than assembled per screen: it has to read `TaskKind` and
+    /// resolve a structure label, and it was previously duplicated across
+    /// three dialogs — each of which called a guard "on a cronjob", since the
+    /// field they read was `Task.target` with the kind thrown away.
+    pub fn program_activity(&self, creature: Entity) -> String {
+        if self.world.resource::<Party>().0.contains(&creature) {
+            return "in party".to_string();
+        }
+        match self.world.get::<Task>(creature) {
+            Some(task) => {
+                let target = self.entity_label(task.target);
+                match task.kind {
+                    TaskKind::GatherResource => target,
+                    TaskKind::Guard => format!("guarding {target}"),
+                }
+            }
+            None => "idle".to_string(),
+        }
     }
 
     /// What selling `creature` would also cancel, worded for display. Built
@@ -10015,20 +10030,20 @@ mod tests {
 
         let companion_info = pets.iter().find(|p| p.entity == companion).unwrap();
         assert!(companion_info.is_companion);
-        assert_eq!(companion_info.job_structure, None);
+        assert_eq!(companion_info.activity, "in party");
 
         let worker_info = pets.iter().find(|p| p.entity == far_worker).unwrap();
         assert!(!worker_info.is_companion);
-        assert!(
-            worker_info.job_structure.is_some(),
-            "a far-off cronjob worker should still be reported"
+        assert_ne!(
+            worker_info.activity, "idle",
+            "a far-off cronjob worker should still be reported as working"
         );
         assert_eq!(worker_info.hp, 12);
         assert_eq!(worker_info.atk, 4);
 
         let idle_info = pets.iter().find(|p| p.entity == idle).unwrap();
         assert!(!idle_info.is_companion);
-        assert_eq!(idle_info.job_structure, None);
+        assert_eq!(idle_info.activity, "idle");
     }
 
     #[test]
@@ -12032,6 +12047,83 @@ mod tests {
             .get::<Inventory>(game.player_entity())
             .unwrap()
             .count(&ItemId::from(ids::CORE_FRAGMENT))
+    }
+
+    /// A guard used to read as being "on a cronjob" everywhere a program was
+    /// listed: `PetInfo::job_structure` was `Task.target`'s label with no
+    /// regard for `TaskKind`, and all three of its consumers wrapped it as
+    /// "on a cronjob". Party membership was shown nowhere at all.
+    #[test]
+    fn program_activity_tells_a_guard_apart_from_a_worker() {
+        let mut game = Game::new(130, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let idle = spawn_tamed(&mut game, 30, 5);
+        let fighter = spawn_tamed(&mut game, 30, 5);
+        let guard = spawn_tamed(&mut game, 30, 5);
+        let market = spawn_market(&mut game);
+
+        assert_eq!(game.program_activity(idle), "idle");
+
+        game.add_companion(fighter).unwrap();
+        assert_eq!(game.program_activity(fighter), "in party");
+
+        game.assign_guard(guard, market).unwrap();
+        let label = game.program_activity(guard);
+        assert!(
+            label.starts_with("guarding "),
+            "a guard must not read as a worker, got {label:?}"
+        );
+        assert!(
+            label.contains(&game.entity_label(market)),
+            "and it must name what it is guarding, got {label:?}"
+        );
+    }
+
+    /// A cronjob worker reads as the structure it works, with no verb — the
+    /// bare name is what distinguishes it from a guard.
+    #[test]
+    fn program_activity_names_the_structure_a_worker_is_on() {
+        let mut game = Game::new(131, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let worker = spawn_tamed(&mut game, 30, 5);
+        let node = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "mining_node".to_string(),
+                },
+                Position { x: 4, y: 4 },
+                ResourceNode {
+                    resource: ItemId::from(ids::CORE_FRAGMENT),
+                    amount: 5,
+                    capacity: 5,
+                    level: None,
+                },
+            ))
+            .id();
+
+        game.assign_cronjob(worker, node).unwrap();
+        let label = game.program_activity(worker);
+        assert_eq!(label, game.entity_label(node));
+        assert!(
+            !label.starts_with("guarding "),
+            "a worker must not read as a guard"
+        );
+    }
+
+    /// The trader's rows carry it too, so the screen that permanently erases
+    /// a program says what that program is currently doing.
+    #[test]
+    fn a_sale_row_carries_the_programs_activity() {
+        let mut game = Game::new(132, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let market = spawn_market(&mut game);
+        let fighter = spawn_tamed(&mut game, 30, 5);
+        game.add_companion(fighter).unwrap();
+
+        let options = game.program_sale_options(market);
+        let row = options
+            .iter()
+            .find(|o| o.entity == fighter)
+            .expect("the party member is still sellable");
+        assert_eq!(row.activity, "in party");
     }
 
     #[test]

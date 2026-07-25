@@ -2898,6 +2898,7 @@ mod tests {
             level: 4,
             power: 62,
             payout: 6,
+            activity: "in party".to_string(),
             detaches: vec!["leaves your battle party".to_string()],
         });
 
@@ -2922,6 +2923,7 @@ mod tests {
             level: 4,
             power: 62,
             payout: 6,
+            activity: "idle".to_string(),
             detaches: Vec::new(),
         });
 

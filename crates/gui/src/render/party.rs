@@ -40,10 +40,6 @@ pub(super) fn draw_companion_menu(game: &mut Game, selected: usize, fonts: &Font
     draw_popup("Party", PopupSize::Large, &rows, fonts, m);
 }
 
-/// Formats one fuse-candidate row with its full stat line, cross-
-/// referencing `pets` (`Game::owned_pets`) by entity — `view_entities`
-/// alone only carries a level and an HP fraction, not the raw HP/ATK/DEF/
-/// PWR numbers a fusion decision actually depends on.
 /// How a program's fusion depth reads in a menu row — nothing at all for
 /// a program that's never been fused, a plain count while it still has
 /// fusions left, and an explicit "maxed" note once it's hit
@@ -56,38 +52,26 @@ fn fusion_tag(fusions: u32) -> String {
     }
 }
 
-fn fuse_candidate_label(num: char, c: &EntityView, pets: &[PetInfo]) -> String {
-    let fused = fusion_tag(c.fusions);
-    match pets.iter().find(|p| p.entity == c.entity) {
-        Some(p) => {
-            let activity = activity_tag(&p.activity);
-            format!(
-                "[{num}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}{fused}{activity}",
-                c.label, p.level, p.hp, p.max_hp, p.atk, p.def, p.power
-            )
-        }
-        None => format!(
-            "[{num}] {}{}{fused}",
-            c.label,
-            c.level.map(|l| format!(" Lv{l}")).unwrap_or_default()
-        ),
-    }
+/// Formats one fuse-candidate row with the full stat line a fusion
+/// decision depends on.
+fn fuse_candidate_label(num: char, p: &PetInfo) -> String {
+    let fused = fusion_tag(p.fusions);
+    let activity = activity_tag(&p.activity);
+    format!(
+        "[{num}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}{fused}{activity}",
+        p.name, p.level, p.hp, p.max_hp, p.atk, p.def, p.power
+    )
 }
 
 pub(super) fn draw_fuse_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
-    let candidates: Vec<_> = game
-        .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
-        .into_iter()
-        .filter(|e| e.is_tamed)
-        .collect();
-    let pets = game.owned_pets();
+    let candidates = game.owned_pets();
     let mut rows = vec![text_row("Fuse which program? Pick the first of two.")];
     if candidates.is_empty() {
-        rows.push(text_row("(no compiled programs nearby)"));
+        rows.push(text_row("(you have no compiled programs)"));
     }
-    for (i, c) in candidates.iter().enumerate() {
+    for (i, p) in candidates.iter().enumerate() {
         rows.push(item_row(
-            fuse_candidate_label(menu_shortcut(i), c, &pets),
+            fuse_candidate_label(menu_shortcut(i), p),
             i == selected,
         ));
     }
@@ -102,26 +86,22 @@ pub(super) fn draw_fuse_second_menu(
     m: &Metrics,
 ) {
     let Some(first) = first else { return };
-    let nearby = game.view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS);
-    let first_label = nearby
-        .iter()
-        .find(|e| e.entity == first)
-        .map(|e| e.label.clone())
-        .unwrap_or_else(|| "it".to_string());
-    let candidates: Vec<_> = nearby
-        .into_iter()
-        .filter(|e| e.is_tamed && e.entity != first)
-        .collect();
     let pets = game.owned_pets();
+    let first_label = pets
+        .iter()
+        .find(|p| p.entity == first)
+        .map(|p| p.name.clone())
+        .unwrap_or_else(|| "it".to_string());
+    let candidates: Vec<_> = pets.into_iter().filter(|p| p.entity != first).collect();
     let mut rows = vec![text_row(format!(
         "Fuse {first_label} with which program? Both are consumed."
     ))];
     if candidates.is_empty() {
-        rows.push(text_row("(no other compiled programs nearby)"));
+        rows.push(text_row("(you have no other compiled programs)"));
     }
-    for (i, c) in candidates.iter().enumerate() {
+    for (i, p) in candidates.iter().enumerate() {
         rows.push(item_row(
-            fuse_candidate_label(menu_shortcut(i), c, &pets),
+            fuse_candidate_label(menu_shortcut(i), p),
             i == selected,
         ));
     }
@@ -141,12 +121,11 @@ pub(super) fn draw_fuse_name_menu(
     let (Some(first), Some(second)) = (first, second) else {
         return;
     };
-    let nearby = game.view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS);
+    let pets = game.owned_pets();
     let label_of = |e: Entity| {
-        nearby
-            .iter()
-            .find(|ev| ev.entity == e)
-            .map(|ev| ev.label.clone())
+        pets.iter()
+            .find(|p| p.entity == e)
+            .map(|p| p.name.clone())
             .unwrap_or_else(|| "it".to_string())
     };
     let rows = vec![

@@ -87,6 +87,12 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   `program_sell_divisor` inside a structure's `trade` block. Omit it and the
   trader deals in items only, so existing structure files are unaffected. See
   `assets/structures/README.md`.
+- **Fusing (`f`) now offers every program you own**, not just the ones
+  standing within 40 tiles of you. Fusion itself never had a distance
+  requirement — only the picker did, so a roster of workers left at far-off
+  nodes reported "no compiled programs nearby" and there was nothing to fuse
+  without walking the map to collect them first. Both pages now list the
+  whole roster, the same way the pets screen does.
 
 ### Structures
 

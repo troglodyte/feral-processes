@@ -108,7 +108,7 @@ change what gets stored — a save from a different build shows up as
 | `v` | Inventory/equipment: equip, unequip, consume, fuse, erase items |
 | `T` | Research tree: spend Research Data to unlock structures and recipes — see [Research](#research) |
 | `p` | Your pets: full stats (level, HP, Attack, Defense) for every compiled program you own, wherever it is — add/stand down party members (max 5) here too. Standing one down frees a battle slot, not a roster slot; to shed a program for good, sell it at a Market (`t`) or fuse it (`f`) |
-| `f` | Fuse two nearby compiled programs into one stronger one |
+| `f` | Fuse two compiled programs you own into one stronger one — the whole roster is offered, wherever the programs are |
 | `t` | Trade with a nearby iso Market: sell items or compiled programs, buy consumables |
 | `x` | Perks: spend Perk Points on permanent passive unlocks |
 | `s` | Save |
@@ -644,8 +644,11 @@ be active party members, fighting alongside you at once.
 
 ### Fusing programs
 
-Press `f` to fuse two nearby compiled programs into one — pick the first,
-then the second (anyone but the first). Both are consumed.
+Press `f` to fuse two compiled programs into one — pick the first, then
+the second (anyone but the first). Both are consumed. Both pages list
+every program you own, wherever it is and whatever it's doing, the same
+way the pets screen (`p`) does — a worker parked at a far-off node is
+just as fusable as the one standing next to you.
 
 - The result's species (and so its moves/work aptitude) matches whichever
   input was the **higher level**; ties favor the first program you picked.

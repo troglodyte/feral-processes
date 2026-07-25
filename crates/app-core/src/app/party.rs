@@ -28,18 +28,17 @@ impl App {
         }
     }
 
-    /// Picks the first of two tamed programs to fuse together.
+    /// Picks the first of two tamed programs to fuse together. Draws from
+    /// the whole roster rather than what's within `MENU_SCAN_RADIUS`:
+    /// `Game::fuse_companions` has no distance requirement, so scanning by
+    /// distance only hid programs left working across the map.
     pub(crate) fn handle_fuse_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.mode = Mode::Playing;
             return;
         }
         let Some(game) = &mut self.game else { return };
-        let candidates: Vec<_> = game
-            .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
-            .into_iter()
-            .filter(|e| e.is_tamed)
-            .collect();
+        let candidates = game.owned_pets();
         if let Some(idx) = self.selected_index(key, candidates.len()) {
             self.pending_fuse_first = Some(candidates[idx].entity);
             self.mode = Mode::FuseSecond;
@@ -60,9 +59,9 @@ impl App {
         };
         let Some(game) = &mut self.game else { return };
         let candidates: Vec<_> = game
-            .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
+            .owned_pets()
             .into_iter()
-            .filter(|e| e.is_tamed && e.entity != first)
+            .filter(|p| p.entity != first)
             .collect();
         if let Some(idx) = self.selected_index(key, candidates.len()) {
             self.pending_fuse_second = Some(candidates[idx].entity);

@@ -15,7 +15,7 @@ use feral_processes_engine::components::GlyphColor;
 use feral_processes_engine::items::ItemId;
 use feral_processes_engine::world::Biome;
 use feral_processes_engine::{
-    Entity, EntityView, Game, MAX_FUSIONS, MessageKind, PetInfo, ProgramSaleOption, ResearchState,
+    Entity, Game, MAX_FUSIONS, MessageKind, PetInfo, ProgramSaleOption, ResearchState,
 };
 
 mod bars;

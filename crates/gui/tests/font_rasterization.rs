@@ -1,4 +1,4 @@
-//! Guards the one empirical assumption the map font rests on.
+//! Guards the empirical assumptions the two fonts rest on.
 //!
 //! unscii ships as vectorized outlines of a bitmap rather than a real
 //! bitmap — HEX and PCF are its only true bitmap formats, and macroquad's
@@ -12,6 +12,7 @@ use std::sync::LazyLock;
 use feral_processes_app_core::MAX_ZOOM;
 
 const UNSCII: &[u8] = include_bytes!("../../../assets/fonts/unscii-16.ttf");
+const UI_FONT: &[u8] = include_bytes!("../../../assets/fonts/DejaVuSansMono.ttf");
 
 /// The sizes `text::map_cell` draws map glyphs at: 1x-4x unscii-16's
 /// native 16px cell.
@@ -26,6 +27,11 @@ const BLUR_TOLERANCE: u8 = 24;
 static FONT: LazyLock<fontdue::Font> = LazyLock::new(|| {
     fontdue::Font::from_bytes(UNSCII, fontdue::FontSettings::default())
         .expect("unscii-16.ttf must parse as a font")
+});
+
+static UI: LazyLock<fontdue::Font> = LazyLock::new(|| {
+    fontdue::Font::from_bytes(UI_FONT, fontdue::FontSettings::default())
+        .expect("DejaVuSansMono.ttf must parse as a font")
 });
 
 fn blurry_pixels(font: &fontdue::Font, size: f32, ch: char) -> Vec<u8> {
@@ -55,5 +61,30 @@ fn unscii_rasterizes_crisp_at_every_map_zoom_step() {
                 &blurry[..blurry.len().min(8)]
             );
         }
+    }
+}
+
+/// The battle ledger builds its columns by padding strings to a cell width,
+/// which lines up only if every glyph advances the same distance. The UI
+/// font is DejaVu Sans *Mono*, so this should hold — but the ledger is
+/// unreadable if it ever stops holding, and "the font is monospace" was an
+/// unstated assumption until this test existed.
+///
+/// Tested through fontdue for the same reason the unscii sweep is: it is the
+/// rasterizer macroquad uses, so no window or GL context is needed.
+#[test]
+fn the_ui_font_advances_every_glyph_equally() {
+    // Every character the roster rows can contain: stat digits, the HP
+    // slash, the truncation marker, and the letters of a species or
+    // companion name.
+    let sample: Vec<char> = (' '..='~').chain(['…']).collect();
+    let reference = UI.metrics('M', 16.0).advance_width;
+    for &ch in &sample {
+        let advance = UI.metrics(ch, 16.0).advance_width;
+        assert!(
+            (advance - reference).abs() < 0.01,
+            "{ch:?} advances {advance}px against {reference}px for 'M' — the UI \
+             font is not monospace, so the ledger's padded columns cannot line up"
+        );
     }
 }

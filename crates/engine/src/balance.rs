@@ -154,10 +154,10 @@ pub fn ticks_to_afford_portal(
     let payout = (tier * ZoneLevel(zone).stat_multiplier() as u32) as f64;
     let success = (0.4 + tier as f64 * 0.1).min(1.0);
     let per_tick = payout * success / ticks_per_unit as f64;
-    // A Portal's build_cost is a per-zone-level rate (see
-    // `StructureDef::zone_portal`), and fragments are bought with the
+    // Priced through the same helper the game charges with (see
+    // `crate::zone_portal_cost`), and fragments are bought with the
     // currency the base actually produces.
-    let needed = (portal_fragment_rate * zone * market_price) as f64;
+    let needed = (crate::zone_portal_cost(portal_fragment_rate, zone) * market_price) as f64;
     needed / per_tick
 }
 
@@ -516,33 +516,34 @@ mod tests {
         }
     }
 
-    /// Pins the *shape* of the un-upgraded curve, which is subtler than it
-    /// looks. Payout scales exponentially with depth (`2^(zone-1)`) while a
-    /// Portal's cost scales only linearly (`build_cost × zone`), so the
-    /// ratio is 1/1 at zone 1, 2/2 at zone 2 — **exactly break-even, the
-    /// first step is free of both gain and loss** — and only starts paying
-    /// off at zone 3 (4/3) and beyond.
+    /// Pins the *shape* of the un-upgraded curve. Payout scales
+    /// exponentially with depth (`2^(zone-1)`) while a Portal's cost grows
+    /// by only half its base rate per zone (see
+    /// `crate::ZONE_PORTAL_COST_GROWTH_PERCENT`), so the ratio is 1/1 at
+    /// zone 1, 2/1.5 at zone 2, 4/2 at zone 3: every step pays off, the
+    /// first one included.
     ///
-    /// So a player who never upgrades treads water on their first breach and
-    /// gains ground after that. Upgrading is what turns the first step into
-    /// a gain; see the tiered projection above.
+    /// Under the old `build_cost × zone` ramp the first breach was exactly
+    /// break-even, and upgrading was the only thing that turned it into a
+    /// gain. Softening the ramp is what bought that first step — deliberate,
+    /// since currency no longer survives the breach that spends it.
     #[test]
-    fn an_unupgraded_base_breaks_even_on_the_first_breach_then_gains_ground() {
+    fn an_unupgraded_base_gains_ground_from_its_very_first_breach() {
         let (ticks, rate, price) = shipped_economy();
         let at = |zone| ticks_to_afford_portal(zone, 1, ticks, rate, price);
 
         assert!(
-            (at(2) - at(1)).abs() < f64::EPSILON,
-            "zone 1 -> 2 is exactly break-even for a Mk1 base (payout x2, cost x2): \
-             {:.0} vs {:.0}",
+            at(2) < at(1),
+            "the first breach must pay for itself even without an upgrade (payout x2, \
+             cost x1.5): {:.0} -> {:.0}",
             at(1),
             at(2)
         );
         assert!(
-            at(3) < at(1),
-            "from zone 3 on, exponential payout pulls ahead of linear portal cost: \
+            at(3) < at(2),
+            "and exponential payout keeps pulling ahead of the linear cost ramp: \
              {:.0} -> {:.0}",
-            at(1),
+            at(2),
             at(3)
         );
     }

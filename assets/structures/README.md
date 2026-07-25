@@ -84,10 +84,10 @@ is skipped with a warning logged in-game rather than crashing startup.
     // sector instead of blocking movement — see `Game::enter_next_zone`.
     // Wild programs in the new zone spawn with stats doubled per zone
     // level, and there's no portal back down. `build_cost` above is
-    // treated as a *per-zone-level* rate for a zone-portal structure: the
-    // amount actually charged when deploying it is each quantity
-    // multiplied by the current zone level (so building the portal out of
-    // zone 2 costs twice as much as building it out of zone 1).
+    // treated as a *base rate* for a zone-portal structure: each quantity
+    // grows by 50% of that rate per zone level, so a 10-fragment portal
+    // costs 10 out of zone 1, 15 out of zone 2, 20 out of zone 3. No other
+    // structure's cost changes with depth.
     // A zone-portal structure is consumed when the player steps onto it: it
     // does not travel to the next zone the way the rest of the base does
     // (see `enables_rest`/`Game::enter_next_zone`), so every breach costs a

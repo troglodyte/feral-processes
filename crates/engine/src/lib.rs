@@ -228,6 +228,20 @@ const BUFFER_MIN_BONUS_PER_LEVEL: i32 = 10;
 /// (see `StructureDef::zone_portal`).
 const PORTAL_FRAGMENT_DROP_CHANCE: f64 = 0.35;
 
+/// How much of a zone-portal structure's base `build_cost` is added to its
+/// price per zone below the current one. Breaching deeper costs more, but
+/// currency does not survive the trip (see `Game::enter_next_zone`), so
+/// this is a ramp on a from-zero grind rather than a tax on a stockpile —
+/// which is why it adds half the base rate per zone instead of doubling.
+const ZONE_PORTAL_COST_GROWTH_PERCENT: u32 = 50;
+
+/// The quantity a zone-portal structure costing `base_qty` of an item
+/// charges at `zone`. Shared with `balance::ticks_to_afford_portal` so a
+/// projection can't drift from the price the game actually charges.
+pub(crate) fn zone_portal_cost(base_qty: u32, zone: u32) -> u32 {
+    base_qty + base_qty * ZONE_PORTAL_COST_GROWTH_PERCENT * zone.saturating_sub(1) / 100
+}
+
 /// Chance a habitat spawn roll (see `Game::try_spawn_habitat_creature`)
 /// picks a boss species instead of an ordinary one, when the tile's biome
 /// has at least one boss defined for it.
@@ -6117,19 +6131,18 @@ impl Game {
     }
 
     /// The actual item cost to deploy `def` right now: `def.build_cost`
-    /// unchanged for a normal structure, or each amount scaled by the
-    /// current zone level for a zone-portal structure (see
-    /// `StructureDef::zone_portal`) — breaching deeper costs more raw
-    /// material each time.
+    /// unchanged for a normal structure, or each amount grown by
+    /// `ZONE_PORTAL_COST_GROWTH_PERCENT` of its base rate per zone level for
+    /// a zone-portal structure (see `StructureDef::zone_portal`) — breaching
+    /// deeper costs more raw material each time.
     pub fn structure_build_cost(&self, def: &StructureDef) -> Vec<(ItemId, u32)> {
-        let multiplier = if def.zone_portal {
-            self.world.resource::<ZoneLevel>().0
-        } else {
-            1
-        };
+        if !def.zone_portal {
+            return def.build_cost.clone();
+        }
+        let zone = self.world.resource::<ZoneLevel>().0;
         def.build_cost
             .iter()
-            .map(|(item, qty)| (item.clone(), qty * multiplier))
+            .map(|(item, qty)| (item.clone(), zone_portal_cost(*qty, zone)))
             .collect()
     }
 
@@ -15809,12 +15822,56 @@ mod tests {
     }
 
     #[test]
-    fn portal_build_cost_scales_with_current_zone_level() {
+    fn portal_cost_grows_by_half_the_base_rate_per_zone() {
+        let mut game = Game::new(944, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let portal = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.id == "portal")
+            .expect("portal.ron should load");
+        let fragments = |game: &Game, def: &StructureDef| {
+            game.structure_build_cost(def)
+                .into_iter()
+                .find(|(item, _)| item.as_str() == ids::PORTAL_FRAGMENT)
+                .map(|(_, qty)| qty)
+                .expect("a portal is bought with portal fragments")
+        };
+
+        assert_eq!(fragments(&game, &portal), 10, "zone 1 pays the base rate");
+
+        game.world.insert_resource(ZoneLevel(2));
+        assert_eq!(
+            fragments(&game, &portal),
+            15,
+            "each zone adds half the base rate, not another whole one"
+        );
+
+        game.world.insert_resource(ZoneLevel(5));
+        assert_eq!(
+            fragments(&game, &portal),
+            30,
+            "the ramp stays linear in the base rate all the way down"
+        );
+
+        let node = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.id == "mining_node")
+            .expect("mining_node.ron should load");
+        assert_eq!(
+            game.structure_build_cost(&node),
+            node.build_cost,
+            "only a zone-portal structure scales; everything else is flat at any depth"
+        );
+    }
+
+    #[test]
+    fn portal_build_cost_ramps_with_current_zone_level() {
         let mut game = Game::new(42, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
         place_home(&mut game, -1, 0);
 
-        // Zone 1: base rate from portal.ron is 10 PortalFragment * zone 1 = 10.
+        // Zone 1: base rate from portal.ron, 10 PortalFragment, unramped.
         game.world
             .get_mut::<Inventory>(player)
             .unwrap()
@@ -15835,14 +15892,14 @@ mod tests {
         // (see `breaching_carries_every_structure_and_its_offset_from_home`),
         // so the new zone needs no fresh Home before building.
 
-        // Zone 2: cost should now be doubled (10 * zone level 2 = 20).
+        // Zone 2: base rate plus half of it again (10 + 5 = 15), not double.
         game.world
             .get_mut::<Inventory>(player)
             .unwrap()
-            .add(ItemId::from(ids::PORTAL_FRAGMENT), 19);
+            .add(ItemId::from(ids::PORTAL_FRAGMENT), 14);
         assert!(
             game.place_structure("portal", 1, 0).is_err(),
-            "19 fragments shouldn't be enough for a zone-2 portal"
+            "14 fragments shouldn't be enough for a zone-2 portal"
         );
         game.world
             .get_mut::<Inventory>(player)
@@ -15855,7 +15912,7 @@ mod tests {
                 .unwrap()
                 .count(&ItemId::from(ids::PORTAL_FRAGMENT)),
             0,
-            "zone 2 portal should cost double the base rate"
+            "zone 2 portal should cost the base rate plus half again"
         );
     }
 

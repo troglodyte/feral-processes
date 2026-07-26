@@ -139,10 +139,12 @@ const ENGAGED_GROUPS: usize = 2;
 /// grows all session. Rather than blocking new spawns once the cap is
 /// reached (which would let a population the player wandered away from
 /// permanently starve the area they're actually in), reaching it culls
-/// the `Hostile` farthest from the player to free a slot — see
-/// `Game::maybe_spawn_wild_creature`. Tamed programs never count here at
-/// all; they shouldn't crowd out wild spawns just by existing.
-const WILD_CREATURE_CAP: usize = 100;
+/// the `Hostile`s farthest from the player until the group about to spawn
+/// fits — see `Game::maybe_spawn_wild_creature`. One roll can place up to
+/// `MAX_GROUP_SIZE` creatures, so freeing a single slot would let the
+/// population ratchet upward with every roll. Tamed programs never count
+/// here at all; they shouldn't crowd out wild spawns just by existing.
+const WILD_CREATURE_CAP: usize = 2000;
 
 /// Initiative baseline for a species whose `.ron` file omits `base_speed` —
 /// the midpoint of the shipped roster's range, so an un-annotated mod

@@ -260,14 +260,21 @@ impl Game {
         if !roll {
             return;
         }
-        // At `WILD_CREATURE_CAP`, make room by despawning the `Hostile`
-        // farthest (Chebyshev, matching 8-directional movement) from where
-        // the player is now — the one least likely to ever be encountered
-        // again. `NestGuardian`s are eligible like any other hostile; a cull
-        // is a plain despawn, so it deliberately doesn't feed the nest's
-        // `pending_respawns` the way an actual defeat does. Guardian counts
-        // are best-effort once a nest is far behind the player.
-        let hostiles: Vec<(Entity, i32)> = {
+        let (dx, dy) = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            (rng.0.random_range(-12..=12), rng.0.random_range(-12..=12))
+        };
+        let (tx, ty) = (player_pos.x + dx, player_pos.y + dy);
+        // Make room for the whole group this roll may place, by despawning
+        // the `Hostile`s farthest (Chebyshev, matching 8-directional
+        // movement) from where the player is now — the ones least likely to
+        // ever be encountered again. `NestGuardian`s are eligible like any
+        // other hostile; a cull is a plain despawn, so it deliberately
+        // doesn't feed the nest's `pending_respawns` the way an actual
+        // defeat does. Guardian counts are best-effort once a nest is far
+        // behind the player.
+        let needed = self.max_group_size(tx, ty) as usize;
+        let mut hostiles: Vec<(Entity, i32)> = {
             let mut query = self
                 .world
                 .query_filtered::<(Entity, &Position), With<Hostile>>();
@@ -281,16 +288,14 @@ impl Game {
                 })
                 .collect()
         };
-        if hostiles.len() >= WILD_CREATURE_CAP
-            && let Some(&(farthest, _)) = hostiles.iter().max_by_key(|(_, dist)| *dist)
-        {
-            self.world.despawn(farthest);
+        let over = (hostiles.len() + needed).saturating_sub(WILD_CREATURE_CAP);
+        if over > 0 {
+            hostiles.sort_by_key(|&(_, dist)| std::cmp::Reverse(dist));
+            for &(entity, _) in hostiles.iter().take(over) {
+                self.world.despawn(entity);
+            }
         }
-        let (dx, dy) = {
-            let mut rng = self.world.resource_mut::<GameRng>();
-            (rng.0.random_range(-12..=12), rng.0.random_range(-12..=12))
-        };
-        self.try_spawn_habitat_creature(player_pos.x + dx, player_pos.y + dy);
+        self.try_spawn_habitat_creature(tx, ty);
     }
 
     /// Attempts to spawn one habitat-appropriate wild creature (or, away

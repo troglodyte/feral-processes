@@ -357,6 +357,64 @@ fn nest_guardians_are_eligible_to_be_culled_for_spawn_room() {
     );
 }
 
+/// One roll can place a whole group, so the cull has to free room for the
+/// group rather than for one creature — otherwise the population ratchets
+/// up past the cap and never comes back down.
+#[test]
+fn a_spawn_roll_culls_enough_room_for_the_whole_group_it_places() {
+    let mut game = Game::new(425, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 4;
+    let species_id = game.species_defs().into_iter().next().unwrap().id;
+
+    // Put the player deep in the field, where a roll places a real group
+    // rather than a single creature.
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let player = game.player_entity();
+    let far = Position {
+        x: spawn.x + GROUP_SIZE_STEP_TILES * 7,
+        y: spawn.y,
+    };
+    *game.world.get_mut::<Position>(player).unwrap() = far;
+    assert!(
+        game.max_group_size(far.x, far.y) > 1,
+        "the fixture is pointless unless a roll here places more than one"
+    );
+
+    // Fill the cap with a population far from the player.
+    let mut hostile_query = game.world.query_filtered::<(), With<Hostile>>();
+    let already = hostile_query.iter(&game.world).count();
+    for _ in 0..WILD_CREATURE_CAP - already {
+        game.world.spawn((
+            Creature {
+                species: species_id.clone(),
+            },
+            Position {
+                x: far.x + 500,
+                y: far.y + 500,
+            },
+            Stats {
+                hp: 10,
+                max_hp: 10,
+                atk: 1,
+                def: 1,
+            },
+            Hostile,
+        ));
+    }
+
+    for _ in 0..60 {
+        game.maybe_spawn_wild_creature();
+        // Bind the query before iterating: `query_filtered` takes `&mut
+        // World`, so it can't be chained straight into an `iter(&world)`.
+        let live = hostile_query.iter(&game.world).count();
+        assert!(
+            live <= WILD_CREATURE_CAP + NEST_GUARDIAN_MAX as usize,
+            "the hostile population ran past the cap ({live} of {WILD_CREATURE_CAP}) — \
+             the cull is freeing room for one creature, not for the group being placed"
+        );
+    }
+}
+
 #[test]
 fn individual_growth_roll_scales_stat_gains_independently_of_species_growth_multiplier() {
     let mut game = Game::new(421, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

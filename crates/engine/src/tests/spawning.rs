@@ -407,6 +407,10 @@ fn a_spawn_roll_culls_enough_room_for_the_whole_group_it_places() {
         // Bind the query before iterating: `query_filtered` takes `&mut
         // World`, so it can't be chained straight into an `iter(&world)`.
         let live = hostile_query.iter(&game.world).count();
+        // `NEST_GUARDIAN_MAX` slack: a nest roll spawns its guardians
+        // through `spawn_nest`, which isn't sized by `max_group_size`, so
+        // it's the one path that can overspend the budget — by a bounded
+        // amount that the next roll's cull reclaims.
         assert!(
             live <= WILD_CREATURE_CAP + NEST_GUARDIAN_MAX as usize,
             "the hostile population ran past the cap ({live} of {WILD_CREATURE_CAP}) — \

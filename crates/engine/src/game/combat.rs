@@ -568,16 +568,20 @@ impl Game {
             },
         ];
 
-        if !is_player {
-            options.push(ActionOption {
-                kind: ActionKind::Special,
-                key: 's',
-                label: "[s]pecial".to_string(),
-                detail: self.companion_ability_label(entity),
-                target: TargetSpec::SpecialAbility,
-                unavailable: None,
-            });
-        }
+        options.push(ActionOption {
+            kind: ActionKind::Special,
+            key: 's',
+            label: "[s]pecial".to_string(),
+            detail: self.ability_label(entity),
+            target: TargetSpec::SpecialAbility,
+            // Only the player can be empty here, and only until they
+            // research their first routine. Greyed with a reason rather than
+            // hidden: a hidden row teaches nobody the feature exists.
+            unavailable: self
+                .actor_abilities(entity)
+                .is_empty()
+                .then(|| "no routines researched".to_string()),
+        });
 
         if is_player {
             options.push(ActionOption {

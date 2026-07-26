@@ -410,6 +410,40 @@ impl Game {
             .collect()
     }
 
+    /// The abilities the player has unlocked through research, in research
+    /// order (see `ResearchDb::all`), each appearing once however many nodes
+    /// grant it.
+    ///
+    /// Unlike `companion_abilities` this may be empty, and deliberately so:
+    /// before any node is researched the player has no routines at all,
+    /// which is exactly what the research is selling. Nothing is stored —
+    /// the set is derived from `Research`, which the save already carries,
+    /// the same way structure and recipe unlocks are.
+    pub fn player_abilities(&self) -> Vec<AbilityDef> {
+        let abilities = self.world.resource::<AbilityDb>();
+        let mut seen = std::collections::HashSet::new();
+        self.world
+            .resource::<ResearchDb>()
+            .all()
+            .filter(|def| self.is_researched(&def.id))
+            .flat_map(|def| def.unlocks_abilities.iter())
+            .filter(|id| seen.insert((*id).clone()))
+            .filter_map(|id| abilities.get(id).cloned())
+            .collect()
+    }
+
+    /// Every ability the combatant at `entity` can be commanded to use: the
+    /// player's researched routines, or a companion's species list. Menu and
+    /// resolution both go through this, so the two cannot disagree about
+    /// what a slot knows.
+    pub(crate) fn actor_abilities(&self, entity: Entity) -> Vec<AbilityDef> {
+        if entity == self.player_entity() {
+            self.player_abilities()
+        } else {
+            self.companion_abilities(entity)
+        }
+    }
+
     /// Consumable items the player is actually holding — the pool
     /// `BattleAction::UseItem` draws from, and what the in-battle item
     /// picker lists. The map's inventory screen is a different flow: there
@@ -466,7 +500,7 @@ impl Game {
         let Some(entity) = self.actor_entity(battle::Actor::Party(slot)) else {
             return Vec::new();
         };
-        self.companion_abilities(entity)
+        self.actor_abilities(entity)
             .into_iter()
             .enumerate()
             .map(|(index, ability)| SpecialOption {
@@ -534,16 +568,20 @@ impl Game {
             },
         ];
 
-        if !is_player {
-            options.push(ActionOption {
-                kind: ActionKind::Special,
-                key: 's',
-                label: "[s]pecial".to_string(),
-                detail: self.companion_ability_label(entity),
-                target: TargetSpec::SpecialAbility,
-                unavailable: None,
-            });
-        }
+        options.push(ActionOption {
+            kind: ActionKind::Special,
+            key: 's',
+            label: "[s]pecial".to_string(),
+            detail: self.ability_label(entity),
+            target: TargetSpec::SpecialAbility,
+            // Only the player can be empty here, and only until they
+            // research their first routine. Greyed with a reason rather than
+            // hidden: a hidden row teaches nobody the feature exists.
+            unavailable: self
+                .actor_abilities(entity)
+                .is_empty()
+                .then(|| "no routines researched".to_string()),
+        });
 
         if is_player {
             options.push(ActionOption {

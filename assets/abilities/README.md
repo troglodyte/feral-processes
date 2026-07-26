@@ -8,10 +8,12 @@ includes a file whose numbers aren't finite: RON accepts bare `NaN` and
 non-finite `fatigue_cost` or `effect.status.chance` disqualifies the whole
 file.
 
-An ability is what a companion spends its round on when commanded with
-Special in battle. Which abilities a companion has comes from its species
-file — see `../species/README.md` — so shipping a new ability usually means
-writing a file here *and* referencing its `id` from a species.
+An ability is what a party member spends its round on when commanded with
+Special in battle. The two sides of the party get theirs differently: a
+companion's come from its species file — see `../species/README.md` — while
+the player's come from a research node naming them in `unlocks_abilities`,
+see `../research/README.md`. So shipping a new ability means writing a file
+here *and* referencing its `id` from a species, a research node, or both.
 
 **One ability is mandatory.** `priority_boost` is the fallback every
 companion falls back on when its species declares no abilities of its own.

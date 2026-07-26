@@ -429,3 +429,33 @@ fn completing_every_slot_resolves_the_round_without_a_narration_page() {
         app.mode
     );
 }
+
+/// The player's Special row is offered before any routine is researched,
+/// greyed with a reason. If the guard on `unavailable` ever went away, the
+/// keypress would be planned, resolve against an empty ability list, and
+/// silently cost the player their round.
+#[test]
+fn pressing_special_with_no_routines_researched_explains_itself_and_costs_nothing() {
+    let mut app = battling_app();
+    let offered = app
+        .game
+        .as_ref()
+        .unwrap()
+        .battle_action_options(0)
+        .into_iter()
+        .find(|o| o.kind == ActionKind::Special)
+        .expect("the player is offered a Special row");
+    assert!(
+        offered.unavailable.is_some(),
+        "a fresh game has researched nothing"
+    );
+
+    app.handle_key(GameKey::Char('s'));
+
+    assert_eq!(app.mode, Mode::Battle, "no picker should have opened");
+    assert!(app.pending_battle_action.is_none());
+    assert!(
+        app.status_line.is_some(),
+        "the player must be told why nothing happened"
+    );
+}

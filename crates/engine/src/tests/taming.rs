@@ -71,6 +71,7 @@ fn decompile_spends_the_highest_potency_catalyst_held_not_the_shipped_one() {
             r#"(id: "master_key", name: "Master Key", taming_potency: Some(0.9))"#,
         )],
         &[],
+        &[],
     );
     let mut game = Game::new(3100, DifficultyMode::Forgiving, &dir).unwrap();
     let _ = std::fs::remove_dir_all(&dir);
@@ -140,6 +141,7 @@ fn two_catalysts_of_equal_potency_resolve_to_the_first_id_alphabetically() {
             ),
         ],
         &[],
+        &[],
     );
     let mut game = Game::new(3102, DifficultyMode::Forgiving, &dir).unwrap();
     let _ = std::fs::remove_dir_all(&dir);
@@ -167,6 +169,7 @@ fn the_decompile_preview_follows_the_catalyst_held_not_a_fixed_item() {
             "master_key.ron",
             r#"(id: "master_key", name: "Master Key", taming_potency: Some(0.9))"#,
         )],
+        &[],
         &[],
     );
     let mut game = Game::new(3104, DifficultyMode::Forgiving, &dir).unwrap();

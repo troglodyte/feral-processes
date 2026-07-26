@@ -114,20 +114,20 @@ impl Game {
             def: stats.def,
             power: stats.power(),
             status: self.status_label(entity),
-            ability: self.companion_ability_label(entity),
+            ability: self.ability_label(entity),
         })
     }
 
     /// Terse label for what commanding `entity` in battle would do right
-    /// now (see `SpecialAbility::short_name`). A member with several
-    /// abilities reads as a count, since no one of them is *the* answer
-    /// until the player picks in `Mode::BattleSpecial`.
-    pub(crate) fn companion_ability_label(&self, entity: Entity) -> String {
-        let abilities = self.companion_abilities(entity);
-        match abilities.as_slice() {
+    /// now. A member with several abilities reads as a count, since no one
+    /// of them is *the* answer until the player picks in
+    /// `Mode::BattleSpecial`.
+    pub(crate) fn ability_label(&self, entity: Entity) -> String {
+        match self.actor_abilities(entity).as_slice() {
+            // Only the player can be empty: `companion_abilities` resolves
+            // the fallback rather than returning nothing.
+            [] => "No routines researched".to_string(),
             [only] => only.name.clone(),
-            // `companion_abilities` resolves the fallback rather than
-            // returning nothing, so there is no empty case to handle.
             many => format!("{} abilities", many.len()),
         }
     }

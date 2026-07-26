@@ -576,7 +576,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (structures, structure_warnings) = StructureDb::load_dir(&assets_dir.join("structures"))?;
     warnings.extend(structure_warnings);
     let (research, research_warnings) =
-        ResearchDb::load_dir(&assets_dir.join("research"), &structures)?;
+        ResearchDb::load_dir(&assets_dir.join("research"), &structures, &abilities)?;
     warnings.extend(research_warnings);
     let (items, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"))?;
     warnings.extend(item_warnings);

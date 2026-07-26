@@ -38,6 +38,14 @@ pub struct ResearchDef {
     pub unlocks_structures: Vec<StructureId>,
     #[serde(default)]
     pub unlocks_recipes: Vec<ResearchRecipe>,
+    /// Abilities the player may use in battle once this node is researched
+    /// (see `Game::player_abilities`). The abilities themselves are data in
+    /// `assets/abilities/`; naming one here is the only way the player gets
+    /// it, since unlike a companion the player has no species to grant one.
+    /// `#[serde(default)]` so existing research files — including mods —
+    /// keep parsing.
+    #[serde(default)]
+    pub unlocks_abilities: Vec<crate::abilities::AbilityId>,
 }
 
 #[derive(Resource, Default)]
@@ -53,7 +61,16 @@ impl ResearchDb {
     /// prereq was itself dropped is equally unreachable — so validation runs
     /// to a fixpoint. Malformed files are skipped with a warning rather than
     /// aborting the load, so one bad mod file can't crash startup.
-    pub fn load_dir(dir: &Path, structures: &StructureDb) -> std::io::Result<(Self, Vec<String>)> {
+    ///
+    /// An unknown id in `unlocks_abilities` is treated more gently than an
+    /// unknown structure: the id is dropped and the node kept, because a node
+    /// also unlocks structures and recipes, and killing it over one bad
+    /// ability id would silently remove content the modder never touched.
+    pub fn load_dir(
+        dir: &Path,
+        structures: &StructureDb,
+        abilities: &crate::abilities::AbilityDb,
+    ) -> std::io::Result<(Self, Vec<String>)> {
         let mut db = ResearchDb::default();
         let mut warnings = Vec::new();
         for entry in std::fs::read_dir(dir)? {
@@ -63,7 +80,20 @@ impl ResearchDb {
             }
             let text = std::fs::read_to_string(&path)?;
             match ron::from_str::<ResearchDef>(&text) {
-                Ok(def) => {
+                Ok(mut def) => {
+                    // `id` is cloned out first because `retain`'s closure
+                    // borrows it while `unlocks_abilities` is borrowed
+                    // mutably — same shape as `SpeciesDb::load_dir`.
+                    let id = def.id.clone();
+                    def.unlocks_abilities.retain(|ability| {
+                        let known = abilities.get(ability).is_some();
+                        if !known {
+                            warnings.push(format!(
+                                "research {id:?}: unknown ability {ability:?} — dropped"
+                            ));
+                        }
+                        known
+                    });
                     db.nodes.insert(def.id.clone(), def);
                 }
                 Err(e) => warnings.push(format!("skipped invalid research file {path:?}: {e}")),
@@ -130,8 +160,9 @@ mod tests {
     use super::*;
 
     /// Writes `files` as `.ron` into a fresh temp dir and loads a `ResearchDb`
-    /// from it against a `StructureDb` built from the real assets — so
-    /// `unlocks_structures` validation runs against real structure ids.
+    /// from it against a `StructureDb` and an `AbilityDb` built from the real
+    /// assets — so `unlocks_structures` and `unlocks_abilities` validation
+    /// both run against real ids.
     fn load(tag: &str, files: &[(&str, &str)]) -> (ResearchDb, Vec<String>) {
         let dir = std::env::temp_dir().join(format!("feral_research_{}_{tag}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -139,11 +170,11 @@ mod tests {
         for (name, body) in files {
             std::fs::write(dir.join(format!("{name}.ron")), body).unwrap();
         }
-        let structures_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../assets")
-            .join("structures");
-        let (structures, _) = StructureDb::load_dir(&structures_dir).unwrap();
-        let result = ResearchDb::load_dir(&dir, &structures).unwrap();
+        let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let (structures, _) = StructureDb::load_dir(&assets.join("structures")).unwrap();
+        let (abilities, _) =
+            crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
+        let result = ResearchDb::load_dir(&dir, &structures, &abilities).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
         result
     }
@@ -164,8 +195,55 @@ mod tests {
         assert_eq!(def.cost, 8);
         assert!(def.requires.is_empty(), "requires defaults to empty");
         assert!(def.unlocks_recipes.is_empty(), "recipes default to empty");
+        assert!(
+            def.unlocks_abilities.is_empty(),
+            "unlocks_abilities defaults to empty"
+        );
         assert_eq!(def.unlocks_structures, vec!["compiler".to_string()]);
         assert!(warnings.is_empty(), "a valid node warns about nothing");
+    }
+
+    #[test]
+    fn a_node_may_unlock_abilities() {
+        let node = r#"(
+            id: "self_exec",
+            name: "Self-Execution",
+            description: "Run a routine yourself.",
+            cost: 12,
+            unlocks_abilities: ["priority_boost"],
+        )"#;
+        let (db, warnings) = load("grants_ability", &[("self_exec", node)]);
+        let def = db.get("self_exec").expect("valid node should load");
+        assert_eq!(def.unlocks_abilities, vec!["priority_boost".to_string()]);
+        assert!(warnings.is_empty(), "a valid node warns about nothing");
+    }
+
+    /// A node can also unlock structures and recipes, so one bad ability id
+    /// must not take the whole node — and everything else it grants — with
+    /// it. Mirrors how `SpeciesDb::load_dir` treats an unknown ability.
+    #[test]
+    fn an_unknown_ability_id_is_dropped_but_the_node_survives() {
+        let node = r#"(
+            id: "automation",
+            name: "Automation",
+            description: "Self-running compile jobs.",
+            cost: 8,
+            unlocks_structures: ["compiler"],
+            unlocks_abilities: ["priority_boost", "no_such_ability"],
+        )"#;
+        let (db, warnings) = load("unknown_ability", &[("automation", node)]);
+        let def = db.get("automation").expect("the node itself must survive");
+        assert_eq!(
+            def.unlocks_abilities,
+            vec!["priority_boost".to_string()],
+            "the unknown id is dropped and the known one kept"
+        );
+        assert_eq!(
+            def.unlocks_structures,
+            vec!["compiler".to_string()],
+            "the node's other unlocks are untouched"
+        );
+        assert_eq!(warnings.len(), 1, "the dropped id explains itself");
     }
 
     #[test]
@@ -245,12 +323,15 @@ mod tests {
     fn the_shipped_tree_loads_clean() {
         let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
         let (structures, _) = StructureDb::load_dir(&assets.join("structures")).unwrap();
-        let (db, warnings) = ResearchDb::load_dir(&assets.join("research"), &structures).unwrap();
+        let (abilities, _) =
+            crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
+        let (db, warnings) =
+            ResearchDb::load_dir(&assets.join("research"), &structures, &abilities).unwrap();
         assert!(
             warnings.is_empty(),
             "the shipped tree must not warn: {warnings:?}"
         );
-        assert_eq!(db.all().count(), 12, "12 nodes ship with the game");
+        assert_eq!(db.all().count(), 15, "15 nodes ship with the game");
         assert_eq!(
             db.get("cortex").map(|d| d.cost),
             Some(45),

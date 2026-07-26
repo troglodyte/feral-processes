@@ -136,7 +136,7 @@ into the renderer, so a new action appears without the UI being touched:
 | --- | --- |
 | `a` | Attack — then pick which enemy group to hit |
 | `d` | Defend — brace for the round: a Defense bonus, and you draw more of the incoming fire |
-| `s` | Special (party members only) — picks one of that member's abilities, then a target if it needs one. A rally (ATK boost) by default, or the species' own abilities if it defines any. Costs you Fatigue — how much the ability decides — and may sit out a few rounds afterwards |
+| `s` | Special — picks one of that member's abilities, then a target if it needs one. A companion's come from its species and unlock as it levels; yours come from research — Self-Execution first, then Runtime Patching and Kernel Privileges — and the row sits greyed until you have researched one. Costs you Fatigue — how much the ability decides — and may sit out a few rounds afterwards |
 | `c` | Decompile (you only) — attempt to compile/tame a group's front program. Needs a taming catalyst, which the ICE Breaker is |
 | `u` | Use item (you only) — spend a consumable as that slot's action for the round |
 | `j` | Jack out (flee) — costs a mild XP setback, same as flatlining. A party-level command, not a per-member action |

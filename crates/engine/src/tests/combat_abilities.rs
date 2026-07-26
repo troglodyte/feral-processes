@@ -150,7 +150,7 @@ fn game_with_a_sweeper() -> (Game, Entity) {
             (id: "redundancy_sync"),
         ],
     )"#;
-    let dir = modded_assets_dir("sweeper", &[], &[], &[("test_sweeper.ron", SWEEPER)]);
+    let dir = modded_assets_dir("sweeper", &[], &[], &[("test_sweeper.ron", SWEEPER)], &[]);
     let mut game = Game::new(31, DifficultyMode::Forgiving, &dir).unwrap();
     let player = game.player_entity();
     let sweeper = game
@@ -390,4 +390,203 @@ fn an_ability_costing_more_fatigue_than_you_have_is_unavailable() {
         "broadcast_storm costs 15.0 Fatigue and must be refused at 1.0"
     );
     let _ = sweeper;
+}
+
+#[test]
+fn the_player_has_no_abilities_until_they_research_one() {
+    let game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(
+        game.player_abilities().is_empty(),
+        "the player starts with nothing to spend a Special on — that's what \
+         the research is selling"
+    );
+}
+
+#[test]
+fn researching_self_execution_grants_the_player_priority_boost() {
+    let mut game = Game::new(32, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "self_exec");
+
+    let ids: Vec<String> = game.player_abilities().into_iter().map(|a| a.id).collect();
+    assert_eq!(ids, vec!["priority_boost".to_string()]);
+}
+
+/// Two nodes may legitimately name the same ability — a mod branching the
+/// tree, say. The picker must not then show it twice, because the duplicate
+/// rows would be indistinguishable and one of them a lie.
+#[test]
+fn an_ability_granted_by_two_nodes_appears_once() {
+    const ALSO_BOOST: &str = r#"(
+        id: "also_boost",
+        name: "Redundant Routine",
+        description: "Grants what self_exec already grants.",
+        cost: 12,
+        unlocks_abilities: ["priority_boost"],
+    )"#;
+    let dir = modded_assets_dir(
+        "dup_ability",
+        &[],
+        &[],
+        &[],
+        &[("also_boost.ron", ALSO_BOOST)],
+    );
+    let mut game = Game::new(33, DifficultyMode::Forgiving, &dir).unwrap();
+    unlock_research_chain(&mut game, "self_exec");
+    unlock_research_chain(&mut game, "also_boost");
+
+    let ids: Vec<String> = game.player_abilities().into_iter().map(|a| a.id).collect();
+    assert_eq!(ids, vec!["priority_boost".to_string()]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `HashMap` iteration is randomized per instance, so a derived list has to
+/// be sorted somewhere. It's sorted in `ResearchDb::all` — cheapest node
+/// first — and this pins that the derivation preserves it.
+#[test]
+fn the_players_abilities_are_ordered_cheapest_node_first() {
+    let mut game = Game::new(34, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "kernel_privileges");
+
+    let ids: Vec<String> = game.player_abilities().into_iter().map(|a| a.id).collect();
+    assert_eq!(
+        ids,
+        vec![
+            "priority_boost".to_string(),
+            "hot_patch".to_string(),
+            "null_route".to_string(),
+        ],
+        "self_exec (12), runtime_patching (28), kernel_privileges (48)"
+    );
+}
+
+/// The player's Special goes through the same resolution path a companion's
+/// does — so the cooldown must arm on the player's own entity, and the
+/// effect must land.
+#[test]
+fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
+    let mut game = Game::new(35, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "runtime_patching");
+    let player = game.player_entity();
+    let enemy = spawn_wild_on_player_tile(&mut game);
+    insert_battle(&mut game, player, vec![enemy]);
+
+    let hot_patch = game
+        .player_abilities()
+        .iter()
+        .position(|a| a.id == "hot_patch")
+        .expect("runtime_patching grants hot_patch");
+    game.world.get_mut::<Stats>(player).unwrap().hp = 1;
+
+    resolve_round_with(
+        &mut game,
+        BattleAction::Special {
+            ability: hot_patch,
+            target: battle::SpecialTarget::Ally { slot: 0 },
+        },
+    );
+
+    assert!(
+        game.world.get::<Stats>(player).unwrap().hp > 1,
+        "the player patched themselves, so their Integrity must have gone up"
+    );
+    assert_eq!(
+        game.world
+            .get::<AbilityCooldowns>(player)
+            .and_then(|c| c.0.get("hot_patch").copied()),
+        Some(1),
+        "armed on the player's own entity as 1 + 1, less this round's tick"
+    );
+    assert!(
+        game.battle_special_options(0)[hot_patch]
+            .unavailable
+            .is_some(),
+        "and the player's own menu reads it back as still cooling down"
+    );
+}
+
+/// Commanding an ability spends the *player's* Fatigue, which is what keeps
+/// a top-tier routine a budget decision rather than a free extra action.
+///
+/// Measured against a control round rather than against the raw cost: a
+/// round of any kind drains a little Fatigue on its own, so the ability's
+/// price is the difference between a Special round and a Defend one.
+#[test]
+fn a_player_special_spends_the_players_fatigue_once() {
+    fn round_cost(action: BattleAction) -> f32 {
+        let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        unlock_research_chain(&mut game, "kernel_privileges");
+        let player = game.player_entity();
+        let enemy = spawn_wild_on_player_tile(&mut game);
+        insert_battle(&mut game, player, vec![enemy]);
+
+        let before = game.world.get::<Needs>(player).unwrap().fatigue;
+        resolve_round_with(&mut game, action);
+        before - game.world.get::<Needs>(player).unwrap().fatigue
+    }
+
+    let mut probe = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut probe, "kernel_privileges");
+    let abilities = probe.player_abilities();
+    let index = abilities
+        .iter()
+        .position(|a| a.id == "null_route")
+        .expect("kernel_privileges grants null_route");
+    let cost = abilities[index].fatigue_cost;
+    assert!(
+        cost > 0.0,
+        "null_route is the first researched routine that costs Fatigue"
+    );
+
+    let idle = round_cost(BattleAction::Defend);
+    let special = round_cost(BattleAction::Special {
+        ability: index,
+        target: battle::SpecialTarget::AllEnemies,
+    });
+
+    assert_eq!(special - idle, cost, "charged exactly once, and to you");
+}
+
+/// The player's routines are derived from `Research`, which the save
+/// already carries. This proves the no-new-save-field claim rather than
+/// asserting it.
+#[test]
+fn a_save_round_trip_preserves_the_players_abilities() {
+    let mut game = Game::new(40, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "runtime_patching");
+    let before: Vec<String> = game.player_abilities().into_iter().map(|a| a.id).collect();
+    assert_eq!(before.len(), 2, "priority_boost and hot_patch");
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_player_abilities_save_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let after: Vec<String> = loaded
+        .player_abilities()
+        .into_iter()
+        .map(|a| a.id)
+        .collect();
+    assert_eq!(after, before);
+}
+
+/// The fallback exists so a companion's menu is never empty. It must not
+/// leak onto the player, or the first research node would sell something
+/// already owned.
+#[test]
+fn the_companion_fallback_does_not_leak_onto_the_player() {
+    let mut game = Game::new(36, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 20, 5);
+
+    assert!(game.player_abilities().is_empty());
+    assert!(
+        !game.actor_abilities(companion).is_empty(),
+        "a companion always resolves at least the fallback"
+    );
+    assert!(
+        game.actor_abilities(game.player_entity()).is_empty(),
+        "the player gets no fallback"
+    );
 }

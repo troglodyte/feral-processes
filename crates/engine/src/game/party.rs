@@ -123,7 +123,7 @@ impl Game {
     /// abilities reads as a count, since no one of them is *the* answer
     /// until the player picks in `Mode::BattleSpecial`.
     pub(crate) fn companion_ability_label(&self, entity: Entity) -> String {
-        let abilities = self.companion_abilities(entity);
+        let abilities = self.actor_abilities(entity);
         match abilities.as_slice() {
             [only] => only.name.clone(),
             // `companion_abilities` resolves the fallback rather than

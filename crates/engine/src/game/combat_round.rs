@@ -111,7 +111,7 @@ impl Game {
             }
             BattleAction::Special { ability, target } => {
                 let name = self.creature_label(entity);
-                let abilities = self.companion_abilities(entity);
+                let abilities = self.actor_abilities(entity);
                 // Falls back to the first rather than skipping the turn: the
                 // index was valid when planned, and a party edited mid-round
                 // shouldn't silently cost a member its action.
@@ -239,7 +239,7 @@ impl Game {
         match action {
             BattleAction::Attack { group } => format!("Attack {}", group_letter(*group)),
             BattleAction::Special { ability, target } => {
-                let abilities = self.companion_abilities(actor);
+                let abilities = self.actor_abilities(actor);
                 let name = abilities
                     .get(*ability)
                     .or_else(|| abilities.first())

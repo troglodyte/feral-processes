@@ -147,14 +147,15 @@ pub(super) fn insert_battle(game: &mut Game, player: Entity, enemies: Vec<Entity
 
 /// Copies the shipped `species`/`structures`/`research`/`items` asset
 /// dirs into a fresh scratch dir, skipping the item files named in
-/// `omit_items` and writing `extra_items` (filename, RON body) on top —
-/// a stand-in for a modded install. The caller removes the directory
-/// once its `Game` is done with it.
+/// `omit_items` and writing the `extra_*` (filename, RON body) pairs on
+/// top — a stand-in for a modded install. The caller removes the
+/// directory once its `Game` is done with it.
 pub(super) fn modded_assets_dir(
     tag: &str,
     omit_items: &[&str],
     extra_items: &[(&str, &str)],
     extra_species: &[(&str, &str)],
+    extra_research: &[(&str, &str)],
 ) -> std::path::PathBuf {
     static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let dir = std::env::temp_dir().join(format!(
@@ -182,6 +183,9 @@ pub(super) fn modded_assets_dir(
     for (name, body) in extra_species {
         std::fs::write(dir.join("species").join(name), body).unwrap();
     }
+    for (name, body) in extra_research {
+        std::fs::write(dir.join("research").join(name), body).unwrap();
+    }
     dir
 }
 
@@ -190,7 +194,7 @@ pub(super) fn modded_assets_dir(
 /// abort (see `ItemDb::missing_roles`) can be exercised against an
 /// otherwise-valid item set.
 pub(super) fn assets_dir_missing_currency_item() -> std::path::PathBuf {
-    modded_assets_dir("missing_currency", &["core_fragment.ron"], &[], &[])
+    modded_assets_dir("missing_currency", &["core_fragment.ron"], &[], &[], &[])
 }
 
 /// Gives the player `n` Research Data, bypassing the Research Node so
@@ -548,6 +552,7 @@ pub(super) fn game_with_two_ability_companion() -> (Game, Entity) {
         &[],
         &[],
         &[("test_medic.ron", TWO_ABILITY_SPECIES)],
+        &[],
     );
     let mut game = Game::new(94, DifficultyMode::Forgiving, &dir).unwrap();
     let player = game.player_entity();

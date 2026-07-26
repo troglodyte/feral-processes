@@ -197,13 +197,15 @@ next to it, and bumping into any one of them pulls the whole cluster into
 the same intrusion. You can only attack or decompile whichever one is
 currently up front, but every packmate still alive retaliates alongside it
 each round — defeating or taming the front one just brings the next
-packmate up, it doesn't end the fight. How large a pack can get is capped
-at your current zone level + 1 (zone 1 → at most 2, zone 2 → at most 3,
-and so on), and that cap is only reached gradually the farther the
-encounter is from your zone's entry point — see
-[Zones and portals](#zones-and-portals) for how that distance scaling
-works for individual stats; packs grow into their cap at twice that
-distance.
+packmate up, it doesn't end the fight. How large a group can get depends
+on both how deep the zone is and how far the encounter is from your base:
+zone 1 is solo programs wherever you go, and every zone after that triples
+the ceiling (zone 2 → 3, zone 3 → 9, zone 4 → 27, zone 5 → 81, zone 6 and
+deeper → 100). You only meet that ceiling out in the field — a group
+doubles in size every 15 tiles from the edge of your platform, so
+encounters near home stay small however deep you've breached. See
+[Zones and portals](#zones-and-portals) for the matching distance scaling
+on individual stats.
 
 ### Getting started: building and running cronjobs
 
@@ -355,11 +357,13 @@ on the map for you to meet separately.
 **Only the front two groups can reach you.** Anything further back has to
 shoot: a group in the back rank can use only moves its species flags as
 ranged, and if it has none it can do nothing at all while it's back there
-(the log will say so). This is what keeps a twelve-program pack survivable
-— and it's what makes clearing front-to-back a real decision rather than an
-obvious one, because wiping the front group *promotes* a back group into
-melee range. Sometimes the right move is to leave a harmless melee-only
-group standing at the front as a plug.
+(the log will say so). That, plus the fact that only some of a group can
+swing at once — a hundred-strong swarm brings ten weapons to bear in a
+round, not a hundred — is what keeps a deep-field intrusion survivable at
+all. It's also what makes clearing front-to-back a real decision rather
+than an obvious one, because wiping the front group *promotes* a back
+group into melee range. Sometimes the right move is to leave a harmless
+melee-only group standing at the front as a plug.
 
 **Initiative is rolled fresh every round.** Every combatant on both sides
 rolls `base_speed + d10` and they all act in one interleaved order, so a

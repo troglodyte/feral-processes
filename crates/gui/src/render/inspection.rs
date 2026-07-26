@@ -98,11 +98,13 @@ pub(super) fn draw_inspect_detail(
     draw_popup("Inspect", PopupSize::Large, &rows, fonts, m);
 }
 
-/// The decompile-odds readout shared by the battle and inspect panels. With
-/// no taming catalyst in inventory there are no odds to quote — decompiling
-/// isn't available at all — so the line says what's missing instead of a
-/// percentage. It stays deliberately generic: which item is a catalyst is
-/// item data, not something a renderer gets to name.
+/// The inspect panel's decompile-odds readout. A full sentence because the
+/// panel has room for one; the battle roster quotes the same number as a
+/// `DECOMP` column instead (see `battle::odds_cell`). With no taming catalyst
+/// in inventory there are no odds to quote — decompiling isn't available at
+/// all — so the line says what's missing instead of a percentage. It stays
+/// deliberately generic: which item is a catalyst is item data, not something
+/// a renderer gets to name.
 fn decompile_chance_line(chance: Option<f32>) -> String {
     match chance {
         Some(c) => format!("Decompile chance right now: {:.0}%", c * 100.0),

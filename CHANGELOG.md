@@ -84,6 +84,16 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   two sentences. Reach and status conditions move out of inline
   `<engaged>`-style tags into columns of their own, and a member with no
   condition reads `OK` rather than blank. The HP bars are unchanged.
+- **Decompile odds are back on the battle screen, as a `DECOMP` column.** The
+  hostile roster now carries each group's live compile chance beside the HP
+  that drives it, so you can watch a group become worth taming as you wear its
+  front program down. The engine had been computing per-group odds all along
+  and the only place they surfaced was the target picker — you had to commit to
+  Decompile before you could see whether it was worth trying, and during a
+  companion's turn there was nowhere to see them at all. The column reads `—`
+  when you hold no taming catalyst, since there is no attempt to quote odds
+  for; the action bar still carries the reason. See
+  [Decompile chance](README.md#stats).
 - **Battle keys are lowercase, and Decompile moved to `c`.** Defend takes `d`,
   so the per-slot keys `a`/`d` and their party-wide counterparts `A`/`D` line
   up: shift means "everyone does this". Nothing sits one shift key away from a

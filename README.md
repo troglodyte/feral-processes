@@ -150,9 +150,9 @@ Both sides are listed as a stat table with a column header, so a value can
 be compared by scanning down its column:
 
 ```
-   GROUP              HP        ATK DEF RANGE   STATUS
-A  4 Null Daemons     18/30       9   4 ENGAGED BLEEDING (2)
-B  Warden Process     44/44      14   9 BACK    OK
+   GROUP              HP        ATK DEF RANGE   STATUS        DECOMP
+A  4 Null Daemons     18/30       9   4 ENGAGED BLEEDING (2)     62%
+B  Warden Process     44/44      14   9 BACK    OK               18%
 
    NAME               HP        ATK DEF POS   ACTION
 >1 You                21/30      11   6 FRONT Attack A
@@ -162,6 +162,13 @@ B  Warden Process     44/44      14   9 BACK    OK
 `RANGE` is whether a hostile group can reach you at all (see above); `POS`
 is your own member's rank. `>` marks the member currently choosing. Each row
 also carries the HP bar the table's numbers summarise.
+
+`DECOMP` is your live chance of compiling that group's front program if you
+decompiled it right now — see [Decompile chance](#stats). It moves as you
+wear the front program down, so you can watch a group become worth taming
+instead of guessing. Groups differ, which is why it's a column and not one
+figure: a battered Glitch and a fresh boss are not the same gamble. With no
+taming catalyst in hand there is nothing to quote and the column reads `—`.
 
 Enemy groups are addressed by letter (`A`, `B`, ...). `Esc` backs the
 planning cursor up a slot if you mis-pick — it also clears the slots after

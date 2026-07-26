@@ -59,6 +59,11 @@ const HP_W: usize = 9;
 const STAT_W: usize = 3;
 /// Widest value is `ENGAGED`.
 const REACH_W: usize = 7;
+/// Widest condition the engine words is `BLEEDING (12)` — see
+/// `Game::status_label`. Anything longer clips rather than shifting DECOMP.
+const STATUS_W: usize = 13;
+/// `DECOMP` itself is the widest thing in the column; `100%` fits under it.
+const DECOMP_W: usize = 6;
 /// The one line shape both rosters and both headers are built from, so a
 /// column cannot move in a row without moving in its header too.
 fn roster_line(
@@ -82,10 +87,39 @@ fn roster_line(
     )
 }
 
+/// The hostile roster's ragged last column is really two more fixed cells —
+/// STATUS then DECOMP — so it is composed here rather than at each call site,
+/// for the same reason `roster_line` exists: the header and every row are
+/// built from one set of widths or they drift.
+fn hostile_tail(status: &str, decomp: &str) -> String {
+    format!("{} {}", cell(status, STATUS_W), right(decomp, DECOMP_W))
+}
+
+/// The DECOMP cell: the engine's odds against *this* group, or a dash when no
+/// taming catalyst is held and there is nothing to quote. Not `0%`, which
+/// would read as an allowed-but-hopeless attempt when the action isn't
+/// available at all. Why it's blank belongs to the action bar, which already
+/// prints the engine's own `no taming catalyst` reason — a second copy of
+/// that wording here is exactly how the two would drift.
+fn odds_cell(chance: Option<f32>) -> String {
+    match chance {
+        Some(c) => format!("{:.0}%", c * 100.0),
+        None => "—".to_string(),
+    }
+}
+
 /// `RANGE` because a hostile group's third column is its reach, not a
 /// front/back rank the player chose.
 fn hostile_header() -> String {
-    roster_line("   ", "GROUP", "HP", "ATK", "DEF", "RANGE", "STATUS")
+    roster_line(
+        "   ",
+        "GROUP",
+        "HP",
+        "ATK",
+        "DEF",
+        "RANGE",
+        &hostile_tail("STATUS", "DECOMP"),
+    )
 }
 
 fn party_header() -> String {
@@ -167,15 +201,18 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics
                 g.atk,
                 g.def,
                 if g.engaged { "ENGAGED" } else { "BACK" },
-                // The engine owns the wording of a condition
-                // ("Bleeding (2)"); upper-casing is presentation, but
-                // abbreviating a vocabulary this renderer does not define
-                // would not be. `OK` rather than blank, because an empty
-                // cell in a ledger reads as missing data.
-                &g.status_effect
-                    .as_deref()
-                    .map(str::to_uppercase)
-                    .unwrap_or_else(|| "OK".to_string()),
+                &hostile_tail(
+                    // The engine owns the wording of a condition
+                    // ("Bleeding (2)"); upper-casing is presentation, but
+                    // abbreviating a vocabulary this renderer does not define
+                    // would not be. `OK` rather than blank, because an empty
+                    // cell in a ledger reads as missing data.
+                    &g.status_effect
+                        .as_deref()
+                        .map(str::to_uppercase)
+                        .unwrap_or_else(|| "OK".to_string()),
+                    &odds_cell(g.decompile_chance),
+                ),
             ),
             g.front_hp as f32,
             g.front_max_hp.max(1) as f32,
@@ -440,9 +477,17 @@ mod tests {
                 9,
                 4,
                 "ENGAGED",
-                "BLEEDING (2)",
+                &hostile_tail("BLEEDING (2)", &odds_cell(Some(0.62))),
             ),
-            roster_row("B  ", "Warden Process", "44/44", 14, 9, "BACK", "OK"),
+            roster_row(
+                "B  ",
+                "Warden Process",
+                "44/44",
+                14,
+                9,
+                "BACK",
+                &hostile_tail("OK", &odds_cell(Some(0.18))),
+            ),
             party_header(),
             roster_row(">1 ", "You", "21/30", 11, 6, "FRONT", "Attack A"),
             roster_row(" 2 ", "Sparkgrub", "18/18", 7, 3, "FRONT", "Defend"),
@@ -475,19 +520,82 @@ mod tests {
                 9,
                 4,
                 "ENGAGED",
-                "BLEEDING (2)",
+                &hostile_tail("BLEEDING (2)", &odds_cell(Some(0.62))),
             ),
-            roster_row("B  ", "Warden Process", "44/44", 14, 9, "BACK", "OK"),
-            roster_row("C  ", "Sentinel [BOSS]", "120/120", 22, 15, "BACK", "OK"),
+            roster_row(
+                "B  ",
+                "Warden Process",
+                "44/44",
+                14,
+                9,
+                "BACK",
+                &hostile_tail("OK", &odds_cell(Some(0.18))),
+            ),
+            roster_row(
+                "C  ",
+                "Sentinel [BOSS]",
+                "120/120",
+                22,
+                15,
+                "BACK",
+                &hostile_tail("OK", &odds_cell(None)),
+            ),
         ]
         .join("\n");
         assert_eq!(
             block,
-            "   GROUP              HP        ATK DEF RANGE   STATUS\n\
-             A  4 Null Daemons     18/30       9   4 ENGAGED BLEEDING (2)\n\
-             B  Warden Process     44/44      14   9 BACK    OK\n\
-             C  Sentinel [BOSS]    120/120    22  15 BACK    OK"
+            "   GROUP              HP        ATK DEF RANGE   STATUS        DECOMP\n\
+             A  4 Null Daemons     18/30       9   4 ENGAGED BLEEDING (2)     62%\n\
+             B  Warden Process     44/44      14   9 BACK    OK               18%\n\
+             C  Sentinel [BOSS]    120/120    22  15 BACK    OK                 —"
         );
+    }
+
+    /// DECOMP is a fixed cell inside the hostile tail, not something appended
+    /// after a condition — so it sits under its header whatever the engine
+    /// words the condition as. `BLEEDING (12)` is the widest one there is.
+    #[test]
+    fn the_decompile_odds_column_holds_its_place() {
+        const DECOMP_COL: usize = TAIL_COL + STATUS_W + 1;
+        let bleeding = roster_row(
+            "A  ",
+            "4 Null Daemons",
+            "18/30",
+            9,
+            4,
+            "ENGAGED",
+            &hostile_tail("BLEEDING (12)", &odds_cell(Some(0.62))),
+        );
+        let ok = roster_row(
+            "B  ",
+            "Glitch",
+            "8/8",
+            3,
+            1,
+            "ENGAGED",
+            &hostile_tail("OK", &odds_cell(Some(1.0))),
+        );
+        assert!(at(&hostile_header(), DECOMP_COL).starts_with("DECOMP"));
+        assert_eq!(at(&bleeding, DECOMP_COL), "   62%");
+        assert_eq!(at(&ok, DECOMP_COL), "  100%");
+    }
+
+    /// With no taming catalyst there are no odds to quote — a decompile can't
+    /// be attempted at all — so the cell holds a dash rather than a `0%` that
+    /// would read as an allowed attempt that never lands.
+    #[test]
+    fn the_odds_cell_is_a_dash_without_a_catalyst() {
+        assert_eq!(odds_cell(None), "—");
+        let row = roster_row(
+            "A  ",
+            "Glitch",
+            "8/8",
+            3,
+            1,
+            "ENGAGED",
+            &hostile_tail("OK", &odds_cell(None)),
+        );
+        assert_eq!(at(&row, TAIL_COL + STATUS_W + 1), "     —");
     }
 
     /// And each header label sits over the column it names.

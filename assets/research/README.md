@@ -44,6 +44,13 @@ Core Fragments.
         // deployed — researching the blueprint is not enough on its own.
         requires_structure: Some("fabricator"),
     )],
+
+    // Optional; defaults to none. Ability ids the PLAYER may use in battle
+    // once this node is unlocked — see assets/abilities/README.md. This is
+    // the only way the player gains an ability; companions get theirs from
+    // their species file instead, and a node listed here changes no
+    // companion's kit.
+    unlocks_abilities: ["hot_patch"],
 )
 ```
 
@@ -57,6 +64,11 @@ Core Fragments.
   `unlocks_structures`, is dropped at load time with a warning — it could
   never be reached or acted on. Dropping cascades: anything that required
   the dropped node goes too.
+- An unknown id in `unlocks_abilities` is treated more gently: that id is
+  dropped with a warning and the node itself still loads, because a node's
+  structures and recipes are innocent of a bad ability id.
+- Two nodes may name the same ability. The player's list shows it once,
+  from whichever node they researched first.
 - The ICE Breaker and Power Cell recipes are always available and are not
   defined here.
 - Nodes are listed cheapest first, ties broken by id, so the menu numbering

@@ -1,0 +1,8 @@
+(
+    id: "runtime_patching",
+    name: "Runtime Patching",
+    description: "Patch an ally back together mid-fight. Unlocks Hot Patch.",
+    cost: 28,
+    requires: ["self_exec"],
+    unlocks_abilities: ["hot_patch"],
+)

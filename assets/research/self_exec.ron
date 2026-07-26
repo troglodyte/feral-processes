@@ -1,0 +1,7 @@
+(
+    id: "self_exec",
+    name: "Self-Execution",
+    description: "Run a routine yourself in battle. Unlocks Priority Boost.",
+    cost: 12,
+    unlocks_abilities: ["priority_boost"],
+)

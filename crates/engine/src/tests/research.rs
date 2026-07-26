@@ -436,7 +436,9 @@ fn no_research_node_is_left_unlocking_nothing() {
             .get(&node.id)
             .expect("a listed node should exist in the db");
         assert!(
-            !def.unlocks_structures.is_empty() || !def.unlocks_recipes.is_empty(),
+            !def.unlocks_structures.is_empty()
+                || !def.unlocks_recipes.is_empty()
+                || !def.unlocks_abilities.is_empty(),
             "{} unlocks nothing and is dead weight in the tree",
             node.id
         );

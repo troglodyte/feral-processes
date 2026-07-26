@@ -1,5 +1,6 @@
 # feral-processes
 
+
 ![feral-processes gameplay screenshot](pics/gameplay.png)
 
 A Neuromancer/Tron-flavored game blending Pokemon (tame and battle rogue
@@ -215,10 +216,12 @@ is a genuine one-on-one — which is what a run needs while your party is
 still empty. See [Zones and portals](#zones-and-portals) for the matching
 distance scaling on individual stats.
 
-**The opening ring.** Inside that first 15 tiles of a *zone-1* breach,
-spawn rolls are also filtered by what a bare level-1 player can actually
-beat one-on-one — most of the roster can take you apart before you have
-a single companion, and none of it should be the first thing you meet.
+**The opening ring.** Inside that first 15-tile step of a *zone-1* breach —
+measured from where you materialize until you've built a Home, from the
+platform edge after that — spawn rolls are also filtered by what a bare
+level-1 player can actually beat one-on-one. Most of the roster can take
+you apart before you have a single companion, and none of it should be the
+first thing you meet.
 Bosses never spawn there. Where a biome has nothing gentle to offer, the
 ring fields the mildest thing it has rather than rolling freely. This is a
 rule about what gets *born* there, not a safe zone: programs wander, so

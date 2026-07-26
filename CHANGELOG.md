@@ -133,6 +133,41 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ### Balance
 
+- **A pack is a swarm now, sized by depth and distance.** A wild group used
+  to be a handful of programs however deep you were. Its ceiling is now the
+  zone — 1 at zone 1, tripling each level (3 / 9 / 27 / 81) to a hard 100
+  from zone 6 — and you only meet that ceiling by walking to it: a group
+  doubles every 15 tiles from the edge of your platform. Four groups at a
+  hundred apiece is the most one intrusion can hold. A swarm that size is
+  an attrition problem rather than an instant wipe, because only some of a
+  group can bring weapons to bear in a round — ten of a hundred, the square
+  root of its size — and because anything past the front two groups has to
+  shoot or idle. Members over a ceiling aren't deleted; they stay standing
+  on the map and are met on the next bump.
+- **How many groups meet you rides that same curve.** The *number* of
+  groups used to jump straight to four anywhere on the map, while their
+  *size* started at one and grew with distance — so the two halves of the
+  same danger curve disagreed, most sharply right where you'd notice. It is
+  now one group at your doorstep and one more per 15-tile step, up to four.
+  An encounter beside your platform is a single program however deep you've
+  breached.
+- **A zone-1 opening is winnable.** Zone 1 caps a group at one member, but
+  four groups could still engage — so a bump near where you materialize was
+  routinely a four-on-one against a player who has no companions yet. Across
+  25 generated worlds, 21 had a four-program fight inside 15 tiles of the
+  spawn point. Offline projection scores that as a loss against every shipped
+  species, and scores eleven of the fifteen ordinary species as a loss even
+  one-on-one. So on top of the group-count fix, the first 15-tile step of a
+  zone-1 breach now only spawns programs a bare level-1 player can actually
+  beat solo, and never a boss. Where a biome has nothing gentle — no shipped
+  StaticField species qualifies — it fields its mildest rather than its whole
+  roster. Twenty of twenty fresh worlds now win their opening fight, taking
+  4-8 rounds to do it.
+- **Modders:** nothing new to author for any of this, but a species' base
+  stats now decide whether it may open a run, not just how hard it hits. A
+  new species that a level-1 player with 90 HP, 6 ATK and 2 DEF can't beat
+  one-on-one simply won't spawn in that first step. It is still met
+  everywhere else.
 - **The base platform shrank from a 15-tile radius to 7.** The platform edge
   is also where the danger curve starts measuring, so hostiles now get tougher
   8 tiles nearer to home — the first stat-escalation step moves from 30 tiles

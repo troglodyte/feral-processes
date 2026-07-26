@@ -195,17 +195,21 @@ hostiles get this treatment.
 **Packs.** A hostile program sometimes spawns with others clustered right
 next to it, and bumping into any one of them pulls the whole cluster into
 the same intrusion. You can only attack or decompile whichever one is
-currently up front, but every packmate still alive retaliates alongside it
-each round — defeating or taming the front one just brings the next
-packmate up, it doesn't end the fight. How large a group can get depends
-on both how deep the zone is and how far the encounter is from your base:
-zone 1 is solo programs wherever you go, and every zone after that triples
-the ceiling (zone 2 → 3, zone 3 → 9, zone 4 → 27, zone 5 → 81, zone 6 and
-deeper → 100). You only meet that ceiling out in the field — a group
-doubles in size every 15 tiles from the edge of your platform, so
-encounters near home stay small however deep you've breached. See
-[Zones and portals](#zones-and-portals) for the matching distance scaling
-on individual stats.
+currently up front, and only the front few packmates retaliate each round
+— not the whole group — so defeating or taming the front one still just
+brings the next packmate up rather than ending the fight. How large a
+group can get depends on both how deep the zone is and how far the
+encounter is from your base: zone 1 caps every group at one program, and
+every zone after that triples the ceiling (zone 2 → 3, zone 3 → 9, zone 4
+→ 27, zone 5 → 81, zone 6 and deeper → 100). You only meet that ceiling
+out in the field — a group doubles in size every 15 tiles from the edge of
+your platform, so encounters near home stay small however deep you've
+breached. A group that outgrows its ceiling doesn't get any bigger: the
+extra members stay standing on the map, to be met on a later bump. Even
+zone 1's one-program ceiling doesn't mean a solo fight — up to four
+different species can each cluster in as their own one-program group, all
+in the same intrusion. See [Zones and portals](#zones-and-portals) for the
+matching distance scaling on individual stats.
 
 ### Getting started: building and running cronjobs
 
@@ -352,7 +356,9 @@ its HP is shown; kill it and the next member of that group steps up. Empty
 a group entirely and it's gone from the list, which shifts everything
 behind it forward. At most four groups engage at once; if a bigger cluster
 than that pulls together, the four largest fight and the rest stay standing
-on the map for you to meet separately.
+on the map for you to meet separately. Four groups at a hundred programs
+apiece is the hard ceiling on one intrusion — four hundred programs, all
+told.
 
 **Only the front two groups can reach you.** Anything further back has to
 shoot: a group in the back rank can use only moves its species flags as

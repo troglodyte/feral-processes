@@ -231,6 +231,23 @@ A second test pins the curve itself, which the old test never covered:
   No spillover, rout, or per-swarm stat discount is introduced.
 - **Save size.** Up to 2000 hostiles serialize instead of 100. No format
   change — `Hostile` entities already round-trip — but files grow.
+- **Zone 1 can now assemble up to four single-member groups in one bump,
+  not one.** Pre-branch, `gather_pack` truncated the *whole* pack to
+  `max_pack_size(anchor)`, which was 1 near a zone-1 spawn point — so
+  however many species clustered together, a zone-1 encounter was always a
+  single 1-v-1 fight. This branch's ceiling is per *group*, not per pack:
+  `gather_pack`'s total cap is `widest_group_size(&pack) * MAX_ENEMY_GROUPS`
+  — `1 * 4` at zone 1, since every zone-1 tile's `max_group_size` is 1. So
+  four different species can each contribute their own one-program group
+  to the same intrusion now, where before only one program total could
+  show up. §1's claim above — "four overlapping
+  species still means up to four singles in one fight, which is what zone 1
+  does today" — was false when written: it described this branch's *new*
+  per-group behaviour as if the old flat-truncate-to-1 code already
+  produced it, and it didn't. Reviewed and ruled to stay: a jump from one
+  solo enemy to at most four solo enemies is a small, in-character
+  extension of the same "zone 1 is where fights are small" shape the rest
+  of this design establishes, not worth gating the branch on.
 
 ## Testing
 

@@ -102,11 +102,13 @@ const INITIAL_SPAWN_SCATTER_TILES: i32 = 15;
 /// one hits escalate on the same footing as you push out.
 const GROUP_SIZE_STEP_TILES: i32 = DISTANCE_STAT_STEP_TILES;
 
-/// How tightly a pack's members cluster around the tile a spawn roll
-/// picked (`Game::try_spawn_habitat_creature`), and how far `gather_pack`
-/// searches from whichever member the player bumped into — both use the
-/// same radius so a whole spawned cluster is guaranteed to pull together
-/// into one fight.
+/// Floor under `swarm_radius`, the radius that actually governs how
+/// tightly a pack's members cluster around the tile a spawn roll picked
+/// (`Game::try_spawn_habitat_creature`) and how far `gather_pack` searches
+/// from whichever member the player bumped into: nothing gets tighter than
+/// this, however small the group. `swarm_radius` grows past this floor
+/// with group size, and its own doc explains why that still doesn't
+/// guarantee a whole spawned cluster gathers into one fight.
 const PACK_GATHER_RADIUS: i32 = 3;
 
 /// Geometric base for the group size each zone level allows: zone 1 is solo,

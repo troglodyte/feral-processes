@@ -209,9 +209,11 @@ impl Game {
             .unwrap_or(DEFAULT_BASE_SPEED)
     }
 
-    /// Every living combatant in descending initiative order. Ties break on
-    /// a stable key — party before enemies, then slot / group index — so a
-    /// seeded run always produces the same order.
+    /// Every living party member, plus each enemy group's front
+    /// `battle::attackers_in_group` members rather than its whole roster —
+    /// in descending initiative order. Ties break on a stable key — party
+    /// before enemies, then slot / group index — so a seeded run always
+    /// produces the same order.
     pub(crate) fn roll_initiative(&mut self) -> Vec<battle::Actor> {
         let Some(battle_state) = self.world.get_resource::<BattleState>() else {
             return Vec::new();

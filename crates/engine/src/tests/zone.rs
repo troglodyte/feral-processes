@@ -125,7 +125,7 @@ fn distance_stat_multiplier_treats_the_whole_platform_as_distance_zero() {
         ) - 1.25)
             .abs()
             < f32::EPSILON,
-        "the first step up lands one full step past the platform edge — 30 tiles from Home"
+        "the first step up lands one full step past the platform edge — 22 tiles from Home"
     );
     assert_eq!(
         game.distance_stat_multiplier(spawn.x + 10_000, spawn.y),

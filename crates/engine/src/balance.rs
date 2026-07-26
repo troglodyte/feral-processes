@@ -19,7 +19,7 @@ use crate::battle::compute_damage;
 use crate::components::{PLAYER_BASE_STATS, Stats};
 use crate::items::EquipmentStats;
 use crate::progression::stats_after_levels;
-use crate::resources::{BASE_PET_CAPACITY, ZoneLevel};
+use crate::resources::ZoneLevel;
 use crate::species::{SpeciesDb, SpeciesDef};
 
 /// Rounds to let a simulated fight run before scoring it a loss. The cap
@@ -365,12 +365,11 @@ pub fn simulate_roster_fight(
 }
 
 /// Searches player levels `1..=max_level` for the lowest one at which a
-/// full party (`MAX_PARTY_SIZE` companions, all tamed from `party_species`
-/// while breached into `zone` and leveled per
-/// `companion_level_for_player_level`) beats a **full-size group** of
-/// `wild_species` scaled to `zone` in `simulate_roster_fight`. `None` means
-/// scaling has broken down outright — not just a long grind, but no level
-/// up to `max_level` clears it.
+/// party of `companion_count` (all tamed from `party_species` while
+/// breached into `zone` and leveled per `companion_level_for_player_level`)
+/// beats a **full-size group** of `wild_species` scaled to `zone` in
+/// `simulate_roster_fight`. `None` means scaling has broken down outright —
+/// not just a long grind, but no level up to `max_level` clears it.
 ///
 /// The unit is one full-size *group* — every member of one species, at the
 /// zone's cap. A lone creature is no contest at any level and would report
@@ -378,38 +377,45 @@ pub fn simulate_roster_fight(
 /// can score, because its intended answer is AoE and no ability is
 /// modelled here.
 ///
-/// The party is `BASE_PET_CAPACITY` strong, not `MAX_PARTY_SIZE`. Fielding
-/// a full roster takes Data Caches (see `Game::pet_capacity`), so it is an
-/// achievement rather than the baseline these progression sweeps are
-/// supposed to describe — and modelling the ceiling here would report that
-/// early zones need level 1, which says nothing about the curve.
+/// `companion_count` is a parameter, not a hardcoded constant, because
+/// different callers are asking different questions with it: the
+/// progression sweeps want `BASE_PET_CAPACITY`, the party most players are
+/// actually fielding (fielding `MAX_PARTY_SIZE` takes Data Caches — see
+/// `Game::pet_capacity` — so it is an achievement rather than the
+/// baseline those sweeps describe, and modelling it there would report
+/// that early zones need level 1, which says nothing about the curve);
+/// the full-roster ratio test wants `MAX_PARTY_SIZE` specifically, because
+/// that ratio is the thing under test.
 ///
 /// `party_species` is deliberately separate from `wild_species`: the party
 /// a player actually fields is whatever they tamed along the way, not a
 /// mirror of the toughest thing they have to fight. Pass
 /// `median_ordinary_species` for the realistic baseline.
 ///
-/// `with_gear` adds `best_case_gear_bonus(zone, weapon, armor)` to the
+/// `with_gear` adds `best_case_gear_bonus(zone, gear.0, gear.1)` to the
 /// player's ATK/DEF (companions never carry equipment — see
 /// `components::Equipment`, only ever fetched for the player entity) — set
 /// it to `false` for a gear-free, pure-grind floor, `true` for the
 /// fully-intended progression path where the player re-equips
-/// zone-appropriate gear as they go. `weapon`/`armor` are the base
+/// zone-appropriate gear as they go. `gear` is `(weapon, armor)`, the base
 /// `EquipmentStats` of the strongest shipped gear, resolved from `ItemDb`
-/// by the caller; ignored when `with_gear` is `false`.
+/// by the caller (see `best_gear_stats`, which already returns them paired
+/// this way) — kept as one tuple parameter rather than two so this
+/// function stays under clippy's argument-count lint; ignored when
+/// `with_gear` is `false`.
 pub fn min_level_to_clear_zone(
     wild_species: &SpeciesDef,
     party_species: &SpeciesDef,
     zone: u32,
     max_level: u32,
+    companion_count: usize,
     with_gear: bool,
-    weapon: EquipmentStats,
-    armor: EquipmentStats,
+    gear: (EquipmentStats, EquipmentStats),
 ) -> Option<(u32, BattleOutcome)> {
     let groups = full_group_at_zone(wild_species, zone);
     let companion_move_power = average_move_power(party_species);
     let (gear_atk, gear_def) = if with_gear {
-        best_case_gear_bonus(zone, weapon, armor)
+        best_case_gear_bonus(zone, gear.0, gear.1)
     } else {
         (0, 0)
     };
@@ -422,7 +428,7 @@ pub fn min_level_to_clear_zone(
         player.atk += gear_atk;
         player.def += gear_def;
         let companion_level = companion_level_for_player_level(level);
-        let companions: Vec<Stats> = (0..BASE_PET_CAPACITY)
+        let companions: Vec<Stats> = (0..companion_count)
             .map(|_| companion_stats(party_species, zone, companion_level))
             .collect();
         let outcome = simulate_roster_fight(player, &companions, companion_move_power, &groups);
@@ -436,7 +442,7 @@ pub fn min_level_to_clear_zone(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::MAX_PARTY_SIZE;
+    use crate::resources::{BASE_PET_CAPACITY, MAX_PARTY_SIZE};
     use std::path::Path;
 
     fn species_assets_dir() -> std::path::PathBuf {
@@ -604,16 +610,35 @@ mod tests {
     const MAX_GEARED_ZONE_SWEPT: u32 = 5;
     const MAX_LEVEL_SEARCHED: u32 = 200;
 
+    /// Multiplier and flat slack the "no cliff" guard allows a zone's level
+    /// requirement to grow by over the previous zone's. Growth is
+    /// geometric in stats *and* group size now, not the old fixed-size-pack
+    /// game's flat ~2x-per-zone, so the shipped curve itself swings from
+    /// 8.0x (grind-only zone 1 -> 2, off a level-1 floor that isn't a real
+    /// measurement) down to 2.1x-2.3x deeper in, and up to 4.0x on the
+    /// geared sweep. `* 6 + 10` is exactly double the multiplier and slack
+    /// this guard used to gate on — real margin against every shipped pair,
+    /// including the ones that used to sit exactly on the wire, while still
+    /// catching a jump twice as sharp as anything that ships today.
+    const LEVEL_GROWTH_GUARD_MULTIPLIER: u32 = 6;
+    const LEVEL_GROWTH_GUARD_SLACK: u32 = 10;
+
     /// The party-size change compounds three ways: `party_stat_bonus`
     /// feeds a share of every companion's ATK/DEF into the player's own
     /// effective stats, so 3 -> 5 raises the player's *passive* stats as
     /// well as adding two more attackers and two more bodies to absorb
     /// hits. The group-size increase is the counterweight. This test is the
-    /// only evidence that ratio is survivable before anyone plays it.
+    /// only evidence that ratio is survivable before anyone plays it — it
+    /// fields `MAX_PARTY_SIZE` companions, unlike the progression sweeps
+    /// below, which field `BASE_PET_CAPACITY`; the full-roster ratio is
+    /// exactly what this test exists to check.
     ///
     /// Deliberately fought against the *toughest* ordinary species with a
     /// *median* party — a player tames what the habitat gives them, and has
     /// to survive the worst thing it spawns.
+    ///
+    /// Swept through `MAX_GEARED_ZONE_SWEPT` zones, matching the range the
+    /// geared progression sweep below covers.
     #[test]
     fn a_full_party_survives_a_full_group_at_each_zone() {
         let (db, warnings) =
@@ -626,25 +651,26 @@ mod tests {
         let party = median_ordinary_species(&db);
         let (weapon, armor) = best_gear_stats();
 
-        for zone in 1..=5u32 {
+        for zone in 1..=MAX_GEARED_ZONE_SWEPT {
             let Some((level, outcome)) = min_level_to_clear_zone(
                 toughest,
                 party,
                 zone,
                 MAX_LEVEL_SEARCHED,
+                MAX_PARTY_SIZE,
                 true,
-                weapon,
-                armor,
+                (weapon, armor),
             ) else {
                 panic!(
-                    "zone {zone}: a full party can't clear a full group of {}s at any level up \
-                     to {MAX_LEVEL_SEARCHED} — the group/party ratio is off",
+                    "zone {zone}: a full party of {MAX_PARTY_SIZE} can't clear a full group of \
+                     {}s at any level up to {MAX_LEVEL_SEARCHED} — the group/party ratio is off",
                     toughest.name
                 );
             };
             eprintln!(
-                "[roster] zone {zone}: group of {} {}s needs level {level} ({} rounds, {:.0}% \
-                 player HP left)",
+                "[roster] zone {zone}: full party of {MAX_PARTY_SIZE} {}s vs group of {} {}s \
+                 needs level {level} ({} rounds, {:.0}% player HP left)",
+                party.name,
                 crate::game::spawning::zone_group_cap(zone),
                 toughest.name,
                 outcome.turns,
@@ -745,9 +771,9 @@ mod tests {
                 party,
                 zone,
                 MAX_LEVEL_SEARCHED,
+                BASE_PET_CAPACITY,
                 false,
-                weapon,
-                armor,
+                (weapon, armor),
             ) else {
                 panic!(
                     "zone {zone} ({}) isn't clearable by level {MAX_LEVEL_SEARCHED} on pure grind \
@@ -759,7 +785,7 @@ mod tests {
                 "[no gear] zone {zone} vs {}, party of {} {}s: needs level {level} ({} turns, \
                  {:.0}% player HP left)",
                 toughest.name,
-                MAX_PARTY_SIZE,
+                BASE_PET_CAPACITY,
                 party.name,
                 outcome.turns,
                 outcome.player_hp_fraction * 100.0
@@ -774,9 +800,9 @@ mod tests {
                 "deeper zones should never require a *lower* level to clear: {required_levels:?}"
             );
             assert!(
-                next <= prev * 3 + 5,
-                "level requirement jumped from {prev} to {next} one zone deeper — the scaling \
-                 curve has a cliff sharper than the expected ~2x-per-zone growth: \
+                next <= prev * LEVEL_GROWTH_GUARD_MULTIPLIER + LEVEL_GROWTH_GUARD_SLACK,
+                "level requirement jumped from {prev} to {next} one zone deeper — sharper than \
+                 the shipped curve's geometric growth in stats and group size ever produces: \
                  {required_levels:?}"
             );
         }
@@ -810,9 +836,9 @@ mod tests {
                 party,
                 zone,
                 MAX_LEVEL_SEARCHED,
+                BASE_PET_CAPACITY,
                 true,
-                weapon,
-                armor,
+                (weapon, armor),
             ) else {
                 panic!(
                     "zone {zone} ({}) isn't clearable by level {MAX_LEVEL_SEARCHED} even fully \
@@ -824,7 +850,7 @@ mod tests {
                 "[geared] zone {zone} vs {}, party of {} {}s: needs level {geared_level} ({} \
                  turns, {:.0}% player HP left)",
                 toughest.name,
-                MAX_PARTY_SIZE,
+                BASE_PET_CAPACITY,
                 party.name,
                 outcome.turns,
                 outcome.player_hp_fraction * 100.0
@@ -839,9 +865,9 @@ mod tests {
                 party,
                 zone,
                 MAX_LEVEL_SEARCHED,
+                BASE_PET_CAPACITY,
                 false,
-                weapon,
-                armor,
+                (weapon, armor),
             ) {
                 assert!(
                     geared_level <= grind_only_level,
@@ -867,9 +893,10 @@ mod tests {
                 continue;
             }
             assert!(
-                next <= prev * 3 + 5,
-                "geared level requirement jumped from {prev} to {next} one zone deeper — the \
-                 scaling curve has a cliff: {required_levels:?}"
+                next <= prev * LEVEL_GROWTH_GUARD_MULTIPLIER + LEVEL_GROWTH_GUARD_SLACK,
+                "geared level requirement jumped from {prev} to {next} one zone deeper — \
+                 sharper than the shipped curve's geometric growth in stats and group size ever \
+                 produces: {required_levels:?}"
             );
         }
     }

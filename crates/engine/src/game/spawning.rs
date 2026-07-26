@@ -210,6 +210,42 @@ impl Game {
         (1u32 << steps).min(cap)
     }
 
+    /// How many distinct species groups one fight at `(x, y)` may hold: a
+    /// single group at the danger origin, gaining one more every
+    /// `GROUP_SIZE_STEP_TILES` out to `MAX_ENEMY_GROUPS`. Rides the same
+    /// curve as `max_group_size`, and for the same reason — what meets you
+    /// at your own doorstep is one program, and it is pushing out that
+    /// turns it into a swarm.
+    ///
+    /// Without this the two halves of the pack ceiling disagreed near the
+    /// origin: group *size* started at one there while the *number* of
+    /// groups jumped straight to four. A zone-1 opening, where the zone cap
+    /// pins every group to a single member anyway, was therefore a
+    /// four-on-one against a player who has no companions yet —
+    /// `balance::simulate_roster_fight` scores that as a loss against every
+    /// shipped species, including the four that `beatable_by_a_fresh_player`
+    /// clears one-on-one.
+    pub(crate) fn max_enemy_groups(&self, x: i32, y: i32) -> usize {
+        let steps = self.distance_from_danger_origin(x, y) / GROUP_SIZE_STEP_TILES;
+        (steps as usize + 1).min(MAX_ENEMY_GROUPS)
+    }
+
+    /// Whether `(x, y)` is in the band a brand-new run opens in: zone 1,
+    /// close enough to the danger origin that a fight there is a single
+    /// program (one group by `max_enemy_groups`, one member by zone 1's
+    /// `zone_group_cap`). Spelled out from both curves rather than as its
+    /// own tile radius so it can't drift out of step with them.
+    ///
+    /// Zone 1 only, and deliberately: past it the player has a party, and
+    /// "what a bare level-1 player beats solo" would be filtering the
+    /// wrong fight — a deep zone's home ring is meant to be quiet, not
+    /// toothless.
+    fn in_opening_ring(&self, x: i32, y: i32) -> bool {
+        self.world.resource::<ZoneLevel>().0 == 1
+            && self.max_group_size(x, y) == 1
+            && self.max_enemy_groups(x, y) == 1
+    }
+
     /// Spawns `count` wild creatures near the player, retrying with a fresh
     /// random offset whenever a roll whiffs (an unwalkable tile, or a biome
     /// with no matching species) rather than giving up on that slot — a
@@ -310,18 +346,60 @@ impl Game {
             return false;
         }
         let species_db = self.world.resource::<SpeciesDb>();
-        let candidates: Vec<String> = species_db
+        let mut candidates: Vec<String> = species_db
             .habitat_matches(tile.biome)
             .into_iter()
             .map(|s| s.id.clone())
             .collect();
-        let boss_candidates: Vec<String> = species_db
+        let mut boss_candidates: Vec<String> = species_db
             .boss_habitat_matches(tile.biome)
             .into_iter()
             .map(|s| s.id.clone())
             .collect();
         if candidates.is_empty() && boss_candidates.is_empty() {
             return false;
+        }
+        // The opening ring fields only what a fresh player can actually
+        // beat — bosses emphatically included in what it turns away.
+        //
+        // Not every biome has something that qualifies (no shipped
+        // StaticField species does), and there the ring falls back to the
+        // gentlest thing that biome has rather than to its whole roster:
+        // still a hard opening, but never the worst one on offer. Ranked
+        // by flat stat total, the same crude yardstick
+        // `balance::toughest_ordinary_species` sorts by, because the
+        // projection itself can't rank fights the player loses — they all
+        // score zero HP left.
+        if self.in_opening_ring(x, y) {
+            let db = self.world.resource::<SpeciesDb>();
+            let gentle: Vec<String> = candidates
+                .iter()
+                .filter(|id| {
+                    db.get(id)
+                        .is_some_and(crate::balance::beatable_by_a_fresh_player)
+                })
+                .cloned()
+                .collect();
+            candidates = if gentle.is_empty() {
+                candidates
+                    .iter()
+                    .min_by_key(|id| {
+                        db.get(id)
+                            .map(|s| s.base_hp + s.base_atk + s.base_def)
+                            .unwrap_or(i32::MAX)
+                    })
+                    .cloned()
+                    .into_iter()
+                    .collect()
+            } else {
+                gentle
+            };
+            boss_candidates.clear();
+            // A biome that offers nothing but bosses spawns nothing here,
+            // rather than drawing from a pool the ring just emptied.
+            if candidates.is_empty() {
+                return false;
+            }
         }
         // A boss takes the tile's one spawn slot instead of an ordinary
         // habitat creature, but only rarely, and only where one is defined

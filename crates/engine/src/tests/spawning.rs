@@ -144,6 +144,242 @@ fn guardian_never_wanders_beyond_the_nest_tether_radius() {
     }
 }
 
+/// End to end, through the real round loop rather than a projection: a
+/// fresh run must be able to win the first fight it walks into. Everything
+/// else about the opening ring is machinery in service of this.
+///
+/// Whole seeds rather than a built fixture, because the failure this
+/// guards against was assembled out of parts that each looked reasonable —
+/// zone 1 caps a group at one member, four groups may engage, the player
+/// starts with no companions — and only bit when a generated world put
+/// them together.
+#[test]
+fn a_fresh_run_can_win_the_first_fight_it_walks_into() {
+    let mut fights = 0;
+    for seed in 1..=8u32 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let spawn = *game.world.resource::<ZoneSpawnPoint>();
+        let nearest = {
+            let mut query = game
+                .world
+                .query_filtered::<(Entity, &Position), With<Hostile>>();
+            query
+                .iter(&game.world)
+                .map(|(e, p)| (e, (p.x - spawn.x).abs().max((p.y - spawn.y).abs())))
+                .filter(|(_, dist)| *dist < GROUP_SIZE_STEP_TILES)
+                .min_by_key(|&(_, dist)| dist)
+                .map(|(e, _)| e)
+        };
+        let Some(anchor) = nearest else {
+            continue;
+        };
+        let species = game.world.get::<Creature>(anchor).unwrap().species.clone();
+        let pack = game.gather_pack(anchor);
+        assert_eq!(
+            pack.len(),
+            1,
+            "seed {seed}: bumping a program in the opening ring pulled in {} of them",
+            pack.len()
+        );
+
+        game.start_battle(pack);
+        // Bounded so a stalemate fails the assertion below instead of
+        // hanging the suite. Well above the 8 rounds the slowest shipped
+        // matchup takes.
+        let mut rounds = 0;
+        while game.has_active_battle() && rounds < 60 {
+            player_attacks(&mut game);
+            rounds += 1;
+        }
+
+        let hp = game.world.get::<Stats>(game.player_entity()).unwrap().hp;
+        assert!(
+            !game.has_active_battle() && hp > 0,
+            "seed {seed}: a bare level-1 player lost their opening fight against a \
+             {species} after {rounds} rounds, at {hp} HP"
+        );
+        assert!(
+            rounds > 2,
+            "seed {seed}: the opening {species} died in {rounds} rounds — the ring is \
+             supposed to be winnable, not free"
+        );
+        fights += 1;
+    }
+    assert!(
+        fights >= 6,
+        "only {fights} of 8 seeds put anything in the opening ring to fight, so this \
+         test is mostly asserting nothing"
+    );
+}
+
+/// A fresh run opens with an empty `Party`, so the first fights are solo —
+/// and eleven of the fifteen shipped ordinary species beat a bare level-1
+/// player one-on-one. Inside the opening ring a spawn roll may only place
+/// the ones that don't.
+///
+/// Asserted over the spawn *roll*, not over the standing population: wild
+/// programs wander (`systems::wander_ai_system`), and a nest just outside
+/// the ring tethers guardians up to `NEST_TETHER_RADIUS` inward, so
+/// something tougher can walk in. The ring decides what is born there, not
+/// what may ever stand there.
+#[test]
+fn the_zone_one_opening_ring_only_rolls_species_a_fresh_player_can_beat() {
+    let mut game = Game::new(444, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    // Every tile of a full ring-width square, so this covers whatever
+    // biomes this seed's terrain happens to lay down rather than the one
+    // the spawn tile sits in.
+    let ring = GROUP_SIZE_STEP_TILES - 1;
+    for dx in -ring..=ring {
+        for dy in -ring..=ring {
+            game.try_spawn_habitat_creature(spawn.x + dx, spawn.y + dy);
+        }
+    }
+
+    let placed: Vec<(String, Position, i32)> = {
+        let mut query = game
+            .world
+            .query_filtered::<(&Creature, &Position), With<Hostile>>();
+        query
+            .iter(&game.world)
+            .map(|(c, p)| {
+                (
+                    c.species.clone(),
+                    *p,
+                    game.distance_from_danger_origin(p.x, p.y),
+                )
+            })
+            .collect()
+    };
+    assert!(
+        placed
+            .iter()
+            .any(|(_, _, dist)| *dist < GROUP_SIZE_STEP_TILES),
+        "the sweep has to actually populate the ring, or this asserts nothing"
+    );
+    let stat_total = |s: &SpeciesDef| s.base_hp + s.base_atk + s.base_def;
+    for (species, pos, dist) in placed {
+        if dist >= GROUP_SIZE_STEP_TILES {
+            continue;
+        }
+        let biome = game
+            .world
+            .resource_mut::<WorldMap>()
+            .tile(pos.x, pos.y)
+            .biome;
+        let db = game.world.resource::<SpeciesDb>();
+        let def = db
+            .get(&species)
+            .expect("a spawned creature's species is in the db");
+        // No shipped StaticField species is a fair solo fight, so the rule
+        // the ring actually enforces is "beatable, or else the gentlest
+        // this biome has" — asserted as an outcome rather than by
+        // re-deriving the pool the spawn path built.
+        let gentlest = db
+            .habitat_matches(biome)
+            .into_iter()
+            .map(stat_total)
+            .min()
+            .expect("the creature spawned here, so this biome has species");
+        assert!(
+            crate::balance::beatable_by_a_fresh_player(def) || stat_total(def) == gentlest,
+            "{species} spawned {dist} tiles into the opening ring: a bare level-1 \
+             player is projected to lose to it, and it isn't the gentlest thing \
+             its biome offers either"
+        );
+    }
+}
+
+/// The fallback half of the ring rule, on the biome that forces it: no
+/// shipped StaticField species is a fair solo fight for a level-1 player,
+/// so a StaticField tile in the ring fields the gentlest of them rather
+/// than rolling freely across sentinels and ciphers. The biome is forced
+/// with a tile override rather than hunted for in generated terrain, so
+/// the case is covered whatever the seed lays down.
+#[test]
+fn a_ring_biome_with_nothing_gentle_fields_only_its_gentlest_species() {
+    let mut game = Game::new(445, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let (x, y) = (spawn.x + 1, spawn.y + 1);
+    game.world.resource_mut::<WorldMap>().set_override(
+        x,
+        y,
+        Tile {
+            biome: Biome::StaticField,
+            walkable: true,
+        },
+    );
+
+    let expected = {
+        let db = game.world.resource::<SpeciesDb>();
+        let pool = db.habitat_matches(Biome::StaticField);
+        assert!(
+            pool.iter()
+                .all(|s| !crate::balance::beatable_by_a_fresh_player(s)),
+            "this test's premise is that StaticField has nothing a fresh player \
+             beats — if that changed, it is now testing the wrong branch"
+        );
+        pool.into_iter()
+            .min_by_key(|s| s.base_hp + s.base_atk + s.base_def)
+            .expect("StaticField ships species")
+            .id
+            .clone()
+    };
+
+    for _ in 0..40 {
+        game.try_spawn_habitat_creature(x, y);
+    }
+
+    let spawned: Vec<String> = {
+        let mut query = game
+            .world
+            .query_filtered::<(&Creature, &Position), With<Hostile>>();
+        query
+            .iter(&game.world)
+            .filter(|(_, p)| p.x == x && p.y == y)
+            .map(|(c, _)| c.species.clone())
+            .collect()
+    };
+    assert!(!spawned.is_empty(), "40 rolls should place something");
+    assert!(
+        spawned.iter().all(|id| *id == expected),
+        "a ring tile whose biome offers nothing gentle must field only its \
+         gentlest species ({expected}), got {spawned:?}"
+    );
+}
+
+/// The counterpart to the ring test above: one step out, the species it
+/// turns away are all still there to be met. A buffer that quietly became
+/// a zone-wide difficulty cut would be a worse bug than the one it fixes.
+#[test]
+fn past_the_opening_ring_the_full_habitat_roster_spawns_again() {
+    let mut game = Game::new(444, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let out = spawn.x + GROUP_SIZE_STEP_TILES;
+    for dy in -20..=20 {
+        for dx in 0..40 {
+            game.try_spawn_habitat_creature(out + dx, spawn.y + dy);
+        }
+    }
+
+    let spawned: Vec<String> = {
+        let mut query = game.world.query_filtered::<&Creature, With<Hostile>>();
+        query.iter(&game.world).map(|c| c.species.clone()).collect()
+    };
+    let db = game.world.resource::<SpeciesDb>();
+    let tough: Vec<&String> = spawned
+        .iter()
+        .filter(|id| {
+            db.get(id)
+                .is_some_and(|s| !crate::balance::beatable_by_a_fresh_player(s))
+        })
+        .collect();
+    assert!(
+        !tough.is_empty(),
+        "past the ring, the species a fresh player loses to must spawn normally"
+    );
+}
+
 #[test]
 fn spawn_wild_creature_rolls_individual_stat_variance_within_a_species() {
     let mut game = Game::new(420, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

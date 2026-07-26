@@ -29,12 +29,26 @@ impl Game {
             .unwrap_or(1)
     }
 
+    /// The widest `max_enemy_groups` among `members`' own tiles, measured
+    /// from every member for the same reason `widest_group_size` is: the
+    /// count rides the same distance curve, so a cluster straddling a step
+    /// boundary would otherwise fight under whichever tile its anchor
+    /// happened to land on.
+    fn widest_enemy_groups(&self, members: &[Entity]) -> usize {
+        members
+            .iter()
+            .filter_map(|&e| self.world.get::<Position>(e))
+            .map(|p| self.max_enemy_groups(p.x, p.y))
+            .max()
+            .unwrap_or(1)
+    }
+
     /// Every alive `Hostile` creature within `swarm_radius` tiles of
     /// `anchor` (Chebyshev distance) — the whole cluster a group spawn
     /// roll placed together (see `try_spawn_habitat_creature`) joins the
     /// fight at once when the player bumps into any one of them. `anchor`
     /// is always first, becoming the initial front target. Truncated to
-    /// `MAX_ENEMY_GROUPS` groups' worth of `widest_group_size`, so how deep
+    /// `widest_enemy_groups` groups' worth of `widest_group_size`, so how deep
     /// a fight this ground can produce is bounded by the same danger curve
     /// that decided how many spawned here, and never exceeds what
     /// `group_pack` can then hold. The remainder stays standing on the map
@@ -65,12 +79,12 @@ impl Game {
                 pack.push(e);
             }
         }
-        pack.truncate(self.widest_group_size(&pack) * MAX_ENEMY_GROUPS);
+        pack.truncate(self.widest_group_size(&pack) * self.widest_enemy_groups(&pack));
         pack
     }
 
     /// Partitions `pack` into one group per species, in first-appearance
-    /// order. A cluster spanning more than `MAX_ENEMY_GROUPS` species keeps
+    /// order. A cluster spanning more than `widest_enemy_groups` species keeps
     /// only its largest groups, and each group is itself capped at
     /// `widest_group_size` — a spawn roll places one species, so without
     /// that a single deep roll would fight as one column rather than as the
@@ -84,6 +98,7 @@ impl Game {
     /// place the entities somewhere, or the fight comes out a single file.
     pub(crate) fn group_pack(&self, pack: Vec<Entity>) -> Vec<EnemyGroup> {
         let cap = self.widest_group_size(&pack);
+        let max_groups = self.widest_enemy_groups(&pack);
         let mut groups: Vec<EnemyGroup> = Vec::new();
         for entity in pack {
             let Some(species) = self
@@ -110,9 +125,9 @@ impl Game {
         // `sort_by_key` is stable, so equal-sized groups keep
         // first-appearance order and the truncation stays deterministic for
         // seeded tests.
-        if groups.len() > MAX_ENEMY_GROUPS {
+        if groups.len() > max_groups {
             groups.sort_by_key(|g| std::cmp::Reverse(g.members.len()));
-            groups.truncate(MAX_ENEMY_GROUPS);
+            groups.truncate(max_groups);
         }
         groups
     }

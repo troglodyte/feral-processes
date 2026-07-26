@@ -143,6 +143,38 @@ pub fn median_ordinary_species(db: &SpeciesDb) -> &SpeciesDef {
     ordinary[ordinary.len() / 2]
 }
 
+/// Whether a bare, level-1 player — no companions, no gear — is projected
+/// to beat one wild `species` one-on-one at zone 1, even when that
+/// individual rolls its best (`MAX_INDIVIDUAL_ROLL` on every stat).
+///
+/// This is the only fight in this module projected without a party, and
+/// it's the one the game actually opens on: `Party` starts empty, so until
+/// the player wins something they can decompile, every encounter is solo.
+/// The zone-1 opening ring spawns only species this holds for — see
+/// `Game::try_spawn_habitat_creature`. Eleven of the fifteen shipped
+/// ordinary species fail it — ten of them even on an average roll — which
+/// is what made the opening unwinnable.
+///
+/// Not a claim that the excluded species are unfair — they're what the ring
+/// exists to keep out of the player's first few fights, and they're waiting
+/// one step further out.
+pub fn beatable_by_a_fresh_player(species: &SpeciesDef) -> bool {
+    let best_roll = |base: i32| (base as f32 * crate::MAX_INDIVIDUAL_ROLL).round() as i32;
+    let stats = wild_stats_at_zone(species, 1);
+    let group = GroupSim {
+        stats: Stats {
+            hp: best_roll(stats.hp),
+            max_hp: best_roll(stats.max_hp),
+            atk: best_roll(stats.atk),
+            def: best_roll(stats.def),
+        },
+        count: 1,
+        move_power: average_move_power(species),
+        ranged_move_power: average_ranged_move_power(species),
+    };
+    simulate_roster_fight(PLAYER_BASE_STATS, &[], crate::PLAYER_STRIKE_POWER, &[group]).player_won
+}
+
 /// Ticks of a single worked, tiered node needed to fund one Portal at
 /// `zone`, routed through the Market's `portal_fragment` buy price.
 ///
@@ -503,6 +535,48 @@ mod tests {
             .expect("the market should sell portal fragments");
 
         (ticks_per_unit, portal_fragment_rate, market_price)
+    }
+
+    /// The opening ring filters the shipped roster with
+    /// `beatable_by_a_fresh_player`, so that predicate has to keep some
+    /// species and turn others away. All-pass and it's inert — the ring
+    /// stops doing anything and a zone-1 opening goes back to being
+    /// unwinnable. All-fail and every ring falls back to its biome's
+    /// unfiltered pool, which is the same thing by a different route.
+    ///
+    /// A rebalance of the shipped `.ron` stats is exactly what would push
+    /// it to either end, which is why this reads the real assets.
+    #[test]
+    fn the_shipped_roster_has_species_on_both_sides_of_the_opening_ring() {
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
+        let (gentle, tough): (Vec<&SpeciesDef>, Vec<&SpeciesDef>) =
+            db.all().partition(|s| beatable_by_a_fresh_player(s));
+        eprintln!(
+            "[ring] a fresh player beats {} of {} shipped species solo: {:?}",
+            gentle.len(),
+            gentle.len() + tough.len(),
+            gentle.iter().map(|s| &s.id).collect::<Vec<_>>()
+        );
+
+        assert!(
+            !gentle.is_empty(),
+            "nothing a bare level-1 player can beat ships at all, so the ring would \
+             fall back to the full pool everywhere and the opening stays unwinnable"
+        );
+        assert!(
+            !tough.is_empty(),
+            "every shipped species is beatable solo, which makes the ring inert — \
+             either the roster got soft or the projection stopped measuring the \
+             fight the player actually opens on"
+        );
+        for boss in db.all().filter(|s| s.is_boss) {
+            assert!(
+                !beatable_by_a_fresh_player(boss),
+                "{} is projected as a fair solo fight for a level-1 player, which \
+                 would let a boss spawn inside the opening ring",
+                boss.id
+            );
+        }
     }
 
     /// The check this whole change exists to satisfy: a base that's been

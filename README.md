@@ -133,7 +133,7 @@ into the renderer, so a new action appears without the UI being touched:
 | --- | --- |
 | `a` | Attack — then pick which enemy group to hit |
 | `d` | Defend — brace for the round: a Defense bonus, and you draw more of the incoming fire |
-| `s` | Special (party members only) — picks one of that member's abilities, then a target. A rally (ATK boost) by default, or the species' own abilities if it defines any. Costs you a flat chunk of Fatigue |
+| `s` | Special (party members only) — picks one of that member's abilities, then a target if it needs one. A rally (ATK boost) by default, or the species' own abilities if it defines any. Costs you Fatigue — how much the ability decides — and may sit out a few rounds afterwards |
 | `c` | Decompile (you only) — attempt to compile/tame a group's front program. Needs a taming catalyst, which the ICE Breaker is |
 | `u` | Use item (you only) — spend a consumable as that slot's action for the round |
 | `j` | Jack out (flee) — costs a mild XP setback, same as flatlining. A party-level command, not a per-member action |
@@ -205,11 +205,24 @@ every zone after that triples the ceiling (zone 2 → 3, zone 3 → 9, zone 4
 out in the field — a group doubles in size every 15 tiles from the edge of
 your platform, so encounters near home stay small however deep you've
 breached. A group that outgrows its ceiling doesn't get any bigger: the
-extra members stay standing on the map, to be met on a later bump. Even
-zone 1's one-program ceiling doesn't mean a solo fight — up to four
-different species can each cluster in as their own one-program group, all
-in the same intrusion. See [Zones and portals](#zones-and-portals) for the
-matching distance scaling on individual stats.
+extra members stay standing on the map, to be met on a later bump.
+
+How many *groups* meet you at once rides the same 15-tile curve: one at
+your own doorstep, a second a step out, a third the step after, up to the
+ceiling of four. So an encounter beside your platform is a single program
+however deep you've breached, and a zone-1 fight near where you materialize
+is a genuine one-on-one — which is what a run needs while your party is
+still empty. See [Zones and portals](#zones-and-portals) for the matching
+distance scaling on individual stats.
+
+**The opening ring.** Inside that first 15 tiles of a *zone-1* breach,
+spawn rolls are also filtered by what a bare level-1 player can actually
+beat one-on-one — most of the roster can take you apart before you have
+a single companion, and none of it should be the first thing you meet.
+Bosses never spawn there. Where a biome has nothing gentle to offer, the
+ring fields the mildest thing it has rather than rolling freely. This is a
+rule about what gets *born* there, not a safe zone: programs wander, so
+something tougher can still walk in from further out.
 
 ### Getting started: building and running cronjobs
 
@@ -354,11 +367,12 @@ three Glitches are one addressable unit — `A  3 Glitches` — rather than
 three separate rows. Only a group's **front** member can be hit, and only
 its HP is shown; kill it and the next member of that group steps up. Empty
 a group entirely and it's gone from the list, which shifts everything
-behind it forward. At most four groups engage at once; if a bigger cluster
-than that pulls together, the four largest fight and the rest stay standing
-on the map for you to meet separately. Four groups at a hundred programs
-apiece is the hard ceiling on one intrusion — four hundred programs, all
-told.
+behind it forward. How many groups may engage at once depends on how far
+from base the encounter is — one beside your platform, four once you're 45
+tiles out; if a bigger cluster than that pulls together, the largest groups
+fight and the rest stay standing on the map for you to meet separately.
+Four groups at a hundred programs apiece is the hard ceiling on one
+intrusion — four hundred programs, all told.
 
 **Only the front two groups can reach you.** Anything further back has to
 shoot: a group in the back rank can use only moves its species flags as

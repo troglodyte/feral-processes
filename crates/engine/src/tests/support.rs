@@ -34,6 +34,24 @@ pub(super) fn generic_species(game: &Game) -> SpeciesDef {
         .expect("at least one species with no declared abilities")
 }
 
+/// A tile far enough from the danger origin that a fight there may hold a
+/// full `MAX_ENEMY_GROUPS` groups — `Game::max_enemy_groups` allows one at
+/// the origin and gains another every `GROUP_SIZE_STEP_TILES`.
+///
+/// Any fixture asserting about more than one enemy group has to stand its
+/// combatants out here: both halves of the pack ceiling are read from the
+/// ground the members occupy (see `Game::group_pack`), so a multi-group
+/// pack placed beside the spawn point partitions down to a single group.
+/// Stats scale with distance too, which is why fixtures that pin damage
+/// numbers set `Stats` explicitly rather than relying on species bases.
+pub(super) fn multi_group_ground(game: &Game) -> (i32, i32) {
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    (
+        spawn.x + GROUP_SIZE_STEP_TILES * (MAX_ENEMY_GROUPS as i32 - 1),
+        spawn.y,
+    )
+}
+
 /// Sets `entity`'s level directly, for tests that need a level-gated
 /// ability unlocked without grinding XP into it.
 pub(super) fn set_level(game: &mut Game, entity: Entity, level: u32) {

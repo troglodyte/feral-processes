@@ -251,6 +251,48 @@ fn max_group_size_doubles_with_distance_and_caps_per_zone() {
     );
 }
 
+/// The count of groups rides the same distance curve as their size, one
+/// step per group rather than a doubling. The origin end is the part that
+/// matters: a fight at your doorstep is one program, which is what makes a
+/// zone-1 opening survivable for a player who has no companions yet.
+#[test]
+fn max_enemy_groups_gains_one_group_per_step_out_and_stops_at_the_ceiling() {
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let at = |game: &Game, steps: i32| {
+        game.max_enemy_groups(spawn.x + GROUP_SIZE_STEP_TILES * steps, spawn.y)
+    };
+
+    assert_eq!(at(&game, 0), 1, "one group at the danger origin");
+    assert_eq!(
+        game.max_enemy_groups(spawn.x + GROUP_SIZE_STEP_TILES - 1, spawn.y),
+        1,
+        "one tile short of a full step is still a single group — an off-by-one \
+         here would end the opening buffer a tile early"
+    );
+    assert_eq!(at(&game, 1), 2);
+    assert_eq!(at(&game, 2), 3);
+    assert_eq!(at(&game, 3), MAX_ENEMY_GROUPS);
+    assert_eq!(
+        at(&game, 10_000),
+        MAX_ENEMY_GROUPS,
+        "distance may not push a fight past the group ceiling"
+    );
+
+    // Zone depth doesn't enter into it — only distance does, so the ring
+    // around a deep zone's entry point is quiet too.
+    game.world.resource_mut::<ZoneLevel>().0 = 5;
+    assert_eq!(at(&game, 0), 1, "every zone's entry point holds one group");
+
+    // And it counts from the platform edge, like every other danger curve.
+    place_home(&mut game, 0, 0);
+    assert_eq!(
+        game.max_enemy_groups(spawn.x + GROUP_SIZE_STEP_TILES, spawn.y),
+        1,
+        "a full step from spawn is only half a step from the platform edge"
+    );
+}
+
 #[test]
 fn stepping_through_a_portal_consumes_it_so_it_never_travels() {
     let mut game = Game::new(950, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

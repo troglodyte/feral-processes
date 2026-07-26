@@ -16,10 +16,12 @@ fn gather_pack_pulls_in_nearby_hostiles_and_caps_the_pack_at_max_enemy_groups_wo
             .clone()
     };
     let mut game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    // Zone 3 caps a group at 9; one step out doubles to 2. That is the
-    // per-*group* size, and the whole pack may carry `MAX_ENEMY_GROUPS` of
-    // them — so the ceiling here is 8, and there are deliberately more than
-    // 8 hostiles in range, or the pack size would just be however many the
+    // Both halves of the ceiling ride the distance curve, and one step out
+    // is where they're small enough to bind on a fixture this size: zone 3
+    // caps a group at 9 but one step doubles the local size to 2, and the
+    // group *count* one step out is 2 of a possible `MAX_ENEMY_GROUPS`. So
+    // the ceiling here is 4, and there are deliberately more than 4
+    // hostiles in range, or the pack size would just be however many the
     // radius happened to reach and the ceiling would go untested.
     game.world.resource_mut::<ZoneLevel>().0 = 3;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
@@ -56,9 +58,9 @@ fn gather_pack_pulls_in_nearby_hostiles_and_caps_the_pack_at_max_enemy_groups_wo
     );
     assert_eq!(
         pack.len(),
-        8,
+        4,
         "twelve are in range, but a pack is capped at the per-group size (2 \
-         one step out in zone 3) times MAX_ENEMY_GROUPS"
+         one step out in zone 3) times the group count one step out (2)"
     );
 }
 
@@ -132,6 +134,43 @@ fn a_pack_of_more_than_four_species_engages_the_four_largest_and_leaves_the_rest
     );
 }
 
+/// The opening buffer, from the battle side: whatever is standing on the
+/// ground around a zone-1 breach, bumping into it starts a one-on-one.
+/// Four species share one tile here, which before the group count rode the
+/// distance curve was a four-on-one against a player who has no companions
+/// yet — `balance::beatable_by_a_fresh_player` scores that as a loss
+/// against every shipped species, boss or not.
+#[test]
+fn a_fight_at_the_danger_origin_is_a_single_program_however_many_are_standing_there() {
+    let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let mut crowd = Vec::new();
+    for (i, species) in ["glitch", "scrapper", "virus", "worm"].iter().enumerate() {
+        crowd.push(
+            game.spawn_wild_creature(species, spawn.x, spawn.y + i as i32)
+                .unwrap(),
+        );
+    }
+
+    game.start_battle(crowd.clone());
+
+    let battle = game.world.resource::<BattleState>();
+    assert_eq!(
+        battle.groups.len(),
+        1,
+        "the origin allows one group, so three of the four wait their turn"
+    );
+    assert_eq!(
+        battle.groups[0].members.len(),
+        1,
+        "and zone 1 caps that group at a single member"
+    );
+    assert!(
+        crowd.iter().all(|&e| game.world.get_entity(e).is_ok()),
+        "the three left out stay on the map, met on the next bump"
+    );
+}
+
 /// Initiative order must be reproducible under a fixed seed. Every roll
 /// goes through the existing `GameRng`, so a seeded test can assert an
 /// exact order without touching the wall clock.
@@ -156,8 +195,9 @@ fn a_faster_species_wins_initiative_far_more_often_than_a_slower_one() {
     let mut sprite_first = 0;
     for seed in 0..200u32 {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        let sprite = game.spawn_wild_creature("sprite", 5, 5).unwrap();
-        let construct = game.spawn_wild_creature("construct", 5, 6).unwrap();
+        let (x, y) = multi_group_ground(&game);
+        let sprite = game.spawn_wild_creature("sprite", x, y).unwrap();
+        let construct = game.spawn_wild_creature("construct", x, y + 1).unwrap();
         game.start_battle(vec![sprite, construct]);
         let order = game.roll_initiative();
         let pos = |e: Entity| {
@@ -178,15 +218,11 @@ fn a_faster_species_wins_initiative_far_more_often_than_a_slower_one() {
 
 #[test]
 fn defeating_the_front_pack_member_continues_the_battle_against_the_next_one() {
-    let species_id = {
-        let game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        game.species_defs()
-            .into_iter()
-            .next()
-            .expect("at least one species")
-            .id
-            .clone()
-    };
+    // Named rather than "whichever species sorts first", which is Cipher —
+    // whose Encrypt carries a 35% stun, and a stunned player never lands
+    // the one-shot this test is built around. Glitch's moveset is plain
+    // damage, so the assertion below can't be eaten by an effect roll.
+    let species_id = "glitch".to_string();
     let mut game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     {
@@ -264,8 +300,9 @@ fn defeating_the_front_pack_member_continues_the_battle_against_the_next_one() {
 #[test]
 fn wiping_the_front_group_promotes_the_group_behind_it() {
     let mut game = Game::new(79, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let glitch = game.spawn_wild_creature("glitch", 5, 5).unwrap();
-    let scrapper = game.spawn_wild_creature("scrapper", 5, 6).unwrap();
+    let (x, y) = multi_group_ground(&game);
+    let glitch = game.spawn_wild_creature("glitch", x, y).unwrap();
+    let scrapper = game.spawn_wild_creature("scrapper", x, y + 1).unwrap();
     game.start_battle(vec![glitch, scrapper]);
     let player = game.player_entity();
 
@@ -294,8 +331,9 @@ fn wiping_the_front_group_promotes_the_group_behind_it() {
 fn a_stale_target_group_index_falls_back_to_the_front_group() {
     let mut game = Game::new(84, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    let glitch = game.spawn_wild_creature("glitch", 5, 5).unwrap();
-    let scrapper = game.spawn_wild_creature("scrapper", 5, 6).unwrap();
+    let (x, y) = multi_group_ground(&game);
+    let glitch = game.spawn_wild_creature("glitch", x, y).unwrap();
+    let scrapper = game.spawn_wild_creature("scrapper", x, y + 1).unwrap();
     game.start_battle(vec![glitch, scrapper]);
 
     assert_eq!(game.retarget(1), Some(1), "group 1 is standing");

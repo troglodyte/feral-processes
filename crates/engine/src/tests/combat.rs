@@ -53,7 +53,8 @@ fn all_attack_needs_a_target_only_while_more_than_one_group_lives() {
     let first = species.next().unwrap();
     let second = species.next().expect("assets ship at least two species");
 
-    let solo = game.spawn_wild_creature(&first, 5, 5).unwrap();
+    let (x, y) = multi_group_ground(&game);
+    let solo = game.spawn_wild_creature(&first, x, y).unwrap();
     insert_battle(&mut game, player, vec![solo]);
     let needs = |game: &Game| {
         game.battle_party_commands()
@@ -67,8 +68,8 @@ fn all_attack_needs_a_target_only_while_more_than_one_group_lives() {
         "one group means no choice, so all-attack shouldn't open a picker"
     );
 
-    let a = game.spawn_wild_creature(&first, 5, 5).unwrap();
-    let b = game.spawn_wild_creature(&second, 6, 5).unwrap();
+    let a = game.spawn_wild_creature(&first, x, y).unwrap();
+    let b = game.spawn_wild_creature(&second, x + 1, y).unwrap();
     insert_battle(&mut game, player, vec![a, b]);
     assert_eq!(
         game.battle_view().unwrap().groups.len(),

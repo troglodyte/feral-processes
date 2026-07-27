@@ -183,3 +183,65 @@ fn an_innate_routine_can_be_popped_out_and_plugged_into_another_program() {
         "a foreign species' routine should install fine"
     );
 }
+
+#[test]
+fn extraction_needs_a_bench_built_somewhere_but_not_nearby() {
+    let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(!game.can_extract_routines(), "no bench, no extraction");
+
+    let pet = spawn_tamed(&mut game, 10, 3);
+    let err = game.extract_routine(pet, 0).unwrap_err();
+    assert!(
+        err.contains("Compiler"),
+        "the refusal should name the bench: {err}"
+    );
+
+    spawn_structure_at(&mut game, "compiler", 30, 30);
+    assert!(
+        game.can_extract_routines(),
+        "a bench 30 tiles away still counts — extraction has no proximity rule"
+    );
+}
+
+#[test]
+fn extracting_yields_the_picked_routine_destroys_the_program_and_loses_the_rest() {
+    let (mut game, medic) = game_with_two_ability_companion();
+    set_level(&mut game, medic, 5); // both of its unlocks installed
+    spawn_structure_at(&mut game, "compiler", 30, 30);
+
+    let offered = game.extractable_routines(medic);
+    assert_eq!(offered.len(), 2, "both installed routines are on offer");
+    let kept = offered[1].id.clone();
+    let lost = offered[0].id.clone();
+
+    game.extract_routine(medic, 1).unwrap();
+
+    assert_eq!(
+        count_item(&game, crate::abilities::routine_item_id(&kept).as_str()),
+        1,
+        "the picked routine lands in inventory"
+    );
+    assert_eq!(
+        count_item(&game, crate::abilities::routine_item_id(&lost).as_str()),
+        0,
+        "everything else on the program is lost with it"
+    );
+    assert!(
+        game.owned_pets().iter().all(|p| p.entity != medic),
+        "the program is consumed"
+    );
+}
+
+#[test]
+fn extraction_is_refused_for_a_program_you_dont_own_and_during_battle() {
+    let mut game = Game::new(33, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    spawn_structure_at(&mut game, "compiler", 30, 30);
+    let wild = spawn_wild_on_player_tile(&mut game);
+    let err = game.extract_routine(wild, 0).unwrap_err();
+    assert!(err.contains("control"), "{err}");
+
+    let pet = spawn_tamed(&mut game, 10, 3);
+    start_battle_with_a_wild_program(&mut game);
+    let err = game.extract_routine(pet, 0).unwrap_err();
+    assert!(err.contains("right now"), "{err}");
+}

@@ -230,6 +230,18 @@ pub(super) fn spawn_data_cache(game: &mut Game, offset: i32) {
     ));
 }
 
+/// Deploys a structure of `kind` at an absolute position, bypassing
+/// `place_structure`'s Home, cost and distance rules — for tests about what
+/// a standing structure *enables*, not about the build rules.
+pub(super) fn spawn_structure_at(game: &mut Game, kind: &str, x: i32, y: i32) {
+    game.world.spawn((
+        Structure {
+            kind: kind.to_string(),
+        },
+        Position { x, y },
+    ));
+}
+
 /// Unlocks `id` and every prerequisite it needs, funding the whole
 /// chain — so a test that just needs a research-gated structure on the
 /// map doesn't have to model the tree itself.

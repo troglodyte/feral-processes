@@ -192,6 +192,14 @@ is skipped with a warning logged in-game rather than crashing startup.
     // cycle actually yields. That reliability saturates at level 6 (100%),
     // so tiers past that add payout only.
     upgrade: Some((max_tier: 5, cost: [("core_fragment", 10)])),
+
+    // Optional; can be left out entirely (defaults to false). If true,
+    // owning one of these anywhere lets the player extract a routine out of
+    // a program they own, destroying it and losing every other routine it
+    // carried — see `Game::extract_routine`. Checked by ownership
+    // (`Game::has_structure`), not proximity, so a bench built anywhere on
+    // the map counts. This is how the Compiler works.
+    extracts_routines: true,
 )
 ```
 

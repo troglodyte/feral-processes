@@ -216,6 +216,14 @@ pub struct StructureDef {
     /// before this field existed.
     #[serde(default)]
     pub upgrade: Option<UpgradeDef>,
+    /// If true, owning one of these anywhere lets you extract a routine out
+    /// of a program you own (see `Game::extract_routine`). Deliberately
+    /// ownership, not proximity: the check is `Game::has_structure`, the
+    /// same "have you built one" test a researched recipe's bench uses.
+    /// `#[serde(default)]` so existing structure files (including mods)
+    /// grant no extraction, exactly as before this field existed.
+    #[serde(default)]
+    pub extracts_routines: bool,
 }
 
 fn default_durability() -> u32 {

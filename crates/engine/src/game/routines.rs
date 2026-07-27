@@ -192,4 +192,97 @@ impl Game {
             self.creature_label(entity)
         }
     }
+
+    /// Whether a routine-extraction bench is standing anywhere. Ownership,
+    /// not proximity — see `StructureDef::extracts_routines`.
+    pub fn can_extract_routines(&self) -> bool {
+        self.world
+            .resource::<StructureDb>()
+            .all()
+            .filter(|def| def.extracts_routines)
+            .any(|def| self.has_structure(&def.id))
+    }
+
+    /// Display name of a bench that would allow extraction, for the refusal
+    /// message — no code names a structure id.
+    fn extraction_bench_name(&self) -> String {
+        self.world
+            .resource::<StructureDb>()
+            .all()
+            .find(|def| def.extracts_routines)
+            .map(|def| def.name.clone())
+            .unwrap_or_else(|| "an extraction bench".to_string())
+    }
+
+    /// The routines installed on `creature`, in slot order — what an
+    /// extraction offers to salvage.
+    pub fn extractable_routines(&self, creature: Entity) -> Vec<AbilityDef> {
+        let db = self.world.resource::<AbilityDb>();
+        self.world
+            .get::<Routines>(creature)
+            .map(|r| r.0.clone())
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|id| db.get(id).cloned())
+            .collect()
+    }
+
+    /// Destroys `creature` and salvages exactly one of its routines — the
+    /// one at `index` in `extractable_routines`. Everything else installed
+    /// on it is lost with it.
+    ///
+    /// Room for the payout is checked before the program is despawned, for
+    /// the reason `sell_companion` documents about its own ordering.
+    pub fn extract_routine(&mut self, creature: Entity, index: usize) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        if !self.can_extract_routines() {
+            return Err(format!(
+                "You need {} standing somewhere to extract a routine.",
+                self.extraction_bench_name()
+            ));
+        }
+        let owner = self
+            .world
+            .get::<Tamed>(creature)
+            .ok_or_else(|| "That program isn't compiled under your control.".to_string())?
+            .owner;
+        if owner != self.player_entity() {
+            return Err("You don't control that program.".into());
+        }
+        let ability = self
+            .extractable_routines(creature)
+            .get(index)
+            .map(|def| def.id.clone())
+            .ok_or_else(|| "That program has no such routine.".to_string())?;
+        let item = abilities::routine_item_id(&ability);
+        self.check_room(&item, 1)?;
+
+        let name = self.creature_label(creature);
+        for detached in self.sale_detachments(creature) {
+            self.log(format!("{name} {detached}."));
+        }
+        self.world
+            .resource_mut::<Party>()
+            .0
+            .retain(|&e| e != creature);
+        self.world.entity_mut(creature).remove::<Task>();
+        self.world.despawn(creature);
+        self.world
+            .get_mut::<Inventory>(self.player_entity())
+            .unwrap()
+            .add(item, 1);
+        let ability_name = self
+            .world
+            .resource::<AbilityDb>()
+            .get(&ability)
+            .map(|a| a.name.clone())
+            .unwrap_or(ability);
+        self.log(format!(
+            "You break {name} down and salvage its {ability_name} routine."
+        ));
+        self.tick();
+        Ok(())
+    }
 }

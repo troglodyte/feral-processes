@@ -28,7 +28,9 @@ straight into the graphics window. Start a **New Game** from the main menu
 and pick **Permadeath** (flatlining ends the run and appends a summary to
 `run_history.log`) or **Forgiving** (flatlining costs Integrity and reboots
 you at the nearest structure); either way you take a mild XP setback for
-dying or fleeing. Each session gets its own save file under `saves/`,
+dying, or for a jack-out that actually gets you clear — escaping is a roll
+weighed on your party's strength against the pack's, and crossing open
+ground can get you ambushed. Each session gets its own save file under `saves/`,
 autosaving every 50 game ticks, and `L` from the main menu lists every save
 to load or delete. Press `?` in game for the complete control list.
 

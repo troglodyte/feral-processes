@@ -32,7 +32,7 @@ fn battle_flee_applies_the_same_mild_xp_setback_as_a_death() {
         .id();
     insert_battle(&mut game, player, vec![wild]);
 
-    game.battle_flee();
+    flee_until_clear(&mut game);
 
     assert_eq!(
         game.world.get::<Experience>(player).unwrap().xp,
@@ -40,6 +40,106 @@ fn battle_flee_applies_the_same_mild_xp_setback_as_a_death() {
         "fleeing should dock the same 20% setback as a death"
     );
     assert!(!game.has_active_battle(), "fleeing should end the battle");
+}
+
+/// Builds a fight the player cannot realistically escape — one enemy whose
+/// stat line pins `jack_out_chance` to its floor — starts the player on 10
+/// XP, and returns the game plus that seed's first jack-out result.
+/// Sweeping seeds rather than pinning one keeps this off a specific RNG
+/// sequence, the same pattern the retaliation-targeting tests use.
+fn first_jack_out_against_an_overwhelming_pack(seed: u32) -> (Game, bool) {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.get_mut::<Experience>(player).unwrap().xp = 10;
+    let species = game
+        .species_defs()
+        .into_iter()
+        .next()
+        .expect("at least one species");
+    let wild = game
+        .world
+        .spawn((
+            Creature {
+                species: species.id.clone(),
+            },
+            Hostile,
+            Position { x: 3, y: 3 },
+            Stats {
+                hp: 100_000,
+                max_hp: 100_000,
+                atk: 1,
+                def: 1,
+            },
+            StatusEffects::default(),
+        ))
+        .id();
+    insert_battle(&mut game, player, vec![wild]);
+    let escaped = game.battle_flee();
+    (game, escaped)
+}
+
+#[test]
+fn a_failed_jack_out_leaves_the_battle_running_and_costs_no_xp() {
+    for seed in 0..60 {
+        let (game, escaped) = first_jack_out_against_an_overwhelming_pack(seed);
+        if escaped {
+            continue;
+        }
+        let player = game.player_entity();
+        assert!(
+            game.has_active_battle(),
+            "a failed jack-out must leave you in the fight"
+        );
+        assert_eq!(
+            game.world.get::<Experience>(player).unwrap().xp,
+            10,
+            "a failed attempt must not dock XP — you only pay for an escape you got"
+        );
+        return;
+    }
+    panic!("no seed in 0..60 produced a failed jack-out against a 100k-power enemy");
+}
+
+#[test]
+fn a_failed_jack_out_draws_a_parting_volley() {
+    for seed in 0..60 {
+        let (game, escaped) = first_jack_out_against_an_overwhelming_pack(seed);
+        if escaped {
+            continue;
+        }
+        let player = game.player_entity();
+        let stats = game.world.get::<Stats>(player).unwrap();
+        assert!(
+            stats.hp < stats.max_hp,
+            "being pinned should cost you a volley"
+        );
+        return;
+    }
+    panic!("no seed in 0..60 produced a failed jack-out against a 100k-power enemy");
+}
+
+#[test]
+fn battle_flee_reports_whether_the_escape_happened() {
+    // Against a trivial enemy the chance pins to its ceiling, so a handful
+    // of attempts is overwhelmingly likely to include a success; the
+    // assertion is that a `true` return and an ended battle agree.
+    let mut game = Game::new(33, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let wild = spawn_wild_on_player_tile(&mut game);
+    insert_battle(&mut game, player, vec![wild]);
+
+    for _ in 0..200 {
+        let escaped = game.battle_flee();
+        assert_eq!(
+            escaped,
+            !game.has_active_battle(),
+            "the return value must agree with whether the fight actually ended"
+        );
+        if escaped {
+            return;
+        }
+    }
+    panic!("200 jack-out attempts all failed against a trivial enemy");
 }
 
 /// All-attack asks which group only when there is a choice to make. With
@@ -563,7 +663,12 @@ fn a_buff_aimed_at_a_companion_does_not_outlive_the_battle() {
         "the shield should be up while the fight runs"
     );
 
-    game.battle_flee();
+    // Retried rather than called once: jacking out is a roll now, and a
+    // failed attempt leaves the shield up and the fight running, which
+    // would fail this assertion for a reason that has nothing to do with
+    // buff teardown.
+    flee_until_clear(&mut game);
+    assert!(!game.has_active_battle(), "the fight should be over");
     assert_eq!(
         game.effective_def(pet),
         def_before,

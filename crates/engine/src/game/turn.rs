@@ -3,7 +3,7 @@
 
 use crate::tuning::{
     FORAGE_CHANCE_MODERATE, FORAGE_CHANCE_RICH, FORAGE_CHANCE_SPARSE,
-    KEEN_SCAVENGER_BONUS_PER_LEVEL, REST_TICKS,
+    KEEN_SCAVENGER_BONUS_PER_LEVEL, RANDOM_ENCOUNTER_CHANCE, REST_TICKS,
 };
 use crate::*;
 
@@ -157,8 +157,99 @@ impl Game {
             let mut p = self.world.get_mut::<Position>(player).unwrap();
             p.x = nx;
             p.y = ny;
+            // Only a step that actually covered ground draws an ambush —
+            // every branch above returned already, so walking into a
+            // creature, a nest or a portal can't also be jumped, and
+            // shoving at a wall isn't travel.
+            self.maybe_ambush();
         }
         self.tick();
+    }
+
+    /// Rolls `RANDOM_ENCOUNTER_CHANCE` for an ambush: on a hit, a
+    /// biome-appropriate pack spawns on a neighbouring tile and engages
+    /// immediately. Unlike every other way a fight starts, the player never
+    /// saw this one coming and cannot route around it — which is the point.
+    /// Crossing open ground is meant to cost something.
+    ///
+    /// Three deliberate limits:
+    ///
+    /// - Never on the base platform. It is a manufactured floor rather than
+    ///   terrain, nothing spawns there, and it stays the one safe ground —
+    ///   the same call `forage_chance` makes about it.
+    /// - Never a boss (`pick_habitat_species(.., false)`). A boss you find
+    ///   on the map is a fight you chose; one that jumps you is a death
+    ///   sentence you never opted into.
+    /// - Never a nest, since `spawn_pack` is called directly rather than
+    ///   through `try_spawn_habitat_creature`. A nest is a structure you
+    ///   attack, not a fight that attacks you.
+    ///
+    /// Spends the roll and does nothing if the player is boxed in by
+    /// unwalkable tiles or the biome offers no ordinary species. Hunting
+    /// further afield for somewhere to put a fight nobody asked for would
+    /// be worse than letting the roll lapse.
+    ///
+    /// Deliberately skips the `WILD_CREATURE_CAP` cull that
+    /// `maybe_spawn_wild_creature` performs: that cap bounds the population
+    /// of *idle* programs the player walked away from, and an ambush pack
+    /// is about to be resolved rather than left to roam.
+    pub(crate) fn maybe_ambush(&mut self) {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return;
+        }
+        let player = self.player_entity();
+        let pos = *self.world.get::<Position>(player).unwrap();
+        if self
+            .world
+            .resource_mut::<WorldMap>()
+            .tile(pos.x, pos.y)
+            .biome
+            == Biome::Platform
+        {
+            return;
+        }
+        let ambushed = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_bool(RANDOM_ENCOUNTER_CHANCE)
+        };
+        if !ambushed {
+            return;
+        }
+        // The eight neighbours, matching the game's 8-directional movement.
+        let open: Vec<(i32, i32)> = [
+            (-1, -1),
+            (0, -1),
+            (1, -1),
+            (-1, 0),
+            (1, 0),
+            (-1, 1),
+            (0, 1),
+            (1, 1),
+        ]
+        .into_iter()
+        .map(|(dx, dy)| (pos.x + dx, pos.y + dy))
+        .filter(|&(x, y)| self.world.resource_mut::<WorldMap>().tile(x, y).walkable)
+        .collect();
+        if open.is_empty() {
+            return;
+        }
+        let (tx, ty) = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            open[rng.0.random_range(0..open.len())]
+        };
+        let Some((species, _)) = self.pick_habitat_species(tx, ty, false) else {
+            return;
+        };
+        let pack = self.spawn_pack(&species, false, tx, ty);
+        let Some(&anchor) = pack.first() else {
+            return;
+        };
+        self.log("Something drops out of the noise floor — you've been made!");
+        // Through `gather_pack` rather than engaging the spawned pack
+        // directly, so an ambush sprung beside programs already standing
+        // there pulls them in too, exactly as walking into one would.
+        let pack = self.gather_pack(anchor);
+        self.start_battle(pack);
     }
 
     /// Consume one unit of `id` out of battle, applying its `ConsumeDef`:

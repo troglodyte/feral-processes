@@ -198,6 +198,27 @@ impl Game {
             .collect()
     }
 
+    /// Summed `Stats::power` of everyone still standing on the player's
+    /// side, and of every living enemy. The two inputs to
+    /// `battle::jack_out_chance` — kept here beside `all_living_enemies`
+    /// because both read the same `BattleState` shape, and split from the
+    /// formula itself so the formula stays testable without a `World`.
+    pub(crate) fn party_side_power(&self) -> i32 {
+        let player = self.player_entity();
+        std::iter::once(player)
+            .chain(self.world.resource::<Party>().0.iter().copied())
+            .filter(|&e| self.creature_alive(e))
+            .filter_map(|e| self.world.get::<Stats>(e).map(|s| s.power()))
+            .sum()
+    }
+
+    pub(crate) fn enemy_side_power(&self) -> i32 {
+        self.all_living_enemies()
+            .into_iter()
+            .filter_map(|e| self.world.get::<Stats>(e).map(|s| s.power()))
+            .sum()
+    }
+
     /// The entity an `Actor` currently refers to, or `None` if that slot is
     /// empty (a party member stood down, an enemy already despawned).
     pub(crate) fn actor_entity(&self, actor: battle::Actor) -> Option<Entity> {

@@ -1,17 +1,55 @@
 //! Damage, status effects, enemy retaliation, and tearing a battle down —
 //! whether it ended in a win, a flee, or a loss.
 
-use crate::tuning::{DEFEND_DEF_BONUS, ENGAGED_GROUPS, FLEE_COUNTERATTACK_CHANCE};
+use crate::tuning::{
+    DEFEND_DEF_BONUS, ENGAGED_GROUPS, FLEE_COUNTERATTACK_CHANCE, JACK_OUT_LUCK_MAX,
+    JACK_OUT_LUCK_MIN,
+};
 use crate::*;
 
 impl Game {
-    pub fn battle_flee(&mut self) {
+    /// Attempts to jack out, returning whether the party actually got clear.
+    ///
+    /// The escape is a roll, not a given — `battle::jack_out_chance` weighs
+    /// your side's summed power against the pack's, times a luck draw. A
+    /// failed attempt burns the round: every engaged group swings, the
+    /// round counter advances and end-of-round upkeep runs, but no XP is
+    /// docked. You pay the setback only for an escape you actually got,
+    /// which is what stops repeated attempts from bleeding progression on
+    /// top of HP.
+    pub fn battle_flee(&mut self) -> bool {
         if self.is_game_over().is_some() {
-            return;
+            return false;
         }
         let Some(player) = self.world.get_resource::<BattleState>().map(|b| b.player) else {
-            return;
+            return false;
         };
+        let luck = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_range(JACK_OUT_LUCK_MIN..=JACK_OUT_LUCK_MAX)
+        };
+        let chance =
+            battle::jack_out_chance(self.party_side_power(), self.enemy_side_power(), luck);
+        let escaped = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_bool(chance)
+        };
+        if !escaped {
+            self.log("The exit route collapses — they're still on you!");
+            self.all_wild_retaliate(player);
+            // The attempt cost the whole party its round, so the fight
+            // advances exactly as a resolved round does — same upkeep, same
+            // counter. `tick_round_status_effects` is also what ends the
+            // battle if that volley flatlined the player.
+            if let Some(mut battle) = self.world.get_resource_mut::<BattleState>() {
+                battle.round += 1;
+                let slots = battle.planned.len();
+                battle.planned = vec![None; slots];
+            }
+            self.tick_round_status_effects(player);
+            self.tick();
+            return false;
+        }
         let got_hit = {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_bool(FLEE_COUNTERATTACK_CHANCE)
@@ -33,6 +71,7 @@ impl Game {
         let front = self.front_of_group(0);
         self.end_battle(player, front);
         self.tick();
+        true
     }
 
     /// Whether `entity` is holding the Defend stance this round.

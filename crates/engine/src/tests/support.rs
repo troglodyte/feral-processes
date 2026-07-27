@@ -424,6 +424,27 @@ pub(super) fn set_inventory(game: &mut Game, stock: &[(&str, u32)]) {
     }
 }
 
+/// Retries `battle_flee` until the escape roll lands, for the tests that
+/// are about what a *successful* jack-out does rather than about the roll.
+/// Jacking out stopped being guaranteed (see `battle::jack_out_chance`), so
+/// a single call is no longer enough to end a battle.
+///
+/// Bounded rather than looping forever: the chance floors at
+/// `JACK_OUT_CHANCE_MIN`, so 200 straight failures is a ~1e-9 event and
+/// means something is actually broken. Bails out if the battle ends under
+/// it — a failed attempt draws a full volley, which can flatline the party.
+pub(super) fn flee_until_clear(game: &mut Game) {
+    for _ in 0..200 {
+        if game.battle_flee() {
+            return;
+        }
+        if !game.has_active_battle() {
+            return;
+        }
+    }
+    panic!("200 jack-out attempts all failed — the escape roll is broken");
+}
+
 /// Spawns a wild program on the player's tile and opens an intrusion on
 /// it — the state `battle_decompile` needs.
 pub(super) fn start_battle_with_a_wild_program(game: &mut Game) -> Entity {

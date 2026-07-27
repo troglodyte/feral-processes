@@ -80,25 +80,34 @@ groups sorted by species, only a group's front member can be hit, and only
 the front two groups can reach you at all — anything further back has to use
 ranged moves or sit the round out, which is what keeps a deep-field fight
 survivable and makes clearing front-to-back a real decision. You can Attack,
-Defend, spend a Special, Decompile (tame) with a catalyst in hand, use an
-item, or jack out; a lowercase key acts for the member currently choosing
-and its uppercase counterpart acts for the whole party. Both sides are laid
-out as stat tables around the combat log, including a live per-group
-decompile chance so you can watch a group become worth taming.
+Defend, spend a Special — Decompile among them, the taming routine the
+player starts with installed, spending a catalyst you hold — use an item, or
+jack out; a lowercase key acts for the member currently choosing and its
+uppercase counterpart acts for the whole party. Both sides are laid out as
+stat tables around the combat log, including a live per-group decompile
+chance so you can watch a group become worth taming.
 
 ## Companions
 
 Press `p` for every compiled program you own, wherever it is; up to five can
 be active party members. Party members fight beside you, gain half your XP,
-passively add 10% of their own Attack and Defense to yours, and grow their
-ability kit as they level — abilities are data files a species claims by id
-and unlock level, priced by cooldown and Fatigue. A program is either
-fighting or working a cronjob, never both. Every individual rolls its own
-stats and growth rate within ±20% of the species baseline, surfaced as a
-**Potential** tag, and tougher species grow faster per level. Press `f` to
-fuse two programs into one stronger one — the result takes the higher-level
-parent's species plus half the lower one's stats, and anything can only be
-fused three times.
+passively add 10% of their own Attack and Defense to yours, and install
+abilities as **routines** into level-derived slots as they level: one slot
+per two companion levels, capped at six. A species' innate kit — data files
+it claims by id and unlock level, priced by cooldown and Fatigue — is
+pre-installed at tame or fuse time and topped up whenever a level-up reaches
+a later unlock, and an innate routine can be popped back out and swapped for
+a different one. Press `m` for the routine panel (install, swap, pop out)
+and `M` at a Compiler standing anywhere on the map to extract a single
+routine out of any program you own — the program and its other routines are
+destroyed. The player gets slots too, just slower: one per ten of your own
+levels, same cap of six, starting with only Decompile installed. A program
+is either fighting or working a cronjob, never both. Every individual rolls
+its own stats and growth rate within ±20% of the species baseline, surfaced
+as a **Potential** tag, and tougher species grow faster per level. Press `f`
+to fuse two programs into one stronger one — the result takes the
+higher-level parent's species plus half the lower one's stats, and anything
+can only be fused three times.
 
 ## Items and equipment
 
@@ -161,6 +170,25 @@ file and no Rust at all. Perks are the one deliberate exception: a small,
 fixed, player-only set that lives in `crates/engine/src/perks.rs`. The
 economy needs exactly one item holding each of the `Currency`,
 `ResearchCurrency`, and `CraftCurrency` roles or the game won't start.
+
+## Tuning difficulty
+
+Everything the engine hardcodes about how hard the game is lives in one
+file: `crates/engine/src/tuning.rs`. Zone and distance scaling, XP curves
+and level caps, the damage and capture formulas, spawn and drop rates, raid
+pressure, need decay, perk magnitudes — each is a documented constant in a
+labelled section. Change a number, run `cargo test --workspace`, play.
+
+It is a Rust file rather than a `.ron`, so retuning means a rebuild (a few
+seconds here). That is the one deliberate difference from modding: content
+is data, difficulty is code. Values that *are* data — species stats, item
+and craft costs, structure economy, research costs, ability magnitudes —
+stay in `assets/*/` and are not duplicated in `tuning.rs`.
+
+Offline balance projections live next door in `balance_sim.rs`, a
+deterministic, RNG-free simulator that fights zone-scaled packs against the
+real `.ron` assets and asserts the resulting level curves as regression
+tests. A retune that breaks progression usually shows up there first.
 
 ## Audio and fonts
 

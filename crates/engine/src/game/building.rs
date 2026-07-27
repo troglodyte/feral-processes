@@ -1,6 +1,7 @@
 //! Placing, upgrading, and demolishing structures, and assigning programs
 //! to work them.
 
+use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, STRUCTURE_REMOVAL_REFUND_PERCENT};
 use crate::*;
 
 impl Game {

@@ -140,19 +140,6 @@ pub struct BattleState {
     pub player_won: bool,
 }
 
-/// The player's active battle party can hold at most this many tamed
-/// programs at once. With soft ranks, the slots past `FRONT_SLOTS` draw
-/// less enemy fire than the ones in front of them, so a full roster is
-/// deeper as well as bigger.
-pub const MAX_PARTY_SIZE: usize = 5;
-
-/// How many tamed programs the player may own in total (across the active
-/// party, cronjob workers, and idle pets) before any capacity-granting
-/// structures — see `StructureDef::pet_slot_bonus` and `Game::pet_capacity`,
-/// which add to this base. Distinct from `MAX_PARTY_SIZE`, which caps only
-/// how many of those pets can fight at once.
-pub const BASE_PET_CAPACITY: usize = 3;
-
 /// The player's active battle party: up to `MAX_PARTY_SIZE` tamed programs
 /// that fight alongside them and can be commanded to attack during an
 /// intrusion. Membership is mutually exclusive with an active cronjob
@@ -197,7 +184,7 @@ impl ZoneLevel {
     /// doubles with each zone level (level 1 = x1, level 2 = x2, level 3 =
     /// x4, ...).
     pub fn stat_multiplier(self) -> i32 {
-        1 << (self.0 - 1)
+        crate::tuning::ZONE_STAT_GROWTH.pow(self.0 - 1)
     }
 }
 

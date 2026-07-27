@@ -1,6 +1,10 @@
 //! Resolving a planned round — running each actor's action, computing
 //! effective stats, and rendering the result as a `BattleView`.
 
+use crate::tuning::{
+    DEFAULT_TAMING_DIFFICULTY, ENGAGED_GROUPS, FRONT_SLOTS, NEST_RESPAWN_TICKS,
+    PARTY_PASSIVE_STAT_DIVISOR, PLAYER_STRIKE_POWER,
+};
 use crate::*;
 
 impl Game {
@@ -146,24 +150,30 @@ impl Game {
                         needs.fatigue = (needs.fatigue - ability.fatigue_cost).max(0.0);
                     }
 
-                    let recipients = self.ability_recipients(ability.target, &target);
-                    self.use_ability(&ability, entity, &name, &recipients);
-                    // An area effect can drop members from any rank, and a
-                    // corpse left in a group would be promoted to front and
-                    // then attacked as though alive.
-                    self.reap_dead_members(player);
+                    // Decompile needs the *group index*, not the recipient
+                    // entity: a successful capture drops the target out of
+                    // its group. Every other effect only ever touches the
+                    // recipients it lands on.
+                    if matches!(ability.effect, AbilityEffect::Decompile) {
+                        if let battle::SpecialTarget::EnemyGroup { group } = target
+                            && let Some(group) = self.retarget(group)
+                        {
+                            self.attempt_decompile(group, player);
+                        }
+                    } else {
+                        let recipients = self.ability_recipients(ability.target, &target);
+                        self.use_ability(&ability, entity, &name, &recipients);
+                        // An area effect can drop members from any rank, and
+                        // a corpse left in a group would be promoted to front
+                        // and then attacked as though alive.
+                        self.reap_dead_members(player);
+                    }
                 }
             }
             // Already applied up front in `battle_resolve_round`, so that
             // bracing covers the whole round rather than only what happens
             // after this member's place in the initiative order.
             BattleAction::Defend => {}
-            BattleAction::Decompile { group } => {
-                let Some(group) = self.retarget(group) else {
-                    return;
-                };
-                self.attempt_decompile(group, player);
-            }
             BattleAction::UseItem { item } => {
                 self.consume_item(&item);
             }
@@ -263,7 +273,6 @@ impl Game {
                 format!("{name} -> {on}")
             }
             BattleAction::Defend => "Defend".to_string(),
-            BattleAction::Decompile { group } => format!("Decompile {}", group_letter(*group)),
             BattleAction::UseItem { item } => format!("Use {}", self.item_name(item)),
         }
     }
@@ -287,7 +296,9 @@ impl Game {
                 let species_name = species
                     .map(|s| self.zone_tagged_name(front, s.name.clone()))
                     .unwrap_or_default();
-                let taming_difficulty = species.map(|s| s.taming_difficulty).unwrap_or(0.5);
+                let taming_difficulty = species
+                    .map(|s| s.taming_difficulty)
+                    .unwrap_or(DEFAULT_TAMING_DIFFICULTY);
                 Some(EnemyGroupView {
                     letter: (b'A' + idx as u8) as char,
                     species_name,
@@ -497,7 +508,7 @@ impl Game {
         }
     }
 
-    /// Executes `ability` (one of `Game::companion_abilities`) on every
+    /// Executes `ability` (one of `Game::actor_abilities`) on every
     /// entity in `recipients` — party members for a buff or heal, enemies
     /// for damage or a debuff. See `Game::ability_recipients`, which
     /// resolves which entities those are. `actor` is who is spending the
@@ -572,6 +583,12 @@ impl Game {
                         self.apply_status_effect(recipient, &effect, &on);
                     }
                 }
+                // `resolve_one_action` branches around `use_ability` entirely
+                // for `Decompile` — it needs the group index, not a
+                // recipient entity — so this arm is unreachable in practice.
+                AbilityEffect::Decompile => unreachable!(
+                    "Decompile never reaches use_ability; resolve_one_action handles it directly"
+                ),
             }
         }
     }
@@ -639,7 +656,10 @@ impl Game {
             .iter()
             .filter_map(|&e| self.world.get::<Stats>(e))
             .fold((0, 0), |(atk, def), s| {
-                (atk + (s.atk / 10).max(1), def + (s.def / 10).max(1))
+                (
+                    atk + (s.atk / PARTY_PASSIVE_STAT_DIVISOR).max(1),
+                    def + (s.def / PARTY_PASSIVE_STAT_DIVISOR).max(1),
+                )
             })
     }
 }

@@ -16,11 +16,12 @@
 //! regression checks this module exists to support.
 
 use crate::battle::compute_damage;
-use crate::components::{PLAYER_BASE_STATS, Stats};
+use crate::components::Stats;
 use crate::items::EquipmentStats;
 use crate::progression::stats_after_levels;
 use crate::resources::ZoneLevel;
 use crate::species::{SpeciesDb, SpeciesDef};
+use crate::tuning::PLAYER_BASE_STATS;
 
 /// Rounds to let a simulated fight run before scoring it a loss. The cap
 /// exists to catch a genuine stalemate — defense permanently outpacing
@@ -63,7 +64,7 @@ fn wild_stats_at_zone(species: &SpeciesDef, zone: u32) -> Stats {
 }
 
 /// Best-in-slot Weapon + Armor bonus (no fusion) at the gear level `zone`
-/// unlocks — see `items::GEAR_LEVEL_GROWTH`/`Game::equip`, where gear level
+/// unlocks — see `crate::tuning::GEAR_LEVEL_GROWTH`/`Game::equip`, where gear level
 /// is capped by `ZoneLevel`. Takes the two items' base `EquipmentStats`
 /// (the strongest shipped weapon/armor, resolved from `ItemDb` by the
 /// caller) and applies the real `scaled_for_level` scaling, so this tracks
@@ -98,7 +99,7 @@ fn average_move_power(species: &SpeciesDef) -> i32 {
 
 /// The same mean, but over only the moves that reach past the front line —
 /// what a back-rank group actually gets to pick from (see
-/// `crate::ENGAGED_GROUPS`). `None` when the species has no ranged move at
+/// `crate::tuning::ENGAGED_GROUPS`). `None` when the species has no ranged move at
 /// all, which is the case that leaves a back group inert.
 fn average_ranged_move_power(species: &SpeciesDef) -> Option<i32> {
     let ranged: Vec<i32> = species
@@ -159,7 +160,7 @@ pub fn median_ordinary_species(db: &SpeciesDb) -> &SpeciesDef {
 /// exists to keep out of the player's first few fights, and they're waiting
 /// one step further out.
 pub fn beatable_by_a_fresh_player(species: &SpeciesDef) -> bool {
-    let best_roll = |base: i32| (base as f32 * crate::MAX_INDIVIDUAL_ROLL).round() as i32;
+    let best_roll = |base: i32| (base as f32 * crate::tuning::MAX_INDIVIDUAL_ROLL).round() as i32;
     let stats = wild_stats_at_zone(species, 1);
     let group = GroupSim {
         stats: Stats {
@@ -172,7 +173,13 @@ pub fn beatable_by_a_fresh_player(species: &SpeciesDef) -> bool {
         move_power: average_move_power(species),
         ranged_move_power: average_ranged_move_power(species),
     };
-    simulate_roster_fight(PLAYER_BASE_STATS, &[], crate::PLAYER_STRIKE_POWER, &[group]).player_won
+    simulate_roster_fight(
+        PLAYER_BASE_STATS,
+        &[],
+        crate::tuning::PLAYER_STRIKE_POWER,
+        &[group],
+    )
+    .player_won
 }
 
 /// Ticks of a single worked, tiered node needed to fund one Portal at
@@ -183,9 +190,8 @@ pub fn beatable_by_a_fresh_player(species: &SpeciesDef) -> bool {
 /// reason the travelling-base work happened. See
 /// `docs/superpowers/specs/2026-07-24-travelling-base-design.md`.
 ///
-/// Mirrors the real payout in `systems::task_progress_system` (tier ×
-/// `ZoneLevel::stat_multiplier`) and the real reliability curve in
-/// `systems::mining_success_chance`, so a rebalance of either shows up here.
+/// Calls the real `systems::node_payout` and `systems::mining_success_chance`
+/// rather than restating them, so a rebalance of either shows up here.
 pub fn ticks_to_afford_portal(
     zone: u32,
     tier: u32,
@@ -193,8 +199,8 @@ pub fn ticks_to_afford_portal(
     portal_fragment_rate: u32,
     market_price: u32,
 ) -> f64 {
-    let payout = (tier * ZoneLevel(zone).stat_multiplier() as u32) as f64;
-    let success = (0.4 + tier as f64 * 0.1).min(1.0);
+    let payout = crate::systems::node_payout(tier, ZoneLevel(zone)) as f64;
+    let success = crate::systems::mining_success_chance(tier);
     let per_tick = payout * success / ticks_per_unit as f64;
     // Priced through the same helper the game charges with (see
     // `crate::zone_portal_cost`), and fragments are bought with the
@@ -232,7 +238,8 @@ struct Fighter {
     atk: i32,
     def: i32,
     move_power: i32,
-    /// Share of incoming fire, matching `Game::roll_enemy_target`'s weights.
+    /// Share of incoming fire, from the same `battle::slot_aggro_weight`
+    /// `Game::roll_enemy_target` rolls against.
     aggro: f64,
 }
 
@@ -244,7 +251,7 @@ struct Fighter {
 #[cfg(test)]
 fn full_pack_at_zone(species: &SpeciesDef, zone: u32) -> Vec<GroupSim> {
     let group = full_group_at_zone(species, zone);
-    std::iter::repeat_n(group[0], crate::MAX_ENEMY_GROUPS).collect()
+    std::iter::repeat_n(group[0], crate::tuning::MAX_ENEMY_GROUPS).collect()
 }
 
 /// One species group at `zone`'s cap — the unit `min_level_to_clear_zone`
@@ -299,7 +306,7 @@ pub fn simulate_roster_fight(
     companion_move_power: i32,
     groups: &[GroupSim],
 ) -> BattleOutcome {
-    let mut roster: Vec<Fighter> = std::iter::once((player, crate::PLAYER_STRIKE_POWER))
+    let mut roster: Vec<Fighter> = std::iter::once((player, crate::tuning::PLAYER_STRIKE_POWER))
         .chain(companions.iter().map(|c| (*c, companion_move_power)))
         .enumerate()
         .map(|(slot, (stats, move_power))| Fighter {
@@ -308,11 +315,7 @@ pub fn simulate_roster_fight(
             atk: stats.atk,
             def: stats.def,
             move_power,
-            aggro: if slot < crate::FRONT_SLOTS {
-                crate::FRONT_SLOT_AGGRO_WEIGHT as f64
-            } else {
-                crate::BACK_SLOT_AGGRO_WEIGHT as f64
-            },
+            aggro: crate::battle::slot_aggro_weight(slot, false) as f64,
         })
         .collect();
 
@@ -365,7 +368,7 @@ pub fn simulate_roster_fight(
             };
         }
         for (idx, (group, _, remaining)) in groups.iter().enumerate() {
-            let power = if idx < crate::ENGAGED_GROUPS {
+            let power = if idx < crate::tuning::ENGAGED_GROUPS {
                 group.move_power
             } else {
                 match group.ranged_move_power {
@@ -455,7 +458,7 @@ pub fn min_level_to_clear_zone(
         let mut player = stats_after_levels(
             PLAYER_BASE_STATS,
             level - 1,
-            crate::progression::BASELINE_GROWTH_MULTIPLIER,
+            crate::tuning::BASELINE_GROWTH_MULTIPLIER,
         );
         player.atk += gear_atk;
         player.def += gear_def;
@@ -474,7 +477,7 @@ pub fn min_level_to_clear_zone(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::{BASE_PET_CAPACITY, MAX_PARTY_SIZE};
+    use crate::tuning::{BASE_PET_CAPACITY, MAX_PARTY_SIZE};
     use std::path::Path;
 
     fn species_assets_dir() -> std::path::PathBuf {
@@ -622,7 +625,7 @@ mod tests {
     /// Pins the *shape* of the un-upgraded curve. Payout scales
     /// exponentially with depth (`2^(zone-1)`) while a Portal's cost grows
     /// by only half its base rate per zone (see
-    /// `crate::ZONE_PORTAL_COST_GROWTH_PERCENT`), so the ratio is 1/1 at
+    /// `crate::tuning::ZONE_PORTAL_COST_GROWTH_PERCENT`), so the ratio is 1/1 at
     /// zone 1, 2/1.5 at zone 2, 4/2 at zone 3: every step pays off, the
     /// first one included.
     ///
@@ -664,7 +667,7 @@ mod tests {
     const MAX_GRIND_ONLY_ZONE_SWEPT: u32 = 5;
     /// How deep to sweep the fully-geared scenario. `GEAR_LEVEL_GROWTH`
     /// matches `ZoneLevel::stat_multiplier`'s doubling-per-zone base (see
-    /// `items::GEAR_LEVEL_GROWTH`'s doc comment), so gear neither overtakes
+    /// `crate::tuning::GEAR_LEVEL_GROWTH`'s doc comment), so gear neither overtakes
     /// deep zones the way the old 2.5x factor did nor collapses to "level 1
     /// clears everything" (confirmed empirically: 1, 5, 20, 45, 127 geared
     /// vs. 1, 8, 29, 61, 138 gear-free for zones 1-5).
@@ -796,7 +799,7 @@ mod tests {
                 let player = stats_after_levels(
                     PLAYER_BASE_STATS,
                     level - 1,
-                    crate::progression::BASELINE_GROWTH_MULTIPLIER,
+                    crate::tuning::BASELINE_GROWTH_MULTIPLIER,
                 );
                 let companions: Vec<Stats> = (0..MAX_PARTY_SIZE)
                     .map(|_| companion_stats(party, zone, companion_level_for_player_level(level)))

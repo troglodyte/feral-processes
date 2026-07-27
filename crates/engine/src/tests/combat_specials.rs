@@ -1,6 +1,7 @@
 //! Companion special abilities: the menus that offer them and the buffs they apply.
 
 use super::support::*;
+use crate::tuning::COMPANION_COMMAND_FATIGUE_COST;
 use crate::*;
 
 #[test]
@@ -196,6 +197,7 @@ fn companion_ability_label_shows_the_ability_name_or_the_fallback() {
             Experience::default(),
         ))
         .id();
+    game.install_innate_routines(plain);
     game.add_companion(plain).unwrap();
     let plain_ability = game.player_status().companions[0].ability.clone();
     assert_eq!(

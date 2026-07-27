@@ -143,6 +143,24 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ### Balance
 
+- **Every difficulty knob is in one file now.** Tuning values were spread
+  across three tiers with no boundary between them: 56 constants in the
+  crate root interleaved with module declarations, 28 more scattered across
+  seven other modules, and — worst — roughly thirty numbers that mattered
+  most sitting anonymous inside formulas. The zone stat doubling, the
+  steepest curve in the game, was an unnamed bit-shift. All of it is now
+  `crates/engine/src/tuning.rs`, grouped into labelled sections with its
+  documentation intact. No behaviour changed; the values are identical.
+  Content stays data — species, items, structures, abilities and research
+  are still `.ron` files and were not pulled into Rust.
+- **`balance.rs` is `balance_sim.rs`.** It was never a table of balance
+  constants; it is a 977-line offline battle simulator used as a
+  regression-test harness, and the name sent anyone hunting for tuning
+  values to the wrong file.
+- Two formulas had been quietly duplicated rather than shared: the mining
+  reliability curve was copied into the balance simulator whose own doc
+  claimed it mirrored the real one, and a cronjob node's default worker
+  capacity was repeated as a bare literal. Both now read one definition.
 - **A pack is a swarm now, sized by depth and distance.** A wild group used
   to be a handful of programs however deep you were. Its ceiling is now the
   zone — 1 at zone 1, tripling each level (3 / 9 / 27 / 81) to a hard 100
@@ -206,6 +224,37 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   `WAYLAND_DISPLAY` now exits with `No display detected; feral-processes needs
   a graphical display.` instead of falling back to text. Playing over SSH or
   on a headless box is no longer possible.
+
+### Routines
+
+- **Abilities are installable routines now, occupying level-derived slots.**
+  A companion gets one slot per two levels (capped at six, so six at level
+  12); the player gets one per ten levels, starting with one so the first
+  *free* slot lands at level 10. The `COMPANION_ROUTINE_SLOT_*` and
+  `PLAYER_ROUTINE_SLOT_*` constants live in `crates/engine/src/tuning.rs`.
+- **A species' innate kit installs itself.** It's pre-installed at tame or
+  fuse time and topped up whenever a level-up reaches a later unlock. An
+  innate routine can still be popped back out and plugged into a different
+  program — nothing is permanently welded in.
+- **Routine extraction.** With a Compiler standing anywhere on the map — no
+  proximity requirement — break a program you own down into exactly one of
+  its routines. The program and every other routine it carried are
+  destroyed.
+- **Decompile is an ability now, not its own battle command.** The player
+  starts a new game with it pre-installed, reached through the Special menu
+  like anything else. It greys out with a reason — no taming catalyst, or a
+  full roster — instead of silently refusing the round.
+- **Research hands over routine items, not the ability itself.** A
+  researched unlock is compiled straight into cargo; installing it into a
+  slot is a separate act from researching it, and two nodes naming the same
+  ability now stack two copies of the item instead of granting it once.
+- **Item and structure descriptions are authored in their `.ron` files.**
+  `Game::structure_description`'s Rust derivation is gone, so a mod controls
+  its own text end to end for both.
+- **New map keys:** `m` opens the routine panel (install, swap, pop out);
+  `M` opens extraction — needs a Compiler built somewhere, not nearby.
+- **Save format is v11.** Older saves are rejected with a clear message, the
+  same policy as every prior bump — this project does no save migration.
 
 ## 0.2.0 — 2026-07-24
 

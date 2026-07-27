@@ -12,6 +12,28 @@ impl Game {
             .collect()
     }
 
+    /// Every loaded item definition, id-sorted (see `ItemDb::all`). Reached
+    /// only by engine tests today; `cfg(test)` rather than widening `Game`'s
+    /// renderer-facing surface for a need nothing outside the crate has yet.
+    #[cfg(test)]
+    pub(crate) fn item_defs(&self) -> Vec<ItemDef> {
+        self.world.resource::<ItemDb>().all().cloned().collect()
+    }
+
+    /// Every loaded ability definition, id-sorted (see `AbilityDb::all`).
+    /// Same test-only rationale as `item_defs`.
+    #[cfg(test)]
+    pub(crate) fn ability_defs(&self) -> Vec<AbilityDef> {
+        self.world.resource::<AbilityDb>().all().cloned().collect()
+    }
+
+    /// One item definition by id, or `None` if nothing declares it. Same
+    /// test-only rationale as `item_defs`.
+    #[cfg(test)]
+    pub(crate) fn item_def(&self, item: &ItemId) -> Option<ItemDef> {
+        self.world.resource::<ItemDb>().get(item.as_str()).cloned()
+    }
+
     /// The display name for `id`, falling back to the raw id if the item set
     /// doesn't define it (a save referencing a since-removed mod item). The
     /// fallback borrows `id`, so the returned reference is bound to the
@@ -145,88 +167,6 @@ impl Game {
             .filter(|def| self.structure_unlocked(&def.id))
             .cloned()
             .collect()
-    }
-
-    /// A one-line summary of everything `def` actually does, for the build
-    /// menu. Derived from the def's capability fields plus the research db
-    /// rather than an authored `description` field, so a structure a modder
-    /// drops in gets an accurate line for free. Lives here rather than in
-    /// each renderer because the bench clause needs `ResearchDb`, which the
-    /// renderers can't see.
-    pub fn structure_description(&self, def: &StructureDef) -> String {
-        let mut parts = Vec::new();
-        if let Some(work) = &def.work {
-            parts.push(format!("cronjob -> {}", self.item_name(&work.produces)));
-        }
-        if let Some(passive) = &def.passive_process {
-            parts.push(format!(
-                "passive within {} tiles: {} -> {}",
-                passive.radius,
-                self.item_name(&passive.consumes),
-                self.item_name(&passive.produces)
-            ));
-        }
-        if let Some(regen) = &def.power_regen {
-            parts.push(format!(
-                "recharges {} Power per tick within {} tiles",
-                regen.per_tick, regen.radius
-            ));
-        }
-        let bench_for: Vec<&str> = self
-            .world
-            .resource::<ResearchDb>()
-            .all()
-            .flat_map(|node| &node.unlocks_recipes)
-            .filter(|recipe| recipe.requires_structure.as_deref() == Some(def.id.as_str()))
-            .map(|recipe| self.item_name(&recipe.result))
-            .collect();
-        if !bench_for.is_empty() {
-            parts.push(format!("compile bench: {}", bench_for.join(", ")));
-        }
-        if let Some(cost) = &def.teleport_cost {
-            let cost = cost
-                .iter()
-                .map(|(item, qty)| format!("{qty} {}", self.item_name(item)))
-                .collect::<Vec<_>>()
-                .join(", ");
-            parts.push(format!("symlink target: teleport here for {cost}"));
-        }
-        if def.zone_portal {
-            parts.push(
-                "breaches to the next zone; fragments and cores don't survive the trip".to_string(),
-            );
-        }
-        if let Some(trade) = &def.trade {
-            let buys = trade
-                .buy
-                .iter()
-                .map(|(item, _)| self.item_name(item))
-                .collect::<Vec<_>>()
-                .join(", ");
-            parts.push(format!(
-                "trade: sell anything for {} Core Fragment each, buy {buys}",
-                trade.sell_rate
-            ));
-        }
-        if def.raid_defense > 0 {
-            parts.push(format!(
-                "-{} raid damage to every deployed structure",
-                def.raid_defense
-            ));
-        }
-        if def.pet_slot_bonus > 0 {
-            parts.push(format!("+{} pet slots", def.pet_slot_bonus));
-        }
-        if let Some(rest) = &def.enables_rest {
-            parts.push(format!("lets you recharge within {} tiles", rest.radius));
-        }
-        if let Some(temp) = &def.temporary {
-            parts.push(format!("collapses after {} ticks", temp.max_ticks));
-        }
-        if parts.is_empty() {
-            parts.push("no effect yet".to_string());
-        }
-        parts.join("; ")
     }
 
     /// How many units of cargo the player can carry right now: the base

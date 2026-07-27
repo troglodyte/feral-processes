@@ -1,6 +1,10 @@
 //! Per-tick base maintenance: structure regeneration, nest respawns,
 //! visual effects, and raids.
 
+use crate::tuning::{
+    RAID_CHANCE_PER_TICK, RAID_DAMAGE, RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_AMOUNT,
+    STRUCTURE_REGEN_INTERVAL,
+};
 use crate::*;
 
 impl Game {

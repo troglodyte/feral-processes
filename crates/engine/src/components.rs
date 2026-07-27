@@ -1,11 +1,13 @@
 use bevy_ecs::prelude::{Component, Entity};
 use serde::{Deserialize, Serialize};
 
+use crate::abilities::AbilityId;
 use crate::items::{EquipmentSlot, ItemId};
 use crate::items_db::ItemDb;
 use crate::perks::Perk;
 use crate::species::SpeciesId;
 use crate::structures::StructureId;
+use crate::tuning::{MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL};
 
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Position {
@@ -83,18 +85,8 @@ impl Stats {
     }
 }
 
-/// The player's stats at level 1, before any leveling or gear — the seed
-/// value `Game::new` spawns the player with, and the baseline `balance`'s
-/// projections grow from, so both stay in lockstep.
-pub const PLAYER_BASE_STATS: Stats = Stats {
-    hp: 90,
-    max_hp: 90,
-    atk: 6,
-    def: 2,
-};
-
 /// The satisfied end of a need's range. Lives here beside `Needs` rather
-/// than in `balance`, because it is the type's own documented invariant
+/// than in `balance_sim`, because it is the type's own documented invariant
 /// rather than a tuning knob: anything writing `hunger` or `fatigue` has to
 /// clamp to it.
 pub const NEED_MAX: f32 = 100.0;
@@ -212,9 +204,20 @@ pub struct Inventory {
     pub items: Vec<(ItemId, u32)>,
 }
 
+/// The abilities installed on this entity, in menu order — the player's and
+/// every companion's entire kit. Length is bounded by
+/// `Game::routine_slots`; position is what `BattleAction::Special::ability`
+/// indexes.
+///
+/// A companion's species kit is *pre-installed* here rather than read from
+/// `SpeciesDef` at menu time, which is what lets an innate ability be popped
+/// out and plugged into a different program.
+#[derive(Component, Default, Clone)]
+pub struct Routines(pub Vec<AbilityId>);
+
 /// Player-only: how many times each equippable `ItemId` has been fused
 /// (see `Game::fuse_item`) — every fusion consumes 2 copies of an item
-/// from `Inventory` and permanently adds `items::ITEM_FUSION_BONUS_PER_TIER`
+/// from `Inventory` and permanently adds `crate::tuning::ITEM_FUSION_BONUS_PER_TIER`
 /// to that item type's equipped bonus (see
 /// `items::EquipmentStats::fused_for_tier`). Tracked per `ItemId` rather
 /// than per physical item, since inventory stacks aren't individually
@@ -449,14 +452,6 @@ pub struct CombatBuff {
 /// intrusion ends — so nothing here is ever persisted.
 #[derive(Component, Default)]
 pub struct AbilityCooldowns(pub std::collections::HashMap<crate::abilities::AbilityId, u32>);
-
-/// Uniform random-roll range applied independently to each of a newly
-/// created creature's stats (baked into `Stats` at spawn) and to its
-/// growth rate (`Potential::growth_roll`) — see `Game::roll_potential`.
-/// The "same species, different stats" mechanic; doesn't apply to the
-/// player, who has no species.
-pub const MIN_INDIVIDUAL_ROLL: f32 = 0.8;
-pub const MAX_INDIVIDUAL_ROLL: f32 = 1.2;
 
 /// An individual creature's innate quality roll, set once when it's
 /// created (see `Game::spawn_wild_creature` / `Game::fuse_companions`)

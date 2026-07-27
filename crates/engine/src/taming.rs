@@ -1,8 +1,8 @@
-/// Percentage-point bonus to decompile chance per point of the player's
-/// `Decompiler` stat (see `components::Decompiler`). Lowered from 0.03
-/// alongside `item_potency` — a well-leveled player was able to stack
-/// enough skill to make almost any attempt a near-guaranteed success.
-const DECOMPILER_SKILL_BONUS: f32 = 0.02;
+use crate::tuning::DECOMPILER_SKILL_BONUS;
+use crate::tuning::{
+    CAPTURE_CHANCE_MAX, CAPTURE_CHANCE_MIN, CAPTURE_DIFFICULTY_PENALTY, CAPTURE_HP_PENALTY,
+    CAPTURE_POTENCY_CEILING,
+};
 
 /// ICE-breaking odds: weaker (lower `hp_fraction`) and easier-compiled
 /// species are more likely to be decompiled; stronger breakers help; a more
@@ -15,9 +15,11 @@ pub fn capture_chance(
     taming_difficulty: f32,
     decompiler_skill: i32,
 ) -> f32 {
-    let base = item_potency * (0.9 - hp_fraction * 0.65) * (1.0 - taming_difficulty * 0.6);
+    let base = item_potency
+        * (CAPTURE_POTENCY_CEILING - hp_fraction * CAPTURE_HP_PENALTY)
+        * (1.0 - taming_difficulty * CAPTURE_DIFFICULTY_PENALTY);
     let skill_bonus = decompiler_skill as f32 * DECOMPILER_SKILL_BONUS;
-    (base + skill_bonus).clamp(0.05, 0.95)
+    (base + skill_bonus).clamp(CAPTURE_CHANCE_MIN, CAPTURE_CHANCE_MAX)
 }
 
 #[cfg(test)]

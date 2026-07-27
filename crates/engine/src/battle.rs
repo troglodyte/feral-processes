@@ -2,6 +2,10 @@ use bevy_ecs::prelude::Entity;
 
 use crate::items::ItemId;
 use crate::species::SpeciesId;
+use crate::tuning::{
+    BACK_SLOT_AGGRO_WEIGHT, DEFEND_AGGRO_WEIGHT, FRONT_SLOT_AGGRO_WEIGHT, FRONT_SLOTS,
+    LOW_POWER_ATTACK_THRESHOLD, LOW_POWER_MIN_ATTACK_MULTIPLIER, MIN_DAMAGE,
+};
 
 /// One species' worth of the wild pack in an active intrusion.
 /// `members[0]` is the front — the only member that takes hits and the only
@@ -30,10 +34,28 @@ pub(crate) fn ceil_sqrt(n: u32) -> u32 {
 /// How many of a group's `n` living members can bring weapons to bear in one
 /// round. A hundred-strong swarm cannot all reach the party at once, so it
 /// swings ten at a time — which is what makes a swarm an attrition problem
-/// rather than an instant wipe. Shared with `crate::balance` so the offline
+/// rather than an instant wipe. Shared with `crate::balance_sim` so the offline
 /// projections and the real round loop cannot drift.
 pub(crate) fn attackers_in_group(n: usize) -> usize {
     ceil_sqrt(n as u32) as usize
+}
+
+/// Relative weight a roster member at `slot` carries in a wild program's
+/// target roll — the player is slot 0 and party members follow in order.
+/// Ranks are soft: a back-slot member is hit less often, never zero times.
+/// Bracing adds `DEFEND_AGGRO_WEIGHT` on top, which is what makes Defend a
+/// party-level play rather than a selfish one.
+///
+/// Shared with `crate::balance_sim` so the offline projections and the real
+/// target roll cannot drift. The sim passes `defending: false` throughout —
+/// it models no Defend actions, and its own docs say so.
+pub(crate) fn slot_aggro_weight(slot: usize, defending: bool) -> u32 {
+    let base = if slot < FRONT_SLOTS {
+        FRONT_SLOT_AGGRO_WEIGHT
+    } else {
+        BACK_SLOT_AGGRO_WEIGHT
+    };
+    base + if defending { DEFEND_AGGRO_WEIGHT } else { 0 }
 }
 
 /// One combatant in an initiative order — an index rather than an `Entity`,
@@ -59,7 +81,7 @@ pub enum BattleAction {
         group: usize,
     },
     Special {
-        /// Index into `Game::companion_abilities` for the acting member —
+        /// Index into `Game::actor_abilities` for the acting member —
         /// which of its abilities this is. Always valid by construction;
         /// resolution falls back to the first if a stale index survives a
         /// party change mid-round.
@@ -69,9 +91,6 @@ pub enum BattleAction {
         target: SpecialTarget,
     },
     Defend,
-    Decompile {
-        group: usize,
-    },
     UseItem {
         item: ItemId,
     },
@@ -115,7 +134,6 @@ pub enum ActionKind {
     Attack,
     Special,
     Defend,
-    Decompile,
     UseItem,
 }
 
@@ -155,7 +173,7 @@ pub struct ActionOption {
 /// `ActionOption`; see `Game::battle_special_options`.
 #[derive(Debug, Clone)]
 pub struct SpecialOption {
-    /// Position in `Game::companion_abilities`, and what
+    /// Position in `Game::actor_abilities`, and what
     /// `BattleAction::Special::ability` is set to.
     pub index: usize,
     /// e.g. "Heal"
@@ -216,13 +234,8 @@ pub struct PartyCommand {
 /// Damage always deals at least 1, so battles can't stall out on high-defense
 /// matchups.
 pub fn compute_damage(atk: i32, def: i32, move_power: i32) -> i32 {
-    (move_power + atk - def).max(1)
+    (move_power + atk - def).max(MIN_DAMAGE)
 }
-
-/// Below this Power ("Power" is the player-facing label for `Needs.hunger`)
-/// threshold, the player's own attacks start losing effectiveness — see
-/// `power_attack_multiplier`.
-pub const LOW_POWER_ATTACK_THRESHOLD: f32 = 50.0;
 
 /// Multiplier applied to the player's attack total once their Power drops
 /// below `LOW_POWER_ATTACK_THRESHOLD`: full strength at the threshold and
@@ -234,7 +247,9 @@ pub fn power_attack_multiplier(hunger: f32) -> f32 {
     if hunger >= LOW_POWER_ATTACK_THRESHOLD {
         1.0
     } else {
-        0.5 + (hunger.max(0.0) / LOW_POWER_ATTACK_THRESHOLD) * 0.5
+        LOW_POWER_MIN_ATTACK_MULTIPLIER
+            + (hunger.max(0.0) / LOW_POWER_ATTACK_THRESHOLD)
+                * (1.0 - LOW_POWER_MIN_ATTACK_MULTIPLIER)
     }
 }
 

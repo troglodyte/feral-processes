@@ -9,5 +9,6 @@ mod inventory;
 mod menus;
 mod playing;
 mod research;
+mod routines;
 mod saves;
 mod trade;

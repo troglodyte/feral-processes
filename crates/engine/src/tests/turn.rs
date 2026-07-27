@@ -2,6 +2,7 @@
 
 use super::support::*;
 use crate::game::turn::forage_chance;
+use crate::tuning::{KEEN_SCAVENGER_BONUS_PER_LEVEL, MAX_BUILD_DISTANCE_FROM_HOME};
 use crate::*;
 
 #[test]

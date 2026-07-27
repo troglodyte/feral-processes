@@ -25,6 +25,12 @@ pub struct ResearchStatus {
     /// a node can be `Available` but unaffordable, or affordable but
     /// `Locked`.
     pub affordable: bool,
+    /// Abilities this node hands over as routine items when researched.
+    /// `cfg(test)`: read only by engine tests today, neither the renderer
+    /// nor app-core touches it, and a `pub(crate)` field that's merely
+    /// unread (rather than absent from non-test builds) still warns.
+    #[cfg(test)]
+    pub(crate) unlocks_abilities: Vec<crate::abilities::AbilityId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -260,6 +266,35 @@ pub struct BattleView {
 pub struct CraftRecipe {
     pub result: ItemId,
     pub cost: Vec<(ItemId, u32)>,
+}
+
+/// One row of an entity's routine panel — a slot, filled or not.
+pub struct RoutineSlotView {
+    pub index: usize,
+    /// `None` for a free slot.
+    pub ability: Option<crate::abilities::AbilityId>,
+    /// The ability's name, or "(empty)" for a free slot.
+    pub name: String,
+    /// The ability's own authored description; empty for a free slot.
+    pub description: String,
+}
+
+/// One row of the "whose routines?" picker — you and every program you own.
+pub struct RoutineHolderView {
+    pub entity: Entity,
+    /// "You" for the player, the program's display name otherwise.
+    pub name: String,
+    pub level: u32,
+    pub filled: usize,
+    pub slots: usize,
+}
+
+/// One row of the install picker — a loose routine held in inventory.
+pub struct RoutineItemView {
+    pub item: ItemId,
+    pub name: String,
+    pub description: String,
+    pub count: u32,
 }
 
 /// Full species-level detail on a single creature, shown by `Game::inspect`

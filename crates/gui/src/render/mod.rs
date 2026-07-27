@@ -13,9 +13,10 @@ use feral_processes_app_core::{
 };
 use feral_processes_engine::components::GlyphColor;
 use feral_processes_engine::items::ItemId;
+use feral_processes_engine::tuning::MAX_FUSIONS;
 use feral_processes_engine::world::Biome;
 use feral_processes_engine::{
-    Entity, Game, MAX_FUSIONS, MessageKind, PetInfo, ProgramSaleOption, ResearchState,
+    Entity, Game, MessageKind, PetInfo, ProgramSaleOption, ResearchState,
 };
 
 mod bars;
@@ -29,6 +30,7 @@ mod meta;
 mod party;
 mod popup;
 mod progression;
+mod routines;
 mod trade;
 
 use base::draw_playing_base;
@@ -50,6 +52,10 @@ use meta::{
 use party::{draw_companion_menu, draw_fuse_menu, draw_fuse_name_menu, draw_fuse_second_menu};
 use popup::{PopupSize, draw_popup, text_row};
 use progression::{draw_perks_menu, draw_research_menu};
+use routines::{
+    draw_extract, draw_extract_confirm, draw_extract_pick, draw_routine_install,
+    draw_routine_target, draw_routines,
+};
 use trade::{
     draw_trade_action_menu, draw_trade_menu, draw_trade_program_confirm, draw_trade_quantity_menu,
 };
@@ -277,6 +283,20 @@ fn draw_mode_overlay(app: &mut App, fonts: &Fonts, m: &Metrics) {
             app.pending_fuse_first,
             app.pending_fuse_second,
             &app.fuse_name_input,
+            fonts,
+            m,
+        ),
+        Mode::RoutineTarget => draw_routine_target(game, selected, fonts, m),
+        Mode::Routines => draw_routines(game, app.pending_routine_holder, selected, fonts, m),
+        Mode::RoutineInstall => draw_routine_install(game, selected, fonts, m),
+        Mode::Extract => draw_extract(game, selected, fonts, m),
+        Mode::ExtractPick => {
+            draw_extract_pick(game, app.pending_extract_program, selected, fonts, m)
+        }
+        Mode::ExtractConfirm => draw_extract_confirm(
+            game,
+            app.pending_extract_program,
+            app.pending_extract_index,
             fonts,
             m,
         ),

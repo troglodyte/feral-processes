@@ -38,12 +38,10 @@ pub struct ResearchDef {
     pub unlocks_structures: Vec<StructureId>,
     #[serde(default)]
     pub unlocks_recipes: Vec<ResearchRecipe>,
-    /// Abilities the player may use in battle once this node is researched
-    /// (see `Game::player_abilities`). The abilities themselves are data in
-    /// `assets/abilities/`; naming one here is the only way the player gets
-    /// it, since unlike a companion the player has no species to grant one.
-    /// `#[serde(default)]` so existing research files — including mods —
-    /// keep parsing.
+    /// Abilities this node hands over, as routine items dropped into cargo
+    /// the moment it is researched (see `Game::unlock_research`). Researching
+    /// a routine and installing it are two separate acts. The abilities
+    /// themselves are data in `assets/abilities/`.
     #[serde(default)]
     pub unlocks_abilities: Vec<crate::abilities::AbilityId>,
 }

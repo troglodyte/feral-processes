@@ -1,6 +1,7 @@
 //! The roster: capacity, membership, companion status, and fusing programs together.
 
 use super::support::*;
+use crate::tuning::MAX_FUSIONS;
 use crate::*;
 
 #[test]
@@ -482,7 +483,29 @@ fn taming_is_refused_when_the_roster_is_full_and_a_data_cache_makes_room() {
 
     start_battle_with_a_wild_program(&mut game);
     set_inventory(&mut game, &[(ids::ICE_BREAKER, 1)]);
-    player_decompiles(&mut game);
+
+    // A full roster greys the row, so `battle_set_action` refuses it before
+    // a round can ever resolve — the refusal is this `Err`, not a logged
+    // line.
+    let index = game
+        .battle_special_options(0)
+        .into_iter()
+        .find(|o| o.name.to_lowercase().contains("decompile"))
+        .expect("the player starts with decompile installed")
+        .index;
+    let err = game
+        .battle_set_action(
+            0,
+            BattleAction::Special {
+                ability: index,
+                target: battle::SpecialTarget::EnemyGroup { group: 0 },
+            },
+        )
+        .unwrap_err();
+    assert!(
+        err.contains("roster is full"),
+        "the refusal should say the roster is full, got: {err}"
+    );
 
     let held = |g: &Game| {
         g.world
@@ -494,12 +517,6 @@ fn taming_is_refused_when_the_roster_is_full_and_a_data_cache_makes_room() {
         held(&game),
         1,
         "a full roster must refuse before the catalyst is spent"
-    );
-    assert!(
-        game.message_log(usize::MAX)
-            .into_iter()
-            .any(|(_, l)| l.contains("roster is full")),
-        "the refusal should say the roster is full"
     );
 
     // A Data Cache raises the cap to 5, so the same attempt now has room
@@ -893,6 +910,49 @@ fn fuse_companions_rejects_a_wild_creature() {
         "a failed fusion shouldn't consume either input"
     );
     assert!(game.world.get::<Creature>(wild).is_some());
+}
+
+/// Regression for I2: `fuse_companions` derives the result's kit fresh from
+/// its species, so a routine installed manually on either input (research,
+/// extraction, a swap) has nowhere to land. Before this fix that vanished
+/// with no message; it must now show up as a logged loss.
+#[test]
+fn fusing_a_program_logs_a_manually_installed_routine_as_lost() {
+    let mut game = Game::new(103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let a = spawn_tamed(&mut game, 10, 3);
+    let b = spawn_tamed(&mut game, 10, 3);
+    set_level(&mut game, a, 4); // two slots, one free alongside the fallback
+    let item = crate::abilities::routine_item_id("sandbox");
+    set_inventory(&mut game, &[(item.as_str(), 1)]);
+    game.install_routine(a, &item).unwrap();
+
+    assert_eq!(
+        game.fusion_routine_losses(a, b)
+            .iter()
+            .filter(|def| def.id == "sandbox")
+            .count(),
+        1,
+        "the preview should name the routine about to be lost"
+    );
+
+    game.fuse_companions(a, b, None).unwrap();
+
+    let fused = game.owned_pets();
+    assert_eq!(fused.len(), 1);
+    assert!(
+        game.actor_abilities(fused[0].entity)
+            .iter()
+            .all(|def| def.id != "sandbox"),
+        "neither generic-species input declares sandbox innately, so it must not survive"
+    );
+    assert!(
+        game.message_log(10)
+            .iter()
+            .any(|(_, text)| text.contains("Routines lost in the fusion")
+                && text.contains("Sandbox")),
+        "the loss must be logged, not silent: {:?}",
+        game.message_log(10)
+    );
 }
 
 #[test]

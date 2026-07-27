@@ -1,6 +1,11 @@
 //! What a won fight pays out: equipment drops, loot, experience, and
 //! decompiling a defeated program into a companion.
 
+use crate::tuning::{
+    BOSS_PORTAL_FRAGMENT_DROP, DECOMPILER_SKILL_PER_LEVEL, NEST_RESPAWN_TICKS, PARTY_XP_DIVISOR,
+    PERK_POINTS_PER_LEVEL, PORTAL_FRAGMENT_DROP_CHANCE,
+};
+use crate::tuning::{DEFAULT_TAMING_DIFFICULTY, WORK_RESOURCE_DROP};
 use crate::*;
 
 impl Game {
@@ -45,7 +50,7 @@ impl Game {
         if let Some(resource) = &species.work_resource {
             let qty = {
                 let mut rng = self.world.resource_mut::<GameRng>();
-                rng.0.random_range(1..=2)
+                rng.0.random_range(WORK_RESOURCE_DROP)
             };
             let landed = self.grant_loot(resource.clone(), qty);
             if landed > 0 {
@@ -108,7 +113,7 @@ impl Game {
                 &mut exp,
                 &mut stats,
                 amount,
-                progression::BASELINE_GROWTH_MULTIPLIER,
+                crate::tuning::BASELINE_GROWTH_MULTIPLIER,
                 // The player has no level ceiling — only creatures do.
                 None,
             );
@@ -149,14 +154,19 @@ impl Game {
                 .get::<Creature>(companion)
                 .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
                 .map(|s| s.growth_multiplier)
-                .unwrap_or(progression::BASELINE_GROWTH_MULTIPLIER);
+                .unwrap_or(crate::tuning::BASELINE_GROWTH_MULTIPLIER);
             let individual_roll = self
                 .world
                 .get::<Potential>(companion)
                 .map(|p| p.growth_roll)
                 .unwrap_or(Potential::NEUTRAL.growth_roll);
             let growth_multiplier = species_growth * individual_roll;
-            let leveled = {
+            let before_level = self
+                .world
+                .get::<Experience>(companion)
+                .map(|e| e.level)
+                .unwrap_or(1);
+            {
                 let mut query = self.world.query::<(&mut Experience, &mut Stats)>();
                 let Ok((mut exp, mut stats)) = query.get_mut(&mut self.world, companion) else {
                     continue;
@@ -166,44 +176,49 @@ impl Game {
                     &mut stats,
                     amount,
                     growth_multiplier,
-                    Some(progression::CREATURE_MAX_LEVEL),
-                ) > 0
-            };
-            if leveled {
+                    Some(crate::tuning::CREATURE_MAX_LEVEL),
+                );
+            }
+            let level = self
+                .world
+                .get::<Experience>(companion)
+                .map(|e| e.level)
+                .unwrap_or(before_level);
+            if level > before_level {
                 let name = self.creature_label(companion);
-                let level = self.world.get::<Experience>(companion).unwrap().level;
                 self.log_kind(
                     MessageKind::LevelUp,
                     format!("{name} gains {amount} XP and levels up to {level}!"),
                 );
+                self.install_unlocked_routines(companion, before_level, level);
             }
         }
     }
 
     /// One decompile attempt against `group`'s front program: spends a
     /// catalyst, rolls `taming::capture_chance`, and on success converts the
-    /// target into a tamed program and drops it from the group.
+    /// target into a tamed program and drops it from the group. Returns
+    /// whether that ended the battle.
     ///
-    /// `None` means the attempt was refused before anything was spent — no
-    /// catalyst, or no room on the roster — so the caller must not charge a
-    /// turn for it. `Some(battle_over)` means the attempt happened.
-    pub(crate) fn attempt_decompile(&mut self, group: usize, player: Entity) -> Option<bool> {
-        // Refuse before spending the catalyst (or the turn) if the roster is
-        // already full — a captured program has to live somewhere.
-        let capacity = self.pet_capacity();
-        let owned = self.pet_count();
-        if owned >= capacity {
-            self.log(format!(
-                "Your roster is full ({owned}/{capacity}) — sell a program at a Market, fuse two together, or deploy a Data Cache to make room."
-            ));
-            return None;
-        }
-
+    /// The roster-full refusal lives in `ability_unavailable` alone now: a
+    /// greyed row can't be planned, and `battle_set_action` refuses one that
+    /// somehow is, and nothing inside a resolving round grows `pet_count`
+    /// except a successful decompile itself, so that state can't reach here.
+    ///
+    /// The no-catalyst guard below stays, though: `ability_unavailable`
+    /// checks it per slot at *plan* time, but the catalyst is a round-wide
+    /// pool, not a per-slot one — two party members can each plan Decompile
+    /// while only one catalyst is held, both pass the per-slot check, and the
+    /// first to resolve spends the only copy. Without this guard the second
+    /// would hit an `expect` instead of a refusal.
+    pub(crate) fn attempt_decompile(&mut self, group: usize, player: Entity) -> bool {
         let Some((catalyst, potency)) = self.taming_catalyst() else {
-            self.log("You have no taming catalyst.");
-            return None;
+            self.log("No taming catalyst left — the decompile attempt fizzles.");
+            return false;
         };
-        let front = self.front_of_group(group)?;
+        let Some(front) = self.front_of_group(group) else {
+            return false;
+        };
         self.world
             .get_mut::<Inventory>(player)
             .unwrap()
@@ -219,7 +234,7 @@ impl Game {
             .resource::<SpeciesDb>()
             .get(&species_id)
             .map(|s| s.taming_difficulty)
-            .unwrap_or(0.5);
+            .unwrap_or(DEFAULT_TAMING_DIFFICULTY);
         let decompiler_skill = self.player_decompiler_skill();
         let chance =
             taming::capture_chance(hp_fraction, potency, taming_difficulty, decompiler_skill);
@@ -230,7 +245,7 @@ impl Game {
 
         if !roll {
             self.log("The program's ICE holds — decompile failed!");
-            return Some(false);
+            return false;
         }
 
         let wild_max_hp = self.world.get::<Stats>(front).unwrap().max_hp;
@@ -241,6 +256,7 @@ impl Game {
         self.world
             .entity_mut(front)
             .insert((Tamed { owner: player }, Experience::default()));
+        self.install_innate_routines(front);
         if let Some(nest) = nest
             && let Some(mut n) = self.world.get_mut::<Nest>(nest)
         {
@@ -250,9 +266,9 @@ impl Game {
         self.award_player_xp(player, wild_max_hp as u32);
         if self.remove_member(group, 0) {
             self.end_battle(player, Some(front));
-            return Some(true);
+            return true;
         }
         self.log("Another rogue program from the pack engages!");
-        Some(false)
+        false
     }
 }

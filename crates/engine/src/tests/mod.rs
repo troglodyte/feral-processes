@@ -22,6 +22,7 @@ mod party;
 mod perks;
 mod raids;
 mod research;
+mod routines;
 mod spawning;
 mod taming;
 mod trade;

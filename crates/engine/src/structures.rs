@@ -34,7 +34,7 @@ pub struct WorkDef {
 }
 
 fn default_work_capacity() -> u32 {
-    5
+    crate::tuning::DEFAULT_WORK_CAPACITY
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -115,6 +115,13 @@ pub struct UpgradeDef {
 pub struct StructureDef {
     pub id: StructureId,
     pub name: String,
+    /// One line on what this structure is for, shown in the build menu.
+    /// Authored here rather than derived from the other fields so a modder
+    /// controls exactly how their structure reads. `#[serde(default)]` so an
+    /// existing mod file without it still parses — as an empty line, which
+    /// the shipped-assets test refuses for anything in this repo.
+    #[serde(default)]
+    pub description: String,
     pub glyph: char,
     pub color: GlyphColor,
     pub build_cost: Vec<(ItemId, u32)>,
@@ -209,10 +216,18 @@ pub struct StructureDef {
     /// before this field existed.
     #[serde(default)]
     pub upgrade: Option<UpgradeDef>,
+    /// If true, owning one of these anywhere lets you extract a routine out
+    /// of a program you own (see `Game::extract_routine`). Deliberately
+    /// ownership, not proximity: the check is `Game::has_structure`, the
+    /// same "have you built one" test a researched recipe's bench uses.
+    /// `#[serde(default)]` so existing structure files (including mods)
+    /// grant no extraction, exactly as before this field existed.
+    #[serde(default)]
+    pub extracts_routines: bool,
 }
 
 fn default_durability() -> u32 {
-    30
+    crate::tuning::DEFAULT_STRUCTURE_DURABILITY
 }
 
 fn default_raidable() -> bool {

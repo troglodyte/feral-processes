@@ -2,7 +2,6 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use rand::RngExt;
 
-use crate::NEST_TETHER_RADIUS;
 use crate::components::{
     Creature, Experience, Inventory, NEED_MAX, NEED_MIN, Needs, Nest, NestGuardian,
     PassiveProcessor, Perks, Player, Position, Potential, ResourceNode, Stats, Structure,
@@ -14,21 +13,11 @@ use crate::progression;
 use crate::resources::{GameRng, MessageKind, MessageLog, ZoneLevel};
 use crate::species::SpeciesDb;
 use crate::structures::StructureDb;
+use crate::tuning::{
+    FATIGUE_DECAY_PER_TICK, HUNGER_DECAY_PER_TICK, WORK_XP_LEVEL_CAP, WORK_XP_PER_CYCLE,
+};
+use crate::tuning::{MINING_SUCCESS_BASE, MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS};
 use crate::world::WorldMap;
-
-/// XP a tamed creature earns for each completed gather cycle.
-const WORK_XP_PER_CYCLE: u32 = 5;
-
-/// A cronjob worker stops earning XP from `task_progress_system` once it
-/// reaches this level — structure work is meant to be a steady, low-effort
-/// income, not a way to grind a pet's level without ever battling. Levels
-/// above this only come from combat (`Game::award_player_xp` /
-/// `award_party_xp`), up to the separate, higher absolute ceiling every
-/// entity shares — see `progression::MAX_LEVEL`.
-pub(crate) const WORK_XP_LEVEL_CAP: u32 = 10;
-
-const HUNGER_DECAY_PER_TICK: f32 = 0.15;
-const FATIGUE_DECAY_PER_TICK: f32 = 0.08;
 
 /// One tick of hunger/fatigue decay; pulled out of the system so the rates
 /// are unit-testable without spinning up an ECS `World`. `hunger_multiplier`
@@ -47,8 +36,9 @@ pub fn needs_decay_system(
 ) {
     for (mut needs, mut stats, perks) in &mut query {
         let low_power_level = perks.map(|p| p.level(Perk::LowPowerMode)).unwrap_or(0);
-        let hunger_multiplier =
-            (1.0 - crate::LOW_POWER_MODE_REDUCTION_PER_LEVEL * low_power_level as f32).max(0.0);
+        let hunger_multiplier = (1.0
+            - crate::tuning::LOW_POWER_MODE_REDUCTION_PER_LEVEL * low_power_level as f32)
+            .max(0.0);
         let was_starving = needs.hunger <= 0.0;
         let (hunger, fatigue) = decay_needs(needs.hunger, needs.fatigue, hunger_multiplier);
         needs.hunger = hunger;
@@ -100,8 +90,22 @@ pub fn wander_ai_system(
 /// costing the cycle for nothing. Scales up with level so a node can be
 /// made more reliable over time; a basic level-1 node succeeds only about
 /// half the time.
-fn mining_success_chance(level: u32) -> f64 {
-    (0.4 + level as f64 * 0.1).min(1.0)
+/// What one completed gather cycle yields from a non-banked node of `tier`
+/// at `zone`. Payout tracks zone depth on the same doubling base as wild
+/// stats and `GEAR_LEVEL_GROWTH` — a flat base economy against an
+/// exponential curve is what made settling never worth the time.
+///
+/// Shared with `crate::balance_sim` so its base-economy projections and the
+/// real payout cannot drift. Banked resources bypass this entirely for a
+/// flat 1 (see `task_progress_system`): their bank limit is the pacing
+/// mechanism, and an exponential payout would just overflow it every few
+/// cycles.
+pub(crate) fn node_payout(tier: u32, zone: ZoneLevel) -> u32 {
+    tier * zone.stat_multiplier() as u32
+}
+
+pub(crate) fn mining_success_chance(level: u32) -> f64 {
+    (MINING_SUCCESS_BASE + level as f64 * MINING_SUCCESS_PER_LEVEL).min(1.0)
 }
 
 /// The worker-side components `task_progress_system` reads per cronjob
@@ -174,19 +178,12 @@ pub fn task_progress_system(
             let resource_name = def
                 .map(|d| d.name.as_str())
                 .unwrap_or(node.resource.as_str());
-            // Payout tracks zone depth on the same doubling base as wild
-            // stats and GEAR_LEVEL_GROWTH — a flat base economy against an
-            // exponential curve is what made settling never worth the time.
             // Read per cycle rather than baked in at deploy, so a base that
             // travels to a deeper zone immediately earns at the new rate.
-            //
-            // A banked resource is excluded: its bank limit is the pacing
-            // mechanism, and an exponential payout would just overflow it
-            // every few cycles.
             let payout = if def.and_then(|d| d.bank_limit).is_some() {
                 1
             } else {
-                tier.map(|t| t.0).unwrap_or(1) * zone.stat_multiplier() as u32
+                node_payout(tier.map(|t| t.0).unwrap_or(1), *zone)
             };
             let landed = inv.add_capped(node.resource.clone(), payout, &item_db);
             if landed == 0 {
@@ -198,7 +195,7 @@ pub fn task_progress_system(
                 let species_growth = species_db
                     .get(&creature.species)
                     .map(|s| s.growth_multiplier)
-                    .unwrap_or(progression::BASELINE_GROWTH_MULTIPLIER);
+                    .unwrap_or(crate::tuning::BASELINE_GROWTH_MULTIPLIER);
                 let individual_roll = potential
                     .map(|p| p.growth_roll)
                     .unwrap_or(Potential::NEUTRAL.growth_roll);
@@ -208,7 +205,7 @@ pub fn task_progress_system(
                     &mut stats,
                     WORK_XP_PER_CYCLE,
                     growth_multiplier,
-                    Some(progression::CREATURE_MAX_LEVEL),
+                    Some(crate::tuning::CREATURE_MAX_LEVEL),
                 );
                 if levels > 0 {
                     format!(" It levels up to {}!", exp.level)
@@ -331,9 +328,9 @@ pub fn power_regen_system(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::PLAYER_BASE_STATS;
     use crate::items::{ItemId, ids};
     use crate::structures::StructureDb;
+    use crate::tuning::PLAYER_BASE_STATS;
     use std::sync::atomic::{AtomicU32, Ordering};
 
     /// Writes `files` (filename, RON body) into a scratch dir and loads them

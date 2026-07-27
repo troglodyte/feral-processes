@@ -42,6 +42,9 @@ pub struct PlayerSave {
     /// How many times each item type has been fused — see
     /// `components::ItemFusions`.
     pub item_fusions: Vec<(ItemId, u32)>,
+    /// The abilities installed in the player's routine slots, in menu order
+    /// — see `components::Routines`.
+    pub routines: Vec<crate::abilities::AbilityId>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -91,6 +94,11 @@ pub struct CreatureSave {
     /// survives a save/load instead of resetting to 0 and handing the
     /// player unlimited fusions for free.
     pub fusions: u32,
+    /// The abilities installed in this program's routine slots, in menu
+    /// order — see `components::Routines`. Persisted rather than re-derived
+    /// from its species, because an innate routine can be popped out and a
+    /// foreign one plugged in.
+    pub routines: Vec<crate::abilities::AbilityId>,
 }
 
 /// Mirrors `components::TaskKind` for persistence — kept separate so the
@@ -172,7 +180,7 @@ pub struct SaveData {
 /// and every save written under the old version stops loading. That's an
 /// intentional, simple tradeoff for a single-player game rather than
 /// building real schema migration.
-pub const SAVE_FORMAT_VERSION: u32 = 10;
+pub const SAVE_FORMAT_VERSION: u32 = 11;
 
 pub fn save_to_file(path: &Path, data: &SaveData) -> io::Result<()> {
     let encoded = bincode::serde::encode_to_vec(data, bincode::config::standard())
@@ -251,6 +259,7 @@ mod tests {
                 item_fusions: Vec::new(),
                 perk_points: 0,
                 unlocked_perks: Vec::new(),
+                routines: Vec::new(),
             },
             creatures: Vec::new(),
             structures: Vec::new(),

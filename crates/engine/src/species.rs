@@ -52,7 +52,7 @@ pub struct MoveDef {
     #[serde(default)]
     pub effect: Option<MoveEffect>,
     /// Whether this move reaches past the front line. A group standing
-    /// behind `crate::ENGAGED_GROUPS` can only use its ranged moves, and
+    /// behind `crate::tuning::ENGAGED_GROUPS` can only use its ranged moves, and
     /// idles if it has none. `#[serde(default)]` so existing species files
     /// (including mods) without this field keep parsing as melee, exactly
     /// as they behaved before it existed.
@@ -100,13 +100,12 @@ pub struct SpeciesDef {
     /// non-boss species.
     #[serde(default)]
     pub is_boss: bool,
-    /// The abilities a tamed member of this species can be commanded to use,
-    /// in menu order, each gated on the companion's level. Left empty, the
-    /// companion falls back to `abilities::FALLBACK_ABILITY_ID` — see
-    /// `Game::companion_abilities`, which resolves that fallback so no
-    /// caller has to special-case an empty list. `#[serde(default)]` so
-    /// existing species files (including mods) without this field keep
-    /// parsing.
+    /// The abilities a tamed member of this species is created holding, in
+    /// menu order, each gated on the companion's level. Left empty, the
+    /// companion is created holding `abilities::FALLBACK_ABILITY_ID`
+    /// instead — see `Game::install_innate_routines`, which is the only
+    /// place that fallback is resolved. `#[serde(default)]` so existing
+    /// species files (including mods) without this field keep parsing.
     #[serde(default)]
     pub abilities: Vec<SpeciesAbility>,
     /// Multiplies this species' per-level stat growth (see
@@ -114,7 +113,7 @@ pub struct SpeciesDef {
     /// grows at the same flat rate as before this field existed; a
     /// higher-tier species can set e.g. `1.5` to out-grow an easy one
     /// level for level. `#[serde(default)]` (via
-    /// `progression::BASELINE_GROWTH_MULTIPLIER`) so existing species
+    /// `crate::tuning::BASELINE_GROWTH_MULTIPLIER`) so existing species
     /// files (including mods) without this field keep growing exactly as
     /// they did before.
     #[serde(default = "default_growth_multiplier")]
@@ -134,11 +133,11 @@ pub struct SpeciesDef {
 }
 
 fn default_growth_multiplier() -> f32 {
-    crate::progression::BASELINE_GROWTH_MULTIPLIER
+    crate::tuning::BASELINE_GROWTH_MULTIPLIER
 }
 
 fn default_base_speed() -> i32 {
-    crate::DEFAULT_BASE_SPEED
+    crate::tuning::DEFAULT_BASE_SPEED
 }
 
 #[derive(Resource, Default)]
@@ -303,7 +302,7 @@ mod tests {
             )"#,
         )
         .expect("a species file with no base_speed must still parse");
-        assert_eq!(def.base_speed, crate::DEFAULT_BASE_SPEED);
+        assert_eq!(def.base_speed, crate::tuning::DEFAULT_BASE_SPEED);
     }
 
     #[test]

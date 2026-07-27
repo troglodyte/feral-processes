@@ -1,0 +1,639 @@
+//! Every gameplay difficulty knob the engine hardcodes, in one place.
+//!
+//! Change a number here and the game gets easier or harder — that is the
+//! whole reason this module exists. Nothing here is referenced by an
+//! identifier the save format or the `.ron` schemas depend on, so a value
+//! can be retuned freely; only the *shape* of a formula lives in the module
+//! that uses it.
+//!
+//! What is deliberately **not** here:
+//!
+//! - **Anything already expressed as data.** Species stats, item and craft
+//!   costs, structure economy, research costs and ability magnitudes are
+//!   `.ron` files under `assets/`. Tune those by editing the files — see
+//!   each directory's `README.md`. Pulling them into Rust would break
+//!   moddability.
+//! - **Type invariants.** `components::NEED_MAX`/`NEED_MIN` bound what
+//!   `Needs` may hold; every reader assumes they hold. They live beside the
+//!   type they constrain.
+//! - **Infrastructure.** `world::CHUNK_SIZE`, `save::SAVE_FORMAT_VERSION`,
+//!   `resources::MESSAGE_LOG_CAP`/`EFFECT_QUEUE_CAP`, `MAX_CUSTOM_NAME_LEN`
+//!   and the `*_ID` string identifiers are sizing and plumbing, not
+//!   difficulty.
+//! - **Simulation-only values.** `balance_sim::TURN_CAP` and the guard
+//!   constants beside it tune the offline projections, not the game.
+
+use crate::components::Stats;
+
+// ─────────────────────────────────────────────────────────────────────────
+// Player baseline & progression
+// ─────────────────────────────────────────────────────────────────────────
+
+/// The player's stats at level 1, before any leveling or gear — the seed
+/// value `Game::new` spawns the player with, and the baseline `balance_sim`'s
+/// projections grow from, so both stay in lockstep.
+pub const PLAYER_BASE_STATS: Stats = Stats {
+    hp: 90,
+    max_hp: 90,
+    atk: 6,
+    def: 2,
+};
+
+/// Flat stat growth per level-up, before `growth_multiplier` scales it —
+/// see `progression::stats_after_levels`. With ATK and DEF both at 1, a
+/// multiplier has to cross a rounding boundary (roughly +0.5) to change
+/// them at all, so `HP_PER_LEVEL` carries most of the effective
+/// granularity.
+pub const HP_PER_LEVEL: i32 = 12;
+pub const ATK_PER_LEVEL: i32 = 1;
+pub const DEF_PER_LEVEL: i32 = 1;
+
+/// Growth-rate multiplier for anything with no species-specific rate of
+/// its own. The player (who has no species at all) always levels at this
+/// rate; it's also `SpeciesDef::growth_multiplier`'s default, so a species
+/// file written before that field existed keeps growing exactly as before.
+pub const BASELINE_GROWTH_MULTIPLIER: f32 = 1.0;
+
+/// Level ceiling for a *creature* (tamed or wild), regardless of XP
+/// source. `add_xp` stops leveling — and stops accumulating XP at all —
+/// once this is reached, so a maxed-out creature's `Experience::xp` just
+/// stalls instead of piling up into a huge, meaningless number.
+///
+/// The player is deliberately **not** capped: they keep leveling forever,
+/// so late-game progression stays open-ended and a long run always earns
+/// something. Callers express that by passing `None` as `add_xp`'s
+/// `level_cap` for the player and `Some(CREATURE_MAX_LEVEL)` for
+/// creatures.
+///
+/// This is a live-gameplay cap only: it deliberately doesn't apply to
+/// `crate::balance_sim`'s offline curve-shape projections, which search well
+/// past any level actually reachable in play on purpose (see that
+/// module's docs).
+pub const CREATURE_MAX_LEVEL: u32 = 12;
+
+/// Fraction of in-level XP knocked back by a "setback" penalty (a flatline,
+/// a Forgiving-mode reboot, or a forced jack-out mid-battle) — see
+/// `progression::apply_setback_xp_penalty`. Deliberately mild: it erodes
+/// progress toward the next level, never the level or stats themselves.
+pub const SETBACK_XP_PENALTY_FRACTION: f64 = 0.2;
+
+/// How much the player's `Decompiler` skill grows per level gained.
+pub const DECOMPILER_SKILL_PER_LEVEL: i32 = 1;
+
+/// Perk Points (see `perks::Perk`) awarded per player level gained.
+pub const PERK_POINTS_PER_LEVEL: u32 = 1;
+
+/// Every party member (see `resources::Party`) gains `1 / PARTY_XP_DIVISOR`
+/// of whatever XP the player just earned from a kill or successful
+/// decompile — see `Game::award_party_xp`.
+pub const PARTY_XP_DIVISOR: u32 = 2;
+
+/// XP required to advance from level *N* to *N + 1* is `N` times this — a
+/// linear per-level step, so cumulative XP to reach a level grows
+/// quadratically. `balance_sim`'s companion-level projection leans on that
+/// quadratic shape: half the XP rate lands a companion at roughly
+/// `1 / sqrt(2)` of the player's level, not half of it.
+pub const XP_PER_LEVEL_STEP: u32 = 20;
+
+/// XP a tamed creature earns for each completed gather cycle.
+pub const WORK_XP_PER_CYCLE: u32 = 5;
+
+/// A cronjob worker stops earning XP from `task_progress_system` once it
+/// reaches this level — structure work is meant to be a steady, low-effort
+/// income, not a way to grind a pet's level without ever battling. Levels
+/// above this only come from combat (`Game::award_player_xp` /
+/// `award_party_xp`), up to the separate, higher ceiling every creature
+/// shares — see `CREATURE_MAX_LEVEL`.
+pub const WORK_XP_LEVEL_CAP: u32 = 10;
+
+// ─────────────────────────────────────────────────────────────────────────
+// Zone & distance scaling
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Geometric base for `ZoneLevel::stat_multiplier`, the flat multiplier on
+/// every wild program's stats in a zone: zone 1 is x1 and each level after
+/// multiplies by this (1, 2, 4, 8, 16, ...). The single steepest difficulty
+/// curve in the game — `GEAR_LEVEL_GROWTH` is deliberately matched to it so
+/// neither gear nor zone depth outruns the other.
+pub const ZONE_STAT_GROWTH: i32 = 2;
+
+/// Tile distance per step of `DISTANCE_STAT_STEP_BONUS`, counted from
+/// `Game::distance_from_danger_origin` — the base platform's edge once a
+/// Home exists, `ZoneSpawnPoint` before then. See
+/// `Game::distance_stat_multiplier`.
+pub const DISTANCE_STAT_STEP_TILES: i32 = 15;
+
+/// Stat growth added per `DISTANCE_STAT_STEP_TILES` step away from the
+/// zone's spawn point, on top of `ZoneLevel::stat_multiplier` — a gentler,
+/// linear (not doubling) knob than zone depth, since it's optional
+/// distance covered within a zone you can always retreat from, not a
+/// one-way commitment like breaching deeper.
+pub const DISTANCE_STAT_STEP_BONUS: f32 = 0.25;
+
+/// Cap on `distance_stat_multiplier`, so wandering far enough doesn't
+/// scale stats forever within a single zone — unlike zone depth, which
+/// really is unbounded.
+pub const MAX_DISTANCE_STAT_MULTIPLIER: f32 = 3.0;
+
+/// Tile distance per doubling of a wild group's size, counted from the same
+/// origin as `DISTANCE_STAT_STEP_TILES` (the platform's edge once a Home
+/// exists) — see `Game::max_group_size`. Deliberately equal to
+/// `DISTANCE_STAT_STEP_TILES`: how many programs meet you and how hard each
+/// one hits escalate on the same footing as you push out.
+pub const GROUP_SIZE_STEP_TILES: i32 = DISTANCE_STAT_STEP_TILES;
+
+/// Geometric base for the group-size growth `GROUP_SIZE_STEP_TILES` steps
+/// unlock, and the cap on how many of those steps count. The exponent has
+/// to be clamped because the map is unbounded and a shift of 32 or more is
+/// a panic in debug; `MAX_GROUP_SIZE_DISTANCE_STEPS` is set where
+/// `GROUP_SIZE_DISTANCE_GROWTH.pow(steps)` already exceeds `MAX_GROUP_SIZE`,
+/// so the clamp is exact rather than a fudge.
+pub const GROUP_SIZE_DISTANCE_GROWTH: u32 = 2;
+pub const MAX_GROUP_SIZE_DISTANCE_STEPS: u32 = 7;
+
+/// Geometric base for the group size each zone level allows: zone 1 is solo,
+/// and every level after multiplies the cap by this against `MAX_GROUP_SIZE`
+/// (1, 3, 9, 27, 81, 100). Only `battle::attackers_in_group` of a group
+/// swing per round, so a deep swarm is an attrition wall rather than a
+/// linear multiplier on incoming damage.
+pub const ZONE_GROUP_GROWTH: u32 = 3;
+
+/// Hard ceiling on a single species group. With `MAX_ENEMY_GROUPS` groups on
+/// the field, one intrusion tops out at four hundred programs.
+pub const MAX_GROUP_SIZE: u32 = 100;
+
+/// How many distinct species groups can engage in one intrusion. A cluster
+/// with more species than this engages its largest groups and leaves the
+/// remainder standing on the map as ordinary hostiles — they're met on the
+/// next bump rather than silently despawned.
+pub const MAX_ENEMY_GROUPS: usize = 4;
+
+/// How many enemy groups are in melee range of the party. Groups past this
+/// index can only act with a move flagged `ranged`, which is what keeps a
+/// four-group pack from simply quadrupling incoming damage — and what makes
+/// wiping the front group a real decision, since it promotes a back group
+/// into reach.
+pub const ENGAGED_GROUPS: usize = 2;
+
+/// How much of a zone-portal structure's base `build_cost` is added to its
+/// price per zone below the current one. Breaching deeper costs more, but
+/// currency does not survive the trip (see `Game::enter_next_zone`), so
+/// this is a ramp on a from-zero grind rather than a tax on a stockpile —
+/// which is why it adds half the base rate per zone instead of doubling.
+pub const ZONE_PORTAL_COST_GROWTH_PERCENT: u32 = 50;
+
+/// Thresholds for `difficulty_color`'s old-school "con" coloring, as
+/// upper bounds on a hostile program's power (see `Stats::power`) relative
+/// to the player's own — anything at or under `DIFFICULTY_EASY_MAX` reads
+/// Green, up through `DIFFICULTY_EVEN_MAX` reads Yellow, up through
+/// `DIFFICULTY_TOUGH_MAX` reads Orange, and anything above that reads Red.
+pub const DIFFICULTY_EASY_MAX: f64 = 0.7;
+pub const DIFFICULTY_EVEN_MAX: f64 = 1.1;
+pub const DIFFICULTY_TOUGH_MAX: f64 = 1.6;
+
+// ─────────────────────────────────────────────────────────────────────────
+// Combat
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Relative weight each party member carries in a wild program's target
+/// roll. Ranks are *soft*: everyone stays targetable, slot order only
+/// changes the odds — a back-slot member is hit
+/// `FRONT_SLOT_AGGRO_WEIGHT / BACK_SLOT_AGGRO_WEIGHT` times less often than
+/// a front-slot one, never zero times. Bracing (see `Game::begin_defend`)
+/// adds `DEFEND_AGGRO_WEIGHT` on top, which is what makes Defend a
+/// party-level play rather than a selfish one.
+pub const FRONT_SLOT_AGGRO_WEIGHT: u32 = 3;
+pub const BACK_SLOT_AGGRO_WEIGHT: u32 = 1;
+pub const DEFEND_AGGRO_WEIGHT: u32 = 4;
+
+/// How many party slots count as the front line for `FRONT_SLOT_AGGRO_WEIGHT`
+/// — the player plus the first two companions.
+pub const FRONT_SLOTS: usize = 3;
+
+/// Initiative baseline for a species whose `.ron` file omits `base_speed` —
+/// the midpoint of the shipped roster's range, so an un-annotated mod
+/// species is neither free initiative nor dead weight.
+pub const DEFAULT_BASE_SPEED: i32 = 10;
+
+/// The player's initiative baseline. A shade above `DEFAULT_BASE_SPEED`: the
+/// player acts first against an average opponent, but loses the roll to
+/// anything genuinely fast.
+pub const PLAYER_BASE_SPEED: i32 = 11;
+
+/// Each round every combatant rolls `base_speed + rng(0..=INITIATIVE_DIE)`
+/// and acts in descending order. Sized so a 4-point speed gap still loses
+/// the roll sometimes — order should be a tendency, not a lookup table.
+pub const INITIATIVE_DIE: i32 = 10;
+
+/// Move power behind the player's own basic strike. The player has no
+/// `Creature` component and so no species moveset — this is their one move,
+/// with `Stats::atk` and equipment carrying the rest of the scaling.
+pub const PLAYER_STRIKE_POWER: i32 = 5;
+
+/// DEF granted for the round by the Defend action.
+pub const DEFEND_DEF_BONUS: i32 = 6;
+
+/// Fatigue the player spends each time they command a companion in battle
+/// (see `BattleAction::Special`) — the rally/special-ability
+/// bonus isn't free, whichever kind the companion has.
+pub const COMPANION_COMMAND_FATIGUE_COST: f32 = 5.0;
+
+/// Below this Power ("Power" is the player-facing label for `Needs.hunger`)
+/// threshold, the player's own attacks start losing effectiveness — see
+/// `battle::power_attack_multiplier`.
+pub const LOW_POWER_ATTACK_THRESHOLD: f32 = 50.0;
+
+/// Floor under a single attack's damage, so battles can't stall out on a
+/// high-defense matchup where `move_power + atk - def` goes non-positive.
+pub const MIN_DAMAGE: i32 = 1;
+
+/// What the player's attack total falls to at zero Power. Between zero and
+/// `LOW_POWER_ATTACK_THRESHOLD` the multiplier interpolates linearly from
+/// this up to full strength — see `battle::power_attack_multiplier`.
+pub const LOW_POWER_MIN_ATTACK_MULTIPLIER: f32 = 0.5;
+
+/// Divisor on each party member's ATK and DEF when totalling the passive
+/// bonus they lend the player outside their own actions (see
+/// `Game::party_stat_bonus`), floored at 1 per member so every companion
+/// contributes something. Companions already act in their own right; this
+/// is the smaller standing bonus on top.
+pub const PARTY_PASSIVE_STAT_DIVISOR: i32 = 10;
+
+/// Chance that jacking out of a fight still costs the player a parting
+/// counter-strike — fleeing is reliable, but not free.
+pub const FLEE_COUNTERATTACK_CHANCE: f64 = 0.5;
+
+/// Uniform random-roll range applied independently to each of a newly
+/// created creature's stats (baked into `Stats` at spawn) and to its
+/// growth rate (`Potential::growth_roll`) — see `Game::roll_potential`.
+/// The "same species, different stats" mechanic; doesn't apply to the
+/// player, who has no species.
+pub const MIN_INDIVIDUAL_ROLL: f32 = 0.8;
+pub const MAX_INDIVIDUAL_ROLL: f32 = 1.2;
+
+// ─────────────────────────────────────────────────────────────────────────
+// Taming
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Percentage-point bonus to decompile chance per point of the player's
+/// `Decompiler` stat (see `components::Decompiler`). Lowered from 0.03
+/// alongside `item_potency` — a well-leveled player was able to stack
+/// enough skill to make almost any attempt a near-guaranteed success.
+pub const DECOMPILER_SKILL_BONUS: f32 = 0.02;
+
+/// Coefficients of `taming::capture_chance`. Ceiling below a full 1.0 means
+/// even a fully-weakened, zero-difficulty target isn't a sure thing on item
+/// potency alone; the two penalties subtract the target's remaining HP
+/// fraction and its species' `taming_difficulty` from that ceiling.
+pub const CAPTURE_POTENCY_CEILING: f32 = 0.9;
+pub const CAPTURE_HP_PENALTY: f32 = 0.65;
+pub const CAPTURE_DIFFICULTY_PENALTY: f32 = 0.6;
+
+/// Hard bounds on the final decompile chance, applied after skill bonuses.
+/// No attempt is ever hopeless and none is ever certain.
+pub const CAPTURE_CHANCE_MIN: f32 = 0.05;
+pub const CAPTURE_CHANCE_MAX: f32 = 0.95;
+
+/// `SpeciesDef::taming_difficulty` assumed for a species that has gone
+/// missing from the db mid-battle — dead centre of the 0..=1 range, so a
+/// lookup failure neither gifts nor denies the capture.
+pub const DEFAULT_TAMING_DIFFICULTY: f32 = 0.5;
+
+// ─────────────────────────────────────────────────────────────────────────
+// Spawning & encounters
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Chance per tick that a wild spawn roll fires at all (see
+/// `Game::maybe_spawn_wild_creature`), and the box radius around the player
+/// the roll places into. The radius is wide enough that a spawn lands
+/// off-screen and is walked into rather than appearing on top of you.
+pub const WILD_SPAWN_CHANCE: f64 = 0.05;
+pub const WILD_SPAWN_RADIUS_TILES: i32 = 12;
+
+/// How many wild programs a zone is seeded with on entry, before any
+/// per-tick spawn rolls — see `Game::spawn_initial_creatures`. Applies both
+/// to a new run and to every zone breached afterwards, so a fresh sector is
+/// never empty while the spawn rolls warm up.
+pub const INITIAL_WILD_POPULATION: usize = 14;
+
+/// How far from the player a zone's opening wild programs scatter (see
+/// `Game::spawn_initial_creatures`). Widened by the platform radius when
+/// the player has a base, since nothing can spawn on platform floor.
+pub const INITIAL_SPAWN_SCATTER_TILES: i32 = 15;
+
+/// Floor under `swarm_radius`, the radius that actually governs how
+/// tightly a pack's members cluster around the tile a spawn roll picked
+/// (`Game::try_spawn_habitat_creature`) and how far `gather_pack` searches
+/// from whichever member the player bumped into: nothing gets tighter than
+/// this, however small the group. `swarm_radius` grows past this floor
+/// with group size, and its own doc explains why that still doesn't
+/// guarantee a whole spawned cluster gathers into one fight.
+pub const PACK_GATHER_RADIUS: i32 = 3;
+
+/// How many `Hostile` creatures may exist across the whole map at once.
+/// Wild creatures never despawn on their own, so without a bound the
+/// world-wide population — and the per-tick AI cost of simulating it —
+/// grows all session. Rather than blocking new spawns once the cap is
+/// reached (which would let a population the player wandered away from
+/// permanently starve the area they're actually in), reaching it culls
+/// the `Hostile`s farthest from the player until the group about to spawn
+/// fits — see `Game::maybe_spawn_wild_creature`. One roll can place up to
+/// `MAX_GROUP_SIZE` creatures, so freeing a single slot would let the
+/// population ratchet upward with every roll. Tamed programs never count
+/// here at all; they shouldn't crowd out wild spawns just by existing.
+pub const WILD_CREATURE_CAP: usize = 2000;
+
+/// Chance a habitat spawn roll (see `Game::try_spawn_habitat_creature`)
+/// picks a boss species instead of an ordinary one, when the tile's biome
+/// has at least one boss defined for it.
+pub const BOSS_SPAWN_CHANCE: f64 = 0.04;
+
+/// Range of Portal Fragments a defeated boss guarantees, replacing the
+/// flat `PORTAL_FRAGMENT_DROP_CHANCE` roll every other species gets.
+pub const BOSS_PORTAL_FRAGMENT_DROP: std::ops::RangeInclusive<u32> = 3..=6;
+
+/// Chance a habitat spawn roll (see `Game::try_spawn_habitat_creature`)
+/// produces a Nest instead of an ordinary pack, for a species that has
+/// `SpeciesDef::can_nest` set. Only rolled at all when `can_nest` is
+/// true, mirroring how `BOSS_SPAWN_CHANCE` is only rolled when a boss
+/// candidate exists — keeps the extra RNG draw out of the common
+/// non-nesting path entirely.
+pub const NEST_SPAWN_CHANCE: f64 = 0.06;
+
+/// Chebyshev distance a `NestGuardian` may wander from its `Nest` — see
+/// `systems::wander_ai_system`.
+pub const NEST_TETHER_RADIUS: i32 = 5;
+
+/// Inclusive range of guardians a freshly spawned `Nest` starts with —
+/// see `Game::spawn_nest`.
+pub const NEST_GUARDIAN_MIN: u32 = 2;
+pub const NEST_GUARDIAN_MAX: u32 = 5;
+
+/// Ticks between a guardian's death/taming and its replacement spawning
+/// — see `Game::nest_respawn_tick`.
+pub const NEST_RESPAWN_TICKS: u32 = 10;
+
+/// A Nest's starting/max `Durability` — double the default structure
+/// durability (`DEFAULT_STRUCTURE_DURABILITY`), since it's meant to
+/// take real, sustained effort to clear, not a single lucky hit.
+pub const NEST_DURABILITY: u32 = 60;
+
+// ─────────────────────────────────────────────────────────────────────────
+// Needs & rest
+// ─────────────────────────────────────────────────────────────────────────
+
+/// How many ticks a full night's recharge cycle advances the clock by.
+pub const REST_TICKS: u32 = 40;
+
+/// Per-tick drain on the two needs — see `systems::decay_needs`. Hunger
+/// (surfaced as "Power") falls faster than Fatigue, so running out of
+/// power is the pressure that actually paces a session.
+pub const HUNGER_DECAY_PER_TICK: f32 = 0.15;
+pub const FATIGUE_DECAY_PER_TICK: f32 = 0.08;
+
+/// What a `DifficultyMode::Forgiving` reboot leaves the player with: max HP
+/// divided by this (never below 1), and both needs topped up to at least the
+/// floor. Enough to keep going, not enough to make dying free — the XP
+/// setback in `SETBACK_XP_PENALTY_FRACTION` applies on top either way.
+pub const FORGIVING_RESPAWN_HP_DIVISOR: i32 = 2;
+pub const FORGIVING_RESPAWN_NEED_FLOOR: f32 = 40.0;
+
+// ─────────────────────────────────────────────────────────────────────────
+// Loot, crafting & economy
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Inclusive quantity range of its species' `work_resource` a defeated wild
+/// program drops.
+pub const WORK_RESOURCE_DROP: std::ops::RangeInclusive<u32> = 1..=2;
+
+/// `Game::forage`'s success chance by biome richness — see
+/// `game::turn::forage_chance`. Barren biomes (the Data Void, Black ICE, and
+/// a base's own manufactured platform floor) are a flat zero and don't get a
+/// constant: a base must never be a risk-free forage spot, or there'd be no
+/// reason to leave the platform.
+pub const FORAGE_CHANCE_RICH: f64 = 0.6;
+pub const FORAGE_CHANCE_MODERATE: f64 = 0.3;
+pub const FORAGE_CHANCE_SPARSE: f64 = 0.15;
+
+/// A mining node's per-cycle success chance is `MINING_SUCCESS_BASE` plus
+/// `MINING_SUCCESS_PER_LEVEL` per tier, capped at 1.0 — so a basic level-1
+/// node succeeds about half the time and upgrading buys reliability. See
+/// `systems::mining_success_chance`.
+pub const MINING_SUCCESS_BASE: f64 = 0.4;
+pub const MINING_SUCCESS_PER_LEVEL: f64 = 0.1;
+
+/// Divisor applied to the *lesser* of two fused programs' stats: a fusion
+/// keeps the better parent's stat outright and adds this fraction of the
+/// weaker one (see `Game::fuse_companions`). Bounded further by
+/// `MAX_FUSIONS`, so the compounding can't run away.
+pub const FUSION_LESSER_STAT_DIVISOR: i32 = 2;
+
+/// Defaults for `.ron` structure files that omit the field — a cronjob
+/// node's worker capacity and a structure's starting/max `Durability`. Both
+/// are `#[serde(default)]` fallbacks, so a mod written before either field
+/// existed keeps its original behaviour.
+pub const DEFAULT_WORK_CAPACITY: u32 = 5;
+pub const DEFAULT_STRUCTURE_DURABILITY: u32 = 30;
+
+/// Chance a defeated wild program additionally drops a Portal Fragment,
+/// independent of its species' own `work_resource`/`equipment_drop`.
+/// Fragments are the raw material for deploying a zone-portal structure
+/// (see `StructureDef::zone_portal`).
+pub const PORTAL_FRAGMENT_DROP_CHANCE: f64 = 0.35;
+
+/// Growth factor applied to an item's base `EquipmentStats` per gear level
+/// above 1 — doubles each level (level *N* = base *
+/// `GEAR_LEVEL_GROWTH.powi(N - 1)`), matching `ZoneLevel::stat_multiplier`'s
+/// own per-zone doubling so neither leveling nor gear dominates the other
+/// outright — see `balance_sim::best_case_gear_bonus`'s tests for the
+/// simulation that surfaced the old 2.5x growth overtaking it. Gear level
+/// is capped by `resources::ZoneLevel`: reaching zone *N* is what
+/// "unlocks" level *N* gear — see `Game::equip`.
+pub const GEAR_LEVEL_GROWTH: f64 = 2.0;
+
+/// Bonus `Game::fuse_item` adds to an item type's equipped stats, per
+/// fusion tier — additive, not compounding (tier 2 is +20%, not +21%).
+pub const ITEM_FUSION_BONUS_PER_TIER: f64 = 0.10;
+
+/// Copies of an item `Game::fuse_item` consumes from inventory per fusion.
+pub const ITEM_FUSION_COST: u32 = 2;
+
+/// How many fusions deep a program's lineage may go before it's a
+/// finished product (see `components::FusionCount`). A program at this
+/// depth can't be fed into another fusion at all, so the stat-compounding
+/// `fuse_stat` gives is bounded instead of being an endless duplicate
+/// laundry.
+pub const MAX_FUSIONS: u32 = 3;
+
+/// Fraction of a structure's current build cost refunded when it's removed
+/// (see `Game::remove_structure`), rounded down per item. Applies uniformly
+/// whether the structure is removed directly or swept up in a Home's
+/// cascading removal.
+pub const STRUCTURE_REMOVAL_REFUND_PERCENT: u32 = 30;
+
+// ─────────────────────────────────────────────────────────────────────────
+// Base & raids
+// ─────────────────────────────────────────────────────────────────────────
+
+/// The player's active battle party can hold at most this many tamed
+/// programs at once. With soft ranks, the slots past `FRONT_SLOTS` draw
+/// less enemy fire than the ones in front of them, so a full roster is
+/// deeper as well as bigger.
+pub const MAX_PARTY_SIZE: usize = 5;
+
+/// How many tamed programs the player may own in total (across the active
+/// party, cronjob workers, and idle pets) before any capacity-granting
+/// structures — see `StructureDef::pet_slot_bonus` and `Game::pet_capacity`,
+/// which add to this base. Distinct from `MAX_PARTY_SIZE`, which caps only
+/// how many of those pets can fight at once.
+pub const BASE_PET_CAPACITY: usize = 3;
+
+/// Chance per tick (see `Game::raid_check`) that a random deployed
+/// structure comes under raid, if any exist.
+pub const RAID_CHANCE_PER_TICK: f64 = 0.012;
+
+/// Damage a raid deals to a structure's `Durability` when it has no
+/// assigned cronjob worker defending it. Deliberately small relative to
+/// `DEFAULT_STRUCTURE_DURABILITY`: a raid is meant to be attrition the base
+/// can recover from, not a three-hit countdown to losing the structure
+/// outright.
+pub const RAID_DAMAGE: u32 = 4;
+
+/// Damage a defending cronjob worker takes fending off a raid on its
+/// structure — win or lose, defending has a cost. The raid's damage to the
+/// structure itself is reduced by the worker's Defense stat instead
+/// (`RAID_DAMAGE.saturating_sub(worker_def)`).
+pub const RAID_DEFENDER_DAMAGE: i32 = 6;
+
+/// Every non-Home structure must be deployed within this many tiles (per
+/// axis, same box-radius style as `StructureDef::passive_process`'s
+/// `radius`) of the Home structure — a base clusters around its Home
+/// rather than sprawling across the map.
+pub const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 7;
+
+/// How often (in ticks) damaged structures passively regenerate — a slow
+/// trickle, not a substitute for staying ahead of raids.
+pub const STRUCTURE_REGEN_INTERVAL: u64 = 20;
+
+/// How much `Durability` a damaged structure regenerates every
+/// `STRUCTURE_REGEN_INTERVAL` ticks — set to match `RAID_DAMAGE` so one
+/// interval fully undoes one raid. Below that, a base loses the attrition
+/// race no matter how it's played.
+pub const STRUCTURE_REGEN_AMOUNT: u32 = 4;
+
+// ─────────────────────────────────────────────────────────────────────────
+// Perk magnitudes
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Perk Points each perk costs per level — the same cost every time,
+/// however many levels you already have. See `Perk::cost`.
+pub const PERK_COST_KEEN_SCAVENGER: u32 = 2;
+pub const PERK_COST_LOW_POWER_MODE: u32 = 2;
+pub const PERK_COST_EXPLOIT_FOCUS: u32 = 3;
+pub const PERK_COST_LEAN_COMPILER: u32 = 3;
+pub const PERK_COST_ATTACKER: u32 = 2;
+pub const PERK_COST_DEFENDER: u32 = 2;
+pub const PERK_COST_BUFFER: u32 = 3;
+
+/// Bonus `Perk::KeenScavenger` adds to `Game::forage`'s success chance, per level.
+pub const KEEN_SCAVENGER_BONUS_PER_LEVEL: f64 = 0.01;
+
+/// `Perk::LowPowerMode`'s hunger-decay reduction, per level (the decay
+/// multiplier is `1.0 - this * level`, floored at 0.0).
+pub const LOW_POWER_MODE_REDUCTION_PER_LEVEL: f32 = 0.01;
+
+/// Effective Decompiler skill `Perk::ExploitFocus` adds on top of the
+/// player's real `Decompiler` stat, per level.
+pub const EXPLOIT_FOCUS_BONUS_PER_LEVEL: i32 = 1;
+
+/// Per-item discount `Perk::LeanCompiler` applies to `Game::craft` recipe
+/// costs, per level (never below 1 each).
+pub const LEAN_COMPILER_DISCOUNT_PER_LEVEL: u32 = 1;
+
+/// Permanent ATK `Perk::Attacker` adds to the player's `Stats`, per level.
+pub const ATTACKER_BONUS_PER_LEVEL: i32 = 1;
+
+/// Permanent DEF `Perk::Defender` adds to the player's `Stats`, per level.
+pub const DEFENDER_BONUS_PER_LEVEL: i32 = 1;
+
+/// Percentage of current max Integrity `Perk::Buffer` adds to the
+/// player's `Stats`, per level.
+pub const BUFFER_BONUS_PERCENT_PER_LEVEL: f32 = 0.01;
+
+/// Floor on `Perk::Buffer`'s per-level max Integrity bonus, so it's still
+/// worth buying early when 1% of max Integrity would round to less than
+/// this.
+pub const BUFFER_MIN_BONUS_PER_LEVEL: i32 = 10;
+
+// ─────────────────────────────────────────────────────────────────────────
+// Routine slots
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Slots a companion has at level 1 before any per-level growth, then one
+/// more for every `COMPANION_ROUTINE_SLOT_PER_LEVEL` levels. The floor of 1
+/// in `abilities::companion_routine_slots` is what keeps a level-1 program
+/// from having nowhere to hold its innate kit.
+pub const COMPANION_ROUTINE_SLOT_BASE: u32 = 0;
+
+/// Levels a companion needs per additional routine slot.
+pub const COMPANION_ROUTINE_SLOT_PER_LEVEL: u32 = 2;
+
+/// Most routines a companion can hold at once, reached at level 12.
+pub const COMPANION_ROUTINE_SLOT_CAP: u32 = 6;
+
+/// Slots the player has at level 1. One, and `decompile` occupies it — a new
+/// game pre-installs that ability, so the player's first *free* slot is the
+/// one `PLAYER_ROUTINE_SLOT_PER_LEVEL` grants.
+pub const PLAYER_ROUTINE_SLOT_BASE: u32 = 1;
+
+/// Levels the player needs per additional routine slot. Deliberately far
+/// slower than a companion's: researched routines are meant to be a choice
+/// between programs, not a second kit the player accumulates for free.
+pub const PLAYER_ROUTINE_SLOT_PER_LEVEL: u32 = 10;
+
+/// Most routines the player can hold at once, reached at level 50. The
+/// player has no level ceiling (`progression::add_xp` takes `None`), so this
+/// clamp is the only thing bounding their slots.
+pub const PLAYER_ROUTINE_SLOT_CAP: u32 = 6;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::resources::ZoneLevel;
+
+    /// The zone curve was a bare `1 << (zone - 1)` before it was named.
+    /// Pinning the sequence keeps a retune of `ZONE_STAT_GROWTH` honest
+    /// about what it costs: this is the steepest curve in the game, and
+    /// `balance_sim`'s level sweeps are projected against it.
+    #[test]
+    fn zone_stat_multiplier_doubles_per_level() {
+        let curve: Vec<i32> = (1..=5).map(|z| ZoneLevel(z).stat_multiplier()).collect();
+        assert_eq!(curve, vec![1, 2, 4, 8, 16]);
+    }
+
+    /// `Game::max_group_size` clamps its distance exponent to
+    /// `MAX_GROUP_SIZE_DISTANCE_STEPS` because the map is unbounded. That
+    /// clamp is only lossless while the clamped growth already exceeds
+    /// `MAX_GROUP_SIZE` — raise the cap without raising the step count and
+    /// distance would silently stop mattering short of it.
+    #[test]
+    fn clamping_the_distance_exponent_cannot_cost_group_size() {
+        assert!(
+            GROUP_SIZE_DISTANCE_GROWTH.pow(MAX_GROUP_SIZE_DISTANCE_STEPS) > MAX_GROUP_SIZE,
+            "distance growth clamped at {MAX_GROUP_SIZE_DISTANCE_STEPS} steps reaches only {}, \
+             which no longer covers MAX_GROUP_SIZE ({MAX_GROUP_SIZE})",
+            GROUP_SIZE_DISTANCE_GROWTH.pow(MAX_GROUP_SIZE_DISTANCE_STEPS),
+        );
+    }
+
+    /// The zone group cap is meant to reach `MAX_GROUP_SIZE` within the
+    /// zones the game is balanced for — `balance_sim` sweeps zones 1-5 and
+    /// documents the cap saturating at zone 6 (1, 3, 9, 27, 81, 100).
+    #[test]
+    fn zone_group_growth_saturates_the_group_cap_in_a_reachable_zone() {
+        let zones_to_saturate = (1..=10)
+            .find(|z| ZONE_GROUP_GROWTH.pow(z - 1) >= MAX_GROUP_SIZE)
+            .expect("group growth should reach MAX_GROUP_SIZE within ten zones");
+        assert_eq!(zones_to_saturate, 6);
+    }
+}

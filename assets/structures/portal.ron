@@ -1,6 +1,7 @@
 (
     id: "portal",
     name: "Zone Portal",
+    description: "Breaches into the next zone. Deeper zones cost more Portal Fragments to open, and neither fragments nor cores survive the trip.",
     glyph: 'O',
     color: Magenta,
     build_cost: [("portal_fragment", 10)],

@@ -1,6 +1,7 @@
 (
     id: "mining_node",
     name: "Mining Node",
+    description: "Assign a program here to mine Core Fragments. Yield is a chance per cycle that improves as the node is upgraded.",
     glyph: '$',
     color: Brown,
     build_cost: [("core_fragment", 12)],

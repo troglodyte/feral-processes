@@ -1,6 +1,10 @@
 //! Perk and research progression — what the player has unlocked and what
 //! unlocking costs.
 
+use crate::tuning::{
+    ATTACKER_BONUS_PER_LEVEL, BUFFER_BONUS_PERCENT_PER_LEVEL, BUFFER_MIN_BONUS_PER_LEVEL,
+    DEFENDER_BONUS_PER_LEVEL, EXPLOIT_FOCUS_BONUS_PER_LEVEL,
+};
 use crate::*;
 
 impl Game {
@@ -156,6 +160,8 @@ impl Game {
                     cost: def.cost,
                     state,
                     affordable: held >= def.cost,
+                    #[cfg(test)]
+                    unlocks_abilities: def.unlocks_abilities.clone(),
                 }
             })
             .collect();
@@ -188,6 +194,27 @@ impl Game {
         if !missing.is_empty() {
             return Err(format!("Requires {} first.", missing.join(", ")));
         }
+        // Checked before anything is spent: a researched routine that can't
+        // fit in cargo would otherwise be lost outright, and there is no
+        // second chance to take a node.
+        //
+        // Aggregated per item id rather than checked ability-by-ability: if
+        // a node ever named the same routine item twice, checking each
+        // occurrence in isolation would pass two independent "room for 1"
+        // checks where the real requirement is room for 2, and the second
+        // `add` below could then overflow a bank-limited item after the
+        // first had already spent the player's Research Data with no way
+        // back. No shipped node repeats an ability, so this is mod-safety
+        // only — same rationale as the routine-slot overflow checks.
+        let mut needed: std::collections::HashMap<ItemId, u32> = std::collections::HashMap::new();
+        for ability in &def.unlocks_abilities {
+            *needed
+                .entry(abilities::routine_item_id(ability))
+                .or_insert(0) += 1;
+        }
+        for (item, qty) in &needed {
+            self.check_room(item, *qty)?;
+        }
         let player = self.player_entity();
         let research_currency = self.research_currency();
         let held = self
@@ -207,6 +234,15 @@ impl Game {
             .0
             .insert(def.id.clone());
         self.log(format!("Research complete: {}.", def.name));
+        for ability in &def.unlocks_abilities {
+            let item = abilities::routine_item_id(ability);
+            let name = self.item_name(&item).to_string();
+            self.world
+                .get_mut::<Inventory>(player)
+                .unwrap()
+                .add(item, 1);
+            self.log(format!("A {name} is compiled into your cargo."));
+        }
         Ok(())
     }
 }

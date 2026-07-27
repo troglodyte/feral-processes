@@ -1,6 +1,7 @@
 (
     id: "power_conduit",
     name: "Power Conduit",
+    description: "Assign a program here to produce Power Cells — the fastest cronjob you can run.",
     glyph: '+',
     color: Yellow,
     build_cost: [("core_fragment", 14)],

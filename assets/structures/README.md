@@ -20,6 +20,16 @@ is skipped with a warning logged in-game rather than crashing startup.
     // any item id from assets/items/*.ron — see assets/items/README.md for
     // the schema, and the top-level README's "Item ids" for the full set.
 
+    // Optional; can be left out entirely (defaults to an empty string, which
+    // the shipped-assets test refuses for anything in this repo). One line
+    // on what the structure does, shown in the build menu. This used to be
+    // derived automatically from the capability fields below (`work`,
+    // `passive_process`, `raid_defense`, and so on); it's authored text now,
+    // so a modder controls exactly how their structure reads — but that also
+    // means nothing checks it against those fields, so if you change a
+    // structure's capabilities, update the description to match by hand.
+    description: "Converts Core Fragments into Power Cells on its own while you stand within 2 tiles. The cheapest thing you can deploy.",
+
     // Omit (`None`) for a purely decorative/utility structure. Set `Some(...)`
     // to make it assignable to a tamed creature via the cronjob menu — it'll
     // produce one unit of `produces` every `ticks_per_unit` ticks. `capacity`
@@ -182,6 +192,14 @@ is skipped with a warning logged in-game rather than crashing startup.
     // cycle actually yields. That reliability saturates at level 6 (100%),
     // so tiers past that add payout only.
     upgrade: Some((max_tier: 5, cost: [("core_fragment", 10)])),
+
+    // Optional; can be left out entirely (defaults to false). If true,
+    // owning one of these anywhere lets the player extract a routine out of
+    // a program they own, destroying it and losing every other routine it
+    // carried — see `Game::extract_routine`. Checked by ownership
+    // (`Game::has_structure`), not proximity, so a bench built anywhere on
+    // the map counts. This is how the Compiler works.
+    extracts_routines: true,
 )
 ```
 

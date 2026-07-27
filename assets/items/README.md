@@ -15,6 +15,15 @@ disqualifies the whole file.
     id: "unique_snake_case_id",   // must be unique across all item files
     name: "Display Name",
 
+    // Optional; can be left out entirely (defaults to an empty string, which
+    // the shipped-assets test refuses for anything in this repo). One line
+    // on what the item is for, shown wherever it's listed. Authored rather
+    // than derived, so a modder controls exactly how their item reads — but
+    // that also means nothing checks it against the fields below, so if you
+    // change `equipment`, `consume`, or another capability, update the text
+    // to match by hand.
+    description: "Restores 25 Power. The staple of staying on the Grid.",
+
     // Optional; can be left out entirely (defaults to no bank limit). The
     // ordinary Buffer (cargo) is unbounded; setting this makes an item a
     // banked currency instead, capped only by this ceiling — Research Data
@@ -109,6 +118,15 @@ disqualifies the whole file.
     // merged per kill — an item declared on both sides is rolled once, at
     // the better of the two chances.
     droppable: Some([("scrapper", 0.1), ("worm", 0.08)]),
+
+    // Reserved for engine-synthesized items — leave this out. Every loaded
+    // ability automatically gets a "<Ability Name> Routine" item (id
+    // `routine_<ability_id>`) whose `routine` names that ability and whose
+    // description is read live from the ability's own text, so it can never
+    // drift. Authoring an item whose id collides with `routine_<ability>`
+    // is refused with a warning (the authored file wins, but the ability
+    // becomes unextractable) — don't claim that id namespace by hand.
+    routine: None,
 )
 ```
 

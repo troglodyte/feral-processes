@@ -1,6 +1,17 @@
 //! Populating a zone with wild programs, nests, and habitat-born
 //! creatures.
 
+use crate::tuning::{
+    BOSS_SPAWN_CHANCE, DISTANCE_STAT_STEP_BONUS, DISTANCE_STAT_STEP_TILES, GROUP_SIZE_STEP_TILES,
+    INITIAL_SPAWN_SCATTER_TILES, MAX_BUILD_DISTANCE_FROM_HOME, MAX_DISTANCE_STAT_MULTIPLIER,
+    MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_DURABILITY, NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN,
+    NEST_SPAWN_CHANCE, NEST_TETHER_RADIUS, PACK_GATHER_RADIUS, WILD_CREATURE_CAP,
+    ZONE_GROUP_GROWTH,
+};
+use crate::tuning::{
+    GROUP_SIZE_DISTANCE_GROWTH, MAX_GROUP_SIZE_DISTANCE_STEPS, WILD_SPAWN_CHANCE,
+    WILD_SPAWN_RADIUS_TILES,
+};
 use crate::*;
 
 /// The zone's ceiling on one species group: zone 1 is solo, every level
@@ -203,11 +214,9 @@ impl Game {
     pub(crate) fn max_group_size(&self, x: i32, y: i32) -> u32 {
         let cap = zone_group_cap(self.world.resource::<ZoneLevel>().0);
         let dist = self.distance_from_danger_origin(x, y);
-        // The map is unbounded and a shift of 32 or more is a panic in
-        // debug; `1 << 7` already exceeds MAX_GROUP_SIZE, so clamping the
-        // exponent there is exact rather than a fudge.
-        let steps = (dist / GROUP_SIZE_STEP_TILES).clamp(0, 7) as u32;
-        (1u32 << steps).min(cap)
+        let steps =
+            (dist / GROUP_SIZE_STEP_TILES).clamp(0, MAX_GROUP_SIZE_DISTANCE_STEPS as i32) as u32;
+        GROUP_SIZE_DISTANCE_GROWTH.pow(steps).min(cap)
     }
 
     /// How many distinct species groups one fight at `(x, y)` may hold: a
@@ -222,7 +231,7 @@ impl Game {
     /// groups jumped straight to four. A zone-1 opening, where the zone cap
     /// pins every group to a single member anyway, was therefore a
     /// four-on-one against a player who has no companions yet —
-    /// `balance::simulate_roster_fight` scores that as a loss against every
+    /// `balance_sim::simulate_roster_fight` scores that as a loss against every
     /// shipped species, including the four that `beatable_by_a_fresh_player`
     /// clears one-on-one.
     pub(crate) fn max_enemy_groups(&self, x: i32, y: i32) -> usize {
@@ -291,14 +300,19 @@ impl Game {
         // Roll first: culling is wasted work if nothing was going to spawn.
         let roll = {
             let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_bool(0.05)
+            rng.0.random_bool(WILD_SPAWN_CHANCE)
         };
         if !roll {
             return;
         }
         let (dx, dy) = {
             let mut rng = self.world.resource_mut::<GameRng>();
-            (rng.0.random_range(-12..=12), rng.0.random_range(-12..=12))
+            (
+                rng.0
+                    .random_range(-WILD_SPAWN_RADIUS_TILES..=WILD_SPAWN_RADIUS_TILES),
+                rng.0
+                    .random_range(-WILD_SPAWN_RADIUS_TILES..=WILD_SPAWN_RADIUS_TILES),
+            )
         };
         let (tx, ty) = (player_pos.x + dx, player_pos.y + dy);
         // Make room for the whole group this roll may place, by despawning
@@ -367,7 +381,7 @@ impl Game {
         // gentlest thing that biome has rather than to its whole roster:
         // still a hard opening, but never the worst one on offer. Ranked
         // by flat stat total, the same crude yardstick
-        // `balance::toughest_ordinary_species` sorts by, because the
+        // `balance_sim::toughest_ordinary_species` sorts by, because the
         // projection itself can't rank fights the player loses — they all
         // score zero HP left.
         if self.in_opening_ring(x, y) {
@@ -376,7 +390,7 @@ impl Game {
                 .iter()
                 .filter(|id| {
                     db.get(id)
-                        .is_some_and(crate::balance::beatable_by_a_fresh_player)
+                        .is_some_and(crate::balance_sim::beatable_by_a_fresh_player)
                 })
                 .cloned()
                 .collect();

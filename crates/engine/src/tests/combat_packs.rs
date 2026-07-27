@@ -2,6 +2,9 @@
 //! groups, initiative order, and what happens as groups fall.
 
 use super::support::*;
+use crate::tuning::{
+    DISTANCE_STAT_STEP_TILES, GROUP_SIZE_STEP_TILES, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE,
+};
 use crate::*;
 
 #[test]
@@ -138,7 +141,7 @@ fn a_pack_of_more_than_four_species_engages_the_four_largest_and_leaves_the_rest
 /// ground around a zone-1 breach, bumping into it starts a one-on-one.
 /// Four species share one tile here, which before the group count rode the
 /// distance curve was a four-on-one against a player who has no companions
-/// yet — `balance::beatable_by_a_fresh_player` scores that as a loss
+/// yet — `balance_sim::beatable_by_a_fresh_player` scores that as a loss
 /// against every shipped species, boss or not.
 #[test]
 fn a_fight_at_the_danger_origin_is_a_single_program_however_many_are_standing_there() {

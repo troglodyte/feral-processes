@@ -14,6 +14,51 @@ pub type AbilityId = String;
 /// every call site, the same way a missing economy role aborts the load.
 pub const FALLBACK_ABILITY_ID: &str = "priority_boost";
 
+/// The ability a new game pre-installs into the player's first routine slot
+/// — capturing a program is reached through the Special menu like anything
+/// else. Validated at startup the same way `FALLBACK_ABILITY_ID` is.
+pub const DECOMPILE_ABILITY_ID: &str = "decompile";
+
+/// Routine slots at `level`, from one constant set. Both public wrappers
+/// call this so the companion and player curves cannot drift into two
+/// different shapes — only their constants differ.
+///
+/// The floor of 1 is load-bearing: `COMPANION_ROUTINE_SLOT_BASE` is 0, so a
+/// level-1 companion would otherwise have nowhere to put the kit its species
+/// grants it at level 1.
+fn routine_slots(level: u32, base: u32, per_level: u32, cap: u32) -> usize {
+    (base + level / per_level).clamp(1, cap) as usize
+}
+
+/// How many routines a companion at `level` can hold — see
+/// `tuning::COMPANION_ROUTINE_SLOT_BASE` and friends.
+pub fn companion_routine_slots(level: u32) -> usize {
+    routine_slots(
+        level,
+        crate::tuning::COMPANION_ROUTINE_SLOT_BASE,
+        crate::tuning::COMPANION_ROUTINE_SLOT_PER_LEVEL,
+        crate::tuning::COMPANION_ROUTINE_SLOT_CAP,
+    )
+}
+
+/// How many routines the player at `level` can hold — see
+/// `tuning::PLAYER_ROUTINE_SLOT_BASE` and friends.
+pub fn player_routine_slots(level: u32) -> usize {
+    routine_slots(
+        level,
+        crate::tuning::PLAYER_ROUTINE_SLOT_BASE,
+        crate::tuning::PLAYER_ROUTINE_SLOT_PER_LEVEL,
+        crate::tuning::PLAYER_ROUTINE_SLOT_CAP,
+    )
+}
+
+/// The inventory item a loose (uninstalled) copy of `ability` takes. Minted
+/// by `ItemDb::synthesize_routines` rather than authored, so a modder's new
+/// ability is extractable and installable with no second file to write.
+pub fn routine_item_id(ability: &str) -> crate::items::ItemId {
+    crate::items::ItemId(format!("routine_{ability}"))
+}
+
 /// Who an ability lands on. Which picker the UI opens for it — if any — is
 /// `AbilityTarget::targeting`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -54,6 +99,11 @@ pub enum AbilityEffect {
         power: i32,
         duration: u32,
     },
+    /// Spends a taming catalyst and rolls `taming::capture_chance` against
+    /// the target group's front program — see `Game::attempt_decompile`.
+    /// Carries no numbers of its own: the whole formula is `taming`'s, and
+    /// duplicating any of it here would be a second copy to drift.
+    Decompile,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -78,7 +128,7 @@ pub struct AbilityDef {
 }
 
 fn default_fatigue_cost() -> f32 {
-    crate::COMPANION_COMMAND_FATIGUE_COST
+    crate::tuning::COMPANION_COMMAND_FATIGUE_COST
 }
 
 impl AbilityDef {
@@ -97,6 +147,26 @@ impl AbilityDef {
             && !status.chance.is_finite()
         {
             return Some("effect.status.chance");
+        }
+        None
+    }
+
+    /// `Decompile` is resolved by group index in `Game::attempt_decompile`,
+    /// which only ever runs when the planned target is a
+    /// `battle::SpecialTarget::EnemyGroup` — the shape `AbilityTarget`'s
+    /// `Enemy` targeting produces. Any other `target` would still arm the
+    /// cooldown and spend Fatigue in `resolve_one_action`, then find no
+    /// group index to act on and silently do nothing: the exact
+    /// "wastes-the-round" failure mode this branch refuses loudly for
+    /// everywhere else it can reach. Caught here instead, the same way
+    /// `non_finite_field` catches a bad number before it reaches a formula.
+    fn decompile_target_mismatch(&self) -> Option<&'static str> {
+        if matches!(self.effect, AbilityEffect::Decompile)
+            && self.target.targeting() != crate::battle::SpecialTargeting::Enemy
+        {
+            return Some(
+                "effect: Decompile requires target: OneEnemyGroupFront or WholeEnemyGroup",
+            );
         }
         None
     }
@@ -142,6 +212,10 @@ impl AbilityDb {
                         warnings.push(format!(
                             "skipped invalid ability file {path:?}: {field} is not a finite number"
                         ));
+                        continue;
+                    }
+                    if let Some(reason) = def.decompile_target_mismatch() {
+                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
                         continue;
                     }
                     db.abilities.insert(def.id.clone(), def);
@@ -202,10 +276,38 @@ mod tests {
         assert_eq!(def.cooldown, 0, "cooldown defaults to none");
         assert_eq!(
             def.fatigue_cost,
-            crate::COMPANION_COMMAND_FATIGUE_COST,
+            crate::tuning::COMPANION_COMMAND_FATIGUE_COST,
             "an ability declaring no cost charges what commanding always did"
         );
         assert!(warnings.is_empty(), "a valid def warns about nothing");
+    }
+
+    /// Regression for M11: a `Decompile` effect is resolved by group index
+    /// in `Game::attempt_decompile`, which only runs for a
+    /// `SpecialTarget::EnemyGroup` — the shape only `OneEnemyGroupFront` and
+    /// `WholeEnemyGroup` targeting produces. Pairing it with anything else
+    /// would arm the cooldown and spend Fatigue and then silently waste the
+    /// round, so it must be refused at load time instead.
+    #[test]
+    fn a_decompile_effect_paired_with_a_non_group_target_is_skipped() {
+        let mismatched = r#"(
+            id: "test_bad_decompile",
+            name: "Bad Decompile",
+            description: "d",
+            target: AllEnemies,
+            effect: Decompile,
+        )"#;
+        let (db, warnings) = load(
+            "bad_decompile",
+            &[("test_sweep", VALID), ("bad", mismatched)],
+        );
+        assert!(db.get("test_sweep").is_some(), "the valid file still loads");
+        assert!(
+            db.get("test_bad_decompile").is_none(),
+            "the mismatched pairing must not load"
+        );
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("Decompile"), "{}", warnings[0]);
     }
 
     #[test]
@@ -247,10 +349,61 @@ mod tests {
             warnings.is_empty(),
             "the shipped set must not warn: {warnings:?}"
         );
-        assert_eq!(db.all().count(), 10, "10 abilities ship with the game");
+        assert_eq!(db.all().count(), 11, "11 abilities ship with the game");
         assert!(
             db.get(FALLBACK_ABILITY_ID).is_some(),
             "the fallback ability must ship, or every companion loses its Special"
+        );
+    }
+
+    #[test]
+    fn companion_slots_grow_one_per_two_levels_up_to_the_cap() {
+        // Level 1 has no slot by the raw formula; the clamp gives it one, so
+        // a freshly tamed program still has somewhere to keep its kit.
+        let expected = [
+            (1, 1),
+            (2, 1),
+            (3, 1),
+            (4, 2),
+            (5, 2),
+            (6, 3),
+            (8, 4),
+            (10, 5),
+            (12, 6),
+        ];
+        for (level, slots) in expected {
+            assert_eq!(
+                companion_routine_slots(level),
+                slots,
+                "companion level {level}"
+            );
+        }
+        assert_eq!(
+            companion_routine_slots(50),
+            crate::tuning::COMPANION_ROUTINE_SLOT_CAP as usize,
+            "past the cap a companion stops gaining slots"
+        );
+    }
+
+    #[test]
+    fn player_slots_grow_one_per_ten_levels_so_the_first_free_one_lands_at_10() {
+        assert_eq!(
+            player_routine_slots(1),
+            1,
+            "the starting slot holds decompile"
+        );
+        assert_eq!(player_routine_slots(9), 1, "still nothing free at 9");
+        assert_eq!(
+            player_routine_slots(10),
+            2,
+            "the first free slot arrives at 10"
+        );
+        assert_eq!(player_routine_slots(49), 5);
+        assert_eq!(player_routine_slots(50), 6);
+        assert_eq!(
+            player_routine_slots(9_999),
+            crate::tuning::PLAYER_ROUTINE_SLOT_CAP as usize,
+            "the player has no level cap, so only this clamp bounds their slots"
         );
     }
 }

@@ -89,12 +89,12 @@ fn the_shipped_species_kits_reference_only_real_abilities() {
                 ability.id
             );
             assert!(
-                ability.level >= 1 && ability.level <= crate::progression::CREATURE_MAX_LEVEL,
+                ability.level >= 1 && ability.level <= crate::tuning::CREATURE_MAX_LEVEL,
                 "species {:?}: ability {:?} unlocks at level {}, outside 1..={}",
                 species.id,
                 ability.id,
                 ability.level,
-                crate::progression::CREATURE_MAX_LEVEL
+                crate::tuning::CREATURE_MAX_LEVEL
             );
             declared += 1;
         }
@@ -103,4 +103,27 @@ fn the_shipped_species_kits_reference_only_real_abilities() {
         declared >= 10,
         "the shipped roster should actually use the ability system, found {declared}"
     );
+}
+
+/// Authored text replaced a derivation that could not go blank. The only
+/// thing left to guard mechanically is that nothing shipped is *missing*
+/// text — a wrong number in an authored line is a review problem, not a
+/// test one.
+#[test]
+fn every_shipped_item_and_structure_has_description_text() {
+    let game = Game::new(3, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for def in game.item_defs() {
+        assert!(
+            !def.description.trim().is_empty(),
+            "item {} ships with no description",
+            def.id.as_str()
+        );
+    }
+    for def in game.structure_defs() {
+        assert!(
+            !def.description.trim().is_empty(),
+            "structure {} ships with no description",
+            def.id
+        );
+    }
 }

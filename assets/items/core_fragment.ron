@@ -1,1 +1,6 @@
-(id: "core_fragment", name: "Core Fragment", role: Some(Currency))
+(
+    id: "core_fragment",
+    name: "Core Fragment",
+    description: "The Grid's currency. Every build cost, most recipes, and everything a trader pays you.",
+    role: Some(Currency),
+)

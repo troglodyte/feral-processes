@@ -111,6 +111,8 @@ change what gets stored — a save from a different build shows up as
 | `v` | Inventory/equipment: equip, unequip, consume, fuse, erase items |
 | `T` | Research tree: spend Research Data to unlock structures and recipes — see [Research](#research) |
 | `p` | Your pets: full stats (level, HP, Attack, Defense) for every compiled program you own, wherever it is — add/stand down party members (max 5) here too. Standing one down frees a battle slot, not a roster slot; to shed a program for good, sell it at a Market (`t`) or fuse it (`f`) |
+| `m` | Routine panel: install a loose routine into a free slot, pop an installed one back out, or swap one for another — see [Routines](#routines) |
+| `M` | Extraction: with a Compiler owned anywhere, break a program you own down into exactly one of its routines — destroys the program and everything else it carried. See [Routines](#routines) |
 | `f` | Fuse two compiled programs you own into one stronger one — the whole roster is offered, wherever the programs are |
 | `t` | Trade with a nearby iso Market: sell items or compiled programs, buy consumables |
 | `x` | Perks: spend Perk Points on permanent passive unlocks |
@@ -136,8 +138,7 @@ into the renderer, so a new action appears without the UI being touched:
 | --- | --- |
 | `a` | Attack — then pick which enemy group to hit |
 | `d` | Defend — brace for the round: a Defense bonus, and you draw more of the incoming fire |
-| `s` | Special — picks one of that member's abilities, then a target if it needs one. A companion's come from its species and unlock as it levels; yours come from research — Self-Execution first, then Runtime Patching and Kernel Privileges — and the row sits greyed until you have researched one. Costs you Fatigue — how much the ability decides — and may sit out a few rounds afterwards |
-| `c` | Decompile (you only) — attempt to compile/tame a group's front program. Needs a taming catalyst, which the ICE Breaker is |
+| `s` | Special — picks one of that member's installed **routines**, then a target if it needs one. The row is hidden entirely, not greyed, for a member with nothing installed. Costs you Fatigue — how much the routine decides — and may sit out a few rounds afterwards. See [Routines](#routines) |
 | `u` | Use item (you only) — spend a consumable as that slot's action for the round |
 | `j` | Jack out (flee) — costs a mild XP setback, same as flatlining. A party-level command, not a per-member action |
 | `A` | All attack — every unplanned slot attacks. Asks which group only if more than one is left |
@@ -456,7 +457,7 @@ means editing `crates/engine/src/perks.rs`, not dropping in a file.
 | --- | --- | --- |
 | Core Fragment | Starting inventory; scan (`g`); dropped by Virus/Construct; a Mining Node cronjob | Deploy structures (2–6 each); compile an ICE Breaker (3 each) or a Power Cell (2 each) |
 | Power Cell | Starting inventory; compiled (`c`) from 2 Core Fragments; dropped by Scrapper/Glitch; cooked passively at a Terminal; a Power Conduit cronjob | Drain (`e`) to restore Power |
-| ICE Breaker | Starting inventory; compiled (`c`) from 3 Core Fragments; a Compiler cronjob | Attempt to decompile a rogue program in battle (`d`) |
+| ICE Breaker | Starting inventory; compiled (`c`) from 3 Core Fragments; a Compiler cronjob | The taming catalyst Decompile spends — a Special (`s`) in battle, not its own key |
 | Portal Fragment | 35% drop from any defeated wild program; a guaranteed 3–6 cache from a boss; buyable at an iso Market (8 Core Fragments) | Deploy a Zone Portal; pay for every equipment recipe |
 | Research Data | A Research Node cronjob | Unlock research nodes (`T`) — see [Research](#research) |
 
@@ -641,10 +642,12 @@ be active party members, fighting alongside you at once.
   target at all: a whole-party heal or a field-wide sweep commits the moment
   you pick it.
 - **A companion's kit grows as it levels.** Its species names which abilities
-  it gets and the level each unlocks at, so a program you've fought with for
-  a while does things a freshly tamed one can't. A species that declares
-  none falls back to a single temporary Attack boost. Abilities are data —
-  see `assets/abilities/README.md` for what one can do and
+  it gets and the level each unlocks at; each one installs itself as a
+  **routine** into a level-derived slot, topped up automatically at every
+  level-up that reaches a new unlock — see [Routines](#routines) for how
+  many slots that buys and what else you can do with them. A species that
+  declares none falls back to a single temporary Attack boost. Abilities are
+  data — see `assets/abilities/README.md` for what one can do and
   `assets/species/README.md` for how a species claims them.
 - **Powerful abilities are paced by cooldowns and Fatigue.** Each declares
   how many rounds it sits out afterwards and how much Fatigue commanding it
@@ -687,6 +690,38 @@ be active party members, fighting alongside you at once.
   (`i`) — Poor / Below Average / Average / Above Average / Excellent.
   Fusing two programs (below) averages their rolls into the result rather
   than rolling a fresh one.
+
+### Routines
+
+An ability only does anything once it's **installed** into a slot — owning
+the routine item on its own isn't enough.
+
+- **Slots grow with level.** A companion gets one slot per two levels it
+  reaches, rounded down and never less than one (so a level-1 program still
+  has somewhere to hold its kit), capped at six — reached at level 12. You
+  get one slot per ten of your own levels, starting from one, same cap of
+  six — so your first *free* slot doesn't open until level 10.
+- **You start with Decompile pre-installed.** It's the one routine every
+  new game begins with, occupying your only slot until level 10 — taming
+  is always available from turn one, before you've researched anything.
+- **A species' innate kit installs itself**, pre-installed the moment you
+  tame or fuse a program and topped up automatically on any level-up that
+  reaches a later unlock (see [Companions](#companions)). An innate
+  routine isn't welded in, though: pop it back out and it becomes an
+  ordinary inventory item again, free to plug into a different program.
+- **Research grants the item, not the slot.** Unlocking a node that names
+  an ability (see [Research](#research)) compiles its routine straight
+  into your cargo — it still has to be installed before you can spend it
+  in battle. Researching the same ability from two different nodes stacks
+  two copies of the item rather than granting it once.
+- Press `m` to open the routine panel: install a loose routine into a free
+  slot, pop an installed one back out, or swap one for another — on
+  yourself or any companion.
+- **Extraction destroys the program.** Owning a Compiler is what's checked,
+  not proximity — one built anywhere counts, wherever you're standing.
+  Press `M` to break a program you own down into exactly one of its
+  routines. The program and every other routine it carried are gone for
+  good.
 
 ### Fusing programs
 

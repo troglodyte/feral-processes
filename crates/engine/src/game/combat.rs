@@ -1,6 +1,8 @@
 //! Starting a battle and planning a round: pack gathering, initiative, and
 //! the action menus the renderer draws from.
 
+use crate::abilities::AbilityId;
+use crate::tuning::{DEFAULT_BASE_SPEED, DEFEND_DEF_BONUS, INITIATIVE_DIE, PLAYER_BASE_SPEED};
 use crate::*;
 
 impl Game {
@@ -307,7 +309,7 @@ impl Game {
         }
         let planned_len = battle.planned.len();
         let target_group = match &action {
-            BattleAction::Attack { group } | BattleAction::Decompile { group } => Some(*group),
+            BattleAction::Attack { group } => Some(*group),
             // A party-facing Special has no group to validate at all.
             BattleAction::Special {
                 target: battle::SpecialTarget::EnemyGroup { group },
@@ -375,23 +377,41 @@ impl Game {
         }
     }
 
-    /// Every ability `entity` can be commanded to use right now, in menu
-    /// order — its species' declared list, filtered to what its level has
-    /// unlocked.
-    ///
-    /// Never empty: a species that declares none, or whose whole list is
-    /// still level-gated, yields `abilities::FALLBACK_ABILITY_ID`. Resolving
-    /// the fallback here rather than at each call site is what lets
-    /// `BattleAction::Special` carry a plain index and the menu list one row
-    /// instead of zero.
-    pub(crate) fn companion_abilities(&self, entity: Entity) -> Vec<AbilityDef> {
-        let db = self.world.resource::<AbilityDb>();
+    /// How many routines `entity` can hold right now. The player and a
+    /// companion grow slots at different rates on purpose — see
+    /// `tuning::PLAYER_ROUTINE_SLOT_PER_LEVEL`.
+    pub fn routine_slots(&self, entity: Entity) -> usize {
         let level = self
             .world
             .get::<Experience>(entity)
             .map(|e| e.level)
             .unwrap_or(1);
-        let declared: Vec<AbilityDef> = self
+        if entity == self.player_entity() {
+            abilities::player_routine_slots(level)
+        } else {
+            abilities::companion_routine_slots(level)
+        }
+    }
+
+    /// Installs the kit `entity`'s species grants at its current level,
+    /// replacing whatever it holds. Called once when a program comes into
+    /// existence — a decompile or a fusion — never afterwards.
+    ///
+    /// A species declaring no abilities gets `FALLBACK_ABILITY_ID` instead,
+    /// which is what keeps an ability-less species commandable and keeps
+    /// that ability obtainable by extraction: nothing else grants it.
+    ///
+    /// No shipped species declares more level-appropriate abilities than it
+    /// has slots for at tame time, so the overflow this logs is mod-safety
+    /// only — same rationale as `install_unlocked_routines`.
+    pub(crate) fn install_innate_routines(&mut self, entity: Entity) {
+        let level = self
+            .world
+            .get::<Experience>(entity)
+            .map(|e| e.level)
+            .unwrap_or(1);
+        let slots = self.routine_slots(entity);
+        let declared: Vec<AbilityId> = self
             .world
             .get::<Creature>(entity)
             .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
@@ -399,49 +419,133 @@ impl Game {
             .unwrap_or_default()
             .into_iter()
             .filter(|a| a.level <= level)
-            .filter_map(|a| db.get(&a.id).cloned())
+            .map(|a| a.id)
+            .filter(|id| self.world.resource::<AbilityDb>().get(id).is_some())
             .collect();
-        if !declared.is_empty() {
-            return declared;
-        }
-        db.get(abilities::FALLBACK_ABILITY_ID)
-            .cloned()
-            .into_iter()
-            .collect()
+        let installed = if declared.is_empty() {
+            vec![abilities::FALLBACK_ABILITY_ID.to_string()]
+        } else {
+            if declared.len() > slots {
+                let name = self.creature_label(entity);
+                for id in &declared[slots..] {
+                    self.log(format!(
+                        "{name} has no free routine slot for {} — the unlock is lost.",
+                        self.ability_display_name(id)
+                    ));
+                }
+            }
+            declared.into_iter().take(slots).collect()
+        };
+        self.world.entity_mut(entity).insert(Routines(installed));
     }
 
-    /// The abilities the player has unlocked through research, in research
-    /// order (see `ResearchDb::all`), each appearing once however many nodes
-    /// grant it.
+    /// Installs every species ability whose unlock level lands in
+    /// `(from_level, to_level]` — the ones this level-up just reached.
     ///
-    /// Unlike `companion_abilities` this may be empty, and deliberately so:
-    /// before any node is researched the player has no routines at all,
-    /// which is exactly what the research is selling. Nothing is stored —
-    /// the set is derived from `Research`, which the save already carries,
-    /// the same way structure and recipe unlocks are.
-    pub fn player_abilities(&self) -> Vec<AbilityDef> {
-        let abilities = self.world.resource::<AbilityDb>();
-        let mut seen = std::collections::HashSet::new();
-        self.world
-            .resource::<ResearchDb>()
-            .all()
-            .filter(|def| self.is_researched(&def.id))
-            .flat_map(|def| def.unlocks_abilities.iter())
-            .filter(|id| seen.insert((*id).clone()))
-            .filter_map(|id| abilities.get(id).cloned())
-            .collect()
+    /// If every slot is full, an unlock evicts `FALLBACK_ABILITY_ID` rather
+    /// than being dropped: the fallback is explicitly a placeholder for a
+    /// companion whose species grants nothing *yet* (see
+    /// `install_innate_routines`), so a real innate unlock displacing it is
+    /// the placeholder doing its job. This is exactly the shipped Scrapper's
+    /// case — its only ability unlocks at level 3, a level-1 tame installs
+    /// the fallback into its one slot, and without eviction the level-3
+    /// unlock would find that slot "full" and be lost forever. The eviction
+    /// is logged (naming both routines) rather than silent, because the
+    /// matched slot might just as easily hold a Priority Boost the player
+    /// deliberately installed by hand — the id match can't tell the two
+    /// apart, so the player at least gets to read what happened.
+    ///
+    /// Only when every slot instead holds a *real* routine — installed,
+    /// researched, or another innate ability — is the unlock logged and
+    /// dropped for good: the window it could have been installed in has
+    /// passed. No shipped species can reach that genuine-loss state (the
+    /// most any declares is two abilities, the latest at level 8, and four
+    /// slots exist by then), so this remains mod-safety only.
+    pub(crate) fn install_unlocked_routines(
+        &mut self,
+        entity: Entity,
+        from_level: u32,
+        to_level: u32,
+    ) {
+        let reached: Vec<AbilityId> = self
+            .world
+            .get::<Creature>(entity)
+            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+            .map(|s| s.abilities.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|a| a.level > from_level && a.level <= to_level)
+            .map(|a| a.id)
+            .filter(|id| self.world.resource::<AbilityDb>().get(id).is_some())
+            .collect();
+        if reached.is_empty() {
+            return;
+        }
+        let slots = self.routine_slots(entity);
+        let name = self.creature_label(entity);
+        for id in reached {
+            let mut installed = self
+                .world
+                .get::<Routines>(entity)
+                .map(|r| r.0.clone())
+                .unwrap_or_default();
+            if installed.contains(&id) {
+                continue;
+            }
+            if installed.len() >= slots {
+                if let Some(pos) = installed
+                    .iter()
+                    .position(|a| a == abilities::FALLBACK_ABILITY_ID)
+                {
+                    // Matched by id alone, so this fires the same way
+                    // whether that slot holds the auto-installed placeholder
+                    // or a Priority Boost the player chose to install
+                    // themselves — there is no stored provenance to tell the
+                    // two apart, and inventing one is out of scope. Logging
+                    // either way is what keeps eviction from reading as data
+                    // loss with no explanation: overwritten in place, not
+                    // popped back to inventory the way `uninstall_routine`
+                    // would, so it really is gone.
+                    let evicted_name = self.ability_display_name(abilities::FALLBACK_ABILITY_ID);
+                    let unlock_name = self.ability_display_name(&id);
+                    self.log(format!(
+                        "{name} swaps out {evicted_name} to make room for {unlock_name} — \
+                         {evicted_name} is destroyed, not returned to cargo."
+                    ));
+                    installed[pos] = id;
+                    self.world.entity_mut(entity).insert(Routines(installed));
+                    continue;
+                }
+                self.log(format!(
+                    "{name} has no free routine slot for {} — the unlock is lost.",
+                    self.ability_display_name(&id)
+                ));
+                continue;
+            }
+            installed.push(id);
+            self.world.entity_mut(entity).insert(Routines(installed));
+        }
     }
 
-    /// Every ability the combatant at `entity` can be commanded to use: the
-    /// player's researched routines, or a companion's species list. Menu and
+    /// Every ability the combatant at `entity` can be commanded to use, in
+    /// menu order: whatever is installed in its routine slots. Menu and
     /// resolution both go through this, so the two cannot disagree about
     /// what a slot knows.
+    ///
+    /// May be empty for anyone — a member with nothing installed is offered
+    /// no Special at all (see `battle_action_options`). A companion's kit is
+    /// installed at tame/fuse time and topped up on the level-ups that reach
+    /// a species unlock (`install_innate_routines`,
+    /// `install_unlocked_routines`); nothing is resolved here.
     pub(crate) fn actor_abilities(&self, entity: Entity) -> Vec<AbilityDef> {
-        if entity == self.player_entity() {
-            self.player_abilities()
-        } else {
-            self.companion_abilities(entity)
-        }
+        let db = self.world.resource::<AbilityDb>();
+        self.world
+            .get::<Routines>(entity)
+            .map(|r| r.0.as_slice())
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|id| db.get(id).cloned())
+            .collect()
     }
 
     /// Consumable items the player is actually holding — the pool
@@ -479,6 +583,17 @@ impl Game {
         if remaining > 0 {
             return Some(format!("{remaining} more rounds"));
         }
+        // Decompile is refused for two reasons no other ability has. They
+        // used to live in `attempt_decompile`, which refunded the round
+        // silently; here the row greys with the reason instead.
+        if matches!(ability.effect, AbilityEffect::Decompile) {
+            if self.taming_catalyst().is_none() {
+                return Some("no taming catalyst".to_string());
+            }
+            if self.pet_count() >= self.pet_capacity() {
+                return Some("roster is full".to_string());
+            }
+        }
         let fatigue = self
             .world
             .get::<Needs>(self.player_entity())
@@ -495,7 +610,8 @@ impl Game {
     /// contract as `battle_action_options` — a species that gains an ability
     /// reaches both without either being touched.
     ///
-    /// Never empty for a real slot: see `Game::companion_abilities`.
+    /// Empty exactly when `battle_action_options` hides the Special row for
+    /// this slot: see `Game::actor_abilities`.
     pub fn battle_special_options(&self, slot: usize) -> Vec<SpecialOption> {
         let Some(entity) = self.actor_entity(battle::Actor::Party(slot)) else {
             return Vec::new();
@@ -568,37 +684,21 @@ impl Game {
             },
         ];
 
-        options.push(ActionOption {
-            kind: ActionKind::Special,
-            key: 's',
-            label: "[s]pecial".to_string(),
-            detail: self.ability_label(entity),
-            target: TargetSpec::SpecialAbility,
-            // Only the player can be empty here, and only until they
-            // research their first routine. Greyed with a reason rather than
-            // hidden: a hidden row teaches nobody the feature exists.
-            unavailable: self
-                .actor_abilities(entity)
-                .is_empty()
-                .then(|| "no routines researched".to_string()),
-        });
+        // Hidden, not greyed: with routines installable at will, an empty
+        // kit is a state the player chose, and a permanently greyed row
+        // teaches nothing they don't already know.
+        if !self.actor_abilities(entity).is_empty() {
+            options.push(ActionOption {
+                kind: ActionKind::Special,
+                key: 's',
+                label: "[s]pecial".to_string(),
+                detail: self.ability_label(entity),
+                target: TargetSpec::SpecialAbility,
+                unavailable: None,
+            });
+        }
 
         if is_player {
-            options.push(ActionOption {
-                kind: ActionKind::Decompile,
-                key: 'c',
-                label: "de[c]ompile".to_string(),
-                detail: "Attempt to capture a group's front program".to_string(),
-                target: TargetSpec::EnemyGroup,
-                unavailable: match (
-                    self.taming_catalyst(),
-                    self.pet_count() >= self.pet_capacity(),
-                ) {
-                    (None, _) => Some("no taming catalyst".to_string()),
-                    (_, true) => Some("roster is full".to_string()),
-                    _ => None,
-                },
-            });
             options.push(ActionOption {
                 kind: ActionKind::UseItem,
                 key: 'u',

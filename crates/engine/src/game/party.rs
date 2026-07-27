@@ -1,6 +1,7 @@
 //! The player's own roster — status, the programs in the party and the
 //! bank, and moving programs between them.
 
+use crate::tuning::{FUSION_LESSER_STAT_DIVISOR, MAX_FUSIONS};
 use crate::*;
 
 impl Game {
@@ -119,16 +120,15 @@ impl Game {
     }
 
     /// Terse label for what commanding `entity` in battle would do right
-    /// now. A member with several abilities reads as a count, since no one
-    /// of them is *the* answer until the player picks in
-    /// `Mode::BattleSpecial`.
+    /// now. A member with several routines reads as a count, since no one of
+    /// them is *the* answer until the player picks in `Mode::BattleSpecial`.
     pub(crate) fn ability_label(&self, entity: Entity) -> String {
         match self.actor_abilities(entity).as_slice() {
-            // Only the player can be empty: `companion_abilities` resolves
-            // the fallback rather than returning nothing.
-            [] => "No routines researched".to_string(),
+            // Anyone can be empty now: an innate routine can be popped out,
+            // and the player starts with only decompile installed.
+            [] => "No routines installed".to_string(),
             [only] => only.name.clone(),
-            many => format!("{} abilities", many.len()),
+            many => format!("{} routines", many.len()),
         }
     }
 
@@ -348,7 +348,7 @@ impl Game {
             .ok_or_else(|| "That species is no longer available.".to_string())?;
 
         fn fuse_stat(x: i32, y: i32) -> i32 {
-            x.max(y) + x.min(y) / 2
+            x.max(y) + x.min(y) / FUSION_LESSER_STAT_DIVISOR
         }
         let fused_hp = fuse_stat(stats_a.max_hp, stats_b.max_hp);
         let fused_atk = fuse_stat(stats_a.atk, stats_b.atk);
@@ -357,6 +357,7 @@ impl Game {
 
         let name_a = self.creature_label(a);
         let name_b = self.creature_label(b);
+        let lost = self.fusion_routine_losses(a, b);
         self.world
             .resource_mut::<Party>()
             .0
@@ -404,9 +405,11 @@ impl Game {
             StatusEffects::default(),
             FusionCount(fused_depth),
         ));
+        let fused_entity = fused.id();
         if let Some(name) = &final_name {
             fused.insert(CustomName(name.clone()));
         }
+        self.install_innate_routines(fused_entity);
         self.log(match &final_name {
             Some(name) => format!(
                 "You fuse {name_a} and {name_b} into {name}, a new {}.",
@@ -417,6 +420,27 @@ impl Game {
                 species.name
             ),
         });
+        // Filtered against the freshly installed kit rather than logged
+        // as-is: an ability on `lost` can still land in the result if the
+        // winning species happens to declare it innately, and this is the
+        // one place that distinction is knowable — before this, only the
+        // input kits exist; after, only the output does.
+        let new_kit = self
+            .world
+            .get::<Routines>(fused_entity)
+            .map(|r| r.0.clone())
+            .unwrap_or_default();
+        let truly_lost: Vec<&str> = lost
+            .iter()
+            .filter(|a| !new_kit.contains(&a.id))
+            .map(|a| a.name.as_str())
+            .collect();
+        if !truly_lost.is_empty() {
+            self.log(format!(
+                "Routines lost in the fusion: {}.",
+                truly_lost.join(", ")
+            ));
+        }
         Ok(())
     }
 }

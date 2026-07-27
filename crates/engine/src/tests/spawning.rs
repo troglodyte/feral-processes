@@ -1,6 +1,10 @@
 //! Populating a zone: wild programs, the spawn cap, nests, and guardians.
 
 use super::support::*;
+use crate::tuning::{
+    GROUP_SIZE_STEP_TILES, NEST_DURABILITY, NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN,
+    NEST_RESPAWN_TICKS, NEST_TETHER_RADIUS, WILD_CREATURE_CAP,
+};
 use crate::*;
 
 #[test]
@@ -282,7 +286,7 @@ fn the_zone_one_opening_ring_only_rolls_species_a_fresh_player_can_beat() {
             .min()
             .expect("the creature spawned here, so this biome has species");
         assert!(
-            crate::balance::beatable_by_a_fresh_player(def) || stat_total(def) == gentlest,
+            crate::balance_sim::beatable_by_a_fresh_player(def) || stat_total(def) == gentlest,
             "{species} spawned {dist} tiles into the opening ring: a bare level-1 \
              player is projected to lose to it, and it isn't the gentlest thing \
              its biome offers either"
@@ -315,7 +319,7 @@ fn a_ring_biome_with_nothing_gentle_fields_only_its_gentlest_species() {
         let pool = db.habitat_matches(Biome::StaticField);
         assert!(
             pool.iter()
-                .all(|s| !crate::balance::beatable_by_a_fresh_player(s)),
+                .all(|s| !crate::balance_sim::beatable_by_a_fresh_player(s)),
             "this test's premise is that StaticField has nothing a fresh player \
              beats — if that changed, it is now testing the wrong branch"
         );
@@ -371,7 +375,7 @@ fn past_the_opening_ring_the_full_habitat_roster_spawns_again() {
         .iter()
         .filter(|id| {
             db.get(id)
-                .is_some_and(|s| !crate::balance::beatable_by_a_fresh_player(s))
+                .is_some_and(|s| !crate::balance_sim::beatable_by_a_fresh_player(s))
         })
         .collect();
     assert!(

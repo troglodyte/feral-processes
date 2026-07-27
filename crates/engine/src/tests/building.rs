@@ -1,6 +1,7 @@
 //! Placing, removing, upgrading, and describing structures, and the base platform they sit on.
 
 use super::support::*;
+use crate::tuning::MAX_BUILD_DISTANCE_FROM_HOME;
 use crate::*;
 
 #[test]
@@ -360,46 +361,6 @@ fn armory_and_fabricator_are_not_cronjob_workable() {
 }
 
 #[test]
-fn every_structure_describes_its_actual_capability() {
-    let game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    for def in game.structure_defs() {
-        // Every shipped structure now has a real capability, so "no effect
-        // yet" always means the description derivation is missing a field
-        // the structure actually uses — the Data Cache reached exactly that
-        // state when `pet_slot_bonus` was added without updating this.
-        assert_ne!(
-            game.structure_description(&def),
-            "no effect yet",
-            "{} has an undescribed effect",
-            def.id
-        );
-    }
-}
-
-#[test]
-fn structure_descriptions_cover_non_production_capabilities() {
-    let game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let describe = |id: &str| {
-        let def = game
-            .structure_defs()
-            .into_iter()
-            .find(|d| d.id == id)
-            .unwrap_or_else(|| panic!("{id}.ron should load as a structure"));
-        game.structure_description(&def)
-    };
-    assert!(describe("armory").contains("Firewall Plating"));
-    assert!(describe("fabricator").contains("Cortex Hack"));
-    assert!(describe("home").contains("Power Cell"));
-    assert!(describe("shield").contains("raid damage"));
-    assert!(describe("data_cache").contains("pet slots"));
-    assert!(describe("recharger_node").contains("recharge"));
-    assert!(describe("portal").contains("next zone"));
-    assert!(describe("market").contains("trade"));
-    assert!(describe("compiler").contains("ICE Breaker"));
-    assert!(describe("terminal").contains("Power Cell"));
-}
-
-#[test]
 fn researching_and_building_an_armory_unlocks_firewall_plating() {
     let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut game, "firewall");
@@ -560,7 +521,7 @@ fn a_mined_out_node_refills_instead_of_stalling_the_cronjob() {
 fn cronjob_work_grants_no_more_xp_once_the_worker_hits_the_work_level_cap() {
     let mut game = Game::new(301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let worker = spawn_tamed(&mut game, 10, 3);
-    game.world.get_mut::<Experience>(worker).unwrap().level = systems::WORK_XP_LEVEL_CAP;
+    game.world.get_mut::<Experience>(worker).unwrap().level = crate::tuning::WORK_XP_LEVEL_CAP;
     let structure = game
         .world
         .spawn((
@@ -590,7 +551,7 @@ fn cronjob_work_grants_no_more_xp_once_the_worker_hits_the_work_level_cap() {
     let exp = game.world.get::<Experience>(worker).unwrap();
     assert_eq!(
         exp.level,
-        systems::WORK_XP_LEVEL_CAP,
+        crate::tuning::WORK_XP_LEVEL_CAP,
         "a capped worker shouldn't level further from cronjob work"
     );
     assert_eq!(
@@ -604,7 +565,7 @@ fn cronjob_work_still_grants_xp_below_the_work_level_cap() {
     let mut game = Game::new(302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let worker = spawn_tamed(&mut game, 10, 3);
     assert!(
-        game.world.get::<Experience>(worker).unwrap().level < systems::WORK_XP_LEVEL_CAP,
+        game.world.get::<Experience>(worker).unwrap().level < crate::tuning::WORK_XP_LEVEL_CAP,
         "a freshly tamed program should start well under the work level cap"
     );
     let structure = game

@@ -1,5 +1,6 @@
 //! Fixtures and helpers shared by the engine's unit tests.
 
+use crate::tuning::{GROUP_SIZE_STEP_TILES, MAX_ENEMY_GROUPS};
 use crate::*;
 use std::path::Path;
 
@@ -53,9 +54,15 @@ pub(super) fn multi_group_ground(game: &Game) -> (i32, i32) {
 }
 
 /// Sets `entity`'s level directly, for tests that need a level-gated
-/// ability unlocked without grinding XP into it.
+/// ability unlocked without grinding XP into it. Installs whatever species
+/// unlocks that jump reaches, exactly as a real level-up would — otherwise
+/// a test that raises a level would see a kit the game never leaves behind.
 pub(super) fn set_level(game: &mut Game, entity: Entity, level: u32) {
+    let before = game.world.get::<Experience>(entity).unwrap().level;
     game.world.get_mut::<Experience>(entity).unwrap().level = level;
+    if level > before {
+        game.install_unlocked_routines(entity, before, level);
+    }
 }
 
 pub(super) fn test_assets_dir() -> std::path::PathBuf {
@@ -86,8 +93,22 @@ pub(super) fn player_attacks(game: &mut Game) {
     resolve_round_with(game, BattleAction::Attack { group: 0 });
 }
 
+/// Plans the player's decompile as the Special it now is, and resolves the
+/// round.
 pub(super) fn player_decompiles(game: &mut Game) {
-    resolve_round_with(game, BattleAction::Decompile { group: 0 });
+    let index = game
+        .battle_special_options(0)
+        .into_iter()
+        .find(|o| o.name.to_lowercase().contains("decompile"))
+        .expect("the player starts with decompile installed")
+        .index;
+    resolve_round_with(
+        game,
+        BattleAction::Special {
+            ability: index,
+            target: crate::battle::SpecialTarget::EnemyGroup { group: 0 },
+        },
+    );
 }
 
 /// Resolves a round in which `companion` uses its Special (the rally or
@@ -220,6 +241,18 @@ pub(super) fn spawn_data_cache(game: &mut Game, offset: i32) {
             x: pos.x + offset,
             y: pos.y,
         },
+    ));
+}
+
+/// Deploys a structure of `kind` at an absolute position, bypassing
+/// `place_structure`'s Home, cost and distance rules — for tests about what
+/// a standing structure *enables*, not about the build rules.
+pub(super) fn spawn_structure_at(game: &mut Game, kind: &str, x: i32, y: i32) {
+    game.world.spawn((
+        Structure {
+            kind: kind.to_string(),
+        },
+        Position { x, y },
     ));
 }
 
@@ -402,7 +435,8 @@ pub(super) fn start_battle_with_a_wild_program(game: &mut Game) -> Entity {
 pub(super) fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
     let player = game.player_entity();
     let species = generic_species(game);
-    game.world
+    let entity = game
+        .world
         .spawn((
             Creature {
                 species: species.id.clone(),
@@ -417,7 +451,9 @@ pub(super) fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
             Tamed { owner: player },
             Experience::default(),
         ))
-        .id()
+        .id();
+    game.install_innate_routines(entity);
+    entity
 }
 
 /// Spawns a minimal wild (untamed, `Hostile`) `Creature` on the
@@ -525,7 +561,7 @@ pub(super) fn fatigue_spent_commanding_companion(seed: u32, stunned: bool) -> f3
 /// A species declaring two abilities, so the multi-ability paths can be
 /// exercised without depending on shipped kit assignments. The second is
 /// gated above a fresh companion's level 1, which is what pins down
-/// `Game::companion_abilities`' level filtering.
+/// `Game::actor_abilities`' level filtering.
 pub(super) const TWO_ABILITY_SPECIES: &str = r#"(
     id: "test_medic",
     name: "Test Medic",
@@ -573,6 +609,7 @@ pub(super) fn game_with_two_ability_companion() -> (Game, Entity) {
             Experience::default(),
         ))
         .id();
+    game.install_innate_routines(medic);
     game.add_companion(medic).unwrap();
     (game, medic)
 }

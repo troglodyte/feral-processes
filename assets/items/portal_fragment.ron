@@ -1,1 +1,6 @@
-(id: "portal_fragment", name: "Portal Fragment", role: Some(CraftCurrency))
+(
+    id: "portal_fragment",
+    name: "Portal Fragment",
+    description: "Opens a Zone Portal. Bosses drop caches of it; ordinary kills drop the odd one.",
+    role: Some(CraftCurrency),
+)

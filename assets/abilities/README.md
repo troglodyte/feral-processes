@@ -12,13 +12,28 @@ An ability is what a party member spends its round on when commanded with
 Special in battle. The two sides of the party get theirs differently: a
 companion's come from its species file — see `../species/README.md` — while
 the player's come from a research node naming them in `unlocks_abilities`,
-see `../research/README.md`. So shipping a new ability means writing a file
-here *and* referencing its `id` from a species, a research node, or both.
+see `../research/README.md`. `decompile` is the one exception: it's
+pre-installed on a new game rather than researched, so the player always
+starts with a way to capture programs even before touching the research
+tree.
 
-**One ability is mandatory.** `priority_boost` is the fallback every
-companion falls back on when its species declares no abilities of its own.
-Deleting that file makes the game refuse to start, the same way deleting the
-Currency item does.
+Neither path is how the ability *reaches* a party member, though — abilities
+are installed **routines** occupying level-derived slots (one per two
+companion levels, one per ten player levels, six at most either way), and
+every loaded ability automatically gets a `routine_<ability_id>` item minted
+for it — see `../items/README.md`. A species or research node just names
+which routine shows up pre-installed or lands in cargo; installing,
+swapping, and popping one back out is a separate act. So shipping a new
+ability means writing a single file here — the routine item exists with no
+second file — and, if you want it reachable through normal play, referencing
+its `id` from a species, a research node, or both.
+
+**Two abilities are mandatory.** `priority_boost` is the fallback every
+companion falls back on when its species declares no abilities of its own,
+and `decompile` is pre-installed into the player's first routine slot on a
+new game — capturing a program is reached through the Special menu like
+anything else. Deleting either file makes the game refuse to start, the same
+way deleting the Currency item does.
 
 ## Schema
 
@@ -46,7 +61,7 @@ Currency item does.
     // spent on a downed member would be wasted.
     target: WholeEnemyGroup,
 
-    // What it does to each recipient. Exactly one of four:
+    // What it does to each recipient. Exactly one of five:
     //
     //   Damage(power: 6)
     //     Direct damage through the same formula a move uses
@@ -72,6 +87,20 @@ Currency item does.
     //     Inflicts a status condition. Same `kind`/`power` rules as the
     //     rider above. A combatant carries at most one status at a time; a
     //     fresh application overwrites whatever was active.
+    //
+    //   Decompile
+    //     Spends a taming catalyst and rolls a capture against the target
+    //     group's front program — the formula lives in `taming`, not here.
+    //     Requires `target: OneEnemyGroupFront` or `WholeEnemyGroup` —
+    //     anything else is enforced at load time (a file pairing
+    //     `Decompile` with `OneAlly`, `WholeParty` or `AllEnemies` is
+    //     skipped with a warning, the same as a non-finite number), because
+    //     it is resolved by group index and any other target would silently
+    //     waste the round instead. Carries no fields of its own, and greys
+    //     out in the picker with a reason — "no taming catalyst" or "roster
+    //     is full" — instead of being refused silently. This is what
+    //     `decompile.ron` uses; there is no reason to declare a second
+    //     ability with this effect.
     effect: Damage(power: 6),
 
     // Optional; defaults to 0 (usable every round). Battle rounds that must

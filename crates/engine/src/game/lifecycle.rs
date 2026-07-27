@@ -4,8 +4,22 @@
 //! go through `load_asset_dbs` so neither can produce a `Game` whose item
 //! set fails the economy-role check.
 
+use crate::abilities::AbilityId;
 use crate::game::zone::find_walkable_start;
+use crate::tuning::{DEFAULT_WORK_CAPACITY, INITIAL_WILD_POPULATION};
 use crate::*;
+
+/// Splits a persisted routine list into what `db` still recognizes and what
+/// it doesn't — `Game::load`'s only chance to catch an id a save carries
+/// that the loaded `AbilityDb` no longer has (the ability file was removed,
+/// or is now malformed and got skipped with its own warning). Left
+/// unfiltered, a ghost id survives into `Routines` as an entry
+/// `routine_view` can't resolve: the slot renders `(empty)`, so the install
+/// picker opens over an occupied one instead of the ghost ever being
+/// uninstallable.
+fn known_routines(ids: &[AbilityId], db: &AbilityDb) -> (Vec<AbilityId>, Vec<AbilityId>) {
+    ids.iter().cloned().partition(|id| db.get(id).is_some())
+}
 
 impl Game {
     pub fn new(seed: u32, difficulty: DifficultyMode, assets_dir: &Path) -> std::io::Result<Self> {
@@ -54,7 +68,7 @@ impl Game {
                     ch: '@',
                     color: GlyphColor::Cyan,
                 },
-                components::PLAYER_BASE_STATS,
+                crate::tuning::PLAYER_BASE_STATS,
                 Needs::default(),
                 Experience::default(),
                 Decompiler::default(),
@@ -70,6 +84,7 @@ impl Game {
                 StatusEffects::default(),
                 CombatBuff::default(),
                 Perks::default(),
+                Routines(vec![abilities::DECOMPILE_ABILITY_ID.to_string()]),
             ))
             .id();
         world.insert_resource(PlayerEntity(player));
@@ -80,7 +95,7 @@ impl Game {
         for warning in load_warnings {
             game.log(warning);
         }
-        game.spawn_initial_creatures(14);
+        game.spawn_initial_creatures(INITIAL_WILD_POPULATION);
         game.log("Connection established. You materialize at the edge of the Grid.");
         Ok(game)
     }
@@ -114,6 +129,18 @@ impl Game {
         let mut world_map = WorldMap::new(data.seed);
         let overrides: HashMap<(i32, i32), Tile> = data.tile_overrides.into_iter().collect();
         world_map.restore_overrides(overrides);
+
+        // A routine slot is persisted as a raw ability id and never
+        // validated, so a save made under one mod configuration can name an
+        // ability a later load's asset set doesn't have (the file was
+        // removed, or is now malformed and got skipped with a warning of
+        // its own). Left in place, `routine_view` can't resolve the id and
+        // renders the slot `(empty)` — which then makes `install_routine`
+        // refuse "no free slot" for a slot the panel just told the player
+        // was free. Dropped here instead, once, at the only point both the
+        // save data and the loaded `AbilityDb` are in hand.
+        let (player_routines, dropped_player_routines) =
+            known_routines(&data.player.routines, &ability_db);
 
         let mut world = World::new();
         world.insert_resource(ability_db);
@@ -195,6 +222,7 @@ impl Game {
                     points: data.player.perk_points,
                     unlocked: data.player.unlocked_perks,
                 },
+                Routines(player_routines),
             ))
             .id();
         world.insert_resource(PlayerEntity(player));
@@ -204,6 +232,12 @@ impl Game {
         let mut game = Self { world, schedule };
         for warning in load_warnings {
             game.log(warning);
+        }
+        if !dropped_player_routines.is_empty() {
+            game.log(format!(
+                "Your installed routines included {} — no longer available, and the slot is now empty.",
+                dropped_player_routines.join(", ")
+            ));
         }
 
         let mut pending_cronjobs: Vec<(Entity, save::CronjobSave)> = Vec::new();
@@ -215,6 +249,15 @@ impl Game {
             let Some(species) = game.world.resource::<SpeciesDb>().get(&c.species).cloned() else {
                 continue;
             };
+            let (routines, dropped_routines) =
+                known_routines(&c.routines, game.world.resource::<AbilityDb>());
+            if !dropped_routines.is_empty() {
+                game.log(format!(
+                    "{} carried {} — no longer available, and the slot is now empty.",
+                    species.name,
+                    dropped_routines.join(", ")
+                ));
+            }
             let party_slot = c.party_slot;
             let mut entity = game.world.spawn((
                 Creature {
@@ -243,6 +286,7 @@ impl Game {
                 ZonePortal(c.zone),
                 StatusEffects::default(),
                 FusionCount(c.fusions),
+                Routines(routines),
             ));
             if let Some(name) = c.custom_name.clone() {
                 entity.insert(CustomName(name));
@@ -307,7 +351,11 @@ impl Game {
                     .as_ref()
                     .map(|w| w.produces.clone())
                     .unwrap_or_else(|| currency.clone());
-                let capacity = def.work.as_ref().map(|w| w.capacity).unwrap_or(5);
+                let capacity = def
+                    .work
+                    .as_ref()
+                    .map(|w| w.capacity)
+                    .unwrap_or(DEFAULT_WORK_CAPACITY);
                 let level = def.work.as_ref().and_then(|w| w.level);
                 entity.insert(ResourceNode {
                     resource,
@@ -376,6 +424,11 @@ impl Game {
             .map(|f| f.tiers.clone())
             .unwrap_or_default();
         let perks = self.world.get::<Perks>(player).cloned().unwrap_or_default();
+        let routines = self
+            .world
+            .get::<Routines>(player)
+            .map(|r| r.0.clone())
+            .unwrap_or_default();
 
         let party_entities = self.world.resource::<Party>().0.clone();
         let mut creatures = Vec::new();
@@ -391,6 +444,7 @@ impl Game {
             Option<&CustomName>,
             Option<&Potential>,
             Option<&FusionCount>,
+            Option<&Routines>,
         )>();
         for (
             entity,
@@ -404,6 +458,7 @@ impl Game {
             custom_name,
             potential,
             fusions,
+            routines,
         ) in creature_query.iter(&self.world)
         {
             let potential = potential.copied().unwrap_or(Potential::NEUTRAL);
@@ -443,6 +498,7 @@ impl Game {
                 def_roll: potential.def_roll,
                 growth_roll: potential.growth_roll,
                 fusions: fusions.map(|f| f.0).unwrap_or(0),
+                routines: routines.map(|r| r.0.clone()).unwrap_or_default(),
             });
         }
 
@@ -509,6 +565,7 @@ impl Game {
                 item_fusions,
                 perk_points: perks.points,
                 unlocked_perks: perks.unlocked,
+                routines,
             },
             creatures,
             structures,
@@ -578,8 +635,9 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (research, research_warnings) =
         ResearchDb::load_dir(&assets_dir.join("research"), &structures, &abilities)?;
     warnings.extend(research_warnings);
-    let (items, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"))?;
+    let (mut items, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"))?;
     warnings.extend(item_warnings);
+    warnings.extend(items.synthesize_routines(&abilities));
     let missing = items.missing_roles();
     if !missing.is_empty() {
         return Err(std::io::Error::new(
@@ -590,15 +648,19 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
             ),
         ));
     }
-    if abilities.get(abilities::FALLBACK_ABILITY_ID).is_none() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!(
-                "ability set is missing the fallback ability {:?}, which every \
-                 companion without a declared kit relies on",
-                abilities::FALLBACK_ABILITY_ID
-            ),
-        ));
+    for required in [
+        abilities::FALLBACK_ABILITY_ID,
+        abilities::DECOMPILE_ABILITY_ID,
+    ] {
+        if abilities.get(required).is_none() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "ability set is missing the mandatory ability {required:?} — the game \
+                     pre-installs it and cannot start without it"
+                ),
+            ));
+        }
     }
     Ok(AssetDbs {
         abilities,

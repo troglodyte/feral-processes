@@ -1,6 +1,7 @@
 (
     id: "research_node",
     name: "Research Node",
+    description: "Assign a program here to gather Research Data. Slow, chancy, and the only source of the currency the research tree runs on.",
     glyph: 'R',
     color: Cyan,
     build_cost: [("core_fragment", 10)],

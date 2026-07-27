@@ -128,7 +128,7 @@ pub(super) fn draw_fuse_name_menu(
             .map(|p| p.name.clone())
             .unwrap_or_else(|| "it".to_string())
     };
-    let rows = vec![
+    let mut rows = vec![
         text_row(format!(
             "Fusing {} and {}.",
             label_of(first),
@@ -143,8 +143,23 @@ pub(super) fn draw_fuse_name_menu(
             true,
         ),
         text_row(""),
-        text_row("Type a name, Enter to fuse (blank keeps the default name)"),
-        text_row("Esc to go back and re-pick the second program"),
     ];
+    // The result's kit is derived fresh from its species, not merged from
+    // its parents' — anything installed manually on either one (research,
+    // extraction, a swap) does not survive, so this is the last screen where
+    // backing out with Esc still saves it.
+    let losses = game.fusion_routine_losses(first, second);
+    if !losses.is_empty() {
+        let names: Vec<&str> = losses.iter().map(|a| a.name.as_str()).collect();
+        rows.push(text_row(format!(
+            "This may lose: {} (anything not innate to the result).",
+            names.join(", ")
+        )));
+        rows.push(text_row(""));
+    }
+    rows.push(text_row(
+        "Type a name, Enter to fuse (blank keeps the default name)",
+    ));
+    rows.push(text_row("Esc to go back and re-pick the second program"));
     draw_popup("Fuse", PopupSize::Small, &rows, fonts, m);
 }

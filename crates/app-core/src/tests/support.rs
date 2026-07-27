@@ -54,11 +54,62 @@ pub(crate) fn app_owning_distant_programs(seed: u32, count: i32) -> App {
             def_roll: 1.0,
             growth_roll: 1.0,
             fusions: 0,
+            routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
         });
     }
     save::save_to_file(&path, &data).unwrap();
 
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
     let _ = std::fs::remove_file(&path);
+    app
+}
+
+/// A game where the player owns one tamed program and has a Compiler
+/// standing, so the extraction flow has both of its preconditions. Built by
+/// editing a save and reloading it, for the same reason
+/// `app_owning_distant_programs` is.
+pub(crate) fn app_owning_a_program_and_a_compiler(seed: u32) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = std::env::temp_dir().join(format!("feral_processes_appcore_extract_{seed}.sav"));
+    let game = app.game.as_mut().unwrap();
+    let species = game.species_defs()[0].id.clone();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    data.creatures.push(CreatureSave {
+        species,
+        position: (px + 1, py),
+        hp: 10,
+        max_hp: 10,
+        atk: 3,
+        def: 1,
+        tamed: true,
+        level: 1,
+        xp: 0,
+        xp_to_next: 20,
+        cronjob: None,
+        party_slot: None,
+        zone: 1,
+        custom_name: None,
+        hp_roll: 1.0,
+        atk_roll: 1.0,
+        def_roll: 1.0,
+        growth_roll: 1.0,
+        fusions: 0,
+        routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
+    });
+    data.structures.push(save::StructureSave {
+        kind: "compiler".to_string(),
+        position: (px + 30, py + 30),
+        resource_amount: None,
+        durability: None,
+        tier: None,
+    });
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Game::load(&path, &assets_dir).ok();
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
     app
 }

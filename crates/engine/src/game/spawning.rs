@@ -348,16 +348,30 @@ impl Game {
         self.try_spawn_habitat_creature(tx, ty);
     }
 
-    /// Attempts to spawn one habitat-appropriate wild creature (or, away
-    /// from the zone's spawn point, a small pack of the same species — see
-    /// `max_group_size`) at `(x, y)`, returning whether it actually spawned
-    /// anything — `false` on an unwalkable tile or a biome with no
-    /// matching species, so callers (see `spawn_initial_creatures`) can
-    /// retry elsewhere instead of silently losing that spawn slot.
-    pub(crate) fn try_spawn_habitat_creature(&mut self, x: i32, y: i32) -> bool {
+    /// Picks which species a spawn at `(x, y)` should field: the tile
+    /// biome's habitat matches, gentled by the opening ring, with a rare
+    /// boss substituted when `allow_boss` and the biome defines one.
+    /// Returns the species id and whether it is a boss, or `None` for an
+    /// unwalkable tile or a biome with nothing eligible.
+    ///
+    /// Split out of `try_spawn_habitat_creature` so `Game::maybe_ambush`
+    /// can reuse the biome and opening-ring rules without inheriting the
+    /// boss and nest substitutions — copying them instead is exactly the
+    /// duplicated-formula trap this repo keeps falling into.
+    ///
+    /// The habitat caller's RNG draw order is unchanged by the split:
+    /// `allow_boss` short-circuits ahead of a boss roll that was already
+    /// conditional on the biome having bosses at all, so only the new
+    /// caller skips a draw.
+    pub(crate) fn pick_habitat_species(
+        &mut self,
+        x: i32,
+        y: i32,
+        allow_boss: bool,
+    ) -> Option<(String, bool)> {
         let tile = self.world.resource_mut::<WorldMap>().tile(x, y);
         if !tile.walkable {
-            return false;
+            return None;
         }
         let species_db = self.world.resource::<SpeciesDb>();
         let mut candidates: Vec<String> = species_db
@@ -371,7 +385,7 @@ impl Game {
             .map(|s| s.id.clone())
             .collect();
         if candidates.is_empty() && boss_candidates.is_empty() {
-            return false;
+            return None;
         }
         // The opening ring fields only what a fresh player can actually
         // beat — bosses emphatically included in what it turns away.
@@ -412,17 +426,22 @@ impl Game {
             // A biome that offers nothing but bosses spawns nothing here,
             // rather than drawing from a pool the ring just emptied.
             if candidates.is_empty() {
-                return false;
+                return None;
             }
         }
         // A boss takes the tile's one spawn slot instead of an ordinary
         // habitat creature, but only rarely, and only where one is defined
         // for this biome at all.
-        let spawn_boss = !boss_candidates.is_empty() && {
+        let spawn_boss = allow_boss && !boss_candidates.is_empty() && {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_bool(BOSS_SPAWN_CHANCE)
         };
         let pool = if spawn_boss || candidates.is_empty() {
+            if !allow_boss {
+                // Only reachable with an empty ordinary pool: a biome whose
+                // sole residents are bosses has nothing an ambush may field.
+                return None;
+            }
             &boss_candidates
         } else {
             &candidates
@@ -431,6 +450,59 @@ impl Game {
             let mut rng = self.world.resource_mut::<GameRng>();
             let idx = rng.0.random_range(0..pool.len());
             pool[idx].clone()
+        };
+        Some((pick, spawn_boss))
+    }
+
+    /// Places a group of `species_id` around `(x, y)` and returns whatever
+    /// actually spawned. Bosses always spawn alone — packs are an
+    /// ordinary-encounter mechanic, not something to stack onto an already
+    /// tough boss fight.
+    pub(crate) fn spawn_pack(
+        &mut self,
+        species_id: &str,
+        is_boss: bool,
+        x: i32,
+        y: i32,
+    ) -> Vec<Entity> {
+        let group_size = if is_boss {
+            1
+        } else {
+            let max_group = self.max_group_size(x, y);
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_range(1..=max_group)
+        };
+        // Hoisted above the loop deliberately: it takes no RNG, so the
+        // seeded sequence every spawn test depends on is untouched.
+        let radius = swarm_radius(group_size);
+        let mut spawned = Vec::new();
+        for i in 0..group_size {
+            // The first member anchors the roll's own tile; the rest
+            // cluster loosely around it (walkability isn't rechecked for
+            // these — same looseness the rest of spawning already has).
+            let (gx, gy) = if i == 0 {
+                (x, y)
+            } else {
+                let mut rng = self.world.resource_mut::<GameRng>();
+                (
+                    x + rng.0.random_range(-radius..=radius),
+                    y + rng.0.random_range(-radius..=radius),
+                )
+            };
+            spawned.extend(self.spawn_wild_creature(species_id, gx, gy));
+        }
+        spawned
+    }
+
+    /// Attempts to spawn one habitat-appropriate wild creature (or, away
+    /// from the zone's spawn point, a small pack of the same species — see
+    /// `max_group_size`) at `(x, y)`, returning whether it actually spawned
+    /// anything — `false` on an unwalkable tile or a biome with no
+    /// matching species, so callers (see `spawn_initial_creatures`) can
+    /// retry elsewhere instead of silently losing that spawn slot.
+    pub(crate) fn try_spawn_habitat_creature(&mut self, x: i32, y: i32) -> bool {
+        let Some((pick, spawn_boss)) = self.pick_habitat_species(x, y, true) else {
+            return false;
         };
 
         // A nest takes the tile's spawn slot instead of an ordinary pack,
@@ -455,34 +527,7 @@ impl Game {
             }
         }
 
-        // Bosses always spawn alone — packs are an ordinary-encounter
-        // mechanic, not something to stack onto an already-tough boss
-        // fight.
-        let group_size = if spawn_boss {
-            1
-        } else {
-            let max_group = self.max_group_size(x, y);
-            let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_range(1..=max_group)
-        };
-        // Hoisted above the loop deliberately: it takes no RNG, so the
-        // seeded sequence every spawn test depends on is untouched.
-        let radius = swarm_radius(group_size);
-        for i in 0..group_size {
-            // The first member anchors the roll's own tile; the rest
-            // cluster loosely around it (walkability isn't rechecked for
-            // these — same looseness the rest of spawning already has).
-            let (gx, gy) = if i == 0 {
-                (x, y)
-            } else {
-                let mut rng = self.world.resource_mut::<GameRng>();
-                (
-                    x + rng.0.random_range(-radius..=radius),
-                    y + rng.0.random_range(-radius..=radius),
-                )
-            };
-            self.spawn_wild_creature(&pick, gx, gy);
-        }
+        self.spawn_pack(&pick, spawn_boss, x, y);
         true
     }
 }

@@ -4,7 +4,8 @@ use crate::items::ItemId;
 use crate::species::SpeciesId;
 use crate::tuning::{
     BACK_SLOT_AGGRO_WEIGHT, DEFEND_AGGRO_WEIGHT, FRONT_SLOT_AGGRO_WEIGHT, FRONT_SLOTS,
-    LOW_POWER_ATTACK_THRESHOLD, LOW_POWER_MIN_ATTACK_MULTIPLIER, MIN_DAMAGE,
+    JACK_OUT_BASE_CHANCE, JACK_OUT_CHANCE_MAX, JACK_OUT_CHANCE_MIN, LOW_POWER_ATTACK_THRESHOLD,
+    LOW_POWER_MIN_ATTACK_MULTIPLIER, MIN_DAMAGE,
 };
 
 /// One species' worth of the wild pack in an active intrusion.
@@ -253,9 +254,36 @@ pub fn power_attack_multiplier(hunger: f32) -> f32 {
     }
 }
 
+/// Odds that a jack-out attempt actually gets the party clear, from the
+/// summed `Stats::power` of your side (`ours` — the player plus every living
+/// party member) against theirs (`theirs` — every living enemy in every
+/// group). Scales linearly with that ratio off `JACK_OUT_BASE_CHANCE`, then
+/// clamps, so no escape is hopeless and none is certain.
+///
+/// `luck` is passed in rather than drawn here to keep this pure and
+/// testable; the caller rolls it from `JACK_OUT_LUCK_MIN..=JACK_OUT_LUCK_MAX`
+/// fresh on every attempt. Applied before the clamp, so a lucky roll can
+/// never carry the chance past the ceiling.
+///
+/// Both totals use `max_hp` rather than current HP, making the odds a
+/// property of the matchup rather than of how the fight is going: the ratio
+/// you face when a pack engages is the ratio you keep, improving as you kill
+/// and worsening as companions fall.
+pub fn jack_out_chance(ours: i32, theirs: i32, luck: f64) -> f64 {
+    // `theirs` at 0 means the battle should already have ended; guarding
+    // rather than dividing means a stale call reads as "trivially escapable"
+    // instead of producing an infinity.
+    let ratio = ours.max(0) as f64 / theirs.max(1) as f64;
+    (JACK_OUT_BASE_CHANCE * ratio * luck).clamp(JACK_OUT_CHANCE_MIN, JACK_OUT_CHANCE_MAX)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Only the caller of `jack_out_chance` draws against these; the function
+    // itself takes luck as a parameter, so they aren't imported at module
+    // scope.
+    use crate::tuning::{JACK_OUT_LUCK_MAX, JACK_OUT_LUCK_MIN};
 
     #[test]
     fn damage_scales_with_power_and_attack() {
@@ -284,5 +312,53 @@ mod tests {
     #[test]
     fn power_attack_multiplier_never_drops_below_half() {
         assert_eq!(power_attack_multiplier(-10.0), 0.5);
+    }
+
+    #[test]
+    fn jack_out_at_an_even_matchup_is_the_base_chance() {
+        assert!((jack_out_chance(300, 300, 1.0) - JACK_OUT_BASE_CHANCE).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn jack_out_scales_with_the_power_ratio() {
+        let outgunned = jack_out_chance(100, 300, 1.0);
+        let even = jack_out_chance(300, 300, 1.0);
+        let dominant = jack_out_chance(500, 300, 1.0);
+        assert!(outgunned < even, "being outgunned must hurt your odds");
+        assert!(dominant > even, "outclassing them must help");
+    }
+
+    #[test]
+    fn jack_out_clamps_to_the_floor_against_an_overwhelming_pack() {
+        assert_eq!(jack_out_chance(10, 100_000, 1.0), JACK_OUT_CHANCE_MIN);
+    }
+
+    #[test]
+    fn jack_out_clamps_to_the_ceiling_against_a_trivial_pack() {
+        assert_eq!(jack_out_chance(100_000, 10, 1.0), JACK_OUT_CHANCE_MAX);
+    }
+
+    #[test]
+    fn jack_out_luck_shifts_the_odds_in_both_directions() {
+        let unlucky = jack_out_chance(300, 300, JACK_OUT_LUCK_MIN);
+        let neutral = jack_out_chance(300, 300, 1.0);
+        let lucky = jack_out_chance(300, 300, JACK_OUT_LUCK_MAX);
+        assert!(unlucky < neutral);
+        assert!(lucky > neutral);
+    }
+
+    #[test]
+    fn jack_out_luck_cannot_push_the_chance_outside_the_clamp() {
+        // Even maximum luck on a hopeless matchup stays inside the bounds —
+        // the clamp is applied last, not to the pre-luck value.
+        let lucky_but_hopeless = jack_out_chance(1, 100_000, JACK_OUT_LUCK_MAX);
+        assert!((JACK_OUT_CHANCE_MIN..=JACK_OUT_CHANCE_MAX).contains(&lucky_but_hopeless));
+    }
+
+    #[test]
+    fn jack_out_against_no_living_enemies_does_not_divide_by_zero() {
+        let chance = jack_out_chance(300, 0, 1.0);
+        assert!(chance.is_finite());
+        assert_eq!(chance, JACK_OUT_CHANCE_MAX);
     }
 }

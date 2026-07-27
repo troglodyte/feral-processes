@@ -77,6 +77,16 @@ in-level XP — never a de-level, just a setback. Jacking out of a fight
 (`j`) costs the same modest XP setback, so fleeing isn't entirely free
 either, but it's a lot cheaper than dying.
 
+**Jacking out is an attempt, not a guarantee.** Whether you get clear is a
+roll weighed on the whole party's strength against the whole pack's: run
+from an even fight and you usually make it, run from something far out of
+your weight class and you usually don't. There's some luck in it either way,
+so a bad matchup is never hopeless and a good one is never certain. Fail and
+the exit route collapses — the attempt burns your round and every engaged
+group gets a free swing at you. You are *not* docked XP for a failed
+attempt; you only pay the setback for an escape you actually got. Trying
+again costs Integrity, not progress.
+
 Each game session gets its own save file under `saves/` in the repo root,
 named from when it was started. Starting a new game (`N`) claims a fresh
 file immediately; `s` saves it manually at any time, and it also autosaves
@@ -140,7 +150,7 @@ into the renderer, so a new action appears without the UI being touched:
 | `d` | Defend — brace for the round: a Defense bonus, and you draw more of the incoming fire |
 | `s` | Special — picks one of that member's installed **routines**, then a target if it needs one. The row is hidden entirely, not greyed, for a member with nothing installed. Costs you Fatigue — how much the routine decides — and may sit out a few rounds afterwards. See [Routines](#routines) |
 | `u` | Use item (you only) — spend a consumable as that slot's action for the round |
-| `j` | Jack out (flee) — costs a mild XP setback, same as flatlining. A party-level command, not a per-member action |
+| `j` | Jack out (flee) — an *attempt*, not a guarantee: the odds weigh your party's strength against the pack's. Success costs a mild XP setback, same as flatlining; failure burns the round and draws a free volley, but costs no XP. A party-level command, not a per-member action |
 | `A` | All attack — every unplanned slot attacks. Asks which group only if more than one is left |
 | `D` | All defend — every unplanned slot braces |
 
@@ -374,6 +384,15 @@ buildable from turn one. See `assets/research/README.md` for the schema.
 
 Walking into a hostile program opens an intrusion — a party-versus-party
 round battle, not a duel with an audience.
+
+**Some intrusions open themselves.** Every step across open ground carries a
+small chance of an ambush: a pack you never saw drops in beside you and
+engages on the spot, with no option to walk around it. Routing carefully
+past the programs drawn on the map is still worth doing, but it no longer
+makes travel free. Two things an ambush never fields are a boss and a nest —
+those stay something you find and choose to take on. Your base platform is
+exempt: nothing spawns on it and nothing jumps you there, so the ground
+inside your build radius stays safe to cross.
 
 **Enemies fight as groups.** Everything in the pack is sorted by species, so
 three Glitches are one addressable unit — `A  3 Glitches` — rather than

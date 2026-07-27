@@ -13,6 +13,26 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Encounters
+
+- **Crossing open ground can get you ambushed.** Every walked step carries a
+  small chance that a biome-appropriate pack drops in beside you and engages
+  on the spot, with no option to route around it. Previously every fight was
+  one you chose by walking into a program drawn on the map, which made travel
+  free and the map a puzzle of avoidance. An ambush never fields a boss or a
+  nest — those stay something you find and choose to take on — and never
+  fires on your base platform, which remains safe ground. Tuned by
+  `RANDOM_ENCOUNTER_CHANCE`.
+- **Jacking out is an attempt, not a guarantee.** `j` used to end any fight
+  unconditionally for a flat XP setback, so a hopeless battle cost 20% of
+  in-level XP and nothing else. Whether you get clear is now a roll weighing
+  your whole party's summed power against the whole pack's, times a fresh
+  luck draw on every attempt — clamped so no escape is hopeless and none is
+  certain. A failed attempt burns the round and draws a free volley from
+  every engaged group, but costs **no** XP: you pay the setback only for an
+  escape you actually got, so retrying bleeds Integrity rather than
+  progression.
+
 ### Combat flow
 
 - **The round-resolve page is gone.** A resolved round used to open a

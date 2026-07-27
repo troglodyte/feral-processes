@@ -485,3 +485,110 @@ fn use_power_source_picks_the_power_item_over_an_earlier_non_power_item() {
     );
     assert_eq!(game.world.get::<Needs>(player).unwrap().hunger, 75.0 - 0.15);
 }
+
+/// Wipes every wild program off the map. The ambush tests use this to make
+/// a battle unambiguous: with nothing left to walk into, the bump path in
+/// `move_player` cannot fire, so any fight that opens came from the ambush
+/// roll.
+fn despawn_every_hostile(game: &mut Game) {
+    let hostiles: Vec<Entity> = {
+        let mut query = game.world.query_filtered::<Entity, With<Hostile>>();
+        query.iter(&game.world).collect()
+    };
+    for entity in hostiles {
+        game.world.despawn(entity);
+    }
+}
+
+#[test]
+fn an_ambush_engages_a_pack_immediately() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    despawn_every_hostile(&mut game);
+
+    for _ in 0..2000 {
+        game.maybe_ambush();
+        if game.has_active_battle() {
+            let enemies = game.all_living_enemies();
+            assert!(
+                !enemies.is_empty(),
+                "an ambush that opens a battle must put something in it"
+            );
+            return;
+        }
+    }
+    panic!("2000 ambush rolls never fired — RANDOM_ENCOUNTER_CHANCE may be broken");
+}
+
+/// Bosses are something you find and choose to fight. One that jumps you
+/// with no chance to decline is a death sentence you never opted into.
+#[test]
+fn an_ambush_never_fields_a_boss() {
+    let mut ambushes = 0;
+    for seed in 0..40 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        despawn_every_hostile(&mut game);
+        for _ in 0..400 {
+            game.maybe_ambush();
+            if !game.has_active_battle() {
+                continue;
+            }
+            ambushes += 1;
+            for enemy in game.all_living_enemies() {
+                let species = game.world.get::<Creature>(enemy).unwrap().species.clone();
+                let def = game.world.resource::<SpeciesDb>().get(&species).cloned();
+                assert!(
+                    !def.expect("an ambushed program's species must be loaded")
+                        .is_boss,
+                    "an ambush must never field a boss"
+                );
+            }
+            despawn_every_hostile(&mut game);
+            game.world.remove_resource::<BattleState>();
+        }
+    }
+    // Without this the whole sweep passes vacuously if ambushes stop
+    // firing — the assertion above only runs inside a battle.
+    assert!(
+        ambushes > 100,
+        "the sweep only fired {ambushes} ambushes; it is not exercising the boss check"
+    );
+}
+
+/// The base platform is a manufactured floor, not terrain. Nothing spawns
+/// on it and nothing should jump you on it — it is the one safe ground.
+#[test]
+fn no_ambush_fires_on_the_base_platform() {
+    let mut game = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 0);
+    despawn_every_hostile(&mut game);
+
+    for _ in 0..2000 {
+        game.maybe_ambush();
+        assert!(
+            !game.has_active_battle(),
+            "the base platform must never be ambushed"
+        );
+    }
+}
+
+/// The integration the ambush actually ships as: a walked step can open a
+/// fight. Every hostile is cleared immediately before each move, so the
+/// bump path in `move_player` has nothing to trigger on and any battle that
+/// appears is attributable to the ambush roll alone.
+#[test]
+fn walking_open_ground_can_be_ambushed() {
+    let mut game = Game::new(3, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    for step in 0..1000 {
+        despawn_every_hostile(&mut game);
+        let dx = if step % 2 == 0 { 1 } else { -1 };
+        game.move_player(dx, 0);
+        if game.has_active_battle() {
+            return;
+        }
+        if game.is_game_over().is_some() {
+            panic!("the player died before any ambush fired");
+        }
+    }
+    panic!("1000 walked steps never produced an ambush");
+}

@@ -104,12 +104,21 @@ impl App {
                 // arms call `&mut self` methods, and a `game` borrow held
                 // across the match would collide with them.
                 let Some(game) = &mut self.game else { return };
-                game.battle_flee();
+                let escaped = game.battle_flee();
                 let still_active = game.has_active_battle();
                 if !still_active {
                     self.mode = Mode::Playing;
                 }
-                self.push_battle_outcome_sounds(SoundEvent::Flee, still_active);
+                // A pinned attempt is not an escape: what the player hears
+                // is the volley it drew, not the jack-out that didn't
+                // happen. The engine logs why, so there's nothing to add to
+                // the status line.
+                let sound = if escaped {
+                    SoundEvent::Flee
+                } else {
+                    SoundEvent::Attack
+                };
+                self.push_battle_outcome_sounds(sound, still_active);
             }
             PartyCommandKind::AllDefend => self.plan_every_slot(BattleAction::Defend),
             PartyCommandKind::AllAttack => {

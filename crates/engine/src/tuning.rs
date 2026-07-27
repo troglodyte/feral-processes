@@ -259,9 +259,33 @@ pub const LOW_POWER_MIN_ATTACK_MULTIPLIER: f32 = 0.5;
 /// is the smaller standing bonus on top.
 pub const PARTY_PASSIVE_STAT_DIVISOR: i32 = 10;
 
-/// Chance that jacking out of a fight still costs the player a parting
-/// counter-strike — fleeing is reliable, but not free.
+/// Chance that a *successful* jack-out still costs the player a parting
+/// counter-strike. Whether the escape happens at all is a separate roll —
+/// see `battle::jack_out_chance`.
 pub const FLEE_COUNTERATTACK_CHANCE: f64 = 0.5;
+
+/// Coefficients of `battle::jack_out_chance`. The base is the escape chance
+/// at an even matchup — where your side's summed `Stats::power` equals
+/// theirs — before the luck roll, so running from a fair fight usually
+/// works. The chance scales linearly with that power ratio: outnumbered and
+/// outgunned, you are much likelier to be pinned.
+pub const JACK_OUT_BASE_CHANCE: f64 = 0.6;
+
+/// Uniform random multiplier drawn fresh on every jack-out attempt, so the
+/// odds are never a lookup: a hopeless-looking escape sometimes works and a
+/// favourable one sometimes doesn't. Same spread as the per-creature stat
+/// roll below, and for the same reason — enough wobble to matter, not
+/// enough to overturn the matchup.
+pub const JACK_OUT_LUCK_MIN: f64 = 0.8;
+pub const JACK_OUT_LUCK_MAX: f64 = 1.2;
+
+/// Hard bounds on the final jack-out chance, applied after the ratio and
+/// the luck roll. Mirrors `CAPTURE_CHANCE_MIN`/`MAX`: no escape is ever
+/// hopeless and none is ever certain. The floor is what keeps an ambush by
+/// an overwhelming pack survivable — expensive, since every failed attempt
+/// costs a full enemy volley, but never a guaranteed death.
+pub const JACK_OUT_CHANCE_MIN: f64 = 0.10;
+pub const JACK_OUT_CHANCE_MAX: f64 = 0.95;
 
 /// Uniform random-roll range applied independently to each of a newly
 /// created creature's stats (baked into `Stats` at spawn) and to its
@@ -309,6 +333,15 @@ pub const DEFAULT_TAMING_DIFFICULTY: f32 = 0.5;
 /// off-screen and is walked into rather than appearing on top of you.
 pub const WILD_SPAWN_CHANCE: f64 = 0.05;
 pub const WILD_SPAWN_RADIUS_TILES: i32 = 12;
+
+/// Chance per walked step that the player is ambushed — a biome-appropriate
+/// pack spawns adjacent and engages immediately, with no chance to route
+/// around it (see `Game::maybe_ambush`). Deliberately an order of magnitude
+/// rarer than an ordinary encounter feels like it should be: the map is
+/// already full of programs you can choose to fight, so this is the tax on
+/// crossing open ground rather than the main source of battles. Not rolled
+/// on base platform tiles, and never produces a boss or a nest.
+pub const RANDOM_ENCOUNTER_CHANCE: f64 = 0.02;
 
 /// How many wild programs a zone is seeded with on entry, before any
 /// per-tick spawn rolls — see `Game::spawn_initial_creatures`. Applies both

@@ -263,22 +263,18 @@ assuming it.
   and on the base platform being exempt.
 - `README.md:31` mentions fleeing in passing; check whether it overclaims.
 
-## Constraint on verification
+## Verification
 
-`crates/gui` does not currently compile: an in-flight renderer migration has
-swapped macroquad for Bevy in `crates/gui/Cargo.toml` without any
-corresponding source change, and `crates/gui/src/` still references
-macroquad throughout. That work is uncommitted, predates this branch, and is
-deliberately left untouched.
-
-The consequence is that `cargo test --workspace` — normally the final gate —
-cannot run. This change touches only `crates/engine` and one line of
-`crates/app-core`, neither of which depends on `crates/gui`, so the
-effective gate is:
+The standard gate applies:
 
 ```sh
-cargo test -p feral-processes-engine -p feral-processes-app-core
+cargo test --workspace
 ```
 
-Baseline on this branch before any change: **462 passed, 0 failed**. Any
-completion claim must cite that command, not a workspace pass.
+Baseline on this branch before any change: **554 passed, 0 failed** (462
+engine, 48 app-core, 42 gui, 2 launcher). Plus `cargo clippy --workspace`
+clean and `cargo fmt`, per CLAUDE.md.
+
+This change touches `crates/engine` and one line of `crates/app-core`;
+`crates/gui` needs no change, since jacking out is already routed through
+`PartyCommandKind::JackOut` and the flee sound is chosen in app-core.

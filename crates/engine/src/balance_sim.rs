@@ -190,9 +190,8 @@ pub fn beatable_by_a_fresh_player(species: &SpeciesDef) -> bool {
 /// reason the travelling-base work happened. See
 /// `docs/superpowers/specs/2026-07-24-travelling-base-design.md`.
 ///
-/// Mirrors the real payout in `systems::task_progress_system` (tier ×
-/// `ZoneLevel::stat_multiplier`) and the real reliability curve in
-/// `systems::mining_success_chance`, so a rebalance of either shows up here.
+/// Calls the real `systems::node_payout` and `systems::mining_success_chance`
+/// rather than restating them, so a rebalance of either shows up here.
 pub fn ticks_to_afford_portal(
     zone: u32,
     tier: u32,
@@ -200,7 +199,7 @@ pub fn ticks_to_afford_portal(
     portal_fragment_rate: u32,
     market_price: u32,
 ) -> f64 {
-    let payout = (tier * ZoneLevel(zone).stat_multiplier() as u32) as f64;
+    let payout = crate::systems::node_payout(tier, ZoneLevel(zone)) as f64;
     let success = crate::systems::mining_success_chance(tier);
     let per_tick = payout * success / ticks_per_unit as f64;
     // Priced through the same helper the game charges with (see
@@ -239,7 +238,8 @@ struct Fighter {
     atk: i32,
     def: i32,
     move_power: i32,
-    /// Share of incoming fire, matching `Game::roll_enemy_target`'s weights.
+    /// Share of incoming fire, from the same `battle::slot_aggro_weight`
+    /// `Game::roll_enemy_target` rolls against.
     aggro: f64,
 }
 
@@ -315,11 +315,7 @@ pub fn simulate_roster_fight(
             atk: stats.atk,
             def: stats.def,
             move_power,
-            aggro: if slot < crate::tuning::FRONT_SLOTS {
-                crate::tuning::FRONT_SLOT_AGGRO_WEIGHT as f64
-            } else {
-                crate::tuning::BACK_SLOT_AGGRO_WEIGHT as f64
-            },
+            aggro: crate::battle::slot_aggro_weight(slot, false) as f64,
         })
         .collect();
 

@@ -2,7 +2,10 @@ use bevy_ecs::prelude::Entity;
 
 use crate::items::ItemId;
 use crate::species::SpeciesId;
-use crate::tuning::{LOW_POWER_ATTACK_THRESHOLD, LOW_POWER_MIN_ATTACK_MULTIPLIER, MIN_DAMAGE};
+use crate::tuning::{
+    BACK_SLOT_AGGRO_WEIGHT, DEFEND_AGGRO_WEIGHT, FRONT_SLOT_AGGRO_WEIGHT, FRONT_SLOTS,
+    LOW_POWER_ATTACK_THRESHOLD, LOW_POWER_MIN_ATTACK_MULTIPLIER, MIN_DAMAGE,
+};
 
 /// One species' worth of the wild pack in an active intrusion.
 /// `members[0]` is the front — the only member that takes hits and the only
@@ -35,6 +38,24 @@ pub(crate) fn ceil_sqrt(n: u32) -> u32 {
 /// projections and the real round loop cannot drift.
 pub(crate) fn attackers_in_group(n: usize) -> usize {
     ceil_sqrt(n as u32) as usize
+}
+
+/// Relative weight a roster member at `slot` carries in a wild program's
+/// target roll — the player is slot 0 and party members follow in order.
+/// Ranks are soft: a back-slot member is hit less often, never zero times.
+/// Bracing adds `DEFEND_AGGRO_WEIGHT` on top, which is what makes Defend a
+/// party-level play rather than a selfish one.
+///
+/// Shared with `crate::balance_sim` so the offline projections and the real
+/// target roll cannot drift. The sim passes `defending: false` throughout —
+/// it models no Defend actions, and its own docs say so.
+pub(crate) fn slot_aggro_weight(slot: usize, defending: bool) -> u32 {
+    let base = if slot < FRONT_SLOTS {
+        FRONT_SLOT_AGGRO_WEIGHT
+    } else {
+        BACK_SLOT_AGGRO_WEIGHT
+    };
+    base + if defending { DEFEND_AGGRO_WEIGHT } else { 0 }
 }
 
 /// One combatant in an initiative order — an index rather than an `Entity`,

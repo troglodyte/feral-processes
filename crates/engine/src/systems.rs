@@ -90,6 +90,20 @@ pub fn wander_ai_system(
 /// costing the cycle for nothing. Scales up with level so a node can be
 /// made more reliable over time; a basic level-1 node succeeds only about
 /// half the time.
+/// What one completed gather cycle yields from a non-banked node of `tier`
+/// at `zone`. Payout tracks zone depth on the same doubling base as wild
+/// stats and `GEAR_LEVEL_GROWTH` — a flat base economy against an
+/// exponential curve is what made settling never worth the time.
+///
+/// Shared with `crate::balance_sim` so its base-economy projections and the
+/// real payout cannot drift. Banked resources bypass this entirely for a
+/// flat 1 (see `task_progress_system`): their bank limit is the pacing
+/// mechanism, and an exponential payout would just overflow it every few
+/// cycles.
+pub(crate) fn node_payout(tier: u32, zone: ZoneLevel) -> u32 {
+    tier * zone.stat_multiplier() as u32
+}
+
 pub(crate) fn mining_success_chance(level: u32) -> f64 {
     (MINING_SUCCESS_BASE + level as f64 * MINING_SUCCESS_PER_LEVEL).min(1.0)
 }
@@ -164,19 +178,12 @@ pub fn task_progress_system(
             let resource_name = def
                 .map(|d| d.name.as_str())
                 .unwrap_or(node.resource.as_str());
-            // Payout tracks zone depth on the same doubling base as wild
-            // stats and GEAR_LEVEL_GROWTH — a flat base economy against an
-            // exponential curve is what made settling never worth the time.
             // Read per cycle rather than baked in at deploy, so a base that
             // travels to a deeper zone immediately earns at the new rate.
-            //
-            // A banked resource is excluded: its bank limit is the pacing
-            // mechanism, and an exponential payout would just overflow it
-            // every few cycles.
             let payout = if def.and_then(|d| d.bank_limit).is_some() {
                 1
             } else {
-                tier.map(|t| t.0).unwrap_or(1) * zone.stat_multiplier() as u32
+                node_payout(tier.map(|t| t.0).unwrap_or(1), *zone)
             };
             let landed = inv.add_capped(node.resource.clone(), payout, &item_db);
             if landed == 0 {

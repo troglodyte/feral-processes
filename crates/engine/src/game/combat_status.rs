@@ -1,11 +1,7 @@
 //! Damage, status effects, enemy retaliation, and tearing a battle down —
 //! whether it ended in a win, a flee, or a loss.
 
-use crate::tuning::FLEE_COUNTERATTACK_CHANCE;
-use crate::tuning::{
-    BACK_SLOT_AGGRO_WEIGHT, DEFEND_AGGRO_WEIGHT, DEFEND_DEF_BONUS, ENGAGED_GROUPS,
-    FRONT_SLOT_AGGRO_WEIGHT, FRONT_SLOTS,
-};
+use crate::tuning::{DEFEND_DEF_BONUS, ENGAGED_GROUPS, FLEE_COUNTERATTACK_CHANCE};
 use crate::*;
 
 impl Game {
@@ -58,14 +54,7 @@ impl Game {
             if !self.creature_alive(entity) {
                 continue;
             }
-            let mut weight = if slot < FRONT_SLOTS {
-                FRONT_SLOT_AGGRO_WEIGHT
-            } else {
-                BACK_SLOT_AGGRO_WEIGHT
-            };
-            if self.is_defending(entity) {
-                weight += DEFEND_AGGRO_WEIGHT;
-            }
+            let weight = crate::battle::slot_aggro_weight(slot, self.is_defending(entity));
             pool.push((entity, weight));
         }
         let total: u32 = pool.iter().map(|(_, w)| w).sum();

@@ -71,7 +71,7 @@ impl Game {
                 StatusEffects::default(),
                 CombatBuff::default(),
                 Perks::default(),
-                Routines::default(),
+                Routines(vec![abilities::DECOMPILE_ABILITY_ID.to_string()]),
             ))
             .id();
         world.insert_resource(PlayerEntity(player));
@@ -608,15 +608,19 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
             ),
         ));
     }
-    if abilities.get(abilities::FALLBACK_ABILITY_ID).is_none() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!(
-                "ability set is missing the fallback ability {:?}, which every \
-                 companion without a declared kit relies on",
-                abilities::FALLBACK_ABILITY_ID
-            ),
-        ));
+    for required in [
+        abilities::FALLBACK_ABILITY_ID,
+        abilities::DECOMPILE_ABILITY_ID,
+    ] {
+        if abilities.get(required).is_none() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "ability set is missing the mandatory ability {required:?} — the game \
+                     pre-installs it and cannot start without it"
+                ),
+            ));
+        }
     }
     Ok(AssetDbs {
         abilities,

@@ -93,8 +93,22 @@ pub(super) fn player_attacks(game: &mut Game) {
     resolve_round_with(game, BattleAction::Attack { group: 0 });
 }
 
+/// Plans the player's decompile as the Special it now is, and resolves the
+/// round.
 pub(super) fn player_decompiles(game: &mut Game) {
-    resolve_round_with(game, BattleAction::Decompile { group: 0 });
+    let index = game
+        .battle_special_options(0)
+        .into_iter()
+        .find(|o| o.name.to_lowercase().contains("decompile"))
+        .expect("the player starts with decompile installed")
+        .index;
+    resolve_round_with(
+        game,
+        BattleAction::Special {
+            ability: index,
+            target: crate::battle::SpecialTarget::EnemyGroup { group: 0 },
+        },
+    );
 }
 
 /// Resolves a round in which `companion` uses its Special (the rally or

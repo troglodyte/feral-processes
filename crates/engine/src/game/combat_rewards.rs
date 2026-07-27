@@ -197,28 +197,20 @@ impl Game {
 
     /// One decompile attempt against `group`'s front program: spends a
     /// catalyst, rolls `taming::capture_chance`, and on success converts the
-    /// target into a tamed program and drops it from the group.
+    /// target into a tamed program and drops it from the group. Returns
+    /// whether that ended the battle.
     ///
-    /// `None` means the attempt was refused before anything was spent — no
-    /// catalyst, or no room on the roster — so the caller must not charge a
-    /// turn for it. `Some(battle_over)` means the attempt happened.
-    pub(crate) fn attempt_decompile(&mut self, group: usize, player: Entity) -> Option<bool> {
-        // Refuse before spending the catalyst (or the turn) if the roster is
-        // already full — a captured program has to live somewhere.
-        let capacity = self.pet_capacity();
-        let owned = self.pet_count();
-        if owned >= capacity {
-            self.log(format!(
-                "Your roster is full ({owned}/{capacity}) — sell a program at a Market, fuse two together, or deploy a Data Cache to make room."
-            ));
-            return None;
-        }
-
-        let Some((catalyst, potency)) = self.taming_catalyst() else {
-            self.log("You have no taming catalyst.");
-            return None;
+    /// The roster-full and no-catalyst refusals live in
+    /// `ability_unavailable` now: a greyed row can't be planned, and
+    /// `battle_set_action` refuses one that somehow is, so neither state can
+    /// reach a resolving round.
+    pub(crate) fn attempt_decompile(&mut self, group: usize, player: Entity) -> bool {
+        let (catalyst, potency) = self
+            .taming_catalyst()
+            .expect("ability_unavailable greys decompile when no catalyst is held");
+        let Some(front) = self.front_of_group(group) else {
+            return false;
         };
-        let front = self.front_of_group(group)?;
         self.world
             .get_mut::<Inventory>(player)
             .unwrap()
@@ -245,7 +237,7 @@ impl Game {
 
         if !roll {
             self.log("The program's ICE holds — decompile failed!");
-            return Some(false);
+            return false;
         }
 
         let wild_max_hp = self.world.get::<Stats>(front).unwrap().max_hp;
@@ -266,9 +258,9 @@ impl Game {
         self.award_player_xp(player, wild_max_hp as u32);
         if self.remove_member(group, 0) {
             self.end_battle(player, Some(front));
-            return Some(true);
+            return true;
         }
         self.log("Another rogue program from the pack engages!");
-        Some(false)
+        false
     }
 }

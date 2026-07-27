@@ -483,7 +483,29 @@ fn taming_is_refused_when_the_roster_is_full_and_a_data_cache_makes_room() {
 
     start_battle_with_a_wild_program(&mut game);
     set_inventory(&mut game, &[(ids::ICE_BREAKER, 1)]);
-    player_decompiles(&mut game);
+
+    // A full roster greys the row, so `battle_set_action` refuses it before
+    // a round can ever resolve — the refusal is this `Err`, not a logged
+    // line.
+    let index = game
+        .battle_special_options(0)
+        .into_iter()
+        .find(|o| o.name.to_lowercase().contains("decompile"))
+        .expect("the player starts with decompile installed")
+        .index;
+    let err = game
+        .battle_set_action(
+            0,
+            BattleAction::Special {
+                ability: index,
+                target: battle::SpecialTarget::EnemyGroup { group: 0 },
+            },
+        )
+        .unwrap_err();
+    assert!(
+        err.contains("roster is full"),
+        "the refusal should say the roster is full, got: {err}"
+    );
 
     let held = |g: &Game| {
         g.world
@@ -495,12 +517,6 @@ fn taming_is_refused_when_the_roster_is_full_and_a_data_cache_makes_room() {
         held(&game),
         1,
         "a full roster must refuse before the catalyst is spent"
-    );
-    assert!(
-        game.message_log(usize::MAX)
-            .into_iter()
-            .any(|(_, l)| l.contains("roster is full")),
-        "the refusal should say the roster is full"
     );
 
     // A Data Cache raises the cap to 5, so the same attempt now has room

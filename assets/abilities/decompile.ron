@@ -1,0 +1,11 @@
+(
+    id: "decompile",
+    name: "Decompile",
+    description: "Spend a taming catalyst to break a group's front program and run it yourself.",
+    target: OneEnemyGroupFront,
+    effect: Decompile,
+    cooldown: 0,
+    // Zero, deliberately: capturing has never cost Fatigue, and folding it
+    // into the ability system is not the place to start charging for it.
+    fatigue_cost: 0.0,
+)

@@ -309,7 +309,7 @@ impl Game {
         }
         let planned_len = battle.planned.len();
         let target_group = match &action {
-            BattleAction::Attack { group } | BattleAction::Decompile { group } => Some(*group),
+            BattleAction::Attack { group } => Some(*group),
             // A party-facing Special has no group to validate at all.
             BattleAction::Special {
                 target: battle::SpecialTarget::EnemyGroup { group },
@@ -534,6 +534,17 @@ impl Game {
         if remaining > 0 {
             return Some(format!("{remaining} more rounds"));
         }
+        // Decompile is refused for two reasons no other ability has. They
+        // used to live in `attempt_decompile`, which refunded the round
+        // silently; here the row greys with the reason instead.
+        if matches!(ability.effect, AbilityEffect::Decompile) {
+            if self.taming_catalyst().is_none() {
+                return Some("no taming catalyst".to_string());
+            }
+            if self.pet_count() >= self.pet_capacity() {
+                return Some("roster is full".to_string());
+            }
+        }
         let fatigue = self
             .world
             .get::<Needs>(self.player_entity())
@@ -639,21 +650,6 @@ impl Game {
         }
 
         if is_player {
-            options.push(ActionOption {
-                kind: ActionKind::Decompile,
-                key: 'c',
-                label: "de[c]ompile".to_string(),
-                detail: "Attempt to capture a group's front program".to_string(),
-                target: TargetSpec::EnemyGroup,
-                unavailable: match (
-                    self.taming_catalyst(),
-                    self.pet_count() >= self.pet_capacity(),
-                ) {
-                    (None, _) => Some("no taming catalyst".to_string()),
-                    (_, true) => Some("roster is full".to_string()),
-                    _ => None,
-                },
-            });
             options.push(ActionOption {
                 kind: ActionKind::UseItem,
                 key: 'u',

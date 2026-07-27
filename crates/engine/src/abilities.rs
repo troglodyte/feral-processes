@@ -14,6 +14,11 @@ pub type AbilityId = String;
 /// every call site, the same way a missing economy role aborts the load.
 pub const FALLBACK_ABILITY_ID: &str = "priority_boost";
 
+/// The ability a new game pre-installs into the player's first routine slot
+/// — capturing a program is reached through the Special menu like anything
+/// else. Validated at startup the same way `FALLBACK_ABILITY_ID` is.
+pub const DECOMPILE_ABILITY_ID: &str = "decompile";
+
 /// Routine slots at `level`, from one constant set. Both public wrappers
 /// call this so the companion and player curves cannot drift into two
 /// different shapes — only their constants differ.
@@ -94,6 +99,11 @@ pub enum AbilityEffect {
         power: i32,
         duration: u32,
     },
+    /// Spends a taming catalyst and rolls `taming::capture_chance` against
+    /// the target group's front program — see `Game::attempt_decompile`.
+    /// Carries no numbers of its own: the whole formula is `taming`'s, and
+    /// duplicating any of it here would be a second copy to drift.
+    Decompile,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -287,7 +297,7 @@ mod tests {
             warnings.is_empty(),
             "the shipped set must not warn: {warnings:?}"
         );
-        assert_eq!(db.all().count(), 10, "10 abilities ship with the game");
+        assert_eq!(db.all().count(), 11, "11 abilities ship with the game");
         assert!(
             db.get(FALLBACK_ABILITY_ID).is_some(),
             "the fallback ability must ship, or every companion loses its Special"

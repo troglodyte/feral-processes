@@ -343,7 +343,6 @@ fn action_from(kind: ActionKind, c: Collected) -> Option<BattleAction> {
             },
         }),
         ActionKind::Defend => Some(BattleAction::Defend),
-        ActionKind::Decompile => Some(BattleAction::Decompile { group: c.group? }),
         ActionKind::UseItem => Some(BattleAction::UseItem { item: c.item? }),
     }
 }

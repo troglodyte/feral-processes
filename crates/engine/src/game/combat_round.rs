@@ -150,24 +150,30 @@ impl Game {
                         needs.fatigue = (needs.fatigue - ability.fatigue_cost).max(0.0);
                     }
 
-                    let recipients = self.ability_recipients(ability.target, &target);
-                    self.use_ability(&ability, entity, &name, &recipients);
-                    // An area effect can drop members from any rank, and a
-                    // corpse left in a group would be promoted to front and
-                    // then attacked as though alive.
-                    self.reap_dead_members(player);
+                    // Decompile needs the *group index*, not the recipient
+                    // entity: a successful capture drops the target out of
+                    // its group. Every other effect only ever touches the
+                    // recipients it lands on.
+                    if matches!(ability.effect, AbilityEffect::Decompile) {
+                        if let battle::SpecialTarget::EnemyGroup { group } = target
+                            && let Some(group) = self.retarget(group)
+                        {
+                            self.attempt_decompile(group, player);
+                        }
+                    } else {
+                        let recipients = self.ability_recipients(ability.target, &target);
+                        self.use_ability(&ability, entity, &name, &recipients);
+                        // An area effect can drop members from any rank, and
+                        // a corpse left in a group would be promoted to front
+                        // and then attacked as though alive.
+                        self.reap_dead_members(player);
+                    }
                 }
             }
             // Already applied up front in `battle_resolve_round`, so that
             // bracing covers the whole round rather than only what happens
             // after this member's place in the initiative order.
             BattleAction::Defend => {}
-            BattleAction::Decompile { group } => {
-                let Some(group) = self.retarget(group) else {
-                    return;
-                };
-                self.attempt_decompile(group, player);
-            }
             BattleAction::UseItem { item } => {
                 self.consume_item(&item);
             }
@@ -267,7 +273,6 @@ impl Game {
                 format!("{name} -> {on}")
             }
             BattleAction::Defend => "Defend".to_string(),
-            BattleAction::Decompile { group } => format!("Decompile {}", group_letter(*group)),
             BattleAction::UseItem { item } => format!("Use {}", self.item_name(item)),
         }
     }
@@ -578,6 +583,12 @@ impl Game {
                         self.apply_status_effect(recipient, &effect, &on);
                     }
                 }
+                // `resolve_one_action` branches around `use_ability` entirely
+                // for `Decompile` — it needs the group index, not a
+                // recipient entity — so this arm is unreachable in practice.
+                AbilityEffect::Decompile => unreachable!(
+                    "Decompile never reaches use_ability; resolve_one_action handles it directly"
+                ),
             }
         }
     }

@@ -99,18 +99,28 @@ fn decompiling_with_no_catalyst_is_refused_without_naming_a_shipped_item() {
     let wild = start_battle_with_a_wild_program(&mut game);
     set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 5)]);
 
-    player_decompiles(&mut game);
+    // No catalyst greys the row, so `battle_set_action` refuses it before a
+    // round can ever resolve — the refusal is this `Err`, not a logged line.
+    let index = game
+        .battle_special_options(0)
+        .into_iter()
+        .find(|o| o.name.to_lowercase().contains("decompile"))
+        .expect("the player starts with decompile installed")
+        .index;
+    let err = game
+        .battle_set_action(
+            0,
+            BattleAction::Special {
+                ability: index,
+                target: battle::SpecialTarget::EnemyGroup { group: 0 },
+            },
+        )
+        .unwrap_err();
 
     assert!(
         game.world.get::<Tamed>(wild).is_none(),
         "a decompile with no catalyst must not tame anything"
     );
-    let refusal = game
-        .message_log(usize::MAX)
-        .into_iter()
-        .map(|(_, line)| line)
-        .find(|line| line.starts_with("You have no"))
-        .expect("the refusal should be logged");
     let shipped_names: Vec<String> = game
         .world
         .resource::<ItemDb>()
@@ -119,8 +129,8 @@ fn decompiling_with_no_catalyst_is_refused_without_naming_a_shipped_item() {
         .collect();
     for name in shipped_names {
         assert!(
-            !refusal.contains(&name),
-            "the refusal must not name a specific item, got: {refusal}"
+            !err.contains(&name),
+            "the refusal must not name a specific item, got: {err}"
         );
     }
 }

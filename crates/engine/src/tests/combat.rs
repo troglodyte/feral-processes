@@ -175,11 +175,10 @@ fn battle_plan_remaining_skips_a_slot_that_cannot_act() {
 }
 
 /// Uppercase A and D became party-wide commands, which only works if the
-/// per-slot keys underneath them are Attack and Defend. Decompile moved
-/// off `d` to make room. Pinned here so a future re-key cannot silently
-/// swap a brace for a capture attempt that spends a taming catalyst.
+/// per-slot keys underneath them are Attack and Defend. Pinned here so a
+/// future re-key cannot silently swap a brace for something else.
 #[test]
-fn battle_action_keys_are_lowercase_with_defend_on_d_and_decompile_on_c() {
+fn battle_action_keys_are_lowercase_with_defend_on_d() {
     let mut game = Game::new(78, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
@@ -195,7 +194,7 @@ fn battle_action_keys_are_lowercase_with_defend_on_d_and_decompile_on_c() {
     };
     assert_eq!(key_for(ActionKind::Attack), 'a');
     assert_eq!(key_for(ActionKind::Defend), 'd');
-    assert_eq!(key_for(ActionKind::Decompile), 'c');
+    assert_eq!(key_for(ActionKind::Special), 's');
     assert_eq!(key_for(ActionKind::UseItem), 'u');
 
     for option in &options {
@@ -208,38 +207,6 @@ fn battle_action_keys_are_lowercase_with_defend_on_d_and_decompile_on_c() {
             option.label
         );
     }
-}
-
-/// The menu is data, not renderer strings. Decompile must report *why*
-/// it is unavailable so the UI can grey it with a reason instead of
-/// hiding it and leaving the player guessing.
-#[test]
-fn decompile_is_offered_with_a_reason_when_no_catalyst_is_held() {
-    let mut game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let player = game.player_entity();
-    // `Inventory` exposes no `clear` — `items` is a public
-    // `Vec<(ItemId, u32)>`, so empty it directly.
-    game.world
-        .get_mut::<Inventory>(player)
-        .unwrap()
-        .items
-        .clear();
-    let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
-    game.start_battle(vec![wild]);
-
-    let options = game.battle_action_options(0);
-    let decompile = options
-        .iter()
-        .find(|o| o.kind == ActionKind::Decompile)
-        .expect("Decompile must be listed even when unusable");
-    assert!(
-        decompile
-            .unavailable
-            .as_deref()
-            .is_some_and(|r| r.contains("catalyst")),
-        "expected a catalyst reason, got {:?}",
-        decompile.unavailable
-    );
 }
 
 /// The planning API is the whole extensibility story: the engine emits
@@ -610,6 +577,9 @@ fn a_buff_aimed_at_a_companion_does_not_outlive_the_battle() {
 fn the_player_is_offered_no_special_before_installing_a_routine() {
     let mut game = Game::new(37, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
+    // The player starts with decompile installed; pop it out so the fixture
+    // actually has nothing installed, which is the state under test.
+    game.uninstall_routine(player, 0).unwrap();
     let enemy = spawn_wild_on_player_tile(&mut game);
     insert_battle(&mut game, player, vec![enemy]);
 
@@ -626,6 +596,9 @@ fn installing_a_researched_routine_makes_the_players_special_available() {
     let mut game = Game::new(38, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut game, "self_exec");
     let player = game.player_entity();
+    // Only one slot at level 1, and decompile already occupies it — free it
+    // before installing the routine under test.
+    game.uninstall_routine(player, 0).unwrap();
     let item = crate::abilities::routine_item_id("priority_boost");
     game.install_routine(player, &item).unwrap();
     let enemy = spawn_wild_on_player_tile(&mut game);

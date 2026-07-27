@@ -263,20 +263,78 @@ fn researching_a_node_grants_routine_items_rather_than_the_ability_itself() {
         1,
         "the routine arrives as an item, not as an installed ability"
     );
+    // Not `actor_abilities(..).is_empty()`: the player always starts with
+    // decompile installed now, so the general emptiness check would fail
+    // for a reason unrelated to what this test is pinning down.
     assert!(
-        game.actor_abilities(game.player_entity()).is_empty(),
+        game.actor_abilities(game.player_entity())
+            .iter()
+            .all(|a| a.id != ability),
         "researching does not install — that is a separate act"
     );
 }
 
 #[test]
-fn a_member_with_no_routines_is_offered_no_special_at_all() {
-    let mut game = Game::new(42, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+fn a_new_game_starts_with_decompile_installed_in_the_players_only_slot() {
+    let game = Game::new(51, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let slots = game.routine_view(game.player_entity());
+    assert_eq!(slots.len(), 1, "level 1 gives the player exactly one slot");
+    assert_eq!(
+        slots[0].ability.as_deref(),
+        Some(crate::abilities::DECOMPILE_ABILITY_ID)
+    );
+}
+
+#[test]
+fn decompile_is_reached_through_special_not_its_own_command() {
+    let mut game = Game::new(52, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    start_battle_with_a_wild_program(&mut game);
+    let options = game.battle_action_options(0);
+    assert!(
+        options.iter().any(|o| o.kind == ActionKind::Special),
+        "the player's Special row carries decompile"
+    );
+    assert!(
+        game.battle_special_options(0)
+            .iter()
+            .any(|o| o.name.to_lowercase().contains("decompile")),
+        "decompile is one of the abilities on offer"
+    );
+}
+
+#[test]
+fn decompile_greys_with_a_reason_rather_than_refunding_the_round() {
+    let mut game = Game::new(53, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_inventory(&mut game, &[]); // no taming catalyst
+    start_battle_with_a_wild_program(&mut game);
+    let row = game
+        .battle_special_options(0)
+        .into_iter()
+        .find(|o| o.name.to_lowercase().contains("decompile"))
+        .expect("decompile is installed");
+    assert_eq!(row.unavailable.as_deref(), Some("no taming catalyst"));
+
+    let err = game
+        .battle_set_action(
+            0,
+            BattleAction::Special {
+                ability: row.index,
+                target: battle::SpecialTarget::EnemyGroup { group: 0 },
+            },
+        )
+        .unwrap_err();
+    assert!(err.contains("no taming catalyst"), "{err}");
+}
+
+#[test]
+fn popping_decompile_out_leaves_the_player_with_no_special() {
+    let mut game = Game::new(54, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.uninstall_routine(game.player_entity(), 0).unwrap();
     start_battle_with_a_wild_program(&mut game);
     assert!(
         game.battle_action_options(0)
             .iter()
             .all(|o| o.kind != ActionKind::Special),
-        "the row is hidden, not greyed, when nothing is installed"
+        "giving up decompile really does cost you the command"
     );
 }

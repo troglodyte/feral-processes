@@ -91,9 +91,6 @@ pub enum BattleAction {
         target: SpecialTarget,
     },
     Defend,
-    Decompile {
-        group: usize,
-    },
     UseItem {
         item: ItemId,
     },
@@ -137,7 +134,6 @@ pub enum ActionKind {
     Attack,
     Special,
     Defend,
-    Decompile,
     UseItem,
 }
 

@@ -14,8 +14,17 @@ use crate::*;
 /// one group. Multi-group behaviour belongs to the engine's own tests,
 /// which can build a pack directly instead of fishing for a seed.
 fn battling_app() -> App {
+    battling_app_with(|_| {})
+}
+
+/// Same seed search as `battling_app`, but `setup` runs on the fresh game
+/// before anything walks toward battle — the only window some engine calls
+/// (like `uninstall_routine`) allow, since they refuse once a battle is
+/// active.
+fn battling_app_with(setup: impl Fn(&mut Game)) -> App {
     for seed in 0..200u32 {
         let mut app = test_app(seed);
+        setup(app.game.as_mut().unwrap());
         let game = app.game.as_mut().unwrap();
         let player = game.player_status().position;
         let target = game
@@ -430,13 +439,21 @@ fn completing_every_slot_resolves_the_round_without_a_narration_page() {
     );
 }
 
-/// The player's Special row is hidden entirely until a routine is
-/// installed — a fresh game has researched nothing, let alone installed it.
-/// If the row silently reappeared, pressing `s` would plan a Special
-/// against an empty ability list and silently cost the player their round.
+/// The player's Special row is hidden entirely once nothing is installed —
+/// a fresh game pre-installs decompile, so this pops it back out first. If
+/// the row silently reappeared, pressing `s` would plan a Special against an
+/// empty ability list and silently cost the player their round.
 #[test]
 fn pressing_special_with_nothing_installed_does_nothing() {
-    let mut app = battling_app();
+    let mut app = battling_app_with(|game| {
+        let player = game
+            .view_entities(12, 12)
+            .into_iter()
+            .find(|e| e.is_player)
+            .expect("the player is always in view of itself")
+            .entity;
+        game.uninstall_routine(player, 0).unwrap();
+    });
     assert!(
         app.game
             .as_ref()

@@ -403,10 +403,16 @@ fn an_ability_costing_more_fatigue_than_you_have_is_unavailable() {
 #[test]
 fn the_player_has_no_abilities_until_they_research_one() {
     let game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    assert!(
-        game.actor_abilities(game.player_entity()).is_empty(),
-        "the player starts with nothing to spend a Special on — that's what \
-         the research is selling"
+    let ids: Vec<String> = game
+        .actor_abilities(game.player_entity())
+        .into_iter()
+        .map(|a| a.id)
+        .collect();
+    assert_eq!(
+        ids,
+        vec![crate::abilities::DECOMPILE_ABILITY_ID.to_string()],
+        "the player starts with only the pre-installed decompile — everything else is \
+         what the research is selling"
     );
 }
 
@@ -415,6 +421,9 @@ fn researching_self_execution_grants_the_player_priority_boost() {
     let mut game = Game::new(32, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut game, "self_exec");
 
+    // The only slot at level 1 already holds decompile; free it for the
+    // routine this test is actually about.
+    game.uninstall_routine(game.player_entity(), 0).unwrap();
     let item = crate::abilities::routine_item_id("priority_boost");
     game.install_routine(game.player_entity(), &item).unwrap();
 
@@ -456,6 +465,9 @@ fn an_ability_granted_by_two_nodes_stacks_the_item_rather_than_double_installing
         "each node deposits its own copy of the routine"
     );
 
+    // The only slot at level 1 already holds decompile; free it for the
+    // routine this test is actually about.
+    game.uninstall_routine(game.player_entity(), 0).unwrap();
     game.install_routine(game.player_entity(), &item).unwrap();
     let ids: Vec<String> = game
         .actor_abilities(game.player_entity())
@@ -480,7 +492,10 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
     let player = game.player_entity();
     // A level-1 player has only one routine slot (see
     // `tuning::PLAYER_ROUTINE_SLOT_BASE`), so both grants need a slot to land in.
+    // Levelling up doesn't evict decompile from the first, so it's popped
+    // out explicitly to make room.
     set_level(&mut game, player, 10);
+    game.uninstall_routine(player, 0).unwrap();
     let priority_boost = crate::abilities::routine_item_id("priority_boost");
     game.install_routine(player, &priority_boost).unwrap();
     let hot_patch_item = crate::abilities::routine_item_id("hot_patch");
@@ -534,6 +549,9 @@ fn a_player_special_spends_the_players_fatigue_once() {
         let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         unlock_research_chain(&mut game, "kernel_privileges");
         let player = game.player_entity();
+        // The only slot at level 1 already holds decompile; free it for the
+        // routine this test is actually about.
+        game.uninstall_routine(player, 0).unwrap();
         let item = crate::abilities::routine_item_id("null_route");
         game.install_routine(player, &item).unwrap();
         let enemy = spawn_wild_on_player_tile(&mut game);
@@ -546,6 +564,7 @@ fn a_player_special_spends_the_players_fatigue_once() {
 
     let mut probe = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut probe, "kernel_privileges");
+    probe.uninstall_routine(probe.player_entity(), 0).unwrap();
     let item = crate::abilities::routine_item_id("null_route");
     probe.install_routine(probe.player_entity(), &item).unwrap();
     let abilities = probe.actor_abilities(probe.player_entity());
@@ -578,7 +597,10 @@ fn a_save_round_trip_preserves_the_players_abilities() {
     let player = game.player_entity();
     // A level-1 player has only one routine slot (see
     // `tuning::PLAYER_ROUTINE_SLOT_BASE`), so both grants need a slot to land in.
+    // Levelling up doesn't evict decompile from the first, so it's popped
+    // out explicitly to make room.
     set_level(&mut game, player, 10);
+    game.uninstall_routine(player, 0).unwrap();
     let priority_boost = crate::abilities::routine_item_id("priority_boost");
     game.install_routine(player, &priority_boost).unwrap();
     let hot_patch = crate::abilities::routine_item_id("hot_patch");
@@ -618,8 +640,12 @@ fn the_companion_fallback_does_not_leak_onto_the_player() {
         !game.actor_abilities(companion).is_empty(),
         "a companion always resolves at least the fallback"
     );
-    assert!(
-        game.actor_abilities(game.player_entity()).is_empty(),
-        "the player gets no fallback"
+    assert_eq!(
+        game.actor_abilities(game.player_entity())
+            .into_iter()
+            .map(|a| a.id)
+            .collect::<Vec<_>>(),
+        vec![crate::abilities::DECOMPILE_ABILITY_ID.to_string()],
+        "the player gets decompile, not the companion fallback"
     );
 }

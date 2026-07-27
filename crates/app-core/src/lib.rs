@@ -122,7 +122,12 @@ const REALTIME_TICK_INTERVAL: Duration = Duration::from_secs(1);
 ///
 /// Presentation rather than difficulty, which is why it lives here and not
 /// in the engine's `tuning.rs`.
-pub const REVEAL_LINES_PER_SECOND: f32 = 12.0;
+///
+/// A typical round narrates four lines, so this is a round per second — a
+/// line landing every quarter second, which reads as arriving rather than
+/// as already being there. The first attempt at this was 12/sec, which put
+/// the same round on screen in a third of a second and looked instant.
+pub const REVEAL_LINES_PER_SECOND: f32 = 4.0;
 
 /// How long a refusal ("that ability isn't ready") stays on screen before
 /// clearing itself, in seconds.
@@ -144,9 +149,10 @@ struct BattleReveal {
     /// Sub-line carry, so a frame covering less than one line's worth of
     /// time isn't rounded away and lost.
     accumulated: f32,
-    /// The `Game::battle_log_id` this count belongs to. When the engine's id
-    /// moves on, a new battle has started and the count restarts.
-    battle_id: u64,
+    /// The `Game::battle_log_generation` this count belongs to. When the
+    /// engine's generation moves on, the pane has a fresh range — a new
+    /// round or a new battle — and the count restarts.
+    generation: u64,
 }
 
 /// A frontend-agnostic input event. Every renderer crate maps its own input

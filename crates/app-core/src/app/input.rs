@@ -120,11 +120,11 @@ impl App {
     /// testable without a sleep.
     pub fn advance_reveal(&mut self, dt: f32) {
         let Some(game) = &self.game else { return };
-        let id = game.battle_log_id();
+        let generation = game.battle_log_generation();
         let total = game.battle_log().len();
-        if self.reveal.battle_id != id {
+        if self.reveal.generation != generation {
             self.reveal = BattleReveal {
-                battle_id: id,
+                generation,
                 ..BattleReveal::default()
             };
         }
@@ -137,8 +137,11 @@ impl App {
             self.reveal.revealed += 1;
         }
         // Credit left over once the last line is out would otherwise be
-        // banked and spent the instant the next round logs, dumping it whole
-        // — the very thing this pacing exists to prevent.
+        // banked and spent the instant more lines land, dumping them whole.
+        // A new round resets the whole counter anyway; this covers the case
+        // where the *same* range grows — the `tick` inside a battle action
+        // can have a background system log into it after the reveal caught
+        // up.
         if self.reveal.revealed >= total {
             self.reveal.accumulated = 0.0;
         }
@@ -159,13 +162,30 @@ impl App {
         }
     }
 
+    /// How many lines are on screen right now.
+    ///
+    /// A count belonging to a superseded generation reads as zero rather
+    /// than as itself: the round it counted has been replaced, and the new
+    /// one has shown nothing yet. `advance_reveal` is what actually resets
+    /// the counter, but it runs once a frame — so between a round resolving
+    /// and the next frame, every reader has to agree the pane is empty, or
+    /// the finished round flashes up whole before the new one starts
+    /// scrolling.
+    fn revealed_count(&self) -> usize {
+        let Some(game) = &self.game else { return 0 };
+        if self.reveal.generation != game.battle_log_generation() {
+            return 0;
+        }
+        self.reveal.revealed
+    }
+
     /// Whether narration is still scrolling in. While this holds, a frontend
     /// suppresses the action bar and `handle_key` skips rather than acting.
     pub fn is_revealing(&self) -> bool {
         let Some(game) = &self.game else {
             return false;
         };
-        self.reveal.revealed < game.battle_log().len()
+        self.revealed_count() < game.battle_log().len()
     }
 
     /// The battle pane's lines: this battle's narration, truncated to what
@@ -176,7 +196,7 @@ impl App {
             return Vec::new();
         };
         let mut lines = game.battle_log();
-        lines.truncate(self.reveal.revealed);
+        lines.truncate(self.revealed_count());
         lines
     }
 
@@ -185,20 +205,26 @@ impl App {
     /// yet. Zero except in the moments after a battle ends.
     pub fn hidden_log_lines(&self) -> usize {
         let Some(game) = &self.game else { return 0 };
-        game.battle_log().len().saturating_sub(self.reveal.revealed)
+        game.battle_log()
+            .len()
+            .saturating_sub(self.revealed_count())
     }
 
     /// Releases every remaining line at once — the skip.
     pub(crate) fn finish_reveal(&mut self) {
-        self.reveal.revealed = self.game.as_ref().map_or(0, |g| g.battle_log().len());
-        self.reveal.accumulated = 0.0;
+        let Some(game) = &self.game else { return };
+        self.reveal = BattleReveal {
+            revealed: game.battle_log().len(),
+            accumulated: 0.0,
+            generation: game.battle_log_generation(),
+        };
     }
 
     /// Starts this battle's narration over from nothing.
     pub(crate) fn restart_reveal(&mut self) {
-        let id = self.game.as_ref().map_or(0, |g| g.battle_log_id());
+        let generation = self.game.as_ref().map_or(0, |g| g.battle_log_generation());
         self.reveal = BattleReveal {
-            battle_id: id,
+            generation,
             ..BattleReveal::default()
         };
     }

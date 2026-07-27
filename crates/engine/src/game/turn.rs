@@ -39,10 +39,10 @@ impl Game {
         self.world.resource::<MessageLog>().since_round().to_vec()
     }
 
-    /// Changes every time a battle starts. A frontend pacing the narration
-    /// restarts when this moves.
-    pub fn battle_log_id(&self) -> u64 {
-        self.world.resource::<MessageLog>().battle_id()
+    /// Changes every time the pane's contents reset — a new round, or a new
+    /// battle. A frontend pacing the narration restarts when this moves.
+    pub fn battle_log_generation(&self) -> u64 {
+        self.world.resource::<MessageLog>().generation()
     }
 
     pub fn is_game_over(&self) -> Option<String> {

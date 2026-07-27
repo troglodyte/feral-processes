@@ -605,39 +605,6 @@ fn ending_a_battle_restarts_the_reveal_for_the_results() {
     );
 }
 
-/// Credit left over when a round finishes revealing must not be banked.
-/// Spending it on the next round would dump that round whole the instant it
-/// logged — the exact behaviour the pacing exists to prevent, and invisible
-/// until a second round happens to arrive.
-#[test]
-fn leftover_pace_credit_is_not_banked_for_the_next_round() {
-    let mut app = battling_app();
-    app.restart_reveal();
-    // Far more time than the opening narration needs.
-    app.advance_reveal(100.0);
-    assert!(
-        !app.is_revealing(),
-        "the fixture left the reveal unfinished"
-    );
-
-    let revealed_before = app.revealed_battle_log().len();
-    // All-defend resolves the round without stopping to pick a target.
-    app.handle_key(GameKey::Char('D'));
-    let total = app.game.as_ref().unwrap().battle_log().len();
-    assert!(
-        total > revealed_before,
-        "the round logged nothing, so there is no banking to catch"
-    );
-
-    app.advance_reveal(0.0);
-
-    assert_eq!(
-        app.revealed_battle_log().len(),
-        revealed_before,
-        "banked credit dumped the new round without any time passing"
-    );
-}
-
 /// A refusal is drawn over the action bar, so leaving it up hides the menu
 /// the player needs in order to press a different key.
 #[test]
@@ -676,4 +643,86 @@ fn a_new_keypress_restarts_the_refusal_window() {
         Some("fresh"),
         "the new message inherited the old one's remaining time"
     );
+}
+
+/// Each round clears the pane, so the reveal has to restart with it.
+/// Resetting only when the *battle* changes leaves `revealed` holding the
+/// previous round's count — which already covers the new round's equally
+/// short range, so `revealed >= total` short-circuits and the whole round
+/// lands at once with no scrolling at all.
+///
+/// Resolves two rounds deliberately: the first round's carried count is
+/// only the opening line, so the bug shows up in full from the second.
+#[test]
+fn every_round_restarts_the_reveal_instead_of_landing_whole() {
+    let mut app = battling_app();
+    // Adopt the current generation and drain the opening line, so what this
+    // asserts afterwards is about the round and not about a stale reset.
+    app.advance_reveal(1_000.0);
+
+    for round in 0..2 {
+        assert!(
+            app.game.as_ref().is_some_and(|g| g.has_active_battle()),
+            "the fight ended after {round} rounds — this needs one that continues"
+        );
+        // All-defend resolves the round without stopping to pick a target.
+        app.handle_key(GameKey::Char('D'));
+        app.advance_reveal(0.0);
+
+        assert_eq!(
+            app.revealed_battle_log().len(),
+            0,
+            "round {round} was already on screen before any time had passed"
+        );
+        assert!(
+            app.is_revealing(),
+            "round {round} has narration, so it should still be scrolling in"
+        );
+        app.advance_reveal(1_000.0);
+    }
+}
+
+/// Every round has to actually take time on screen, not just the first.
+///
+/// Two separate bugs made rounds after the first land whole. The counter
+/// was keyed on the battle rather than the round, so a carried-over count
+/// already covered the next round's equally short range; and `is_revealing`
+/// read the raw count, so between a round resolving and the next frame's
+/// `advance_reveal` every reader still saw the finished round's total. This
+/// walks real frames, which is what catches the second one — the reveal
+/// looked fine to a test that reset it by hand first.
+#[test]
+fn every_round_takes_real_time_to_scroll_in() {
+    let mut app = battling_app();
+    app.advance_reveal(1_000.0);
+    let frame = 1.0 / 60.0;
+
+    for round in 0..3 {
+        assert!(
+            app.game.as_ref().is_some_and(|g| g.has_active_battle()),
+            "the fight ended after {round} rounds — this needs one that continues"
+        );
+        // All-defend resolves the round without stopping to pick a target.
+        app.handle_key(GameKey::Char('D'));
+
+        let total = app.game.as_ref().unwrap().battle_log().len();
+        assert!(total > 1, "round {round} narrated too little to pace");
+        assert_eq!(
+            app.revealed_battle_log().len(),
+            0,
+            "round {round} was on screen before a frame had passed"
+        );
+
+        let mut frames = 0;
+        while app.is_revealing() && frames < 10_000 {
+            app.advance_reveal(frame);
+            frames += 1;
+        }
+        let seconds = frames as f32 * frame;
+        let expected = total as f32 / REVEAL_LINES_PER_SECOND;
+        assert!(
+            (seconds - expected).abs() < 0.1,
+            "round {round}: {total} lines took {seconds:.2}s, expected about {expected:.2}s"
+        );
+    }
 }

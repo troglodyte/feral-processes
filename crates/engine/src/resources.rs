@@ -81,9 +81,13 @@ pub struct MessageLog {
     /// at a time, so a resolved round replaces the last rather than piling
     /// on top of it.
     round_start: Option<MessageMark>,
-    /// Bumped by every `open_battle`, so a frontend can tell one battle's
-    /// narration from the next without comparing text.
-    battle_id: u64,
+    /// Bumped every time the pane's range resets — a new round or a new
+    /// battle — so a frontend pacing the narration can tell it has a fresh
+    /// range to scroll rather than comparing text. A per-*battle* counter
+    /// is not enough: consecutive rounds are much the same length, so a
+    /// reveal that carried its count across one would find the new range
+    /// already covered and show it whole.
+    generation: u64,
 }
 
 impl MessageLog {
@@ -110,18 +114,18 @@ impl MessageLog {
     /// its first round with it.
     pub fn open_battle(&mut self) {
         self.battle_start = Some(MessageMark(self.pushed));
-        self.round_start = Some(MessageMark(self.pushed));
-        self.battle_id += 1;
+        self.open_round();
     }
 
     /// Opens a new round's range at the next line pushed. The pane shows one
     /// round at a time, so this is what clears it between them.
     pub fn open_round(&mut self) {
         self.round_start = Some(MessageMark(self.pushed));
+        self.generation += 1;
     }
 
-    pub fn battle_id(&self) -> u64 {
-        self.battle_id
+    pub fn generation(&self) -> u64 {
+        self.generation
     }
 
     /// Where `mark` sits in `lines` right now. Clamped: once the mark has

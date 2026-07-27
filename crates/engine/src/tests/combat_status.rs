@@ -293,13 +293,17 @@ fn a_second_battle_starts_with_an_empty_pane() {
     let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     start_battle_with_a_wild_program(&mut game);
-    let first = game.battle_log_id();
+    let first = game.battle_log_generation();
     game.log("first battle narration");
     game.end_battle(player, None);
 
     start_battle_with_a_wild_program(&mut game);
 
-    assert_ne!(first, game.battle_log_id(), "the battle id did not advance");
+    assert_ne!(
+        first,
+        game.battle_log_generation(),
+        "the pane generation did not advance for the new battle"
+    );
     let battle: Vec<String> = game.battle_log().into_iter().map(|(_, l)| l).collect();
     assert!(
         !battle.iter().any(|l| l == "first battle narration"),

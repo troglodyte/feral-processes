@@ -408,7 +408,7 @@ fn a_knocked_out_companion_stands_down_once_the_battle_ends() {
                 1,
                 "a downed companion holds its slot until the battle ends"
             );
-            game.battle_flee();
+            flee_until_clear(&mut game);
             assert!(
                 game.player_status().companions.is_empty(),
                 "ending the battle should have stood the downed companion down"

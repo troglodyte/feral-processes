@@ -160,6 +160,7 @@ impl Game {
                     cost: def.cost,
                     state,
                     affordable: held >= def.cost,
+                    unlocks_abilities: def.unlocks_abilities.clone(),
                 }
             })
             .collect();
@@ -192,6 +193,12 @@ impl Game {
         if !missing.is_empty() {
             return Err(format!("Requires {} first.", missing.join(", ")));
         }
+        // Checked before anything is spent: a researched routine that can't
+        // fit in cargo would otherwise be lost outright, and there is no
+        // second chance to take a node.
+        for ability in &def.unlocks_abilities {
+            self.check_room(&abilities::routine_item_id(ability), 1)?;
+        }
         let player = self.player_entity();
         let research_currency = self.research_currency();
         let held = self
@@ -211,6 +218,15 @@ impl Game {
             .0
             .insert(def.id.clone());
         self.log(format!("Research complete: {}.", def.name));
+        for ability in &def.unlocks_abilities {
+            let item = abilities::routine_item_id(ability);
+            let name = self.item_name(&item).to_string();
+            self.world
+                .get_mut::<Inventory>(player)
+                .unwrap()
+                .add(item, 1);
+            self.log(format!("A {name} is compiled into your cargo."));
+        }
         Ok(())
     }
 }

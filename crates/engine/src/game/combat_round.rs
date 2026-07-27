@@ -503,7 +503,7 @@ impl Game {
         }
     }
 
-    /// Executes `ability` (one of `Game::companion_abilities`) on every
+    /// Executes `ability` (one of `Game::actor_abilities`) on every
     /// entity in `recipients` — party members for a buff or heal, enemies
     /// for damage or a debuff. See `Game::ability_recipients`, which
     /// resolves which entities those are. `actor` is who is spending the

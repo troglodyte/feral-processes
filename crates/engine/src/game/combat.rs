@@ -478,13 +478,17 @@ impl Game {
         }
     }
 
-    /// Every ability `entity` can be commanded to use right now, in menu
-    /// order — whatever is installed in its routine slots.
+    /// Every ability the combatant at `entity` can be commanded to use, in
+    /// menu order: whatever is installed in its routine slots. Menu and
+    /// resolution both go through this, so the two cannot disagree about
+    /// what a slot knows.
     ///
-    /// A companion's kit is installed at tame/fuse time and topped up on the
-    /// level-ups that reach a species unlock (see `install_innate_routines`
-    /// and `install_unlocked_routines`); nothing is resolved here.
-    pub(crate) fn companion_abilities(&self, entity: Entity) -> Vec<AbilityDef> {
+    /// May be empty for anyone — a member with nothing installed is offered
+    /// no Special at all (see `battle_action_options`). A companion's kit is
+    /// installed at tame/fuse time and topped up on the level-ups that reach
+    /// a species unlock (`install_innate_routines`,
+    /// `install_unlocked_routines`); nothing is resolved here.
+    pub(crate) fn actor_abilities(&self, entity: Entity) -> Vec<AbilityDef> {
         let db = self.world.resource::<AbilityDb>();
         self.world
             .get::<Routines>(entity)
@@ -493,40 +497,6 @@ impl Game {
             .iter()
             .filter_map(|id| db.get(id).cloned())
             .collect()
-    }
-
-    /// The abilities the player has unlocked through research, in research
-    /// order (see `ResearchDb::all`), each appearing once however many nodes
-    /// grant it.
-    ///
-    /// Unlike `companion_abilities` this may be empty, and deliberately so:
-    /// before any node is researched the player has no routines at all,
-    /// which is exactly what the research is selling. Nothing is stored —
-    /// the set is derived from `Research`, which the save already carries,
-    /// the same way structure and recipe unlocks are.
-    pub fn player_abilities(&self) -> Vec<AbilityDef> {
-        let abilities = self.world.resource::<AbilityDb>();
-        let mut seen = std::collections::HashSet::new();
-        self.world
-            .resource::<ResearchDb>()
-            .all()
-            .filter(|def| self.is_researched(&def.id))
-            .flat_map(|def| def.unlocks_abilities.iter())
-            .filter(|id| seen.insert((*id).clone()))
-            .filter_map(|id| abilities.get(id).cloned())
-            .collect()
-    }
-
-    /// Every ability the combatant at `entity` can be commanded to use: the
-    /// player's researched routines, or a companion's species list. Menu and
-    /// resolution both go through this, so the two cannot disagree about
-    /// what a slot knows.
-    pub(crate) fn actor_abilities(&self, entity: Entity) -> Vec<AbilityDef> {
-        if entity == self.player_entity() {
-            self.player_abilities()
-        } else {
-            self.companion_abilities(entity)
-        }
     }
 
     /// Consumable items the player is actually holding — the pool
@@ -580,7 +550,8 @@ impl Game {
     /// contract as `battle_action_options` — a species that gains an ability
     /// reaches both without either being touched.
     ///
-    /// Never empty for a real slot: see `Game::companion_abilities`.
+    /// Empty exactly when `battle_action_options` hides the Special row for
+    /// this slot: see `Game::actor_abilities`.
     pub fn battle_special_options(&self, slot: usize) -> Vec<SpecialOption> {
         let Some(entity) = self.actor_entity(battle::Actor::Party(slot)) else {
             return Vec::new();
@@ -653,20 +624,19 @@ impl Game {
             },
         ];
 
-        options.push(ActionOption {
-            kind: ActionKind::Special,
-            key: 's',
-            label: "[s]pecial".to_string(),
-            detail: self.ability_label(entity),
-            target: TargetSpec::SpecialAbility,
-            // Only the player can be empty here, and only until they
-            // research their first routine. Greyed with a reason rather than
-            // hidden: a hidden row teaches nobody the feature exists.
-            unavailable: self
-                .actor_abilities(entity)
-                .is_empty()
-                .then(|| "no routines researched".to_string()),
-        });
+        // Hidden, not greyed: with routines installable at will, an empty
+        // kit is a state the player chose, and a permanently greyed row
+        // teaches nothing they don't already know.
+        if !self.actor_abilities(entity).is_empty() {
+            options.push(ActionOption {
+                kind: ActionKind::Special,
+                key: 's',
+                label: "[s]pecial".to_string(),
+                detail: self.ability_label(entity),
+                target: TargetSpec::SpecialAbility,
+                unavailable: None,
+            });
+        }
 
         if is_player {
             options.push(ActionOption {

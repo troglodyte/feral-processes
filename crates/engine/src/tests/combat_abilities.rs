@@ -404,7 +404,7 @@ fn an_ability_costing_more_fatigue_than_you_have_is_unavailable() {
 fn the_player_has_no_abilities_until_they_research_one() {
     let game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     assert!(
-        game.player_abilities().is_empty(),
+        game.actor_abilities(game.player_entity()).is_empty(),
         "the player starts with nothing to spend a Special on — that's what \
          the research is selling"
     );
@@ -415,15 +415,22 @@ fn researching_self_execution_grants_the_player_priority_boost() {
     let mut game = Game::new(32, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut game, "self_exec");
 
-    let ids: Vec<String> = game.player_abilities().into_iter().map(|a| a.id).collect();
+    let item = crate::abilities::routine_item_id("priority_boost");
+    game.install_routine(game.player_entity(), &item).unwrap();
+
+    let ids: Vec<String> = game
+        .actor_abilities(game.player_entity())
+        .into_iter()
+        .map(|a| a.id)
+        .collect();
     assert_eq!(ids, vec!["priority_boost".to_string()]);
 }
 
 /// Two nodes may legitimately name the same ability — a mod branching the
-/// tree, say. The picker must not then show it twice, because the duplicate
-/// rows would be indistinguishable and one of them a lie.
+/// tree, say. Research must not then auto-install it twice; it just stacks
+/// the routine item, and installing is still a separate, deliberate act.
 #[test]
-fn an_ability_granted_by_two_nodes_appears_once() {
+fn an_ability_granted_by_two_nodes_stacks_the_item_rather_than_double_installing() {
     const ALSO_BOOST: &str = r#"(
         id: "also_boost",
         name: "Redundant Routine",
@@ -442,29 +449,25 @@ fn an_ability_granted_by_two_nodes_appears_once() {
     unlock_research_chain(&mut game, "self_exec");
     unlock_research_chain(&mut game, "also_boost");
 
-    let ids: Vec<String> = game.player_abilities().into_iter().map(|a| a.id).collect();
-    assert_eq!(ids, vec!["priority_boost".to_string()]);
-    let _ = std::fs::remove_dir_all(&dir);
-}
+    let item = crate::abilities::routine_item_id("priority_boost");
+    assert_eq!(
+        count_item(&game, item.as_str()),
+        2,
+        "each node deposits its own copy of the routine"
+    );
 
-/// `HashMap` iteration is randomized per instance, so a derived list has to
-/// be sorted somewhere. It's sorted in `ResearchDb::all` — cheapest node
-/// first — and this pins that the derivation preserves it.
-#[test]
-fn the_players_abilities_are_ordered_cheapest_node_first() {
-    let mut game = Game::new(34, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    unlock_research_chain(&mut game, "kernel_privileges");
-
-    let ids: Vec<String> = game.player_abilities().into_iter().map(|a| a.id).collect();
+    game.install_routine(game.player_entity(), &item).unwrap();
+    let ids: Vec<String> = game
+        .actor_abilities(game.player_entity())
+        .into_iter()
+        .map(|a| a.id)
+        .collect();
     assert_eq!(
         ids,
-        vec![
-            "priority_boost".to_string(),
-            "hot_patch".to_string(),
-            "null_route".to_string(),
-        ],
-        "self_exec (12), runtime_patching (28), kernel_privileges (48)"
+        vec!["priority_boost".to_string()],
+        "installing spends one copy and fills one slot, however many nodes granted it"
     );
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// The player's Special goes through the same resolution path a companion's
@@ -475,11 +478,18 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
     let mut game = Game::new(35, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut game, "runtime_patching");
     let player = game.player_entity();
+    // A level-1 player has only one routine slot (see
+    // `tuning::PLAYER_ROUTINE_SLOT_BASE`), so both grants need a slot to land in.
+    set_level(&mut game, player, 10);
+    let priority_boost = crate::abilities::routine_item_id("priority_boost");
+    game.install_routine(player, &priority_boost).unwrap();
+    let hot_patch_item = crate::abilities::routine_item_id("hot_patch");
+    game.install_routine(player, &hot_patch_item).unwrap();
     let enemy = spawn_wild_on_player_tile(&mut game);
     insert_battle(&mut game, player, vec![enemy]);
 
     let hot_patch = game
-        .player_abilities()
+        .actor_abilities(player)
         .iter()
         .position(|a| a.id == "hot_patch")
         .expect("runtime_patching grants hot_patch");
@@ -524,6 +534,8 @@ fn a_player_special_spends_the_players_fatigue_once() {
         let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         unlock_research_chain(&mut game, "kernel_privileges");
         let player = game.player_entity();
+        let item = crate::abilities::routine_item_id("null_route");
+        game.install_routine(player, &item).unwrap();
         let enemy = spawn_wild_on_player_tile(&mut game);
         insert_battle(&mut game, player, vec![enemy]);
 
@@ -534,7 +546,9 @@ fn a_player_special_spends_the_players_fatigue_once() {
 
     let mut probe = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut probe, "kernel_privileges");
-    let abilities = probe.player_abilities();
+    let item = crate::abilities::routine_item_id("null_route");
+    probe.install_routine(probe.player_entity(), &item).unwrap();
+    let abilities = probe.actor_abilities(probe.player_entity());
     let index = abilities
         .iter()
         .position(|a| a.id == "null_route")
@@ -554,18 +568,30 @@ fn a_player_special_spends_the_players_fatigue_once() {
     assert_eq!(special - idle, cost, "charged exactly once, and to you");
 }
 
-/// The player's routines are derived from `Research`, which the save
-/// already carries. This proves the no-new-save-field claim rather than
-/// asserting it.
+/// The player's installed routines are carried in `data.player.routines`,
+/// a separate save path from a companion's `Routines` component — this
+/// pins that the player's own path round-trips too.
 #[test]
 fn a_save_round_trip_preserves_the_players_abilities() {
     let mut game = Game::new(40, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut game, "runtime_patching");
-    let before: Vec<String> = game.player_abilities().into_iter().map(|a| a.id).collect();
+    let player = game.player_entity();
+    // A level-1 player has only one routine slot (see
+    // `tuning::PLAYER_ROUTINE_SLOT_BASE`), so both grants need a slot to land in.
+    set_level(&mut game, player, 10);
+    let priority_boost = crate::abilities::routine_item_id("priority_boost");
+    game.install_routine(player, &priority_boost).unwrap();
+    let hot_patch = crate::abilities::routine_item_id("hot_patch");
+    game.install_routine(player, &hot_patch).unwrap();
+    let before: Vec<String> = game
+        .actor_abilities(player)
+        .into_iter()
+        .map(|a| a.id)
+        .collect();
     assert_eq!(before.len(), 2, "priority_boost and hot_patch");
 
     let path = std::env::temp_dir().join(format!(
-        "feral_player_abilities_save_{}.bin",
+        "feral_player_routines_save_{}.bin",
         std::process::id()
     ));
     game.save(&path).unwrap();
@@ -573,7 +599,7 @@ fn a_save_round_trip_preserves_the_players_abilities() {
     let _ = std::fs::remove_file(&path);
 
     let after: Vec<String> = loaded
-        .player_abilities()
+        .actor_abilities(loaded.player_entity())
         .into_iter()
         .map(|a| a.id)
         .collect();
@@ -588,7 +614,6 @@ fn the_companion_fallback_does_not_leak_onto_the_player() {
     let mut game = Game::new(36, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 20, 5);
 
-    assert!(game.player_abilities().is_empty());
     assert!(
         !game.actor_abilities(companion).is_empty(),
         "a companion always resolves at least the fallback"

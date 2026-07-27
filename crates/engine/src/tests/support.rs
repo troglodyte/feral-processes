@@ -547,7 +547,7 @@ pub(super) fn fatigue_spent_commanding_companion(seed: u32, stunned: bool) -> f3
 /// A species declaring two abilities, so the multi-ability paths can be
 /// exercised without depending on shipped kit assignments. The second is
 /// gated above a fresh companion's level 1, which is what pins down
-/// `Game::companion_abilities`' level filtering.
+/// `Game::actor_abilities`' level filtering.
 pub(super) const TWO_ABILITY_SPECIES: &str = r#"(
     id: "test_medic",
     name: "Test Medic",

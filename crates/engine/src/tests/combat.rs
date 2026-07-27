@@ -607,28 +607,27 @@ fn a_buff_aimed_at_a_companion_does_not_outlive_the_battle() {
 /// A hidden row teaches nobody the feature exists; a greyed one with a
 /// reason points at the research tree.
 #[test]
-fn the_player_is_offered_a_greyed_special_before_researching_one() {
+fn the_player_is_offered_no_special_before_installing_a_routine() {
     let mut game = Game::new(37, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let enemy = spawn_wild_on_player_tile(&mut game);
     insert_battle(&mut game, player, vec![enemy]);
 
-    let special = game
-        .battle_action_options(0)
-        .into_iter()
-        .find(|o| o.kind == ActionKind::Special)
-        .expect("the player's Special row is shown, not hidden");
-    assert_eq!(
-        special.unavailable.as_deref(),
-        Some("no routines researched")
+    assert!(
+        game.battle_action_options(0)
+            .iter()
+            .all(|o| o.kind != ActionKind::Special),
+        "nothing is installed, so the row is hidden rather than greyed"
     );
 }
 
 #[test]
-fn researching_a_routine_makes_the_players_special_available() {
+fn installing_a_researched_routine_makes_the_players_special_available() {
     let mut game = Game::new(38, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut game, "self_exec");
     let player = game.player_entity();
+    let item = crate::abilities::routine_item_id("priority_boost");
+    game.install_routine(player, &item).unwrap();
     let enemy = spawn_wild_on_player_tile(&mut game);
     insert_battle(&mut game, player, vec![enemy]);
 
@@ -636,7 +635,7 @@ fn researching_a_routine_makes_the_players_special_available() {
         .battle_action_options(0)
         .into_iter()
         .find(|o| o.kind == ActionKind::Special)
-        .expect("the Special row is still there");
+        .expect("the installed routine shows the Special row");
     assert_eq!(special.unavailable, None);
     assert_eq!(
         special.detail, "Priority Boost",

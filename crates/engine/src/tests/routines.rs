@@ -245,3 +245,38 @@ fn extraction_is_refused_for_a_program_you_dont_own_and_during_battle() {
     let err = game.extract_routine(pet, 0).unwrap_err();
     assert!(err.contains("right now"), "{err}");
 }
+
+#[test]
+fn researching_a_node_grants_routine_items_rather_than_the_ability_itself() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = game
+        .research_nodes()
+        .into_iter()
+        .find(|n| !n.unlocks_abilities.is_empty())
+        .expect("some shipped node grants an ability");
+    let ability = node.unlocks_abilities[0].clone();
+
+    unlock_research_chain(&mut game, &node.id);
+
+    assert_eq!(
+        count_item(&game, crate::abilities::routine_item_id(&ability).as_str()),
+        1,
+        "the routine arrives as an item, not as an installed ability"
+    );
+    assert!(
+        game.actor_abilities(game.player_entity()).is_empty(),
+        "researching does not install — that is a separate act"
+    );
+}
+
+#[test]
+fn a_member_with_no_routines_is_offered_no_special_at_all() {
+    let mut game = Game::new(42, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    start_battle_with_a_wild_program(&mut game);
+    assert!(
+        game.battle_action_options(0)
+            .iter()
+            .all(|o| o.kind != ActionKind::Special),
+        "the row is hidden, not greyed, when nothing is installed"
+    );
+}

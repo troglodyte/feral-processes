@@ -25,6 +25,8 @@ pub struct ResearchStatus {
     /// a node can be `Available` but unaffordable, or affordable but
     /// `Locked`.
     pub affordable: bool,
+    /// Abilities this node hands over as routine items when researched.
+    pub unlocks_abilities: Vec<crate::abilities::AbilityId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

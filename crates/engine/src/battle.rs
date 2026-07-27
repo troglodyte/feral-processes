@@ -81,7 +81,7 @@ pub enum BattleAction {
         group: usize,
     },
     Special {
-        /// Index into `Game::companion_abilities` for the acting member —
+        /// Index into `Game::actor_abilities` for the acting member —
         /// which of its abilities this is. Always valid by construction;
         /// resolution falls back to the first if a stale index survives a
         /// party change mid-round.
@@ -177,7 +177,7 @@ pub struct ActionOption {
 /// `ActionOption`; see `Game::battle_special_options`.
 #[derive(Debug, Clone)]
 pub struct SpecialOption {
-    /// Position in `Game::companion_abilities`, and what
+    /// Position in `Game::actor_abilities`, and what
     /// `BattleAction::Special::ability` is set to.
     pub index: usize,
     /// e.g. "Heal"

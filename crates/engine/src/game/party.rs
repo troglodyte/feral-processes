@@ -120,16 +120,15 @@ impl Game {
     }
 
     /// Terse label for what commanding `entity` in battle would do right
-    /// now. A member with several abilities reads as a count, since no one
-    /// of them is *the* answer until the player picks in
-    /// `Mode::BattleSpecial`.
+    /// now. A member with several routines reads as a count, since no one of
+    /// them is *the* answer until the player picks in `Mode::BattleSpecial`.
     pub(crate) fn ability_label(&self, entity: Entity) -> String {
         match self.actor_abilities(entity).as_slice() {
-            // Only the player can be empty: `companion_abilities` resolves
-            // the fallback rather than returning nothing.
-            [] => "No routines researched".to_string(),
+            // Anyone can be empty now: an innate routine can be popped out,
+            // and the player starts with only decompile installed.
+            [] => "No routines installed".to_string(),
             [only] => only.name.clone(),
-            many => format!("{} abilities", many.len()),
+            many => format!("{} routines", many.len()),
         }
     }
 

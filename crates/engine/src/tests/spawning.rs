@@ -1,6 +1,10 @@
 //! Populating a zone: wild programs, the spawn cap, nests, and guardians.
 
 use super::support::*;
+use crate::tuning::{
+    GROUP_SIZE_STEP_TILES, NEST_DURABILITY, NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN,
+    NEST_RESPAWN_TICKS, NEST_TETHER_RADIUS, WILD_CREATURE_CAP,
+};
 use crate::*;
 
 #[test]

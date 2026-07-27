@@ -2,6 +2,7 @@
 //! bracing, and how far back an enemy group can reach.
 
 use super::support::*;
+use crate::tuning::{DEFEND_DEF_BONUS, FRONT_SLOTS};
 use crate::*;
 
 /// `wild_retaliate` rolls per-call whether a companion soaks the hit, so

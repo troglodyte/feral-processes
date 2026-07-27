@@ -2,6 +2,7 @@
 //! stamping the base platform, and stepping through a portal to the next
 //! zone.
 
+use crate::tuning::MAX_BUILD_DISTANCE_FROM_HOME;
 use crate::*;
 
 impl Game {

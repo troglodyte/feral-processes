@@ -89,12 +89,12 @@ fn the_shipped_species_kits_reference_only_real_abilities() {
                 ability.id
             );
             assert!(
-                ability.level >= 1 && ability.level <= crate::progression::CREATURE_MAX_LEVEL,
+                ability.level >= 1 && ability.level <= crate::tuning::CREATURE_MAX_LEVEL,
                 "species {:?}: ability {:?} unlocks at level {}, outside 1..={}",
                 species.id,
                 ability.id,
                 ability.level,
-                crate::progression::CREATURE_MAX_LEVEL
+                crate::tuning::CREATURE_MAX_LEVEL
             );
             declared += 1;
         }

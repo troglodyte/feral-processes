@@ -54,7 +54,7 @@ impl Game {
                     ch: '@',
                     color: GlyphColor::Cyan,
                 },
-                components::PLAYER_BASE_STATS,
+                crate::tuning::PLAYER_BASE_STATS,
                 Needs::default(),
                 Experience::default(),
                 Decompiler::default(),

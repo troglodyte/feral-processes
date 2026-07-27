@@ -1,6 +1,7 @@
 //! Looking at the world without changing it: the tile and entity views the
 //! renderer draws, plus inspect and symlink targeting.
 
+use crate::tuning::{DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX, DIFFICULTY_TOUGH_MAX};
 use crate::*;
 
 impl Game {

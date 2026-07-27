@@ -1,6 +1,10 @@
 //! What a won fight pays out: equipment drops, loot, experience, and
 //! decompiling a defeated program into a companion.
 
+use crate::tuning::{
+    BOSS_PORTAL_FRAGMENT_DROP, DECOMPILER_SKILL_PER_LEVEL, NEST_RESPAWN_TICKS, PARTY_XP_DIVISOR,
+    PERK_POINTS_PER_LEVEL, PORTAL_FRAGMENT_DROP_CHANCE,
+};
 use crate::*;
 
 impl Game {
@@ -108,7 +112,7 @@ impl Game {
                 &mut exp,
                 &mut stats,
                 amount,
-                progression::BASELINE_GROWTH_MULTIPLIER,
+                crate::tuning::BASELINE_GROWTH_MULTIPLIER,
                 // The player has no level ceiling — only creatures do.
                 None,
             );
@@ -149,7 +153,7 @@ impl Game {
                 .get::<Creature>(companion)
                 .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
                 .map(|s| s.growth_multiplier)
-                .unwrap_or(progression::BASELINE_GROWTH_MULTIPLIER);
+                .unwrap_or(crate::tuning::BASELINE_GROWTH_MULTIPLIER);
             let individual_roll = self
                 .world
                 .get::<Potential>(companion)
@@ -166,7 +170,7 @@ impl Game {
                     &mut stats,
                     amount,
                     growth_multiplier,
-                    Some(progression::CREATURE_MAX_LEVEL),
+                    Some(crate::tuning::CREATURE_MAX_LEVEL),
                 ) > 0
             };
             if leveled {

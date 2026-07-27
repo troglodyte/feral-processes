@@ -1,6 +1,10 @@
 //! Raids against the base — damage, shields, guards, effects, and regeneration.
 
 use super::support::*;
+use crate::tuning::{
+    NEST_DURABILITY, RAID_DAMAGE, RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_AMOUNT,
+    STRUCTURE_REGEN_INTERVAL,
+};
 use crate::*;
 
 #[test]

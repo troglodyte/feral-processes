@@ -1,3 +1,4 @@
+use crate::tuning::{GEAR_LEVEL_GROWTH, ITEM_FUSION_BONUS_PER_TIER};
 use serde::{Deserialize, Serialize};
 
 /// `#[serde(transparent)]` so an `ItemId` serializes as its bare inner string
@@ -89,23 +90,6 @@ pub struct EquipmentStats {
     #[serde(default)]
     pub decompiler: i32,
 }
-
-/// Growth factor applied to an item's base `EquipmentStats` per gear level
-/// above 1 — doubles each level (level *N* = base *
-/// `GEAR_LEVEL_GROWTH.powi(N - 1)`), matching `ZoneLevel::stat_multiplier`'s
-/// own per-zone doubling so neither leveling nor gear dominates the other
-/// outright — see `balance_sim::best_case_gear_bonus`'s tests for the
-/// simulation that surfaced the old 2.5x growth overtaking it. Gear level
-/// is capped by `resources::ZoneLevel`: reaching zone *N* is what
-/// "unlocks" level *N* gear — see `Game::equip`.
-pub const GEAR_LEVEL_GROWTH: f64 = 2.0;
-
-/// Bonus `Game::fuse_item` adds to an item type's equipped stats, per
-/// fusion tier — additive, not compounding (tier 2 is +20%, not +21%).
-pub const ITEM_FUSION_BONUS_PER_TIER: f64 = 0.10;
-
-/// Copies of an item `Game::fuse_item` consumes from inventory per fusion.
-pub const ITEM_FUSION_COST: u32 = 2;
 
 impl EquipmentStats {
     /// This item's bonus scaled up for `level` (1 = base, no scaling).

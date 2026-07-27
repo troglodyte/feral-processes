@@ -1,6 +1,7 @@
 //! Companion special abilities: the menus that offer them and the buffs they apply.
 
 use super::support::*;
+use crate::tuning::COMPANION_COMMAND_FATIGUE_COST;
 use crate::*;
 
 #[test]

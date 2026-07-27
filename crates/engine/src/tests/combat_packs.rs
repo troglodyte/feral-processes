@@ -2,6 +2,9 @@
 //! groups, initiative order, and what happens as groups fall.
 
 use super::support::*;
+use crate::tuning::{
+    DISTANCE_STAT_STEP_TILES, GROUP_SIZE_STEP_TILES, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE,
+};
 use crate::*;
 
 #[test]

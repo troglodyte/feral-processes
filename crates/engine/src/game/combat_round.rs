@@ -1,6 +1,7 @@
 //! Resolving a planned round — running each actor's action, computing
 //! effective stats, and rendering the result as a `BattleView`.
 
+use crate::tuning::{ENGAGED_GROUPS, FRONT_SLOTS, NEST_RESPAWN_TICKS, PLAYER_STRIKE_POWER};
 use crate::*;
 
 impl Game {

@@ -16,9 +16,8 @@ use feral_processes_engine::battle::SpecialTargeting;
 use feral_processes_engine::battle::{
     ActionKind, BattleAction, PartyCommandKind, SpecialTarget, TargetSpec,
 };
-use feral_processes_engine::items::{
-    EquipmentSlot, ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, ItemId,
-};
+use feral_processes_engine::items::{EquipmentSlot, ItemId};
+use feral_processes_engine::tuning::{ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST};
 use feral_processes_engine::{DifficultyMode, Entity, Game, ProgramSaleOption};
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the

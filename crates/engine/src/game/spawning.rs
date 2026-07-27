@@ -1,6 +1,13 @@
 //! Populating a zone with wild programs, nests, and habitat-born
 //! creatures.
 
+use crate::tuning::{
+    BOSS_SPAWN_CHANCE, DISTANCE_STAT_STEP_BONUS, DISTANCE_STAT_STEP_TILES, GROUP_SIZE_STEP_TILES,
+    INITIAL_SPAWN_SCATTER_TILES, MAX_BUILD_DISTANCE_FROM_HOME, MAX_DISTANCE_STAT_MULTIPLIER,
+    MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_DURABILITY, NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN,
+    NEST_SPAWN_CHANCE, NEST_TETHER_RADIUS, PACK_GATHER_RADIUS, WILD_CREATURE_CAP,
+    ZONE_GROUP_GROWTH,
+};
 use crate::*;
 
 /// The zone's ceiling on one species group: zone 1 is solo, every level

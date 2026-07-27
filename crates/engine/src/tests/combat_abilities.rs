@@ -6,6 +6,7 @@ use crate::resources::*;
 use crate::*;
 
 use super::support::*;
+use crate::tuning::{COMPANION_COMMAND_FATIGUE_COST, GROUP_SIZE_STEP_TILES};
 
 /// Spawns `count` hostile members of one species into a single group and
 /// starts a battle against them, so back-rank indices actually exist.

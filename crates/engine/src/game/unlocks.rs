@@ -1,6 +1,10 @@
 //! Perk and research progression — what the player has unlocked and what
 //! unlocking costs.
 
+use crate::tuning::{
+    ATTACKER_BONUS_PER_LEVEL, BUFFER_BONUS_PERCENT_PER_LEVEL, BUFFER_MIN_BONUS_PER_LEVEL,
+    DEFENDER_BONUS_PER_LEVEL, EXPLOIT_FOCUS_BONUS_PER_LEVEL,
+};
 use crate::*;
 
 impl Game {

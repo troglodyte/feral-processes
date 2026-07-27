@@ -1,8 +1,4 @@
-/// Percentage-point bonus to decompile chance per point of the player's
-/// `Decompiler` stat (see `components::Decompiler`). Lowered from 0.03
-/// alongside `item_potency` — a well-leveled player was able to stack
-/// enough skill to make almost any attempt a near-guaranteed success.
-const DECOMPILER_SKILL_BONUS: f32 = 0.02;
+use crate::tuning::DECOMPILER_SKILL_BONUS;
 
 /// ICE-breaking odds: weaker (lower `hp_fraction`) and easier-compiled
 /// species are more likely to be decompiled; stronger breakers help; a more

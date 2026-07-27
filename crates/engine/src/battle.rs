@@ -2,6 +2,7 @@ use bevy_ecs::prelude::Entity;
 
 use crate::items::ItemId;
 use crate::species::SpeciesId;
+use crate::tuning::LOW_POWER_ATTACK_THRESHOLD;
 
 /// One species' worth of the wild pack in an active intrusion.
 /// `members[0]` is the front — the only member that takes hits and the only
@@ -218,11 +219,6 @@ pub struct PartyCommand {
 pub fn compute_damage(atk: i32, def: i32, move_power: i32) -> i32 {
     (move_power + atk - def).max(1)
 }
-
-/// Below this Power ("Power" is the player-facing label for `Needs.hunger`)
-/// threshold, the player's own attacks start losing effectiveness — see
-/// `power_attack_multiplier`.
-pub const LOW_POWER_ATTACK_THRESHOLD: f32 = 50.0;
 
 /// Multiplier applied to the player's attack total once their Power drops
 /// below `LOW_POWER_ATTACK_THRESHOLD`: full strength at the threshold and

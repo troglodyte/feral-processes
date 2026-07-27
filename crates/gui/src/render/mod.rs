@@ -13,9 +13,10 @@ use feral_processes_app_core::{
 };
 use feral_processes_engine::components::GlyphColor;
 use feral_processes_engine::items::ItemId;
+use feral_processes_engine::tuning::MAX_FUSIONS;
 use feral_processes_engine::world::Biome;
 use feral_processes_engine::{
-    Entity, Game, MAX_FUSIONS, MessageKind, PetInfo, ProgramSaleOption, ResearchState,
+    Entity, Game, MessageKind, PetInfo, ProgramSaleOption, ResearchState,
 };
 
 mod bars;

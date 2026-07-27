@@ -1,6 +1,7 @@
 //! What a fight pays out — loot, experience, and how it spreads across the party.
 
 use super::support::*;
+use crate::tuning::{BOSS_PORTAL_FRAGMENT_DROP, DISTANCE_STAT_STEP_TILES};
 use crate::*;
 
 #[test]
@@ -203,13 +204,13 @@ fn higher_growth_multiplier_species_out_grows_a_baseline_one_via_award_party_xp(
     let species = game.species_defs();
     let baseline_id = species
         .iter()
-        .find(|s| s.growth_multiplier == progression::BASELINE_GROWTH_MULTIPLIER)
+        .find(|s| s.growth_multiplier == crate::tuning::BASELINE_GROWTH_MULTIPLIER)
         .expect("base roster should have at least one baseline-growth species")
         .id
         .clone();
     let boosted_id = species
         .iter()
-        .find(|s| s.growth_multiplier > progression::BASELINE_GROWTH_MULTIPLIER)
+        .find(|s| s.growth_multiplier > crate::tuning::BASELINE_GROWTH_MULTIPLIER)
         .expect("base roster should have at least one higher-growth species")
         .id
         .clone();
@@ -310,7 +311,7 @@ fn killing_a_wild_creature_in_battle_awards_the_active_companion_half_xp() {
 }
 
 /// The player has no level ceiling, while their party members stop at
-/// `progression::CREATURE_MAX_LEVEL` — one big XP award should push
+/// `crate::tuning::CREATURE_MAX_LEVEL` — one big XP award should push
 /// the player past that ceiling and leave the companion pinned to it.
 #[test]
 fn player_levels_past_the_creature_cap_but_companions_dont() {
@@ -326,12 +327,12 @@ fn player_levels_past_the_creature_cap_but_companions_dont() {
     let player_level = game.world.get::<Experience>(player).unwrap().level;
     let companion_level = game.world.get::<Experience>(companion).unwrap().level;
     assert!(
-        player_level > progression::CREATURE_MAX_LEVEL,
+        player_level > crate::tuning::CREATURE_MAX_LEVEL,
         "the player should keep leveling past the creature ceiling, got {player_level}"
     );
     assert_eq!(
         companion_level,
-        progression::CREATURE_MAX_LEVEL,
+        crate::tuning::CREATURE_MAX_LEVEL,
         "a companion should still stop at the creature ceiling"
     );
 }

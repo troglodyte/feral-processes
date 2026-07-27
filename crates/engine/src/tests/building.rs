@@ -1,6 +1,7 @@
 //! Placing, removing, upgrading, and describing structures, and the base platform they sit on.
 
 use super::support::*;
+use crate::tuning::MAX_BUILD_DISTANCE_FROM_HOME;
 use crate::*;
 
 #[test]
@@ -560,7 +561,7 @@ fn a_mined_out_node_refills_instead_of_stalling_the_cronjob() {
 fn cronjob_work_grants_no_more_xp_once_the_worker_hits_the_work_level_cap() {
     let mut game = Game::new(301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let worker = spawn_tamed(&mut game, 10, 3);
-    game.world.get_mut::<Experience>(worker).unwrap().level = systems::WORK_XP_LEVEL_CAP;
+    game.world.get_mut::<Experience>(worker).unwrap().level = crate::tuning::WORK_XP_LEVEL_CAP;
     let structure = game
         .world
         .spawn((
@@ -590,7 +591,7 @@ fn cronjob_work_grants_no_more_xp_once_the_worker_hits_the_work_level_cap() {
     let exp = game.world.get::<Experience>(worker).unwrap();
     assert_eq!(
         exp.level,
-        systems::WORK_XP_LEVEL_CAP,
+        crate::tuning::WORK_XP_LEVEL_CAP,
         "a capped worker shouldn't level further from cronjob work"
     );
     assert_eq!(
@@ -604,7 +605,7 @@ fn cronjob_work_still_grants_xp_below_the_work_level_cap() {
     let mut game = Game::new(302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let worker = spawn_tamed(&mut game, 10, 3);
     assert!(
-        game.world.get::<Experience>(worker).unwrap().level < systems::WORK_XP_LEVEL_CAP,
+        game.world.get::<Experience>(worker).unwrap().level < crate::tuning::WORK_XP_LEVEL_CAP,
         "a freshly tamed program should start well under the work level cap"
     );
     let structure = game

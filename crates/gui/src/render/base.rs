@@ -245,7 +245,7 @@ fn draw_status_panel(
         format!(
             "Party: {}/{}",
             status.companions.len(),
-            feral_processes_engine::resources::MAX_PARTY_SIZE
+            feral_processes_engine::tuning::MAX_PARTY_SIZE
         ),
         x + m.inset,
         cy,

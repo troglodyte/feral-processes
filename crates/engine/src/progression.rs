@@ -1,31 +1,5 @@
 use crate::components::{Experience, Stats};
-
-const HP_PER_LEVEL: i32 = 12;
-const ATK_PER_LEVEL: i32 = 1;
-const DEF_PER_LEVEL: i32 = 1;
-
-/// Growth-rate multiplier for anything with no species-specific rate of
-/// its own. The player (who has no species at all) always levels at this
-/// rate; it's also `SpeciesDef::growth_multiplier`'s default, so a species
-/// file written before that field existed keeps growing exactly as before.
-pub const BASELINE_GROWTH_MULTIPLIER: f32 = 1.0;
-
-/// Level ceiling for a *creature* (tamed or wild), regardless of XP
-/// source. `add_xp` stops leveling — and stops accumulating XP at all —
-/// once this is reached, so a maxed-out creature's `Experience::xp` just
-/// stalls instead of piling up into a huge, meaningless number.
-///
-/// The player is deliberately **not** capped: they keep leveling forever,
-/// so late-game progression stays open-ended and a long run always earns
-/// something. Callers express that by passing `None` as `add_xp`'s
-/// `level_cap` for the player and `Some(CREATURE_MAX_LEVEL)` for
-/// creatures.
-///
-/// This is a live-gameplay cap only: it deliberately doesn't apply to
-/// `crate::balance_sim`'s offline curve-shape projections, which search well
-/// past any level actually reachable in play on purpose (see that
-/// module's docs).
-pub const CREATURE_MAX_LEVEL: u32 = 12;
+use crate::tuning::{ATK_PER_LEVEL, DEF_PER_LEVEL, HP_PER_LEVEL, SETBACK_XP_PENALTY_FRACTION};
 
 /// One stat's flat per-level growth, scaled by `growth_multiplier` and
 /// rounded to the nearest whole point. With `ATK_PER_LEVEL`/`DEF_PER_LEVEL`
@@ -35,12 +9,6 @@ pub const CREATURE_MAX_LEVEL: u32 = 12;
 fn scaled_growth(per_level: i32, growth_multiplier: f32) -> i32 {
     (per_level as f32 * growth_multiplier).round() as i32
 }
-
-/// Fraction of in-level XP knocked back by a "setback" penalty (a flatline,
-/// a Forgiving-mode reboot, or a forced jack-out mid-battle) — see
-/// `apply_setback_xp_penalty`. Deliberately mild: it erodes progress toward
-/// the next level, never the level or stats themselves.
-const SETBACK_XP_PENALTY_FRACTION: f64 = 0.2;
 
 /// XP required to advance from `level` to `level + 1`.
 pub fn xp_for_level(level: u32) -> u32 {
@@ -111,6 +79,7 @@ pub fn add_xp(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tuning::{BASELINE_GROWTH_MULTIPLIER, CREATURE_MAX_LEVEL};
 
     fn base_stats() -> Stats {
         Stats {

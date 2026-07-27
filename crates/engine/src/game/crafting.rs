@@ -1,6 +1,7 @@
 //! Recipes, crafting, and the equipment the results go into: equip,
 //! unequip, fuse, and erase.
 
+use crate::tuning::LEAN_COMPILER_DISCOUNT_PER_LEVEL;
 use crate::*;
 
 impl Game {
@@ -308,9 +309,9 @@ impl Game {
             .unwrap_or(0)
     }
 
-    /// Consumes `items::ITEM_FUSION_COST` copies of `item` to permanently
+    /// Consumes `crate::tuning::ITEM_FUSION_COST` copies of `item` to permanently
     /// boost that item type's equipped bonus by another
-    /// `items::ITEM_FUSION_BONUS_PER_TIER` (see `ItemFusions`,
+    /// `crate::tuning::ITEM_FUSION_BONUS_PER_TIER` (see `ItemFusions`,
     /// `EquipmentStats::fused_for_tier`) — a sink for extra copies of gear.
     /// Only equippable items qualify.
     ///
@@ -335,7 +336,7 @@ impl Game {
             .get::<Equipment>(player)
             .and_then(|e| e.get(slot))
             .filter(|eq| &eq.item == item);
-        let from_inventory = items::ITEM_FUSION_COST - u32::from(worn.is_some());
+        let from_inventory = crate::tuning::ITEM_FUSION_COST - u32::from(worn.is_some());
 
         let taken = self
             .world
@@ -386,8 +387,8 @@ impl Game {
 
         let msg = format!(
             "You fuse {} {name} into a tier {tier} bonus ({}% stronger equipped).",
-            items::ITEM_FUSION_COST,
-            (tier as f64 * items::ITEM_FUSION_BONUS_PER_TIER * 100.0).round() as i32
+            crate::tuning::ITEM_FUSION_COST,
+            (tier as f64 * crate::tuning::ITEM_FUSION_BONUS_PER_TIER * 100.0).round() as i32
         );
         self.log(msg.clone());
         self.tick();

@@ -1,6 +1,10 @@
 //! Damage, status effects, enemy retaliation, and tearing a battle down —
 //! whether it ended in a win, a flee, or a loss.
 
+use crate::tuning::{
+    BACK_SLOT_AGGRO_WEIGHT, DEFEND_AGGRO_WEIGHT, DEFEND_DEF_BONUS, ENGAGED_GROUPS,
+    FRONT_SLOT_AGGRO_WEIGHT, FRONT_SLOTS,
+};
 use crate::*;
 
 impl Game {

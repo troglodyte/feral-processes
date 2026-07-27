@@ -1,6 +1,10 @@
 //! Zone depth scaling and what survives a breach into the next zone.
 
 use super::support::*;
+use crate::tuning::{
+    DISTANCE_STAT_STEP_TILES, GROUP_SIZE_STEP_TILES, MAX_BUILD_DISTANCE_FROM_HOME,
+    MAX_DISTANCE_STAT_MULTIPLIER, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE,
+};
 use crate::*;
 
 #[test]

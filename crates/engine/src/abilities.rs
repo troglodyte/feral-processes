@@ -78,7 +78,7 @@ pub struct AbilityDef {
 }
 
 fn default_fatigue_cost() -> f32 {
-    crate::COMPANION_COMMAND_FATIGUE_COST
+    crate::tuning::COMPANION_COMMAND_FATIGUE_COST
 }
 
 impl AbilityDef {
@@ -202,7 +202,7 @@ mod tests {
         assert_eq!(def.cooldown, 0, "cooldown defaults to none");
         assert_eq!(
             def.fatigue_cost,
-            crate::COMPANION_COMMAND_FATIGUE_COST,
+            crate::tuning::COMPANION_COMMAND_FATIGUE_COST,
             "an ability declaring no cost charges what commanding always did"
         );
         assert!(warnings.is_empty(), "a valid def warns about nothing");

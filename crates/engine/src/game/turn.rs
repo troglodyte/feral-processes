@@ -1,6 +1,7 @@
 //! The turn loop: advancing the clock, moving, and the actions a player
 //! spends a turn on.
 
+use crate::tuning::{KEEN_SCAVENGER_BONUS_PER_LEVEL, REST_TICKS};
 use crate::*;
 
 impl Game {

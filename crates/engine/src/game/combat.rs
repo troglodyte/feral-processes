@@ -1,6 +1,7 @@
 //! Starting a battle and planning a round: pack gathering, initiative, and
 //! the action menus the renderer draws from.
 
+use crate::tuning::{DEFAULT_BASE_SPEED, DEFEND_DEF_BONUS, INITIATIVE_DIE, PLAYER_BASE_SPEED};
 use crate::*;
 
 impl Game {

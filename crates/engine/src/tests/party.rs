@@ -1,6 +1,7 @@
 //! The roster: capacity, membership, companion status, and fusing programs together.
 
 use super::support::*;
+use crate::tuning::MAX_FUSIONS;
 use crate::*;
 
 #[test]

@@ -1,6 +1,7 @@
 //! The player's own roster — status, the programs in the party and the
 //! bank, and moving programs between them.
 
+use crate::tuning::MAX_FUSIONS;
 use crate::*;
 
 impl Game {

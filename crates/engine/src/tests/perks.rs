@@ -1,6 +1,10 @@
 //! Perk unlocks and the effects each perk level has.
 
 use super::support::*;
+use crate::tuning::{
+    ATTACKER_BONUS_PER_LEVEL, BUFFER_MIN_BONUS_PER_LEVEL, DECOMPILER_SKILL_PER_LEVEL,
+    DEFENDER_BONUS_PER_LEVEL, LEAN_COMPILER_DISCOUNT_PER_LEVEL,
+};
 use crate::*;
 
 #[test]

@@ -1,5 +1,6 @@
 //! Fixtures and helpers shared by the engine's unit tests.
 
+use crate::tuning::{GROUP_SIZE_STEP_TILES, MAX_ENEMY_GROUPS};
 use crate::*;
 use std::path::Path;
 

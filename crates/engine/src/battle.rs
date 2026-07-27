@@ -30,7 +30,7 @@ pub(crate) fn ceil_sqrt(n: u32) -> u32 {
 /// How many of a group's `n` living members can bring weapons to bear in one
 /// round. A hundred-strong swarm cannot all reach the party at once, so it
 /// swings ten at a time — which is what makes a swarm an attrition problem
-/// rather than an instant wipe. Shared with `crate::balance` so the offline
+/// rather than an instant wipe. Shared with `crate::balance_sim` so the offline
 /// projections and the real round loop cannot drift.
 pub(crate) fn attackers_in_group(n: usize) -> usize {
     ceil_sqrt(n as u32) as usize

@@ -22,7 +22,7 @@ pub const BASELINE_GROWTH_MULTIPLIER: f32 = 1.0;
 /// creatures.
 ///
 /// This is a live-gameplay cap only: it deliberately doesn't apply to
-/// `crate::balance`'s offline curve-shape projections, which search well
+/// `crate::balance_sim`'s offline curve-shape projections, which search well
 /// past any level actually reachable in play on purpose (see that
 /// module's docs).
 pub const CREATURE_MAX_LEVEL: u32 = 12;
@@ -50,7 +50,7 @@ pub fn xp_for_level(level: u32) -> u32 {
 /// `base` after `levels_gained` level-ups at `growth_multiplier`, fully
 /// healed — the same growth `add_xp` applies per level-up, computed
 /// directly rather than by spending XP one level at a time. Lets balance
-/// projections (see `crate::balance`) reuse the real growth constants
+/// projections (see `crate::balance_sim`) reuse the real growth constants
 /// instead of re-deriving them.
 pub fn stats_after_levels(base: Stats, levels_gained: u32, growth_multiplier: f32) -> Stats {
     let levels_gained = levels_gained as i32;

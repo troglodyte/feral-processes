@@ -94,7 +94,7 @@ pub struct EquipmentStats {
 /// above 1 — doubles each level (level *N* = base *
 /// `GEAR_LEVEL_GROWTH.powi(N - 1)`), matching `ZoneLevel::stat_multiplier`'s
 /// own per-zone doubling so neither leveling nor gear dominates the other
-/// outright — see `balance::best_case_gear_bonus`'s tests for the
+/// outright — see `balance_sim::best_case_gear_bonus`'s tests for the
 /// simulation that surfaced the old 2.5x growth overtaking it. Gear level
 /// is capped by `resources::ZoneLevel`: reaching zone *N* is what
 /// "unlocks" level *N* gear — see `Game::equip`.

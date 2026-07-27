@@ -1,5 +1,5 @@
 pub mod abilities;
-pub mod balance;
+pub mod balance_sim;
 pub mod battle;
 pub mod components;
 pub mod difficulty;
@@ -243,7 +243,7 @@ const PORTAL_FRAGMENT_DROP_CHANCE: f64 = 0.35;
 const ZONE_PORTAL_COST_GROWTH_PERCENT: u32 = 50;
 
 /// The quantity a zone-portal structure costing `base_qty` of an item
-/// charges at `zone`. Shared with `balance::ticks_to_afford_portal` so a
+/// charges at `zone`. Shared with `balance_sim::ticks_to_afford_portal` so a
 /// projection can't drift from the price the game actually charges.
 pub(crate) fn zone_portal_cost(base_qty: u32, zone: u32) -> u32 {
     base_qty + base_qty * ZONE_PORTAL_COST_GROWTH_PERCENT * zone.saturating_sub(1) / 100

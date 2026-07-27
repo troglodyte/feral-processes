@@ -222,7 +222,7 @@ impl Game {
     /// groups jumped straight to four. A zone-1 opening, where the zone cap
     /// pins every group to a single member anyway, was therefore a
     /// four-on-one against a player who has no companions yet —
-    /// `balance::simulate_roster_fight` scores that as a loss against every
+    /// `balance_sim::simulate_roster_fight` scores that as a loss against every
     /// shipped species, including the four that `beatable_by_a_fresh_player`
     /// clears one-on-one.
     pub(crate) fn max_enemy_groups(&self, x: i32, y: i32) -> usize {
@@ -367,7 +367,7 @@ impl Game {
         // gentlest thing that biome has rather than to its whole roster:
         // still a hard opening, but never the worst one on offer. Ranked
         // by flat stat total, the same crude yardstick
-        // `balance::toughest_ordinary_species` sorts by, because the
+        // `balance_sim::toughest_ordinary_species` sorts by, because the
         // projection itself can't rank fights the player loses — they all
         // score zero HP left.
         if self.in_opening_ring(x, y) {
@@ -376,7 +376,7 @@ impl Game {
                 .iter()
                 .filter(|id| {
                     db.get(id)
-                        .is_some_and(crate::balance::beatable_by_a_fresh_player)
+                        .is_some_and(crate::balance_sim::beatable_by_a_fresh_player)
                 })
                 .cloned()
                 .collect();

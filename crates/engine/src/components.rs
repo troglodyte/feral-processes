@@ -84,7 +84,7 @@ impl Stats {
 }
 
 /// The player's stats at level 1, before any leveling or gear — the seed
-/// value `Game::new` spawns the player with, and the baseline `balance`'s
+/// value `Game::new` spawns the player with, and the baseline `balance_sim`'s
 /// projections grow from, so both stay in lockstep.
 pub const PLAYER_BASE_STATS: Stats = Stats {
     hp: 90,
@@ -94,7 +94,7 @@ pub const PLAYER_BASE_STATS: Stats = Stats {
 };
 
 /// The satisfied end of a need's range. Lives here beside `Needs` rather
-/// than in `balance`, because it is the type's own documented invariant
+/// than in `balance_sim`, because it is the type's own documented invariant
 /// rather than a tuning knob: anything writing `hunger` or `fatigue` has to
 /// clamp to it.
 pub const NEED_MAX: f32 = 100.0;

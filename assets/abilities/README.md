@@ -15,7 +15,17 @@ the player's come from a research node naming them in `unlocks_abilities`,
 see `../research/README.md`. `decompile` is the one exception: it's
 pre-installed on a new game rather than researched, so the player always
 starts with a way to capture programs even before touching the research
-tree. So shipping a new ability means writing a file here *and* referencing
+tree.
+
+Neither path is how the ability *reaches* a party member, though — abilities
+are installed **routines** occupying level-derived slots (one per two
+companion levels, one per ten player levels, six at most either way), and
+every loaded ability automatically gets a `routine_<ability_id>` item minted
+for it — see `../items/README.md`. A species or research node just names
+which routine shows up pre-installed or lands in cargo; installing,
+swapping, and popping one back out is a separate act. So shipping a new
+ability means writing a single file here — the routine item exists with no
+second file — and, if you want it reachable through normal play, referencing
 its `id` from a species, a research node, or both.
 
 **Two abilities are mandatory.** `priority_boost` is the fallback every

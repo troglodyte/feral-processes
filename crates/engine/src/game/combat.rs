@@ -449,7 +449,11 @@ impl Game {
     /// the placeholder doing its job. This is exactly the shipped Scrapper's
     /// case — its only ability unlocks at level 3, a level-1 tame installs
     /// the fallback into its one slot, and without eviction the level-3
-    /// unlock would find that slot "full" and be lost forever.
+    /// unlock would find that slot "full" and be lost forever. The eviction
+    /// is logged (naming both routines) rather than silent, because the
+    /// matched slot might just as easily hold a Priority Boost the player
+    /// deliberately installed by hand — the id match can't tell the two
+    /// apart, so the player at least gets to read what happened.
     ///
     /// Only when every slot instead holds a *real* routine — installed,
     /// researched, or another innate ability — is the unlock logged and
@@ -493,6 +497,21 @@ impl Game {
                     .iter()
                     .position(|a| a == abilities::FALLBACK_ABILITY_ID)
                 {
+                    // Matched by id alone, so this fires the same way
+                    // whether that slot holds the auto-installed placeholder
+                    // or a Priority Boost the player chose to install
+                    // themselves — there is no stored provenance to tell the
+                    // two apart, and inventing one is out of scope. Logging
+                    // either way is what keeps eviction from reading as data
+                    // loss with no explanation: overwritten in place, not
+                    // popped back to inventory the way `uninstall_routine`
+                    // would, so it really is gone.
+                    let evicted_name = self.ability_display_name(abilities::FALLBACK_ABILITY_ID);
+                    let unlock_name = self.ability_display_name(&id);
+                    self.log(format!(
+                        "{name} swaps out {evicted_name} to make room for {unlock_name} — \
+                         {evicted_name} is destroyed, not returned to cargo."
+                    ));
                     installed[pos] = id;
                     self.world.entity_mut(entity).insert(Routines(installed));
                     continue;

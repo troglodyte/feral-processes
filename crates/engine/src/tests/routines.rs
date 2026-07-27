@@ -91,6 +91,43 @@ fn a_level_up_that_reaches_an_unlock_installs_it_into_a_free_slot() {
     );
 }
 
+/// Regression for the gap the re-review found in the C1 fix: eviction
+/// matches on ability id alone, so it fires identically whether the matched
+/// slot holds the auto-installed placeholder or a Priority Boost the player
+/// chose to install by hand — and the latter used to be evicted with no log
+/// line at all, unlike the neighbouring "unlock is lost" branch.
+#[test]
+fn evicting_a_manually_installed_priority_boost_is_logged() {
+    let (mut game, medic) = game_with_two_ability_companion();
+    set_level(&mut game, medic, 4); // two slots: hot_patch, plus one free
+    let boost_item = crate::abilities::routine_item_id(crate::abilities::FALLBACK_ABILITY_ID);
+    set_inventory(&mut game, &[(boost_item.as_str(), 1)]);
+    game.install_routine(medic, &boost_item).unwrap();
+    assert_eq!(
+        game.world.get::<Routines>(medic).unwrap().0,
+        vec!["hot_patch".to_string(), "priority_boost".to_string()],
+        "a deliberate install, not the tame-time fallback"
+    );
+
+    set_level(&mut game, medic, 5); // sandbox unlocks; both slots are full
+
+    assert_eq!(
+        game.world.get::<Routines>(medic).unwrap().0,
+        vec!["hot_patch".to_string(), "sandbox".to_string()],
+        "the unlock still evicts the id-matched slot, manual install or not"
+    );
+    assert!(
+        game.message_log(10).iter().any(|(_, text)| {
+            text.contains("swaps out")
+                && text.contains("Priority Boost")
+                && text.contains("Sandbox")
+        }),
+        "the eviction of a deliberately installed routine must be logged, \
+         not just the auto-installed placeholder's: {:?}",
+        game.message_log(10)
+    );
+}
+
 #[test]
 fn game_routine_slots_dispatches_to_the_companion_or_player_curve_by_entity() {
     // The actual number-per-level curves are pinned in `abilities.rs`'

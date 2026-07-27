@@ -171,6 +171,13 @@ fn game_with_a_sweeper() -> (Game, Entity) {
             Experience::default(),
         ))
         .id();
+    // Routine slots are level-gated (see `abilities::companion_routine_slots`):
+    // a level-1 companion has exactly one, so a level-1 sweeper would only
+    // ever install `cascade_overflow` and the other two tests below it would
+    // have nothing at their index. Level 6 is the lowest level worth three
+    // slots, which is exactly what all three declared abilities need to land.
+    game.world.get_mut::<Experience>(sweeper).unwrap().level = 6;
+    game.install_innate_routines(sweeper);
     game.add_companion(sweeper).unwrap();
     (game, sweeper)
 }

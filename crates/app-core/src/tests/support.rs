@@ -54,6 +54,7 @@ pub(crate) fn app_owning_distant_programs(seed: u32, count: i32) -> App {
             def_roll: 1.0,
             growth_roll: 1.0,
             fusions: 0,
+            routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
         });
     }
     save::save_to_file(&path, &data).unwrap();

@@ -1,6 +1,7 @@
 //! Starting a battle and planning a round: pack gathering, initiative, and
 //! the action menus the renderer draws from.
 
+use crate::abilities::AbilityId;
 use crate::tuning::{DEFAULT_BASE_SPEED, DEFEND_DEF_BONUS, INITIATIVE_DIE, PLAYER_BASE_SPEED};
 use crate::*;
 
@@ -376,23 +377,37 @@ impl Game {
         }
     }
 
-    /// Every ability `entity` can be commanded to use right now, in menu
-    /// order — its species' declared list, filtered to what its level has
-    /// unlocked.
-    ///
-    /// Never empty: a species that declares none, or whose whole list is
-    /// still level-gated, yields `abilities::FALLBACK_ABILITY_ID`. Resolving
-    /// the fallback here rather than at each call site is what lets
-    /// `BattleAction::Special` carry a plain index and the menu list one row
-    /// instead of zero.
-    pub(crate) fn companion_abilities(&self, entity: Entity) -> Vec<AbilityDef> {
-        let db = self.world.resource::<AbilityDb>();
+    /// How many routines `entity` can hold right now. The player and a
+    /// companion grow slots at different rates on purpose — see
+    /// `tuning::PLAYER_ROUTINE_SLOT_PER_LEVEL`.
+    pub fn routine_slots(&self, entity: Entity) -> usize {
         let level = self
             .world
             .get::<Experience>(entity)
             .map(|e| e.level)
             .unwrap_or(1);
-        let declared: Vec<AbilityDef> = self
+        if entity == self.player_entity() {
+            abilities::player_routine_slots(level)
+        } else {
+            abilities::companion_routine_slots(level)
+        }
+    }
+
+    /// Installs the kit `entity`'s species grants at its current level,
+    /// replacing whatever it holds. Called once when a program comes into
+    /// existence — a decompile or a fusion — never afterwards.
+    ///
+    /// A species declaring no abilities gets `FALLBACK_ABILITY_ID` instead,
+    /// which is what keeps an ability-less species commandable and keeps
+    /// that ability obtainable by extraction: nothing else grants it.
+    pub(crate) fn install_innate_routines(&mut self, entity: Entity) {
+        let level = self
+            .world
+            .get::<Experience>(entity)
+            .map(|e| e.level)
+            .unwrap_or(1);
+        let slots = self.routine_slots(entity);
+        let declared: Vec<AbilityId> = self
             .world
             .get::<Creature>(entity)
             .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
@@ -400,14 +415,83 @@ impl Game {
             .unwrap_or_default()
             .into_iter()
             .filter(|a| a.level <= level)
-            .filter_map(|a| db.get(&a.id).cloned())
+            .map(|a| a.id)
+            .filter(|id| self.world.resource::<AbilityDb>().get(id).is_some())
+            .take(slots)
             .collect();
-        if !declared.is_empty() {
-            return declared;
-        }
-        db.get(abilities::FALLBACK_ABILITY_ID)
-            .cloned()
+        let installed = if declared.is_empty() {
+            vec![abilities::FALLBACK_ABILITY_ID.to_string()]
+        } else {
+            declared
+        };
+        self.world.entity_mut(entity).insert(Routines(installed));
+    }
+
+    /// Installs every species ability whose unlock level lands in
+    /// `(from_level, to_level]` — the ones this level-up just reached.
+    ///
+    /// An unlock with no free slot is logged and dropped for good: the
+    /// window it could have been installed in has passed. No shipped species
+    /// can reach that state (the most any declares is two abilities, the
+    /// latest at level 8, and four slots exist by then), so this is
+    /// mod-safety, and failing loudly beats carrying a pending-installs list
+    /// nothing ships to exercise.
+    pub(crate) fn install_unlocked_routines(
+        &mut self,
+        entity: Entity,
+        from_level: u32,
+        to_level: u32,
+    ) {
+        let reached: Vec<AbilityId> = self
+            .world
+            .get::<Creature>(entity)
+            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+            .map(|s| s.abilities.clone())
+            .unwrap_or_default()
             .into_iter()
+            .filter(|a| a.level > from_level && a.level <= to_level)
+            .map(|a| a.id)
+            .filter(|id| self.world.resource::<AbilityDb>().get(id).is_some())
+            .collect();
+        if reached.is_empty() {
+            return;
+        }
+        let slots = self.routine_slots(entity);
+        let name = self.creature_label(entity);
+        for id in reached {
+            let mut installed = self
+                .world
+                .get::<Routines>(entity)
+                .map(|r| r.0.clone())
+                .unwrap_or_default();
+            if installed.contains(&id) {
+                continue;
+            }
+            if installed.len() >= slots {
+                self.log(format!(
+                    "{name} has no free routine slot for {id} — the unlock is lost."
+                ));
+                continue;
+            }
+            installed.push(id);
+            self.world.entity_mut(entity).insert(Routines(installed));
+        }
+    }
+
+    /// Every ability `entity` can be commanded to use right now, in menu
+    /// order — whatever is installed in its routine slots.
+    ///
+    /// A companion's kit is installed at tame/fuse time and topped up on the
+    /// level-ups that reach a species unlock (see `install_innate_routines`
+    /// and `install_unlocked_routines`); nothing is resolved here.
+    pub(crate) fn companion_abilities(&self, entity: Entity) -> Vec<AbilityDef> {
+        let db = self.world.resource::<AbilityDb>();
+        self.world
+            .get::<Routines>(entity)
+            .map(|r| r.0.as_slice())
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|id| db.get(id).cloned())
             .collect()
     }
 

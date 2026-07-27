@@ -405,9 +405,11 @@ impl Game {
             StatusEffects::default(),
             FusionCount(fused_depth),
         ));
+        let fused_entity = fused.id();
         if let Some(name) = &final_name {
             fused.insert(CustomName(name.clone()));
         }
+        self.install_innate_routines(fused_entity);
         self.log(match &final_name {
             Some(name) => format!(
                 "You fuse {name_a} and {name_b} into {name}, a new {}.",

@@ -1,6 +1,7 @@
 use bevy_ecs::prelude::{Component, Entity};
 use serde::{Deserialize, Serialize};
 
+use crate::abilities::AbilityId;
 use crate::items::{EquipmentSlot, ItemId};
 use crate::items_db::ItemDb;
 use crate::perks::Perk;
@@ -202,6 +203,17 @@ impl Equipment {
 pub struct Inventory {
     pub items: Vec<(ItemId, u32)>,
 }
+
+/// The abilities installed on this entity, in menu order — the player's and
+/// every companion's entire kit. Length is bounded by
+/// `Game::routine_slots`; position is what `BattleAction::Special::ability`
+/// indexes.
+///
+/// A companion's species kit is *pre-installed* here rather than read from
+/// `SpeciesDef` at menu time, which is what lets an innate ability be popped
+/// out and plugged into a different program.
+#[derive(Component, Default, Clone)]
+pub struct Routines(pub Vec<AbilityId>);
 
 /// Player-only: how many times each equippable `ItemId` has been fused
 /// (see `Game::fuse_item`) — every fusion consumes 2 copies of an item

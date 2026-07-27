@@ -161,7 +161,12 @@ impl Game {
                 .map(|p| p.growth_roll)
                 .unwrap_or(Potential::NEUTRAL.growth_roll);
             let growth_multiplier = species_growth * individual_roll;
-            let leveled = {
+            let before_level = self
+                .world
+                .get::<Experience>(companion)
+                .map(|e| e.level)
+                .unwrap_or(1);
+            {
                 let mut query = self.world.query::<(&mut Experience, &mut Stats)>();
                 let Ok((mut exp, mut stats)) = query.get_mut(&mut self.world, companion) else {
                     continue;
@@ -172,11 +177,16 @@ impl Game {
                     amount,
                     growth_multiplier,
                     Some(crate::tuning::CREATURE_MAX_LEVEL),
-                ) > 0
-            };
-            if leveled {
+                );
+            }
+            let level = self
+                .world
+                .get::<Experience>(companion)
+                .map(|e| e.level)
+                .unwrap_or(before_level);
+            if level > before_level {
+                self.install_unlocked_routines(companion, before_level, level);
                 let name = self.creature_label(companion);
-                let level = self.world.get::<Experience>(companion).unwrap().level;
                 self.log_kind(
                     MessageKind::LevelUp,
                     format!("{name} gains {amount} XP and levels up to {level}!"),
@@ -246,6 +256,7 @@ impl Game {
         self.world
             .entity_mut(front)
             .insert((Tamed { owner: player }, Experience::default()));
+        self.install_innate_routines(front);
         if let Some(nest) = nest
             && let Some(mut n) = self.world.get_mut::<Nest>(nest)
         {

@@ -71,6 +71,7 @@ impl Game {
                 StatusEffects::default(),
                 CombatBuff::default(),
                 Perks::default(),
+                Routines::default(),
             ))
             .id();
         world.insert_resource(PlayerEntity(player));
@@ -196,6 +197,7 @@ impl Game {
                     points: data.player.perk_points,
                     unlocked: data.player.unlocked_perks,
                 },
+                Routines(data.player.routines.clone()),
             ))
             .id();
         world.insert_resource(PlayerEntity(player));
@@ -244,6 +246,7 @@ impl Game {
                 ZonePortal(c.zone),
                 StatusEffects::default(),
                 FusionCount(c.fusions),
+                Routines(c.routines.clone()),
             ));
             if let Some(name) = c.custom_name.clone() {
                 entity.insert(CustomName(name));
@@ -381,6 +384,11 @@ impl Game {
             .map(|f| f.tiers.clone())
             .unwrap_or_default();
         let perks = self.world.get::<Perks>(player).cloned().unwrap_or_default();
+        let routines = self
+            .world
+            .get::<Routines>(player)
+            .map(|r| r.0.clone())
+            .unwrap_or_default();
 
         let party_entities = self.world.resource::<Party>().0.clone();
         let mut creatures = Vec::new();
@@ -396,6 +404,7 @@ impl Game {
             Option<&CustomName>,
             Option<&Potential>,
             Option<&FusionCount>,
+            Option<&Routines>,
         )>();
         for (
             entity,
@@ -409,6 +418,7 @@ impl Game {
             custom_name,
             potential,
             fusions,
+            routines,
         ) in creature_query.iter(&self.world)
         {
             let potential = potential.copied().unwrap_or(Potential::NEUTRAL);
@@ -448,6 +458,7 @@ impl Game {
                 def_roll: potential.def_roll,
                 growth_roll: potential.growth_roll,
                 fusions: fusions.map(|f| f.0).unwrap_or(0),
+                routines: routines.map(|r| r.0.clone()).unwrap_or_default(),
             });
         }
 
@@ -514,6 +525,7 @@ impl Game {
                 item_fusions,
                 perk_points: perks.points,
                 unlocked_perks: perks.unlocked,
+                routines,
             },
             creatures,
             structures,

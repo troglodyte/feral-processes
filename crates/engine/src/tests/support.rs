@@ -54,9 +54,15 @@ pub(super) fn multi_group_ground(game: &Game) -> (i32, i32) {
 }
 
 /// Sets `entity`'s level directly, for tests that need a level-gated
-/// ability unlocked without grinding XP into it.
+/// ability unlocked without grinding XP into it. Installs whatever species
+/// unlocks that jump reaches, exactly as a real level-up would — otherwise
+/// a test that raises a level would see a kit the game never leaves behind.
 pub(super) fn set_level(game: &mut Game, entity: Entity, level: u32) {
+    let before = game.world.get::<Experience>(entity).unwrap().level;
     game.world.get_mut::<Experience>(entity).unwrap().level = level;
+    if level > before {
+        game.install_unlocked_routines(entity, before, level);
+    }
 }
 
 pub(super) fn test_assets_dir() -> std::path::PathBuf {
@@ -403,7 +409,8 @@ pub(super) fn start_battle_with_a_wild_program(game: &mut Game) -> Entity {
 pub(super) fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
     let player = game.player_entity();
     let species = generic_species(game);
-    game.world
+    let entity = game
+        .world
         .spawn((
             Creature {
                 species: species.id.clone(),
@@ -418,7 +425,9 @@ pub(super) fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
             Tamed { owner: player },
             Experience::default(),
         ))
-        .id()
+        .id();
+    game.install_innate_routines(entity);
+    entity
 }
 
 /// Spawns a minimal wild (untamed, `Hostile`) `Creature` on the
@@ -574,6 +583,7 @@ pub(super) fn game_with_two_ability_companion() -> (Game, Entity) {
             Experience::default(),
         ))
         .id();
+    game.install_innate_routines(medic);
     game.add_companion(medic).unwrap();
     (game, medic)
 }

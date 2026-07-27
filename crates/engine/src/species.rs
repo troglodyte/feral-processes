@@ -100,13 +100,12 @@ pub struct SpeciesDef {
     /// non-boss species.
     #[serde(default)]
     pub is_boss: bool,
-    /// The abilities a tamed member of this species can be commanded to use,
-    /// in menu order, each gated on the companion's level. Left empty, the
-    /// companion falls back to `abilities::FALLBACK_ABILITY_ID` — see
-    /// `Game::companion_abilities`, which resolves that fallback so no
-    /// caller has to special-case an empty list. `#[serde(default)]` so
-    /// existing species files (including mods) without this field keep
-    /// parsing.
+    /// The abilities a tamed member of this species is created holding, in
+    /// menu order, each gated on the companion's level. Left empty, the
+    /// companion is created holding `abilities::FALLBACK_ABILITY_ID`
+    /// instead — see `Game::install_innate_routines`, which is the only
+    /// place that fallback is resolved. `#[serde(default)]` so existing
+    /// species files (including mods) without this field keep parsing.
     #[serde(default)]
     pub abilities: Vec<SpeciesAbility>,
     /// Multiplies this species' per-level stat growth (see

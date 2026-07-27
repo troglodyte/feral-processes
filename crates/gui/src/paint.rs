@@ -4,23 +4,23 @@
 //! `render/` is ~3,000 lines of immediate-mode drawing. Rather than have all
 //! of it name a graphics library directly — which is what made the frontend
 //! macroquad-shaped in the first place — it names `Painter`, and the library
-//! lives behind that. Swapping backends is then a change to this file rather
-//! than to every menu.
+//! lives behind that. Swapping backends is a change to this file rather than
+//! to every menu.
 //!
 //! The surface is deliberately tiny: filled rect, outlined rect, line, text
 //! in one of three faces, text measurement, and the frame's dimensions and
-//! clock. That is the whole vocabulary the screens are drawn in.
+//! frame delta. That is the whole vocabulary the screens are drawn in.
 //!
 //! **Text is positioned by baseline**, not by top edge — `y` is where the
 //! glyph bottoms sit, ignoring descenders. Every layout in `render/` is
 //! written against that convention (rows advance by `Metrics::line_height`
-//! from one baseline to the next), so a backend that positions text by its
-//! top-left has to convert rather than reinterpret.
+//! from one baseline to the next). egui positions a laid-out galley by its
+//! top-left, so `text` converts rather than reinterprets; see
+//! `baseline_offset`.
 
-use macroquad::prelude::{
-    FilterMode, Font, TextParams, draw_line, draw_rectangle, draw_rectangle_lines, draw_text_ex,
-    get_time, load_ttf_font_from_bytes, measure_text, screen_height, screen_width,
-};
+use std::sync::Arc;
+
+use bevy_egui::egui;
 
 /// Straight RGBA, each channel 0.0–1.0, non-premultiplied.
 ///
@@ -64,8 +64,13 @@ impl Rect {
     }
 }
 
-/// Measured extent of a run of text. `height` is the cap height the callers
-/// centre glyphs by, not the font's full line box.
+/// Measured extent of a run of text — the *inked* extent, the box the
+/// visible pixels actually occupy, not the layout advance.
+///
+/// That is what the previous backend's `measure_text` reported and what the
+/// callers assume: `render/base.rs` centres a glyph in its tile by it, so
+/// using the advance width instead would push every map glyph off-centre by
+/// its side bearing.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TextDims {
     pub width: f32,
@@ -84,41 +89,96 @@ pub enum Face {
     Map,
 }
 
+/// Font family keys registered with egui by `install_fonts`. egui addresses
+/// faces by family name, so these strings are the link between `Face` and
+/// the loaded bytes, and must match on both sides.
+const FAMILY_UI: &str = "fp-ui";
+const FAMILY_UI_BOLD: &str = "fp-ui-bold";
+const FAMILY_MAP: &str = "fp-map";
+
+impl Face {
+    fn family(self) -> egui::FontFamily {
+        let name = match self {
+            Self::Ui => FAMILY_UI,
+            Self::UiBold => FAMILY_UI_BOLD,
+            Self::Map => FAMILY_MAP,
+        };
+        egui::FontFamily::Name(name.into())
+    }
+
+    fn font_id(self, size: u16) -> egui::FontId {
+        egui::FontId::new(size as f32, self.family())
+    }
+}
+
+/// Registers the three embedded faces with the egui context. Runs once at
+/// startup; egui owns the rasterized atlas from then on.
+///
+/// Embedded with `include_bytes!` rather than loaded from `assets_dir` for
+/// the same reason the sound effects are (see `sounds.rs`): fonts aren't
+/// moddable game content.
+///
+/// Starts from `FontDefinitions::empty()` rather than `default()` so egui's
+/// own bundled faces aren't rasterized into the atlas for nothing — every
+/// string this frontend draws names one of the three families below.
+pub fn install_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::empty();
+    let mut add = |key: &str, bytes: &'static [u8]| {
+        fonts
+            .font_data
+            .insert(key.to_owned(), Arc::new(egui::FontData::from_static(bytes)));
+        fonts
+            .families
+            .insert(egui::FontFamily::Name(key.into()), vec![key.to_owned()]);
+    };
+    add(
+        FAMILY_UI,
+        include_bytes!("../../../assets/fonts/DejaVuSansMono.ttf"),
+    );
+    add(
+        FAMILY_UI_BOLD,
+        include_bytes!("../../../assets/fonts/DejaVuSansMono-Bold.ttf"),
+    );
+    add(
+        FAMILY_MAP,
+        include_bytes!("../../../assets/fonts/unscii-16.ttf"),
+    );
+    ctx.set_fonts(fonts);
+}
+
 /// Everything a screen needs in order to draw itself.
 ///
 /// Threaded through `render/` in the parameter slot that used to carry
-/// `&Fonts`; it additionally carries the frame's dimensions and clock, which
-/// the drawing code previously read from backend globals. Created once (font
-/// loading is not cheap) and refreshed each frame by `begin_frame`.
+/// `&Fonts`; it additionally carries the frame's dimensions and delta, which
+/// the drawing code previously read from backend globals.
+///
+/// Built fresh each frame — an `egui::Painter` is a cheap handle onto the
+/// context's shape list, not a resource worth keeping — which is also what
+/// makes the dimensions consistent for everything drawn inside one
+/// frame. Reading them per-call instead would let a resize land midway
+/// through a screen and tear its layout.
 pub struct Painter {
-    fonts: Fonts,
+    painter: egui::Painter,
     width: f32,
     height: f32,
-    time: f64,
     delta: f32,
 }
 
 impl Painter {
-    /// Loads the embedded faces. Must run after the window exists — the font
-    /// loader reaches for the graphics context.
-    pub fn new() -> Self {
+    pub fn for_frame(ctx: &egui::Context, delta: f32) -> Self {
+        // The background layer, so the game draws beneath any egui window —
+        // there are none today, but a debug overlay shouldn't have to fight
+        // the map for z-order. `layer_painter` hands back a full-screen
+        // painter, so its clip rect is also the window size; taking both
+        // from one place keeps them from disagreeing.
+        let painter = ctx.layer_painter(egui::LayerId::background());
+        let screen = painter.clip_rect();
         Self {
-            fonts: Fonts::load(),
-            width: 0.0,
-            height: 0.0,
-            time: 0.0,
-            delta: 0.0,
+            painter,
+            width: screen.width(),
+            height: screen.height(),
+            delta,
         }
-    }
-
-    /// Latches the frame's dimensions and clock, so that everything drawn
-    /// inside one frame agrees about both. Reading them per-call instead
-    /// would let a resize land midway through a screen and tear its layout.
-    pub fn begin_frame(&mut self) {
-        self.width = screen_width();
-        self.height = screen_height();
-        self.time = get_time();
-        self.delta = macroquad::prelude::get_frame_time();
     }
 
     pub fn screen_w(&self) -> f32 {
@@ -129,12 +189,6 @@ impl Painter {
         self.height
     }
 
-    /// Seconds since startup. The one clock the frontend's animations run
-    /// on — `Fx` timing and the toast expiry both read it from here.
-    pub fn time(&self) -> f64 {
-        self.time
-    }
-
     /// Seconds the previous frame took. Drives the rate-based animations —
     /// the ghost bars drain per second, not per frame, so they look the
     /// same regardless of framerate.
@@ -142,44 +196,56 @@ impl Painter {
         self.delta
     }
 
+    /// Fills the whole screen. Not a render-pass clear: egui has no such
+    /// concept, and this is simply the first shape in the frame's list, so
+    /// everything drawn afterwards lands on top of it.
     pub fn clear(&self, color: Color) {
-        macroquad::prelude::clear_background(to_backend(color));
+        self.painter
+            .rect_filled(self.painter.clip_rect(), 0.0, to_egui(color));
     }
 
     pub fn rect(&self, x: f32, y: f32, w: f32, h: f32, color: Color) {
-        draw_rectangle(x, y, w, h, to_backend(color));
+        self.painter
+            .rect_filled(rect_of(x, y, w, h), 0.0, to_egui(color));
     }
 
+    /// Outline centred on the rect's edge (`StrokeKind::Middle`), which is
+    /// where the previous backend put it — an inside or outside stroke would
+    /// shift every panel border by half its thickness.
     pub fn rect_lines(&self, x: f32, y: f32, w: f32, h: f32, thickness: f32, color: Color) {
-        draw_rectangle_lines(x, y, w, h, thickness, to_backend(color));
+        self.painter.rect_stroke(
+            rect_of(x, y, w, h),
+            0.0,
+            egui::Stroke::new(thickness, to_egui(color)),
+            egui::StrokeKind::Middle,
+        );
     }
 
     pub fn line(&self, x1: f32, y1: f32, x2: f32, y2: f32, thickness: f32, color: Color) {
-        draw_line(x1, y1, x2, y2, thickness, to_backend(color));
+        self.painter.line_segment(
+            [egui::pos2(x1, y1), egui::pos2(x2, y2)],
+            egui::Stroke::new(thickness, to_egui(color)),
+        );
     }
 
     /// Draws `text` with its baseline at `y`. See the module docs on why
     /// that, and not the top edge, is the anchor.
     pub fn text(&self, face: Face, text: impl AsRef<str>, x: f32, y: f32, size: u16, color: Color) {
-        draw_text_ex(
-            text.as_ref(),
-            x,
-            y,
-            TextParams {
-                font: Some(self.fonts.face(face)),
-                font_size: size,
-                color: to_backend(color),
-                ..Default::default()
-            },
-        );
+        let color = to_egui(color);
+        let galley =
+            self.painter
+                .layout_no_wrap(text.as_ref().to_owned(), face.font_id(size), color);
+        let top = y - baseline_offset(&galley);
+        self.painter.galley(egui::pos2(x, top), galley, color);
     }
 
     pub fn measure(&self, face: Face, text: impl AsRef<str>, size: u16) -> TextDims {
-        let d = measure_text(text.as_ref(), Some(self.fonts.face(face)), size, 1.0);
-        TextDims {
-            width: d.width,
-            height: d.height,
-        }
+        let galley = self.painter.layout_no_wrap(
+            text.as_ref().to_owned(),
+            face.font_id(size),
+            egui::Color32::WHITE,
+        );
+        ink_extents(&galley)
     }
 
     /// `text` in the regular UI face — the overwhelmingly common case.
@@ -204,49 +270,47 @@ impl Painter {
     }
 }
 
-/// The three faces the frontend draws with: a pixel font for the map grid
-/// and a vector monospace, regular and bold, for everything else.
+/// How far below a galley's top edge its first baseline sits.
 ///
-/// Embedded with `include_bytes!` rather than loaded from `assets_dir` for
-/// the same reason the sound effects are (see `sounds.rs`): fonts aren't
-/// moddable game content.
-struct Fonts {
-    map: Font,
-    ui: Font,
-    ui_bold: Font,
+/// `Glyph::pos.y` is the baseline relative to its row, and `PlacedRow::pos.y`
+/// is the row relative to the galley, so the two together convert a
+/// baseline-anchored `y` into the top-left egui wants. Empty text has no
+/// glyph to ask and also nothing to draw, so zero is harmless there.
+fn baseline_offset(galley: &egui::Galley) -> f32 {
+    galley
+        .rows
+        .first()
+        .and_then(|placed| placed.row.glyphs.first().map(|g| placed.pos.y + g.pos.y))
+        .unwrap_or(0.0)
 }
 
-impl Fonts {
-    fn load() -> Self {
-        let mut map =
-            load_ttf_font_from_bytes(include_bytes!("../../../assets/fonts/unscii-16.ttf"))
-                .expect("embedded unscii-16 is valid ttf");
-        // unscii is vectorized outlines of a bitmap, so it only stays crisp
-        // under nearest-neighbour sampling. The loader applies the context
-        // default, which is linear.
-        map.set_filter(FilterMode::Nearest);
-        Self {
-            map,
-            ui: load_ttf_font_from_bytes(include_bytes!(
-                "../../../assets/fonts/DejaVuSansMono.ttf"
-            ))
-            .expect("embedded DejaVu Sans Mono is valid ttf"),
-            ui_bold: load_ttf_font_from_bytes(include_bytes!(
-                "../../../assets/fonts/DejaVuSansMono-Bold.ttf"
-            ))
-            .expect("embedded DejaVu Sans Mono Bold is valid ttf"),
+/// The inked extent of a laid-out galley — see `TextDims` on why this is the
+/// ink box and not the layout box.
+///
+/// `mesh_bounds` is `Rect::NOTHING` for text that rasterizes to nothing (an
+/// empty string, or a run of spaces), and that sentinel is built from
+/// infinities, so it is checked rather than trusted: an infinite width would
+/// propagate silently into a panel size.
+fn ink_extents(galley: &egui::Galley) -> TextDims {
+    let ink = galley.mesh_bounds;
+    if ink.is_finite() {
+        TextDims {
+            width: ink.width(),
+            height: ink.height(),
         }
-    }
-
-    fn face(&self, face: Face) -> &Font {
-        match face {
-            Face::Ui => &self.ui,
-            Face::UiBold => &self.ui_bold,
-            Face::Map => &self.map,
+    } else {
+        TextDims {
+            width: galley.rect.width(),
+            height: 0.0,
         }
     }
 }
 
-fn to_backend(c: Color) -> macroquad::prelude::Color {
-    macroquad::prelude::Color::new(c.r, c.g, c.b, c.a)
+fn rect_of(x: f32, y: f32, w: f32, h: f32) -> egui::Rect {
+    egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(w, h))
+}
+
+fn to_egui(c: Color) -> egui::Color32 {
+    let ch = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    egui::Color32::from_rgba_unmultiplied(ch(c.r), ch(c.g), ch(c.b), ch(c.a))
 }

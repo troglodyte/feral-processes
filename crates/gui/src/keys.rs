@@ -1,17 +1,21 @@
 //! Auto-repeat for held keys.
 //!
-//! macroquad's `is_key_pressed` is edge-triggered and deliberately drops the
-//! backend's auto-repeat events: `key_down_event` records a press only when
-//! the event is flagged `repeat == false`, and the pressed set is cleared
-//! every frame. A held arrow key therefore delivers exactly one press no
-//! matter how long it's held. Letter keys escape this only by arriving
-//! through `get_char_pressed`, whose queue is fed regardless of the flag —
-//! which is why `hjkl` repeat and the arrows do not.
+//! `ButtonInput::just_pressed` is edge-triggered and swallows the OS's own
+//! auto-repeat: `ButtonInput::press` only records a *just*-press when the key
+//! was not already in the pressed set, and a held key sends `Pressed` again
+//! without an intervening `Released`. A held arrow key therefore delivers
+//! exactly one press no matter how long it's held. Letter keys escape this
+//! only by arriving as `KeyboardInput::text`, which is emitted per event
+//! regardless — which is why `hjkl` repeat and the arrows do not.
 //!
 //! `KeyRepeat` reconstructs the repeat from the *held* state instead, so its
 //! cadence is the game's rather than the player's desktop key settings.
+//!
+//! This held-state reading is the reason the module survived the move off
+//! macroquad unchanged: both backends land on the same edge-triggered
+//! semantics, so only the name of the key enum differs.
 
-use macroquad::prelude::KeyCode;
+use bevy::input::keyboard::KeyCode;
 
 /// How long a key must be held before it starts repeating.
 const REPEAT_DELAY: f64 = 0.25;
@@ -76,43 +80,52 @@ mod tests {
     #[test]
     fn a_new_press_fires_once_and_then_waits_out_the_delay() {
         let mut repeat = KeyRepeat::new();
-        assert_eq!(repeat.tick(0.0, &[KeyCode::Up]), vec![KeyCode::Up]);
+        assert_eq!(
+            repeat.tick(0.0, &[KeyCode::ArrowUp]),
+            vec![KeyCode::ArrowUp]
+        );
         for frame in 1..15 {
             let now = frame as f64 / 60.0;
             assert!(now < REPEAT_DELAY, "test only covers the pre-delay frames");
             assert!(
-                repeat.tick(now, &[KeyCode::Up]).is_empty(),
+                repeat.tick(now, &[KeyCode::ArrowUp]).is_empty(),
                 "a key held for {now}s is still inside the delay"
             );
         }
     }
 
     /// The reported bug: holding an arrow key moved the player exactly one
-    /// tile, because macroquad's `is_key_pressed` drops the backend's
+    /// tile, because an edge-triggered just-pressed check drops the OS's
     /// auto-repeat events.
     #[test]
     fn a_held_key_repeats_at_the_interval_once_the_delay_has_passed() {
         let mut repeat = KeyRepeat::new();
-        assert_eq!(repeat.tick(0.0, &[KeyCode::Right]), vec![KeyCode::Right]);
+        assert_eq!(
+            repeat.tick(0.0, &[KeyCode::ArrowRight]),
+            vec![KeyCode::ArrowRight]
+        );
 
         assert!(
             repeat
-                .tick(REPEAT_DELAY - 0.001, &[KeyCode::Right])
+                .tick(REPEAT_DELAY - 0.001, &[KeyCode::ArrowRight])
                 .is_empty()
         );
         assert_eq!(
-            repeat.tick(REPEAT_DELAY, &[KeyCode::Right]),
-            vec![KeyCode::Right]
+            repeat.tick(REPEAT_DELAY, &[KeyCode::ArrowRight]),
+            vec![KeyCode::ArrowRight]
         );
         assert!(
             repeat
-                .tick(REPEAT_DELAY + REPEAT_INTERVAL - 0.001, &[KeyCode::Right])
+                .tick(
+                    REPEAT_DELAY + REPEAT_INTERVAL - 0.001,
+                    &[KeyCode::ArrowRight]
+                )
                 .is_empty(),
             "repeats are paced by the interval, not by the frame rate"
         );
         assert_eq!(
-            repeat.tick(REPEAT_DELAY + REPEAT_INTERVAL, &[KeyCode::Right]),
-            vec![KeyCode::Right]
+            repeat.tick(REPEAT_DELAY + REPEAT_INTERVAL, &[KeyCode::ArrowRight]),
+            vec![KeyCode::ArrowRight]
         );
     }
 
@@ -121,9 +134,12 @@ mod tests {
     #[test]
     fn releasing_a_key_lets_the_next_press_fire_immediately() {
         let mut repeat = KeyRepeat::new();
-        repeat.tick(0.0, &[KeyCode::Left]);
+        repeat.tick(0.0, &[KeyCode::ArrowLeft]);
         repeat.tick(0.1, &[]);
-        assert_eq!(repeat.tick(0.11, &[KeyCode::Left]), vec![KeyCode::Left]);
+        assert_eq!(
+            repeat.tick(0.11, &[KeyCode::ArrowLeft]),
+            vec![KeyCode::ArrowLeft]
+        );
     }
 
     /// A key pressed while another is already held starts its own delay
@@ -131,16 +147,16 @@ mod tests {
     #[test]
     fn each_key_keeps_its_own_schedule() {
         let mut repeat = KeyRepeat::new();
-        repeat.tick(0.0, &[KeyCode::Up]);
+        repeat.tick(0.0, &[KeyCode::ArrowUp]);
 
         assert_eq!(
-            repeat.tick(REPEAT_DELAY, &[KeyCode::Up, KeyCode::Down]),
-            vec![KeyCode::Up, KeyCode::Down],
+            repeat.tick(REPEAT_DELAY, &[KeyCode::ArrowUp, KeyCode::ArrowDown]),
+            vec![KeyCode::ArrowUp, KeyCode::ArrowDown],
             "Up is due to repeat, Down is a fresh press"
         );
         assert!(
             repeat
-                .tick(REPEAT_DELAY + REPEAT_INTERVAL, &[KeyCode::Down])
+                .tick(REPEAT_DELAY + REPEAT_INTERVAL, &[KeyCode::ArrowDown])
                 .is_empty(),
             "Down waits out its own delay, not Up's"
         );
@@ -152,21 +168,21 @@ mod tests {
     #[test]
     fn a_blocked_key_stays_quiet_until_it_is_released() {
         let mut repeat = KeyRepeat::new();
-        repeat.tick(0.0, &[KeyCode::Down]);
+        repeat.tick(0.0, &[KeyCode::ArrowDown]);
         repeat.block_held();
 
         for frame in 1..=120 {
             let now = frame as f64 / 60.0;
             assert!(
-                repeat.tick(now, &[KeyCode::Down]).is_empty(),
+                repeat.tick(now, &[KeyCode::ArrowDown]).is_empty(),
                 "a blocked key must stay quiet while it stays held ({now}s)"
             );
         }
 
         repeat.tick(2.1, &[]);
         assert_eq!(
-            repeat.tick(2.2, &[KeyCode::Down]),
-            vec![KeyCode::Down],
+            repeat.tick(2.2, &[KeyCode::ArrowDown]),
+            vec![KeyCode::ArrowDown],
             "releasing it clears the block"
         );
     }

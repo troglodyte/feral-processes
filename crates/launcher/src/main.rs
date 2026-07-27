@@ -37,12 +37,12 @@ fn main() -> io::Result<()> {
 }
 
 /// Best-effort preflight check: on Linux there's no windowing system to
-/// open a window on at all without an X11/Wayland display, and macroquad's
-/// underlying platform layer aborts the process rather than returning a
-/// catchable error in that case — so this check is what turns the common
-/// "no display" case (e.g. an SSH session or a CI box) into a readable
-/// error instead of a raw abort. macOS/Windows always have a compositor
-/// available to the active session, so there's nothing analogous to check.
+/// open a window on at all without an X11/Wayland display, and the winit
+/// layer under Bevy panics out of `App::run` rather than returning an error
+/// a caller could act on — so this check is what turns the common "no
+/// display" case (e.g. an SSH session or a CI box) into a readable error
+/// instead of a backtrace. macOS/Windows always have a compositor available
+/// to the active session, so there's nothing analogous to check.
 fn graphics_available() -> bool {
     #[cfg(target_os = "linux")]
     {

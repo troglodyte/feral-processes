@@ -6,7 +6,32 @@ edition.workspace = true
 [dependencies]
 feral-processes-app-core = { workspace = true }
 feral-processes-engine = { workspace = true }
-macroquad = { version = "0.4", features = ["audio"] }
+
+# Trimmed hard rather than taken as `default`, which drags in 3d, pbr,
+# gltf, animation and bevy_ui — none of which this frontend renders. The
+# screens are drawn through egui and the map is 2d, so what's left is: a
+# window, the 2d pipeline, input, and wav playback.
+#
+# `2d_bevy_render` rather than the `2d` umbrella, and the platform pieces
+# spelled out rather than `default_platform`: both umbrellas pull in
+# `bevy_gilrs`, whose `libudev-sys` needs a system libudev this game has no
+# use for — it has no gamepad support and reads the keyboard only.
+# `bevy_audio` + `wav` rather than `audio`, which would add vorbis for
+# formats the six embedded cues don't use.
+bevy = { version = "0.19", default-features = false, features = [
+    "std",
+    "async_executor",
+    "multi_threaded",
+    "bevy_log",
+    "bevy_asset",
+    "bevy_winit",
+    "x11",
+    "wayland",
+    "2d_bevy_render",
+    "bevy_audio",
+    "wav",
+] }
+bevy_egui = "0.41"
 
 [dev-dependencies]
 fontdue = "0.9"

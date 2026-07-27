@@ -1,7 +1,10 @@
 //! Resolving a planned round — running each actor's action, computing
 //! effective stats, and rendering the result as a `BattleView`.
 
-use crate::tuning::{ENGAGED_GROUPS, FRONT_SLOTS, NEST_RESPAWN_TICKS, PLAYER_STRIKE_POWER};
+use crate::tuning::{
+    DEFAULT_TAMING_DIFFICULTY, ENGAGED_GROUPS, FRONT_SLOTS, NEST_RESPAWN_TICKS,
+    PARTY_PASSIVE_STAT_DIVISOR, PLAYER_STRIKE_POWER,
+};
 use crate::*;
 
 impl Game {
@@ -288,7 +291,9 @@ impl Game {
                 let species_name = species
                     .map(|s| self.zone_tagged_name(front, s.name.clone()))
                     .unwrap_or_default();
-                let taming_difficulty = species.map(|s| s.taming_difficulty).unwrap_or(0.5);
+                let taming_difficulty = species
+                    .map(|s| s.taming_difficulty)
+                    .unwrap_or(DEFAULT_TAMING_DIFFICULTY);
                 Some(EnemyGroupView {
                     letter: (b'A' + idx as u8) as char,
                     species_name,
@@ -640,7 +645,10 @@ impl Game {
             .iter()
             .filter_map(|&e| self.world.get::<Stats>(e))
             .fold((0, 0), |(atk, def), s| {
-                (atk + (s.atk / 10).max(1), def + (s.def / 10).max(1))
+                (
+                    atk + (s.atk / PARTY_PASSIVE_STAT_DIVISOR).max(1),
+                    def + (s.def / PARTY_PASSIVE_STAT_DIVISOR).max(1),
+                )
             })
     }
 }

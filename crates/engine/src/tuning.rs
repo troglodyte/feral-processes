@@ -88,6 +88,13 @@ pub const PERK_POINTS_PER_LEVEL: u32 = 1;
 /// decompile — see `Game::award_party_xp`.
 pub const PARTY_XP_DIVISOR: u32 = 2;
 
+/// XP required to advance from level *N* to *N + 1* is `N` times this — a
+/// linear per-level step, so cumulative XP to reach a level grows
+/// quadratically. `balance_sim`'s companion-level projection leans on that
+/// quadratic shape: half the XP rate lands a companion at roughly
+/// `1 / sqrt(2)` of the player's level, not half of it.
+pub const XP_PER_LEVEL_STEP: u32 = 20;
+
 /// XP a tamed creature earns for each completed gather cycle.
 pub const WORK_XP_PER_CYCLE: u32 = 5;
 
@@ -102,6 +109,13 @@ pub const WORK_XP_LEVEL_CAP: u32 = 10;
 // ─────────────────────────────────────────────────────────────────────────
 // Zone & distance scaling
 // ─────────────────────────────────────────────────────────────────────────
+
+/// Geometric base for `ZoneLevel::stat_multiplier`, the flat multiplier on
+/// every wild program's stats in a zone: zone 1 is x1 and each level after
+/// multiplies by this (1, 2, 4, 8, 16, ...). The single steepest difficulty
+/// curve in the game — `GEAR_LEVEL_GROWTH` is deliberately matched to it so
+/// neither gear nor zone depth outruns the other.
+pub const ZONE_STAT_GROWTH: i32 = 2;
 
 /// Tile distance per step of `DISTANCE_STAT_STEP_BONUS`, counted from
 /// `Game::distance_from_danger_origin` — the base platform's edge once a
@@ -127,6 +141,15 @@ pub const MAX_DISTANCE_STAT_MULTIPLIER: f32 = 3.0;
 /// `DISTANCE_STAT_STEP_TILES`: how many programs meet you and how hard each
 /// one hits escalate on the same footing as you push out.
 pub const GROUP_SIZE_STEP_TILES: i32 = DISTANCE_STAT_STEP_TILES;
+
+/// Geometric base for the group-size growth `GROUP_SIZE_STEP_TILES` steps
+/// unlock, and the cap on how many of those steps count. The exponent has
+/// to be clamped because the map is unbounded and a shift of 32 or more is
+/// a panic in debug; `MAX_GROUP_SIZE_DISTANCE_STEPS` is set where
+/// `GROUP_SIZE_DISTANCE_GROWTH.pow(steps)` already exceeds `MAX_GROUP_SIZE`,
+/// so the clamp is exact rather than a fudge.
+pub const GROUP_SIZE_DISTANCE_GROWTH: u32 = 2;
+pub const MAX_GROUP_SIZE_DISTANCE_STEPS: u32 = 7;
 
 /// Geometric base for the group size each zone level allows: zone 1 is solo,
 /// and every level after multiplies the cap by this against `MAX_GROUP_SIZE`
@@ -220,6 +243,26 @@ pub const COMPANION_COMMAND_FATIGUE_COST: f32 = 5.0;
 /// `battle::power_attack_multiplier`.
 pub const LOW_POWER_ATTACK_THRESHOLD: f32 = 50.0;
 
+/// Floor under a single attack's damage, so battles can't stall out on a
+/// high-defense matchup where `move_power + atk - def` goes non-positive.
+pub const MIN_DAMAGE: i32 = 1;
+
+/// What the player's attack total falls to at zero Power. Between zero and
+/// `LOW_POWER_ATTACK_THRESHOLD` the multiplier interpolates linearly from
+/// this up to full strength — see `battle::power_attack_multiplier`.
+pub const LOW_POWER_MIN_ATTACK_MULTIPLIER: f32 = 0.5;
+
+/// Divisor on each party member's ATK and DEF when totalling the passive
+/// bonus they lend the player outside their own actions (see
+/// `Game::party_stat_bonus`), floored at 1 per member so every companion
+/// contributes something. Companions already act in their own right; this
+/// is the smaller standing bonus on top.
+pub const PARTY_PASSIVE_STAT_DIVISOR: i32 = 10;
+
+/// Chance that jacking out of a fight still costs the player a parting
+/// counter-strike — fleeing is reliable, but not free.
+pub const FLEE_COUNTERATTACK_CHANCE: f64 = 0.5;
+
 /// Uniform random-roll range applied independently to each of a newly
 /// created creature's stats (baked into `Stats` at spawn) and to its
 /// growth rate (`Potential::growth_roll`) — see `Game::roll_potential`.
@@ -238,9 +281,40 @@ pub const MAX_INDIVIDUAL_ROLL: f32 = 1.2;
 /// enough skill to make almost any attempt a near-guaranteed success.
 pub const DECOMPILER_SKILL_BONUS: f32 = 0.02;
 
+/// Coefficients of `taming::capture_chance`. Ceiling below a full 1.0 means
+/// even a fully-weakened, zero-difficulty target isn't a sure thing on item
+/// potency alone; the two penalties subtract the target's remaining HP
+/// fraction and its species' `taming_difficulty` from that ceiling.
+pub const CAPTURE_POTENCY_CEILING: f32 = 0.9;
+pub const CAPTURE_HP_PENALTY: f32 = 0.65;
+pub const CAPTURE_DIFFICULTY_PENALTY: f32 = 0.6;
+
+/// Hard bounds on the final decompile chance, applied after skill bonuses.
+/// No attempt is ever hopeless and none is ever certain.
+pub const CAPTURE_CHANCE_MIN: f32 = 0.05;
+pub const CAPTURE_CHANCE_MAX: f32 = 0.95;
+
+/// `SpeciesDef::taming_difficulty` assumed for a species that has gone
+/// missing from the db mid-battle — dead centre of the 0..=1 range, so a
+/// lookup failure neither gifts nor denies the capture.
+pub const DEFAULT_TAMING_DIFFICULTY: f32 = 0.5;
+
 // ─────────────────────────────────────────────────────────────────────────
 // Spawning & encounters
 // ─────────────────────────────────────────────────────────────────────────
+
+/// Chance per tick that a wild spawn roll fires at all (see
+/// `Game::maybe_spawn_wild_creature`), and the box radius around the player
+/// the roll places into. The radius is wide enough that a spawn lands
+/// off-screen and is walked into rather than appearing on top of you.
+pub const WILD_SPAWN_CHANCE: f64 = 0.05;
+pub const WILD_SPAWN_RADIUS_TILES: i32 = 12;
+
+/// How many wild programs a zone is seeded with on entry, before any
+/// per-tick spawn rolls — see `Game::spawn_initial_creatures`. Applies both
+/// to a new run and to every zone breached afterwards, so a fresh sector is
+/// never empty while the spawn rolls warm up.
+pub const INITIAL_WILD_POPULATION: usize = 14;
 
 /// How far from the player a zone's opening wild programs scatter (see
 /// `Game::spawn_initial_creatures`). Widened by the platform radius when
@@ -317,9 +391,49 @@ pub const REST_TICKS: u32 = 40;
 pub const HUNGER_DECAY_PER_TICK: f32 = 0.15;
 pub const FATIGUE_DECAY_PER_TICK: f32 = 0.08;
 
+/// What a `DifficultyMode::Forgiving` reboot leaves the player with: max HP
+/// divided by this (never below 1), and both needs topped up to at least the
+/// floor. Enough to keep going, not enough to make dying free — the XP
+/// setback in `SETBACK_XP_PENALTY_FRACTION` applies on top either way.
+pub const FORGIVING_RESPAWN_HP_DIVISOR: i32 = 2;
+pub const FORGIVING_RESPAWN_NEED_FLOOR: f32 = 40.0;
+
 // ─────────────────────────────────────────────────────────────────────────
 // Loot, crafting & economy
 // ─────────────────────────────────────────────────────────────────────────
+
+/// Inclusive quantity range of its species' `work_resource` a defeated wild
+/// program drops.
+pub const WORK_RESOURCE_DROP: std::ops::RangeInclusive<u32> = 1..=2;
+
+/// `Game::forage`'s success chance by biome richness — see
+/// `game::turn::forage_chance`. Barren biomes (the Data Void, Black ICE, and
+/// a base's own manufactured platform floor) are a flat zero and don't get a
+/// constant: a base must never be a risk-free forage spot, or there'd be no
+/// reason to leave the platform.
+pub const FORAGE_CHANCE_RICH: f64 = 0.6;
+pub const FORAGE_CHANCE_MODERATE: f64 = 0.3;
+pub const FORAGE_CHANCE_SPARSE: f64 = 0.15;
+
+/// A mining node's per-cycle success chance is `MINING_SUCCESS_BASE` plus
+/// `MINING_SUCCESS_PER_LEVEL` per tier, capped at 1.0 — so a basic level-1
+/// node succeeds about half the time and upgrading buys reliability. See
+/// `systems::mining_success_chance`.
+pub const MINING_SUCCESS_BASE: f64 = 0.4;
+pub const MINING_SUCCESS_PER_LEVEL: f64 = 0.1;
+
+/// Divisor applied to the *lesser* of two fused programs' stats: a fusion
+/// keeps the better parent's stat outright and adds this fraction of the
+/// weaker one (see `Game::fuse_companions`). Bounded further by
+/// `MAX_FUSIONS`, so the compounding can't run away.
+pub const FUSION_LESSER_STAT_DIVISOR: i32 = 2;
+
+/// Defaults for `.ron` structure files that omit the field — a cronjob
+/// node's worker capacity and a structure's starting/max `Durability`. Both
+/// are `#[serde(default)]` fallbacks, so a mod written before either field
+/// existed keeps its original behaviour.
+pub const DEFAULT_WORK_CAPACITY: u32 = 5;
+pub const DEFAULT_STRUCTURE_DURABILITY: u32 = 30;
 
 /// Chance a defeated wild program additionally drops a Portal Fragment,
 /// independent of its species' own `work_resource`/`equipment_drop`.
@@ -410,6 +524,16 @@ pub const STRUCTURE_REGEN_AMOUNT: u32 = 4;
 // ─────────────────────────────────────────────────────────────────────────
 // Perk magnitudes
 // ─────────────────────────────────────────────────────────────────────────
+
+/// Perk Points each perk costs per level — the same cost every time,
+/// however many levels you already have. See `Perk::cost`.
+pub const PERK_COST_KEEN_SCAVENGER: u32 = 2;
+pub const PERK_COST_LOW_POWER_MODE: u32 = 2;
+pub const PERK_COST_EXPLOIT_FOCUS: u32 = 3;
+pub const PERK_COST_LEAN_COMPILER: u32 = 3;
+pub const PERK_COST_ATTACKER: u32 = 2;
+pub const PERK_COST_DEFENDER: u32 = 2;
+pub const PERK_COST_BUFFER: u32 = 3;
 
 /// Bonus `Perk::KeenScavenger` adds to `Game::forage`'s success chance, per level.
 pub const KEEN_SCAVENGER_BONUS_PER_LEVEL: f64 = 0.01;

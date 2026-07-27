@@ -5,6 +5,7 @@
 //! set fails the economy-role check.
 
 use crate::game::zone::find_walkable_start;
+use crate::tuning::{DEFAULT_WORK_CAPACITY, INITIAL_WILD_POPULATION};
 use crate::*;
 
 impl Game {
@@ -80,7 +81,7 @@ impl Game {
         for warning in load_warnings {
             game.log(warning);
         }
-        game.spawn_initial_creatures(14);
+        game.spawn_initial_creatures(INITIAL_WILD_POPULATION);
         game.log("Connection established. You materialize at the edge of the Grid.");
         Ok(game)
     }
@@ -307,7 +308,11 @@ impl Game {
                     .as_ref()
                     .map(|w| w.produces.clone())
                     .unwrap_or_else(|| currency.clone());
-                let capacity = def.work.as_ref().map(|w| w.capacity).unwrap_or(5);
+                let capacity = def
+                    .work
+                    .as_ref()
+                    .map(|w| w.capacity)
+                    .unwrap_or(DEFAULT_WORK_CAPACITY);
                 let level = def.work.as_ref().and_then(|w| w.level);
                 entity.insert(ResourceNode {
                     resource,

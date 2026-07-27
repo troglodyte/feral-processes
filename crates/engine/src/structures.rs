@@ -34,7 +34,7 @@ pub struct WorkDef {
 }
 
 fn default_work_capacity() -> u32 {
-    5
+    crate::tuning::DEFAULT_WORK_CAPACITY
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -212,7 +212,7 @@ pub struct StructureDef {
 }
 
 fn default_durability() -> u32 {
-    30
+    crate::tuning::DEFAULT_STRUCTURE_DURABILITY
 }
 
 fn default_raidable() -> bool {

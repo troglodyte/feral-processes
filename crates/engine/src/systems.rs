@@ -13,10 +13,10 @@ use crate::progression;
 use crate::resources::{GameRng, MessageKind, MessageLog, ZoneLevel};
 use crate::species::SpeciesDb;
 use crate::structures::StructureDb;
-use crate::tuning::NEST_TETHER_RADIUS;
 use crate::tuning::{
     FATIGUE_DECAY_PER_TICK, HUNGER_DECAY_PER_TICK, WORK_XP_LEVEL_CAP, WORK_XP_PER_CYCLE,
 };
+use crate::tuning::{MINING_SUCCESS_BASE, MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS};
 use crate::world::WorldMap;
 
 /// One tick of hunger/fatigue decay; pulled out of the system so the rates
@@ -90,8 +90,8 @@ pub fn wander_ai_system(
 /// costing the cycle for nothing. Scales up with level so a node can be
 /// made more reliable over time; a basic level-1 node succeeds only about
 /// half the time.
-fn mining_success_chance(level: u32) -> f64 {
-    (0.4 + level as f64 * 0.1).min(1.0)
+pub(crate) fn mining_success_chance(level: u32) -> f64 {
+    (MINING_SUCCESS_BASE + level as f64 * MINING_SUCCESS_PER_LEVEL).min(1.0)
 }
 
 /// The worker-side components `task_progress_system` reads per cronjob

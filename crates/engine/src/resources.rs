@@ -184,7 +184,7 @@ impl ZoneLevel {
     /// doubles with each zone level (level 1 = x1, level 2 = x2, level 3 =
     /// x4, ...).
     pub fn stat_multiplier(self) -> i32 {
-        1 << (self.0 - 1)
+        crate::tuning::ZONE_STAT_GROWTH.pow(self.0 - 1)
     }
 }
 

@@ -1,3 +1,7 @@
+use crate::tuning::{
+    PERK_COST_ATTACKER, PERK_COST_BUFFER, PERK_COST_DEFENDER, PERK_COST_EXPLOIT_FOCUS,
+    PERK_COST_KEEN_SCAVENGER, PERK_COST_LEAN_COMPILER, PERK_COST_LOW_POWER_MODE,
+};
 use serde::{Deserialize, Serialize};
 
 /// A permanent passive upgrade purchased with Perk Points (earned 1 per
@@ -79,13 +83,13 @@ impl Perk {
     /// many levels you already have.
     pub fn cost(self) -> u32 {
         match self {
-            Perk::KeenScavenger => 2,
-            Perk::LowPowerMode => 2,
-            Perk::ExploitFocus => 3,
-            Perk::LeanCompiler => 3,
-            Perk::Attacker => 2,
-            Perk::Defender => 2,
-            Perk::Buffer => 3,
+            Perk::KeenScavenger => PERK_COST_KEEN_SCAVENGER,
+            Perk::LowPowerMode => PERK_COST_LOW_POWER_MODE,
+            Perk::ExploitFocus => PERK_COST_EXPLOIT_FOCUS,
+            Perk::LeanCompiler => PERK_COST_LEAN_COMPILER,
+            Perk::Attacker => PERK_COST_ATTACKER,
+            Perk::Defender => PERK_COST_DEFENDER,
+            Perk::Buffer => PERK_COST_BUFFER,
         }
     }
 }

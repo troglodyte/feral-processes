@@ -5,6 +5,7 @@ use crate::tuning::{
     BOSS_PORTAL_FRAGMENT_DROP, DECOMPILER_SKILL_PER_LEVEL, NEST_RESPAWN_TICKS, PARTY_XP_DIVISOR,
     PERK_POINTS_PER_LEVEL, PORTAL_FRAGMENT_DROP_CHANCE,
 };
+use crate::tuning::{DEFAULT_TAMING_DIFFICULTY, WORK_RESOURCE_DROP};
 use crate::*;
 
 impl Game {
@@ -49,7 +50,7 @@ impl Game {
         if let Some(resource) = &species.work_resource {
             let qty = {
                 let mut rng = self.world.resource_mut::<GameRng>();
-                rng.0.random_range(1..=2)
+                rng.0.random_range(WORK_RESOURCE_DROP)
             };
             let landed = self.grant_loot(resource.clone(), qty);
             if landed > 0 {
@@ -223,7 +224,7 @@ impl Game {
             .resource::<SpeciesDb>()
             .get(&species_id)
             .map(|s| s.taming_difficulty)
-            .unwrap_or(0.5);
+            .unwrap_or(DEFAULT_TAMING_DIFFICULTY);
         let decompiler_skill = self.player_decompiler_skill();
         let chance =
             taming::capture_chance(hp_fraction, potency, taming_difficulty, decompiler_skill);

@@ -2,7 +2,7 @@ use bevy_ecs::prelude::Entity;
 
 use crate::items::ItemId;
 use crate::species::SpeciesId;
-use crate::tuning::LOW_POWER_ATTACK_THRESHOLD;
+use crate::tuning::{LOW_POWER_ATTACK_THRESHOLD, LOW_POWER_MIN_ATTACK_MULTIPLIER, MIN_DAMAGE};
 
 /// One species' worth of the wild pack in an active intrusion.
 /// `members[0]` is the front — the only member that takes hits and the only
@@ -217,7 +217,7 @@ pub struct PartyCommand {
 /// Damage always deals at least 1, so battles can't stall out on high-defense
 /// matchups.
 pub fn compute_damage(atk: i32, def: i32, move_power: i32) -> i32 {
-    (move_power + atk - def).max(1)
+    (move_power + atk - def).max(MIN_DAMAGE)
 }
 
 /// Multiplier applied to the player's attack total once their Power drops
@@ -230,7 +230,9 @@ pub fn power_attack_multiplier(hunger: f32) -> f32 {
     if hunger >= LOW_POWER_ATTACK_THRESHOLD {
         1.0
     } else {
-        0.5 + (hunger.max(0.0) / LOW_POWER_ATTACK_THRESHOLD) * 0.5
+        LOW_POWER_MIN_ATTACK_MULTIPLIER
+            + (hunger.max(0.0) / LOW_POWER_ATTACK_THRESHOLD)
+                * (1.0 - LOW_POWER_MIN_ATTACK_MULTIPLIER)
     }
 }
 

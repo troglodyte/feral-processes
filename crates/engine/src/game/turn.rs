@@ -1,7 +1,10 @@
 //! The turn loop: advancing the clock, moving, and the actions a player
 //! spends a turn on.
 
-use crate::tuning::{KEEN_SCAVENGER_BONUS_PER_LEVEL, REST_TICKS};
+use crate::tuning::{
+    FORAGE_CHANCE_MODERATE, FORAGE_CHANCE_RICH, FORAGE_CHANCE_SPARSE,
+    KEEN_SCAVENGER_BONUS_PER_LEVEL, REST_TICKS,
+};
 use crate::*;
 
 impl Game {
@@ -375,9 +378,9 @@ impl Game {
 /// unit-testable without an RNG.
 pub(crate) fn forage_chance(biome: Biome, keen_scavenger_level: u32) -> f64 {
     let chance = match biome {
-        Biome::Mainframe | Biome::OpenGrid => 0.6,
-        Biome::NullSector => 0.3,
-        Biome::StaticField => 0.15,
+        Biome::Mainframe | Biome::OpenGrid => FORAGE_CHANCE_RICH,
+        Biome::NullSector => FORAGE_CHANCE_MODERATE,
+        Biome::StaticField => FORAGE_CHANCE_SPARSE,
         // A base platform is a manufactured floor, not terrain — there's
         // nothing on it to scavenge. Keeping it at 0.0 also stops a base
         // from being a risk-free forage spot, which would undercut the

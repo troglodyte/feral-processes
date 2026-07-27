@@ -3,6 +3,7 @@ use bevy_ecs::prelude::*;
 use crate::components::{Experience, Needs, Player, Position, Stats, Structure};
 use crate::progression;
 use crate::resources::{DifficultyMode, GameClock, GameOver, MessageLog};
+use crate::tuning::{FORGIVING_RESPAWN_HP_DIVISOR, FORGIVING_RESPAWN_NEED_FLOOR};
 
 /// Gates what happens when the player's HP hits zero. Permadeath ends the
 /// run (the caller is responsible for writing the history log once);
@@ -30,9 +31,9 @@ pub fn death_handling_system(
                 game_over.reason = Some(format!("flatlined at cycle {}", clock.tick));
             }
             DifficultyMode::Forgiving => {
-                stats.hp = (stats.max_hp / 2).max(1);
-                needs.hunger = needs.hunger.max(40.0);
-                needs.fatigue = needs.fatigue.max(40.0);
+                stats.hp = (stats.max_hp / FORGIVING_RESPAWN_HP_DIVISOR).max(1);
+                needs.hunger = needs.hunger.max(FORGIVING_RESPAWN_NEED_FLOOR);
+                needs.fatigue = needs.fatigue.max(FORGIVING_RESPAWN_NEED_FLOOR);
                 let nearest = structure_query
                     .iter()
                     .min_by_key(|s_pos| (s_pos.x - pos.x).abs() + (s_pos.y - pos.y).abs());

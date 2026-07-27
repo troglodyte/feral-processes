@@ -1,5 +1,7 @@
 use crate::components::{Experience, Stats};
-use crate::tuning::{ATK_PER_LEVEL, DEF_PER_LEVEL, HP_PER_LEVEL, SETBACK_XP_PENALTY_FRACTION};
+use crate::tuning::{
+    ATK_PER_LEVEL, DEF_PER_LEVEL, HP_PER_LEVEL, SETBACK_XP_PENALTY_FRACTION, XP_PER_LEVEL_STEP,
+};
 
 /// One stat's flat per-level growth, scaled by `growth_multiplier` and
 /// rounded to the nearest whole point. With `ATK_PER_LEVEL`/`DEF_PER_LEVEL`
@@ -12,7 +14,7 @@ fn scaled_growth(per_level: i32, growth_multiplier: f32) -> i32 {
 
 /// XP required to advance from `level` to `level + 1`.
 pub fn xp_for_level(level: u32) -> u32 {
-    level * 20
+    level * XP_PER_LEVEL_STEP
 }
 
 /// `base` after `levels_gained` level-ups at `growth_multiplier`, fully

@@ -1,6 +1,7 @@
 //! Damage, status effects, enemy retaliation, and tearing a battle down —
 //! whether it ended in a win, a flee, or a loss.
 
+use crate::tuning::FLEE_COUNTERATTACK_CHANCE;
 use crate::tuning::{
     BACK_SLOT_AGGRO_WEIGHT, DEFEND_AGGRO_WEIGHT, DEFEND_DEF_BONUS, ENGAGED_GROUPS,
     FRONT_SLOT_AGGRO_WEIGHT, FRONT_SLOTS,
@@ -17,7 +18,7 @@ impl Game {
         };
         let got_hit = {
             let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_bool(0.5)
+            rng.0.random_bool(FLEE_COUNTERATTACK_CHANCE)
         };
         if got_hit {
             self.log("You jack out, but not before taking a parting counter-strike!");

@@ -1,7 +1,7 @@
 //! The player's own roster — status, the programs in the party and the
 //! bank, and moving programs between them.
 
-use crate::tuning::MAX_FUSIONS;
+use crate::tuning::{FUSION_LESSER_STAT_DIVISOR, MAX_FUSIONS};
 use crate::*;
 
 impl Game {
@@ -349,7 +349,7 @@ impl Game {
             .ok_or_else(|| "That species is no longer available.".to_string())?;
 
         fn fuse_stat(x: i32, y: i32) -> i32 {
-            x.max(y) + x.min(y) / 2
+            x.max(y) + x.min(y) / FUSION_LESSER_STAT_DIVISOR
         }
         let fused_hp = fuse_stat(stats_a.max_hp, stats_b.max_hp);
         let fused_atk = fuse_stat(stats_a.atk, stats_b.atk);

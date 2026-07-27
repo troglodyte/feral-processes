@@ -2,7 +2,7 @@
 //! stamping the base platform, and stepping through a portal to the next
 //! zone.
 
-use crate::tuning::MAX_BUILD_DISTANCE_FROM_HOME;
+use crate::tuning::{INITIAL_WILD_POPULATION, MAX_BUILD_DISTANCE_FROM_HOME};
 use crate::*;
 
 impl Game {
@@ -349,7 +349,7 @@ impl Game {
                 "Your caches decohere in transit — {manifest} lost to the breach."
             ));
         }
-        self.spawn_initial_creatures(14);
+        self.spawn_initial_creatures(INITIAL_WILD_POPULATION);
     }
 
     /// Where the player materialized on breaching into the current zone —

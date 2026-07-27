@@ -201,7 +201,7 @@ pub fn ticks_to_afford_portal(
     market_price: u32,
 ) -> f64 {
     let payout = (tier * ZoneLevel(zone).stat_multiplier() as u32) as f64;
-    let success = (0.4 + tier as f64 * 0.1).min(1.0);
+    let success = crate::systems::mining_success_chance(tier);
     let per_tick = payout * success / ticks_per_unit as f64;
     // Priced through the same helper the game charges with (see
     // `crate::zone_portal_cost`), and fragments are bought with the

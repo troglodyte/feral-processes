@@ -8,6 +8,10 @@ use crate::tuning::{
     NEST_SPAWN_CHANCE, NEST_TETHER_RADIUS, PACK_GATHER_RADIUS, WILD_CREATURE_CAP,
     ZONE_GROUP_GROWTH,
 };
+use crate::tuning::{
+    GROUP_SIZE_DISTANCE_GROWTH, MAX_GROUP_SIZE_DISTANCE_STEPS, WILD_SPAWN_CHANCE,
+    WILD_SPAWN_RADIUS_TILES,
+};
 use crate::*;
 
 /// The zone's ceiling on one species group: zone 1 is solo, every level
@@ -210,11 +214,9 @@ impl Game {
     pub(crate) fn max_group_size(&self, x: i32, y: i32) -> u32 {
         let cap = zone_group_cap(self.world.resource::<ZoneLevel>().0);
         let dist = self.distance_from_danger_origin(x, y);
-        // The map is unbounded and a shift of 32 or more is a panic in
-        // debug; `1 << 7` already exceeds MAX_GROUP_SIZE, so clamping the
-        // exponent there is exact rather than a fudge.
-        let steps = (dist / GROUP_SIZE_STEP_TILES).clamp(0, 7) as u32;
-        (1u32 << steps).min(cap)
+        let steps =
+            (dist / GROUP_SIZE_STEP_TILES).clamp(0, MAX_GROUP_SIZE_DISTANCE_STEPS as i32) as u32;
+        GROUP_SIZE_DISTANCE_GROWTH.pow(steps).min(cap)
     }
 
     /// How many distinct species groups one fight at `(x, y)` may hold: a
@@ -298,14 +300,19 @@ impl Game {
         // Roll first: culling is wasted work if nothing was going to spawn.
         let roll = {
             let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_bool(0.05)
+            rng.0.random_bool(WILD_SPAWN_CHANCE)
         };
         if !roll {
             return;
         }
         let (dx, dy) = {
             let mut rng = self.world.resource_mut::<GameRng>();
-            (rng.0.random_range(-12..=12), rng.0.random_range(-12..=12))
+            (
+                rng.0
+                    .random_range(-WILD_SPAWN_RADIUS_TILES..=WILD_SPAWN_RADIUS_TILES),
+                rng.0
+                    .random_range(-WILD_SPAWN_RADIUS_TILES..=WILD_SPAWN_RADIUS_TILES),
+            )
         };
         let (tx, ty) = (player_pos.x + dx, player_pos.y + dy);
         // Make room for the whole group this roll may place, by despawning

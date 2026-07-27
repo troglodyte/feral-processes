@@ -42,6 +42,13 @@ impl App {
     }
 
     pub fn handle_key(&mut self, key: GameKey) {
+        // A key pressed while narration is still scrolling in dumps the rest
+        // and is not acted on. Without this the pacing would be a tax on
+        // anyone who reads faster than it scrolls.
+        if self.is_revealing() {
+            self.finish_reveal();
+            return;
+        }
         let mode_before = self.mode;
         match self.mode {
             Mode::MainMenu => self.handle_main_menu_key(key),
@@ -125,6 +132,12 @@ impl App {
             self.reveal.accumulated -= 1.0;
             self.reveal.revealed += 1;
         }
+        // Credit left over once the last line is out would otherwise be
+        // banked and spent the instant the next round logs, dumping it whole
+        // — the very thing this pacing exists to prevent.
+        if self.reveal.revealed >= total {
+            self.reveal.accumulated = 0.0;
+        }
     }
 
     /// Whether narration is still scrolling in. While this holds, a frontend
@@ -154,6 +167,12 @@ impl App {
     pub fn hidden_log_lines(&self) -> usize {
         let Some(game) = &self.game else { return 0 };
         game.battle_log().len().saturating_sub(self.reveal.revealed)
+    }
+
+    /// Releases every remaining line at once — the skip.
+    pub(crate) fn finish_reveal(&mut self) {
+        self.reveal.revealed = self.game.as_ref().map_or(0, |g| g.battle_log().len());
+        self.reveal.accumulated = 0.0;
     }
 
     /// Starts this battle's narration over from nothing.

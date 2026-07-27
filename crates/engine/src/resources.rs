@@ -61,10 +61,14 @@ pub struct MessageLog {
     /// Lines ever pushed, including those since drained.
     pushed: u64,
     /// Where the current — or most recently ended — battle's narration
-    /// begins. Deliberately not cleared when a battle ends: the frontend is
-    /// still scrolling that battle's results in after the fact and needs the
-    /// range to slice. The next `open_battle` replaces it.
-    battle_start: MessageMark,
+    /// begins. `None` until the first battle: a run that has never fought
+    /// has no narration, and defaulting to mark 0 would instead make the
+    /// whole log read as one endless battle.
+    ///
+    /// Deliberately not cleared when a battle ends: the frontend is still
+    /// scrolling that battle's results in after the fact and needs the range
+    /// to slice. The next `open_battle` replaces it.
+    battle_start: Option<MessageMark>,
     /// Bumped by every `open_battle`, so a frontend can tell one battle's
     /// narration from the next without comparing text.
     battle_id: u64,
@@ -91,7 +95,7 @@ impl MessageLog {
 
     /// Opens a new narration range starting at the next line pushed.
     pub fn open_battle(&mut self) {
-        self.battle_start = MessageMark(self.pushed);
+        self.battle_start = Some(MessageMark(self.pushed));
         self.battle_id += 1;
     }
 
@@ -103,15 +107,20 @@ impl MessageLog {
     /// everything drained since the mark was taken. Clamped: once the mark
     /// itself has been drained past, every line still held is younger than
     /// it, so all of them belong to the battle.
-    fn battle_start_index(&self) -> usize {
+    fn battle_start_index(&self) -> Option<usize> {
+        let mark = self.battle_start?;
         let drained = self.pushed - self.lines.len() as u64;
-        let start = self.battle_start.0.saturating_sub(drained) as usize;
-        start.min(self.lines.len())
+        let start = mark.0.saturating_sub(drained) as usize;
+        Some(start.min(self.lines.len()))
     }
 
-    /// The current battle's lines, oldest first.
+    /// The current battle's lines, oldest first. Empty before the run's
+    /// first battle.
     pub fn since_battle(&self) -> &[(MessageKind, String)] {
-        &self.lines[self.battle_start_index()..]
+        match self.battle_start_index() {
+            Some(start) => &self.lines[start..],
+            None => &[],
+        }
     }
 
     /// Drops the blow-by-blow from the battle range, keeping what the player
@@ -121,7 +130,9 @@ impl MessageLog {
     /// log directly, so a raid alert can arrive inside a battle's range
     /// without being any part of that battle.
     pub fn retain_outcomes_since_battle(&mut self) {
-        let start = self.battle_start_index();
+        let Some(start) = self.battle_start_index() else {
+            return;
+        };
         let mut index = 0;
         self.lines.retain(|(kind, _)| {
             let keep = index < start

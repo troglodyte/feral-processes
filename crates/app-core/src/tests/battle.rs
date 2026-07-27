@@ -46,6 +46,10 @@ fn battling_app_with(setup: impl Fn(&mut Game)) -> App {
             .is_some_and(|v| v.groups.len() == 1);
         if app.mode == Mode::Battle && single_group {
             let _ = app.take_sounds();
+            // The opening narration is scrolling in, and a key pressed
+            // during that skips rather than acting. Drain it so a caller's
+            // first key is its own test's input, not a skip.
+            app.finish_reveal();
             return app;
         }
     }
@@ -542,5 +546,94 @@ fn the_revealed_log_never_runs_past_this_battle() {
         revealed.len(),
         battle.len(),
         "the pane and the engine disagree on what this battle logged"
+    );
+}
+
+#[test]
+fn a_key_pressed_mid_reveal_skips_instead_of_acting() {
+    let mut app = battling_app();
+    app.restart_reveal();
+    app.advance_reveal(0.0);
+    let mode_before = app.mode;
+    assert!(app.is_revealing(), "the fixture left nothing to reveal");
+
+    app.handle_key(GameKey::Esc);
+
+    assert!(!app.is_revealing(), "the key did not finish the reveal");
+    assert_eq!(
+        app.mode, mode_before,
+        "the skip key was acted on as well as skipping"
+    );
+}
+
+#[test]
+fn a_key_pressed_after_the_reveal_acts_normally() {
+    let mut app = battling_app();
+    app.advance_reveal(1_000.0);
+    assert!(!app.is_revealing());
+
+    app.handle_key(GameKey::Char('j'));
+
+    assert!(
+        !app.take_sounds().is_empty() || app.mode != Mode::Battle,
+        "jacking out did nothing once the reveal was done"
+    );
+}
+
+/// A won battle has had its log pruned to results by the engine. Those
+/// results are what the map's log pane shows, and they scroll in there at
+/// the same pace rather than appearing whole.
+#[test]
+fn ending_a_battle_restarts_the_reveal_for_the_results() {
+    let mut app = battling_app();
+    app.advance_reveal(1_000.0);
+    assert!(!app.is_revealing());
+
+    // Jack out — the one battle ending reachable from a single key press
+    // regardless of how the fight is going.
+    app.handle_key(GameKey::Char('j'));
+    if app.game.as_ref().is_some_and(|g| g.has_active_battle()) {
+        // The jack-out roll can fail; the battle is still on, so there is
+        // no ended-battle handoff to assert about.
+        return;
+    }
+
+    assert_eq!(
+        app.revealed_battle_log().len(),
+        0,
+        "the results were shown whole instead of scrolling in"
+    );
+}
+
+/// Credit left over when a round finishes revealing must not be banked.
+/// Spending it on the next round would dump that round whole the instant it
+/// logged — the exact behaviour the pacing exists to prevent, and invisible
+/// until a second round happens to arrive.
+#[test]
+fn leftover_pace_credit_is_not_banked_for_the_next_round() {
+    let mut app = battling_app();
+    app.restart_reveal();
+    // Far more time than the opening narration needs.
+    app.advance_reveal(100.0);
+    assert!(
+        !app.is_revealing(),
+        "the fixture left the reveal unfinished"
+    );
+
+    let revealed_before = app.revealed_battle_log().len();
+    // All-defend resolves the round without stopping to pick a target.
+    app.handle_key(GameKey::Char('D'));
+    let total = app.game.as_ref().unwrap().battle_log().len();
+    assert!(
+        total > revealed_before,
+        "the round logged nothing, so there is no banking to catch"
+    );
+
+    app.advance_reveal(0.0);
+
+    assert_eq!(
+        app.revealed_battle_log().len(),
+        revealed_before,
+        "banked credit dumped the new round without any time passing"
     );
 }

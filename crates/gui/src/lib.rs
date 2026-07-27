@@ -26,7 +26,7 @@ use bevy::input::ButtonState;
 use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy::window::WindowResolution;
-use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};
+use bevy_egui::{EguiContexts, EguiPlugin, EguiPreUpdateSet, EguiPrimaryContextPass};
 
 use feral_processes_app_core::{App, GameKey, Mode};
 use fx::Fx;
@@ -122,7 +122,8 @@ fn draw_toast(text: &str, p: &Painter) {
 /// and nothing is lost by that, since the process exits once this returns.
 pub fn run(app: App) {
     let last_mode = app.mode;
-    bevy::app::App::new()
+    let mut bevy_app = bevy::app::App::new();
+    bevy_app
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "feral-processes".to_string(),
@@ -142,8 +143,43 @@ pub fn run(app: App) {
             last_mode,
         })
         .add_systems(Startup, setup)
-        .add_systems(EguiPrimaryContextPass, frame)
-        .run();
+        .add_systems(EguiPrimaryContextPass, frame);
+    add_font_install(&mut bevy_app);
+    bevy_app.run();
+}
+
+/// Schedules the one-shot font install.
+///
+/// Shared with the test that boots the plugin headlessly, so the slot the
+/// test proves is the slot production actually uses.
+fn add_font_install(app: &mut bevy::app::App) {
+    app.add_systems(
+        PreUpdate,
+        install_fonts_once
+            .after(EguiPreUpdateSet::InitContexts)
+            .before(EguiPreUpdateSet::BeginPass),
+    );
+}
+
+/// Binds the three font families, once, before the first pass begins.
+///
+/// `egui::Context::set_fonts` does not bind anything itself — it stashes the
+/// definitions and egui installs them at the *start of the next pass*. Doing
+/// this from inside `EguiPrimaryContextPass` is therefore too late by one
+/// frame: the pass is already underway, so frame 1 lays its text out against
+/// families that aren't bound yet and epaint panics rather than falling back
+/// (`FontDefinitions::empty()` left it nothing to fall back to).
+///
+/// The context does not exist until bevy_egui has seen the camera, which is
+/// why this retries rather than running once in `Startup`.
+fn install_fonts_once(mut contexts: EguiContexts, mut installed: Local<bool>) {
+    if *installed {
+        return;
+    }
+    if let Ok(ctx) = contexts.ctx_mut() {
+        paint::install_fonts(ctx);
+        *installed = true;
+    }
 }
 
 fn setup(mut commands: Commands, mut sources: ResMut<Assets<AudioSource>>) {
@@ -178,19 +214,9 @@ fn frame(
     mut commands: Commands,
     sounds: Res<SoundBank>,
     mut exit: MessageWriter<AppExit>,
-    mut fonts_installed: Local<bool>,
 ) -> Result {
     let now = input.time.elapsed_secs_f64();
-    let painter = {
-        let ctx = contexts.ctx_mut()?;
-        // Deferred to the first frame rather than done in `setup`: the
-        // context does not exist until bevy_egui has seen the camera.
-        if !*fonts_installed {
-            paint::install_fonts(ctx);
-            *fonts_installed = true;
-        }
-        Painter::for_frame(ctx, input.time.delta_secs())
-    };
+    let painter = Painter::for_frame(contexts.ctx_mut()?, input.time.delta_secs());
 
     let fe = &mut *frontend;
     fe.app.update_realtime();
@@ -285,6 +311,67 @@ fn frame(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The whole frontend draws in three font families that only exist
+    /// because `install_fonts` registered them, and `FontDefinitions::empty()`
+    /// leaves egui nothing to fall back on — so a family that isn't bound by
+    /// the time the pass runs is a panic, not blank text. It has to be bound
+    /// for the *first* pass, which is what this pins: the plugin's real
+    /// scheduling, the real install slot, and a measurement in every face
+    /// from inside the pass, exactly as frame 1 does it.
+    ///
+    /// Installing from within `EguiPrimaryContextPass` — where this used to
+    /// happen — fails here, because `set_fonts` only takes effect at the
+    /// start of the pass after the one it is called from.
+    #[test]
+    fn the_first_pass_can_draw_in_every_face() {
+        #[derive(Resource, Default)]
+        struct Measured(bool);
+
+        fn probe(mut contexts: EguiContexts, mut measured: ResMut<Measured>) -> Result {
+            let p = Painter::for_frame(contexts.ctx_mut()?, 1.0 / 60.0);
+            for face in [paint::Face::Ui, paint::Face::UiBold, paint::Face::Map] {
+                let dims = p.measure(face, "Integrity", 24);
+                assert!(dims.width > 0.0, "{face:?} measured nothing");
+            }
+            measured.0 = true;
+            Ok(())
+        }
+
+        let mut app = bevy::app::App::new();
+        // `EguiPlugin` registers its shader as an internal asset at build
+        // time, so the asset plumbing has to exist even though nothing here
+        // renders. Everything past that is CPU-side text layout.
+        app.add_plugins((
+            MinimalPlugins,
+            AssetPlugin::default(),
+            // bevy_egui reads keyboard, gesture and IME messages every
+            // PreUpdate and treats an unregistered message type as fatal, so
+            // the plugins that register them have to be here. Neither opens a
+            // window: `WindowPlugin` without a primary window just declares
+            // the message types.
+            bevy::input::InputPlugin,
+            WindowPlugin {
+                primary_window: None,
+                exit_condition: bevy::window::ExitCondition::DontExit,
+                ..default()
+            },
+        ))
+        .init_asset::<bevy::shader::Shader>()
+        .init_asset::<Image>()
+        .add_plugins(EguiPlugin::default())
+        .init_resource::<Measured>()
+        .add_systems(EguiPrimaryContextPass, probe);
+        add_font_install(&mut app);
+        app.world_mut().spawn(bevy_egui::PrimaryEguiContext);
+
+        app.update();
+
+        assert!(
+            app.world().resource::<Measured>().0,
+            "the egui pass never ran, so this proved nothing"
+        );
+    }
 
     /// A key listed in either table but missing from `map_special_key` is
     /// polled every frame and silently does nothing — the sort of dead

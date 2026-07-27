@@ -228,6 +228,25 @@ pub enum Mode {
     /// programs in `Mode::Fuse`/`Mode::FuseSecond`; Enter actually runs the
     /// fusion.
     FuseName,
+    /// Picking whose routines to manage — you, or any program you own.
+    /// Reached with `m` from `Mode::Playing`.
+    RoutineTarget,
+    /// The chosen member's slot list. A filled slot pops its routine back
+    /// into cargo; an empty one opens `Mode::RoutineInstall`.
+    Routines,
+    /// Picking which loose routine to drop into the slot chosen in
+    /// `Mode::Routines`.
+    RoutineInstall,
+    /// Picking which program to break down for a routine. Reached with `M`
+    /// from `Mode::Playing`.
+    Extract,
+    /// Picking which of that program's routines to salvage.
+    ExtractPick,
+    /// Confirming the extraction. Programs take a confirmation for the same
+    /// reason a sale does: it is irreversible, and every *other* routine on
+    /// the program is lost with it — this screen is the only place that is
+    /// said out loud.
+    ExtractConfirm,
     Trade,
     TradeAction,
     TradeQuantity,
@@ -289,6 +308,12 @@ impl Mode {
             | Mode::Fuse
             | Mode::FuseSecond
             | Mode::FuseName
+            | Mode::RoutineTarget
+            | Mode::Routines
+            | Mode::RoutineInstall
+            | Mode::Extract
+            | Mode::ExtractPick
+            | Mode::ExtractConfirm
             | Mode::Trade
             | Mode::TradeAction
             | Mode::TradeQuantity
@@ -379,6 +404,18 @@ pub struct App {
     pub pending_fuse_second: Option<Entity>,
     /// Characters typed so far on the fuse-naming page (see `Mode::FuseName`).
     pub fuse_name_input: String,
+    /// The routine holder picked in `Mode::RoutineTarget` — the player or one
+    /// of their programs — awaiting a slot pick from `Mode::Routines`.
+    pub pending_routine_holder: Option<Entity>,
+    /// The empty slot picked in `Mode::Routines`, awaiting a loose routine
+    /// from `Mode::RoutineInstall` before `Game::install_routine` is called.
+    pub pending_routine_slot: Option<usize>,
+    /// The program picked in `Mode::Extract`, awaiting a routine pick from
+    /// `Mode::ExtractPick`.
+    pub pending_extract_program: Option<Entity>,
+    /// The routine index picked in `Mode::ExtractPick`, awaiting confirmation
+    /// from `Mode::ExtractConfirm` before `Game::extract_routine` is called.
+    pub pending_extract_index: Option<usize>,
     /// The action kind picked in `Mode::Battle`, awaiting an enemy group
     /// from `Mode::BattleTarget` before it becomes a `BattleAction`.
     pub pending_battle_action: Option<ActionKind>,

@@ -14,4 +14,5 @@ mod menus;
 mod party;
 mod playing;
 mod progression;
+mod routines;
 mod trade;

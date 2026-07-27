@@ -49,6 +49,14 @@ impl App {
                 self.mode = Mode::Fuse;
                 return;
             }
+            GameKey::Char('m') => {
+                self.mode = Mode::RoutineTarget;
+                return;
+            }
+            GameKey::Char('M') => {
+                self.mode = Mode::Extract;
+                return;
+            }
             GameKey::Char('t') => {
                 self.mode = Mode::Trade;
                 return;

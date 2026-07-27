@@ -17,6 +17,16 @@ impl Game {
         self.world.resource::<ItemDb>().all().cloned().collect()
     }
 
+    /// Every loaded ability definition, id-sorted (see `AbilityDb::all`).
+    pub fn ability_defs(&self) -> Vec<AbilityDef> {
+        self.world.resource::<AbilityDb>().all().cloned().collect()
+    }
+
+    /// One item definition by id, or `None` if nothing declares it.
+    pub fn item_def(&self, item: &ItemId) -> Option<ItemDef> {
+        self.world.resource::<ItemDb>().get(item.as_str()).cloned()
+    }
+
     /// The display name for `id`, falling back to the raw id if the item set
     /// doesn't define it (a save referencing a since-removed mod item). The
     /// fallback borrows `id`, so the returned reference is bound to the

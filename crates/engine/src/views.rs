@@ -262,6 +262,35 @@ pub struct CraftRecipe {
     pub cost: Vec<(ItemId, u32)>,
 }
 
+/// One row of an entity's routine panel — a slot, filled or not.
+pub struct RoutineSlotView {
+    pub index: usize,
+    /// `None` for a free slot.
+    pub ability: Option<crate::abilities::AbilityId>,
+    /// The ability's name, or "(empty)" for a free slot.
+    pub name: String,
+    /// The ability's own authored description; empty for a free slot.
+    pub description: String,
+}
+
+/// One row of the "whose routines?" picker — you and every program you own.
+pub struct RoutineHolderView {
+    pub entity: Entity,
+    /// "You" for the player, the program's display name otherwise.
+    pub name: String,
+    pub level: u32,
+    pub filled: usize,
+    pub slots: usize,
+}
+
+/// One row of the install picker — a loose routine held in inventory.
+pub struct RoutineItemView {
+    pub item: ItemId,
+    pub name: String,
+    pub description: String,
+    pub count: u32,
+}
+
 /// Full species-level detail on a single creature, shown by `Game::inspect`
 /// so the player can scope a program out before bumping into it and
 /// triggering an intrusion.

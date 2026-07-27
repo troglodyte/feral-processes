@@ -91,3 +91,95 @@ fn installed_routines_survive_a_save_load_round_trip() {
         .expect("the tamed program should come back");
     assert_eq!(restored, before, "a save must carry installed routines");
 }
+
+#[test]
+fn every_loaded_ability_gets_a_routine_item_carrying_its_own_text() {
+    let game = Game::new(21, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for ability in game.ability_defs() {
+        let item = crate::abilities::routine_item_id(&ability.id);
+        let def = game
+            .item_def(&item)
+            .unwrap_or_else(|| panic!("{} should have a synthesized routine item", ability.id));
+        assert_eq!(def.routine.as_deref(), Some(ability.id.as_str()));
+        assert_eq!(
+            def.description, ability.description,
+            "a routine item reads its text from the ability, never a copy"
+        );
+        assert!(def.name.ends_with(" Routine"), "{}", def.name);
+    }
+}
+
+#[test]
+fn install_then_uninstall_returns_the_same_item() {
+    let mut game = Game::new(22, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    set_level(&mut game, pet, 4); // two slots, one of them free
+    let item = crate::abilities::routine_item_id("sandbox");
+    set_inventory(&mut game, &[(item.as_str(), 1)]);
+
+    game.install_routine(pet, &item).unwrap();
+    assert_eq!(
+        count_item(&game, item.as_str()),
+        0,
+        "installing spends the item"
+    );
+    assert!(
+        game.routine_view(pet)
+            .iter()
+            .any(|s| s.ability.as_deref() == Some("sandbox")),
+        "the routine should occupy a slot"
+    );
+
+    let slot = game
+        .routine_view(pet)
+        .into_iter()
+        .position(|s| s.ability.as_deref() == Some("sandbox"))
+        .unwrap();
+    game.uninstall_routine(pet, slot).unwrap();
+    assert_eq!(
+        count_item(&game, item.as_str()),
+        1,
+        "uninstalling gives it back"
+    );
+}
+
+#[test]
+fn install_is_refused_with_no_free_slot_without_the_item_and_during_battle() {
+    let mut game = Game::new(23, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3); // level 1: exactly one slot, already full
+    let item = crate::abilities::routine_item_id("sandbox");
+
+    let err = game.install_routine(pet, &item).unwrap_err();
+    assert!(err.contains("don't have"), "no copy held: {err}");
+
+    set_inventory(&mut game, &[(item.as_str(), 1)]);
+    let err = game.install_routine(pet, &item).unwrap_err();
+    assert!(err.contains("no free routine slot"), "slots full: {err}");
+
+    set_level(&mut game, pet, 4);
+    start_battle_with_a_wild_program(&mut game);
+    let err = game.install_routine(pet, &item).unwrap_err();
+    assert!(err.contains("right now"), "mid-battle: {err}");
+}
+
+#[test]
+fn an_innate_routine_can_be_popped_out_and_plugged_into_another_program() {
+    let (mut game, medic) = game_with_two_ability_companion();
+    let popped = game.routine_view(medic)[0].ability.clone().unwrap();
+    game.uninstall_routine(medic, 0).unwrap();
+    assert!(
+        game.routine_view(medic).iter().all(|s| s.ability.is_none()),
+        "the innate slot should now be empty"
+    );
+
+    let host = spawn_tamed(&mut game, 10, 3);
+    set_level(&mut game, host, 4);
+    let item = crate::abilities::routine_item_id(&popped);
+    game.install_routine(host, &item).unwrap();
+    assert!(
+        game.routine_view(host)
+            .iter()
+            .any(|s| s.ability.as_deref() == Some(popped.as_str())),
+        "a foreign species' routine should install fine"
+    );
+}

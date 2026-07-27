@@ -4,6 +4,7 @@ use std::path::Path;
 use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
 
+use crate::abilities::AbilityDb;
 use crate::components::BuffKind;
 use crate::items::{EquipmentSlot, EquipmentStats, ItemId};
 use crate::species::SpeciesId;
@@ -81,6 +82,12 @@ pub struct ItemDef {
     /// merged per kill (see `Game::equipment_drops_for`).
     #[serde(default)]
     pub droppable: Option<Vec<(SpeciesId, f32)>>,
+    /// The ability a loose copy of this item installs, for a routine item.
+    /// Set only on the defs `ItemDb::synthesize_routines` mints; an authored
+    /// file leaving it `None` is an ordinary item. `#[serde(default)]` like
+    /// every other optional field.
+    #[serde(default)]
+    pub routine: Option<crate::abilities::AbilityId>,
 }
 
 impl ItemDef {
@@ -180,6 +187,50 @@ impl ItemDb {
 
     pub fn craft_currency(&self) -> Option<&ItemId> {
         self.craft_currency.as_ref()
+    }
+
+    /// Mints one item per loaded ability, so a loose routine is an ordinary
+    /// inventory item that stores, stacks and sells with no new machinery.
+    ///
+    /// Called after both databases load rather than inside `load_dir`, which
+    /// has no view of `AbilityDb`. The description is *read* from the
+    /// ability rather than copied into a second authored file, so the two
+    /// cannot drift.
+    ///
+    /// An ability whose routine id collides with an authored item is skipped
+    /// with a warning: the authored file wins, exactly as a duplicate
+    /// economy role does.
+    pub fn synthesize_routines(&mut self, abilities: &AbilityDb) -> Vec<String> {
+        let mut warnings = Vec::new();
+        for ability in abilities.all() {
+            let id = crate::abilities::routine_item_id(&ability.id);
+            if self.items.contains_key(id.as_str()) {
+                warnings.push(format!(
+                    "ability {} wants routine item {}, which an authored item already claims; \
+                     the ability will not be extractable",
+                    ability.id,
+                    id.as_str()
+                ));
+                continue;
+            }
+            self.items.insert(
+                id.0.clone(),
+                ItemDef {
+                    id,
+                    name: format!("{} Routine", ability.name),
+                    description: ability.description.clone(),
+                    routine: Some(ability.id.clone()),
+                    bank_limit: None,
+                    role: None,
+                    equipment: None,
+                    taming_potency: None,
+                    consume: None,
+                    craftable: None,
+                    droppable: None,
+                },
+            );
+        }
+        warnings
     }
 
     /// Human-readable names of any economy role with no holder — empty when

@@ -15,6 +15,7 @@ pub(crate) mod crafting;
 pub(crate) mod inspection;
 pub(crate) mod lifecycle;
 pub(crate) mod party;
+pub(crate) mod routines;
 pub(crate) mod spawning;
 pub(crate) mod trade;
 pub(crate) mod turn;

@@ -47,6 +47,13 @@ pub fn player_routine_slots(level: u32) -> usize {
     )
 }
 
+/// The inventory item a loose (uninstalled) copy of `ability` takes. Minted
+/// by `ItemDb::synthesize_routines` rather than authored, so a modder's new
+/// ability is extractable and installable with no second file to write.
+pub fn routine_item_id(ability: &str) -> crate::items::ItemId {
+    crate::items::ItemId(format!("routine_{ability}"))
+}
+
 /// Who an ability lands on. Which picker the UI opens for it — if any — is
 /// `AbilityTarget::targeting`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

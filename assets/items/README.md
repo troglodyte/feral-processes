@@ -118,6 +118,15 @@ disqualifies the whole file.
     // merged per kill — an item declared on both sides is rolled once, at
     // the better of the two chances.
     droppable: Some([("scrapper", 0.1), ("worm", 0.08)]),
+
+    // Reserved for engine-synthesized items — leave this out. Every loaded
+    // ability automatically gets a "<Ability Name> Routine" item (id
+    // `routine_<ability_id>`) whose `routine` names that ability and whose
+    // description is read live from the ability's own text, so it can never
+    // drift. Authoring an item whose id collides with `routine_<ability>`
+    // is refused with a warning (the authored file wins, but the ability
+    // becomes unextractable) — don't claim that id namespace by hand.
+    routine: None,
 )
 ```
 

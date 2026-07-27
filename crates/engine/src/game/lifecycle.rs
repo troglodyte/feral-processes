@@ -595,8 +595,9 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (research, research_warnings) =
         ResearchDb::load_dir(&assets_dir.join("research"), &structures, &abilities)?;
     warnings.extend(research_warnings);
-    let (items, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"))?;
+    let (mut items, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"))?;
     warnings.extend(item_warnings);
+    warnings.extend(items.synthesize_routines(&abilities));
     let missing = items.missing_roles();
     if !missing.is_empty() {
         return Err(std::io::Error::new(

@@ -51,7 +51,7 @@ pub(super) fn draw_bar(
     value: f32,
     max: f32,
     style: BarStyle,
-    fonts: &Fonts,
+    painter: &Painter,
     m: &Metrics,
 ) -> f32 {
     let BarStyle { color, bold } = style;
@@ -61,20 +61,20 @@ pub(super) fn draw_bar(
     // the battle rosters' HP column impossible — a drawing primitive is the
     // wrong place to be deciding text layout.
     if bold {
-        fonts.ui_bold(label, g.x, g.y, m.label(), TEXT);
+        painter.ui_bold(label, g.x, g.y, m.label(), TEXT);
     } else {
-        fonts.ui(label, g.x, g.y, m.label(), TEXT);
+        painter.ui(label, g.x, g.y, m.label(), TEXT);
     }
     let bar_y = g.track_y(m);
-    draw_rectangle(
+    painter.rect(
         g.x,
         bar_y,
         g.w,
         BAR_TRACK_H,
         Color::new(0.15, 0.15, 0.15, 1.0),
     );
-    draw_rectangle(g.x, bar_y, g.w * ratio, BAR_TRACK_H, color);
-    draw_rectangle_lines(g.x, bar_y, g.w, BAR_TRACK_H, 1.0, BORDER);
+    painter.rect(g.x, bar_y, g.w * ratio, BAR_TRACK_H, color);
+    painter.rect_lines(g.x, bar_y, g.w, BAR_TRACK_H, 1.0, BORDER);
     // Leaves the next row's label room above its own baseline, so stacked
     // bars keep their spacing as the label grows.
     bar_y + BAR_TRACK_H + m.font_size as f32 / 2.0
@@ -98,6 +98,7 @@ pub(super) fn draw_ghost_band(
     ghost: f32,
     max: f32,
     color: Color,
+    painter: &Painter,
     m: &Metrics,
 ) {
     let ratio = (value / max).clamp(0.0, 1.0);
@@ -105,7 +106,7 @@ pub(super) fn draw_ghost_band(
     if ghost_ratio <= ratio {
         return;
     }
-    draw_rectangle(
+    painter.rect(
         g.x + g.w * ratio,
         g.track_y(m),
         g.w * (ghost_ratio - ratio),

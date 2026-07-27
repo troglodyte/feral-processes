@@ -1,21 +1,19 @@
-//! Transient visual feedback for the macroquad frontend: raid flashes on
-//! the map, hit feedback in battle, damaged-structure tinting, and the log
-//! pane's raid flash.
+//! Transient visual feedback: raid flashes on the map, hit feedback in
+//! battle, damaged-structure tinting, and the log pane's raid flash.
 //!
 //! `App` knows nothing about any of this — like the volume control, it's
-//! GUI-local state owned by `game_loop` and threaded into `render::draw`.
+//! GUI-local state owned by the game loop and threaded into `render::draw`.
 //! The one thing it does consume from the engine is `Game::take_effects`,
 //! which reports raid outcomes a renderer can't otherwise observe (a raid
 //! the shield network absorbs changes no state at all).
 //!
 //! The timing math lives in free functions so it can be unit-tested;
-//! everything that touches macroquad's draw calls can't be.
+//! everything that reaches for `Painter` can't be.
 
 use std::collections::HashMap;
 
-use macroquad::prelude::*;
-
-use crate::text::{Fonts, Metrics};
+use crate::paint::{Color, Painter};
+use crate::text::Metrics;
 use feral_processes_engine::{EffectKind, MessageKind, VisualEffect};
 
 /// Alpha a tile flash starts at, before fading linearly to nothing. Chosen
@@ -259,11 +257,11 @@ impl Fx {
         });
     }
 
-    pub fn draw_floats(&self, fonts: &Fonts, m: &Metrics) {
+    pub fn draw_floats(&self, painter: &Painter, m: &Metrics) {
         for f in &self.floats {
             let t = ((self.now - f.start) / FLOAT_SECONDS) as f32;
             let color = Color::new(f.color.r, f.color.g, f.color.b, 1.0 - t);
-            fonts.ui(&f.text, f.x, f.y - FLOAT_RISE_PX * t, m.label(), color);
+            painter.ui(&f.text, f.x, f.y - FLOAT_RISE_PX * t, m.label(), color);
         }
     }
 

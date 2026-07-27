@@ -3,7 +3,7 @@
 use super::popup::*;
 use super::*;
 
-pub(super) fn draw_trade_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_trade_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
     let structures: Vec<_> = game
         .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
         .into_iter()
@@ -30,14 +30,14 @@ pub(super) fn draw_trade_menu(game: &mut Game, selected: usize, fonts: &Fonts, m
             i == selected,
         ));
     }
-    draw_popup("Trade", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Trade", PopupSize::Large, &rows, painter, m);
 }
 
 pub(super) fn draw_trade_action_menu(
     game: &mut Game,
     structure: Option<Entity>,
     selected: usize,
-    fonts: &Fonts,
+    painter: &Painter,
     m: &Metrics,
 ) {
     let Some(structure) = structure else { return };
@@ -119,7 +119,7 @@ pub(super) fn draw_trade_action_menu(
     }
     rows.push(text_row(""));
     rows.push(text_row("Esc to cancel; Up/Down + Enter also work"));
-    draw_popup("Trade", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Trade", PopupSize::Large, &rows, painter, m);
 }
 
 /// Confirms a program sale. The only screen that says what else the sale
@@ -127,7 +127,7 @@ pub(super) fn draw_trade_action_menu(
 /// cronjob or guard post without asking.
 pub(super) fn draw_trade_program_confirm(
     option: Option<&ProgramSaleOption>,
-    fonts: &Fonts,
+    painter: &Painter,
     m: &Metrics,
 ) {
     let Some(option) = option else { return };
@@ -149,7 +149,7 @@ pub(super) fn draw_trade_program_confirm(
     }
     rows.push(text_row(""));
     rows.push(text_row("[y] sell    [n] keep it    Esc to cancel"));
-    draw_popup("Confirm sale", PopupSize::Small, &rows, fonts, m);
+    draw_popup("Confirm sale", PopupSize::Small, &rows, painter, m);
 }
 
 pub(super) fn draw_trade_quantity_menu(
@@ -157,7 +157,7 @@ pub(super) fn draw_trade_quantity_menu(
     structure: Option<Entity>,
     choice: Option<TradeChoice>,
     quantity_input: &str,
-    fonts: &Fonts,
+    painter: &Painter,
     m: &Metrics,
 ) {
     let (Some(structure), Some(choice)) = (structure, choice) else {
@@ -195,5 +195,5 @@ pub(super) fn draw_trade_quantity_menu(
             verb.to_lowercase()
         )),
     ];
-    draw_popup("Trade", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Trade", PopupSize::Large, &rows, painter, m);
 }

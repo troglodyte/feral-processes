@@ -7,7 +7,7 @@ pub(super) fn draw_erase_quantity(
     game: &mut Game,
     item: Option<ItemId>,
     quantity_input: &str,
-    fonts: &Fonts,
+    painter: &Painter,
     m: &Metrics,
 ) {
     let Some(item) = item else { return };
@@ -36,10 +36,10 @@ pub(super) fn draw_erase_quantity(
         text_row("Type digits, Enter to erase"),
         text_row("[A] Erase all   Esc to go back"),
     ];
-    draw_popup("Erase", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Erase", PopupSize::Large, &rows, painter, m);
 }
 
-pub(super) fn draw_inventory(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
     let status = game.player_status();
     let mut rows = vec![
         Row::TextColored(
@@ -79,7 +79,7 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, fonts: &Fonts, m:
     }
     rows.push(text_row(""));
     rows.push(text_row("Esc to close; Up/Down + Enter also work"));
-    draw_popup("Inventory", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Inventory", PopupSize::Large, &rows, painter, m);
 }
 
 fn equipped_row(
@@ -135,7 +135,7 @@ pub(super) fn draw_inventory_item_action(
     zone_level: u32,
     fusion_tier: u32,
     selected: usize,
-    fonts: &Fonts,
+    painter: &Painter,
     m: &Metrics,
 ) {
     let Some(item) = item else {
@@ -143,7 +143,7 @@ pub(super) fn draw_inventory_item_action(
             "Item",
             PopupSize::Small,
             &[text_row("Nothing selected.")],
-            fonts,
+            painter,
             m,
         );
         return;
@@ -159,5 +159,5 @@ pub(super) fn draw_inventory_item_action(
     }
     rows.push(text_row(""));
     rows.push(text_row("Esc to cancel; Up/Down + Enter also work"));
-    draw_popup("Item", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Item", PopupSize::Large, &rows, painter, m);
 }

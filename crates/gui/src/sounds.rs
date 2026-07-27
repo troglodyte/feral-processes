@@ -1,45 +1,59 @@
-//! Plays `feral_processes_app_core::SoundEvent` cues through macroquad's
-//! audio device. The `.wav` files are embedded in the binary (they're tiny
-//! procedural blips, not sampled assets someone would want to mod) rather
-//! than loaded from `assets_dir` at runtime.
+//! Plays `feral_processes_app_core::SoundEvent` cues through `bevy_audio`.
+//! The `.wav` files are embedded in the binary (they're tiny procedural
+//! blips, not sampled assets someone would want to mod) rather than loaded
+//! from `assets_dir` at runtime.
 
-use macroquad::audio::{self, PlaySoundParams, Sound};
+use std::sync::Arc;
+
+use bevy::audio::Volume;
+use bevy::prelude::*;
 
 use feral_processes_app_core::SoundEvent;
 
-/// One loaded `Sound` per `SoundEvent` variant.
+/// One loaded handle per `SoundEvent` variant.
+///
+/// The clips are registered straight into `Assets<AudioSource>` from the
+/// embedded bytes rather than going through `AssetServer`, which would want
+/// a path on disk. That also means nothing is in flight: the handles are
+/// usable the moment this returns, so there is no early window in which a
+/// cue would be dropped for not having finished loading.
+#[derive(Resource)]
 pub struct SoundBank {
-    step: Sound,
-    battle_start: Sound,
-    attack: Sound,
-    flee: Sound,
-    victory: Sound,
-    defeat: Sound,
+    step: Handle<AudioSource>,
+    battle_start: Handle<AudioSource>,
+    attack: Handle<AudioSource>,
+    flee: Handle<AudioSource>,
+    victory: Handle<AudioSource>,
+    defeat: Handle<AudioSource>,
 }
 
 impl SoundBank {
-    pub async fn load() -> Self {
-        async fn load(bytes: &[u8]) -> Sound {
-            audio::load_sound_from_bytes(bytes)
-                .await
-                .expect("embedded sound effects are always valid wav data")
-        }
+    pub fn load(sources: &mut Assets<AudioSource>) -> Self {
+        let mut add = |bytes: &'static [u8]| {
+            sources.add(AudioSource {
+                bytes: Arc::from(bytes),
+            })
+        };
         Self {
-            step: load(include_bytes!("../../../assets/sounds/step.wav")).await,
-            battle_start: load(include_bytes!("../../../assets/sounds/battle_start.wav")).await,
-            attack: load(include_bytes!("../../../assets/sounds/attack.wav")).await,
-            flee: load(include_bytes!("../../../assets/sounds/flee.wav")).await,
-            victory: load(include_bytes!("../../../assets/sounds/victory.wav")).await,
-            defeat: load(include_bytes!("../../../assets/sounds/defeat.wav")).await,
+            step: add(include_bytes!("../../../assets/sounds/step.wav")),
+            battle_start: add(include_bytes!("../../../assets/sounds/battle_start.wav")),
+            attack: add(include_bytes!("../../../assets/sounds/attack.wav")),
+            flee: add(include_bytes!("../../../assets/sounds/flee.wav")),
+            victory: add(include_bytes!("../../../assets/sounds/victory.wav")),
+            defeat: add(include_bytes!("../../../assets/sounds/defeat.wav")),
         }
     }
 
     /// `volume` is the caller's current master volume (see the `[`/`]`
-    /// controls in `game_loop`), applied as-is with no further scaling —
-    /// each wav was synthesized at a level already balanced against the
-    /// others, so there's no separate per-sound mix to fold in.
-    pub fn play(&self, event: SoundEvent, volume: f32) {
-        let sound = match event {
+    /// controls in `frame`), applied as-is with no further scaling — each wav
+    /// was synthesized at a level already balanced against the others, so
+    /// there's no separate per-sound mix to fold in.
+    ///
+    /// Each cue is spawned as its own entity that despawns when the clip
+    /// ends, which is what lets overlapping cues sound together instead of
+    /// cutting each other off.
+    pub fn play(&self, commands: &mut Commands, event: SoundEvent, volume: f32) {
+        let source = match event {
             SoundEvent::Step => &self.step,
             SoundEvent::BattleStart => &self.battle_start,
             SoundEvent::Attack => &self.attack,
@@ -47,12 +61,12 @@ impl SoundBank {
             SoundEvent::Victory => &self.victory,
             SoundEvent::Defeat => &self.defeat,
         };
-        audio::play_sound(
-            sound,
-            PlaySoundParams {
-                looped: false,
-                volume,
+        commands.spawn((
+            AudioPlayer::new(source.clone()),
+            PlaybackSettings {
+                volume: Volume::Linear(volume),
+                ..PlaybackSettings::DESPAWN
             },
-        );
+        ));
     }
 }

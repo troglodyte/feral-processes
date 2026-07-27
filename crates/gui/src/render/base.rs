@@ -33,13 +33,13 @@ fn biome_style(biome: Biome) -> (char, Color) {
 
 /// The world grid, status panel, and message feed — the base layer shown
 /// under `Mode::Playing` and every menu popup, same as `ui.rs::render_playing`.
-pub(super) fn draw_playing_base(app: &mut App, fx: &Fx, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_playing_base(app: &mut App, fx: &Fx, painter: &Painter, m: &Metrics) {
     let (tile_px, glyph_px) = map_cell(app.zoom);
     let status_line = app.status_line.clone();
     let Some(game) = &mut app.game else { return };
 
-    let map_w = screen_width() * 0.7;
-    let map_h = screen_height() * 0.72;
+    let map_w = painter.screen_w() * 0.7;
+    let map_h = painter.screen_h() * 0.72;
     let half_w = ((map_w / tile_px) / 2.0).max(1.0) as i32;
     let half_h = ((map_h / tile_px) / 2.0).max(1.0) as i32;
 
@@ -53,7 +53,7 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &Fx, fonts: &Fonts, m: &Metri
     let spawn_point = game.zone_spawn_point();
     let shield_outline = fx.shield_outline(game.raid_defense_active());
 
-    draw_rectangle(0.0, 0.0, map_w, map_h, Color::new(0.03, 0.03, 0.05, 1.0));
+    painter.rect(0.0, 0.0, map_w, map_h, Color::new(0.03, 0.03, 0.05, 1.0));
     for (ry, row) in tiles.iter().enumerate() {
         for (rx, tile) in row.iter().enumerate() {
             let (mut ch, biome_color) = biome_style(tile.biome);
@@ -96,12 +96,12 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &Fx, fonts: &Fonts, m: &Metri
             if critical {
                 bg = Color::new((bg.r + 0.18).min(1.0), bg.g, bg.b, bg.a);
             }
-            draw_rectangle(px, py, tile_px - 1.0, tile_px - 1.0, bg);
+            painter.rect(px, py, tile_px - 1.0, tile_px - 1.0, bg);
             let glyph = ch.to_string();
-            let dims = fonts.measure_map(&glyph, glyph_px);
+            let dims = painter.measure_map(&glyph, glyph_px);
             let tx = px + (tile_px - dims.width) / 2.0;
             let ty = py + (tile_px + dims.height) / 2.0;
-            fonts.map(&glyph, tx, ty, glyph_px, color);
+            painter.map(&glyph, tx, ty, glyph_px, color);
             // Marks where the player materialized on breaching into this
             // zone (see `Game::zone_spawn_point`) — an outline rather than
             // replacing the glyph, so whatever's actually standing there
@@ -110,61 +110,61 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &Fx, fonts: &Fonts, m: &Metri
             let spawn_rx = spawn_point.0 - status.position.0 + half_w;
             let spawn_ry = spawn_point.1 - status.position.1 + half_h;
             if rx as i32 == spawn_rx && ry as i32 == spawn_ry {
-                draw_rectangle_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, MAGENTA);
+                painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, MAGENTA);
             }
             // A structure with a pet actively cronjob-assigned gets a
             // yellow outline so it's visible at a glance without opening
             // the cronjob menu to check.
             if staffed {
-                draw_rectangle_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, YELLOW);
+                painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, YELLOW);
             }
             // The shield network is base-wide, not per-structure, so every
             // structure carries the same faint pulse while one is standing.
             // Drawn under the flash so a raid still reads on top of it.
             if let Some(pulse) = shield_outline.filter(|_| shielded) {
-                draw_rectangle_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, pulse);
+                painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, pulse);
             }
             let world = (
                 status.position.0 + rx as i32 - half_w,
                 status.position.1 + ry as i32 - half_h,
             );
             if let Some(flash) = fx.tile_flash(world) {
-                draw_rectangle(px, py, tile_px - 1.0, tile_px - 1.0, flash);
+                painter.rect(px, py, tile_px - 1.0, tile_px - 1.0, flash);
             }
         }
     }
-    draw_rectangle_lines(0.0, 0.0, map_w, map_h, 2.0, BORDER);
+    painter.rect_lines(0.0, 0.0, map_w, map_h, 2.0, BORDER);
 
     draw_status_panel(
-        Rect::new(map_w, 0.0, screen_width() - map_w, map_h),
+        Rect::new(map_w, 0.0, painter.screen_w() - map_w, map_h),
         &status,
         game,
-        fonts,
+        painter,
         m,
     );
 
     let log_y = map_h;
-    let log_h = screen_height() - map_h;
-    draw_rectangle(0.0, log_y, screen_width(), log_h, PANEL_BG);
-    draw_rectangle_lines(
+    let log_h = painter.screen_h() - map_h;
+    painter.rect(0.0, log_y, painter.screen_w(), log_h, PANEL_BG);
+    painter.rect_lines(
         0.0,
         log_y,
-        screen_width(),
+        painter.screen_w(),
         log_h,
         2.0,
         fx.log_border(BORDER),
     );
     let mut ly = log_y + m.inset + m.font_size as f32 / 2.0;
     if let Some(s) = &status_line {
-        fonts.ui(s, m.inset, ly, m.font_size, RED);
+        painter.ui(s, m.inset, ly, m.font_size, RED);
         ly += m.line_height;
     }
     let capacity = ((log_h - m.line_height) / m.line_height).max(1.0) as usize;
     for (kind, line) in game.message_log(capacity) {
-        if ly > screen_height() - m.gap {
+        if ly > painter.screen_h() - m.gap {
             break;
         }
-        draw_message_line(kind, &line, m.inset, ly, fonts, m);
+        draw_message_line(kind, &line, m.inset, ly, painter, m);
         ly += m.line_height;
     }
 }
@@ -173,12 +173,12 @@ fn draw_status_panel(
     rect: Rect,
     status: &feral_processes_engine::PlayerStatus,
     game: &Game,
-    fonts: &Fonts,
+    painter: &Painter,
     m: &Metrics,
 ) {
     let Rect { x, y, w, h } = rect;
-    draw_rectangle(x, y, w, h, PANEL_BG);
-    draw_rectangle_lines(x, y, w, h, 2.0, BORDER);
+    painter.rect(x, y, w, h, PANEL_BG);
+    painter.rect_lines(x, y, w, h, 2.0, BORDER);
 
     // Clears the panel border by one inset, then drops to the first
     // baseline; both terms grow with the font the rows are drawn in.
@@ -193,7 +193,7 @@ fn draw_status_panel(
         status.hp as f32,
         status.max_hp.max(1) as f32,
         BarStyle::plain(RED),
-        fonts,
+        painter,
         m,
     );
     cy = draw_bar(
@@ -206,7 +206,7 @@ fn draw_status_panel(
         status.hunger,
         100.0,
         BarStyle::plain(YELLOW),
-        fonts,
+        painter,
         m,
     );
     cy = draw_bar(
@@ -219,7 +219,7 @@ fn draw_status_panel(
         status.fatigue,
         100.0,
         BarStyle::plain(BLUE),
-        fonts,
+        painter,
         m,
     );
     cy += m.gap;
@@ -238,10 +238,10 @@ fn draw_status_panel(
         format!("Decompiler {}", status.decompiler),
     ];
     for line in &lines {
-        fonts.ui(line, x + m.inset, cy, m.font_size, TEXT);
+        painter.ui(line, x + m.inset, cy, m.font_size, TEXT);
         cy += m.line_height;
     }
-    fonts.ui(
+    painter.ui(
         format!(
             "Party: {}/{}",
             status.companions.len(),
@@ -253,7 +253,7 @@ fn draw_status_panel(
         GREEN,
     );
     cy += m.line_height;
-    fonts.ui(
+    painter.ui(
         format!("Pets: {}/{}", status.pet_count, status.pet_capacity),
         x + m.inset,
         cy,
@@ -262,7 +262,7 @@ fn draw_status_panel(
     );
     cy += m.line_height;
     for companion in &status.companions {
-        fonts.ui(
+        painter.ui(
             format!(
                 "Companion: {} (HP {}/{}, PWR {})",
                 companion.name, companion.hp, companion.max_hp, companion.power
@@ -275,10 +275,10 @@ fn draw_status_panel(
         cy += m.line_height;
     }
     cy += m.gap;
-    fonts.ui("Inventory:", x + m.inset, cy, m.font_size, TEXT);
+    painter.ui("Inventory:", x + m.inset, cy, m.font_size, TEXT);
     cy += m.line_height;
     if status.inventory.is_empty() {
-        fonts.ui("(empty)", x + m.inset, cy, m.font_size, TEXT_DIM);
+        painter.ui("(empty)", x + m.inset, cy, m.font_size, TEXT_DIM);
         cy += m.line_height;
     }
     let keys = [
@@ -296,7 +296,7 @@ fn draw_status_panel(
         if cy > keys_y - m.line_height {
             break;
         }
-        fonts.ui(
+        painter.ui(
             format!("{} x{}", game.item_name(item), qty),
             x + m.inset,
             cy,
@@ -308,7 +308,7 @@ fn draw_status_panel(
 
     let mut ky = keys_y;
     for k in keys {
-        fonts.ui(k, x + m.inset, ky, m.small(), TEXT_DIM);
+        painter.ui(k, x + m.inset, ky, m.small(), TEXT_DIM);
         ky += keys_line_height;
     }
 }

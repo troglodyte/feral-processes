@@ -1,104 +1,16 @@
-//! Fonts, text sizing, and terrain color math for the graphics frontend.
+//! Text sizing and terrain color math for the graphics frontend.
 //!
 //! Split out of `render.rs` for the same reason `fx.rs` was: this is pure
 //! and worth unit-testing, while the drawing that consumes it can't be
-//! tested at all without a window. Holds `Fonts` (the three loaded faces),
-//! the map-glyph and UI-text sizing rules, and `terrain_color`.
+//! tested at all without a window. Holds the map-glyph and UI-text sizing
+//! rules and `terrain_color`; the faces themselves belong to `Painter`.
 //!
 //! Two independent sizing rules live here. Map glyphs are sized by zoom
 //! alone, in strict integer multiples of the pixel font's native cell.
 //! UI text is sized continuously from the window height. They never mix.
 
+use crate::paint::Color;
 use feral_processes_app_core::{MAX_ZOOM, MIN_ZOOM};
-use macroquad::prelude::*;
-
-/// The three faces the frontend draws with: a pixel font for the map grid
-/// and a vector monospace, regular and bold, for everything else.
-///
-/// Embedded with `include_bytes!` rather than loaded from `assets_dir` for
-/// the same reason the sound effects are (see `sounds.rs`): fonts aren't
-/// moddable game content.
-pub struct Fonts {
-    map: Font,
-    ui: Font,
-    ui_bold: Font,
-}
-
-impl Fonts {
-    /// Not async, unlike `SoundBank::load` — macroquad's font loader is
-    /// synchronous — but it still reaches for the graphics context, so it
-    /// has to run after the window exists.
-    pub fn load() -> Self {
-        let mut map =
-            load_ttf_font_from_bytes(include_bytes!("../../../assets/fonts/unscii-16.ttf"))
-                .expect("embedded unscii-16 is valid ttf");
-        // unscii is vectorized outlines of a bitmap, so it only stays
-        // crisp under nearest-neighbour sampling. The loader applies the
-        // context default, which is linear.
-        map.set_filter(FilterMode::Nearest);
-        Self {
-            map,
-            ui: load_ttf_font_from_bytes(include_bytes!(
-                "../../../assets/fonts/DejaVuSansMono.ttf"
-            ))
-            .expect("embedded DejaVu Sans Mono is valid ttf"),
-            ui_bold: load_ttf_font_from_bytes(include_bytes!(
-                "../../../assets/fonts/DejaVuSansMono-Bold.ttf"
-            ))
-            .expect("embedded DejaVu Sans Mono Bold is valid ttf"),
-        }
-    }
-
-    pub fn ui(&self, text: impl AsRef<str>, x: f32, y: f32, size: u16, color: Color) {
-        draw_text_ex(
-            text,
-            x,
-            y,
-            TextParams {
-                font: Some(&self.ui),
-                font_size: size,
-                color,
-                ..Default::default()
-            },
-        );
-    }
-
-    pub fn ui_bold(&self, text: impl AsRef<str>, x: f32, y: f32, size: u16, color: Color) {
-        draw_text_ex(
-            text,
-            x,
-            y,
-            TextParams {
-                font: Some(&self.ui_bold),
-                font_size: size,
-                color,
-                ..Default::default()
-            },
-        );
-    }
-
-    pub fn map(&self, glyph: impl AsRef<str>, x: f32, y: f32, size: u16, color: Color) {
-        draw_text_ex(
-            glyph,
-            x,
-            y,
-            TextParams {
-                font: Some(&self.map),
-                font_size: size,
-                color,
-                ..Default::default()
-            },
-        );
-    }
-
-    pub fn measure_ui(&self, text: impl AsRef<str>, size: u16) -> TextDimensions {
-        measure_text(text, Some(&self.ui), size, 1.0)
-    }
-
-    pub fn measure_map(&self, glyph: impl AsRef<str>, size: u16) -> TextDimensions {
-        measure_text(glyph, Some(&self.map), size, 1.0)
-    }
-}
 
 /// unscii-16's native cell height. Map glyphs are only ever drawn at
 /// integer multiples of this, so the vectorized bitmap keeps landing on

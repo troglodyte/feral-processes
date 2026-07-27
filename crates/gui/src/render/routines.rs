@@ -3,7 +3,12 @@
 use super::popup::*;
 use super::*;
 
-pub(super) fn draw_routine_target(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_routine_target(
+    game: &mut Game,
+    selected: usize,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let holders = game.routine_holders();
     let mut rows = vec![text_row("Whose routines?")];
     for (i, h) in holders.iter().enumerate() {
@@ -19,14 +24,14 @@ pub(super) fn draw_routine_target(game: &mut Game, selected: usize, fonts: &Font
             i == selected,
         ));
     }
-    draw_popup("Routines", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Routines", PopupSize::Large, &rows, painter, m);
 }
 
 pub(super) fn draw_routines(
     game: &Game,
     holder: Option<Entity>,
     selected: usize,
-    fonts: &Fonts,
+    painter: &Painter,
     m: &Metrics,
 ) {
     let Some(holder) = holder else { return };
@@ -43,10 +48,10 @@ pub(super) fn draw_routines(
             rows.push(text_row(format!("    {}", s.description)));
         }
     }
-    draw_popup("Routines", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Routines", PopupSize::Large, &rows, painter, m);
 }
 
-pub(super) fn draw_routine_install(game: &Game, selected: usize, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_routine_install(game: &Game, selected: usize, painter: &Painter, m: &Metrics) {
     let loose = game.loose_routines();
     let mut rows = vec![text_row("Install which routine?")];
     if loose.is_empty() {
@@ -61,10 +66,10 @@ pub(super) fn draw_routine_install(game: &Game, selected: usize, fonts: &Fonts, 
         ));
         rows.push(text_row(format!("    {}", r.description)));
     }
-    draw_popup("Install Routine", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Install Routine", PopupSize::Large, &rows, painter, m);
 }
 
-pub(super) fn draw_extract(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_extract(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
     let programs = game.owned_pets();
     let mut rows = vec![text_row(
         "Break down which program? Extraction destroys it and salvages one routine.",
@@ -78,14 +83,14 @@ pub(super) fn draw_extract(game: &mut Game, selected: usize, fonts: &Fonts, m: &
             i == selected,
         ));
     }
-    draw_popup("Extract", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Extract", PopupSize::Large, &rows, painter, m);
 }
 
 pub(super) fn draw_extract_pick(
     game: &Game,
     program: Option<Entity>,
     selected: usize,
-    fonts: &Fonts,
+    painter: &Painter,
     m: &Metrics,
 ) {
     let Some(program) = program else { return };
@@ -100,14 +105,14 @@ pub(super) fn draw_extract_pick(
         ));
         rows.push(text_row(format!("    {}", a.description)));
     }
-    draw_popup("Extract", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Extract", PopupSize::Large, &rows, painter, m);
 }
 
 pub(super) fn draw_extract_confirm(
     game: &Game,
     program: Option<Entity>,
     index: Option<usize>,
-    fonts: &Fonts,
+    painter: &Painter,
     m: &Metrics,
 ) {
     let (Some(program), Some(index)) = (program, index) else {
@@ -131,5 +136,5 @@ pub(super) fn draw_extract_confirm(
         rows.push(text_row(format!("This loses: {}.", lost.join(", "))));
     }
     rows.push(text_row("Enter to confirm, Esc to back out."));
-    draw_popup("Extract", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Extract", PopupSize::Large, &rows, painter, m);
 }

@@ -1,12 +1,11 @@
 //! All drawing for the graphics frontend: one screen per `Mode`, laid out
-//! with macroquad's immediate-mode primitives (filled rects for bars and
-//! tiles, drawn text for menus). Reads engine data through `App` and never
-//! touches the ECS `World`.
-
-use macroquad::prelude::*;
+//! in immediate mode against `Painter` (filled rects for bars and tiles,
+//! drawn text for menus). Reads engine data through `App` and never touches
+//! the ECS `World`.
 
 use crate::fx::Fx;
-use crate::text::{Fonts, Metrics, map_cell, terrain_color, ui_metrics};
+use crate::paint::{Color, DARKGRAY, GRAY, Painter, Rect, WHITE};
+use crate::text::{Metrics, map_cell, terrain_color, ui_metrics};
 use feral_processes_app_core::{
     App, MENU_SCAN_RADIUS, Mode, TradeChoice, equip_preview_tag, inventory_item_actions,
     menu_shortcut,
@@ -89,7 +88,14 @@ fn desaturate(color: Color) -> Color {
 /// Display styling for a message-log line, chosen by the engine-supplied
 /// `MessageKind` rather than by sniffing the text — low-priority chatter
 /// stays dim, gains/damage that matter get a color.
-fn draw_message_line(kind: MessageKind, text: &str, x: f32, y: f32, fonts: &Fonts, m: &Metrics) {
+fn draw_message_line(
+    kind: MessageKind,
+    text: &str,
+    x: f32,
+    y: f32,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let color = match kind {
         MessageKind::Info => TEXT_DIM,
         MessageKind::Loot => GREEN,
@@ -98,9 +104,9 @@ fn draw_message_line(kind: MessageKind, text: &str, x: f32, y: f32, fonts: &Font
         MessageKind::Round => TEXT_DIM,
     };
     if kind == MessageKind::LevelUp {
-        fonts.ui_bold(text, x, y, m.font_size, color);
+        painter.ui_bold(text, x, y, m.font_size, color);
     } else {
-        fonts.ui(text, x, y, m.font_size, color);
+        painter.ui(text, x, y, m.font_size, color);
     }
 }
 
@@ -116,58 +122,58 @@ fn needs_status_banner(mode: Mode) -> bool {
 /// Draws `status` in a strip along the bottom edge, below every popup —
 /// `draw_popup` caps a panel at 85% of the window height and centers it, so
 /// the bottom 7.5% is always clear.
-fn draw_status_banner(status: &str, fonts: &Fonts, m: &Metrics) {
-    let dims = fonts.measure_ui(status, m.font_size);
-    let baseline = screen_height() - m.pad;
-    draw_rectangle(
+fn draw_status_banner(status: &str, painter: &Painter, m: &Metrics) {
+    let dims = painter.measure_ui(status, m.font_size);
+    let baseline = painter.screen_h() - m.pad;
+    painter.rect(
         0.0,
         baseline - dims.height - m.pad / 2.0,
-        screen_width(),
+        painter.screen_w(),
         dims.height + m.pad,
         PANEL_BG,
     );
-    fonts.ui(status, m.inset, baseline, m.font_size, RED);
+    painter.ui(status, m.inset, baseline, m.font_size, RED);
 }
 
-pub fn draw(app: &mut App, fx: &mut Fx, fonts: &Fonts) {
-    let m = ui_metrics(screen_height());
-    clear_background(Color::new(0.02, 0.02, 0.03, 1.0));
+pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
+    let m = ui_metrics(painter.screen_h());
+    painter.clear(Color::new(0.02, 0.02, 0.03, 1.0));
     match app.mode {
-        Mode::MainMenu => draw_main_menu(app, fonts, &m),
-        Mode::LoadGame => draw_load_game(app, fonts, &m),
-        Mode::SaveAction => draw_save_action(app, fonts, &m),
-        Mode::DifficultyPick => draw_difficulty_pick(app.menu_selected, fonts, &m),
-        Mode::GameOver => draw_game_over(app, fonts, &m),
-        Mode::Battle => draw_battle(app, fx, fonts, &m),
+        Mode::MainMenu => draw_main_menu(app, painter, &m),
+        Mode::LoadGame => draw_load_game(app, painter, &m),
+        Mode::SaveAction => draw_save_action(app, painter, &m),
+        Mode::DifficultyPick => draw_difficulty_pick(app.menu_selected, painter, &m),
+        Mode::GameOver => draw_game_over(app, painter, &m),
+        Mode::Battle => draw_battle(app, fx, painter, &m),
         Mode::BattleTarget => {
-            draw_battle(app, fx, fonts, &m);
-            draw_battle_target_menu(app, fonts, &m);
+            draw_battle(app, fx, painter, &m);
+            draw_battle_target_menu(app, painter, &m);
         }
         Mode::BattleItem => {
-            draw_battle(app, fx, fonts, &m);
-            draw_battle_item_menu(app, fonts, &m);
+            draw_battle(app, fx, painter, &m);
+            draw_battle_item_menu(app, painter, &m);
         }
         Mode::BattleSpecial => {
-            draw_battle(app, fx, fonts, &m);
-            draw_battle_special_menu(app, fonts, &m);
+            draw_battle(app, fx, painter, &m);
+            draw_battle_special_menu(app, painter, &m);
         }
         Mode::BattleAlly => {
-            draw_battle(app, fx, fonts, &m);
-            draw_battle_ally_menu(app, fonts, &m);
+            draw_battle(app, fx, painter, &m);
+            draw_battle_ally_menu(app, painter, &m);
         }
         Mode::Help => {
-            draw_playing_base(app, fx, fonts, &m);
-            draw_help(fonts, &m);
+            draw_playing_base(app, fx, painter, &m);
+            draw_help(painter, &m);
         }
         _ => {
-            draw_playing_base(app, fx, fonts, &m);
-            draw_mode_overlay(app, fonts, &m);
+            draw_playing_base(app, fx, painter, &m);
+            draw_mode_overlay(app, painter, &m);
         }
     }
     if let Some(status) = &app.status_line
         && needs_status_banner(app.mode)
     {
-        draw_status_banner(status, fonts, &m);
+        draw_status_banner(status, painter, &m);
     }
 }
 
@@ -186,30 +192,30 @@ fn cost_display(game: &Game, cost: &[(ItemId, u32)], inventory: &[(ItemId, u32)]
         .collect()
 }
 
-fn draw_mode_overlay(app: &mut App, fonts: &Fonts, m: &Metrics) {
+fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
     let selected = app.menu_selected;
     let Some(game) = &mut app.game else { return };
     match app.mode {
-        Mode::Build => draw_build_menu(game, selected, fonts, m),
+        Mode::Build => draw_build_menu(game, selected, painter, m),
         Mode::BuildDirection => draw_direction_prompt(
             "Deploy Direction",
             "Choose a direction to deploy (arrows/hjkl), Esc to cancel",
-            fonts,
+            painter,
             m,
         ),
-        Mode::Craft => draw_craft_menu(game, selected, fonts, m),
+        Mode::Craft => draw_craft_menu(game, selected, painter, m),
         Mode::CraftQuantity => draw_craft_quantity(
             game,
             app.pending_craft.clone(),
             &app.craft_quantity_input,
-            fonts,
+            painter,
             m,
         ),
         Mode::EraseQuantity => draw_erase_quantity(
             game,
             app.pending_erase.clone(),
             &app.erase_quantity_input,
-            fonts,
+            painter,
             m,
         ),
         Mode::Cronjob => draw_worker_menu(
@@ -217,7 +223,7 @@ fn draw_mode_overlay(app: &mut App, fonts: &Fonts, m: &Metrics) {
             "Assign Cronjob",
             "Assign which program to a cronjob?",
             selected,
-            fonts,
+            painter,
             m,
         ),
         Mode::CronjobStructure => draw_structure_menu(
@@ -226,7 +232,7 @@ fn draw_mode_overlay(app: &mut App, fonts: &Fonts, m: &Metrics) {
             "Cronjob which structure?",
             true,
             selected,
-            fonts,
+            painter,
             m,
         ),
         Mode::Guard => draw_worker_menu(
@@ -234,7 +240,7 @@ fn draw_mode_overlay(app: &mut App, fonts: &Fonts, m: &Metrics) {
             "Assign Guard",
             "Assign which program to guard duty?",
             selected,
-            fonts,
+            painter,
             m,
         ),
         Mode::GuardStructure => draw_structure_menu(
@@ -243,21 +249,21 @@ fn draw_mode_overlay(app: &mut App, fonts: &Fonts, m: &Metrics) {
             "Guard which structure? Any structure qualifies.",
             false,
             selected,
-            fonts,
+            painter,
             m,
         ),
-        Mode::Remove => draw_remove_menu(game, selected, fonts, m),
-        Mode::RemoveConfirm => draw_remove_confirm(selected, fonts, m),
-        Mode::Upgrade => draw_upgrade_menu(game, selected, fonts, m),
-        Mode::Symlink => draw_symlink_menu(game, selected, fonts, m),
+        Mode::Remove => draw_remove_menu(game, selected, painter, m),
+        Mode::RemoveConfirm => draw_remove_confirm(selected, painter, m),
+        Mode::Upgrade => draw_upgrade_menu(game, selected, painter, m),
+        Mode::Symlink => draw_symlink_menu(game, selected, painter, m),
         Mode::InspectDirection => draw_direction_prompt(
             "Inspect Direction",
             "Choose a direction to inspect (arrows/hjkl), Esc to cancel",
-            fonts,
+            painter,
             m,
         ),
-        Mode::InspectDetail => draw_inspect_detail(game, app.pending_inspect, fonts, m),
-        Mode::Inventory => draw_inventory(game, selected, fonts, m),
+        Mode::InspectDetail => draw_inspect_detail(game, app.pending_inspect, painter, m),
+        Mode::Inventory => draw_inventory(game, selected, painter, m),
         Mode::InventoryItemAction => {
             let zone = game.player_status().zone;
             let fusion_tier = app
@@ -271,58 +277,60 @@ fn draw_mode_overlay(app: &mut App, fonts: &Fonts, m: &Metrics) {
                 zone,
                 fusion_tier,
                 selected,
-                fonts,
+                painter,
                 m,
             )
         }
-        Mode::Companion => draw_companion_menu(game, selected, fonts, m),
-        Mode::Fuse => draw_fuse_menu(game, selected, fonts, m),
-        Mode::FuseSecond => draw_fuse_second_menu(game, app.pending_fuse_first, selected, fonts, m),
+        Mode::Companion => draw_companion_menu(game, selected, painter, m),
+        Mode::Fuse => draw_fuse_menu(game, selected, painter, m),
+        Mode::FuseSecond => {
+            draw_fuse_second_menu(game, app.pending_fuse_first, selected, painter, m)
+        }
         Mode::FuseName => draw_fuse_name_menu(
             game,
             app.pending_fuse_first,
             app.pending_fuse_second,
             &app.fuse_name_input,
-            fonts,
+            painter,
             m,
         ),
-        Mode::RoutineTarget => draw_routine_target(game, selected, fonts, m),
-        Mode::Routines => draw_routines(game, app.pending_routine_holder, selected, fonts, m),
-        Mode::RoutineInstall => draw_routine_install(game, selected, fonts, m),
-        Mode::Extract => draw_extract(game, selected, fonts, m),
+        Mode::RoutineTarget => draw_routine_target(game, selected, painter, m),
+        Mode::Routines => draw_routines(game, app.pending_routine_holder, selected, painter, m),
+        Mode::RoutineInstall => draw_routine_install(game, selected, painter, m),
+        Mode::Extract => draw_extract(game, selected, painter, m),
         Mode::ExtractPick => {
-            draw_extract_pick(game, app.pending_extract_program, selected, fonts, m)
+            draw_extract_pick(game, app.pending_extract_program, selected, painter, m)
         }
         Mode::ExtractConfirm => draw_extract_confirm(
             game,
             app.pending_extract_program,
             app.pending_extract_index,
-            fonts,
+            painter,
             m,
         ),
-        Mode::Trade => draw_trade_menu(game, selected, fonts, m),
+        Mode::Trade => draw_trade_menu(game, selected, painter, m),
         Mode::TradeAction => {
-            draw_trade_action_menu(game, app.pending_trade_structure, selected, fonts, m)
+            draw_trade_action_menu(game, app.pending_trade_structure, selected, painter, m)
         }
         Mode::TradeQuantity => draw_trade_quantity_menu(
             game,
             app.pending_trade_structure,
             app.pending_trade_choice.clone(),
             &app.trade_quantity_input,
-            fonts,
+            painter,
             m,
         ),
         Mode::TradeProgramConfirm => {
-            draw_trade_program_confirm(app.pending_trade_program.as_ref(), fonts, m)
+            draw_trade_program_confirm(app.pending_trade_program.as_ref(), painter, m)
         }
-        Mode::Perks => draw_perks_menu(game, selected, fonts, m),
-        Mode::Research => draw_research_menu(game, selected, fonts, m),
+        Mode::Perks => draw_perks_menu(game, selected, painter, m),
+        Mode::Research => draw_research_menu(game, selected, painter, m),
         _ => {}
     }
 }
 
-fn draw_direction_prompt(title: &str, body: &str, fonts: &Fonts, m: &Metrics) {
-    draw_popup(title, PopupSize::Small, &[text_row(body)], fonts, m);
+fn draw_direction_prompt(title: &str, body: &str, painter: &Painter, m: &Metrics) {
+    draw_popup(title, PopupSize::Small, &[text_row(body)], painter, m);
 }
 
 /// A program's current activity as a bracketed suffix — `" (in party)"`,

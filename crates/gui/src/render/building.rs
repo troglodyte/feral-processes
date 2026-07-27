@@ -3,7 +3,7 @@
 use super::popup::*;
 use super::*;
 
-pub(super) fn draw_build_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_build_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
     let status = game.player_status();
     let defs = game.buildable_structure_defs();
     let descriptions: Vec<String> = defs.iter().map(|def| def.description.clone()).collect();
@@ -20,7 +20,7 @@ pub(super) fn draw_build_menu(game: &mut Game, selected: usize, fonts: &Fonts, m
         ));
         rows.push(text_row(format!("    {}", descriptions[i])));
     }
-    draw_popup("Deploy", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Deploy", PopupSize::Large, &rows, painter, m);
 }
 
 pub(super) fn draw_worker_menu(
@@ -28,7 +28,7 @@ pub(super) fn draw_worker_menu(
     title: &str,
     prompt: &str,
     selected: usize,
-    fonts: &Fonts,
+    painter: &Painter,
     m: &Metrics,
 ) {
     let workers: Vec<_> = game
@@ -64,7 +64,7 @@ pub(super) fn draw_worker_menu(
             i == selected,
         ));
     }
-    draw_popup(title, PopupSize::Large, &rows, fonts, m);
+    draw_popup(title, PopupSize::Large, &rows, painter, m);
 }
 
 pub(super) fn draw_structure_menu(
@@ -73,7 +73,7 @@ pub(super) fn draw_structure_menu(
     prompt: &str,
     workable_only: bool,
     selected: usize,
-    fonts: &Fonts,
+    painter: &Painter,
     m: &Metrics,
 ) {
     let structures: Vec<_> = game
@@ -116,10 +116,10 @@ pub(super) fn draw_structure_menu(
             i == selected,
         ));
     }
-    draw_popup(title, PopupSize::Large, &rows, fonts, m);
+    draw_popup(title, PopupSize::Large, &rows, painter, m);
 }
 
-pub(super) fn draw_remove_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_remove_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
     let structures: Vec<_> = game
         .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
         .into_iter()
@@ -150,10 +150,10 @@ pub(super) fn draw_remove_menu(game: &mut Game, selected: usize, fonts: &Fonts, 
             i == selected,
         ));
     }
-    draw_popup("Demolish Structure", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Demolish Structure", PopupSize::Large, &rows, painter, m);
 }
 
-pub(super) fn draw_upgrade_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_upgrade_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
     let structures: Vec<_> = game
         .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
         .into_iter()
@@ -178,10 +178,10 @@ pub(super) fn draw_upgrade_menu(game: &mut Game, selected: usize, fonts: &Fonts,
             i == selected,
         ));
     }
-    draw_popup("Upgrade Structure", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Upgrade Structure", PopupSize::Large, &rows, painter, m);
 }
 
-pub(super) fn draw_remove_confirm(selected: usize, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_remove_confirm(selected: usize, painter: &Painter, m: &Metrics) {
     let rows = vec![
         Row::TextColored(
             "Removing Home destroys every other structure in this base and refunds".to_string(),
@@ -195,10 +195,10 @@ pub(super) fn draw_remove_confirm(selected: usize, fonts: &Fonts, m: &Metrics) {
         item_row("[y] Yes, demolish everything", selected == 0),
         item_row("[n] No, cancel", selected == 1),
     ];
-    draw_popup("Confirm Demolish Home", PopupSize::Small, &rows, fonts, m);
+    draw_popup("Confirm Demolish Home", PopupSize::Small, &rows, painter, m);
 }
 
-pub(super) fn draw_symlink_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_symlink_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
     let status = game.player_status();
     let targets = game.symlink_targets();
     let mut rows = vec![text_row(
@@ -227,5 +227,5 @@ pub(super) fn draw_symlink_menu(game: &mut Game, selected: usize, fonts: &Fonts,
             i == selected,
         ));
     }
-    draw_popup("Symlink", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Symlink", PopupSize::Large, &rows, painter, m);
 }

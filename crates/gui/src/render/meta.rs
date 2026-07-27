@@ -4,7 +4,7 @@
 use super::popup::*;
 use super::*;
 
-pub(super) fn draw_main_menu(app: &App, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_main_menu(app: &App, painter: &Painter, m: &Metrics) {
     let mut options = vec!["[N] New Game".to_string()];
     if !app.list_saves().is_empty() {
         options.push("[L] Load Game".to_string());
@@ -22,10 +22,10 @@ pub(super) fn draw_main_menu(app: &App, fonts: &Fonts, m: &Metrics) {
         rows.push(text_row(""));
         rows.push(Row::TextColored(s.clone(), RED));
     }
-    draw_popup("Main Menu", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Main Menu", PopupSize::Large, &rows, painter, m);
 }
 
-pub(super) fn draw_load_game(app: &App, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_load_game(app: &App, painter: &Painter, m: &Metrics) {
     let saves = app.list_saves();
     let mut rows = vec![text_row(
         "Pick a save (Esc to cancel; Up/Down + Enter also work)",
@@ -43,10 +43,10 @@ pub(super) fn draw_load_game(app: &App, fonts: &Fonts, m: &Metrics) {
             i == app.menu_selected,
         ));
     }
-    draw_popup("Load Game", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Load Game", PopupSize::Large, &rows, painter, m);
 }
 
-pub(super) fn draw_save_action(app: &App, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_save_action(app: &App, painter: &Painter, m: &Metrics) {
     let name = app
         .pending_save
         .as_ref()
@@ -65,10 +65,10 @@ pub(super) fn draw_save_action(app: &App, fonts: &Fonts, m: &Metrics) {
         rows.push(text_row(""));
         rows.push(Row::TextColored(s.clone(), RED));
     }
-    draw_popup("Save", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Save", PopupSize::Large, &rows, painter, m);
 }
 
-pub(super) fn draw_difficulty_pick(selected: usize, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_difficulty_pick(selected: usize, painter: &Painter, m: &Metrics) {
     let rows = vec![
         item_row(
             "[P] Permadeath - flatlining is final; the session is archived to a log".to_string(),
@@ -81,10 +81,10 @@ pub(super) fn draw_difficulty_pick(selected: usize, fonts: &Fonts, m: &Metrics) 
         text_row(""),
         text_row("Esc to go back; Up/Down + Enter also work"),
     ];
-    draw_popup("New Game", PopupSize::Large, &rows, fonts, m);
+    draw_popup("New Game", PopupSize::Large, &rows, painter, m);
 }
 
-pub(super) fn draw_game_over(app: &mut App, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_game_over(app: &mut App, painter: &Painter, m: &Metrics) {
     let summary = app
         .game
         .as_mut()
@@ -97,10 +97,10 @@ pub(super) fn draw_game_over(app: &mut App, fonts: &Fonts, m: &Metrics) {
         text_row(""),
         text_row("Press any key to return to the main menu"),
     ];
-    draw_popup("Session Terminated", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Session Terminated", PopupSize::Large, &rows, painter, m);
 }
 
-pub(super) fn draw_help(fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_help(painter: &Painter, m: &Metrics) {
     let rows = vec![
         text_row("hjkl/arrows move   . wait   e drain   r recharge"),
         text_row("g scan   c compile   b deploy   w cronjob   G guard   R demolish"),
@@ -118,5 +118,5 @@ pub(super) fn draw_help(fonts: &Fonts, m: &Metrics) {
         text_row(""),
         text_row("Press any key to close"),
     ];
-    draw_popup("Help", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Help", PopupSize::Large, &rows, painter, m);
 }

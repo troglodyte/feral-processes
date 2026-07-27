@@ -1,8 +1,47 @@
 # Renderer & graphics: costed assessment
 
-**2026-07-27.** Reference document, not a committed plan — nothing here has been
-built. Written to answer "what would be the lift for switching to Bevy, so we
-could implement actual graphics later on?", extended to cover bracket-lib.
+**2026-07-27.** Written to answer "what would be the lift for switching to Bevy,
+so we could implement actual graphics later on?", extended to cover bracket-lib.
+
+## Outcome: Tier 3 was built, and this estimate was wrong
+
+The recommendation below was Tier 1 (sprites on macroquad) first. It was
+overruled, and **Tier 3 was built the same day** — the frontend now runs on
+Bevy 0.19 + bevy_egui 0.41. The rest of this document is kept as written,
+because the way its estimate missed is more useful than a corrected number.
+
+The estimate said Tier 3 meant rewriting ~3,500–4,400 lines. The actual swap
+touched **five source files and not one line of `render/`**:
+
+| | estimated | actual |
+|---|---|---|
+| `render/` (3,109 LOC) | "**Rewritten.** This is the bulk." | untouched |
+| gui source churn | ~3,500–4,400 LOC | ~760 lines across 5 files |
+| 48 gui tests | "layout assertions get rewritten or dropped" | all 48 unchanged |
+| dependencies | "roughly 400–500" | 557 |
+
+The error was assuming the port had to go through `render/` at all. Splitting
+the work in two — first a `Painter` seam introduced *while still on macroquad*
+and verified against the existing tests, then a backend swap behind it — meant
+the second step never touched the screens. The seam commit was 540 insertions
+and 348 deletions with no behaviour change; the backend swap after it was
+almost entirely one file.
+
+The lesson generalises past this port: **the cost of a backend swap is set by
+how much code names the backend, not by how much code draws.** This estimate
+measured the second. It even recorded the fact that would have corrected it —
+that `&Fonts` was already threaded through 51 drawing functions — without
+drawing the conclusion.
+
+What did survive scrutiny: the engine needed no migration (already
+`bevy_ecs 0.19`), app-core needed none (zero macroquad references), the
+bracket-lib rejection, and the finding that the tileset was never blocked by
+macroquad. **That last point still stands and is still unaddressed** —
+switching to Bevy did not by itself put a single sprite on screen. The Tier 1
+work below is still the work.
+
+Still unverified: that the window opens and draws. Nothing in the suite
+exercises the Bevy app.
 
 ## Context
 

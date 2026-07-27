@@ -13,6 +13,23 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Renderer
+
+- **The frontend runs on Bevy and egui instead of macroquad.** The engine was
+  always built on `bevy_ecs`, so the sim and the renderer now share an ECS
+  version — though they still meet only through `Game`, as before. Nothing
+  about the screens changed: the same tiles, bars, popups and menus, drawn by
+  the same code. Two player-visible differences, both improvements: typed keys
+  now follow your keyboard layout instead of assuming QWERTY key positions,
+  and overlapping sound cues play together rather than cutting each other off.
+- **Drawing goes through one seam.** The ~3,000 lines that draw the screens no
+  longer name a graphics library at all; they name a `Painter` with eleven
+  operations on it, and the library sits behind that. That is what made the
+  backend swap a change to one file rather than to every menu, and what would
+  make the next one cheap too.
+- Startup on a machine with no display still fails with a readable message
+  rather than a backtrace.
+
 ### Encounters
 
 - **Crossing open ground can get you ambushed.** Every walked step carries a

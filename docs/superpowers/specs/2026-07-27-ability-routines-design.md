@@ -63,7 +63,7 @@ Verified by reading, not assumed:
   version bump.
 - **Shipped species declare at most 2 abilities**, latest unlock level 8
   (`cipher`: `null_route` at 8). No shipped species can outgrow its slots.
-  Eight of seventeen declare none at all and rely on the fallback.
+  Ten of seventeen declare none at all and rely on the fallback.
 - **`ItemDef` and `StructureDef` have no description field.** Item text does
   not exist; structure text is derived in Rust by `Game::structure_description`
   and guarded by `tests/building.rs:364`, a test that exists because the
@@ -125,7 +125,7 @@ always-on list. Concretely:
   ships to exercise.
 - A species declaring no abilities implicitly installs
   `abilities::FALLBACK_ABILITY_ID` (`priority_boost`) at level 1. This keeps
-  the eight fallback species behaving exactly as they do today, and keeps
+  the ten fallback species behaving exactly as they do today, and keeps
   that ability obtainable by extraction — nothing else grants it.
 
 `FALLBACK_ABILITY_ID` stops being an invisible backstop resolved inside

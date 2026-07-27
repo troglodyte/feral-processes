@@ -29,12 +29,14 @@ impl Game {
         self.world.resource::<MessageLog>().recent(n).to_vec()
     }
 
-    /// This battle's narration, oldest first — what the battle pane shows,
-    /// so each fight opens with an empty pane rather than the tail of the
-    /// last one. Once the battle has ended this is the pruned result set,
-    /// which is what a frontend still mid-reveal is scrolling in.
+    /// The current round's narration, oldest first — what the battle pane
+    /// shows. One round at a time, so a resolved round replaces the last
+    /// rather than piling on top of it, and a fresh fight opens on an empty
+    /// pane rather than the tail of the previous one. Once the battle has
+    /// ended this is the pruned result set, which is what a frontend still
+    /// mid-reveal is scrolling in.
     pub fn battle_log(&self) -> Vec<(MessageKind, String)> {
-        self.world.resource::<MessageLog>().since_battle().to_vec()
+        self.world.resource::<MessageLog>().since_round().to_vec()
     }
 
     /// Changes every time a battle starts. A frontend pacing the narration

@@ -306,3 +306,59 @@ fn a_second_battle_starts_with_an_empty_pane() {
         "the previous battle's narration is still in the pane: {battle:?}"
     );
 }
+
+/// Pruning removes lines from the middle of the log, which must not shift
+/// where the battle mark points. The mark is a count of lines ever pushed
+/// and the index is derived from how many have been dropped off the front —
+/// so a prune that forgets to account for what it removed makes every later
+/// slice reach back past the battle and swallow lines from before it.
+#[test]
+fn pruning_does_not_drag_the_battle_mark_backwards() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.log("well before the fight");
+    game.log("also before the fight");
+    start_battle_with_a_wild_program(&mut game);
+    game.log("a hostile swings and misses");
+    game.log("another miss");
+    game.log_kind(MessageKind::Outcome, "You gain 12 XP.");
+
+    game.end_battle(player, None);
+
+    let battle: Vec<String> = game.battle_log().into_iter().map(|(_, l)| l).collect();
+    assert!(
+        !battle.iter().any(|l| l.contains("before the fight")),
+        "the mark slid back past the battle after pruning: {battle:?}"
+    );
+    assert!(
+        battle.iter().any(|l| l.contains("You gain 12 XP")),
+        "the result went missing: {battle:?}"
+    );
+}
+
+/// The pane shows one round at a time. Without this a six-round fight
+/// leaves the player scanning a wall of text for the two lines that just
+/// happened.
+#[test]
+fn resolving_a_round_clears_the_pane_of_the_previous_one() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    start_battle_with_a_wild_program(&mut game);
+    assert!(
+        game.battle_log()
+            .iter()
+            .any(|(_, l)| l.contains("intercepts your signal")),
+        "the opening line should be in the pane before any round resolves"
+    );
+
+    resolve_round_with(&mut game, BattleAction::Defend);
+
+    let pane: Vec<String> = game.battle_log().into_iter().map(|(_, l)| l).collect();
+    assert!(
+        !pane.iter().any(|l| l.contains("intercepts your signal")),
+        "the opening line survived into the next round: {pane:?}"
+    );
+    assert!(
+        pane.iter().any(|l| l.contains("round")),
+        "the round's own narration is missing: {pane:?}"
+    );
+}

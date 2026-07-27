@@ -58,8 +58,16 @@ pub struct MessageMark(u64);
 #[derive(Resource, Default)]
 pub struct MessageLog {
     pub lines: Vec<(MessageKind, String)>,
-    /// Lines ever pushed, including those since drained.
+    /// Lines ever pushed, including those since dropped. Marks are minted
+    /// from this, and `pushed - dropped == lines.len()` is the invariant
+    /// that converts a mark back into an index — every mutation of `lines`
+    /// has to keep it.
     pushed: u64,
+    /// Lines dropped off the front by the cap. Counted rather than derived
+    /// from `pushed - lines.len()`: `retain_outcomes_since_battle` removes
+    /// lines from the middle too, which a derived figure would mistake for
+    /// front-drops and slide every mark backwards past its own range.
+    dropped: u64,
     /// Where the current — or most recently ended — battle's narration
     /// begins. `None` until the first battle: a run that has never fought
     /// has no narration, and defaulting to mark 0 would instead make the
@@ -69,6 +77,10 @@ pub struct MessageLog {
     /// scrolling that battle's results in after the fact and needs the range
     /// to slice. The next `open_battle` replaces it.
     battle_start: Option<MessageMark>,
+    /// Where the current round's narration begins. The pane shows one round
+    /// at a time, so a resolved round replaces the last rather than piling
+    /// on top of it.
+    round_start: Option<MessageMark>,
     /// Bumped by every `open_battle`, so a frontend can tell one battle's
     /// narration from the next without comparing text.
     battle_id: u64,
@@ -85,6 +97,7 @@ impl MessageLog {
         if self.lines.len() > MESSAGE_LOG_CAP {
             let excess = self.lines.len() - MESSAGE_LOG_CAP;
             self.lines.drain(0..excess);
+            self.dropped += excess as u64;
         }
     }
 
@@ -93,31 +106,37 @@ impl MessageLog {
         &self.lines[start..]
     }
 
-    /// Opens a new narration range starting at the next line pushed.
+    /// Opens a new battle's narration range at the next line pushed, and
+    /// its first round with it.
     pub fn open_battle(&mut self) {
         self.battle_start = Some(MessageMark(self.pushed));
+        self.round_start = Some(MessageMark(self.pushed));
         self.battle_id += 1;
+    }
+
+    /// Opens a new round's range at the next line pushed. The pane shows one
+    /// round at a time, so this is what clears it between them.
+    pub fn open_round(&mut self) {
+        self.round_start = Some(MessageMark(self.pushed));
     }
 
     pub fn battle_id(&self) -> u64 {
         self.battle_id
     }
 
-    /// Where the battle range starts in `lines` right now, accounting for
-    /// everything drained since the mark was taken. Clamped: once the mark
-    /// itself has been drained past, every line still held is younger than
-    /// it, so all of them belong to the battle.
-    fn battle_start_index(&self) -> Option<usize> {
-        let mark = self.battle_start?;
-        let drained = self.pushed - self.lines.len() as u64;
-        let start = mark.0.saturating_sub(drained) as usize;
+    /// Where `mark` sits in `lines` right now. Clamped: once the mark has
+    /// been dropped past, every line still held is younger than it, so all
+    /// of them belong to the range.
+    fn index_of(&self, mark: Option<MessageMark>) -> Option<usize> {
+        let mark = mark?;
+        let start = mark.0.saturating_sub(self.dropped) as usize;
         Some(start.min(self.lines.len()))
     }
 
-    /// The current battle's lines, oldest first. Empty before the run's
-    /// first battle.
-    pub fn since_battle(&self) -> &[(MessageKind, String)] {
-        match self.battle_start_index() {
+    /// The current round's lines, oldest first — what the battle pane shows.
+    /// Empty before the run's first battle.
+    pub fn since_round(&self) -> &[(MessageKind, String)] {
+        match self.index_of(self.round_start) {
             Some(start) => &self.lines[start..],
             None => &[],
         }
@@ -130,7 +149,7 @@ impl MessageLog {
     /// log directly, so a raid alert can arrive inside a battle's range
     /// without being any part of that battle.
     pub fn retain_outcomes_since_battle(&mut self) {
-        let Some(start) = self.battle_start_index() else {
+        let Some(start) = self.index_of(self.battle_start) else {
             return;
         };
         let mut index = 0;
@@ -146,6 +165,14 @@ impl MessageLog {
             index += 1;
             keep
         });
+        // Restores `pushed - dropped == lines.len()`. Without this the lines
+        // just removed would read as front-drops and drag every mark back
+        // past its own range.
+        self.pushed = self.dropped + self.lines.len() as u64;
+        // What survived is the results, and they are what the map's pane
+        // scrolls in — so the round range has to cover them, not the point
+        // the final round happened to start at.
+        self.round_start = Some(MessageMark(self.dropped + start as u64));
     }
 }
 

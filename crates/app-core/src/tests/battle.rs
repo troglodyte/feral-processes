@@ -637,3 +637,43 @@ fn leftover_pace_credit_is_not_banked_for_the_next_round() {
         "banked credit dumped the new round without any time passing"
     );
 }
+
+/// A refusal is drawn over the action bar, so leaving it up hides the menu
+/// the player needs in order to press a different key.
+#[test]
+fn a_refusal_clears_itself_so_the_action_bar_comes_back() {
+    let mut app = battling_app();
+    app.status_line = Some("that ability isn't ready".to_string());
+
+    app.advance_status(STATUS_LINE_SECONDS / 2.0);
+    assert!(
+        app.status_line.is_some(),
+        "the message vanished before it could be read"
+    );
+
+    app.advance_status(STATUS_LINE_SECONDS / 2.0);
+    assert!(
+        app.status_line.is_none(),
+        "the message outstayed its welcome and is still covering the menu"
+    );
+}
+
+/// The window belongs to the newest message. Without the reset, a refusal
+/// raised just as an older one aged out would flash and vanish.
+#[test]
+fn a_new_keypress_restarts_the_refusal_window() {
+    let mut app = battling_app();
+    app.status_line = Some("stale".to_string());
+    app.advance_status(STATUS_LINE_SECONDS * 0.9);
+
+    // Any key press restarts the clock.
+    app.handle_key(GameKey::Char('d'));
+    app.status_line = Some("fresh".to_string());
+    app.advance_status(STATUS_LINE_SECONDS * 0.5);
+
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("fresh"),
+        "the new message inherited the old one's remaining time"
+    );
+}

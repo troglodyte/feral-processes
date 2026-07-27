@@ -31,6 +31,9 @@ impl Game {
         // Read before the increment at the end of this method, so the number
         // matches the planning screen's own "round N" header.
         let round = self.world.resource::<BattleState>().round;
+        // The pane shows one round at a time, so this round's narration
+        // replaces the last round's rather than piling on top of it.
+        self.world.resource_mut::<MessageLog>().open_round();
         self.log_kind(MessageKind::Round, format!("── round {round} ──"));
         let player = self.world.resource::<BattleState>().player;
         let plan = self.world.resource::<BattleState>().planned.clone();

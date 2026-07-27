@@ -49,6 +49,10 @@ impl App {
             self.finish_reveal();
             return;
         }
+        // Restarts the refusal window: whatever this key produces (or leaves
+        // standing) gets its full time on screen, rather than inheriting the
+        // remainder of the previous message's.
+        self.status_age = 0.0;
         let mode_before = self.mode;
         match self.mode {
             Mode::MainMenu => self.handle_main_menu_key(key),
@@ -137,6 +141,21 @@ impl App {
         // — the very thing this pacing exists to prevent.
         if self.reveal.revealed >= total {
             self.reveal.accumulated = 0.0;
+        }
+    }
+
+    /// Ages the status line out after `STATUS_LINE_SECONDS`, so a refusal
+    /// stops covering the action bar it was drawn over. A frontend calls
+    /// this once a frame alongside `advance_reveal`, and for the same
+    /// reason it takes the frame's delta rather than reading a clock.
+    pub fn advance_status(&mut self, dt: f32) {
+        if self.status_line.is_none() {
+            return;
+        }
+        self.status_age += dt;
+        if self.status_age >= STATUS_LINE_SECONDS {
+            self.status_line = None;
+            self.status_age = 0.0;
         }
     }
 

@@ -124,6 +124,15 @@ const REALTIME_TICK_INTERVAL: Duration = Duration::from_secs(1);
 /// in the engine's `tuning.rs`.
 pub const REVEAL_LINES_PER_SECOND: f32 = 12.0;
 
+/// How long a refusal ("that ability isn't ready") stays on screen before
+/// clearing itself, in seconds.
+///
+/// It clears rather than sitting there because it is drawn over the action
+/// bar on several screens — so a message about one rejected key would
+/// otherwise hide the menu the player needs in order to press a different
+/// one.
+pub const STATUS_LINE_SECONDS: f32 = 4.0;
+
 /// How much of the current battle's narration the player has been shown.
 ///
 /// Transient presentation state, deliberately not saved: a loaded game
@@ -486,6 +495,10 @@ pub struct App {
     pending_sounds: Vec<SoundEvent>,
     /// Paces battle narration into the log pane — see `App::advance_reveal`.
     reveal: BattleReveal,
+    /// Seconds `status_line` has been on screen — see `App::advance_status`.
+    /// Reset by every key press, so the window belongs to the most recent
+    /// message rather than the first one.
+    status_age: f32,
     /// Wall-clock time of the last idle tick (see `App::update_realtime`) —
     /// reset whenever ticking is paused (any mode but `Playing`) so resuming
     /// play doesn't immediately fire a burst of catch-up ticks.

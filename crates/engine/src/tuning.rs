@@ -565,6 +565,37 @@ pub const BUFFER_BONUS_PERCENT_PER_LEVEL: f32 = 0.01;
 /// this.
 pub const BUFFER_MIN_BONUS_PER_LEVEL: i32 = 10;
 
+// ─────────────────────────────────────────────────────────────────────────
+// Routine slots
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Slots a companion has at level 1 before any per-level growth, then one
+/// more for every `COMPANION_ROUTINE_SLOT_PER_LEVEL` levels. The floor of 1
+/// in `abilities::companion_routine_slots` is what keeps a level-1 program
+/// from having nowhere to hold its innate kit.
+pub const COMPANION_ROUTINE_SLOT_BASE: u32 = 0;
+
+/// Levels a companion needs per additional routine slot.
+pub const COMPANION_ROUTINE_SLOT_PER_LEVEL: u32 = 2;
+
+/// Most routines a companion can hold at once, reached at level 12.
+pub const COMPANION_ROUTINE_SLOT_CAP: u32 = 6;
+
+/// Slots the player has at level 1. One, and `decompile` occupies it — a new
+/// game pre-installs that ability, so the player's first *free* slot is the
+/// one `PLAYER_ROUTINE_SLOT_PER_LEVEL` grants.
+pub const PLAYER_ROUTINE_SLOT_BASE: u32 = 1;
+
+/// Levels the player needs per additional routine slot. Deliberately far
+/// slower than a companion's: researched routines are meant to be a choice
+/// between programs, not a second kit the player accumulates for free.
+pub const PLAYER_ROUTINE_SLOT_PER_LEVEL: u32 = 10;
+
+/// Most routines the player can hold at once, reached at level 50. The
+/// player has no level ceiling (`progression::add_xp` takes `None`), so this
+/// clamp is the only thing bounding their slots.
+pub const PLAYER_ROUTINE_SLOT_CAP: u32 = 6;
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -14,6 +14,39 @@ pub type AbilityId = String;
 /// every call site, the same way a missing economy role aborts the load.
 pub const FALLBACK_ABILITY_ID: &str = "priority_boost";
 
+/// Routine slots at `level`, from one constant set. Both public wrappers
+/// call this so the companion and player curves cannot drift into two
+/// different shapes — only their constants differ.
+///
+/// The floor of 1 is load-bearing: `COMPANION_ROUTINE_SLOT_BASE` is 0, so a
+/// level-1 companion would otherwise have nowhere to put the kit its species
+/// grants it at level 1.
+fn routine_slots(level: u32, base: u32, per_level: u32, cap: u32) -> usize {
+    (base + level / per_level).clamp(1, cap) as usize
+}
+
+/// How many routines a companion at `level` can hold — see
+/// `tuning::COMPANION_ROUTINE_SLOT_BASE` and friends.
+pub fn companion_routine_slots(level: u32) -> usize {
+    routine_slots(
+        level,
+        crate::tuning::COMPANION_ROUTINE_SLOT_BASE,
+        crate::tuning::COMPANION_ROUTINE_SLOT_PER_LEVEL,
+        crate::tuning::COMPANION_ROUTINE_SLOT_CAP,
+    )
+}
+
+/// How many routines the player at `level` can hold — see
+/// `tuning::PLAYER_ROUTINE_SLOT_BASE` and friends.
+pub fn player_routine_slots(level: u32) -> usize {
+    routine_slots(
+        level,
+        crate::tuning::PLAYER_ROUTINE_SLOT_BASE,
+        crate::tuning::PLAYER_ROUTINE_SLOT_PER_LEVEL,
+        crate::tuning::PLAYER_ROUTINE_SLOT_CAP,
+    )
+}
+
 /// Who an ability lands on. Which picker the UI opens for it — if any — is
 /// `AbilityTarget::targeting`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -251,6 +284,57 @@ mod tests {
         assert!(
             db.get(FALLBACK_ABILITY_ID).is_some(),
             "the fallback ability must ship, or every companion loses its Special"
+        );
+    }
+
+    #[test]
+    fn companion_slots_grow_one_per_two_levels_up_to_the_cap() {
+        // Level 1 has no slot by the raw formula; the clamp gives it one, so
+        // a freshly tamed program still has somewhere to keep its kit.
+        let expected = [
+            (1, 1),
+            (2, 1),
+            (3, 1),
+            (4, 2),
+            (5, 2),
+            (6, 3),
+            (8, 4),
+            (10, 5),
+            (12, 6),
+        ];
+        for (level, slots) in expected {
+            assert_eq!(
+                companion_routine_slots(level),
+                slots,
+                "companion level {level}"
+            );
+        }
+        assert_eq!(
+            companion_routine_slots(50),
+            crate::tuning::COMPANION_ROUTINE_SLOT_CAP as usize,
+            "past the cap a companion stops gaining slots"
+        );
+    }
+
+    #[test]
+    fn player_slots_grow_one_per_ten_levels_so_the_first_free_one_lands_at_10() {
+        assert_eq!(
+            player_routine_slots(1),
+            1,
+            "the starting slot holds decompile"
+        );
+        assert_eq!(player_routine_slots(9), 1, "still nothing free at 9");
+        assert_eq!(
+            player_routine_slots(10),
+            2,
+            "the first free slot arrives at 10"
+        );
+        assert_eq!(player_routine_slots(49), 5);
+        assert_eq!(player_routine_slots(50), 6);
+        assert_eq!(
+            player_routine_slots(9_999),
+            crate::tuning::PLAYER_ROUTINE_SLOT_CAP as usize,
+            "the player has no level cap, so only this clamp bounds their slots"
         );
     }
 }

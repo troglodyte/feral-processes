@@ -230,6 +230,22 @@ pub const INITIATIVE_DIE: i32 = 10;
 /// with `Stats::atk` and equipment carrying the rest of the scaling.
 pub const PLAYER_STRIKE_POWER: i32 = 5;
 
+/// How often a wild program reaches for the status effect on the move it
+/// just used — see `Game::wild_retaliate`.
+///
+/// Wild programs used to attempt their move's effect every single turn, so
+/// a species with a nasty stun was that stun on repeat. At 20% a moveset
+/// reads as something a program *can* bring to bear rather than all it does.
+///
+/// Gates the effect only; the move still lands its full damage. That is
+/// deliberate — it changes how a fight feels without touching the damage
+/// curves `balance_sim` projects, so retuning it does not move them.
+///
+/// Composes with each move's own `effect.chance` (`.ron` data, 0.3-0.5 on
+/// the shipped roster) rather than replacing it, so an effect actually
+/// lands on roughly 6-10% of wild attacks.
+pub const WILD_ABILITY_CHANCE: f64 = 0.2;
+
 /// DEF granted for the round by the Defend action.
 pub const DEFEND_DEF_BONUS: i32 = 6;
 

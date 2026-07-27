@@ -1,6 +1,7 @@
 //! Status effects: how stun and bleed tick down, and when they clear.
 
 use super::support::*;
+use crate::tuning::WILD_ABILITY_CHANCE;
 use crate::*;
 
 #[test]
@@ -364,5 +365,76 @@ fn resolving_a_round_clears_the_pane_of_the_previous_one() {
     assert!(
         pane.iter().any(|l| l.contains("round")),
         "the round's own narration is missing: {pane:?}"
+    );
+}
+
+/// Wild programs used to attempt their move's status effect every single
+/// turn, so a species with a nasty stun was that stun on repeat. They now
+/// reach for it only `WILD_ABILITY_CHANCE` of the time.
+///
+/// Samples many retaliations rather than asserting on one: the point is a
+/// rate. Counts only the turns where the move actually used carries an
+/// effect, so a damage-only move being picked is never mistaken for the
+/// gate having fired.
+#[test]
+fn wild_programs_only_sometimes_reach_for_their_status_effect() {
+    let mut with_effect_move = 0;
+    let mut landed = 0;
+    for seed in 0..400u32 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let wild = start_battle_with_a_wild_program(&mut game);
+        let species = game.world.get::<Creature>(wild).unwrap().species.clone();
+        let moves = game
+            .world
+            .resource::<SpeciesDb>()
+            .get(&species)
+            .map(|s| s.moves.clone())
+            .unwrap_or_default();
+
+        let before = game.message_log(200).len();
+        game.wild_retaliate(wild, 0, player);
+        let after: Vec<String> = game
+            .message_log(200)
+            .into_iter()
+            .skip(before)
+            .map(|(_, l)| l)
+            .collect();
+
+        // Which move was used is only observable through the line naming it.
+        let used_effect_move = moves
+            .iter()
+            .filter(|m| m.effect.is_some())
+            .any(|m| after.iter().any(|l| l.contains(&m.name)));
+        if !used_effect_move {
+            continue;
+        }
+        with_effect_move += 1;
+        if after
+            .iter()
+            .any(|l| l.contains("starts bleeding") || l.contains("locks up"))
+        {
+            landed += 1;
+        }
+    }
+
+    assert!(
+        with_effect_move > 30,
+        "only {with_effect_move} turns used an effect-carrying move — too few to judge a rate"
+    );
+    // The gate composes with each move's own `effect.chance` (0.3-0.5 across
+    // the shipped roster), so the landed rate sits *below* the gate itself
+    // and can never exceed it.
+    let rate = landed as f64 / with_effect_move as f64;
+    assert!(
+        rate < WILD_ABILITY_CHANCE,
+        "status effects landed on {:.0}% of effect-move turns, above the {:.0}% gate \
+         ({landed} of {with_effect_move})",
+        rate * 100.0,
+        WILD_ABILITY_CHANCE * 100.0
+    );
+    assert!(
+        landed > 0,
+        "no status effect ever landed — the gate is stuck shut"
     );
 }

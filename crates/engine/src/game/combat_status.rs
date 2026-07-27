@@ -3,7 +3,7 @@
 
 use crate::tuning::{
     DEFEND_DEF_BONUS, ENGAGED_GROUPS, FLEE_COUNTERATTACK_CHANCE, JACK_OUT_LUCK_MAX,
-    JACK_OUT_LUCK_MIN,
+    JACK_OUT_LUCK_MIN, WILD_ABILITY_CHANCE,
 };
 use crate::*;
 
@@ -145,7 +145,26 @@ impl Game {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_range(0..candidates.len())
         };
-        let mv = candidates[idx].clone();
+        let mut mv = candidates[idx].clone();
+        // A moveset's status effects are what a program *can* bring to bear,
+        // not what it does every turn. Reaching for one every time meant a
+        // species with a nasty stun was that stun on repeat.
+        //
+        // Gates the effect only — the move still lands its full damage — so
+        // this changes how a fight *feels* without touching the damage
+        // curves `balance_sim` projects.
+        //
+        // Composes with the move's own `effect.chance` rather than replacing
+        // it: that figure is per-move `.ron` data, including anyone's mods,
+        // and is the move's own reliability. Shipped chances are 0.3-0.5, so
+        // an effect actually lands on roughly 6-10% of wild attacks.
+        let reaches_for_effect = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_bool(WILD_ABILITY_CHANCE)
+        };
+        if !reaches_for_effect {
+            mv.effect = None;
+        }
 
         let target = self.roll_enemy_target(player);
         let targets_companion = target != player;

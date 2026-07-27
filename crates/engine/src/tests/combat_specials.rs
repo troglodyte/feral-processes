@@ -343,14 +343,20 @@ fn the_chosen_ability_index_decides_which_special_resolves() {
     let (mut game, medic) = game_with_two_ability_companion();
     set_level(&mut game, medic, 5);
     let player = game.player_entity();
-    game.world.get_mut::<Stats>(player).unwrap().hp = 1;
+    // Wounded, so a heal would be visible, but nowhere near death. At 1 HP
+    // the wild's retaliation flatlines the player mid-round, and Forgiving
+    // mode revives them at full HP — which reads exactly like the heal this
+    // test exists to rule out. The health here only has to outlast one
+    // round's damage, which `max_hp` guarantees it does.
+    let max_hp = game.world.get::<Stats>(player).unwrap().max_hp;
+    game.world.get_mut::<Stats>(player).unwrap().hp = max_hp / 2;
+    let wounded = game.world.get::<Stats>(player).unwrap().hp;
     start_battle_with_a_wild_program(&mut game);
 
     // Index 1 is Sandbox, which buffs DEF and must not heal.
     companion_uses_special(&mut game, medic, 1, battle::SpecialTarget::Ally { slot: 0 });
-    assert_eq!(
-        game.world.get::<Stats>(player).unwrap().hp,
-        1,
+    assert!(
+        game.world.get::<Stats>(player).unwrap().hp <= wounded,
         "picking Sandbox must not run Hot Patch, the ability at index 0"
     );
     assert!(

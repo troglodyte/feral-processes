@@ -281,3 +281,38 @@ fn frame(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A key listed in either table but missing from `map_special_key` is
+    /// polled every frame and silently does nothing — the sort of dead
+    /// binding that only shows up when someone tries the key. Renaming the
+    /// backend's key enum (as the move off macroquad did: `Up` became
+    /// `ArrowUp`) is exactly when that can happen.
+    #[test]
+    fn every_polled_key_maps_to_a_game_key() {
+        for &key in REPEATING_KEYS.iter().chain(SPECIAL_KEYS) {
+            assert!(
+                map_special_key(key).is_some(),
+                "{key:?} is polled every frame but maps to nothing"
+            );
+        }
+    }
+
+    /// The four repeating keys must be the four directions and nothing else:
+    /// a duplicate would make one direction unreachable while another fired
+    /// twice.
+    #[test]
+    fn the_repeating_keys_are_exactly_the_four_directions() {
+        let mut mapped: Vec<GameKey> = REPEATING_KEYS
+            .iter()
+            .filter_map(|&k| map_special_key(k))
+            .collect();
+        let before = mapped.len();
+        mapped.dedup();
+        assert_eq!(before, REPEATING_KEYS.len(), "a direction went unmapped");
+        assert_eq!(mapped.len(), 4, "two arrow keys map to the same direction");
+    }
+}

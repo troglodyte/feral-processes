@@ -314,3 +314,150 @@ fn to_egui(c: Color) -> egui::Color32 {
     let ch = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
     egui::Color32::from_rgba_unmultiplied(ch(c.r), ch(c.g), ch(c.b), ch(c.a))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// egui lays text out on the CPU, so the parts of this module with real
+    /// arithmetic in them — the baseline conversion and the ink measurement —
+    /// can be exercised without a window or a GPU. Only the shapes that come
+    /// out the far end need a display, which is why nothing below asserts
+    /// about drawing.
+    fn with_painter<R>(f: impl FnOnce(&Painter) -> R) -> R {
+        let ctx = egui::Context::default();
+        install_fonts(&ctx);
+        ctx.begin_pass(egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1440.0, 900.0),
+            )),
+            ..Default::default()
+        });
+        let out = f(&Painter::for_frame(&ctx, 1.0 / 60.0));
+        let _ = ctx.end_pass();
+        out
+    }
+
+    fn lay_out(p: &Painter, face: Face, text: &str, size: u16) -> std::sync::Arc<egui::Galley> {
+        p.painter
+            .layout_no_wrap(text.to_owned(), face.font_id(size), egui::Color32::WHITE)
+    }
+
+    const FACES: [Face; 3] = [Face::Ui, Face::UiBold, Face::Map];
+
+    /// A family name that doesn't match what `install_fonts` registered would
+    /// leave egui with nothing to draw the string in. Since
+    /// `FontDefinitions::empty()` removes the bundled fallbacks too, that
+    /// failure is silent — blank text rather than a panic — so it is worth
+    /// pinning that every face actually produces glyphs.
+    #[test]
+    fn every_face_resolves_to_a_registered_font() {
+        with_painter(|p| {
+            for face in FACES {
+                let galley = lay_out(p, face, "Integrity", 24);
+                let glyphs: usize = galley.rows.iter().map(|r| r.row.glyphs.len()).sum();
+                assert_eq!(glyphs, "Integrity".len(), "{face:?} laid out no glyphs");
+            }
+        });
+    }
+
+    /// The whole reason `text` converts rather than passing `y` through: egui
+    /// anchors a galley by its top-left, and every layout in `render/` means
+    /// the baseline. A zero offset would mean text drawn a full ascent too
+    /// low, which is exactly the regression this catches.
+    #[test]
+    fn the_baseline_sits_below_the_top_of_the_galley() {
+        with_painter(|p| {
+            for face in FACES {
+                let galley = lay_out(p, face, "Integrity", 24);
+                let offset = baseline_offset(&galley);
+                assert!(offset > 0.0, "{face:?} put the baseline at the top edge");
+                assert!(
+                    offset < galley.rect.height(),
+                    "{face:?} put the baseline below the whole galley"
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn the_baseline_offset_grows_with_the_font() {
+        with_painter(|p| {
+            let small = baseline_offset(&lay_out(p, Face::Ui, "Integrity", 16));
+            let large = baseline_offset(&lay_out(p, Face::Ui, "Integrity", 40));
+            assert!(
+                large > small,
+                "a 40px face should sit further below the top than a 16px one ({small} -> {large})"
+            );
+        });
+    }
+
+    /// `mesh_bounds` is `Rect::NOTHING` — built from infinities — for text
+    /// that rasterizes to nothing. An infinity here would propagate into a
+    /// popup's width and take the layout with it, so the guard in
+    /// `ink_extents` matters more than its size suggests.
+    #[test]
+    fn blank_text_measures_finite() {
+        with_painter(|p| {
+            for blank in ["", " ", "   "] {
+                let dims = p.measure_ui(blank, 24);
+                assert!(
+                    dims.width.is_finite() && dims.height.is_finite(),
+                    "{blank:?} measured {dims:?}, which would poison any layout using it"
+                );
+                assert!(dims.width >= 0.0 && dims.height >= 0.0);
+            }
+        });
+    }
+
+    #[test]
+    fn measurement_grows_with_both_the_text_and_the_font() {
+        with_painter(|p| {
+            let one = p.measure_ui("M", 24);
+            let many = p.measure_ui("MMMM", 24);
+            assert!(many.width > one.width, "wider text measured no wider");
+
+            let large = p.measure_ui("M", 40);
+            assert!(large.width > one.width, "a bigger font measured no wider");
+            assert!(
+                large.height > one.height,
+                "a bigger font measured no taller"
+            );
+        });
+    }
+
+    /// `render/base.rs` centres a map glyph in its tile by the measured width,
+    /// so a measurement that reported the layout advance instead of the ink
+    /// would push every glyph off-centre by its side bearing. Ink is narrower
+    /// than advance for a monospace face at any normal glyph.
+    #[test]
+    fn measurement_reports_ink_and_not_the_layout_advance() {
+        with_painter(|p| {
+            let galley = lay_out(p, Face::Map, "M", 32);
+            let ink = ink_extents(&galley);
+            assert!(
+                ink.width <= galley.rect.width(),
+                "ink {} exceeded the advance {}",
+                ink.width,
+                galley.rect.width()
+            );
+        });
+    }
+
+    #[test]
+    fn colour_conversion_keeps_the_channels_and_alpha() {
+        let c = to_egui(Color::new(1.0, 0.0, 0.5, 0.25));
+        assert_eq!(c.to_srgba_unmultiplied(), [255, 0, 128, 64]);
+    }
+
+    /// Out-of-range channels would wrap rather than saturate under a bare
+    /// `as u8`, turning an over-bright colour black.
+    #[test]
+    fn colour_conversion_clamps_instead_of_wrapping() {
+        assert_eq!(
+            to_egui(Color::new(2.0, -1.0, 0.0, 1.0)).to_srgba_unmultiplied(),
+            [255, 0, 0, 255]
+        );
+    }
+}

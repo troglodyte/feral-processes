@@ -39,6 +39,12 @@ pub enum MessageKind {
     /// battle screen's log pane is continuous, so without this the narration
     /// of six rounds reads as one undifferentiated block.
     Round,
+    /// A line that is a *result* of a battle rather than narration of it —
+    /// the kill, the XP, the decompile verdict, the jack-out. `MessageLog::
+    /// retain_outcomes_since_battle` keeps exactly these (plus `Loot` and
+    /// `LevelUp`, which already tag themselves) when a battle ends, which is
+    /// what stops the blow-by-blow following the player onto the map.
+    Outcome,
 }
 
 #[derive(Resource, Default)]

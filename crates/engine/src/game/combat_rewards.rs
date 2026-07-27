@@ -131,7 +131,7 @@ impl Game {
                 format!("You gain {amount} XP and reach level {new_level}!"),
             );
         } else {
-            self.log(format!("You gain {amount} XP."));
+            self.log_kind(MessageKind::Outcome, format!("You gain {amount} XP."));
         }
         self.award_party_xp(amount / PARTY_XP_DIVISOR);
     }
@@ -213,7 +213,10 @@ impl Game {
     /// would hit an `expect` instead of a refusal.
     pub(crate) fn attempt_decompile(&mut self, group: usize, player: Entity) -> bool {
         let Some((catalyst, potency)) = self.taming_catalyst() else {
-            self.log("No taming catalyst left — the decompile attempt fizzles.");
+            self.log_kind(
+                MessageKind::Outcome,
+                "No taming catalyst left — the decompile attempt fizzles.",
+            );
             return false;
         };
         let Some(front) = self.front_of_group(group) else {
@@ -244,7 +247,10 @@ impl Game {
         };
 
         if !roll {
-            self.log("The program's ICE holds — decompile failed!");
+            self.log_kind(
+                MessageKind::Outcome,
+                "The program's ICE holds — decompile failed!",
+            );
             return false;
         }
 
@@ -262,7 +268,10 @@ impl Game {
         {
             n.pending_respawns.push(NEST_RESPAWN_TICKS);
         }
-        self.log("ICE breached! The program now runs under your control.");
+        self.log_kind(
+            MessageKind::Outcome,
+            "ICE breached! The program now runs under your control.",
+        );
         self.award_player_xp(player, wild_max_hp as u32);
         if self.remove_member(group, 0) {
             self.end_battle(player, Some(front));

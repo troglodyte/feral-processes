@@ -416,7 +416,10 @@ impl Game {
         else {
             return self.living_group_count() == 0;
         };
-        self.log("The rogue program crashes and deletes itself!");
+        self.log_kind(
+            MessageKind::Outcome,
+            "The rogue program crashes and deletes itself!",
+        );
         let wild_max_hp = self.world.get::<Stats>(victim).unwrap().max_hp;
         self.award_player_xp(player, wild_max_hp as u32);
         self.award_loot(victim);

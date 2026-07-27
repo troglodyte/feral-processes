@@ -55,17 +55,23 @@ impl Game {
             rng.0.random_bool(FLEE_COUNTERATTACK_CHANCE)
         };
         if got_hit {
-            self.log("You jack out, but not before taking a parting counter-strike!");
+            self.log_kind(
+                MessageKind::Outcome,
+                "You jack out, but not before taking a parting counter-strike!",
+            );
             self.all_wild_retaliate(player);
         } else {
-            self.log("You jack out safely.");
+            self.log_kind(MessageKind::Outcome, "You jack out safely.");
         }
         // A forced jack-out costs a little progress too — nothing drastic,
         // same mild setback as a flatline (see `death_handling_system`).
         if let Some(mut exp) = self.world.get_mut::<Experience>(player) {
             let xp_lost = progression::apply_setback_xp_penalty(&mut exp);
             if xp_lost > 0 {
-                self.log(format!("Bailing out costs you {xp_lost} XP."));
+                self.log_kind(
+                    MessageKind::Outcome,
+                    format!("Bailing out costs you {xp_lost} XP."),
+                );
             }
         }
         let front = self.front_of_group(0);

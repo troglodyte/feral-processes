@@ -184,3 +184,34 @@ fn status_effects_are_cleared_once_the_battle_ends() {
         "leftover status effects should be cleared once the battle ends, however it ends"
     );
 }
+
+/// The lines that are a battle's *results* have to be distinguishable from
+/// the blow-by-blow, since only the results follow the player onto the map.
+/// Loot and level-ups already carry their own kinds; the kill and the XP
+/// award were plain `Info` and so were indistinguishable from narration.
+#[test]
+fn the_kill_line_and_xp_award_are_tagged_as_outcomes() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    start_battle_with_a_wild_program(&mut game);
+
+    game.finish_member(0, 0, player);
+
+    let tagged: Vec<String> = game
+        .message_log(50)
+        .into_iter()
+        .filter(|(kind, _)| *kind == MessageKind::Outcome)
+        .map(|(_, line)| line)
+        .collect();
+
+    assert!(
+        tagged
+            .iter()
+            .any(|l| l.contains("crashes and deletes itself")),
+        "the kill line was not tagged an outcome: {tagged:?}"
+    );
+    assert!(
+        tagged.iter().any(|l| l.contains("XP")),
+        "the XP award was not tagged an outcome: {tagged:?}"
+    );
+}

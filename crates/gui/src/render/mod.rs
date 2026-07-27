@@ -102,6 +102,9 @@ fn draw_message_line(
         MessageKind::LevelUp => GREEN,
         MessageKind::Raid => ORANGE,
         MessageKind::Round => TEXT_DIM,
+        // A result reads at full brightness: it is the line still on screen
+        // once the fight is over and the map is back.
+        MessageKind::Outcome => TEXT,
     };
     if kind == MessageKind::LevelUp {
         painter.ui_bold(text, x, y, m.font_size, color);

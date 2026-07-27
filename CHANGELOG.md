@@ -13,7 +13,30 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Battle
+
+- **Battle narration scrolls in instead of landing all at once.** A resolved
+  round used to appear as a block of text; its lines now arrive at a steady
+  pace you can read. Pressing any key skips straight to the end, and the
+  action bar stays hidden until the narration finishes, so a key pressed
+  mid-scroll never spends your round by accident.
+- **Each battle's log pane starts empty.** The pane used to show the tail of
+  one shared rolling log, so a fight opened on the end of the previous one.
+- **Only a battle's results follow you back to the map.** The blow-by-blow
+  stays in the battle it belongs to; what you read once the map is back is
+  the kill, the XP, the loot, the level-ups and the decompile verdict — and
+  those scroll in at the same pace. A raid that lands mid-fight is kept too,
+  since that is world news rather than battle narration. One consequence
+  worth knowing: the final round's blow-by-blow is dropped, so you see that
+  you won and what you got, not the blow that won it.
+
 ### Renderer
+
+- **The first frame no longer crashes on a missing font.** The window opened
+  and the game died immediately with `FontFamily::Name("fp-ui") is not bound
+  to any fonts`: the fonts were installed from inside the egui pass, but
+  `set_fonts` only takes effect at the start of the *next* pass, so the first
+  frame drew against families that did not exist yet.
 
 - **The frontend runs on Bevy and egui instead of macroquad.** The engine was
   always built on `bevy_ecs`, so the sim and the renderer now share an ECS

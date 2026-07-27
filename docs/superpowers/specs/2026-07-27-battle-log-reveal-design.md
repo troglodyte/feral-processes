@@ -128,13 +128,9 @@ reveal takes `dt` as a parameter. The frontend supplies Bevy's
 While `is_revealing()`, `handle_key` swallows the key and completes the
 reveal instead of acting on it — that is the skip.
 
-**The transition to `Mode::Playing` is deferred** until the reveal finishes.
-Flipping modes the instant the engine reports the battle over would tear the
-screen away mid-narration on the killing round, which is the round that most
-needs reading. `battle_resolve_round`'s existing
-`if still_active { Mode::Battle } else { Mode::Playing }` tail becomes
-"…else once the reveal drains". The same applies to `plan_every_slot` and the
-jack-out path in `run_party_command`, which share that tail.
+**The transition to `Mode::Playing` is not deferred** — see the amendment
+below. The mode flips the moment the engine reports the battle over, as it
+does today, and the *results* scroll into the map's log pane instead.
 
 ### gui — unchanged responsibilities
 
@@ -197,3 +193,37 @@ All headless, no sleeping, no wall-clock reads.
 
 `balance_sim` is not expected to move — no `.ron` and no `tuning.rs` value
 changes — but it will be run, since the engine changes sit in combat code.
+
+## Amendments made while planning
+
+Three corrections, all decided after this design was first approved. The
+sections above have been edited to match.
+
+**1. The killing round reveals on the map, not on the battle screen.**
+`end_battle` removes `BattleState` (`combat_status.rs:483`), so
+`battle_view()` returns `None` and `draw_battle` bails at line 152 — the
+battle screen has no rosters left to draw. Three options were weighed: a
+dedicated results screen, freezing the last roster state, or flipping to the
+map and revealing the pruned results there. **The map was chosen**, as the
+smallest build. The accepted cost: the final round's blow-by-blow is pruned
+away and never read. The player sees that they won and what they got, not
+the blow that won it.
+
+This also dissolves a conflict the original design would have hit. Pruning
+at `end_battle` would otherwise have yanked unrevealed narration out from
+under an in-flight reveal — the one round that most needed reading. With the
+final round's narration knowingly discarded, there is nothing left to
+protect.
+
+**2. `retain_outcomes_since_battle` also keeps `MessageKind::Raid`.**
+`systems.rs:35,146,236` and `difficulty.rs:19` write to `MessageLog`
+directly through `ResMut<MessageLog>`, bypassing `Game::log_kind`, and they
+run during the `tick()` a battle action triggers. A raid alert that lands
+mid-fight is world news, not battle narration, and must survive the prune.
+
+**3. The battle mark lives on `MessageLog`, not `BattleState`.**
+`end_battle` removes `BattleState`, which would take the mark with it while
+the frontend is still revealing that battle's results. The mark is instead
+replaced by the next `start_battle`. `MessageLog` also carries a
+`battle_id`, bumped per battle, so app-core can tell one battle's narration
+from the next without comparing text.

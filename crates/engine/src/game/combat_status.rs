@@ -486,6 +486,11 @@ impl Game {
                 .0
                 .retain(|e| !downed.contains(e));
         }
+        // The blow-by-blow has done its job by now — the battle pane showed
+        // it live. What follows the player onto the map is the results.
+        self.world
+            .resource_mut::<MessageLog>()
+            .retain_outcomes_since_battle();
         self.world.remove_resource::<BattleState>();
     }
 }

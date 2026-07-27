@@ -47,9 +47,27 @@ pub enum MessageKind {
     Outcome,
 }
 
+/// Where a battle's narration begins, as a count of lines ever pushed.
+///
+/// Deliberately not an index into `MessageLog::lines`: the log drains its
+/// oldest entries once past `MESSAGE_LOG_CAP`, so an index would come to
+/// point at the wrong line in any battle long enough to overflow it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MessageMark(u64);
+
 #[derive(Resource, Default)]
 pub struct MessageLog {
     pub lines: Vec<(MessageKind, String)>,
+    /// Lines ever pushed, including those since drained.
+    pushed: u64,
+    /// Where the current — or most recently ended — battle's narration
+    /// begins. Deliberately not cleared when a battle ends: the frontend is
+    /// still scrolling that battle's results in after the fact and needs the
+    /// range to slice. The next `open_battle` replaces it.
+    battle_start: MessageMark,
+    /// Bumped by every `open_battle`, so a frontend can tell one battle's
+    /// narration from the next without comparing text.
+    battle_id: u64,
 }
 
 impl MessageLog {
@@ -59,6 +77,7 @@ impl MessageLog {
 
     pub fn push_kind(&mut self, kind: MessageKind, line: impl Into<String>) {
         self.lines.push((kind, line.into()));
+        self.pushed += 1;
         if self.lines.len() > MESSAGE_LOG_CAP {
             let excess = self.lines.len() - MESSAGE_LOG_CAP;
             self.lines.drain(0..excess);
@@ -68,6 +87,54 @@ impl MessageLog {
     pub fn recent(&self, n: usize) -> &[(MessageKind, String)] {
         let start = self.lines.len().saturating_sub(n);
         &self.lines[start..]
+    }
+
+    /// Opens a new narration range starting at the next line pushed.
+    pub fn open_battle(&mut self) {
+        self.battle_start = MessageMark(self.pushed);
+        self.battle_id += 1;
+    }
+
+    pub fn battle_id(&self) -> u64 {
+        self.battle_id
+    }
+
+    /// Where the battle range starts in `lines` right now, accounting for
+    /// everything drained since the mark was taken. Clamped: once the mark
+    /// itself has been drained past, every line still held is younger than
+    /// it, so all of them belong to the battle.
+    fn battle_start_index(&self) -> usize {
+        let drained = self.pushed - self.lines.len() as u64;
+        let start = self.battle_start.0.saturating_sub(drained) as usize;
+        start.min(self.lines.len())
+    }
+
+    /// The current battle's lines, oldest first.
+    pub fn since_battle(&self) -> &[(MessageKind, String)] {
+        &self.lines[self.battle_start_index()..]
+    }
+
+    /// Drops the blow-by-blow from the battle range, keeping what the player
+    /// should still be reading once the map is back: the battle's results,
+    /// and any world news that landed mid-fight. `Raid` is kept because the
+    /// background systems in `systems.rs` and `difficulty.rs` write to this
+    /// log directly, so a raid alert can arrive inside a battle's range
+    /// without being any part of that battle.
+    pub fn retain_outcomes_since_battle(&mut self) {
+        let start = self.battle_start_index();
+        let mut index = 0;
+        self.lines.retain(|(kind, _)| {
+            let keep = index < start
+                || matches!(
+                    kind,
+                    MessageKind::Outcome
+                        | MessageKind::Loot
+                        | MessageKind::LevelUp
+                        | MessageKind::Raid
+                );
+            index += 1;
+            keep
+        });
     }
 }
 

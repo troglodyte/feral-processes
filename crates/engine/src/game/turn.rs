@@ -29,6 +29,20 @@ impl Game {
         self.world.resource::<MessageLog>().recent(n).to_vec()
     }
 
+    /// This battle's narration, oldest first — what the battle pane shows,
+    /// so each fight opens with an empty pane rather than the tail of the
+    /// last one. Once the battle has ended this is the pruned result set,
+    /// which is what a frontend still mid-reveal is scrolling in.
+    pub fn battle_log(&self) -> Vec<(MessageKind, String)> {
+        self.world.resource::<MessageLog>().since_battle().to_vec()
+    }
+
+    /// Changes every time a battle starts. A frontend pacing the narration
+    /// restarts when this moves.
+    pub fn battle_log_id(&self) -> u64 {
+        self.world.resource::<MessageLog>().battle_id()
+    }
+
     pub fn is_game_over(&self) -> Option<String> {
         self.world.resource::<GameOver>().reason.clone()
     }

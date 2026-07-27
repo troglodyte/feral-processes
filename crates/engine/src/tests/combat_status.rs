@@ -215,3 +215,94 @@ fn the_kill_line_and_xp_award_are_tagged_as_outcomes() {
         "the XP award was not tagged an outcome: {tagged:?}"
     );
 }
+
+#[test]
+fn the_battle_log_holds_only_the_current_battle() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.log("before the fight");
+    start_battle_with_a_wild_program(&mut game);
+    game.log("mid-battle narration");
+
+    let battle: Vec<String> = game.battle_log().into_iter().map(|(_, l)| l).collect();
+
+    assert!(
+        battle.iter().any(|l| l == "mid-battle narration"),
+        "the battle's own line is missing: {battle:?}"
+    );
+    assert!(
+        !battle.iter().any(|l| l == "before the fight"),
+        "a pre-battle line leaked into the battle log: {battle:?}"
+    );
+}
+
+/// `MESSAGE_LOG_CAP` is 100, and the log drains its oldest lines past that.
+/// A battle mark stored as a raw index into `lines` would be pointing at the
+/// wrong entry by the time that happens — which is why it is a count of
+/// lines ever pushed instead.
+#[test]
+fn the_mark_survives_a_log_that_overflows_its_cap() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    start_battle_with_a_wild_program(&mut game);
+    for i in 0..350 {
+        game.log(format!("line {i}"));
+    }
+
+    let battle: Vec<String> = game.battle_log().into_iter().map(|(_, l)| l).collect();
+
+    assert_eq!(
+        battle.last().map(String::as_str),
+        Some("line 349"),
+        "the newest line is not last: {:?}",
+        battle.last()
+    );
+    assert!(
+        battle.len() <= 100,
+        "the battle log outgrew the log it slices: {}",
+        battle.len()
+    );
+}
+
+#[test]
+fn ending_a_battle_keeps_results_and_drops_narration() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    start_battle_with_a_wild_program(&mut game);
+    game.log("A hostile swings and misses.");
+    game.log_kind(MessageKind::Outcome, "You gain 12 XP.");
+    game.log_kind(MessageKind::Raid, "A raid hits your base!");
+
+    game.end_battle(player, None);
+
+    let after: Vec<String> = game.message_log(100).into_iter().map(|(_, l)| l).collect();
+    assert!(
+        !after.iter().any(|l| l.contains("swings and misses")),
+        "blow-by-blow survived the prune: {after:?}"
+    );
+    assert!(
+        after.iter().any(|l| l.contains("You gain 12 XP")),
+        "the result was pruned away: {after:?}"
+    );
+    assert!(
+        after.iter().any(|l| l.contains("A raid hits your base")),
+        "a raid alert is world news, not battle narration: {after:?}"
+    );
+}
+
+#[test]
+fn a_second_battle_starts_with_an_empty_pane() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    start_battle_with_a_wild_program(&mut game);
+    let first = game.battle_log_id();
+    game.log("first battle narration");
+    game.end_battle(player, None);
+
+    start_battle_with_a_wild_program(&mut game);
+
+    assert_ne!(first, game.battle_log_id(), "the battle id did not advance");
+    let battle: Vec<String> = game.battle_log().into_iter().map(|(_, l)| l).collect();
+    assert!(
+        !battle.iter().any(|l| l == "first battle narration"),
+        "the previous battle's narration is still in the pane: {battle:?}"
+    );
+}

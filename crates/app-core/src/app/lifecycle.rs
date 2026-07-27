@@ -41,6 +41,7 @@ impl App {
             menu_selected: 0,
             last_autosave_tick: 0,
             pending_sounds: Vec::new(),
+            reveal: BattleReveal::default(),
             last_realtime_tick: Instant::now(),
         }
     }

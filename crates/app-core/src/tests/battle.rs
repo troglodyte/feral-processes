@@ -469,3 +469,78 @@ fn pressing_special_with_nothing_installed_does_nothing() {
     assert_eq!(app.mode, Mode::Battle, "no picker should have opened");
     assert!(app.pending_battle_action.is_none());
 }
+
+/// The reveal must be driven by an injected delta, never a wall clock —
+/// otherwise this test would need a sleep, which the suite forbids.
+#[test]
+fn lines_are_released_in_proportion_to_the_elapsed_time() {
+    let mut app = battling_app();
+    app.restart_reveal();
+
+    app.advance_reveal(0.0);
+    assert_eq!(
+        app.revealed_battle_log().len(),
+        0,
+        "a zero delta released a line"
+    );
+
+    app.advance_reveal(1.0 / REVEAL_LINES_PER_SECOND);
+    assert_eq!(
+        app.revealed_battle_log().len(),
+        1,
+        "one line's worth of time released something other than one line"
+    );
+}
+
+/// A frame covering less than a whole line must not lose the fraction: two
+/// half-line frames make a line. Truncating instead would stall the reveal
+/// completely on a fast enough frame rate.
+#[test]
+fn the_fractional_carry_does_not_lose_a_line() {
+    let mut app = battling_app();
+    app.restart_reveal();
+
+    let half = 0.5 / REVEAL_LINES_PER_SECOND;
+    app.advance_reveal(half);
+    assert_eq!(app.revealed_battle_log().len(), 0);
+    app.advance_reveal(half);
+    assert_eq!(
+        app.revealed_battle_log().len(),
+        1,
+        "the sub-line carry was dropped between frames"
+    );
+}
+
+#[test]
+fn the_reveal_stops_at_the_last_line_and_reports_done() {
+    let mut app = battling_app();
+    app.restart_reveal();
+    let total = app.game.as_ref().unwrap().battle_log().len();
+    assert!(total > 0, "the fixture produced no narration to reveal");
+
+    app.advance_reveal(1_000.0);
+
+    assert_eq!(app.revealed_battle_log().len(), total);
+    assert!(
+        !app.is_revealing(),
+        "still reporting a reveal in progress with every line out"
+    );
+    assert_eq!(app.hidden_log_lines(), 0);
+}
+
+/// The pane shows this battle's lines and nothing older, so what the reveal
+/// paces is scoped to the fight the player is actually in.
+#[test]
+fn the_revealed_log_never_runs_past_this_battle() {
+    let mut app = battling_app();
+    app.restart_reveal();
+    app.advance_reveal(1_000.0);
+
+    let revealed = app.revealed_battle_log();
+    let battle = app.game.as_ref().unwrap().battle_log();
+    assert_eq!(
+        revealed.len(),
+        battle.len(),
+        "the pane and the engine disagree on what this battle logged"
+    );
+}

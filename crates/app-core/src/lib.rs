@@ -18,7 +18,7 @@ use feral_processes_engine::battle::{
 };
 use feral_processes_engine::items::{EquipmentSlot, ItemId};
 use feral_processes_engine::tuning::{ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST};
-use feral_processes_engine::{DifficultyMode, Entity, Game, ProgramSaleOption};
+use feral_processes_engine::{DifficultyMode, Entity, Game, MessageKind, ProgramSaleOption};
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
 /// visible viewport size.
@@ -117,6 +117,28 @@ const AUTOSAVE_INTERVAL_TICKS: u64 = 50;
 /// the world keeps moving once a second even while the player just sits on
 /// `Mode::Playing` and touches nothing.
 const REALTIME_TICK_INTERVAL: Duration = Duration::from_secs(1);
+
+/// How fast battle narration scrolls into the log pane, in lines per second.
+///
+/// Presentation rather than difficulty, which is why it lives here and not
+/// in the engine's `tuning.rs`.
+pub const REVEAL_LINES_PER_SECOND: f32 = 12.0;
+
+/// How much of the current battle's narration the player has been shown.
+///
+/// Transient presentation state, deliberately not saved: a loaded game
+/// resumes with nothing pending.
+#[derive(Default)]
+struct BattleReveal {
+    /// Lines released to the pane so far.
+    revealed: usize,
+    /// Sub-line carry, so a frame covering less than one line's worth of
+    /// time isn't rounded away and lost.
+    accumulated: f32,
+    /// The `Game::battle_log_id` this count belongs to. When the engine's id
+    /// moves on, a new battle has started and the count restarts.
+    battle_id: u64,
+}
 
 /// A frontend-agnostic input event. Every renderer crate maps its own input
 /// system's keys onto this small vocabulary before calling `App::handle_key`
@@ -462,6 +484,8 @@ pub struct App {
     /// Sound cues queued up by the most recent `handle_key` calls, awaiting
     /// `take_sounds` — see `SoundEvent`.
     pending_sounds: Vec<SoundEvent>,
+    /// Paces battle narration into the log pane — see `App::advance_reveal`.
+    reveal: BattleReveal,
     /// Wall-clock time of the last idle tick (see `App::update_realtime`) —
     /// reset whenever ticking is paused (any mode but `Playing`) so resuming
     /// play doesn't immediately fire a burst of catch-up ticks.

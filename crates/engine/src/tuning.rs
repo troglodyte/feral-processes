@@ -75,7 +75,7 @@ pub const CREATURE_MAX_LEVEL: u32 = 12;
 /// a Forgiving-mode reboot, or a forced jack-out mid-battle) — see
 /// `progression::apply_setback_xp_penalty`. Deliberately mild: it erodes
 /// progress toward the next level, never the level or stats themselves.
-pub const SETBACK_XP_PENALTY_FRACTION: f64 = 0.2;
+pub const SETBACK_XP_PENALTY_FRACTION: f64 = 0.3;
 
 /// How much the player's `Decompiler` skill grows per level gained.
 pub const DECOMPILER_SKILL_PER_LEVEL: i32 = 1;
@@ -93,7 +93,7 @@ pub const PARTY_XP_DIVISOR: u32 = 2;
 /// quadratically. `balance_sim`'s companion-level projection leans on that
 /// quadratic shape: half the XP rate lands a companion at roughly
 /// `1 / sqrt(2)` of the player's level, not half of it.
-pub const XP_PER_LEVEL_STEP: u32 = 20;
+pub const XP_PER_LEVEL_STEP: u32 = 40;
 
 /// XP a tamed creature earns for each completed gather cycle.
 pub const WORK_XP_PER_CYCLE: u32 = 5;
@@ -578,7 +578,7 @@ pub const STRUCTURE_REGEN_AMOUNT: u32 = 4;
 /// however many levels you already have. See `Perk::cost`.
 pub const PERK_COST_KEEN_SCAVENGER: u32 = 2;
 pub const PERK_COST_LOW_POWER_MODE: u32 = 2;
-pub const PERK_COST_EXPLOIT_FOCUS: u32 = 3;
+pub const PERK_COST_EXPLOIT_FOCUS: u32 = 5;
 pub const PERK_COST_LEAN_COMPILER: u32 = 3;
 pub const PERK_COST_ATTACKER: u32 = 2;
 pub const PERK_COST_DEFENDER: u32 = 2;

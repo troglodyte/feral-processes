@@ -92,6 +92,9 @@ fn companion_stats(species: &SpeciesDef, caught_zone: u32, level: u32) -> Stats 
 /// A deterministic stand-in for the real move selection
 /// (`Game::wild_retaliate` picks uniformly at random among `species.moves`)
 /// — the mean power across the moveset.
+///
+/// Unaffected by `WILD_ABILITY_CHANCE`: that gates a chosen move's *status
+/// effect*, not its damage, and this module models damage only.
 fn average_move_power(species: &SpeciesDef) -> i32 {
     let total: i32 = species.moves.iter().map(|m| m.power).sum();
     (total as f64 / species.moves.len().max(1) as f64).round() as i32

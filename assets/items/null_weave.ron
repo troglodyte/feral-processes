@@ -1,6 +1,7 @@
 (
     id: "null_weave",
     name: "Null Weave",
+    description: "Standard armor. Weave that hits back a little as it absorbs.",
     equipment: Some((Armor, (def: 2, atk: 1))),
     craftable: Some((cost: [("core_fragment", 14)], requires_structure: Some("armory"))),
     droppable: Some([("phantom", 0.09), ("trojan", 0.07)]),

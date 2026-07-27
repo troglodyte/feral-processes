@@ -20,6 +20,16 @@ is skipped with a warning logged in-game rather than crashing startup.
     // any item id from assets/items/*.ron — see assets/items/README.md for
     // the schema, and the top-level README's "Item ids" for the full set.
 
+    // Optional; can be left out entirely (defaults to an empty string, which
+    // the shipped-assets test refuses for anything in this repo). One line
+    // on what the structure does, shown in the build menu. This used to be
+    // derived automatically from the capability fields below (`work`,
+    // `passive_process`, `raid_defense`, and so on); it's authored text now,
+    // so a modder controls exactly how their structure reads — but that also
+    // means nothing checks it against those fields, so if you change a
+    // structure's capabilities, update the description to match by hand.
+    description: "Converts Core Fragments into Power Cells on its own while you stand within 2 tiles. The cheapest thing you can deploy.",
+
     // Omit (`None`) for a purely decorative/utility structure. Set `Some(...)`
     // to make it assignable to a tamed creature via the cronjob menu — it'll
     // produce one unit of `produces` every `ticks_per_unit` ticks. `capacity`

@@ -1,6 +1,7 @@
 (
     id: "ablative_plating",
     name: "Ablative Plating",
+    description: "Researched armor. Sheds a layer per hit so you don't.",
     equipment: Some((Armor, (def: 4))),
     droppable: Some([("rootkit", 0.3)]),
 )

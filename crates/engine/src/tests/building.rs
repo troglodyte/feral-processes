@@ -361,46 +361,6 @@ fn armory_and_fabricator_are_not_cronjob_workable() {
 }
 
 #[test]
-fn every_structure_describes_its_actual_capability() {
-    let game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    for def in game.structure_defs() {
-        // Every shipped structure now has a real capability, so "no effect
-        // yet" always means the description derivation is missing a field
-        // the structure actually uses — the Data Cache reached exactly that
-        // state when `pet_slot_bonus` was added without updating this.
-        assert_ne!(
-            game.structure_description(&def),
-            "no effect yet",
-            "{} has an undescribed effect",
-            def.id
-        );
-    }
-}
-
-#[test]
-fn structure_descriptions_cover_non_production_capabilities() {
-    let game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let describe = |id: &str| {
-        let def = game
-            .structure_defs()
-            .into_iter()
-            .find(|d| d.id == id)
-            .unwrap_or_else(|| panic!("{id}.ron should load as a structure"));
-        game.structure_description(&def)
-    };
-    assert!(describe("armory").contains("Firewall Plating"));
-    assert!(describe("fabricator").contains("Cortex Hack"));
-    assert!(describe("home").contains("Power Cell"));
-    assert!(describe("shield").contains("raid damage"));
-    assert!(describe("data_cache").contains("pet slots"));
-    assert!(describe("recharger_node").contains("recharge"));
-    assert!(describe("portal").contains("next zone"));
-    assert!(describe("market").contains("trade"));
-    assert!(describe("compiler").contains("ICE Breaker"));
-    assert!(describe("terminal").contains("Power Cell"));
-}
-
-#[test]
 fn researching_and_building_an_armory_unlocks_firewall_plating() {
     let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut game, "firewall");

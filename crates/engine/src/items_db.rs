@@ -56,6 +56,13 @@ pub struct CraftableDef {
 pub struct ItemDef {
     pub id: ItemId,
     pub name: String,
+    /// One line on what this item is for, shown wherever the item is listed.
+    /// Authored here rather than derived from the other fields so a modder
+    /// controls exactly how their item reads. `#[serde(default)]` so an
+    /// existing mod file without it still parses — as an empty line, which
+    /// the shipped-assets test refuses for anything in this repo.
+    #[serde(default)]
+    pub description: String,
     #[serde(default)]
     pub bank_limit: Option<u32>,
     #[serde(default)]

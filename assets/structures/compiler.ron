@@ -1,6 +1,7 @@
 (
     id: "compiler",
     name: "Compiler",
+    description: "Assign a program here to compile ICE Breakers. Also the bench that extracts a routine out of a program you own.",
     glyph: '&',
     color: Green,
     build_cost: [("core_fragment", 16)],

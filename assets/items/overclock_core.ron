@@ -1,6 +1,7 @@
 (
     id: "overclock_core",
     name: "Overclock Core",
+    description: "Researched weapon. Pushes your clock past spec.",
     equipment: Some((Weapon, (atk: 3))),
     droppable: Some([("construct", 0.3), ("scrapper", 0.15), ("trojan", 0.2)]),
 )

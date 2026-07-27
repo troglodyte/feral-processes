@@ -6,10 +6,7 @@ use super::*;
 pub(super) fn draw_build_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
     let status = game.player_status();
     let defs = game.buildable_structure_defs();
-    let descriptions: Vec<String> = defs
-        .iter()
-        .map(|def| game.structure_description(def))
-        .collect();
+    let descriptions: Vec<String> = defs.iter().map(|def| def.description.clone()).collect();
     let mut rows = vec![
         text_row("Esc to cancel; Up/Down + Enter also work"),
         text_row(""),

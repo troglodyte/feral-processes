@@ -1,6 +1,7 @@
 (
     id: "shield",
     name: "Shield",
+    description: "Soaks 2 damage off every raid against every structure you own, not just itself. Stacks with a second one.",
     glyph: '^',
     color: Red,
     build_cost: [("core_fragment", 16)],

@@ -1,6 +1,7 @@
 (
     id: "data_cache",
     name: "Data Cache",
+    description: "Widens your roster by two while it stands, so a decompile has somewhere to land.",
     glyph: '=',
     color: Gray,
     build_cost: [("core_fragment", 10)],

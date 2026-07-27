@@ -1,6 +1,7 @@
 (
     id: "armory",
     name: "Armory",
+    description: "Compile bench for researched weapon and armor recipes — the gear won't appear in the craft menu until one is standing.",
     glyph: '%',
     color: Blue,
     build_cost: [("core_fragment", 18)],

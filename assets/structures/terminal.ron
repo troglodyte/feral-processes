@@ -1,6 +1,7 @@
 (
     id: "terminal",
     name: "Terminal",
+    description: "Converts Core Fragments into Power Cells on its own while you stand within 2 tiles. The cheapest thing you can deploy.",
     glyph: 'T',
     color: Cyan,
     build_cost: [("core_fragment", 3)],

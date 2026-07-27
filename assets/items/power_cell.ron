@@ -1,6 +1,7 @@
 (
     id: "power_cell",
     name: "Power Cell",
+    description: "Restores 25 Power. The staple of staying on the Grid.",
     craftable: Some((cost: [("core_fragment", 2)])),
     consume: Some((power: 25.0)),
 )

@@ -1,6 +1,7 @@
 (
     id: "market",
     name: "iso Market",
+    description: "Sell anything here for 1 Core Fragment a unit, sell a program for a tenth of its power, and buy back ICE Breakers, Power Cells and Portal Fragments.",
     glyph: '$',
     color: Yellow,
     build_cost: [("core_fragment", 16)],

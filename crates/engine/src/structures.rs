@@ -115,6 +115,13 @@ pub struct UpgradeDef {
 pub struct StructureDef {
     pub id: StructureId,
     pub name: String,
+    /// One line on what this structure is for, shown in the build menu.
+    /// Authored here rather than derived from the other fields so a modder
+    /// controls exactly how their structure reads. `#[serde(default)]` so an
+    /// existing mod file without it still parses — as an empty line, which
+    /// the shipped-assets test refuses for anything in this repo.
+    #[serde(default)]
+    pub description: String,
     pub glyph: char,
     pub color: GlyphColor,
     pub build_cost: Vec<(ItemId, u32)>,

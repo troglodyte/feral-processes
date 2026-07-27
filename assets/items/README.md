@@ -15,6 +15,15 @@ disqualifies the whole file.
     id: "unique_snake_case_id",   // must be unique across all item files
     name: "Display Name",
 
+    // Optional; can be left out entirely (defaults to an empty string, which
+    // the shipped-assets test refuses for anything in this repo). One line
+    // on what the item is for, shown wherever it's listed. Authored rather
+    // than derived, so a modder controls exactly how their item reads — but
+    // that also means nothing checks it against the fields below, so if you
+    // change `equipment`, `consume`, or another capability, update the text
+    // to match by hand.
+    description: "Restores 25 Power. The staple of staying on the Grid.",
+
     // Optional; can be left out entirely (defaults to no bank limit). The
     // ordinary Buffer (cargo) is unbounded; setting this makes an item a
     // banked currency instead, capped only by this ceiling — Research Data

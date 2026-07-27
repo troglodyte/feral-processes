@@ -1,6 +1,7 @@
 (
     id: "logic_probe",
     name: "Logic Probe",
+    description: "Standard module. Sharpens both your strike and your capture.",
     equipment: Some((Module, (decompiler: 2, atk: 1))),
     craftable: Some((cost: [("core_fragment", 15)], requires_structure: Some("fabricator"))),
     droppable: Some([("trojan", 0.08), ("scrapper", 0.07)]),

@@ -564,3 +564,45 @@ pub const BUFFER_BONUS_PERCENT_PER_LEVEL: f32 = 0.01;
 /// worth buying early when 1% of max Integrity would round to less than
 /// this.
 pub const BUFFER_MIN_BONUS_PER_LEVEL: i32 = 10;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::resources::ZoneLevel;
+
+    /// The zone curve was a bare `1 << (zone - 1)` before it was named.
+    /// Pinning the sequence keeps a retune of `ZONE_STAT_GROWTH` honest
+    /// about what it costs: this is the steepest curve in the game, and
+    /// `balance_sim`'s level sweeps are projected against it.
+    #[test]
+    fn zone_stat_multiplier_doubles_per_level() {
+        let curve: Vec<i32> = (1..=5).map(|z| ZoneLevel(z).stat_multiplier()).collect();
+        assert_eq!(curve, vec![1, 2, 4, 8, 16]);
+    }
+
+    /// `Game::max_group_size` clamps its distance exponent to
+    /// `MAX_GROUP_SIZE_DISTANCE_STEPS` because the map is unbounded. That
+    /// clamp is only lossless while the clamped growth already exceeds
+    /// `MAX_GROUP_SIZE` — raise the cap without raising the step count and
+    /// distance would silently stop mattering short of it.
+    #[test]
+    fn clamping_the_distance_exponent_cannot_cost_group_size() {
+        assert!(
+            GROUP_SIZE_DISTANCE_GROWTH.pow(MAX_GROUP_SIZE_DISTANCE_STEPS) > MAX_GROUP_SIZE,
+            "distance growth clamped at {MAX_GROUP_SIZE_DISTANCE_STEPS} steps reaches only {}, \
+             which no longer covers MAX_GROUP_SIZE ({MAX_GROUP_SIZE})",
+            GROUP_SIZE_DISTANCE_GROWTH.pow(MAX_GROUP_SIZE_DISTANCE_STEPS),
+        );
+    }
+
+    /// The zone group cap is meant to reach `MAX_GROUP_SIZE` within the
+    /// zones the game is balanced for — `balance_sim` sweeps zones 1-5 and
+    /// documents the cap saturating at zone 6 (1, 3, 9, 27, 81, 100).
+    #[test]
+    fn zone_group_growth_saturates_the_group_cap_in_a_reachable_zone() {
+        let zones_to_saturate = (1..=10)
+            .find(|z| ZONE_GROUP_GROWTH.pow(z - 1) >= MAX_GROUP_SIZE)
+            .expect("group growth should reach MAX_GROUP_SIZE within ten zones");
+        assert_eq!(zones_to_saturate, 6);
+    }
+}

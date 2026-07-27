@@ -162,6 +162,25 @@ fixed, player-only set that lives in `crates/engine/src/perks.rs`. The
 economy needs exactly one item holding each of the `Currency`,
 `ResearchCurrency`, and `CraftCurrency` roles or the game won't start.
 
+## Tuning difficulty
+
+Everything the engine hardcodes about how hard the game is lives in one
+file: `crates/engine/src/tuning.rs`. Zone and distance scaling, XP curves
+and level caps, the damage and capture formulas, spawn and drop rates, raid
+pressure, need decay, perk magnitudes — each is a documented constant in a
+labelled section. Change a number, run `cargo test --workspace`, play.
+
+It is a Rust file rather than a `.ron`, so retuning means a rebuild (a few
+seconds here). That is the one deliberate difference from modding: content
+is data, difficulty is code. Values that *are* data — species stats, item
+and craft costs, structure economy, research costs, ability magnitudes —
+stay in `assets/*/` and are not duplicated in `tuning.rs`.
+
+Offline balance projections live next door in `balance_sim.rs`, a
+deterministic, RNG-free simulator that fights zone-scaled packs against the
+real `.ron` assets and asserts the resulting level curves as regression
+tests. A retune that breaks progression usually shows up there first.
+
 ## Audio and fonts
 
 The GUI plays short sound effects from `assets/sounds/` for movement,

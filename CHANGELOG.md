@@ -143,6 +143,24 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ### Balance
 
+- **Every difficulty knob is in one file now.** Tuning values were spread
+  across three tiers with no boundary between them: 56 constants in the
+  crate root interleaved with module declarations, 28 more scattered across
+  seven other modules, and — worst — roughly thirty numbers that mattered
+  most sitting anonymous inside formulas. The zone stat doubling, the
+  steepest curve in the game, was an unnamed bit-shift. All of it is now
+  `crates/engine/src/tuning.rs`, grouped into labelled sections with its
+  documentation intact. No behaviour changed; the values are identical.
+  Content stays data — species, items, structures, abilities and research
+  are still `.ron` files and were not pulled into Rust.
+- **`balance.rs` is `balance_sim.rs`.** It was never a table of balance
+  constants; it is a 977-line offline battle simulator used as a
+  regression-test harness, and the name sent anyone hunting for tuning
+  values to the wrong file.
+- Two formulas had been quietly duplicated rather than shared: the mining
+  reliability curve was copied into the balance simulator whose own doc
+  claimed it mirrored the real one, and a cronjob node's default worker
+  capacity was repeated as a bare literal. Both now read one definition.
 - **A pack is a swarm now, sized by depth and distance.** A wild group used
   to be a handful of programs however deep you were. Its ceiling is now the
   zone — 1 at zone 1, tripling each level (3 / 9 / 27 / 81) to a hard 100

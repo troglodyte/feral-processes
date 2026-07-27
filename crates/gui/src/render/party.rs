@@ -3,7 +3,12 @@
 use super::popup::*;
 use super::*;
 
-pub(super) fn draw_companion_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_companion_menu(
+    game: &mut Game,
+    selected: usize,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let pets = game.owned_pets();
     let mut rows = vec![text_row(
         "Pick a program to add to your party (max 3) - select a party member's own number to stand it down.",
@@ -37,7 +42,7 @@ pub(super) fn draw_companion_menu(game: &mut Game, selected: usize, fonts: &Font
             i == selected,
         ));
     }
-    draw_popup("Party", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Party", PopupSize::Large, &rows, painter, m);
 }
 
 /// How a program's fusion depth reads in a menu row — nothing at all for
@@ -63,7 +68,7 @@ fn fuse_candidate_label(num: char, p: &PetInfo) -> String {
     )
 }
 
-pub(super) fn draw_fuse_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_fuse_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
     let candidates = game.owned_pets();
     let mut rows = vec![text_row("Fuse which program? Pick the first of two.")];
     if candidates.is_empty() {
@@ -75,14 +80,14 @@ pub(super) fn draw_fuse_menu(game: &mut Game, selected: usize, fonts: &Fonts, m:
             i == selected,
         ));
     }
-    draw_popup("Fuse", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Fuse", PopupSize::Large, &rows, painter, m);
 }
 
 pub(super) fn draw_fuse_second_menu(
     game: &mut Game,
     first: Option<Entity>,
     selected: usize,
-    fonts: &Fonts,
+    painter: &Painter,
     m: &Metrics,
 ) {
     let Some(first) = first else { return };
@@ -105,7 +110,7 @@ pub(super) fn draw_fuse_second_menu(
             i == selected,
         ));
     }
-    draw_popup("Fuse", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Fuse", PopupSize::Large, &rows, painter, m);
 }
 
 /// Free-text naming page shown after both fuse candidates are picked.
@@ -115,7 +120,7 @@ pub(super) fn draw_fuse_name_menu(
     first: Option<Entity>,
     second: Option<Entity>,
     name_input: &str,
-    fonts: &Fonts,
+    painter: &Painter,
     m: &Metrics,
 ) {
     let (Some(first), Some(second)) = (first, second) else {
@@ -161,5 +166,5 @@ pub(super) fn draw_fuse_name_menu(
         "Type a name, Enter to fuse (blank keeps the default name)",
     ));
     rows.push(text_row("Esc to go back and re-pick the second program"));
-    draw_popup("Fuse", PopupSize::Small, &rows, fonts, m);
+    draw_popup("Fuse", PopupSize::Small, &rows, painter, m);
 }

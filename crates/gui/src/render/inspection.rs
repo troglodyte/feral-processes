@@ -6,7 +6,7 @@ use super::*;
 pub(super) fn draw_inspect_detail(
     game: &mut Game,
     entity: Option<Entity>,
-    fonts: &Fonts,
+    painter: &Painter,
     m: &Metrics,
 ) {
     let Some(view) = entity.and_then(|e| game.inspect(e)) else {
@@ -14,7 +14,7 @@ pub(super) fn draw_inspect_detail(
             "Inspect",
             PopupSize::Small,
             &[text_row("That program is gone. Press any key to go back.")],
-            fonts,
+            painter,
             m,
         );
         return;
@@ -95,7 +95,7 @@ pub(super) fn draw_inspect_detail(
     }
     rows.push(text_row(""));
     rows.push(text_row("Press any key to go back, Esc to close"));
-    draw_popup("Inspect", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Inspect", PopupSize::Large, &rows, painter, m);
 }
 
 /// The inspect panel's decompile-odds readout. A full sentence because the

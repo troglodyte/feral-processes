@@ -3,7 +3,7 @@
 use super::popup::*;
 use super::*;
 
-pub(super) fn draw_perks_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_perks_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
     let status = game.player_status();
     let mut rows = vec![
         Row::TextColored(format!("Perk Points: {}", status.perk_points), CYAN),
@@ -32,10 +32,10 @@ pub(super) fn draw_perks_menu(game: &mut Game, selected: usize, fonts: &Fonts, m
     rows.push(text_row(
         "Pick a row's key to buy another level. Esc to close",
     ));
-    draw_popup("Perks", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Perks", PopupSize::Large, &rows, painter, m);
 }
 
-pub(super) fn draw_research_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_research_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
     let research_currency = game.research_currency();
     let held = game
         .player_status()
@@ -69,5 +69,5 @@ pub(super) fn draw_research_menu(game: &mut Game, selected: usize, fonts: &Fonts
     }
     rows.push(text_row(""));
     rows.push(text_row("Pick a row's key to research it. Esc to close"));
-    draw_popup("Research", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Research", PopupSize::Large, &rows, painter, m);
 }

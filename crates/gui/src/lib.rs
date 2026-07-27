@@ -6,6 +6,7 @@
 
 mod fx;
 mod keys;
+mod paint;
 mod render;
 mod sounds;
 mod text;
@@ -16,6 +17,7 @@ use macroquad::prelude::*;
 use feral_processes_app_core::{App, GameKey};
 use fx::Fx;
 use keys::KeyRepeat;
+use paint::{Color, Painter};
 use sounds::SoundBank;
 
 fn map_special_key(key: KeyCode) -> Option<GameKey> {
@@ -82,24 +84,24 @@ const TOAST_SECONDS: f64 = 1.5;
 /// drew — volume and effects are GUI-only concerns (`App` knows nothing
 /// about either), so they stay local to the game loop rather than being
 /// threaded through `render::draw`.
-fn draw_toast(text: &str, fonts: &text::Fonts) {
-    let m = text::ui_metrics(screen_height());
+fn draw_toast(text: &str, p: &Painter) {
+    let m = text::ui_metrics(p.screen_h());
     let font_size = m.title();
-    let dims = fonts.measure_ui(text, font_size);
-    let x = (screen_width() - dims.width) / 2.0;
+    let dims = p.measure_ui(text, font_size);
+    let x = (p.screen_w() - dims.width) / 2.0;
     let y = m.pad + m.title() as f32;
     // The box's margins were hand-tuned (14 horizontal, 10 above the text,
     // 12 below the baseline) rather than symmetric, so they're reproduced
     // as arithmetic on pad/inset/gap instead of one uniform padding value.
     let margin_x = m.pad + m.inset - 2.0 * m.gap;
-    draw_rectangle(
+    p.rect(
         x - margin_x,
         y - dims.height - m.inset,
         dims.width + margin_x * 2.0,
         dims.height + m.inset + m.gap * 2.0,
         Color::new(0.06, 0.07, 0.10, 0.85),
     );
-    fonts.ui(text, x, y, font_size, Color::new(0.92, 0.92, 0.92, 1.0));
+    p.ui(text, x, y, font_size, Color::new(0.92, 0.92, 0.92, 1.0));
 }
 
 /// Runs the graphics frontend to completion (until `app.quit`). Takes `App`
@@ -113,7 +115,7 @@ pub fn run(app: App) {
 
 async fn game_loop(mut app: App) {
     let sound_bank = SoundBank::load().await;
-    let fonts = text::Fonts::load();
+    let mut painter = Painter::new();
     let mut volume = DEFAULT_VOLUME;
     let mut fx = Fx::new();
     let mut toast: Option<String> = None;
@@ -121,13 +123,14 @@ async fn game_loop(mut app: App) {
     let mut key_repeat = KeyRepeat::new();
     let mut last_mode = app.mode;
     loop {
+        painter.begin_frame();
         app.update_realtime();
         let held: Vec<KeyCode> = REPEATING_KEYS
             .iter()
             .copied()
             .filter(|&key| is_key_down(key))
             .collect();
-        for key in key_repeat.tick(get_time(), &held) {
+        for key in key_repeat.tick(painter.time(), &held) {
             if let Some(game_key) = map_special_key(key) {
                 app.handle_key(game_key);
             }
@@ -154,12 +157,12 @@ async fn game_loop(mut app: App) {
         if is_key_pressed(KeyCode::LeftBracket) {
             volume = (volume - VOLUME_STEP).max(0.0);
             toast = Some(format!("Volume: {}%", (volume * 100.0).round() as i32));
-            toast_until = get_time() + TOAST_SECONDS;
+            toast_until = painter.time() + TOAST_SECONDS;
         }
         if is_key_pressed(KeyCode::RightBracket) {
             volume = (volume + VOLUME_STEP).min(1.0);
             toast = Some(format!("Volume: {}%", (volume * 100.0).round() as i32));
-            toast_until = get_time() + TOAST_SECONDS;
+            toast_until = painter.time() + TOAST_SECONDS;
         }
         // Backslash rather than a letter: letters reach the game through
         // `get_char_pressed` above and would collide with its bindings.
@@ -169,7 +172,7 @@ async fn game_loop(mut app: App) {
                 "Effects: {}",
                 if fx.enabled { "on" } else { "off" }
             ));
-            toast_until = get_time() + TOAST_SECONDS;
+            toast_until = painter.time() + TOAST_SECONDS;
         }
 
         for event in app.take_sounds() {
@@ -187,14 +190,14 @@ async fn game_loop(mut app: App) {
             Some(game) => (game.take_effects(), game.message_log(1).pop()),
             None => (Vec::new(), None),
         };
-        fx.begin_frame(get_time(), effects, in_battle);
+        fx.begin_frame(painter.time(), effects, in_battle);
         fx.observe_log(last_log.as_ref());
 
-        render::draw(&mut app, &mut fx, &fonts);
+        render::draw(&mut app, &mut fx, &painter);
         if let Some(text) = &toast
-            && get_time() < toast_until
+            && painter.time() < toast_until
         {
-            draw_toast(text, &fonts);
+            draw_toast(text, &painter);
         }
         next_frame().await;
     }

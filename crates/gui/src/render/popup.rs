@@ -146,20 +146,26 @@ fn popup_layout<'a>(screen_h: f32, pct_h: f32, rows: &'a [Row], m: &Metrics) -> 
     }
 }
 
-pub(super) fn draw_popup(title: &str, size: PopupSize, rows: &[Row], fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_popup(
+    title: &str,
+    size: PopupSize,
+    rows: &[Row],
+    painter: &Painter,
+    m: &Metrics,
+) {
     let (pct_w, pct_h) = match size {
         PopupSize::Large => (0.88, 0.85),
         PopupSize::Small => (0.5, 0.85),
     };
-    let layout = popup_layout(screen_height(), pct_h, rows, m);
-    let w = screen_width() * pct_w;
+    let layout = popup_layout(painter.screen_h(), pct_h, rows, m);
+    let w = painter.screen_w() * pct_w;
     let h = layout.h;
-    let x = (screen_width() - w) / 2.0;
-    let y = (screen_height() - h) / 2.0;
+    let x = (painter.screen_w() - w) / 2.0;
+    let y = (painter.screen_h() - h) / 2.0;
 
-    draw_rectangle(x, y, w, h, PANEL_BG);
-    draw_rectangle_lines(x, y, w, h, 2.0, BORDER);
-    fonts.ui(
+    painter.rect(x, y, w, h, PANEL_BG);
+    painter.rect_lines(x, y, w, h, 2.0, BORDER);
+    painter.ui(
         title,
         x + m.font_size as f32 / 2.0,
         y + m.font_size as f32,
@@ -170,7 +176,7 @@ pub(super) fn draw_popup(title: &str, size: PopupSize, rows: &[Row], fonts: &Fon
     // larger font pushes the rule down instead of striking through it.
     let divider_y = y + m.title() as f32 + m.gap;
     let divider_inset = m.pad / 2.0;
-    draw_line(
+    painter.line(
         x + divider_inset,
         divider_y,
         x + w - divider_inset,
@@ -182,7 +188,7 @@ pub(super) fn draw_popup(title: &str, size: PopupSize, rows: &[Row], fonts: &Fon
     let mut cy = y + m.line_height * 2.0;
     let max_y = y + h - m.inset;
     for row in layout.header {
-        cy = draw_row(row, x, w, cy, max_y, fonts, m);
+        cy = draw_row(row, x, w, cy, max_y, painter, m);
     }
 
     if !layout.body.is_empty() {
@@ -192,13 +198,13 @@ pub(super) fn draw_popup(title: &str, size: PopupSize, rows: &[Row], fonts: &Fon
             } else {
                 String::new()
             };
-            fonts.ui(&text, x + m.pad, cy, m.small(), TEXT_DIM);
+            painter.ui(&text, x + m.pad, cy, m.small(), TEXT_DIM);
             cy += m.line_height;
         }
 
         let visible_end = (layout.offset + layout.capacity).min(layout.body.len());
         for row in &layout.body[layout.offset..visible_end] {
-            cy = draw_row(row, x, w, cy, max_y, fonts, m);
+            cy = draw_row(row, x, w, cy, max_y, painter, m);
         }
 
         if layout.scrolling {
@@ -208,13 +214,13 @@ pub(super) fn draw_popup(title: &str, size: PopupSize, rows: &[Row], fonts: &Fon
             } else {
                 String::new()
             };
-            fonts.ui(&text, x + m.pad, cy, m.small(), TEXT_DIM);
+            painter.ui(&text, x + m.pad, cy, m.small(), TEXT_DIM);
             cy += m.line_height;
         }
     }
 
     for row in layout.footer {
-        cy = draw_row(row, x, w, cy, max_y, fonts, m);
+        cy = draw_row(row, x, w, cy, max_y, painter, m);
     }
 }
 
@@ -222,16 +228,16 @@ pub(super) fn draw_popup(title: &str, size: PopupSize, rows: &[Row], fonts: &Fon
 /// `max_y` is a last-resort safety clamp — normal layout keeps every row
 /// within bounds via `draw_popup`'s capacity accounting, so this only ever
 /// bites if that accounting is off by a line.
-fn draw_row(row: &Row, x: f32, w: f32, cy: f32, max_y: f32, fonts: &Fonts, m: &Metrics) -> f32 {
+fn draw_row(row: &Row, x: f32, w: f32, cy: f32, max_y: f32, painter: &Painter, m: &Metrics) -> f32 {
     if cy > max_y {
         return cy;
     }
     match row {
         Row::Text(s) => {
-            fonts.ui(s, x + m.pad, cy, m.font_size, TEXT_DIM);
+            painter.ui(s, x + m.pad, cy, m.font_size, TEXT_DIM);
         }
         Row::TextColored(s, color) => {
-            fonts.ui(s, x + m.pad, cy, m.font_size, *color);
+            painter.ui(s, x + m.pad, cy, m.font_size, *color);
         }
         Row::Item {
             text: s,
@@ -243,7 +249,7 @@ fn draw_row(row: &Row, x: f32, w: f32, cy: f32, max_y: f32, fonts: &Fonts, m: &M
                 // highlight keeps leading its text by one inset at every
                 // font size instead of drifting left as the text grows.
                 let bleed = m.pad - m.inset;
-                draw_rectangle(
+                painter.rect(
                     x + bleed,
                     cy - m.font_size as f32,
                     w - bleed * 2.0,
@@ -254,9 +260,9 @@ fn draw_row(row: &Row, x: f32, w: f32, cy: f32, max_y: f32, fonts: &Fonts, m: &M
             let prefix = if *selected { "> " } else { "  " };
             let label = format!("{prefix}{s}");
             if *selected && *bold {
-                fonts.ui_bold(label, x + m.pad, cy, m.font_size, TEXT);
+                painter.ui_bold(label, x + m.pad, cy, m.font_size, TEXT);
             } else {
-                fonts.ui(label, x + m.pad, cy, m.font_size, TEXT);
+                painter.ui(label, x + m.pad, cy, m.font_size, TEXT);
             }
         }
     }

@@ -147,20 +147,20 @@ fn roster_row(
     )
 }
 
-pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Metrics) {
     let Some(game) = &mut app.game else { return };
     let Some(view) = game.battle_view() else {
         return;
     };
 
-    let w = screen_width();
+    let w = painter.screen_w();
     // The battle screen sits straight on the window instead of inside a
     // panel, so it holds off the edges by more than panel content does.
     let margin = m.inset * 2.0;
     let mut y = margin;
-    let dt = get_frame_time();
+    let dt = painter.delta();
 
-    fonts.ui(
+    painter.ui(
         format!("Hostile programs — round {}", view.round),
         margin,
         y,
@@ -168,7 +168,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics
         TEXT,
     );
     y += m.line_height;
-    fonts.ui(hostile_header(), margin, y, m.label(), TEXT_DIM);
+    painter.ui(hostile_header(), margin, y, m.label(), TEXT_DIM);
     y += m.line_height;
 
     for (idx, g) in view.groups.iter().enumerate() {
@@ -217,7 +217,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics
             g.front_hp as f32,
             g.front_max_hp.max(1) as f32,
             BarStyle::plain(color),
-            fonts,
+            painter,
             m,
         );
         draw_ghost_band(
@@ -226,6 +226,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics
             ghost.ghost,
             g.front_max_hp.max(1) as f32,
             color,
+            painter,
             m,
         );
         // Damage is inferred from the HP the view reports rather than from
@@ -245,7 +246,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics
     // passed between them in the middle. The party block is bottom-anchored
     // above the action bar so the log can take exactly the slack left over,
     // which is why its height has to be computed rather than accumulated.
-    let log_bottom = screen_height() - m.line_height * 2.0;
+    let log_bottom = painter.screen_h() - m.line_height * 2.0;
     // Two line heights, not one: the block's title *and* its column header
     // sit above the first bar. Getting this wrong shifts the whole party
     // block, since it is bottom-anchored off this figure.
@@ -253,8 +254,8 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics
     let party_top = (log_bottom - party_height).max(y);
 
     let log_height = party_top - y;
-    draw_rectangle(margin, y, w - margin * 2.0, log_height, PANEL_BG);
-    draw_rectangle_lines(margin, y, w - margin * 2.0, log_height, 2.0, BORDER);
+    painter.rect(margin, y, w - margin * 2.0, log_height, PANEL_BG);
+    painter.rect_lines(margin, y, w - margin * 2.0, log_height, 2.0, BORDER);
     // Floors at 0, not 1. On a window too short to seat both rosters this
     // pane collapses to nothing, and forcing a line into it drew narration
     // at the party block's first row — which the party header then painted
@@ -265,12 +266,12 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics
         if ly + m.line_height > party_top {
             break;
         }
-        draw_message_line(kind, &line, margin + m.inset, ly, fonts, m);
+        draw_message_line(kind, &line, margin + m.inset, ly, painter, m);
         ly += m.line_height;
     }
 
     y = party_top;
-    fonts.ui(
+    painter.ui(
         format!("Your party — DECOMP {}", view.player_decompiler),
         margin,
         y,
@@ -278,7 +279,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics
         TEXT,
     );
     y += m.line_height;
-    fonts.ui(party_header(), margin, y, m.label(), TEXT_DIM);
+    painter.ui(party_header(), margin, y, m.label(), TEXT_DIM);
     y += m.line_height;
 
     for p in &view.party {
@@ -314,7 +315,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics
                 color,
                 bold: active,
             },
-            fonts,
+            painter,
             m,
         );
         draw_ghost_band(
@@ -323,6 +324,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics
             ghost.ghost,
             p.max_hp.max(1) as f32,
             color,
+            painter,
             m,
         );
         if ghost.damage > 0 {
@@ -345,20 +347,20 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, fonts: &Fonts, m: &Metrics
     // Party-level commands come from the engine too, so the two renderers
     // cannot drift on them either.
     actions.extend(game.battle_party_commands().into_iter().map(|c| c.label));
-    fonts.ui(
+    painter.ui(
         actions.join("   "),
         margin,
-        screen_height() - m.font_size as f32,
+        painter.screen_h() - m.font_size as f32,
         m.font_size,
         TEXT,
     );
 
-    fx.draw_floats(fonts, m);
+    fx.draw_floats(painter, m);
 }
 
 /// Which of the acting member's abilities does the Special spend? Rows come
 /// from the engine, same contract as the action bar.
-pub(super) fn draw_battle_special_menu(app: &mut App, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_battle_special_menu(app: &mut App, painter: &Painter, m: &Metrics) {
     let selected = app.menu_selected;
     let Some(game) = &mut app.game else { return };
     let Some(slot) = game.battle_active_slot() else {
@@ -371,12 +373,12 @@ pub(super) fn draw_battle_special_menu(app: &mut App, fonts: &Fonts, m: &Metrics
             i == selected,
         ));
     }
-    draw_popup("Pick a special", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Pick a special", PopupSize::Large, &rows, painter, m);
 }
 
 /// Who does this buff or heal land on? Lists you and every standing
 /// companion — the whole point of aiming one.
-pub(super) fn draw_battle_ally_menu(app: &mut App, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_battle_ally_menu(app: &mut App, painter: &Painter, m: &Metrics) {
     let selected = app.menu_selected;
     let title = app.battle_target_title();
     let Some(game) = &mut app.game else { return };
@@ -387,13 +389,13 @@ pub(super) fn draw_battle_ally_menu(app: &mut App, fonts: &Fonts, m: &Metrics) {
             i == selected,
         ));
     }
-    draw_popup(&title, PopupSize::Large, &rows, fonts, m);
+    draw_popup(&title, PopupSize::Large, &rows, painter, m);
 }
 
 /// Which group does the pending action hit? Shows per-group decompile odds,
 /// since that's the one action where the choice of target is a real gamble
 /// rather than a preference.
-pub(super) fn draw_battle_target_menu(app: &mut App, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_battle_target_menu(app: &mut App, painter: &Painter, m: &Metrics) {
     let selected = app.menu_selected;
     let title = app.battle_target_title();
     let Some(game) = &mut app.game else { return };
@@ -420,12 +422,12 @@ pub(super) fn draw_battle_target_menu(app: &mut App, fonts: &Fonts, m: &Metrics)
             i == selected,
         ));
     }
-    draw_popup(&title, PopupSize::Large, &rows, fonts, m);
+    draw_popup(&title, PopupSize::Large, &rows, painter, m);
 }
 
 /// Which consumable does this slot spend? Lists only what's actually
 /// usable — the action is greyed out with a reason before it gets here.
-pub(super) fn draw_battle_item_menu(app: &mut App, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_battle_item_menu(app: &mut App, painter: &Painter, m: &Metrics) {
     let selected = app.menu_selected;
     let Some(game) = &mut app.game else { return };
     let items = game.battle_usable_items();
@@ -438,7 +440,7 @@ pub(super) fn draw_battle_item_menu(app: &mut App, fonts: &Fonts, m: &Metrics) {
             i == selected,
         ));
     }
-    draw_popup("Use an item", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Use an item", PopupSize::Large, &rows, painter, m);
 }
 
 #[cfg(test)]

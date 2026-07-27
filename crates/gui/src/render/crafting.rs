@@ -3,7 +3,7 @@
 use super::popup::*;
 use super::*;
 
-pub(super) fn draw_craft_menu(game: &mut Game, selected: usize, fonts: &Fonts, m: &Metrics) {
+pub(super) fn draw_craft_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
     let status = game.player_status();
     let recipes = game.craft_recipes();
     let mut rows = vec![
@@ -27,14 +27,14 @@ pub(super) fn draw_craft_menu(game: &mut Game, selected: usize, fonts: &Fonts, m
             i == selected,
         ));
     }
-    draw_popup("Compile", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Compile", PopupSize::Large, &rows, painter, m);
 }
 
 pub(super) fn draw_craft_quantity(
     game: &mut Game,
     pending: Option<ItemId>,
     quantity_input: &str,
-    fonts: &Fonts,
+    painter: &Painter,
     m: &Metrics,
 ) {
     let Some(result) = pending else { return };
@@ -68,5 +68,5 @@ pub(super) fn draw_craft_quantity(
     rows.push(text_row(
         "[F] Compile 5   [M] Compile max affordable   Esc to go back",
     ));
-    draw_popup("Compile", PopupSize::Large, &rows, fonts, m);
+    draw_popup("Compile", PopupSize::Large, &rows, painter, m);
 }

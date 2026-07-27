@@ -2018,14 +2018,22 @@ In `crates/engine/src/game/combat_rewards.rs`, change `attempt_decompile`'s sign
     /// target into a tamed program and drops it from the group. Returns
     /// whether that ended the battle.
     ///
-    /// The roster-full and no-catalyst refusals are `ability_unavailable`'s
-    /// now — a greyed row can't be planned, so they can't be reached from a
-    /// resolving round. They stay here as guards because reaching one would
-    /// mean spending a catalyst on a capture with nowhere to land.
+    /// The roster-full and no-catalyst refusals live in
+    /// `ability_unavailable` now: a greyed row can't be planned, and
+    /// `battle_set_action` refuses one that somehow is, so neither state can
+    /// reach a resolving round.
     pub(crate) fn attempt_decompile(&mut self, group: usize, player: Entity) -> bool {
 ```
 
-Replace `return None;` with `return false;` in both guards, `let Some(front) = self.front_of_group(group) else { return false; };` for the `?`, `return Some(false)` with `return false`, `return Some(true)` with `return true`, and the trailing `Some(false)` with `false`.
+**Delete both early-return guards** — the roster-capacity block (lines ~197-206) and the `taming_catalyst()` `else` arm's refusal. They guard states `ability_unavailable` now makes unreachable, and this repo does not write error handling for scenarios that can't happen. The catalyst lookup still has to happen, so keep it as a plain destructure:
+
+```rust
+        let (catalyst, potency) = self
+            .taming_catalyst()
+            .expect("ability_unavailable greys decompile when no catalyst is held");
+```
+
+Then `let Some(front) = self.front_of_group(group) else { return false; };` for the `?`, `return Some(false)` → `return false`, `return Some(true)` → `return true`, and the trailing `Some(false)` → `false`.
 
 In `crates/app-core/src/lib.rs:346`, delete the `ActionKind::Decompile` arm from `action_from`.
 

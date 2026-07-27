@@ -91,11 +91,16 @@ way deleting the Currency item does.
     //   Decompile
     //     Spends a taming catalyst and rolls a capture against the target
     //     group's front program — the formula lives in `taming`, not here.
-    //     Only meaningful with `target: OneEnemyGroupFront`. Carries no
-    //     fields of its own, and greys out in the picker with a reason —
-    //     "no taming catalyst" or "roster is full" — instead of being
-    //     refused silently. This is what `decompile.ron` uses; there is no
-    //     reason to declare a second ability with this effect.
+    //     Requires `target: OneEnemyGroupFront` or `WholeEnemyGroup` —
+    //     anything else is enforced at load time (a file pairing
+    //     `Decompile` with `OneAlly`, `WholeParty` or `AllEnemies` is
+    //     skipped with a warning, the same as a non-finite number), because
+    //     it is resolved by group index and any other target would silently
+    //     waste the round instead. Carries no fields of its own, and greys
+    //     out in the picker with a reason — "no taming catalyst" or "roster
+    //     is full" — instead of being refused silently. This is what
+    //     `decompile.ron` uses; there is no reason to declare a second
+    //     ability with this effect.
     effect: Damage(power: 6),
 
     // Optional; defaults to 0 (usable every round). Battle rounds that must

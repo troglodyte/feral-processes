@@ -401,6 +401,15 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
+        // A routine can be one-of-a-kind (decompile has no other source at
+        // all): the whole point of it being poppable into cargo is to move
+        // it between programs, not to sit next to the delete button.
+        if self.is_routine(item) {
+            return Err(
+                "That's a routine, not scrap — install it on a program instead of erasing it."
+                    .into(),
+            );
+        }
         let player = self.player_entity();
         let taken = self
             .world

@@ -104,26 +104,23 @@ is skipped with a warning logged in-game rather than crashing startup.
     // still double per zone level like any other species, on top of this).
     is_boss: true,
 
-    // Optional; can be left out entirely (defaults to empty). A tamed
-    // program no longer attacks directly when commanded in battle — it
-    // spends its round on an ability instead. Left empty, that's the
-    // fallback `priority_boost`. List one or more here and a tamed member
-    // of this species offers them as a menu when commanded: choosing
-    // Special asks which ability, then who it lands on (if that ability
-    // needs a choice at all). Listing exactly one still shows the menu,
-    // with that one row — the order you write them in is the order they
-    // appear.
+    // Optional; can be left out entirely (defaults to empty). This is not
+    // the menu a tamed program offers — it's what gets *installed* into a
+    // bounded number of routine slots, once, at specific moments. What ends
+    // up commandable in battle is always whatever currently occupies those
+    // slots (see "Routines and slots" below), not this list re-read live.
     //
     // Abilities themselves are data: each entry names an `id` from
     // `assets/abilities/`, whose README documents what an ability can do
     // (single- and multi-target damage, debuffs, heals and buffs, plus
     // cooldowns and Fatigue costs). Nothing about an ability is defined
-    // here — only which ones this species gets, and when.
+    // here — only which ones this species grants, and when.
     //
-    // `level` is optional and defaults to 1, meaning the ability is
-    // available as soon as the program is tamed. A higher number gates it
-    // until the companion reaches that level; companions cap at level 12,
-    // so anything above that is permanently unreachable.
+    // `level` is optional and defaults to 1, meaning the ability installs
+    // as soon as the program is tamed (or as soon as slots exist for it —
+    // see below). A higher number gates it until the companion reaches
+    // that level; companions cap at level 12, so anything above that is
+    // permanently unreachable.
     //
     // An id that doesn't exist is dropped with a logged warning and the
     // rest of the species still loads — a program missing one ability is
@@ -132,6 +129,40 @@ is skipped with a warning logged in-game rather than crashing startup.
         (id: "hot_patch"),
         (id: "redundancy_sync", level: 7),
     ],
+
+    // ## Routines and slots
+    //
+    // A tamed program's abilities live in a small, level-derived number of
+    // routine slots (one more every two companion levels, six at most —
+    // see `tuning::COMPANION_ROUTINE_SLOT_*`), and what a slot holds is
+    // installed at specific moments, not recomputed on the fly:
+    //
+    //   - **Tame or fusion time.** Every entry above whose `level` is at
+    //     or below the program's current level installs, in the order
+    //     written, up to however many slots exist yet. If `abilities` is
+    //     empty, or none of it has unlocked yet (this species' *first*
+    //     unlock is above level 1), the program starts on the fallback
+    //     ability, `priority_boost`, instead — so an ability-less or
+    //     not-yet-unlocked program still has *something* commandable, and
+    //     that filler is itself obtainable by extraction (see
+    //     `assets/structures/README.md`).
+    //   - **Every level-up.** Whichever entries this level-up's range
+    //     newly qualifies for try to install. A free slot takes it
+    //     directly. A full kit still takes it if `priority_boost` occupies
+    //     one of the slots — the fallback is explicitly a placeholder for
+    //     "nothing real yet," so a genuine unlock arriving displaces it
+    //     rather than losing to it. Only when every slot already holds a
+    //     *real* routine (installed, researched, or another innate
+    //     ability) is the unlock logged as lost, permanently — the window
+    //     to install it has passed. No shipped species can reach that
+    //     genuine-loss state; the closest any comes is exactly the eviction
+    //     case above (e.g. a species whose only ability unlocks above
+    //     level 1, like the Scrapper's `cascade_overflow` at level 3).
+    //
+    // Nothing here is permanently welded in: an innate routine can be
+    // popped back out (`m` in the routine panel) same as any installed
+    // one, freeing the slot and handing back a loose item that installs on
+    // any program — including a different species entirely.
 
     // Optional; can be left out entirely (defaults to 1.0). Multiplies this
     // species' per-level stat growth (see `progression::add_xp`) for a tamed

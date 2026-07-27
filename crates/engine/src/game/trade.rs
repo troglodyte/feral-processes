@@ -28,6 +28,16 @@ impl Game {
         if qty == 0 {
             return Err("Sell at least 1.".into());
         }
+        // Same reasoning as `erase_item`: a routine can be one-of-a-kind
+        // (nothing else grants decompile), so refusing to sell it for a
+        // single Core Fragment costs the player nothing next to what losing
+        // it for good would.
+        if self.is_routine(&item) {
+            return Err(
+                "That's a routine, not scrap — install it on a program instead of selling it."
+                    .into(),
+            );
+        }
         let currency = self.currency();
         if item == currency {
             return Err("Core Fragments aren't worth trading for more Core Fragments.".into());
@@ -143,6 +153,28 @@ impl Game {
         out
     }
 
+    /// Logs `sale_detachments`, then drops `creature` out of the party and
+    /// the world for good. The one way a tamed program permanently leaves
+    /// play — `sell_companion` and `routines::extract_routine` both end a
+    /// program this way and only differ in what they hand back for it, so
+    /// this is the single call that keeps the two sequences from drifting
+    /// apart the way a doc comment merely claiming to mirror one another
+    /// couldn't. Returns the label logged, since both callers still need it
+    /// for their own payout line afterward.
+    pub(crate) fn dissolve_tamed_program(&mut self, creature: Entity) -> String {
+        let name = self.creature_label(creature);
+        for detached in self.sale_detachments(creature) {
+            self.log(format!("{name} {detached}."));
+        }
+        self.world
+            .resource_mut::<Party>()
+            .0
+            .retain(|&e| e != creature);
+        self.world.entity_mut(creature).remove::<Task>();
+        self.world.despawn(creature);
+        name
+    }
+
     /// Sells `creature` to the trading post `structure` for a share of its
     /// power, despawning it and freeing the roster slot it held — the only
     /// way to shed a tamed program without fusing it into another.
@@ -176,16 +208,7 @@ impl Game {
         let currency = self.currency();
         self.check_room(&currency, payout)?;
 
-        let name = self.creature_label(creature);
-        for detached in self.sale_detachments(creature) {
-            self.log(format!("{name} {detached}."));
-        }
-        self.world
-            .resource_mut::<Party>()
-            .0
-            .retain(|&e| e != creature);
-        self.world.entity_mut(creature).remove::<Task>();
-        self.world.despawn(creature);
+        let name = self.dissolve_tamed_program(creature);
         self.world
             .get_mut::<Inventory>(self.player_entity())
             .unwrap()

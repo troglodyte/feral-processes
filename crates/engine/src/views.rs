@@ -26,7 +26,11 @@ pub struct ResearchStatus {
     /// `Locked`.
     pub affordable: bool,
     /// Abilities this node hands over as routine items when researched.
-    pub unlocks_abilities: Vec<crate::abilities::AbilityId>,
+    /// `cfg(test)`: read only by engine tests today, neither the renderer
+    /// nor app-core touches it, and a `pub(crate)` field that's merely
+    /// unread (rather than absent from non-test builds) still warns.
+    #[cfg(test)]
+    pub(crate) unlocks_abilities: Vec<crate::abilities::AbilityId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

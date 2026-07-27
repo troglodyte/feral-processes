@@ -4,9 +4,22 @@
 //! go through `load_asset_dbs` so neither can produce a `Game` whose item
 //! set fails the economy-role check.
 
+use crate::abilities::AbilityId;
 use crate::game::zone::find_walkable_start;
 use crate::tuning::{DEFAULT_WORK_CAPACITY, INITIAL_WILD_POPULATION};
 use crate::*;
+
+/// Splits a persisted routine list into what `db` still recognizes and what
+/// it doesn't — `Game::load`'s only chance to catch an id a save carries
+/// that the loaded `AbilityDb` no longer has (the ability file was removed,
+/// or is now malformed and got skipped with its own warning). Left
+/// unfiltered, a ghost id survives into `Routines` as an entry
+/// `routine_view` can't resolve: the slot renders `(empty)`, so the install
+/// picker opens over an occupied one instead of the ghost ever being
+/// uninstallable.
+fn known_routines(ids: &[AbilityId], db: &AbilityDb) -> (Vec<AbilityId>, Vec<AbilityId>) {
+    ids.iter().cloned().partition(|id| db.get(id).is_some())
+}
 
 impl Game {
     pub fn new(seed: u32, difficulty: DifficultyMode, assets_dir: &Path) -> std::io::Result<Self> {
@@ -117,6 +130,18 @@ impl Game {
         let overrides: HashMap<(i32, i32), Tile> = data.tile_overrides.into_iter().collect();
         world_map.restore_overrides(overrides);
 
+        // A routine slot is persisted as a raw ability id and never
+        // validated, so a save made under one mod configuration can name an
+        // ability a later load's asset set doesn't have (the file was
+        // removed, or is now malformed and got skipped with a warning of
+        // its own). Left in place, `routine_view` can't resolve the id and
+        // renders the slot `(empty)` — which then makes `install_routine`
+        // refuse "no free slot" for a slot the panel just told the player
+        // was free. Dropped here instead, once, at the only point both the
+        // save data and the loaded `AbilityDb` are in hand.
+        let (player_routines, dropped_player_routines) =
+            known_routines(&data.player.routines, &ability_db);
+
         let mut world = World::new();
         world.insert_resource(ability_db);
         world.insert_resource(species_db);
@@ -197,7 +222,7 @@ impl Game {
                     points: data.player.perk_points,
                     unlocked: data.player.unlocked_perks,
                 },
-                Routines(data.player.routines.clone()),
+                Routines(player_routines),
             ))
             .id();
         world.insert_resource(PlayerEntity(player));
@@ -207,6 +232,12 @@ impl Game {
         let mut game = Self { world, schedule };
         for warning in load_warnings {
             game.log(warning);
+        }
+        if !dropped_player_routines.is_empty() {
+            game.log(format!(
+                "Your installed routines included {} — no longer available, and the slot is now empty.",
+                dropped_player_routines.join(", ")
+            ));
         }
 
         let mut pending_cronjobs: Vec<(Entity, save::CronjobSave)> = Vec::new();
@@ -218,6 +249,15 @@ impl Game {
             let Some(species) = game.world.resource::<SpeciesDb>().get(&c.species).cloned() else {
                 continue;
             };
+            let (routines, dropped_routines) =
+                known_routines(&c.routines, game.world.resource::<AbilityDb>());
+            if !dropped_routines.is_empty() {
+                game.log(format!(
+                    "{} carried {} — no longer available, and the slot is now empty.",
+                    species.name,
+                    dropped_routines.join(", ")
+                ));
+            }
             let party_slot = c.party_slot;
             let mut entity = game.world.spawn((
                 Creature {
@@ -246,7 +286,7 @@ impl Game {
                 ZonePortal(c.zone),
                 StatusEffects::default(),
                 FusionCount(c.fusions),
-                Routines(c.routines.clone()),
+                Routines(routines),
             ));
             if let Some(name) = c.custom_name.clone() {
                 entity.insert(CustomName(name));

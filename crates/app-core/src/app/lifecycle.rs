@@ -23,7 +23,6 @@ impl App {
             pending_fuse_second: None,
             fuse_name_input: String::new(),
             pending_routine_holder: None,
-            pending_routine_slot: None,
             pending_extract_program: None,
             pending_extract_index: None,
             pending_battle_action: None,

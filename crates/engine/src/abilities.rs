@@ -150,6 +150,26 @@ impl AbilityDef {
         }
         None
     }
+
+    /// `Decompile` is resolved by group index in `Game::attempt_decompile`,
+    /// which only ever runs when the planned target is a
+    /// `battle::SpecialTarget::EnemyGroup` — the shape `AbilityTarget`'s
+    /// `Enemy` targeting produces. Any other `target` would still arm the
+    /// cooldown and spend Fatigue in `resolve_one_action`, then find no
+    /// group index to act on and silently do nothing: the exact
+    /// "wastes-the-round" failure mode this branch refuses loudly for
+    /// everywhere else it can reach. Caught here instead, the same way
+    /// `non_finite_field` catches a bad number before it reaches a formula.
+    fn decompile_target_mismatch(&self) -> Option<&'static str> {
+        if matches!(self.effect, AbilityEffect::Decompile)
+            && self.target.targeting() != crate::battle::SpecialTargeting::Enemy
+        {
+            return Some(
+                "effect: Decompile requires target: OneEnemyGroupFront or WholeEnemyGroup",
+            );
+        }
+        None
+    }
 }
 
 impl AbilityTarget {
@@ -192,6 +212,10 @@ impl AbilityDb {
                         warnings.push(format!(
                             "skipped invalid ability file {path:?}: {field} is not a finite number"
                         ));
+                        continue;
+                    }
+                    if let Some(reason) = def.decompile_target_mismatch() {
+                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
                         continue;
                     }
                     db.abilities.insert(def.id.clone(), def);
@@ -256,6 +280,34 @@ mod tests {
             "an ability declaring no cost charges what commanding always did"
         );
         assert!(warnings.is_empty(), "a valid def warns about nothing");
+    }
+
+    /// Regression for M11: a `Decompile` effect is resolved by group index
+    /// in `Game::attempt_decompile`, which only runs for a
+    /// `SpecialTarget::EnemyGroup` — the shape only `OneEnemyGroupFront` and
+    /// `WholeEnemyGroup` targeting produces. Pairing it with anything else
+    /// would arm the cooldown and spend Fatigue and then silently waste the
+    /// round, so it must be refused at load time instead.
+    #[test]
+    fn a_decompile_effect_paired_with_a_non_group_target_is_skipped() {
+        let mismatched = r#"(
+            id: "test_bad_decompile",
+            name: "Bad Decompile",
+            description: "d",
+            target: AllEnemies,
+            effect: Decompile,
+        )"#;
+        let (db, warnings) = load(
+            "bad_decompile",
+            &[("test_sweep", VALID), ("bad", mismatched)],
+        );
+        assert!(db.get("test_sweep").is_some(), "the valid file still loads");
+        assert!(
+            db.get("test_bad_decompile").is_none(),
+            "the mismatched pairing must not load"
+        );
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("Decompile"), "{}", warnings[0]);
     }
 
     #[test]

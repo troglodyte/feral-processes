@@ -400,6 +400,10 @@ impl Game {
     /// A species declaring no abilities gets `FALLBACK_ABILITY_ID` instead,
     /// which is what keeps an ability-less species commandable and keeps
     /// that ability obtainable by extraction: nothing else grants it.
+    ///
+    /// No shipped species declares more level-appropriate abilities than it
+    /// has slots for at tame time, so the overflow this logs is mod-safety
+    /// only — same rationale as `install_unlocked_routines`.
     pub(crate) fn install_innate_routines(&mut self, entity: Entity) {
         let level = self
             .world
@@ -417,12 +421,20 @@ impl Game {
             .filter(|a| a.level <= level)
             .map(|a| a.id)
             .filter(|id| self.world.resource::<AbilityDb>().get(id).is_some())
-            .take(slots)
             .collect();
         let installed = if declared.is_empty() {
             vec![abilities::FALLBACK_ABILITY_ID.to_string()]
         } else {
-            declared
+            if declared.len() > slots {
+                let name = self.creature_label(entity);
+                for id in &declared[slots..] {
+                    self.log(format!(
+                        "{name} has no free routine slot for {} — the unlock is lost.",
+                        self.ability_display_name(id)
+                    ));
+                }
+            }
+            declared.into_iter().take(slots).collect()
         };
         self.world.entity_mut(entity).insert(Routines(installed));
     }
@@ -430,12 +442,21 @@ impl Game {
     /// Installs every species ability whose unlock level lands in
     /// `(from_level, to_level]` — the ones this level-up just reached.
     ///
-    /// An unlock with no free slot is logged and dropped for good: the
-    /// window it could have been installed in has passed. No shipped species
-    /// can reach that state (the most any declares is two abilities, the
-    /// latest at level 8, and four slots exist by then), so this is
-    /// mod-safety, and failing loudly beats carrying a pending-installs list
-    /// nothing ships to exercise.
+    /// If every slot is full, an unlock evicts `FALLBACK_ABILITY_ID` rather
+    /// than being dropped: the fallback is explicitly a placeholder for a
+    /// companion whose species grants nothing *yet* (see
+    /// `install_innate_routines`), so a real innate unlock displacing it is
+    /// the placeholder doing its job. This is exactly the shipped Scrapper's
+    /// case — its only ability unlocks at level 3, a level-1 tame installs
+    /// the fallback into its one slot, and without eviction the level-3
+    /// unlock would find that slot "full" and be lost forever.
+    ///
+    /// Only when every slot instead holds a *real* routine — installed,
+    /// researched, or another innate ability — is the unlock logged and
+    /// dropped for good: the window it could have been installed in has
+    /// passed. No shipped species can reach that genuine-loss state (the
+    /// most any declares is two abilities, the latest at level 8, and four
+    /// slots exist by then), so this remains mod-safety only.
     pub(crate) fn install_unlocked_routines(
         &mut self,
         entity: Entity,
@@ -468,8 +489,17 @@ impl Game {
                 continue;
             }
             if installed.len() >= slots {
+                if let Some(pos) = installed
+                    .iter()
+                    .position(|a| a == abilities::FALLBACK_ABILITY_ID)
+                {
+                    installed[pos] = id;
+                    self.world.entity_mut(entity).insert(Routines(installed));
+                    continue;
+                }
                 self.log(format!(
-                    "{name} has no free routine slot for {id} — the unlock is lost."
+                    "{name} has no free routine slot for {} — the unlock is lost.",
+                    self.ability_display_name(&id)
                 ));
                 continue;
             }

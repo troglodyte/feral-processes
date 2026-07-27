@@ -43,13 +43,11 @@ impl App {
             }
             return;
         }
-        self.pending_routine_slot = Some(idx);
         self.mode = Mode::RoutineInstall;
     }
 
     pub(crate) fn handle_routine_install_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.pending_routine_slot = None;
             self.mode = Mode::Routines;
             return;
         }
@@ -67,7 +65,6 @@ impl App {
                 Ok(()) => self.status_line = None,
                 Err(e) => self.status_line = Some(e),
             }
-            self.pending_routine_slot = None;
             self.mode = Mode::Routines;
         }
     }

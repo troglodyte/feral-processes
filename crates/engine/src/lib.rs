@@ -44,7 +44,9 @@ use components::{
     Structure, StructureTier, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
 };
 use items::{EquipmentSlot, EquipmentStats, ItemId, ids};
-use items_db::{ItemDb, ItemDef};
+use items_db::ItemDb;
+#[cfg(test)]
+use items_db::ItemDef;
 pub use perks::Perk;
 use research::{ResearchDb, ResearchDef};
 pub use research::{ResearchId, ResearchRecipe};

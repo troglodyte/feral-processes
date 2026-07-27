@@ -407,9 +407,6 @@ pub struct App {
     /// The routine holder picked in `Mode::RoutineTarget` — the player or one
     /// of their programs — awaiting a slot pick from `Mode::Routines`.
     pub pending_routine_holder: Option<Entity>,
-    /// The empty slot picked in `Mode::Routines`, awaiting a loose routine
-    /// from `Mode::RoutineInstall` before `Game::install_routine` is called.
-    pub pending_routine_slot: Option<usize>,
     /// The program picked in `Mode::Extract`, awaiting a routine pick from
     /// `Mode::ExtractPick`.
     pub pending_extract_program: Option<Entity>,

@@ -185,12 +185,12 @@ impl Game {
                 .map(|e| e.level)
                 .unwrap_or(before_level);
             if level > before_level {
-                self.install_unlocked_routines(companion, before_level, level);
                 let name = self.creature_label(companion);
                 self.log_kind(
                     MessageKind::LevelUp,
                     format!("{name} gains {amount} XP and levels up to {level}!"),
                 );
+                self.install_unlocked_routines(companion, before_level, level);
             }
         }
     }
@@ -200,14 +200,22 @@ impl Game {
     /// target into a tamed program and drops it from the group. Returns
     /// whether that ended the battle.
     ///
-    /// The roster-full and no-catalyst refusals live in
-    /// `ability_unavailable` now: a greyed row can't be planned, and
-    /// `battle_set_action` refuses one that somehow is, so neither state can
-    /// reach a resolving round.
+    /// The roster-full refusal lives in `ability_unavailable` alone now: a
+    /// greyed row can't be planned, and `battle_set_action` refuses one that
+    /// somehow is, and nothing inside a resolving round grows `pet_count`
+    /// except a successful decompile itself, so that state can't reach here.
+    ///
+    /// The no-catalyst guard below stays, though: `ability_unavailable`
+    /// checks it per slot at *plan* time, but the catalyst is a round-wide
+    /// pool, not a per-slot one — two party members can each plan Decompile
+    /// while only one catalyst is held, both pass the per-slot check, and the
+    /// first to resolve spends the only copy. Without this guard the second
+    /// would hit an `expect` instead of a refusal.
     pub(crate) fn attempt_decompile(&mut self, group: usize, player: Entity) -> bool {
-        let (catalyst, potency) = self
-            .taming_catalyst()
-            .expect("ability_unavailable greys decompile when no catalyst is held");
+        let Some((catalyst, potency)) = self.taming_catalyst() else {
+            self.log("No taming catalyst left — the decompile attempt fizzles.");
+            return false;
+        };
         let Some(front) = self.front_of_group(group) else {
             return false;
         };

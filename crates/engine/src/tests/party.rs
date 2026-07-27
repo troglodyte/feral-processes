@@ -912,6 +912,49 @@ fn fuse_companions_rejects_a_wild_creature() {
     assert!(game.world.get::<Creature>(wild).is_some());
 }
 
+/// Regression for I2: `fuse_companions` derives the result's kit fresh from
+/// its species, so a routine installed manually on either input (research,
+/// extraction, a swap) has nowhere to land. Before this fix that vanished
+/// with no message; it must now show up as a logged loss.
+#[test]
+fn fusing_a_program_logs_a_manually_installed_routine_as_lost() {
+    let mut game = Game::new(103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let a = spawn_tamed(&mut game, 10, 3);
+    let b = spawn_tamed(&mut game, 10, 3);
+    set_level(&mut game, a, 4); // two slots, one free alongside the fallback
+    let item = crate::abilities::routine_item_id("sandbox");
+    set_inventory(&mut game, &[(item.as_str(), 1)]);
+    game.install_routine(a, &item).unwrap();
+
+    assert_eq!(
+        game.fusion_routine_losses(a, b)
+            .iter()
+            .filter(|def| def.id == "sandbox")
+            .count(),
+        1,
+        "the preview should name the routine about to be lost"
+    );
+
+    game.fuse_companions(a, b, None).unwrap();
+
+    let fused = game.owned_pets();
+    assert_eq!(fused.len(), 1);
+    assert!(
+        game.actor_abilities(fused[0].entity)
+            .iter()
+            .all(|def| def.id != "sandbox"),
+        "neither generic-species input declares sandbox innately, so it must not survive"
+    );
+    assert!(
+        game.message_log(10)
+            .iter()
+            .any(|(_, text)| text.contains("Routines lost in the fusion")
+                && text.contains("Sandbox")),
+        "the loss must be logged, not silent: {:?}",
+        game.message_log(10)
+    );
+}
+
 #[test]
 fn fuse_companions_removes_fused_members_from_the_active_party() {
     let mut game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

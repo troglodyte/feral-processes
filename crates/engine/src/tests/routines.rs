@@ -27,9 +27,52 @@ fn a_species_kit_is_installed_at_tame_time_in_declared_order() {
     let (game, medic) = game_with_two_ability_companion();
     let installed = &game.world.get::<Routines>(medic).unwrap().0;
     assert_eq!(
-        installed.len(),
-        1,
-        "only the level-1 unlock is installed on a level-1 program: {installed:?}"
+        installed,
+        &vec!["hot_patch".to_string()],
+        "the level-1 unlock installed is TWO_ABILITY_SPECIES' declared id, \
+         not just any single routine: {installed:?}"
+    );
+}
+
+/// Regression for the shipped Scrapper: its only ability, `cascade_overflow`,
+/// unlocks at level 3 and nothing unlocks at level 1, so a freshly tamed one
+/// starts on the fallback. Before the eviction fix, the level-3 unlock found
+/// that one slot "full" (of the fallback) and was logged as lost forever —
+/// this pins the real fix down against the actual shipped asset rather than
+/// a fixture, since no test fixture happened to reproduce the shape.
+#[test]
+fn a_scrapper_levelling_to_its_unlock_gets_cascade_overflow_instead_of_a_stuck_fallback() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let scrapper = game
+        .world
+        .spawn((
+            Creature {
+                species: "scrapper".to_string(),
+            },
+            Position { x: 3, y: 3 },
+            Stats {
+                hp: 50,
+                max_hp: 50,
+                atk: 5,
+                def: 2,
+            },
+            Tamed { owner: player },
+            Experience::default(),
+        ))
+        .id();
+    game.install_innate_routines(scrapper);
+    assert_eq!(
+        game.world.get::<Routines>(scrapper).unwrap().0,
+        vec![crate::abilities::FALLBACK_ABILITY_ID.to_string()],
+        "a level-1 Scrapper has no unlock yet, so it starts on the fallback"
+    );
+
+    set_level(&mut game, scrapper, 3);
+    assert_eq!(
+        game.world.get::<Routines>(scrapper).unwrap().0,
+        vec!["cascade_overflow".to_string()],
+        "reaching the level-3 unlock must evict the fallback, not lose the unlock"
     );
 }
 
@@ -49,33 +92,47 @@ fn a_level_up_that_reaches_an_unlock_installs_it_into_a_free_slot() {
 }
 
 #[test]
-fn slot_count_follows_the_tuning_curve_for_both_sides() {
+fn game_routine_slots_dispatches_to_the_companion_or_player_curve_by_entity() {
+    // The actual number-per-level curves are pinned in `abilities.rs`'
+    // `companion_slots_grow_one_per_two_levels_up_to_the_cap` and
+    // `player_slots_grow_one_per_ten_levels_so_the_first_free_one_lands_at_10`;
+    // this only needs to show `Game::routine_slots` asks the right one of the
+    // two depending on which entity it's asked about.
     let mut game = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let pet = spawn_tamed(&mut game, 10, 3);
-    for level in 1..=12u32 {
-        set_level(&mut game, pet, level);
-        assert_eq!(
-            game.routine_slots(pet),
-            crate::abilities::companion_routine_slots(level),
-            "companion slots at level {level}"
-        );
-    }
-    for level in [1u32, 9, 10, 25, 50] {
-        set_level(&mut game, player, level);
-        assert_eq!(
-            game.routine_slots(player),
-            crate::abilities::player_routine_slots(level),
-            "player slots at level {level}"
-        );
-    }
+    set_level(&mut game, pet, 6);
+    set_level(&mut game, player, 6);
+    assert_eq!(
+        game.routine_slots(pet),
+        crate::abilities::companion_routine_slots(6),
+    );
+    assert_eq!(
+        game.routine_slots(player),
+        crate::abilities::player_routine_slots(6),
+    );
+    assert_ne!(
+        crate::abilities::companion_routine_slots(6),
+        crate::abilities::player_routine_slots(6),
+        "the two curves must actually differ for this test to mean anything"
+    );
 }
 
 #[test]
 fn installed_routines_survive_a_save_load_round_trip() {
     let mut game = Game::new(13, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pet = spawn_tamed(&mut game, 10, 3);
+    // A generic-species program's kit is just the fallback, which a loader
+    // that rebuilt `Routines` from `SpeciesDef` on load (rather than
+    // actually persisting it) would reproduce too. Installing a foreign
+    // routine here means the save format is the only thing that can be
+    // carrying it — the same shape as the player-side twin of this test.
+    set_level(&mut game, pet, 4); // two slots, one free
+    let item = crate::abilities::routine_item_id("sandbox");
+    set_inventory(&mut game, &[(item.as_str(), 1)]);
+    game.install_routine(pet, &item).unwrap();
     let before = game.world.get::<Routines>(pet).unwrap().0.clone();
+    assert_eq!(before.len(), 2, "fallback plus the foreign routine");
     let path = std::env::temp_dir().join(format!(
         "feral_routines_roundtrip_{}.bin",
         std::process::id()
@@ -90,6 +147,83 @@ fn installed_routines_survive_a_save_load_round_trip() {
         .map(|p| loaded.world.get::<Routines>(p.entity).unwrap().0.clone())
         .expect("the tamed program should come back");
     assert_eq!(restored, before, "a save must carry installed routines");
+}
+
+/// Regression for M14: a save can name an ability id the currently loaded
+/// `AbilityDb` no longer has (the mod that added it was uninstalled). Left
+/// unfiltered, that id would survive into `Routines` as a ghost
+/// `routine_view` renders `(empty)` but `installed.len()` still counts
+/// against the slot cap — a slot the panel calls free that can never
+/// actually be filled again.
+#[test]
+fn a_routine_naming_a_since_removed_ability_is_dropped_on_load_with_a_warning() {
+    let dir = std::env::temp_dir().join(format!("feral_ghost_routine_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    for sub in ["species", "structures", "research", "items", "abilities"] {
+        let dst = dir.join(sub);
+        std::fs::create_dir_all(&dst).unwrap();
+        for entry in std::fs::read_dir(test_assets_dir().join(sub)).unwrap() {
+            let entry = entry.unwrap();
+            std::fs::copy(entry.path(), dst.join(entry.file_name())).unwrap();
+        }
+    }
+    let ghost_ability = r#"(
+        id: "ghost_ability",
+        name: "Ghost Ability",
+        description: "d",
+        target: OneAlly,
+        effect: Heal(power: 1),
+    )"#;
+    std::fs::write(
+        dir.join("abilities").join("ghost_ability.ron"),
+        ghost_ability,
+    )
+    .unwrap();
+
+    let mut game = Game::new(57, DifficultyMode::Forgiving, &dir).unwrap();
+    let player = game.player_entity();
+    set_level(&mut game, player, 10); // a free slot alongside decompile
+    let ghost_item = crate::abilities::routine_item_id("ghost_ability");
+    set_inventory(&mut game, &[(ghost_item.as_str(), 1)]);
+    game.install_routine(player, &ghost_item).unwrap();
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_ghost_routine_save_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+
+    // The mod is "uninstalled": the ability file is gone before the reload.
+    std::fs::remove_file(dir.join("abilities").join("ghost_ability.ron")).unwrap();
+    let mut loaded = Game::load(&path, &dir).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let player = loaded.player_entity();
+    assert!(
+        loaded
+            .actor_abilities(player)
+            .iter()
+            .all(|a| a.id != "ghost_ability"),
+        "the ghost id must not survive the load"
+    );
+    assert!(
+        loaded
+            .message_log(20)
+            .iter()
+            .any(|(_, text)| text.contains("no longer available")),
+        "the drop must be logged, not silent: {:?}",
+        loaded.message_log(20)
+    );
+
+    // The freed slot must be genuinely usable, not still counted against the
+    // cap by a ghost entry the panel can no longer even show.
+    let boost_item = crate::abilities::routine_item_id("priority_boost");
+    set_inventory(&mut loaded, &[(boost_item.as_str(), 1)]);
+    loaded
+        .install_routine(player, &boost_item)
+        .expect("the slot the ghost vacated must accept a real routine");
+
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -182,6 +316,46 @@ fn an_innate_routine_can_be_popped_out_and_plugged_into_another_program() {
             .any(|s| s.ability.as_deref() == Some(popped.as_str())),
         "a foreign species' routine should install fine"
     );
+}
+
+/// Regression for M4: a save-loaded wild creature carries `Routines(vec![])`
+/// too (`lifecycle.rs` inserts it in the common creature bundle before the
+/// `if c.tamed` branch), so without an ownership check `install_routine`
+/// and `uninstall_routine` would silently accept an entity no menu ever
+/// offers — unlike `extract_routine` and `sell_companion`, which both
+/// already refuse a program the player doesn't own.
+#[test]
+fn install_and_uninstall_routine_are_refused_for_a_program_you_dont_own() {
+    let mut game = Game::new(56, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let wild = game
+        .world
+        .spawn((
+            Creature {
+                species: game.species_defs().into_iter().next().unwrap().id,
+            },
+            Hostile,
+            Position {
+                x: player_pos.x,
+                y: player_pos.y,
+            },
+            Stats {
+                hp: 10,
+                max_hp: 10,
+                atk: 0,
+                def: 1,
+            },
+            Routines(vec![]),
+        ))
+        .id();
+
+    let item = crate::abilities::routine_item_id("sandbox");
+    set_inventory(&mut game, &[(item.as_str(), 1)]);
+    let err = game.install_routine(wild, &item).unwrap_err();
+    assert!(err.contains("control"), "{err}");
+
+    let err = game.uninstall_routine(wild, 0).unwrap_err();
+    assert!(err.contains("control"), "{err}");
 }
 
 #[test]
@@ -285,6 +459,48 @@ fn a_new_game_starts_with_decompile_installed_in_the_players_only_slot() {
     );
 }
 
+/// Regression for I4: `decompile` is one-of-a-kind and unrecoverable — no
+/// species, research node, drop, recipe or market listing grants it again.
+/// Popping it into cargo to make room must not put it next to a delete
+/// button that ends taming for the save.
+#[test]
+fn a_loose_routine_cannot_be_erased_or_sold() {
+    let mut game = Game::new(55, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let item = crate::abilities::routine_item_id(crate::abilities::DECOMPILE_ABILITY_ID);
+    game.uninstall_routine(game.player_entity(), 0).unwrap();
+    assert_eq!(count_item(&game, item.as_str()), 1, "popped into cargo");
+
+    let err = game.erase_item(&item, 1).unwrap_err();
+    assert!(err.contains("routine"), "{err}");
+    assert_eq!(
+        count_item(&game, item.as_str()),
+        1,
+        "erase must not spend it"
+    );
+
+    let def = game
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.trade.is_some())
+        .expect("a trading structure should exist");
+    let market = game
+        .world
+        .spawn((
+            Structure {
+                kind: def.id.clone(),
+            },
+            Position { x: 5, y: 5 },
+        ))
+        .id();
+    let err = game.sell_item(market, item.clone(), 1).unwrap_err();
+    assert!(err.contains("routine"), "{err}");
+    assert_eq!(
+        count_item(&game, item.as_str()),
+        1,
+        "sale must not spend it"
+    );
+}
+
 #[test]
 fn decompile_is_reached_through_special_not_its_own_command() {
     let mut game = Game::new(52, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -324,6 +540,123 @@ fn decompile_greys_with_a_reason_rather_than_refunding_the_round() {
         )
         .unwrap_err();
     assert!(err.contains("no taming catalyst"), "{err}");
+}
+
+/// Regression for I1: `ability_unavailable` greys Decompile per slot
+/// (`taming_catalyst().is_none()`), but the catalyst it checks is a
+/// round-wide pool, not one reserved per planner. With exactly one ICE
+/// Breaker held, both the player and a companion can plan Decompile in the
+/// same round — the first to resolve spends the only copy, and the second
+/// used to hit an `expect` instead of a refusal.
+#[test]
+fn a_second_decompiler_in_the_same_round_is_refused_rather_than_panicking() {
+    let mut game = Game::new(72, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let companion = spawn_tamed(&mut game, 50, 5);
+    game.add_companion(companion).unwrap();
+    set_level(&mut game, companion, 4); // two slots, one free
+    let decompile_item = crate::abilities::routine_item_id(crate::abilities::DECOMPILE_ABILITY_ID);
+    set_inventory(
+        &mut game,
+        &[(decompile_item.as_str(), 1), (ids::ICE_BREAKER, 1)],
+    );
+    game.install_routine(companion, &decompile_item).unwrap();
+
+    // Two members of one species, built by hand rather than through
+    // `start_battle`: the pack ceiling at the player's own tile caps a
+    // same-species group at one member, and this test needs a capture on
+    // the front not to end the battle before the second slot's action runs.
+    let species = game.species_defs().into_iter().next().unwrap().id;
+    let player_pos = *game.world.get::<Position>(player).unwrap();
+    let e1 = game
+        .world
+        .spawn((
+            Creature {
+                species: species.clone(),
+            },
+            Hostile,
+            Position {
+                x: player_pos.x,
+                y: player_pos.y,
+            },
+            Stats {
+                hp: 40,
+                max_hp: 40,
+                atk: 0,
+                def: 0,
+            },
+        ))
+        .id();
+    let e2 = game
+        .world
+        .spawn((
+            Creature {
+                species: species.clone(),
+            },
+            Hostile,
+            Position {
+                x: player_pos.x,
+                y: player_pos.y,
+            },
+            Stats {
+                hp: 40,
+                max_hp: 40,
+                atk: 0,
+                def: 0,
+            },
+        ))
+        .id();
+    game.world.insert_resource(BattleState {
+        player,
+        groups: vec![EnemyGroup {
+            species,
+            members: vec![e1, e2],
+        }],
+        round: 1,
+        planned: vec![None, None],
+        finished: false,
+        player_won: false,
+    });
+
+    let player_decompile = game
+        .battle_special_options(0)
+        .into_iter()
+        .find(|o| o.name.to_lowercase().contains("decompile"))
+        .expect("the player has decompile installed")
+        .index;
+    let companion_decompile = game
+        .battle_special_options(1)
+        .into_iter()
+        .find(|o| o.name.to_lowercase().contains("decompile"))
+        .expect("the companion has decompile installed")
+        .index;
+
+    game.battle_set_action(
+        0,
+        BattleAction::Special {
+            ability: player_decompile,
+            target: battle::SpecialTarget::EnemyGroup { group: 0 },
+        },
+    )
+    .unwrap();
+    game.battle_set_action(
+        1,
+        BattleAction::Special {
+            ability: companion_decompile,
+            target: battle::SpecialTarget::EnemyGroup { group: 0 },
+        },
+    )
+    .unwrap();
+
+    // Must not panic: this is the exact shape that used to hit the `expect`
+    // in `attempt_decompile`.
+    game.battle_resolve_round();
+
+    assert_eq!(
+        count_item(&game, ids::ICE_BREAKER),
+        0,
+        "the one catalyst held was spent by whichever slot resolved first"
+    );
 }
 
 #[test]

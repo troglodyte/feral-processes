@@ -357,6 +357,7 @@ impl Game {
 
         let name_a = self.creature_label(a);
         let name_b = self.creature_label(b);
+        let lost = self.fusion_routine_losses(a, b);
         self.world
             .resource_mut::<Party>()
             .0
@@ -419,6 +420,27 @@ impl Game {
                 species.name
             ),
         });
+        // Filtered against the freshly installed kit rather than logged
+        // as-is: an ability on `lost` can still land in the result if the
+        // winning species happens to declare it innately, and this is the
+        // one place that distinction is knowable — before this, only the
+        // input kits exist; after, only the output does.
+        let new_kit = self
+            .world
+            .get::<Routines>(fused_entity)
+            .map(|r| r.0.clone())
+            .unwrap_or_default();
+        let truly_lost: Vec<&str> = lost
+            .iter()
+            .filter(|a| !new_kit.contains(&a.id))
+            .map(|a| a.name.as_str())
+            .collect();
+        if !truly_lost.is_empty() {
+            self.log(format!(
+                "Routines lost in the fusion: {}.",
+                truly_lost.join(", ")
+            ));
+        }
         Ok(())
     }
 }

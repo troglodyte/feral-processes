@@ -112,7 +112,7 @@ pub(super) fn draw_help(fonts: &Fonts, m: &Metrics) {
         text_row("Every numbered menu also takes Up/Down + Enter, on top of"),
         text_row("typing a row's own number/letter directly."),
         text_row(""),
-        text_row("In an intrusion:  a attack   d defend   s special   c decompile"),
+        text_row("In an intrusion:  a attack   d defend   s special"),
         text_row("                  u use item   j jack out"),
         text_row("                  A all attack   D all defend (shift = the whole party)"),
         text_row(""),

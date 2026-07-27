@@ -21,9 +21,13 @@ fn picking_a_filled_slot_uninstalls_and_picking_an_empty_one_opens_the_install_l
     app.handle_key(GameKey::Char('1')); // You — slot 1 holds decompile
     app.handle_key(GameKey::Char('1'));
     assert_eq!(app.mode, Mode::Routines, "uninstalling stays on the panel");
-    let game = app.game.as_ref().unwrap();
+    let game = app.game.as_mut().unwrap();
+    // `routine_holders()[0]` is the player by construction (see
+    // `Game::routine_holders`) — `Game::player_entity` is `pub(crate)`, so
+    // this is the entity-facing route a real caller has too.
+    let player = game.routine_holders()[0].entity;
     assert!(
-        game.routine_view(game.player_entity())[0].ability.is_none(),
+        game.routine_view(player)[0].ability.is_none(),
         "decompile should have been popped out"
     );
 
@@ -48,9 +52,16 @@ fn the_extract_flow_requires_confirmation_before_the_program_is_destroyed() {
         before,
         "backing out must not destroy the program"
     );
-    // Esc backs out one page at a time (same as `TradeProgramConfirm`), so
-    // fully returning to the top of the flow takes a second Esc.
+    // Esc backs out one page at a time (same as `TradeProgramConfirm`):
+    // ExtractConfirm -> ExtractPick -> Extract -> Playing, three Escs to
+    // fully unwind. Asserting each step is what makes the following `M`
+    // meaningful — pressed from anywhere but `Playing` it would be
+    // swallowed by that mode's own numbered-menu handler and prove nothing.
+    assert_eq!(app.mode, Mode::ExtractPick);
     app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Extract);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
 
     app.handle_key(GameKey::Char('M'));
     app.handle_key(GameKey::Char('1'));

@@ -12,18 +12,25 @@ impl Game {
             .collect()
     }
 
-    /// Every loaded item definition, id-sorted (see `ItemDb::all`).
-    pub fn item_defs(&self) -> Vec<ItemDef> {
+    /// Every loaded item definition, id-sorted (see `ItemDb::all`). Reached
+    /// only by engine tests today; `cfg(test)` rather than widening `Game`'s
+    /// renderer-facing surface for a need nothing outside the crate has yet.
+    #[cfg(test)]
+    pub(crate) fn item_defs(&self) -> Vec<ItemDef> {
         self.world.resource::<ItemDb>().all().cloned().collect()
     }
 
     /// Every loaded ability definition, id-sorted (see `AbilityDb::all`).
-    pub fn ability_defs(&self) -> Vec<AbilityDef> {
+    /// Same test-only rationale as `item_defs`.
+    #[cfg(test)]
+    pub(crate) fn ability_defs(&self) -> Vec<AbilityDef> {
         self.world.resource::<AbilityDb>().all().cloned().collect()
     }
 
-    /// One item definition by id, or `None` if nothing declares it.
-    pub fn item_def(&self, item: &ItemId) -> Option<ItemDef> {
+    /// One item definition by id, or `None` if nothing declares it. Same
+    /// test-only rationale as `item_defs`.
+    #[cfg(test)]
+    pub(crate) fn item_def(&self, item: &ItemId) -> Option<ItemDef> {
         self.world.resource::<ItemDb>().get(item.as_str()).cloned()
     }
 

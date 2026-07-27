@@ -8,9 +8,12 @@ use crate::tuning::{
 use crate::*;
 
 impl Game {
-    /// The player's own `Entity` — e.g. to pass to `routine_view` when the
-    /// player, not a program, is the routine holder in question.
-    pub fn player_entity(&self) -> Entity {
+    /// The player's own `Entity`. `pub(crate)`: no renderer or app-core code
+    /// needs it directly — `Game::routine_holders()[0].entity` is the
+    /// player by construction and is already `pub`, which is the route the
+    /// one production caller that used to need this (`app/routines.rs`)
+    /// actually takes.
+    pub(crate) fn player_entity(&self) -> Entity {
         self.world.resource::<PlayerEntity>().0
     }
 

@@ -13,6 +13,18 @@ impl Game {
             .is_some_and(|d| d.routine.is_some())
     }
 
+    /// `id`'s display name, falling back to the raw id if the ability set
+    /// doesn't define it (a mod removed since a save referenced it). Every
+    /// routine log line resolves through here so none of them read a raw
+    /// snake_case id.
+    pub(crate) fn ability_display_name(&self, id: &str) -> String {
+        self.world
+            .resource::<AbilityDb>()
+            .get(id)
+            .map(|a| a.name.clone())
+            .unwrap_or_else(|| id.to_string())
+    }
+
     /// `entity`'s slots in menu order, filled and empty alike.
     pub fn routine_view(&self, entity: Entity) -> Vec<RoutineSlotView> {
         let db = self.world.resource::<AbilityDb>();
@@ -102,11 +114,29 @@ impl Game {
         rows
     }
 
+    /// Whether `entity` is a routine holder the player actually controls —
+    /// themself, or a program `Tamed` to them. A save-loaded wild creature
+    /// carries an empty `Routines` too (the common creature bundle inserts
+    /// it before the `if c.tamed` branch), so without this check
+    /// `install_routine`/`uninstall_routine` would accept an entity no menu
+    /// ever offers but nothing here refused either — the same ownership
+    /// gate `extract_routine` and `sell_companion` already both apply.
+    fn owns_routine_holder(&self, entity: Entity) -> bool {
+        entity == self.player_entity()
+            || self
+                .world
+                .get::<Tamed>(entity)
+                .is_some_and(|t| t.owner == self.player_entity())
+    }
+
     /// Spends one loose `item` and fills `entity`'s first free slot with the
     /// routine it carries. Free and unrestricted outside battle.
     pub fn install_routine(&mut self, entity: Entity, item: &ItemId) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
+        }
+        if !self.owns_routine_holder(entity) {
+            return Err("You don't control that program.".into());
         }
         let ability = self
             .world
@@ -136,27 +166,29 @@ impl Game {
             .get_mut::<Inventory>(player)
             .unwrap()
             .take(item.clone(), 1);
-        installed.push(ability.clone());
+        let ability_name = self.ability_display_name(&ability);
+        installed.push(ability);
         self.world.entity_mut(entity).insert(Routines(installed));
         let name = self.routine_holder_label(entity);
-        let ability_name = self
-            .world
-            .resource::<AbilityDb>()
-            .get(&ability)
-            .map(|a| a.name.clone())
-            .unwrap_or(ability);
         self.log(format!("{name} now runs {ability_name}."));
         Ok(())
     }
 
     /// Frees `slot` and returns its routine to inventory as an item.
     ///
-    /// Checked for cargo room *before* the slot is cleared, for the reason
-    /// `sell_item` documents about its own ordering: discovering there was
-    /// no room afterwards would eat the routine.
+    /// `check_room` is a no-op for every routine item the shipped set can
+    /// produce — `ItemDb::synthesize_routines` always mints `bank_limit:
+    /// None` — so this can't actually refuse today. It runs anyway, and
+    /// still runs *before* the slot is cleared: a modder can author their
+    /// own item with both `routine` and `bank_limit` set, and that ordering
+    /// is what keeps such an item from being eaten if the check ever does
+    /// fail (the same reasoning `sell_item` documents for its own ordering).
     pub fn uninstall_routine(&mut self, entity: Entity, slot: usize) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
+        }
+        if !self.owns_routine_holder(entity) {
+            return Err("You don't control that program.".into());
         }
         let installed = self
             .world
@@ -227,12 +259,31 @@ impl Game {
             .collect()
     }
 
+    /// Every routine currently installed on `a` or `b` that fusing them
+    /// would destroy. `Game::fuse_companions` derives the result's kit fresh
+    /// from its winning species via `install_innate_routines` rather than
+    /// merging the parents' — so anything installed manually on either one
+    /// (researched, extracted, or swapped in from a third program) does not
+    /// carry over, even if the winning species happens to declare the same
+    /// ability innately. Feeds both the `FuseName` warning and the log line
+    /// fusion itself writes.
+    pub fn fusion_routine_losses(&self, a: Entity, b: Entity) -> Vec<AbilityDef> {
+        let mut lost = self.actor_abilities(a);
+        for ability in self.actor_abilities(b) {
+            if !lost.iter().any(|kept| kept.id == ability.id) {
+                lost.push(ability);
+            }
+        }
+        lost
+    }
+
     /// Destroys `creature` and salvages exactly one of its routines — the
     /// one at `index` in `extractable_routines`. Everything else installed
     /// on it is lost with it.
     ///
     /// Room for the payout is checked before the program is despawned, for
-    /// the reason `sell_companion` documents about its own ordering.
+    /// the reason `sell_companion` documents about its own ordering — a
+    /// no-op for the shipped item set, same caveat as `uninstall_routine`'s.
     pub fn extract_routine(&mut self, creature: Entity, index: usize) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -259,26 +310,12 @@ impl Game {
         let item = abilities::routine_item_id(&ability);
         self.check_room(&item, 1)?;
 
-        let name = self.creature_label(creature);
-        for detached in self.sale_detachments(creature) {
-            self.log(format!("{name} {detached}."));
-        }
-        self.world
-            .resource_mut::<Party>()
-            .0
-            .retain(|&e| e != creature);
-        self.world.entity_mut(creature).remove::<Task>();
-        self.world.despawn(creature);
+        let name = self.dissolve_tamed_program(creature);
         self.world
             .get_mut::<Inventory>(self.player_entity())
             .unwrap()
             .add(item, 1);
-        let ability_name = self
-            .world
-            .resource::<AbilityDb>()
-            .get(&ability)
-            .map(|a| a.name.clone())
-            .unwrap_or(ability);
+        let ability_name = self.ability_display_name(&ability);
         self.log(format!(
             "You break {name} down and salvage its {ability_name} routine."
         ));

@@ -252,7 +252,7 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   `Game::structure_description`'s Rust derivation is gone, so a mod controls
   its own text end to end for both.
 - **New map keys:** `m` opens the routine panel (install, swap, pop out);
-  `M` opens extraction at a Compiler.
+  `M` opens extraction — needs a Compiler built somewhere, not nearby.
 - **Save format is v11.** Older saves are rejected with a clear message, the
   same policy as every prior bump — this project does no save migration.
 

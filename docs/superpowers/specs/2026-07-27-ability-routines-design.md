@@ -228,7 +228,7 @@ reason instead of silently refunding the round. That removes the
 `ItemDef` and `StructureDef` each gain a `description`, `#[serde(default)]`
 so existing mod files keep parsing.
 
-- All 11 shipped item files get authored text. Nothing exists to drift from;
+- All 36 shipped item files get authored text. Nothing exists to drift from;
   this is pure addition, and the install/extract menus need it.
 - All 13 shipped structure files get authored text.
   `Game::structure_description` and its two derivation tests

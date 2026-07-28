@@ -311,7 +311,11 @@ pub struct Platform {
 /// order; the inner `Vec` stays in insertion order, which is player-driven
 /// and gives the trade screen a stable row order.
 #[derive(Resource, Default, Clone)]
-pub struct BuybackLedger(pub BTreeMap<(StructureId, (i32, i32)), Vec<(ItemId, u32)>>);
+pub struct BuybackLedger(pub BTreeMap<ShelfKey, Vec<(ItemId, u32)>>);
+
+/// Which shelf: the trader's kind and the tile it stands on — see
+/// `BuybackLedger` for why those two and not an `Entity`.
+pub type ShelfKey = (StructureId, (i32, i32));
 
 /// Which zone sector the player is currently breached into. Starts at 1
 /// (the sector the run begins in); breaching a zone portal increments it.

@@ -212,6 +212,7 @@ impl Game {
             for w in workers {
                 self.world.entity_mut(w).remove::<Task>();
             }
+            self.announce_lost_shelf(structure);
             self.world.despawn(structure);
         } else {
             self.log_kind(

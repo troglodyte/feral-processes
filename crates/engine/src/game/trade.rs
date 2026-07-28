@@ -76,7 +76,7 @@ impl Game {
     /// position — its kind and the tile it stands on. Every public buyback
     /// call resolves an `Entity` through here, so no caller learns how the
     /// ledger is keyed.
-    fn shelf_key(&self, entity: Entity) -> Option<(StructureId, (i32, i32))> {
+    fn shelf_key(&self, entity: Entity) -> Option<resources::ShelfKey> {
         let kind = self.world.get::<Structure>(entity)?.kind.clone();
         let pos = self.world.get::<Position>(entity)?;
         Some((kind, (pos.x, pos.y)))
@@ -99,6 +99,33 @@ impl Game {
             Some((_, held)) => *held += qty,
             None => shelf.push((item.clone(), qty)),
         }
+    }
+
+    /// Announces what a trader's shelf still held as it comes down, and that
+    /// rebuilding on the same tile gets it back. Silent for a trader with an
+    /// empty shelf, or one that never traded at all.
+    ///
+    /// Called from both paths that destroy a structure — `damage_structure`
+    /// and `remove_structure`. Wiring it into only one is the split that
+    /// already made selling a program announce its detachments while fusing
+    /// the same program away went quiet.
+    pub(crate) fn announce_lost_shelf(&mut self, structure: Entity) {
+        let shelf = self.buyback_options(structure);
+        if shelf.is_empty() {
+            return;
+        }
+        let manifest = shelf
+            .iter()
+            .map(|row| format!("{} {}", row.qty, row.name))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let label = self.entity_label(structure);
+        self.log_kind(
+            MessageKind::Raid,
+            format!(
+                "{manifest} left on {label}'s shelf — rebuild on the same footprint to reclaim it."
+            ),
+        );
     }
 
     /// What `structure` charges per unit to sell something back: its own

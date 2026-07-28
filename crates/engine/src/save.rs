@@ -133,6 +133,14 @@ pub struct StructureSave {
     pub tier: Option<u32>,
 }
 
+/// One trading post's buyback shelf on disk: the trader kind and tile that
+/// key it, then what is on it — see `SaveData::buyback`.
+pub type BuybackShelfSave = (
+    crate::structures::StructureId,
+    (i32, i32),
+    Vec<(ItemId, u32)>,
+);
+
 /// Only the world seed and the sparse tile overlay are persisted; unmodified
 /// terrain regenerates deterministically from the seed on load.
 #[derive(Serialize, Deserialize)]
@@ -153,11 +161,7 @@ pub struct SaveData {
     /// whose `BTreeMap` this is the flattened, key-ordered form of. Not part
     /// of `StructureSave` because a shelf outlives its building and can sit
     /// on a tile holding nothing at all.
-    pub buyback: Vec<(
-        crate::structures::StructureId,
-        (i32, i32),
-        Vec<(ItemId, u32)>,
-    )>,
+    pub buyback: Vec<BuybackShelfSave>,
     /// Which research nodes have been unlocked — see `research::ResearchDb`.
     /// Sorted on write so the encoded bytes don't depend on `HashSet`
     /// iteration order.

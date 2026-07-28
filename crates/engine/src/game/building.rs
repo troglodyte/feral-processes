@@ -248,6 +248,7 @@ impl Game {
             for worker in workers {
                 self.world.entity_mut(worker).remove::<Task>();
             }
+            self.announce_lost_shelf(target);
             self.world.despawn(target);
         }
         if is_home {

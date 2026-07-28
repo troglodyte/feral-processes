@@ -467,6 +467,225 @@ fn buying_back_is_barred_during_a_battle() {
     assert!(game.buy_back(market, plating, 1).is_err());
 }
 
+/// The shelf is the stockroom on a site, not a property of the building, so
+/// a raid that levels the trader must not take the player's sales with it.
+#[test]
+fn a_shelf_outlives_the_trader_standing_on_it() {
+    let mut game = Game::new(148, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market_at(&mut game, 5, 5);
+    let plating = ItemId::from(ids::FIREWALL_PLATING);
+    give(&mut game, &plating, 3);
+    game.sell_item(market, plating.clone(), 3).unwrap();
+
+    game.world.despawn(market);
+    let rebuilt = spawn_market_at(&mut game, 5, 5);
+
+    let shelf = game.buyback_options(rebuilt);
+    assert_eq!(shelf.len(), 1, "rebuilding the same site reopens the store");
+    assert_eq!(shelf[0].qty, 3);
+}
+
+/// The cost of keying on the tile: rebuild elsewhere and you have a new
+/// store. The stock is not destroyed, just out of reach until something
+/// stands on the old footprint again — which is why losing a trader is
+/// announced rather than silent.
+#[test]
+fn a_trader_rebuilt_on_a_different_tile_opens_empty() {
+    let mut game = Game::new(149, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market_at(&mut game, 5, 5);
+    let plating = ItemId::from(ids::FIREWALL_PLATING);
+    give(&mut game, &plating, 3);
+    game.sell_item(market, plating.clone(), 3).unwrap();
+    game.world.despawn(market);
+
+    let moved = spawn_market_at(&mut game, 9, 9);
+    assert!(game.buyback_options(moved).is_empty());
+
+    let back_home = spawn_market_at(&mut game, 5, 5);
+    assert_eq!(game.buyback_options(back_home)[0].qty, 3);
+}
+
+#[test]
+fn two_traders_in_one_zone_keep_separate_shelves() {
+    let mut game = Game::new(150, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let near = spawn_market_at(&mut game, 5, 5);
+    let far = spawn_market_at(&mut game, 9, 9);
+    let plating = ItemId::from(ids::FIREWALL_PLATING);
+    give(&mut game, &plating, 2);
+
+    game.sell_item(near, plating.clone(), 2).unwrap();
+
+    assert_eq!(game.buyback_options(near)[0].qty, 2);
+    assert!(
+        game.buyback_options(far).is_empty(),
+        "selling to one trader must not stock another"
+    );
+}
+
+/// The trader kind is part of the key, so a different structure raised on a
+/// dead trader's footprint inherits nothing.
+#[test]
+fn another_structure_on_the_tile_inherits_nothing() {
+    let mut game = Game::new(151, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market_at(&mut game, 5, 5);
+    let plating = ItemId::from(ids::FIREWALL_PLATING);
+    give(&mut game, &plating, 2);
+    game.sell_item(market, plating.clone(), 2).unwrap();
+    game.world.despawn(market);
+
+    spawn_structure_at(&mut game, "shield", 5, 5);
+    let shield = game
+        .world
+        .query::<(Entity, &Structure)>()
+        .iter(&game.world)
+        .find(|(_, s)| s.kind == "shield")
+        .map(|(e, _)| e)
+        .expect("the shield should be standing");
+
+    assert!(game.buyback_options(shield).is_empty());
+}
+
+/// Build salvage and breach keys are wiped at a breach so a stockpile can't
+/// fund content it never engaged with. A shelf holding that same salvage
+/// would be exactly the loophole, so it goes too.
+#[test]
+fn a_breach_clears_every_shelf() {
+    let mut game = Game::new(152, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market_at(&mut game, 5, 5);
+    let plating = ItemId::from(ids::FIREWALL_PLATING);
+    give(&mut game, &plating, 3);
+    game.sell_item(market, plating.clone(), 3).unwrap();
+    assert_eq!(game.buyback_options(market)[0].qty, 3);
+
+    game.enter_next_zone();
+
+    // Asserting the ledger, not just `buyback_options`: the breach moves the
+    // base to a new spawn point, so every trader's tile key changes and the
+    // old entry stops matching whether or not anything cleared it. Left
+    // behind it would still be saved, and would spring back the moment a
+    // trader happened to be rebuilt on the matching tile.
+    assert!(
+        game.world
+            .resource::<resources::BuybackLedger>()
+            .0
+            .is_empty(),
+        "a shelf must not carry a doomed stockpile across a breach"
+    );
+    assert!(game.buyback_options(market).is_empty());
+}
+
+#[test]
+fn a_shelf_survives_a_save_and_load_round_trip() {
+    let mut game = Game::new(153, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let standing = spawn_market_at(&mut game, 5, 5);
+    let doomed = spawn_market_at(&mut game, 9, 9);
+    let plating = ItemId::from(ids::FIREWALL_PLATING);
+    let amplifier = ItemId::from(ids::NEURAL_AMPLIFIER);
+    give(&mut game, &plating, 3);
+    give(&mut game, &amplifier, 1);
+    game.sell_item(standing, plating.clone(), 3).unwrap();
+    // A shelf on a tile whose building is gone has to persist too, or the
+    // rebuild-the-same-footprint rule silently stops working across a save.
+    game.sell_item(doomed, amplifier.clone(), 1).unwrap();
+    game.world.despawn(doomed);
+
+    let path = std::env::temp_dir().join(format!("feral_buyback_save_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let restored = find_structure_by_kind(
+        &mut loaded,
+        &game.world.get::<Structure>(standing).unwrap().kind.clone(),
+    )
+    .expect("the surviving trader should load");
+    let shelf = loaded.buyback_options(restored);
+    assert_eq!(shelf.len(), 1);
+    assert_eq!(shelf[0].item, plating);
+    assert_eq!(shelf[0].qty, 3);
+
+    let rebuilt = spawn_market_at(&mut loaded, 9, 9);
+    assert_eq!(
+        loaded.buyback_options(rebuilt)[0].item,
+        amplifier,
+        "the orphaned shelf is still on its tile after a reload"
+    );
+}
+
+/// The same-footprint rule is invisible unless the game says so, and the
+/// moment it matters is the moment the trader comes down.
+#[test]
+fn losing_a_trader_that_holds_stock_says_so() {
+    let mut game = Game::new(154, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market_at(&mut game, 5, 5);
+    let plating = ItemId::from(ids::FIREWALL_PLATING);
+    give(&mut game, &plating, 2);
+    game.sell_item(market, plating.clone(), 2).unwrap();
+    // `spawn_market_at` bypasses `place_structure`, so nothing raidable is
+    // attached; without this `damage_structure` returns before it can act.
+    game.world
+        .entity_mut(market)
+        .insert(Durability { hp: 1, max_hp: 1 });
+
+    let before = game.world.resource::<MessageLog>().lines.len();
+    game.damage_structure(market, u32::MAX, "iso Market");
+    let said: Vec<String> = game.world.resource::<MessageLog>().lines[before..]
+        .iter()
+        .map(|(_, text)| text.clone())
+        .collect();
+
+    assert!(
+        said.iter().any(|line| line.contains("Firewall Plating")),
+        "the loss must name what was on the shelf, got {said:?}"
+    );
+    assert!(
+        said.iter()
+            .any(|line| line.to_lowercase().contains("footprint")),
+        "and how to get it back, got {said:?}"
+    );
+}
+
+#[test]
+fn losing_an_empty_trader_is_silent_about_the_shelf() {
+    let mut game = Game::new(155, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market_at(&mut game, 5, 5);
+    game.world
+        .entity_mut(market)
+        .insert(Durability { hp: 1, max_hp: 1 });
+
+    let before = game.world.resource::<MessageLog>().lines.len();
+    game.damage_structure(market, u32::MAX, "iso Market");
+
+    assert!(
+        !game.world.resource::<MessageLog>().lines[before..]
+            .iter()
+            .any(|(_, text)| text.to_lowercase().contains("footprint")),
+        "a trader with nothing on its shelf loses nothing"
+    );
+}
+
+/// Demolition is the other way a trader comes down, and it went quiet the
+/// first time this was wired up only into the raid path.
+#[test]
+fn demolishing_a_trader_that_holds_stock_says_so_too() {
+    let mut game = Game::new(156, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 0);
+    let market = spawn_market_at(&mut game, 5, 5);
+    let plating = ItemId::from(ids::FIREWALL_PLATING);
+    give(&mut game, &plating, 2);
+    game.sell_item(market, plating.clone(), 2).unwrap();
+
+    let before = game.world.resource::<MessageLog>().lines.len();
+    game.remove_structure(market).unwrap();
+
+    assert!(
+        game.world.resource::<MessageLog>().lines[before..]
+            .iter()
+            .any(|(_, text)| text.to_lowercase().contains("footprint")),
+        "demolishing a trader must not go quiet where a raid speaks up"
+    );
+}
+
 /// A program is destroyed by its sale, not shelved — buying one back would
 /// mean resurrecting a despawned entity.
 #[test]

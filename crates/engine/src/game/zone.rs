@@ -336,6 +336,14 @@ impl Game {
         // it instead would mean pulling Portal Fragments off every trader,
         // and that listing is the only route from base production to
         // progression — see `balance_sim::ticks_to_afford_portal`.
+        // Every trader's shelf goes with it, for the same reason: a shelf
+        // holding a zone's worth of salvage is precisely the stockpile that
+        // wipe exists to strand. Cleared explicitly rather than left to rot —
+        // the base travels, so a stale entry keyed on a tile nobody stands on
+        // any more would still be saved, and would spring back the day a
+        // trader was rebuilt on the matching tile.
+        self.world.insert_resource(BuybackLedger::default());
+
         let spendable = [self.currency(), self.craft_currency()];
         let player = self.player_entity();
         let lost: Vec<(ItemId, u32)> = {

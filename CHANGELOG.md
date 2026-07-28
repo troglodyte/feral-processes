@@ -60,6 +60,17 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ### Balance
 
+- **Bosses can no longer be decompiled.** A boss is built to be a wall —
+  roughly thirteen times the Integrity of the toughest ordinary species —
+  and capturing one moved that wall into your roster, where fusing two of
+  them compounded it into something no encounter in the game could threaten,
+  with two more fusions still to spare. Decompile is now refused the moment
+  you aim it at a boss, so it costs you neither the round nor the catalyst,
+  and the inspect and battle screens quote no odds where there is no attempt
+  to make. Fusing a boss is gone with it, since fusion needs two compiled
+  programs. Bosses keep their stats, their guaranteed Portal Fragment cache,
+  and their place as the thing you beat rather than the thing you own. A save
+  that already holds a captured boss keeps it.
 - **A program brought to 0 HP is deleted for good.** It used to be knocked
   offline — dropped from your party at the end of the fight, then healed
   back to full for free the next time you recharged. Now it is destroyed,

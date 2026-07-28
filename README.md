@@ -87,7 +87,8 @@ player starts with installed, spending a catalyst you hold — use an item, or
 jack out; a lowercase key acts for the member currently choosing and its
 uppercase counterpart acts for the whole party. Both sides are laid out as
 stat tables around the combat log, including a live per-group decompile
-chance so you can watch a group become worth taming.
+chance so you can watch a group become worth taming. Bosses quote no chance
+— they are encounters to beat, never programs to compile.
 
 ## Companions
 

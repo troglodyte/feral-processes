@@ -102,6 +102,14 @@ is skipped with a warning logged in-game rather than crashing startup.
     // There's no separate engine-side stat multiplier for a boss — make
     // `base_hp`/`base_atk`/`base_def` tough here directly (a boss's stats
     // still double per zone level like any other species, on top of this).
+    //
+    // A boss can also never be decompiled: it's refused as a target when the
+    // action is chosen, so it costs neither the round nor the catalyst, and
+    // the inspect and battle screens quote no odds for it. That's what lets
+    // you make the stats above genuinely huge — they'd otherwise arrive in
+    // the player's roster, where fusion compounds them. Since fusing needs
+    // two tamed programs, it follows that a boss can never be fused either.
+    // Set this flag and `taming_difficulty` stops mattering for the species.
     is_boss: true,
 
     // Optional; can be left out entirely (defaults to empty). This is not

@@ -174,54 +174,6 @@ impl Game {
             .collect()
     }
 
-    /// Species-level detail on a creature `view_entities` reported nearby.
-    /// Read-only — looking a program over never triggers an intrusion.
-    /// Returns `None` for anything that isn't a creature (e.g. a structure
-    /// or the player) or whose species failed to resolve.
-    pub fn inspect(&self, entity: Entity) -> Option<InspectView> {
-        let creature = self.world.get::<Creature>(entity)?;
-        let species = self.world.resource::<SpeciesDb>().get(&creature.species)?;
-        let stats = self.world.get::<Stats>(entity)?;
-        let level = self.world.get::<Experience>(entity).map(|e| e.level);
-        let is_hostile = self.world.get::<Hostile>(entity).is_some();
-        let is_tamed = self.world.get::<Tamed>(entity).is_some();
-        let decompiler_skill = self.player_decompiler_skill();
-        let decompile_chance = self.taming_catalyst().map(|(_, potency)| {
-            taming::capture_chance(
-                stats.hp_fraction(),
-                potency,
-                species.taming_difficulty,
-                decompiler_skill,
-            )
-        });
-        let display_name = self
-            .world
-            .get::<CustomName>(entity)
-            .map(|c| c.0.clone())
-            .unwrap_or_else(|| species.name.clone());
-        Some(InspectView {
-            name: self.zone_tagged_name(entity, display_name),
-            glyph: species.glyph,
-            color: species.color,
-            level,
-            hp: stats.hp,
-            max_hp: stats.max_hp,
-            atk: stats.atk,
-            def: stats.def,
-            power: stats.power(),
-            is_hostile,
-            is_tamed,
-            is_boss: species.is_boss,
-            taming_difficulty: species.taming_difficulty,
-            decompile_chance,
-            habitats: species.habitats.clone(),
-            moves: species.moves.clone(),
-            work_resource: species.work_resource.clone(),
-            quality: self.potential_quality_label(entity),
-            fusions: self.fusion_count(entity),
-        })
-    }
-
     /// Everything known about one subject, for the manifest screen. Works on
     /// the player and on any creature — wild, owned, or in the party.
     /// Read-only: looking a program over never triggers an intrusion.

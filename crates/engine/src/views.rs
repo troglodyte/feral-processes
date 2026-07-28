@@ -297,40 +297,6 @@ pub struct RoutineItemView {
     pub count: u32,
 }
 
-/// Full species-level detail on a single creature, shown by `Game::inspect`
-/// so the player can scope a program out before bumping into it and
-/// triggering an intrusion.
-pub struct InspectView {
-    pub name: String,
-    pub glyph: char,
-    pub color: GlyphColor,
-    pub level: Option<u32>,
-    pub hp: i32,
-    pub max_hp: i32,
-    pub atk: i32,
-    pub def: i32,
-    /// A rough overall-strength scalar — see `components::Stats::power`.
-    pub power: i32,
-    pub is_hostile: bool,
-    pub is_tamed: bool,
-    pub is_boss: bool,
-    pub taming_difficulty: f32,
-    /// Estimated decompile chance if an intrusion started right now, using
-    /// the creature's current HP fraction — same formula and same `None`
-    /// meaning as `BattleView::decompile_chance`.
-    pub decompile_chance: Option<f32>,
-    pub habitats: Vec<Biome>,
-    pub moves: Vec<MoveDef>,
-    pub work_resource: Option<ItemId>,
-    /// This individual's rolled quality tier (see `components::Potential`),
-    /// e.g. "Excellent (94%)" — `None` for an entity with no `Potential`.
-    pub quality: Option<String>,
-    /// How many fusions deep this program's lineage is, 0 to `MAX_FUSIONS`
-    /// — see `components::FusionCount`. At `MAX_FUSIONS` it can no longer
-    /// be fused.
-    pub fusions: u32,
-}
-
 /// Everything the engine knows about one subject, for the manifest screen —
 /// the player, a program you own, or a wild one. Shared header fields plus a
 /// `subject` carrying the half that differs, so "the player has no Potential

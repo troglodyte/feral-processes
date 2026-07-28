@@ -208,6 +208,15 @@ impl Game {
             .collect()
     }
 
+    /// You, then every program you own — everyone the manifest screen can
+    /// page through. Same membership and order as `owned_pets` with the
+    /// player prepended, so the two can't disagree about what you have.
+    pub fn manifest_subjects(&mut self) -> Vec<Entity> {
+        let mut subjects = vec![self.player_entity()];
+        subjects.extend(self.owned_pets().into_iter().map(|p| p.entity));
+        subjects
+    }
+
     /// Display string for `entity`'s current active status condition, if
     /// any — e.g. "Bleeding (2)" or "Stunned (1)", the number being battle
     /// rounds remaining. `None` if it has no active condition.

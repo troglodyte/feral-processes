@@ -18,7 +18,7 @@ impl App {
             pending_structure: None,
             pending_worker: None,
             pending_remove_structure: None,
-            pending_inspect: None,
+            pending_manifest: None,
             pending_fuse_first: None,
             pending_fuse_second: None,
             fuse_name_input: String::new(),

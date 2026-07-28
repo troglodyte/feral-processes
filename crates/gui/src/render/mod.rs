@@ -23,8 +23,8 @@ mod base;
 mod battle;
 mod building;
 mod crafting;
-mod inspection;
 mod inventory;
+mod manifest;
 mod manifest_layout;
 mod meta;
 mod party;
@@ -43,8 +43,8 @@ use building::{
     draw_upgrade_menu, draw_worker_menu,
 };
 use crafting::{draw_craft_menu, draw_craft_quantity};
-use inspection::draw_inspect_detail;
 use inventory::{draw_erase_quantity, draw_inventory, draw_inventory_item_action};
+use manifest::draw_manifest;
 use meta::{
     draw_difficulty_pick, draw_game_over, draw_help, draw_load_game, draw_main_menu,
     draw_save_action,
@@ -77,6 +77,26 @@ const ORANGE: Color = Color::new(0.95, 0.55, 0.15, 1.0);
 /// as "can't reach you" beside an engaged group without becoming
 /// unreadable.
 const BACK_RANK_DESATURATION: f32 = 0.55;
+
+/// The one place a `GlyphColor` becomes a drawable `Color`. Shared by the map
+/// and by the manifest's header portrait — a second copy would be free to
+/// drift, and a program would read as one colour on the grid and another on
+/// its own sheet.
+pub(super) fn glyph_color(c: GlyphColor) -> Color {
+    match c {
+        GlyphColor::White => WHITE,
+        GlyphColor::Gray => GRAY,
+        GlyphColor::Green => GREEN,
+        GlyphColor::DarkGreen => Color::new(0.0, 0.4, 0.0, 1.0),
+        GlyphColor::Red => RED,
+        GlyphColor::Yellow => YELLOW,
+        GlyphColor::Blue => BLUE,
+        GlyphColor::Magenta => MAGENTA,
+        GlyphColor::Cyan => CYAN,
+        GlyphColor::Brown => Color::new(0.55, 0.27, 0.07, 1.0),
+        GlyphColor::Orange => Color::new(1.0, 0.55, 0.0, 1.0),
+    }
+}
 
 /// Pulls `color` toward its own grey, for drawing something that's present
 /// but not currently in play.
@@ -195,6 +215,7 @@ fn cost_display(game: &Game, cost: &[(ItemId, u32)], inventory: &[(ItemId, u32)]
 
 fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
     let selected = app.menu_selected;
+    let pending_manifest = app.pending_manifest;
     let Some(game) = &mut app.game else { return };
     match app.mode {
         Mode::Build => draw_build_menu(game, selected, painter, m),
@@ -263,7 +284,15 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             painter,
             m,
         ),
-        Mode::InspectDetail => draw_inspect_detail(game, app.pending_inspect, painter, m),
+        Mode::Manifest => {
+            // Only advertise ←/→ when they actually do something. A wild
+            // program reached via `i` is not in the owned list, so cycling
+            // from it is a no-op and the footer must not claim otherwise.
+            let subjects = game.manifest_subjects();
+            let cyclable =
+                subjects.len() > 1 && pending_manifest.is_some_and(|e| subjects.contains(&e));
+            draw_manifest(game, pending_manifest, cyclable, painter, m)
+        }
         Mode::Inventory => draw_inventory(game, selected, painter, m),
         Mode::InventoryItemAction => {
             let zone = game.player_status().zone;

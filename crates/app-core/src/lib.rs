@@ -211,7 +211,9 @@ pub enum Mode {
     Upgrade,
     Symlink,
     InspectDirection,
-    InspectDetail,
+    /// The manifest — a full read-only stat sheet for the player, a program
+    /// you own, or a wild one. `App::pending_manifest` is the subject.
+    Manifest,
     Inventory,
     InventoryItemAction,
     /// Second page of the erase flow: asks how many units of
@@ -300,7 +302,7 @@ impl Mode {
             | Mode::Upgrade
             | Mode::Symlink
             | Mode::InspectDirection
-            | Mode::InspectDetail
+            | Mode::Manifest
             | Mode::Inventory
             | Mode::InventoryItemAction
             | Mode::EraseQuantity
@@ -394,7 +396,9 @@ pub struct App {
     /// The structure picked in `Mode::Remove`, awaiting confirmation from
     /// `Mode::RemoveConfirm` if it's the Home (see `Game::remove_structure`).
     pending_remove_structure: Option<Entity>,
-    pub pending_inspect: Option<Entity>,
+    /// Whose stat sheet `Mode::Manifest` is showing — the player, a program
+    /// you own, or the wild one `Mode::InspectDirection` just found.
+    pub pending_manifest: Option<Entity>,
     /// The first program picked in `Mode::Fuse`, awaiting a second from
     /// `Mode::FuseSecond` before `Game::fuse_companions` is actually called.
     pub pending_fuse_first: Option<Entity>,

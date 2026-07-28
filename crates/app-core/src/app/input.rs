@@ -68,7 +68,7 @@ impl App {
             Mode::Upgrade => self.handle_upgrade_key(key),
             Mode::Symlink => self.handle_symlink_key(key),
             Mode::InspectDirection => self.handle_inspect_direction_key(key),
-            Mode::InspectDetail => self.handle_inspect_detail_key(key),
+            Mode::Manifest => self.handle_manifest_key(key),
             Mode::Inventory => self.handle_inventory_key(key),
             Mode::InventoryItemAction => self.handle_inventory_item_action_key(key),
             Mode::EraseQuantity => self.handle_erase_quantity_key(key),

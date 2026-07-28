@@ -741,3 +741,17 @@ pub(super) fn deploy_upgradeable_node(game: &mut Game) -> Entity {
     game.place_structure("mining_node", 1, 1).unwrap();
     find_structure_by_kind(game, "mining_node").unwrap()
 }
+
+/// The `ProgramManifest` half of `entity`'s manifest. Most tests that reach
+/// for a manifest only care about creature-side detail, and matching the
+/// subject enum inline five times reads worse than naming the expectation.
+pub(super) fn program_manifest(game: &Game, entity: Entity) -> ProgramManifest {
+    match game
+        .manifest(entity)
+        .expect("entity should have a manifest")
+        .subject
+    {
+        ManifestSubject::Program(p) => p,
+        ManifestSubject::Player(_) => panic!("expected a program, got the player"),
+    }
+}

@@ -3,22 +3,6 @@
 use super::bars::*;
 use super::*;
 
-fn glyph_color(c: GlyphColor) -> Color {
-    match c {
-        GlyphColor::White => WHITE,
-        GlyphColor::Gray => GRAY,
-        GlyphColor::Green => GREEN,
-        GlyphColor::DarkGreen => Color::new(0.0, 0.4, 0.0, 1.0),
-        GlyphColor::Red => RED,
-        GlyphColor::Yellow => YELLOW,
-        GlyphColor::Blue => BLUE,
-        GlyphColor::Magenta => MAGENTA,
-        GlyphColor::Cyan => CYAN,
-        GlyphColor::Brown => Color::new(0.55, 0.27, 0.07, 1.0),
-        GlyphColor::Orange => Color::new(1.0, 0.55, 0.0, 1.0),
-    }
-}
-
 fn biome_style(biome: Biome) -> (char, Color) {
     match biome {
         Biome::DataVoid => ('~', BLUE),

@@ -6,56 +6,6 @@ use crate::tuning::MAX_FUSIONS;
 use crate::*;
 
 #[test]
-fn inspect_reports_species_detail_without_starting_a_battle() {
-    let mut game = Game::new(3, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species = game
-        .species_defs()
-        .into_iter()
-        .next()
-        .expect("at least one species");
-
-    let wild = game
-        .world
-        .spawn((
-            Creature {
-                species: species.id.clone(),
-            },
-            Hostile,
-            Position { x: 5, y: 5 },
-            Stats {
-                hp: species.base_hp,
-                max_hp: species.base_hp,
-                atk: species.base_atk,
-                def: species.base_def,
-            },
-        ))
-        .id();
-
-    let view = game
-        .inspect(wild)
-        .expect("wild creature should be inspectable");
-    assert_eq!(view.name, species.name);
-    assert!(view.is_hostile);
-    assert!(!view.is_tamed);
-    assert_eq!(view.max_hp, species.base_hp);
-    let chance = view
-        .decompile_chance
-        .expect("the starting kit includes a taming catalyst");
-    assert!((0.0..=1.0).contains(&chance));
-    assert!(
-        !game.has_active_battle(),
-        "inspecting must not trigger an intrusion"
-    );
-}
-
-#[test]
-fn inspect_returns_none_for_non_creature_entities() {
-    let game = Game::new(4, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let player = game.player_entity();
-    assert!(game.inspect(player).is_none());
-}
-
-#[test]
 fn a_creatures_display_label_is_tagged_with_its_spawn_zone() {
     let mut game = Game::new(50, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let species = game.species_defs().into_iter().next().unwrap();
@@ -98,7 +48,7 @@ fn a_creatures_display_label_is_tagged_with_its_spawn_zone() {
     assert_eq!(game.entity_label(zone1), format!("{} 1", species.name));
     assert_eq!(game.entity_label(zone2), format!("{} 2", species.name));
     assert_eq!(
-        game.inspect(zone2).unwrap().name,
+        game.manifest(zone2).unwrap().name,
         format!("{} 2", species.name)
     );
 }
@@ -467,9 +417,12 @@ fn boss_creatures_are_flagged_in_entity_and_inspect_views() {
         "non-boss creatures shouldn't be flagged is_boss"
     );
 
+    let ManifestSubject::Program(boss) = game.manifest(boss_entity).unwrap().subject else {
+        panic!("a creature is a Program subject");
+    };
     assert!(
-        game.inspect(boss_entity).unwrap().is_boss,
-        "InspectView should also flag a boss creature"
+        boss.is_boss,
+        "the manifest should also flag a boss creature"
     );
 }
 

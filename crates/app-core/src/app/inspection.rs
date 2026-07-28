@@ -1,4 +1,4 @@
-//! Aiming the inspector at a tile and reading the result.
+//! Aiming the inspector at a tile, and the manifest screen it opens.
 
 use crate::*;
 
@@ -22,9 +22,9 @@ impl App {
         let Some(game) = &mut self.game else { return };
         match game.find_creature_in_direction(dx, dy, MENU_SCAN_RADIUS) {
             Some(entity) => {
-                self.pending_inspect = Some(entity);
+                self.pending_manifest = Some(entity);
                 self.status_line = None;
-                self.mode = Mode::InspectDetail;
+                self.mode = Mode::Manifest;
             }
             None => {
                 self.status_line = Some("Nothing in that direction.".to_string());
@@ -33,8 +33,19 @@ impl App {
         }
     }
 
-    pub(crate) fn handle_inspect_detail_key(&mut self, _key: GameKey) {
-        self.pending_inspect = None;
+    /// You, then every program you own — everyone the manifest can page
+    /// through with ←/→. A wild program reached via `i` is deliberately not
+    /// in here: it is not yours to page to, and paging away from it would be
+    /// a one-way trip.
+    pub fn manifest_subjects(&mut self) -> Vec<Entity> {
+        self.game
+            .as_mut()
+            .map(|game| game.manifest_subjects())
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn handle_manifest_key(&mut self, _key: GameKey) {
+        self.pending_manifest = None;
         self.mode = Mode::Playing;
     }
 }

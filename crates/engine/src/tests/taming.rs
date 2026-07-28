@@ -187,15 +187,11 @@ fn the_decompile_preview_follows_the_catalyst_held_not_a_fixed_item() {
     let wild = spawn_wild_on_player_tile(&mut game);
 
     set_inventory(&mut game, &[(ids::ICE_BREAKER, 1)]);
-    let with_shipped = game
-        .inspect(wild)
-        .unwrap()
+    let with_shipped = program_manifest(&game, wild)
         .decompile_chance
         .expect("holding a catalyst should quote odds");
     set_inventory(&mut game, &[("master_key", 1)]);
-    let with_mod = game
-        .inspect(wild)
-        .unwrap()
+    let with_mod = program_manifest(&game, wild)
         .decompile_chance
         .expect("holding a catalyst should quote odds");
     assert!(
@@ -205,7 +201,7 @@ fn the_decompile_preview_follows_the_catalyst_held_not_a_fixed_item() {
 
     set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 1)]);
     assert!(
-        game.inspect(wild).unwrap().decompile_chance.is_none(),
+        program_manifest(&game, wild).decompile_chance.is_none(),
         "with no catalyst there are no odds to quote — the action is unavailable"
     );
 }

@@ -106,13 +106,13 @@ fn exploit_focus_boosts_effective_decompiler_skill_per_level() {
         ))
         .id();
 
-    let before = game.inspect(wild).unwrap().decompile_chance;
+    let before = program_manifest(&game, wild).decompile_chance;
 
     game.world.get_mut::<Perks>(player).unwrap().points = 10;
     game.unlock_perk(Perk::ExploitFocus).unwrap();
-    let after_one = game.inspect(wild).unwrap().decompile_chance;
+    let after_one = program_manifest(&game, wild).decompile_chance;
     game.unlock_perk(Perk::ExploitFocus).unwrap();
-    let after_two = game.inspect(wild).unwrap().decompile_chance;
+    let after_two = program_manifest(&game, wild).decompile_chance;
 
     assert!(
         after_one > before,

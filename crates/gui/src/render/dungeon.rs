@@ -233,4 +233,64 @@ mod tests {
         );
         assert!(!solid(DungeonCellView::StairsUp));
     }
+
+    /// A view whose middle column is `ahead`, with `flank` either side.
+    fn view(ahead: &[DungeonCellView], flank: DungeonCellView) -> DungeonView {
+        DungeonView {
+            depth: 2,
+            facing: "N",
+            position: (3, 4),
+            cells: ahead.iter().map(|&c| vec![flank, c, flank]).collect(),
+            standing_on: Some("Stairs lead down".to_string()),
+        }
+    }
+
+    /// The projection maths above is tested in isolation; this drives the
+    /// whole draw through a real `Painter` on a headless egui context, which
+    /// is what catches an indexing panic against a shape of view the pure
+    /// tests never build. It cannot assert about pixels — nothing without a
+    /// display can — so it asserts only that every shape gets drawn.
+    #[test]
+    fn drawing_every_shape_of_corridor_does_not_panic() {
+        use DungeonCellView::*;
+        let m = crate::text::ui_metrics(900.0);
+        let cases = [
+            view(&[Floor, Floor, Floor, Floor], Rock),
+            view(&[Floor, Rock, Rock, Rock], Rock), // blocked one step ahead
+            view(&[Rock, Rock, Rock, Rock], Rock),  // sealed in
+            view(&[Floor, Floor, Floor, Floor], Floor), // open hall, no walls
+            view(&[StairsUp, Floor, StairsDown, Floor], Rock),
+        ];
+        crate::paint::with_painter(|p| {
+            for case in &cases {
+                draw_dungeon(case, p, 1000.0, 640.0, &m);
+            }
+        });
+    }
+
+    /// A renderer must survive whatever the engine hands it, including the
+    /// shapes it never actually produces — a view built before the party has
+    /// a level, say.
+    #[test]
+    fn drawing_a_degenerate_view_does_not_panic() {
+        let m = crate::text::ui_metrics(900.0);
+        let empty = DungeonView {
+            depth: 1,
+            facing: "N",
+            position: (0, 0),
+            cells: Vec::new(),
+            standing_on: None,
+        };
+        let single = DungeonView {
+            depth: 1,
+            facing: "S",
+            position: (0, 0),
+            cells: vec![vec![DungeonCellView::Floor]],
+            standing_on: None,
+        };
+        crate::paint::with_painter(|p| {
+            draw_dungeon(&empty, p, 800.0, 600.0, &m);
+            draw_dungeon(&single, p, 800.0, 600.0, &m);
+        });
+    }
 }

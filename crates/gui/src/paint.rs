@@ -392,29 +392,34 @@ fn to_egui(c: Color) -> egui::Color32 {
     egui::Color32::from_rgba_unmultiplied(ch(c.r), ch(c.g), ch(c.b), ch(c.a))
 }
 
+/// Runs `f` against a real `Painter` backed by a headless egui context.
+///
+/// egui lays text out and records shapes on the CPU, so a draw routine can be
+/// exercised end to end without a window or a GPU — which is enough to catch
+/// a panic in one, even though nothing here can assert about pixels. Only the
+/// shapes that come out the far end need a display.
+///
+/// Lives at module level rather than inside `mod tests` so `render/`'s own
+/// tests can drive a screen through it.
+#[cfg(test)]
+pub(crate) fn with_painter<R>(f: impl FnOnce(&Painter) -> R) -> R {
+    let ctx = egui::Context::default();
+    install_fonts(&ctx);
+    ctx.begin_pass(egui::RawInput {
+        screen_rect: Some(egui::Rect::from_min_size(
+            egui::Pos2::ZERO,
+            egui::vec2(1440.0, 900.0),
+        )),
+        ..Default::default()
+    });
+    let out = f(&Painter::for_frame(&ctx, 1.0 / 60.0));
+    let _ = ctx.end_pass();
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// egui lays text out on the CPU, so the parts of this module with real
-    /// arithmetic in them — the baseline conversion and the ink measurement —
-    /// can be exercised without a window or a GPU. Only the shapes that come
-    /// out the far end need a display, which is why nothing below asserts
-    /// about drawing.
-    fn with_painter<R>(f: impl FnOnce(&Painter) -> R) -> R {
-        let ctx = egui::Context::default();
-        install_fonts(&ctx);
-        ctx.begin_pass(egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(
-                egui::Pos2::ZERO,
-                egui::vec2(1440.0, 900.0),
-            )),
-            ..Default::default()
-        });
-        let out = f(&Painter::for_frame(&ctx, 1.0 / 60.0));
-        let _ = ctx.end_pass();
-        out
-    }
 
     fn lay_out(p: &Painter, face: Face, text: &str, size: u16) -> std::sync::Arc<egui::Galley> {
         p.painter

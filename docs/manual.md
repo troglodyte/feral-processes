@@ -117,7 +117,8 @@ change what gets stored — a save from a different build shows up as
 | `R` | Demolish a nearby structure, refunding 30% of its materials — demolishing Home destroys every other base structure too, after a confirmation warning (see [Structures](#structures)) |
 | `U` | Upgrade a nearby structure one tier — each tier costs more and yields more (see [Structures](#structures)) |
 | `u` | Use symlink: instantly teleport to a deployed symlink structure (e.g. Home), for its item cost |
-| `i` | Inspect: pick a direction, see stats/moves/decompile odds for the first program that way (no intrusion) |
+| `i` | Inspect: pick a direction, open the manifest for the first program that way (no intrusion) |
+| `d` | Manifest: a full read-only stat sheet for you or any program you own — integrity and XP meters, combat stats, potential rolls, routines, equipment, perks, species detail. `←`/`→` page between subjects, `Esc` closes |
 | `v` | Inventory/equipment: equip, unequip, consume, fuse, erase items |
 | `T` | Research tree: spend Research Data to unlock structures and recipes — see [Research](#research) |
 | `p` | Your pets: full stats (level, HP, Attack, Defense) for every compiled program you own, wherever it is — add/stand down party members (max 5) here too. Standing one down frees a battle slot, not a roster slot; to shed a program for good, sell it at a Market (`t`) or fuse it (`f`) |
@@ -446,7 +447,7 @@ Shown in the status panel (always) and the intrusion screen (in battle):
 | **Attack** | How hard your hits land. Battle damage is roughly `move power + attacker's Attack − defender's Defense` (always at least 1). The same formula covers every combatant: your own strike has a fixed move power, while a program — yours or wild — rolls one of its species' moves. |
 | **Defense** | How much incoming damage you shrug off — see the Attack formula above. |
 | **Decompiler** | Player-only skill at cracking ICE. Grows by 1 every time you level up (starts at 0). Adds a flat bonus to your decompile odds — see Decompile chance below. Tamed programs never have this stat; only you attempt decompiles. |
-| **Decompile chance** | Shown live during an intrusion and on the inspect panel. Your odds of successfully compiling (taming) the program *this attempt*, given its remaining HP fraction, its species' difficulty, your Decompiler stat, and the potency of the taming catalyst the attempt would spend — weakening it first, leveling up over time, and carrying a stronger catalyst all raise your odds. With no catalyst in hand there's nothing to quote (you can't attempt at all), so the readout says "needs a taming catalyst" instead. |
+| **Decompile chance** | Shown live during an intrusion and on the manifest. Your odds of successfully compiling (taming) the program *this attempt*, given its remaining HP fraction, its species' difficulty, your Decompiler stat, and the potency of the taming catalyst the attempt would spend — weakening it first, leveling up over time, and carrying a stronger catalyst all raise your odds. With no catalyst in hand there's nothing to quote (you can't attempt at all), so the readout says "needs a taming catalyst" instead. |
 
 ### Perks
 
@@ -705,8 +706,9 @@ be active party members, fighting alongside you at once.
   ±20% roll on top of its species' growth rate for how fast it levels —
   so two Scrappers can genuinely differ, not just look the same with the
   same number. Its overall roll shows up as a **Potential** tag (e.g.
-  "Excellent (94%)") in the pets screen (`p`) and the inspect screen
-  (`i`) — Poor / Below Average / Average / Above Average / Excellent.
+  "Excellent (94%)") in the pets screen (`p`) and on the manifest (`d`),
+  which also breaks the tier down into the four individual rolls behind it
+  — Poor / Below Average / Average / Above Average / Excellent.
   Fusing two programs (below) averages their rolls into the result rather
   than rolling a fresh one.
 
@@ -814,7 +816,7 @@ Cascade Logic can cause bleeding.
 ### Bosses
 
 Rare, much tougher programs — rendered **bold** on the map and tagged
-`[BOSS]` on the inspect/battle screens. A boss takes a habitat's spawn slot
+`[BOSS]` on the manifest and battle screens. A boss takes a habitat's spawn slot
 only occasionally, in place of an ordinary program for that biome.
 Defeating one guarantees a cache of 3-6 Portal Fragments at once, instead
 of the flat drop chance every other species rolls — a reliable way to fund

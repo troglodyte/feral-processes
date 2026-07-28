@@ -15,6 +15,16 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ### Renderer
 
+- **A manifest screen (`d`) shows everything the sim knows about you or any
+  program.** Integrity and XP meters (plus Power and Fatigue for you), combat
+  stats, all four potential rolls behind the Excellent/Poor tag, installed
+  routines, and — for a program — habitats, moves, work aptitude, growth and
+  speed; for you, each equipped item with the bonus it is actually granting,
+  and every perk with its level. `←`/`→` page between you and everything you
+  own. Several of those numbers had no readout anywhere before: the
+  individual rolls, growth, base speed, and a perk's purchased level.
+  It replaces the old inspect popup rather than sitting beside it, so `i` +
+  direction now opens the manifest for the program it finds.
 - **The frontend runs on Bevy and egui instead of macroquad.** The engine was
   always built on `bevy_ecs`, so the sim and the renderer now share an ECS
   version — though they still meet only through `Game`, as before. Nothing

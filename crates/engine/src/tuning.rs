@@ -672,6 +672,19 @@ pub const PLAYER_ROUTINE_SLOT_CAP: u32 = 6;
 // Wild routines and ability scaling
 // ─────────────────────────────────────────────────────────────────────────
 
+/// Chance a freshly spawned wild program carries a routine its species
+/// never grants — a "carrier". It uses that routine against you in battle,
+/// and hands it over installed if you decompile it.
+///
+/// This decides *whether* a carrier appears; which routine it gets is the
+/// per-ability `wild_weight` in `assets/abilities/*.ron`. Deliberately low:
+/// a carrier should be a thing you go hunting for, not the default program
+/// in the field.
+///
+/// Unrelated to `WILD_ABILITY_CHANCE`, which gates whether a wild program
+/// reaches for its *move's* status effect on a given swing.
+pub const WILD_ROUTINE_CHANCE: f64 = 0.06;
+
 /// How much each level adds to an ability's magnitude: the multiplier is
 /// `1.0 + level * this`. A flat `Heal(power: 8)` is a real patch at level 1
 /// and noise against a level-20 program with 400 Integrity taking 100-point

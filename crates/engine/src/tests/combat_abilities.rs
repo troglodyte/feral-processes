@@ -508,7 +508,14 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
         .iter()
         .position(|a| a.id == "hot_patch")
         .expect("runtime_patching grants hot_patch");
-    game.world.get_mut::<Stats>(player).unwrap().hp = 1;
+    // Not 1: initiative is a roll (`roll_initiative`), and wild spawns now
+    // draw from the same `GameRng` (see `Game::roll_wild_routine`), so which
+    // side goes first in this round is no longer pinned by this seed alone.
+    // `set_level` only advances `Experience.level` — it doesn't grow `Stats`
+    // — so the player's DEF is still the base 2, and the fixed atk:0 enemy's
+    // strongest move (Cross-Reference, power 9) can land up to 7. 20 clears
+    // that with room, either order.
+    game.world.get_mut::<Stats>(player).unwrap().hp = 20;
 
     resolve_round_with(
         &mut game,
@@ -519,8 +526,9 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
     );
 
     assert!(
-        game.world.get::<Stats>(player).unwrap().hp > 1,
-        "the player patched themselves, so their Integrity must have gone up"
+        game.world.get::<Stats>(player).unwrap().hp > 15,
+        "the player patched themselves, so their Integrity must have gone up \
+         past what a single worst-case enemy hit could leave it at"
     );
     assert_eq!(
         game.world

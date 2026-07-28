@@ -188,9 +188,9 @@ pub fn beatable_by_a_fresh_player(species: &SpeciesDef) -> bool {
 /// Ticks of a single worked, tiered node needed to fund one Portal at
 /// `zone`, routed through the Market's `portal_fragment` buy price.
 ///
-/// Deliberately arithmetic rather than a live sim: this is the check that
-/// the base economy keeps pace with the doubling curve, which is the whole
-/// reason the travelling-base work happened. See
+/// Deliberately arithmetic rather than a live sim: this is the check on what
+/// a settled base is worth against the cost of moving it deeper, which is the
+/// whole reason the travelling-base work happened. See
 /// `docs/superpowers/specs/2026-07-24-travelling-base-design.md`.
 ///
 /// Calls the real `systems::node_payout` and `systems::mining_success_chance`
@@ -605,37 +605,50 @@ mod tests {
         );
     }
 
-    /// At a fixed tier, funding time must not blow up with depth — the
-    /// payout doubles per zone while the portal cost only grows linearly
-    /// with it, so deeper zones should get *easier* to fund, not harder.
+    /// At an upgraded tier, funding the next breach *does* get slower with
+    /// depth: the payout gains a flat `NODE_PAYOUT_ZONE_BONUS` per zone while
+    /// the Portal's cost grows by half its base rate, so cost pulls ahead.
+    /// That's the intended shape — depth should cost time, or fragments stop
+    /// being a constraint the way they did when payout doubled per zone.
+    ///
+    /// What must hold is that it *converges* rather than exploding: the ratio
+    /// tends to a ceiling as depth grows (about 571 ticks against 381 at zone
+    /// 1), so a deeper zone is a longer grind and never a wall. This bound is
+    /// the gate — a change that makes deep zones unfundable trips it.
     #[test]
-    fn base_income_outpaces_portal_cost_across_every_zone() {
+    fn deeper_breaches_cost_more_time_but_stay_bounded() {
         let (ticks, rate, price) = shipped_economy();
 
-        let mut previous = f64::MAX;
+        let shallowest = ticks_to_afford_portal(1, 3, ticks, rate, price);
+        let mut previous = 0.0_f64;
         for zone in 1..=6 {
             let t = ticks_to_afford_portal(zone, 3, ticks, rate, price);
             eprintln!("[Mk3] zone {zone}: {t:.1} ticks/portal");
             assert!(
-                t <= previous,
-                "portal funding time must not grow with depth — it did at zone {zone} \
-                 ({t:.1} ticks vs {previous:.1} one zone shallower)"
+                t >= previous,
+                "funding time should rise with depth, not fall — it dropped at \
+                 zone {zone} ({t:.1} ticks vs {previous:.1} one zone shallower)"
+            );
+            assert!(
+                t <= shallowest * 1.5,
+                "and must stay bounded: zone {zone} costs {t:.1} ticks against \
+                 {shallowest:.1} at zone 1, past the 1.5x ceiling"
             );
             previous = t;
         }
     }
 
-    /// Pins the *shape* of the un-upgraded curve. Payout scales
-    /// exponentially with depth (`2^(zone-1)`) while a Portal's cost grows
-    /// by only half its base rate per zone (see
-    /// `crate::tuning::ZONE_PORTAL_COST_GROWTH_PERCENT`), so the ratio is 1/1 at
-    /// zone 1, 2/1.5 at zone 2, 4/2 at zone 3: every step pays off, the
-    /// first one included.
+    /// Pins the *shape* of the un-upgraded curve, which runs opposite to the
+    /// upgraded one above. At Mk1 a flat `NODE_PAYOUT_ZONE_BONUS` per zone
+    /// doubles the payout on the first breach (1 -> 2) while the Portal's
+    /// cost grows by only half its base rate (see
+    /// `crate::tuning::ZONE_PORTAL_COST_GROWTH_PERCENT`), so the early steps
+    /// still pay off — it's only once tier has raised the baseline that the
+    /// linear cost ramp starts to win.
     ///
-    /// Under the old `build_cost × zone` ramp the first breach was exactly
-    /// break-even, and upgrading was the only thing that turned it into a
-    /// gain. Softening the ramp is what bought that first step — deliberate,
-    /// since currency no longer survives the breach that spends it.
+    /// That first step matters because currency does not survive the breach
+    /// that spends it: a player arriving in a new zone with nothing must find
+    /// the next exit no harder to fund than the last.
     #[test]
     fn an_unupgraded_base_gains_ground_from_its_very_first_breach() {
         let (ticks, rate, price) = shipped_economy();
@@ -650,8 +663,8 @@ mod tests {
         );
         assert!(
             at(3) < at(2),
-            "and exponential payout keeps pulling ahead of the linear cost ramp: \
-             {:.0} -> {:.0}",
+            "and the payout bonus keeps pulling ahead of the cost ramp while tier is \
+             low: {:.0} -> {:.0}",
             at(2),
             at(3)
         );

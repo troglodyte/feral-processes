@@ -233,10 +233,17 @@ fn the_shipped_ice_breaker_still_tames_for_a_player_holding_only_it() {
     let player = game.player_entity();
     let wild = start_battle_with_a_wild_program(&mut game);
     set_inventory(&mut game, &[(ids::ICE_BREAKER, 50)]);
-    // Maxed Decompiler skill pins capture_chance to its 0.95 clamp, so
-    // 50 seeded attempts succeed without the test depending on a
-    // particular roll.
+    // High skill against a fully-weakened target, which is the best odds the
+    // shipped catalyst can produce for any species. Skill alone no longer
+    // pins the chance to its clamp (it multiplies the base rather than being
+    // added to it), so the target is weakened too: that puts even the
+    // hardest-to-tame species far enough above zero that 50 seeded attempts
+    // land without the test depending on a particular roll.
     game.world.get_mut::<Decompiler>(player).unwrap().skill = 50;
+    {
+        let mut stats = game.world.get_mut::<Stats>(wild).unwrap();
+        stats.hp = 1;
+    }
 
     let mut attempts = 0;
     for _ in 0..50 {

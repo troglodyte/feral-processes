@@ -58,9 +58,9 @@ Node. Build a Home first (nothing else can be deployed until it stands, and
 everything else must sit within its 15-tile platform), then assign compiled
 programs to structures as **cronjobs** — the Palworld-style "put a tamed
 creature to work" mechanic. Production then runs tick by tick wherever you
-are, paying out into your inventory, multiplied by both your zone level and
-the structure's upgrade tier, which is what makes settling in and building
-up worth more than rushing the next portal.
+are, paying out into your inventory at a rate that adds the structure's
+upgrade tier to your zone depth — so upgrading what you have is worth more
+than rushing the next portal, and neither lever runs away with the economy.
 
 ## Research
 
@@ -145,8 +145,8 @@ workable (Mining Node, Research Node, Power Conduit, Compiler), passively
 processing (Terminal), a symlink target you can `u` to from anywhere (Home),
 a rest gate, a power source (Recharger Node), a trading post (iso Market),
 or a plain bench (Fabricator, Armory). Producers upgrade to Mk5 with `U`,
-each tier multiplying payout and raising the chance a cycle pays out at all,
-and upgrades ride through portals with the rest of the base. Every structure
+each tier adding to the payout and raising the chance a cycle pays out at
+all, and upgrades ride through portals with the rest of the base. Every structure
 except Home has raid Durability and can be chipped away by random raids: a
 cronjob worker or a program posted to guard (`G`) fights the raid off at a
 cost to its own HP, and every deployed Shield shaves flat damage off every

@@ -13,6 +13,28 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Balance
+
+- **Structure income no longer doubles with every zone.** A worked node's
+  payout used to be its upgrade tier multiplied by the zone's enemy-difficulty
+  curve, so a Mk5 node paid 5 a cycle in zone 1 and 80 in zone 5 while build
+  costs, upgrades and market prices all stayed flat — Core Fragments stopped
+  being a constraint by about zone 2. Payout is now the tier *plus* one per
+  zone below the current one: a Mk1 node pays 1 in zone 1 and 3 in zone 3, a
+  Mk5 pays 5 and 7. Depth still pays, upgrading still pays, and neither
+  compounds the other. Banked resources such as Research Data are unchanged
+  at a flat 1 per cycle. Existing saves keep whatever they have banked; only
+  the rate changes.
+- **Decompiler skill can no longer be stacked past a species' resistance.**
+  Skill used to add flat percentage points to a decompile chance, while the
+  odds it was added to could never exceed 0.33 — so at about player level 30
+  every attempt pinned to the 95% clamp, and a boss was no harder to take
+  than a Drone. Skill now multiplies your odds instead, leaving the target's
+  species and how far you have weakened it inside what gets multiplied. A
+  fully-weakened Overseer at skill 40 sits near 30% rather than 95%; the same
+  attempt against a Drone is near 59%. Low-skill play is essentially
+  unchanged.
+
 ### Battle
 
 - **Battle narration scrolls in instead of landing all at once.** A resolved

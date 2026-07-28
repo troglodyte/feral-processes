@@ -5,10 +5,13 @@ use crate::tuning::{
 };
 
 /// ICE-breaking odds: weaker (lower `hp_fraction`) and easier-compiled
-/// species are more likely to be decompiled; stronger breakers help; a more
-/// practiced player (`decompiler_skill`) adds a flat bonus on top. The
-/// `0.9` ceiling (rather than a full `1.0`) means even a fully-weakened,
-/// zero-difficulty target isn't a sure thing on item potency alone.
+/// species are more likely to be decompiled, and stronger breakers help. A
+/// more practiced player (`decompiler_skill`) *multiplies* whatever those
+/// three are worth rather than adding to it, so neither the species' own
+/// resistance nor the work of weakening it first can be skilled past — see
+/// `DECOMPILER_SKILL_BONUS`. The `0.9` ceiling (rather than a full `1.0`)
+/// means even a fully-weakened, zero-difficulty target isn't a sure thing on
+/// item potency alone.
 pub fn capture_chance(
     hp_fraction: f32,
     item_potency: f32,
@@ -18,8 +21,8 @@ pub fn capture_chance(
     let base = item_potency
         * (CAPTURE_POTENCY_CEILING - hp_fraction * CAPTURE_HP_PENALTY)
         * (1.0 - taming_difficulty * CAPTURE_DIFFICULTY_PENALTY);
-    let skill_bonus = decompiler_skill as f32 * DECOMPILER_SKILL_BONUS;
-    (base + skill_bonus).clamp(CAPTURE_CHANCE_MIN, CAPTURE_CHANCE_MAX)
+    let skill_multiplier = 1.0 + decompiler_skill as f32 * DECOMPILER_SKILL_BONUS;
+    (base * skill_multiplier).clamp(CAPTURE_CHANCE_MIN, CAPTURE_CHANCE_MAX)
 }
 
 #[cfg(test)]
@@ -45,6 +48,26 @@ mod tests {
         let unskilled = capture_chance(0.5, 0.55, 0.5, 0);
         let skilled = capture_chance(0.5, 0.55, 0.5, 10);
         assert!(skilled > unskilled);
+    }
+
+    /// The whole point of the multiplicative skill term: a well-practiced
+    /// player is better at everything, but a boss-grade species stays
+    /// meaningfully harder than trash forever. Under the old additive term
+    /// both of these pinned to `CAPTURE_CHANCE_MAX` and the spread vanished.
+    #[test]
+    fn high_skill_does_not_flatten_the_gap_between_easy_and_boss_species() {
+        let drone = capture_chance(0.0, 0.4, 0.15, 40);
+        let boss = capture_chance(0.0, 0.4, 0.9, 40);
+
+        assert!(
+            drone < CAPTURE_CHANCE_MAX,
+            "skill 40 should not pin even an easy species to the clamp: {drone}"
+        );
+        assert!(
+            drone > boss * 1.5,
+            "an easy species must stay far ahead of a boss at high skill: \
+             {drone} vs {boss}"
+        );
     }
 
     #[test]

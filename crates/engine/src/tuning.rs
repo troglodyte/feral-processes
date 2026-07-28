@@ -315,10 +315,19 @@ pub const MAX_INDIVIDUAL_ROLL: f32 = 1.2;
 // Taming
 // ─────────────────────────────────────────────────────────────────────────
 
-/// Percentage-point bonus to decompile chance per point of the player's
-/// `Decompiler` stat (see `components::Decompiler`). Lowered from 0.03
-/// alongside `item_potency` — a well-leveled player was able to stack
-/// enough skill to make almost any attempt a near-guaranteed success.
+/// Fraction by which each point of the player's `Decompiler` stat (see
+/// `components::Decompiler`) *multiplies* their decompile odds — skill 40 is
+/// a 1.8x on whatever the attempt was already worth.
+///
+/// Multiplicative rather than added on top, because `Decompiler` skill has no
+/// ceiling (+1 per player level forever, +1..=4 from each of fifteen gear
+/// items, +1 per `Perk::ExploitFocus` level) while the base it applies to
+/// cannot exceed 0.33 — the ICE Breaker's `taming_potency` of 0.4 is the
+/// strongest catalyst that ships. As a flat addend, skill 40 was worth +0.80
+/// and pinned every attempt to `CAPTURE_CHANCE_MAX` regardless of species,
+/// leaving `taming_difficulty` and weakening the target both meaningless.
+/// Scaling the base instead keeps them inside what's being multiplied, so
+/// they matter at every skill level.
 pub const DECOMPILER_SKILL_BONUS: f32 = 0.02;
 
 /// Coefficients of `taming::capture_chance`. Ceiling below a full 1.0 means
@@ -470,6 +479,20 @@ pub const FORAGE_CHANCE_SPARSE: f64 = 0.15;
 /// `systems::mining_success_chance`.
 pub const MINING_SUCCESS_BASE: f64 = 0.4;
 pub const MINING_SUCCESS_PER_LEVEL: f64 = 0.1;
+
+/// Extra units a worked node pays per zone below the current one, on top of
+/// its upgrade tier — see `systems::node_payout`.
+///
+/// Deliberately additive, and deliberately *not* `ZONE_STAT_GROWTH`. Node
+/// payout used to be `tier * ZoneLevel::stat_multiplier()`, which borrowed
+/// the enemy-difficulty curve as the economy curve: yield doubled with depth
+/// *and* multiplied by tier, so a Mk5 node paid 5 a cycle in zone 1 and 80
+/// in zone 5 while every sink — build costs, upgrades, market prices — stayed
+/// flat. Depth and tier compounding each other is what made Core Fragments
+/// stop being a constraint by zone 2. Adding instead of multiplying keeps
+/// both levers meaningful without either running away, and leaves
+/// `stat_multiplier` to mean enemy difficulty and nothing else.
+pub const NODE_PAYOUT_ZONE_BONUS: u32 = 1;
 
 /// Divisor applied to the *lesser* of two fused programs' stats: a fusion
 /// keeps the better parent's stat outright and adds this fraction of the

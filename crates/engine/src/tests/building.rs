@@ -810,13 +810,17 @@ fn a_structure_without_an_upgrade_def_cannot_be_upgraded() {
 }
 
 #[test]
-fn tier_multiplies_payout_on_top_of_the_zone_multiplier() {
+fn tier_adds_to_payout_on_top_of_the_zone_bonus() {
     let mut game = Game::new(974, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    game.world.resource_mut::<ZoneLevel>().0 = 3; // stat_multiplier() == 4
+    game.world.resource_mut::<ZoneLevel>().0 = 3;
 
     let gained = run_one_full_gather_cycle_at_tier(&mut game, ids::CORE_FRAGMENT, Some(3));
 
-    assert_eq!(gained, 12, "tier 3 x zone multiplier 4");
+    assert_eq!(
+        gained, 5,
+        "tier 3 plus two zones' worth of bonus — not the 12 the old \
+         tier x zone-multiplier form paid"
+    );
 }
 
 #[test]
@@ -849,19 +853,21 @@ fn a_structures_tier_survives_a_save_and_load_round_trip() {
     );
 }
 
+/// Depth pays, but on the economy's own linear curve — deliberately not the
+/// `stat_multiplier` doubling that scales wild programs. Payout used to
+/// borrow that curve, which is what let income outrun every sink in the game.
 #[test]
 fn a_worked_node_pays_out_more_the_deeper_the_zone() {
     let mut game = Game::new(960, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.resource_mut::<ZoneLevel>().0 = 4;
-    assert_eq!(
-        game.world.resource::<ZoneLevel>().stat_multiplier(),
-        8,
-        "zone 4's multiplier is 1 << 3"
-    );
 
     let gained = run_one_full_gather_cycle(&mut game, ids::CORE_FRAGMENT);
 
-    assert_eq!(gained, 8, "a zone-4 node pays 8x what a zone-1 node pays");
+    assert_eq!(
+        gained, 4,
+        "a Mk1 node in zone 4 pays its tier plus three zones' bonus, not the \
+         8x that zone's stat multiplier would give"
+    );
 }
 
 #[test]

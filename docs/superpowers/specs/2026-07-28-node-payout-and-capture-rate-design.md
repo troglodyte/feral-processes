@@ -201,10 +201,17 @@ The four unit tests in `taming.rs` (`weaker_prey_is_easier_to_tame`,
 multiplicative form preserves, and should pass untouched. If any fails, the
 change is wrong.
 
-No engine test asserts a specific gathered quantity — the `GatherResource`
-setups in `tests/building.rs`, `tests/zone.rs`, `tests/party.rs`,
-`tests/raids.rs` and `tests/support.rs` assert task survival and raid
-behaviour, not payout size.
+Two end-to-end tests in `tests/building.rs` do assert exact gathered
+quantities against the old formula and must be rewritten to the new one:
+`tier_multiplies_payout_on_top_of_the_zone_multiplier` (zone 3 Mk3, expects
+12) and `a_worked_node_pays_out_more_the_deeper_the_zone` (zone 4 Mk1,
+expects 8, and separately asserts `stat_multiplier() == 8` — an assertion
+that stops having anything to do with payout). They become 5 and 4, and the
+first is renamed for the additive shape.
+
+The remaining `GatherResource` setups — in `tests/zone.rs`, `tests/party.rs`,
+`tests/raids.rs` and `tests/support.rs` — assert task survival and raid
+behaviour rather than payout size, and are unaffected.
 
 ## Documentation
 

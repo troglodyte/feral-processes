@@ -55,12 +55,25 @@ procedurally generated dungeon levels, seeded from the world seed and the
 depth you have walked to. Step onto one and the view changes: the top-down
 grid gives way to a **first-person corridor**, and `hjkl`/arrows stop being
 compass directions and start being forward, back, turn left, turn right.
-`<` and `>` take the stairs under you. There is no auto-map; that is what
-graph paper is for.
+`<` and `>` take the stairs under you.
+
+`g` — the same key that scans the ground on the surface — opens the party's
+map of the level. It shows what you have seen and nothing else: corridors
+walked, stairs found, and the corridors something jumped you in. Cells you
+have never had in view stay dark, and are drawn differently from rock you
+have seen, because "I have not been here" and "there is nothing here" are
+the two things worth telling apart.
+
+A breach opens onto a shaft of fixed length rather than an endless descent.
+How deep it runs is read off how far the walk to it was, so the same
+distance that decides what lives down there decides how much of it there
+is: the breach inside your opening viewport is two levels, the ones out at
+the edge of the sector are six. The bottom level has no stairs down.
 
 Materializing in a sector runs a deep scan that logs how many breaches are
 in it and the bearing of the nearest. One is always within sight of where
-you arrive; the rest are a walk.
+you arrive; the rest are a walk. Each opens onto its own dungeon — two
+breaches are never two doors onto the same maze.
 
 Corridors are not safe. Every step you take underground can draw an
 intrusion, and the programs down there are drawn from the biome the breach

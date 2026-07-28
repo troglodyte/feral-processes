@@ -352,6 +352,12 @@ impl Game {
         // trader was rebuilt on the matching tile.
         self.world.insert_resource(BuybackLedger::default());
 
+        // Same reason, and the same trap: the entrances a zone's breaches
+        // stood on are gone, but their maps are keyed by tile and would
+        // otherwise draw the last sector's walked corridors onto a fresh
+        // breach that happened to land on a matching coordinate.
+        self.world.insert_resource(DungeonMemory::default());
+
         let spendable = [self.currency(), self.craft_currency()];
         let player = self.player_entity();
         let lost: Vec<(ItemId, u32)> = {

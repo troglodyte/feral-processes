@@ -100,6 +100,7 @@ impl App {
             Mode::Perks => self.handle_perks_key(key),
             Mode::Research => self.handle_research_key(key),
             Mode::Help => self.handle_help_key(),
+            Mode::DungeonMap => self.handle_dungeon_map_key(),
             Mode::GameOver => self.handle_game_over_key(),
             Mode::QuitRunConfirm => self.handle_quit_run_confirm_key(key),
             Mode::QuitAppConfirm => self.handle_quit_app_confirm_key(key),

@@ -1,7 +1,7 @@
 use bevy_ecs::prelude::{Entity, Resource};
 use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::battle::{BattleAction, EnemyGroup};
 use crate::dungeon::{Dir, DungeonLevel};
@@ -382,6 +382,48 @@ pub enum Locale {
         entrance: (i32, i32),
     },
 }
+
+/// Which level of which shaft a `LevelMemory` belongs to.
+///
+/// Keyed by the breach's surface tile rather than by anything about the
+/// level, because that tile is what makes a shaft itself — it is already
+/// half of `dungeon::LevelSpec`. Two breaches in a sector therefore keep
+/// separate maps of their separate depth-3s.
+pub type LevelKey = ((i32, i32), u32);
+
+/// What the party learned about one dungeon level by walking it.
+///
+/// This is the only dungeon state that is saved rather than regenerated.
+/// The level itself is a pure function of its `dungeon::LevelSpec`, but what
+/// the player has *seen* of it is not — that is the run's history, and
+/// losing it on load would hand back a blank map of a level already walked.
+///
+/// `BTreeSet` rather than `HashSet` so the encoded save bytes don't depend
+/// on hash order.
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+pub struct LevelMemory {
+    /// Every cell the party has had in view — see `Game::view_cone`, which
+    /// both this and the first-person view are filled from.
+    pub seen: BTreeSet<(i32, i32)>,
+    /// Cells whose cache has been emptied.
+    pub looted: BTreeSet<(i32, i32)>,
+    /// Sealed doors that have been opened, which stay open.
+    pub opened: BTreeSet<(i32, i32)>,
+    /// Where the party was jumped. Kept for the map alone: a corridor that
+    /// has cost you something is worth marking, and it is the one landmark
+    /// the level's own layout can't tell you about.
+    pub fights: BTreeSet<(i32, i32)>,
+}
+
+/// Everything the party has learned about every dungeon level in this zone.
+///
+/// Zone-local, and **not** self-clearing: like `BuybackLedger` this has to
+/// be wiped by name in `Game::enter_next_zone`, because breaching does not
+/// despawn what a zone accumulated. Left behind, a stale entry would draw
+/// the previous sector's walked corridors onto a new sector's map at
+/// whatever tile happened to collide.
+#[derive(Resource, Clone, Default, Debug, Serialize, Deserialize)]
+pub struct DungeonMemory(pub BTreeMap<LevelKey, LevelMemory>);
 
 /// The level the player is currently standing in, or `None` on the surface.
 ///

@@ -23,7 +23,23 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   stairs. Levels are mazes with their dead ends partly braided back into
   loops, generated deterministically from the world seed and the depth
   walked to, so a level is the same every time you return to it and costs
-  the save file nothing. There is no auto-map.
+  the save file nothing.
+- **A map of what you have seen.** `g` — the same key that scans the ground
+  on the surface — opens the party's map of the level they are standing in.
+  It is drawn north-up and records only what has actually been in view:
+  corridors walked, stairs found, and the corridors something jumped you in.
+  Cells never seen stay dark and are drawn differently from rock that has
+  been seen. Opening it costs no time. Each breach keeps its own map, and
+  each level of a shaft its own; the map is written to the save, because a
+  level regenerates from its seed but what you have seen of it is history.
+- **A breach is a shaft with a bottom.** Descent used to be unbounded — the
+  depth counter simply went up, with the stat multiplier compounding the
+  whole way and nothing down there. A breach now opens onto a shaft of fixed
+  length, read off how far the walk to it was, so the same distance that
+  scales what lives down there scales how much of it there is. The bottom
+  level generates with no stairs down at all. Breaches also now carve their
+  own dungeons: the entrance tile is part of the level seed, where before
+  every hole in a sector opened onto the same maze at a given depth.
 - **The surface keeps running while you are underground.** The player's
   position on the zone map stays pinned to the breach they entered by, so
   cronjobs keep paying out, needs keep decaying, and a raid can land on the

@@ -176,6 +176,11 @@ pub struct SaveData {
     /// regenerates from `seed` and the saved depth, exactly as terrain
     /// regenerates from `seed` alone.
     pub locale: crate::resources::Locale,
+    /// What the party has learned about each dungeon level walked in this
+    /// zone — see `resources::DungeonMemory`. The one piece of dungeon state
+    /// that is saved rather than regenerated: a level is a pure function of
+    /// its spec, but which parts of it the player has *seen* is history.
+    pub dungeon_memory: crate::resources::DungeonMemory,
 }
 
 /// Bumped whenever `SaveData` (or anything it contains, transitively)
@@ -293,6 +298,7 @@ mod tests {
             researched: Vec::new(),
             dungeon_entrances: Vec::new(),
             locale: crate::resources::Locale::Surface,
+            dungeon_memory: crate::resources::DungeonMemory::default(),
         }
     }
 

@@ -167,9 +167,15 @@ stats — and so the XP they pay, since a kill awards the defeated program's
 Integrity. Shoving at a wall is not travel and never rolls for a fight.
 Jacking out ends the fight where you stand.
 
-There is **no auto-map**. The compass reading and depth in the corner of the
-view are the only navigational aid; mapping the level is your problem, as it
-was in 1985.
+`g` opens the **map** — the same key that scans the ground on the surface,
+since the two screens never both apply. It is drawn north-up and shows only
+what the party has had in view: cells never seen stay dark, and are drawn
+differently from rock that has been seen. Stairs are marked, so are the
+corridors you were jumped in. Opening it costs no time.
+
+Each breach keeps its own map, and each level of a shaft its own. The map
+survives saving and loading — a level regenerates from its seed, but what
+you have seen of it is history and is written to the save.
 
 Every numbered or lettered menu (compile, deploy, cronjob, inventory,
 party, fuse, trade, perks, and so on) can also be navigated with Up/Down

@@ -165,6 +165,15 @@ impl App {
     /// already ran, and the ones that need open grid refuse in the engine
     /// (see `Game::require_surface`).
     fn handle_dungeon_key(&mut self, key: GameKey, is_move_key: bool) {
+        // The same `g` that scans the ground on the surface. Checked before
+        // the game is borrowed below, and costing no tick: reading your own
+        // map is not an action, and a dungeon that advanced a turn every
+        // time you checked where you were would punish mapping.
+        if key == GameKey::Char('g') {
+            self.mode = Mode::DungeonMap;
+            return;
+        }
+
         let acted = {
             let Some(game) = &mut self.game else { return };
             match key {

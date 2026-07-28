@@ -167,6 +167,49 @@ fn the_menu_keys_still_open_their_screens_underground() {
 }
 
 #[test]
+fn g_opens_the_map_underground_and_any_key_closes_it() {
+    let mut app = app_underground(707);
+    app.handle_key(GameKey::Char('g'));
+    assert_eq!(app.mode, Mode::DungeonMap);
+    assert!(
+        app.game.as_ref().unwrap().dungeon_map().is_some(),
+        "the map screen must have a map to draw"
+    );
+
+    app.handle_key(GameKey::Char('z'));
+    assert_eq!(app.mode, Mode::Playing);
+}
+
+/// Reading your own map is not an action. A dungeon that advanced a turn
+/// every time you checked where you were would punish mapping, which is the
+/// one thing this screen exists to make easier.
+#[test]
+fn opening_the_map_costs_no_time() {
+    let mut app = app_underground(808);
+    let before = app.game.as_ref().unwrap().player_status().position;
+    let ticks = app.game.as_ref().unwrap().message_log(200).len();
+
+    app.handle_key(GameKey::Char('g'));
+
+    let game = app.game.as_ref().unwrap();
+    assert_eq!(game.player_status().position, before);
+    assert_eq!(
+        game.message_log(200).len(),
+        ticks,
+        "the map advanced a turn"
+    );
+}
+
+/// On the surface `g` forages. The two screens never both apply, so the
+/// key is shared rather than a second one being invented for the same verb.
+#[test]
+fn g_still_forages_on_the_surface() {
+    let mut app = test_app(909);
+    app.handle_key(GameKey::Char('g'));
+    assert_eq!(app.mode, Mode::Playing);
+}
+
+#[test]
 fn taking_the_stairs_up_from_depth_one_surfaces() {
     let mut app = app_underground(505);
     // The fixture lands the party on the entry cell, which is the way out.

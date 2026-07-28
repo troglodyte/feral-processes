@@ -7,7 +7,7 @@
 //! on the way in.
 
 use crate::dungeon::{self, CellKind, Dir};
-use crate::resources::{CurrentDungeon, Locale};
+use crate::resources::{CurrentDungeon, DungeonMemory, LevelMemory, Locale};
 use crate::tuning::{
     DUNGEON_DEPTH_STAT_GROWTH, DUNGEON_ENCOUNTER_CHANCE, DUNGEON_ENTRANCE_SCATTER_TILES,
     DUNGEON_FLOORS_MAX, DUNGEON_FLOORS_MIN, DUNGEON_MIN_ENTRANCE_TILES,
@@ -48,6 +48,27 @@ pub(crate) fn bearing(dx: i32, dy: i32) -> &'static str {
         // as any other.
         (None, None) => "here",
     }
+}
+
+/// The world coordinates of the view cone from `(x, y)` facing `facing`,
+/// indexed `[ahead][lateral]` — the same shape and order
+/// `views::DungeonView::cells` carries.
+///
+/// The first-person view and the map's record of what has been seen are both
+/// filled by walking this, so the map cannot mark a cell the view never
+/// showed and the view cannot show one the map won't remember.
+fn view_cone(x: i32, y: i32, facing: Dir) -> Vec<Vec<(i32, i32)>> {
+    let (fx, fy) = facing.delta();
+    let (rx, ry) = facing.right_delta();
+    let span = DUNGEON_VIEW_HALF_WIDTH as i32;
+
+    (0..DUNGEON_VIEW_DEPTH as i32)
+        .map(|ahead| {
+            (-span..=span)
+                .map(|lateral| (x + fx * ahead + rx * lateral, y + fy * ahead + ry * lateral))
+                .collect()
+        })
+        .collect()
 }
 
 /// The `Locale::Dungeon` payload, unpacked — see `Game::dungeon_pos`. A
@@ -282,6 +303,7 @@ impl Game {
             facing: Dir::North,
             entrance,
         });
+        self.remember_view();
     }
 
     /// Climbs out to the zone map. The player's `Position` was pinned to the
@@ -290,6 +312,57 @@ impl Game {
         self.world.insert_resource(Locale::Surface);
         self.world.insert_resource(CurrentDungeon(None));
         self.log("You surface through the breach, back onto open grid.".to_string());
+    }
+
+    /// Records everything the party can see from where they are standing.
+    ///
+    /// Called from every place that moves the party or turns them, plus the
+    /// load path — anywhere the view changes, the map has to change with it,
+    /// or the player is told they never looked down a corridor they are
+    /// currently staring at.
+    fn remember_view(&mut self) {
+        let Some(pos) = self.dungeon_pos() else {
+            return;
+        };
+        let Some(level) = self.world.resource::<CurrentDungeon>().0.clone() else {
+            return;
+        };
+
+        let mut seen = Vec::new();
+        for row in view_cone(pos.x, pos.y, pos.facing) {
+            // The wall that stops the view is itself in plain sight, so the
+            // row is recorded before the break, not after the check.
+            let blocked = row
+                .get(DUNGEON_VIEW_HALF_WIDTH)
+                .is_some_and(|&(cx, cy)| !level.walkable(cx, cy));
+            seen.extend(row);
+            if blocked {
+                break;
+            }
+        }
+
+        let memory = self.level_memory_mut(pos);
+        memory.seen.extend(seen);
+    }
+
+    /// The memory of the level the party is standing in, created empty on
+    /// first sight of it.
+    fn level_memory_mut(&mut self, pos: DungeonPos) -> &mut LevelMemory {
+        self.world
+            .resource_mut::<DungeonMemory>()
+            .into_inner()
+            .0
+            .entry((pos.entrance, pos.depth))
+            .or_default()
+    }
+
+    /// Marks the cell the party is standing on as somewhere a fight started,
+    /// for the map to pin.
+    pub(crate) fn remember_fight(&mut self) {
+        let Some(pos) = self.dungeon_pos() else {
+            return;
+        };
+        self.level_memory_mut(pos).fights.insert((pos.x, pos.y));
     }
 
     /// The party's current cell and facing, or `None` on the surface.
@@ -324,6 +397,7 @@ impl Game {
         if let Locale::Dungeon { facing, .. } = &mut *self.world.resource_mut::<Locale>() {
             *facing = dir;
         }
+        self.remember_view();
     }
 
     pub fn turn_left(&mut self) {
@@ -384,6 +458,9 @@ impl Game {
             *x = nx;
             *y = ny;
         }
+        // Before the encounter roll, so a corridor the party walked into is
+        // on their map even if something jumps them the moment they enter it.
+        self.remember_view();
         // Only a step that actually covered ground draws an encounter —
         // shoving at a wall is not travel, the same call `move_player`
         // makes about an ambush.
@@ -449,6 +526,7 @@ impl Game {
         for &member in &pack {
             self.world.entity_mut(member).insert(DungeonSpawn);
         }
+        self.remember_fight();
         self.log("Something moves in the dark ahead.".to_string());
         self.start_battle(pack);
     }
@@ -552,6 +630,7 @@ impl Game {
             facing: Dir::North,
             entrance,
         });
+        self.remember_view();
     }
 
     /// Restores a saved dungeon position, regenerating the level from the
@@ -569,10 +648,82 @@ impl Game {
             self.world.insert_resource(CurrentDungeon(Some(level)));
         }
         self.world.insert_resource(locale);
+        self.remember_view();
     }
 
     pub(crate) fn locale(&self) -> Locale {
         *self.world.resource::<Locale>()
+    }
+
+    /// The party's map of the level they are in — see
+    /// `views::DungeonMapView`. `None` on the surface.
+    ///
+    /// Drawn from `DungeonMemory` rather than from the level, so it shows
+    /// what has been seen and not what is there. The level is consulted only
+    /// to say what each *remembered* cell holds.
+    pub fn dungeon_map(&self) -> Option<DungeonMapView> {
+        let pos = self.dungeon_pos()?;
+        let level = self.world.resource::<CurrentDungeon>().0.as_ref()?;
+        let memory = self.world.resource::<DungeonMemory>();
+        let seen = memory
+            .0
+            .get(&(pos.entrance, pos.depth))
+            .map(|m| &m.seen)
+            .cloned()
+            .unwrap_or_default();
+
+        let cells = (0..level.height)
+            .map(|y| {
+                (0..level.width)
+                    .map(|x| {
+                        if !seen.contains(&(x, y)) {
+                            return DungeonMapCell::Unknown;
+                        }
+                        match level.cell(x, y) {
+                            CellKind::Rock => DungeonMapCell::Rock,
+                            CellKind::Floor => DungeonMapCell::Floor,
+                            CellKind::StairsUp => DungeonMapCell::StairsUp,
+                            CellKind::StairsDown => DungeonMapCell::StairsDown,
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
+
+        let mut marks: Vec<((i32, i32), DungeonMapMark)> = memory
+            .0
+            .get(&(pos.entrance, pos.depth))
+            .map(|m| {
+                m.fights
+                    .iter()
+                    .map(|&c| (c, DungeonMapMark::Fight))
+                    .collect()
+            })
+            .unwrap_or_default();
+        // Last, so a fight marker on the party's own cell doesn't hide them.
+        marks.push(((pos.x, pos.y), DungeonMapMark::Party));
+
+        let walkable = (0..level.height)
+            .flat_map(|y| (0..level.width).map(move |x| (x, y)))
+            .filter(|&(x, y)| level.walkable(x, y))
+            .count();
+        let walked = seen.iter().filter(|&&(x, y)| level.walkable(x, y)).count();
+
+        Some(DungeonMapView {
+            depth: pos.depth,
+            floors: pos.floors,
+            width: level.width,
+            height: level.height,
+            cells,
+            marks,
+            facing: pos.facing.label(),
+            entrance: pos.entrance,
+            explored: if walkable == 0 {
+                0.0
+            } else {
+                walked as f32 / walkable as f32
+            },
+        })
     }
 
     /// The first-person view of the cells around the party, already rotated
@@ -588,22 +739,15 @@ impl Game {
         } = self.dungeon_pos()?;
         let level = self.world.resource::<CurrentDungeon>().0.as_ref()?;
 
-        let (fx, fy) = facing.delta();
-        let (rx, ry) = facing.right_delta();
-        let span = DUNGEON_VIEW_HALF_WIDTH as i32;
-
-        let cells = (0..DUNGEON_VIEW_DEPTH as i32)
-            .map(|ahead| {
-                (-span..=span)
-                    .map(|lateral| {
-                        let cx = x + fx * ahead + rx * lateral;
-                        let cy = y + fy * ahead + ry * lateral;
-                        match level.cell(cx, cy) {
-                            CellKind::Rock => DungeonCellView::Rock,
-                            CellKind::Floor => DungeonCellView::Floor,
-                            CellKind::StairsUp => DungeonCellView::StairsUp,
-                            CellKind::StairsDown => DungeonCellView::StairsDown,
-                        }
+        let cells = view_cone(x, y, facing)
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(|(cx, cy)| match level.cell(cx, cy) {
+                        CellKind::Rock => DungeonCellView::Rock,
+                        CellKind::Floor => DungeonCellView::Floor,
+                        CellKind::StairsUp => DungeonCellView::StairsUp,
+                        CellKind::StairsDown => DungeonCellView::StairsDown,
                     })
                     .collect()
             })

@@ -55,6 +55,7 @@ impl Game {
         world.insert_resource(Platform::default());
         world.insert_resource(Locale::default());
         world.insert_resource(CurrentDungeon::default());
+        world.insert_resource(DungeonMemory::default());
         world.insert_resource(ZoneSpawnPoint {
             x: start.0,
             y: start.1,
@@ -171,6 +172,7 @@ impl Game {
         world.insert_resource(Platform::default());
         world.insert_resource(Locale::default());
         world.insert_resource(CurrentDungeon::default());
+        world.insert_resource(DungeonMemory::default());
         world.insert_resource(ZoneSpawnPoint {
             x: data.spawn_point.0,
             y: data.spawn_point.1,
@@ -418,6 +420,10 @@ impl Game {
         }
 
         game.restore_dungeon_entrances(data.dungeon_entrances);
+        // Before `restore_locale`, which records what the party can see from
+        // where they are standing and would otherwise write into a map that
+        // is about to be overwritten.
+        game.world.insert_resource(data.dungeon_memory);
         // Last, and after the WorldMap is in place: restoring a dungeon
         // locale regenerates its level from that map's seed.
         game.restore_locale(data.locale);
@@ -617,6 +623,7 @@ impl Game {
                 query.iter(&self.world).map(|p| (p.x, p.y)).collect()
             },
             locale: self.locale(),
+            dungeon_memory: self.world.resource::<DungeonMemory>().clone(),
         };
         save::save_to_file(path, &data)
     }

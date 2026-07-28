@@ -99,6 +99,13 @@ impl App {
         self.mode = Mode::Playing;
     }
 
+    /// The map closes on any key, like the help screen: it is something you
+    /// glance at mid-corridor, and making the player find the right key to
+    /// put it away would be friction on the one screen meant to remove some.
+    pub(crate) fn handle_dungeon_map_key(&mut self) {
+        self.mode = Mode::Playing;
+    }
+
     pub(crate) fn handle_game_over_key(&mut self) {
         self.game = None;
         self.status_line = None;

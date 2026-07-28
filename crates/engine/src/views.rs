@@ -313,6 +313,55 @@ pub struct DungeonView {
     pub standing_on: Option<String>,
 }
 
+/// One cell of `DungeonMapView`.
+///
+/// `Unknown` is a cell the party has never had in view. It is deliberately
+/// indistinguishable from solid rock the party *has* seen only in that both
+/// are unwalkable — the renderer draws them differently, because "I have not
+/// been here" and "there is nothing here" are the two things a mapper most
+/// needs to tell apart.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum DungeonMapCell {
+    Unknown,
+    Rock,
+    Floor,
+    StairsUp,
+    StairsDown,
+}
+
+/// A landmark pinned to a mapped cell, over and above what the layout says.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum DungeonMapMark {
+    /// Where the party is standing, and which way they are looking.
+    Party,
+    /// A corridor the party was jumped in.
+    Fight,
+}
+
+/// The party's own map of the level they are standing in — everything they
+/// have had in view, and nothing they haven't.
+///
+/// A whole-level grid rather than a window, because the point of a map is
+/// seeing the shape of the parts you have walked all at once.
+pub struct DungeonMapView {
+    pub depth: u32,
+    pub floors: u32,
+    pub width: i32,
+    pub height: i32,
+    /// Row-major, `height` rows of `width` cells.
+    pub cells: Vec<Vec<DungeonMapCell>>,
+    /// Landmarks by cell, in a stable order.
+    pub marks: Vec<((i32, i32), DungeonMapMark)>,
+    /// `Dir::label` for the party's heading — the map is drawn north-up, so
+    /// unlike `DungeonView` this is a real bearing rather than a readout.
+    pub facing: &'static str,
+    /// The surface tile of the breach this shaft hangs from, so the map can
+    /// say which of a sector's breaches it belongs to.
+    pub entrance: (i32, i32),
+    /// How much of the level's walkable area has been seen, 0.0 to 1.0.
+    pub explored: f32,
+}
+
 /// One entry in `Game::craft_recipes` — compiling `result` consumes `cost`.
 pub struct CraftRecipe {
     pub result: ItemId,

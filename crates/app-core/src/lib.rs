@@ -248,6 +248,11 @@ pub enum Mode {
     Upgrade,
     Symlink,
     InspectDirection,
+    /// The party's own map of the dungeon level they are standing in — see
+    /// `Game::dungeon_map`. Underground only, opened with the same `g` that
+    /// scans the ground on the surface: it is the same verb, and the two
+    /// screens never both apply.
+    DungeonMap,
     /// The manifest — a full read-only stat sheet for the player, a program
     /// you own, or a wild one. `App::pending_manifest` is the subject.
     Manifest,
@@ -373,6 +378,7 @@ impl Mode {
             | Mode::Perks
             | Mode::Research
             | Mode::Help
+            | Mode::DungeonMap
             | Mode::GameOver
             | Mode::QuitRunConfirm
             | Mode::QuitAppConfirm => false,

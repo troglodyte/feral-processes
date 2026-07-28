@@ -24,6 +24,7 @@ mod battle;
 mod building;
 mod crafting;
 mod dungeon;
+mod dungeon_map;
 mod inventory;
 mod manifest;
 mod manifest_layout;
@@ -44,6 +45,7 @@ use building::{
     draw_upgrade_menu, draw_worker_menu,
 };
 use crafting::{draw_craft_menu, draw_craft_quantity};
+use dungeon_map::draw_dungeon_map;
 use inventory::{draw_erase_quantity, draw_inventory, draw_inventory_item_action};
 use manifest::{ManifestNav, draw_manifest, draw_manifest_pick};
 use meta::{
@@ -265,6 +267,20 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
             draw_playing_base(app, fx, painter, &m);
             draw_help(painter, &m);
         }
+        // Full-pane rather than a popup over the corridor: the whole point
+        // is seeing the level's shape at once, and a map you have to peer
+        // around the first-person view to read is not that.
+        Mode::DungeonMap => match app.game.as_ref().and_then(|g| g.dungeon_map()) {
+            Some(view) => {
+                draw_dungeon_map(&view, painter, painter.screen_w(), painter.screen_h(), &m)
+            }
+            // Surfacing with the map open, which the engine allows: fall
+            // back to the map screen rather than to a blank pane.
+            None => {
+                draw_playing_base(app, fx, painter, &m);
+                draw_mode_overlay(app, painter, &m);
+            }
+        },
         _ => {
             draw_playing_base(app, fx, painter, &m);
             draw_mode_overlay(app, painter, &m);

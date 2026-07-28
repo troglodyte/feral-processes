@@ -74,6 +74,25 @@ fn level_cells(game: &Game) -> Vec<CellKind> {
         .collect()
 }
 
+/// Walks `steps` corridor cells, jacking out of anything that jumps the
+/// party on the way.
+///
+/// Necessary because `face_an_open_way` turns, and turning is refused
+/// mid-intrusion — so a naive walk loop panics the moment the encounter
+/// roll comes up, on a schedule that varies with the seed.
+fn walk_corridors(game: &mut Game, steps: usize) {
+    for _ in 0..steps {
+        if game.has_active_battle() {
+            flee_until_clear(game);
+        }
+        face_an_open_way(game);
+        game.step_forward();
+    }
+    if game.has_active_battle() {
+        flee_until_clear(game);
+    }
+}
+
 /// Faces the party down a direction they can actually walk, so a movement
 /// assertion isn't silently testing a wall.
 fn face_an_open_way(game: &mut Game) -> Dir {
@@ -630,6 +649,194 @@ fn a_dungeon_position_survives_a_save_and_load_with_an_identical_level() {
     assert_eq!(
         cells_before, cells_after,
         "the level regenerates from the seed — a different one would strand the party in rock"
+    );
+}
+
+fn map(game: &Game) -> DungeonMapView {
+    game.dungeon_map().expect("underground")
+}
+
+fn map_cell(view: &DungeonMapView, x: i32, y: i32) -> DungeonMapCell {
+    view.cells[y as usize][x as usize]
+}
+
+#[test]
+fn the_surface_has_no_map() {
+    let game = game();
+    assert!(game.dungeon_map().is_none());
+}
+
+#[test]
+fn arriving_maps_what_the_party_can_see_and_nothing_else() {
+    let mut game = game();
+    descend(&mut game);
+    let view = map(&game);
+
+    let Locale::Dungeon { x, y, .. } = locale(&game) else {
+        unreachable!()
+    };
+    assert_eq!(
+        map_cell(&view, x, y),
+        DungeonMapCell::StairsUp,
+        "the cell the party is standing on must be mapped"
+    );
+    assert!(
+        view.cells
+            .iter()
+            .flatten()
+            .any(|&c| c == DungeonMapCell::Unknown),
+        "standing on the entry should not reveal a 21x21 level"
+    );
+    assert!(view.explored > 0.0 && view.explored < 1.0);
+}
+
+/// The map is filled from `view_cone`, the same walk the first-person view
+/// is built from — so anything the view shows is mapped, and nothing else.
+#[test]
+fn the_map_records_exactly_what_the_first_person_view_showed() {
+    let mut game = game();
+    descend(&mut game);
+    let facing = face_an_open_way(&mut game);
+    game.step_forward();
+
+    let view = game.dungeon_view().unwrap();
+    let mapped = map(&game);
+    let Locale::Dungeon { x, y, .. } = locale(&game) else {
+        unreachable!()
+    };
+
+    // The cell straight ahead is in view, so it must be on the map.
+    let (dx, dy) = facing.delta();
+    let (ax, ay) = (x + dx, y + dy);
+    if (0..mapped.width).contains(&ax) && (0..mapped.height).contains(&ay) {
+        assert_ne!(
+            map_cell(&mapped, ax, ay),
+            DungeonMapCell::Unknown,
+            "a cell the view is drawing was left off the map"
+        );
+    }
+    assert!(!view.cells.is_empty());
+}
+
+#[test]
+fn turning_in_place_maps_the_new_heading() {
+    let mut game = game();
+    descend(&mut game);
+    let before = map(&game).explored;
+
+    for _ in 0..3 {
+        game.turn_right();
+    }
+    assert!(
+        map(&game).explored >= before,
+        "turning to look down a new corridor should map it"
+    );
+}
+
+#[test]
+fn walking_a_level_maps_more_of_it() {
+    let mut game = game();
+    descend(&mut game);
+    let before = map(&game).explored;
+
+    walk_corridors(&mut game, 40);
+
+    assert!(
+        map(&game).explored > before,
+        "forty steps mapped nothing new"
+    );
+}
+
+/// A level regenerates from its spec, but what the player has *seen* of it
+/// does not — losing that on load hands back a blank map of a walked level.
+#[test]
+fn the_map_survives_a_save_and_load() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    game.enter_dungeon(pos.x, pos.y);
+    walk_corridors(&mut game, 20);
+    let before = map(&game);
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_dungeon_map_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let after = map(&loaded);
+    assert_eq!(before.cells, after.cells, "the walked map came back blank");
+    assert!((before.explored - after.explored).abs() < f32::EPSILON);
+}
+
+/// Two breaches are two dungeons, so they are two maps. Sharing one would
+/// pre-reveal a level the party has never set foot in.
+#[test]
+fn each_breach_keeps_its_own_map() {
+    let mut game = game();
+    let tiles = entrance_tiles(&mut game);
+    assert!(tiles.len() >= 2);
+
+    game.enter_dungeon(tiles[0].0, tiles[0].1);
+    walk_corridors(&mut game, 20);
+    let walked = map(&game).explored;
+    game.ascend();
+
+    game.enter_dungeon(tiles[1].0, tiles[1].1);
+    assert!(
+        map(&game).explored < walked,
+        "the second breach opened onto the first one's map"
+    );
+}
+
+#[test]
+fn a_dungeon_fight_is_pinned_to_the_corridor_it_happened_in() {
+    let mut game = game();
+    descend(&mut game);
+    let Locale::Dungeon { x, y, .. } = locale(&game) else {
+        unreachable!()
+    };
+    game.remember_fight();
+
+    let marks = map(&game).marks;
+    assert!(
+        marks.contains(&((x, y), DungeonMapMark::Fight)),
+        "a fight should leave a mark on the map"
+    );
+    assert_eq!(
+        marks.last().map(|&(_, m)| m),
+        Some(DungeonMapMark::Party),
+        "the party must be drawn last, or a fight marker hides them"
+    );
+}
+
+/// Breaching does not despawn what a zone accumulated, so anything
+/// zone-local has to be wiped by name — the trap `BuybackLedger` already
+/// documents, and one a dungeon map falls into just as readily.
+#[test]
+fn maps_do_not_ride_a_breach_into_the_next_zone() {
+    let mut game = game();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    game.enter_dungeon(pos.x, pos.y);
+    // Turning maps the entry's surroundings without leaving the cell, so the
+    // climb back out below is from the stairs the party arrived on — a
+    // breach can only be taken from the surface.
+    for _ in 0..3 {
+        game.turn_right();
+    }
+    game.ascend();
+    assert!(!game.is_underground(), "the fixture must surface to breach");
+    assert!(
+        !game.world.resource::<DungeonMemory>().0.is_empty(),
+        "the fixture should have mapped something to lose"
+    );
+
+    game.enter_next_zone();
+    assert!(
+        game.world.resource::<DungeonMemory>().0.is_empty(),
+        "last sector's maps rode the breach through"
     );
 }
 

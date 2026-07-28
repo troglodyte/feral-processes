@@ -53,8 +53,9 @@ pub use perks::Perk;
 use research::{ResearchDb, ResearchDef};
 pub use research::{ResearchId, ResearchRecipe};
 use resources::{
-    BattleState, BuybackLedger, CurrentDungeon, EffectQueue, GameClock, GameOver, GameRng, Locale,
-    MessageLog, Party, Platform, PlayerEntity, Research, ZoneLevel, ZoneSpawnPoint,
+    BattleState, BuybackLedger, CurrentDungeon, DungeonMemory, EffectQueue, GameClock, GameOver,
+    GameRng, Locale, MessageLog, Party, Platform, PlayerEntity, Research, ZoneLevel,
+    ZoneSpawnPoint,
 };
 pub use resources::{DifficultyMode, EffectKind, MessageKind, VisualEffect};
 use species::{MoveDef, SpeciesDb, SpeciesDef, SpeciesId};

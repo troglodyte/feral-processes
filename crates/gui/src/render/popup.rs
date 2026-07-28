@@ -45,6 +45,18 @@ pub(super) fn spent_item_row(s: impl Into<String>, selected: bool) -> Row {
     }
 }
 
+/// `item_row` for a program close enough to 0 HP that another fight could
+/// delete it for good — see `hp_critical`. Callers pair it with a CRITICAL
+/// tag in the row text, so the warning still reads without colour.
+pub(super) fn critical_item_row(s: impl Into<String>, selected: bool) -> Row {
+    Row::Item {
+        text: s.into(),
+        selected,
+        bold: false,
+        color: RED,
+    }
+}
+
 /// `item_row` for a list of creatures — see `Row::Item::bold`.
 pub(super) fn creature_row(s: impl Into<String>, selected: bool) -> Row {
     Row::Item {

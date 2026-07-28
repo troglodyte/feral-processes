@@ -299,7 +299,16 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
         };
         let ghost = fx.bar_ghost(PARTY_BAR_KEY_BASE + p.slot as u64, p.hp, dt);
         let active = view.active_slot == Some(p.slot);
-        let color = if active { CYAN } else { GREEN };
+        // Danger outranks the active-slot cue: the `>` prefix and the bold
+        // face already mark who is acting, and nothing else on this screen
+        // says "one more hit and this is gone".
+        let color = if hp_critical(p.hp, p.max_hp) {
+            RED
+        } else if active {
+            CYAN
+        } else {
+            GREEN
+        };
         y = draw_bar(
             bar,
             &roster_row(

@@ -78,6 +78,23 @@ const ORANGE: Color = Color::new(0.95, 0.55, 0.15, 1.0);
 /// unreadable.
 const BACK_RANK_DESATURATION: f32 = 0.55;
 
+/// A program at or below `1 / CRITICAL_HP_DIVISOR` of its Integrity is
+/// flagged as about to be lost. At 0 it is deleted for good, so the warning
+/// has to arrive before the hit that gets it there rather than after.
+///
+/// A presentation threshold, not a difficulty knob — nothing in the sim
+/// reads it — so it lives here with the colours rather than in the engine's
+/// `tuning.rs`.
+const CRITICAL_HP_DIVISOR: i32 = 3;
+
+/// Whether a program is close enough to deletion to warrant the warning
+/// colour. The single definition both the battle pane and the party menu
+/// call, so the threshold cannot come to mean two different things on two
+/// screens.
+pub(super) fn hp_critical(hp: i32, max_hp: i32) -> bool {
+    max_hp > 0 && hp * CRITICAL_HP_DIVISOR <= max_hp
+}
+
 /// The one place a `GlyphColor` becomes a drawable `Color`. Shared by the map
 /// and by the manifest's header portrait — a second copy would be free to
 /// drift, and a program would read as one colour on the grid and another on
@@ -444,6 +461,18 @@ fn activity_tag(activity: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hp_critical_triggers_at_exactly_a_third_and_not_a_point_above() {
+        assert!(hp_critical(10, 30), "exactly a third is already critical");
+        assert!(!hp_critical(11, 30), "a point above a third is not");
+        assert!(hp_critical(0, 30), "a dead program reads as critical");
+        assert!(!hp_critical(30, 30), "full health is never critical");
+        assert!(
+            !hp_critical(0, 0),
+            "a program with no max HP is a malformed fixture, not a warning"
+        );
+    }
 
     #[test]
     fn every_mode_that_covers_the_log_pane_gets_the_status_banner() {

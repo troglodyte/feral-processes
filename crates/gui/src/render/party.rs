@@ -24,23 +24,27 @@ pub(super) fn draw_companion_menu(
             .map(|q| format!(" [{q}]"))
             .unwrap_or_default();
         let fused = fusion_tag(p.fusions);
-        rows.push(item_row(
-            format!(
-                "[{}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}{}{}{}",
-                menu_shortcut(i),
-                p.name,
-                p.level,
-                p.hp,
-                p.max_hp,
-                p.atk,
-                p.def,
-                p.power,
-                quality,
-                fused,
-                activity
-            ),
-            i == selected,
-        ));
+        let critical = hp_critical(p.hp, p.max_hp);
+        let text = format!(
+            "[{}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}{}{}{}{}",
+            menu_shortcut(i),
+            p.name,
+            p.level,
+            p.hp,
+            p.max_hp,
+            p.atk,
+            p.def,
+            p.power,
+            quality,
+            fused,
+            activity,
+            if critical { " - CRITICAL" } else { "" }
+        );
+        rows.push(if critical {
+            critical_item_row(text, i == selected)
+        } else {
+            item_row(text, i == selected)
+        });
     }
     draw_popup("Party", PopupSize::Large, &rows, painter, m);
 }

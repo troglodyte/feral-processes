@@ -637,3 +637,111 @@ fn ending_a_battle_clears_every_hostiles_combat_state() {
         );
     }
 }
+
+/// The death line has to be `Outcome`, not the default `Info` kind:
+/// `MessageLog::retain_outcomes_since_battle` prunes everything else when
+/// the battle ends, so an `Info` line would be announced mid-fight and then
+/// silently vanish before the player reached the map.
+#[test]
+fn a_companion_brought_to_zero_announces_its_deletion_and_its_lost_routines() {
+    let mut game = Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(companion)
+        .insert(Routines(vec!["priority_boost".to_string()]));
+    game.add_companion(companion).unwrap();
+    let name = game.creature_label(companion);
+
+    game.apply_damage(companion, 10);
+
+    let (kind, line) = game
+        .message_log(20)
+        .into_iter()
+        .find(|(_, l)| l.contains(&name) && l.contains("deleted"))
+        .expect("a companion reaching 0 HP must announce its deletion");
+    assert_eq!(
+        kind,
+        MessageKind::Outcome,
+        "the death line must survive retain_outcomes_since_battle"
+    );
+    assert!(
+        line.contains("Priority Boost"),
+        "the line must name the routines lost with it, got: {line}"
+    );
+}
+
+/// The guard is `Party` membership. A hostile reaching 0 is already handled
+/// by `finish_member`, which logs its own kill line and awards loot — a
+/// second announcement here would double-report every kill in the game.
+#[test]
+fn a_hostile_brought_to_zero_is_not_announced_by_the_companion_death_path() {
+    let mut game = Game::new(4243, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_on_player_tile(&mut game);
+    game.world.get_mut::<Stats>(wild).unwrap().hp = 5;
+
+    game.apply_damage(wild, 5);
+
+    assert!(
+        !game
+            .message_log(20)
+            .iter()
+            .any(|(_, l)| l.contains("deleted for good")),
+        "only party members route through the companion death announcement"
+    );
+}
+
+/// Damage that hurts without killing must stay silent, and a second hit on
+/// an already-dead member must not announce twice — the transition is
+/// `> 0` to `0`, not "is at 0".
+#[test]
+fn the_death_line_fires_once_on_the_transition_to_zero_and_never_above_it() {
+    let mut game = Game::new(4244, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(companion).unwrap();
+
+    game.apply_damage(companion, 4);
+    assert!(
+        !game
+            .message_log(20)
+            .iter()
+            .any(|(_, l)| l.contains("deleted for good")),
+        "a survivable hit must not announce a death"
+    );
+
+    game.apply_damage(companion, 6);
+    game.apply_damage(companion, 6);
+    let announcements = game
+        .message_log(20)
+        .iter()
+        .filter(|(_, l)| l.contains("deleted for good"))
+        .count();
+    assert_eq!(
+        announcements, 1,
+        "hitting a corpse again must not re-announce its death"
+    );
+}
+
+/// The player is not a party member and must never be reaped by this path —
+/// flatlining stays with `difficulty::death_handling_system`, which is what
+/// `DifficultyMode` selects between. A player deleted from the world would
+/// take the whole run with it.
+#[test]
+fn the_player_at_zero_hp_is_not_touched_by_the_program_death_path() {
+    let mut game = Game::new(4245, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let hp = game.world.get::<Stats>(player).unwrap().hp;
+
+    game.apply_damage(player, hp);
+
+    assert!(
+        game.world.get::<Stats>(player).is_some(),
+        "the player entity survives 0 HP; only difficulty handling may act on it"
+    );
+    assert!(
+        !game
+            .message_log(20)
+            .iter()
+            .any(|(_, l)| l.contains("deleted for good")),
+        "the player does not get a program death line"
+    );
+}

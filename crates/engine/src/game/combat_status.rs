@@ -303,10 +303,52 @@ impl Game {
         }
     }
 
+    /// Applies `dmg` to `target`, floored at 0.
+    ///
+    /// Death is detected here rather than at the six call sites because this
+    /// is the only path that lowers a creature's HP — every other write to
+    /// `Stats::hp` is a heal, one of the two full-heals, or
+    /// `needs_decay_system`, which is `With<Player>`. A seventh caller added
+    /// later inherits the check for free; six separate checks would not.
+    ///
+    /// Only party members are announced. A hostile reaching 0 is reported by
+    /// `finish_member`, and the player by `difficulty::death_handling_system`.
     pub(crate) fn apply_damage(&mut self, target: Entity, dmg: i32) {
-        if let Some(mut stats) = self.world.get_mut::<Stats>(target) {
+        let killed = {
+            let Some(mut stats) = self.world.get_mut::<Stats>(target) else {
+                return;
+            };
+            let was_alive = stats.hp > 0;
             stats.hp = (stats.hp - dmg).max(0);
+            was_alive && stats.hp == 0
+        };
+        if killed && self.world.resource::<Party>().0.contains(&target) {
+            self.announce_program_death(target);
         }
+    }
+
+    /// The `Outcome` line for a party member killed in battle: what died and
+    /// what died with it.
+    ///
+    /// Emitted the moment its HP reaches 0, while the entity itself lives on
+    /// until `end_battle` reaps it — see that method for why the removal has
+    /// to wait.
+    fn announce_program_death(&mut self, program: Entity) {
+        let name = self.creature_label(program);
+        let routines: Vec<String> = self
+            .extractable_routines(program)
+            .into_iter()
+            .map(|def| def.name)
+            .collect();
+        let line = if routines.is_empty() {
+            format!("{name} crashes and is deleted for good.")
+        } else {
+            format!(
+                "{name} crashes and is deleted for good, taking {} with it.",
+                routines.join(", ")
+            )
+        };
+        self.log_kind(MessageKind::Outcome, line);
     }
 
     pub(crate) fn creature_alive(&self, e: Entity) -> bool {

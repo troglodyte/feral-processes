@@ -171,11 +171,16 @@ therefore arms `max(ability.cooldown, ENEMY_ROUTINE_MIN_COOLDOWN)`. The
 player side keeps the authored value untouched — that is what leaves
 `decompile` spammable.
 
-Two player-only paths widen, both of which become live bugs the moment a
-hostile holds a buff:
+Three player-only paths widen, all of which become live bugs the moment a
+hostile holds a routine or a buff:
 
 - `tick_ability_cooldowns` is called for the player and party members only.
-  Hostile carriers must tick too, or a fired routine never comes back.
+  Hostile carriers must tick too, or a fired routine never comes back and a
+  carrier is a one-shot.
+- `tick_combat_buff` is likewise party-only. `tick_round_status_effects`
+  already walks hostiles for `tick_status_effects` but not for this, so a
+  mirrored buff or sap would last the whole fight regardless of its authored
+  `duration`.
 - `clear_battle_status_effects(player, wild: Option<Entity>)` clears exactly
   one hostile's `StatusEffects` and no hostile's `CombatBuff`. With mirrored
   buffs that leaves a permanent free stat on every surviving hostile — they

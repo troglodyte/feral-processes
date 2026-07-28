@@ -2468,9 +2468,9 @@ fn a_cooldown_zero_routine_still_cannot_fire_two_rounds_running() {
 
     game.wild_retaliate(enemies[0], 0, player);
     assert!(
-        game.wild_routine_ready(enemies[0]).is_none()
-            || crate::tuning::ENEMY_ROUTINE_MIN_COOLDOWN == 0,
-        "the enemy side floors the cooldown so a mod cannot produce an every-round routine"
+        game.wild_routine_ready(enemies[0]).is_none(),
+        "the enemy side floors the cooldown at ENEMY_ROUTINE_MIN_COOLDOWN, so a mod ability \
+         declaring none still cannot fire two rounds running"
     );
 }
 

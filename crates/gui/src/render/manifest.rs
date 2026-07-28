@@ -428,3 +428,40 @@ fn roll_readout(roll: f32) -> String {
     };
     format!("{roll:.2}  {tier}")
 }
+
+pub(super) fn draw_manifest_pick(
+    game: &mut Game,
+    subjects: &[Entity],
+    selected: usize,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let mut rows = vec![text_row("Read whose manifest?")];
+    for (i, &entity) in subjects.iter().enumerate() {
+        let label = match game.manifest(entity) {
+            Some(v) => match &v.subject {
+                ManifestSubject::Player(_) => format!("You - Lv{}", v.level.unwrap_or(1)),
+                ManifestSubject::Program(p) => format!(
+                    "{} Lv{} - HP {}/{}  PWR {}{}",
+                    v.name,
+                    v.level.unwrap_or(1),
+                    v.hp,
+                    v.max_hp,
+                    v.power,
+                    p.activity
+                        .as_ref()
+                        .map(|a| activity_tag(a))
+                        .unwrap_or_default()
+                ),
+            },
+            None => "(gone)".to_string(),
+        };
+        rows.push(creature_row(
+            format!("[{}] {label}", menu_shortcut(i)),
+            i == selected,
+        ));
+    }
+    rows.push(text_row(""));
+    rows.push(text_row("Esc to cancel"));
+    draw_popup("Manifest", PopupSize::Large, &rows, painter, m);
+}

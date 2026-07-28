@@ -44,8 +44,42 @@ impl App {
             .unwrap_or_default()
     }
 
-    pub(crate) fn handle_manifest_key(&mut self, _key: GameKey) {
-        self.pending_manifest = None;
-        self.mode = Mode::Playing;
+    pub(crate) fn handle_manifest_pick_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.mode = Mode::Playing;
+            return;
+        }
+        let subjects = self.manifest_subjects();
+        if let Some(idx) = self.selected_index(key, subjects.len()) {
+            self.pending_manifest = Some(subjects[idx]);
+            self.status_line = None;
+            self.mode = Mode::Manifest;
+        }
+    }
+
+    /// Unlike the popup this replaced, the manifest doesn't close on any key
+    /// — ←/→ page between subjects, so only Esc leaves.
+    pub(crate) fn handle_manifest_key(&mut self, key: GameKey) {
+        let step = match key {
+            GameKey::Left => -1,
+            GameKey::Right => 1,
+            GameKey::Esc => {
+                self.pending_manifest = None;
+                self.mode = Mode::Playing;
+                return;
+            }
+            _ => return,
+        };
+        let subjects = self.manifest_subjects();
+        let Some(current) = self
+            .pending_manifest
+            .and_then(|e| subjects.iter().position(|&s| s == e))
+        else {
+            // A wild program isn't in the list, so there is nothing to cycle
+            // to — the footer doesn't offer the keys either.
+            return;
+        };
+        let next = (current as isize + step).rem_euclid(subjects.len() as isize) as usize;
+        self.pending_manifest = Some(subjects[next]);
     }
 }

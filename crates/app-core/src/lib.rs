@@ -214,6 +214,9 @@ pub enum Mode {
     /// The manifest — a full read-only stat sheet for the player, a program
     /// you own, or a wild one. `App::pending_manifest` is the subject.
     Manifest,
+    /// Picking whose manifest to read — you, or any program you own.
+    /// Reached with `d` from `Mode::Playing`.
+    ManifestPick,
     Inventory,
     InventoryItemAction,
     /// Second page of the erase flow: asks how many units of
@@ -303,6 +306,7 @@ impl Mode {
             | Mode::Symlink
             | Mode::InspectDirection
             | Mode::Manifest
+            | Mode::ManifestPick
             | Mode::Inventory
             | Mode::InventoryItemAction
             | Mode::EraseQuantity

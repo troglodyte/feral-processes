@@ -44,7 +44,7 @@ use building::{
 };
 use crafting::{draw_craft_menu, draw_craft_quantity};
 use inventory::{draw_erase_quantity, draw_inventory, draw_inventory_item_action};
-use manifest::draw_manifest;
+use manifest::{draw_manifest, draw_manifest_pick};
 use meta::{
     draw_difficulty_pick, draw_game_over, draw_help, draw_load_game, draw_main_menu,
     draw_save_action,
@@ -292,6 +292,10 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             let cyclable =
                 subjects.len() > 1 && pending_manifest.is_some_and(|e| subjects.contains(&e));
             draw_manifest(game, pending_manifest, cyclable, painter, m)
+        }
+        Mode::ManifestPick => {
+            let subjects = game.manifest_subjects();
+            draw_manifest_pick(game, &subjects, selected, painter, m)
         }
         Mode::Inventory => draw_inventory(game, selected, painter, m),
         Mode::InventoryItemAction => {

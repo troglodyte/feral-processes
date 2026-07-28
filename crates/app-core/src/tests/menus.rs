@@ -2,6 +2,7 @@
 
 use super::support::*;
 use crate::*;
+use feral_processes_engine::ManifestSubject;
 
 /// The invariant every menu renderer leans on: the key a row advertises
 /// is the key that picks it. Twelve research nodes and ten deployable
@@ -52,4 +53,139 @@ fn letters_pick_no_row_in_a_menu_shorter_than_ten_rows() {
             );
         }
     }
+}
+
+#[test]
+fn d_opens_the_manifest_picker_and_esc_backs_out() {
+    let mut app = test_app(70);
+    app.handle_key(GameKey::Char('d'));
+    assert_eq!(app.mode, Mode::ManifestPick);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+}
+
+#[test]
+fn the_picker_always_offers_you_as_its_first_row() {
+    let mut app = test_app(71);
+    let player = app.game.as_ref().unwrap().player_status().position;
+
+    app.handle_key(GameKey::Char('d'));
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.mode, Mode::Manifest);
+    let subject = app.pending_manifest.expect("row 1 picks a subject");
+    let view = app.game.as_ref().unwrap().manifest(subject).unwrap();
+    assert_eq!(view.name, "You", "you are always the first row");
+    let ManifestSubject::Player(p) = view.subject else {
+        panic!("row 1 is the player");
+    };
+    assert_eq!(p.position, player);
+}
+
+#[test]
+fn the_picker_lists_every_owned_program_after_you() {
+    let mut app = app_owning_distant_programs(72, 2);
+    let subjects = app.manifest_subjects();
+    assert_eq!(subjects.len(), 3, "you plus two programs");
+
+    app.handle_key(GameKey::Char('d'));
+    app.handle_key(GameKey::Char('2'));
+    assert_eq!(app.mode, Mode::Manifest);
+    assert_eq!(app.pending_manifest, Some(subjects[1]));
+}
+
+#[test]
+fn left_and_right_cycle_the_owned_subjects_and_wrap_at_both_ends() {
+    let mut app = app_owning_distant_programs(73, 2);
+    let subjects = app.manifest_subjects();
+    app.handle_key(GameKey::Char('d'));
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.pending_manifest, Some(subjects[0]));
+
+    app.handle_key(GameKey::Right);
+    assert_eq!(app.pending_manifest, Some(subjects[1]));
+    app.handle_key(GameKey::Right);
+    assert_eq!(app.pending_manifest, Some(subjects[2]));
+    app.handle_key(GameKey::Right);
+    assert_eq!(
+        app.pending_manifest,
+        Some(subjects[0]),
+        "past the last subject wraps to the first"
+    );
+    app.handle_key(GameKey::Left);
+    assert_eq!(
+        app.pending_manifest,
+        Some(subjects[2]),
+        "before the first subject wraps to the last"
+    );
+    assert_eq!(app.mode, Mode::Manifest, "cycling never leaves the screen");
+}
+
+/// A wild program near the player, and the cardinal direction it lies in.
+/// Found by scanning `view_entities` rather than guessing a direction, so the
+/// test doesn't depend on where a seed happened to put one.
+fn a_wild_program_and_its_direction(app: &mut App) -> (Entity, GameKey) {
+    let game = app.game.as_mut().unwrap();
+    let player = game.player_status().position;
+    let wild = game
+        .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
+        .into_iter()
+        .find(|e| e.is_hostile)
+        .expect("a fresh map has a wild program within scan radius");
+    let (dx, dy) = (wild.pos.0 - player.0, wild.pos.1 - player.1);
+    let key = if dx.abs() >= dy.abs() {
+        if dx > 0 {
+            GameKey::Right
+        } else {
+            GameKey::Left
+        }
+    } else if dy > 0 {
+        GameKey::Down
+    } else {
+        GameKey::Up
+    };
+    (wild.entity, key)
+}
+
+#[test]
+fn cycling_does_nothing_when_the_subject_is_a_program_you_do_not_own() {
+    let mut app = test_app(74);
+    // A wild program reached through `i` + direction is not in the owned
+    // list, so there is nothing to cycle to.
+    let (wild, _) = a_wild_program_and_its_direction(&mut app);
+
+    app.pending_manifest = Some(wild);
+    app.mode = Mode::Manifest;
+    app.handle_key(GameKey::Right);
+    assert_eq!(app.pending_manifest, Some(wild));
+    assert_eq!(app.mode, Mode::Manifest);
+}
+
+#[test]
+fn esc_leaves_the_manifest_for_the_map_rather_than_the_picker() {
+    let mut app = app_owning_distant_programs(75, 1);
+    app.handle_key(GameKey::Char('d'));
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.mode, Mode::Manifest);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(
+        app.mode,
+        Mode::Playing,
+        "the picker is a way in, not a place to be"
+    );
+    assert_eq!(app.pending_manifest, None);
+}
+
+#[test]
+fn inspecting_a_direction_still_lands_on_the_manifest() {
+    let mut app = test_app(76);
+    let (_, direction) = a_wild_program_and_its_direction(&mut app);
+
+    app.handle_key(GameKey::Char('i'));
+    assert_eq!(app.mode, Mode::InspectDirection);
+    app.handle_key(direction);
+    assert_eq!(app.mode, Mode::Manifest);
+    assert!(
+        app.pending_manifest.is_some(),
+        "the inspected program is the manifest's subject"
+    );
 }

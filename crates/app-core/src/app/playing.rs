@@ -37,6 +37,10 @@ impl App {
                 self.mode = Mode::InspectDirection;
                 return;
             }
+            GameKey::Char('d') => {
+                self.mode = Mode::ManifestPick;
+                return;
+            }
             GameKey::Char('v') => {
                 self.mode = Mode::Inventory;
                 return;

@@ -65,6 +65,25 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ### Renderer
 
+- **The map glides under you instead of jumping a tile at a time.** There was
+  no camera at all: the view was rebuilt around your integer position each
+  frame, so a step moved the entire map by one whole tile in one frame. A
+  camera now trails you and eases into place, and the grid is drawn shifted by
+  whatever fraction of a tile it is currently behind. Because you are drawn at
+  your own position rather than pinned to the centre, you visibly lead the
+  camera while it catches up. It never falls more than a tile behind, which
+  also means breaching a zone arrives as a cut rather than a long pan across
+  terrain you are not in any more. Turning effects off makes the camera
+  instant, the same way it makes an HP bar instant.
+- **The ground has texture and the pane has depth.** Every tile of a biome
+  used to draw at one identical colour, so a stretch of Open Grid read as a
+  colour swatch. Each tile now varies slightly, by an amount fixed to its
+  world coordinate — so the variation belongs to the ground and stays put as
+  you walk over it. Tiles with something standing on them are left alone,
+  since their colour is already carrying that structure's damage. Separately,
+  the map dims toward the edges of its pane. That one is decoration rather
+  than information: it stops well short of hiding anything, and a hostile at
+  the edge of the view is as visible as it ever was.
 - **Quitting asks first.** `q` in a run used to drop it on the spot, so one
   mistyped key cost every tick since the last autosave with nothing asked and
   nothing said. It now offers *save and quit*, *quit without saving*, or *keep

@@ -4,4 +4,5 @@
     description: "+3 DEF to one ally for 3 rounds",
     target: OneAlly,
     effect: Buff(kind: Def, power: 3, duration: 3),
+    cooldown: 1,
 )

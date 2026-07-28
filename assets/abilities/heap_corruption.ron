@@ -1,0 +1,10 @@
+(
+    id: "heap_corruption",
+    name: "Heap Corruption",
+    description: "Bleed every member of one group for 3 rounds",
+    target: WholeEnemyGroup,
+    effect: Debuff(kind: Bleed, power: 3, duration: 3),
+    cooldown: 3,
+    fatigue_cost: 11.0,
+    wild_weight: 7,
+)

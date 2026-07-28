@@ -1,0 +1,13 @@
+(
+    id: "throttle",
+    name: "Throttle",
+    // A sap: a negative buff power subtracts wherever it lands. Note that a
+    // combatant holds one buff at a time, so this also clears a target's
+    // Defend stance.
+    description: "-4 ATK to every member of one group for 3 rounds",
+    target: WholeEnemyGroup,
+    effect: Buff(kind: Atk, power: -4, duration: 3),
+    cooldown: 3,
+    fatigue_cost: 10.0,
+    wild_weight: 7,
+)

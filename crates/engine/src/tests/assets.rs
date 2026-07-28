@@ -127,3 +127,60 @@ fn every_shipped_item_and_structure_has_description_text() {
         );
     }
 }
+
+/// The twenty hunt-only routines are reachable exactly one way: off a wild
+/// carrier. A species or research file naming one would quietly restore the
+/// "just target the species" loop this set exists to break.
+#[test]
+fn no_species_or_research_file_grants_a_wild_only_ability() {
+    let game = Game::new(3301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild_only: Vec<String> = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .wild_pool()
+        .into_iter()
+        .map(|(d, _)| d.id.clone())
+        .collect();
+    assert_eq!(wild_only.len(), 20, "twenty routines are hunt-only");
+
+    for species in game.species_defs() {
+        for ability in &species.abilities {
+            assert!(
+                !wild_only.contains(&ability.id),
+                "species {:?} grants {:?}, which is meant to be findable only in the field",
+                species.id,
+                ability.id
+            );
+        }
+    }
+    for node in game.world.resource::<crate::research::ResearchDb>().all() {
+        for id in &node.unlocks_abilities {
+            assert!(
+                !wild_only.contains(id),
+                "research node {:?} unlocks {:?}, which is meant to be findable only in the field",
+                node.id,
+                id
+            );
+        }
+    }
+}
+
+/// A cooldown of 0 means a hostile carrier fires the routine every single
+/// round (see `Game::wild_retaliate`). `decompile` is the one exception: it
+/// is the player's capture mechanism, hostiles never use it, and a cooldown
+/// on a failed capture roll would change the core loop.
+#[test]
+fn every_shipped_ability_but_decompile_has_a_cooldown() {
+    let game = Game::new(3302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
+        if def.id == crate::abilities::DECOMPILE_ABILITY_ID {
+            assert_eq!(def.cooldown, 0, "decompile stays spammable, deliberately");
+            continue;
+        }
+        assert!(
+            def.cooldown >= 1,
+            "ability {:?} has no cooldown, so a wild carrier would fire it every round",
+            def.id
+        );
+    }
+}

@@ -1,0 +1,10 @@
+(
+    id: "race_condition",
+    name: "Race Condition",
+    description: "Stun every member of one group for 1 round",
+    target: WholeEnemyGroup,
+    effect: Debuff(kind: Stun, power: 0, duration: 1),
+    cooldown: 4,
+    fatigue_cost: 13.0,
+    wild_weight: 5,
+)

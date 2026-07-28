@@ -161,10 +161,10 @@ way deleting the Currency item does.
 
 `power` is an authored *baseline*, not the figure that lands. `Heal`, `Buff`
 and `Debuff` magnitudes are multiplied by the level of whoever used the
-ability, so a `Heal(power: 8)` restores 8 at level 1 and 32 at level 20. The
+ability, so a `Heal(power: 8)` restores 9 at level 1 and 32 at level 20. The
 curve is `1 + level x ABILITY_POWER_SCALE_PER_LEVEL`, capped at
 `ABILITY_POWER_SCALE_LEVEL_CAP` — both in `crates/engine/src/tuning.rs`.
-Author powers as though for level 1.
+Author powers as a level-1 baseline.
 
 `duration` never scales. Neither does `Damage` power, nor `Drain`: both go
 through `power + ATK - DEF`, so they already grow with the user's ATK, and
@@ -191,3 +191,18 @@ because a species is still perfectly playable without one of its abilities.
 
 Companions cap at level 12, so a `level` above that makes an ability
 permanently unreachable.
+
+## The hunt-only set
+
+Twenty shipped abilities carry a non-zero `wild_weight` and are named by no
+species file and no research node: `kernel_panic`, `stack_smash`,
+`pipeline_stall`, `fork_bomb`, `packet_shred`, `bus_fault`, `hard_lock`,
+`heap_corruption`, `race_condition`, `bit_rot`, `hyperthread`, `bastion`,
+`throttle`, `etch`, `checksum_repair`, `mirror_restore`, `cold_boot`,
+`siphon_cycles`, `leech_array`, `flush_cache`.
+
+The only way to get one is to find a wild program carrying it and decompile
+that program. Killing the carrier destroys the routine. Adding any of these
+to a species or research file would defeat the point, and a test
+(`assets::no_species_or_research_file_grants_a_wild_only_ability`) fails if
+you do — a mod is of course free to.

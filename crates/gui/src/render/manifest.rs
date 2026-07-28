@@ -17,10 +17,21 @@ use feral_processes_engine::{
 /// `m.title()`).
 const HEADER_GLYPH_SCALE: u16 = 2;
 
+/// What the manifest's footer can offer, which depends on how the screen was
+/// opened. Bundled rather than passed as two loose bools, which read as
+/// `true, false` at the call site and say nothing.
+pub(super) struct ManifestNav {
+    /// ←/→ page between subjects. False for a wild program, which isn't in
+    /// the owned list and so has nowhere to page to.
+    pub(super) cyclable: bool,
+    /// Esc returns to the picker rather than to the map.
+    pub(super) from_picker: bool,
+}
+
 pub(super) fn draw_manifest(
     game: &mut Game,
     entity: Option<Entity>,
-    cyclable: bool,
+    nav: ManifestNav,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -69,13 +80,17 @@ pub(super) fn draw_manifest(
         draw_section(section, *rect, painter, m);
     }
 
-    let footer = if cyclable {
-        "←/→ other programs      Esc back"
+    let mut footer = Vec::new();
+    if nav.cyclable {
+        footer.push("←/→ other programs");
+    }
+    footer.push(if nav.from_picker {
+        "Esc back to list"
     } else {
         "Esc back"
-    };
+    });
     painter.ui(
-        footer,
+        footer.join("      "),
         l.footer.x,
         l.footer.y + m.font_size as f32,
         m.small(),

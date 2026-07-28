@@ -94,7 +94,12 @@ impl App {
         // Every menu's arrow-key highlight (see `selected_index`) starts
         // fresh at the top of its list, rather than carrying over whatever
         // row happened to be highlighted on a previous, unrelated menu.
-        if self.mode != mode_before {
+        // Backing out of a manifest to its picker is the one exception: it
+        // is the same list re-entered, and `leave_manifest` has already put
+        // the highlight on whoever the sheet was showing.
+        if self.mode != mode_before
+            && !(mode_before == Mode::Manifest && self.mode == Mode::ManifestPick)
+        {
             self.menu_selected = 0;
         }
         self.maybe_autosave();

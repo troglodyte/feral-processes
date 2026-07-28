@@ -118,7 +118,7 @@ change what gets stored — a save from a different build shows up as
 | `U` | Upgrade a nearby structure one tier — each tier costs more and yields more (see [Structures](#structures)) |
 | `u` | Use symlink: instantly teleport to a deployed symlink structure (e.g. Home), for its item cost |
 | `i` | Inspect: pick a direction, open the manifest for the first program that way (no intrusion) |
-| `d` | Manifest: a full read-only stat sheet for you or any program you own — integrity and XP meters, combat stats, potential rolls, routines, equipment, perks, species detail. `←`/`→` page between subjects, `Esc` closes |
+| `d` | Manifest: a full read-only stat sheet for you or any program you own — integrity and XP meters, combat stats, potential rolls, routines, equipment, perks, species detail. `←`/`→` page between subjects, `Esc` goes back to the list (and again to the map) |
 | `v` | Inventory/equipment: equip, unequip, consume, fuse, erase items |
 | `T` | Research tree: spend Research Data to unlock structures and recipes — see [Research](#research) |
 | `p` | Your pets: full stats (level, HP, Attack, Defense) for every compiled program you own, wherever it is — add/stand down party members (max 5) here too. Standing one down frees a battle slot, not a roster slot; to shed a program for good, sell it at a Market (`t`) or fuse it (`f`) |

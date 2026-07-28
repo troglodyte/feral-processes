@@ -21,7 +21,7 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   routines, and — for a program — habitats, moves, work aptitude, growth and
   speed; for you, each equipped item with the bonus it is actually granting,
   and every perk with its level. `←`/`→` page between you and everything you
-  own. Several of those numbers had no readout anywhere before: the
+  own, and `Esc` steps back to the list rather than all the way out. Several of those numbers had no readout anywhere before: the
   individual rolls, growth, base speed, and a perk's purchased level.
   It replaces the old inspect popup rather than sitting beside it, so `i` +
   direction now opens the manifest for the program it finds.

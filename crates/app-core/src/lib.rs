@@ -403,6 +403,10 @@ pub struct App {
     /// Whose stat sheet `Mode::Manifest` is showing — the player, a program
     /// you own, or the wild one `Mode::InspectDirection` just found.
     pub pending_manifest: Option<Entity>,
+    /// Whether `Mode::Manifest` was opened from `Mode::ManifestPick`, which
+    /// is where Esc then goes back to. Reached from the map with `i` instead,
+    /// there is no list to return to and Esc goes straight back to play.
+    pub manifest_from_picker: bool,
     /// The first program picked in `Mode::Fuse`, awaiting a second from
     /// `Mode::FuseSecond` before `Game::fuse_companions` is actually called.
     pub pending_fuse_first: Option<Entity>,

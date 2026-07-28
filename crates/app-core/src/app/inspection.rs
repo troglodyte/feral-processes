@@ -23,6 +23,7 @@ impl App {
         match game.find_creature_in_direction(dx, dy, MENU_SCAN_RADIUS) {
             Some(entity) => {
                 self.pending_manifest = Some(entity);
+                self.manifest_from_picker = false;
                 self.status_line = None;
                 self.mode = Mode::Manifest;
             }
@@ -46,12 +47,14 @@ impl App {
 
     pub(crate) fn handle_manifest_pick_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
+            self.pending_manifest = None;
             self.mode = Mode::Playing;
             return;
         }
         let subjects = self.manifest_subjects();
         if let Some(idx) = self.selected_index(key, subjects.len()) {
             self.pending_manifest = Some(subjects[idx]);
+            self.manifest_from_picker = true;
             self.status_line = None;
             self.mode = Mode::Manifest;
         }
@@ -64,8 +67,7 @@ impl App {
             GameKey::Left => -1,
             GameKey::Right => 1,
             GameKey::Esc => {
-                self.pending_manifest = None;
-                self.mode = Mode::Playing;
+                self.leave_manifest();
                 return;
             }
             _ => return,
@@ -81,5 +83,25 @@ impl App {
         };
         let next = (current as isize + step).rem_euclid(subjects.len() as isize) as usize;
         self.pending_manifest = Some(subjects[next]);
+    }
+
+    /// Esc from the manifest: back to the picker it was opened from, or to
+    /// the map if it was opened from there.
+    ///
+    /// Returning to the picker re-highlights whoever the sheet was showing
+    /// rather than the row originally picked — after paging with ←/→ those
+    /// differ, and the list should agree with the sheet you just left.
+    fn leave_manifest(&mut self) {
+        if !self.manifest_from_picker {
+            self.pending_manifest = None;
+            self.mode = Mode::Playing;
+            return;
+        }
+        let subjects = self.manifest_subjects();
+        self.menu_selected = self
+            .pending_manifest
+            .and_then(|e| subjects.iter().position(|&s| s == e))
+            .unwrap_or(0);
+        self.mode = Mode::ManifestPick;
     }
 }

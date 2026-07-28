@@ -232,9 +232,13 @@ out is what makes the layout testable headlessly, and it is the same reason
   programs) with wraparound. A wild program is not in that list, so Left/Right
   is a no-op there; the footer only advertises the keys when there is more than
   one subject to move between.
-- Esc leaves `Mode::Manifest` for `Mode::Playing` — including when it was
-  reached through `Mode::ManifestPick`, since the picker is a way in, not a
-  place to be. Esc from `Mode::ManifestPick` itself also returns to `Playing`.
+- Esc from `Mode::Manifest` returns to whichever screen opened it: the picker
+  when it came from there, the map when `i` found the subject on the ground
+  (there is no list behind it, and it wouldn't list a wild program anyway).
+  `App::manifest_from_picker` records which. Returning to the picker
+  re-highlights whoever the sheet was showing rather than the row originally
+  picked — after paging with ←/→ those differ. Esc from `Mode::ManifestPick`
+  itself returns to `Playing`.
 - Both variants are classified in `Mode::is_battle`'s exhaustive match (both
   `false`).
 

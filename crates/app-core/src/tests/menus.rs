@@ -161,18 +161,62 @@ fn cycling_does_nothing_when_the_subject_is_a_program_you_do_not_own() {
 }
 
 #[test]
-fn esc_leaves_the_manifest_for_the_map_rather_than_the_picker() {
+fn esc_returns_to_the_picker_when_the_manifest_was_opened_from_it() {
     let mut app = app_owning_distant_programs(75, 1);
     app.handle_key(GameKey::Char('d'));
     app.handle_key(GameKey::Char('1'));
     assert_eq!(app.mode, Mode::Manifest);
+
     app.handle_key(GameKey::Esc);
     assert_eq!(
         app.mode,
-        Mode::Playing,
-        "the picker is a way in, not a place to be"
+        Mode::ManifestPick,
+        "back to the list you came from"
     );
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing, "a second Esc leaves for the map");
     assert_eq!(app.pending_manifest, None);
+}
+
+/// Reached with `i` there is no list behind the sheet, so Esc goes straight
+/// back to the map rather than dropping the player into a picker they never
+/// opened — and which wouldn't list the wild program anyway.
+#[test]
+fn esc_leaves_for_the_map_when_the_manifest_was_opened_from_the_world() {
+    let mut app = test_app(77);
+    let (_, direction) = a_wild_program_and_its_direction(&mut app);
+    app.handle_key(GameKey::Char('i'));
+    app.handle_key(direction);
+    assert_eq!(app.mode, Mode::Manifest);
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.pending_manifest, None);
+}
+
+/// The list re-opens on whoever the sheet was showing, not on the row
+/// originally picked — after paging with ←/→ those differ, and a highlight
+/// that disagrees with the screen you just left reads as a bug.
+#[test]
+fn returning_to_the_picker_highlights_the_subject_you_were_reading() {
+    let mut app = app_owning_distant_programs(78, 2);
+    app.handle_key(GameKey::Char('d'));
+    app.handle_key(GameKey::Char('1'));
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Right);
+    let showing = app.pending_manifest;
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::ManifestPick);
+    assert_eq!(
+        app.menu_selected, 2,
+        "the highlight follows the sheet, not the original pick"
+    );
+    app.handle_key(GameKey::Enter);
+    assert_eq!(
+        app.pending_manifest, showing,
+        "Enter on the restored row re-opens the same subject"
+    );
 }
 
 #[test]

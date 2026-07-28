@@ -44,7 +44,7 @@ use building::{
 };
 use crafting::{draw_craft_menu, draw_craft_quantity};
 use inventory::{draw_erase_quantity, draw_inventory, draw_inventory_item_action};
-use manifest::{draw_manifest, draw_manifest_pick};
+use manifest::{ManifestNav, draw_manifest, draw_manifest_pick};
 use meta::{
     draw_difficulty_pick, draw_game_over, draw_help, draw_load_game, draw_main_menu,
     draw_save_action,
@@ -216,6 +216,7 @@ fn cost_display(game: &Game, cost: &[(ItemId, u32)], inventory: &[(ItemId, u32)]
 fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
     let selected = app.menu_selected;
     let pending_manifest = app.pending_manifest;
+    let manifest_from_picker = app.manifest_from_picker;
     let Some(game) = &mut app.game else { return };
     match app.mode {
         Mode::Build => draw_build_menu(game, selected, painter, m),
@@ -289,9 +290,12 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             // program reached via `i` is not in the owned list, so cycling
             // from it is a no-op and the footer must not claim otherwise.
             let subjects = game.manifest_subjects();
-            let cyclable =
-                subjects.len() > 1 && pending_manifest.is_some_and(|e| subjects.contains(&e));
-            draw_manifest(game, pending_manifest, cyclable, painter, m)
+            let nav = ManifestNav {
+                cyclable: subjects.len() > 1
+                    && pending_manifest.is_some_and(|e| subjects.contains(&e)),
+                from_picker: manifest_from_picker,
+            };
+            draw_manifest(game, pending_manifest, nav, painter, m)
         }
         Mode::ManifestPick => {
             let subjects = game.manifest_subjects();

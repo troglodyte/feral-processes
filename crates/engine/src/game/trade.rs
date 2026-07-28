@@ -17,10 +17,12 @@ impl Game {
     }
 
     /// Sells `qty` of `item` from inventory to the trading post `structure`,
-    /// crediting Core Fragments at its flat `sell_rate` per unit. Core
-    /// Fragments themselves can't be sold (trading them for more of the
-    /// same thing is meaningless, and would be exploitable if a modded
-    /// `sell_rate` was ever above 1).
+    /// crediting the trade currency at its flat `sell_rate` per unit. The
+    /// trade currency itself can't be sold (trading it for more of the same
+    /// thing is meaningless, and would be exploitable if a modded
+    /// `sell_rate` was ever above 1). Build salvage *is* sellable — that is
+    /// the on-ramp that lets a player convert a doomed zone-local stockpile
+    /// into Credits before breaching.
     pub fn sell_item(&mut self, structure: Entity, item: ItemId, qty: u32) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -30,17 +32,18 @@ impl Game {
         }
         // Same reasoning as `erase_item`: a routine can be one-of-a-kind
         // (nothing else grants decompile), so refusing to sell it for a
-        // single Core Fragment costs the player nothing next to what losing
-        // it for good would.
+        // single Credit costs the player nothing next to what losing it for
+        // good would.
         if self.is_routine(&item) {
             return Err(
                 "That's a routine, not scrap — install it on a program instead of selling it."
                     .into(),
             );
         }
-        let currency = self.currency();
+        let currency = self.trade_currency();
         if item == currency {
-            return Err("Core Fragments aren't worth trading for more Core Fragments.".into());
+            let money = self.item_name(&currency);
+            return Err(format!("{money} aren't worth trading for more {money}."));
         }
         let trade = self
             .trade_options(structure)
@@ -57,14 +60,13 @@ impl Game {
         // destroy the sold item for nothing.
         self.check_room(&currency, payout)?;
         let name = self.item_name(&item).to_string();
+        let money = self.item_name(&currency).to_string();
         {
             let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
             inv.take(item, taken);
             inv.add(currency, payout);
         }
-        self.log(format!(
-            "You sell {taken} {name} for {payout} Core Fragments."
-        ));
+        self.log(format!("You sell {taken} {name} for {payout} {money}."));
         self.tick();
         Ok(())
     }
@@ -205,21 +207,22 @@ impl Game {
         let payout = self
             .program_payout(structure, creature)
             .ok_or_else(|| "That program can't be appraised.".to_string())?;
-        let currency = self.currency();
+        let currency = self.trade_currency();
         self.check_room(&currency, payout)?;
 
         let name = self.dissolve_tamed_program(creature);
+        let money = self.item_name(&currency).to_string();
         self.world
             .get_mut::<Inventory>(self.player_entity())
             .unwrap()
             .add(currency, payout);
-        self.log(format!("You sell {name} for {payout} Core Fragments."));
+        self.log(format!("You sell {name} for {payout} {money}."));
         self.tick();
         Ok(())
     }
 
     /// Buys `qty` of `item` from the trading post `structure`, at its
-    /// listed per-unit Core Fragment cost.
+    /// listed per-unit cost in the trade currency.
     pub fn buy_item(&mut self, structure: Entity, item: ItemId, qty: u32) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -236,7 +239,8 @@ impl Game {
             .find(|(i, _)| *i == item)
             .ok_or_else(|| format!("{} isn't for sale here.", self.item_name(&item)))?;
         let total_cost = unit_cost * qty;
-        let currency = self.currency();
+        let currency = self.trade_currency();
+        let money = self.item_name(&currency).to_string();
         let player = self.player_entity();
         if self
             .world
@@ -245,7 +249,7 @@ impl Game {
             .count(&currency)
             < total_cost
         {
-            return Err(format!("Not enough Core Fragments (need {total_cost})."));
+            return Err(format!("Not enough {money} (need {total_cost})."));
         }
         self.check_room(&item, qty)?;
         let name = self.item_name(&item).to_string();
@@ -254,9 +258,7 @@ impl Game {
             inv.take(currency, total_cost);
             inv.add(item, qty);
         }
-        self.log(format!(
-            "You buy {qty} {name} for {total_cost} Core Fragments."
-        ));
+        self.log(format!("You buy {qty} {name} for {total_cost} {money}."));
         self.tick();
         Ok(())
     }

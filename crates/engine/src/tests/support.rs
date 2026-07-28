@@ -763,6 +763,15 @@ pub(super) fn fragments(game: &Game) -> u32 {
         .count(&ItemId::from(ids::CORE_FRAGMENT))
 }
 
+/// The trade currency, which is what every trader pays — distinct from
+/// `fragments`, the build salvage no trader deals in.
+pub(super) fn credits(game: &Game) -> u32 {
+    game.world
+        .get::<Inventory>(game.player_entity())
+        .unwrap()
+        .count(&ItemId::from(ids::CREDITS))
+}
+
 /// Finds the deployed Home, if any. Home is the only structure of its
 /// kind, so the first match is the only match.
 pub(super) fn find_home(game: &mut Game) -> Option<Entity> {

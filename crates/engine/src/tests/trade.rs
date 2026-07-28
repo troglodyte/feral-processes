@@ -88,10 +88,10 @@ fn selling_a_program_pays_a_tenth_of_its_power_and_despawns_it() {
     let pet = spawn_tamed(&mut game, 60, 8);
     game.world.get_mut::<Stats>(pet).unwrap().def = 2;
 
-    let before = fragments(&game);
+    let before = credits(&game);
     game.sell_companion(market, pet).unwrap();
 
-    assert_eq!(fragments(&game), before + 7, "a tenth of 70 power");
+    assert_eq!(credits(&game), before + 7, "a tenth of 70 power");
     assert!(
         game.world.get::<Stats>(pet).is_none(),
         "the sold program has to be gone, not merely stood down"
@@ -100,15 +100,15 @@ fn selling_a_program_pays_a_tenth_of_its_power_and_despawns_it() {
 
 /// The floor exists so a sale can never destroy a program for nothing.
 #[test]
-fn a_program_too_weak_to_price_still_sells_for_one_fragment() {
+fn a_program_too_weak_to_price_still_sells_for_one_credit() {
     let mut game = Game::new(121, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let market = spawn_market(&mut game);
     let pet = spawn_tamed(&mut game, 2, 1);
     game.world.get_mut::<Stats>(pet).unwrap().def = 0;
 
-    let before = fragments(&game);
+    let before = credits(&game);
     game.sell_companion(market, pet).unwrap();
-    assert_eq!(fragments(&game), before + 1, "3 power still pays 1, not 0");
+    assert_eq!(credits(&game), before + 1, "3 power still pays 1, not 0");
 }
 
 /// `sell_companion` checks room for the payout before despawning, the
@@ -253,7 +253,7 @@ fn program_sale_options_price_each_program_and_are_empty_for_a_non_buyer() {
 }
 
 #[test]
-fn sell_item_pays_out_core_fragments_at_the_structures_sell_rate() {
+fn sell_item_pays_out_credits_at_the_structures_sell_rate() {
     let mut game = Game::new(90, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let def = game
@@ -275,7 +275,12 @@ fn sell_item_pays_out_core_fragments_at_the_structures_sell_rate() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::FIREWALL_PLATING), 3);
-    let cf_before = game
+    let credits_before = game
+        .world
+        .get::<Inventory>(player)
+        .unwrap()
+        .count(&ItemId::from(ids::CREDITS));
+    let fragments_before = game
         .world
         .get::<Inventory>(player)
         .unwrap()
@@ -292,13 +297,53 @@ fn sell_item_pays_out_core_fragments_at_the_structures_sell_rate() {
     );
     let sell_rate = def.trade.as_ref().unwrap().sell_rate;
     assert_eq!(
+        inv.count(&ItemId::from(ids::CREDITS)),
+        credits_before + sell_rate * 2
+    );
+    assert_eq!(
         inv.count(&ItemId::from(ids::CORE_FRAGMENT)),
-        cf_before + sell_rate * 2
+        fragments_before,
+        "a trader deals in Credits and never mints build salvage"
     );
 }
 
+/// The on-ramp that makes a pre-breach sell-off possible: salvage is
+/// ordinary goods to a trader now that it isn't the trade currency.
 #[test]
-fn sell_item_rejects_core_fragments_and_items_you_dont_have() {
+fn sell_item_accepts_core_fragments_and_pays_credits_for_them() {
+    let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let def = game
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.trade.is_some())
+        .unwrap();
+    let market = game
+        .world
+        .spawn((
+            Structure {
+                kind: def.id.clone(),
+            },
+            Position { x: 5, y: 5 },
+        ))
+        .id();
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        inv.items.clear();
+        inv.add(ItemId::from(ids::CORE_FRAGMENT), 4);
+    }
+
+    game.sell_item(market, ItemId::from(ids::CORE_FRAGMENT), 4)
+        .unwrap();
+
+    let sell_rate = def.trade.as_ref().unwrap().sell_rate;
+    let inv = game.world.get::<Inventory>(player).unwrap();
+    assert_eq!(inv.count(&ItemId::from(ids::CORE_FRAGMENT)), 0);
+    assert_eq!(inv.count(&ItemId::from(ids::CREDITS)), sell_rate * 4);
+}
+
+#[test]
+fn sell_item_rejects_credits_and_items_you_dont_have() {
     let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let def = game
         .structure_defs()
@@ -316,7 +361,7 @@ fn sell_item_rejects_core_fragments_and_items_you_dont_have() {
         .id();
 
     assert!(
-        game.sell_item(market, ItemId::from(ids::CORE_FRAGMENT), 1)
+        game.sell_item(market, ItemId::from(ids::CREDITS), 1)
             .is_err()
     );
     assert!(
@@ -327,7 +372,7 @@ fn sell_item_rejects_core_fragments_and_items_you_dont_have() {
 }
 
 #[test]
-fn buy_item_charges_core_fragments_and_grants_the_item() {
+fn buy_item_charges_credits_and_grants_the_item() {
     let mut game = Game::new(92, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let def = game
@@ -348,14 +393,14 @@ fn buy_item_charges_core_fragments_and_grants_the_item() {
     {
         let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
         inv.items.clear();
-        inv.add(ItemId::from(ids::CORE_FRAGMENT), unit_cost * 2);
+        inv.add(ItemId::from(ids::CREDITS), unit_cost * 2);
     }
 
     game.buy_item(market, buy_item.clone(), 2).unwrap();
 
     let inv = game.world.get::<Inventory>(player).unwrap();
     assert_eq!(
-        inv.count(&ItemId::from(ids::CORE_FRAGMENT)),
+        inv.count(&ItemId::from(ids::CREDITS)),
         0,
         "the full cost should be charged"
     );
@@ -363,7 +408,7 @@ fn buy_item_charges_core_fragments_and_grants_the_item() {
 }
 
 #[test]
-fn buy_item_fails_without_enough_core_fragments_or_for_an_unlisted_item() {
+fn buy_item_fails_without_enough_credits_or_for_an_unlisted_item() {
     let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let def = game
@@ -389,7 +434,7 @@ fn buy_item_fails_without_enough_core_fragments_or_for_an_unlisted_item() {
 
     assert!(
         game.buy_item(market, buy_item, 1).is_err(),
-        "no Core Fragments should fail the purchase"
+        "no Credits should fail the purchase"
     );
     assert!(
         game.buy_item(market, ItemId::from(ids::CORE_FRAGMENT), 1)

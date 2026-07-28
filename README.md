@@ -102,8 +102,14 @@ a later unlock, and an innate routine can be popped back out and swapped for
 a different one. Press `m` for the routine panel (install, swap, pop out)
 and `M` at a Compiler standing anywhere on the map to extract a single
 routine out of any program you own — the program and its other routines are
-destroyed. The player gets slots too, just slower: one per ten of your own
-levels, same cap of six, starting with only Decompile installed. A program
+destroyed. Not every routine comes from a kit or the research tree, though:
+some exist only in the field. A wild program can spawn already carrying one
+and will run it against you in battle — which is how you find out it has
+it. Decompile the carrier and the routine comes over installed, ready to pop
+out into whichever program you want running it instead; destroy the carrier
+and the routine goes down with it. The player gets slots too, just slower:
+one per ten of your own levels, same cap of six, starting with only
+Decompile installed. A program
 is either fighting or working a cronjob, never both. Every individual rolls
 its own stats and growth rate within ±20% of the species baseline, surfaced
 as a **Potential** tag, and tougher species grow faster per level. Press `f`

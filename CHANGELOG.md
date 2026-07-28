@@ -63,9 +63,10 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 - **The log and the menus are colour-coded by what a line actually is.** Items
   you receive read blue instead of sharing green with a level-up. A hostile
   program's blow reads red, and orange when the move it used also inflicts a
-  condition — enemies have no Special action of their own, so a
-  condition-bearing move is the whole of what makes one special. A party
-  member's hit stays quiet except for the damage figure itself, which is picked
+  condition — at the time this shipped no hostile had a Special of its own,
+  so a condition-bearing move was the whole of what made one special; a wild
+  carrier running its own routine is now the exception. A party member's hit
+  stays quiet except for the damage figure itself, which is picked
   out in bold white rather than the old all-or-nothing bolding of the whole
   sentence. On the research screen a node you have already unlocked greys out,
   so the list reads as what is left to buy rather than a flat menu. The Shield
@@ -362,6 +363,21 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   `M` opens extraction — needs a Compiler built somewhere, not nearby.
 - **Save format is v11.** Older saves are rejected with a clear message, the
   same policy as every prior bump — this project does no save migration.
+- **Wild programs can spawn already carrying a routine their species never
+  grants, and will spend a round running it against you** — the first time a
+  hostile's kit has ever been more than its species moveset. Decompiling the
+  carrier hands the routine over already installed; destroying the carrier
+  destroys the routine with it.
+- **Twenty new routines exist that no species and no research node grants.**
+  Finding a carrier in the field is the only way to get one.
+- **Ability magnitudes now scale with the user's level**, so a heal or a
+  buff picked up early doesn't fall behind the fights it's used in by the
+  late game.
+- **A routine that finds no free slot on capture now goes to cargo instead
+  of being destroyed.** Popping a slot free later lets you install it same
+  as any other routine item.
+- **Every ability has a cooldown now, except Decompile** — it stays
+  spammable, since it's the capture mechanic rather than a combat move.
 
 ## 0.2.0 — 2026-07-24
 

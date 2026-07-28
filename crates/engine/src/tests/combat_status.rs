@@ -438,3 +438,202 @@ fn wild_programs_only_sometimes_reach_for_their_status_effect() {
         "no status effect ever landed — the gate is stuck shut"
     );
 }
+
+/// The discovery mechanism: you learn a program is a carrier by being hit
+/// with what it carries.
+#[test]
+fn a_carrier_spends_its_round_on_its_routine_instead_of_a_move() {
+    let mut game = Game::new(7701, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    game.world
+        .entity_mut(enemies[0])
+        .insert(Routines(vec!["hard_lock".to_string()]));
+    game.world.get_mut::<Stats>(enemies[0]).unwrap().atk = 0;
+
+    game.wild_retaliate(enemies[0], 0, player);
+
+    assert!(
+        matches!(
+            game.world.get::<StatusEffects>(player).unwrap().active,
+            Some(ActiveStatus {
+                kind: StatusKind::Stun,
+                ..
+            })
+        ),
+        "Hard Lock stuns — a move could not have done this"
+    );
+}
+
+#[test]
+fn a_carriers_routine_goes_on_cooldown_and_comes_back() {
+    let mut game = Game::new(7702, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    game.world
+        .entity_mut(enemies[0])
+        .insert(Routines(vec!["hard_lock".to_string()]));
+
+    game.wild_retaliate(enemies[0], 0, player);
+    assert!(
+        game.wild_routine_ready(enemies[0]).is_none(),
+        "it just fired — Hard Lock has a cooldown of 4"
+    );
+
+    for _ in 0..6 {
+        game.tick_ability_cooldowns(enemies[0]);
+    }
+    assert!(
+        game.wild_routine_ready(enemies[0]).is_some(),
+        "and it comes back once the cooldown has ticked out"
+    );
+}
+
+/// `cooldown` defaults to 0 and a carrier fires whenever it can, so a mod
+/// ability declaring none must still not fire two rounds running.
+///
+/// Its predecessor stood `priority_boost` in for a cooldown-0 ability, but
+/// this same branch bumped `priority_boost.ron` to `cooldown: 1` — so that
+/// version passed for the wrong reason, and would have kept passing even
+/// with `ENEMY_ROUTINE_MIN_COOLDOWN` deleted outright. This drops in a real
+/// cooldown-0 ability instead, and asserts its premise before relying on it.
+#[test]
+fn a_cooldown_zero_routine_still_cannot_fire_two_rounds_running() {
+    const ZERO_CD_ABILITY: &str = r#"(
+        id: "test_zero_cd_strike",
+        name: "Zero-CD Strike",
+        description: "d",
+        target: OneEnemyGroupFront,
+        effect: Damage(power: 5),
+    )"#;
+    let dir = modded_assets_dir(
+        "zero_cd_floor",
+        &[],
+        &[],
+        &[],
+        &[],
+        &[("test_zero_cd_strike.ron", ZERO_CD_ABILITY)],
+    );
+    let mut game = Game::new(7703, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    game.world
+        .entity_mut(enemies[0])
+        .insert(Routines(vec!["test_zero_cd_strike".to_string()]));
+    assert_eq!(
+        game.world
+            .resource::<crate::abilities::AbilityDb>()
+            .get("test_zero_cd_strike")
+            .unwrap()
+            .cooldown,
+        0,
+        "the ability under test must genuinely declare no cooldown, or this proves nothing"
+    );
+
+    game.wild_retaliate(enemies[0], 0, player);
+    // One round-end tick, standing in for `tick_round_status_effects` — the
+    // `+1` in `abilities::armed_cooldown` exists precisely so this tick
+    // doesn't eat the round the routine just fired on. Checking readiness
+    // *before* this tick can't tell floor 1 from floor 0: either arms a
+    // cooldown that is still nonzero this same round. It's the round after
+    // that distinguishes them — floor 0 would already read zero and fire
+    // again, floor 1 still reads 1.
+    game.tick_ability_cooldowns(enemies[0]);
+    assert!(
+        game.wild_routine_ready(enemies[0]).is_none(),
+        "the enemy side floors the cooldown at ENEMY_ROUTINE_MIN_COOLDOWN, so a mod ability \
+         declaring none still cannot fire two rounds running"
+    );
+}
+
+/// A buff aimed at a hostile has to expire on schedule. While abilities
+/// were party-only, `tick_combat_buff` was never called for a hostile — so
+/// a mirrored buff or sap would have lasted the whole fight regardless of
+/// its authored duration.
+#[test]
+fn a_buff_on_a_hostile_ticks_down_each_round() {
+    let mut game = Game::new(7705, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    game.arm_buff(
+        enemies[0],
+        ActiveBuff {
+            kind: BuffKind::Atk,
+            remaining: 2,
+            power: 5,
+        },
+    );
+
+    game.tick_round_status_effects(player);
+    assert_eq!(
+        game.world
+            .get::<CombatBuff>(enemies[0])
+            .unwrap()
+            .active
+            .unwrap()
+            .remaining,
+        1,
+        "one round burned"
+    );
+    game.tick_round_status_effects(player);
+    assert!(
+        game.world
+            .get::<CombatBuff>(enemies[0])
+            .unwrap()
+            .active
+            .is_none(),
+        "and it expires rather than lasting the whole fight"
+    );
+}
+
+/// Hostiles that survive a jack-out stay on the map. A mirrored buff left
+/// armed on one would be a permanent free stat that never ticks down.
+#[test]
+fn ending_a_battle_clears_every_hostiles_combat_state() {
+    let mut game = Game::new(7704, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 3, 200);
+    for &e in &enemies {
+        game.arm_buff(
+            e,
+            ActiveBuff {
+                kind: BuffKind::Atk,
+                remaining: 5,
+                power: 9,
+            },
+        );
+        game.world.get_mut::<StatusEffects>(e).unwrap().active = Some(ActiveStatus {
+            kind: StatusKind::Bleed,
+            remaining: 3,
+            power: 2,
+        });
+        game.world.entity_mut(e).insert(AbilityCooldowns(
+            std::iter::once(("kernel_panic".to_string(), 3)).collect(),
+        ));
+    }
+
+    game.end_battle(player, None);
+
+    for &e in &enemies {
+        assert!(
+            game.world
+                .get::<CombatBuff>(e)
+                .is_none_or(|b| b.active.is_none()),
+            "a buff left armed on a surviving hostile never ticks down — it is a free stat forever"
+        );
+        assert!(
+            game.world
+                .get::<StatusEffects>(e)
+                .is_none_or(|s| s.active.is_none()),
+            "and a bleed left running would tick outside any battle"
+        );
+        assert!(
+            game.world
+                .get::<AbilityCooldowns>(e)
+                .is_none_or(|c| c.0.is_empty()),
+            "and a routine's own cooldown would carry into the next fight — the one of the \
+             three that only exists on a hostile because of this branch"
+        );
+    }
+}

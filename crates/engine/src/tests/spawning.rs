@@ -1078,3 +1078,101 @@ fn nest_respawn_tick_spawns_one_guardian_per_ready_entry_not_one_per_nest() {
         "the two fired entries should be removed and the untouched entry decremented once"
     );
 }
+
+/// The roll is seeded, so the same seed produces the same carrier. Without
+/// the ordering in `AbilityDb::wild_pool` this would pass or fail depending
+/// on `HashMap` iteration order.
+#[test]
+fn the_wild_routine_roll_is_reproducible_from_the_seed() {
+    let carried = |seed: u32| {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        (0..40)
+            .filter_map(|_| game.roll_wild_routine().first().cloned())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        carried(770),
+        carried(770),
+        "same seed, same carriers — a weighted walk over an unordered pool would not be"
+    );
+}
+
+/// Whatever the roll produces has to be a real, hunt-only ability: a
+/// carrier holding something a species already grants would be no prize.
+#[test]
+fn a_rolled_routine_is_always_one_of_the_opted_in_abilities() {
+    let mut game = Game::new(771, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pool: Vec<String> = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .wild_pool()
+        .into_iter()
+        .map(|(d, _)| d.id.clone())
+        .collect();
+
+    let mut rolled = 0;
+    for _ in 0..500 {
+        let routines = game.roll_wild_routine();
+        assert!(routines.len() <= 1, "a carrier holds exactly one routine");
+        if let Some(id) = routines.first() {
+            rolled += 1;
+            assert!(
+                pool.contains(id),
+                "rolled {id:?}, which is not in the wild pool"
+            );
+        }
+    }
+    assert!(
+        rolled > 0,
+        "500 rolls at WILD_ROUTINE_CHANCE should produce at least one carrier"
+    );
+}
+
+/// Every wild program routes through `spawn_wild_creature`, so every one of
+/// them holds a `Routines` component — empty for the overwhelming majority.
+/// Without it, `install_innate_routines` would have nothing to merge and
+/// `wild_retaliate` nothing to read.
+#[test]
+fn every_spawned_wild_creature_holds_a_routines_component() {
+    let mut game = Game::new(772, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let species = game.species_defs().into_iter().next().unwrap();
+    let entity = game
+        .spawn_wild_creature(&species.id, spawn.x + 3, spawn.y)
+        .expect("a shipped species spawns");
+    assert!(
+        game.world.get::<Routines>(entity).is_some(),
+        "a wild program with no Routines can never be a carrier and never merges on capture"
+    );
+}
+
+/// `CreatureSave.routines` is already written for wild creatures, so a
+/// carrier round-trips on the existing save format — this pins that, since
+/// the spec's "no SAVE_FORMAT_VERSION bump" rests on it.
+#[test]
+fn a_wild_carrier_survives_a_save_load_round_trip() {
+    let dir = std::env::temp_dir().join(format!("feral_carrier_save_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("carrier.sav");
+
+    let mut game = Game::new(773, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let species = game.species_defs().into_iter().next().unwrap();
+    let entity = game
+        .spawn_wild_creature(&species.id, spawn.x + 4, spawn.y)
+        .unwrap();
+    game.world
+        .entity_mut(entity)
+        .insert(Routines(vec!["kernel_panic".to_string()]));
+    game.save(&path).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let mut query = loaded.world.query::<(&Position, &Routines)>();
+    let found = query
+        .iter(&loaded.world)
+        .any(|(pos, r)| pos.x == spawn.x + 4 && r.0 == vec!["kernel_panic".to_string()]);
+    assert!(found, "a wild carrier's routine must survive save/load");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -417,17 +417,37 @@ impl Game {
         }
     }
 
+    /// Mints `ability`'s routine item into the player's cargo — where a
+    /// routine goes when it has nowhere to be installed.
+    ///
+    /// Displacing a routine used to destroy it. It is a real object with an
+    /// item of its own (`ItemDb::synthesize_routines` mints one per loaded
+    /// ability), so returning it turns a slot collision into a swap decision
+    /// the player gets to make later, rather than a loss they get to read
+    /// about.
+    pub(crate) fn return_routine_to_cargo(&mut self, ability: &str) {
+        let item = crate::abilities::routine_item_id(ability);
+        let player = self.player_entity();
+        if let Some(mut inventory) = self.world.get_mut::<Inventory>(player) {
+            inventory.add(item, 1);
+        }
+    }
+
     /// Installs the kit `entity`'s species grants at its current level,
-    /// replacing whatever it holds. Called once when a program comes into
-    /// existence — a decompile or a fusion — never afterwards.
+    /// merged with whatever it was already carrying. Called once when a
+    /// program comes into existence — a decompile or a fusion — never
+    /// afterwards.
+    ///
+    /// A wild program can spawn carrying a routine its species never grants
+    /// (`Game::roll_wild_routine`); that routine is the reason the player
+    /// decompiled it, so it keeps its slot and the species kit fills in
+    /// around it. Anything that doesn't fit goes to cargo.
     ///
     /// A species declaring no abilities gets `FALLBACK_ABILITY_ID` instead,
     /// which is what keeps an ability-less species commandable and keeps
-    /// that ability obtainable by extraction: nothing else grants it.
-    ///
-    /// No shipped species declares more level-appropriate abilities than it
-    /// has slots for at tame time, so the overflow this logs is mod-safety
-    /// only — same rationale as `install_unlocked_routines`.
+    /// that ability obtainable by extraction: nothing else grants it. A
+    /// carrier never gets it — the fallback fills an empty kit, and a
+    /// carrier's is not empty.
     pub(crate) fn install_innate_routines(&mut self, entity: Entity) {
         let level = self
             .world
@@ -446,20 +466,37 @@ impl Game {
             .map(|a| a.id)
             .filter(|id| self.world.resource::<AbilityDb>().get(id).is_some())
             .collect();
-        let installed = if declared.is_empty() {
-            vec![abilities::FALLBACK_ABILITY_ID.to_string()]
-        } else {
-            if declared.len() > slots {
-                let name = self.creature_label(entity);
-                for id in &declared[slots..] {
-                    self.log(format!(
-                        "{name} has no free routine slot for {} — the unlock is lost.",
-                        self.ability_display_name(id)
-                    ));
-                }
+        // Whatever this program was already holding is what it was found
+        // carrying in the field — see `Game::roll_wild_routine`. That is the
+        // prize the player decompiled it for, so it keeps its place and the
+        // species kit fills in around it.
+        let carried: Vec<AbilityId> = self
+            .world
+            .get::<Routines>(entity)
+            .map(|r| r.0.clone())
+            .unwrap_or_default();
+
+        let mut installed = carried.clone();
+        for id in declared {
+            if installed.contains(&id) {
+                continue;
             }
-            declared.into_iter().take(slots).collect()
-        };
+            if installed.len() >= slots {
+                let name = self.creature_label(entity);
+                let ability_name = self.ability_display_name(&id);
+                self.log(format!(
+                    "{name} has no free routine slot for {ability_name} — it goes to cargo."
+                ));
+                self.return_routine_to_cargo(&id);
+                continue;
+            }
+            installed.push(id);
+        }
+        // The fallback fills an *empty* kit. A carrier already holds
+        // something real, so it never gets the placeholder.
+        if installed.is_empty() {
+            installed.push(abilities::FALLBACK_ABILITY_ID.to_string());
+        }
         self.world.entity_mut(entity).insert(Routines(installed));
     }
 
@@ -480,11 +517,11 @@ impl Game {
     /// apart, so the player at least gets to read what happened.
     ///
     /// Only when every slot instead holds a *real* routine — installed,
-    /// researched, or another innate ability — is the unlock logged and
-    /// dropped for good: the window it could have been installed in has
-    /// passed. No shipped species can reach that genuine-loss state (the
-    /// most any declares is two abilities, the latest at level 8, and four
-    /// slots exist by then), so this remains mod-safety only.
+    /// researched, another innate ability, or one the program was found
+    /// carrying in the field — does the unlock go to cargo instead of a
+    /// slot. Not lost: `return_routine_to_cargo` mints its routine item, so
+    /// the player can install it by hand once they free a slot. A carried
+    /// routine is never the fallback, so it is never the thing evicted.
     pub(crate) fn install_unlocked_routines(
         &mut self,
         entity: Entity,
@@ -541,14 +578,32 @@ impl Game {
                     continue;
                 }
                 self.log(format!(
-                    "{name} has no free routine slot for {} — the unlock is lost.",
+                    "{name} has no free routine slot for {} — it goes to cargo.",
                     self.ability_display_name(&id)
                 ));
+                self.return_routine_to_cargo(&id);
                 continue;
             }
             installed.push(id);
             self.world.entity_mut(entity).insert(Routines(installed));
         }
+    }
+
+    /// The level an ability's magnitude scales from when `entity` uses it —
+    /// see `abilities::scaled_power`.
+    ///
+    /// The player and companions have `Experience`. Wild programs do not:
+    /// they scale by zone and distance instead, so a hostile carrier reads
+    /// the current `ZoneLevel`, which is the closest analogue it has and
+    /// keeps its routine in step with the fight it turns up in.
+    ///
+    /// One helper for all three cases deliberately — three call sites each
+    /// resolving a level would be three formulas to drift.
+    pub(crate) fn ability_user_level(&self, entity: Entity) -> u32 {
+        self.world
+            .get::<Experience>(entity)
+            .map(|e| e.level)
+            .unwrap_or_else(|| self.world.resource::<ZoneLevel>().0)
     }
 
     /// Every ability the combatant at `entity` can be commanded to use, in

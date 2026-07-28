@@ -61,7 +61,7 @@ way deleting the Currency item does.
     // spent on a downed member would be wasted.
     target: WholeEnemyGroup,
 
-    // What it does to each recipient. Exactly one of five:
+    // What it does to each recipient. Exactly one of seven:
     //
     //   Damage(power: 6)
     //     Direct damage through the same formula a move uses
@@ -79,14 +79,32 @@ way deleting the Currency item does.
     //
     //   Buff(kind: Atk, power: 3, duration: 3)
     //     Temporary stat boost for `duration` battle rounds. `kind` is
-    //     `Atk` or `Def`. Because damage is additive, a flat +3 ATK is worth
-    //     exactly 3 extra damage per hit at every level — buff powers do not
-    //     need to scale.
+    //     `Atk` or `Def`.
+    //     A *negative* power is how you write a sap: `Buff(kind: Atk,
+    //     power: -4, duration: 3)` with `target: WholeEnemyGroup` weakens
+    //     a group rather than strengthening it, because the buff bonus is
+    //     added unconditionally wherever it lands. There is no separate
+    //     `Sap` effect, and adding one would be a second spelling of this.
+    //     One caveat: a combatant holds a single buff at a time, and the
+    //     Defend stance is itself a buff — so a sap landing on a bracing
+    //     member overwrites its stance and it stops defending.
     //
     //   Debuff(kind: Stun, power: 0, duration: 1)
     //     Inflicts a status condition. Same `kind`/`power` rules as the
     //     rider above. A combatant carries at most one status at a time; a
     //     fresh application overwrites whatever was active.
+    //
+    //   Drain(power: 10, heal_fraction: 0.5)
+    //     Damage through the same formula as `Damage`, then the *user* is
+    //     healed for that fraction of the damage it actually dealt, capped
+    //     at its own maximum Integrity. Healing off the dealt figure rather
+    //     than the authored power means an armoured target returns less,
+    //     which is the intended shape. `heal_fraction` is clamped to
+    //     0.0-1.0 at load; a non-finite one disqualifies the file.
+    //
+    //   Cleanse
+    //     Clears each recipient's active status condition. No fields.
+    //     Silent on a recipient that had nothing to clear.
     //
     //   Decompile
     //     Spends a taming catalyst and rolls a capture against the target
@@ -121,8 +139,39 @@ way deleting the Currency item does.
     // This is Fatigue, not Power: Power is the other need, and abilities
     // don't touch it.
     fatigue_cost: 8.0,
+
+    // Optional; defaults to 0. How likely this ability is to be found
+    // already installed on a wild program you meet in the field — a
+    // "carrier". 0 means it never spawns wild, which is why every ability
+    // reachable through a species or a research node leaves this alone.
+    //
+    // Weights are relative within the pool, not probabilities: an ability
+    // at 12 turns up twice as often as one at 6. Whether a given wild
+    // program carries anything at all is a separate roll the engine makes
+    // (`WILD_ROUTINE_CHANCE` in `tuning.rs`); this only decides *which*
+    // routine it gets once that roll has already succeeded.
+    //
+    // A carrier uses its routine against you in battle, and hands it over
+    // installed if you decompile it. Killing it destroys the routine.
+    wild_weight: 8,
 )
 ```
+
+## Magnitudes scale with level
+
+`power` is an authored *baseline*, not the figure that lands. `Heal`, `Buff`
+and `Debuff` magnitudes are multiplied by the level of whoever used the
+ability, so a `Heal(power: 8)` restores 9 at level 1 and 32 at level 20. The
+curve is `1 + level x ABILITY_POWER_SCALE_PER_LEVEL`, capped at
+`ABILITY_POWER_SCALE_LEVEL_CAP` — both in `crates/engine/src/tuning.rs`.
+Author powers as a level-1 baseline.
+
+`duration` never scales. Neither does `Damage` power, nor `Drain`: both go
+through `power + ATK - DEF`, so they already grow with the user's ATK, and
+scaling the flat term as well would count the same growth twice.
+
+A wild program has no level — it scales by zone and distance — so a carrier
+scales its routine from the current zone instead.
 
 ## Referencing an ability from a species
 
@@ -142,3 +191,18 @@ because a species is still perfectly playable without one of its abilities.
 
 Companions cap at level 12, so a `level` above that makes an ability
 permanently unreachable.
+
+## The hunt-only set
+
+Twenty shipped abilities carry a non-zero `wild_weight` and are named by no
+species file and no research node: `kernel_panic`, `stack_smash`,
+`pipeline_stall`, `fork_bomb`, `packet_shred`, `bus_fault`, `hard_lock`,
+`heap_corruption`, `race_condition`, `bit_rot`, `hyperthread`, `bastion`,
+`throttle`, `etch`, `checksum_repair`, `mirror_restore`, `cold_boot`,
+`siphon_cycles`, `leech_array`, `flush_cache`.
+
+The only way to get one is to find a wild program carrying it and decompile
+that program. Killing the carrier destroys the routine. Adding any of these
+to a species or research file would defeat the point, and a test
+(`assets::no_species_or_research_file_grants_a_wild_only_ability`) fails if
+you do — a mod is of course free to.

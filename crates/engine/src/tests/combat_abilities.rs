@@ -6,50 +6,7 @@ use crate::resources::*;
 use crate::*;
 
 use super::support::*;
-use crate::tuning::{COMPANION_COMMAND_FATIGUE_COST, GROUP_SIZE_STEP_TILES};
-
-/// Spawns `count` hostile members of one species into a single group and
-/// starts a battle against them, so back-rank indices actually exist.
-/// Stats are set by hand rather than rolled, because these tests assert on
-/// exact HP.
-///
-/// Placed deep and far on purpose: a group's size ceiling is the local
-/// `max_group_size`, which at a zone-1 spawn point is one member — there
-/// would be no back rank to test. The hand-set stats are what make the move
-/// free, since nothing here reads the distance or zone scaling it implies.
-fn battle_with_a_pack_of(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
-    let player = game.player_entity();
-    let species = game
-        .species_defs()
-        .into_iter()
-        .next()
-        .expect("at least one species");
-    game.world.resource_mut::<ZoneLevel>().0 = 3;
-    let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    let (x, y) = (spawn.x + GROUP_SIZE_STEP_TILES * 7, spawn.y);
-    let members: Vec<Entity> = (0..count)
-        .map(|i| {
-            game.world
-                .spawn((
-                    Creature {
-                        species: species.id.clone(),
-                    },
-                    Hostile,
-                    Position { x: x + i as i32, y },
-                    Stats {
-                        hp,
-                        max_hp: hp,
-                        atk: 0,
-                        def: 0,
-                    },
-                    StatusEffects::default(),
-                ))
-                .id()
-        })
-        .collect();
-    insert_battle(game, player, members.clone());
-    members
-}
+use crate::tuning::COMPANION_COMMAND_FATIGUE_COST;
 
 #[test]
 fn a_back_rank_member_killed_outright_leaves_the_group_and_awards_its_xp() {
@@ -151,7 +108,14 @@ fn game_with_a_sweeper() -> (Game, Entity) {
             (id: "redundancy_sync"),
         ],
     )"#;
-    let dir = modded_assets_dir("sweeper", &[], &[], &[("test_sweeper.ron", SWEEPER)], &[]);
+    let dir = modded_assets_dir(
+        "sweeper",
+        &[],
+        &[],
+        &[("test_sweeper.ron", SWEEPER)],
+        &[],
+        &[],
+    );
     let mut game = Game::new(31, DifficultyMode::Forgiving, &dir).unwrap();
     let player = game.player_entity();
     let sweeper = game
@@ -453,6 +417,7 @@ fn an_ability_granted_by_two_nodes_stacks_the_item_rather_than_double_installing
         &[],
         &[],
         &[("also_boost.ron", ALSO_BOOST)],
+        &[],
     );
     let mut game = Game::new(33, DifficultyMode::Forgiving, &dir).unwrap();
     unlock_research_chain(&mut game, "self_exec");
@@ -508,7 +473,14 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
         .iter()
         .position(|a| a.id == "hot_patch")
         .expect("runtime_patching grants hot_patch");
-    game.world.get_mut::<Stats>(player).unwrap().hp = 1;
+    // Not 1: initiative is a roll (`roll_initiative`), and wild spawns now
+    // draw from the same `GameRng` (see `Game::roll_wild_routine`), so which
+    // side goes first in this round is no longer pinned by this seed alone.
+    // `set_level` only advances `Experience.level` — it doesn't grow `Stats`
+    // — so the player's DEF is still the base 2, and the fixed atk:0 enemy's
+    // strongest move (Cross-Reference, power 9) can land up to 7. 20 clears
+    // that with room, either order.
+    game.world.get_mut::<Stats>(player).unwrap().hp = 20;
 
     resolve_round_with(
         &mut game,
@@ -519,8 +491,9 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
     );
 
     assert!(
-        game.world.get::<Stats>(player).unwrap().hp > 1,
-        "the player patched themselves, so their Integrity must have gone up"
+        game.world.get::<Stats>(player).unwrap().hp > 15,
+        "the player patched themselves, so their Integrity must have gone up \
+         past what a single worst-case enemy hit could leave it at"
     );
     assert_eq!(
         game.world
@@ -647,5 +620,417 @@ fn the_companion_fallback_does_not_leak_onto_the_player() {
             .collect::<Vec<_>>(),
         vec![crate::abilities::DECOMPILE_ABILITY_ID.to_string()],
         "the player gets decompile, not the companion fallback"
+    );
+}
+
+/// Drain heals the user for its fraction of the damage it actually dealt —
+/// not of its authored power, which DEF has already eaten into.
+#[test]
+fn drain_heals_the_user_for_a_fraction_of_the_damage_it_dealt() {
+    let mut game = Game::new(4101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 200;
+        stats.hp = 50;
+        stats.atk = 10;
+    }
+    let before = game.world.get::<Stats>(enemies[0]).unwrap().hp;
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_drain".into(),
+        name: "Test Drain".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
+        effect: crate::abilities::AbilityEffect::Drain {
+            power: 10,
+            heal_fraction: 0.5,
+        },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+    game.use_ability(&ability, player, "You", &[enemies[0]]);
+
+    let dealt = before - game.world.get::<Stats>(enemies[0]).unwrap().hp;
+    assert!(dealt > 0, "the drain must actually land damage");
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().hp,
+        50 + dealt / 2,
+        "the user is healed for half of what it dealt"
+    );
+}
+
+#[test]
+fn drain_never_heals_the_user_past_its_maximum() {
+    let mut game = Game::new(4102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 60;
+        stats.hp = 59;
+        stats.atk = 40;
+    }
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_drain".into(),
+        name: "Test Drain".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
+        effect: crate::abilities::AbilityEffect::Drain {
+            power: 10,
+            heal_fraction: 1.0,
+        },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+    game.use_ability(&ability, player, "You", &[enemies[0]]);
+
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().hp,
+        60,
+        "a full-lifesteal drain caps at max Integrity rather than overhealing"
+    );
+}
+
+#[test]
+fn cleanse_clears_an_active_status_and_is_silent_on_a_clean_target() {
+    let mut game = Game::new(4103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let _ = battle_with_a_pack_of(&mut game, 1, 200);
+    game.world.get_mut::<StatusEffects>(player).unwrap().active = Some(ActiveStatus {
+        kind: StatusKind::Bleed,
+        remaining: 3,
+        power: 4,
+    });
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_cleanse".into(),
+        name: "Test Cleanse".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::WholeParty,
+        effect: crate::abilities::AbilityEffect::Cleanse,
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+    game.use_ability(&ability, player, "You", &[player]);
+    assert!(
+        game.world
+            .get::<StatusEffects>(player)
+            .unwrap()
+            .active
+            .is_none(),
+        "cleanse must clear the condition"
+    );
+
+    let lines_before = game.world.resource::<MessageLog>().lines.len();
+    game.use_ability(&ability, player, "You", &[player]);
+    assert_eq!(
+        game.world.resource::<MessageLog>().lines.len(),
+        lines_before,
+        "a cleanse with nothing to clear logs nothing — one line per party member every time would drown the log"
+    );
+}
+
+/// A sap is a negative-power `Buff` aimed at the enemy side. No `Sap`
+/// variant exists, deliberately — `effective_atk` adds the buff bonus
+/// unconditionally, so a negative power already subtracts.
+#[test]
+fn a_negative_power_buff_saps_effective_attack() {
+    let mut game = Game::new(4104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    game.world.get_mut::<Stats>(enemies[0]).unwrap().atk = 20;
+    let before = game.effective_atk(enemies[0]);
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_sap".into(),
+        name: "Test Sap".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::WholeEnemyGroup,
+        effect: crate::abilities::AbilityEffect::Buff {
+            kind: BuffKind::Atk,
+            power: -6,
+            duration: 3,
+        },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+    game.use_ability(&ability, player, "You", &[enemies[0]]);
+
+    assert_eq!(
+        game.effective_atk(enemies[0]),
+        before + crate::abilities::scaled_power(-6, 1),
+        "a negative buff power subtracts, which is the whole sap mechanic"
+    );
+}
+
+/// `CombatBuff` holds one `active` slot and `is_defending` identifies the
+/// Defend stance by an exact power match, so a sap landing on a bracing
+/// member cancels its stance. Documented cost of the single-slot design,
+/// pinned here rather than special-cased.
+#[test]
+fn a_sap_landing_on_a_bracing_member_cancels_its_defend_stance() {
+    let mut game = Game::new(4105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let _ = battle_with_a_pack_of(&mut game, 1, 200);
+    game.begin_defend(player);
+    assert!(game.is_defending(player), "fixture: the player is bracing");
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_sap".into(),
+        name: "Test Sap".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::WholeEnemyGroup,
+        effect: crate::abilities::AbilityEffect::Buff {
+            kind: BuffKind::Def,
+            power: -4,
+            duration: 3,
+        },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+    game.use_ability(&ability, player, "Enemy", &[player]);
+
+    assert!(
+        !game.is_defending(player),
+        "one buff slot means a sap overwrites the stance — the documented cost, not a bug"
+    );
+}
+
+/// A heal stores the scaled figure at the moment it is applied, so nothing
+/// downstream has to re-scale.
+#[test]
+fn a_heal_scales_with_the_users_level() {
+    let mut game = Game::new(4201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let _ = battle_with_a_pack_of(&mut game, 1, 200);
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 400;
+        stats.hp = 100;
+    }
+    game.world.get_mut::<Experience>(player).unwrap().level = 20;
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_heal".into(),
+        name: "Test Heal".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::OneAlly,
+        effect: crate::abilities::AbilityEffect::Heal { power: 8 },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+    game.use_ability(&ability, player, "You", &[player]);
+
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().hp,
+        100 + crate::abilities::scaled_power(8, 20),
+        "an 8-point patch at level 20 is 32, not 8"
+    );
+}
+
+#[test]
+fn a_buff_stores_the_scaled_power_so_the_tick_needs_no_change() {
+    let mut game = Game::new(4202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let _ = battle_with_a_pack_of(&mut game, 1, 200);
+    game.world.get_mut::<Experience>(player).unwrap().level = 20;
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_buff".into(),
+        name: "Test Buff".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::OneAlly,
+        effect: crate::abilities::AbilityEffect::Buff {
+            kind: BuffKind::Atk,
+            power: 3,
+            duration: 3,
+        },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+    game.use_ability(&ability, player, "You", &[player]);
+
+    assert_eq!(
+        game.world
+            .get::<CombatBuff>(player)
+            .unwrap()
+            .active
+            .unwrap()
+            .power,
+        crate::abilities::scaled_power(3, 20),
+        "the scaled figure is stored, not recomputed at read time"
+    );
+}
+
+#[test]
+fn a_bleed_debuffs_per_round_damage_scales_with_the_users_level() {
+    let mut game = Game::new(4203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 400);
+    game.world.get_mut::<Experience>(player).unwrap().level = 20;
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_bleed".into(),
+        name: "Test Bleed".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
+        effect: crate::abilities::AbilityEffect::Debuff {
+            kind: StatusKind::Bleed,
+            power: 2,
+            duration: 3,
+        },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+    game.use_ability(&ability, player, "You", &[enemies[0]]);
+
+    assert_eq!(
+        game.world
+            .get::<StatusEffects>(enemies[0])
+            .unwrap()
+            .active
+            .unwrap()
+            .power,
+        crate::abilities::scaled_power(2, 20),
+        "bleed is flat damage per round, so it needs scaling as much as a heal does"
+    );
+}
+
+/// `compute_damage` is `power + ATK - DEF`, so ability damage already rides
+/// the user's ATK. Scaling the flat term as well would double-dip through
+/// every curve `balance_sim` projects.
+#[test]
+fn ability_damage_is_not_scaled_by_level() {
+    let mut game = Game::new(4204, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 2, 500);
+    game.world.get_mut::<Stats>(player).unwrap().atk = 10;
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_hit".into(),
+        name: "Test Hit".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
+        effect: crate::abilities::AbilityEffect::Damage {
+            power: 6,
+            status: None,
+        },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+
+    game.world.get_mut::<Experience>(player).unwrap().level = 1;
+    let before = game.world.get::<Stats>(enemies[0]).unwrap().hp;
+    game.use_ability(&ability, player, "You", &[enemies[0]]);
+    let at_level_1 = before - game.world.get::<Stats>(enemies[0]).unwrap().hp;
+
+    game.world.get_mut::<Experience>(player).unwrap().level = 20;
+    let before = game.world.get::<Stats>(enemies[1]).unwrap().hp;
+    game.use_ability(&ability, player, "You", &[enemies[1]]);
+    let at_level_20 = before - game.world.get::<Stats>(enemies[1]).unwrap().hp;
+
+    assert_eq!(
+        at_level_1, at_level_20,
+        "ability damage scales through ATK alone — scaling power too would double-dip"
+    );
+}
+
+/// Drain's heal rides the damage it dealt, which already rides ATK, so it
+/// must not be scaled a second time.
+#[test]
+fn drain_is_not_scaled_by_level() {
+    let mut game = Game::new(4205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 2, 500);
+    game.world.get_mut::<Stats>(player).unwrap().atk = 10;
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_drain".into(),
+        name: "Test Drain".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
+        effect: crate::abilities::AbilityEffect::Drain {
+            power: 10,
+            heal_fraction: 0.5,
+        },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+
+    game.world.get_mut::<Experience>(player).unwrap().level = 1;
+    let before = game.world.get::<Stats>(enemies[0]).unwrap().hp;
+    game.use_ability(&ability, player, "You", &[enemies[0]]);
+    let at_level_1 = before - game.world.get::<Stats>(enemies[0]).unwrap().hp;
+
+    game.world.get_mut::<Experience>(player).unwrap().level = 20;
+    let before = game.world.get::<Stats>(enemies[1]).unwrap().hp;
+    game.use_ability(&ability, player, "You", &[enemies[1]]);
+    let at_level_20 = before - game.world.get::<Stats>(enemies[1]).unwrap().hp;
+
+    assert_eq!(at_level_1, at_level_20, "a drain scales through ATK alone");
+}
+
+/// Wild programs have no `Experience` — they scale by zone and distance —
+/// so a hostile carrier reads the current `ZoneLevel` instead.
+#[test]
+fn a_hostile_scales_its_routine_off_the_zone_level() {
+    let mut game = Game::new(4206, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    game.world.resource_mut::<ZoneLevel>().0 = 7;
+
+    assert_eq!(
+        game.ability_user_level(enemies[0]),
+        7,
+        "a wild program has no level, so the zone is what its routine scales from"
+    );
+    assert_eq!(
+        game.ability_user_level(player),
+        game.world.get::<Experience>(player).unwrap().level,
+        "the player scales off their own level"
+    );
+}
+
+/// `use_ability` was made side-agnostic (it resolves recipients from either
+/// side via `ability_recipients`) without making its log kind side-aware:
+/// the `Damage`/`Drain` arms hardcoded `MessageKind::PartyDamage`, so a
+/// hostile carrier's routine damage rendered in the party's own styling —
+/// the same bold-white the log deliberately reserves for the player's hits.
+#[test]
+fn a_hostile_routines_damage_line_logs_as_enemy_special_not_party_damage() {
+    let mut game = Game::new(9201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    let kernel_panic = ability(&game, "kernel_panic");
+
+    game.use_ability(&kernel_panic, enemies[0], "Wraith", &[player]);
+
+    let kinds: Vec<MessageKind> = game
+        .world
+        .resource::<MessageLog>()
+        .lines
+        .iter()
+        .map(|(kind, _)| *kind)
+        .collect();
+    assert!(
+        kinds.contains(&MessageKind::EnemySpecial),
+        "a hostile's routine damage should log EnemySpecial: {kinds:?}"
+    );
+    assert!(
+        !kinds.contains(&MessageKind::PartyDamage),
+        "and never the party's own damage styling: {kinds:?}"
     );
 }

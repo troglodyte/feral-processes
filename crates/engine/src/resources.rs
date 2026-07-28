@@ -49,10 +49,10 @@ pub enum MessageKind {
     PartyDamage,
     /// A hostile program landing a plain damage-only move.
     EnemyAttack,
-    /// A hostile program landing a move that also inflicts a status
-    /// condition, and the line naming the condition it inflicted. Enemies
-    /// have no separate Special action the way the party does — a move
-    /// carrying a `MoveEffect` is the whole of what makes one special.
+    /// A hostile program doing something other than a plain swing: a move
+    /// that also inflicts a status condition, the line naming that
+    /// condition, or a carrier spending its round on an installed routine
+    /// (see `Game::wild_routine_ready`).
     EnemySpecial,
 }
 

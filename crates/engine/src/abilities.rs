@@ -52,11 +52,74 @@ pub fn player_routine_slots(level: u32) -> usize {
     )
 }
 
+/// The multiplier an ability's authored magnitude is scaled by when a
+/// combatant of `level` uses it — see
+/// `tuning::ABILITY_POWER_SCALE_PER_LEVEL`.
+///
+/// `level` is clamped at `tuning::ABILITY_POWER_SCALE_LEVEL_CAP` because the
+/// player has no level ceiling; see `player_routine_slots`, which clamps for
+/// the same reason.
+pub fn ability_power_scale(level: u32) -> f32 {
+    let level = level.min(crate::tuning::ABILITY_POWER_SCALE_LEVEL_CAP);
+    1.0 + level as f32 * crate::tuning::ABILITY_POWER_SCALE_PER_LEVEL
+}
+
+/// `power` scaled by `ability_power_scale(level)`, rounded to the nearest
+/// whole point. Negative powers scale too — a sap is a negative-power buff,
+/// and it has to sharpen with level the same way a buff does.
+pub fn scaled_power(power: i32, level: u32) -> i32 {
+    (power as f32 * ability_power_scale(level)).round() as i32
+}
+
+/// The cooldown armed on a combatant right after it casts an ability whose
+/// authored value is `cooldown`, floored at `floor` rounds. Called from both
+/// `resolve_one_action` (party side, `floor = 0`, so the authored value is
+/// untouched — this is what keeps `decompile` spammable) and `wild_retaliate`
+/// (hostile side, `floor = tuning::ENEMY_ROUTINE_MIN_COOLDOWN`, so a mod
+/// ability declaring no cooldown still can't fire every single round).
+///
+/// One function rather than the same `+1` written twice: a comment saying
+/// two formulas "match" can't keep them in sync if one drifts, so this is
+/// the sync.
+///
+/// The `+1` is armed before the effect resolves and read again at the end of
+/// this same round by `tick_ability_cooldowns` — without it, that tick would
+/// eat a round the caster never actually got to wait out.
+pub fn armed_cooldown(cooldown: u32, floor: u32) -> u32 {
+    cooldown.max(floor) + 1
+}
+
 /// The inventory item a loose (uninstalled) copy of `ability` takes. Minted
 /// by `ItemDb::synthesize_routines` rather than authored, so a modder's new
 /// ability is extractable and installable with no second file to write.
 pub fn routine_item_id(ability: &str) -> crate::items::ItemId {
     crate::items::ItemId(format!("routine_{ability}"))
+}
+
+/// Index into `weights` that `roll` selects, treating each weight as the
+/// width of a bucket. `roll` is expected in `0..weights.iter().sum()`.
+///
+/// `None` only when there is genuinely nothing to pick — an empty slice, or
+/// every weight zero. An overshooting roll saturates to the last non-zero
+/// bucket rather than returning `None`, so a caller that computes its range
+/// wrong degrades to a valid pick instead of silently spawning nothing.
+///
+/// Pure, and takes the roll rather than the RNG, so the distribution can be
+/// tested without a `Game`.
+pub fn weighted_pick(weights: &[u32], roll: u32) -> Option<usize> {
+    let mut remaining = roll;
+    let mut last = None;
+    for (index, &weight) in weights.iter().enumerate() {
+        if weight == 0 {
+            continue;
+        }
+        last = Some(index);
+        if remaining < weight {
+            return Some(index);
+        }
+        remaining -= weight;
+    }
+    last
 }
 
 /// Who an ability lands on. Which picker the UI opens for it — if any — is
@@ -99,6 +162,22 @@ pub enum AbilityEffect {
         power: i32,
         duration: u32,
     },
+    /// Damage through `battle::compute_damage`, then the user is healed for
+    /// `heal_fraction` of the damage it actually dealt, capped at its own
+    /// maximum Integrity.
+    ///
+    /// Deliberately excluded from `scaled_power`: the heal rides the damage,
+    /// which already rides the user's ATK, so this scales with level without
+    /// being scaled.
+    Drain {
+        power: i32,
+        /// Clamped to `0.0..=1.0` at load — see `AbilityDb::load_dir`. Bounded
+        /// there rather than at use, so a `heal_fraction: 5.0` mod is a
+        /// bounded ability instead of a bounded surprise inside a formula.
+        heal_fraction: f32,
+    },
+    /// Clears each recipient's active status condition. Carries no fields.
+    Cleanse,
     /// Spends a taming catalyst and rolls `taming::capture_chance` against
     /// the target group's front program — see `Game::attempt_decompile`.
     /// Carries no numbers of its own: the whole formula is `taming`'s, and
@@ -125,6 +204,17 @@ pub struct AbilityDef {
     /// ability omitting it behaves as before.
     #[serde(default = "default_fatigue_cost")]
     pub fatigue_cost: f32,
+    /// How likely this ability is to be found already installed on a wild
+    /// program — see `Game::spawn_wild_creature`. Relative within the pool,
+    /// not a probability: weight 12 is twice as likely as weight 6, and the
+    /// pool is normalised at pick time.
+    ///
+    /// `#[serde(default)]` to 0, which means "never spawns wild". Defaulting
+    /// to exclusion is what keeps `priority_boost` and `decompile` — and
+    /// every other ability reachable through a species or a research node —
+    /// out of the pool without this module having to name them.
+    #[serde(default)]
+    pub wild_weight: u32,
 }
 
 fn default_fatigue_cost() -> f32 {
@@ -148,6 +238,11 @@ impl AbilityDef {
         {
             return Some("effect.status.chance");
         }
+        if let AbilityEffect::Drain { heal_fraction, .. } = &self.effect
+            && !heal_fraction.is_finite()
+        {
+            return Some("effect.heal_fraction");
+        }
         None
     }
 
@@ -169,6 +264,16 @@ impl AbilityDef {
             );
         }
         None
+    }
+
+    /// Bounds a `Drain`'s `heal_fraction` to `0.0..=1.0`. Applied at load so
+    /// every reader downstream can treat it as a fraction, rather than each
+    /// one re-clamping. Runs after `non_finite_field`, which has already
+    /// refused a NaN — `clamp` would panic on one.
+    fn clamp_ranges(&mut self) {
+        if let AbilityEffect::Drain { heal_fraction, .. } = &mut self.effect {
+            *heal_fraction = heal_fraction.clamp(0.0, 1.0);
+        }
     }
 }
 
@@ -207,7 +312,7 @@ impl AbilityDb {
             }
             let text = std::fs::read_to_string(&path)?;
             match ron::from_str::<AbilityDef>(&text) {
-                Ok(def) => {
+                Ok(mut def) => {
                     if let Some(field) = def.non_finite_field() {
                         warnings.push(format!(
                             "skipped invalid ability file {path:?}: {field} is not a finite number"
@@ -218,6 +323,7 @@ impl AbilityDb {
                         warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
                         continue;
                     }
+                    def.clamp_ranges();
                     db.abilities.insert(def.id.clone(), def);
                 }
                 Err(e) => warnings.push(format!("skipped invalid ability file {path:?}: {e}")),
@@ -237,6 +343,20 @@ impl AbilityDb {
         let mut defs: Vec<&AbilityDef> = self.abilities.values().collect();
         defs.sort_by(|a, b| a.id.cmp(&b.id));
         defs.into_iter()
+    }
+
+    /// Every ability that can be found on a wild program, paired with its
+    /// weight, ordered by id.
+    ///
+    /// Ordered for the same reason `all()` is: `HashMap` iteration is
+    /// randomised per instance, so a weighted walk over an unordered pool
+    /// would not be reproducible from a seed — and every wild spawn in this
+    /// game is.
+    pub fn wild_pool(&self) -> Vec<(&AbilityDef, u32)> {
+        self.all()
+            .filter(|d| d.wild_weight > 0)
+            .map(|d| (d, d.wild_weight))
+            .collect()
     }
 }
 
@@ -349,7 +469,7 @@ mod tests {
             warnings.is_empty(),
             "the shipped set must not warn: {warnings:?}"
         );
-        assert_eq!(db.all().count(), 11, "11 abilities ship with the game");
+        assert_eq!(db.all().count(), 31, "31 abilities ship with the game");
         assert!(
             db.get(FALLBACK_ABILITY_ID).is_some(),
             "the fallback ability must ship, or every companion loses its Special"
@@ -404,6 +524,148 @@ mod tests {
             player_routine_slots(9_999),
             crate::tuning::PLAYER_ROUTINE_SLOT_CAP as usize,
             "the player has no level cap, so only this clamp bounds their slots"
+        );
+    }
+
+    #[test]
+    fn wild_weight_defaults_to_zero_so_an_ability_opts_in_rather_than_out() {
+        let (db, _) = load("wild_default", &[("test_sweep", VALID)]);
+        let def = db.get("test_sweep").expect("valid ability should load");
+        assert_eq!(
+            def.wild_weight, 0,
+            "an ability that says nothing must never spawn wild"
+        );
+    }
+
+    #[test]
+    fn wild_pool_holds_only_the_opted_in_abilities_ordered_by_id() {
+        let common = r#"(id: "zebra", name: "Zebra", description: "d",
+            target: OneAlly, effect: Heal(power: 1), cooldown: 1, wild_weight: 4)"#;
+        let rare = r#"(id: "apple", name: "Apple", description: "d",
+            target: OneAlly, effect: Heal(power: 1), cooldown: 1, wild_weight: 1)"#;
+        let (db, _) = load(
+            "wild_pool",
+            &[("test_sweep", VALID), ("zebra", common), ("apple", rare)],
+        );
+        let pool: Vec<(&str, u32)> = db
+            .wild_pool()
+            .into_iter()
+            .map(|(d, w)| (d.id.as_str(), w))
+            .collect();
+        assert_eq!(
+            pool,
+            vec![("apple", 1), ("zebra", 4)],
+            "weight-0 abilities are excluded, and HashMap order must not leak into a seeded roll"
+        );
+    }
+
+    #[test]
+    fn weighted_pick_is_proportional_to_the_weights() {
+        let weights = [1, 3, 1];
+        // Roll 0 lands in the first bucket; 1..=3 in the second; 4 in the third.
+        assert_eq!(weighted_pick(&weights, 0), Some(0));
+        assert_eq!(weighted_pick(&weights, 1), Some(1));
+        assert_eq!(weighted_pick(&weights, 3), Some(1));
+        assert_eq!(weighted_pick(&weights, 4), Some(2));
+    }
+
+    #[test]
+    fn weighted_pick_handles_an_empty_pool_and_an_overshooting_roll() {
+        assert_eq!(weighted_pick(&[], 0), None, "nothing to pick from");
+        assert_eq!(weighted_pick(&[0, 0], 0), None, "all weights excluded");
+        assert_eq!(
+            weighted_pick(&[2, 3], 99),
+            Some(1),
+            "an overshooting roll saturates to the last real bucket, never panics"
+        );
+    }
+
+    #[test]
+    fn a_drain_with_a_non_finite_heal_fraction_is_skipped() {
+        let bad = r#"(id: "test_bad_drain", name: "Bad Drain", description: "d",
+            target: OneEnemyGroupFront, cooldown: 1,
+            effect: Drain(power: 8, heal_fraction: NaN))"#;
+        let (db, warnings) = load("bad_drain", &[("test_sweep", VALID), ("bad", bad)]);
+        assert!(db.get("test_sweep").is_some(), "the valid file still loads");
+        assert!(
+            db.get("test_bad_drain").is_none(),
+            "a NaN heal fraction must not reach the formula"
+        );
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("heal_fraction"), "{}", warnings[0]);
+    }
+
+    #[test]
+    fn an_out_of_range_heal_fraction_is_clamped_rather_than_refused() {
+        let greedy = r#"(id: "test_greedy", name: "Greedy", description: "d",
+            target: OneEnemyGroupFront, cooldown: 1,
+            effect: Drain(power: 8, heal_fraction: 5.0))"#;
+        let (db, warnings) = load("greedy_drain", &[("greedy", greedy)]);
+        let def = db.get("test_greedy").expect("clamped, not skipped");
+        let AbilityEffect::Drain { heal_fraction, .. } = def.effect else {
+            panic!("expected a Drain effect");
+        };
+        assert_eq!(
+            heal_fraction, 1.0,
+            "a mod asking for 500% lifesteal gets 100%, bounded at load not at use"
+        );
+        assert!(warnings.is_empty(), "clamping is not a load failure");
+    }
+
+    #[test]
+    fn a_cleanse_needs_no_fields() {
+        let cleanse = r#"(id: "test_cleanse", name: "Cleanse", description: "d",
+            target: WholeParty, cooldown: 1, effect: Cleanse)"#;
+        let (db, warnings) = load("cleanse", &[("cleanse", cleanse)]);
+        assert!(db.get("test_cleanse").is_some(), "{warnings:?}");
+    }
+
+    #[test]
+    fn ability_power_scale_grows_per_level_and_stops_at_the_cap() {
+        assert_eq!(ability_power_scale(0), 1.0, "no level, no bonus");
+        assert!(
+            (ability_power_scale(12) - 2.8).abs() < 1e-5,
+            "a companion at its level cap runs routines at 2.8x"
+        );
+        assert!(
+            (ability_power_scale(20) - 4.0).abs() < 1e-5,
+            "the level-20 case that motivated the change"
+        );
+        let capped = ability_power_scale(crate::tuning::ABILITY_POWER_SCALE_LEVEL_CAP);
+        assert_eq!(
+            ability_power_scale(9_999),
+            capped,
+            "the player has no level cap, so this clamp is the only bound"
+        );
+    }
+
+    #[test]
+    fn scaled_power_scales_negative_magnitudes_too() {
+        assert_eq!(
+            scaled_power(-4, 20),
+            -16,
+            "a sap must sharpen with level the same way a buff does"
+        );
+        assert_eq!(scaled_power(0, 20), 0);
+    }
+
+    #[test]
+    fn armed_cooldown_floors_a_zero_authored_value_but_leaves_a_real_one_alone() {
+        assert_eq!(
+            armed_cooldown(0, crate::tuning::ENEMY_ROUTINE_MIN_COOLDOWN),
+            2,
+            "a mod ability declaring no cooldown is still floored, plus the +1"
+        );
+        assert_eq!(
+            armed_cooldown(3, crate::tuning::ENEMY_ROUTINE_MIN_COOLDOWN),
+            4,
+            "a real cooldown above the floor is untouched but for the +1"
+        );
+        assert_eq!(
+            armed_cooldown(0, 0),
+            1,
+            "the party side's floor is 0 — only the +1 applies, which is what \
+             leaves `decompile` spammable"
         );
     }
 }

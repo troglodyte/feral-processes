@@ -1,0 +1,10 @@
+(
+    id: "kernel_panic",
+    name: "Kernel Panic",
+    description: "Heavy damage to one target",
+    target: OneEnemyGroupFront,
+    effect: Damage(power: 16),
+    cooldown: 3,
+    fatigue_cost: 10.0,
+    wild_weight: 10,
+)

@@ -1,0 +1,10 @@
+(
+    id: "packet_shred",
+    name: "Packet Shred",
+    description: "Damage 10 to every member of one group",
+    target: WholeEnemyGroup,
+    effect: Damage(power: 10),
+    cooldown: 3,
+    fatigue_cost: 11.0,
+    wild_weight: 8,
+)

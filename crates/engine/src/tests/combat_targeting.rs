@@ -316,3 +316,170 @@ fn an_engaged_group_still_uses_its_melee_moves() {
         "a melee-only species in the front rank must still hit"
     );
 }
+
+/// The mirror: "ally" means the user's own side, whichever side that is.
+#[test]
+fn a_hostile_ally_target_resolves_to_its_own_side() {
+    let mut game = Game::new(6601, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 3, 100);
+
+    let recipients = game.ability_recipients(
+        enemies[0],
+        crate::abilities::AbilityTarget::WholeParty,
+        &battle::SpecialTarget::WholeParty,
+    );
+    assert_eq!(
+        recipients.len(),
+        3,
+        "a hostile's 'whole party' is its own side"
+    );
+    assert!(
+        !recipients.contains(&player),
+        "and never reaches across to the player"
+    );
+    for e in &enemies {
+        assert!(recipients.contains(e));
+    }
+}
+
+#[test]
+fn a_hostile_one_ally_target_picks_one_of_its_own() {
+    let mut game = Game::new(6602, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 3, 100);
+
+    let recipients = game.ability_recipients(
+        enemies[0],
+        crate::abilities::AbilityTarget::OneAlly,
+        &battle::SpecialTarget::WholeParty,
+    );
+    assert_eq!(recipients.len(), 1, "exactly one recipient");
+    assert!(
+        enemies.contains(&recipients[0]) && recipients[0] != player,
+        "and it is one of the hostiles, not the player"
+    );
+}
+
+/// `WholeEnemyGroup` and `AllEnemies` collapse for a hostile actor: the
+/// player has one party where the hostiles have groups, and there is no
+/// player-side subdivision to select.
+#[test]
+fn both_hostile_area_enemy_targets_resolve_to_the_whole_player_party() {
+    let mut game = Game::new(6603, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 2, 100);
+
+    let group = game.ability_recipients(
+        enemies[0],
+        crate::abilities::AbilityTarget::WholeEnemyGroup,
+        &battle::SpecialTarget::EnemyGroup { group: 0 },
+    );
+    let all = game.ability_recipients(
+        enemies[0],
+        crate::abilities::AbilityTarget::AllEnemies,
+        &battle::SpecialTarget::AllEnemies,
+    );
+    assert_eq!(group, all, "the two collapse for a hostile actor");
+    assert!(group.contains(&player));
+    for e in &enemies {
+        assert!(
+            !group.contains(e),
+            "a hostile area attack never hits its own side"
+        );
+    }
+}
+
+#[test]
+fn a_hostile_single_enemy_target_hits_exactly_one_party_member() {
+    let mut game = Game::new(6604, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 100);
+
+    // `chosen` is `Ally { slot }` here, not `EnemyGroup` — `wild_retaliate` is
+    // what resolves a hostile's single-target routine now (via
+    // `roll_enemy_target`, aggro-weighted) and hands the slot down; this call
+    // stands in for that resolved slot rather than re-deriving it.
+    let recipients = game.ability_recipients(
+        enemies[0],
+        crate::abilities::AbilityTarget::OneEnemyGroupFront,
+        &battle::SpecialTarget::Ally { slot: 0 },
+    );
+    assert_eq!(recipients.len(), 1);
+    assert!(
+        !enemies.contains(&recipients[0]),
+        "it aims at the party, not at itself"
+    );
+    assert_eq!(
+        recipients[0], player,
+        "with only the player in the party, it is the player"
+    );
+}
+
+/// Spec §4: a hostile's `OneEnemyGroupFront` routine resolves through
+/// `roll_enemy_target`, the same aggro-weighted roll a wild *move* uses — so
+/// slot order and bracing still matter. Before the fix, `wild_retaliate`
+/// hardcoded `chosen` as `SpecialTarget::EnemyGroup { group }`, which made
+/// the hostile branch of `ability_recipients` fall through to
+/// `living_party().take(1)` — always slot 0, the player, no matter who was
+/// bracing or how the party was arranged.
+#[test]
+fn a_hostile_single_target_routine_is_aggro_weighted_across_the_party() {
+    let mut player_hit = false;
+    let mut bracing_companion_hit = false;
+    let mut other_companion_hit = false;
+
+    for seed in 0..200u32 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let bracing = spawn_tamed(&mut game, 1000, 1);
+        let other = spawn_tamed(&mut game, 1000, 1);
+        game.add_companion(bracing).unwrap();
+        game.add_companion(other).unwrap();
+        let player_hp_before = game.world.get::<Stats>(player).unwrap().hp;
+
+        let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+        // Kernel Panic: OneEnemyGroupFront, flat Damage — HP loss identifies
+        // who it landed on without depending on a `StatusEffects` component
+        // the test's own companions don't carry.
+        game.world
+            .entity_mut(enemies[0])
+            .insert(Routines(vec!["kernel_panic".to_string()]));
+        // Bracing draws extra aggro weight — see `battle::slot_aggro_weight`.
+        game.begin_defend(bracing);
+
+        game.wild_retaliate(enemies[0], 0, player);
+
+        let hp_dropped = |e: Entity, before: i32| game.world.get::<Stats>(e).unwrap().hp < before;
+        player_hit |= hp_dropped(player, player_hp_before);
+        bracing_companion_hit |= hp_dropped(bracing, 1000);
+        other_companion_hit |= hp_dropped(other, 1000);
+    }
+
+    assert!(player_hit, "the player must still be a possible target");
+    assert!(
+        bracing_companion_hit || other_companion_hit,
+        "a hostile's single-target routine must be able to land on a companion — before the fix \
+         it always resolved to slot 0 (the player), ignoring bracing and slot order entirely"
+    );
+}
+
+/// The player side is unchanged by any of this.
+#[test]
+fn the_players_side_targets_exactly_as_it_did() {
+    let mut game = Game::new(6605, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let _ = battle_with_a_pack_of(&mut game, 3, 100);
+
+    let recipients = game.ability_recipients(
+        player,
+        crate::abilities::AbilityTarget::WholeEnemyGroup,
+        &battle::SpecialTarget::EnemyGroup { group: 0 },
+    );
+    assert_eq!(
+        recipients.len(),
+        3,
+        "the player's group attack still hits the group"
+    );
+    assert!(!recipients.contains(&player));
+}

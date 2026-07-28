@@ -259,6 +259,21 @@ impl Game {
         self.world
             .entity_mut(front)
             .remove::<(Hostile, WanderAi, NestGuardian)>();
+        // Battle-scoped state has to be cleared here rather than left to
+        // `end_battle`/`clear_battle_status_effects`: `front` is about to
+        // leave its group below, so if other groups are still standing the
+        // fight goes on without it ever reaching that teardown, and a
+        // mirrored buff or a routine's own cooldown would otherwise ride
+        // into the roster and never tick again.
+        if let Some(mut s) = self.world.get_mut::<StatusEffects>(front) {
+            s.active = None;
+        }
+        if let Some(mut b) = self.world.get_mut::<CombatBuff>(front) {
+            b.active = None;
+        }
+        if let Some(mut c) = self.world.get_mut::<AbilityCooldowns>(front) {
+            c.0.clear();
+        }
         self.world
             .entity_mut(front)
             .insert((Tamed { owner: player }, Experience::default()));

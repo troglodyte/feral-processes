@@ -139,9 +139,15 @@ impl Game {
                             .get::<AbilityCooldowns>(entity)
                             .map(|c| c.0.clone())
                             .unwrap_or_default();
-                        // +1 so the tick at the end of this same round
-                        // doesn't eat a round the player never got.
-                        cooldowns.insert(ability.id.clone(), ability.cooldown + 1);
+                        // `floor = 0`: the player side keeps the authored
+                        // value untouched (see `abilities::armed_cooldown`),
+                        // which is what leaves `decompile` — guarded out of
+                        // this branch entirely by `cooldown > 0` above —
+                        // spammable.
+                        cooldowns.insert(
+                            ability.id.clone(),
+                            abilities::armed_cooldown(ability.cooldown, 0),
+                        );
                         self.world
                             .entity_mut(entity)
                             .insert(AbilityCooldowns(cooldowns));
@@ -164,7 +170,7 @@ impl Game {
                             self.attempt_decompile(group, player);
                         }
                     } else {
-                        let recipients = self.ability_recipients(ability.target, &target);
+                        let recipients = self.ability_recipients(entity, ability.target, &target);
                         self.use_ability(&ability, entity, &name, &recipients);
                         // An area effect can drop members from any rank, and
                         // a corpse left in a group would be promoted to front
@@ -467,15 +473,90 @@ impl Game {
         }
     }
 
-    /// Which entities an ability actually lands on this round, resolved at
-    /// resolve time rather than plan time — so a group that died before the
-    /// acting member's turn retargets, and an ally knocked out in the
-    /// meantime is skipped instead of being healed as a corpse.
+    /// Whether `entity` is fighting on the wild side. Ability targets are
+    /// authored from the party's point of view, so this is what decides
+    /// which way to read them — see `ability_recipients`.
+    pub(crate) fn is_hostile(&self, entity: Entity) -> bool {
+        self.world.get::<Hostile>(entity).is_some()
+    }
+
+    /// The player plus every living companion — the party side as a flat
+    /// list. What a hostile's enemy-facing ability lands on.
+    pub(crate) fn living_party(&self) -> Vec<Entity> {
+        let battle_slots = self
+            .world
+            .get_resource::<BattleState>()
+            .map(|b| b.planned.len())
+            .unwrap_or(0);
+        (0..battle_slots)
+            .filter_map(|slot| self.actor_entity(battle::Actor::Party(slot)))
+            .filter(|&e| self.creature_alive(e))
+            .collect()
+    }
+
+    /// The inverse of `actor_entity(battle::Actor::Party(slot))`: which party
+    /// slot `entity` occupies, if it occupies one at all. `roll_enemy_target`
+    /// returns an entity; a hostile's single-target routine needs it as a
+    /// slot index to build `SpecialTarget::Ally` for `ability_recipients`.
+    pub(crate) fn party_slot_of(&self, entity: Entity) -> Option<usize> {
+        if entity == self.player_entity() {
+            return Some(0);
+        }
+        self.world
+            .resource::<Party>()
+            .0
+            .iter()
+            .position(|&e| e == entity)
+            .map(|i| i + 1)
+    }
+
+    /// Which entities `target` lands on, read from `actor`'s side of the
+    /// fight.
+    ///
+    /// Resolved at resolve time rather than plan time — so a group that died
+    /// before the acting member's turn retargets, and an ally knocked out in
+    /// the meantime is skipped instead of being healed as a corpse.
+    ///
+    /// Targets are authored from the party's point of view — "ally" means a
+    /// party member, "enemy" means a wild program. A hostile using the same
+    /// ability flips both: its ally is another hostile, and its enemy is the
+    /// party. That mirror is what lets one ability file serve both sides
+    /// instead of needing an enemy-only twin.
+    ///
+    /// Two of the shapes collapse on the hostile side. The party is a single
+    /// flat roster where the wild side is partitioned into groups, so
+    /// `WholeEnemyGroup` has no player-side subdivision to select and reads
+    /// identically to `AllEnemies`. That is the asymmetry of the two sides,
+    /// not a shortcut.
     pub(crate) fn ability_recipients(
         &self,
+        actor: Entity,
         target: AbilityTarget,
         chosen: &battle::SpecialTarget,
     ) -> Vec<Entity> {
+        if self.is_hostile(actor) {
+            return match target {
+                AbilityTarget::OneAlly => self.hostile_ally_of(actor).into_iter().collect(),
+                AbilityTarget::WholeParty => self.all_living_enemies(),
+                AbilityTarget::OneEnemyGroupFront => match chosen {
+                    battle::SpecialTarget::Ally { slot } => self
+                        .actor_entity(battle::Actor::Party(*slot))
+                        .filter(|&e| self.creature_alive(e))
+                        .into_iter()
+                        .collect(),
+                    // Nothing else constructs a `SpecialTarget` for a
+                    // hostile's single-target routine: `wild_retaliate`
+                    // always rolls `roll_enemy_target` first and passes the
+                    // result as `Ally`. Empty rather than
+                    // `living_party().take(1)` — that fallback used to be
+                    // the only live path, and it silently hit the player
+                    // (slot 0) every time, bypassing bracing and aggro
+                    // weighting entirely.
+                    _ => Vec::new(),
+                },
+                AbilityTarget::WholeEnemyGroup | AbilityTarget::AllEnemies => self.living_party(),
+            };
+        }
         match target {
             AbilityTarget::OneAlly => match chosen {
                 battle::SpecialTarget::Ally { slot } => self
@@ -485,14 +566,7 @@ impl Game {
                     .collect(),
                 _ => Vec::new(),
             },
-            AbilityTarget::WholeParty => (0..self
-                .world
-                .get_resource::<BattleState>()
-                .map(|b| b.planned.len())
-                .unwrap_or(0))
-                .filter_map(|slot| self.actor_entity(battle::Actor::Party(slot)))
-                .filter(|&e| self.creature_alive(e))
-                .collect(),
+            AbilityTarget::WholeParty => self.living_party(),
             AbilityTarget::OneEnemyGroupFront => match chosen {
                 battle::SpecialTarget::EnemyGroup { group } => self
                     .retarget(*group)
@@ -520,6 +594,32 @@ impl Game {
         }
     }
 
+    /// One living hostile for a carrier's ally-facing routine to land on.
+    ///
+    /// Not "the most hurt". A carrier fires whenever its routine is off
+    /// cooldown, so a heal landing on a healthy ally is wasted — accepted,
+    /// because the alternative is a per-effect situational policy that this
+    /// design deliberately does not have.
+    ///
+    /// A deterministic rotation keyed on the round number and the actor's
+    /// own position among the candidates — not a uniform draw. Chosen so the
+    /// pick needs no `&mut self` (and so no `GameRng`, which only takes
+    /// `&mut`), at the cost of being predictable to anyone tracking the
+    /// round count. Nothing in the design relies on it being anything else.
+    fn hostile_ally_of(&self, actor: Entity) -> Option<Entity> {
+        let candidates = self.all_living_enemies();
+        if candidates.is_empty() {
+            return None;
+        }
+        let round = self
+            .world
+            .get_resource::<BattleState>()
+            .map(|b| b.round as usize)
+            .unwrap_or(0);
+        let offset = candidates.iter().position(|&e| e == actor).unwrap_or(0);
+        Some(candidates[(round + offset) % candidates.len()])
+    }
+
     /// Executes `ability` (one of `Game::actor_abilities`) on every
     /// entity in `recipients` — party members for a buff or heal, enemies
     /// for damage or a debuff. See `Game::ability_recipients`, which
@@ -532,6 +632,23 @@ impl Game {
         name: &str,
         recipients: &[Entity],
     ) {
+        // Resolved once for the whole cast rather than per recipient: every
+        // recipient of one ability is scaled by the *user's* level, and
+        // re-reading it inside the loop would invite someone to key it off
+        // the recipient instead.
+        let level = self.ability_user_level(actor);
+        // Damage/drain lines get the log kind their side actually earns,
+        // rather than the party's own `PartyDamage` regardless of who is
+        // acting — `use_ability` serves both sides now, but a hostile
+        // carrier's hit is not a party hit. Derived from `actor` rather than
+        // taken as a parameter, since a parameter would be a second source
+        // of truth for something `ability_recipients` already determines
+        // from `actor` via `is_hostile`.
+        let hit_kind = if self.is_hostile(actor) {
+            MessageKind::EnemySpecial
+        } else {
+            MessageKind::PartyDamage
+        };
         for &recipient in recipients {
             // A buff can land on the player or on a companion, so the log
             // names whoever got it rather than assuming "you".
@@ -547,7 +664,7 @@ impl Game {
                         ActiveBuff {
                             kind: *kind,
                             remaining: *duration,
-                            power: *power,
+                            power: abilities::scaled_power(*power, level),
                         },
                     );
                     let stat = match kind {
@@ -560,6 +677,7 @@ impl Game {
                     ));
                 }
                 AbilityEffect::Heal { power } => {
+                    let power = abilities::scaled_power(*power, level);
                     if let Some(mut stats) = self.world.get_mut::<Stats>(recipient) {
                         stats.hp = (stats.hp + power).min(stats.max_hp);
                     }
@@ -574,7 +692,7 @@ impl Game {
                         statuses.active = Some(ActiveStatus {
                             kind: *kind,
                             remaining: *duration,
-                            power: *power,
+                            power: abilities::scaled_power(*power, level),
                         });
                     }
                     match kind {
@@ -590,13 +708,48 @@ impl Game {
                         .unwrap_or(0);
                     let dmg = battle::compute_damage(self.effective_atk(actor), def, *power);
                     self.apply_damage(recipient, dmg);
-                    self.log_kind(
-                        MessageKind::PartyDamage,
-                        format!("{name} hits {on} for {dmg} damage."),
-                    );
+                    self.log_kind(hit_kind, format!("{name} hits {on} for {dmg} damage."));
                     if let Some(effect) = status.clone() {
-                        self.apply_status_effect(recipient, &effect, &on, MessageKind::PartyDamage);
+                        self.apply_status_effect(recipient, &effect, &on, hit_kind);
                     }
+                }
+                AbilityEffect::Drain {
+                    power,
+                    heal_fraction,
+                } => {
+                    let def = self
+                        .world
+                        .get::<Stats>(recipient)
+                        .map(|s| s.def)
+                        .unwrap_or(0);
+                    let dmg = battle::compute_damage(self.effective_atk(actor), def, *power);
+                    self.apply_damage(recipient, dmg);
+                    // Off the damage actually dealt, not the authored power:
+                    // DEF has already eaten into it, and healing off the
+                    // pre-mitigation figure would make a drain better against
+                    // an armoured target than a soft one.
+                    let restored = (dmg as f32 * heal_fraction).round() as i32;
+                    if let Some(mut stats) = self.world.get_mut::<Stats>(actor) {
+                        stats.hp = (stats.hp + restored).min(stats.max_hp);
+                    }
+                    self.log_kind(
+                        hit_kind,
+                        format!("{name} siphons {dmg} from {on}, restoring {restored}."),
+                    );
+                }
+                AbilityEffect::Cleanse => {
+                    let had_status = self
+                        .world
+                        .get::<StatusEffects>(recipient)
+                        .is_some_and(|s| s.active.is_some());
+                    if had_status {
+                        if let Some(mut statuses) = self.world.get_mut::<StatusEffects>(recipient) {
+                            statuses.active = None;
+                        }
+                        self.log(format!("{name} flushes the corruption from {on}."));
+                    }
+                    // Silent on a clean recipient: a "nothing to clear" line
+                    // per party member, every cast, would drown the log.
                 }
                 // `resolve_one_action` branches around `use_ability` entirely
                 // for `Decompile` — it needs the group index, not a

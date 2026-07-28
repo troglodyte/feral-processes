@@ -668,6 +668,49 @@ pub const PLAYER_ROUTINE_SLOT_PER_LEVEL: u32 = 10;
 /// clamp is the only thing bounding their slots.
 pub const PLAYER_ROUTINE_SLOT_CAP: u32 = 6;
 
+// ─────────────────────────────────────────────────────────────────────────
+// Wild routines and ability scaling
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Chance a freshly spawned wild program carries a routine its species
+/// never grants — a "carrier". It uses that routine against you in battle,
+/// and hands it over installed if you decompile it.
+///
+/// This decides *whether* a carrier appears; which routine it gets is the
+/// per-ability `wild_weight` in `assets/abilities/*.ron`. Deliberately low:
+/// a carrier should be a thing you go hunting for, not the default program
+/// in the field.
+///
+/// Unrelated to `WILD_ABILITY_CHANCE`, which gates whether a wild program
+/// reaches for its *move's* status effect on a given swing.
+pub const WILD_ROUTINE_CHANCE: f64 = 0.06;
+
+/// How much each level adds to an ability's magnitude: the multiplier is
+/// `1.0 + level * this`. A flat `Heal(power: 8)` is a real patch at level 1
+/// and noise against a level-20 program with 400 Integrity taking 100-point
+/// hits, which is what this exists to fix.
+///
+/// Applies to `Heal`, `Buff` and `Debuff` magnitudes only. Ability `Damage`
+/// is deliberately excluded — `battle::compute_damage` is
+/// `power + ATK - DEF`, so it already rides the user's ATK, and scaling the
+/// flat term too would double-dip through every curve `balance_sim`
+/// projects.
+pub const ABILITY_POWER_SCALE_PER_LEVEL: f32 = 0.15;
+
+/// Level ceiling on `abilities::ability_power_scale`. The player has no
+/// level cap (`progression::add_xp` takes `None`), so without this a long
+/// enough game multiplies every heal and buff without bound. At the value
+/// above, this caps the multiplier at 7x.
+pub const ABILITY_POWER_SCALE_LEVEL_CAP: u32 = 40;
+
+/// Floor on the cooldown a hostile arms after spending a routine.
+///
+/// `AbilityDef::cooldown` is `#[serde(default)]` 0, and a carrier fires
+/// whenever its routine is off cooldown — so a mod ability declaring no
+/// cooldown would fire every single round. The player side keeps the
+/// authored value untouched, which is what leaves `decompile` spammable.
+pub const ENEMY_ROUTINE_MIN_COOLDOWN: u32 = 1;
+
 #[cfg(test)]
 mod tests {
     use super::*;

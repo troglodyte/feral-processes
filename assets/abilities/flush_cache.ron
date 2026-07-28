@@ -1,0 +1,10 @@
+(
+    id: "flush_cache",
+    name: "Flush Cache",
+    description: "Clear status conditions from the whole party",
+    target: WholeParty,
+    effect: Cleanse,
+    cooldown: 3,
+    fatigue_cost: 7.0,
+    wild_weight: 8,
+)

@@ -9,8 +9,8 @@ use crate::tuning::{
     ZONE_GROUP_GROWTH,
 };
 use crate::tuning::{
-    GROUP_SIZE_DISTANCE_GROWTH, MAX_GROUP_SIZE_DISTANCE_STEPS, WILD_SPAWN_CHANCE,
-    WILD_SPAWN_RADIUS_TILES,
+    GROUP_SIZE_DISTANCE_GROWTH, MAX_GROUP_SIZE_DISTANCE_STEPS, WILD_ROUTINE_CHANCE,
+    WILD_SPAWN_CHANCE, WILD_SPAWN_RADIUS_TILES,
 };
 use crate::*;
 
@@ -40,6 +40,45 @@ pub(crate) fn swarm_radius(n: u32) -> i32 {
 }
 
 impl Game {
+    /// Rolls whether a fresh wild program carries a routine, and which —
+    /// the `Routines` payload for one creature, empty on the (usual) miss.
+    ///
+    /// Two rolls, deliberately separate: `WILD_ROUTINE_CHANCE` decides
+    /// whether there is a carrier at all, and the per-ability `wild_weight`
+    /// decides what it holds. Folding them into one would mean adding an
+    /// ability to the pool changed how often carriers appear.
+    ///
+    /// Exactly one routine. A carrier is a prize, and a second would need a
+    /// slot policy at capture time that nothing else in the design needs.
+    pub(crate) fn roll_wild_routine(&mut self) -> Vec<crate::abilities::AbilityId> {
+        let carries = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_bool(WILD_ROUTINE_CHANCE)
+        };
+        if !carries {
+            return Vec::new();
+        }
+        let pool: Vec<(crate::abilities::AbilityId, u32)> = self
+            .world
+            .resource::<AbilityDb>()
+            .wild_pool()
+            .into_iter()
+            .map(|(def, weight)| (def.id.clone(), weight))
+            .collect();
+        let total: u32 = pool.iter().map(|(_, w)| w).sum();
+        if total == 0 {
+            return Vec::new();
+        }
+        let roll = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_range(0..total)
+        };
+        let weights: Vec<u32> = pool.iter().map(|(_, w)| *w).collect();
+        crate::abilities::weighted_pick(&weights, roll)
+            .map(|index| vec![pool[index].0.clone()])
+            .unwrap_or_default()
+    }
+
     /// Spawns a wild creature of `species_id` at `(x, y)`, returning its
     /// `Entity` — `None` only if `species_id` isn't in `SpeciesDb` (every
     /// real call site passes an id it already validated against
@@ -62,6 +101,7 @@ impl Game {
         let zone = zone_level.0;
         let dist_mult = self.distance_stat_multiplier(x, y);
         let potential = self.roll_potential();
+        let routines = self.roll_wild_routine();
         let scale = |base: i32, roll: f32| ((base as f32) * mult * dist_mult * roll).round() as i32;
         Some(
             self.world
@@ -85,6 +125,7 @@ impl Game {
                     WanderAi::default(),
                     ZonePortal(zone),
                     StatusEffects::default(),
+                    Routines(routines),
                 ))
                 .id(),
         )

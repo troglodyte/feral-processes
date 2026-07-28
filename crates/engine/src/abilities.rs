@@ -59,6 +59,32 @@ pub fn routine_item_id(ability: &str) -> crate::items::ItemId {
     crate::items::ItemId(format!("routine_{ability}"))
 }
 
+/// Index into `weights` that `roll` selects, treating each weight as the
+/// width of a bucket. `roll` is expected in `0..weights.iter().sum()`.
+///
+/// `None` only when there is genuinely nothing to pick — an empty slice, or
+/// every weight zero. An overshooting roll saturates to the last non-zero
+/// bucket rather than returning `None`, so a caller that computes its range
+/// wrong degrades to a valid pick instead of silently spawning nothing.
+///
+/// Pure, and takes the roll rather than the RNG, so the distribution can be
+/// tested without a `Game`.
+pub fn weighted_pick(weights: &[u32], roll: u32) -> Option<usize> {
+    let mut remaining = roll;
+    let mut last = None;
+    for (index, &weight) in weights.iter().enumerate() {
+        if weight == 0 {
+            continue;
+        }
+        last = Some(index);
+        if remaining < weight {
+            return Some(index);
+        }
+        remaining -= weight;
+    }
+    last
+}
+
 /// Who an ability lands on. Which picker the UI opens for it — if any — is
 /// `AbilityTarget::targeting`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -125,6 +151,17 @@ pub struct AbilityDef {
     /// ability omitting it behaves as before.
     #[serde(default = "default_fatigue_cost")]
     pub fatigue_cost: f32,
+    /// How likely this ability is to be found already installed on a wild
+    /// program — see `Game::spawn_wild_creature`. Relative within the pool,
+    /// not a probability: weight 12 is twice as likely as weight 6, and the
+    /// pool is normalised at pick time.
+    ///
+    /// `#[serde(default)]` to 0, which means "never spawns wild". Defaulting
+    /// to exclusion is what keeps `priority_boost` and `decompile` — and
+    /// every other ability reachable through a species or a research node —
+    /// out of the pool without this module having to name them.
+    #[serde(default)]
+    pub wild_weight: u32,
 }
 
 fn default_fatigue_cost() -> f32 {
@@ -237,6 +274,20 @@ impl AbilityDb {
         let mut defs: Vec<&AbilityDef> = self.abilities.values().collect();
         defs.sort_by(|a, b| a.id.cmp(&b.id));
         defs.into_iter()
+    }
+
+    /// Every ability that can be found on a wild program, paired with its
+    /// weight, ordered by id.
+    ///
+    /// Ordered for the same reason `all()` is: `HashMap` iteration is
+    /// randomised per instance, so a weighted walk over an unordered pool
+    /// would not be reproducible from a seed — and every wild spawn in this
+    /// game is.
+    pub fn wild_pool(&self) -> Vec<(&AbilityDef, u32)> {
+        self.all()
+            .filter(|d| d.wild_weight > 0)
+            .map(|d| (d, d.wild_weight))
+            .collect()
     }
 }
 
@@ -404,6 +455,59 @@ mod tests {
             player_routine_slots(9_999),
             crate::tuning::PLAYER_ROUTINE_SLOT_CAP as usize,
             "the player has no level cap, so only this clamp bounds their slots"
+        );
+    }
+
+    #[test]
+    fn wild_weight_defaults_to_zero_so_an_ability_opts_in_rather_than_out() {
+        let (db, _) = load("wild_default", &[("test_sweep", VALID)]);
+        let def = db.get("test_sweep").expect("valid ability should load");
+        assert_eq!(
+            def.wild_weight, 0,
+            "an ability that says nothing must never spawn wild"
+        );
+    }
+
+    #[test]
+    fn wild_pool_holds_only_the_opted_in_abilities_ordered_by_id() {
+        let common = r#"(id: "zebra", name: "Zebra", description: "d",
+            target: OneAlly, effect: Heal(power: 1), cooldown: 1, wild_weight: 4)"#;
+        let rare = r#"(id: "apple", name: "Apple", description: "d",
+            target: OneAlly, effect: Heal(power: 1), cooldown: 1, wild_weight: 1)"#;
+        let (db, _) = load(
+            "wild_pool",
+            &[("test_sweep", VALID), ("zebra", common), ("apple", rare)],
+        );
+        let pool: Vec<(&str, u32)> = db
+            .wild_pool()
+            .into_iter()
+            .map(|(d, w)| (d.id.as_str(), w))
+            .collect();
+        assert_eq!(
+            pool,
+            vec![("apple", 1), ("zebra", 4)],
+            "weight-0 abilities are excluded, and HashMap order must not leak into a seeded roll"
+        );
+    }
+
+    #[test]
+    fn weighted_pick_is_proportional_to_the_weights() {
+        let weights = [1, 3, 1];
+        // Roll 0 lands in the first bucket; 1..=3 in the second; 4 in the third.
+        assert_eq!(weighted_pick(&weights, 0), Some(0));
+        assert_eq!(weighted_pick(&weights, 1), Some(1));
+        assert_eq!(weighted_pick(&weights, 3), Some(1));
+        assert_eq!(weighted_pick(&weights, 4), Some(2));
+    }
+
+    #[test]
+    fn weighted_pick_handles_an_empty_pool_and_an_overshooting_roll() {
+        assert_eq!(weighted_pick(&[], 0), None, "nothing to pick from");
+        assert_eq!(weighted_pick(&[0, 0], 0), None, "all weights excluded");
+        assert_eq!(
+            weighted_pick(&[2, 3], 99),
+            Some(1),
+            "an overshooting roll saturates to the last real bucket, never panics"
         );
     }
 }

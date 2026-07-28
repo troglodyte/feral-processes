@@ -121,6 +121,21 @@ way deleting the Currency item does.
     // This is Fatigue, not Power: Power is the other need, and abilities
     // don't touch it.
     fatigue_cost: 8.0,
+
+    // Optional; defaults to 0. How likely this ability is to be found
+    // already installed on a wild program you meet in the field — a
+    // "carrier". 0 means it never spawns wild, which is why every ability
+    // reachable through a species or a research node leaves this alone.
+    //
+    // Weights are relative within the pool, not probabilities: an ability
+    // at 12 turns up twice as often as one at 6. Whether a given wild
+    // program carries anything at all is a separate roll the engine makes
+    // (`WILD_ROUTINE_CHANCE` in `tuning.rs`); this only decides *which*
+    // routine it gets once that roll has already succeeded.
+    //
+    // A carrier uses its routine against you in battle, and hands it over
+    // installed if you decompile it. Killing it destroys the routine.
+    wild_weight: 8,
 )
 ```
 

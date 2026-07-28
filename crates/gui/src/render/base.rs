@@ -3,6 +3,48 @@
 use super::bars::*;
 use super::*;
 
+/// How far a bare tile's background may stray from its biome's flat colour,
+/// as a fraction either side. Enough to break up a field of identical tiles,
+/// not enough to read as two different biomes.
+const SHADE_JITTER: f32 = 0.08;
+/// How dark the map pane's corners get relative to its centre. Floored well
+/// short of illegible: the vignette is depth, and must never be the reason a
+/// hostile at the pane's edge goes unnoticed.
+const VIGNETTE_MIN: f32 = 0.75;
+
+/// A tile's own brightness multiplier, so a field of one biome reads as
+/// ground rather than as a flat colour swatch.
+///
+/// Hashed from the world coordinate, never the screen cell: the camera now
+/// slides continuously across tiles, and a shade tied to screen position
+/// would crawl over the terrain as it went. The two axes are mixed with
+/// different constants because a symmetric hash bands the map along its
+/// diagonal, which reads as a pattern instead of as texture.
+fn tile_shade(world: (i32, i32)) -> f32 {
+    let mut h =
+        (world.0 as u32).wrapping_mul(0x9E37_79B9) ^ (world.1 as u32).wrapping_mul(0x85EB_CA6B);
+    h ^= h >> 15;
+    h = h.wrapping_mul(0x2545_F491);
+    h ^= h >> 13;
+    let t = (h & 0xFFFF) as f32 / 65535.0;
+    1.0 - SHADE_JITTER + 2.0 * SHADE_JITTER * t
+}
+
+/// Radial dimming toward the edge of the map pane, given a tile's offset from
+/// the pane centre and the pane's half-extent, both in pixels.
+///
+/// Anchored to the pane rather than to the grid, so it stays put while the
+/// camera slides beneath it. Normalising by the half-extent is what keeps the
+/// gradient the same shape at every zoom step and window size, and squaring
+/// the radius keeps the centre broadly flat so the falloff reads only near
+/// the edges.
+fn vignette(dx: f32, dy: f32, half_w_px: f32, half_h_px: f32) -> f32 {
+    let r = ((dx / half_w_px).powi(2) + (dy / half_h_px).powi(2))
+        .sqrt()
+        .min(1.0);
+    1.0 - (1.0 - VIGNETTE_MIN) * r * r
+}
+
 fn biome_style(biome: Biome) -> (char, Color) {
     match biome {
         Biome::DataVoid => ('~', BLUE),
@@ -64,6 +106,7 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
             let mut staffed = false;
             let mut shielded = false;
             let mut critical = false;
+            let mut occupied = false;
             for ev in &entities {
                 let erx = ev.pos.0 - status.position.0 + hw;
                 let ery = ev.pos.1 - status.position.1 + hh;
@@ -81,18 +124,38 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
                     // its glyph.
                     bg_source = color;
                     shielded = ev.is_structure;
+                    occupied = true;
                 }
             }
+            let world = (
+                status.position.0 + rx as i32 - hw,
+                status.position.1 + ry as i32 - hh,
+            );
+            // Bare ground only. Where something is standing, the background
+            // carries the damage-dimmed glyph colour, and jittering that
+            // would muddy a structure's durability read.
+            let shade = if occupied { 1.0 } else { tile_shade(world) };
+            let vig = vignette(
+                px + tile_px / 2.0 - map_w / 2.0,
+                py + tile_px / 2.0 - map_h / 2.0,
+                map_w / 2.0,
+                map_h / 2.0,
+            );
+            let dim = shade * vig;
             let mut bg = Color::new(
-                bg_source.r * 0.18,
-                bg_source.g * 0.18,
-                bg_source.b * 0.18,
+                bg_source.r * 0.18 * dim,
+                bg_source.g * 0.18 * dim,
+                bg_source.b * 0.18 * dim,
                 1.0,
             );
             if critical {
                 bg = Color::new((bg.r + 0.18).min(1.0), bg.g, bg.b, bg.a);
             }
             painter.rect(px, py, tile_px - 1.0, tile_px - 1.0, bg);
+            // The glyph takes the vignette but not the shade: depth should
+            // apply to everything on the map evenly, while per-tile jitter is
+            // a property of the ground, not of what stands on it.
+            let color = Color::new(color.r * vig, color.g * vig, color.b * vig, color.a);
             let glyph = ch.to_string();
             let dims = painter.measure_map(&glyph, glyph_px);
             let tx = px + (tile_px - dims.width) / 2.0;
@@ -120,10 +183,6 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
             if let Some(pulse) = shield_outline.filter(|_| shielded) {
                 painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, pulse);
             }
-            let world = (
-                status.position.0 + rx as i32 - hw,
-                status.position.1 + ry as i32 - hh,
-            );
             if let Some(flash) = fx.tile_flash(world) {
                 painter.rect(px, py, tile_px - 1.0, tile_px - 1.0, flash);
             }
@@ -314,5 +373,83 @@ fn draw_status_panel(
     for k in keys {
         painter.ui(k, x + m.inset, ky, m.small(), TEXT_DIM);
         ky += keys_line_height;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tile_shade_is_stable_for_a_given_world_coordinate() {
+        // The camera slides continuously over a tile now. A shade derived
+        // from anything but the world coordinate would shimmer as it went.
+        assert_eq!(tile_shade((12, -7)), tile_shade((12, -7)));
+    }
+
+    #[test]
+    fn tile_shade_stays_within_the_jitter_band() {
+        for x in -60..60 {
+            for y in -60..60 {
+                let s = tile_shade((x, y));
+                assert!(
+                    (1.0 - SHADE_JITTER..=1.0 + SHADE_JITTER).contains(&s),
+                    "shade {s} at ({x}, {y}) escaped the band"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn tile_shade_actually_varies_between_neighbours() {
+        let row: Vec<f32> = (0..40).map(|x| tile_shade((x, 5))).collect();
+        let first = row[0];
+        assert!(
+            row.iter().any(|s| (s - first).abs() > SHADE_JITTER / 4.0),
+            "a whole row came out flat — the hash isn't spreading"
+        );
+    }
+
+    /// A hash that treats the axes alike bands the map along the diagonal,
+    /// which reads as a pattern rather than as texture.
+    #[test]
+    fn tile_shade_distinguishes_the_two_axes() {
+        assert_ne!(tile_shade((3, 9)), tile_shade((9, 3)));
+    }
+
+    #[test]
+    fn the_vignette_leaves_the_centre_of_the_pane_untouched() {
+        assert_eq!(vignette(0.0, 0.0, 400.0, 300.0), 1.0);
+    }
+
+    #[test]
+    fn the_vignette_bottoms_out_at_its_floor_and_never_below() {
+        assert!((vignette(400.0, 0.0, 400.0, 300.0) - VIGNETTE_MIN).abs() < 1e-6);
+        // The corners sit past the unit radius and must clamp rather than
+        // keep darkening.
+        assert!(vignette(400.0, 300.0, 400.0, 300.0) >= VIGNETTE_MIN);
+        assert!(vignette(9999.0, 9999.0, 400.0, 300.0) >= VIGNETTE_MIN);
+    }
+
+    #[test]
+    fn the_vignette_darkens_monotonically_outward() {
+        let mut previous = f32::MAX;
+        for i in 0..=20 {
+            let v = vignette(i as f32 * 20.0, 0.0, 400.0, 300.0);
+            assert!(
+                v <= previous,
+                "brightened at step {i}: {v} after {previous}"
+            );
+            previous = v;
+        }
+    }
+
+    /// Normalising by the pane's half-extent is what keeps the gradient the
+    /// same shape at every zoom step and window size.
+    #[test]
+    fn the_vignette_depends_on_position_within_the_pane_not_on_its_size() {
+        let small = vignette(100.0, 75.0, 400.0, 300.0);
+        let large = vignette(200.0, 150.0, 800.0, 600.0);
+        assert!((small - large).abs() < 1e-6, "{small} vs {large}");
     }
 }

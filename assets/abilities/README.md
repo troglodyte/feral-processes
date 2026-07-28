@@ -61,7 +61,7 @@ way deleting the Currency item does.
     // spent on a downed member would be wasted.
     target: WholeEnemyGroup,
 
-    // What it does to each recipient. Exactly one of five:
+    // What it does to each recipient. Exactly one of seven:
     //
     //   Damage(power: 6)
     //     Direct damage through the same formula a move uses
@@ -82,11 +82,31 @@ way deleting the Currency item does.
     //     `Atk` or `Def`. Because damage is additive, a flat +3 ATK is worth
     //     exactly 3 extra damage per hit at every level — buff powers do not
     //     need to scale.
+    //     A *negative* power is how you write a sap: `Buff(kind: Atk,
+    //     power: -4, duration: 3)` with `target: WholeEnemyGroup` weakens
+    //     a group rather than strengthening it, because the buff bonus is
+    //     added unconditionally wherever it lands. There is no separate
+    //     `Sap` effect, and adding one would be a second spelling of this.
+    //     One caveat: a combatant holds a single buff at a time, and the
+    //     Defend stance is itself a buff — so a sap landing on a bracing
+    //     member overwrites its stance and it stops defending.
     //
     //   Debuff(kind: Stun, power: 0, duration: 1)
     //     Inflicts a status condition. Same `kind`/`power` rules as the
     //     rider above. A combatant carries at most one status at a time; a
     //     fresh application overwrites whatever was active.
+    //
+    //   Drain(power: 10, heal_fraction: 0.5)
+    //     Damage through the same formula as `Damage`, then the *user* is
+    //     healed for that fraction of the damage it actually dealt, capped
+    //     at its own maximum Integrity. Healing off the dealt figure rather
+    //     than the authored power means an armoured target returns less,
+    //     which is the intended shape. `heal_fraction` is clamped to
+    //     0.0-1.0 at load; a non-finite one disqualifies the file.
+    //
+    //   Cleanse
+    //     Clears each recipient's active status condition. No fields.
+    //     Silent on a recipient that had nothing to clear.
     //
     //   Decompile
     //     Spends a taming catalyst and rolls a capture against the target

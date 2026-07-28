@@ -649,3 +649,184 @@ fn the_companion_fallback_does_not_leak_onto_the_player() {
         "the player gets decompile, not the companion fallback"
     );
 }
+
+/// Drain heals the user for its fraction of the damage it actually dealt —
+/// not of its authored power, which DEF has already eaten into.
+#[test]
+fn drain_heals_the_user_for_a_fraction_of_the_damage_it_dealt() {
+    let mut game = Game::new(4101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 200;
+        stats.hp = 50;
+        stats.atk = 10;
+    }
+    let before = game.world.get::<Stats>(enemies[0]).unwrap().hp;
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_drain".into(),
+        name: "Test Drain".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
+        effect: crate::abilities::AbilityEffect::Drain {
+            power: 10,
+            heal_fraction: 0.5,
+        },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+    game.use_ability(&ability, player, "You", &[enemies[0]]);
+
+    let dealt = before - game.world.get::<Stats>(enemies[0]).unwrap().hp;
+    assert!(dealt > 0, "the drain must actually land damage");
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().hp,
+        50 + dealt / 2,
+        "the user is healed for half of what it dealt"
+    );
+}
+
+#[test]
+fn drain_never_heals_the_user_past_its_maximum() {
+    let mut game = Game::new(4102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 60;
+        stats.hp = 59;
+        stats.atk = 40;
+    }
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_drain".into(),
+        name: "Test Drain".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
+        effect: crate::abilities::AbilityEffect::Drain {
+            power: 10,
+            heal_fraction: 1.0,
+        },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+    game.use_ability(&ability, player, "You", &[enemies[0]]);
+
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().hp,
+        60,
+        "a full-lifesteal drain caps at max Integrity rather than overhealing"
+    );
+}
+
+#[test]
+fn cleanse_clears_an_active_status_and_is_silent_on_a_clean_target() {
+    let mut game = Game::new(4103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let _ = battle_with_a_pack_of(&mut game, 1, 200);
+    game.world.get_mut::<StatusEffects>(player).unwrap().active = Some(ActiveStatus {
+        kind: StatusKind::Bleed,
+        remaining: 3,
+        power: 4,
+    });
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_cleanse".into(),
+        name: "Test Cleanse".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::WholeParty,
+        effect: crate::abilities::AbilityEffect::Cleanse,
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+    game.use_ability(&ability, player, "You", &[player]);
+    assert!(
+        game.world
+            .get::<StatusEffects>(player)
+            .unwrap()
+            .active
+            .is_none(),
+        "cleanse must clear the condition"
+    );
+
+    let lines_before = game.world.resource::<MessageLog>().lines.len();
+    game.use_ability(&ability, player, "You", &[player]);
+    assert_eq!(
+        game.world.resource::<MessageLog>().lines.len(),
+        lines_before,
+        "a cleanse with nothing to clear logs nothing — one line per party member every time would drown the log"
+    );
+}
+
+/// A sap is a negative-power `Buff` aimed at the enemy side. No `Sap`
+/// variant exists, deliberately — `effective_atk` adds the buff bonus
+/// unconditionally, so a negative power already subtracts.
+#[test]
+fn a_negative_power_buff_saps_effective_attack() {
+    let mut game = Game::new(4104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    game.world.get_mut::<Stats>(enemies[0]).unwrap().atk = 20;
+    let before = game.effective_atk(enemies[0]);
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_sap".into(),
+        name: "Test Sap".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::WholeEnemyGroup,
+        effect: crate::abilities::AbilityEffect::Buff {
+            kind: BuffKind::Atk,
+            power: -6,
+            duration: 3,
+        },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+    game.use_ability(&ability, player, "You", &[enemies[0]]);
+
+    assert_eq!(
+        game.effective_atk(enemies[0]),
+        before - 6,
+        "a negative buff power subtracts, which is the whole sap mechanic"
+    );
+}
+
+/// `CombatBuff` holds one `active` slot and `is_defending` identifies the
+/// Defend stance by an exact power match, so a sap landing on a bracing
+/// member cancels its stance. Documented cost of the single-slot design,
+/// pinned here rather than special-cased.
+#[test]
+fn a_sap_landing_on_a_bracing_member_cancels_its_defend_stance() {
+    let mut game = Game::new(4105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let _ = battle_with_a_pack_of(&mut game, 1, 200);
+    game.begin_defend(player);
+    assert!(game.is_defending(player), "fixture: the player is bracing");
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_sap".into(),
+        name: "Test Sap".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::WholeEnemyGroup,
+        effect: crate::abilities::AbilityEffect::Buff {
+            kind: BuffKind::Def,
+            power: -4,
+            duration: 3,
+        },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+    game.use_ability(&ability, player, "Enemy", &[player]);
+
+    assert!(
+        !game.is_defending(player),
+        "one buff slot means a sap overwrites the stance — the documented cost, not a bug"
+    );
+}

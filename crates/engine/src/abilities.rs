@@ -125,6 +125,22 @@ pub enum AbilityEffect {
         power: i32,
         duration: u32,
     },
+    /// Damage through `battle::compute_damage`, then the user is healed for
+    /// `heal_fraction` of the damage it actually dealt, capped at its own
+    /// maximum Integrity.
+    ///
+    /// Deliberately excluded from `scaled_power`: the heal rides the damage,
+    /// which already rides the user's ATK, so this scales with level without
+    /// being scaled.
+    Drain {
+        power: i32,
+        /// Clamped to `0.0..=1.0` at load — see `AbilityDb::load_dir`. Bounded
+        /// there rather than at use, so a `heal_fraction: 5.0` mod is a
+        /// bounded ability instead of a bounded surprise inside a formula.
+        heal_fraction: f32,
+    },
+    /// Clears each recipient's active status condition. Carries no fields.
+    Cleanse,
     /// Spends a taming catalyst and rolls `taming::capture_chance` against
     /// the target group's front program — see `Game::attempt_decompile`.
     /// Carries no numbers of its own: the whole formula is `taming`'s, and
@@ -185,6 +201,11 @@ impl AbilityDef {
         {
             return Some("effect.status.chance");
         }
+        if let AbilityEffect::Drain { heal_fraction, .. } = &self.effect
+            && !heal_fraction.is_finite()
+        {
+            return Some("effect.heal_fraction");
+        }
         None
     }
 
@@ -206,6 +227,16 @@ impl AbilityDef {
             );
         }
         None
+    }
+
+    /// Bounds a `Drain`'s `heal_fraction` to `0.0..=1.0`. Applied at load so
+    /// every reader downstream can treat it as a fraction, rather than each
+    /// one re-clamping. Runs after `non_finite_field`, which has already
+    /// refused a NaN — `clamp` would panic on one.
+    fn clamp_ranges(&mut self) {
+        if let AbilityEffect::Drain { heal_fraction, .. } = &mut self.effect {
+            *heal_fraction = heal_fraction.clamp(0.0, 1.0);
+        }
     }
 }
 
@@ -244,7 +275,7 @@ impl AbilityDb {
             }
             let text = std::fs::read_to_string(&path)?;
             match ron::from_str::<AbilityDef>(&text) {
-                Ok(def) => {
+                Ok(mut def) => {
                     if let Some(field) = def.non_finite_field() {
                         warnings.push(format!(
                             "skipped invalid ability file {path:?}: {field} is not a finite number"
@@ -255,6 +286,7 @@ impl AbilityDb {
                         warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
                         continue;
                     }
+                    def.clamp_ranges();
                     db.abilities.insert(def.id.clone(), def);
                 }
                 Err(e) => warnings.push(format!("skipped invalid ability file {path:?}: {e}")),
@@ -509,5 +541,45 @@ mod tests {
             Some(1),
             "an overshooting roll saturates to the last real bucket, never panics"
         );
+    }
+
+    #[test]
+    fn a_drain_with_a_non_finite_heal_fraction_is_skipped() {
+        let bad = r#"(id: "test_bad_drain", name: "Bad Drain", description: "d",
+            target: OneEnemyGroupFront, cooldown: 1,
+            effect: Drain(power: 8, heal_fraction: NaN))"#;
+        let (db, warnings) = load("bad_drain", &[("test_sweep", VALID), ("bad", bad)]);
+        assert!(db.get("test_sweep").is_some(), "the valid file still loads");
+        assert!(
+            db.get("test_bad_drain").is_none(),
+            "a NaN heal fraction must not reach the formula"
+        );
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("heal_fraction"), "{}", warnings[0]);
+    }
+
+    #[test]
+    fn an_out_of_range_heal_fraction_is_clamped_rather_than_refused() {
+        let greedy = r#"(id: "test_greedy", name: "Greedy", description: "d",
+            target: OneEnemyGroupFront, cooldown: 1,
+            effect: Drain(power: 8, heal_fraction: 5.0))"#;
+        let (db, warnings) = load("greedy_drain", &[("greedy", greedy)]);
+        let def = db.get("test_greedy").expect("clamped, not skipped");
+        let AbilityEffect::Drain { heal_fraction, .. } = def.effect else {
+            panic!("expected a Drain effect");
+        };
+        assert_eq!(
+            heal_fraction, 1.0,
+            "a mod asking for 500% lifesteal gets 100%, bounded at load not at use"
+        );
+        assert!(warnings.is_empty(), "clamping is not a load failure");
+    }
+
+    #[test]
+    fn a_cleanse_needs_no_fields() {
+        let cleanse = r#"(id: "test_cleanse", name: "Cleanse", description: "d",
+            target: WholeParty, cooldown: 1, effect: Cleanse)"#;
+        let (db, warnings) = load("cleanse", &[("cleanse", cleanse)]);
+        assert!(db.get("test_cleanse").is_some(), "{warnings:?}");
     }
 }

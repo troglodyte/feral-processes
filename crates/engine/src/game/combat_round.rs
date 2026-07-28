@@ -598,6 +598,44 @@ impl Game {
                         self.apply_status_effect(recipient, &effect, &on, MessageKind::PartyDamage);
                     }
                 }
+                AbilityEffect::Drain {
+                    power,
+                    heal_fraction,
+                } => {
+                    let def = self
+                        .world
+                        .get::<Stats>(recipient)
+                        .map(|s| s.def)
+                        .unwrap_or(0);
+                    let dmg = battle::compute_damage(self.effective_atk(actor), def, *power);
+                    self.apply_damage(recipient, dmg);
+                    // Off the damage actually dealt, not the authored power:
+                    // DEF has already eaten into it, and healing off the
+                    // pre-mitigation figure would make a drain better against
+                    // an armoured target than a soft one.
+                    let restored = (dmg as f32 * heal_fraction).round() as i32;
+                    if let Some(mut stats) = self.world.get_mut::<Stats>(actor) {
+                        stats.hp = (stats.hp + restored).min(stats.max_hp);
+                    }
+                    self.log_kind(
+                        MessageKind::PartyDamage,
+                        format!("{name} siphons {dmg} from {on}, restoring {restored}."),
+                    );
+                }
+                AbilityEffect::Cleanse => {
+                    let had_status = self
+                        .world
+                        .get::<StatusEffects>(recipient)
+                        .is_some_and(|s| s.active.is_some());
+                    if had_status {
+                        if let Some(mut statuses) = self.world.get_mut::<StatusEffects>(recipient) {
+                            statuses.active = None;
+                        }
+                        self.log(format!("{name} flushes the corruption from {on}."));
+                    }
+                    // Silent on a clean recipient: a "nothing to clear" line
+                    // per party member, every cast, would drown the log.
+                }
                 // `resolve_one_action` branches around `use_ability` entirely
                 // for `Decompile` — it needs the group index, not a
                 // recipient entity — so this arm is unreachable in practice.

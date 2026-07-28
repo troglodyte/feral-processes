@@ -178,15 +178,38 @@ or an empty routine list drops that box rather than drawing an empty one.
 - **Header band:** glyph in species colour at title size, name, species name in
   parentheses when a custom name overrides it, then a subtitle line of level,
   quality tier, fusion depth, and activity/status.
-- **Meters:** Integrity and Experience full-width. The player additionally gets
-  Power (hunger) and Fatigue, matching the sidebar's labels.
-- **Columns:** program — Combat / Potential / Routines / Species. Player —
-  Combat / Progression (XP, decompiler, perk points) / Routines / Equipment.
+- **Meters:** Integrity and Experience full-width (a wild program has no
+  Experience, so it gets one). The player additionally gets Power (hunger) and
+  Fatigue, matching the sidebar's labels. XP is not repeated as a stat row —
+  the Experience meter already reads `xp/to_next`.
+- **Columns:** program — Combat / Potential / Species / Routines. Player —
+  Combat / Progression / Equipment / Routines / Perks / Party.
   The Species box carries habitats, work aptitude, taming difficulty, the live
   decompile chance, growth multiplier and base speed — every `SpeciesDef` field
   the sim actually reads, so nothing in `ProgramManifest` goes undrawn.
 - **Bottom band:** program — Moves, each with power and any ranged/status tag.
-  Player — Perks (each purchased perk and its level), then Party.
+  The player has no band: six boxes across two columns is what the tightest
+  supported window has room for, and promoting two of them to full-width bands
+  would cost roughly 180px the height budget does not have (a band is as tall
+  as a columned box while consuming a whole row of the grid).
+
+### The height budget
+
+720px is the binding case — the UI font is 19px there, and the header, meters
+and footer are paid before a single stat row is drawn. Two consequences are
+load-bearing rather than incidental:
+
+- The header is **two** rows, not three; the glyph is drawn to their left at
+  twice the title size and spans both, costing no row of its own.
+- A stat row is `font_size` tall, not `line_height`, and **not** `m.small()` —
+  `small()` is `font_size - 4`, so it closes on the body size as the font
+  grows, which would make 1440px tighter than 720px and invert which window
+  the sweep needs to catch.
+
+A section caps at 6 rows (the routine-slot cap, so a full kit is never
+trimmed), with a counted `+N more` row when it would exceed that. Under those
+rules the fullest page either subject can produce clears 720px with room to
+spare, which `the_real_worst_case_pages_fit_the_tightest_window` pins.
 
 ### `manifest_layout(screen_w, screen_h, sections, m) -> ManifestLayout`
 

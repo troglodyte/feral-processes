@@ -7,10 +7,11 @@
 //! lives behind that. Swapping backends is a change to this file rather than
 //! to every menu.
 //!
-//! The surface is deliberately tiny: filled rect, outlined rect, line, text
-//! in one of three faces, a run of differently-styled text on one baseline,
-//! text measurement, and the frame's dimensions and frame delta. That is the
-//! whole vocabulary the screens are drawn in.
+//! The surface is deliberately tiny: filled rect, outlined rect, line,
+//! filled convex polygon, text in one of three faces, a run of
+//! differently-styled text on one baseline, text measurement, and the
+//! frame's dimensions and frame delta. That is the whole vocabulary the
+//! screens are drawn in.
 //!
 //! **Text is positioned by baseline**, not by top edge — `y` is where the
 //! glyph bottoms sit, ignoring descenders. Every layout in `render/` is
@@ -239,6 +240,28 @@ impl Painter {
             [egui::pos2(x1, y1), egui::pos2(x2, y2)],
             egui::Stroke::new(thickness, to_egui(color)),
         );
+    }
+
+    /// Fills a convex polygon given in order around its perimeter.
+    ///
+    /// The one primitive `rect` cannot stand in for: the side walls of the
+    /// first-person dungeon corridor recede toward a vanishing point, so
+    /// they are trapezoids, not axis-aligned boxes. Convex only — every
+    /// shape `render/dungeon.rs` builds is a quad, and the backend's
+    /// triangulation assumes it.
+    ///
+    /// Fewer than three points draws nothing rather than erroring: a
+    /// degenerate wall is a wall of zero width, which is exactly what should
+    /// appear.
+    pub fn poly(&self, points: &[(f32, f32)], color: Color) {
+        if points.len() < 3 {
+            return;
+        }
+        self.painter.add(egui::Shape::convex_polygon(
+            points.iter().map(|&(x, y)| egui::pos2(x, y)).collect(),
+            to_egui(color),
+            egui::Stroke::NONE,
+        ));
     }
 
     /// Draws `text` with its baseline at `y`. See the module docs on why

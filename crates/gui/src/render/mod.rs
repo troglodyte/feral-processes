@@ -23,6 +23,7 @@ mod base;
 mod battle;
 mod building;
 mod crafting;
+mod dungeon;
 mod inventory;
 mod manifest;
 mod manifest_layout;

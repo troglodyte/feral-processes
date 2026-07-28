@@ -1,6 +1,7 @@
 //! The map screen: terrain, entities, effects, and the status panel beside them.
 
 use super::bars::*;
+use super::dungeon::draw_dungeon;
 use super::*;
 
 /// How far a bare tile's background may stray from its biome's flat colour,
@@ -69,6 +70,70 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
 
     let map_w = painter.screen_w() * 0.7;
     let map_h = painter.screen_h() * 0.72;
+
+    let status = game.player_status();
+    if let Some(view) = game.dungeon_view() {
+        draw_dungeon(&view, painter, map_w, map_h, m);
+    } else {
+        draw_surface_map(game, fx, painter, map_w, map_h, tile_px, glyph_px, &status);
+    }
+
+    draw_status_panel(
+        Rect::new(map_w, 0.0, painter.screen_w() - map_w, map_h),
+        &status,
+        game,
+        painter,
+        m,
+    );
+
+    let log_y = map_h;
+    let log_h = painter.screen_h() - map_h;
+    painter.rect(0.0, log_y, painter.screen_w(), log_h, PANEL_BG);
+    painter.rect_lines(
+        0.0,
+        log_y,
+        painter.screen_w(),
+        log_h,
+        2.0,
+        fx.log_border(BORDER),
+    );
+    let mut ly = log_y + m.inset + m.font_size as f32 / 2.0;
+    if let Some(s) = &status_line {
+        painter.ui(s, m.inset, ly, m.font_size, RED);
+        ly += m.line_height;
+    }
+    let capacity = ((log_h - m.line_height) / m.line_height).max(1.0) as usize;
+    // Fetch the hidden tail as well, so chopping it still leaves a full
+    // pane's worth of older lines to draw.
+    let lines = game.message_log(capacity + hidden);
+    let shown = lines.len().saturating_sub(hidden);
+    for (kind, line) in lines
+        .iter()
+        .take(shown)
+        .skip(shown.saturating_sub(capacity))
+    {
+        if ly > painter.screen_h() - m.gap {
+            break;
+        }
+        draw_message_line(*kind, line, m.inset, ly, painter, m);
+        ly += m.line_height;
+    }
+}
+
+/// The zone map: terrain, entities and effects, drawn top-down into the pane
+/// at the origin. The other half of the pane's contents is `draw_dungeon`,
+/// which replaces this entirely while the party is underground.
+#[allow(clippy::too_many_arguments)]
+fn draw_surface_map(
+    game: &mut Game,
+    fx: &mut Fx,
+    painter: &Painter,
+    map_w: f32,
+    map_h: f32,
+    tile_px: f32,
+    glyph_px: u16,
+    status: &feral_processes_engine::PlayerStatus,
+) {
     // One ring wider than the pane can show, so the camera's sub-tile offset
     // has a tile to slide in from instead of a blank trailing edge. Every
     // grid-to-world conversion below goes through `hw`/`hh` for that reason —
@@ -78,7 +143,6 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
     let hw = half_w + 1;
     let hh = half_h + 1;
 
-    let status = game.player_status();
     let (off_x, off_y) = fx.camera_offset(status.position, painter.delta());
     let tiles = game.view_tiles(hw, hh);
     let entities: Vec<_> = game
@@ -189,47 +253,6 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
         }
     }
     painter.rect_lines(0.0, 0.0, map_w, map_h, 2.0, BORDER);
-
-    draw_status_panel(
-        Rect::new(map_w, 0.0, painter.screen_w() - map_w, map_h),
-        &status,
-        game,
-        painter,
-        m,
-    );
-
-    let log_y = map_h;
-    let log_h = painter.screen_h() - map_h;
-    painter.rect(0.0, log_y, painter.screen_w(), log_h, PANEL_BG);
-    painter.rect_lines(
-        0.0,
-        log_y,
-        painter.screen_w(),
-        log_h,
-        2.0,
-        fx.log_border(BORDER),
-    );
-    let mut ly = log_y + m.inset + m.font_size as f32 / 2.0;
-    if let Some(s) = &status_line {
-        painter.ui(s, m.inset, ly, m.font_size, RED);
-        ly += m.line_height;
-    }
-    let capacity = ((log_h - m.line_height) / m.line_height).max(1.0) as usize;
-    // Fetch the hidden tail as well, so chopping it still leaves a full
-    // pane's worth of older lines to draw.
-    let lines = game.message_log(capacity + hidden);
-    let shown = lines.len().saturating_sub(hidden);
-    for (kind, line) in lines
-        .iter()
-        .take(shown)
-        .skip(shown.saturating_sub(capacity))
-    {
-        if ly > painter.screen_h() - m.gap {
-            break;
-        }
-        draw_message_line(*kind, line, m.inset, ly, painter, m);
-        ly += m.line_height;
-    }
 }
 
 fn draw_status_panel(

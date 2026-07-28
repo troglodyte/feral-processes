@@ -792,7 +792,7 @@ fn a_negative_power_buff_saps_effective_attack() {
 
     assert_eq!(
         game.effective_atk(enemies[0]),
-        before - 6,
+        before + crate::abilities::scaled_power(-6, 1),
         "a negative buff power subtracts, which is the whole sap mechanic"
     );
 }
@@ -828,5 +828,205 @@ fn a_sap_landing_on_a_bracing_member_cancels_its_defend_stance() {
     assert!(
         !game.is_defending(player),
         "one buff slot means a sap overwrites the stance — the documented cost, not a bug"
+    );
+}
+
+/// A heal stores the scaled figure at the moment it is applied, so nothing
+/// downstream has to re-scale.
+#[test]
+fn a_heal_scales_with_the_users_level() {
+    let mut game = Game::new(4201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let _ = battle_with_a_pack_of(&mut game, 1, 200);
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 400;
+        stats.hp = 100;
+    }
+    game.world.get_mut::<Experience>(player).unwrap().level = 20;
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_heal".into(),
+        name: "Test Heal".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::OneAlly,
+        effect: crate::abilities::AbilityEffect::Heal { power: 8 },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+    game.use_ability(&ability, player, "You", &[player]);
+
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().hp,
+        100 + crate::abilities::scaled_power(8, 20),
+        "an 8-point patch at level 20 is 32, not 8"
+    );
+}
+
+#[test]
+fn a_buff_stores_the_scaled_power_so_the_tick_needs_no_change() {
+    let mut game = Game::new(4202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let _ = battle_with_a_pack_of(&mut game, 1, 200);
+    game.world.get_mut::<Experience>(player).unwrap().level = 20;
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_buff".into(),
+        name: "Test Buff".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::OneAlly,
+        effect: crate::abilities::AbilityEffect::Buff {
+            kind: BuffKind::Atk,
+            power: 3,
+            duration: 3,
+        },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+    game.use_ability(&ability, player, "You", &[player]);
+
+    assert_eq!(
+        game.world
+            .get::<CombatBuff>(player)
+            .unwrap()
+            .active
+            .unwrap()
+            .power,
+        crate::abilities::scaled_power(3, 20),
+        "the scaled figure is stored, not recomputed at read time"
+    );
+}
+
+#[test]
+fn a_bleed_debuffs_per_round_damage_scales_with_the_users_level() {
+    let mut game = Game::new(4203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 400);
+    game.world.get_mut::<Experience>(player).unwrap().level = 20;
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_bleed".into(),
+        name: "Test Bleed".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
+        effect: crate::abilities::AbilityEffect::Debuff {
+            kind: StatusKind::Bleed,
+            power: 2,
+            duration: 3,
+        },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+    game.use_ability(&ability, player, "You", &[enemies[0]]);
+
+    assert_eq!(
+        game.world
+            .get::<StatusEffects>(enemies[0])
+            .unwrap()
+            .active
+            .unwrap()
+            .power,
+        crate::abilities::scaled_power(2, 20),
+        "bleed is flat damage per round, so it needs scaling as much as a heal does"
+    );
+}
+
+/// `compute_damage` is `power + ATK - DEF`, so ability damage already rides
+/// the user's ATK. Scaling the flat term as well would double-dip through
+/// every curve `balance_sim` projects.
+#[test]
+fn ability_damage_is_not_scaled_by_level() {
+    let mut game = Game::new(4204, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 2, 500);
+    game.world.get_mut::<Stats>(player).unwrap().atk = 10;
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_hit".into(),
+        name: "Test Hit".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
+        effect: crate::abilities::AbilityEffect::Damage {
+            power: 6,
+            status: None,
+        },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+
+    game.world.get_mut::<Experience>(player).unwrap().level = 1;
+    let before = game.world.get::<Stats>(enemies[0]).unwrap().hp;
+    game.use_ability(&ability, player, "You", &[enemies[0]]);
+    let at_level_1 = before - game.world.get::<Stats>(enemies[0]).unwrap().hp;
+
+    game.world.get_mut::<Experience>(player).unwrap().level = 20;
+    let before = game.world.get::<Stats>(enemies[1]).unwrap().hp;
+    game.use_ability(&ability, player, "You", &[enemies[1]]);
+    let at_level_20 = before - game.world.get::<Stats>(enemies[1]).unwrap().hp;
+
+    assert_eq!(
+        at_level_1, at_level_20,
+        "ability damage scales through ATK alone — scaling power too would double-dip"
+    );
+}
+
+/// Drain's heal rides the damage it dealt, which already rides ATK, so it
+/// must not be scaled a second time.
+#[test]
+fn drain_is_not_scaled_by_level() {
+    let mut game = Game::new(4205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 2, 500);
+    game.world.get_mut::<Stats>(player).unwrap().atk = 10;
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_drain".into(),
+        name: "Test Drain".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
+        effect: crate::abilities::AbilityEffect::Drain {
+            power: 10,
+            heal_fraction: 0.5,
+        },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+
+    game.world.get_mut::<Experience>(player).unwrap().level = 1;
+    let before = game.world.get::<Stats>(enemies[0]).unwrap().hp;
+    game.use_ability(&ability, player, "You", &[enemies[0]]);
+    let at_level_1 = before - game.world.get::<Stats>(enemies[0]).unwrap().hp;
+
+    game.world.get_mut::<Experience>(player).unwrap().level = 20;
+    let before = game.world.get::<Stats>(enemies[1]).unwrap().hp;
+    game.use_ability(&ability, player, "You", &[enemies[1]]);
+    let at_level_20 = before - game.world.get::<Stats>(enemies[1]).unwrap().hp;
+
+    assert_eq!(at_level_1, at_level_20, "a drain scales through ATK alone");
+}
+
+/// Wild programs have no `Experience` — they scale by zone and distance —
+/// so a hostile carrier reads the current `ZoneLevel` instead.
+#[test]
+fn a_hostile_scales_its_routine_off_the_zone_level() {
+    let mut game = Game::new(4206, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    game.world.resource_mut::<ZoneLevel>().0 = 7;
+
+    assert_eq!(
+        game.ability_user_level(enemies[0]),
+        7,
+        "a wild program has no level, so the zone is what its routine scales from"
+    );
+    assert_eq!(
+        game.ability_user_level(player),
+        game.world.get::<Experience>(player).unwrap().level,
+        "the player scales off their own level"
     );
 }

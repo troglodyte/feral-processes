@@ -668,6 +668,28 @@ pub const PLAYER_ROUTINE_SLOT_PER_LEVEL: u32 = 10;
 /// clamp is the only thing bounding their slots.
 pub const PLAYER_ROUTINE_SLOT_CAP: u32 = 6;
 
+// ─────────────────────────────────────────────────────────────────────────
+// Wild routines and ability scaling
+// ─────────────────────────────────────────────────────────────────────────
+
+/// How much each level adds to an ability's magnitude: the multiplier is
+/// `1.0 + level * this`. A flat `Heal(power: 8)` is a real patch at level 1
+/// and noise against a level-20 program with 400 Integrity taking 100-point
+/// hits, which is what this exists to fix.
+///
+/// Applies to `Heal`, `Buff` and `Debuff` magnitudes only. Ability `Damage`
+/// is deliberately excluded — `battle::compute_damage` is
+/// `power + ATK - DEF`, so it already rides the user's ATK, and scaling the
+/// flat term too would double-dip through every curve `balance_sim`
+/// projects.
+pub const ABILITY_POWER_SCALE_PER_LEVEL: f32 = 0.15;
+
+/// Level ceiling on `abilities::ability_power_scale`. The player has no
+/// level cap (`progression::add_xp` takes `None`), so without this a long
+/// enough game multiplies every heal and buff without bound. At the value
+/// above, this caps the multiplier at 7x.
+pub const ABILITY_POWER_SCALE_LEVEL_CAP: u32 = 40;
+
 #[cfg(test)]
 mod tests {
     use super::*;

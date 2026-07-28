@@ -79,9 +79,7 @@ way deleting the Currency item does.
     //
     //   Buff(kind: Atk, power: 3, duration: 3)
     //     Temporary stat boost for `duration` battle rounds. `kind` is
-    //     `Atk` or `Def`. Because damage is additive, a flat +3 ATK is worth
-    //     exactly 3 extra damage per hit at every level — buff powers do not
-    //     need to scale.
+    //     `Atk` or `Def`.
     //     A *negative* power is how you write a sap: `Buff(kind: Atk,
     //     power: -4, duration: 3)` with `target: WholeEnemyGroup` weakens
     //     a group rather than strengthening it, because the buff bonus is
@@ -158,6 +156,22 @@ way deleting the Currency item does.
     wild_weight: 8,
 )
 ```
+
+## Magnitudes scale with level
+
+`power` is an authored *baseline*, not the figure that lands. `Heal`, `Buff`
+and `Debuff` magnitudes are multiplied by the level of whoever used the
+ability, so a `Heal(power: 8)` restores 8 at level 1 and 32 at level 20. The
+curve is `1 + level x ABILITY_POWER_SCALE_PER_LEVEL`, capped at
+`ABILITY_POWER_SCALE_LEVEL_CAP` — both in `crates/engine/src/tuning.rs`.
+Author powers as though for level 1.
+
+`duration` never scales. Neither does `Damage` power, nor `Drain`: both go
+through `power + ATK - DEF`, so they already grow with the user's ATK, and
+scaling the flat term as well would count the same growth twice.
+
+A wild program has no level — it scales by zone and distance — so a carrier
+scales its routine from the current zone instead.
 
 ## Referencing an ability from a species
 

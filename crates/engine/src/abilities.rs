@@ -52,6 +52,25 @@ pub fn player_routine_slots(level: u32) -> usize {
     )
 }
 
+/// The multiplier an ability's authored magnitude is scaled by when a
+/// combatant of `level` uses it — see
+/// `tuning::ABILITY_POWER_SCALE_PER_LEVEL`.
+///
+/// `level` is clamped at `tuning::ABILITY_POWER_SCALE_LEVEL_CAP` because the
+/// player has no level ceiling; see `player_routine_slots`, which clamps for
+/// the same reason.
+pub fn ability_power_scale(level: u32) -> f32 {
+    let level = level.min(crate::tuning::ABILITY_POWER_SCALE_LEVEL_CAP);
+    1.0 + level as f32 * crate::tuning::ABILITY_POWER_SCALE_PER_LEVEL
+}
+
+/// `power` scaled by `ability_power_scale(level)`, rounded to the nearest
+/// whole point. Negative powers scale too — a sap is a negative-power buff,
+/// and it has to sharpen with level the same way a buff does.
+pub fn scaled_power(power: i32, level: u32) -> i32 {
+    (power as f32 * ability_power_scale(level)).round() as i32
+}
+
 /// The inventory item a loose (uninstalled) copy of `ability` takes. Minted
 /// by `ItemDb::synthesize_routines` rather than authored, so a modder's new
 /// ability is extractable and installable with no second file to write.
@@ -581,5 +600,34 @@ mod tests {
             target: WholeParty, cooldown: 1, effect: Cleanse)"#;
         let (db, warnings) = load("cleanse", &[("cleanse", cleanse)]);
         assert!(db.get("test_cleanse").is_some(), "{warnings:?}");
+    }
+
+    #[test]
+    fn ability_power_scale_grows_per_level_and_stops_at_the_cap() {
+        assert_eq!(ability_power_scale(0), 1.0, "no level, no bonus");
+        assert!(
+            (ability_power_scale(12) - 2.8).abs() < 1e-5,
+            "a companion at its level cap runs routines at 2.8x"
+        );
+        assert!(
+            (ability_power_scale(20) - 4.0).abs() < 1e-5,
+            "the level-20 case that motivated the change"
+        );
+        let capped = ability_power_scale(crate::tuning::ABILITY_POWER_SCALE_LEVEL_CAP);
+        assert_eq!(
+            ability_power_scale(9_999),
+            capped,
+            "the player has no level cap, so this clamp is the only bound"
+        );
+    }
+
+    #[test]
+    fn scaled_power_scales_negative_magnitudes_too() {
+        assert_eq!(
+            scaled_power(-4, 20),
+            -16,
+            "a sap must sharpen with level the same way a buff does"
+        );
+        assert_eq!(scaled_power(0, 20), 0);
     }
 }

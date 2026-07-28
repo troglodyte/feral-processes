@@ -551,6 +551,23 @@ impl Game {
         }
     }
 
+    /// The level an ability's magnitude scales from when `entity` uses it —
+    /// see `abilities::scaled_power`.
+    ///
+    /// The player and companions have `Experience`. Wild programs do not:
+    /// they scale by zone and distance instead, so a hostile carrier reads
+    /// the current `ZoneLevel`, which is the closest analogue it has and
+    /// keeps its routine in step with the fight it turns up in.
+    ///
+    /// One helper for all three cases deliberately — three call sites each
+    /// resolving a level would be three formulas to drift.
+    pub(crate) fn ability_user_level(&self, entity: Entity) -> u32 {
+        self.world
+            .get::<Experience>(entity)
+            .map(|e| e.level)
+            .unwrap_or_else(|| self.world.resource::<ZoneLevel>().0)
+    }
+
     /// Every ability the combatant at `entity` can be commanded to use, in
     /// menu order: whatever is installed in its routine slots. Menu and
     /// resolution both go through this, so the two cannot disagree about

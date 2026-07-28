@@ -532,6 +532,11 @@ impl Game {
         name: &str,
         recipients: &[Entity],
     ) {
+        // Resolved once for the whole cast rather than per recipient: every
+        // recipient of one ability is scaled by the *user's* level, and
+        // re-reading it inside the loop would invite someone to key it off
+        // the recipient instead.
+        let level = self.ability_user_level(actor);
         for &recipient in recipients {
             // A buff can land on the player or on a companion, so the log
             // names whoever got it rather than assuming "you".
@@ -547,7 +552,7 @@ impl Game {
                         ActiveBuff {
                             kind: *kind,
                             remaining: *duration,
-                            power: *power,
+                            power: abilities::scaled_power(*power, level),
                         },
                     );
                     let stat = match kind {
@@ -560,6 +565,7 @@ impl Game {
                     ));
                 }
                 AbilityEffect::Heal { power } => {
+                    let power = abilities::scaled_power(*power, level);
                     if let Some(mut stats) = self.world.get_mut::<Stats>(recipient) {
                         stats.hp = (stats.hp + power).min(stats.max_hp);
                     }
@@ -574,7 +580,7 @@ impl Game {
                         statuses.active = Some(ActiveStatus {
                             kind: *kind,
                             remaining: *duration,
-                            power: *power,
+                            power: abilities::scaled_power(*power, level),
                         });
                     }
                     match kind {

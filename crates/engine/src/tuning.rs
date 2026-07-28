@@ -379,6 +379,18 @@ pub const INITIAL_WILD_POPULATION: usize = 14;
 /// the player has a base, since nothing can spawn on platform floor.
 pub const INITIAL_SPAWN_SCATTER_TILES: i32 = 15;
 
+/// How many dungeon entrances a zone is seeded with — see
+/// `Game::spawn_dungeon_entrances`. Deliberately few: an entrance is
+/// something you go looking for, and one on every corner would make the
+/// zone map a lobby rather than a place.
+pub const DUNGEON_ENTRANCES_PER_ZONE: usize = 3;
+
+/// How far from the player's arrival point a zone's dungeon entrances
+/// scatter. Wider than `INITIAL_SPAWN_SCATTER_TILES` so finding one is a
+/// trip rather than a glance, and so an entrance never lands under the base
+/// platform the player is standing on.
+pub const DUNGEON_ENTRANCE_SCATTER_TILES: i32 = 40;
+
 /// Floor under `swarm_radius`, the radius that actually governs how
 /// tightly a pack's members cluster around the tile a spawn roll picked
 /// (`Game::try_spawn_habitat_creature`) and how far `gather_pack` searches

@@ -6,7 +6,7 @@
 
 use crate::abilities::AbilityId;
 use crate::game::zone::find_walkable_start;
-use crate::tuning::{DEFAULT_WORK_CAPACITY, INITIAL_WILD_POPULATION};
+use crate::tuning::{DEFAULT_WORK_CAPACITY, DUNGEON_ENTRANCES_PER_ZONE, INITIAL_WILD_POPULATION};
 use crate::*;
 
 /// Splits a persisted routine list into what `db` still recognizes and what
@@ -99,6 +99,7 @@ impl Game {
             game.log(warning);
         }
         game.spawn_initial_creatures(INITIAL_WILD_POPULATION);
+        game.spawn_dungeon_entrances(DUNGEON_ENTRANCES_PER_ZONE);
         game.log("Connection established. You materialize at the edge of the Grid.");
         Ok(game)
     }
@@ -416,6 +417,11 @@ impl Game {
             }
         }
 
+        game.restore_dungeon_entrances(data.dungeon_entrances);
+        // Last, and after the WorldMap is in place: restoring a dungeon
+        // locale regenerates its level from that map's seed.
+        game.restore_locale(data.locale);
+
         game.log("Session restored. Reconnecting to the Grid.");
         Ok(game)
     }
@@ -604,6 +610,13 @@ impl Game {
                 ids.sort();
                 ids
             },
+            dungeon_entrances: {
+                let mut query = self
+                    .world
+                    .query_filtered::<&Position, With<DungeonEntrance>>();
+                query.iter(&self.world).map(|p| (p.x, p.y)).collect()
+            },
+            locale: self.locale(),
         };
         save::save_to_file(path, &data)
     }

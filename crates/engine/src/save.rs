@@ -166,6 +166,16 @@ pub struct SaveData {
     /// Sorted on write so the encoded bytes don't depend on `HashSet`
     /// iteration order.
     pub researched: Vec<crate::research::ResearchId>,
+    /// Every dungeon entrance standing on the zone map — see
+    /// `components::DungeonEntrance`. Only the tile: an entrance carries no
+    /// state of its own, and which dungeon it opens onto is a pure function
+    /// of the world seed and the depth walked to.
+    pub dungeon_entrances: Vec<(i32, i32)>,
+    /// Whether the player was on the surface or down a dungeon, and where —
+    /// see `resources::Locale`. The level itself is *not* here: it
+    /// regenerates from `seed` and the saved depth, exactly as terrain
+    /// regenerates from `seed` alone.
+    pub locale: crate::resources::Locale,
 }
 
 /// Bumped whenever `SaveData` (or anything it contains, transitively)
@@ -193,7 +203,7 @@ pub struct SaveData {
 /// and every save written under the old version stops loading. That's an
 /// intentional, simple tradeoff for a single-player game rather than
 /// building real schema migration.
-pub const SAVE_FORMAT_VERSION: u32 = 12;
+pub const SAVE_FORMAT_VERSION: u32 = 13;
 
 pub fn save_to_file(path: &Path, data: &SaveData) -> io::Result<()> {
     let encoded = bincode::serde::encode_to_vec(data, bincode::config::standard())
@@ -281,6 +291,8 @@ mod tests {
             spawn_point: (0, 0),
             buyback: Vec::new(),
             researched: Vec::new(),
+            dungeon_entrances: Vec::new(),
+            locale: crate::resources::Locale::Surface,
         }
     }
 

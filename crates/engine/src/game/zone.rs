@@ -2,7 +2,9 @@
 //! stamping the base platform, and stepping through a portal to the next
 //! zone.
 
-use crate::tuning::{INITIAL_WILD_POPULATION, MAX_BUILD_DISTANCE_FROM_HOME};
+use crate::tuning::{
+    DUNGEON_ENTRANCES_PER_ZONE, INITIAL_WILD_POPULATION, MAX_BUILD_DISTANCE_FROM_HOME,
+};
 use crate::*;
 
 impl Game {
@@ -371,6 +373,7 @@ impl Game {
             ));
         }
         self.spawn_initial_creatures(INITIAL_WILD_POPULATION);
+        self.spawn_dungeon_entrances(DUNGEON_ENTRANCES_PER_ZONE);
     }
 
     /// Where the player materialized on breaching into the current zone —

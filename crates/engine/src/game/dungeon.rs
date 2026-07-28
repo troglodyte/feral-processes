@@ -8,6 +8,7 @@
 
 use crate::dungeon::{self, CellKind, Dir};
 use crate::resources::{CurrentDungeon, Locale};
+use crate::tuning::DUNGEON_ENTRANCE_SCATTER_TILES;
 use crate::*;
 
 /// How far ahead the first-person view reaches, in cells. Four is enough
@@ -19,6 +20,18 @@ pub const DUNGEON_VIEW_DEPTH: usize = 4;
 /// three-wide cone a classic blobber shows — the corridor you are in, plus
 /// whatever opens off it.
 pub const DUNGEON_VIEW_HALF_WIDTH: usize = 1;
+
+/// The `Locale::Dungeon` payload, unpacked — see `Game::dungeon_pos`. A
+/// named struct rather than a five-tuple so call sites read as fields
+/// rather than as positions.
+#[derive(Clone, Copy)]
+struct DungeonPos {
+    depth: u32,
+    x: i32,
+    y: i32,
+    facing: Dir,
+    entrance: (i32, i32),
+}
 
 impl Game {
     /// Finds a `DungeonEntrance` at `(x, y)`, if any — checked in
@@ -32,6 +45,78 @@ impl Game {
             .iter(&self.world)
             .find(|(_, p)| p.x == x && p.y == y)
             .map(|(e, _)| e)
+    }
+
+    /// Spawns `DUNGEON_ENTRANCES_PER_ZONE` breaches scattered around the
+    /// player's arrival point, on walkable ground outside the base platform.
+    /// Called once per zone, alongside `spawn_initial_creatures`.
+    ///
+    /// Platform tiles are skipped rather than merely unlikely: the base is
+    /// the one safe ground in the game, and a hole down into a dungeon in
+    /// the middle of it would undo that.
+    ///
+    /// Draws from a locally seeded RNG rather than `resources::GameRng`, for
+    /// two reasons. Where the entrances are is world generation, and world
+    /// generation should be a function of the seed rather than of however
+    /// many rolls happened to precede it — the same argument
+    /// `dungeon::generate` makes. And drawing from the shared stream here
+    /// would shift every later roll in the run, which is not a private
+    /// matter: it silently rewrites the outcome of every seeded test in the
+    /// suite. `ENTRANCE_SALT` keeps this stream off the one the levels
+    /// themselves are carved from, so entrance placement and maze layout
+    /// don't correlate.
+    pub(crate) fn spawn_dungeon_entrances(&mut self, count: usize) {
+        const ENTRANCE_SALT: u64 = 0xD07E_5A17;
+
+        let origin = *self.world.get::<Position>(self.player_entity()).unwrap();
+        let seed = self.world.resource::<WorldMap>().seed();
+        let zone = self.world.resource::<ZoneLevel>().0;
+        let mut rng = StdRng::seed_from_u64(((seed as u64) << 32) ^ zone as u64 ^ ENTRANCE_SALT);
+
+        let reach = DUNGEON_ENTRANCE_SCATTER_TILES;
+        let mut placed = 0;
+        let mut attempts = 0;
+        while placed < count && attempts < count * 40 {
+            attempts += 1;
+            let (dx, dy) = (
+                rng.random_range(-reach..=reach),
+                rng.random_range(-reach..=reach),
+            );
+            let (x, y) = (origin.x + dx, origin.y + dy);
+            let tile = self.world.resource_mut::<WorldMap>().tile(x, y);
+            if !tile.walkable || tile.biome == Biome::Platform {
+                continue;
+            }
+            if self.find_dungeon_entrance_at(x, y).is_some()
+                || self.find_blocking_structure_at(x, y).is_some()
+            {
+                continue;
+            }
+            self.world.spawn((
+                DungeonEntrance,
+                Position { x, y },
+                Glyph {
+                    ch: '%',
+                    color: GlyphColor::Magenta,
+                },
+            ));
+            placed += 1;
+        }
+    }
+
+    /// Rebuilds the entrances a save recorded — see
+    /// `save::SaveData::dungeon_entrances`.
+    pub(crate) fn restore_dungeon_entrances(&mut self, tiles: Vec<(i32, i32)>) {
+        for (x, y) in tiles {
+            self.world.spawn((
+                DungeonEntrance,
+                Position { x, y },
+                Glyph {
+                    ch: '%',
+                    color: GlyphColor::Magenta,
+                },
+            ));
+        }
     }
 
     pub fn is_underground(&self) -> bool {
@@ -97,7 +182,7 @@ impl Game {
     }
 
     /// The party's current cell and facing, or `None` on the surface.
-    fn dungeon_pos(&self) -> Option<(u32, i32, i32, Dir, (i32, i32))> {
+    fn dungeon_pos(&self) -> Option<DungeonPos> {
         match *self.world.resource::<Locale>() {
             Locale::Surface => None,
             Locale::Dungeon {
@@ -106,7 +191,13 @@ impl Game {
                 y,
                 facing,
                 entrance,
-            } => Some((depth, x, y, facing, entrance)),
+            } => Some(DungeonPos {
+                depth,
+                x,
+                y,
+                facing,
+                entrance,
+            }),
         }
     }
 
@@ -126,10 +217,10 @@ impl Game {
         if !self.can_act_underground() {
             return;
         }
-        let Some((_, _, _, facing, _)) = self.dungeon_pos() else {
+        let Some(pos) = self.dungeon_pos() else {
             return;
         };
-        self.set_facing(facing.turn_left());
+        self.set_facing(pos.facing.turn_left());
         self.tick();
     }
 
@@ -137,10 +228,10 @@ impl Game {
         if !self.can_act_underground() {
             return;
         }
-        let Some((_, _, _, facing, _)) = self.dungeon_pos() else {
+        let Some(pos) = self.dungeon_pos() else {
             return;
         };
-        self.set_facing(facing.turn_right());
+        self.set_facing(pos.facing.turn_right());
         self.tick();
     }
 
@@ -162,11 +253,11 @@ impl Game {
         if !self.can_act_underground() {
             return;
         }
-        let Some((_, x, y, facing, _)) = self.dungeon_pos() else {
+        let Some(pos) = self.dungeon_pos() else {
             return;
         };
-        let (dx, dy) = facing.delta();
-        let (nx, ny) = (x + dx * sign, y + dy * sign);
+        let (dx, dy) = pos.facing.delta();
+        let (nx, ny) = (pos.x + dx * sign, pos.y + dy * sign);
 
         let walkable = self
             .world
@@ -190,7 +281,14 @@ impl Game {
         if !self.can_act_underground() {
             return;
         }
-        let Some((depth, x, y, _, entrance)) = self.dungeon_pos() else {
+        let Some(DungeonPos {
+            depth,
+            x,
+            y,
+            entrance,
+            ..
+        }) = self.dungeon_pos()
+        else {
             return;
         };
         let Some(cell) = self
@@ -259,7 +357,13 @@ impl Game {
     /// The first-person view of the cells around the party, already rotated
     /// into view space — see `views::DungeonView`. `None` on the surface.
     pub fn dungeon_view(&self) -> Option<DungeonView> {
-        let (depth, x, y, facing, _) = self.dungeon_pos()?;
+        let DungeonPos {
+            depth,
+            x,
+            y,
+            facing,
+            ..
+        } = self.dungeon_pos()?;
         let level = self.world.resource::<CurrentDungeon>().0.as_ref()?;
 
         let (fx, fy) = facing.delta();

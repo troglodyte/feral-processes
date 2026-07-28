@@ -486,3 +486,189 @@ fn the_view_names_what_the_party_is_standing_on() {
         view.standing_on
     );
 }
+
+#[test]
+fn a_new_zone_is_seeded_with_dungeon_entrances() {
+    let game = game();
+    let entrances = game
+        .world
+        .iter_entities()
+        .filter(|e| e.contains::<DungeonEntrance>())
+        .count();
+    assert_eq!(entrances, crate::tuning::DUNGEON_ENTRANCES_PER_ZONE);
+}
+
+#[test]
+fn no_entrance_opens_onto_unwalkable_ground_or_the_base_platform() {
+    let mut game = game();
+    game.place_structure("home", 1, 0).unwrap();
+    let tiles: Vec<(i32, i32)> = {
+        let mut query = game
+            .world
+            .query_filtered::<&Position, With<DungeonEntrance>>();
+        query.iter(&game.world).map(|p| (p.x, p.y)).collect()
+    };
+    assert!(!tiles.is_empty());
+    for (x, y) in tiles {
+        let tile = game.world.resource_mut::<WorldMap>().tile(x, y);
+        assert!(tile.walkable, "entrance at ({x}, {y}) sits in a wall");
+        assert_ne!(
+            tile.biome,
+            Biome::Platform,
+            "an entrance inside the base would undo the one safe ground in the game"
+        );
+    }
+}
+
+#[test]
+fn walking_onto_an_entrance_descends_and_leaves_the_entrance_standing() {
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let target = (ppos.x + 1, ppos.y);
+    game.world.spawn((
+        DungeonEntrance,
+        Position {
+            x: target.0,
+            y: target.1,
+        },
+        Glyph {
+            ch: '%',
+            color: GlyphColor::Magenta,
+        },
+    ));
+
+    game.move_player(1, 0);
+
+    assert!(game.is_underground());
+    // Unlike a zone portal, an entrance is a place you come back to.
+    assert!(
+        game.find_dungeon_entrance_at(target.0, target.1).is_some(),
+        "the entrance must survive being used"
+    );
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    assert_eq!((pos.x, pos.y), target);
+}
+
+#[test]
+fn a_dungeon_position_survives_a_save_and_load_with_an_identical_level() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
+    descend(&mut game);
+    face_an_open_way(&mut game);
+    game.step_forward();
+    game.turn_right();
+    let before = locale(&game);
+    let cells_before: Vec<CellKind> = {
+        let level = game.world.resource::<CurrentDungeon>().0.as_ref().unwrap();
+        (0..level.height)
+            .flat_map(|y| (0..level.width).map(move |x| (x, y)))
+            .map(|(x, y)| level.cell(x, y))
+            .collect()
+    };
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_dungeon_save_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        loaded.locale(),
+        before,
+        "depth, cell and facing must all survive"
+    );
+    let cells_after: Vec<CellKind> = {
+        let level = loaded
+            .world
+            .resource::<CurrentDungeon>()
+            .0
+            .as_ref()
+            .unwrap();
+        (0..level.height)
+            .flat_map(|y| (0..level.width).map(move |x| (x, y)))
+            .map(|(x, y)| level.cell(x, y))
+            .collect()
+    };
+    assert_eq!(
+        cells_before, cells_after,
+        "the level regenerates from the seed — a different one would strand the party in rock"
+    );
+}
+
+fn entrance_tiles(game: &mut Game) -> Vec<(i32, i32)> {
+    let mut query = game
+        .world
+        .query_filtered::<&Position, With<DungeonEntrance>>();
+    let mut tiles: Vec<(i32, i32)> = query.iter(&game.world).map(|p| (p.x, p.y)).collect();
+    tiles.sort();
+    tiles
+}
+
+#[test]
+fn entrances_survive_a_save_and_load() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
+    let before = entrance_tiles(&mut game);
+    assert!(!before.is_empty());
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_entrance_save_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(before, entrance_tiles(&mut loaded));
+}
+
+#[test]
+fn a_save_made_on_the_surface_loads_back_onto_the_surface() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_surface_save_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(loaded.locale(), Locale::Surface);
+    assert!(loaded.dungeon_view().is_none());
+}
+
+/// Placing entrances must not touch `GameRng`. It did once, and shifting the
+/// shared stream silently rewrote the outcome of a seeded combat test three
+/// files away — the failure surfaced nowhere near the cause.
+#[test]
+fn seeding_a_zones_entrances_does_not_disturb_the_shared_rng_stream() {
+    let mut untouched = game();
+    let before: Vec<u32> = {
+        let mut rng = untouched.world.resource_mut::<GameRng>();
+        (0..8).map(|_| rng.0.random_range(0..1_000_000)).collect()
+    };
+
+    let mut fresh = game();
+    fresh.spawn_dungeon_entrances(crate::tuning::DUNGEON_ENTRANCES_PER_ZONE);
+    let after: Vec<u32> = {
+        let mut rng = fresh.world.resource_mut::<GameRng>();
+        (0..8).map(|_| rng.0.random_range(0..1_000_000)).collect()
+    };
+
+    assert_eq!(
+        before, after,
+        "entrance placement drew from the shared stream and moved it"
+    );
+}
+
+/// The same zone of the same world always opens onto the same breaches, so
+/// loading a save and re-entering a zone can't shuffle them.
+#[test]
+fn entrance_placement_is_a_pure_function_of_the_seed_and_zone() {
+    let mut a = Game::new(77, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut b = Game::new(77, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert_eq!(entrance_tiles(&mut a), entrance_tiles(&mut b));
+    assert!(!entrance_tiles(&mut a).is_empty());
+}

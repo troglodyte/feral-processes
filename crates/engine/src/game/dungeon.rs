@@ -92,14 +92,7 @@ impl Game {
             {
                 continue;
             }
-            self.world.spawn((
-                DungeonEntrance,
-                Position { x, y },
-                Glyph {
-                    ch: '%',
-                    color: GlyphColor::Magenta,
-                },
-            ));
+            self.spawn_entrance_at(x, y);
             placed += 1;
         }
     }
@@ -108,15 +101,27 @@ impl Game {
     /// `save::SaveData::dungeon_entrances`.
     pub(crate) fn restore_dungeon_entrances(&mut self, tiles: Vec<(i32, i32)>) {
         for (x, y) in tiles {
-            self.world.spawn((
-                DungeonEntrance,
-                Position { x, y },
-                Glyph {
-                    ch: '%',
-                    color: GlyphColor::Magenta,
-                },
-            ));
+            self.spawn_entrance_at(x, y);
         }
+    }
+
+    /// The one place an entrance entity is built, so a fresh zone's breaches
+    /// and a reloaded save's cannot end up looking like different things.
+    ///
+    /// `>` rather than anything more decorative because every other glyph on
+    /// the map is spoken for — `%` is both the Static Field biome and a
+    /// species — and because it already reads as "the way down" to anyone
+    /// who has played a roguelike. It is the same mark the dungeon view puts
+    /// on a staircase.
+    fn spawn_entrance_at(&mut self, x: i32, y: i32) {
+        self.world.spawn((
+            DungeonEntrance,
+            Position { x, y },
+            Glyph {
+                ch: '>',
+                color: GlyphColor::Magenta,
+            },
+        ));
     }
 
     pub fn is_underground(&self) -> bool {

@@ -13,6 +13,31 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Dungeons
+
+- **First-person dungeon levels.** Every zone is now seeded with a handful
+  of **breaches** (`>`) standing on open ground. Walking onto one drops the
+  party into a procedurally generated dungeon level, drawn as a receding
+  first-person corridor rather than the top-down grid — the movement keys
+  become forward, back, turn left and turn right, and `<`/`>` take the
+  stairs. Levels are mazes with their dead ends partly braided back into
+  loops, generated deterministically from the world seed and the depth
+  walked to, so a level is the same every time you return to it and costs
+  the save file nothing. There is no auto-map.
+- **The surface keeps running while you are underground.** The player's
+  position on the zone map stays pinned to the breach they entered by, so
+  cronjobs keep paying out, needs keep decaying, and a raid can land on the
+  base while the party is several levels down. Actions that reach into the
+  zone map — deploying, cronjobs, guarding, demolishing, upgrading,
+  symlinks, trading, resting and scanning — are refused underground and say
+  so. Party, inventory, routine, fusion and perk management are not: sorting
+  your gear in a dungeon is a thing the genre expects.
+- **Save format bumped to v13**, so saves written by earlier builds no
+  longer load. `SaveData` gained the locale (depth, cell, facing and
+  entrance) and the zone's breach tiles; the level itself is not stored,
+  regenerating from the seed.
+
+
 ### Economy
 
 - **Traders deal in Credits, not Core Fragments.** Core Fragments were both

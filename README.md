@@ -48,6 +48,23 @@ scale with zone depth and distance from your base — a zone-1 fight beside
 where you materialize is a genuine one-on-one, and the deep field can throw
 four groups of a hundred at you.
 
+## Dungeons
+
+Scattered across every zone are **breaches** (`>`) — holes down into
+procedurally generated dungeon levels, seeded from the world seed and the
+depth you have walked to. Step onto one and the view changes: the top-down
+grid gives way to a **first-person corridor**, and `hjkl`/arrows stop being
+compass directions and start being forward, back, turn left, turn right.
+`<` and `>` take the stairs under you. There is no auto-map; that is what
+graph paper is for.
+
+Your base does not stop while you are down there. The player's position on
+the zone map stays pinned to the breach you entered by, so cronjobs keep
+paying out, needs keep decaying, and a raid can land on your Home while you
+are four levels below it. Anything that reaches into the zone map — deploying
+structures, trading, symlinks, resting — is refused underground; managing
+your party, inventory, routines and perks is not.
+
 ## Building and cronjobs
 
 There are no resource deposits to stumble onto — every workable node is

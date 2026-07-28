@@ -134,6 +134,33 @@ change what gets stored — a save from a different build shows up as
 | `\` | Toggle visual effects on/off |
 | `?` | In-game help / full control list |
 
+**In a dungeon:**
+
+Walking onto a breach (`>`) on the zone map drops you into a first-person
+dungeon level. The movement keys change meaning — they steer a party that
+has a facing rather than moving a token on a grid.
+
+| Key | Action |
+| --- | --- |
+| `k` / `Up` | Step forward along your facing |
+| `j` / `Down` | Back up, without turning round |
+| `h` / `Left` | Turn 90° left, in place |
+| `l` / `Right` | Turn 90° right, in place |
+| `<` / `>` | Take the stairs under you — down a level, up a level, or out to the surface from depth 1 |
+| `.` | Wait in place |
+| `e` | Drain a Power-restoring item |
+
+Every other map key still works: inventory, party, routines, fusion, perks,
+manifest, research, save and help all open normally underground. The ones
+that reach into the zone map — deploy, cronjob, guard, demolish, upgrade,
+symlink, trade, rest, scan — refuse with a message, because while you are
+underground your position on the zone map is pinned to the breach you came
+in through.
+
+There is **no auto-map**. The compass reading and depth in the corner of the
+view are the only navigational aid; mapping the level is your problem, as it
+was in 1985.
+
 Every numbered or lettered menu (compile, deploy, cronjob, inventory,
 party, fuse, trade, perks, and so on) can also be navigated with Up/Down
 arrows and confirmed with Enter — that's on top of, not instead of, typing

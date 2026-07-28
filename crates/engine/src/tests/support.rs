@@ -577,6 +577,22 @@ pub(super) fn spawn_wild_on_player_tile(game: &mut Game) -> Entity {
         .id()
 }
 
+/// The wild-boss counterpart of `spawn_wild_on_player_tile`, for the tests
+/// that assert a boss can never reach the roster. Its stats come from the
+/// real species rather than the token 10 HP above, because `atk: 0` is
+/// exactly what stops those tests noticing if a refused round resolves
+/// anyway.
+pub(super) fn spawn_boss_on_player_tile(game: &mut Game) -> Entity {
+    let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let boss = game
+        .species_defs()
+        .into_iter()
+        .find(|s| s.is_boss)
+        .expect("at least one boss species should ship in assets/species");
+    game.spawn_wild_creature(&boss.id, player_pos.x, player_pos.y)
+        .expect("a shipped boss species should spawn")
+}
+
 /// Deploys a Home directly on the player's current tile — `Game::rest`
 /// requires a rest-enabling structure nearby, so tests exercising `rest`
 /// need one in place first. Spawned directly rather than through

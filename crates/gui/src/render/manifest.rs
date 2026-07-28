@@ -381,19 +381,24 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
     if let Some(res) = &p.work_resource {
         species.push(stat("Work aptitude", game.item_name(res).to_string()));
     }
-    species.push(stat(
-        "Decompile difficulty",
-        format!("{:.0}%", p.taming_difficulty * 100.0),
-    ));
-    species.push(stat(
-        "Decompile chance now",
-        match p.decompile_chance {
-            Some(c) => format!("{:.0}%", c * 100.0),
-            // Which item is a catalyst is item data, not something a renderer
-            // gets to name.
-            None => "needs a taming catalyst".to_string(),
-        },
-    ));
+    // A boss can't be decompiled at all, so both rows are dropped rather
+    // than quoting odds that can never be rolled — and the "needs a taming
+    // catalyst" fallback below would be an outright lie about why.
+    if !p.is_boss {
+        species.push(stat(
+            "Decompile difficulty",
+            format!("{:.0}%", p.taming_difficulty * 100.0),
+        ));
+        species.push(stat(
+            "Decompile chance now",
+            match p.decompile_chance {
+                Some(c) => format!("{:.0}%", c * 100.0),
+                // Which item is a catalyst is item data, not something a
+                // renderer gets to name.
+                None => "needs a taming catalyst".to_string(),
+            },
+        ));
+    }
     species.push(stat("Growth", format!("{:.2}x", p.growth_multiplier)));
     species.push(stat("Speed", p.base_speed.to_string()));
     sections.push(Section {

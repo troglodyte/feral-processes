@@ -333,3 +333,76 @@ fn decompiling_a_program_mid_fight_clears_its_battle_scoped_state() {
         "nor a cooldown from the routine it fired before capture"
     );
 }
+
+/// A boss is an encounter, never a companion. The refusal has to live at
+/// plan time rather than in `ability_unavailable`, which takes no target —
+/// the player picks the ability before the group, so the row can't grey.
+#[test]
+fn a_boss_is_refused_as_a_decompile_target() {
+    let mut game = Game::new(3106, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let boss = spawn_boss_on_player_tile(&mut game);
+    game.start_battle(vec![boss]);
+
+    let ability = game
+        .battle_special_options(0)
+        .into_iter()
+        .find(|o| o.name.to_lowercase().contains("decompile"))
+        .expect("the player starts with decompile installed")
+        .index;
+
+    let err = game
+        .battle_set_action(
+            0,
+            BattleAction::Special {
+                ability,
+                target: crate::battle::SpecialTarget::EnemyGroup { group: 0 },
+            },
+        )
+        .expect_err("a boss must be refused as a decompile target");
+    assert!(
+        err.to_lowercase().contains("ice"),
+        "the refusal should say why, got {err:?}"
+    );
+}
+
+#[test]
+fn a_refused_decompile_costs_the_player_no_catalyst_and_never_tames_the_boss() {
+    let mut game = Game::new(3107, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let boss = spawn_boss_on_player_tile(&mut game);
+    game.start_battle(vec![boss]);
+
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 50)]);
+    game.world.get_mut::<Decompiler>(player).unwrap().skill = 50;
+
+    for _ in 0..10 {
+        player_decompiles(&mut game);
+    }
+
+    assert!(
+        game.world.get::<Tamed>(boss).is_none(),
+        "a boss must never join the roster"
+    );
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::ICE_BREAKER)),
+        50,
+        "a decompile that is refused must not spend a catalyst"
+    );
+}
+
+#[test]
+fn the_battle_view_quotes_no_decompile_odds_against_a_boss() {
+    let mut game = Game::new(3108, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let boss = spawn_boss_on_player_tile(&mut game);
+    game.start_battle(vec![boss]);
+
+    let view = game.battle_view().unwrap();
+    assert!(view.groups[0].is_boss, "the fixture should field a boss");
+    assert!(
+        view.groups[0].decompile_chance.is_none(),
+        "a boss can't be decompiled, so the target list must not advertise odds"
+    );
+}

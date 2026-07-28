@@ -314,6 +314,7 @@ impl Game {
                 let taming_difficulty = species
                     .map(|s| s.taming_difficulty)
                     .unwrap_or(DEFAULT_TAMING_DIFFICULTY);
+                let is_boss = species.is_some_and(|s| s.is_boss);
                 Some(EnemyGroupView {
                     letter: (b'A' + idx as u8) as char,
                     species_name,
@@ -322,10 +323,12 @@ impl Game {
                     front_max_hp: stats.max_hp,
                     atk: stats.atk,
                     def: stats.def,
-                    is_boss: species.is_some_and(|s| s.is_boss),
+                    is_boss,
                     engaged: idx < ENGAGED_GROUPS,
                     status_effect: self.status_label(front),
-                    decompile_chance: catalyst_potency.map(|potency| {
+                    // No odds against a boss, because there is no attempt to
+                    // make — `battle_set_action` refuses the target outright.
+                    decompile_chance: catalyst_potency.filter(|_| !is_boss).map(|potency| {
                         taming::capture_chance(
                             stats.hp_fraction(),
                             potency,

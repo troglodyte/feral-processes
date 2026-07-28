@@ -364,6 +364,27 @@ impl Game {
             if let Some(reason) = &options[*ability].unavailable {
                 return Err(format!("That ability isn't ready: {reason}."));
             }
+            // A boss is an encounter, never a companion: capturing one puts a
+            // creature with an order-of-magnitude larger `base_hp` into the
+            // roster, where fusion's `max + min/2` then compounds it.
+            //
+            // This can't join Decompile's other two refusals in
+            // `ability_unavailable` — that takes no target, because the
+            // ability is chosen before the group, so the row cannot grey on
+            // something only the target knows. Refusing here costs the player
+            // neither the round nor the catalyst.
+            if let battle::SpecialTarget::EnemyGroup { group } = target
+                && let Some(actor) = self.actor_entity(battle::Actor::Party(slot))
+                && matches!(
+                    self.actor_abilities(actor).get(*ability).map(|a| &a.effect),
+                    Some(AbilityEffect::Decompile)
+                )
+                && self
+                    .front_of_group(*group)
+                    .is_some_and(|front| self.is_boss_creature(front))
+            {
+                return Err("That program's ICE is beyond decompiling.".to_string());
+            }
         }
         self.world.resource_mut::<BattleState>().planned[slot] = Some(action);
         Ok(())

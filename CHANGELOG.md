@@ -39,6 +39,14 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   shows about ±16 by ±9 tiles, and three breaches scattered across a
   40-tile radius left most seeds with none on screen and nothing to suggest
   they existed.
+- **Dungeons have teeth.** Every step underground rolls for an intrusion.
+  The pack is drawn from the biome the breach opens in — a dungeon has no
+  biome of its own, so it reads as the substrate beneath the ground above
+  it — and each level of depth multiplies enemy stats, and with them the XP
+  a kill pays. Shoving at a wall never draws a fight; only a step that
+  covered ground does. Jacking out ends the fight where you stand, and the
+  pack is cleaned up rather than left waiting at the breach mouth for when
+  you climb out.
 - **Save format bumped to v13**, so saves written by earlier builds no
   longer load. `SaveData` gained the locale (depth, cell, facing and
   entrance) and the zone's breach tiles; the level itself is not stored,

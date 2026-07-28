@@ -62,6 +62,13 @@ Materializing in a sector runs a deep scan that logs how many breaches are
 in it and the bearing of the nearest. One is always within sight of where
 you arrive; the rest are a walk.
 
+Corridors are not safe. Every step you take underground can draw an
+intrusion, and the programs down there are drawn from the biome the breach
+opens in — descend under a Mainframe sector and Mainframe programs are what
+live below it. Each level down multiplies their stats, and since a kill pays
+out the defeated program's Integrity, it multiplies the XP too. Descending
+is the trade: harder fights, better returns, and a longer walk back.
+
 Your base does not stop while you are down there. The player's position on
 the zone map stays pinned to the breach you entered by, so cronjobs keep
 paying out, needs keep decaying, and a raid can land on your Home while you

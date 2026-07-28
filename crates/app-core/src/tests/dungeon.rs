@@ -222,3 +222,31 @@ fn stairs_available_reports_only_what_the_cell_underfoot_offers() {
     assert!(up, "the entry cell is a way up");
     assert!(!down, "and is not also a way down");
 }
+
+/// The whole chain: a step underground rolls an encounter, the engine starts
+/// the battle, and `after_world_action` drops the app into `Mode::Battle`.
+/// That transition is shared with the surface path rather than copied, and
+/// this is what proves the dungeon path actually reaches it.
+#[test]
+fn an_encounter_underground_opens_the_battle_screen() {
+    let mut app = app_underground(606);
+    for i in 0..600 {
+        if app.mode == Mode::Battle {
+            assert!(
+                app.game.as_ref().unwrap().has_active_battle(),
+                "Mode::Battle without a battle behind it"
+            );
+            assert!(
+                app.game.as_ref().unwrap().is_underground(),
+                "the fight should happen where the party is standing"
+            );
+            return;
+        }
+        app.handle_key(if i % 4 == 3 {
+            GameKey::Right
+        } else {
+            GameKey::Up
+        });
+    }
+    panic!("600 steps of corridor never opened a fight");
+}

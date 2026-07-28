@@ -9,7 +9,8 @@
 use crate::dungeon::{self, CellKind, Dir};
 use crate::resources::{CurrentDungeon, Locale};
 use crate::tuning::{
-    DUNGEON_ENTRANCE_SCATTER_TILES, DUNGEON_MIN_ENTRANCE_TILES, DUNGEON_NEAREST_ENTRANCE_TILES,
+    DUNGEON_DEPTH_STAT_GROWTH, DUNGEON_ENCOUNTER_CHANCE, DUNGEON_ENTRANCE_SCATTER_TILES,
+    DUNGEON_MIN_ENTRANCE_TILES, DUNGEON_NEAREST_ENTRANCE_TILES,
 };
 use crate::*;
 
@@ -345,7 +346,73 @@ impl Game {
             *x = nx;
             *y = ny;
         }
+        // Only a step that actually covered ground draws an encounter —
+        // shoving at a wall is not travel, the same call `move_player`
+        // makes about an ambush.
+        if walkable {
+            self.maybe_dungeon_encounter();
+        }
         self.tick();
+    }
+
+    /// What dungeon depth multiplies wild program stats by — `1.0` on the
+    /// surface, so `spawn_wild_creature` can fold it in unconditionally.
+    ///
+    /// Compounds with `ZoneLevel::stat_multiplier` and
+    /// `distance_stat_multiplier` rather than replacing them: a breach far
+    /// out in a deep zone is a nastier hole than one beside your base, and
+    /// going down makes either worse.
+    pub(crate) fn dungeon_depth_multiplier(&self) -> f32 {
+        match self.dungeon_pos() {
+            None => 1.0,
+            Some(pos) => DUNGEON_DEPTH_STAT_GROWTH.powi(pos.depth as i32 - 1),
+        }
+    }
+
+    /// Rolls `DUNGEON_ENCOUNTER_CHANCE` for an encounter after a step, and
+    /// starts the fight if it hits.
+    ///
+    /// The pack is drawn from the biome of the **entrance tile** — the
+    /// surface terrain the breach opens in. A dungeon has no biome of its
+    /// own, and rather than invent one, this reads the level as the
+    /// substrate beneath the ground above it: descend under a Mainframe
+    /// sector and Mainframe programs are what live down there. It costs no
+    /// new content and it gives the player a reason to care which breach
+    /// they picked.
+    ///
+    /// Never a boss, for the same reason `maybe_ambush` refuses one: a fight
+    /// you never saw coming should not also be the hardest fight available.
+    fn maybe_dungeon_encounter(&mut self) {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return;
+        }
+        let Some(pos) = self.dungeon_pos() else {
+            return;
+        };
+        let encountered = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_bool(DUNGEON_ENCOUNTER_CHANCE)
+        };
+        if !encountered {
+            return;
+        }
+
+        let (ex, ey) = pos.entrance;
+        let Some((species, _)) = self.pick_habitat_species(ex, ey, false) else {
+            return;
+        };
+        // Spawned onto the breach tile itself: the party's `Position` is
+        // pinned there, and a dungeon pack is resolved immediately rather
+        // than left to roam, so where on the surface it stands never matters.
+        let pack = self.spawn_pack(&species, false, ex, ey);
+        if pack.is_empty() {
+            return;
+        }
+        for &member in &pack {
+            self.world.entity_mut(member).insert(DungeonSpawn);
+        }
+        self.log("Something moves in the dark ahead.".to_string());
+        self.start_battle(pack);
     }
 
     /// The cell the party is standing on, or `None` on the surface.

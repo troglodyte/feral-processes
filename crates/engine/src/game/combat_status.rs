@@ -677,6 +677,22 @@ impl Game {
         for program in dead {
             self.dissolve_tamed_program(program);
         }
+        // A dungeon pack that outlived the fight — the party jacked out —
+        // has nowhere to go: it stands at surface coordinates around the
+        // breach mouth, and would be waiting there when they climb back out.
+        //
+        // `Without<Tamed>` is load-bearing, not defensive: decompiling one of
+        // these mid-fight makes it the player's, and sweeping it up with the
+        // rest would delete a program they just earned.
+        let strays: Vec<Entity> = {
+            let mut query = self
+                .world
+                .query_filtered::<Entity, (With<DungeonSpawn>, Without<Tamed>)>();
+            query.iter(&self.world).collect()
+        };
+        for stray in strays {
+            self.world.despawn(stray);
+        }
         // The blow-by-blow has done its job by now — the battle pane showed
         // it live. What follows the player onto the map is the results.
         self.world

@@ -161,6 +161,12 @@ symlink, trade, rest, scan — refuse with a message, because while you are
 underground your position on the zone map is pinned to the breach you came
 in through.
 
+Every step in a corridor can draw an intrusion. The programs you meet come
+from the biome the breach opens in, and each level of depth multiplies their
+stats — and so the XP they pay, since a kill awards the defeated program's
+Integrity. Shoving at a wall is not travel and never rolls for a fight.
+Jacking out ends the fight where you stand.
+
 There is **no auto-map**. The compass reading and depth in the corner of the
 view are the only navigational aid; mapping the level is your problem, as it
 was in 1985.

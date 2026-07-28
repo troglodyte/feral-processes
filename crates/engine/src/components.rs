@@ -560,6 +560,18 @@ pub struct Nest {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct DungeonEntrance;
 
+/// Tags a wild program that was conjured for a dungeon encounter rather
+/// than found on the zone map.
+///
+/// It exists at surface coordinates like any other creature — the player's
+/// `Position` is pinned to the breach while they're underground, so that is
+/// where the pack lands — but it has no business surviving the fight. Left
+/// alive after a jack-out it would be standing around the breach mouth when
+/// the party climbs back out, a pack from a place the player left. So
+/// `Game::end_battle` despawns whatever still carries this.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct DungeonSpawn;
+
 /// Tags a wild creature as tethered to a `Nest` — see
 /// `systems::wander_ai_system`'s radius check. Removed (not the
 /// creature) when its nest is destroyed (`Game::attack_nest`) or when the

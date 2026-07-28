@@ -100,9 +100,14 @@ impl Game {
         let mult = zone_level.stat_multiplier() as f32;
         let zone = zone_level.0;
         let dist_mult = self.distance_stat_multiplier(x, y);
+        // 1.0 on the surface, so this is inert for every spawn that isn't a
+        // dungeon encounter.
+        let depth_mult = self.dungeon_depth_multiplier();
         let potential = self.roll_potential();
         let routines = self.roll_wild_routine();
-        let scale = |base: i32, roll: f32| ((base as f32) * mult * dist_mult * roll).round() as i32;
+        let scale = |base: i32, roll: f32| {
+            ((base as f32) * mult * dist_mult * depth_mult * roll).round() as i32
+        };
         Some(
             self.world
                 .spawn((

@@ -871,3 +871,169 @@ fn no_breach_opens_on_top_of_the_player_or_within_a_step_of_them() {
         }
     }
 }
+
+/// Walks until an encounter fires, or gives up. Deterministic: the seeded
+/// `GameRng` decides, and the walk itself is a fixed pattern.
+fn walk_until_a_fight(game: &mut Game, steps: usize) -> bool {
+    for i in 0..steps {
+        if game.has_active_battle() {
+            return true;
+        }
+        game.step_forward();
+        if i % 3 == 0 {
+            game.turn_right();
+        }
+    }
+    game.has_active_battle()
+}
+
+#[test]
+fn walking_a_dungeon_eventually_draws_an_encounter() {
+    let mut game = game();
+    descend(&mut game);
+    assert!(
+        walk_until_a_fight(&mut game, 400),
+        "400 steps of corridor drew no fights at all"
+    );
+}
+
+#[test]
+fn shoving_at_a_wall_cannot_draw_an_encounter() {
+    let mut game = game();
+    descend(&mut game);
+    // Face a wall and grind at it. A blocked step is not travel, so it must
+    // never roll for a fight, however many times it is repeated.
+    for _ in 0..4 {
+        let Locale::Dungeon { x, y, facing, .. } = locale(&game) else {
+            unreachable!()
+        };
+        let (dx, dy) = facing.delta();
+        if !cell_at(&game, x + dx, y + dy).walkable() {
+            break;
+        }
+        game.turn_right();
+    }
+    for _ in 0..500 {
+        game.step_forward();
+        assert!(
+            !game.has_active_battle(),
+            "walking into solid rock started a fight"
+        );
+    }
+}
+
+#[test]
+fn a_dungeon_pack_is_drawn_from_the_biome_the_breach_opens_in() {
+    let mut game = game();
+    let entrance = descend(&mut game);
+    let biome = game
+        .world
+        .resource_mut::<WorldMap>()
+        .tile(entrance.0, entrance.1)
+        .biome;
+    assert!(walk_until_a_fight(&mut game, 400), "no fight to inspect");
+
+    let species: Vec<SpeciesId> = {
+        let mut query = game.world.query_filtered::<&Creature, With<DungeonSpawn>>();
+        query.iter(&game.world).map(|c| c.species.clone()).collect()
+    };
+    assert!(
+        !species.is_empty(),
+        "the pack should be tagged DungeonSpawn"
+    );
+    for id in species {
+        let def = game
+            .species_defs()
+            .into_iter()
+            .find(|s| s.id == id)
+            .expect("a spawned species is in the db");
+        assert!(
+            def.habitats.contains(&biome),
+            "{id} does not live in {biome:?}, the biome the breach opens in"
+        );
+    }
+}
+
+#[test]
+fn deeper_levels_field_tougher_programs() {
+    // Same species, same breach, same everything but depth.
+    let power_at = |depth: u32| {
+        let mut game = Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+        game.enter_dungeon(pos.x, pos.y);
+        if depth > 1 {
+            let Locale::Dungeon {
+                x,
+                y,
+                facing,
+                entrance,
+                ..
+            } = locale(&game)
+            else {
+                unreachable!()
+            };
+            game.world.insert_resource(Locale::Dungeon {
+                depth,
+                x,
+                y,
+                facing,
+                entrance,
+            });
+        }
+        let wild = game.spawn_wild_creature("scrapper", pos.x, pos.y).unwrap();
+        game.world.get::<Stats>(wild).unwrap().power()
+    };
+
+    let shallow = power_at(1);
+    let deep = power_at(4);
+    assert!(
+        deep > shallow,
+        "depth 4 fielded {deep} power against depth 1's {shallow} — descending must cost something"
+    );
+}
+
+#[test]
+fn the_surface_is_untouched_by_the_depth_multiplier() {
+    let mut game = game();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    assert_eq!(
+        game.dungeon_depth_multiplier(),
+        1.0,
+        "the multiplier must be inert above ground"
+    );
+    let wild = game.spawn_wild_creature("scrapper", pos.x, pos.y).unwrap();
+    assert!(game.world.get::<Stats>(wild).unwrap().hp > 0);
+}
+
+/// A pack conjured for a dungeon fight has no business outliving it: it
+/// stands at surface coordinates around the breach mouth, and would be
+/// waiting there when the party climbs out.
+#[test]
+fn a_dungeon_pack_that_survives_a_jack_out_does_not_linger_on_the_surface() {
+    let mut game = game();
+    descend(&mut game);
+    assert!(walk_until_a_fight(&mut game, 400), "no fight to flee");
+
+    let before = {
+        let mut query = game.world.query_filtered::<Entity, With<DungeonSpawn>>();
+        query.iter(&game.world).count()
+    };
+    assert!(before > 0);
+
+    flee_until_clear(&mut game);
+
+    let after = {
+        let mut query = game.world.query_filtered::<Entity, With<DungeonSpawn>>();
+        query.iter(&game.world).count()
+    };
+    assert_eq!(after, 0, "{before} dungeon programs outlived the fight");
+}
+
+#[test]
+fn an_encounter_underground_leaves_the_players_surface_position_alone() {
+    let mut game = game();
+    let entrance = descend(&mut game);
+    assert!(walk_until_a_fight(&mut game, 400), "no fight");
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    assert_eq!((pos.x, pos.y), entrance);
+}

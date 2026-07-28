@@ -412,6 +412,29 @@ pub const DUNGEON_NEAREST_ENTRANCE_TILES: i32 = 8;
 /// "there's a breach here" for no reason the player could have foreseen.
 pub const DUNGEON_MIN_ENTRANCE_TILES: i32 = 5;
 
+/// Chance per step that walking a dungeon corridor draws an encounter.
+///
+/// Much higher than `RANDOM_ENCOUNTER_CHANCE` on purpose: crossing open
+/// ground is travel that fighting interrupts, but a dungeon is somewhere you
+/// go *to* fight. It is also what makes mapping one tense — every corridor
+/// you walk to find the stairs is a corridor that can cost you.
+///
+/// Arithmetic-plausible only, never playtested. A level is 21x21 with about
+/// half of it floor, so a traversal runs somewhere near 40-80 steps, putting
+/// this at roughly three to six fights per level.
+pub const DUNGEON_ENCOUNTER_CHANCE: f64 = 0.08;
+
+/// What each level of dungeon depth multiplies wild program stats by,
+/// compounding, on top of `ZoneLevel::stat_multiplier` and
+/// `Game::distance_stat_multiplier`.
+///
+/// A float and much gentler than `ZONE_STAT_GROWTH`'s flat doubling, because
+/// descending is cheap — a flight of stairs, not a Portal you had to fund —
+/// so the curve has to be walkable rather than a wall. XP follows for free:
+/// a kill pays the defeated program's `max_hp`, so scaling stats scales the
+/// reward with the risk.
+pub const DUNGEON_DEPTH_STAT_GROWTH: f32 = 1.35;
+
 /// Floor under `swarm_radius`, the radius that actually governs how
 /// tightly a pack's members cluster around the tile a spawn roll picked
 /// (`Game::try_spawn_habitat_creature`) and how far `gather_pack` searches

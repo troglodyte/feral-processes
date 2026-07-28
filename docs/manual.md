@@ -121,7 +121,7 @@ change what gets stored — a save from a different build shows up as
 | `d` | Manifest: a full read-only stat sheet for you or any program you own — integrity and XP meters, combat stats, potential rolls, routines, equipment, perks, species detail. `←`/`→` page between subjects, `Esc` goes back to the list (and again to the map) |
 | `v` | Inventory/equipment: equip, unequip, consume, fuse, erase items |
 | `T` | Research tree: spend Research Data to unlock structures and recipes — see [Research](#research) |
-| `p` | Your pets: full stats (level, HP, Attack, Defense) for every compiled program you own, wherever it is — add/stand down party members (max 5) here too. Standing one down frees a battle slot, not a roster slot; to shed a program for good, sell it at a Market (`t`) or fuse it (`f`) |
+| `p` | Your pets: full stats (level, HP, Attack, Defense) for every compiled program you own, wherever it is — add/stand down party members (max 5) here too. Standing one down frees a battle slot, not a roster slot; to shed a program for good, sell it at a Market (`t`), fuse it (`f`), or extract a routine from it (`M`) — and losing one in a fight or a raid does the same, permanently |
 | `m` | Routine panel: install a loose routine into a free slot, pop an installed one back out, or swap one for another — see [Routines](#routines) |
 | `M` | Extraction: with a Compiler owned anywhere, break a program you own down into exactly one of its routines — destroys the program and everything else it carried. See [Routines](#routines) |
 | `f` | Fuse two compiled programs you own into one stronger one — the whole roster is offered, wherever the programs are |
@@ -679,9 +679,11 @@ be active party members, fighting alongside you at once.
   companions — draw noticeably more fire than the ones behind them, but
   every member stays reachable, so a back slot is safer, never safe. A
   member holding Defend draws more still, which is what makes bracing a
-  play for the whole party rather than a selfish one. A party member knocked
-  to 0 HP stands down automatically — it isn't lost, just no longer active;
-  re-add it (`p`) and recharge overnight (`r`) to heal it back up.
+  play for the whole party rather than a selfish one. A party member brought
+  to 0 HP is **deleted for good** at the end of the fight, taking every
+  routine installed on it — nothing drops, and there is no reviving it. The
+  battle pane turns a member's bar red once it is down to a third of its
+  Integrity; that is your warning to jack out.
 - Party **order** matters and is saved with your game, since it's what
   decides who's in those front slots.
 - The party/cronjob pickers show each candidate's status: `(in party)` or
@@ -973,8 +975,10 @@ hitting a random one of your *other* deployed structures:
   or just posted to guard it (`G`) — it fights the raid off: the
   structure's damage is reduced by the defender's Defense stat, but the
   defender still takes a flat cost to its own HP for defending — win or
-  lose. A defender knocked to 0 HP stands down (like a knocked-out
-  companion), but isn't destroyed.
+  lose. A defender brought to 0 HP is **destroyed** — and since programs
+  have no passive healing, raid damage accumulates until you come home and
+  recharge (`r`). A program left on a cronjob long enough will eventually
+  be lost to raids while you are elsewhere.
 - `G` (guard) works on **any** raidable structure, including ones with no
   cronjob recipe at all — Terminal, Data Cache, Fabricator, Armory, and so
   on. It's the only way to defend those. A structure already cronjob-worked

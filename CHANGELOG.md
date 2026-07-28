@@ -15,6 +15,17 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ### Balance
 
+- **A program brought to 0 HP is deleted for good.** It used to be knocked
+  offline — dropped from your party at the end of the fight, then healed
+  back to full for free the next time you recharged. Now it is destroyed,
+  along with every routine installed on it, and nothing drops. This applies
+  in Forgiving as well as Permadeath (that setting still governs only what
+  happens when *you* flatline), and outside battle as well as in it: a
+  cronjob worker that runs out of Integrity defending a structure is lost
+  even though you were not there. Programs have no passive healing, so raid
+  damage is attrition you have to manage by coming home to recharge. The
+  battle pane and the party menu now flag any program at or below a third of
+  its Integrity in red.
 - **Structure income no longer doubles with every zone.** A worked node's
   payout used to be its upgrade tier multiplied by the zone's enemy-difficulty
   curve, so a Mk5 node paid 5 a cycle in zone 1 and 80 in zone 5 while build

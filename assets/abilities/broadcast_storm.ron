@@ -1,9 +1,9 @@
 (
     id: "broadcast_storm",
     name: "Broadcast Storm",
-    description: "Damage 4 to every hostile program on the field",
+    description: "Damage 25 to every hostile program on the field",
     target: AllEnemies,
-    effect: Damage(power: 4),
+    effect: Damage(power: 25),
     cooldown: 4,
     fatigue_cost: 15.0,
 )

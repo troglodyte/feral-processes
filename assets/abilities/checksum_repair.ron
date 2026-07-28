@@ -1,9 +1,9 @@
 (
     id: "checksum_repair",
     name: "Checksum Repair",
-    description: "Restore 18 Integrity to one ally",
+    description: "Restore 25 Integrity to one ally",
     target: OneAlly,
-    effect: Heal(power: 18),
+    effect: Heal(power: 25),
     cooldown: 3,
     fatigue_cost: 9.0,
     wild_weight: 9,

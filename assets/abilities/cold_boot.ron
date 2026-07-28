@@ -1,9 +1,9 @@
 (
     id: "cold_boot",
     name: "Cold Boot",
-    description: "Restore 30 Integrity to one ally",
+    description: "Restore 50 Integrity to one ally",
     target: OneAlly,
-    effect: Heal(power: 30),
+    effect: Heal(power: 50),
     cooldown: 5,
     fatigue_cost: 15.0,
     wild_weight: 4,

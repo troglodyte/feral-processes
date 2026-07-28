@@ -1,7 +1,7 @@
 //! Looking at the world without changing it: the tile and entity views the
 //! renderer draws, plus inspect and symlink targeting.
 
-use crate::tuning::{DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX, DIFFICULTY_TOUGH_MAX};
+use crate::tuning::{DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX, DIFFICULTY_TOUGH_MAX, MAX_FUSIONS};
 use crate::*;
 
 impl Game {
@@ -219,6 +219,175 @@ impl Game {
             work_resource: species.work_resource.clone(),
             quality: self.potential_quality_label(entity),
             fusions: self.fusion_count(entity),
+        })
+    }
+
+    /// Everything known about one subject, for the manifest screen. Works on
+    /// the player and on any creature — wild, owned, or in the party.
+    /// Read-only: looking a program over never triggers an intrusion.
+    ///
+    /// `None` for anything that is neither (a structure, a nest, a despawned
+    /// entity), or for a creature whose species failed to resolve.
+    pub fn manifest(&self, entity: Entity) -> Option<ManifestView> {
+        if self.world.get::<Player>(entity).is_some() {
+            return self.player_manifest(entity);
+        }
+        self.program_manifest(entity)
+    }
+
+    fn player_manifest(&self, entity: Entity) -> Option<ManifestView> {
+        let stats = self.world.get::<Stats>(entity)?;
+        let needs = self.world.get::<Needs>(entity)?;
+        let pos = self.world.get::<Position>(entity)?;
+        let inv = self.world.get::<Inventory>(entity)?;
+        let exp = self.world.get::<Experience>(entity)?;
+        let glyph = self.world.get::<Glyph>(entity)?;
+        // The same calls `player_status` makes, so the sidebar and the sheet
+        // cannot show different numbers for the same player.
+        let atk = self.effective_atk(entity);
+        let def = self.effective_def(entity);
+        let equipment = self
+            .world
+            .get::<Equipment>(entity)
+            .cloned()
+            .unwrap_or_default();
+        let perks = self.world.get::<Perks>(entity);
+        Some(ManifestView {
+            entity,
+            name: "You".to_string(),
+            glyph: glyph.ch,
+            color: glyph.color,
+            level: Some(exp.level),
+            xp: Some((exp.xp, exp.xp_to_next)),
+            hp: stats.hp,
+            max_hp: stats.max_hp,
+            atk,
+            def,
+            power: stats.max_hp + atk + def,
+            status_effect: self.status_label(entity),
+            routines: self.routine_view(entity),
+            subject: ManifestSubject::Player(PlayerManifest {
+                hunger: needs.hunger,
+                fatigue: needs.fatigue,
+                decompiler: self
+                    .world
+                    .get::<Decompiler>(entity)
+                    .map(|d| d.skill)
+                    .unwrap_or(0),
+                equipment: [
+                    EquipmentSlot::Weapon,
+                    EquipmentSlot::Armor,
+                    EquipmentSlot::Module,
+                ]
+                .into_iter()
+                .filter_map(|slot| self.manifest_equip_slot(slot, equipment.get(slot)?))
+                .collect(),
+                perk_points: perks.map(|p| p.points).unwrap_or(0),
+                perks: perks
+                    .map(|p| {
+                        Perk::all()
+                            .into_iter()
+                            .map(|perk| (perk, p.level(perk)))
+                            .filter(|(_, level)| *level > 0)
+                            .map(|(perk, level)| (perk.display_name().to_string(), level))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                position: (pos.x, pos.y),
+                zone: self.world.resource::<ZoneLevel>().0,
+                pet_count: self.pet_count(),
+                pet_capacity: self.pet_capacity(),
+                cargo_used: inv.cargo_used(self.world.resource::<ItemDb>()),
+                party: self.party_info(),
+            }),
+        })
+    }
+
+    /// One worn item as the manifest lists it. `None` if the item's
+    /// definition has gone missing (a mod removed since the save was
+    /// written), which drops the row rather than failing the whole sheet.
+    fn manifest_equip_slot(
+        &self,
+        slot: EquipmentSlot,
+        worn: EquippedItem,
+    ) -> Option<ManifestEquipSlot> {
+        let (_, base) = self.equipment_of(&worn.item)?;
+        let mods = base
+            .scaled_for_level(worn.level)
+            .fused_for_tier(worn.fusion_tier);
+        Some(ManifestEquipSlot {
+            slot: slot.label().to_string(),
+            item_name: self.item_name(&worn.item).to_string(),
+            gear_level: worn.level,
+            fusion_tier: worn.fusion_tier,
+            atk: mods.atk,
+            def: mods.def,
+            decompiler: mods.decompiler,
+        })
+    }
+
+    fn program_manifest(&self, entity: Entity) -> Option<ManifestView> {
+        let creature = self.world.get::<Creature>(entity)?;
+        let species = self.world.resource::<SpeciesDb>().get(&creature.species)?;
+        let stats = self.world.get::<Stats>(entity)?;
+        let exp = self.world.get::<Experience>(entity);
+        let is_tamed = self.world.get::<Tamed>(entity).is_some();
+        let custom = self.world.get::<CustomName>(entity).map(|c| c.0.clone());
+        let decompiler_skill = self.player_decompiler_skill();
+        Some(ManifestView {
+            entity,
+            name: match &custom {
+                Some(name) => name.clone(),
+                None => self.zone_tagged_name(entity, species.name.clone()),
+            },
+            glyph: species.glyph,
+            color: species.color,
+            level: exp.map(|e| e.level),
+            xp: exp.map(|e| (e.xp, e.xp_to_next)),
+            hp: stats.hp,
+            max_hp: stats.max_hp,
+            atk: stats.atk,
+            def: stats.def,
+            power: stats.power(),
+            status_effect: self.status_label(entity),
+            routines: self.routine_view(entity),
+            subject: ManifestSubject::Program(ProgramManifest {
+                species_name: custom
+                    .is_some()
+                    .then(|| self.zone_tagged_name(entity, species.name.clone())),
+                is_hostile: self.world.get::<Hostile>(entity).is_some(),
+                is_tamed,
+                is_companion: self.world.resource::<Party>().0.contains(&entity),
+                is_boss: species.is_boss,
+                activity: is_tamed.then(|| self.program_activity(entity)),
+                potential: self
+                    .world
+                    .get::<Potential>(entity)
+                    .map(|p| ManifestPotential {
+                        hp_roll: p.hp_roll,
+                        atk_roll: p.atk_roll,
+                        def_roll: p.def_roll,
+                        growth_roll: p.growth_roll,
+                        percent: p.quality_percent(),
+                        label: p.quality_label().to_string(),
+                    }),
+                fusions: self.fusion_count(entity),
+                max_fusions: MAX_FUSIONS,
+                habitats: species.habitats.clone(),
+                moves: species.moves.clone(),
+                work_resource: species.work_resource.clone(),
+                taming_difficulty: species.taming_difficulty,
+                decompile_chance: self.taming_catalyst().map(|(_, potency)| {
+                    taming::capture_chance(
+                        stats.hp_fraction(),
+                        potency,
+                        species.taming_difficulty,
+                        decompiler_skill,
+                    )
+                }),
+                growth_multiplier: species.growth_multiplier,
+                base_speed: species.base_speed,
+            }),
         })
     }
 

@@ -330,3 +330,126 @@ pub struct InspectView {
     /// be fused.
     pub fusions: u32,
 }
+
+/// Everything the engine knows about one subject, for the manifest screen —
+/// the player, a program you own, or a wild one. Shared header fields plus a
+/// `subject` carrying the half that differs, so "the player has no Potential
+/// roll" and "a program has no equipment" are type-level facts rather than
+/// `Option`s a renderer can forget to check.
+pub struct ManifestView {
+    pub entity: Entity,
+    /// "You" for the player; a program's `CustomName` if it has one, else its
+    /// zone-tagged species name (see `Game::zone_tagged_name`).
+    pub name: String,
+    pub glyph: char,
+    pub color: GlyphColor,
+    /// `None` for a wild program, which carries no `Experience` until it is
+    /// compiled.
+    pub level: Option<u32>,
+    /// `(xp, xp_to_next)`, `None` for the same reason `level` is.
+    pub xp: Option<(u32, u32)>,
+    pub hp: i32,
+    pub max_hp: i32,
+    /// The player's is `Game::effective_atk` (equipment folded in); a
+    /// program's is its raw `Stats`.
+    pub atk: i32,
+    pub def: i32,
+    /// A rough overall-strength scalar — see `components::Stats::power`.
+    pub power: i32,
+    /// Active battle status condition, e.g. "Bleeding (2)" — see
+    /// `Game::status_label`. Always `None` outside an intrusion.
+    pub status_effect: Option<String>,
+    /// Every routine slot, filled or empty. Reuses `RoutineSlotView` rather
+    /// than a parallel type, so the manifest and the routines menu cannot
+    /// disagree about what is installed.
+    pub routines: Vec<RoutineSlotView>,
+    pub subject: ManifestSubject,
+}
+
+pub enum ManifestSubject {
+    Player(PlayerManifest),
+    Program(ProgramManifest),
+}
+
+/// The player-only half of a manifest.
+pub struct PlayerManifest {
+    pub hunger: f32,
+    pub fatigue: f32,
+    pub decompiler: i32,
+    /// One entry per *occupied* slot — an empty slot is absent rather than
+    /// listed as "(none)", so the section shrinks to what is actually worn.
+    pub equipment: Vec<ManifestEquipSlot>,
+    pub perk_points: u32,
+    /// Every perk bought at least once, as (display name, level).
+    pub perks: Vec<(String, u32)>,
+    pub position: (i32, i32),
+    pub zone: u32,
+    pub pet_count: usize,
+    pub pet_capacity: usize,
+    pub cargo_used: u32,
+    pub party: Vec<CompanionInfo>,
+}
+
+/// One worn item and the bonus it is *currently* granting.
+///
+/// `gear_level`/`fusion_tier` are the values captured on the `EquippedItem`
+/// at equip time, and the stat fields are `EquipmentStats::scaled_for_level`
+/// then `fused_for_tier` applied with exactly those — not a fresh preview at
+/// today's zone level, which is what the inventory screen shows instead.
+pub struct ManifestEquipSlot {
+    /// `EquipmentSlot::label()` — "Weapon", "Armor", "Module".
+    pub slot: String,
+    pub item_name: String,
+    pub gear_level: u32,
+    pub fusion_tier: u32,
+    pub atk: i32,
+    pub def: i32,
+    pub decompiler: i32,
+}
+
+/// The creature-only half of a manifest — an owned program or a wild one.
+pub struct ProgramManifest {
+    /// The species name, present only when a `CustomName` is overriding it,
+    /// so the header can show "Hexed (Scrapper 2)" without repeating itself
+    /// for an unrenamed program.
+    pub species_name: Option<String>,
+    pub is_hostile: bool,
+    pub is_tamed: bool,
+    pub is_companion: bool,
+    pub is_boss: bool,
+    /// What this program is doing right now — see `Game::program_activity`.
+    /// `None` for a program you don't own, which has no job to report.
+    pub activity: Option<String>,
+    /// `None` for a creature with no `Potential` component — an old save
+    /// predating it, or a test helper that spawned one directly.
+    pub potential: Option<ManifestPotential>,
+    pub fusions: u32,
+    /// `tuning::MAX_FUSIONS`, carried so the renderer prints "1/3" without
+    /// importing a tuning constant of its own.
+    pub max_fusions: u32,
+    pub habitats: Vec<Biome>,
+    pub moves: Vec<MoveDef>,
+    pub work_resource: Option<ItemId>,
+    pub taming_difficulty: f32,
+    /// Estimated decompile chance if an intrusion started right now, using
+    /// the creature's current HP fraction. `None` when the player holds no
+    /// taming catalyst: there is no potency to quote odds for, and the action
+    /// isn't available at all.
+    pub decompile_chance: Option<f32>,
+    pub growth_multiplier: f32,
+    pub base_speed: i32,
+}
+
+/// An individual's four `Potential` rolls, surfaced separately rather than
+/// only as the aggregate tier the party menu shows.
+#[derive(Debug, PartialEq)]
+pub struct ManifestPotential {
+    pub hp_roll: f32,
+    pub atk_roll: f32,
+    pub def_roll: f32,
+    pub growth_roll: f32,
+    /// `Potential::quality_percent`.
+    pub percent: u32,
+    /// `Potential::quality_label`.
+    pub label: String,
+}

@@ -2,6 +2,7 @@
 
 use super::support::*;
 use crate::game::inspection::difficulty_color;
+use crate::tuning::MAX_FUSIONS;
 use crate::*;
 
 #[test]
@@ -559,4 +560,160 @@ fn view_entities_colors_hostiles_by_difficulty_and_leaves_others_alone() {
         GlyphColor::Cyan,
         "a non-hostile entity should keep its own glyph color, not be difficulty-colored"
     );
+}
+
+#[test]
+fn manifest_reports_the_player_with_equipment_folded_into_their_stats() {
+    let game = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let status = game.player_status();
+
+    let view = game.manifest(player).expect("the player has a manifest");
+    assert_eq!(view.name, "You");
+    assert_eq!(view.hp, status.hp);
+    assert_eq!(view.max_hp, status.max_hp);
+    assert_eq!(
+        (view.atk, view.def, view.power),
+        (status.atk, status.def, status.power),
+        "the manifest must quote the same effective stats the sidebar does"
+    );
+    assert_eq!(view.level, Some(status.level));
+    assert_eq!(view.xp, Some((status.xp, status.xp_to_next)));
+
+    let ManifestSubject::Player(p) = view.subject else {
+        panic!("the player is a Player subject");
+    };
+    assert_eq!(p.hunger, status.hunger);
+    assert_eq!(p.fatigue, status.fatigue);
+    assert_eq!(p.decompiler, status.decompiler);
+    assert_eq!(p.zone, status.zone);
+    assert_eq!(p.position, status.position);
+    assert_eq!(p.pet_capacity, status.pet_capacity);
+}
+
+#[test]
+fn manifest_lists_every_equipped_item_with_the_bonus_it_is_actually_granting() {
+    let mut game = Game::new(12, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let equippable = game
+        .item_defs()
+        .into_iter()
+        .find(|d| d.equipment.is_some())
+        .expect("the shipped item set has equippable gear");
+    let item = equippable.id.clone();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(item.clone(), 1);
+    game.equip(&item).expect("equipping a held item works");
+
+    let view = game.manifest(player).unwrap();
+    let ManifestSubject::Player(p) = view.subject else {
+        panic!("the player is a Player subject");
+    };
+    let slot = p
+        .equipment
+        .iter()
+        .find(|s| s.item_name == equippable.name)
+        .expect("the item just equipped is listed");
+    let (_, base) = game.equipment_of(&item).unwrap();
+    let expected = base
+        .scaled_for_level(slot.gear_level)
+        .fused_for_tier(slot.fusion_tier);
+    assert_eq!(
+        (slot.atk, slot.def, slot.decompiler),
+        (expected.atk, expected.def, expected.decompiler),
+        "the listed bonus must be the one captured at equip time, not a fresh preview"
+    );
+}
+
+#[test]
+fn manifest_reports_a_tamed_program_with_all_four_potential_rolls() {
+    let mut game = Game::new(13, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 20, 5);
+    game.world.entity_mut(pet).insert(Potential {
+        hp_roll: 1.10,
+        atk_roll: 1.05,
+        def_roll: 0.95,
+        growth_roll: 1.15,
+    });
+
+    let view = game.manifest(pet).expect("a tamed program has a manifest");
+    assert_eq!(view.max_hp, 20);
+    assert!(
+        !view.routines.is_empty(),
+        "spawn_tamed installs the species' innate routines"
+    );
+
+    let ManifestSubject::Program(p) = view.subject else {
+        panic!("a creature is a Program subject");
+    };
+    assert!(p.is_tamed);
+    assert!(!p.is_hostile);
+    assert_eq!(p.max_fusions, MAX_FUSIONS);
+    assert_eq!(
+        p.activity.as_deref(),
+        Some("idle"),
+        "an owned program always reports what it is doing"
+    );
+    let rolls = p.potential.expect("the rolls were just inserted");
+    assert_eq!(
+        (
+            rolls.hp_roll,
+            rolls.atk_roll,
+            rolls.def_roll,
+            rolls.growth_roll
+        ),
+        (1.10, 1.05, 0.95, 1.15),
+        "every roll is surfaced individually, not just the aggregate tier"
+    );
+    assert!(!rolls.label.is_empty());
+}
+
+#[test]
+fn manifest_of_a_wild_program_has_no_experience_and_no_activity() {
+    let mut game = Game::new(14, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_on_player_tile(&mut game);
+
+    let view = game.manifest(wild).expect("a wild program has a manifest");
+    assert_eq!(
+        view.xp, None,
+        "a wild program carries no Experience until it is compiled"
+    );
+    let ManifestSubject::Program(p) = view.subject else {
+        panic!("a creature is a Program subject");
+    };
+    assert!(p.is_hostile);
+    assert!(!p.is_tamed);
+    assert_eq!(
+        p.activity, None,
+        "a program you don't own isn't doing a job"
+    );
+    assert!(
+        p.decompile_chance.is_some(),
+        "the starting kit includes a taming catalyst"
+    );
+    assert!(!game.has_active_battle(), "a manifest never starts a fight");
+}
+
+#[test]
+fn manifest_survives_a_creature_that_predates_the_potential_component() {
+    let mut game = Game::new(15, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 12, 3);
+    game.world.entity_mut(pet).remove::<Potential>();
+
+    let view = game
+        .manifest(pet)
+        .expect("still inspectable without a roll");
+    let ManifestSubject::Program(p) = view.subject else {
+        panic!("a creature is a Program subject");
+    };
+    assert_eq!(p.potential, None);
+}
+
+#[test]
+fn manifest_returns_none_for_anything_that_is_neither_the_player_nor_a_creature() {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structure = game.world.spawn(Position { x: 0, y: 0 }).id();
+    assert!(game.manifest(structure).is_none());
 }

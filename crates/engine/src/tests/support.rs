@@ -209,8 +209,8 @@ pub(super) fn battle_with_a_pack_of(game: &mut Game, count: usize, hp: i32) -> V
     members
 }
 
-/// Copies the shipped `species`/`structures`/`research`/`items` asset
-/// dirs into a fresh scratch dir, skipping the item files named in
+/// Copies the shipped `species`/`structures`/`research`/`items`/`abilities`
+/// asset dirs into a fresh scratch dir, skipping the item files named in
 /// `omit_items` and writing the `extra_*` (filename, RON body) pairs on
 /// top — a stand-in for a modded install. The caller removes the
 /// directory once its `Game` is done with it.
@@ -220,6 +220,7 @@ pub(super) fn modded_assets_dir(
     extra_items: &[(&str, &str)],
     extra_species: &[(&str, &str)],
     extra_research: &[(&str, &str)],
+    extra_abilities: &[(&str, &str)],
 ) -> std::path::PathBuf {
     static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let dir = std::env::temp_dir().join(format!(
@@ -250,6 +251,9 @@ pub(super) fn modded_assets_dir(
     for (name, body) in extra_research {
         std::fs::write(dir.join("research").join(name), body).unwrap();
     }
+    for (name, body) in extra_abilities {
+        std::fs::write(dir.join("abilities").join(name), body).unwrap();
+    }
     dir
 }
 
@@ -258,7 +262,14 @@ pub(super) fn modded_assets_dir(
 /// abort (see `ItemDb::missing_roles`) can be exercised against an
 /// otherwise-valid item set.
 pub(super) fn assets_dir_missing_currency_item() -> std::path::PathBuf {
-    modded_assets_dir("missing_currency", &["core_fragment.ron"], &[], &[], &[])
+    modded_assets_dir(
+        "missing_currency",
+        &["core_fragment.ron"],
+        &[],
+        &[],
+        &[],
+        &[],
+    )
 }
 
 /// Gives the player `n` Research Data, bypassing the Research Node so
@@ -496,6 +507,21 @@ pub(super) fn start_battle_with_a_wild_program(game: &mut Game) -> Entity {
     wild
 }
 
+/// `Game::spawn_wild_creature` through `species`, with whatever routine the
+/// `WILD_ROUTINE_CHANCE` roll gave it immediately cleared — for a fixture
+/// that asserts on enemy *move* behaviour and can't tolerate the roll
+/// occasionally handing it a carrier instead. A carrier's routine acting
+/// differently from a move is loud, not silent (a kill or damage assertion
+/// fails rather than passes), but loud is still a mystery failure in an
+/// unrelated test the day the RNG stream shifts.
+pub(super) fn spawn_wild_without_routine(game: &mut Game, species: &str, x: i32, y: i32) -> Entity {
+    let entity = game
+        .spawn_wild_creature(species, x, y)
+        .unwrap_or_else(|| panic!("{species} ships with the game"));
+    game.world.entity_mut(entity).insert(Routines::default());
+    entity
+}
+
 pub(super) fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
     let player = game.player_entity();
     let species = generic_species(game);
@@ -652,6 +678,7 @@ pub(super) fn game_with_two_ability_companion() -> (Game, Entity) {
         &[],
         &[],
         &[("test_medic.ron", TWO_ABILITY_SPECIES)],
+        &[],
         &[],
     );
     let mut game = Game::new(94, DifficultyMode::Forgiving, &dir).unwrap();

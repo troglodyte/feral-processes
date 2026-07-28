@@ -396,10 +396,14 @@ fn a_hostile_single_enemy_target_hits_exactly_one_party_member() {
     let player = game.player_entity();
     let enemies = battle_with_a_pack_of(&mut game, 1, 100);
 
+    // `chosen` is `Ally { slot }` here, not `EnemyGroup` — `wild_retaliate` is
+    // what resolves a hostile's single-target routine now (via
+    // `roll_enemy_target`, aggro-weighted) and hands the slot down; this call
+    // stands in for that resolved slot rather than re-deriving it.
     let recipients = game.ability_recipients(
         enemies[0],
         crate::abilities::AbilityTarget::OneEnemyGroupFront,
-        &battle::SpecialTarget::EnemyGroup { group: 0 },
+        &battle::SpecialTarget::Ally { slot: 0 },
     );
     assert_eq!(recipients.len(), 1);
     assert!(
@@ -409,6 +413,54 @@ fn a_hostile_single_enemy_target_hits_exactly_one_party_member() {
     assert_eq!(
         recipients[0], player,
         "with only the player in the party, it is the player"
+    );
+}
+
+/// Spec §4: a hostile's `OneEnemyGroupFront` routine resolves through
+/// `roll_enemy_target`, the same aggro-weighted roll a wild *move* uses — so
+/// slot order and bracing still matter. Before the fix, `wild_retaliate`
+/// hardcoded `chosen` as `SpecialTarget::EnemyGroup { group }`, which made
+/// the hostile branch of `ability_recipients` fall through to
+/// `living_party().take(1)` — always slot 0, the player, no matter who was
+/// bracing or how the party was arranged.
+#[test]
+fn a_hostile_single_target_routine_is_aggro_weighted_across_the_party() {
+    let mut player_hit = false;
+    let mut bracing_companion_hit = false;
+    let mut other_companion_hit = false;
+
+    for seed in 0..200u32 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let bracing = spawn_tamed(&mut game, 1000, 1);
+        let other = spawn_tamed(&mut game, 1000, 1);
+        game.add_companion(bracing).unwrap();
+        game.add_companion(other).unwrap();
+        let player_hp_before = game.world.get::<Stats>(player).unwrap().hp;
+
+        let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+        // Kernel Panic: OneEnemyGroupFront, flat Damage — HP loss identifies
+        // who it landed on without depending on a `StatusEffects` component
+        // the test's own companions don't carry.
+        game.world
+            .entity_mut(enemies[0])
+            .insert(Routines(vec!["kernel_panic".to_string()]));
+        // Bracing draws extra aggro weight — see `battle::slot_aggro_weight`.
+        game.begin_defend(bracing);
+
+        game.wild_retaliate(enemies[0], 0, player);
+
+        let hp_dropped = |e: Entity, before: i32| game.world.get::<Stats>(e).unwrap().hp < before;
+        player_hit |= hp_dropped(player, player_hp_before);
+        bracing_companion_hit |= hp_dropped(bracing, 1000);
+        other_companion_hit |= hp_dropped(other, 1000);
+    }
+
+    assert!(player_hit, "the player must still be a possible target");
+    assert!(
+        bracing_companion_hit || other_companion_hit,
+        "a hostile's single-target routine must be able to land on a companion — before the fix \
+         it always resolved to slot 0 (the player), ignoring bracing and slot order entirely"
     );
 }
 

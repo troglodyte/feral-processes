@@ -108,7 +108,14 @@ fn game_with_a_sweeper() -> (Game, Entity) {
             (id: "redundancy_sync"),
         ],
     )"#;
-    let dir = modded_assets_dir("sweeper", &[], &[], &[("test_sweeper.ron", SWEEPER)], &[]);
+    let dir = modded_assets_dir(
+        "sweeper",
+        &[],
+        &[],
+        &[("test_sweeper.ron", SWEEPER)],
+        &[],
+        &[],
+    );
     let mut game = Game::new(31, DifficultyMode::Forgiving, &dir).unwrap();
     let player = game.player_entity();
     let sweeper = game
@@ -410,6 +417,7 @@ fn an_ability_granted_by_two_nodes_stacks_the_item_rather_than_double_installing
         &[],
         &[],
         &[("also_boost.ron", ALSO_BOOST)],
+        &[],
     );
     let mut game = Game::new(33, DifficultyMode::Forgiving, &dir).unwrap();
     unlock_research_chain(&mut game, "self_exec");
@@ -993,5 +1001,36 @@ fn a_hostile_scales_its_routine_off_the_zone_level() {
         game.ability_user_level(player),
         game.world.get::<Experience>(player).unwrap().level,
         "the player scales off their own level"
+    );
+}
+
+/// `use_ability` was made side-agnostic (it resolves recipients from either
+/// side via `ability_recipients`) without making its log kind side-aware:
+/// the `Damage`/`Drain` arms hardcoded `MessageKind::PartyDamage`, so a
+/// hostile carrier's routine damage rendered in the party's own styling —
+/// the same bold-white the log deliberately reserves for the player's hits.
+#[test]
+fn a_hostile_routines_damage_line_logs_as_enemy_special_not_party_damage() {
+    let mut game = Game::new(9201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    let kernel_panic = ability(&game, "kernel_panic");
+
+    game.use_ability(&kernel_panic, enemies[0], "Wraith", &[player]);
+
+    let kinds: Vec<MessageKind> = game
+        .world
+        .resource::<MessageLog>()
+        .lines
+        .iter()
+        .map(|(kind, _)| *kind)
+        .collect();
+    assert!(
+        kinds.contains(&MessageKind::EnemySpecial),
+        "a hostile's routine damage should log EnemySpecial: {kinds:?}"
+    );
+    assert!(
+        !kinds.contains(&MessageKind::PartyDamage),
+        "and never the party's own damage styling: {kinds:?}"
     );
 }

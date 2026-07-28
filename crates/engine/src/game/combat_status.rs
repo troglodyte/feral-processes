@@ -158,16 +158,15 @@ impl Game {
         // executed rather than swung — gating it would silently disable
         // every carrier behind the front groups.
         if let Some(routine) = self.wild_routine_ready(wild) {
-            // Armed before the effect resolves, matching `resolve_one_action`:
-            // a killing blow ends the battle inside `reap_dead_members` and
-            // `end_battle` wipes every battle-scoped component, so a cooldown
-            // written afterwards would land on an entity already cleaned up.
+            // Armed before the effect resolves, the same reason
+            // `resolve_one_action` arms early: a killing blow ends the
+            // battle inside `reap_dead_members` and `end_battle` wipes every
+            // battle-scoped component, so a cooldown written afterwards
+            // would land on an entity already cleaned up.
             //
-            // Floored, because `cooldown` defaults to 0 and a carrier fires
-            // whenever it can — see `ENEMY_ROUTINE_MIN_COOLDOWN`. The +1 is
-            // the same one the party side uses, so this round's own tick
-            // doesn't eat a round.
-            let armed = routine.cooldown.max(ENEMY_ROUTINE_MIN_COOLDOWN) + 1;
+            // Floored at `ENEMY_ROUTINE_MIN_COOLDOWN` — see
+            // `abilities::armed_cooldown`, the one function both sides call.
+            let armed = abilities::armed_cooldown(routine.cooldown, ENEMY_ROUTINE_MIN_COOLDOWN);
             let mut cooldowns = self
                 .world
                 .get::<AbilityCooldowns>(wild)
@@ -185,7 +184,18 @@ impl Game {
                 MessageKind::EnemySpecial,
                 format!("{name} runs {}.", routine.name),
             );
-            let chosen = battle::SpecialTarget::EnemyGroup { group };
+            // A single-target routine is aggro-weighted exactly like a wild
+            // move — see `roll_enemy_target` — so bracing and slot order
+            // still matter against it. Rolled only for the shape that needs
+            // a single party-side pick; every other shape in
+            // `ability_recipients`' hostile branch ignores `chosen`.
+            let chosen = if matches!(routine.target, AbilityTarget::OneEnemyGroupFront) {
+                let target = self.roll_enemy_target(player);
+                let slot = self.party_slot_of(target).unwrap_or(0);
+                battle::SpecialTarget::Ally { slot }
+            } else {
+                battle::SpecialTarget::EnemyGroup { group }
+            };
             let recipients = self.ability_recipients(wild, routine.target, &chosen);
             self.use_ability(&routine, wild, &name, &recipients);
             self.reap_dead_members(player);

@@ -72,6 +72,7 @@ fn decompile_spends_the_highest_potency_catalyst_held_not_the_shipped_one() {
         )],
         &[],
         &[],
+        &[],
     );
     let mut game = Game::new(3100, DifficultyMode::Forgiving, &dir).unwrap();
     let _ = std::fs::remove_dir_all(&dir);
@@ -152,6 +153,7 @@ fn two_catalysts_of_equal_potency_resolve_to_the_first_id_alphabetically() {
         ],
         &[],
         &[],
+        &[],
     );
     let mut game = Game::new(3102, DifficultyMode::Forgiving, &dir).unwrap();
     let _ = std::fs::remove_dir_all(&dir);
@@ -179,6 +181,7 @@ fn the_decompile_preview_follows_the_catalyst_held_not_a_fixed_item() {
             "master_key.ron",
             r#"(id: "master_key", name: "Master Key", taming_potency: Some(0.9))"#,
         )],
+        &[],
         &[],
         &[],
     );
@@ -265,5 +268,68 @@ fn the_shipped_ice_breaker_still_tames_for_a_player_holding_only_it() {
             .count(&ItemId::from(ids::ICE_BREAKER)),
         50 - attempts,
         "one ICE Breaker per attempt, same as before"
+    );
+}
+
+/// A program decompiled while another group is still standing leaves the
+/// fight in progress (`end_battle` never runs) and drops out of its group
+/// the same round — so it is in neither `all_living_enemies()` nor `Party`.
+/// Nothing ticks or clears its `CombatBuff`/`AbilityCooldowns` in that state,
+/// which was harmless before this branch (no hostile could hold either) and
+/// is a live bug now that a carrier can.
+#[test]
+fn decompiling_a_program_mid_fight_clears_its_battle_scoped_state() {
+    let mut game = Game::new(9101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let (x, y) = multi_group_ground(&game);
+    let front_a = game.spawn_wild_creature("glitch", x, y).unwrap();
+    let front_b = game.spawn_wild_creature("scrapper", x, y + 1).unwrap();
+    game.start_battle(vec![front_a, front_b]);
+    {
+        let mut stats = game.world.get_mut::<Stats>(front_a).unwrap();
+        stats.hp = 1;
+    }
+    // As if `front_a` had already mirrored a buff onto itself and fired a
+    // routine earlier this same fight, before the capture that follows.
+    game.arm_buff(
+        front_a,
+        ActiveBuff {
+            kind: BuffKind::Def,
+            remaining: 3,
+            power: 9,
+        },
+    );
+    game.world.entity_mut(front_a).insert(AbilityCooldowns(
+        std::iter::once(("kernel_panic".to_string(), 3)).collect(),
+    ));
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 50)]);
+    game.world.get_mut::<Decompiler>(player).unwrap().skill = 50;
+
+    for _ in 0..50 {
+        if game.world.get::<Tamed>(front_a).is_some() {
+            break;
+        }
+        game.attempt_decompile(0, player);
+    }
+
+    assert!(
+        game.world.get::<Tamed>(front_a).is_some(),
+        "front_a should have been captured"
+    );
+    assert!(
+        game.world.get_resource::<BattleState>().is_some(),
+        "group B is still standing, so the fight must still be going"
+    );
+    assert!(
+        game.world
+            .get::<CombatBuff>(front_a)
+            .is_none_or(|b| b.active.is_none()),
+        "a program captured mid-fight must not keep a battle-scoped buff forever"
+    );
+    assert!(
+        game.world
+            .get::<AbilityCooldowns>(front_a)
+            .is_none_or(|c| c.0.is_empty()),
+        "nor a cooldown from the routine it fired before capture"
     );
 }

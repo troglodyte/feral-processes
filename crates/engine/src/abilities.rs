@@ -71,6 +71,24 @@ pub fn scaled_power(power: i32, level: u32) -> i32 {
     (power as f32 * ability_power_scale(level)).round() as i32
 }
 
+/// The cooldown armed on a combatant right after it casts an ability whose
+/// authored value is `cooldown`, floored at `floor` rounds. Called from both
+/// `resolve_one_action` (party side, `floor = 0`, so the authored value is
+/// untouched — this is what keeps `decompile` spammable) and `wild_retaliate`
+/// (hostile side, `floor = tuning::ENEMY_ROUTINE_MIN_COOLDOWN`, so a mod
+/// ability declaring no cooldown still can't fire every single round).
+///
+/// One function rather than the same `+1` written twice: a comment saying
+/// two formulas "match" can't keep them in sync if one drifts, so this is
+/// the sync.
+///
+/// The `+1` is armed before the effect resolves and read again at the end of
+/// this same round by `tick_ability_cooldowns` — without it, that tick would
+/// eat a round the caster never actually got to wait out.
+pub fn armed_cooldown(cooldown: u32, floor: u32) -> u32 {
+    cooldown.max(floor) + 1
+}
+
 /// The inventory item a loose (uninstalled) copy of `ability` takes. Minted
 /// by `ItemDb::synthesize_routines` rather than authored, so a modder's new
 /// ability is extractable and installable with no second file to write.
@@ -629,5 +647,25 @@ mod tests {
             "a sap must sharpen with level the same way a buff does"
         );
         assert_eq!(scaled_power(0, 20), 0);
+    }
+
+    #[test]
+    fn armed_cooldown_floors_a_zero_authored_value_but_leaves_a_real_one_alone() {
+        assert_eq!(
+            armed_cooldown(0, crate::tuning::ENEMY_ROUTINE_MIN_COOLDOWN),
+            2,
+            "a mod ability declaring no cooldown is still floored, plus the +1"
+        );
+        assert_eq!(
+            armed_cooldown(3, crate::tuning::ENEMY_ROUTINE_MIN_COOLDOWN),
+            4,
+            "a real cooldown above the floor is untouched but for the +1"
+        );
+        assert_eq!(
+            armed_cooldown(0, 0),
+            1,
+            "the party side's floor is 0 — only the +1 applies, which is what \
+             leaves `decompile` spammable"
+        );
     }
 }

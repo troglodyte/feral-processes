@@ -139,9 +139,15 @@ impl Game {
                             .get::<AbilityCooldowns>(entity)
                             .map(|c| c.0.clone())
                             .unwrap_or_default();
-                        // +1 so the tick at the end of this same round
-                        // doesn't eat a round the player never got.
-                        cooldowns.insert(ability.id.clone(), ability.cooldown + 1);
+                        // `floor = 0`: the player side keeps the authored
+                        // value untouched (see `abilities::armed_cooldown`),
+                        // which is what leaves `decompile` — guarded out of
+                        // this branch entirely by `cooldown > 0` above —
+                        // spammable.
+                        cooldowns.insert(
+                            ability.id.clone(),
+                            abilities::armed_cooldown(ability.cooldown, 0),
+                        );
                         self.world
                             .entity_mut(entity)
                             .insert(AbilityCooldowns(cooldowns));
@@ -488,8 +494,28 @@ impl Game {
             .collect()
     }
 
+    /// The inverse of `actor_entity(battle::Actor::Party(slot))`: which party
+    /// slot `entity` occupies, if it occupies one at all. `roll_enemy_target`
+    /// returns an entity; a hostile's single-target routine needs it as a
+    /// slot index to build `SpecialTarget::Ally` for `ability_recipients`.
+    pub(crate) fn party_slot_of(&self, entity: Entity) -> Option<usize> {
+        if entity == self.player_entity() {
+            return Some(0);
+        }
+        self.world
+            .resource::<Party>()
+            .0
+            .iter()
+            .position(|&e| e == entity)
+            .map(|i| i + 1)
+    }
+
     /// Which entities `target` lands on, read from `actor`'s side of the
     /// fight.
+    ///
+    /// Resolved at resolve time rather than plan time — so a group that died
+    /// before the acting member's turn retargets, and an ally knocked out in
+    /// the meantime is skipped instead of being healed as a corpse.
     ///
     /// Targets are authored from the party's point of view — "ally" means a
     /// party member, "enemy" means a wild program. A hostile using the same
@@ -518,7 +544,15 @@ impl Game {
                         .filter(|&e| self.creature_alive(e))
                         .into_iter()
                         .collect(),
-                    _ => self.living_party().into_iter().take(1).collect(),
+                    // Nothing else constructs a `SpecialTarget` for a
+                    // hostile's single-target routine: `wild_retaliate`
+                    // always rolls `roll_enemy_target` first and passes the
+                    // result as `Ally`. Empty rather than
+                    // `living_party().take(1)` — that fallback used to be
+                    // the only live path, and it silently hit the player
+                    // (slot 0) every time, bypassing bracing and aggro
+                    // weighting entirely.
+                    _ => Vec::new(),
                 },
                 AbilityTarget::WholeEnemyGroup | AbilityTarget::AllEnemies => self.living_party(),
             };
@@ -562,14 +596,16 @@ impl Game {
 
     /// One living hostile for a carrier's ally-facing routine to land on.
     ///
-    /// A uniform pick, not "the most hurt". A carrier fires whenever its
-    /// routine is off cooldown, so a heal landing on a healthy ally is
-    /// wasted — accepted, because the alternative is a per-effect
-    /// situational policy that this design deliberately does not have.
+    /// Not "the most hurt". A carrier fires whenever its routine is off
+    /// cooldown, so a heal landing on a healthy ally is wasted — accepted,
+    /// because the alternative is a per-effect situational policy that this
+    /// design deliberately does not have.
     ///
-    /// `&self` rather than `&mut self`, so the pick is derived from the
-    /// battle's round number rather than drawing from `GameRng`. Same
-    /// reproducibility, no borrow fight with the caller.
+    /// A deterministic rotation keyed on the round number and the actor's
+    /// own position among the candidates — not a uniform draw. Chosen so the
+    /// pick needs no `&mut self` (and so no `GameRng`, which only takes
+    /// `&mut`), at the cost of being predictable to anyone tracking the
+    /// round count. Nothing in the design relies on it being anything else.
     fn hostile_ally_of(&self, actor: Entity) -> Option<Entity> {
         let candidates = self.all_living_enemies();
         if candidates.is_empty() {
@@ -601,6 +637,18 @@ impl Game {
         // re-reading it inside the loop would invite someone to key it off
         // the recipient instead.
         let level = self.ability_user_level(actor);
+        // Damage/drain lines get the log kind their side actually earns,
+        // rather than the party's own `PartyDamage` regardless of who is
+        // acting — `use_ability` serves both sides now, but a hostile
+        // carrier's hit is not a party hit. Derived from `actor` rather than
+        // taken as a parameter, since a parameter would be a second source
+        // of truth for something `ability_recipients` already determines
+        // from `actor` via `is_hostile`.
+        let hit_kind = if self.is_hostile(actor) {
+            MessageKind::EnemySpecial
+        } else {
+            MessageKind::PartyDamage
+        };
         for &recipient in recipients {
             // A buff can land on the player or on a companion, so the log
             // names whoever got it rather than assuming "you".
@@ -660,12 +708,9 @@ impl Game {
                         .unwrap_or(0);
                     let dmg = battle::compute_damage(self.effective_atk(actor), def, *power);
                     self.apply_damage(recipient, dmg);
-                    self.log_kind(
-                        MessageKind::PartyDamage,
-                        format!("{name} hits {on} for {dmg} damage."),
-                    );
+                    self.log_kind(hit_kind, format!("{name} hits {on} for {dmg} damage."));
                     if let Some(effect) = status.clone() {
-                        self.apply_status_effect(recipient, &effect, &on, MessageKind::PartyDamage);
+                        self.apply_status_effect(recipient, &effect, &on, hit_kind);
                     }
                 }
                 AbilityEffect::Drain {
@@ -688,7 +733,7 @@ impl Game {
                         stats.hp = (stats.hp + restored).min(stats.max_hp);
                     }
                     self.log_kind(
-                        MessageKind::PartyDamage,
+                        hit_kind,
                         format!("{name} siphons {dmg} from {on}, restoring {restored}."),
                     );
                 }

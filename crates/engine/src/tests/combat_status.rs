@@ -490,19 +490,56 @@ fn a_carriers_routine_goes_on_cooldown_and_comes_back() {
 }
 
 /// `cooldown` defaults to 0 and a carrier fires whenever it can, so a mod
-/// ability with none must still not fire two rounds running.
+/// ability declaring none must still not fire two rounds running.
+///
+/// Its predecessor stood `priority_boost` in for a cooldown-0 ability, but
+/// this same branch bumped `priority_boost.ron` to `cooldown: 1` — so that
+/// version passed for the wrong reason, and would have kept passing even
+/// with `ENEMY_ROUTINE_MIN_COOLDOWN` deleted outright. This drops in a real
+/// cooldown-0 ability instead, and asserts its premise before relying on it.
 #[test]
 fn a_cooldown_zero_routine_still_cannot_fire_two_rounds_running() {
-    let mut game = Game::new(7703, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    const ZERO_CD_ABILITY: &str = r#"(
+        id: "test_zero_cd_strike",
+        name: "Zero-CD Strike",
+        description: "d",
+        target: OneEnemyGroupFront,
+        effect: Damage(power: 5),
+    )"#;
+    let dir = modded_assets_dir(
+        "zero_cd_floor",
+        &[],
+        &[],
+        &[],
+        &[],
+        &[("test_zero_cd_strike.ron", ZERO_CD_ABILITY)],
+    );
+    let mut game = Game::new(7703, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
     let player = game.player_entity();
     let enemies = battle_with_a_pack_of(&mut game, 1, 200);
-    // decompile is the shipped ability at cooldown 0. A hostile never uses
-    // it, so install the fallback and zero its cooldown by hand instead.
-    game.world.entity_mut(enemies[0]).insert(Routines(vec![
-        crate::abilities::FALLBACK_ABILITY_ID.to_string(),
-    ]));
+    game.world
+        .entity_mut(enemies[0])
+        .insert(Routines(vec!["test_zero_cd_strike".to_string()]));
+    assert_eq!(
+        game.world
+            .resource::<crate::abilities::AbilityDb>()
+            .get("test_zero_cd_strike")
+            .unwrap()
+            .cooldown,
+        0,
+        "the ability under test must genuinely declare no cooldown, or this proves nothing"
+    );
 
     game.wild_retaliate(enemies[0], 0, player);
+    // One round-end tick, standing in for `tick_round_status_effects` — the
+    // `+1` in `abilities::armed_cooldown` exists precisely so this tick
+    // doesn't eat the round the routine just fired on. Checking readiness
+    // *before* this tick can't tell floor 1 from floor 0: either arms a
+    // cooldown that is still nonzero this same round. It's the round after
+    // that distinguishes them — floor 0 would already read zero and fire
+    // again, floor 1 still reads 1.
+    game.tick_ability_cooldowns(enemies[0]);
     assert!(
         game.wild_routine_ready(enemies[0]).is_none(),
         "the enemy side floors the cooldown at ENEMY_ROUTINE_MIN_COOLDOWN, so a mod ability \
@@ -571,6 +608,9 @@ fn ending_a_battle_clears_every_hostiles_combat_state() {
             remaining: 3,
             power: 2,
         });
+        game.world.entity_mut(e).insert(AbilityCooldowns(
+            std::iter::once(("kernel_panic".to_string(), 3)).collect(),
+        ));
     }
 
     game.end_battle(player, None);
@@ -587,6 +627,13 @@ fn ending_a_battle_clears_every_hostiles_combat_state() {
                 .get::<StatusEffects>(e)
                 .is_none_or(|s| s.active.is_none()),
             "and a bleed left running would tick outside any battle"
+        );
+        assert!(
+            game.world
+                .get::<AbilityCooldowns>(e)
+                .is_none_or(|c| c.0.is_empty()),
+            "and a routine's own cooldown would carry into the next fight — the one of the \
+             three that only exists on a hostile because of this branch"
         );
     }
 }

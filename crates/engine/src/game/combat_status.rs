@@ -646,13 +646,14 @@ impl Game {
     }
 
     /// Tears the current battle down: every combat-only effect cleared from
-    /// both sides, companions knocked offline during the fight finally stood
-    /// down, and `BattleState` dropped.
+    /// both sides, companions killed during the fight finally reaped, and
+    /// `BattleState` dropped.
     ///
-    /// Standing the fallen down happens here rather than the moment they
-    /// fall because `BattleState::planned` indexes `Party` positionally (see
+    /// Reaping the dead happens here rather than the moment they fall
+    /// because `BattleState::planned` indexes `Party` positionally (see
     /// `actor_entity`) — removing a member mid-battle shifts every member
-    /// behind it into the wrong slot.
+    /// behind it into the wrong slot. The death itself is announced when it
+    /// happens, in `apply_damage`; only the despawn waits.
     ///
     /// `wild` is passed in rather than looked up because two of the callers
     /// have already popped the group: the entity whose status must be
@@ -661,7 +662,7 @@ impl Game {
     /// Bleeding is the bug this guards.
     pub(crate) fn end_battle(&mut self, player: Entity, wild: Option<Entity>) {
         self.clear_battle_status_effects(player, wild);
-        let downed: Vec<Entity> = self
+        let dead: Vec<Entity> = self
             .world
             .resource::<Party>()
             .0
@@ -669,11 +670,12 @@ impl Game {
             .copied()
             .filter(|&e| !self.creature_alive(e))
             .collect();
-        if !downed.is_empty() {
-            self.world
-                .resource_mut::<Party>()
-                .0
-                .retain(|e| !downed.contains(e));
+        // Before `retain_outcomes_since_battle` below, deliberately: the
+        // detachment lines `dissolve_tamed_program` writes are `Info` kind,
+        // so running the reap first is what prunes them and leaves the
+        // `Outcome` death line to reach the map alone.
+        for program in dead {
+            self.dissolve_tamed_program(program);
         }
         // The blow-by-blow has done its job by now — the battle pane showed
         // it live. What follows the player onto the map is the results.

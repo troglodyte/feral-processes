@@ -413,6 +413,14 @@ fn a_knocked_out_companion_stands_down_once_the_battle_ends() {
                 game.player_status().companions.is_empty(),
                 "ending the battle should have stood the downed companion down"
             );
+            assert!(
+                game.world.get::<Stats>(companion).is_none(),
+                "a companion that hit 0 HP is deleted, not merely stood down"
+            );
+            assert!(
+                !game.owned_pets().iter().any(|p| p.entity == companion),
+                "and it is gone from the roster, not just the party"
+            );
             return;
         }
     }
@@ -1060,5 +1068,74 @@ fn fusion_depth_survives_a_save_load_round_trip() {
     assert_eq!(
         restored.fusions, MAX_FUSIONS,
         "a maxed lineage must stay maxed across a save, not reset to fusable"
+    );
+}
+
+/// Nothing drops. A program's routines die with it — the only way to get a
+/// routine back off a program is `extract_routine` at a bench, and that
+/// destroys the program deliberately.
+#[test]
+fn a_companion_killed_in_battle_returns_none_of_its_routines_to_inventory() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(5150, DifficultyMode::Forgiving, &assets).unwrap();
+    let player = game.player_entity();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(companion)
+        .insert(Routines(vec!["priority_boost".to_string()]));
+    game.add_companion(companion).unwrap();
+
+    let routine_item = crate::abilities::routine_item_id("priority_boost");
+    let before = game
+        .world
+        .get::<Inventory>(player)
+        .map(|i| i.count(&routine_item))
+        .unwrap_or(0);
+
+    let wild = spawn_wild_on_player_tile(&mut game);
+    insert_battle(&mut game, player, vec![wild]);
+    game.apply_damage(companion, 10);
+    flee_until_clear(&mut game);
+
+    let after = game
+        .world
+        .get::<Inventory>(player)
+        .map(|i| i.count(&routine_item))
+        .unwrap_or(0);
+    assert_eq!(
+        before, after,
+        "a dead program's routines are destroyed with it, not dropped"
+    );
+}
+
+/// The reap has to run before `retain_outcomes_since_battle`, or the
+/// `Info`-kind detachment lines `dissolve_tamed_program` writes ("leaves
+/// your battle party") would survive and trail the death line onto the map.
+#[test]
+fn only_the_outcome_death_line_follows_the_player_out_of_the_battle() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(5151, DifficultyMode::Forgiving, &assets).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(companion).unwrap();
+    let name = game.creature_label(companion);
+
+    // A real `start_battle`, not `insert_battle`: only the former calls
+    // `MessageLog::open_battle`, and without that mark
+    // `retain_outcomes_since_battle` returns early and prunes nothing — the
+    // very behaviour this test exists to pin.
+    start_battle_with_a_wild_program(&mut game);
+    game.apply_damage(companion, 10);
+    flee_until_clear(&mut game);
+
+    let log = game.message_log(40);
+    assert!(
+        log.iter()
+            .any(|(k, l)| *k == MessageKind::Outcome && l.contains("deleted for good")),
+        "the death line survives the end of the battle"
+    );
+    assert!(
+        !log.iter()
+            .any(|(_, l)| l.contains(&name) && l.contains("leaves your battle party")),
+        "the dissolve's departure chatter must be pruned, not trail the death line"
     );
 }

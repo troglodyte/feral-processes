@@ -176,12 +176,30 @@ impl Game {
         let dmg = battle::compute_damage(w_atk, t_def, mv.power);
         self.apply_damage(target, dmg);
 
+        // A move that also inflicts a condition is the only thing an enemy has
+        // resembling the party's Special, so it is what earns the louder
+        // colour in the log.
+        //
+        // Read *after* the gate above has had its say, deliberately: the
+        // colour then means "it reached for the effect this turn", not "this
+        // move theoretically has one". Taken before the gate, a Wraith would
+        // read as a special on every swing while the condition landed on
+        // barely one in ten of them.
+        let kind = if mv.effect.is_some() {
+            MessageKind::EnemySpecial
+        } else {
+            MessageKind::EnemyAttack
+        };
+
         if targets_companion {
             let name = self.creature_label(target);
-            self.log(format!(
-                "The rogue program executes {} on {} for {} damage.",
-                mv.name, name, dmg
-            ));
+            self.log_kind(
+                kind,
+                format!(
+                    "The rogue program executes {} on {} for {} damage.",
+                    mv.name, name, dmg
+                ),
+            );
             if !self.creature_alive(target) {
                 self.log(format!("{name} is knocked offline and stands down."));
                 // It leaves `Party` at the end of the battle, not here —
@@ -190,17 +208,17 @@ impl Game {
                 // into the wrong slot. `slot_can_act` is what keeps the
                 // empty-handed slot from holding the round open until then.
             } else if let Some(effect) = &mv.effect {
-                self.apply_status_effect(target, effect, &name);
+                self.apply_status_effect(target, effect, &name, kind);
             }
         } else {
-            self.log(format!(
-                "The rogue program executes {} for {} damage.",
-                mv.name, dmg
-            ));
+            self.log_kind(
+                kind,
+                format!("The rogue program executes {} for {} damage.", mv.name, dmg),
+            );
             if self.creature_alive(target)
                 && let Some(effect) = &mv.effect
             {
-                self.apply_status_effect(target, effect, "You");
+                self.apply_status_effect(target, effect, "You", kind);
             }
         }
     }
@@ -222,11 +240,16 @@ impl Game {
     /// status condition (see `StatusEffects`) and logs it. A miss is
     /// silent — the move's direct damage still landed, it just didn't also
     /// inflict its status this time.
+    ///
+    /// `kind` is the log styling for the condition line, taken from the caller
+    /// because both sides of a fight inflict conditions and only the caller
+    /// knows which one this is.
     pub(crate) fn apply_status_effect(
         &mut self,
         target: Entity,
         effect: &species::MoveEffect,
         target_label: &str,
+        kind: MessageKind,
     ) {
         let applied = {
             let mut rng = self.world.resource_mut::<GameRng>();
@@ -243,10 +266,11 @@ impl Game {
             });
         }
         match effect.kind {
-            StatusKind::Bleed => {
-                self.log(format!("{target_label} starts bleeding corrupted data!"))
-            }
-            StatusKind::Stun => self.log(format!("{target_label} locks up, stunned!")),
+            StatusKind::Bleed => self.log_kind(
+                kind,
+                format!("{target_label} starts bleeding corrupted data!"),
+            ),
+            StatusKind::Stun => self.log_kind(kind, format!("{target_label} locks up, stunned!")),
         }
     }
 

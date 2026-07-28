@@ -32,6 +32,16 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ### Renderer
 
+- **The log and the menus are colour-coded by what a line actually is.** Items
+  you receive read blue instead of sharing green with a level-up. A hostile
+  program's blow reads red, and orange when the move it used also inflicts a
+  condition — enemies have no Special action of their own, so a
+  condition-bearing move is the whole of what makes one special. A party
+  member's hit stays quiet except for the damage figure itself, which is picked
+  out in bold white rather than the old all-or-nothing bolding of the whole
+  sentence. On the research screen a node you have already unlocked greys out,
+  so the list reads as what is left to buy rather than a flat menu. The Shield
+  structure is blue on the map instead of red, which read as a threat.
 - **A manifest screen (`d`) shows everything the sim knows about you or any
   program.** Integrity and XP meters (plus Power and Fatigue for you), combat
   stats, all four potential rolls behind the Excellent/Poor tag, installed
@@ -55,7 +65,7 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   now follow your keyboard layout instead of assuming QWERTY key positions,
   and overlapping sound cues play together rather than cutting each other off.
 - **Drawing goes through one seam.** The ~3,000 lines that draw the screens no
-  longer name a graphics library at all; they name a `Painter` with eleven
+  longer name a graphics library at all; they name a `Painter` with twelve
   operations on it, and the library sits behind that. That is what made the
   backend swap a change to one file rather than to every menu, and what would
   make the next one cheap too.

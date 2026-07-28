@@ -4,7 +4,7 @@
 //! the ECS `World`.
 
 use crate::fx::Fx;
-use crate::paint::{Color, DARKGRAY, GRAY, Painter, Rect, WHITE};
+use crate::paint::{Color, DARKGRAY, GRAY, Painter, Rect, TextRun, WHITE};
 use crate::text::{Metrics, map_cell, terrain_color, ui_metrics};
 use feral_processes_app_core::{
     App, MENU_SCAN_RADIUS, Mode, TradeChoice, equip_preview_tag, inventory_item_actions,
@@ -106,9 +106,60 @@ fn desaturate(color: Color) -> Color {
     Color::new(mix(color.r), mix(color.g), mix(color.b), color.a)
 }
 
-/// Display styling for a message-log line, chosen by the engine-supplied
-/// `MessageKind` rather than by sniffing the text — low-priority chatter
-/// stays dim, gains/damage that matter get a color.
+/// Splits `text` so that every run of digits in it is drawn in `emphasis` and
+/// everything else in `base`.
+///
+/// Which characters form a number is lexical, and stays that. The *decision*
+/// to emphasise at all is still the engine's, taken from `MessageKind` by the
+/// only caller — this does not sniff a line to work out what it is.
+fn emphasize_numbers<'a>(text: &'a str, base: Color, emphasis: Color) -> Vec<TextRun<'a>> {
+    let mut runs = Vec::new();
+    let mut start = 0;
+    let mut in_number = text.starts_with(|c: char| c.is_ascii_digit());
+    let mut push = |piece: &'a str, bold: bool| {
+        runs.push(TextRun {
+            text: piece,
+            bold,
+            color: if bold { emphasis } else { base },
+        });
+    };
+    for (i, c) in text.char_indices() {
+        if c.is_ascii_digit() != in_number {
+            push(&text[start..i], in_number);
+            start = i;
+            in_number = !in_number;
+        }
+    }
+    if start < text.len() {
+        push(&text[start..], in_number);
+    }
+    runs
+}
+
+/// The colour a log line of each kind is narrated in, chosen by the
+/// engine-supplied `MessageKind` rather than by sniffing the text —
+/// low-priority chatter stays dim, gains and either side's blows get a color.
+///
+/// For `PartyDamage` this is the colour of the *narration*; the number inside
+/// it is picked out separately — see `draw_message_line`.
+fn message_color(kind: MessageKind) -> Color {
+    match kind {
+        MessageKind::Info | MessageKind::Round | MessageKind::PartyDamage => TEXT_DIM,
+        MessageKind::Loot => BLUE,
+        MessageKind::LevelUp => GREEN,
+        MessageKind::Raid | MessageKind::EnemySpecial => ORANGE,
+        MessageKind::EnemyAttack => RED,
+        // A result reads at full brightness: it is the line still on screen
+        // once the fight is over and the map is back.
+        MessageKind::Outcome => TEXT,
+    }
+}
+
+/// Draws one log line in its kind's style.
+///
+/// A party member's hit is the one line styled unevenly: how hard it landed is
+/// the part worth reading twice, so the number takes the emphasis and the
+/// narration around it stays as quiet as any other chatter.
 fn draw_message_line(
     kind: MessageKind,
     text: &str,
@@ -117,20 +168,13 @@ fn draw_message_line(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let color = match kind {
-        MessageKind::Info => TEXT_DIM,
-        MessageKind::Loot => GREEN,
-        MessageKind::LevelUp => GREEN,
-        MessageKind::Raid => ORANGE,
-        MessageKind::Round => TEXT_DIM,
-        // A result reads at full brightness: it is the line still on screen
-        // once the fight is over and the map is back.
-        MessageKind::Outcome => TEXT,
-    };
-    if kind == MessageKind::LevelUp {
-        painter.ui_bold(text, x, y, m.font_size, color);
-    } else {
-        painter.ui(text, x, y, m.font_size, color);
+    let color = message_color(kind);
+    match kind {
+        MessageKind::PartyDamage => {
+            painter.ui_runs(&emphasize_numbers(text, color, WHITE), x, y, m.font_size)
+        }
+        MessageKind::LevelUp => painter.ui_bold(text, x, y, m.font_size, color),
+        _ => painter.ui(text, x, y, m.font_size, color),
     }
 }
 
@@ -405,6 +449,84 @@ mod tests {
                 "{mode:?} draws over the log pane, so its refusals need the banner"
             );
         }
+    }
+
+    /// The kinds a player is meant to tell apart at a glance mid-fight: what
+    /// they gained, what the enemy did, which of the enemy's blows carried a
+    /// condition, their own hit, and how the fight came out. Sharing a colour
+    /// between any two of them defeats the point of the log being coloured at
+    /// all — and all five can sit in the battle pane at once.
+    #[test]
+    fn the_log_colours_a_player_reads_mid_fight_are_all_distinct() {
+        let kinds = [
+            MessageKind::Loot,
+            MessageKind::EnemyAttack,
+            MessageKind::EnemySpecial,
+            MessageKind::PartyDamage,
+            MessageKind::Outcome,
+        ];
+        for (i, a) in kinds.iter().enumerate() {
+            for b in &kinds[i + 1..] {
+                assert_ne!(
+                    message_color(*a),
+                    message_color(*b),
+                    "{a:?} and {b:?} narrate in the same colour"
+                );
+            }
+        }
+    }
+
+    /// A message-log line always draws in full, whichever style it takes: the
+    /// run split is a re-styling of the text, not a filter on it.
+    #[test]
+    fn splitting_a_line_into_runs_preserves_it_exactly() {
+        for line in [
+            "You unleash a data strike for 7 damage.",
+            "Sparkgrub 12 executes Arc Bite for 103 damage.",
+            "42",
+            "no numbers at all",
+            "",
+            "Ünïcödé hits you for 5 damage.",
+        ] {
+            let joined: String = emphasize_numbers(line, TEXT_DIM, WHITE)
+                .iter()
+                .map(|r| r.text)
+                .collect();
+            assert_eq!(joined, line);
+        }
+    }
+
+    /// Only the digits take the emphasis. Bolding the whole sentence is what
+    /// this replaced, and bolding nothing would leave the number no easier to
+    /// pick out than the flavour text around it.
+    #[test]
+    fn only_the_digits_of_a_damage_line_are_emphasized() {
+        let runs = emphasize_numbers("You unleash a data strike for 7 damage.", TEXT_DIM, WHITE);
+        for run in &runs {
+            let all_digits = run.text.chars().all(|c| c.is_ascii_digit());
+            assert_eq!(
+                run.bold, all_digits,
+                "{:?} came out bold={} — a run is either all digits or none",
+                run.text, run.bold
+            );
+            assert_eq!(run.color, if run.bold { WHITE } else { TEXT_DIM });
+        }
+        let emphasized: String = runs
+            .iter()
+            .filter(|r| r.bold)
+            .map(|r| r.text)
+            .collect::<Vec<_>>()
+            .join("|");
+        assert_eq!(emphasized, "7");
+    }
+
+    /// Multi-digit numbers stay whole. Splitting per character would still
+    /// look right, but only by accident of the two faces sharing an advance.
+    #[test]
+    fn a_multi_digit_number_is_one_run() {
+        let runs = emphasize_numbers("Sparkgrub hits you for 103 damage.", TEXT_DIM, WHITE);
+        let bold: Vec<&str> = runs.iter().filter(|r| r.bold).map(|r| r.text).collect();
+        assert_eq!(bold, ["103"]);
     }
 
     #[test]

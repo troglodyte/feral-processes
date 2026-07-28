@@ -56,15 +56,18 @@ pub(super) fn draw_research_menu(game: &mut Game, selected: usize, painter: &Pai
             ResearchState::Available => String::new(),
             ResearchState::Locked { missing } => format!(" (needs {})", missing.join(", ")),
         };
-        rows.push(item_row(
-            format!(
-                "[{}] {} - {} Research Data{tag}",
-                menu_shortcut(i),
-                node.name,
-                node.cost
-            ),
-            i == selected,
-        ));
+        let label = format!(
+            "[{}] {} - {} Research Data{tag}",
+            menu_shortcut(i),
+            node.name,
+            node.cost
+        );
+        // An unlocked node is kept on the list as a record of what's been
+        // bought, so it has to read as spent rather than as an option.
+        rows.push(match node.state {
+            ResearchState::Unlocked => spent_item_row(label, i == selected),
+            _ => item_row(label, i == selected),
+        });
         rows.push(text_row(format!("    {}", node.description)));
     }
     rows.push(text_row(""));

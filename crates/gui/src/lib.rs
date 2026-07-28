@@ -336,6 +336,27 @@ mod tests {
                 let dims = p.measure(face, "Integrity", 24);
                 assert!(dims.width > 0.0, "{face:?} measured nothing");
             }
+            // A damage line in the log mixes both UI faces on one baseline,
+            // which reaches egui through `layout_job` rather than the
+            // single-face path above. Drawn rather than measured, since that
+            // is the call frame 1 actually makes.
+            p.ui_runs(
+                &[
+                    paint::TextRun {
+                        text: "for ",
+                        bold: false,
+                        color: paint::WHITE,
+                    },
+                    paint::TextRun {
+                        text: "7",
+                        bold: true,
+                        color: paint::WHITE,
+                    },
+                ],
+                0.0,
+                24.0,
+                24,
+            );
             measured.0 = true;
             Ok(())
         }

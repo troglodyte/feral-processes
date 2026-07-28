@@ -8,8 +8,9 @@
 //! to every menu.
 //!
 //! The surface is deliberately tiny: filled rect, outlined rect, line, text
-//! in one of three faces, text measurement, and the frame's dimensions and
-//! frame delta. That is the whole vocabulary the screens are drawn in.
+//! in one of three faces, a run of differently-styled text on one baseline,
+//! text measurement, and the frame's dimensions and frame delta. That is the
+//! whole vocabulary the screens are drawn in.
 //!
 //! **Text is positioned by baseline**, not by top edge — `y` is where the
 //! glyph bottoms sit, ignoring descenders. Every layout in `render/` is
@@ -75,6 +76,18 @@ impl Rect {
 pub struct TextDims {
     pub width: f32,
     pub height: f32,
+}
+
+/// One styled piece of a line drawn by `Painter::ui_runs` — a stretch of
+/// text with its own weight and colour.
+///
+/// Weight is a bool rather than a `Face` because the two UI faces are the
+/// only pair that can share a baseline: they are the same monospace design at
+/// two weights, so runs advance identically whichever one a piece uses.
+pub struct TextRun<'a> {
+    pub text: &'a str,
+    pub bold: bool,
+    pub color: Color,
 }
 
 /// Which of the three loaded faces to draw a string in.
@@ -257,6 +270,23 @@ impl Painter {
         self.text(Face::UiBold, text, x, y, size, color);
     }
 
+    /// `runs` concatenated into one line with its baseline at `y`, each piece
+    /// keeping its own weight and colour.
+    ///
+    /// Laid out as a single galley rather than drawn piece by piece: the
+    /// caller would otherwise have to advance `x` itself, and the only width
+    /// this module reports is the *ink* extent (see `TextDims`), which is
+    /// narrower than the advance and wrong outright for a run ending in a
+    /// space. Letting the layout engine place the pieces sidesteps that.
+    pub fn ui_runs(&self, runs: &[TextRun], x: f32, y: f32, size: u16) {
+        let galley = self.painter.layout_job(runs_job(runs, size));
+        let top = y - baseline_offset(&galley);
+        // Each run carries its own colour, so the galley never falls back to
+        // this one; egui only reaches for it where a run left `PLACEHOLDER`.
+        self.painter
+            .galley(egui::pos2(x, top), galley, to_egui(WHITE));
+    }
+
     pub fn map(&self, glyph: impl AsRef<str>, x: f32, y: f32, size: u16, color: Color) {
         self.text(Face::Map, glyph, x, y, size, color);
     }
@@ -268,6 +298,30 @@ impl Painter {
     pub fn measure_map(&self, glyph: impl AsRef<str>, size: u16) -> TextDims {
         self.measure(Face::Map, glyph, size)
     }
+}
+
+/// The layout job behind `Painter::ui_runs`. Split out so the arithmetic it
+/// produces can be measured in a test without a window.
+///
+/// Wrapping is switched off explicitly: every caller is drawing one line at a
+/// fixed baseline, and a wrapped second row would be drawn over whatever the
+/// screen put below it rather than pushing it down.
+fn runs_job(runs: &[TextRun], size: u16) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::default();
+    job.wrap.max_width = f32::INFINITY;
+    for run in runs {
+        let face = if run.bold { Face::UiBold } else { Face::Ui };
+        job.append(
+            run.text,
+            0.0,
+            egui::TextFormat {
+                font_id: face.font_id(size),
+                color: to_egui(run.color),
+                ..Default::default()
+            },
+        );
+    }
+    job
 }
 
 /// How far below a galley's top edge its first baseline sits.
@@ -442,6 +496,48 @@ mod tests {
                 ink.width,
                 galley.rect.width()
             );
+        });
+    }
+
+    /// `ui_runs` places nothing itself — it hands the whole line to the layout
+    /// engine — so emphasising a word mid-sentence must not shift the rest of
+    /// it sideways. That holds only because the two UI faces are one monospace
+    /// design at two weights, which `TextRun` asserts in prose and this pins
+    /// in fact.
+    #[test]
+    fn emphasising_part_of_a_line_does_not_shift_the_rest_of_it() {
+        const LINE: &str = "You unleash a data strike for 7 damage.";
+        with_painter(|p| {
+            let plain = lay_out(p, Face::Ui, LINE, 24);
+            let mixed = p.painter.layout_job(runs_job(
+                &[
+                    TextRun {
+                        text: "You unleash a data strike for ",
+                        bold: false,
+                        color: WHITE,
+                    },
+                    TextRun {
+                        text: "7",
+                        bold: true,
+                        color: WHITE,
+                    },
+                    TextRun {
+                        text: " damage.",
+                        bold: false,
+                        color: WHITE,
+                    },
+                ],
+                24,
+            ));
+            assert_eq!(mixed.rows.len(), 1, "a one-line run job must not wrap");
+            assert!(
+                (mixed.rect.width() - plain.rect.width()).abs() < 0.5,
+                "the mixed-weight line came out {}px against {}px all-regular",
+                mixed.rect.width(),
+                plain.rect.width()
+            );
+            let glyphs: usize = mixed.rows.iter().map(|r| r.row.glyphs.len()).sum();
+            assert_eq!(glyphs, LINE.chars().count(), "a run laid out no glyphs");
         });
     }
 

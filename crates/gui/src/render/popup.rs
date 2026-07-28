@@ -16,6 +16,7 @@ pub(super) enum Row {
         /// where the row is a *creature you are addressing* rather than a
         /// command you are picking — see `draw_battle_target_menu`.
         bold: bool,
+        color: Color,
     },
 }
 
@@ -28,6 +29,19 @@ pub(super) fn item_row(s: impl Into<String>, selected: bool) -> Row {
         text: s.into(),
         selected,
         bold: false,
+        color: TEXT,
+    }
+}
+
+/// `item_row` for something still listed but no longer worth picking — a
+/// research node already unlocked. Stays selectable, since the list is
+/// navigated past it, but reads as spent.
+pub(super) fn spent_item_row(s: impl Into<String>, selected: bool) -> Row {
+    Row::Item {
+        text: s.into(),
+        selected,
+        bold: false,
+        color: TEXT_DIM,
     }
 }
 
@@ -37,6 +51,7 @@ pub(super) fn creature_row(s: impl Into<String>, selected: bool) -> Row {
         text: s.into(),
         selected,
         bold: true,
+        color: TEXT,
     }
 }
 
@@ -243,6 +258,7 @@ fn draw_row(row: &Row, x: f32, w: f32, cy: f32, max_y: f32, painter: &Painter, m
             text: s,
             selected,
             bold,
+            color,
         } => {
             if *selected {
                 // Anchored to the same `m.pad` the row text uses, so the
@@ -260,9 +276,9 @@ fn draw_row(row: &Row, x: f32, w: f32, cy: f32, max_y: f32, painter: &Painter, m
             let prefix = if *selected { "> " } else { "  " };
             let label = format!("{prefix}{s}");
             if *selected && *bold {
-                painter.ui_bold(label, x + m.pad, cy, m.font_size, TEXT);
+                painter.ui_bold(label, x + m.pad, cy, m.font_size, *color);
             } else {
-                painter.ui(label, x + m.pad, cy, m.font_size, TEXT);
+                painter.ui(label, x + m.pad, cy, m.font_size, *color);
             }
         }
     }

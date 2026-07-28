@@ -720,3 +720,99 @@ fn installing_a_researched_routine_makes_the_players_special_available() {
         "one ability reads as its own name"
     );
 }
+
+/// Every `MessageKind` a resolved round can log, in the order the round
+/// produced them.
+fn logged_kinds(game: &Game) -> Vec<MessageKind> {
+    game.message_log(200).into_iter().map(|(k, _)| k).collect()
+}
+
+/// The kinds one `species`'s retaliation logs, across a fixed span of seeds.
+/// Swept rather than pinned to one seed because `WILD_ABILITY_CHANCE` decides
+/// per turn whether the program reaches for its move's effect — a single seed
+/// would only ever show one side of that.
+fn retaliation_kinds_across_seeds(species: &str) -> Vec<MessageKind> {
+    (1..60u32)
+        .flat_map(|seed| {
+            let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            let player = game.player_entity();
+            let wild = game.spawn_wild_creature(species, 5, 5).unwrap();
+            insert_battle(&mut game, player, vec![wild]);
+            resolve_round_with(&mut game, BattleAction::Defend);
+            logged_kinds(&game)
+        })
+        .collect()
+}
+
+/// A hostile blow logs `EnemySpecial` only when the program actually reached
+/// for its move's status effect this turn — `wild_retaliate` decides the kind
+/// *after* the `WILD_ABILITY_CHANCE` gate has had its say and cleared
+/// `mv.effect`. That ordering is the whole point: taken before the gate, a
+/// Wraith would read as a special on every single swing while the condition
+/// landed on barely one in ten, which is a colour that means nothing.
+///
+/// Both species have a homogeneous moveset — Glitch's two moves are plain,
+/// Wraith's two both carry a condition — so which move the RNG rolls cannot
+/// affect the kind, and the gate is the only thing that can.
+#[test]
+fn an_enemy_logs_a_special_only_on_a_turn_it_reached_for_its_moves_effect() {
+    let glitch = retaliation_kinds_across_seeds("glitch");
+    assert!(
+        glitch.contains(&MessageKind::EnemyAttack),
+        "a retaliating glitch has to log its blow at all"
+    );
+    assert!(
+        !glitch.contains(&MessageKind::EnemySpecial),
+        "neither Glitch move carries a condition, so no gate roll can make one special"
+    );
+
+    let wraith = retaliation_kinds_across_seeds("wraith");
+    assert!(
+        wraith.contains(&MessageKind::EnemySpecial),
+        "a Wraith that reached for its condition has to read as a special"
+    );
+    assert!(
+        wraith.contains(&MessageKind::EnemyAttack),
+        "a Wraith that did *not* reach for it swings as a plain attack — if this \
+         never happens the kind is being decided before the WILD_ABILITY_CHANCE gate"
+    );
+}
+
+/// A party member's hit is the one log line styled unevenly — the frontend
+/// picks the number out of it — so it has to be distinguishable from the
+/// enemy's blow in the same round rather than sharing `Info` with it.
+#[test]
+fn a_party_members_hit_is_logged_as_party_damage() {
+    let mut game = Game::new(52, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+    // Enough HP that the round runs to the enemy's turn too, so this also
+    // pins the two sides apart rather than only checking one of them.
+    game.world.get_mut::<Stats>(wild).unwrap().hp = 500;
+    game.world.get_mut::<Stats>(wild).unwrap().max_hp = 500;
+    insert_battle(&mut game, player, vec![wild]);
+
+    resolve_round_with(&mut game, BattleAction::Attack { group: 0 });
+
+    let damage_lines: Vec<String> = game
+        .message_log(200)
+        .into_iter()
+        .filter(|(kind, _)| *kind == MessageKind::PartyDamage)
+        .map(|(_, text)| text)
+        .collect();
+    assert_eq!(
+        damage_lines.len(),
+        1,
+        "one attacking member should log one PartyDamage line, got {damage_lines:?}"
+    );
+    assert!(
+        damage_lines[0].contains("damage"),
+        "the line the frontend emphasises a number inside has to carry one: {:?}",
+        damage_lines[0]
+    );
+    assert!(
+        logged_kinds(&game).contains(&MessageKind::EnemyAttack),
+        "the enemy's own blow must stay its own kind: {:?}",
+        game.message_log(200)
+    );
+}

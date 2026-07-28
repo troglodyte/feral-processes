@@ -212,10 +212,16 @@ impl Game {
         let dmg = battle::compute_damage(atk, def, move_power);
         self.apply_damage(front, dmg);
         if slot == 0 {
-            self.log(format!("You unleash a {move_name} for {dmg} damage."));
+            self.log_kind(
+                MessageKind::PartyDamage,
+                format!("You unleash a {move_name} for {dmg} damage."),
+            );
         } else {
             let name = self.creature_label(entity);
-            self.log(format!("{name} executes {move_name} for {dmg} damage."));
+            self.log_kind(
+                MessageKind::PartyDamage,
+                format!("{name} executes {move_name} for {dmg} damage."),
+            );
         }
 
         if !self.creature_alive(front) {
@@ -584,9 +590,12 @@ impl Game {
                         .unwrap_or(0);
                     let dmg = battle::compute_damage(self.effective_atk(actor), def, *power);
                     self.apply_damage(recipient, dmg);
-                    self.log(format!("{name} hits {on} for {dmg} damage."));
+                    self.log_kind(
+                        MessageKind::PartyDamage,
+                        format!("{name} hits {on} for {dmg} damage."),
+                    );
                     if let Some(effect) = status.clone() {
-                        self.apply_status_effect(recipient, &effect, &on);
+                        self.apply_status_effect(recipient, &effect, &on, MessageKind::PartyDamage);
                     }
                 }
                 // `resolve_one_action` branches around `use_ability` entirely

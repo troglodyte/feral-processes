@@ -25,6 +25,7 @@ mod building;
 mod crafting;
 mod inspection;
 mod inventory;
+mod manifest_layout;
 mod meta;
 mod party;
 mod popup;

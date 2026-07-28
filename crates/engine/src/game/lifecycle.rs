@@ -50,6 +50,7 @@ impl Game {
         world.insert_resource(difficulty);
         world.insert_resource(Party::default());
         world.insert_resource(Research::default());
+        world.insert_resource(BuybackLedger::default());
         world.insert_resource(ZoneLevel::default());
         world.insert_resource(Platform::default());
         world.insert_resource(ZoneSpawnPoint {
@@ -157,6 +158,12 @@ impl Game {
         world.insert_resource(data.difficulty);
         world.insert_resource(Party::default());
         world.insert_resource(Research(data.researched.into_iter().collect()));
+        world.insert_resource(BuybackLedger(
+            data.buyback
+                .into_iter()
+                .map(|(kind, tile, shelf)| ((kind, tile), shelf))
+                .collect(),
+        ));
         world.insert_resource(ZoneLevel(data.zone));
         world.insert_resource(Platform::default());
         world.insert_resource(ZoneSpawnPoint {
@@ -575,6 +582,13 @@ impl Game {
                 let p = self.world.resource::<ZoneSpawnPoint>();
                 (p.x, p.y)
             },
+            buyback: self
+                .world
+                .resource::<BuybackLedger>()
+                .0
+                .iter()
+                .map(|((kind, tile), shelf)| (kind.clone(), *tile, shelf.clone()))
+                .collect(),
             researched: {
                 let mut ids: Vec<ResearchId> = self
                     .world

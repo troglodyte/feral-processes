@@ -537,6 +537,15 @@ pub const ITEM_FUSION_COST: u32 = 2;
 /// laundry.
 pub const MAX_FUSIONS: u32 = 3;
 
+/// What a trading post charges to sell the player back something they sold
+/// it, as a multiple of that trader's own `TradeDef::sell_rate` — see
+/// `Game::buy_back`. At 2 every round trip is a net loss, which is what
+/// keeps the shelf a safety net rather than a strategy.
+///
+/// Here rather than in `TradeDef` because it is an economy knob, and this
+/// file is where difficulty lives even though the content it prices is data.
+pub const BUYBACK_PRICE_MULTIPLIER: u32 = 2;
+
 /// Fraction of a structure's current build cost refunded when it's removed
 /// (see `Game::remove_structure`), rounded down per item. Applies uniformly
 /// whether the structure is removed directly or swept up in a Home's

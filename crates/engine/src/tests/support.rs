@@ -740,6 +740,12 @@ pub(super) fn fuse_to_depth(game: &mut Game, depth: u32) -> Entity {
 
 /// A trading structure, spawned without paying for it.
 pub(super) fn spawn_market(game: &mut Game) -> Entity {
+    spawn_market_at(game, 5, 5)
+}
+
+/// The same, at a chosen tile — for tests about the buyback shelf, which is
+/// keyed by the tile its trader stands on.
+pub(super) fn spawn_market_at(game: &mut Game, x: i32, y: i32) -> Entity {
     let kind = game
         .structure_defs()
         .into_iter()
@@ -752,8 +758,26 @@ pub(super) fn spawn_market(game: &mut Game) -> Entity {
         .id
         .clone();
     game.world
-        .spawn((Structure { kind }, Position { x: 5, y: 5 }))
+        .spawn((Structure { kind }, Position { x, y }))
         .id()
+}
+
+/// Puts `qty` of `item` straight into the player's pack, bypassing whatever
+/// would normally have to be mined, looted or bought to get it there.
+pub(super) fn give(game: &mut Game, item: &ItemId, qty: u32) {
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(item.clone(), qty);
+}
+
+/// How many of `item` the player is carrying.
+pub(super) fn held(game: &Game, item: &ItemId) -> u32 {
+    game.world
+        .get::<Inventory>(game.player_entity())
+        .unwrap()
+        .count(item)
 }
 
 pub(super) fn fragments(game: &Game) -> u32 {

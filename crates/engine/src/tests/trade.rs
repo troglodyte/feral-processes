@@ -333,6 +333,153 @@ fn sell_item_accepts_core_fragments_and_pays_credits_for_them() {
     assert_eq!(inv.count(&ItemId::from(ids::CREDITS)), sell_rate * 4);
 }
 
+/// A sale is no longer one-way: what the trader took goes on its shelf,
+/// priced at double what it paid, so walking a sale back costs a fee rather
+/// than being impossible.
+#[test]
+fn selling_stocks_the_shelf_at_double_the_sell_rate() {
+    let mut game = Game::new(140, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market(&mut game);
+    let plating = ItemId::from(ids::FIREWALL_PLATING);
+    give(&mut game, &plating, 5);
+
+    assert!(
+        game.buyback_options(market).is_empty(),
+        "a trader you have never sold to has nothing to offer back"
+    );
+
+    game.sell_item(market, plating.clone(), 3).unwrap();
+
+    let rate = game.trade_options(market).unwrap().sell_rate;
+    let shelf = game.buyback_options(market);
+    assert_eq!(shelf.len(), 1);
+    assert_eq!(shelf[0].item, plating);
+    assert_eq!(shelf[0].qty, 3, "only what the trader actually took");
+    assert_eq!(shelf[0].unit_cost, rate * 2);
+}
+
+/// Selling more than you hold sells what you hold — the shelf follows the
+/// clamp, not the request.
+#[test]
+fn the_shelf_records_what_was_taken_not_what_was_asked_for() {
+    let mut game = Game::new(141, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market(&mut game);
+    let plating = ItemId::from(ids::FIREWALL_PLATING);
+    give(&mut game, &plating, 2);
+
+    game.sell_item(market, plating.clone(), 99).unwrap();
+
+    assert_eq!(game.buyback_options(market)[0].qty, 2);
+}
+
+#[test]
+fn buying_back_returns_the_item_charges_double_and_empties_the_row() {
+    let mut game = Game::new(142, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market(&mut game);
+    let plating = ItemId::from(ids::FIREWALL_PLATING);
+    give(&mut game, &plating, 2);
+    game.sell_item(market, plating.clone(), 2).unwrap();
+
+    let rate = game.trade_options(market).unwrap().sell_rate;
+    give(&mut game, &ItemId::from(ids::CREDITS), rate * 4);
+    let credits_before = credits(&game);
+
+    game.buy_back(market, plating.clone(), 2).unwrap();
+
+    assert_eq!(held(&game, &plating), 2, "the goods come home");
+    assert_eq!(credits(&game), credits_before - rate * 4);
+    assert!(
+        game.buyback_options(market).is_empty(),
+        "a bought-out row leaves no empty shelf entry behind"
+    );
+}
+
+#[test]
+fn buying_back_takes_only_part_of_a_stack() {
+    let mut game = Game::new(143, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market(&mut game);
+    let plating = ItemId::from(ids::FIREWALL_PLATING);
+    give(&mut game, &plating, 5);
+    game.sell_item(market, plating.clone(), 5).unwrap();
+    give(&mut game, &ItemId::from(ids::CREDITS), 100);
+
+    game.buy_back(market, plating.clone(), 2).unwrap();
+
+    assert_eq!(held(&game, &plating), 2);
+    assert_eq!(game.buyback_options(market)[0].qty, 3);
+}
+
+/// The shelf is finite — it is a record of your own sales, not a shop.
+#[test]
+fn you_cannot_buy_back_more_than_you_sold() {
+    let mut game = Game::new(144, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market(&mut game);
+    let plating = ItemId::from(ids::FIREWALL_PLATING);
+    let amplifier = ItemId::from(ids::NEURAL_AMPLIFIER);
+    give(&mut game, &plating, 1);
+    game.sell_item(market, plating.clone(), 1).unwrap();
+    give(&mut game, &ItemId::from(ids::CREDITS), 100);
+
+    assert!(game.buy_back(market, plating.clone(), 2).is_err());
+    assert_eq!(
+        game.buyback_options(market)[0].qty,
+        1,
+        "a refused buyback leaves the shelf alone"
+    );
+    assert!(
+        game.buy_back(market, amplifier, 1).is_err(),
+        "an item never sold here isn't on the shelf"
+    );
+}
+
+#[test]
+fn buying_back_without_the_credits_is_refused_and_costs_nothing() {
+    let mut game = Game::new(145, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market(&mut game);
+    let plating = ItemId::from(ids::FIREWALL_PLATING);
+    give(&mut game, &plating, 1);
+    game.sell_item(market, plating.clone(), 1).unwrap();
+    // The sale paid `sell_rate`; buying back costs double that, so the
+    // proceeds of a sale are never enough to undo it.
+    let credits_before = credits(&game);
+
+    assert!(game.buy_back(market, plating.clone(), 1).is_err());
+    assert_eq!(credits(&game), credits_before);
+    assert_eq!(game.buyback_options(market)[0].qty, 1);
+    assert_eq!(held(&game, &plating), 0);
+}
+
+/// Every other trade action is barred mid-battle and after a loss; this one
+/// is no different.
+#[test]
+fn buying_back_is_barred_during_a_battle() {
+    let mut game = Game::new(146, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market(&mut game);
+    let plating = ItemId::from(ids::FIREWALL_PLATING);
+    give(&mut game, &plating, 1);
+    game.sell_item(market, plating.clone(), 1).unwrap();
+    give(&mut game, &ItemId::from(ids::CREDITS), 100);
+
+    let wild = spawn_wild_on_player_tile(&mut game);
+    let player = game.player_entity();
+    insert_battle(&mut game, player, vec![wild]);
+
+    assert!(game.buy_back(market, plating, 1).is_err());
+}
+
+/// A program is destroyed by its sale, not shelved — buying one back would
+/// mean resurrecting a despawned entity.
+#[test]
+fn selling_a_program_stocks_nothing() {
+    let mut game = Game::new(147, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market(&mut game);
+    let pet = spawn_tamed(&mut game, 60, 8);
+
+    game.sell_companion(market, pet).unwrap();
+
+    assert!(game.buyback_options(market).is_empty());
+}
+
 #[test]
 fn sell_item_rejects_credits_and_items_you_dont_have() {
     let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

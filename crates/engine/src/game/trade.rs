@@ -63,10 +63,147 @@ impl Game {
         let money = self.item_name(&currency).to_string();
         {
             let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
-            inv.take(item, taken);
+            inv.take(item.clone(), taken);
             inv.add(currency, payout);
         }
+        self.stock_shelf(structure, &item, taken);
         self.log(format!("You sell {taken} {name} for {payout} {money}."));
+        self.tick();
+        Ok(())
+    }
+
+    /// The `BuybackLedger` key for `entity`, if it's a structure with a
+    /// position — its kind and the tile it stands on. Every public buyback
+    /// call resolves an `Entity` through here, so no caller learns how the
+    /// ledger is keyed.
+    fn shelf_key(&self, entity: Entity) -> Option<(StructureId, (i32, i32))> {
+        let kind = self.world.get::<Structure>(entity)?.kind.clone();
+        let pos = self.world.get::<Position>(entity)?;
+        Some((kind, (pos.x, pos.y)))
+    }
+
+    /// Adds `qty` of `item` to `structure`'s shelf, merging into the existing
+    /// row if there is one.
+    fn stock_shelf(&mut self, structure: Entity, item: &ItemId, qty: u32) {
+        let Some(key) = self.shelf_key(structure) else {
+            return;
+        };
+        let shelf = self
+            .world
+            .resource_mut::<BuybackLedger>()
+            .into_inner()
+            .0
+            .entry(key)
+            .or_default();
+        match shelf.iter_mut().find(|(i, _)| i == item) {
+            Some((_, held)) => *held += qty,
+            None => shelf.push((item.clone(), qty)),
+        }
+    }
+
+    /// What `structure` charges per unit to sell something back: its own
+    /// `sell_rate` marked up by `BUYBACK_PRICE_MULTIPLIER`. Floored at 1 the
+    /// way `program_payout` is, so a modded `sell_rate: 0` can't hand goods
+    /// out for free.
+    fn buyback_unit_cost(&self, structure: Entity) -> Option<u32> {
+        let rate = self.trade_options(structure)?.sell_rate;
+        Some((rate * tuning::BUYBACK_PRICE_MULTIPLIER).max(1))
+    }
+
+    /// Everything `structure` has bought off the player and will sell back,
+    /// already priced. Empty for a structure that doesn't trade or has an
+    /// untouched shelf — which is every trader until the player sells to one.
+    pub fn buyback_options(&self, structure: Entity) -> Vec<BuybackOption> {
+        let Some(unit_cost) = self.buyback_unit_cost(structure) else {
+            return Vec::new();
+        };
+        let Some(key) = self.shelf_key(structure) else {
+            return Vec::new();
+        };
+        self.world
+            .resource::<BuybackLedger>()
+            .0
+            .get(&key)
+            .map(|shelf| {
+                shelf
+                    .iter()
+                    .map(|(item, qty)| BuybackOption {
+                        name: self.item_name(item).to_string(),
+                        item: item.clone(),
+                        qty: *qty,
+                        unit_cost,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Buys back `qty` of `item` that the player previously sold to
+    /// `structure`, at `buyback_unit_cost` each.
+    ///
+    /// Separate from `buy_item` rather than folded into it: that list is an
+    /// infinite catalogue priced per item, this shelf is finite and drains as
+    /// it's bought. Both share the ordering `sell_item` documents — Credits
+    /// and cargo room are checked before anything moves.
+    pub fn buy_back(&mut self, structure: Entity, item: ItemId, qty: u32) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        if qty == 0 {
+            return Err("Buy back at least 1.".into());
+        }
+        let unit_cost = self
+            .buyback_unit_cost(structure)
+            .ok_or_else(|| "That structure doesn't trade.".to_string())?;
+        let key = self
+            .shelf_key(structure)
+            .ok_or_else(|| "That structure doesn't trade.".to_string())?;
+        let shelved = self
+            .world
+            .resource::<BuybackLedger>()
+            .0
+            .get(&key)
+            .and_then(|shelf| shelf.iter().find(|(i, _)| *i == item))
+            .map(|(_, held)| *held)
+            .unwrap_or(0);
+        let name = self.item_name(&item).to_string();
+        if shelved < qty {
+            return Err(format!("They only have {shelved} {name} to sell back."));
+        }
+        let total_cost = unit_cost * qty;
+        let currency = self.trade_currency();
+        let money = self.item_name(&currency).to_string();
+        let player = self.player_entity();
+        if self
+            .world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&currency)
+            < total_cost
+        {
+            return Err(format!("Not enough {money} (need {total_cost})."));
+        }
+        self.check_room(&item, qty)?;
+        {
+            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
+            inv.take(currency, total_cost);
+            inv.add(item.clone(), qty);
+        }
+        {
+            let mut ledger = self.world.resource_mut::<BuybackLedger>();
+            if let Some(shelf) = ledger.0.get_mut(&key) {
+                if let Some(row) = shelf.iter_mut().find(|(i, _)| *i == item) {
+                    row.1 -= qty;
+                }
+                shelf.retain(|(_, held)| *held > 0);
+                if shelf.is_empty() {
+                    ledger.0.remove(&key);
+                }
+            }
+        }
+        self.log(format!(
+            "You buy back {qty} {name} for {total_cost} {money}."
+        ));
         self.tick();
         Ok(())
     }

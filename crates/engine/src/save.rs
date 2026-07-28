@@ -149,6 +149,15 @@ pub struct SaveData {
     /// Where the player materialized on breaching into that zone — see
     /// `resources::ZoneSpawnPoint`.
     pub spawn_point: (i32, i32),
+    /// Each trading post's buyback shelf — see `resources::BuybackLedger`,
+    /// whose `BTreeMap` this is the flattened, key-ordered form of. Not part
+    /// of `StructureSave` because a shelf outlives its building and can sit
+    /// on a tile holding nothing at all.
+    pub buyback: Vec<(
+        crate::structures::StructureId,
+        (i32, i32),
+        Vec<(ItemId, u32)>,
+    )>,
     /// Which research nodes have been unlocked — see `research::ResearchDb`.
     /// Sorted on write so the encoded bytes don't depend on `HashSet`
     /// iteration order.
@@ -180,7 +189,7 @@ pub struct SaveData {
 /// and every save written under the old version stops loading. That's an
 /// intentional, simple tradeoff for a single-player game rather than
 /// building real schema migration.
-pub const SAVE_FORMAT_VERSION: u32 = 11;
+pub const SAVE_FORMAT_VERSION: u32 = 12;
 
 pub fn save_to_file(path: &Path, data: &SaveData) -> io::Result<()> {
     let encoded = bincode::serde::encode_to_vec(data, bincode::config::standard())
@@ -266,6 +275,7 @@ mod tests {
             tile_overrides: Vec::new(),
             zone: 1,
             spawn_point: (0, 0),
+            buyback: Vec::new(),
             researched: Vec::new(),
         }
     }

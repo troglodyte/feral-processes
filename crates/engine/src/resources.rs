@@ -1,8 +1,11 @@
 use bevy_ecs::prelude::{Entity, Resource};
 use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 use crate::battle::{BattleAction, EnemyGroup};
+use crate::items::ItemId;
+use crate::structures::StructureId;
 
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum DifficultyMode {
@@ -288,6 +291,27 @@ pub struct Party(pub Vec<Entity>);
 pub struct Platform {
     pub center: Option<(i32, i32)>,
 }
+
+/// What each trading post has bought off the player and will sell back to
+/// them — see `Game::buyback_options` and `Game::buy_back`.
+///
+/// Keyed by `(structure kind, tile)` rather than by `Entity` because a shelf
+/// has to outlive the building standing on it: a raid that levels the Market
+/// must not erase what the player sold it, and the tile is the only identity
+/// a rebuilt structure shares with the one it replaced. Rebuilding on the
+/// same footprint therefore reopens the same store, and two Markets in one
+/// zone keep separate shelves. The kind is part of the key so a different
+/// structure raised on a dead trader's tile inherits nothing.
+///
+/// Entries for tiles that no longer hold a trader are kept, not pruned —
+/// that is the whole point — and are bounded by the tiles built on in one
+/// zone before `Game::enter_next_zone` clears the lot.
+///
+/// `BTreeMap` rather than `HashMap` so save bytes don't depend on hash
+/// order; the inner `Vec` stays in insertion order, which is player-driven
+/// and gives the trade screen a stable row order.
+#[derive(Resource, Default, Clone)]
+pub struct BuybackLedger(pub BTreeMap<(StructureId, (i32, i32)), Vec<(ItemId, u32)>>);
 
 /// Which zone sector the player is currently breached into. Starts at 1
 /// (the sector the run begins in); breaching a zone portal increments it.

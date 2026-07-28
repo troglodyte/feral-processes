@@ -88,6 +88,19 @@ pub struct PlayerStatus {
 /// Full stats for one tamed program the player owns, wherever it is on the
 /// map — shown by the pets/roster screen so you can check on (or manage) a
 /// cronjob worker without walking over to it. See `Game::owned_pets`.
+/// One row on a trading post's buyback shelf: something the player sold
+/// here, offered back at a markup — see `Game::buyback_options`. Renderers
+/// draw these verbatim and never compute a price of their own.
+#[derive(Clone)]
+pub struct BuybackOption {
+    pub item: ItemId,
+    pub name: String,
+    /// How many are on the shelf — the shelf is a record of the player's own
+    /// sales, so this is a hard cap on what `Game::buy_back` will hand over.
+    pub qty: u32,
+    pub unit_cost: u32,
+}
+
 /// One sellable program at a trading post, already priced — see
 /// `Game::program_sale_options`. Renderers draw these verbatim and never
 /// compute a payout of their own.

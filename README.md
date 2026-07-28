@@ -122,7 +122,8 @@ can only be fused three times.
 The consumable economy is deliberately tight: Core Fragment is the universal
 raw material, Power Cells and ICE Breakers are refined from it for one
 purpose each, and Portal Fragments and Research Data are the two progression
-currencies. Everything you carry counts against a shared **Buffer** starting
+currencies. Credits are money — a trader is the only thing that mints them
+and the only thing that takes them. Everything you carry counts against a shared **Buffer** starting
 at 30 units and growing with each deployed Data Cache. Press `v` for the
 inventory screen, where you equip, unequip, consume, erase, and fuse items
 across three slots (Weapon, Armor, Module). There are 31 pieces of gear:
@@ -139,7 +140,8 @@ doubles wild stats over the last, with another 25% per 15 tiles you wander
 past your platform edge (capping at 3×). Deploy a Zone Portal — 10 Portal
 Fragments plus half that again per zone below your current one — and walk
 onto it to breach deeper. Your Portal Fragments and Core Fragments are wiped
-in the crossing, so every zone has to fund its own exit, but your gear,
+in the crossing, so every zone has to fund its own exit — sell what you can
+for Credits first, since those do cross — but your gear,
 supplies, banked Research Data, party, and entire base — structures,
 platform, upgrades, running cronjobs and all — rematerialize around the new
 entry point. The portal itself is consumed, and there is no way back down.
@@ -160,9 +162,11 @@ raid anywhere in the base.
 
 ## Trading
 
-Press `t` at a nearby iso Market to sell inventory items for Core Fragments
-at a flat floor rate, buy ICE Breakers, Power Cells, or Portal Fragments, or
-sell a compiled program for a tenth of its power. Selling a program is the
+Press `t` at a nearby iso Market to sell inventory items for **Credits** at
+a flat floor rate, buy ICE Breakers, Power Cells, or Portal Fragments with
+them, or sell a compiled program for a tenth of its power. Credits are the
+only currency a trader deals in — Core Fragments are salvage, and a trader
+buys those off you like anything else rather than paying in them. Selling a program is the
 only way to free a roster slot short of fusing it, and it's permanent —
 the confirmation says so, along with any cronjob or guard post the sale
 cancels. A structure's trade terms are entirely data-driven.

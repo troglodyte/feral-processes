@@ -35,10 +35,16 @@ disqualifies the whole file.
     // set, this item is the game's singleton anchor for that role — engine
     // logic looks up "the item with role X" rather than naming an id, so
     // swapping which item is the currency is a data change, not a code
-    // change. One of: `Currency`, `ResearchCurrency`, `CraftCurrency`.
+    // change. One of: `Currency`, `ResearchCurrency`, `CraftCurrency`,
+    // `TradeCurrency`.
+    //
+    // `Currency` is the salvage the build economy runs on (build costs and
+    // recipes); `TradeCurrency` is what traders pay and charge. They are
+    // deliberately different items — no trader deals in `Currency`, and
+    // `TradeCurrency` is the only one that survives a zone breach.
     //
     // Exactly one item across the whole loaded set must claim each of these
-    // three roles or the game refuses to start (see `ItemDb::missing_roles`).
+    // four roles or the game refuses to start (see `ItemDb::missing_roles`).
     // If two items claim the same role, the first one loaded keeps it and
     // the second is ignored with a warning — `.ron` files are read in
     // directory order, so don't rely on this to resolve a real conflict; fix
@@ -134,6 +140,6 @@ The filename doesn't matter to the loader (only the `id` field does), but
 name it after the item for readability, e.g. `power_cell.ron`.
 
 For the canonical list of shipped item ids and the rules governing the
-three economy roles, see [Item ids](../../README.md#item-ids) and
-[The three economy roles](../../README.md#the-three-economy-roles) in the
-top-level README.
+four economy roles, see [Item ids](../../docs/manual.md#item-ids) and
+[The four economy roles](../../docs/manual.md#the-four-economy-roles) in the
+manual.

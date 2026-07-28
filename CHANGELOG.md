@@ -13,6 +13,32 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Economy
+
+- **Traders deal in Credits, not Core Fragments.** Core Fragments were both
+  the raw salvage every build cost and recipe consumes *and* the money a
+  trader paid you, which made the iso Market a scrap dispenser rather than a
+  merchant. Selling now pays **Credits**, a new item minted by nothing else,
+  and buying spends them. Core Fragments stay exactly what they were for
+  building, mining and scanning — and are now sellable, since they are
+  ordinary goods to a trader.
+- **Credits survive a zone breach.** Core Fragments and Portal Fragments are
+  still wiped in the crossing, so a zone must still fund its own exit, but
+  converting a doomed stockpile into money before you go now works and is
+  the point of having a trader. Selling into a 1-Credit floor rate and
+  buying back at 3–8 means the conversion is lossy; crafting from salvage is
+  still cheaper than sell-then-buy, so the Market is for junk you cannot use
+  and for value you want to keep, never for efficiency.
+- `TradeCurrency` joins `Currency`, `ResearchCurrency` and `CraftCurrency` as
+  a required economy role, so which item is money stays a data change rather
+  than a code change. An item set that claims no `TradeCurrency` is refused
+  at startup with the role named, as the other three already were. Prices and
+  payouts now read the currency's name out of its `.ron` instead of saying
+  "Core Fragments" in twelve hardcoded places — swapping the currency item in
+  a mod no longer leaves the UI lying about it.
+- No save-format change: `Inventory` is keyed by item id, so existing saves
+  load with zero Credits, which is also where a new run starts.
+
 ### Balance
 
 - **A program brought to 0 HP is deleted for good.** It used to be knocked

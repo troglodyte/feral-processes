@@ -125,7 +125,7 @@ change what gets stored — a save from a different build shows up as
 | `m` | Routine panel: install a loose routine into a free slot, pop an installed one back out, or swap one for another — see [Routines](#routines) |
 | `M` | Extraction: with a Compiler owned anywhere, break a program you own down into exactly one of its routines — destroys the program and everything else it carried. See [Routines](#routines) |
 | `f` | Fuse two compiled programs you own into one stronger one — the whole roster is offered, wherever the programs are |
-| `t` | Trade with a nearby iso Market: sell items or compiled programs, buy consumables |
+| `t` | Trade with a nearby iso Market: sell items or compiled programs for Credits, buy consumables with them |
 | `x` | Perks: spend Perk Points on permanent passive unlocks |
 | `s` | Save |
 | `q` | Return to the main menu — asks first, and offers to save on the way out |
@@ -478,8 +478,9 @@ means editing `crates/engine/src/perks.rs`, not dropping in a file.
 | Core Fragment | Starting inventory; scan (`g`); dropped by Virus/Construct; a Mining Node cronjob | Deploy structures (2–6 each); compile an ICE Breaker (3 each) or a Power Cell (2 each) |
 | Power Cell | Starting inventory; compiled (`c`) from 2 Core Fragments; dropped by Scrapper/Glitch; cooked passively at a Terminal; a Power Conduit cronjob | Drain (`e`) to restore Power |
 | ICE Breaker | Starting inventory; compiled (`c`) from 3 Core Fragments; a Compiler cronjob | The taming catalyst Decompile spends — a Special (`s`) in battle, not its own key |
-| Portal Fragment | 35% drop from any defeated wild program; a guaranteed 3–6 cache from a boss; buyable at an iso Market (8 Core Fragments) | Deploy a Zone Portal; pay for every equipment recipe |
+| Portal Fragment | 35% drop from any defeated wild program; a guaranteed 3–6 cache from a boss; buyable at an iso Market (8 Credits) | Deploy a Zone Portal; pay for every equipment recipe |
 | Research Data | A Research Node cronjob | Unlock research nodes (`T`) — see [Research](#research) |
+| Credits | Selling items or programs at an iso Market — nothing else mints them | Buying at an iso Market. The only cache that survives a breach |
 
 A deliberately tight core-consumable economy: Core Fragment is the
 universal raw material — found by scanning (`g`) or harvested passively via
@@ -487,7 +488,9 @@ a Mining Node — and Power Cells and ICE Breakers are refined from it
 (compiled with `c`, scavenged from creatures, or produced by a structure
 cronjob) for one specific purpose each. Portal Fragments and Research Data
 are the two progression currencies, spent on zones and gear and on the
-research tree respectively. Equipment (below) is a separate, non-consumable
+research tree respectively. Credits are money and nothing else: a trader is
+the only thing that pays them and the only thing that takes them, which is
+what makes selling a doomed stockpile before a breach worth doing. Equipment (below) is a separate, non-consumable
 item category. Items are data-driven `.ron` files under `assets/items/`,
 same as species and structures — see `assets/items/README.md` for the
 schema and [Item ids](#item-ids) for the canonical list.
@@ -871,7 +874,7 @@ enough of them, then walk onto it to breach into the next zone.
   for every zone below your current one** — 10 in zone 1, 15 in zone 2, 20
   in zone 3. Breaching deeper costs more raw material each time.
 - **Your fragments and cores don't survive the breach.** Portal Fragments
-  and Core Fragments are cleared as you step through, so every zone has to
+  and Core Fragments are cleared as you step through (Credits are not), so every zone has to
   fund its own exit — you can't farm zone 1 rich and then chain-breach on
   the stockpile. Research Data is banked progress and is kept, as are your
   gear, your supplies, and your fusion tiers.
@@ -1095,12 +1098,14 @@ Nothing privileges these over an item you add — they're ordinary `.ron`
 files in `assets/items/`, and any of them can be edited or removed (subject
 to the role rule below).
 
-### The three economy roles
+### The four economy roles
 
 The game needs exactly one item holding each of `Currency`,
-`ResearchCurrency`, and `CraftCurrency` to start — these are the anchors
-every trade, research spend, and zone-portal cost reads through instead of
-naming a hardcoded item. Removing (or renaming without re-tagging) the item
+`ResearchCurrency`, `CraftCurrency` and `TradeCurrency` to start — these are
+the anchors every build cost, research spend, zone-portal cost and trade
+reads through instead of naming a hardcoded item. `Currency` (Core Fragment)
+is the salvage the build economy runs on; `TradeCurrency` (Credits) is what
+traders deal in, and no trader touches the other three. Removing (or renaming without re-tagging) the item
 that holds a role, with nothing else claiming it, leaves the economy
 incomplete and the game won't start; see `ItemDb::missing_roles`.
 

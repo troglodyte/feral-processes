@@ -25,8 +25,9 @@ sell surplus scrap and unusable loot for Credits; they cross the portal when
 Core Fragments don't; spend them on the far side once you have mined up
 enough to stand a market. The trader becomes a value-laundering service.
 
-That is only safe because Credits buy neither the `Currency` nor the
-`CraftCurrency` item — see *The buy-list guard*.
+Credits can still buy a Portal Fragment on the far side, so a stockpile can
+in principle fund a breach out of a zone it never worked. That is priced
+rather than forbidden — see *The chain-breach question*.
 
 ### Balance
 
@@ -78,23 +79,37 @@ roles and takes `u32::MAX` of each. Credits are simply not added to that
 list, so they persist by omission. The comment there must say why, because
 "currency is zone-local" is about to stop being true of all currency.
 
-### The buy-list guard
+### The chain-breach question
 
-Nothing today stops a `TradeDef.buy` entry naming `portal_fragment`. With
-Credits persisting, that silently reopens the chain-breaching the zone reset
-exists to prevent: stockpile Credits, breach, buy a breach out of content you
-never engaged with.
+**Considered and rejected: a guard forbidding traders from listing the
+`Currency` or `CraftCurrency` item.** Recording it because the reasoning is
+the load-bearing part, and the obvious next reader will propose it again.
 
-Add a validation pass that **drops, with a warning, any `TradeDef.buy` entry
-whose item holds the `Currency` or `CraftCurrency` role.** Drop the entry, not
-the structure — the skip-and-warn contract in CLAUDE.md, and a modder gets a
-working game plus a log line.
+With Credits persisting, a trader that sells Portal Fragments lets a player
+stockpile Credits, breach, and immediately buy the next breach — skipping a
+zone's content, which is exactly what the wipe exists to prevent. Pulling
+`portal_fragment` off the Market closes that.
 
-`StructureDb::load_dir` cannot do this: it has no view of `ItemDb`. It takes
-the shape of `ItemDb::synthesize_routines(&AbilityDb)` instead — a method on
-`StructureDb` taking `&ItemDb`, called from `load_asset_dbs` in
-`game/lifecycle.rs` after the `missing_roles` check has resolved the roles.
-`structures` there becomes `mut`.
+It also **severs mining from breaching entirely**, which is worse. That
+listing is the only route from base production to progression, and
+`balance_sim::ticks_to_afford_portal` measures the whole travelling-base
+economy through its price — three balance tests assert *a breach pays for
+itself* (payout ×2 per zone outrunning cost ×1.5) and become meaningless
+without it. Removing it would make going deeper something you can only fight
+for, never farm for, and would delete a regression gate.
+
+The route is priced instead. At a 1-Credit sell rate and 8 Credits a
+fragment:
+
+| Zone | Fragments | Credits | Items sold |
+|---|---|---|---|
+| 1 | 10 | 80 | 80 |
+| 3 | 20 | 160 | 160 |
+| 5 | 30 | 240 | 240 |
+| 7 | 40 | 320 | 320 |
+
+Selling 160 items into a cargo cap *is* a zone's worth of engagement, so the
+"skip" is not free and the hole is narrower than it first appears.
 
 ### Display names stop being literals
 
@@ -117,9 +132,9 @@ common case read correctly without introducing a pluralizer.
 - **New** `assets/items/credits.ron` — `id: "credits"`, `name: "Credits"`,
   `role: Some(TradeCurrency)`. No `craftable`, no `droppable`, no
   `bank_limit`. Only a trader mints it.
-- `assets/structures/black_market.ron` — `buy` list drops both
-  `portal_fragment` and `core_fragment`, leaving `ice_breaker` (4) and
-  `power_cell` (3). Description rewritten for Credits.
+- `assets/structures/black_market.ron` — `buy` list is unchanged
+  (`ice_breaker` 4, `power_cell` 3, `portal_fragment` 8), now priced in
+  Credits. Description rewritten.
 - `assets/structures/terminal.ron`, `mining_node.ron`, `portal.ron` —
   descriptions reviewed for currency wording.
 - `assets/items/core_fragment.ron` — description no longer claims to be
@@ -147,8 +162,6 @@ New coverage:
 - selling Credits is refused
 - Credits survive a breach while Core Fragments and Portal Fragments do not
 - `missing_roles` names `TradeCurrency` when no item claims it
-- a `TradeDef.buy` entry naming the `Currency` or `CraftCurrency` item is
-  dropped with a warning, and the rest of that trader's list survives
 
 Gates: `cargo test --workspace`, `cargo clippy --workspace`, `cargo fmt`, and
 `cargo test -p feral-processes-engine balance_sim`.

@@ -17,7 +17,7 @@ fn biome_style(biome: Biome) -> (char, Color) {
 
 /// The world grid, status panel, and message feed — the base layer shown
 /// under `Mode::Playing` and every menu popup, same as `ui.rs::render_playing`.
-pub(super) fn draw_playing_base(app: &mut App, fx: &Fx, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Metrics) {
     let (tile_px, glyph_px) = map_cell(app.zoom);
     let status_line = app.status_line.clone();
     // Read before the `game` borrow below: the results of a battle that just
@@ -27,13 +27,20 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &Fx, painter: &Painter, m: &M
 
     let map_w = painter.screen_w() * 0.7;
     let map_h = painter.screen_h() * 0.72;
+    // One ring wider than the pane can show, so the camera's sub-tile offset
+    // has a tile to slide in from instead of a blank trailing edge. Every
+    // grid-to-world conversion below goes through `hw`/`hh` for that reason —
+    // the ring shifts the whole grid by one cell.
     let half_w = ((map_w / tile_px) / 2.0).max(1.0) as i32;
     let half_h = ((map_h / tile_px) / 2.0).max(1.0) as i32;
+    let hw = half_w + 1;
+    let hh = half_h + 1;
 
     let status = game.player_status();
-    let tiles = game.view_tiles(half_w, half_h);
+    let (off_x, off_y) = fx.camera_offset(status.position, painter.delta());
+    let tiles = game.view_tiles(hw, hh);
     let entities: Vec<_> = game
-        .view_entities(half_w, half_h)
+        .view_entities(hw, hh)
         .into_iter()
         .filter(|e| !e.is_tamed)
         .collect();
@@ -50,14 +57,16 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &Fx, painter: &Painter, m: &M
             // background is deliberately not desaturated, so bare ground
             // keeps its biome identity instead of the whole map going grey.
             let mut bg_source = biome_color;
-            let px = rx as f32 * tile_px;
-            let py = ry as f32 * tile_px;
+            // The extra ring costs a tile of leading offset, so the pane
+            // frames the same view it did before the camera existed.
+            let px = (rx as f32 - 1.0 - off_x) * tile_px;
+            let py = (ry as f32 - 1.0 - off_y) * tile_px;
             let mut staffed = false;
             let mut shielded = false;
             let mut critical = false;
             for ev in &entities {
-                let erx = ev.pos.0 - status.position.0 + half_w;
-                let ery = ev.pos.1 - status.position.1 + half_h;
+                let erx = ev.pos.0 - status.position.0 + hw;
+                let ery = ev.pos.1 - status.position.1 + hh;
                 if erx == rx as i32 && ery == ry as i32 {
                     ch = ev.glyph;
                     color = glyph_color(ev.color);
@@ -94,8 +103,8 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &Fx, painter: &Painter, m: &M
             // replacing the glyph, so whatever's actually standing there
             // (the player, a creature, a rebuilt structure) still reads
             // clearly on top of it.
-            let spawn_rx = spawn_point.0 - status.position.0 + half_w;
-            let spawn_ry = spawn_point.1 - status.position.1 + half_h;
+            let spawn_rx = spawn_point.0 - status.position.0 + hw;
+            let spawn_ry = spawn_point.1 - status.position.1 + hh;
             if rx as i32 == spawn_rx && ry as i32 == spawn_ry {
                 painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, MAGENTA);
             }
@@ -112,8 +121,8 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &Fx, painter: &Painter, m: &M
                 painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, pulse);
             }
             let world = (
-                status.position.0 + rx as i32 - half_w,
-                status.position.1 + ry as i32 - half_h,
+                status.position.0 + rx as i32 - hw,
+                status.position.1 + ry as i32 - hh,
             );
             if let Some(flash) = fx.tile_flash(world) {
                 painter.rect(px, py, tile_px - 1.0, tile_px - 1.0, flash);

@@ -275,6 +275,40 @@ pub struct BattleView {
     pub player_decompiler: i32,
 }
 
+/// What one cell of the first-person view cone contains — see
+/// `DungeonView::cells`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DungeonCellView {
+    /// Solid, and what everything past the edge of the level reads as. The
+    /// renderer draws this as a wall face.
+    Rock,
+    Floor,
+    StairsUp,
+    StairsDown,
+}
+
+/// The party's first-person view of the level around them — see
+/// `Game::dungeon_view`.
+///
+/// `cells` is already rotated into **view space**: `cells[ahead][lateral]`,
+/// where `ahead` counts cells away from the party (0 is the cell they stand
+/// in) and `lateral` runs left to right across the cone, with
+/// `DUNGEON_VIEW_HALF_WIDTH` in the middle. The engine does that rotation so
+/// the renderer only ever draws a forward-facing corridor and never learns
+/// which way north is — the same contract `ActionOption` has, where the
+/// renderer draws verbatim and authors nothing.
+pub struct DungeonView {
+    pub depth: u32,
+    /// `Dir::label` — "N", "E", "S", "W". A compass reading for the player,
+    /// not something the renderer projects with.
+    pub facing: &'static str,
+    pub position: (i32, i32),
+    pub cells: Vec<Vec<DungeonCellView>>,
+    /// What the party is standing on, worded for a prompt — e.g. "Stairs
+    /// lead down". `None` on plain floor.
+    pub standing_on: Option<String>,
+}
+
 /// One entry in `Game::craft_recipes` — compiling `result` consumes `cost`.
 pub struct CraftRecipe {
     pub result: ItemId,

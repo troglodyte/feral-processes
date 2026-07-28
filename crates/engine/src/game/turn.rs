@@ -137,7 +137,11 @@ impl Game {
     }
 
     pub fn move_player(&mut self, dx: i32, dy: i32) {
-        if self.is_game_over().is_some() || self.has_active_battle() {
+        // Underground the party moves through `step_forward`/`turn_left` and
+        // friends instead — `Position` is pinned to the entrance tile while
+        // down there, so walking it would drag the player across the zone
+        // map without their ever leaving the dungeon.
+        if self.is_game_over().is_some() || self.has_active_battle() || self.is_underground() {
             return;
         }
         let player = self.player_entity();
@@ -152,6 +156,13 @@ impl Game {
         }
         if let Some(nest) = self.find_nest_at(nx, ny) {
             self.attack_nest(nest);
+            self.tick();
+            return;
+        }
+        if self.find_dungeon_entrance_at(nx, ny).is_some() {
+            // The entrance survives, unlike a zone portal — it is a place
+            // you come back to, not a one-way door.
+            self.enter_dungeon(nx, ny);
             self.tick();
             return;
         }
@@ -368,6 +379,10 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
+        if let Err(reason) = self.require_surface() {
+            self.log(reason);
+            return;
+        }
         let player_pos = *self.world.get::<Position>(self.player_entity()).unwrap();
         if self.nearby_rest_structure(player_pos).is_none() {
             self.log("You need to be within your base, near Home, to power down and rest.");
@@ -456,6 +471,10 @@ impl Game {
     /// compiled from (see `craft_recipes`).
     pub fn forage(&mut self) {
         if self.is_game_over().is_some() || self.has_active_battle() {
+            return;
+        }
+        if let Err(reason) = self.require_surface() {
+            self.log(reason);
             return;
         }
         let player = self.player_entity();

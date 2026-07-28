@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use crate::battle::{BattleAction, EnemyGroup};
+use crate::dungeon::{Dir, DungeonLevel};
 use crate::items::ItemId;
 use crate::structures::StructureId;
 
@@ -339,6 +340,50 @@ impl ZoneLevel {
         crate::tuning::ZONE_STAT_GROWTH.pow(self.0 - 1)
     }
 }
+
+/// Whether the player is walking the zone map or is down inside a dungeon,
+/// and where in it.
+///
+/// The dungeon coordinates live *here* rather than on the player's
+/// `Position` component, and that is the load-bearing decision of the whole
+/// dungeon layer. `Position` is the shared coordinate space that structures,
+/// wild programs, nests, cronjob targets, raid pathing, the build radius and
+/// `Game::view_entities` all live in. Moving the player into dungeon
+/// coordinates through it would put them on a surface tile that means
+/// something else entirely, and every one of those systems would quietly
+/// misbehave.
+///
+/// So while underground the player's `Position` stays pinned to `entrance`
+/// — the surface tile they walked in through. Nothing on the surface has to
+/// know the dungeon exists, and the consequences are the right ones for
+/// free: the base is where it was left, cronjobs keep paying out, and a raid
+/// can land while the player is four levels down.
+#[derive(Resource, Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub enum Locale {
+    #[default]
+    Surface,
+    Dungeon {
+        /// 1 at the first level below the surface, counting up as you
+        /// descend. Half of the `(world seed, depth)` pair the level
+        /// regenerates from.
+        depth: u32,
+        x: i32,
+        y: i32,
+        facing: Dir,
+        /// The surface tile of the entrance walked in through — where the
+        /// player's `Position` is pinned, and where they pop out on
+        /// climbing back up from depth 1.
+        entrance: (i32, i32),
+    },
+}
+
+/// The level the player is currently standing in, or `None` on the surface.
+///
+/// Deliberately not serialized: it regenerates from `(WorldMap::seed,
+/// Locale::depth)` on load, exactly as terrain regenerates from the world
+/// seed. See `dungeon::generate`.
+#[derive(Resource, Default)]
+pub struct CurrentDungeon(pub Option<DungeonLevel>);
 
 /// Where the player materialized on breaching into the current zone sector
 /// (set alongside `ZoneLevel` in `Game::new`/`Game::enter_next_zone`) — the

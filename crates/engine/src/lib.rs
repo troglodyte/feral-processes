@@ -39,10 +39,11 @@ use battle::{
 };
 use components::{
     AbilityCooldowns, ActiveBuff, ActiveStatus, BuffKind, CombatBuff, Creature, CustomName,
-    Decompiler, Durability, Equipment, EquippedItem, Experience, FusionCount, Glyph, GlyphColor,
-    Hostile, Inventory, ItemFusions, NEED_MAX, Needs, Nest, NestGuardian, PassiveProcessor, Perks,
-    Player, Position, Potential, ResourceNode, Routines, Stats, StatusEffects, StatusKind,
-    Structure, StructureTier, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
+    Decompiler, DungeonEntrance, Durability, Equipment, EquippedItem, Experience, FusionCount,
+    Glyph, GlyphColor, Hostile, Inventory, ItemFusions, NEED_MAX, Needs, Nest, NestGuardian,
+    PassiveProcessor, Perks, Player, Position, Potential, ResourceNode, Routines, Stats,
+    StatusEffects, StatusKind, Structure, StructureTier, Tamed, Task, TaskKind, Temporary,
+    WanderAi, ZonePortal,
 };
 use items::{EquipmentSlot, EquipmentStats, ItemId, ids};
 use items_db::ItemDb;
@@ -52,8 +53,8 @@ pub use perks::Perk;
 use research::{ResearchDb, ResearchDef};
 pub use research::{ResearchId, ResearchRecipe};
 use resources::{
-    BattleState, BuybackLedger, EffectQueue, GameClock, GameOver, GameRng, MessageLog, Party,
-    Platform, PlayerEntity, Research, ZoneLevel, ZoneSpawnPoint,
+    BattleState, BuybackLedger, CurrentDungeon, EffectQueue, GameClock, GameOver, GameRng, Locale,
+    MessageLog, Party, Platform, PlayerEntity, Research, ZoneLevel, ZoneSpawnPoint,
 };
 pub use resources::{DifficultyMode, EffectKind, MessageKind, VisualEffect};
 use species::{MoveDef, SpeciesDb, SpeciesDef, SpeciesId};

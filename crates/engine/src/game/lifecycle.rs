@@ -53,6 +53,8 @@ impl Game {
         world.insert_resource(BuybackLedger::default());
         world.insert_resource(ZoneLevel::default());
         world.insert_resource(Platform::default());
+        world.insert_resource(Locale::default());
+        world.insert_resource(CurrentDungeon::default());
         world.insert_resource(ZoneSpawnPoint {
             x: start.0,
             y: start.1,
@@ -166,6 +168,8 @@ impl Game {
         ));
         world.insert_resource(ZoneLevel(data.zone));
         world.insert_resource(Platform::default());
+        world.insert_resource(Locale::default());
+        world.insert_resource(CurrentDungeon::default());
         world.insert_resource(ZoneSpawnPoint {
             x: data.spawn_point.0,
             y: data.spawn_point.1,

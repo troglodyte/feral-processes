@@ -16,6 +16,7 @@ mod combat_specials;
 mod combat_status;
 mod combat_targeting;
 mod crafting;
+mod dungeon;
 mod equipment;
 mod inspection;
 mod party;

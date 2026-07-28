@@ -551,6 +551,15 @@ pub struct Nest {
     pub pending_respawns: Vec<u32>,
 }
 
+/// A way down into a dungeon, standing on the zone map. Carries `Position`
+/// and `Glyph` alongside this, the way a `Nest` does, but no `Durability`:
+/// an entrance is walked into, not attacked.
+///
+/// Walking onto one is checked in `Game::move_player` before the generic
+/// blocking-structure test, the same way a nest and a zone portal are.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct DungeonEntrance;
+
 /// Tags a wild creature as tethered to a `Nest` — see
 /// `systems::wander_ai_system`'s radius check. Removed (not the
 /// creature) when its nest is destroyed (`Game::attack_nest`) or when the

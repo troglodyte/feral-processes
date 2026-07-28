@@ -405,6 +405,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
+        self.require_surface()?;
         if self.world.get::<Structure>(target).is_none() {
             return Err("That's not a structure.".to_string());
         }

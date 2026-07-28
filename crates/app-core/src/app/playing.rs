@@ -184,8 +184,12 @@ impl App {
                     game.turn_right();
                     true
                 }
-                GameKey::Char('>') | GameKey::Char('<') => {
-                    game.take_stairs();
+                GameKey::Char('>') => {
+                    game.descend();
+                    true
+                }
+                GameKey::Char('<') => {
+                    game.ascend();
                     true
                 }
                 GameKey::Char('.') => {

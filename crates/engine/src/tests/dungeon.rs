@@ -238,7 +238,7 @@ fn taking_the_stairs_down_increments_the_depth_and_regenerates_the_level() {
         facing,
         entrance,
     });
-    game.take_stairs();
+    game.descend();
 
     let Locale::Dungeon { depth, .. } = locale(&game) else {
         panic!("descending should leave us underground")
@@ -260,7 +260,7 @@ fn climbing_out_of_depth_one_returns_to_the_surface_with_movement_working() {
     let mut game = game();
     let entrance = descend(&mut game);
 
-    game.take_stairs(); // the party arrives standing on the stairs up
+    game.ascend(); // the party arrives standing on the stairs up
 
     assert!(!game.is_underground());
     assert_eq!(locale(&game), Locale::Surface);
@@ -307,8 +307,8 @@ fn descending_then_climbing_back_lands_on_that_levels_stairs_down() {
         facing,
         entrance,
     });
-    game.take_stairs(); // to depth 2, arriving on its stairs up
-    game.take_stairs(); // back to depth 1
+    game.descend(); // to depth 2, arriving on its stairs up
+    game.ascend(); // back to depth 1
 
     let Locale::Dungeon { depth, x, y, .. } = locale(&game) else {
         panic!("climbing from depth 2 should stay underground")

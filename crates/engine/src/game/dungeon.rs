@@ -348,53 +348,74 @@ impl Game {
         self.tick();
     }
 
-    /// Takes the stairs under the party, in whichever direction they lead.
-    /// Climbing from depth 1 surfaces. Does nothing on a cell without
-    /// stairs, so a renderer can bind this unconditionally.
-    pub fn take_stairs(&mut self) {
-        if !self.can_act_underground() {
-            return;
-        }
-        let Some(DungeonPos {
-            depth,
-            x,
-            y,
-            entrance,
-            ..
-        }) = self.dungeon_pos()
-        else {
-            return;
-        };
-        let Some(cell) = self
-            .world
+    /// The cell the party is standing on, or `None` on the surface.
+    fn cell_underfoot(&self) -> Option<CellKind> {
+        let pos = self.dungeon_pos()?;
+        self.world
             .resource::<CurrentDungeon>()
             .0
             .as_ref()
-            .map(|level| level.cell(x, y))
-        else {
+            .map(|level| level.cell(pos.x, pos.y))
+    }
+
+    /// Goes down a level, if the party is standing on a way down.
+    ///
+    /// Separate from `ascend` rather than one key that does whichever the
+    /// cell offers: descending is a commitment — the level below is harder
+    /// and the way back is a walk — and a single key would sometimes take it
+    /// when the player meant to leave.
+    pub fn descend(&mut self) {
+        if !self.can_act_underground() {
+            return;
+        }
+        let (Some(pos), Some(cell)) = (self.dungeon_pos(), self.cell_underfoot()) else {
             return;
         };
+        if cell != CellKind::StairsDown {
+            self.log("There's no way down here.".to_string());
+            return;
+        }
+        self.descend_to(pos.depth + 1, pos.entrance);
+        self.log(format!("You descend to dungeon level {}.", pos.depth + 1));
+        self.tick();
+    }
 
-        match cell {
-            CellKind::StairsDown => {
-                self.descend_to(depth + 1, entrance);
-                self.log(format!("You descend to dungeon level {}.", depth + 1));
-                self.tick();
-            }
-            CellKind::StairsUp if depth == 1 => {
-                self.leave_dungeon();
-                self.tick();
-            }
-            CellKind::StairsUp => {
-                // Climbing lands on the level above's stairs *down*, not its
-                // entry — otherwise every ascent would teleport the party
-                // back to that level's entrance and undo the walk they just
-                // made.
-                self.ascend_to(depth - 1, entrance);
-                self.log(format!("You climb back to dungeon level {}.", depth - 1));
-                self.tick();
-            }
-            _ => self.log("There are no stairs here.".to_string()),
+    /// Goes up a level, if the party is standing on a way up. From depth 1
+    /// that is the breach itself, and climbing it surfaces.
+    pub fn ascend(&mut self) {
+        if !self.can_act_underground() {
+            return;
+        }
+        let (Some(pos), Some(cell)) = (self.dungeon_pos(), self.cell_underfoot()) else {
+            return;
+        };
+        if cell != CellKind::StairsUp {
+            self.log("There's no way up here.".to_string());
+            return;
+        }
+        if pos.depth == 1 {
+            self.leave_dungeon();
+        } else {
+            // Climbing lands on the level above's stairs *down*, not its
+            // entry — otherwise every ascent would teleport the party back to
+            // that level's entrance and undo the walk they just made.
+            self.ascend_to(pos.depth - 1, pos.entrance);
+            self.log(format!(
+                "You climb back to dungeon level {}.",
+                pos.depth - 1
+            ));
+        }
+        self.tick();
+    }
+
+    /// Whether the cell underfoot offers a way down, and a way up — what the
+    /// renderer greys the two stair prompts from, so it never advertises a
+    /// key that would only log a refusal.
+    pub fn stairs_available(&self) -> (bool, bool) {
+        match self.cell_underfoot() {
+            Some(CellKind::StairsDown) => (true, false),
+            Some(CellKind::StairsUp) => (false, true),
+            _ => (false, false),
         }
     }
 
@@ -462,11 +483,9 @@ impl Game {
             .collect();
 
         let standing_on = match level.cell(x, y) {
-            CellKind::StairsDown => Some("Stairs lead down".to_string()),
-            CellKind::StairsUp if depth == 1 => {
-                Some("A breach leads back to the surface".to_string())
-            }
-            CellKind::StairsUp => Some("Stairs lead up".to_string()),
+            CellKind::StairsDown => Some("Stairs lead down  [>] descend".to_string()),
+            CellKind::StairsUp if depth == 1 => Some("The breach out  [<] surface".to_string()),
+            CellKind::StairsUp => Some("Stairs lead up  [<] climb".to_string()),
             _ => None,
         };
 

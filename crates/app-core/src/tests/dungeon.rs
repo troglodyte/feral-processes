@@ -183,3 +183,42 @@ fn surfacing_hands_movement_back_to_the_zone_map() {
     }
     panic!("no direction moved the player after surfacing");
 }
+
+/// Up and down are separate commands, not one key that guesses. Pressing
+/// the wrong one on the entry cell must refuse rather than quietly do the
+/// other thing.
+#[test]
+fn descending_from_the_entry_cell_refuses_instead_of_surfacing() {
+    let mut app = app_underground(505);
+    app.handle_key(GameKey::Char('>'));
+    let game = app.game.as_ref().unwrap();
+    assert!(
+        game.is_underground(),
+        "'>' on a way *up* must not take it — that is what '<' is for"
+    );
+    assert!(
+        game.message_log(10)
+            .iter()
+            .any(|(_, l)| l.contains("no way down")),
+        "the refusal should say why"
+    );
+}
+
+#[test]
+fn the_view_names_the_key_that_takes_the_stairs() {
+    let app = app_underground(505);
+    let view = app.game.as_ref().unwrap().dungeon_view().unwrap();
+    let standing = view.standing_on.expect("the entry cell is the way out");
+    assert!(
+        standing.contains("[<]"),
+        "the prompt must name the key, got: {standing}"
+    );
+}
+
+#[test]
+fn stairs_available_reports_only_what_the_cell_underfoot_offers() {
+    let app = app_underground(505);
+    let (down, up) = app.game.as_ref().unwrap().stairs_available();
+    assert!(up, "the entry cell is a way up");
+    assert!(!down, "and is not also a way down");
+}

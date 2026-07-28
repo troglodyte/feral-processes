@@ -149,7 +149,8 @@ has a facing rather than moving a token on a grid.
 | `j` / `Down` | Back up, without turning round |
 | `h` / `Left` | Turn 90° left, in place |
 | `l` / `Right` | Turn 90° right, in place |
-| `<` / `>` | Take the stairs under you — down a level, up a level, or out to the surface from depth 1 |
+| `>` | Descend — take the stairs down under you |
+| `<` | Climb — take the stairs up, or surface from depth 1 |
 | `.` | Wait in place |
 | `e` | Drain a Power-restoring item |
 

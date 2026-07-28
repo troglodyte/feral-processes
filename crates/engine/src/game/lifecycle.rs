@@ -622,7 +622,7 @@ struct AssetDbs {
 
 /// Loads all four asset directories and refuses an item set that leaves any
 /// economy role unfilled. Both `Game::new` and `Game::load` must go through
-/// here: `Game::currency`/`research_currency`/`craft_currency` each
+/// here: `Game::currency`/`research_currency`/`craft_currency`/`trade_currency` each
 /// `.expect("validated at startup")`, so a door into the world that skipped
 /// this check would turn a modder's incomplete item set into a panic mid-play
 /// instead of a startup error.

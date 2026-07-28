@@ -38,6 +38,7 @@ impl std::fmt::Display for ItemId {
 /// economy roles and `ItemDef` fields.
 pub mod ids {
     pub const CORE_FRAGMENT: &str = "core_fragment";
+    pub const CREDITS: &str = "credits";
     pub const POWER_CELL: &str = "power_cell";
     pub const ICE_BREAKER: &str = "ice_breaker";
     pub const OVERCLOCK_CORE: &str = "overclock_core";

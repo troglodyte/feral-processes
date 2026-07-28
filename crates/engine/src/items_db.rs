@@ -17,6 +17,13 @@ pub enum EconomyRole {
     Currency,
     ResearchCurrency,
     CraftCurrency,
+    /// What a trader pays and charges. Deliberately *not* `Currency`: the
+    /// build economy runs on salvage a trader has no reason to hand out, and
+    /// this is the only currency that survives a zone breach (see
+    /// `Game::breach_portal`), which is why no trader may deal in the
+    /// `Currency` or `CraftCurrency` item — see
+    /// `StructureDb::strip_reserved_trade_goods`.
+    TradeCurrency,
 }
 
 /// What `Game::use_item` does out of battle. All fields optional so one item
@@ -119,6 +126,7 @@ pub struct ItemDb {
     currency: Option<ItemId>,
     research_currency: Option<ItemId>,
     craft_currency: Option<ItemId>,
+    trade_currency: Option<ItemId>,
 }
 
 impl ItemDb {
@@ -148,6 +156,7 @@ impl ItemDb {
                             EconomyRole::Currency => &mut db.currency,
                             EconomyRole::ResearchCurrency => &mut db.research_currency,
                             EconomyRole::CraftCurrency => &mut db.craft_currency,
+                            EconomyRole::TradeCurrency => &mut db.trade_currency,
                         };
                         if let Some(existing) = slot {
                             warnings.push(format!(
@@ -187,6 +196,10 @@ impl ItemDb {
 
     pub fn craft_currency(&self) -> Option<&ItemId> {
         self.craft_currency.as_ref()
+    }
+
+    pub fn trade_currency(&self) -> Option<&ItemId> {
+        self.trade_currency.as_ref()
     }
 
     /// Mints one item per loaded ability, so a loose routine is an ordinary
@@ -235,7 +248,7 @@ impl ItemDb {
 
     /// Human-readable names of any economy role with no holder — empty when
     /// the item set is complete. `Game::new`/`load` abort if this is
-    /// non-empty (the economy can't run without all three).
+    /// non-empty (the economy can't run with an anchor missing).
     pub fn missing_roles(&self) -> Vec<&'static str> {
         let mut missing = Vec::new();
         if self.currency.is_none() {
@@ -246,6 +259,9 @@ impl ItemDb {
         }
         if self.craft_currency.is_none() {
             missing.push("CraftCurrency");
+        }
+        if self.trade_currency.is_none() {
+            missing.push("TradeCurrency");
         }
         missing
     }
@@ -311,10 +327,7 @@ mod tests {
             warnings.is_empty(),
             "shipped items should parse clean: {warnings:?}"
         );
-        assert!(
-            db.missing_roles().is_empty(),
-            "all three roles must be held"
-        );
+        assert!(db.missing_roles().is_empty(), "every role must be held");
         assert_eq!(db.currency().unwrap(), &ItemId::from("core_fragment"));
         assert_eq!(
             db.research_currency().unwrap(),
@@ -324,6 +337,7 @@ mod tests {
             db.craft_currency().unwrap(),
             &ItemId::from("portal_fragment")
         );
+        assert_eq!(db.trade_currency().unwrap(), &ItemId::from("credits"));
         assert_eq!(db.get("research_data").unwrap().bank_limit, Some(200));
         assert_eq!(db.get("ice_breaker").unwrap().taming_potency, Some(0.4));
         assert_eq!(db.get("power_cell").unwrap().consume.unwrap().power, 25.0);
@@ -390,7 +404,7 @@ mod tests {
             equipment.len(),
             "an equippable not in the table above is unpinned"
         );
-        assert_eq!(db.all().count(), 36);
+        assert_eq!(db.all().count(), 37);
     }
 
     #[test]
@@ -478,7 +492,12 @@ mod tests {
         let (db, _) = load_fixture(&[("a.ron", r#"(id: "a", name: "A")"#)]);
         assert_eq!(
             db.missing_roles(),
-            vec!["Currency", "ResearchCurrency", "CraftCurrency"]
+            vec![
+                "Currency",
+                "ResearchCurrency",
+                "CraftCurrency",
+                "TradeCurrency"
+            ]
         );
     }
 }

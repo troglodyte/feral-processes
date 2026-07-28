@@ -139,6 +139,17 @@ impl Game {
             .clone()
     }
 
+    /// What every trader pays and charges — see `EconomyRole::TradeCurrency`.
+    /// Distinct from `currency`, which is the salvage the build economy runs
+    /// on and which no trader deals in.
+    pub fn trade_currency(&self) -> ItemId {
+        self.world
+            .resource::<ItemDb>()
+            .trade_currency()
+            .expect("validated at startup")
+            .clone()
+    }
+
     /// Whether `structure_id` may be built right now. A structure named by
     /// no research file is unlocked by default — that's what keeps Home, the
     /// Mining Node, the Research Node, the Recharger Node and the Zone

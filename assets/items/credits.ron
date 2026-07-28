@@ -1,0 +1,6 @@
+(
+    id: "credits",
+    name: "Credits",
+    description: "What a trader pays and charges. Minted by no one else, and the only cache that survives a breach.",
+    role: Some(TradeCurrency),
+)

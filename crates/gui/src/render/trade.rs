@@ -94,6 +94,29 @@ pub(super) fn draw_trade_action_menu(
         ));
         idx += 1;
     }
+    // What this trader has bought off the player, offered back at a markup.
+    // Omitted until they sell something here, so the screen is unchanged at
+    // a trader they have never sold to.
+    let buybacks = game.buyback_options(structure);
+    if !buybacks.is_empty() {
+        rows.push(text_row(""));
+        rows.push(Row::TextColored("Buy back (your sales):".to_string(), TEXT));
+        for row in &buybacks {
+            let tag = equip_preview_tag(game, &row.item, status.zone, 0);
+            rows.push(item_row(
+                format!(
+                    "[{}] Buy back {}{} x{} ({} {money} each)",
+                    menu_shortcut(idx),
+                    row.name,
+                    tag,
+                    row.qty,
+                    row.unit_cost
+                ),
+                idx == selected,
+            ));
+            idx += 1;
+        }
+    }
     // Only shown by a trader that buys programs — see
     // `TradeDef::program_sell_divisor`. Omitted entirely otherwise, rather
     // than shown empty, so an items-only trader's screen is unchanged.
@@ -180,6 +203,17 @@ pub(super) fn draw_trade_quantity_menu(
                 .map(|(_, c)| *c)
                 .unwrap_or(0);
             ("Buy", item, price)
+        }
+        // Priced from the shelf row rather than from `sell_rate` here, so
+        // this screen can't drift from the markup the engine charges.
+        TradeChoice::BuyBack(item) => {
+            let price = game
+                .buyback_options(structure)
+                .iter()
+                .find(|row| row.item == item)
+                .map(|row| row.unit_cost)
+                .unwrap_or(0);
+            ("Buy back", item, price)
         }
     };
     let shown = if quantity_input.is_empty() {

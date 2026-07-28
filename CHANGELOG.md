@@ -38,6 +38,25 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   a mod no longer leaves the UI lying about it.
 - No save-format change: `Inventory` is keyed by item id, so existing saves
   load with zero Credits, which is also where a new run starts.
+- **Traders remember what you sold them, and will sell it back at double.**
+  A sale used to be final, which made hoarding the safe play and selling a
+  last resort. Everything you sell now goes onto that trader's buyback
+  shelf, purchasable back at twice its `sell_rate` per unit. The shelf is
+  finite — it holds only your own sales — and every round trip is a net
+  loss, so it is a way to walk back a mistake, never a way to make money.
+- A shelf belongs to the **tile** a trader stands on rather than to the
+  building, so a Market levelled by a raid and rebuilt on the same footprint
+  reopens with its stock intact, and two Markets in one zone keep separate
+  shelves. Rebuild somewhere else and you have opened a new store; losing a
+  trader that still holds stock now says what was on it and how to get it
+  back. Shelves are wiped on a breach, alongside build salvage and breach
+  keys — a shelf that crossed would be exactly the stockpile that wipe
+  exists to strand.
+- Selling a *program* still destroys it. It is not shelved, and cannot be
+  bought back.
+- **Save-format bump to 12.** `SaveData` carries every shelf, since a shelf
+  outlives its building and can sit on a tile holding nothing at all.
+  Existing saves stop loading.
 
 ### Balance
 

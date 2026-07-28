@@ -381,12 +381,15 @@ impl Mode {
 }
 
 /// A line item picked in `Mode::TradeAction`, awaiting a quantity from
-/// `Mode::TradeQuantity` before `Game::sell_item`/`Game::buy_item` is
-/// actually called.
+/// `Mode::TradeQuantity` before `Game::sell_item`/`Game::buy_item`/
+/// `Game::buy_back` is actually called.
 #[derive(Clone)]
 pub enum TradeChoice {
     Sell(ItemId),
     Buy(ItemId),
+    /// Something the player sold this trader, offered back at a markup —
+    /// see `Game::buyback_options`.
+    BuyBack(ItemId),
 }
 
 pub const MIN_ZOOM: u16 = 1;

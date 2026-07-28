@@ -55,6 +55,40 @@ fn declining_the_program_sale_confirmation_sells_nothing() {
     assert!(app.pending_trade_program.is_none());
 }
 
+/// The buyback shelf slots between the buy list and the programs, so both
+/// the sections before it keep their row numbers and the programs — which
+/// branch to a confirmation instead of a quantity — stay last.
+///
+/// Tested against the arithmetic directly rather than by driving the
+/// screen: staging a trading post needs a Home, build clearance and 16 Core
+/// Fragments, and the player starts with 5.
+#[test]
+fn buyback_rows_are_numbered_between_the_buy_list_and_the_programs() {
+    use crate::app::trade::{TradeRow, trade_row};
+
+    let (sells, buys, buybacks, programs) = (2, 3, 2, 1);
+    let row = |i| trade_row(i, sells, buys, buybacks, programs);
+
+    assert_eq!(row(0), Some(TradeRow::Sell(0)));
+    assert_eq!(row(1), Some(TradeRow::Sell(1)));
+    assert_eq!(row(2), Some(TradeRow::Buy(0)));
+    assert_eq!(row(4), Some(TradeRow::Buy(2)));
+    assert_eq!(row(5), Some(TradeRow::BuyBack(0)));
+    assert_eq!(row(6), Some(TradeRow::BuyBack(1)));
+    assert_eq!(row(7), Some(TradeRow::Program(0)));
+    assert_eq!(row(8), None, "a row past the last one picks nothing");
+}
+
+/// An empty shelf must not shift the rows under the player — which is what
+/// makes this change invisible at a trader they've never sold to.
+#[test]
+fn an_empty_shelf_leaves_the_other_sections_where_they_were() {
+    use crate::app::trade::{TradeRow, trade_row};
+
+    assert_eq!(trade_row(2, 2, 3, 0, 1), Some(TradeRow::Buy(0)));
+    assert_eq!(trade_row(5, 2, 3, 0, 1), Some(TradeRow::Program(0)));
+}
+
 /// The confirmation screen is not part of an intrusion, and the
 /// exhaustive match in `Mode::is_battle` is what forces that to be
 /// decided rather than defaulted.

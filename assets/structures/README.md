@@ -110,17 +110,32 @@ is skipped with a warning logged in-game rather than crashing startup.
 
     // Optional; can be left out entirely (defaults to no trading). If set,
     // this structure is a trading post: the player can "trade" (`t`) with
-    // it to sell any inventory item (except Core Fragment) for
-    // `sell_rate` Core Fragments per unit, or buy any item listed in `buy`
-    // for its Core Fragment cost.
+    // it to sell any inventory item (except the trade currency itself) for
+    // `sell_rate` Credits per unit, or buy any item listed in `buy` for its
+    // Credit cost.
+    //
+    // `sell_rate` prices two things, not one. Whatever this trader buys goes
+    // onto a buyback shelf the player can purchase back at twice
+    // `sell_rate` per unit — so raising it makes selling here more
+    // rewarding *and* undoing a sale more expensive. The multiplier is an
+    // engine constant (`tuning::BUYBACK_PRICE_MULTIPLIER`), not a field
+    // here: what a trader deals in is content, how steep the economy is
+    // isn't.
+    //
+    // A shelf belongs to the tile a trader stands on, not to the building,
+    // so one destroyed by a raid and rebuilt on the same footprint reopens
+    // with its stock intact — and two traders of the same kind in one zone
+    // keep separate shelves. Every shelf is wiped when the player breaches
+    // to the next zone, alongside their build salvage.
     //
     // `program_sell_divisor` is optional inside the trade block (defaults to
     // None — items only). Set it and this trader also buys the player's
-    // tamed programs, paying `power / divisor` Core Fragments rounded down,
-    // where power is the program's max HP + Attack + Defense. The payout
-    // never drops below 1. Selling despawns the program permanently and
-    // frees the roster slot it occupied, so this is the player's way out of
-    // a full roster. A divisor of 0 means the same as omitting it.
+    // tamed programs, paying `power / divisor` Credits rounded down, where
+    // power is the program's max HP + Attack + Defense. The payout never
+    // drops below 1. Selling despawns the program permanently and frees the
+    // roster slot it occupied, so this is the player's way out of a full
+    // roster; a sold program is destroyed, never shelved for buyback. A
+    // divisor of 0 means the same as omitting it.
     trade: Some((
         sell_rate: 1,
         program_sell_divisor: Some(10),

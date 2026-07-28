@@ -1,7 +1,7 @@
 (
     id: "market",
     name: "iso Market",
-    description: "Sell anything here for 1 Credit a unit — including salvage you're about to lose to a breach — sell a program for a tenth of its power, and buy back ICE Breakers, Power Cells and Portal Fragments. Credits are the only cache that survives a breach.",
+    description: "Sell anything here for 1 Credit a unit — including salvage you're about to lose to a breach — sell a program for a tenth of its power, and buy ICE Breakers, Power Cells and Portal Fragments. It keeps what you sell it and will sell it back at double, until you breach. Credits are the only cache that survives a breach.",
     glyph: '$',
     color: Yellow,
     build_cost: [("core_fragment", 16)],

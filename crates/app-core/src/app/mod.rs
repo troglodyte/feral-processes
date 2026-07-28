@@ -15,4 +15,4 @@ mod party;
 mod playing;
 mod progression;
 mod routines;
-mod trade;
+pub(crate) mod trade;

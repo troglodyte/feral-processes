@@ -2,6 +2,46 @@
 
 use crate::*;
 
+/// Which section of the trade screen a picked row number lands in, and its
+/// index within that section.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum TradeRow {
+    Sell(usize),
+    Buy(usize),
+    BuyBack(usize),
+    Program(usize),
+}
+
+/// Resolves a row number against the trade screen's four stacked sections —
+/// sell, buy, buyback, programs, in that order — given how many rows each
+/// contributed. `None` for a row past the end.
+///
+/// Pulled out of `handle_trade_action_key` and shared with the renderer that
+/// numbers the same rows: the offset arithmetic is where a screen with more
+/// than two sections goes wrong, and it is the one part of this flow that
+/// can be tested without a trading post to stand in front of.
+pub(crate) fn trade_row(
+    idx: usize,
+    sells: usize,
+    buys: usize,
+    buybacks: usize,
+    programs: usize,
+) -> Option<TradeRow> {
+    if idx < sells {
+        return Some(TradeRow::Sell(idx));
+    }
+    let idx = idx - sells;
+    if idx < buys {
+        return Some(TradeRow::Buy(idx));
+    }
+    let idx = idx - buys;
+    if idx < buybacks {
+        return Some(TradeRow::BuyBack(idx));
+    }
+    let idx = idx - buybacks;
+    (idx < programs).then_some(TradeRow::Program(idx))
+}
+
 impl App {
     /// Picks a nearby trading-post structure to open a trade session with.
     pub(crate) fn handle_trade_key(&mut self, key: GameKey) {
@@ -47,23 +87,32 @@ impl App {
             .filter(|item| *item != currency)
             .collect();
         let buy_items: Vec<ItemId> = trade.buy.iter().map(|(item, _)| item.clone()).collect();
+        // Empty until the player sells this trader something, so the screen
+        // is unchanged at a trader they have never sold to.
+        let buybacks = game.buyback_options(structure);
         // Programs come last, and are empty for a trader that deals in items
         // only — so this screen is unchanged at such a trader.
         let programs = game.program_sale_options(structure);
-        let total = sell_items.len() + buy_items.len() + programs.len();
+        let total = sell_items.len() + buy_items.len() + buybacks.len() + programs.len();
         if let Some(idx) = self.selected_index(key, total) {
-            if idx >= sell_items.len() + buy_items.len() {
-                // A program needs no quantity — there is exactly one of it —
-                // so it skips the quantity page and goes to confirmation.
-                self.pending_trade_program =
-                    Some(programs[idx - sell_items.len() - buy_items.len()].clone());
-                self.mode = Mode::TradeProgramConfirm;
-                return;
-            }
-            let choice = if idx < sell_items.len() {
-                TradeChoice::Sell(sell_items[idx].clone())
-            } else {
-                TradeChoice::Buy(buy_items[idx - sell_items.len()].clone())
+            let choice = match trade_row(
+                idx,
+                sell_items.len(),
+                buy_items.len(),
+                buybacks.len(),
+                programs.len(),
+            ) {
+                Some(TradeRow::Sell(i)) => TradeChoice::Sell(sell_items[i].clone()),
+                Some(TradeRow::Buy(i)) => TradeChoice::Buy(buy_items[i].clone()),
+                Some(TradeRow::BuyBack(i)) => TradeChoice::BuyBack(buybacks[i].item.clone()),
+                Some(TradeRow::Program(i)) => {
+                    // A program needs no quantity — there is exactly one of it
+                    // — so it skips the quantity page and goes to confirmation.
+                    self.pending_trade_program = Some(programs[i].clone());
+                    self.mode = Mode::TradeProgramConfirm;
+                    return;
+                }
+                None => return,
             };
             self.pending_trade_choice = Some(choice);
             self.trade_quantity_input.clear();
@@ -142,6 +191,7 @@ impl App {
                     let result = match choice {
                         TradeChoice::Sell(item) => game.sell_item(structure, item, quantity),
                         TradeChoice::Buy(item) => game.buy_item(structure, item, quantity),
+                        TradeChoice::BuyBack(item) => game.buy_back(structure, item, quantity),
                     };
                     match result {
                         Ok(()) => self.status_line = None,

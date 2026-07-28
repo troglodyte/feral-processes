@@ -166,10 +166,20 @@ Press `t` at a nearby iso Market to sell inventory items for **Credits** at
 a flat floor rate, buy ICE Breakers, Power Cells, or Portal Fragments with
 them, or sell a compiled program for a tenth of its power. Credits are the
 only currency a trader deals in — Core Fragments are salvage, and a trader
-buys those off you like anything else rather than paying in them. Selling a program is the
-only way to free a roster slot short of fusing it, and it's permanent —
-the confirmation says so, along with any cronjob or guard post the sale
-cancels. A structure's trade terms are entirely data-driven.
+buys those off you like anything else rather than paying in them.
+
+A trader keeps what you sell it. Anything you hand over goes onto its
+buyback shelf, and you can purchase it back at **double** what it paid — so
+a sale you regret costs a fee to undo rather than being final. The shelf
+belongs to the tile the trader stands on, not the building: raze it and
+rebuild on the same footprint and the stock is still there, but rebuild
+somewhere else and you have opened a new store. It is wiped when you breach,
+along with your salvage.
+
+Selling a *program* is the exception: it is destroyed, not shelved. That's
+still the only way to free a roster slot short of fusing it, and it's
+permanent — the confirmation says so, along with any cronjob or guard post
+the sale cancels. A structure's trade terms are entirely data-driven.
 
 ## Modding
 

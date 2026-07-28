@@ -45,18 +45,18 @@ is skipped with a warning logged in-game rather than crashing startup.
     // a node that always yields on completion, same as before this field
     // existed.
     //
-    // How much a completed cycle actually pays out is not one unit: it's
-    // multiplied by the current zone level's stat multiplier (doubling per
-    // zone — zone 1 pays x1, zone 2 x2, zone 3 x4) and again by the
-    // structure's upgrade tier if it has one (see `upgrade` below). The
-    // multiplier is read when the cycle completes, not when the structure
-    // was deployed, so a base carried into a deeper zone immediately earns
-    // at the deeper rate.
+    // How much a completed cycle actually pays out is not one unit: it's the
+    // structure's upgrade tier if it has one (see `upgrade` below), plus one
+    // per zone level below the current one. A Mk1 node pays 1 in zone 1 and
+    // 3 in zone 3; a Mk5 node pays 5 and 7. Depth and tier add rather than
+    // multiply, so neither compounds the other. The zone part is read when
+    // the cycle completes, not when the structure was deployed, so a base
+    // carried into a deeper zone immediately earns at the deeper rate.
     //
     // The one exception is a `produces` item that declares a `bank_limit`
     // (see `assets/items/README.md`) — Research Data, for instance. Banked
     // resources always pay exactly one unit per cycle, because their cap is
-    // what paces them and an exponential payout would just overflow it.
+    // what paces them and a scaling payout would just overflow it.
     work: Some((produces: "core_fragment", ticks_per_unit: 5, capacity: 5, level: Some(1))),
 
     // Optional; can be left out entirely (defaults to no passive processing).

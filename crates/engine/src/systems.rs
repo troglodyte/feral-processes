@@ -16,7 +16,9 @@ use crate::structures::StructureDb;
 use crate::tuning::{
     FATIGUE_DECAY_PER_TICK, HUNGER_DECAY_PER_TICK, WORK_XP_LEVEL_CAP, WORK_XP_PER_CYCLE,
 };
-use crate::tuning::{MINING_SUCCESS_BASE, MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS};
+use crate::tuning::{
+    MINING_SUCCESS_BASE, MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS,
+};
 use crate::world::WorldMap;
 
 /// One tick of hunger/fatigue decay; pulled out of the system so the rates
@@ -85,25 +87,24 @@ pub fn wander_ai_system(
     }
 }
 
+/// What one completed gather cycle yields from a non-banked node of `tier`
+/// at `zone`: the tier itself, plus `NODE_PAYOUT_ZONE_BONUS` per zone below
+/// the current one. Depth and upgrade tier add rather than multiply — see
+/// that constant for why compounding them broke the economy.
+///
+/// Shared with `crate::balance_sim` so its base-economy projections and the
+/// real payout cannot drift. Banked resources bypass this entirely for a
+/// flat 1 (see `task_progress_system`): their bank limit is the pacing
+/// mechanism, and a scaling payout would just overflow it every few cycles.
+pub(crate) fn node_payout(tier: u32, zone: ZoneLevel) -> u32 {
+    tier + NODE_PAYOUT_ZONE_BONUS * zone.0.saturating_sub(1)
+}
+
 /// Chance (0.0-1.0) a completed gather cycle against a leveled node (see
 /// `ResourceNode::level`) actually yields, rather than fizzling out and
 /// costing the cycle for nothing. Scales up with level so a node can be
 /// made more reliable over time; a basic level-1 node succeeds only about
 /// half the time.
-/// What one completed gather cycle yields from a non-banked node of `tier`
-/// at `zone`. Payout tracks zone depth on the same doubling base as wild
-/// stats and `GEAR_LEVEL_GROWTH` — a flat base economy against an
-/// exponential curve is what made settling never worth the time.
-///
-/// Shared with `crate::balance_sim` so its base-economy projections and the
-/// real payout cannot drift. Banked resources bypass this entirely for a
-/// flat 1 (see `task_progress_system`): their bank limit is the pacing
-/// mechanism, and an exponential payout would just overflow it every few
-/// cycles.
-pub(crate) fn node_payout(tier: u32, zone: ZoneLevel) -> u32 {
-    tier * zone.stat_multiplier() as u32
-}
-
 pub(crate) fn mining_success_chance(level: u32) -> f64 {
     (MINING_SUCCESS_BASE + level as f64 * MINING_SUCCESS_PER_LEVEL).min(1.0)
 }
@@ -332,6 +333,29 @@ mod tests {
     use crate::structures::StructureDb;
     use crate::tuning::PLAYER_BASE_STATS;
     use std::sync::atomic::{AtomicU32, Ordering};
+
+    /// Pins the payout *shape*, not just its values: depth and upgrade tier
+    /// each add, so neither compounds the other. The old
+    /// `tier * stat_multiplier()` form put this Mk5-in-zone-3 cell at 20 and
+    /// a Mk5 in zone 5 at 80.
+    #[test]
+    fn depth_and_tier_add_to_a_payout_rather_than_multiplying() {
+        let row = |tier| {
+            (1..=5)
+                .map(|z| node_payout(tier, ZoneLevel(z)))
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(row(1), vec![1, 2, 3, 4, 5]);
+        assert_eq!(row(3), vec![3, 4, 5, 6, 7]);
+        assert_eq!(row(5), vec![5, 6, 7, 8, 9]);
+
+        assert_eq!(
+            node_payout(5, ZoneLevel(3)) - node_payout(1, ZoneLevel(3)),
+            node_payout(5, ZoneLevel(1)) - node_payout(1, ZoneLevel(1)),
+            "what four upgrade tiers are worth must not depend on depth"
+        );
+    }
 
     /// Writes `files` (filename, RON body) into a scratch dir and loads them
     /// through `StructureDb::load_dir` — `StructureDb`'s map is private

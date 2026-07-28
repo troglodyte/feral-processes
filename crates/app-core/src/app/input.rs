@@ -42,6 +42,17 @@ impl App {
     }
 
     pub fn handle_key(&mut self, key: GameKey) {
+        // A key pressed while narration is still scrolling in dumps the rest
+        // and is not acted on. Without this the pacing would be a tax on
+        // anyone who reads faster than it scrolls.
+        if self.is_revealing() {
+            self.finish_reveal();
+            return;
+        }
+        // Restarts the refusal window: whatever this key produces (or leaves
+        // standing) gets its full time on screen, rather than inheriting the
+        // remainder of the previous message's.
+        self.status_age = 0.0;
         let mode_before = self.mode;
         match self.mode {
             Mode::MainMenu => self.handle_main_menu_key(key),
@@ -103,6 +114,125 @@ impl App {
             self.menu_selected = 0;
         }
         self.maybe_autosave();
+    }
+
+    /// Releases battle narration into the log pane at
+    /// `REVEAL_LINES_PER_SECOND`, so a resolved round reads as it arrives
+    /// rather than landing as a block. A frontend calls this once a frame
+    /// with that frame's delta.
+    ///
+    /// Takes the delta rather than reading a clock: the suite forbids
+    /// wall-clock dependence, and an injected `dt` is what makes the pacing
+    /// testable without a sleep.
+    pub fn advance_reveal(&mut self, dt: f32) {
+        let Some(game) = &self.game else { return };
+        let generation = game.battle_log_generation();
+        let total = game.battle_log().len();
+        if self.reveal.generation != generation {
+            self.reveal = BattleReveal {
+                generation,
+                ..BattleReveal::default()
+            };
+        }
+        if self.reveal.revealed >= total {
+            return;
+        }
+        self.reveal.accumulated += dt * REVEAL_LINES_PER_SECOND;
+        while self.reveal.accumulated >= 1.0 && self.reveal.revealed < total {
+            self.reveal.accumulated -= 1.0;
+            self.reveal.revealed += 1;
+        }
+        // Credit left over once the last line is out would otherwise be
+        // banked and spent the instant more lines land, dumping them whole.
+        // A new round resets the whole counter anyway; this covers the case
+        // where the *same* range grows — the `tick` inside a battle action
+        // can have a background system log into it after the reveal caught
+        // up.
+        if self.reveal.revealed >= total {
+            self.reveal.accumulated = 0.0;
+        }
+    }
+
+    /// Ages the status line out after `STATUS_LINE_SECONDS`, so a refusal
+    /// stops covering the action bar it was drawn over. A frontend calls
+    /// this once a frame alongside `advance_reveal`, and for the same
+    /// reason it takes the frame's delta rather than reading a clock.
+    pub fn advance_status(&mut self, dt: f32) {
+        if self.status_line.is_none() {
+            return;
+        }
+        self.status_age += dt;
+        if self.status_age >= STATUS_LINE_SECONDS {
+            self.status_line = None;
+            self.status_age = 0.0;
+        }
+    }
+
+    /// How many lines are on screen right now.
+    ///
+    /// A count belonging to a superseded generation reads as zero rather
+    /// than as itself: the round it counted has been replaced, and the new
+    /// one has shown nothing yet. `advance_reveal` is what actually resets
+    /// the counter, but it runs once a frame — so between a round resolving
+    /// and the next frame, every reader has to agree the pane is empty, or
+    /// the finished round flashes up whole before the new one starts
+    /// scrolling.
+    fn revealed_count(&self) -> usize {
+        let Some(game) = &self.game else { return 0 };
+        if self.reveal.generation != game.battle_log_generation() {
+            return 0;
+        }
+        self.reveal.revealed
+    }
+
+    /// Whether narration is still scrolling in. While this holds, a frontend
+    /// suppresses the action bar and `handle_key` skips rather than acting.
+    pub fn is_revealing(&self) -> bool {
+        let Some(game) = &self.game else {
+            return false;
+        };
+        self.revealed_count() < game.battle_log().len()
+    }
+
+    /// The battle pane's lines: this battle's narration, truncated to what
+    /// has been revealed. The pane draws the tail of this once it overflows,
+    /// which is what makes lines scroll up as new ones arrive.
+    pub fn revealed_battle_log(&self) -> Vec<(MessageKind, String)> {
+        let Some(game) = &self.game else {
+            return Vec::new();
+        };
+        let mut lines = game.battle_log();
+        lines.truncate(self.revealed_count());
+        lines
+    }
+
+    /// How many lines the *base* screen must chop off the tail of
+    /// `Game::message_log` — the battle results that have not scrolled in
+    /// yet. Zero except in the moments after a battle ends.
+    pub fn hidden_log_lines(&self) -> usize {
+        let Some(game) = &self.game else { return 0 };
+        game.battle_log()
+            .len()
+            .saturating_sub(self.revealed_count())
+    }
+
+    /// Releases every remaining line at once — the skip.
+    pub(crate) fn finish_reveal(&mut self) {
+        let Some(game) = &self.game else { return };
+        self.reveal = BattleReveal {
+            revealed: game.battle_log().len(),
+            accumulated: 0.0,
+            generation: game.battle_log_generation(),
+        };
+    }
+
+    /// Starts this battle's narration over from nothing.
+    pub(crate) fn restart_reveal(&mut self) {
+        let generation = self.game.as_ref().map_or(0, |g| g.battle_log_generation());
+        self.reveal = BattleReveal {
+            generation,
+            ..BattleReveal::default()
+        };
     }
 
     /// Advances the world by one idle tick if a real second has passed

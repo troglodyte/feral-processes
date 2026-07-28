@@ -519,15 +519,28 @@ fn taming_is_refused_when_the_roster_is_full_and_a_data_cache_makes_room() {
         "a full roster must refuse before the catalyst is spent"
     );
 
-    // A Data Cache raises the cap to 5, so the same attempt now has room
-    // and runs (spending the catalyst) instead of being refused.
+    // A Data Cache raises the cap to 5, so the same attempt is accepted
+    // rather than refused.
     spawn_data_cache(&mut game, 1);
     assert_eq!(game.pet_capacity(), BASE_PET_CAPACITY + 2);
-    player_decompiles(&mut game);
+    game.battle_set_action(
+        0,
+        BattleAction::Special {
+            ability: index,
+            target: battle::SpecialTarget::EnemyGroup { group: 0 },
+        },
+    )
+    .expect("with a cache deployed the roster has room, so the action must be accepted");
+    // Deliberately asserts on the acceptance rather than on the catalyst
+    // being spent. Whether the attempt actually resolves depends on the
+    // round: the wild acts first, and a stun costs the player the turn
+    // before the decompile ever runs. That made this assertion a coin flip
+    // on the RNG sequence, which any unrelated change to the number of
+    // rolls could — and did — flip.
     assert_eq!(
         held(&game),
-        0,
-        "with a cache deployed the roster has room, so the decompile runs and spends the catalyst"
+        1,
+        "planning alone must not spend the catalyst — that happens on resolve"
     );
 }
 

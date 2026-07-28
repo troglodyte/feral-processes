@@ -107,7 +107,7 @@ impl App {
                 let escaped = game.battle_flee();
                 let still_active = game.has_active_battle();
                 if !still_active {
-                    self.mode = Mode::Playing;
+                    self.settle_after_round(still_active);
                 }
                 // A pinned attempt is not an escape: what the player hears
                 // is the volley it drew, not the jack-out that didn't
@@ -148,11 +148,7 @@ impl App {
         }
         game.battle_resolve_round();
         let still_active = game.has_active_battle();
-        self.mode = if still_active {
-            Mode::Battle
-        } else {
-            Mode::Playing
-        };
+        self.settle_after_round(still_active);
         self.push_battle_outcome_sounds(SoundEvent::Attack, still_active);
     }
 
@@ -377,12 +373,24 @@ impl App {
         }
         game.battle_resolve_round();
         let still_active = game.has_active_battle();
+        self.settle_after_round(still_active);
+        self.push_battle_outcome_sounds(SoundEvent::Attack, still_active);
+    }
+
+    /// The shared tail of every action that can end a battle.
+    ///
+    /// A battle that just ended has had its log pruned to results by the
+    /// engine, so the reveal restarts and those results scroll into the map's
+    /// log pane rather than appearing whole.
+    fn settle_after_round(&mut self, still_active: bool) {
         self.mode = if still_active {
             Mode::Battle
         } else {
             Mode::Playing
         };
-        self.push_battle_outcome_sounds(SoundEvent::Attack, still_active);
+        if !still_active {
+            self.restart_reveal();
+        }
     }
 
     /// Backs the planning cursor up one slot, so a misclick can be undone.

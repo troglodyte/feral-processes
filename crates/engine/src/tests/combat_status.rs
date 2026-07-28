@@ -1,6 +1,7 @@
 //! Status effects: how stun and bleed tick down, and when they clear.
 
 use super::support::*;
+use crate::tuning::WILD_ABILITY_CHANCE;
 use crate::*;
 
 #[test]
@@ -182,5 +183,258 @@ fn status_effects_are_cleared_once_the_battle_ends() {
             .active
             .is_none(),
         "leftover status effects should be cleared once the battle ends, however it ends"
+    );
+}
+
+/// The lines that are a battle's *results* have to be distinguishable from
+/// the blow-by-blow, since only the results follow the player onto the map.
+/// Loot and level-ups already carry their own kinds; the kill and the XP
+/// award were plain `Info` and so were indistinguishable from narration.
+#[test]
+fn the_kill_line_and_xp_award_are_tagged_as_outcomes() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    start_battle_with_a_wild_program(&mut game);
+
+    game.finish_member(0, 0, player);
+
+    let tagged: Vec<String> = game
+        .message_log(50)
+        .into_iter()
+        .filter(|(kind, _)| *kind == MessageKind::Outcome)
+        .map(|(_, line)| line)
+        .collect();
+
+    assert!(
+        tagged
+            .iter()
+            .any(|l| l.contains("crashes and deletes itself")),
+        "the kill line was not tagged an outcome: {tagged:?}"
+    );
+    assert!(
+        tagged.iter().any(|l| l.contains("XP")),
+        "the XP award was not tagged an outcome: {tagged:?}"
+    );
+}
+
+#[test]
+fn the_battle_log_holds_only_the_current_battle() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.log("before the fight");
+    start_battle_with_a_wild_program(&mut game);
+    game.log("mid-battle narration");
+
+    let battle: Vec<String> = game.battle_log().into_iter().map(|(_, l)| l).collect();
+
+    assert!(
+        battle.iter().any(|l| l == "mid-battle narration"),
+        "the battle's own line is missing: {battle:?}"
+    );
+    assert!(
+        !battle.iter().any(|l| l == "before the fight"),
+        "a pre-battle line leaked into the battle log: {battle:?}"
+    );
+}
+
+/// `MESSAGE_LOG_CAP` is 100, and the log drains its oldest lines past that.
+/// A battle mark stored as a raw index into `lines` would be pointing at the
+/// wrong entry by the time that happens — which is why it is a count of
+/// lines ever pushed instead.
+#[test]
+fn the_mark_survives_a_log_that_overflows_its_cap() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    start_battle_with_a_wild_program(&mut game);
+    for i in 0..350 {
+        game.log(format!("line {i}"));
+    }
+
+    let battle: Vec<String> = game.battle_log().into_iter().map(|(_, l)| l).collect();
+
+    assert_eq!(
+        battle.last().map(String::as_str),
+        Some("line 349"),
+        "the newest line is not last: {:?}",
+        battle.last()
+    );
+    assert!(
+        battle.len() <= 100,
+        "the battle log outgrew the log it slices: {}",
+        battle.len()
+    );
+}
+
+#[test]
+fn ending_a_battle_keeps_results_and_drops_narration() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    start_battle_with_a_wild_program(&mut game);
+    game.log("A hostile swings and misses.");
+    game.log_kind(MessageKind::Outcome, "You gain 12 XP.");
+    game.log_kind(MessageKind::Raid, "A raid hits your base!");
+
+    game.end_battle(player, None);
+
+    let after: Vec<String> = game.message_log(100).into_iter().map(|(_, l)| l).collect();
+    assert!(
+        !after.iter().any(|l| l.contains("swings and misses")),
+        "blow-by-blow survived the prune: {after:?}"
+    );
+    assert!(
+        after.iter().any(|l| l.contains("You gain 12 XP")),
+        "the result was pruned away: {after:?}"
+    );
+    assert!(
+        after.iter().any(|l| l.contains("A raid hits your base")),
+        "a raid alert is world news, not battle narration: {after:?}"
+    );
+}
+
+#[test]
+fn a_second_battle_starts_with_an_empty_pane() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    start_battle_with_a_wild_program(&mut game);
+    let first = game.battle_log_generation();
+    game.log("first battle narration");
+    game.end_battle(player, None);
+
+    start_battle_with_a_wild_program(&mut game);
+
+    assert_ne!(
+        first,
+        game.battle_log_generation(),
+        "the pane generation did not advance for the new battle"
+    );
+    let battle: Vec<String> = game.battle_log().into_iter().map(|(_, l)| l).collect();
+    assert!(
+        !battle.iter().any(|l| l == "first battle narration"),
+        "the previous battle's narration is still in the pane: {battle:?}"
+    );
+}
+
+/// Pruning removes lines from the middle of the log, which must not shift
+/// where the battle mark points. The mark is a count of lines ever pushed
+/// and the index is derived from how many have been dropped off the front —
+/// so a prune that forgets to account for what it removed makes every later
+/// slice reach back past the battle and swallow lines from before it.
+#[test]
+fn pruning_does_not_drag_the_battle_mark_backwards() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.log("well before the fight");
+    game.log("also before the fight");
+    start_battle_with_a_wild_program(&mut game);
+    game.log("a hostile swings and misses");
+    game.log("another miss");
+    game.log_kind(MessageKind::Outcome, "You gain 12 XP.");
+
+    game.end_battle(player, None);
+
+    let battle: Vec<String> = game.battle_log().into_iter().map(|(_, l)| l).collect();
+    assert!(
+        !battle.iter().any(|l| l.contains("before the fight")),
+        "the mark slid back past the battle after pruning: {battle:?}"
+    );
+    assert!(
+        battle.iter().any(|l| l.contains("You gain 12 XP")),
+        "the result went missing: {battle:?}"
+    );
+}
+
+/// The pane shows one round at a time. Without this a six-round fight
+/// leaves the player scanning a wall of text for the two lines that just
+/// happened.
+#[test]
+fn resolving_a_round_clears_the_pane_of_the_previous_one() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    start_battle_with_a_wild_program(&mut game);
+    assert!(
+        game.battle_log()
+            .iter()
+            .any(|(_, l)| l.contains("intercepts your signal")),
+        "the opening line should be in the pane before any round resolves"
+    );
+
+    resolve_round_with(&mut game, BattleAction::Defend);
+
+    let pane: Vec<String> = game.battle_log().into_iter().map(|(_, l)| l).collect();
+    assert!(
+        !pane.iter().any(|l| l.contains("intercepts your signal")),
+        "the opening line survived into the next round: {pane:?}"
+    );
+    assert!(
+        pane.iter().any(|l| l.contains("round")),
+        "the round's own narration is missing: {pane:?}"
+    );
+}
+
+/// Wild programs used to attempt their move's status effect every single
+/// turn, so a species with a nasty stun was that stun on repeat. They now
+/// reach for it only `WILD_ABILITY_CHANCE` of the time.
+///
+/// Samples many retaliations rather than asserting on one: the point is a
+/// rate. Counts only the turns where the move actually used carries an
+/// effect, so a damage-only move being picked is never mistaken for the
+/// gate having fired.
+#[test]
+fn wild_programs_only_sometimes_reach_for_their_status_effect() {
+    let mut with_effect_move = 0;
+    let mut landed = 0;
+    for seed in 0..400u32 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let wild = start_battle_with_a_wild_program(&mut game);
+        let species = game.world.get::<Creature>(wild).unwrap().species.clone();
+        let moves = game
+            .world
+            .resource::<SpeciesDb>()
+            .get(&species)
+            .map(|s| s.moves.clone())
+            .unwrap_or_default();
+
+        let before = game.message_log(200).len();
+        game.wild_retaliate(wild, 0, player);
+        let after: Vec<String> = game
+            .message_log(200)
+            .into_iter()
+            .skip(before)
+            .map(|(_, l)| l)
+            .collect();
+
+        // Which move was used is only observable through the line naming it.
+        let used_effect_move = moves
+            .iter()
+            .filter(|m| m.effect.is_some())
+            .any(|m| after.iter().any(|l| l.contains(&m.name)));
+        if !used_effect_move {
+            continue;
+        }
+        with_effect_move += 1;
+        if after
+            .iter()
+            .any(|l| l.contains("starts bleeding") || l.contains("locks up"))
+        {
+            landed += 1;
+        }
+    }
+
+    assert!(
+        with_effect_move > 30,
+        "only {with_effect_move} turns used an effect-carrying move — too few to judge a rate"
+    );
+    // The gate composes with each move's own `effect.chance` (0.3-0.5 across
+    // the shipped roster), so the landed rate sits *below* the gate itself
+    // and can never exceed it.
+    let rate = landed as f64 / with_effect_move as f64;
+    assert!(
+        rate < WILD_ABILITY_CHANCE,
+        "status effects landed on {:.0}% of effect-move turns, above the {:.0}% gate \
+         ({landed} of {with_effect_move})",
+        rate * 100.0,
+        WILD_ABILITY_CHANCE * 100.0
+    );
+    assert!(
+        landed > 0,
+        "no status effect ever landed — the gate is stuck shut"
     );
 }

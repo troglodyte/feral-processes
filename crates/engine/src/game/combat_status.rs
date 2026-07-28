@@ -3,7 +3,7 @@
 
 use crate::tuning::{
     DEFEND_DEF_BONUS, ENGAGED_GROUPS, FLEE_COUNTERATTACK_CHANCE, JACK_OUT_LUCK_MAX,
-    JACK_OUT_LUCK_MIN,
+    JACK_OUT_LUCK_MIN, WILD_ABILITY_CHANCE,
 };
 use crate::*;
 
@@ -55,17 +55,23 @@ impl Game {
             rng.0.random_bool(FLEE_COUNTERATTACK_CHANCE)
         };
         if got_hit {
-            self.log("You jack out, but not before taking a parting counter-strike!");
+            self.log_kind(
+                MessageKind::Outcome,
+                "You jack out, but not before taking a parting counter-strike!",
+            );
             self.all_wild_retaliate(player);
         } else {
-            self.log("You jack out safely.");
+            self.log_kind(MessageKind::Outcome, "You jack out safely.");
         }
         // A forced jack-out costs a little progress too — nothing drastic,
         // same mild setback as a flatline (see `death_handling_system`).
         if let Some(mut exp) = self.world.get_mut::<Experience>(player) {
             let xp_lost = progression::apply_setback_xp_penalty(&mut exp);
             if xp_lost > 0 {
-                self.log(format!("Bailing out costs you {xp_lost} XP."));
+                self.log_kind(
+                    MessageKind::Outcome,
+                    format!("Bailing out costs you {xp_lost} XP."),
+                );
             }
         }
         let front = self.front_of_group(0);
@@ -139,7 +145,26 @@ impl Game {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_range(0..candidates.len())
         };
-        let mv = candidates[idx].clone();
+        let mut mv = candidates[idx].clone();
+        // A moveset's status effects are what a program *can* bring to bear,
+        // not what it does every turn. Reaching for one every time meant a
+        // species with a nasty stun was that stun on repeat.
+        //
+        // Gates the effect only — the move still lands its full damage — so
+        // this changes how a fight *feels* without touching the damage
+        // curves `balance_sim` projects.
+        //
+        // Composes with the move's own `effect.chance` rather than replacing
+        // it: that figure is per-move `.ron` data, including anyone's mods,
+        // and is the move's own reliability. Shipped chances are 0.3-0.5, so
+        // an effect actually lands on roughly 6-10% of wild attacks.
+        let reaches_for_effect = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_bool(WILD_ABILITY_CHANCE)
+        };
+        if !reaches_for_effect {
+            mv.effect = None;
+        }
 
         let target = self.roll_enemy_target(player);
         let targets_companion = target != player;
@@ -480,6 +505,11 @@ impl Game {
                 .0
                 .retain(|e| !downed.contains(e));
         }
+        // The blow-by-blow has done its job by now — the battle pane showed
+        // it live. What follows the player onto the map is the results.
+        self.world
+            .resource_mut::<MessageLog>()
+            .retain_outcomes_since_battle();
         self.world.remove_resource::<BattleState>();
     }
 }

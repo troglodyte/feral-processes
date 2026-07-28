@@ -20,6 +20,9 @@ fn biome_style(biome: Biome) -> (char, Color) {
 pub(super) fn draw_playing_base(app: &mut App, fx: &Fx, painter: &Painter, m: &Metrics) {
     let (tile_px, glyph_px) = map_cell(app.zoom);
     let status_line = app.status_line.clone();
+    // Read before the `game` borrow below: the results of a battle that just
+    // ended are at the tail of the log and scroll in one at a time.
+    let hidden = app.hidden_log_lines();
     let Some(game) = &mut app.game else { return };
 
     let map_w = painter.screen_w() * 0.7;
@@ -144,11 +147,19 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &Fx, painter: &Painter, m: &M
         ly += m.line_height;
     }
     let capacity = ((log_h - m.line_height) / m.line_height).max(1.0) as usize;
-    for (kind, line) in game.message_log(capacity) {
+    // Fetch the hidden tail as well, so chopping it still leaves a full
+    // pane's worth of older lines to draw.
+    let lines = game.message_log(capacity + hidden);
+    let shown = lines.len().saturating_sub(hidden);
+    for (kind, line) in lines
+        .iter()
+        .take(shown)
+        .skip(shown.saturating_sub(capacity))
+    {
         if ly > painter.screen_h() - m.gap {
             break;
         }
-        draw_message_line(kind, &line, m.inset, ly, painter, m);
+        draw_message_line(*kind, line, m.inset, ly, painter, m);
         ly += m.line_height;
     }
 }

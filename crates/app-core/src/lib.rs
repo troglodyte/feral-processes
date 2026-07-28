@@ -18,7 +18,7 @@ use feral_processes_engine::battle::{
 };
 use feral_processes_engine::items::{EquipmentSlot, ItemId};
 use feral_processes_engine::tuning::{ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST};
-use feral_processes_engine::{DifficultyMode, Entity, Game, ProgramSaleOption};
+use feral_processes_engine::{DifficultyMode, Entity, Game, MessageKind, ProgramSaleOption};
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
 /// visible viewport size.
@@ -117,6 +117,43 @@ const AUTOSAVE_INTERVAL_TICKS: u64 = 50;
 /// the world keeps moving once a second even while the player just sits on
 /// `Mode::Playing` and touches nothing.
 const REALTIME_TICK_INTERVAL: Duration = Duration::from_secs(1);
+
+/// How fast battle narration scrolls into the log pane, in lines per second.
+///
+/// Presentation rather than difficulty, which is why it lives here and not
+/// in the engine's `tuning.rs`.
+///
+/// A typical round narrates four lines, so this is a round per second — a
+/// line landing every quarter second, which reads as arriving rather than
+/// as already being there. The first attempt at this was 12/sec, which put
+/// the same round on screen in a third of a second and looked instant.
+pub const REVEAL_LINES_PER_SECOND: f32 = 4.0;
+
+/// How long a refusal ("that ability isn't ready") stays on screen before
+/// clearing itself, in seconds.
+///
+/// It clears rather than sitting there because it is drawn over the action
+/// bar on several screens — so a message about one rejected key would
+/// otherwise hide the menu the player needs in order to press a different
+/// one.
+pub const STATUS_LINE_SECONDS: f32 = 4.0;
+
+/// How much of the current battle's narration the player has been shown.
+///
+/// Transient presentation state, deliberately not saved: a loaded game
+/// resumes with nothing pending.
+#[derive(Default)]
+struct BattleReveal {
+    /// Lines released to the pane so far.
+    revealed: usize,
+    /// Sub-line carry, so a frame covering less than one line's worth of
+    /// time isn't rounded away and lost.
+    accumulated: f32,
+    /// The `Game::battle_log_generation` this count belongs to. When the
+    /// engine's generation moves on, the pane has a fresh range — a new
+    /// round or a new battle — and the count restarts.
+    generation: u64,
+}
 
 /// A frontend-agnostic input event. Every renderer crate maps its own input
 /// system's keys onto this small vocabulary before calling `App::handle_key`
@@ -474,6 +511,12 @@ pub struct App {
     /// Sound cues queued up by the most recent `handle_key` calls, awaiting
     /// `take_sounds` — see `SoundEvent`.
     pending_sounds: Vec<SoundEvent>,
+    /// Paces battle narration into the log pane — see `App::advance_reveal`.
+    reveal: BattleReveal,
+    /// Seconds `status_line` has been on screen — see `App::advance_status`.
+    /// Reset by every key press, so the window belongs to the most recent
+    /// message rather than the first one.
+    status_age: f32,
     /// Wall-clock time of the last idle tick (see `App::update_realtime`) —
     /// reset whenever ticking is paused (any mode but `Playing`) so resuming
     /// play doesn't immediately fire a burst of catch-up ticks.

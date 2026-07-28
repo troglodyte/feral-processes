@@ -148,6 +148,10 @@ fn roster_row(
 }
 
 pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Metrics) {
+    // Read before the `game` borrow below, which is held for the rest of
+    // the function.
+    let revealed = app.revealed_battle_log();
+    let revealing = app.is_revealing();
     let Some(game) = &mut app.game else { return };
     let Some(view) = game.battle_view() else {
         return;
@@ -262,11 +266,16 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
     // over.
     let capacity = ((log_height - margin) / m.line_height).max(0.0) as usize;
     let mut ly = y + margin;
-    for (kind, line) in game.message_log(capacity) {
+    // The tail, not the head: once a battle's narration outgrows the pane,
+    // new lines have to push old ones up and out.
+    for (kind, line) in revealed
+        .iter()
+        .skip(revealed.len().saturating_sub(capacity))
+    {
         if ly + m.line_height > party_top {
             break;
         }
-        draw_message_line(kind, &line, margin + m.inset, ly, painter, m);
+        draw_message_line(*kind, line, margin + m.inset, ly, painter, m);
         ly += m.line_height;
     }
 
@@ -333,27 +342,32 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
         y += m.inset;
     }
 
-    // The action bar is drawn from whatever the engine offers, never from
-    // strings authored here — so a new action reaches both renderers
-    // without either being touched.
-    let mut actions: Vec<String> = view
-        .options
-        .iter()
-        .map(|o| match &o.unavailable {
-            None => o.label.clone(),
-            Some(reason) => format!("{} ({reason})", o.label),
-        })
-        .collect();
-    // Party-level commands come from the engine too, so the two renderers
-    // cannot drift on them either.
-    actions.extend(game.battle_party_commands().into_iter().map(|c| c.label));
-    painter.ui(
-        actions.join("   "),
-        margin,
-        painter.screen_h() - m.font_size as f32,
-        m.font_size,
-        TEXT,
-    );
+    // Hidden while narration is still scrolling in: a key pressed then
+    // skips the reveal rather than acting, so offering the actions would be
+    // advertising keys that don't do what they say.
+    if !revealing {
+        // The action bar is drawn from whatever the engine offers, never from
+        // strings authored here — so a new action reaches both renderers
+        // without either being touched.
+        let mut actions: Vec<String> = view
+            .options
+            .iter()
+            .map(|o| match &o.unavailable {
+                None => o.label.clone(),
+                Some(reason) => format!("{} ({reason})", o.label),
+            })
+            .collect();
+        // Party-level commands come from the engine too, so the two renderers
+        // cannot drift on them either.
+        actions.extend(game.battle_party_commands().into_iter().map(|c| c.label));
+        painter.ui(
+            actions.join("   "),
+            margin,
+            painter.screen_h() - m.font_size as f32,
+            m.font_size,
+            TEXT,
+        );
+    }
 
     fx.draw_floats(painter, m);
 }
@@ -674,5 +688,41 @@ mod tests {
         assert_eq!(cell("Ünïcödé", 7).chars().count(), 7);
         assert_eq!(cell("Ünïcödé", 4).chars().count(), 4);
         assert_eq!(cell("Ünïcödé", 9).chars().count(), 9);
+    }
+}
+
+#[cfg(test)]
+mod reveal_tests {
+    /// Both log panes show the *tail* of what they are given, not the head:
+    /// once narration outgrows the pane, new lines have to push old ones up
+    /// and out. Taking the head instead would freeze the pane on the
+    /// opening lines and never show the round the player just fought.
+    #[test]
+    fn a_pane_shows_the_newest_lines_once_it_overflows() {
+        let revealed: Vec<String> = (0..10).map(|i| format!("line {i}")).collect();
+        let capacity = 3;
+
+        let shown: Vec<&String> = revealed
+            .iter()
+            .skip(revealed.len().saturating_sub(capacity))
+            .collect();
+
+        assert_eq!(shown, vec!["line 7", "line 8", "line 9"]);
+    }
+
+    /// Fewer lines than the pane holds must all be drawn — `saturating_sub`
+    /// rather than a subtraction that would underflow to a huge skip and
+    /// draw nothing at all.
+    #[test]
+    fn a_pane_that_is_not_full_shows_everything() {
+        let revealed = ["line 0", "line 1"];
+        let capacity = 10;
+
+        let shown: Vec<&&str> = revealed
+            .iter()
+            .skip(revealed.len().saturating_sub(capacity))
+            .collect();
+
+        assert_eq!(shown.len(), 2);
     }
 }

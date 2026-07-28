@@ -46,6 +46,10 @@ fn battling_app_with(setup: impl Fn(&mut Game)) -> App {
             .is_some_and(|v| v.groups.len() == 1);
         if app.mode == Mode::Battle && single_group {
             let _ = app.take_sounds();
+            // The opening narration is scrolling in, and a key pressed
+            // during that skips rather than acting. Drain it so a caller's
+            // first key is its own test's input, not a skip.
+            app.finish_reveal();
             return app;
         }
     }
@@ -468,4 +472,257 @@ fn pressing_special_with_nothing_installed_does_nothing() {
 
     assert_eq!(app.mode, Mode::Battle, "no picker should have opened");
     assert!(app.pending_battle_action.is_none());
+}
+
+/// The reveal must be driven by an injected delta, never a wall clock —
+/// otherwise this test would need a sleep, which the suite forbids.
+#[test]
+fn lines_are_released_in_proportion_to_the_elapsed_time() {
+    let mut app = battling_app();
+    app.restart_reveal();
+
+    app.advance_reveal(0.0);
+    assert_eq!(
+        app.revealed_battle_log().len(),
+        0,
+        "a zero delta released a line"
+    );
+
+    app.advance_reveal(1.0 / REVEAL_LINES_PER_SECOND);
+    assert_eq!(
+        app.revealed_battle_log().len(),
+        1,
+        "one line's worth of time released something other than one line"
+    );
+}
+
+/// A frame covering less than a whole line must not lose the fraction: two
+/// half-line frames make a line. Truncating instead would stall the reveal
+/// completely on a fast enough frame rate.
+#[test]
+fn the_fractional_carry_does_not_lose_a_line() {
+    let mut app = battling_app();
+    app.restart_reveal();
+
+    let half = 0.5 / REVEAL_LINES_PER_SECOND;
+    app.advance_reveal(half);
+    assert_eq!(app.revealed_battle_log().len(), 0);
+    app.advance_reveal(half);
+    assert_eq!(
+        app.revealed_battle_log().len(),
+        1,
+        "the sub-line carry was dropped between frames"
+    );
+}
+
+#[test]
+fn the_reveal_stops_at_the_last_line_and_reports_done() {
+    let mut app = battling_app();
+    app.restart_reveal();
+    let total = app.game.as_ref().unwrap().battle_log().len();
+    assert!(total > 0, "the fixture produced no narration to reveal");
+
+    app.advance_reveal(1_000.0);
+
+    assert_eq!(app.revealed_battle_log().len(), total);
+    assert!(
+        !app.is_revealing(),
+        "still reporting a reveal in progress with every line out"
+    );
+    assert_eq!(app.hidden_log_lines(), 0);
+}
+
+/// The pane shows this battle's lines and nothing older, so what the reveal
+/// paces is scoped to the fight the player is actually in.
+#[test]
+fn the_revealed_log_never_runs_past_this_battle() {
+    let mut app = battling_app();
+    app.restart_reveal();
+    app.advance_reveal(1_000.0);
+
+    let revealed = app.revealed_battle_log();
+    let battle = app.game.as_ref().unwrap().battle_log();
+    assert_eq!(
+        revealed.len(),
+        battle.len(),
+        "the pane and the engine disagree on what this battle logged"
+    );
+}
+
+#[test]
+fn a_key_pressed_mid_reveal_skips_instead_of_acting() {
+    let mut app = battling_app();
+    app.restart_reveal();
+    app.advance_reveal(0.0);
+    let mode_before = app.mode;
+    assert!(app.is_revealing(), "the fixture left nothing to reveal");
+
+    app.handle_key(GameKey::Esc);
+
+    assert!(!app.is_revealing(), "the key did not finish the reveal");
+    assert_eq!(
+        app.mode, mode_before,
+        "the skip key was acted on as well as skipping"
+    );
+}
+
+#[test]
+fn a_key_pressed_after_the_reveal_acts_normally() {
+    let mut app = battling_app();
+    app.advance_reveal(1_000.0);
+    assert!(!app.is_revealing());
+
+    app.handle_key(GameKey::Char('j'));
+
+    assert!(
+        !app.take_sounds().is_empty() || app.mode != Mode::Battle,
+        "jacking out did nothing once the reveal was done"
+    );
+}
+
+/// A won battle has had its log pruned to results by the engine. Those
+/// results are what the map's log pane shows, and they scroll in there at
+/// the same pace rather than appearing whole.
+#[test]
+fn ending_a_battle_restarts_the_reveal_for_the_results() {
+    let mut app = battling_app();
+    app.advance_reveal(1_000.0);
+    assert!(!app.is_revealing());
+
+    // Jack out — the one battle ending reachable from a single key press
+    // regardless of how the fight is going.
+    app.handle_key(GameKey::Char('j'));
+    if app.game.as_ref().is_some_and(|g| g.has_active_battle()) {
+        // The jack-out roll can fail; the battle is still on, so there is
+        // no ended-battle handoff to assert about.
+        return;
+    }
+
+    assert_eq!(
+        app.revealed_battle_log().len(),
+        0,
+        "the results were shown whole instead of scrolling in"
+    );
+}
+
+/// A refusal is drawn over the action bar, so leaving it up hides the menu
+/// the player needs in order to press a different key.
+#[test]
+fn a_refusal_clears_itself_so_the_action_bar_comes_back() {
+    let mut app = battling_app();
+    app.status_line = Some("that ability isn't ready".to_string());
+
+    app.advance_status(STATUS_LINE_SECONDS / 2.0);
+    assert!(
+        app.status_line.is_some(),
+        "the message vanished before it could be read"
+    );
+
+    app.advance_status(STATUS_LINE_SECONDS / 2.0);
+    assert!(
+        app.status_line.is_none(),
+        "the message outstayed its welcome and is still covering the menu"
+    );
+}
+
+/// The window belongs to the newest message. Without the reset, a refusal
+/// raised just as an older one aged out would flash and vanish.
+#[test]
+fn a_new_keypress_restarts_the_refusal_window() {
+    let mut app = battling_app();
+    app.status_line = Some("stale".to_string());
+    app.advance_status(STATUS_LINE_SECONDS * 0.9);
+
+    // Any key press restarts the clock.
+    app.handle_key(GameKey::Char('d'));
+    app.status_line = Some("fresh".to_string());
+    app.advance_status(STATUS_LINE_SECONDS * 0.5);
+
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("fresh"),
+        "the new message inherited the old one's remaining time"
+    );
+}
+
+/// Each round clears the pane, so the reveal has to restart with it.
+/// Resetting only when the *battle* changes leaves `revealed` holding the
+/// previous round's count — which already covers the new round's equally
+/// short range, so `revealed >= total` short-circuits and the whole round
+/// lands at once with no scrolling at all.
+///
+/// Resolves two rounds deliberately: the first round's carried count is
+/// only the opening line, so the bug shows up in full from the second.
+#[test]
+fn every_round_restarts_the_reveal_instead_of_landing_whole() {
+    let mut app = battling_app();
+    // Adopt the current generation and drain the opening line, so what this
+    // asserts afterwards is about the round and not about a stale reset.
+    app.advance_reveal(1_000.0);
+
+    for round in 0..2 {
+        assert!(
+            app.game.as_ref().is_some_and(|g| g.has_active_battle()),
+            "the fight ended after {round} rounds — this needs one that continues"
+        );
+        // All-defend resolves the round without stopping to pick a target.
+        app.handle_key(GameKey::Char('D'));
+        app.advance_reveal(0.0);
+
+        assert_eq!(
+            app.revealed_battle_log().len(),
+            0,
+            "round {round} was already on screen before any time had passed"
+        );
+        assert!(
+            app.is_revealing(),
+            "round {round} has narration, so it should still be scrolling in"
+        );
+        app.advance_reveal(1_000.0);
+    }
+}
+
+/// Every round has to actually take time on screen, not just the first.
+///
+/// Two separate bugs made rounds after the first land whole. The counter
+/// was keyed on the battle rather than the round, so a carried-over count
+/// already covered the next round's equally short range; and `is_revealing`
+/// read the raw count, so between a round resolving and the next frame's
+/// `advance_reveal` every reader still saw the finished round's total. This
+/// walks real frames, which is what catches the second one — the reveal
+/// looked fine to a test that reset it by hand first.
+#[test]
+fn every_round_takes_real_time_to_scroll_in() {
+    let mut app = battling_app();
+    app.advance_reveal(1_000.0);
+    let frame = 1.0 / 60.0;
+
+    for round in 0..3 {
+        assert!(
+            app.game.as_ref().is_some_and(|g| g.has_active_battle()),
+            "the fight ended after {round} rounds — this needs one that continues"
+        );
+        // All-defend resolves the round without stopping to pick a target.
+        app.handle_key(GameKey::Char('D'));
+
+        let total = app.game.as_ref().unwrap().battle_log().len();
+        assert!(total > 1, "round {round} narrated too little to pace");
+        assert_eq!(
+            app.revealed_battle_log().len(),
+            0,
+            "round {round} was on screen before a frame had passed"
+        );
+
+        let mut frames = 0;
+        while app.is_revealing() && frames < 10_000 {
+            app.advance_reveal(frame);
+            frames += 1;
+        }
+        let seconds = frames as f32 * frame;
+        let expected = total as f32 / REVEAL_LINES_PER_SECOND;
+        assert!(
+            (seconds - expected).abs() < 0.1,
+            "round {round}: {total} lines took {seconds:.2}s, expected about {expected:.2}s"
+        );
+    }
 }

@@ -151,6 +151,9 @@ impl Game {
             .sum::<usize>()
             .saturating_sub(1);
         let slots = self.world.resource::<Party>().0.len() + 1;
+        // Opened before the intercept line below, so that line is the first
+        // thing the battle pane shows.
+        self.world.resource_mut::<MessageLog>().open_battle();
         self.world.insert_resource(BattleState {
             player,
             groups,

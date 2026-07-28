@@ -39,11 +39,55 @@ pub enum MessageKind {
     /// battle screen's log pane is continuous, so without this the narration
     /// of six rounds reads as one undifferentiated block.
     Round,
+    /// A line that is a *result* of a battle rather than narration of it —
+    /// the kill, the XP, the decompile verdict, the jack-out. `MessageLog::
+    /// retain_outcomes_since_battle` keeps exactly these (plus `Loot` and
+    /// `LevelUp`, which already tag themselves) when a battle ends, which is
+    /// what stops the blow-by-blow following the player onto the map.
+    Outcome,
 }
+
+/// Where a battle's narration begins, as a count of lines ever pushed.
+///
+/// Deliberately not an index into `MessageLog::lines`: the log drains its
+/// oldest entries once past `MESSAGE_LOG_CAP`, so an index would come to
+/// point at the wrong line in any battle long enough to overflow it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MessageMark(u64);
 
 #[derive(Resource, Default)]
 pub struct MessageLog {
     pub lines: Vec<(MessageKind, String)>,
+    /// Lines ever pushed, including those since dropped. Marks are minted
+    /// from this, and `pushed - dropped == lines.len()` is the invariant
+    /// that converts a mark back into an index — every mutation of `lines`
+    /// has to keep it.
+    pushed: u64,
+    /// Lines dropped off the front by the cap. Counted rather than derived
+    /// from `pushed - lines.len()`: `retain_outcomes_since_battle` removes
+    /// lines from the middle too, which a derived figure would mistake for
+    /// front-drops and slide every mark backwards past its own range.
+    dropped: u64,
+    /// Where the current — or most recently ended — battle's narration
+    /// begins. `None` until the first battle: a run that has never fought
+    /// has no narration, and defaulting to mark 0 would instead make the
+    /// whole log read as one endless battle.
+    ///
+    /// Deliberately not cleared when a battle ends: the frontend is still
+    /// scrolling that battle's results in after the fact and needs the range
+    /// to slice. The next `open_battle` replaces it.
+    battle_start: Option<MessageMark>,
+    /// Where the current round's narration begins. The pane shows one round
+    /// at a time, so a resolved round replaces the last rather than piling
+    /// on top of it.
+    round_start: Option<MessageMark>,
+    /// Bumped every time the pane's range resets — a new round or a new
+    /// battle — so a frontend pacing the narration can tell it has a fresh
+    /// range to scroll rather than comparing text. A per-*battle* counter
+    /// is not enough: consecutive rounds are much the same length, so a
+    /// reveal that carried its count across one would find the new range
+    /// already covered and show it whole.
+    generation: u64,
 }
 
 impl MessageLog {
@@ -53,15 +97,86 @@ impl MessageLog {
 
     pub fn push_kind(&mut self, kind: MessageKind, line: impl Into<String>) {
         self.lines.push((kind, line.into()));
+        self.pushed += 1;
         if self.lines.len() > MESSAGE_LOG_CAP {
             let excess = self.lines.len() - MESSAGE_LOG_CAP;
             self.lines.drain(0..excess);
+            self.dropped += excess as u64;
         }
     }
 
     pub fn recent(&self, n: usize) -> &[(MessageKind, String)] {
         let start = self.lines.len().saturating_sub(n);
         &self.lines[start..]
+    }
+
+    /// Opens a new battle's narration range at the next line pushed, and
+    /// its first round with it.
+    pub fn open_battle(&mut self) {
+        self.battle_start = Some(MessageMark(self.pushed));
+        self.open_round();
+    }
+
+    /// Opens a new round's range at the next line pushed. The pane shows one
+    /// round at a time, so this is what clears it between them.
+    pub fn open_round(&mut self) {
+        self.round_start = Some(MessageMark(self.pushed));
+        self.generation += 1;
+    }
+
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    /// Where `mark` sits in `lines` right now. Clamped: once the mark has
+    /// been dropped past, every line still held is younger than it, so all
+    /// of them belong to the range.
+    fn index_of(&self, mark: Option<MessageMark>) -> Option<usize> {
+        let mark = mark?;
+        let start = mark.0.saturating_sub(self.dropped) as usize;
+        Some(start.min(self.lines.len()))
+    }
+
+    /// The current round's lines, oldest first — what the battle pane shows.
+    /// Empty before the run's first battle.
+    pub fn since_round(&self) -> &[(MessageKind, String)] {
+        match self.index_of(self.round_start) {
+            Some(start) => &self.lines[start..],
+            None => &[],
+        }
+    }
+
+    /// Drops the blow-by-blow from the battle range, keeping what the player
+    /// should still be reading once the map is back: the battle's results,
+    /// and any world news that landed mid-fight. `Raid` is kept because the
+    /// background systems in `systems.rs` and `difficulty.rs` write to this
+    /// log directly, so a raid alert can arrive inside a battle's range
+    /// without being any part of that battle.
+    pub fn retain_outcomes_since_battle(&mut self) {
+        let Some(start) = self.index_of(self.battle_start) else {
+            return;
+        };
+        let mut index = 0;
+        self.lines.retain(|(kind, _)| {
+            let keep = index < start
+                || matches!(
+                    kind,
+                    MessageKind::Outcome
+                        | MessageKind::Loot
+                        | MessageKind::LevelUp
+                        | MessageKind::Raid
+                );
+            index += 1;
+            keep
+        });
+        // Restores `pushed - dropped == lines.len()`. Without this the lines
+        // just removed would read as front-drops and drag every mark back
+        // past its own range.
+        self.pushed = self.dropped + self.lines.len() as u64;
+        // What survived is the results, and they are what the map's pane
+        // scrolls in — so the round range has to cover them, not the point
+        // the final round happened to start at.
+        self.round_start = Some(MessageMark(self.dropped + start as u64));
     }
 }
 

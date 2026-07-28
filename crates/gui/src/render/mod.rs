@@ -47,7 +47,7 @@ use inventory::{draw_erase_quantity, draw_inventory, draw_inventory_item_action}
 use manifest::{ManifestNav, draw_manifest, draw_manifest_pick};
 use meta::{
     draw_difficulty_pick, draw_game_over, draw_help, draw_load_game, draw_main_menu,
-    draw_save_action,
+    draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
 };
 use party::{draw_companion_menu, draw_fuse_menu, draw_fuse_name_menu, draw_fuse_second_menu};
 use popup::{PopupSize, draw_popup, text_row};
@@ -183,8 +183,16 @@ fn draw_message_line(
 /// and save popups carry it as a row inside the panel; every other mode
 /// covers the log pane with a popup, which would otherwise bury the one
 /// message explaining why a menu pick was refused.
+///
+/// `QuitAppConfirm` is exempt because it draws the main menu underneath it,
+/// which shows the line itself. `QuitRunConfirm` is not: the banner is how a
+/// failed save-and-quit reaches the player, and it is the reason that screen
+/// keeps them there instead of leaving anyway.
 fn needs_status_banner(mode: Mode) -> bool {
-    !matches!(mode, Mode::Playing | Mode::MainMenu | Mode::SaveAction)
+    !matches!(
+        mode,
+        Mode::Playing | Mode::MainMenu | Mode::SaveAction | Mode::QuitAppConfirm
+    )
 }
 
 /// Draws `status` in a strip along the bottom edge, below every popup —
@@ -208,6 +216,12 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
     painter.clear(Color::new(0.02, 0.02, 0.03, 1.0));
     match app.mode {
         Mode::MainMenu => draw_main_menu(app, painter, &m),
+        // Drawn over the menu it was opened from, so the row `q` was pressed
+        // on stays visible behind the question.
+        Mode::QuitAppConfirm => {
+            draw_main_menu(app, painter, &m);
+            draw_quit_app_confirm(app.menu_selected, painter, &m);
+        }
         Mode::LoadGame => draw_load_game(app, painter, &m),
         Mode::SaveAction => draw_save_action(app, painter, &m),
         Mode::DifficultyPick => draw_difficulty_pick(app.menu_selected, painter, &m),
@@ -410,6 +424,7 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         }
         Mode::Perks => draw_perks_menu(game, selected, painter, m),
         Mode::Research => draw_research_menu(game, selected, painter, m),
+        Mode::QuitRunConfirm => draw_quit_run_confirm(selected, painter, m),
         _ => {}
     }
 }
@@ -443,6 +458,9 @@ mod tests {
             Mode::BattleItem,
             Mode::Help,
             Mode::LoadGame,
+            // Where "Save failed: ..." has to land, or save-and-quit refuses
+            // to leave for a reason the player can't see.
+            Mode::QuitRunConfirm,
         ] {
             assert!(
                 needs_status_banner(mode),
@@ -531,7 +549,12 @@ mod tests {
 
     #[test]
     fn modes_that_already_show_the_status_line_dont_double_up() {
-        for mode in [Mode::Playing, Mode::MainMenu, Mode::SaveAction] {
+        for mode in [
+            Mode::Playing,
+            Mode::MainMenu,
+            Mode::SaveAction,
+            Mode::QuitAppConfirm,
+        ] {
             assert!(
                 !needs_status_banner(mode),
                 "{mode:?} already surfaces status_line itself"

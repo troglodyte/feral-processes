@@ -25,7 +25,7 @@ impl App {
                 self.status_line = None;
                 self.mode = Mode::LoadGame;
             }
-            Some('q') => self.quit = true,
+            Some('q') => self.mode = Mode::QuitAppConfirm,
             _ => {}
         }
     }

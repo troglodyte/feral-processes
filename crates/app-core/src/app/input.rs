@@ -101,6 +101,8 @@ impl App {
             Mode::Research => self.handle_research_key(key),
             Mode::Help => self.handle_help_key(),
             Mode::GameOver => self.handle_game_over_key(),
+            Mode::QuitRunConfirm => self.handle_quit_run_confirm_key(key),
+            Mode::QuitAppConfirm => self.handle_quit_app_confirm_key(key),
         }
         // Every menu's arrow-key highlight (see `selected_index`) starts
         // fresh at the top of its list, rather than carrying over whatever

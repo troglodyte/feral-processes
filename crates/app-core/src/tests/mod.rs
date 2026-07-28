@@ -8,6 +8,7 @@ mod fusion;
 mod inventory;
 mod menus;
 mod playing;
+mod quitting;
 mod research;
 mod routines;
 mod saves;

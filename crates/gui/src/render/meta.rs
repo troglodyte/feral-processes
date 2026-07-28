@@ -100,13 +100,44 @@ pub(super) fn draw_game_over(app: &mut App, painter: &Painter, m: &Metrics) {
     draw_popup("Session Terminated", PopupSize::Large, &rows, painter, m);
 }
 
+/// Confirms abandoning the run. Spells out what leaving costs rather than
+/// asking a bare "are you sure?" — the answer depends on how long ago the
+/// last autosave was, which is not something the player can see.
+pub(super) fn draw_quit_run_confirm(selected: usize, painter: &Painter, m: &Metrics) {
+    let rows = vec![
+        text_row("Leave this run?"),
+        text_row(""),
+        item_row("[S] Save and quit to the menu".to_string(), selected == 0),
+        item_row("[Q] Quit without saving".to_string(), selected == 1),
+        item_row("[N] Keep playing".to_string(), selected == 2),
+        text_row(""),
+        text_row("Quitting without saving drops progress since the last autosave."),
+        text_row("Esc to cancel; Up/Down + Enter also work"),
+    ];
+    draw_popup("Quit to Menu", PopupSize::Large, &rows, painter, m);
+}
+
+/// Confirms ending the process from the main menu. No run is loaded, so
+/// this guards a misaimed keypress rather than any progress.
+pub(super) fn draw_quit_app_confirm(selected: usize, painter: &Painter, m: &Metrics) {
+    let rows = vec![
+        text_row("Close feral-processes?"),
+        text_row(""),
+        item_row("[Y] Yes, quit".to_string(), selected == 0),
+        item_row("[N] No, stay".to_string(), selected == 1),
+        text_row(""),
+        text_row("Esc to cancel; Up/Down + Enter also work"),
+    ];
+    draw_popup("Quit", PopupSize::Large, &rows, painter, m);
+}
+
 pub(super) fn draw_help(painter: &Painter, m: &Metrics) {
     let rows = vec![
         text_row("hjkl/arrows move   . wait   e drain   r recharge"),
         text_row("g scan   c compile   b deploy   w cronjob   G guard   R demolish"),
         text_row("u symlink   i inspect   d manifest   v inventory   p companions"),
         text_row("f fuse   m routines   M extract   t trade   x perks   T research"),
-        text_row("s save   q main menu"),
+        text_row("s save   q main menu (confirms first)"),
         text_row("+/- zoom   [/] volume   \\ visual effects"),
         text_row(""),
         text_row("Every numbered menu also takes Up/Down + Enter, on top of"),

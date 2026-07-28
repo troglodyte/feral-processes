@@ -128,7 +128,7 @@ change what gets stored — a save from a different build shows up as
 | `t` | Trade with a nearby iso Market: sell items or compiled programs, buy consumables |
 | `x` | Perks: spend Perk Points on permanent passive unlocks |
 | `s` | Save |
-| `q` | Return to the main menu (unsaved progress is lost — `s` first if you want to keep it) |
+| `q` | Return to the main menu — asks first, and offers to save on the way out |
 | `+` / `-` | Zoom the grid in/out |
 | `[` / `]` | Volume down/up in 10% steps — see [Audio](#audio) |
 | `\` | Toggle visual effects on/off |

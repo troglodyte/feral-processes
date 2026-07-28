@@ -303,6 +303,15 @@ pub enum Mode {
     Research,
     Help,
     GameOver,
+    /// Confirming `q` from `Mode::Playing`, which abandons the run. Offers to
+    /// save first: autosave only fires every `AUTOSAVE_INTERVAL_TICKS`, so
+    /// leaving without one silently drops however many ticks have passed
+    /// since — and remembering to press `s` first is not something a
+    /// confirmation should require of the player.
+    QuitRunConfirm,
+    /// Confirming `q` from `Mode::MainMenu`, which ends the process. Nothing
+    /// is in memory to lose here; the key simply sits between `n` and `l`.
+    QuitAppConfirm,
 }
 
 impl Mode {
@@ -364,7 +373,9 @@ impl Mode {
             | Mode::Perks
             | Mode::Research
             | Mode::Help
-            | Mode::GameOver => false,
+            | Mode::GameOver
+            | Mode::QuitRunConfirm
+            | Mode::QuitAppConfirm => false,
         }
     }
 }

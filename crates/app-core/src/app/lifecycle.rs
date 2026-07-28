@@ -144,15 +144,80 @@ impl App {
         }
     }
 
-    pub(crate) fn save_game(&mut self) {
+    /// Writes the run to its slot, reporting whether it landed. The bool is
+    /// there for `Mode::QuitRunConfirm`'s save-and-quit, which must not throw
+    /// the run away on the strength of a save that failed.
+    pub(crate) fn save_game(&mut self) -> bool {
         let Some(path) = &self.current_save_path else {
-            return;
+            return false;
         };
-        if let Some(game) = &mut self.game {
-            match game.save(path) {
-                Ok(()) => self.status_line = Some("Game saved.".to_string()),
-                Err(e) => self.status_line = Some(format!("Save failed: {e}")),
+        let Some(game) = &mut self.game else {
+            return false;
+        };
+        match game.save(path) {
+            Ok(()) => {
+                self.status_line = Some("Game saved.".to_string());
+                true
             }
+            Err(e) => {
+                self.status_line = Some(format!("Save failed: {e}"));
+                false
+            }
+        }
+    }
+
+    /// Drops the run and returns to the main menu. The one path out of
+    /// `Mode::Playing` that discards state, so it is only ever reached
+    /// through `Mode::QuitRunConfirm`.
+    fn leave_run(&mut self) {
+        self.game = None;
+        self.status_line = None;
+        self.mode = Mode::MainMenu;
+    }
+
+    pub(crate) fn handle_quit_run_confirm_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.mode = Mode::Playing;
+            return;
+        }
+        let options = ['s', 'q', 'n'];
+        let idx = self
+            .selected_index(key, options.len())
+            .or_else(|| match key {
+                GameKey::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
+                _ => None,
+            });
+        let picked = idx.map(|i| options[i]);
+        // A failed save holds the player here with the error still on screen
+        // rather than leaving anyway. Quitting after being asked to save
+        // first, and dropping the run regardless, is the one outcome this
+        // screen exists to prevent.
+        if picked == Some('s') && !self.save_game() {
+            return;
+        }
+        match picked {
+            Some('s') | Some('q') => self.leave_run(),
+            Some('n') => self.mode = Mode::Playing,
+            _ => {}
+        }
+    }
+
+    pub(crate) fn handle_quit_app_confirm_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.mode = Mode::MainMenu;
+            return;
+        }
+        let options = ['y', 'n'];
+        let idx = self
+            .selected_index(key, options.len())
+            .or_else(|| match key {
+                GameKey::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
+                _ => None,
+            });
+        match idx.map(|i| options[i]) {
+            Some('y') => self.quit = true,
+            Some('n') => self.mode = Mode::MainMenu,
+            _ => {}
         }
     }
 

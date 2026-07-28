@@ -78,9 +78,7 @@ impl App {
                 return;
             }
             GameKey::Char('q') => {
-                self.game = None;
-                self.status_line = None;
-                self.mode = Mode::MainMenu;
+                self.mode = Mode::QuitRunConfirm;
                 return;
             }
             GameKey::Char('?') => {

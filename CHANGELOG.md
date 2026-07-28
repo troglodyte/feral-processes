@@ -32,6 +32,12 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ### Renderer
 
+- **Quitting asks first.** `q` in a run used to drop it on the spot, so one
+  mistyped key cost every tick since the last autosave with nothing asked and
+  nothing said. It now offers *save and quit*, *quit without saving*, or *keep
+  playing* — and if that save fails it keeps you where you are with the error
+  on screen rather than leaving anyway. `q` at the main menu, which ends the
+  process, takes a plain yes/no; it sits one key from New Game and Load Game.
 - **The log and the menus are colour-coded by what a line actually is.** Items
   you receive read blue instead of sharing green with a level-up. A hostile
   program's blow reads red, and orange when the move it used also inflicts a

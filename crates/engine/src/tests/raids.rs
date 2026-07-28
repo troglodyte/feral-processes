@@ -932,3 +932,58 @@ fn structures_survive_save_and_load_with_their_durability() {
     assert_eq!(durability.hp, 12);
     assert_eq!(durability.max_hp, structure_def.durability);
 }
+
+/// Programs have no passive regen and the player is not present, so raid
+/// chip damage is pure attrition: a worker left on a cronjob long enough
+/// dies unattended. That is the intended cost, not an oversight.
+#[test]
+fn a_raid_defender_brought_to_zero_is_destroyed_rather_than_standing_down() {
+    let mut game = Game::new(101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let existing: Vec<Entity> = {
+        let mut query = game.world.query_filtered::<Entity, With<Durability>>();
+        query.iter(&game.world).collect()
+    };
+    for e in existing {
+        game.world.despawn(e);
+    }
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+            Durability {
+                hp: 1000,
+                max_hp: 1000,
+            },
+        ))
+        .id();
+    // Exactly one raid's worth of defender damage, so the first raid that
+    // lands kills it and the test never depends on how many fire.
+    let worker = spawn_tamed(&mut game, RAID_DEFENDER_DAMAGE, 3);
+    game.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: structure,
+        progress: 1,
+        required: 5,
+    });
+
+    for _ in 0..2000 {
+        game.raid_check();
+        if game.world.get::<Stats>(worker).is_none() {
+            break;
+        }
+    }
+
+    assert!(
+        game.world.get::<Stats>(worker).is_none(),
+        "a defender knocked to 0 HP is destroyed, not stood down"
+    );
+    assert!(
+        game.message_log(200)
+            .iter()
+            .any(|(k, l)| *k == MessageKind::Raid && l.contains("destroyed defending")),
+        "the loss is reported as a Raid line, since the player wasn't there to see it"
+    );
+}

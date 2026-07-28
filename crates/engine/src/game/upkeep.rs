@@ -163,10 +163,17 @@ impl Game {
         }
         self.apply_damage(worker, RAID_DEFENDER_DAMAGE);
         if !self.creature_alive(worker) {
-            self.log(format!(
-                "{worker_label} is knocked offline defending {target_label} and stands down from its cronjob."
-            ));
+            self.log_kind(
+                MessageKind::Raid,
+                format!("{worker_label} is destroyed defending {target_label}."),
+            );
+            // Stripped before the dissolve, not by it. `raid_check` finds its
+            // defender *by* this `Task`, so the program is always working the
+            // structure the line above already names — leaving the `Task` on
+            // would have `sale_detachments` add a redundant "stops working
+            // the Mining Node" directly beneath it.
             self.world.entity_mut(worker).remove::<Task>();
+            self.dissolve_tamed_program(worker);
         }
     }
 

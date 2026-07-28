@@ -58,6 +58,10 @@ compass directions and start being forward, back, turn left, turn right.
 `<` and `>` take the stairs under you. There is no auto-map; that is what
 graph paper is for.
 
+Materializing in a sector runs a deep scan that logs how many breaches are
+in it and the bearing of the nearest. One is always within sight of where
+you arrive; the rest are a walk.
+
 Your base does not stop while you are down there. The player's position on
 the zone map stays pinned to the breach you entered by, so cronjobs keep
 paying out, needs keep decaying, and a raid can land on your Home while you

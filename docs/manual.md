@@ -137,7 +137,10 @@ change what gets stored — a save from a different build shows up as
 **In a dungeon:**
 
 Walking onto a breach (`>`) on the zone map drops you into a first-person
-dungeon level. The movement keys change meaning — they steer a party that
+dungeon level. Each sector holds three, and materializing in one runs a deep
+scan that logs how many there are and the bearing of the nearest — one is
+always within sight of your arrival point, the others are a walk. A
+structure cannot be deployed on a breach tile. The movement keys change meaning — they steer a party that
 has a facing rather than moving a token on a grid.
 
 | Key | Action |

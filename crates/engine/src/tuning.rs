@@ -391,6 +391,27 @@ pub const DUNGEON_ENTRANCES_PER_ZONE: usize = 3;
 /// platform the player is standing on.
 pub const DUNGEON_ENTRANCE_SCATTER_TILES: i32 = 40;
 
+/// How close the *first* entrance of a zone is placed.
+///
+/// Measured against the map viewport rather than picked for feel: at the
+/// default zoom the pane shows roughly ±16 by ±9 tiles, so anything past
+/// this is off screen when the player materializes. With all three entrances
+/// scattered to `DUNGEON_ENTRANCE_SCATTER_TILES`, most seeds put every one
+/// of them out of sight, and a player with no reason to think breaches exist
+/// has no reason to go looking. One always within the opening view is the
+/// on-ramp; the other two are still a trip.
+pub const DUNGEON_NEAREST_ENTRANCE_TILES: i32 = 8;
+
+/// How close a breach may get to where the player materializes.
+///
+/// Without a floor, `DUNGEON_NEAREST_ENTRANCE_TILES` can put one on the
+/// arrival tile itself — the player starts standing on a breach — or one
+/// step from it, so the first movement key of the run drops them into a
+/// dungeon they never chose to enter. It also keeps breaches off the tiles a
+/// base's first few structures go on, which would otherwise be refused with
+/// "there's a breach here" for no reason the player could have foreseen.
+pub const DUNGEON_MIN_ENTRANCE_TILES: i32 = 5;
+
 /// Floor under `swarm_radius`, the radius that actually governs how
 /// tightly a pack's members cluster around the tile a spawn roll picked
 /// (`Game::try_spawn_habitat_creature`) and how far `gather_pack` searches

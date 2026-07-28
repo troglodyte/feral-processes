@@ -8,7 +8,9 @@
 
 use crate::dungeon::{self, CellKind, Dir};
 use crate::resources::{CurrentDungeon, Locale};
-use crate::tuning::DUNGEON_ENTRANCE_SCATTER_TILES;
+use crate::tuning::{
+    DUNGEON_ENTRANCE_SCATTER_TILES, DUNGEON_MIN_ENTRANCE_TILES, DUNGEON_NEAREST_ENTRANCE_TILES,
+};
 use crate::*;
 
 /// How far ahead the first-person view reaches, in cells. Four is enough
@@ -20,6 +22,31 @@ pub const DUNGEON_VIEW_DEPTH: usize = 4;
 /// three-wide cone a classic blobber shows — the corridor you are in, plus
 /// whatever opens off it.
 pub const DUNGEON_VIEW_HALF_WIDTH: usize = 1;
+
+/// Eight-point compass heading for an offset, with north as `-y` to match
+/// `dungeon::Dir`.
+///
+/// A direction counts as diagonal when neither axis dominates the other by
+/// more than half — a strict "whichever is larger" split would call a
+/// near-45° bearing due east and send the player off at an angle.
+pub(crate) fn bearing(dx: i32, dy: i32) -> &'static str {
+    let (ax, ay) = (dx.abs(), dy.abs());
+    let horizontal = ax * 2 > ay;
+    let vertical = ay * 2 > ax;
+    match (vertical.then_some(dy < 0), horizontal.then_some(dx > 0)) {
+        (Some(true), None) => "north",
+        (Some(false), None) => "south",
+        (None, Some(true)) => "east",
+        (None, Some(false)) => "west",
+        (Some(true), Some(true)) => "north-east",
+        (Some(true), Some(false)) => "north-west",
+        (Some(false), Some(true)) => "south-east",
+        (Some(false), Some(false)) => "south-west",
+        // Only reachable at dx == dy == 0, where every direction is as good
+        // as any other.
+        (None, None) => "here",
+    }
+}
 
 /// The `Locale::Dungeon` payload, unpacked — see `Game::dungeon_pos`. A
 /// named struct rather than a five-tuple so call sites read as fields
@@ -73,15 +100,24 @@ impl Game {
         let zone = self.world.resource::<ZoneLevel>().0;
         let mut rng = StdRng::seed_from_u64(((seed as u64) << 32) ^ zone as u64 ^ ENTRANCE_SALT);
 
-        let reach = DUNGEON_ENTRANCE_SCATTER_TILES;
         let mut placed = 0;
         let mut attempts = 0;
         while placed < count && attempts < count * 40 {
             attempts += 1;
+            // The first one lands inside the opening viewport; the rest
+            // scatter. See `DUNGEON_NEAREST_ENTRANCE_TILES`.
+            let reach = if placed == 0 {
+                DUNGEON_NEAREST_ENTRANCE_TILES
+            } else {
+                DUNGEON_ENTRANCE_SCATTER_TILES
+            };
             let (dx, dy) = (
                 rng.random_range(-reach..=reach),
                 rng.random_range(-reach..=reach),
             );
+            if dx.abs().max(dy.abs()) < DUNGEON_MIN_ENTRANCE_TILES {
+                continue;
+            }
             let (x, y) = (origin.x + dx, origin.y + dy);
             let tile = self.world.resource_mut::<WorldMap>().tile(x, y);
             if !tile.walkable || tile.biome == Biome::Platform {
@@ -95,6 +131,39 @@ impl Game {
             self.spawn_entrance_at(x, y);
             placed += 1;
         }
+        self.announce_dungeon_entrances(origin);
+    }
+
+    /// Logs what the arrival scan picks up: how many breaches are in the
+    /// sector and where the nearest one lies.
+    ///
+    /// Without this the layer is invisible. Three unmarked holes scattered
+    /// across an unbounded procedural field, in a game that has never had a
+    /// reason to reward wandering, is not something a player finds — they
+    /// have to be told the breaches are there before looking for one is a
+    /// choice rather than an accident.
+    fn announce_dungeon_entrances(&mut self, origin: Position) {
+        let mut query = self
+            .world
+            .query_filtered::<&Position, With<DungeonEntrance>>();
+        let mut found: Vec<(i32, i32, i32)> = query
+            .iter(&self.world)
+            .map(|p| {
+                let (dx, dy) = (p.x - origin.x, p.y - origin.y);
+                (dx.abs().max(dy.abs()), dx, dy)
+            })
+            .collect();
+        found.sort();
+
+        let Some(&(distance, dx, dy)) = found.first() else {
+            return;
+        };
+        self.log(format!(
+            "Deep scan: {} breach{} in this sector. Nearest bears {} at {distance} tiles.",
+            found.len(),
+            if found.len() == 1 { "" } else { "es" },
+            bearing(dx, dy),
+        ));
     }
 
     /// Rebuilds the entrances a save recorded — see

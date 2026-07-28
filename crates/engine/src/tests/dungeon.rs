@@ -499,25 +499,71 @@ fn a_new_zone_is_seeded_with_dungeon_entrances() {
 }
 
 #[test]
-fn no_entrance_opens_onto_unwalkable_ground_or_the_base_platform() {
+fn no_entrance_opens_onto_unwalkable_ground() {
     let mut game = game();
-    game.place_structure("home", 1, 0).unwrap();
-    let tiles: Vec<(i32, i32)> = {
-        let mut query = game
-            .world
-            .query_filtered::<&Position, With<DungeonEntrance>>();
-        query.iter(&game.world).map(|p| (p.x, p.y)).collect()
-    };
+    let tiles = entrance_tiles(&mut game);
     assert!(!tiles.is_empty());
     for (x, y) in tiles {
         let tile = game.world.resource_mut::<WorldMap>().tile(x, y);
         assert!(tile.walkable, "entrance at ({x}, {y}) sits in a wall");
+    }
+}
+
+/// The Platform check only has anything to do on a zone breach, where the
+/// base slab is stamped down *before* the new sector's breaches are placed
+/// (see `enter_next_zone`). On a fresh run no platform exists yet, and a
+/// player later stamping a Home over a breach is their own doing — that
+/// still works, and a dungeon mouth inside your base is a fine place for one.
+#[test]
+fn breaching_with_a_base_never_opens_a_breach_inside_the_platform() {
+    let mut game = game();
+    // Home to the south so it doesn't share the portal's tile.
+    game.place_structure("home", 0, 1).unwrap();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    game.world.spawn((
+        Structure {
+            kind: "portal".to_string(),
+        },
+        Position {
+            x: ppos.x + 1,
+            y: ppos.y,
+        },
+    ));
+    game.move_player(1, 0);
+    assert_eq!(game.player_status().zone, 2);
+
+    let tiles = entrance_tiles(&mut game);
+    assert!(!tiles.is_empty());
+    for (x, y) in tiles {
+        let tile = game.world.resource_mut::<WorldMap>().tile(x, y);
         assert_ne!(
             tile.biome,
             Biome::Platform,
-            "an entrance inside the base would undo the one safe ground in the game"
+            "a breach opened at ({x}, {y}), inside the one safe ground in the game"
         );
     }
+}
+
+#[test]
+fn a_structure_cannot_be_deployed_on_top_of_a_breach() {
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    // Clear the way, then put a breach right where the Home would go.
+    game.world.spawn((
+        DungeonEntrance,
+        Position {
+            x: ppos.x + 1,
+            y: ppos.y,
+        },
+        Glyph {
+            ch: '>',
+            color: GlyphColor::Magenta,
+        },
+    ));
+    let Err(reason) = game.place_structure("home", 1, 0) else {
+        panic!("a structure sharing a tile with a breach makes the tile ambiguous to walk onto");
+    };
+    assert!(reason.contains("breach"), "got: {reason}");
 }
 
 #[test]
@@ -671,4 +717,157 @@ fn entrance_placement_is_a_pure_function_of_the_seed_and_zone() {
     let mut b = Game::new(77, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     assert_eq!(entrance_tiles(&mut a), entrance_tiles(&mut b));
     assert!(!entrance_tiles(&mut a).is_empty());
+}
+
+/// The bug this guards: with every entrance scattered to the full radius,
+/// most seeds put all three off screen on arrival, and nothing told the
+/// player breaches existed at all. At the default zoom the map pane shows
+/// roughly +/-16 by +/-9 tiles.
+const OPENING_VIEW_HALF_W: i32 = 16;
+const OPENING_VIEW_HALF_H: i32 = 9;
+
+#[test]
+fn every_seed_puts_one_breach_inside_the_opening_view() {
+    for seed in [16u32, 43, 77, 101, 2024, 7, 999, 31337] {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let origin = *game.world.get::<Position>(game.player_entity()).unwrap();
+        let visible = entrance_tiles(&mut game).into_iter().any(|(x, y)| {
+            (x - origin.x).abs() <= OPENING_VIEW_HALF_W
+                && (y - origin.y).abs() <= OPENING_VIEW_HALF_H
+        });
+        assert!(
+            visible,
+            "seed {seed} starts the player with no breach on screen and no way to know one exists"
+        );
+    }
+}
+
+#[test]
+fn the_remaining_breaches_are_still_a_trip() {
+    let mut game = Game::new(2024, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let origin = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let far = entrance_tiles(&mut game)
+        .into_iter()
+        .filter(|(x, y)| {
+            (x - origin.x).abs() > OPENING_VIEW_HALF_W || (y - origin.y).abs() > OPENING_VIEW_HALF_H
+        })
+        .count();
+    assert!(
+        far > 0,
+        "if every breach is underfoot there is nothing left to explore for"
+    );
+}
+
+#[test]
+fn arriving_in_a_zone_scans_for_breaches_and_says_where_the_nearest_is() {
+    let game = game();
+    let scan = game
+        .message_log(50)
+        .into_iter()
+        .find(|(_, line)| line.contains("Deep scan"))
+        .map(|(_, line)| line);
+    let Some(scan) = scan else {
+        panic!("arriving in a zone should report what the scan found");
+    };
+    assert!(scan.contains("breaches"), "got: {scan}");
+    assert!(
+        ["north", "south", "east", "west"]
+            .iter()
+            .any(|d| scan.contains(d)),
+        "the scan must give a bearing to walk, got: {scan}"
+    );
+}
+
+#[test]
+fn breaching_a_zone_scans_the_new_sector_too() {
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    game.world.spawn((
+        Structure {
+            kind: "portal".to_string(),
+        },
+        Position {
+            x: ppos.x + 1,
+            y: ppos.y,
+        },
+    ));
+    game.move_player(1, 0);
+    assert_eq!(game.player_status().zone, 2);
+    assert!(
+        game.message_log(50)
+            .iter()
+            .any(|(_, line)| line.contains("Deep scan")),
+        "a fresh sector needs its own scan, or the layer is invisible again"
+    );
+}
+
+#[test]
+fn a_bearing_names_the_direction_you_would_actually_walk() {
+    use crate::game::dungeon::bearing;
+    // North is -y, matching dungeon::Dir and the renderer.
+    assert_eq!(bearing(0, -10), "north");
+    assert_eq!(bearing(0, 10), "south");
+    assert_eq!(bearing(10, 0), "east");
+    assert_eq!(bearing(-10, 0), "west");
+    assert_eq!(bearing(10, -10), "north-east");
+    assert_eq!(bearing(-10, -10), "north-west");
+    assert_eq!(bearing(10, 10), "south-east");
+    assert_eq!(bearing(-10, 10), "south-west");
+}
+
+#[test]
+fn a_bearing_only_goes_diagonal_when_neither_axis_dominates() {
+    use crate::game::dungeon::bearing;
+    // Mostly east with a slight northerly lean is still east — calling it
+    // north-east would send the player off at an angle.
+    assert_eq!(bearing(20, -3), "east");
+    assert_eq!(bearing(3, -20), "north");
+    assert_eq!(bearing(0, 0), "here");
+}
+
+/// Breaching does not despawn structures — the base travels — so anything
+/// zone-local has to be wiped by name in `enter_next_zone`. Entrances are
+/// zone-local: each opens onto a level generated for its own sector.
+#[test]
+fn a_breach_leaves_the_previous_sectors_entrances_behind() {
+    let mut game = game();
+    let before = entrance_tiles(&mut game);
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    game.world.spawn((
+        Structure {
+            kind: "portal".to_string(),
+        },
+        Position {
+            x: ppos.x + 1,
+            y: ppos.y,
+        },
+    ));
+    game.move_player(1, 0);
+    assert_eq!(game.player_status().zone, 2);
+
+    let after = entrance_tiles(&mut game);
+    assert_eq!(
+        after.len(),
+        crate::tuning::DUNGEON_ENTRANCES_PER_ZONE,
+        "the new sector should hold its own breaches and no more — old ones rode the breach"
+    );
+    assert_ne!(before, after, "the new sector needs its own breaches");
+}
+
+/// A breach on the arrival tile means starting the run standing on one; a
+/// breach one step away means the first movement key of the run drops the
+/// player into a dungeon they never chose to enter.
+#[test]
+fn no_breach_opens_on_top_of_the_player_or_within_a_step_of_them() {
+    for seed in 0u32..40 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let origin = *game.world.get::<Position>(game.player_entity()).unwrap();
+        for (x, y) in entrance_tiles(&mut game) {
+            let distance = (x - origin.x).abs().max((y - origin.y).abs());
+            assert!(
+                distance >= crate::tuning::DUNGEON_MIN_ENTRANCE_TILES,
+                "seed {seed}: breach at ({x}, {y}) is {distance} tiles from the player"
+            );
+        }
+    }
 }

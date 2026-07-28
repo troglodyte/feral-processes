@@ -32,6 +32,13 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   symlinks, trading, resting and scanning — are refused underground and say
   so. Party, inventory, routine, fusion and perk management are not: sorting
   your gear in a dungeon is a thing the genre expects.
+- **Arriving in a sector scans for breaches.** The log reports how many are
+  in it and which way the nearest lies, and one breach is always placed
+  within sight of where you materialize — the other two are a walk. Without
+  this the layer was effectively invisible: at the default zoom the map pane
+  shows about ±16 by ±9 tiles, and three breaches scattered across a
+  40-tile radius left most seeds with none on screen and nothing to suggest
+  they existed.
 - **Save format bumped to v13**, so saves written by earlier builds no
   longer load. `SaveData` gained the locale (depth, cell, facing and
   entrance) and the zone's breach tiles; the level itself is not stored,

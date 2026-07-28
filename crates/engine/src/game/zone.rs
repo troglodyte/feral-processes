@@ -228,10 +228,16 @@ impl Game {
     /// end of this function. Gear, supplies, fusion tiers and banked Research
     /// Data all do.
     pub(crate) fn enter_next_zone(&mut self) {
+        // Breaching does not despawn structures — the base travels — so
+        // anything zone-local has to be named here or it comes along at its
+        // old coordinates. A `DungeonEntrance` is zone-local: it opens onto a
+        // level generated for the sector it stands in, and left alive it
+        // would ride the breach and could land inside the newly stamped base
+        // platform.
         let stale: Vec<Entity> = {
             let mut query = self
                 .world
-                .query_filtered::<Entity, Or<(With<Hostile>, With<Nest>)>>();
+                .query_filtered::<Entity, Or<(With<Hostile>, With<Nest>, With<DungeonEntrance>)>>();
             query.iter(&self.world).collect()
         };
         for e in stale {

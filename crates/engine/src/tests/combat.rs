@@ -737,6 +737,13 @@ fn retaliation_kinds_across_seeds(species: &str) -> Vec<MessageKind> {
             let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
             let player = game.player_entity();
             let wild = game.spawn_wild_creature(species, 5, 5).unwrap();
+            // A carrier also logs `EnemySpecial`, for a routine rather than a
+            // move's effect — a different mechanism this test isn't about.
+            // `spawn_wild_creature` rolls one in at `WILD_ROUTINE_CHANCE`
+            // regardless of species, and 59 seeds make that near-certain
+            // over the run, so it has to be stripped rather than left to
+            // chance.
+            game.world.entity_mut(wild).insert(Routines(Vec::new()));
             insert_battle(&mut game, player, vec![wild]);
             resolve_round_with(&mut game, BattleAction::Defend);
             logged_kinds(&game)

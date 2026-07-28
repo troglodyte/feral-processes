@@ -2,8 +2,8 @@
 //! whether it ended in a win, a flee, or a loss.
 
 use crate::tuning::{
-    DEFEND_DEF_BONUS, ENGAGED_GROUPS, FLEE_COUNTERATTACK_CHANCE, JACK_OUT_LUCK_MAX,
-    JACK_OUT_LUCK_MIN, WILD_ABILITY_CHANCE,
+    DEFEND_DEF_BONUS, ENEMY_ROUTINE_MIN_COOLDOWN, ENGAGED_GROUPS, FLEE_COUNTERATTACK_CHANCE,
+    JACK_OUT_LUCK_MAX, JACK_OUT_LUCK_MIN, WILD_ABILITY_CHANCE,
 };
 use crate::*;
 
@@ -119,9 +119,79 @@ impl Game {
         player
     }
 
+    /// The routine `wild` will spend this round on, if it is carrying one
+    /// that is not still cooling.
+    ///
+    /// First installed wins. A carrier holds exactly one
+    /// (`Game::roll_wild_routine`), so ordering is not a real decision, and
+    /// inventing a priority scheme for a one-element list would be building
+    /// for a case that does not exist.
+    ///
+    /// `Decompile` is excluded: it is resolved by group index against the
+    /// *wild* side and would do nothing coherent aimed the other way. Only a
+    /// mod can put it on a hostile — `decompile.ron` has no `wild_weight` —
+    /// but a mod that does gets a normal move rather than a wasted round.
+    pub(crate) fn wild_routine_ready(&self, wild: Entity) -> Option<AbilityDef> {
+        let cooling = self
+            .world
+            .get::<AbilityCooldowns>(wild)
+            .map(|c| c.0.clone())
+            .unwrap_or_default();
+        let db = self.world.resource::<AbilityDb>();
+        self.world
+            .get::<Routines>(wild)
+            .map(|r| r.0.as_slice())
+            .unwrap_or_default()
+            .iter()
+            .filter(|id| !cooling.contains_key(*id))
+            .filter_map(|id| db.get(id))
+            .find(|def| !matches!(def.effect, AbilityEffect::Decompile))
+            .cloned()
+    }
+
     /// The wild creature strikes back at whoever's exposed: normally the
     /// player or a party member, weighted by slot — see `roll_enemy_target`.
     pub(crate) fn wild_retaliate(&mut self, wild: Entity, group: usize, player: Entity) {
+        // A carrier spends its round on the routine rather than a move. No
+        // engagement check: `ENGAGED_GROUPS` gates *moves* because a
+        // back-rank program has to physically reach, and a routine is
+        // executed rather than swung — gating it would silently disable
+        // every carrier behind the front groups.
+        if let Some(routine) = self.wild_routine_ready(wild) {
+            // Armed before the effect resolves, matching `resolve_one_action`:
+            // a killing blow ends the battle inside `reap_dead_members` and
+            // `end_battle` wipes every battle-scoped component, so a cooldown
+            // written afterwards would land on an entity already cleaned up.
+            //
+            // Floored, because `cooldown` defaults to 0 and a carrier fires
+            // whenever it can — see `ENEMY_ROUTINE_MIN_COOLDOWN`. The +1 is
+            // the same one the party side uses, so this round's own tick
+            // doesn't eat a round.
+            let armed = routine.cooldown.max(ENEMY_ROUTINE_MIN_COOLDOWN) + 1;
+            let mut cooldowns = self
+                .world
+                .get::<AbilityCooldowns>(wild)
+                .map(|c| c.0.clone())
+                .unwrap_or_default();
+            cooldowns.insert(routine.id.clone(), armed);
+            self.world
+                .entity_mut(wild)
+                .insert(AbilityCooldowns(cooldowns));
+
+            // Fatigue is not charged: `fatigue_cost` models the *player*
+            // issuing a command, and a wild program commands itself.
+            let name = self.creature_label(wild);
+            self.log_kind(
+                MessageKind::EnemySpecial,
+                format!("{name} runs {}.", routine.name),
+            );
+            let chosen = battle::SpecialTarget::EnemyGroup { group };
+            let recipients = self.ability_recipients(wild, routine.target, &chosen);
+            self.use_ability(&routine, wild, &name, &recipients);
+            self.reap_dead_members(player);
+            return;
+        }
+
         let species_id = self.world.get::<Creature>(wild).unwrap().species.clone();
         // Only the front `ENGAGED_GROUPS` are close enough to swing; anything
         // further back has to shoot, and idles if it has nothing that reaches.
@@ -408,6 +478,12 @@ impl Game {
         for wild in self.all_living_enemies() {
             let label = self.entity_label(wild);
             self.tick_status_effects(wild, &label);
+            // Both of these were party-only while abilities were party-only.
+            // A carrier's routine has to cool or it fires once and never
+            // again, and a mirrored buff has to expire or its `duration` is
+            // decoration.
+            self.tick_combat_buff(wild);
+            self.tick_ability_cooldowns(wild);
         }
         let player_label = self.entity_label(player);
         self.tick_status_effects(player, &player_label);
@@ -461,13 +537,15 @@ impl Game {
         false
     }
 
-    /// Clears any residual status effects from the player, `wild`, and
-    /// every party member, and the player's active combat buff (see
-    /// `CombatBuff`). Status conditions are scoped to a single intrusion, so
-    /// nothing should carry forward once one ends, however it ends. `wild`
-    /// is `None` when the pack is already gone, and may name an entity that
-    /// is already despawned (a kill), in which case clearing it is a no-op —
-    /// neither case may skip clearing your own side.
+    /// Clears any residual status effects, combat buffs, and ability
+    /// cooldowns from the player, every party member, and every hostile
+    /// still in the fight. Status conditions are scoped to a single
+    /// intrusion, so nothing should carry forward once one ends, however it
+    /// ends. `wild` is `None` when the pack is already gone, and may name an
+    /// entity that has already left its group (a decompile) or already
+    /// despawned (a kill) and so isn't reachable through
+    /// `all_living_enemies` — in which case clearing it again is a no-op,
+    /// but neither case may skip clearing your own side.
     pub(crate) fn clear_battle_status_effects(&mut self, player: Entity, wild: Option<Entity>) {
         if let Some(mut s) = self.world.get_mut::<StatusEffects>(player) {
             s.active = None;
@@ -478,8 +556,24 @@ impl Game {
         if let Some(mut c) = self.world.get_mut::<AbilityCooldowns>(player) {
             c.0.clear();
         }
-        if let Some(mut s) = wild.and_then(|w| self.world.get_mut::<StatusEffects>(w)) {
-            s.active = None;
+        // Every hostile still in the fight, not only the one passed in.
+        // Survivors of a jack-out stay on the map, and a mirrored buff left
+        // armed on one never ticks down — `effective_atk`/`effective_def`
+        // read `CombatBuff` unconditionally, so it would be a free stat
+        // forever. `wild` is still taken because it may name a program that
+        // has already left its group (a successful decompile).
+        let mut hostiles: Vec<Entity> = self.all_living_enemies();
+        hostiles.extend(wild);
+        for hostile in hostiles {
+            if let Some(mut s) = self.world.get_mut::<StatusEffects>(hostile) {
+                s.active = None;
+            }
+            if let Some(mut b) = self.world.get_mut::<CombatBuff>(hostile) {
+                b.active = None;
+            }
+            if let Some(mut c) = self.world.get_mut::<AbilityCooldowns>(hostile) {
+                c.0.clear();
+            }
         }
         let party = self.world.resource::<Party>().0.clone();
         for companion in party {

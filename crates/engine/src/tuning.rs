@@ -703,6 +703,14 @@ pub const ABILITY_POWER_SCALE_PER_LEVEL: f32 = 0.15;
 /// above, this caps the multiplier at 7x.
 pub const ABILITY_POWER_SCALE_LEVEL_CAP: u32 = 40;
 
+/// Floor on the cooldown a hostile arms after spending a routine.
+///
+/// `AbilityDef::cooldown` is `#[serde(default)]` 0, and a carrier fires
+/// whenever its routine is off cooldown — so a mod ability declaring no
+/// cooldown would fire every single round. The player side keeps the
+/// authored value untouched, which is what leaves `decompile` spammable.
+pub const ENEMY_ROUTINE_MIN_COOLDOWN: u32 = 1;
+
 #[cfg(test)]
 mod tests {
     use super::*;

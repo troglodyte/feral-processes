@@ -417,7 +417,7 @@ fn a_hostile_single_enemy_target_hits_exactly_one_party_member() {
 fn the_players_side_targets_exactly_as_it_did() {
     let mut game = Game::new(6605, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    let enemies = battle_with_a_pack_of(&mut game, 3, 100);
+    let _ = battle_with_a_pack_of(&mut game, 3, 100);
 
     let recipients = game.ability_recipients(
         player,

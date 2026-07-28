@@ -25,29 +25,40 @@ save data. That is a separate feature, not part of this one.
 
 ### Where the stock lives
 
-A new component on the trader **structure entity**:
+A world resource, not a component:
 
 ```rust
-pub struct BuybackStock(pub Vec<(ItemId, u32)>);
+pub struct BuybackLedger(pub BTreeMap<StructureId, Vec<(ItemId, u32)>>);
 ```
 
-Inserted lazily on the first sale, so structure spawning is untouched.
+**Keyed by trader kind, one ledger per zone.** A shelf must outlive the
+building it sits in — a raid that levels the Market must not erase what the
+player sold it, and a rebuilt Market is the same franchise, not a new one. A
+`StructureId` is the only identity a rebuilt structure shares with the one it
+replaces; keying on position instead would mean a Market rebuilt one tile to
+the left silently loses its history, a rule invisible to the player and
+indistinguishable from a bug.
 
-A `Vec` rather than a `HashMap` because save bytes must be deterministic —
-the same reason `SaveData::researched` is a sorted `Vec`. Insertion order is
-driven by player actions, so it is already deterministic, and it gives the
-trade screen a stable row order for free.
+The consequence is that two Markets standing in one zone share a shelf. That
+is the intended reading: sell to the iso Market, buy back from the iso
+Market. A second *kind* of trader would keep its own.
 
-Attaching it to the structure gives three properties without any code to
-enforce them:
+`BTreeMap` gives deterministic iteration, so save bytes don't depend on hash
+order — the concern that makes `SaveData::researched` a sorted `Vec`. The
+inner `Vec` stays in insertion order, which is player-driven and therefore
+deterministic, and gives the trade screen a stable row order for free.
 
-- **Per-trader.** Selling to one Market does not stock another.
-- **Dies with the zone.** `enter_next_zone` already despawns every
-  `With<Structure>` entity, so the shelf is wiped on a breach. Credits remain
-  the only cache that crosses, and "liquidate the stockpile you are about to
-  lose" stays a real decision rather than a free warehouse.
-- **Dies with the trader.** A raid that destroys the Market takes the shelf
-  with it.
+### What a breach does to it
+
+`enter_next_zone` **does not** despawn structures — the base travels forward,
+each structure repositioned at its offset from the Home. So the shelf needs
+an explicit wipe, and it gets one, alongside the existing build-salvage and
+breach-key wipe at the end of that function and for the identical reason: a
+shelf holding a zone's worth of salvage is precisely the stockpile-chaining
+that wipe exists to prevent, and "liquidate what you're about to lose" has to
+stay a decision rather than a free warehouse.
+
+Credits remain the only cache that crosses a breach.
 
 ### Price
 
@@ -81,13 +92,16 @@ Renderers draw priced rows verbatim and never work a price out themselves —
 the precedent `program_sale_options` sets. Three additions to
 `game/trade.rs`:
 
-- `sell_item` records `taken` of `item` into the structure's stock, after the
+- `sell_item` records `taken` of `item` under the structure's kind, after the
   sale has otherwise succeeded.
 - `pub fn buyback_options(&self, structure: Entity) -> Vec<BuybackOption>`,
   where `BuybackOption { item, name, qty, unit_cost }`. Empty for a structure
   with no stock or no `trade`.
 - `pub fn buy_back(&mut self, structure: Entity, item: ItemId, qty: u32) ->
   Result<(), String>`.
+
+Both public calls take an `Entity` and resolve it to a `StructureId`
+internally, so no renderer ever learns the ledger is keyed by kind.
 
 `buy_back` is separate from `buy_item` rather than folded into it: the stock
 semantics differ (finite and decrementing, versus an infinite listing) and so
@@ -103,7 +117,10 @@ enter stock.
 
 ### Save format
 
-`StructureSave` gains `buyback: Vec<(ItemId, u32)>`.
+`SaveData` gains `buyback: Vec<(StructureId, Vec<(ItemId, u32)>)>` — the
+ledger flattened, in `BTreeMap` order. `StructureSave` is untouched, since the
+shelf no longer belongs to any building.
+
 `SAVE_FORMAT_VERSION` goes 11 → 12. Existing saves stop loading, which is the
 documented and intentional tradeoff in `save.rs`.
 
@@ -134,7 +151,8 @@ Engine (`crates/engine/src/tests/trade.rs`):
   decrements the shelf.
 - Buying back the last of a stack removes the row entirely.
 - Cannot buy back more than was sold.
-- Stock is per-structure: a second trader has none of it.
+- Stock survives the trader being destroyed and rebuilt.
+- Stock is per trader kind: a different trader kind has none of it.
 - Stock survives a save/load round trip.
 - Stock is gone after a zone breach.
 - Selling a program creates no stock.

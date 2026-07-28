@@ -166,6 +166,49 @@ pub(super) fn insert_battle(game: &mut Game, player: Entity, enemies: Vec<Entity
     });
 }
 
+/// Spawns `count` hostile members of one species into a single group and
+/// starts a battle against them, so back-rank indices actually exist.
+/// Stats are set by hand rather than rolled, because these tests assert on
+/// exact HP.
+///
+/// Placed deep and far on purpose: a group's size ceiling is the local
+/// `max_group_size`, which at a zone-1 spawn point is one member — there
+/// would be no back rank to test. The hand-set stats are what make the move
+/// free, since nothing here reads the distance or zone scaling it implies.
+pub(super) fn battle_with_a_pack_of(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
+    let player = game.player_entity();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .next()
+        .expect("at least one species");
+    game.world.resource_mut::<ZoneLevel>().0 = 3;
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let (x, y) = (spawn.x + GROUP_SIZE_STEP_TILES * 7, spawn.y);
+    let members: Vec<Entity> = (0..count)
+        .map(|i| {
+            game.world
+                .spawn((
+                    Creature {
+                        species: species.id.clone(),
+                    },
+                    Hostile,
+                    Position { x: x + i as i32, y },
+                    Stats {
+                        hp,
+                        max_hp: hp,
+                        atk: 0,
+                        def: 0,
+                    },
+                    StatusEffects::default(),
+                ))
+                .id()
+        })
+        .collect();
+    insert_battle(game, player, members.clone());
+    members
+}
+
 /// Copies the shipped `species`/`structures`/`research`/`items` asset
 /// dirs into a fresh scratch dir, skipping the item files named in
 /// `omit_items` and writing the `extra_*` (filename, RON body) pairs on

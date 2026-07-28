@@ -164,7 +164,7 @@ impl Game {
                             self.attempt_decompile(group, player);
                         }
                     } else {
-                        let recipients = self.ability_recipients(ability.target, &target);
+                        let recipients = self.ability_recipients(entity, ability.target, &target);
                         self.use_ability(&ability, entity, &name, &recipients);
                         // An area effect can drop members from any rank, and
                         // a corpse left in a group would be promoted to front
@@ -467,15 +467,62 @@ impl Game {
         }
     }
 
-    /// Which entities an ability actually lands on this round, resolved at
-    /// resolve time rather than plan time — so a group that died before the
-    /// acting member's turn retargets, and an ally knocked out in the
-    /// meantime is skipped instead of being healed as a corpse.
+    /// Whether `entity` is fighting on the wild side. Ability targets are
+    /// authored from the party's point of view, so this is what decides
+    /// which way to read them — see `ability_recipients`.
+    pub(crate) fn is_hostile(&self, entity: Entity) -> bool {
+        self.world.get::<Hostile>(entity).is_some()
+    }
+
+    /// The player plus every living companion — the party side as a flat
+    /// list. What a hostile's enemy-facing ability lands on.
+    pub(crate) fn living_party(&self) -> Vec<Entity> {
+        let battle_slots = self
+            .world
+            .get_resource::<BattleState>()
+            .map(|b| b.planned.len())
+            .unwrap_or(0);
+        (0..battle_slots)
+            .filter_map(|slot| self.actor_entity(battle::Actor::Party(slot)))
+            .filter(|&e| self.creature_alive(e))
+            .collect()
+    }
+
+    /// Which entities `target` lands on, read from `actor`'s side of the
+    /// fight.
+    ///
+    /// Targets are authored from the party's point of view — "ally" means a
+    /// party member, "enemy" means a wild program. A hostile using the same
+    /// ability flips both: its ally is another hostile, and its enemy is the
+    /// party. That mirror is what lets one ability file serve both sides
+    /// instead of needing an enemy-only twin.
+    ///
+    /// Two of the shapes collapse on the hostile side. The party is a single
+    /// flat roster where the wild side is partitioned into groups, so
+    /// `WholeEnemyGroup` has no player-side subdivision to select and reads
+    /// identically to `AllEnemies`. That is the asymmetry of the two sides,
+    /// not a shortcut.
     pub(crate) fn ability_recipients(
         &self,
+        actor: Entity,
         target: AbilityTarget,
         chosen: &battle::SpecialTarget,
     ) -> Vec<Entity> {
+        if self.is_hostile(actor) {
+            return match target {
+                AbilityTarget::OneAlly => self.hostile_ally_of(actor).into_iter().collect(),
+                AbilityTarget::WholeParty => self.all_living_enemies(),
+                AbilityTarget::OneEnemyGroupFront => match chosen {
+                    battle::SpecialTarget::Ally { slot } => self
+                        .actor_entity(battle::Actor::Party(*slot))
+                        .filter(|&e| self.creature_alive(e))
+                        .into_iter()
+                        .collect(),
+                    _ => self.living_party().into_iter().take(1).collect(),
+                },
+                AbilityTarget::WholeEnemyGroup | AbilityTarget::AllEnemies => self.living_party(),
+            };
+        }
         match target {
             AbilityTarget::OneAlly => match chosen {
                 battle::SpecialTarget::Ally { slot } => self
@@ -485,14 +532,7 @@ impl Game {
                     .collect(),
                 _ => Vec::new(),
             },
-            AbilityTarget::WholeParty => (0..self
-                .world
-                .get_resource::<BattleState>()
-                .map(|b| b.planned.len())
-                .unwrap_or(0))
-                .filter_map(|slot| self.actor_entity(battle::Actor::Party(slot)))
-                .filter(|&e| self.creature_alive(e))
-                .collect(),
+            AbilityTarget::WholeParty => self.living_party(),
             AbilityTarget::OneEnemyGroupFront => match chosen {
                 battle::SpecialTarget::EnemyGroup { group } => self
                     .retarget(*group)
@@ -518,6 +558,30 @@ impl Game {
             },
             AbilityTarget::AllEnemies => self.all_living_enemies(),
         }
+    }
+
+    /// One living hostile for a carrier's ally-facing routine to land on.
+    ///
+    /// A uniform pick, not "the most hurt". A carrier fires whenever its
+    /// routine is off cooldown, so a heal landing on a healthy ally is
+    /// wasted — accepted, because the alternative is a per-effect
+    /// situational policy that this design deliberately does not have.
+    ///
+    /// `&self` rather than `&mut self`, so the pick is derived from the
+    /// battle's round number rather than drawing from `GameRng`. Same
+    /// reproducibility, no borrow fight with the caller.
+    fn hostile_ally_of(&self, actor: Entity) -> Option<Entity> {
+        let candidates = self.all_living_enemies();
+        if candidates.is_empty() {
+            return None;
+        }
+        let round = self
+            .world
+            .get_resource::<BattleState>()
+            .map(|b| b.round as usize)
+            .unwrap_or(0);
+        let offset = candidates.iter().position(|&e| e == actor).unwrap_or(0);
+        Some(candidates[(round + offset) % candidates.len()])
     }
 
     /// Executes `ability` (one of `Game::actor_abilities`) on every

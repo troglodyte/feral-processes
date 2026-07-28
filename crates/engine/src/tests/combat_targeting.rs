@@ -316,3 +316,118 @@ fn an_engaged_group_still_uses_its_melee_moves() {
         "a melee-only species in the front rank must still hit"
     );
 }
+
+/// The mirror: "ally" means the user's own side, whichever side that is.
+#[test]
+fn a_hostile_ally_target_resolves_to_its_own_side() {
+    let mut game = Game::new(6601, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 3, 100);
+
+    let recipients = game.ability_recipients(
+        enemies[0],
+        crate::abilities::AbilityTarget::WholeParty,
+        &battle::SpecialTarget::WholeParty,
+    );
+    assert_eq!(
+        recipients.len(),
+        3,
+        "a hostile's 'whole party' is its own side"
+    );
+    assert!(
+        !recipients.contains(&player),
+        "and never reaches across to the player"
+    );
+    for e in &enemies {
+        assert!(recipients.contains(e));
+    }
+}
+
+#[test]
+fn a_hostile_one_ally_target_picks_one_of_its_own() {
+    let mut game = Game::new(6602, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 3, 100);
+
+    let recipients = game.ability_recipients(
+        enemies[0],
+        crate::abilities::AbilityTarget::OneAlly,
+        &battle::SpecialTarget::WholeParty,
+    );
+    assert_eq!(recipients.len(), 1, "exactly one recipient");
+    assert!(
+        enemies.contains(&recipients[0]) && recipients[0] != player,
+        "and it is one of the hostiles, not the player"
+    );
+}
+
+/// `WholeEnemyGroup` and `AllEnemies` collapse for a hostile actor: the
+/// player has one party where the hostiles have groups, and there is no
+/// player-side subdivision to select.
+#[test]
+fn both_hostile_area_enemy_targets_resolve_to_the_whole_player_party() {
+    let mut game = Game::new(6603, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 2, 100);
+
+    let group = game.ability_recipients(
+        enemies[0],
+        crate::abilities::AbilityTarget::WholeEnemyGroup,
+        &battle::SpecialTarget::EnemyGroup { group: 0 },
+    );
+    let all = game.ability_recipients(
+        enemies[0],
+        crate::abilities::AbilityTarget::AllEnemies,
+        &battle::SpecialTarget::AllEnemies,
+    );
+    assert_eq!(group, all, "the two collapse for a hostile actor");
+    assert!(group.contains(&player));
+    for e in &enemies {
+        assert!(
+            !group.contains(e),
+            "a hostile area attack never hits its own side"
+        );
+    }
+}
+
+#[test]
+fn a_hostile_single_enemy_target_hits_exactly_one_party_member() {
+    let mut game = Game::new(6604, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 100);
+
+    let recipients = game.ability_recipients(
+        enemies[0],
+        crate::abilities::AbilityTarget::OneEnemyGroupFront,
+        &battle::SpecialTarget::EnemyGroup { group: 0 },
+    );
+    assert_eq!(recipients.len(), 1);
+    assert!(
+        !enemies.contains(&recipients[0]),
+        "it aims at the party, not at itself"
+    );
+    assert_eq!(
+        recipients[0], player,
+        "with only the player in the party, it is the player"
+    );
+}
+
+/// The player side is unchanged by any of this.
+#[test]
+fn the_players_side_targets_exactly_as_it_did() {
+    let mut game = Game::new(6605, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 3, 100);
+
+    let recipients = game.ability_recipients(
+        player,
+        crate::abilities::AbilityTarget::WholeEnemyGroup,
+        &battle::SpecialTarget::EnemyGroup { group: 0 },
+    );
+    assert_eq!(
+        recipients.len(),
+        3,
+        "the player's group attack still hits the group"
+    );
+    assert!(!recipients.contains(&player));
+}

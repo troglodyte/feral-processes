@@ -95,7 +95,7 @@ fn a_level_up_that_reaches_an_unlock_installs_it_into_a_free_slot() {
 /// matches on ability id alone, so it fires identically whether the matched
 /// slot holds the auto-installed placeholder or a Priority Boost the player
 /// chose to install by hand — and the latter used to be evicted with no log
-/// line at all, unlike the neighbouring "unlock is lost" branch.
+/// line at all, unlike the neighbouring "it goes to cargo" branch.
 #[test]
 fn evicting_a_manually_installed_priority_boost_is_logged() {
     let (mut game, medic) = game_with_two_ability_companion();
@@ -706,5 +706,151 @@ fn popping_decompile_out_leaves_the_player_with_no_special() {
             .iter()
             .all(|o| o.kind != ActionKind::Special),
         "giving up decompile really does cost you the command"
+    );
+}
+
+/// The whole payoff: decompile a carrier and its routine comes with it.
+#[test]
+fn a_carried_routine_survives_capture() {
+    let mut game = Game::new(5501, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = generic_species(&game);
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let carrier = game
+        .spawn_wild_creature(&species.id, spawn.x + 2, spawn.y)
+        .unwrap();
+    game.world
+        .entity_mut(carrier)
+        .insert(Routines(vec!["kernel_panic".to_string()]));
+    game.world.entity_mut(carrier).insert(Experience::default());
+
+    game.install_innate_routines(carrier);
+
+    assert!(
+        game.world
+            .get::<Routines>(carrier)
+            .unwrap()
+            .0
+            .contains(&"kernel_panic".to_string()),
+        "the carried routine is the prize — it must not be overwritten by the species kit"
+    );
+}
+
+/// A carrier already holds something real, so it must not also be handed
+/// the placeholder that exists for programs whose species grants nothing.
+#[test]
+fn a_carrier_of_an_ability_less_species_is_not_given_the_fallback() {
+    let mut game = Game::new(5502, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = generic_species(&game);
+    assert!(
+        species.abilities.is_empty(),
+        "fixture: this species grants nothing of its own"
+    );
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let carrier = game
+        .spawn_wild_creature(&species.id, spawn.x + 2, spawn.y)
+        .unwrap();
+    game.world
+        .entity_mut(carrier)
+        .insert(Routines(vec!["cold_boot".to_string()]));
+    game.world.entity_mut(carrier).insert(Experience::default());
+
+    game.install_innate_routines(carrier);
+
+    assert_eq!(
+        game.world.get::<Routines>(carrier).unwrap().0,
+        vec!["cold_boot".to_string()],
+        "the fallback fills an empty kit, not a kit that already holds a prize"
+    );
+}
+
+/// A level-1 program has one slot, and six shipped species grant an ability
+/// at level 1. The carried routine wins the slot; the species ability is
+/// minted into cargo rather than destroyed, so the player can swap.
+#[test]
+fn a_species_ability_displaced_by_a_carried_routine_goes_to_cargo() {
+    let mut game = Game::new(5503, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|s| s.abilities.iter().any(|a| a.level <= 1))
+        .expect("a shipped species grants an ability at level 1");
+    let displaced = species
+        .abilities
+        .iter()
+        .find(|a| a.level <= 1)
+        .unwrap()
+        .id
+        .clone();
+
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let carrier = game
+        .spawn_wild_creature(&species.id, spawn.x + 2, spawn.y)
+        .unwrap();
+    game.world
+        .entity_mut(carrier)
+        .insert(Routines(vec!["bastion".to_string()]));
+    game.world.entity_mut(carrier).insert(Experience::default());
+
+    let player = game.player_entity();
+    let item = crate::abilities::routine_item_id(&displaced);
+    let before = game.world.get::<Inventory>(player).unwrap().count(&item);
+
+    game.install_innate_routines(carrier);
+
+    assert_eq!(
+        game.world.get::<Routines>(carrier).unwrap().0,
+        vec!["bastion".to_string()],
+        "one slot at level 1, and the carried routine takes it"
+    );
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().count(&item),
+        before + 1,
+        "the displaced species ability lands in cargo instead of being destroyed"
+    );
+}
+
+/// A species unlock reaching a full kit used to be logged and lost. It now
+/// goes to cargo, and — critically — must never evict a carried routine.
+#[test]
+fn a_level_up_unlock_never_evicts_a_carried_routine() {
+    let mut game = Game::new(5504, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|s| s.abilities.iter().any(|a| a.level > 1))
+        .expect("a shipped species unlocks an ability above level 1");
+    let unlock = species
+        .abilities
+        .iter()
+        .find(|a| a.level > 1)
+        .unwrap()
+        .clone();
+
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let pet = game
+        .spawn_wild_creature(&species.id, spawn.x + 2, spawn.y)
+        .unwrap();
+    game.world.entity_mut(pet).insert(Experience::default());
+    game.world
+        .entity_mut(pet)
+        .insert(Routines(vec!["cold_boot".to_string()]));
+
+    // One slot, already holding the prize, and the unlock now lands.
+    game.install_unlocked_routines(pet, 1, unlock.level);
+
+    assert!(
+        game.world
+            .get::<Routines>(pet)
+            .unwrap()
+            .0
+            .contains(&"cold_boot".to_string()),
+        "a carried routine is not the fallback placeholder and must never be evicted"
+    );
+    let player = game.player_entity();
+    let item = crate::abilities::routine_item_id(&unlock.id);
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().count(&item),
+        1,
+        "the unlock that found no room goes to cargo"
     );
 }

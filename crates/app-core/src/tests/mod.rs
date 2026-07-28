@@ -4,6 +4,7 @@ mod support;
 
 mod battle;
 mod building;
+mod dungeon;
 mod fusion;
 mod inventory;
 mod menus;

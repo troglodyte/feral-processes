@@ -107,6 +107,15 @@ impl App {
                 | GameKey::Char('h')
                 | GameKey::Char('l')
         );
+        // Underground the same four keys steer a party that has a facing:
+        // forward, back, and turn in place. Deliberately the same keys rather
+        // than a separate set — walking is walking, and the view makes which
+        // one you're doing obvious.
+        if self.game.as_ref().is_some_and(|g| g.is_underground()) {
+            self.handle_dungeon_key(key, is_move_key);
+            return;
+        }
+
         let acted = {
             let Some(game) = &mut self.game else { return };
             match key {
@@ -145,6 +154,64 @@ impl App {
                 _ => false,
             }
         };
+        self.after_world_action(acted, is_move_key);
+    }
+
+    /// Movement for a party that has a facing. Forward and back walk along
+    /// it; left and right turn in place, which is what makes the dungeon a
+    /// first-person space rather than a top-down one seen at an angle.
+    ///
+    /// Everything else on the map screen is left alone — the mode keys above
+    /// already ran, and the ones that need open grid refuse in the engine
+    /// (see `Game::require_surface`).
+    fn handle_dungeon_key(&mut self, key: GameKey, is_move_key: bool) {
+        let acted = {
+            let Some(game) = &mut self.game else { return };
+            match key {
+                GameKey::Up | GameKey::Char('k') => {
+                    game.step_forward();
+                    true
+                }
+                GameKey::Down | GameKey::Char('j') => {
+                    game.step_back();
+                    true
+                }
+                GameKey::Left | GameKey::Char('h') => {
+                    game.turn_left();
+                    true
+                }
+                GameKey::Right | GameKey::Char('l') => {
+                    game.turn_right();
+                    true
+                }
+                GameKey::Char('>') | GameKey::Char('<') => {
+                    game.take_stairs();
+                    true
+                }
+                GameKey::Char('.') => {
+                    game.wait();
+                    true
+                }
+                GameKey::Char('e') => {
+                    game.use_power_source();
+                    true
+                }
+                _ => false,
+            }
+        };
+        self.after_world_action(acted, is_move_key);
+    }
+
+    /// The bookkeeping that follows any action that advanced the world,
+    /// whichever locale it happened in: clearing the status line, dropping
+    /// into `Mode::Battle` if one just started, the movement cue, and the
+    /// game-over check.
+    ///
+    /// Shared by the surface and dungeon paths rather than copied into both.
+    /// The battle transition especially: Phase 2 puts random encounters
+    /// underground, and a second copy of this is exactly the kind of thing
+    /// that gets updated on one side only.
+    fn after_world_action(&mut self, acted: bool, is_move_key: bool) {
         if !acted {
             return;
         }

@@ -28,25 +28,49 @@ save data. That is a separate feature, not part of this one.
 A world resource, not a component:
 
 ```rust
-pub struct BuybackLedger(pub BTreeMap<StructureId, Vec<(ItemId, u32)>>);
+pub struct BuybackLedger(pub BTreeMap<(StructureId, (i32, i32)), Vec<(ItemId, u32)>>);
 ```
 
-**Keyed by trader kind, one ledger per zone.** A shelf must outlive the
-building it sits in — a raid that levels the Market must not erase what the
-player sold it, and a rebuilt Market is the same franchise, not a new one. A
-`StructureId` is the only identity a rebuilt structure shares with the one it
-replaces; keying on position instead would mean a Market rebuilt one tile to
-the left silently loses its history, a rule invisible to the player and
-indistinguishable from a bug.
+**Keyed by trader kind and tile, one ledger per zone.** Two requirements pull
+against each other: each trader keeps its own shelf, *and* a shelf outlives
+the building — a raid that levels the Market must not erase what the player
+sold it. Entity identity dies with the despawn, so it can serve neither. The
+tile is the only identity a rebuilt structure shares with the one it
+replaced, and it satisfies both: the shelf is the physical stockroom on that
+site, and rebuilding on the same footprint reopens the same store.
 
-The consequence is that two Markets standing in one zone share a shelf. That
-is the intended reading: sell to the iso Market, buy back from the iso
-Market. A second *kind* of trader would keep its own.
+The kind is part of the key so a different structure raised on a dead
+Market's tile inherits nothing.
+
+The consequence the player can hit: a Market rebuilt *somewhere else* starts
+empty, and the shelf on the old footprint is unreachable until something is
+built there again. That rule is invisible unless the game says so, so it does
+— see "Losing a shelf" below.
+
+Because the ledger is an independent resource keyed by tile, neither
+destruction path (`damage_structure`, `demolish`) needs to preserve anything
+on despawn. The shelf is simply still there.
 
 `BTreeMap` gives deterministic iteration, so save bytes don't depend on hash
 order — the concern that makes `SaveData::researched` a sorted `Vec`. The
 inner `Vec` stays in insertion order, which is player-driven and therefore
 deterministic, and gives the trade screen a stable row order for free.
+
+Stale entries for tiles that no longer hold a trader are left in place rather
+than pruned — that is the whole point — and are bounded by tiles built on in
+one zone, then wiped at the breach.
+
+### Losing a shelf
+
+When a trader holding stock is destroyed, by raid or by demolition, the game
+logs a `MessageKind::Raid` line naming what is now sitting in the rubble and
+saying that rebuilding on the same footprint recovers it. Silent otherwise,
+so a trader with an empty shelf reads exactly as it does today.
+
+One helper on `Game`, called from both despawn sites. Two call sites of one
+function, deliberately — the alternative is the split that already bit
+`dissolve_tamed_program` versus `fuse_companions`, where one path logs
+detachments and the other goes quiet.
 
 ### What a breach does to it
 
@@ -92,16 +116,16 @@ Renderers draw priced rows verbatim and never work a price out themselves —
 the precedent `program_sale_options` sets. Three additions to
 `game/trade.rs`:
 
-- `sell_item` records `taken` of `item` under the structure's kind, after the
-  sale has otherwise succeeded.
+- `sell_item` records `taken` of `item` under the structure's kind and tile,
+  after the sale has otherwise succeeded.
 - `pub fn buyback_options(&self, structure: Entity) -> Vec<BuybackOption>`,
   where `BuybackOption { item, name, qty, unit_cost }`. Empty for a structure
   with no stock or no `trade`.
 - `pub fn buy_back(&mut self, structure: Entity, item: ItemId, qty: u32) ->
   Result<(), String>`.
 
-Both public calls take an `Entity` and resolve it to a `StructureId`
-internally, so no renderer ever learns the ledger is keyed by kind.
+Both public calls take an `Entity` and resolve it to a key internally, so no
+renderer ever learns how the ledger is keyed.
 
 `buy_back` is separate from `buy_item` rather than folded into it: the stock
 semantics differ (finite and decrementing, versus an infinite listing) and so
@@ -117,9 +141,10 @@ enter stock.
 
 ### Save format
 
-`SaveData` gains `buyback: Vec<(StructureId, Vec<(ItemId, u32)>)>` — the
-ledger flattened, in `BTreeMap` order. `StructureSave` is untouched, since the
-shelf no longer belongs to any building.
+`SaveData` gains
+`buyback: Vec<(StructureId, (i32, i32), Vec<(ItemId, u32)>)>` — the ledger
+flattened, in `BTreeMap` order. `StructureSave` is untouched, since a shelf
+outlives the building and can exist on a tile holding nothing at all.
 
 `SAVE_FORMAT_VERSION` goes 11 → 12. Existing saves stop loading, which is the
 documented and intentional tradeoff in `save.rs`.
@@ -151,9 +176,15 @@ Engine (`crates/engine/src/tests/trade.rs`):
   decrements the shelf.
 - Buying back the last of a stack removes the row entirely.
 - Cannot buy back more than was sold.
-- Stock survives the trader being destroyed and rebuilt.
-- Stock is per trader kind: a different trader kind has none of it.
-- Stock survives a save/load round trip.
+- Stock survives the trader being destroyed and rebuilt on the same tile.
+- A trader rebuilt on a different tile has an empty shelf, and the original
+  tile still holds the stock.
+- Two Markets in one zone keep separate shelves.
+- A different structure kind built on a dead trader's tile inherits nothing.
+- Destroying a trader that holds stock logs the loss; destroying an empty one
+  is silent.
+- Stock survives a save/load round trip, including an entry whose tile no
+  longer holds a structure.
 - Stock is gone after a zone breach.
 - Selling a program creates no stock.
 - Insufficient Credits refuses and leaves the shelf untouched.

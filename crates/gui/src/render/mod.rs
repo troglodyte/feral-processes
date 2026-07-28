@@ -437,7 +437,8 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             m,
         ),
         Mode::TradeProgramConfirm => {
-            draw_trade_program_confirm(app.pending_trade_program.as_ref(), painter, m)
+            let money = game.item_name(&game.trade_currency()).to_string();
+            draw_trade_program_confirm(app.pending_trade_program.as_ref(), &money, painter, m)
         }
         Mode::Perks => draw_perks_menu(game, selected, painter, m),
         Mode::Research => draw_research_menu(game, selected, painter, m),

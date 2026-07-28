@@ -318,11 +318,24 @@ impl Game {
             }
         }
 
-        // Currency is zone-local: the next breach has to be funded in the
-        // zone you leave from, so a stockpile can't chain breaches past
-        // content it never engaged with. Keyed on economy role, so a mod's
-        // own currency item resets without an engine change. Research Data
-        // is banked progress rather than spending money and survives.
+        // Build salvage and breach keys are zone-local: the next breach has
+        // to be funded in the zone you leave from, so a stockpile can't chain
+        // breaches past content it never engaged with. Keyed on economy role,
+        // so a mod's own items reset without an engine change.
+        //
+        // Research Data is banked progress rather than spending money and
+        // survives. So do Credits, by omission and on purpose — converting a
+        // doomed stockpile into money before you breach is what a trader is
+        // *for*.
+        //
+        // Credits can buy a Portal Fragment on the far side, so in principle
+        // a stockpile could fund a breach out of a zone it never worked. That
+        // is priced rather than forbidden: at a 1-Credit sell rate and 8
+        // Credits a fragment, skipping zone 3 means having sold 160 items
+        // into a cargo cap first, which is a zone's work either way. Closing
+        // it instead would mean pulling Portal Fragments off every trader,
+        // and that listing is the only route from base production to
+        // progression — see `balance_sim::ticks_to_afford_portal`.
         let spendable = [self.currency(), self.craft_currency()];
         let player = self.player_entity();
         let lost: Vec<(ItemId, u32)> = {

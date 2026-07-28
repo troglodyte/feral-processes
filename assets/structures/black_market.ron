@@ -1,7 +1,7 @@
 (
     id: "market",
     name: "iso Market",
-    description: "Sell anything here for 1 Core Fragment a unit, sell a program for a tenth of its power, and buy back ICE Breakers, Power Cells and Portal Fragments.",
+    description: "Sell anything here for 1 Credit a unit — including salvage you're about to lose to a breach — sell a program for a tenth of its power, and buy back ICE Breakers, Power Cells and Portal Fragments. Credits are the only cache that survives a breach.",
     glyph: '$',
     color: Yellow,
     build_cost: [("core_fragment", 16)],
@@ -9,8 +9,12 @@
     trade: Some((
         sell_rate: 1,
         // Buys tamed programs at a tenth of their power (max_hp + atk + def),
-        // rounded down, minimum 1 Core Fragment. Omit to deal in items only.
+        // rounded down, minimum 1 Credit. Omit to deal in items only.
         program_sell_divisor: Some(10),
+        // Portal Fragments stay on this list on purpose: it is the only route
+        // from base production to progression (mine salvage, sell it, buy a
+        // breach), and `balance_sim::ticks_to_afford_portal` measures the
+        // whole travelling-base economy through this price.
         buy: [
             ("ice_breaker", 4),
             ("power_cell", 3),

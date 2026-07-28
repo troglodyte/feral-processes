@@ -1,6 +1,6 @@
 (
     id: "core_fragment",
     name: "Core Fragment",
-    description: "The Grid's currency. Every build cost, most recipes, and everything a trader pays you.",
+    description: "The Grid's raw salvage. Every build cost and most recipes. Zone-local: it does not survive a breach, so sell it before you go.",
     role: Some(Currency),
 )

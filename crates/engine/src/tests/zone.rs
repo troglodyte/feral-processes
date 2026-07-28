@@ -559,6 +559,7 @@ fn breaching_wipes_the_currency_and_craft_currency_stacks() {
         let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
         inv.add(ItemId::from(ids::PORTAL_FRAGMENT), 25);
         inv.add(ItemId::from(ids::CORE_FRAGMENT), 40);
+        inv.add(ItemId::from(ids::CREDITS), 30);
     }
 
     game.enter_next_zone();
@@ -572,6 +573,12 @@ fn breaching_wipes_the_currency_and_craft_currency_stacks() {
         count_item(&game, ids::CORE_FRAGMENT),
         0,
         "and so does everything the base is bought with"
+    );
+    assert_eq!(
+        count_item(&game, ids::CREDITS),
+        30,
+        "Credits are the one liquid thing that crosses a breach — selling \
+         a doomed stockpile before you go is the point of a trader"
     );
 }
 

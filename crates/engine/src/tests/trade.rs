@@ -275,33 +275,24 @@ fn sell_item_pays_out_credits_at_the_structures_sell_rate() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::FIREWALL_PLATING), 3);
-    let credits_before = game
-        .world
-        .get::<Inventory>(player)
-        .unwrap()
-        .count(&ItemId::from(ids::CREDITS));
-    let fragments_before = game
-        .world
-        .get::<Inventory>(player)
-        .unwrap()
-        .count(&ItemId::from(ids::CORE_FRAGMENT));
+    let credits_before = credits(&game);
+    let fragments_before = fragments(&game);
 
     game.sell_item(market, ItemId::from(ids::FIREWALL_PLATING), 2)
         .unwrap();
 
-    let inv = game.world.get::<Inventory>(player).unwrap();
     assert_eq!(
-        inv.count(&ItemId::from(ids::FIREWALL_PLATING)),
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::FIREWALL_PLATING)),
         1,
         "only the sold quantity should leave the inventory"
     );
     let sell_rate = def.trade.as_ref().unwrap().sell_rate;
+    assert_eq!(credits(&game), credits_before + sell_rate * 2);
     assert_eq!(
-        inv.count(&ItemId::from(ids::CREDITS)),
-        credits_before + sell_rate * 2
-    );
-    assert_eq!(
-        inv.count(&ItemId::from(ids::CORE_FRAGMENT)),
+        fragments(&game),
         fragments_before,
         "a trader deals in Credits and never mints build salvage"
     );

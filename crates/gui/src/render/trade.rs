@@ -46,7 +46,10 @@ pub(super) fn draw_trade_action_menu(
     };
     let status = game.player_status();
     let inventory = status.inventory.clone();
-    let currency = game.currency();
+    // The trade currency, not the build salvage: salvage is ordinary goods
+    // to a trader, and money is the one thing it won't take back.
+    let currency = game.trade_currency();
+    let money = game.item_name(&currency).to_string();
 
     let mut rows = vec![Row::TextColored("Sell (from inventory):".to_string(), TEXT)];
     let sellable: Vec<_> = inventory
@@ -64,7 +67,7 @@ pub(super) fn draw_trade_action_menu(
         let tag = equip_preview_tag(game, item, status.zone, game.item_fusion_tier(item));
         rows.push(item_row(
             format!(
-                "[{}] Sell {} x{qty}{} ({} Core Fragments each)",
+                "[{}] Sell {} x{qty}{} ({} {money} each)",
                 menu_shortcut(idx),
                 game.item_name(item),
                 tag,
@@ -82,7 +85,7 @@ pub(super) fn draw_trade_action_menu(
         let tag = equip_preview_tag(game, item, status.zone, 0);
         rows.push(item_row(
             format!(
-                "[{}] Buy {}{} ({cost} Core Fragments each)",
+                "[{}] Buy {}{} ({cost} {money} each)",
                 menu_shortcut(idx),
                 game.item_name(item),
                 tag
@@ -104,7 +107,7 @@ pub(super) fn draw_trade_action_menu(
         for program in &programs {
             rows.push(item_row(
                 format!(
-                    "[{}] Sell {} Lv{} — power {} → {} Core Fragments{}",
+                    "[{}] Sell {} Lv{} — power {} → {} {money}{}",
                     menu_shortcut(idx),
                     program.name,
                     program.level,
@@ -127,13 +130,14 @@ pub(super) fn draw_trade_action_menu(
 /// cronjob or guard post without asking.
 pub(super) fn draw_trade_program_confirm(
     option: Option<&ProgramSaleOption>,
+    money: &str,
     painter: &Painter,
     m: &Metrics,
 ) {
     let Some(option) = option else { return };
     let mut rows = vec![
         text_row(format!(
-            "Sell {} (Lv {}, power {}) for {} Core Fragments?",
+            "Sell {} (Lv {}, power {}) for {} {money}?",
             option.name, option.level, option.power, option.payout
         )),
         Row::TextColored(
@@ -183,10 +187,11 @@ pub(super) fn draw_trade_quantity_menu(
     } else {
         quantity_input
     };
+    let money = game.item_name(&game.trade_currency()).to_string();
     let rows = vec![
         text_row(format!("{verb} how many {}?", game.item_name(&item))),
         text_row(""),
-        text_row(format!("Price: {unit_price} Core Fragments each")),
+        text_row(format!("Price: {unit_price} {money} each")),
         text_row(""),
         text_row(format!("Quantity: {shown}")),
         text_row(""),

@@ -60,17 +60,19 @@ pub struct PowerRegenDef {
 }
 
 /// A structure's trading post capability: sell any item here for a flat
-/// per-unit payout, and buy specific items back for Core Fragments.
+/// per-unit payout, and buy specific items back. Everything is priced in the
+/// `EconomyRole::TradeCurrency` item — never in the salvage the build
+/// economy runs on.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TradeDef {
-    /// Core Fragments granted per unit when selling any item to this
+    /// Trade currency granted per unit when selling any item to this
     /// structure — a uniform sell price, not a per-item table.
     pub sell_rate: u32,
-    /// Items purchasable here, each as `(item, cost in Core Fragments)`.
+    /// Items purchasable here, each as `(item, cost in the trade currency)`.
     pub buy: Vec<(ItemId, u32)>,
     /// Divisor applied to a tamed program's `Stats::power()` to price it
-    /// when sold here — 10 pays a tenth of its power, rounded down, with a
-    /// floor of 1.
+    /// when sold here in the trade currency — 10 pays a tenth of its power,
+    /// rounded down, with a floor of 1.
     ///
     /// `None` (the default) means this trader deals in items only. A
     /// structure field rather than an engine constant so no code names a

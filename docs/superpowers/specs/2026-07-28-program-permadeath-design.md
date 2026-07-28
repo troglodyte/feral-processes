@@ -81,11 +81,14 @@ the defender's `Task` and logs that it stood down. That branch becomes a
 death: a `MessageKind::Raid` line, then `dissolve_tamed_program`. Nothing
 indexes positionally here, so the despawn happens on the spot.
 
-The detachment line `dissolve_tamed_program` writes here ("stops working the
-Data Mine") is wanted and survives — a structure that goes quiet should say
-so. If the raid destroyed the structure outright, `damage_structure` has
-already stripped the worker's `Task` (`upkeep.rs:205`), so there is no
-dangling entity label to resolve.
+The existing `Task` strip stays and runs *before* the dissolve. That is what
+keeps the log clean: `raid_check` finds its defender by `Task.target ==
+target`, so the program is always working the very structure the death line
+already names, and `sale_detachments` would otherwise add a redundant "stops
+working the Mining Node" line directly under "is destroyed defending the
+Mining Node". With the `Task` gone first, `dissolve_tamed_program`
+contributes only the `Party` retain and the despawn, and the single `Raid`
+line stands alone.
 
 ## Reusing `dissolve_tamed_program`
 

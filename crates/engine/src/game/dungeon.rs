@@ -10,7 +10,8 @@ use crate::dungeon::{self, CellKind, Dir};
 use crate::resources::{CurrentDungeon, Locale};
 use crate::tuning::{
     DUNGEON_DEPTH_STAT_GROWTH, DUNGEON_ENCOUNTER_CHANCE, DUNGEON_ENTRANCE_SCATTER_TILES,
-    DUNGEON_MIN_ENTRANCE_TILES, DUNGEON_NEAREST_ENTRANCE_TILES,
+    DUNGEON_FLOORS_MAX, DUNGEON_FLOORS_MIN, DUNGEON_MIN_ENTRANCE_TILES,
+    DUNGEON_NEAREST_ENTRANCE_TILES, DUNGEON_TILES_PER_FLOOR,
 };
 use crate::*;
 
@@ -55,10 +56,25 @@ pub(crate) fn bearing(dx: i32, dy: i32) -> &'static str {
 #[derive(Clone, Copy)]
 struct DungeonPos {
     depth: u32,
+    floors: u32,
     x: i32,
     y: i32,
     facing: Dir,
     entrance: (i32, i32),
+}
+
+/// How many levels the shaft under a breach at `tile` runs before it
+/// bottoms out.
+///
+/// Depth is read off the walk to the breach rather than rolled, so it rides
+/// the same distance-from-arrival that already scales wild program stats.
+/// The two then agree — a far breach is deeper *and* fields harder programs
+/// — instead of a nearby hole occasionally being the deepest thing in the
+/// sector for no reason the player could have seen coming.
+pub(crate) fn breach_floors(tile: (i32, i32), spawn: (i32, i32)) -> u32 {
+    let distance = (tile.0 - spawn.0).abs().max((tile.1 - spawn.1).abs());
+    let extra = (distance / DUNGEON_TILES_PER_FLOOR).max(0) as u32;
+    (DUNGEON_FLOORS_MIN + extra).min(DUNGEON_FLOORS_MAX)
 }
 
 impl Game {
@@ -228,19 +244,39 @@ impl Game {
             pos.x = x;
             pos.y = y;
         }
-        self.descend_to(1, (x, y));
-        self.log("You drop through the breach. The signal above you thins to nothing.".to_string());
+        let floors = self.breach_floors_at((x, y));
+        self.descend_to(1, floors, (x, y));
+        self.log(format!(
+            "You drop through the breach. The signal above you thins to nothing. \
+             The shaft sounds {floors} levels deep."
+        ));
+    }
+
+    /// How deep the shaft under the breach at `tile` runs — see
+    /// `breach_floors`, which this feeds the zone's arrival point.
+    pub(crate) fn breach_floors_at(&self, tile: (i32, i32)) -> u32 {
+        let spawn = self.world.resource::<ZoneSpawnPoint>();
+        breach_floors(tile, (spawn.x, spawn.y))
+    }
+
+    fn level_spec(&self, depth: u32, floors: u32, entrance: (i32, i32)) -> dungeon::LevelSpec {
+        dungeon::LevelSpec {
+            world_seed: self.world.resource::<WorldMap>().seed(),
+            entrance,
+            depth,
+            floors,
+        }
     }
 
     /// Generates the level for `depth` and puts the party on its entry cell
     /// facing north. Shared by the way in and every flight of stairs down.
-    fn descend_to(&mut self, depth: u32, entrance: (i32, i32)) {
-        let seed = self.world.resource::<WorldMap>().seed();
-        let level = dungeon::generate(seed, depth);
+    fn descend_to(&mut self, depth: u32, floors: u32, entrance: (i32, i32)) {
+        let level = dungeon::generate(self.level_spec(depth, floors, entrance));
         let entry = level.entry;
         self.world.insert_resource(CurrentDungeon(Some(level)));
         self.world.insert_resource(Locale::Dungeon {
             depth,
+            floors,
             x: entry.0,
             y: entry.1,
             facing: Dir::North,
@@ -262,12 +298,14 @@ impl Game {
             Locale::Surface => None,
             Locale::Dungeon {
                 depth,
+                floors,
                 x,
                 y,
                 facing,
                 entrance,
             } => Some(DungeonPos {
                 depth,
+                floors,
                 x,
                 y,
                 facing,
@@ -439,11 +477,23 @@ impl Game {
             return;
         };
         if cell != CellKind::StairsDown {
-            self.log("There's no way down here.".to_string());
+            // The bottom level is generated without stairs down at all, so
+            // this is where a finished shaft reports itself. Saying so beats
+            // "there's no way down here" on the one cell where the player
+            // might reasonably keep looking for one.
+            if pos.depth >= pos.floors {
+                self.log("Solid bedrock. This shaft bottoms out here.".to_string());
+            } else {
+                self.log("There's no way down here.".to_string());
+            }
             return;
         }
-        self.descend_to(pos.depth + 1, pos.entrance);
-        self.log(format!("You descend to dungeon level {}.", pos.depth + 1));
+        self.descend_to(pos.depth + 1, pos.floors, pos.entrance);
+        self.log(format!(
+            "You descend to dungeon level {} of {}.",
+            pos.depth + 1,
+            pos.floors
+        ));
         self.tick();
     }
 
@@ -466,7 +516,7 @@ impl Game {
             // Climbing lands on the level above's stairs *down*, not its
             // entry — otherwise every ascent would teleport the party back to
             // that level's entrance and undo the walk they just made.
-            self.ascend_to(pos.depth - 1, pos.entrance);
+            self.ascend_to(pos.depth - 1, pos.floors, pos.entrance);
             self.log(format!(
                 "You climb back to dungeon level {}.",
                 pos.depth - 1
@@ -486,13 +536,17 @@ impl Game {
         }
     }
 
-    fn ascend_to(&mut self, depth: u32, entrance: (i32, i32)) {
-        let seed = self.world.resource::<WorldMap>().seed();
-        let level = dungeon::generate(seed, depth);
-        let landing = level.stairs_down;
+    fn ascend_to(&mut self, depth: u32, floors: u32, entrance: (i32, i32)) {
+        let level = dungeon::generate(self.level_spec(depth, floors, entrance));
+        // Infallible: you can only climb *to* a level you already climbed
+        // *from*, so it is not the bottom of the shaft and has a way down.
+        let landing = level
+            .stairs_down
+            .expect("a level climbed up into must have the stairs that were climbed");
         self.world.insert_resource(CurrentDungeon(Some(level)));
         self.world.insert_resource(Locale::Dungeon {
             depth,
+            floors,
             x: landing.0,
             y: landing.1,
             facing: Dir::North,
@@ -501,12 +555,17 @@ impl Game {
     }
 
     /// Restores a saved dungeon position, regenerating the level from the
-    /// world seed and `depth` rather than reading it off disk — see
+    /// world seed and the saved spec rather than reading it off disk — see
     /// `resources::CurrentDungeon`.
     pub(crate) fn restore_locale(&mut self, locale: Locale) {
-        if let Locale::Dungeon { depth, .. } = locale {
-            let seed = self.world.resource::<WorldMap>().seed();
-            let level = dungeon::generate(seed, depth);
+        if let Locale::Dungeon {
+            depth,
+            floors,
+            entrance,
+            ..
+        } = locale
+        {
+            let level = dungeon::generate(self.level_spec(depth, floors, entrance));
             self.world.insert_resource(CurrentDungeon(Some(level)));
         }
         self.world.insert_resource(locale);
@@ -521,6 +580,7 @@ impl Game {
     pub fn dungeon_view(&self) -> Option<DungeonView> {
         let DungeonPos {
             depth,
+            floors,
             x,
             y,
             facing,
@@ -558,6 +618,7 @@ impl Game {
 
         Some(DungeonView {
             depth,
+            floors,
             facing: facing.label(),
             position: (x, y),
             cells,

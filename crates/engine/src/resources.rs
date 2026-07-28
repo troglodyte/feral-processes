@@ -364,9 +364,15 @@ pub enum Locale {
     Surface,
     Dungeon {
         /// 1 at the first level below the surface, counting up as you
-        /// descend. Half of the `(world seed, depth)` pair the level
-        /// regenerates from.
+        /// descend. Part of the `dungeon::LevelSpec` the level regenerates
+        /// from.
         depth: u32,
+        /// How many levels this shaft runs before it bottoms out. Carried
+        /// rather than recomputed from `entrance` because it is also part
+        /// of the level spec — the bottom level is generated without a way
+        /// down — and a shaft that changed length underneath the party
+        /// would strand them.
+        floors: u32,
         x: i32,
         y: i32,
         facing: Dir,

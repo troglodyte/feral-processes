@@ -412,6 +412,31 @@ pub const DUNGEON_NEAREST_ENTRANCE_TILES: i32 = 8;
 /// "there's a breach here" for no reason the player could have foreseen.
 pub const DUNGEON_MIN_ENTRANCE_TILES: i32 = 5;
 
+/// How many levels the shallowest breach runs before bottoming out.
+///
+/// Two rather than one so even the on-ramp breach has a descent in it: a
+/// single-level shaft is a room with a boss in it, and the thing being built
+/// here is a dungeon.
+pub const DUNGEON_FLOORS_MIN: u32 = 2;
+
+/// The deepest a breach can run, however far out it sits.
+///
+/// A cap rather than an open curve because the floor count is what the
+/// player commits to when they start down — six levels of walking back up is
+/// already a long way from the surface with a hurt party.
+pub const DUNGEON_FLOORS_MAX: u32 = 6;
+
+/// How many tiles from the zone's arrival point buys one more level of
+/// depth — see `Game::breach_floors`.
+///
+/// Depth rides on the same distance that already scales wild program stats
+/// (`Game::distance_stat_multiplier`), so the two agree instead of pulling
+/// against each other: a far breach is deeper *and* fields harder programs,
+/// and the player can read both off how long the walk there was. With
+/// `DUNGEON_ENTRANCE_SCATTER_TILES` at 40, this puts the outermost breaches
+/// at the cap.
+pub const DUNGEON_TILES_PER_FLOOR: i32 = 8;
+
 /// Chance per step that walking a dungeon corridor draws an encounter.
 ///
 /// Much higher than `RANDOM_ENCOUNTER_CHANCE` on purpose: crossing open

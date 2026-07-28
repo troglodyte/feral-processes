@@ -299,6 +299,10 @@ pub enum DungeonCellView {
 /// renderer draws verbatim and authors nothing.
 pub struct DungeonView {
     pub depth: u32,
+    /// How many levels this shaft runs in total, so the renderer can show
+    /// "2 / 4" and the player can tell a long descent from a short one
+    /// without counting stairs.
+    pub floors: u32,
     /// `Dir::label` — "N", "E", "S", "W". A compass reading for the player,
     /// not something the renderer projects with.
     pub facing: &'static str,

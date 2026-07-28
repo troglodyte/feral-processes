@@ -203,7 +203,7 @@ pub struct SaveData {
 /// and every save written under the old version stops loading. That's an
 /// intentional, simple tradeoff for a single-player game rather than
 /// building real schema migration.
-pub const SAVE_FORMAT_VERSION: u32 = 13;
+pub const SAVE_FORMAT_VERSION: u32 = 14;
 
 pub fn save_to_file(path: &Path, data: &SaveData) -> io::Result<()> {
     let encoded = bincode::serde::encode_to_vec(data, bincode::config::standard())

@@ -99,6 +99,52 @@ impl CellKind {
     }
 }
 
+/// Everything a level is a function of.
+///
+/// A struct rather than four positional arguments because the arguments are
+/// all integers and three of them are interchangeable at a glance, which is
+/// exactly the shape of call that ends up transposed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LevelSpec {
+    pub world_seed: u32,
+    /// The surface tile of the breach this shaft hangs from. Part of the
+    /// seed, so two breaches in one sector are two different dungeons rather
+    /// than two doors onto the same maze.
+    pub entrance: (i32, i32),
+    /// 1 immediately below the surface, counting up as you descend.
+    pub depth: u32,
+    /// How many levels this shaft runs before it bottoms out — see
+    /// `Game::breach_floors`.
+    pub floors: u32,
+}
+
+impl LevelSpec {
+    /// The last level of the shaft, which has no way down.
+    pub fn is_bottom(self) -> bool {
+        self.depth >= self.floors
+    }
+
+    /// Mixes the whole spec down to one RNG seed.
+    ///
+    /// An FNV-1a pass rather than shifting the parts into disjoint bit
+    /// ranges: adjacent breaches differ in a single low bit of one
+    /// coordinate far more often than they differ anywhere else, and levels
+    /// carved from seeds that close should not be able to rhyme.
+    fn rng_seed(self) -> u64 {
+        let mut h = 0xcbf2_9ce4_8422_2325_u64;
+        for word in [
+            self.world_seed as u64,
+            self.entrance.0 as u32 as u64,
+            self.entrance.1 as u32 as u64,
+            self.depth as u64,
+        ] {
+            h ^= word;
+            h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        h
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct DungeonLevel {
     pub width: i32,
@@ -106,7 +152,9 @@ pub struct DungeonLevel {
     cells: Vec<CellKind>,
     /// Where the party arrives, and where `StairsUp` sits.
     pub entry: (i32, i32),
-    pub stairs_down: (i32, i32),
+    /// `None` on the bottom level of a shaft — the point of a shaft having
+    /// a bottom is that there is nowhere further to go.
+    pub stairs_down: Option<(i32, i32)>,
 }
 
 impl DungeonLevel {
@@ -131,30 +179,35 @@ impl DungeonLevel {
     }
 }
 
-/// Builds the level for `depth` under the world seeded with `world_seed`.
+/// Builds the level `spec` describes.
 ///
-/// Deterministic in both arguments and nothing else. The RNG is seeded
-/// locally rather than drawn from `resources::GameRng`: that generator's
-/// stream position is not persisted, so drawing from it would regenerate a
+/// Deterministic in the spec and nothing else. The RNG is seeded locally
+/// rather than drawn from `resources::GameRng`: that generator's stream
+/// position is not persisted, so drawing from it would regenerate a
 /// *different* level after a save/load, and the party would find itself
 /// inside solid rock.
-pub fn generate(world_seed: u32, depth: u32) -> DungeonLevel {
-    let mut rng = StdRng::seed_from_u64(((world_seed as u64) << 32) | depth as u64);
+pub fn generate(spec: LevelSpec) -> DungeonLevel {
+    let mut rng = StdRng::seed_from_u64(spec.rng_seed());
 
     let mut level = DungeonLevel {
         width: LEVEL_SIZE,
         height: LEVEL_SIZE,
         cells: vec![CellKind::Rock; (LEVEL_SIZE * LEVEL_SIZE) as usize],
         entry: (1, 1),
-        stairs_down: (1, 1),
+        stairs_down: None,
     };
 
     carve_maze(&mut level, &mut rng);
     braid(&mut level, &mut rng);
 
+    // The far cell earns its place either way: the way down on a level that
+    // has one, and on the bottom level the deepest room of the whole shaft,
+    // which is where anything worth the walk belongs.
     let far = furthest_floor_from(&level, level.entry);
-    level.stairs_down = far;
-    level.set(far.0, far.1, CellKind::StairsDown);
+    if !spec.is_bottom() {
+        level.stairs_down = Some(far);
+        level.set(far.0, far.1, CellKind::StairsDown);
+    }
     level.set(level.entry.0, level.entry.1, CellKind::StairsUp);
 
     level
@@ -309,10 +362,21 @@ mod tests {
             .count()
     }
 
+    /// A spec deep in a shaft with plenty of room left below it, so tests
+    /// that aren't about the bottom don't accidentally land on one.
+    fn spec(world_seed: u32, depth: u32) -> LevelSpec {
+        LevelSpec {
+            world_seed,
+            entrance: (0, 0),
+            depth,
+            floors: 9,
+        }
+    }
+
     #[test]
-    fn the_same_seed_and_depth_yield_an_identical_level() {
-        let a = generate(1234, 3);
-        let b = generate(1234, 3);
+    fn the_same_spec_yields_an_identical_level() {
+        let a = generate(spec(1234, 3));
+        let b = generate(spec(1234, 3));
         assert_eq!(floors(&a), floors(&b));
         assert_eq!(a.entry, b.entry);
         assert_eq!(a.stairs_down, b.stairs_down);
@@ -320,8 +384,8 @@ mod tests {
 
     #[test]
     fn different_depths_of_the_same_world_diverge() {
-        let a = generate(1234, 1);
-        let b = generate(1234, 2);
+        let a = generate(spec(1234, 1));
+        let b = generate(spec(1234, 2));
         assert_ne!(
             floors(&a),
             floors(&b),
@@ -331,13 +395,33 @@ mod tests {
 
     #[test]
     fn different_worlds_diverge_at_the_same_depth() {
-        assert_ne!(floors(&generate(1, 1)), floors(&generate(2, 1)));
+        assert_ne!(floors(&generate(spec(1, 1))), floors(&generate(spec(2, 1))));
+    }
+
+    /// Two breaches in one sector must be two dungeons. Without the
+    /// entrance tile in the seed every hole in the ground opened onto the
+    /// same maze, and walking to a distant one bought nothing.
+    #[test]
+    fn breaches_on_different_tiles_diverge_at_the_same_depth() {
+        let here = LevelSpec {
+            entrance: (12, -40),
+            ..spec(5, 1)
+        };
+        let there = LevelSpec {
+            entrance: (13, -40),
+            ..spec(5, 1)
+        };
+        assert_ne!(
+            floors(&generate(here)),
+            floors(&generate(there)),
+            "adjacent breaches carved the same maze"
+        );
     }
 
     #[test]
     fn every_walkable_cell_is_reachable_from_the_entry() {
         for depth in 1..=5 {
-            let level = generate(99, depth);
+            let level = generate(spec(99, depth));
             let reached = reachable_from(&level, level.entry);
             let all = floors(&level);
             assert_eq!(
@@ -352,22 +436,37 @@ mod tests {
     #[test]
     fn the_stairs_down_are_placed_and_reachable() {
         for depth in 1..=5 {
-            let level = generate(7, depth);
-            assert_eq!(
-                level.cell(level.stairs_down.0, level.stairs_down.1),
-                CellKind::StairsDown
-            );
+            let level = generate(spec(7, depth));
+            let down = level.stairs_down.expect("depth {depth} has room below it");
+            assert_eq!(level.cell(down.0, down.1), CellKind::StairsDown);
             assert_ne!(
-                level.stairs_down, level.entry,
+                down, level.entry,
                 "depth {depth} put the way down on top of the way in"
             );
-            assert!(reachable_from(&level, level.entry).contains(&level.stairs_down));
+            assert!(reachable_from(&level, level.entry).contains(&down));
         }
     }
 
     #[test]
+    fn the_bottom_level_of_a_shaft_has_no_way_down() {
+        let level = generate(LevelSpec {
+            world_seed: 7,
+            entrance: (3, 4),
+            depth: 4,
+            floors: 4,
+        });
+        assert_eq!(level.stairs_down, None);
+        assert!(
+            !floors(&level)
+                .into_iter()
+                .any(|(x, y)| level.cell(x, y) == CellKind::StairsDown),
+            "the bottom level laid stairs down into nothing"
+        );
+    }
+
+    #[test]
     fn the_entry_holds_the_stairs_up() {
-        let level = generate(7, 2);
+        let level = generate(spec(7, 2));
         assert_eq!(level.cell(level.entry.0, level.entry.1), CellKind::StairsUp);
     }
 
@@ -379,7 +478,7 @@ mod tests {
             height: LEVEL_SIZE,
             cells: vec![CellKind::Rock; (LEVEL_SIZE * LEVEL_SIZE) as usize],
             entry: (1, 1),
-            stairs_down: (1, 1),
+            stairs_down: None,
         };
         carve_maze(&mut level, &mut rng);
         let before = dead_ends(&level);
@@ -394,7 +493,7 @@ mod tests {
 
     #[test]
     fn out_of_bounds_reads_as_solid_rock() {
-        let level = generate(1, 1);
+        let level = generate(spec(1, 1));
         assert_eq!(level.cell(-1, 5), CellKind::Rock);
         assert_eq!(level.cell(5, -1), CellKind::Rock);
         assert_eq!(level.cell(level.width, 5), CellKind::Rock);
@@ -404,7 +503,7 @@ mod tests {
 
     #[test]
     fn the_level_is_walled_in() {
-        let level = generate(5, 1);
+        let level = generate(spec(5, 1));
         for i in 0..level.width {
             assert!(!level.walkable(i, 0), "top edge leaks at {i}");
             assert!(

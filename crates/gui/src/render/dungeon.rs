@@ -116,11 +116,9 @@ pub(super) fn draw_dungeon(view: &DungeonView, painter: &Painter, w: f32, h: f32
 
     painter.rect_lines(0.0, 0.0, w, h, 2.0, BORDER);
 
-    // Compass and depth: the only navigational aid there is, since the
-    // dungeon has no auto-map.
     let heading = format!(
-        "Facing {}   Depth {}   ({}, {})",
-        view.facing, view.depth, view.position.0, view.position.1
+        "Facing {}   Depth {} / {}   ({}, {})",
+        view.facing, view.depth, view.floors, view.position.0, view.position.1
     );
     painter.ui(
         &heading,
@@ -238,6 +236,7 @@ mod tests {
     fn view(ahead: &[DungeonCellView], flank: DungeonCellView) -> DungeonView {
         DungeonView {
             depth: 2,
+            floors: 4,
             facing: "N",
             position: (3, 4),
             cells: ahead.iter().map(|&c| vec![flank, c, flank]).collect(),
@@ -276,6 +275,7 @@ mod tests {
         let m = crate::text::ui_metrics(900.0);
         let empty = DungeonView {
             depth: 1,
+            floors: 1,
             facing: "N",
             position: (0, 0),
             cells: Vec::new(),
@@ -283,6 +283,7 @@ mod tests {
         };
         let single = DungeonView {
             depth: 1,
+            floors: 1,
             facing: "S",
             position: (0, 0),
             cells: vec![vec![DungeonCellView::Floor]],

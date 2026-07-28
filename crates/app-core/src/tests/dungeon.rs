@@ -1,7 +1,7 @@
 //! Movement underground: the same four keys, steering a party that has a
 //! facing.
 
-use feral_processes_engine::dungeon::{Dir, generate};
+use feral_processes_engine::dungeon::{Dir, LevelSpec, generate};
 use feral_processes_engine::resources::Locale;
 use feral_processes_engine::save;
 
@@ -30,13 +30,20 @@ fn app_underground(seed: u32) -> App {
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
-    let entry = generate(data.seed, 1).entry;
-    data.locale = Locale::Dungeon {
+    let spec = LevelSpec {
+        world_seed: data.seed,
+        entrance: data.player.position,
         depth: 1,
+        floors: 2,
+    };
+    let entry = generate(spec).entry;
+    data.locale = Locale::Dungeon {
+        depth: spec.depth,
+        floors: spec.floors,
         x: entry.0,
         y: entry.1,
         facing: Dir::North,
-        entrance: data.player.position,
+        entrance: spec.entrance,
     };
     save::save_to_file(&path, &data).unwrap();
 

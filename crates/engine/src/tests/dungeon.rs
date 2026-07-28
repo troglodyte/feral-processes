@@ -31,6 +31,49 @@ fn cell_at(game: &Game, x: i32, y: i32) -> CellKind {
         .cell(x, y)
 }
 
+/// Teleports the party onto the current level's way down and returns that
+/// cell, so a test about descending doesn't have to walk the maze to reach
+/// the stairs.
+fn stand_on_stairs_down(game: &mut Game) -> (i32, i32) {
+    let down = game
+        .world
+        .resource::<CurrentDungeon>()
+        .0
+        .as_ref()
+        .unwrap()
+        .stairs_down
+        .expect("this level should have a way down");
+    let Locale::Dungeon {
+        depth,
+        floors,
+        facing,
+        entrance,
+        ..
+    } = locale(game)
+    else {
+        unreachable!("not underground")
+    };
+    game.world.insert_resource(Locale::Dungeon {
+        depth,
+        floors,
+        x: down.0,
+        y: down.1,
+        facing,
+        entrance,
+    });
+    down
+}
+
+/// Every cell of the level the party is standing in, row-major — for
+/// asserting that two levels are or aren't the same maze.
+fn level_cells(game: &Game) -> Vec<CellKind> {
+    let level = game.world.resource::<CurrentDungeon>().0.as_ref().unwrap();
+    (0..level.height)
+        .flat_map(|y| (0..level.width).map(move |x| (x, y)))
+        .map(|(x, y)| level.cell(x, y))
+        .collect()
+}
+
 /// Faces the party down a direction they can actually walk, so a movement
 /// assertion isn't silently testing a wall.
 fn face_an_open_way(game: &mut Game) -> Dir {
@@ -209,50 +252,16 @@ fn the_party_arrives_on_the_stairs_up_facing_north() {
 fn taking_the_stairs_down_increments_the_depth_and_regenerates_the_level() {
     let mut game = game();
     descend(&mut game);
-    let first: Vec<CellKind> = {
-        let level = game.world.resource::<CurrentDungeon>().0.as_ref().unwrap();
-        (0..level.height)
-            .flat_map(|y| (0..level.width).map(move |x| (x, y)))
-            .map(|(x, y)| level.cell(x, y))
-            .collect()
-    };
+    let first = level_cells(&game);
 
-    // Stand on the way down, then take it.
-    let down = game
-        .world
-        .resource::<CurrentDungeon>()
-        .0
-        .as_ref()
-        .unwrap()
-        .stairs_down;
-    let Locale::Dungeon {
-        facing, entrance, ..
-    } = locale(&game)
-    else {
-        unreachable!()
-    };
-    game.world.insert_resource(Locale::Dungeon {
-        depth: 1,
-        x: down.0,
-        y: down.1,
-        facing,
-        entrance,
-    });
+    stand_on_stairs_down(&mut game);
     game.descend();
 
     let Locale::Dungeon { depth, .. } = locale(&game) else {
         panic!("descending should leave us underground")
     };
     assert_eq!(depth, 2);
-
-    let second: Vec<CellKind> = {
-        let level = game.world.resource::<CurrentDungeon>().0.as_ref().unwrap();
-        (0..level.height)
-            .flat_map(|y| (0..level.width).map(move |x| (x, y)))
-            .map(|(x, y)| level.cell(x, y))
-            .collect()
-    };
-    assert_ne!(first, second, "depth 2 should be its own level");
+    assert_ne!(first, level_cells(&game), "depth 2 should be its own level");
 }
 
 #[test]
@@ -287,26 +296,7 @@ fn descending_then_climbing_back_lands_on_that_levels_stairs_down() {
     let mut game = game();
     descend(&mut game);
 
-    let down = game
-        .world
-        .resource::<CurrentDungeon>()
-        .0
-        .as_ref()
-        .unwrap()
-        .stairs_down;
-    let Locale::Dungeon {
-        facing, entrance, ..
-    } = locale(&game)
-    else {
-        unreachable!()
-    };
-    game.world.insert_resource(Locale::Dungeon {
-        depth: 1,
-        x: down.0,
-        y: down.1,
-        facing,
-        entrance,
-    });
+    let down = stand_on_stairs_down(&mut game);
     game.descend(); // to depth 2, arriving on its stairs up
     game.ascend(); // back to depth 1
 
@@ -643,6 +633,120 @@ fn a_dungeon_position_survives_a_save_and_load_with_an_identical_level() {
     );
 }
 
+/// True if any of the last `n` log lines contains `needle`.
+fn logged(game: &Game, needle: &str) -> bool {
+    game.message_log(12)
+        .iter()
+        .any(|(_, line)| line.contains(needle))
+}
+
+#[test]
+fn a_breach_further_from_the_arrival_point_runs_deeper() {
+    let spawn = (100, -50);
+    let near = crate::game::dungeon::breach_floors((105, -50), spawn);
+    let far = crate::game::dungeon::breach_floors((138, -50), spawn);
+    assert_eq!(
+        near,
+        crate::tuning::DUNGEON_FLOORS_MIN,
+        "a breach inside the opening viewport should be the shallow one"
+    );
+    assert!(
+        far > near,
+        "walking {} tiles further bought no extra depth",
+        138 - 105
+    );
+    assert!(far <= crate::tuning::DUNGEON_FLOORS_MAX);
+}
+
+#[test]
+fn shaft_depth_is_capped_however_far_out_the_breach_sits() {
+    let floors = crate::game::dungeon::breach_floors((10_000, 10_000), (0, 0));
+    assert_eq!(floors, crate::tuning::DUNGEON_FLOORS_MAX);
+}
+
+/// The bottom level is generated with no stairs down at all, so a shaft ends
+/// rather than running forever — which is what it did before breaches had a
+/// depth: `descend` incremented past any number you like.
+#[test]
+fn a_shaft_bottoms_out_and_says_so() {
+    let mut game = game();
+    descend(&mut game);
+    let Locale::Dungeon { floors, .. } = locale(&game) else {
+        unreachable!()
+    };
+
+    for _ in 1..floors {
+        stand_on_stairs_down(&mut game);
+        game.descend();
+    }
+
+    let Locale::Dungeon { depth, .. } = locale(&game) else {
+        panic!("still underground at the bottom")
+    };
+    assert_eq!(depth, floors, "should have walked the shaft to its end");
+    assert_eq!(
+        game.world
+            .resource::<CurrentDungeon>()
+            .0
+            .as_ref()
+            .unwrap()
+            .stairs_down,
+        None,
+        "the bottom level laid stairs into nothing"
+    );
+
+    game.descend();
+    let Locale::Dungeon { depth, .. } = locale(&game) else {
+        unreachable!()
+    };
+    assert_eq!(depth, floors, "descending past the bottom moved the party");
+    assert!(
+        logged(&game, "bottoms out"),
+        "the bottom of a shaft should say so, not just refuse"
+    );
+}
+
+/// Before the entrance tile went into the level seed, every breach in a
+/// sector opened onto the same maze — three holes, one dungeon, and no
+/// reason to walk to the far one.
+#[test]
+fn two_breaches_in_a_sector_open_onto_different_dungeons() {
+    let mut game = game();
+    let tiles = entrance_tiles(&mut game);
+    assert!(tiles.len() >= 2, "this seed should field several breaches");
+
+    game.enter_dungeon(tiles[0].0, tiles[0].1);
+    let first = level_cells(&game);
+    game.ascend();
+
+    game.enter_dungeon(tiles[1].0, tiles[1].1);
+    assert_ne!(
+        first,
+        level_cells(&game),
+        "two breaches carved the same maze"
+    );
+}
+
+#[test]
+fn how_deep_a_shaft_runs_survives_a_save_and_load() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
+    let tiles = entrance_tiles(&mut game);
+    let far = *tiles.last().unwrap();
+    game.enter_dungeon(far.0, far.1);
+    let before = locale(&game);
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_shaft_depth_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(loaded.locale(), before);
+}
+
 fn entrance_tiles(game: &mut Game) -> Vec<(i32, i32)> {
     let mut query = game
         .world
@@ -974,6 +1078,9 @@ fn deeper_levels_field_tougher_programs() {
             };
             game.world.insert_resource(Locale::Dungeon {
                 depth,
+                // Deep enough that this test's depths are all above the
+                // bottom; it is measuring the stat curve, not the shaft.
+                floors: 9,
                 x,
                 y,
                 facing,

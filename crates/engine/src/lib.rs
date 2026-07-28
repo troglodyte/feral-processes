@@ -3,6 +3,7 @@ pub mod balance_sim;
 pub mod battle;
 pub mod components;
 pub mod difficulty;
+pub mod dungeon;
 mod game;
 pub mod items;
 pub mod items_db;

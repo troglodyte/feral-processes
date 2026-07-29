@@ -97,8 +97,15 @@ Your base does not stop while you are down there. The player's position on
 the zone map stays pinned to the breach you entered by, so cronjobs keep
 paying out, needs keep decaying, and a raid can land on your Home while you
 are four levels below it. Anything that reaches into the zone map — deploying
-structures, trading, symlinks, resting — is refused underground; managing
-your party, inventory, routines and perks is not.
+structures, trading, resting — is refused underground; managing your party,
+inventory, routines and perks is not.
+
+The one exception is the symlink. `u` works at any depth: it hauls the party
+up out of the shaft and drops them at the structure they linked to, paying
+the usual cost. It will not save you from a fight — like every symlink it is
+refused mid-battle — and it abandons the descent, since walking back into the
+breach starts you at the top again. What it does not cost you is the mapping:
+every level you had walked is still drawn when you come back down.
 
 ## Building and cronjobs
 

@@ -74,9 +74,17 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   cronjobs keep paying out, needs keep decaying, and a raid can land on the
   base while the party is several levels down. Actions that reach into the
   zone map — deploying, cronjobs, guarding, demolishing, upgrading,
-  symlinks, trading, resting and scanning — are refused underground and say
-  so. Party, inventory, routine, fusion and perk management are not: sorting
-  your gear in a dungeon is a thing the genre expects.
+  trading, resting and scanning — are refused underground and say so. Party,
+  inventory, routine, fusion and perk management are not: sorting your gear
+  in a dungeon is a thing the genre expects.
+- **The symlink is the way out.** `u` works at any depth, and is the only
+  guarded action that changes locale rather than being refused by it: it
+  surfaces the party and then teleports them to the structure they picked,
+  for the usual cost. It cannot be used to flee a fight — symlinks are
+  refused mid-battle wherever you are — and it gives up the descent, since
+  the breach puts you back on level one. It does not give up the maps: those
+  are keyed by breach and depth, so every level already walked comes back
+  drawn.
 - **Arriving in a sector scans for breaches.** The log reports how many are
   in it and which way the nearest lies, and one breach is always placed
   within sight of where you materialize — the other two are a walk. Without

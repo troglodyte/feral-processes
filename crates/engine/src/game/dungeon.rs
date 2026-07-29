@@ -307,11 +307,20 @@ impl Game {
         self.remember_view();
     }
 
-    /// Climbs out to the zone map. The player's `Position` was pinned to the
-    /// entrance tile the whole time, so there is nothing to restore.
-    fn leave_dungeon(&mut self) {
+    /// Puts the party back on the zone map. The player's `Position` was
+    /// pinned to the entrance tile the whole time, so there is nothing to
+    /// restore.
+    ///
+    /// Unnarrated, because the breach is no longer the only way out —
+    /// `use_symlink` leaves by its own route and says so in its own words.
+    pub(crate) fn clear_dungeon(&mut self) {
         self.world.insert_resource(Locale::Surface);
         self.world.insert_resource(CurrentDungeon(None));
+    }
+
+    /// Climbs out through the breach the party walked in through.
+    fn leave_dungeon(&mut self) {
+        self.clear_dungeon();
         self.log("You surface through the breach, back onto open grid.".to_string());
     }
 

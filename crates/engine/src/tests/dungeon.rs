@@ -438,21 +438,105 @@ fn deploying_a_structure_is_refused_underground() {
     );
 }
 
-#[test]
-fn a_symlink_cannot_be_used_underground() {
-    let mut game = game();
+/// Deploys a Home one tile east, puts the party underground through a breach
+/// on their own tile, and returns the Home and where it stands.
+fn home_then_descend(game: &mut Game) -> (Entity, Position) {
     game.place_structure("home", 1, 0).unwrap();
     let home = game
         .view_entities(5, 5)
         .into_iter()
         .find(|e| e.is_home)
         .expect("the Home just deployed");
-    descend(&mut game);
+    let at = *game.world.get::<Position>(home.entity).unwrap();
+    descend(game);
+    (home.entity, at)
+}
 
-    let Err(reason) = game.use_symlink(home.entity) else {
-        panic!("a symlink underground would relocate the entrance we climb out of");
+fn stock_for_symlink(game: &mut Game, target: Entity) {
+    let cost = game.symlink_cost(target).expect("Home has a symlink");
+    let player = game.player_entity();
+    let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+    for (item, qty) in &cost {
+        inv.add(item.clone(), *qty);
+    }
+}
+
+/// The symlink is the one guarded action that gets to *change* locale rather
+/// than be refused by it: it pulls the party out of the shaft and then
+/// teleports them. `Position` is never written while `Locale::Dungeon` is
+/// live, which is the thing `require_surface` exists to prevent.
+#[test]
+fn a_symlink_used_underground_surfaces_the_party_and_teleports_them() {
+    let mut game = game();
+    let (home, at) = home_then_descend(&mut game);
+    stock_for_symlink(&mut game, home);
+
+    game.use_symlink(home).expect("a symlink should reach home");
+
+    assert!(
+        !game.is_underground(),
+        "the symlink should have surfaced us"
+    );
+    assert!(
+        game.dungeon_view().is_none(),
+        "the level should have been dropped, not left loaded"
+    );
+    let player = game.player_entity();
+    assert_eq!(
+        *game.world.get::<Position>(player).unwrap(),
+        at,
+        "the party should be standing on the Home they linked to"
+    );
+}
+
+/// The surfacing happens after every check, so a symlink that cannot be paid
+/// for is not a one-way trip out of the dungeon.
+#[test]
+fn a_symlink_that_cannot_be_paid_for_leaves_the_party_underground() {
+    let mut game = game();
+    let (home, _) = home_then_descend(&mut game);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .items
+        .clear();
+    let before = locale(&game);
+
+    assert!(game.use_symlink(home).is_err());
+
+    assert!(
+        game.is_underground(),
+        "a refused symlink surfaced the party"
+    );
+    assert_eq!(
+        before,
+        locale(&game),
+        "a refused symlink moved the party underground"
+    );
+}
+
+/// The maps of every level walked are keyed by `(breach tile, depth)`, so
+/// leaving by symlink costs the descent but not the mapping.
+#[test]
+fn a_symlink_out_keeps_the_maps_of_the_levels_already_walked() {
+    let mut game = game();
+    let (home, _) = home_then_descend(&mut game);
+    let breach = match locale(&game) {
+        Locale::Dungeon { entrance, .. } => entrance,
+        Locale::Surface => unreachable!("just descended"),
     };
-    assert!(reason.contains("open grid"), "got: {reason}");
+    walk_corridors(&mut game, 12);
+    let before = map(&game).explored;
+    stock_for_symlink(&mut game, home);
+
+    game.use_symlink(home).unwrap();
+    game.enter_dungeon(breach.0, breach.1);
+
+    assert!(
+        (map(&game).explored - before).abs() < f32::EPSILON,
+        "walking back into the breach handed back a blank map"
+    );
 }
 
 #[test]

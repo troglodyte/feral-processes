@@ -405,7 +405,6 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_surface()?;
         if self.world.get::<Structure>(target).is_none() {
             return Err("That's not a structure.".to_string());
         }
@@ -429,12 +428,25 @@ impl Game {
         }
         let target_pos = *self.world.get::<Position>(target).unwrap();
         let name = self.entity_label(target);
+        // Only once every check above has passed: a symlink that is refused
+        // must not have surfaced the party on its way to refusing. Doing it
+        // here also keeps `Position` from ever being written while
+        // `Locale::Dungeon` is live, which is what `require_surface` guards
+        // the other actions against — underground it *is* the entrance tile.
+        let surfaced = self.is_underground();
+        if surfaced {
+            self.clear_dungeon();
+        }
         {
             let mut pos = self.world.get_mut::<Position>(player).unwrap();
             pos.x = target_pos.x;
             pos.y = target_pos.y;
         }
-        self.log(format!("You use a symlink and teleport to {name}."));
+        self.log(if surfaced {
+            format!("The symlink hauls you up out of the shaft and drops you at {name}.")
+        } else {
+            format!("You use a symlink and teleport to {name}.")
+        });
         self.tick();
         Ok(())
     }

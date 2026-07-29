@@ -4,4 +4,5 @@
     description: "A taming catalyst. Spent on a decompile to raise the odds of the capture landing.",
     taming_potency: Some(0.4),
     craftable: Some((cost: [("core_fragment", 3)])),
+    cache_drop: Some(0.3),
 )

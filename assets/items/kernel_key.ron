@@ -5,4 +5,5 @@
     equipment: Some((Module, (decompiler: 4))),
     craftable: Some((cost: [("portal_fragment", 16)], requires_structure: Some("fabricator"))),
     droppable: Some([("cipher", 0.08), ("virus", 0.06)]),
+    cache_drop: Some(0.02),
 )

@@ -7,6 +7,7 @@
 
 use std::collections::VecDeque;
 
+use crate::tuning::DUNGEON_CACHES_PER_LEVEL;
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use serde::{Deserialize, Serialize};
@@ -91,6 +92,11 @@ pub enum CellKind {
     /// out to the surface.
     StairsUp,
     StairsDown,
+    /// Something worth the walk, sitting in a dead end. Walking onto one
+    /// empties it — see `Game::open_cache`. Whether a given cache has
+    /// already been emptied is not part of the level, which regenerates from
+    /// its spec; it lives in `resources::LevelMemory::looted`.
+    Cache,
 }
 
 impl CellKind {
@@ -210,7 +216,39 @@ pub fn generate(spec: LevelSpec) -> DungeonLevel {
     }
     level.set(level.entry.0, level.entry.1, CellKind::StairsUp);
 
+    place_caches(&mut level, &mut rng);
+
     level
+}
+
+/// Puts caches in dead ends.
+///
+/// Dead ends specifically, and not any spare floor cell: `braid` deliberately
+/// leaves half of them in place, and a dead end with nothing at the end of it
+/// is a corridor that wasted your time. This gives the braid's leftovers the
+/// reason to exist that they were missing — walking one is now a bet rather
+/// than a mistake.
+///
+/// Runs last so it can see the stairs, which it will not build over: a cache
+/// on the way down would be picked up by anyone descending, for free.
+fn place_caches(level: &mut DungeonLevel, rng: &mut StdRng) {
+    let mut ends: Vec<(i32, i32)> = Vec::new();
+    for y in 1..level.height - 1 {
+        for x in 1..level.width - 1 {
+            if level.cell(x, y) == CellKind::Floor && is_dead_end(level, x, y) {
+                ends.push((x, y));
+            }
+        }
+    }
+
+    // Fisher-Yates over a row-major list, so which dead ends get picked is a
+    // pure function of the seed rather than of iteration order.
+    for i in (1..ends.len()).rev() {
+        ends.swap(i, rng.random_range(0..=i));
+    }
+    for &(x, y) in ends.iter().take(DUNGEON_CACHES_PER_LEVEL) {
+        level.set(x, y, CellKind::Cache);
+    }
 }
 
 /// Recursive-backtracker maze carver. Cells sit on odd coordinates; carving

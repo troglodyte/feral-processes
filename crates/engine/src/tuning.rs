@@ -437,6 +437,34 @@ pub const DUNGEON_FLOORS_MAX: u32 = 6;
 /// at the cap.
 pub const DUNGEON_TILES_PER_FLOOR: i32 = 8;
 
+/// How many caches a dungeon level hides — see `dungeon::place_caches`,
+/// which puts them in the dead ends the braid pass left behind.
+///
+/// A reward rate, so it lives here rather than beside the generator with
+/// `BRAID_PERCENT`: how *many* is balance, where *dead ends specifically* is
+/// the shape of the content.
+pub const DUNGEON_CACHES_PER_LEVEL: usize = 3;
+
+/// Credits a cache holds at depth 1, before `DUNGEON_CACHE_DEPTH_GROWTH`.
+///
+/// Credits rather than Core Fragments because a dungeon run should pay for
+/// itself in the one currency that survives a breach — see
+/// `EconomyRole::TradeCurrency`. Fragments are what the surface is for.
+pub const DUNGEON_CACHE_CREDITS: std::ops::RangeInclusive<u32> = 12..=30;
+
+/// What each level of depth multiplies a cache's credit payout by,
+/// compounding. Deliberately steeper than `DUNGEON_DEPTH_STAT_GROWTH`: going
+/// deeper has to pay better than it costs, or the bottom of a shaft is a
+/// place with no reason to visit it.
+pub const DUNGEON_CACHE_DEPTH_GROWTH: f32 = 1.5;
+
+/// Chance a cache also holds a portal fragment, per level of depth (so
+/// depth 3 rolls at three times this, capped at certainty).
+///
+/// The one route besides the Market listing and boss kills that pays the
+/// breaching currency — see `market-portal-fragment-listing-is-load-bearing`.
+pub const DUNGEON_CACHE_FRAGMENT_CHANCE: f64 = 0.12;
+
 /// Chance per step that walking a dungeon corridor draws an encounter.
 ///
 /// Much higher than `RANDOM_ENCOUNTER_CHANCE` on purpose: crossing open

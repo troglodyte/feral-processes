@@ -9,6 +9,7 @@
 use crate::dungeon::{self, CellKind, Dir};
 use crate::resources::{CurrentDungeon, DungeonMemory, LevelMemory, Locale};
 use crate::tuning::{
+    DUNGEON_CACHE_CREDITS, DUNGEON_CACHE_DEPTH_GROWTH, DUNGEON_CACHE_FRAGMENT_CHANCE,
     DUNGEON_DEPTH_STAT_GROWTH, DUNGEON_ENCOUNTER_CHANCE, DUNGEON_ENTRANCE_SCATTER_TILES,
     DUNGEON_FLOORS_MAX, DUNGEON_FLOORS_MIN, DUNGEON_MIN_ENTRANCE_TILES,
     DUNGEON_NEAREST_ENTRANCE_TILES, DUNGEON_TILES_PER_FLOOR,
@@ -356,6 +357,99 @@ impl Game {
             .or_default()
     }
 
+    /// Empties the cache the party is standing on, if there is one and it
+    /// has not already been emptied.
+    ///
+    /// Payout is a depth-scaled pile of Credits, a chance at a portal
+    /// fragment, and whatever the item set declares — see
+    /// `ItemDef::cache_drop`, which is how a mod adds to what caches hold
+    /// without touching this function.
+    ///
+    /// Credits rather than Core Fragments deliberately: they are the one
+    /// currency that survives a breach, so a dungeon run banks something the
+    /// next sector can still spend.
+    fn open_cache(&mut self) {
+        let Some(pos) = self.dungeon_pos() else {
+            return;
+        };
+        if self.cell_underfoot() != Some(CellKind::Cache) {
+            return;
+        }
+        if self
+            .world
+            .resource::<DungeonMemory>()
+            .0
+            .get(&(pos.entrance, pos.depth))
+            .is_some_and(|m| m.looted.contains(&(pos.x, pos.y)))
+        {
+            return;
+        }
+        self.level_memory_mut(pos).looted.insert((pos.x, pos.y));
+
+        let depth_mult = DUNGEON_CACHE_DEPTH_GROWTH.powi(pos.depth as i32 - 1);
+        let credits = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_range(DUNGEON_CACHE_CREDITS)
+        };
+        let credits = ((credits as f32) * depth_mult).round() as u32;
+
+        self.log_kind(MessageKind::Loot, "A cache, still sealed. You crack it.");
+        let landed = self.grant_loot(self.trade_currency(), credits);
+        if landed > 0 {
+            self.log_kind(
+                MessageKind::Loot,
+                format!("{landed} credits, skimmed off some long-dead process."),
+            );
+        }
+
+        let fragment_roll = {
+            let chance = (DUNGEON_CACHE_FRAGMENT_CHANCE * pos.depth as f64).min(1.0);
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_bool(chance)
+        };
+        if fragment_roll && self.grant_loot(self.craft_currency(), 1) > 0 {
+            self.log_kind(
+                MessageKind::Loot,
+                "A portal fragment, wedged in the casing.",
+            );
+        }
+
+        // Sorted by id so a seeded run consumes its rolls in the same order
+        // however the item files happen to load — the same guarantee
+        // `equipment_drops_for` makes.
+        let mut table: Vec<(ItemId, f32)> = self
+            .world
+            .resource::<ItemDb>()
+            .all()
+            .filter_map(|def| def.cache_drop.map(|chance| (def.id.clone(), chance)))
+            .collect();
+        table.sort_by(|a, b| a.0.as_str().cmp(b.0.as_str()));
+
+        for (item, chance) in table {
+            let roll = {
+                let mut rng = self.world.resource_mut::<GameRng>();
+                rng.0.random_bool(chance.clamp(0.0, 1.0) as f64)
+            };
+            if roll && self.grant_loot(item.clone(), 1) > 0 {
+                self.log_kind(
+                    MessageKind::Loot,
+                    format!("Also inside: a {}.", self.item_name(&item)),
+                );
+            }
+        }
+    }
+
+    /// Whether the cache on `cell` of the level the party is in is still
+    /// unopened — what both views use to stop advertising an empty one.
+    fn cache_unopened(&self, pos: DungeonPos, cell: (i32, i32)) -> bool {
+        !self
+            .world
+            .resource::<DungeonMemory>()
+            .0
+            .get(&(pos.entrance, pos.depth))
+            .is_some_and(|m| m.looted.contains(&cell))
+    }
+
     /// Marks the cell the party is standing on as somewhere a fight started,
     /// for the map to pin.
     pub(crate) fn remember_fight(&mut self) {
@@ -459,8 +553,11 @@ impl Game {
             *y = ny;
         }
         // Before the encounter roll, so a corridor the party walked into is
-        // on their map even if something jumps them the moment they enter it.
+        // on their map even if something jumps them the moment they enter it,
+        // and so a cache is the party's before anything can interrupt them
+        // reaching for it.
         self.remember_view();
+        self.open_cache();
         // Only a step that actually covered ground draws an encounter —
         // shoving at a wall is not travel, the same call `move_player`
         // makes about an ambush.
@@ -684,6 +781,10 @@ impl Game {
                             CellKind::Floor => DungeonMapCell::Floor,
                             CellKind::StairsUp => DungeonMapCell::StairsUp,
                             CellKind::StairsDown => DungeonMapCell::StairsDown,
+                            CellKind::Cache if self.cache_unopened(pos, (x, y)) => {
+                                DungeonMapCell::Cache
+                            }
+                            CellKind::Cache => DungeonMapCell::Floor,
                         }
                     })
                     .collect()
@@ -729,6 +830,7 @@ impl Game {
     /// The first-person view of the cells around the party, already rotated
     /// into view space — see `views::DungeonView`. `None` on the surface.
     pub fn dungeon_view(&self) -> Option<DungeonView> {
+        let pos = self.dungeon_pos()?;
         let DungeonPos {
             depth,
             floors,
@@ -736,7 +838,7 @@ impl Game {
             y,
             facing,
             ..
-        } = self.dungeon_pos()?;
+        } = pos;
         let level = self.world.resource::<CurrentDungeon>().0.as_ref()?;
 
         let cells = view_cone(x, y, facing)
@@ -748,6 +850,13 @@ impl Game {
                         CellKind::Floor => DungeonCellView::Floor,
                         CellKind::StairsUp => DungeonCellView::StairsUp,
                         CellKind::StairsDown => DungeonCellView::StairsDown,
+                        // An emptied cache is just an alcove. Still drawing
+                        // one would send the player back down a dead end
+                        // they have already walked.
+                        CellKind::Cache if self.cache_unopened(pos, (cx, cy)) => {
+                            DungeonCellView::Cache
+                        }
+                        CellKind::Cache => DungeonCellView::Floor,
                     })
                     .collect()
             })
@@ -757,6 +866,9 @@ impl Game {
             CellKind::StairsDown => Some("Stairs lead down  [>] descend".to_string()),
             CellKind::StairsUp if depth == 1 => Some("The breach out  [<] surface".to_string()),
             CellKind::StairsUp => Some("Stairs lead up  [<] climb".to_string()),
+            // Emptied on arrival rather than on a key, so this reports what
+            // already happened rather than offering a choice.
+            CellKind::Cache => Some("An empty casing".to_string()),
             _ => None,
         };
 

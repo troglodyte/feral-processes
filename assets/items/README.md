@@ -125,6 +125,22 @@ disqualifies the whole file.
     // the better of the two chances.
     droppable: Some([("scrapper", 0.1), ("worm", 0.08)]),
 
+    // Optional. Chance, 0.0-1.0, that a dungeon cache holds one of these.
+    // Caches sit in the dead ends of generated dungeon levels; walking onto
+    // one empties it, once, for good.
+    //
+    // Rolled once per cache for every item that declares this, so the
+    // expected haul is the *sum* across the whole item set rather than a
+    // pick from a list — adding a mod item with `cache_drop` makes caches
+    // richer overall, it does not dilute what is already in them. Keep the
+    // numbers low for that reason: the shipped set totals a little over one
+    // item per cache.
+    //
+    // Currencies are handled separately and are not declared here — every
+    // cache pays depth-scaled Credits and rolls for a Portal Fragment, from
+    // constants in `tuning.rs`.
+    cache_drop: Some(0.08),
+
     // Reserved for engine-synthesized items — leave this out. Every loaded
     // ability automatically gets a "<Ability Name> Routine" item (id
     // `routine_<ability_id>`) whose `routine` names that ability and whose

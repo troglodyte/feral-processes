@@ -840,6 +840,224 @@ fn maps_do_not_ride_a_breach_into_the_next_zone() {
     );
 }
 
+/// Teleports the party to the mouth of a cache's dead end, facing it, and
+/// returns the cache's cell. A single `step_forward` then walks onto it,
+/// which is how a cache is actually reached — teleporting *onto* one would
+/// test a state the game never produces, and `step_back` off a dead end is
+/// only sometimes possible depending on which way the party happens to face.
+///
+/// Caches sit at dead ends, so walking to one honestly would mean solving
+/// the maze first.
+fn stand_before_a_cache(game: &mut Game) -> (i32, i32) {
+    let level = game
+        .world
+        .resource::<CurrentDungeon>()
+        .0
+        .as_ref()
+        .unwrap()
+        .clone();
+    let cache = (0..level.height)
+        .flat_map(|y| (0..level.width).map(move |x| (x, y)))
+        .find(|&(x, y)| level.cell(x, y) == CellKind::Cache)
+        .expect("every level should hide at least one cache");
+
+    // A dead end has exactly one open neighbour; stand there looking in.
+    let (facing, mouth) = [Dir::North, Dir::East, Dir::South, Dir::West]
+        .into_iter()
+        .find_map(|dir| {
+            let (dx, dy) = dir.delta();
+            // The neighbour is behind us, so we face the *opposite* way.
+            let neighbour = (cache.0 + dx, cache.1 + dy);
+            level
+                .walkable(neighbour.0, neighbour.1)
+                .then_some((dir.turn_left().turn_left(), neighbour))
+        })
+        .expect("a dead end must have one way in");
+
+    let Locale::Dungeon {
+        depth,
+        floors,
+        entrance,
+        ..
+    } = locale(game)
+    else {
+        unreachable!("not underground")
+    };
+    game.world.insert_resource(Locale::Dungeon {
+        depth,
+        floors,
+        x: mouth.0,
+        y: mouth.1,
+        facing,
+        entrance,
+    });
+    cache
+}
+
+fn credits(game: &Game) -> u32 {
+    let id = game.trade_currency();
+    game.world
+        .get::<Inventory>(game.player_entity())
+        .unwrap()
+        .items
+        .iter()
+        .find(|(item, _)| *item == id)
+        .map(|&(_, qty)| qty)
+        .unwrap_or(0)
+}
+
+#[test]
+fn a_level_hides_caches_in_its_dead_ends() {
+    let mut game = game();
+    descend(&mut game);
+    let level = game.world.resource::<CurrentDungeon>().0.clone().unwrap();
+
+    let caches: Vec<(i32, i32)> = (0..level.height)
+        .flat_map(|y| (0..level.width).map(move |x| (x, y)))
+        .filter(|&(x, y)| level.cell(x, y) == CellKind::Cache)
+        .collect();
+    assert_eq!(caches.len(), crate::tuning::DUNGEON_CACHES_PER_LEVEL);
+    for (x, y) in caches {
+        let exits = [(0, -1), (1, 0), (0, 1), (-1, 0)]
+            .iter()
+            .filter(|(dx, dy)| level.walkable(x + dx, y + dy))
+            .count();
+        assert_eq!(exits, 1, "the cache at {x},{y} is not in a dead end");
+    }
+}
+
+#[test]
+fn walking_onto_a_cache_pays_out() {
+    let mut game = game();
+    descend(&mut game);
+    let cache = stand_before_a_cache(&mut game);
+    let before = credits(&game);
+
+    game.step_forward();
+
+    let Locale::Dungeon { x, y, .. } = locale(&game) else {
+        unreachable!()
+    };
+    assert_eq!((x, y), cache, "the fixture should walk onto the cache");
+    assert!(credits(&game) > before, "walking onto a cache paid nothing");
+    assert!(logged(&game, "cache"));
+}
+
+/// Otherwise a cache is an infinite credit tap: step off, step back on.
+#[test]
+fn a_cache_only_pays_out_once() {
+    let mut game = game();
+    descend(&mut game);
+    stand_before_a_cache(&mut game);
+    game.step_forward();
+    let after_first = credits(&game);
+
+    for _ in 0..5 {
+        if game.has_active_battle() {
+            flee_until_clear(&mut game);
+        }
+        game.step_back();
+        game.step_forward();
+    }
+    assert_eq!(
+        credits(&game),
+        after_first,
+        "the cache refilled itself when the party stepped off and back on"
+    );
+}
+
+#[test]
+fn an_emptied_cache_stays_emptied_across_a_save_and_load() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    game.enter_dungeon(pos.x, pos.y);
+    let cache = stand_before_a_cache(&mut game);
+    game.step_forward();
+    if game.has_active_battle() {
+        flee_until_clear(&mut game);
+    }
+    let after_looting = credits(&game);
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_cache_looted_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(credits(&loaded), after_looting);
+    loaded.step_back();
+    loaded.step_forward();
+    assert_eq!(
+        credits(&loaded),
+        after_looting,
+        "loading refilled a cache the party had already emptied"
+    );
+    assert_eq!(
+        loaded.dungeon_map().unwrap().cells[cache.1 as usize][cache.0 as usize],
+        DungeonMapCell::Floor,
+        "an emptied cache should stop being advertised on the map"
+    );
+}
+
+/// The map answers "where is there still something", so an emptied cache
+/// drops off it while an untouched one stays.
+#[test]
+fn the_map_marks_caches_the_party_has_seen_and_not_opened() {
+    let mut game = game();
+    descend(&mut game);
+    let cache = stand_before_a_cache(&mut game);
+    // Seen from the mouth of the dead end, not yet stepped on.
+    game.turn_left();
+    game.turn_right();
+    let seen = map(&game);
+    assert_eq!(map_cell(&seen, cache.0, cache.1), DungeonMapCell::Cache);
+
+    game.step_forward();
+    assert_eq!(
+        map_cell(&map(&game), cache.0, cache.1),
+        DungeonMapCell::Floor
+    );
+}
+
+#[test]
+fn a_deeper_cache_pays_better() {
+    let payout_at = |depth: u32| {
+        let mut game = Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+        game.enter_dungeon(pos.x, pos.y);
+        let Locale::Dungeon {
+            x,
+            y,
+            facing,
+            entrance,
+            ..
+        } = locale(&game)
+        else {
+            unreachable!()
+        };
+        game.world.insert_resource(Locale::Dungeon {
+            depth,
+            floors: 9,
+            x,
+            y,
+            facing,
+            entrance,
+        });
+        let before = credits(&game);
+        stand_before_a_cache(&mut game);
+        game.step_forward();
+        credits(&game) - before
+    };
+
+    assert!(
+        payout_at(4) > payout_at(1),
+        "depth has to pay better than it costs, or the bottom of a shaft has no draw"
+    );
+}
+
 /// True if any of the last `n` log lines contains `needle`.
 fn logged(game: &Game, needle: &str) -> bool {
     game.message_log(12)

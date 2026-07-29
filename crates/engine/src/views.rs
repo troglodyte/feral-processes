@@ -285,6 +285,10 @@ pub enum DungeonCellView {
     Floor,
     StairsUp,
     StairsDown,
+    /// An unopened cache. One that has already been emptied comes through
+    /// as `Floor` — still drawing it would send the party back down a dead
+    /// end they have already walked.
+    Cache,
 }
 
 /// The party's first-person view of the level around them — see
@@ -327,6 +331,10 @@ pub enum DungeonMapCell {
     Floor,
     StairsUp,
     StairsDown,
+    /// A cache the party has seen and not yet emptied. An emptied one maps
+    /// as `Floor`, so the map answers "where is there still something" and
+    /// not merely "where was there once".
+    Cache,
 }
 
 /// A landmark pinned to a mapped cell, over and above what the layout says.

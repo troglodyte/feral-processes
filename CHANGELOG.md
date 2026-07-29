@@ -32,6 +32,18 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   been seen. Opening it costs no time. Each breach keeps its own map, and
   each level of a shaft its own; the map is written to the save, because a
   level regenerates from its seed but what you have seen of it is history.
+- **Caches.** Dead ends now hold something. `braid` deliberately leaves half
+  of the maze's dead ends in place, and until now walking one was purely a
+  waste of time; three cells per level hide a cache, marked `!` in the view
+  and on the map. Walking onto one empties it, once and for good — the map
+  stops advertising an emptied cache, so it answers "where is there still
+  something" rather than "where was there once". Payout is depth-scaled
+  Credits (the one currency that survives a breach), a chance at a portal
+  fragment that grows with depth, and whatever the item set declares.
+- **Items can declare themselves cache loot.** New optional `cache_drop`
+  field on an item `.ron` — the chance a dungeon cache holds one. Rolled per
+  cache per declaring item, so a mod adding items makes caches richer without
+  touching engine code. See `assets/items/README.md`.
 - **A breach is a shaft with a bottom.** Descent used to be unbounded — the
   depth counter simply went up, with the stat multiplier compounding the
   whole way and nothing down there. A breach now opens onto a shaft of fixed

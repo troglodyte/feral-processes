@@ -26,7 +26,10 @@ fn tile_color(cell: DungeonMapCell) -> Color {
     match cell {
         DungeonMapCell::Unknown => UNKNOWN,
         DungeonMapCell::Rock => ROCK,
-        DungeonMapCell::Floor | DungeonMapCell::StairsUp | DungeonMapCell::StairsDown => WALKED,
+        DungeonMapCell::Floor
+        | DungeonMapCell::StairsUp
+        | DungeonMapCell::StairsDown
+        | DungeonMapCell::Cache => WALKED,
     }
 }
 
@@ -37,6 +40,7 @@ fn cell_glyph(cell: DungeonMapCell) -> Option<(char, Color)> {
     match cell {
         DungeonMapCell::StairsDown => Some(('>', YELLOW)),
         DungeonMapCell::StairsUp => Some(('<', YELLOW)),
+        DungeonMapCell::Cache => Some(('!', GREEN)),
         _ => None,
     }
 }
@@ -123,7 +127,7 @@ pub(super) fn draw_dungeon_map(
         draw_cell_glyph(painter, ch, color, px, py, cell, glyph_px);
     }
 
-    let legend = "@ you    < up    > down    x jumped here    unlit = unmapped";
+    let legend = "@ you    < up    > down    ! cache    x jumped here    unlit = unmapped";
     let dims = painter.measure_ui(legend, m.font_size);
     painter.ui(
         legend,

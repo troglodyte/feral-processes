@@ -89,6 +89,13 @@ pub struct ItemDef {
     /// merged per kill (see `Game::equipment_drops_for`).
     #[serde(default)]
     pub droppable: Option<Vec<(SpeciesId, f32)>>,
+    /// Chance, 0.0-1.0, that a dungeon cache holds this item — see
+    /// `Game::open_cache`. Rolled once per cache per declaring item, so the
+    /// expected haul is the sum across the item set rather than a pick from
+    /// a list, and a mod adding items adds to what caches can contain
+    /// without touching engine code.
+    #[serde(default)]
+    pub cache_drop: Option<f32>,
     /// The ability a loose copy of this item installs, for a routine item.
     /// Set only on the defs `ItemDb::synthesize_routines` mints; an authored
     /// file leaving it `None` is an ordinary item. `#[serde(default)]` like
@@ -111,6 +118,9 @@ impl ItemDef {
             && sources.iter().any(|(_, chance)| !chance.is_finite())
         {
             return Some("droppable chance");
+        }
+        if self.cache_drop.is_some_and(|chance| !chance.is_finite()) {
+            return Some("cache_drop");
         }
         match self.consume {
             Some(c) if !c.power.is_finite() => Some("consume.power"),
@@ -240,6 +250,7 @@ impl ItemDb {
                     consume: None,
                     craftable: None,
                     droppable: None,
+                    cache_drop: None,
                 },
             );
         }

@@ -1111,6 +1111,172 @@ fn a_species_heal_affinity_scales_the_heal_it_casts() {
     );
 }
 
+/// A species with a damage affinity, for the `Damage` arm of `use_ability` —
+/// the one that feeds `scaled_affinity_power` into `battle::compute_damage`
+/// rather than standing on `scaled_power` alone.
+const STRIKER_WITH_AFFINITY: &str = r#"(
+    id: "test_striker",
+    name: "Test Striker",
+    glyph: 's',
+    color: Red,
+    base_hp: 10,
+    base_atk: 4,
+    base_def: 2,
+    taming_difficulty: 0.5,
+    habitats: [OpenGrid],
+    base_speed: 10,
+    moves: [(name: "Poke", power: 3)],
+    abilities: [(id: "kernel_panic")],
+    affinities: (damage: 1.5),
+)"#;
+
+#[test]
+fn a_species_damage_affinity_scales_the_damage_it_deals() {
+    let dir = super::support::modded_assets_dir(
+        "damage_affinity_battle",
+        &[],
+        &[],
+        &[("test_striker.ron", STRIKER_WITH_AFFINITY)],
+        &[],
+        &[],
+    );
+    let mut game = Game::new(94, DifficultyMode::Forgiving, &dir).unwrap();
+    let striker = game
+        .world
+        .spawn((
+            Creature {
+                species: "test_striker".to_string(),
+            },
+            Position { x: 3, y: 3 },
+            Stats {
+                hp: 10,
+                max_hp: 10,
+                atk: 5,
+                def: 1,
+            },
+            Experience::default(),
+        ))
+        .id();
+    let target = game
+        .world
+        .spawn((
+            Hostile,
+            Position { x: 4, y: 3 },
+            Stats {
+                hp: 200,
+                max_hp: 200,
+                atk: 0,
+                def: 3,
+            },
+        ))
+        .id();
+    let kernel_panic = ability(&game, "kernel_panic");
+
+    game.use_ability(&kernel_panic, striker, "Test Striker", &[target]);
+
+    let taken = 200 - game.world.get::<Stats>(target).unwrap().hp;
+    // kernel_panic is Damage(power: 16); Damage takes affinity alone, with
+    // no level term, since compute_damage already adds the caster's ATK.
+    let scaled = crate::abilities::scaled_affinity_power(16, 1.5);
+    let expected = battle::compute_damage(game.effective_atk(striker), 3, scaled);
+    assert_eq!(
+        taken, expected,
+        "damage affinity should scale the authored power fed to compute_damage"
+    );
+    assert!(
+        scaled > crate::abilities::scaled_affinity_power(16, AFFINITY_NEUTRAL),
+        "the fixture must actually differ from neutral, or this proves nothing"
+    );
+}
+
+/// A species with a drain affinity, for the `Drain` arm — and the one place
+/// `heal_fraction` must NOT be scaled a second time, since it already
+/// multiplies damage that affinity has scaled once.
+const DRAINER_WITH_AFFINITY: &str = r#"(
+    id: "test_drainer",
+    name: "Test Drainer",
+    glyph: 'd',
+    color: Magenta,
+    base_hp: 10,
+    base_atk: 4,
+    base_def: 2,
+    taming_difficulty: 0.5,
+    habitats: [OpenGrid],
+    base_speed: 10,
+    moves: [(name: "Poke", power: 3)],
+    abilities: [(id: "siphon_cycles")],
+    affinities: (drain: 1.5),
+)"#;
+
+#[test]
+fn a_species_drain_affinity_scales_the_damage_but_not_the_heal_fraction() {
+    let dir = super::support::modded_assets_dir(
+        "drain_affinity_battle",
+        &[],
+        &[],
+        &[("test_drainer.ron", DRAINER_WITH_AFFINITY)],
+        &[],
+        &[],
+    );
+    let mut game = Game::new(94, DifficultyMode::Forgiving, &dir).unwrap();
+    let drainer = game
+        .world
+        .spawn((
+            Creature {
+                species: "test_drainer".to_string(),
+            },
+            Position { x: 3, y: 3 },
+            Stats {
+                hp: 50,
+                max_hp: 200,
+                atk: 5,
+                def: 1,
+            },
+            Experience::default(),
+        ))
+        .id();
+    let target = game
+        .world
+        .spawn((
+            Hostile,
+            Position { x: 4, y: 3 },
+            Stats {
+                hp: 200,
+                max_hp: 200,
+                atk: 0,
+                def: 3,
+            },
+        ))
+        .id();
+    let siphon_cycles = ability(&game, "siphon_cycles");
+
+    game.use_ability(&siphon_cycles, drainer, "Test Drainer", &[target]);
+
+    let taken = 200 - game.world.get::<Stats>(target).unwrap().hp;
+    // siphon_cycles is Drain(power: 10, heal_fraction: 0.5); affinity alone
+    // scales the authored power, same as Damage.
+    let scaled = crate::abilities::scaled_affinity_power(10, 1.5);
+    let expected_dmg = battle::compute_damage(game.effective_atk(drainer), 3, scaled);
+    assert_eq!(
+        taken, expected_dmg,
+        "drain affinity should scale the authored power fed to compute_damage"
+    );
+
+    let restored = game.world.get::<Stats>(drainer).unwrap().hp - 50;
+    // Off the damage actually dealt (already affinity-scaled), times the
+    // authored heal_fraction — never affinity again, or this double-dips.
+    let expected_restored = (expected_dmg as f32 * 0.5).round() as i32;
+    assert_eq!(
+        restored, expected_restored,
+        "heal_fraction must apply once, to damage already scaled by affinity"
+    );
+    let double_dipped = (expected_dmg as f32 * 0.5 * 1.5).round() as i32;
+    assert_ne!(
+        restored, double_dipped,
+        "a regression that re-applies affinity to heal_fraction must fail this"
+    );
+}
+
 #[test]
 fn a_player_affinity_perk_scales_the_players_own_ability() {
     let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

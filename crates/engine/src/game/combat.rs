@@ -635,16 +635,19 @@ impl Game {
     /// Resolved from `actor`, never from a recipient: an affinity is a
     /// property of who casts.
     ///
-    /// The player's comes from perks and a companion's from its species,
-    /// and the two can never stack — the player has no `Creature` and a
-    /// companion has no `Perks` — so there is no combination rule here on
-    /// purpose. A wild program has a `Creature` like any other, which is
-    /// how a species affinity reaches a hostile carrier for free.
+    /// The player's comes from perks and a companion's from its species, and
+    /// the two can never stack — checked by identity against
+    /// `player_entity()` rather than by which components `actor` happens to
+    /// carry, so the no-stacking property holds by construction rather than
+    /// by the player having no `Creature` and a companion having no
+    /// `Perks` staying true by convention. A wild program has a `Creature`
+    /// like any other, which is how a species affinity reaches a hostile
+    /// carrier for free.
     pub(crate) fn ability_affinity(&self, actor: Entity, effect: &AbilityEffect) -> f32 {
         let Some(kind) = effect.affinity_kind() else {
             return AFFINITY_NEUTRAL;
         };
-        if self.world.get::<Perks>(actor).is_some() {
+        if actor == self.player_entity() {
             return AFFINITY_NEUTRAL
                 + AFFINITY_PERK_BONUS_PER_LEVEL * self.player_perk_level(kind.perk()) as f32;
         }

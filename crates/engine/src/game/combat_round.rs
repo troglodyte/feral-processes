@@ -635,14 +635,11 @@ impl Game {
         name: &str,
         recipients: &[Entity],
     ) {
-        // Resolved once for the whole cast rather than per recipient: every
-        // recipient of one ability is scaled by the *user's* level, and
-        // re-reading it inside the loop would invite someone to key it off
-        // the recipient instead.
+        // Both resolved once for the whole cast rather than per recipient:
+        // every recipient of one ability is scaled by the *user's* level and
+        // affinity, and re-reading either inside the loop would invite
+        // someone to key it off the recipient instead.
         let level = self.ability_user_level(actor);
-        // Resolved once for the whole cast, for the same reason `level` is:
-        // this is the caster's property, and re-reading it inside the
-        // recipient loop would invite keying it off the recipient.
         let affinity = self.ability_affinity(actor, &ability.effect);
         // Damage/drain lines get the log kind their side actually earns,
         // rather than the party's own `PartyDamage` regardless of who is

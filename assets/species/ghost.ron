@@ -15,4 +15,5 @@
         (name: "Static Wail", power: 7, ranged: true),
     ],
     work_resource: None,
+    affinities: (damage: 1.25, buff: 0.85),
 )

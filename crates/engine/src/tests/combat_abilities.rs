@@ -1368,3 +1368,38 @@ fn an_effect_with_no_category_takes_no_multiplier() {
         AFFINITY_NEUTRAL
     );
 }
+
+#[test]
+fn a_wild_carrier_gets_its_species_damage_affinity() {
+    const BITER: &str = r#"(
+    id: "test_biter",
+    name: "Test Biter",
+    glyph: 'b',
+    color: Red,
+    base_hp: 40,
+    base_atk: 6,
+    base_def: 2,
+    taming_difficulty: 0.5,
+    habitats: [OpenGrid],
+    moves: [(name: "Poke", power: 3)],
+    affinities: (damage: 2.0),
+)"#;
+    let dir = super::support::modded_assets_dir(
+        "wild_damage_affinity",
+        &[],
+        &[],
+        &[("test_biter.ron", BITER)],
+        &[],
+        &[],
+    );
+    let mut game = Game::new(94, DifficultyMode::Forgiving, &dir).unwrap();
+    // Resolve through the same entry point battle uses, on a wild entity,
+    // rather than asserting a damage total that pack composition and
+    // initiative both move.
+    let biter = super::support::spawn_wild_without_routine(&mut game, "test_biter", 3, 3);
+    let effect = AbilityEffect::Damage {
+        power: 6,
+        status: None,
+    };
+    assert_eq!(game.ability_affinity(biter, &effect), 2.0);
+}

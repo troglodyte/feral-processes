@@ -16,4 +16,5 @@
     ],
     work_resource: None,
     abilities: [(id: "deadlock"), (id: "memory_leak", level: 4)],
+    affinities: (drain: 1.3, buff: 0.85),
 )

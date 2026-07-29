@@ -16,4 +16,5 @@
     ],
     work_resource: None,
     abilities: [(id: "memory_leak"), (id: "null_route", level: 8)],
+    affinities: (debuff: 1.35, heal: 0.85),
 )

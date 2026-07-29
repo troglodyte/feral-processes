@@ -17,4 +17,5 @@
     work_resource: Some("power_cell"),
     can_nest: true,
     abilities: [(id: "cascade_overflow", level: 3)],
+    affinities: (damage: 1.2, heal: 0.85),
 )

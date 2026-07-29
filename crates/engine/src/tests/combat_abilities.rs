@@ -7,7 +7,7 @@ use crate::*;
 
 use super::support::*;
 use crate::tuning::{
-    AFFINITY_NEUTRAL, AFFINITY_PERK_BONUS_PER_LEVEL, COMPANION_COMMAND_FATIGUE_COST,
+    AFFINITY_MAX, AFFINITY_NEUTRAL, AFFINITY_PERK_BONUS_PER_LEVEL, COMPANION_COMMAND_FATIGUE_COST,
 };
 
 #[test]
@@ -1295,6 +1295,40 @@ fn a_player_affinity_perk_scales_the_players_own_ability() {
     assert_eq!(
         game.ability_affinity(player, &effect),
         AFFINITY_NEUTRAL + 2.0 * AFFINITY_PERK_BONUS_PER_LEVEL
+    );
+}
+
+#[test]
+fn a_player_affinity_perk_is_clamped_at_affinity_max() {
+    let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    // AFFINITY_NEUTRAL + levels * AFFINITY_PERK_BONUS_PER_LEVEL reaches
+    // AFFINITY_MAX at 20 levels; a few past that confirms the clamp, not
+    // just a formula that happens to land on the ceiling.
+    let levels: u32 = 25;
+    let cost = game
+        .world
+        .resource::<PerkDb>()
+        .get(Perk::HealAffinity)
+        .unwrap()
+        .cost;
+    {
+        let mut perks = game.world.get_mut::<Perks>(player).unwrap();
+        perks.points = levels * cost;
+    }
+    for _ in 0..levels {
+        game.unlock_perk(Perk::HealAffinity).unwrap();
+    }
+
+    let uncapped = AFFINITY_NEUTRAL + levels as f32 * AFFINITY_PERK_BONUS_PER_LEVEL;
+    assert!(
+        uncapped > AFFINITY_MAX,
+        "the fixture must actually overshoot the ceiling, or this proves nothing"
+    );
+    assert_eq!(
+        game.ability_affinity(player, &AbilityEffect::Heal { power: 8 }),
+        AFFINITY_MAX,
+        "a player's perk affinity must not exceed the species ceiling"
     );
 }
 

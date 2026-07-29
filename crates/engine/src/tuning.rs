@@ -870,12 +870,19 @@ pub const AFFINITY_MIN: f32 = 0.5;
 pub const AFFINITY_MAX: f32 = 2.0;
 
 /// Affinity a player affinity perk adds per level: the perk's multiplier is
-/// `AFFINITY_NEUTRAL + this * level`. One shared constant rather than five
-/// identical ones, because all five affinity perks are the same shape — see
-/// `Perk::affinity_kind`. Matches
-/// `EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL`, the closest existing
-/// analogue among the perks that multiply rather than add.
-pub const AFFINITY_PERK_BONUS_PER_LEVEL: f32 = 0.03;
+/// `AFFINITY_NEUTRAL + this * level`, clamped at `AFFINITY_MAX` in
+/// `Game::ability_affinity` the same way a species' affinity is clamped at
+/// load. One shared constant rather than five identical ones, because all
+/// five affinity perks are the same shape — see `Perk::affinity_kind`.
+///
+/// Higher than `EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL` (0.03) on
+/// purpose rather than matching it: `Damage` and `Drain` deliberately skip
+/// level scaling (see `ABILITY_POWER_SCALE_PER_LEVEL`'s doc), so their
+/// magnitudes stay small next to a heal or buff's, and a 3% nudge on a
+/// small `i32` power rounds away to nothing for most shipped abilities —
+/// `packet_shred` and `kernel_panic` both round-trip unchanged at one perk
+/// level. At 0.05 the same abilities move by a visible +1.
+pub const AFFINITY_PERK_BONUS_PER_LEVEL: f32 = 0.05;
 
 /// Floor on the cooldown a hostile arms after spending a routine.
 ///

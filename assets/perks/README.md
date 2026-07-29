@@ -28,13 +28,17 @@ Tuning, Field Medic, Overclocker, Corruption Vector and Siphon Protocol each
 raise your affinity for one `AffinityKind` category (Damage, Heal, Buff,
 Debuff, Drain) by the same `AFFINITY_PERK_BONUS_PER_LEVEL` per level, in
 `crates/engine/src/tuning.rs` — one constant, because all five perks are the
-same shape, not five identical knobs to keep in sync by hand. They scale
-**only your own** ability casts, never a companion's: a companion's affinity
-is its species' business (`SpeciesDef::affinities`), and a party-wide perk
-would double-multiply against it. As with every perk here, the `description`
-below is authored text — the engine never derives it from the constant, so
-retuning `AFFINITY_PERK_BONUS_PER_LEVEL` leaves the wording stale (still
-saying "+3%") until someone edits the five files to match.
+same shape, not five identical knobs to keep in sync by hand. The result is
+clamped at `AFFINITY_MAX`, the same ceiling a species file is clamped to at
+load — perk levels are uncapped, so without the clamp a long enough game
+would let your own casts exceed the bound every other affinity is held to.
+They scale **only your own** ability casts, never a companion's: a
+companion's affinity is its species' business (`SpeciesDef::affinities`), and
+a party-wide perk would double-multiply against it. As with every perk here,
+the `description` below is authored text — the engine never derives it from
+the constant, so retuning `AFFINITY_PERK_BONUS_PER_LEVEL` leaves the wording
+stale (still quoting the old percentage) until someone edits the five files
+to match.
 
 What *is* here is worth having: the wording players read, and the price they
 pay. Both are things you'd want to change without a compiler.

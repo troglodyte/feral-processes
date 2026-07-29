@@ -3,8 +3,8 @@
 
 use crate::abilities::AbilityId;
 use crate::tuning::{
-    AFFINITY_NEUTRAL, AFFINITY_PERK_BONUS_PER_LEVEL, DEFAULT_BASE_SPEED, DEFEND_DEF_BONUS,
-    INITIATIVE_DIE, PLAYER_BASE_SPEED,
+    AFFINITY_MAX, AFFINITY_NEUTRAL, AFFINITY_PERK_BONUS_PER_LEVEL, DEFAULT_BASE_SPEED,
+    DEFEND_DEF_BONUS, INITIATIVE_DIE, PLAYER_BASE_SPEED,
 };
 use crate::*;
 
@@ -643,13 +643,22 @@ impl Game {
     /// `Perks` staying true by convention. A wild program has a `Creature`
     /// like any other, which is how a species affinity reaches a hostile
     /// carrier for free.
+    ///
+    /// The perk arm is clamped at `AFFINITY_MAX`, the same ceiling a species
+    /// file is clamped to at load (`Affinities::clamp_all`): perk levels are
+    /// uncapped, so without this a long enough game would let the player's
+    /// own casts exceed the bound `tuning.rs` reasons about everywhere else.
+    /// `.min` rather than `.clamp`, because the perk arithmetic — a `u32`
+    /// level times a finite constant — cannot produce NaN or undershoot
+    /// `AFFINITY_MIN`, so there is no lower bound to express.
     pub(crate) fn ability_affinity(&self, actor: Entity, effect: &AbilityEffect) -> f32 {
         let Some(kind) = effect.affinity_kind() else {
             return AFFINITY_NEUTRAL;
         };
         if actor == self.player_entity() {
-            return AFFINITY_NEUTRAL
+            let affinity = AFFINITY_NEUTRAL
                 + AFFINITY_PERK_BONUS_PER_LEVEL * self.player_perk_level(kind.perk()) as f32;
+            return affinity.min(AFFINITY_MAX);
         }
         self.world
             .get::<Creature>(actor)

@@ -1,6 +1,6 @@
 (
     id: HealAffinity,
     name: "Field Medic",
-    description: "Your own repair routines mend deeper. +3% healing per level.",
+    description: "Your own repair routines mend deeper. +5% healing per level.",
     cost: 2,
 )

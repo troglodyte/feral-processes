@@ -1,6 +1,6 @@
 (
     id: DebuffAffinity,
     name: "Corruption Vector",
-    description: "Your own afflictions land heavier. +3% per level.",
+    description: "Your own afflictions land heavier. +5% per level.",
     cost: 2,
 )

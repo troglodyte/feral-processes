@@ -2,7 +2,10 @@
 //! the action menus the renderer draws from.
 
 use crate::abilities::AbilityId;
-use crate::tuning::{DEFAULT_BASE_SPEED, DEFEND_DEF_BONUS, INITIATIVE_DIE, PLAYER_BASE_SPEED};
+use crate::tuning::{
+    AFFINITY_NEUTRAL, AFFINITY_PERK_BONUS_PER_LEVEL, DEFAULT_BASE_SPEED, DEFEND_DEF_BONUS,
+    INITIATIVE_DIE, PLAYER_BASE_SPEED,
+};
 use crate::*;
 
 impl Game {
@@ -625,6 +628,31 @@ impl Game {
             .get::<Experience>(entity)
             .map(|e| e.level)
             .unwrap_or_else(|| self.world.resource::<ZoneLevel>().0)
+    }
+
+    /// The caster's multiplier for `effect`'s category — the affinity half
+    /// of an ability's magnitude, alongside `ability_user_level`'s scale.
+    /// Resolved from `actor`, never from a recipient: an affinity is a
+    /// property of who casts.
+    ///
+    /// The player's comes from perks and a companion's from its species,
+    /// and the two can never stack — the player has no `Creature` and a
+    /// companion has no `Perks` — so there is no combination rule here on
+    /// purpose. A wild program has a `Creature` like any other, which is
+    /// how a species affinity reaches a hostile carrier for free.
+    pub(crate) fn ability_affinity(&self, actor: Entity, effect: &AbilityEffect) -> f32 {
+        let Some(kind) = effect.affinity_kind() else {
+            return AFFINITY_NEUTRAL;
+        };
+        if self.world.get::<Perks>(actor).is_some() {
+            return AFFINITY_NEUTRAL
+                + AFFINITY_PERK_BONUS_PER_LEVEL * self.player_perk_level(kind.perk()) as f32;
+        }
+        self.world
+            .get::<Creature>(actor)
+            .and_then(|c| self.species_affinities(&c.species))
+            .map(|a| a.get(kind))
+            .unwrap_or(AFFINITY_NEUTRAL)
     }
 
     /// Every ability the combatant at `entity` can be commanded to use, in

@@ -640,6 +640,10 @@ impl Game {
         // re-reading it inside the loop would invite someone to key it off
         // the recipient instead.
         let level = self.ability_user_level(actor);
+        // Resolved once for the whole cast, for the same reason `level` is:
+        // this is the caster's property, and re-reading it inside the
+        // recipient loop would invite keying it off the recipient.
+        let affinity = self.ability_affinity(actor, &ability.effect);
         // Damage/drain lines get the log kind their side actually earns,
         // rather than the party's own `PartyDamage` regardless of who is
         // acting — `use_ability` serves both sides now, but a hostile
@@ -667,11 +671,7 @@ impl Game {
                         ActiveBuff {
                             kind: *kind,
                             remaining: *duration,
-                            power: abilities::scaled_power(
-                                *power,
-                                level,
-                                crate::tuning::AFFINITY_NEUTRAL,
-                            ),
+                            power: abilities::scaled_power(*power, level, affinity),
                         },
                     );
                     let stat = match kind {
@@ -684,8 +684,7 @@ impl Game {
                     ));
                 }
                 AbilityEffect::Heal { power } => {
-                    let power =
-                        abilities::scaled_power(*power, level, crate::tuning::AFFINITY_NEUTRAL);
+                    let power = abilities::scaled_power(*power, level, affinity);
                     if let Some(mut stats) = self.world.get_mut::<Stats>(recipient) {
                         stats.hp = (stats.hp + power).min(stats.max_hp);
                     }
@@ -700,11 +699,7 @@ impl Game {
                         statuses.active = Some(ActiveStatus {
                             kind: *kind,
                             remaining: *duration,
-                            power: abilities::scaled_power(
-                                *power,
-                                level,
-                                crate::tuning::AFFINITY_NEUTRAL,
-                            ),
+                            power: abilities::scaled_power(*power, level, affinity),
                         });
                     }
                     match kind {
@@ -718,7 +713,11 @@ impl Game {
                         .get::<Stats>(recipient)
                         .map(|s| s.def)
                         .unwrap_or(0);
-                    let dmg = battle::compute_damage(self.effective_atk(actor), def, *power);
+                    let dmg = battle::compute_damage(
+                        self.effective_atk(actor),
+                        def,
+                        abilities::scaled_affinity_power(*power, affinity),
+                    );
                     self.apply_damage(recipient, dmg);
                     self.log_kind(hit_kind, format!("{name} hits {on} for {dmg} damage."));
                     if let Some(effect) = status.clone() {
@@ -734,7 +733,11 @@ impl Game {
                         .get::<Stats>(recipient)
                         .map(|s| s.def)
                         .unwrap_or(0);
-                    let dmg = battle::compute_damage(self.effective_atk(actor), def, *power);
+                    let dmg = battle::compute_damage(
+                        self.effective_atk(actor),
+                        def,
+                        abilities::scaled_affinity_power(*power, affinity),
+                    );
                     self.apply_damage(recipient, dmg);
                     // Off the damage actually dealt, not the authored power:
                     // DEF has already eaten into it, and healing off the

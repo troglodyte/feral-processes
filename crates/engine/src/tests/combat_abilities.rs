@@ -6,7 +6,9 @@ use crate::resources::*;
 use crate::*;
 
 use super::support::*;
-use crate::tuning::COMPANION_COMMAND_FATIGUE_COST;
+use crate::tuning::{
+    AFFINITY_NEUTRAL, AFFINITY_PERK_BONUS_PER_LEVEL, COMPANION_COMMAND_FATIGUE_COST,
+};
 
 #[test]
 fn a_back_rank_member_killed_outright_leaves_the_group_and_awards_its_xp() {
@@ -1032,5 +1034,137 @@ fn a_hostile_routines_damage_line_logs_as_enemy_special_not_party_damage() {
     assert!(
         !kinds.contains(&MessageKind::PartyDamage),
         "and never the party's own damage styling: {kinds:?}"
+    );
+}
+
+/// A `test_medic` (support::TWO_ABILITY_SPECIES) with a heal affinity —
+/// same species, same `hot_patch`, one number different.
+const HEALER_WITH_AFFINITY: &str = r#"(
+    id: "test_medic",
+    name: "Test Medic",
+    glyph: 'm',
+    color: Cyan,
+    base_hp: 10,
+    base_atk: 4,
+    base_def: 2,
+    taming_difficulty: 0.5,
+    habitats: [OpenGrid],
+    base_speed: 10,
+    moves: [(name: "Poke", power: 3)],
+    abilities: [(id: "hot_patch")],
+    affinities: (heal: 1.5),
+)"#;
+
+#[test]
+fn a_species_heal_affinity_scales_the_heal_it_casts() {
+    let dir = super::support::modded_assets_dir(
+        "heal_affinity_battle",
+        &[],
+        &[],
+        &[("test_medic.ron", HEALER_WITH_AFFINITY)],
+        &[],
+        &[],
+    );
+    let mut game = Game::new(94, DifficultyMode::Forgiving, &dir).unwrap();
+    let player = game.player_entity();
+    // Only `Creature` (for species lookup) and `Experience` (for level)
+    // matter here — cast directly via `use_ability` rather than through a
+    // full battle round, so a wild enemy's guaranteed `MIN_DAMAGE`-floored
+    // counterattack can't land on the player in the same round and make the
+    // net HP delta disagree with the heal actually applied.
+    let medic = game
+        .world
+        .spawn((
+            Creature {
+                species: "test_medic".to_string(),
+            },
+            Position { x: 3, y: 3 },
+            Stats {
+                hp: 10,
+                max_hp: 10,
+                atk: 5,
+                def: 1,
+            },
+            Tamed { owner: player },
+            Experience::default(),
+        ))
+        .id();
+    let hot_patch = ability(&game, "hot_patch");
+
+    // Wound the player so a heal has room to land, then have the medic
+    // cast hot_patch (Heal(power: 8)) on them directly.
+    let before = 20;
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 200;
+        stats.hp = before;
+    }
+    game.use_ability(&hot_patch, medic, "Test Medic", &[player]);
+
+    let healed = game.world.get::<Stats>(player).unwrap().hp - before;
+    // hot_patch is Heal(power: 8); the medic is level 1.
+    let expected = crate::abilities::scaled_power(8, 1, 1.5);
+    assert_eq!(healed, expected, "heal affinity should scale the heal");
+    assert!(
+        expected > crate::abilities::scaled_power(8, 1, AFFINITY_NEUTRAL),
+        "the fixture must actually differ from neutral, or this proves nothing"
+    );
+}
+
+#[test]
+fn a_player_affinity_perk_scales_the_players_own_ability() {
+    let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let effect = AbilityEffect::Heal { power: 8 };
+    let before = game.ability_affinity(player, &effect);
+
+    {
+        let mut perks = game.world.get_mut::<Perks>(player).unwrap();
+        perks.points = 99;
+    }
+    game.unlock_perk(Perk::HealAffinity).unwrap();
+    game.unlock_perk(Perk::HealAffinity).unwrap();
+
+    assert_eq!(before, AFFINITY_NEUTRAL);
+    assert_eq!(
+        game.ability_affinity(player, &effect),
+        AFFINITY_NEUTRAL + 2.0 * AFFINITY_PERK_BONUS_PER_LEVEL
+    );
+}
+
+#[test]
+fn a_player_affinity_perk_does_not_scale_a_companions_ability() {
+    // The scoping decision, asserted directly: the perk is the player's
+    // own, and a companion answers to its species instead.
+    let (mut game, medic) = super::support::game_with_two_ability_companion();
+    let player = game.player_entity();
+    {
+        let mut perks = game.world.get_mut::<Perks>(player).unwrap();
+        perks.points = 99;
+    }
+    game.unlock_perk(Perk::HealAffinity).unwrap();
+
+    let effect = AbilityEffect::Heal { power: 8 };
+    assert!(game.ability_affinity(player, &effect) > AFFINITY_NEUTRAL);
+    assert_eq!(
+        game.ability_affinity(medic, &effect),
+        AFFINITY_NEUTRAL,
+        "the player's perk must not reach a companion's cast"
+    );
+}
+
+#[test]
+fn an_effect_with_no_category_takes_no_multiplier() {
+    let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    {
+        let mut perks = game.world.get_mut::<Perks>(player).unwrap();
+        perks.points = 99;
+    }
+    game.unlock_perk(Perk::HealAffinity).unwrap();
+    // Cleanse has no magnitude; a perk must not invent one for it.
+    assert_eq!(
+        game.ability_affinity(player, &AbilityEffect::Cleanse),
+        AFFINITY_NEUTRAL
     );
 }

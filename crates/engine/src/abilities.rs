@@ -75,6 +75,16 @@ pub fn scaled_power(power: i32, level: u32, affinity: f32) -> i32 {
     (power as f32 * ability_power_scale(level) * affinity).round() as i32
 }
 
+/// `power` scaled by `affinity` alone, for the two effects whose magnitude
+/// goes through `battle::compute_damage` rather than standing on its own.
+/// Level scaling is deliberately absent: `compute_damage` adds the caster's
+/// ATK, which already grows with level, and applying
+/// `ability_power_scale` here as well would scale the same progression
+/// twice.
+pub fn scaled_affinity_power(power: i32, affinity: f32) -> i32 {
+    (power as f32 * affinity).round() as i32
+}
+
 /// The cooldown armed on a combatant right after it casts an ability whose
 /// authored value is `cooldown`, floored at `floor` rounds. Called from both
 /// `resolve_one_action` (party side, `floor = 0`, so the authored value is

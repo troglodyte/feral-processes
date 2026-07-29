@@ -64,6 +64,43 @@ fn stand_on_stairs_down(game: &mut Game) -> (i32, i32) {
     down
 }
 
+/// Teleports the party into a doorway, facing along the corridor it is hung
+/// in, and returns both. `place_doors` only ever hangs a door in a cell with
+/// exactly two exits opposite each other, so such a heading always exists.
+fn stand_in_a_doorway(game: &mut Game) -> ((i32, i32), Dir) {
+    let (door, heading) = {
+        let level = game.world.resource::<CurrentDungeon>().0.as_ref().unwrap();
+        let door = (0..level.height)
+            .flat_map(|y| (0..level.width).map(move |x| (x, y)))
+            .find(|&(x, y)| level.cell(x, y) == CellKind::Door)
+            .expect("every level hangs doors");
+        let heading = if level.walkable(door.0, door.1 - 1) {
+            Dir::North
+        } else {
+            Dir::East
+        };
+        (door, heading)
+    };
+    let Locale::Dungeon {
+        depth,
+        floors,
+        entrance,
+        ..
+    } = locale(game)
+    else {
+        unreachable!("not underground")
+    };
+    game.world.insert_resource(Locale::Dungeon {
+        depth,
+        floors,
+        x: door.0,
+        y: door.1,
+        facing: heading,
+        entrance,
+    });
+    (door, heading)
+}
+
 /// Every cell of the level the party is standing in, row-major — for
 /// asserting that two levels are or aren't the same maze.
 fn level_cells(game: &Game) -> Vec<CellKind> {
@@ -716,6 +753,34 @@ fn the_map_records_exactly_what_the_first_person_view_showed() {
         );
     }
     assert!(!view.cells.is_empty());
+}
+
+/// A door is the one cell that is both walkable and sight-blocking, so it is
+/// the one cell the party can stand *inside* an occluder. Their own cell must
+/// not stop the cone: letting it means stepping into a doorway blinds them to
+/// the corridor they are standing in.
+#[test]
+fn standing_in_a_doorway_maps_the_corridor_beyond_it() {
+    let mut game = game();
+    descend(&mut game);
+    let (door, heading) = stand_in_a_doorway(&mut game);
+
+    // A full circle, so the party ends on the heading they were placed with
+    // and `remember_view` runs for it — teleporting maps nothing by itself.
+    for _ in 0..4 {
+        game.turn_right();
+    }
+
+    // Two cells out, not one: facing across the corridor puts the cell
+    // immediately ahead into row 0's lateral span, so it gets mapped even
+    // when the cone is truncated and proves nothing.
+    let (dx, dy) = heading.delta();
+    assert_ne!(
+        map_cell(&map(&game), door.0 + dx * 2, door.1 + dy * 2),
+        DungeonMapCell::Unknown,
+        "the party is standing in the doorway looking down the corridor, and \
+         it is not on their map past the cell they could touch"
+    );
 }
 
 #[test]
@@ -2000,3 +2065,4 @@ fn an_encounter_underground_leaves_the_players_surface_position_alone() {
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
     assert_eq!((pos.x, pos.y), entrance);
 }
+

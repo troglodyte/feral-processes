@@ -330,12 +330,18 @@ impl Game {
         };
 
         let mut seen = Vec::new();
-        for row in view_cone(pos.x, pos.y, pos.facing) {
+        for (ahead, row) in view_cone(pos.x, pos.y, pos.facing).into_iter().enumerate() {
+            // The party's own cell can never stop their view out of it. That
+            // is not hypothetical: a door both blocks sight and is walkable —
+            // the only cell that is both — so standing in a doorway would
+            // otherwise blind the party to the corridor they are standing in.
+            //
             // The wall that stops the view is itself in plain sight, so the
             // row is recorded before the break, not after the check.
-            let blocked = row
-                .get(DUNGEON_VIEW_HALF_WIDTH)
-                .is_some_and(|&(cx, cy)| level.cell(cx, cy).blocks_sight());
+            let blocked = ahead > 0
+                && row
+                    .get(DUNGEON_VIEW_HALF_WIDTH)
+                    .is_some_and(|&(cx, cy)| level.cell(cx, cy).blocks_sight());
             seen.extend(row);
             if blocked {
                 break;

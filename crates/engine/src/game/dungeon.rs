@@ -335,7 +335,7 @@ impl Game {
             // row is recorded before the break, not after the check.
             let blocked = row
                 .get(DUNGEON_VIEW_HALF_WIDTH)
-                .is_some_and(|&(cx, cy)| !level.walkable(cx, cy));
+                .is_some_and(|&(cx, cy)| level.cell(cx, cy).blocks_sight());
             seen.extend(row);
             if blocked {
                 break;
@@ -439,6 +439,42 @@ impl Game {
         }
     }
 
+    /// Whether the party may walk into `cell`, opening a sealed door on the
+    /// way if they are carrying something that opens it.
+    ///
+    /// Spends the shard rather than keeping it, and records the door as open
+    /// so the way back out is free — a one-way vault that charged you again
+    /// on the return trip would be a tax on having gone in.
+    fn pass_seal(&mut self, pos: DungeonPos, cell: (i32, i32)) -> bool {
+        let already_open = self
+            .world
+            .resource::<DungeonMemory>()
+            .0
+            .get(&(pos.entrance, pos.depth))
+            .is_some_and(|m| m.opened.contains(&cell));
+        if already_open {
+            return true;
+        }
+
+        let shard = ItemId::from(ids::ACCESS_SHARD);
+        let player = self.player_entity();
+        let spent = self
+            .world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .take(shard, 1);
+        if spent == 0 {
+            self.log("Sealed. The lock wants authorization you don't have.".to_string());
+            return false;
+        }
+        self.level_memory_mut(pos).opened.insert(cell);
+        self.log_kind(
+            MessageKind::Outcome,
+            "You burn an access shard. The seal releases.",
+        );
+        true
+    }
+
     /// Starts the boss fight if the party has just walked into an uncleared
     /// lair.
     ///
@@ -507,6 +543,15 @@ impl Game {
             .into_iter()
             .max_by_key(|s| s.base_hp + s.base_atk + s.base_def)
             .map(|s| (s.id.clone(), false))
+    }
+
+    /// Whether the sealed door on `cell` has already been burned open.
+    fn seal_open(&self, pos: DungeonPos, cell: (i32, i32)) -> bool {
+        self.world
+            .resource::<DungeonMemory>()
+            .0
+            .get(&(pos.entrance, pos.depth))
+            .is_some_and(|m| m.opened.contains(&cell))
     }
 
     fn lair_cleared(&self, pos: DungeonPos) -> bool {
@@ -631,12 +676,18 @@ impl Game {
         let (dx, dy) = pos.facing.delta();
         let (nx, ny) = (pos.x + dx * sign, pos.y + dy * sign);
 
-        let walkable = self
+        let target = self
             .world
             .resource::<CurrentDungeon>()
             .0
             .as_ref()
-            .is_some_and(|level| level.walkable(nx, ny));
+            .map(|level| level.cell(nx, ny))
+            .unwrap_or(CellKind::Rock);
+
+        // A sealed door is walkable as far as the level is concerned — the
+        // generator has to see through it — so the lock is checked here.
+        let walkable =
+            target.walkable() && (target != CellKind::SealedDoor || self.pass_seal(pos, (nx, ny)));
 
         if walkable && let Locale::Dungeon { x, y, .. } = &mut *self.world.resource_mut::<Locale>()
         {
@@ -879,6 +930,11 @@ impl Game {
                             CellKind::Cache => DungeonMapCell::Floor,
                             CellKind::Lair if !self.lair_cleared(pos) => DungeonMapCell::Lair,
                             CellKind::Lair => DungeonMapCell::Floor,
+                            CellKind::Door => DungeonMapCell::Door,
+                            CellKind::SealedDoor if self.seal_open(pos, (x, y)) => {
+                                DungeonMapCell::Door
+                            }
+                            CellKind::SealedDoor => DungeonMapCell::SealedDoor,
                         }
                     })
                     .collect()
@@ -953,6 +1009,11 @@ impl Game {
                         CellKind::Cache => DungeonCellView::Floor,
                         CellKind::Lair if !self.lair_cleared(pos) => DungeonCellView::Lair,
                         CellKind::Lair => DungeonCellView::Floor,
+                        CellKind::Door => DungeonCellView::Door,
+                        CellKind::SealedDoor if self.seal_open(pos, (cx, cy)) => {
+                            DungeonCellView::Door
+                        }
+                        CellKind::SealedDoor => DungeonCellView::SealedDoor,
                     })
                     .collect()
             })
@@ -966,6 +1027,7 @@ impl Game {
             // already happened rather than offering a choice.
             CellKind::Cache => Some("An empty casing".to_string()),
             CellKind::Lair => Some("The lair, and nothing left holding it".to_string()),
+            CellKind::Door | CellKind::SealedDoor => Some("A doorway".to_string()),
             _ => None,
         };
 

@@ -445,6 +445,14 @@ pub const DUNGEON_TILES_PER_FLOOR: i32 = 8;
 /// the shape of the content.
 pub const DUNGEON_CACHES_PER_LEVEL: usize = 3;
 
+/// How many plain doorways a dungeon level hangs — see
+/// `dungeon::place_doors`.
+///
+/// Presentation as much as balance: a door blocks the view cone, so it turns
+/// a corridor into a decision. Enough to break up a level, few enough that
+/// the maze doesn't read as a series of closed boxes.
+pub const DUNGEON_DOORS_PER_LEVEL: usize = 4;
+
 /// Credits a cache holds at depth 1, before `DUNGEON_CACHE_DEPTH_GROWTH`.
 ///
 /// Credits rather than Core Fragments because a dungeon run should pay for

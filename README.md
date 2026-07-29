@@ -70,6 +70,12 @@ distance that decides what lives down there decides how much of it there
 is: the breach inside your opening viewport is two levels, the ones out at
 the edge of the sector are six. The bottom level has no stairs down.
 
+Corridors hang the occasional **doorway** (`+`) — walkable, but you cannot
+see past one, so a corridor that ends in a door is a decision rather than
+more corridor. The lair is walled off behind **sealed doors**, and opening
+one burns an **Access Shard**, which is what caches are for. Once opened a
+door stays open.
+
 The deepest room of a shaft is a **lair** (`&`), holding something drawn
 from the breach tile's biome. It is seeded off the shaft, so it is the same
 guardian every time you come back — and the fight is scaled by every level

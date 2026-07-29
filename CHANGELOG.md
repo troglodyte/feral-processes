@@ -32,6 +32,14 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   been seen. Opening it costs no time. Each breach keeps its own map, and
   each level of a shaft its own; the map is written to the save, because a
   level regenerates from its seed but what you have seen of it is history.
+- **Doors, and a vault at the bottom.** Levels now hang a few plain doorways
+  in their corridors — walkable, but you cannot see past them, which turns a
+  stretch of corridor into a decision. The lair is walled off behind **sealed
+  doors** on every way in, and opening one burns an **Access Shard**: a new
+  item found in caches. Once opened a door stays open, including across a
+  save, so the way back out is free and a party that spent its last shard
+  getting in is not stranded. A shaft is now a chain: caches pay for the
+  shard, the shard buys the vault, the vault holds the guardian.
 - **Something is holding the bottom.** The deepest room of a shaft is now a
   lair, marked `&`. Walking in starts the fight; what you face is drawn from
   the breach tile's biome, from the boss pool rather than the ordinary one,

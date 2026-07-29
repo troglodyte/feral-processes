@@ -34,6 +34,8 @@ const WALL: Color = Color::new(0.22, 0.62, 0.62, 1.0);
 const FLOOR: Color = Color::new(0.10, 0.26, 0.30, 1.0);
 const CEILING: Color = Color::new(0.06, 0.14, 0.20, 1.0);
 const VOID: Color = Color::new(0.02, 0.03, 0.05, 1.0);
+const DOOR: Color = Color::new(0.55, 0.42, 0.18, 1.0);
+const SEALED: Color = Color::new(0.62, 0.20, 0.24, 1.0);
 
 /// The corridor's cross-section `depth` cells away, in pane-local pixels.
 ///
@@ -61,8 +63,24 @@ fn dim(color: Color, factor: f32) -> Color {
     )
 }
 
+/// Whether this cell is drawn as a face filling its frame rather than as
+/// more corridor. A door is not rock, but you cannot see past it, and
+/// drawing it as open would be the view lying about what is ahead.
 fn solid(cell: DungeonCellView) -> bool {
-    cell == DungeonCellView::Rock
+    matches!(
+        cell,
+        DungeonCellView::Rock | DungeonCellView::Door | DungeonCellView::SealedDoor
+    )
+}
+
+/// The colour a solid face is drawn in — doors stand out from the rock they
+/// are set into, and a sealed one stands out from a plain one.
+fn face_color(cell: DungeonCellView) -> Color {
+    match cell {
+        DungeonCellView::Door => DOOR,
+        DungeonCellView::SealedDoor => SEALED,
+        _ => WALL,
+    }
 }
 
 /// Draws the corridor into the pane at the origin, `w` by `h`.
@@ -83,7 +101,7 @@ pub(super) fn draw_dungeon(view: &DungeonView, painter: &Painter, w: f32, h: f32
             // The corridor is blocked here: this cell's face toward us fills
             // the whole frame. Anything beyond it was drawn already and is
             // now covered, which is exactly right.
-            painter.rect(nl, nt, nr - nl, nb - nt, dim(WALL, s));
+            painter.rect(nl, nt, nr - nl, nb - nt, dim(face_color(row[middle]), s));
             continue;
         }
 

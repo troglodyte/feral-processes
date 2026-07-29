@@ -1059,7 +1059,13 @@ fn a_deeper_cache_pays_better() {
 }
 
 /// Walks the party to the bottom of the shaft they are in and stands them
-/// at the mouth of the lair, facing it. Returns the lair's cell.
+/// outside the sealed door guarding the lair, facing that door. Returns the
+/// lair's cell.
+///
+/// Outside the *seal*, not beside the lair: a sealed door is walkable as far
+/// as the level is concerned (the generator has to see through it), so
+/// standing on the lair's neighbour would put the party already past the
+/// lock this is meant to exercise.
 fn stand_before_the_lair(game: &mut Game) -> (i32, i32) {
     loop {
         let Locale::Dungeon { depth, floors, .. } = locale(game) else {
@@ -1084,16 +1090,24 @@ fn stand_before_the_lair(game: &mut Game) -> (i32, i32) {
         .find(|&(x, y)| level.cell(x, y) == CellKind::Lair)
         .expect("the bottom level should hold a lair");
 
+    let seal = [Dir::North, Dir::East, Dir::South, Dir::West]
+        .into_iter()
+        .map(|dir| {
+            let (dx, dy) = dir.delta();
+            (lair.0 + dx, lair.1 + dy)
+        })
+        .find(|&(x, y)| level.cell(x, y) == CellKind::SealedDoor)
+        .expect("the lair must be sealed and reachable");
+
     let (facing, mouth) = [Dir::North, Dir::East, Dir::South, Dir::West]
         .into_iter()
         .find_map(|dir| {
             let (dx, dy) = dir.delta();
-            let neighbour = (lair.0 + dx, lair.1 + dy);
-            level
-                .walkable(neighbour.0, neighbour.1)
-                .then_some((dir.turn_left().turn_left(), neighbour))
+            let outside = (seal.0 + dx, seal.1 + dy);
+            (outside != lair && level.walkable(outside.0, outside.1))
+                .then_some((dir.turn_left().turn_left(), outside))
         })
-        .expect("the lair must be reachable");
+        .expect("the seal must have a way up to it");
 
     let Locale::Dungeon {
         depth,
@@ -1112,6 +1126,16 @@ fn stand_before_the_lair(game: &mut Game) -> (i32, i32) {
         facing,
         entrance,
     });
+    lair
+}
+
+/// Burns through the seal and walks into the lair, which is what rouses
+/// whatever is in it.
+fn walk_into_the_lair(game: &mut Game) -> (i32, i32) {
+    let lair = stand_before_the_lair(game);
+    give_shards(game, 1);
+    game.step_forward(); // through the seal
+    game.step_forward(); // into the lair
     lair
 }
 
@@ -1146,9 +1170,7 @@ fn only_the_bottom_level_of_a_shaft_holds_a_lair() {
 fn walking_into_the_lair_starts_a_fight() {
     let mut game = game();
     descend(&mut game);
-    let lair = stand_before_the_lair(&mut game);
-
-    game.step_forward();
+    let lair = walk_into_the_lair(&mut game);
 
     let Locale::Dungeon { x, y, .. } = locale(&game) else {
         unreachable!()
@@ -1166,8 +1188,7 @@ fn walking_into_the_lair_starts_a_fight() {
 fn fleeing_the_lair_leaves_it_held() {
     let mut game = game();
     descend(&mut game);
-    let lair = stand_before_the_lair(&mut game);
-    game.step_forward();
+    let lair = walk_into_the_lair(&mut game);
     flee_until_clear(&mut game);
 
     assert_eq!(
@@ -1191,8 +1212,6 @@ fn fleeing_the_lair_leaves_it_held() {
 fn killing_the_guardian_clears_the_lair_for_good() {
     let mut game = game();
     descend(&mut game);
-    let lair = stand_before_the_lair(&mut game);
-
     // Overwhelming force, so this is testing what a win does rather than
     // whether a level-1 party can manage one.
     {
@@ -1204,7 +1223,7 @@ fn killing_the_guardian_clears_the_lair_for_good() {
         stats.def = 100_000;
     }
 
-    game.step_forward();
+    let lair = walk_into_the_lair(&mut game);
     assert!(game.has_active_battle(), "the lair should have roused");
 
     let mut rounds = 0;
@@ -1248,7 +1267,6 @@ fn a_cleared_lair_stays_cleared_across_a_save_and_load() {
     let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
     game.enter_dungeon(pos.x, pos.y);
-    stand_before_the_lair(&mut game);
     {
         let player = game.player_entity();
         let mut stats = game.world.get_mut::<Stats>(player).unwrap();
@@ -1257,7 +1275,7 @@ fn a_cleared_lair_stays_cleared_across_a_save_and_load() {
         stats.atk = 100_000;
         stats.def = 100_000;
     }
-    game.step_forward();
+    walk_into_the_lair(&mut game);
     let mut rounds = 0;
     while game.has_active_battle() && rounds < 60 {
         player_attacks(&mut game);
@@ -1292,13 +1310,183 @@ fn the_same_shaft_always_fields_the_same_guardian() {
         let mut game = Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
         game.enter_dungeon(pos.x, pos.y);
-        stand_before_the_lair(&mut game);
-        game.step_forward();
+        walk_into_the_lair(&mut game);
         game.battle_view().map(|v| v.groups[0].species_name.clone())
     };
     let first = name_of_guardian();
     assert!(first.is_some(), "the lair should have fielded something");
     assert_eq!(first, name_of_guardian());
+}
+
+fn shards(game: &Game) -> u32 {
+    game.world
+        .get::<Inventory>(game.player_entity())
+        .unwrap()
+        .items
+        .iter()
+        .find(|(item, _)| item.as_str() == ids::ACCESS_SHARD)
+        .map(|&(_, qty)| qty)
+        .unwrap_or(0)
+}
+
+fn give_shards(game: &mut Game, qty: u32) {
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .items
+        .push((ItemId::from(ids::ACCESS_SHARD), qty));
+}
+
+/// The party has to get through a sealed door to reach the guardian, so
+/// `stand_before_the_lair` puts them on one. Returns its cell.
+fn a_seal_before_the_lair(game: &Game, lair: (i32, i32)) -> (i32, i32) {
+    let level = game.world.resource::<CurrentDungeon>().0.clone().unwrap();
+    [Dir::North, Dir::East, Dir::South, Dir::West]
+        .into_iter()
+        .map(|dir| {
+            let (dx, dy) = dir.delta();
+            (lair.0 + dx, lair.1 + dy)
+        })
+        .find(|&(x, y)| level.cell(x, y) == CellKind::SealedDoor)
+        .expect("the lair should be sealed off")
+}
+
+#[test]
+fn the_lair_is_sealed_off_behind_doors() {
+    let mut game = game();
+    descend(&mut game);
+    let lair = stand_before_the_lair(&mut game);
+    let level = game.world.resource::<CurrentDungeon>().0.clone().unwrap();
+
+    let ways_in: Vec<CellKind> = [Dir::North, Dir::East, Dir::South, Dir::West]
+        .into_iter()
+        .map(|dir| {
+            let (dx, dy) = dir.delta();
+            level.cell(lair.0 + dx, lair.1 + dy)
+        })
+        .filter(|kind| kind.walkable())
+        .collect();
+    assert!(!ways_in.is_empty(), "the lair must be reachable at all");
+    assert!(
+        ways_in.iter().all(|&k| k == CellKind::SealedDoor),
+        "an unsealed way into the lair: {ways_in:?}"
+    );
+}
+
+#[test]
+fn a_sealed_door_refuses_a_party_with_no_shard() {
+    let mut game = game();
+    descend(&mut game);
+    stand_before_the_lair(&mut game);
+    let before = locale(&game);
+
+    game.step_forward();
+
+    assert_eq!(locale(&game), before, "walked through a sealed door");
+    assert!(logged(&game, "authorization"));
+}
+
+#[test]
+fn an_access_shard_opens_a_sealed_door_and_is_spent() {
+    let mut game = game();
+    descend(&mut game);
+    let lair = stand_before_the_lair(&mut game);
+    let seal = a_seal_before_the_lair(&game, lair);
+    give_shards(&mut game, 2);
+
+    game.step_forward();
+
+    let Locale::Dungeon { x, y, .. } = locale(&game) else {
+        unreachable!()
+    };
+    assert_eq!((x, y), seal, "the shard should have let the party through");
+    assert_eq!(shards(&game), 1, "opening a door should spend one shard");
+}
+
+/// A vault that charged again on the way out would be a tax on having gone
+/// in — and could strand a party that spent its last shard getting there.
+#[test]
+fn a_door_once_opened_stays_open() {
+    let mut game = game();
+    descend(&mut game);
+    stand_before_the_lair(&mut game);
+    give_shards(&mut game, 1);
+    game.step_forward();
+    assert_eq!(shards(&game), 0);
+
+    game.step_back();
+    let before = locale(&game);
+    game.step_forward();
+
+    assert_ne!(locale(&game), before, "the door sealed itself behind us");
+    assert_eq!(shards(&game), 0, "a second shard was charged");
+}
+
+#[test]
+fn an_opened_door_stays_open_across_a_save_and_load() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    game.enter_dungeon(pos.x, pos.y);
+    stand_before_the_lair(&mut game);
+    give_shards(&mut game, 1);
+    game.step_forward();
+    game.step_back();
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_door_open_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let before = loaded.locale();
+    loaded.step_forward();
+    assert_ne!(
+        loaded.locale(),
+        before,
+        "loading re-sealed a door the party had already opened"
+    );
+}
+
+/// A door you cannot see past is the whole reason plain doors exist. The
+/// map is filled from the same cone, so this asserts on what it recorded.
+#[test]
+fn a_shut_door_stops_the_view() {
+    let mut game = game();
+    descend(&mut game);
+    let lair = stand_before_the_lair(&mut game);
+    // Standing at the mouth looking at a sealed door with the lair behind it.
+    assert_eq!(
+        map_cell(&map(&game), lair.0, lair.1),
+        DungeonMapCell::Unknown,
+        "the view saw straight through a shut door"
+    );
+}
+
+#[test]
+fn a_level_hangs_doorways_in_corridors_not_junctions() {
+    let mut game = game();
+    descend(&mut game);
+    let level = game.world.resource::<CurrentDungeon>().0.clone().unwrap();
+
+    let doors: Vec<(i32, i32)> = (0..level.height)
+        .flat_map(|y| (0..level.width).map(move |x| (x, y)))
+        .filter(|&(x, y)| level.cell(x, y) == CellKind::Door)
+        .collect();
+    assert!(!doors.is_empty(), "the level hung no doorways at all");
+    assert!(doors.len() <= crate::tuning::DUNGEON_DOORS_PER_LEVEL);
+
+    for (x, y) in doors {
+        let vertical = level.walkable(x, y - 1) && level.walkable(x, y + 1);
+        let horizontal = level.walkable(x + 1, y) && level.walkable(x - 1, y);
+        assert!(
+            vertical != horizontal,
+            "the door at {x},{y} is in a junction, not a corridor"
+        );
+    }
 }
 
 /// True if any of the last `n` log lines contains `needle`.

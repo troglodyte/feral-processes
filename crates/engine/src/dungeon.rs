@@ -7,7 +7,7 @@
 
 use std::collections::VecDeque;
 
-use crate::tuning::DUNGEON_CACHES_PER_LEVEL;
+use crate::tuning::{DUNGEON_CACHES_PER_LEVEL, DUNGEON_DOORS_PER_LEVEL};
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use serde::{Deserialize, Serialize};
@@ -102,11 +102,31 @@ pub enum CellKind {
     /// fight — see `Game::rouse_lair`. Whether it has already been cleared
     /// lives in `resources::LevelMemory::cleared`, not in the level.
     Lair,
+    /// A doorway. Walkable, but you cannot see past it — which is the whole
+    /// reason it exists: a corridor that ends in a door reads as a decision
+    /// rather than as more corridor.
+    Door,
+    /// A door that will not open without an `ids::ACCESS_SHARD`. Seals the
+    /// lair off from the rest of the bottom level, so the guardian is
+    /// something you have to earn your way to rather than stumble into.
+    ///
+    /// Walkable as far as the level is concerned — connectivity, dead-end
+    /// detection and the stairs placement all have to see through it, or the
+    /// generator would treat a whole sealed wing as unreachable. Whether the
+    /// party may actually pass is `Game::step`'s business, and whether this
+    /// one has already been opened lives in `LevelMemory::opened`.
+    SealedDoor,
 }
 
 impl CellKind {
     pub fn walkable(self) -> bool {
         !matches!(self, CellKind::Rock)
+    }
+
+    /// Whether this cell stops the view cone. Rock does the obvious way;
+    /// a door does it by being shut.
+    pub fn blocks_sight(self) -> bool {
+        matches!(self, CellKind::Rock | CellKind::Door | CellKind::SealedDoor)
     }
 }
 
@@ -229,9 +249,63 @@ pub fn generate(spec: LevelSpec) -> DungeonLevel {
     }
     level.set(level.entry.0, level.entry.1, CellKind::StairsUp);
 
+    if spec.is_bottom() {
+        seal_the_lair(&mut level, far);
+    }
+    place_doors(&mut level, &mut rng);
     place_caches(&mut level, &mut rng);
 
     level
+}
+
+/// Walls the lair off behind sealed doors.
+///
+/// Every open neighbour gets one, rather than picking a single cut vertex on
+/// the route in: `braid` leaves loops, so one door on the shortest path is
+/// no guarantee there isn't a way round it, and the analysis to find a true
+/// cut vertex would be a lot of machinery to reach the same place. The lair
+/// sits at the end of the longest walk in the level, so it rarely has more
+/// than one or two ways in anyway.
+fn seal_the_lair(level: &mut DungeonLevel, lair: (i32, i32)) {
+    for dir in DIRS {
+        let (dx, dy) = dir.delta();
+        let (nx, ny) = (lair.0 + dx, lair.1 + dy);
+        if level.cell(nx, ny) == CellKind::Floor {
+            level.set(nx, ny, CellKind::SealedDoor);
+        }
+    }
+}
+
+/// Hangs plain doors in corridors — cells with exactly two exits, opposite
+/// each other, which is what a doorway looks like.
+///
+/// A junction never gets one: a door you cannot see past, in a cell with
+/// three ways out of it, hides two choices behind one wall.
+fn place_doors(level: &mut DungeonLevel, rng: &mut StdRng) {
+    let mut corridors: Vec<(i32, i32)> = Vec::new();
+    for y in 1..level.height - 1 {
+        for x in 1..level.width - 1 {
+            if level.cell(x, y) != CellKind::Floor {
+                continue;
+            }
+            let north = level.walkable(x, y - 1);
+            let south = level.walkable(x, y + 1);
+            let east = level.walkable(x + 1, y);
+            let west = level.walkable(x - 1, y);
+            let vertical = north && south && !east && !west;
+            let horizontal = east && west && !north && !south;
+            if vertical || horizontal {
+                corridors.push((x, y));
+            }
+        }
+    }
+
+    for i in (1..corridors.len()).rev() {
+        corridors.swap(i, rng.random_range(0..=i));
+    }
+    for &(x, y) in corridors.iter().take(DUNGEON_DOORS_PER_LEVEL) {
+        level.set(x, y, CellKind::Door);
+    }
 }
 
 /// Puts caches in dead ends.

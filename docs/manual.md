@@ -167,6 +167,14 @@ stats — and so the XP they pay, since a kill awards the defeated program's
 Integrity. Shoving at a wall is not travel and never rolls for a fight.
 Jacking out ends the fight where you stand.
 
+Levels hold more than corridors. **Caches** (`!`) sit in dead ends and pay
+depth-scaled Credits, a chance at a portal fragment, and whatever the item
+set declares; walking onto one empties it, once. **Doorways** (`+`) are
+walkable but block your view. **Sealed doors** wall off the **lair** (`&`) at
+the bottom of the shaft, and each one costs an Access Shard to open — shards
+come out of caches. Killing what holds the lair clears the shaft for good;
+jacking out leaves it waiting.
+
 `g` opens the **map** — the same key that scans the ground on the surface,
 since the two screens never both apply. It is drawn north-up and shows only
 what the party has had in view: cells never seen stay dark, and are drawn

@@ -291,6 +291,12 @@ pub enum DungeonCellView {
     Cache,
     /// The shaft's lair, still held. A cleared one comes through as `Floor`.
     Lair,
+    /// A doorway. Walkable, but the view stops here — a door is drawn as a
+    /// face, not as more corridor. A sealed door already burned open comes
+    /// through as this.
+    Door,
+    /// A door that still wants an access shard.
+    SealedDoor,
 }
 
 /// The party's first-person view of the level around them — see
@@ -339,6 +345,11 @@ pub enum DungeonMapCell {
     Cache,
     /// The shaft's lair, still held. A cleared one maps as `Floor`.
     Lair,
+    /// A doorway, or a seal already burned open.
+    Door,
+    /// A door that still wants an access shard — worth marking, since it is
+    /// the one thing on a map that tells you where to come back to.
+    SealedDoor,
 }
 
 /// A landmark pinned to a mapped cell, over and above what the layout says.

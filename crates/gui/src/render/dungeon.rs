@@ -73,6 +73,16 @@ fn solid(cell: DungeonCellView) -> bool {
     )
 }
 
+/// Whether the cell `depth` away fills its frame with a face rather than
+/// opening into more corridor.
+///
+/// Never at depth 0. That cell is the one the party is standing in, and a
+/// doorway you are inside is open around you — a door is the one cell that
+/// both blocks sight and can be walked onto, so this is reachable.
+fn draws_as_face(depth: usize, cell: DungeonCellView) -> bool {
+    depth > 0 && solid(cell)
+}
+
 /// The colour a solid face is drawn in — doors stand out from the rock they
 /// are set into, and a sealed one stands out from a plain one.
 fn face_color(cell: DungeonCellView) -> Color {
@@ -97,7 +107,7 @@ pub(super) fn draw_dungeon(view: &DungeonView, painter: &Painter, w: f32, h: f32
         let (fl, ft, fr, fb) = frame(depth + 1, w, h);
         let s = shade(depth);
 
-        if solid(row[middle]) {
+        if draws_as_face(depth, row[middle]) {
             // The corridor is blocked here: this cell's face toward us fills
             // the whole frame. Anything beyond it was drawn already and is
             // now covered, which is exactly right.
@@ -241,6 +251,21 @@ mod tests {
         assert_eq!(stair_mark(DungeonCellView::Rock), None);
     }
 
+    /// `frame(0)` spans the whole pane, so a face drawn at depth 0 fills the
+    /// view and `continue` skips every corridor surface behind it — the
+    /// screen becomes one flat rectangle of door. The party is not stuck,
+    /// but nothing on screen tells them which way is out.
+    #[test]
+    fn the_cell_the_party_is_standing_in_is_never_drawn_as_a_face() {
+        assert!(!draws_as_face(0, DungeonCellView::Door));
+        assert!(!draws_as_face(0, DungeonCellView::SealedDoor));
+        assert!(
+            draws_as_face(1, DungeonCellView::Door),
+            "a door ahead of the party is still a face — you cannot see past it"
+        );
+        assert!(draws_as_face(1, DungeonCellView::Rock));
+    }
+
     #[test]
     fn only_rock_counts_as_a_wall() {
         assert!(solid(DungeonCellView::Rock));
@@ -279,6 +304,8 @@ mod tests {
             view(&[Rock, Rock, Rock, Rock], Rock),  // sealed in
             view(&[Floor, Floor, Floor, Floor], Floor), // open hall, no walls
             view(&[StairsUp, Floor, StairsDown, Floor], Rock),
+            view(&[Door, Floor, Floor, Floor], Rock), // standing in a doorway
+            view(&[Floor, Door, Floor, Floor], Rock), // a shut door one step on
         ];
         crate::paint::with_painter(|p| {
             for case in &cases {

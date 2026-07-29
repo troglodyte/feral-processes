@@ -2065,4 +2065,3 @@ fn an_encounter_underground_leaves_the_players_surface_position_alone() {
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
     assert_eq!((pos.x, pos.y), entrance);
 }
-

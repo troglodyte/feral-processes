@@ -9,8 +9,12 @@ pub(super) fn draw_perks_menu(game: &mut Game, selected: usize, painter: &Painte
         Row::TextColored(format!("Perk Points: {}", status.perk_points), CYAN),
         text_row(""),
     ];
-    for (i, perk) in feral_processes_engine::Perk::all().iter().enumerate() {
-        let level = status.unlocked_perks.iter().filter(|p| *p == perk).count();
+    for (i, def) in game.perk_defs().iter().enumerate() {
+        let level = status
+            .unlocked_perks
+            .iter()
+            .filter(|p| **p == def.id)
+            .count();
         let tag = if level > 0 {
             format!(" (level {level})")
         } else {
@@ -20,13 +24,13 @@ pub(super) fn draw_perks_menu(game: &mut Game, selected: usize, painter: &Painte
             format!(
                 "[{}] {} - {} Perk Points{}",
                 menu_shortcut(i),
-                perk.display_name(),
-                perk.cost(),
+                def.name,
+                def.cost,
                 tag
             ),
             i == selected,
         ));
-        rows.push(text_row(format!("    {}", perk.description())));
+        rows.push(text_row(format!("    {}", def.description)));
     }
     rows.push(text_row(""));
     rows.push(text_row(

@@ -49,7 +49,7 @@ use items::{EquipmentSlot, EquipmentStats, ItemId, ids};
 use items_db::ItemDb;
 #[cfg(test)]
 use items_db::ItemDef;
-pub use perks::Perk;
+pub use perks::{Perk, PerkDb, PerkDef};
 use research::{ResearchDb, ResearchDef};
 pub use research::{ResearchId, ResearchRecipe};
 use resources::{

@@ -517,10 +517,16 @@ on top of whatever you already have, at the same Perk Point cost every time:
 | Defender | 2 | +1 permanent Defense |
 | Buffer | 3 | +1% permanent max Integrity per level, minimum +10 (fully heals on purchase) |
 
-The `x` menu shows each perk's current level next to it. Unlike species,
-structures, items, abilities, and research, perks are a small fixed set of
-player-only progression choices rather than moddable content — adding one
-means editing `crates/engine/src/perks.rs`, not dropping in a file.
+The `x` menu shows each perk's current level next to it.
+
+Each perk's **name, description and cost** are authored in
+`assets/perks/*.ron` and can be edited without recompiling. The set of seven
+cannot: unlike species, structures, items, abilities and research, a perk is
+a hook into a particular formula rather than a shape the engine knows how to
+read from data, so an eighth one means editing
+`crates/engine/src/perks.rs`. How much each perk gives per level isn't in
+the file either — that's difficulty tuning, and it stays in
+`crates/engine/src/tuning.rs`. See `assets/perks/README.md`.
 
 ### Items
 
@@ -1096,6 +1102,11 @@ drop in a new `.ron` file and it's picked up automatically next run, no
 recompiling needed. See the `README.md` in each of those directories for the
 schema. A malformed file is skipped with an in-game warning rather than
 crashing startup.
+
+`assets/perks/*.ron` works differently: it's a **catalogue**, not a content
+directory. The seven perks are fixed, and each file only sets what one of
+them is called, how it reads, and what it costs — see
+`assets/perks/README.md` for why an eighth perk needs Rust.
 
 A new piece of equipment is a **single file** and no Rust at all: `equipment`
 gives it a slot and any mix of Attack/Defense/Decompiler, `craftable` gives it

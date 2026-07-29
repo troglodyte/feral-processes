@@ -263,4 +263,16 @@ impl Game {
     pub fn species_defs(&self) -> Vec<SpeciesDef> {
         self.world.resource::<SpeciesDb>().all().cloned().collect()
     }
+
+    /// Every perk currently on offer, in picker order. The renderer's only
+    /// route to a perk's name, description and price — those are authored in
+    /// `assets/perks/*.ron`, not derivable from the `Perk` variant, and the
+    /// index into this list is what `unlock_perk` expects back.
+    pub fn perk_defs(&self) -> Vec<PerkDef> {
+        self.world
+            .resource::<PerkDb>()
+            .catalogue()
+            .cloned()
+            .collect()
+    }
 }

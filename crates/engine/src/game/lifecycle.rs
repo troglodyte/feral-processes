@@ -29,6 +29,7 @@ impl Game {
             structures: structure_db,
             research: research_db,
             items: item_db,
+            perks: perk_db,
             warnings: load_warnings,
         } = load_asset_dbs(assets_dir)?;
 
@@ -41,6 +42,7 @@ impl Game {
         world.insert_resource(structure_db);
         world.insert_resource(research_db);
         world.insert_resource(item_db);
+        world.insert_resource(perk_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock::default());
         world.insert_resource(GameRng(StdRng::seed_from_u64(seed as u64)));
@@ -128,6 +130,7 @@ impl Game {
             structures: structure_db,
             research: research_db,
             items: item_db,
+            perks: perk_db,
             warnings: load_warnings,
         } = load_asset_dbs(assets_dir)?;
 
@@ -153,6 +156,7 @@ impl Game {
         world.insert_resource(structure_db);
         world.insert_resource(research_db);
         world.insert_resource(item_db);
+        world.insert_resource(perk_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock { tick: data.tick });
         world.insert_resource(GameRng(StdRng::seed_from_u64(data.seed as u64 ^ data.tick)));
@@ -655,10 +659,11 @@ struct AssetDbs {
     structures: StructureDb,
     research: ResearchDb,
     items: ItemDb,
+    perks: PerkDb,
     warnings: Vec<String>,
 }
 
-/// Loads all four asset directories and refuses an item set that leaves any
+/// Loads every asset directory and refuses an item set that leaves any
 /// economy role unfilled. Both `Game::new` and `Game::load` must go through
 /// here: `Game::currency`/`research_currency`/`craft_currency`/`trade_currency` each
 /// `.expect("validated at startup")`, so a door into the world that skipped
@@ -675,6 +680,8 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     warnings.extend(research_warnings);
     let (mut items, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"))?;
     warnings.extend(item_warnings);
+    let (perks, perk_warnings) = PerkDb::load_dir(&assets_dir.join("perks"))?;
+    warnings.extend(perk_warnings);
     warnings.extend(items.synthesize_routines(&abilities));
     let missing = items.missing_roles();
     if !missing.is_empty() {
@@ -706,6 +713,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         structures,
         research,
         items,
+        perks,
         warnings,
     })
 }

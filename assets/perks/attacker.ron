@@ -1,0 +1,6 @@
+(
+    id: Attacker,
+    name: "Attacker",
+    description: "Sharper routines. +1 permanent Attack per level, applied the moment you buy it.",
+    cost: 2,
+)

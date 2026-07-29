@@ -248,9 +248,15 @@ files under `assets/*/` — drop one in and it's picked up next run, no
 recompiling, with a malformed file skipped and warned about rather than
 crashing startup. Each of those directories has a `README.md` documenting
 its schema. A new piece of equipment or a new combat ability is a single
-file and no Rust at all. Perks are the one deliberate exception: a small,
-fixed, player-only set that lives in `crates/engine/src/perks.rs`. The
-economy needs exactly one item holding each of the `Currency`,
+file and no Rust at all.
+
+Perks are the one deliberate half-exception. `assets/perks/*.ron` sets what
+each perk is called, how it reads and what it costs, but the set of seven is
+fixed and lives in `crates/engine/src/perks.rs` — a perk's effect is a hook
+into one particular formula rather than a shape the engine can read from a
+file, so there is no `effect:` field to write and an eighth perk means Rust.
+
+The economy needs exactly one item holding each of the `Currency`,
 `ResearchCurrency`, and `CraftCurrency` roles or the game won't start.
 
 ## Tuning difficulty

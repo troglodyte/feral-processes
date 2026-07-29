@@ -151,6 +151,19 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   outlives its building and can sit on a tile holding nothing at all.
   Existing saves stop loading.
 
+### Moddability
+
+- **Perk names, descriptions and prices are data.** `assets/perks/` now
+  holds one `.ron` file per perk carrying its name, its picker line and its
+  Perk Point cost, so retitling or re-pricing the menu is a file edit. It is
+  a *catalogue* rather than a content directory: the seven perks stay fixed,
+  because a perk's effect is a hook into one particular formula — the scan
+  roll, the hunger multiplier, the decompile HP term, recipe costs, a direct
+  stat write — with no shared shape to put in a file, so an eighth perk
+  still means Rust. Per-level magnitudes stay in `tuning.rs` with the rest
+  of the difficulty knobs; only cost moved. Deleting a file removes that
+  perk from the picker without touching levels a save already holds.
+
 ### Balance
 
 - **Exploit Focus buys healthier targets, not better odds.** The perk used

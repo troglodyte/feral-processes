@@ -7,6 +7,14 @@ use crate::tuning::{
 };
 use crate::*;
 
+fn perk_cost(game: &Game, perk: Perk) -> u32 {
+    game.perk_defs()
+        .into_iter()
+        .find(|d| d.id == perk)
+        .unwrap_or_else(|| panic!("{perk:?} should be on offer"))
+        .cost
+}
+
 #[test]
 fn player_decompiler_skill_grows_on_level_up_and_survives_save_load() {
     let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -51,10 +59,11 @@ fn unlock_perk_spends_points_and_can_be_bought_repeatedly() {
     let player = game.player_entity();
     game.world.get_mut::<Perks>(player).unwrap().points = 5;
 
+    let cost = perk_cost(&game, Perk::KeenScavenger);
     game.unlock_perk(Perk::KeenScavenger).unwrap();
 
     let status = game.player_status();
-    assert_eq!(status.perk_points, 5 - Perk::KeenScavenger.cost());
+    assert_eq!(status.perk_points, 5 - cost);
     assert_eq!(status.unlocked_perks, vec![Perk::KeenScavenger]);
     assert_eq!(game.player_perk_level(Perk::KeenScavenger), 1);
 
@@ -64,10 +73,7 @@ fn unlock_perk_spends_points_and_can_be_bought_repeatedly() {
         2,
         "buying the same perk again should stack another level, not be rejected"
     );
-    assert_eq!(
-        status.perk_points - Perk::KeenScavenger.cost(),
-        game.player_status().perk_points
-    );
+    assert_eq!(status.perk_points - cost, game.player_status().perk_points);
 }
 
 #[test]

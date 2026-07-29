@@ -237,11 +237,12 @@ impl Game {
                 perk_points: perks.map(|p| p.points).unwrap_or(0),
                 perks: perks
                     .map(|p| {
+                        let db = self.world.resource::<PerkDb>();
                         Perk::all()
                             .into_iter()
                             .map(|perk| (perk, p.level(perk)))
                             .filter(|(_, level)| *level > 0)
-                            .map(|(perk, level)| (perk.display_name().to_string(), level))
+                            .filter_map(|(perk, level)| Some((db.get(perk)?.name.clone(), level)))
                             .collect()
                     })
                     .unwrap_or_default(),

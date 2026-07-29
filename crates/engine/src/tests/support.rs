@@ -230,7 +230,14 @@ pub(super) fn modded_assets_dir(
     ));
     let _ = std::fs::remove_dir_all(&dir);
     let shipped = test_assets_dir();
-    for sub in ["species", "structures", "research", "items", "abilities"] {
+    for sub in [
+        "species",
+        "structures",
+        "research",
+        "items",
+        "abilities",
+        "perks",
+    ] {
         let dst = dir.join(sub);
         std::fs::create_dir_all(&dst).unwrap();
         for entry in std::fs::read_dir(shipped.join(sub)).unwrap() {

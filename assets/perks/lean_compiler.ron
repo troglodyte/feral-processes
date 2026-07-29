@@ -1,0 +1,6 @@
+(
+    id: LeanCompiler,
+    name: "Lean Compiler",
+    description: "Tighter builds, less waste. Compiling (c) costs 1 less of each required item per level, never below 1 each.",
+    cost: 3,
+)

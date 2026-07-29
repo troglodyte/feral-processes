@@ -10,7 +10,16 @@ impl App {
             self.mode = Mode::Playing;
             return;
         }
-        let perks = feral_processes_engine::Perk::all();
+        // Through `perk_defs` rather than `Perk::all()` so the numbering the
+        // player types against is the one the picker drew — a perk whose
+        // `.ron` file is missing isn't listed and can't be bought by index.
+        let Some(perks) = self
+            .game
+            .as_ref()
+            .map(|g| g.perk_defs().into_iter().map(|d| d.id).collect::<Vec<_>>())
+        else {
+            return;
+        };
         if let Some(idx) = self.selected_index(key, perks.len()) {
             let Some(game) = &mut self.game else { return };
             match game.unlock_perk(perks[idx]) {

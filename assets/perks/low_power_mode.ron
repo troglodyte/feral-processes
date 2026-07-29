@@ -1,0 +1,6 @@
+(
+    id: LowPowerMode,
+    name: "Low Power Mode",
+    description: "Throttle your own clock. Power drains 1 percentage point slower per level, and enough levels stop the drain entirely.",
+    cost: 2,
+)

@@ -1,0 +1,6 @@
+(
+    id: Buffer,
+    name: "Buffer",
+    description: "More headroom before you fault. +1% permanent max Integrity per level (at least +10), and buying it heals you fully.",
+    cost: 3,
+)

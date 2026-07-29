@@ -65,24 +65,35 @@ impl Game {
     /// Spends Perk Points to buy another level of `perk` (see
     /// `perks::Perk`). Perks are repeatable — there's no cap on levels,
     /// only on how many Perk Points you've earned.
+    ///
+    /// Name and price come from `PerkDb`, so a perk whose `.ron` file is
+    /// missing or malformed can't be bought at all — the same state the
+    /// picker shows by leaving it out of the list.
     pub fn unlock_perk(&mut self, perk: Perk) -> Result<(), String> {
         if self.is_game_over().is_some() {
             return Err("Can't do that right now.".into());
         }
         let player = self.player_entity();
+        let (name, cost) = {
+            let def = self
+                .world
+                .resource::<PerkDb>()
+                .get(perk)
+                .ok_or_else(|| "That perk isn't available.".to_string())?;
+            (def.name.clone(), def.cost)
+        };
         let level = {
             let mut perks = self
                 .world
                 .get_mut::<Perks>(player)
                 .ok_or_else(|| "No perks available.".to_string())?;
-            if perks.points < perk.cost() {
+            if perks.points < cost {
                 return Err(format!(
-                    "Not enough Perk Points (need {}, have {}).",
-                    perk.cost(),
+                    "Not enough Perk Points (need {cost}, have {}).",
                     perks.points
                 ));
             }
-            perks.points -= perk.cost();
+            perks.points -= cost;
             perks.unlocked.push(perk);
             perks.level(perk)
         };
@@ -108,10 +119,7 @@ impl Game {
             }
             _ => {}
         }
-        self.log(format!(
-            "You buy the {} perk (level {level}).",
-            perk.display_name()
-        ));
+        self.log(format!("You buy the {name} perk (level {level})."));
         Ok(())
     }
 

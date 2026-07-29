@@ -739,15 +739,11 @@ pub const STRUCTURE_REGEN_AMOUNT: u32 = 4;
 // Perk magnitudes
 // ─────────────────────────────────────────────────────────────────────────
 
-/// Perk Points each perk costs per level — the same cost every time,
-/// however many levels you already have. See `Perk::cost`.
-pub const PERK_COST_KEEN_SCAVENGER: u32 = 2;
-pub const PERK_COST_LOW_POWER_MODE: u32 = 2;
-pub const PERK_COST_EXPLOIT_FOCUS: u32 = 3;
-pub const PERK_COST_LEAN_COMPILER: u32 = 3;
-pub const PERK_COST_ATTACKER: u32 = 2;
-pub const PERK_COST_DEFENDER: u32 = 2;
-pub const PERK_COST_BUFFER: u32 = 3;
+// What each perk *does* per level lives here; what each perk *costs* does
+// not — that is authored alongside its name and description in
+// `assets/perks/*.ron`, so retitling and re-pricing the catalogue is a file
+// edit. The magnitudes below stay code for the reason at the top of this
+// module: content is moddable, how hard the game is, is not.
 
 /// Bonus `Perk::KeenScavenger` adds to `Game::forage`'s success chance, per level.
 pub const KEEN_SCAVENGER_BONUS_PER_LEVEL: f64 = 0.01;

@@ -198,6 +198,11 @@ is skipped with a warning logged in-game rather than crashing startup.
     // popped out and installed on a different species entirely. So a
     // species with a strong `heal` and no innate heal is not a mistake:
     // it's a reason to spend a researched heal routine on that program.
+    //
+    // The manifest screen shows at most two non-neutral categories — the
+    // rest collapse into a single "+N more" line. Name only one or two if
+    // you want every one of them visible; a species naming three or more
+    // still works, it just won't all be shown on the same screen.
     affinities: (heal: 1.4, damage: 0.85),
 
     // Optional; can be left out entirely (defaults to false). If true,

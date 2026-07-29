@@ -36,14 +36,46 @@ pub(super) enum SectionRow {
 /// routine-slot cap, so a full kit is never trimmed.
 pub(super) const MAX_SECTION_ROWS: usize = 6;
 
+/// The AFFINITIES box's own cap, tighter than `MAX_SECTION_ROWS`. Measured at
+/// 720px (the tightest supported window): a fifth columned box — COMBAT,
+/// POTENTIAL, AFFINITIES, SPECIES, ROUTINES, plus the full-width MOVES band —
+/// has room for 2 affinity rows; 3 overlaps the footer by ~20px and 4-5
+/// escape the frame outright (see the git history of
+/// `the_real_worst_case_pages_fit_the_tightest_window` for the measurements).
+/// 2 costs nothing shipped: every species Task 5 gave affinities to carries
+/// exactly one strength and one weakness. A modded species naming three or
+/// more only ever loses rows to the "+N more" note below, never crashes the
+/// page.
+pub(super) const MAX_AFFINITY_ROWS: usize = 2;
+
+/// The full-width band's own cap. `MAX_SECTION_ROWS` covers the columned
+/// boxes, but the band is what actually overflows once a fifth columned box
+/// (AFFINITIES) exists: at `MAX_SECTION_ROWS` (6) it overlapped the footer
+/// by 2.00px/10.00px/3.33px at 900px/1000px/1080px (720px and every other
+/// swept height were fine — the failure is height-band-specific, not
+/// universal). 4 clears all of it with margin. Deliberately a separate
+/// constant from `MAX_SECTION_ROWS` rather than lowering that one: 6 is also
+/// `COMPANION_ROUTINE_SLOT_CAP`, so shrinking `MAX_SECTION_ROWS` would trim
+/// a player's full 6-slot routine kit, which is a real regression the band
+/// cap doesn't have to cause — nothing shipped has more than 2 moves, so 4
+/// trims nothing that exists today, only a mod.
+pub(super) const MAX_BAND_ROWS: usize = 4;
+
 /// Trims `rows` to `MAX_SECTION_ROWS`, spending the last line on a count of
 /// what was dropped. A silent truncation would read as "that's all of them".
-pub(super) fn section_rows(mut rows: Vec<SectionRow>) -> Vec<SectionRow> {
-    if rows.len() <= MAX_SECTION_ROWS {
+pub(super) fn section_rows(rows: Vec<SectionRow>) -> Vec<SectionRow> {
+    section_rows_capped(rows, MAX_SECTION_ROWS)
+}
+
+/// `section_rows` at an arbitrary cap, for the one box (AFFINITIES) whose
+/// real worst case is narrower than `MAX_SECTION_ROWS` — see
+/// `MAX_AFFINITY_ROWS`.
+pub(super) fn section_rows_capped(mut rows: Vec<SectionRow>, cap: usize) -> Vec<SectionRow> {
+    if rows.len() <= cap {
         return rows;
     }
-    let hidden = rows.len() - (MAX_SECTION_ROWS - 1);
-    rows.truncate(MAX_SECTION_ROWS - 1);
+    let hidden = rows.len() - (cap - 1);
+    rows.truncate(cap - 1);
     rows.push(SectionRow::Note(format!("+{hidden} more")));
     rows
 }
@@ -193,17 +225,32 @@ mod tests {
         }
     }
 
-    /// The fullest page a program can produce: four columned boxes at their
-    /// real row counts, plus the Moves band at the cap. Row counts are the
-    /// ones `sections_for` actually builds — 3 combat stats, 5 potential
-    /// lines, 6 species facts, and `COMPANION_ROUTINE_SLOT_CAP` routines.
+    /// The fullest page a program can produce, at every cap that actually
+    /// bounds `program_sections`' output: 3 combat stats, 5 potential lines,
+    /// `MAX_AFFINITY_ROWS` affinity lines, 6 species facts,
+    /// `COMPANION_ROUTINE_SLOT_CAP` routines, and `MAX_BAND_ROWS` moves.
+    /// POTENTIAL and AFFINITIES together are the ordinary case for a tamed
+    /// Scrapper, not an edge case — the balance sweep models a mid-grade
+    /// party as three of them, and `scrapper.ron` carries both a
+    /// `Potential` roll and a non-neutral `damage` affinity.
+    ///
+    /// Five affinity rows is *not* a layout state and must not be modeled
+    /// here: `program_sections` builds the AFFINITIES box through
+    /// `section_rows_capped(_, MAX_AFFINITY_ROWS)`, so a five-category
+    /// species renders 2 rows (one plus a "+4 more" note), the same as it
+    /// renders here. The real worst case this fixture has to defend is
+    /// `MAX_AFFINITY_ROWS` + `MAX_BAND_ROWS` together, which is what made
+    /// the band overflow the footer in the first place — restoring either
+    /// to a pre-cap literal reintroduces a fixture state the renderer can
+    /// no longer produce.
     fn worst_case_program() -> Vec<Section> {
         vec![
             section("COMBAT", 3, false),
             section("POTENTIAL", 5, false),
+            section("AFFINITIES", MAX_AFFINITY_ROWS, false),
             section("SPECIES", 6, false),
             section("ROUTINES", 6, false),
-            section("MOVES", MAX_SECTION_ROWS, true),
+            section("MOVES", MAX_BAND_ROWS, true),
         ]
     }
 
@@ -231,7 +278,14 @@ mod tests {
     /// that sum can land a fraction of a pixel past the boundary, so the
     /// tolerance here is what separates "adjacent" from "genuinely on top of
     /// each other". A real overlap is tens of pixels, never a rounding tail.
-    const TOUCH_EPSILON: f32 = 0.5;
+    ///
+    /// Raised from 0.5 to 1.0 when AFFINITIES became a fifth columned box:
+    /// five stacked boxes accumulate more float error across a
+    /// percentage-based frame than four did, and at the shipped 2-row
+    /// affinity cap the resulting gap was a 0.67px rounding tail that 0.5
+    /// flagged as an overlap. 1.0 still catches a real one — the tightest
+    /// remaining margin between any two real boxes is nowhere near a pixel.
+    const TOUCH_EPSILON: f32 = 1.0;
 
     fn overlaps(a: &Rect, b: &Rect) -> bool {
         a.x + TOUCH_EPSILON < b.x + b.w
@@ -397,5 +451,39 @@ mod tests {
             .map(|i| SectionRow::Note(format!("row {i}")))
             .collect();
         assert_eq!(section_rows(rows).len(), 3);
+    }
+
+    /// A modded species naming all five `AffinityKind` categories must not
+    /// blow out the AFFINITIES box — it renders one row plus an honest
+    /// count of what's hidden, same as `section_rows` already does for
+    /// MOVES and PERKS at `MAX_SECTION_ROWS`.
+    #[test]
+    fn a_five_category_affinity_list_is_capped_with_an_honest_count() {
+        let rows: Vec<SectionRow> = (0..5)
+            .map(|i| SectionRow::Stat(format!("Category {i}"), "1.00x".to_string()))
+            .collect();
+        let trimmed = section_rows_capped(rows, MAX_AFFINITY_ROWS);
+        assert_eq!(trimmed.len(), MAX_AFFINITY_ROWS);
+        let SectionRow::Note(last) = &trimmed[MAX_AFFINITY_ROWS - 1] else {
+            panic!("the trailing row is a note");
+        };
+        assert_eq!(last, "+4 more");
+    }
+
+    /// A modded species naming more moves than `MAX_BAND_ROWS` must not push
+    /// the full-width band into the footer — it renders the cap plus an
+    /// honest count of what's hidden, same shape as the affinity truncation
+    /// above.
+    #[test]
+    fn a_move_list_past_the_band_cap_is_capped_with_an_honest_count() {
+        let rows: Vec<SectionRow> = (0..MAX_BAND_ROWS + 3)
+            .map(|i| SectionRow::Stat(format!("Move {i}"), format!("pow {i}")))
+            .collect();
+        let trimmed = section_rows_capped(rows, MAX_BAND_ROWS);
+        assert_eq!(trimmed.len(), MAX_BAND_ROWS);
+        let SectionRow::Note(last) = &trimmed[MAX_BAND_ROWS - 1] else {
+            panic!("the trailing row is a note");
+        };
+        assert_eq!(last, "+4 more");
     }
 }

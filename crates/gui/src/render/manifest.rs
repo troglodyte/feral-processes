@@ -369,11 +369,12 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
     if !p.affinities.is_empty() {
         sections.push(Section {
             title: "AFFINITIES",
-            rows: section_rows(
+            rows: section_rows_capped(
                 p.affinities
                     .iter()
                     .map(|&(kind, v)| stat(kind.label(), format!("{v:.2}x")))
                     .collect(),
+                MAX_AFFINITY_ROWS,
             ),
             full_width: false,
         });
@@ -423,7 +424,7 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
     if !p.moves.is_empty() {
         sections.push(Section {
             title: "MOVES",
-            rows: section_rows(p.moves.iter().map(move_row).collect()),
+            rows: section_rows_capped(p.moves.iter().map(move_row).collect(), MAX_BAND_ROWS),
             full_width: true,
         });
     }

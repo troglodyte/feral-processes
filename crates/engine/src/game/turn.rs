@@ -267,7 +267,7 @@ impl Game {
         let Some((species, _)) = self.pick_habitat_species(tx, ty, false) else {
             return;
         };
-        let pack = self.spawn_pack(&species, false, tx, ty);
+        let pack = self.spawn_pack(&species, false, tx, ty, 1.0);
         let Some(&anchor) = pack.first() else {
             return;
         };

@@ -162,8 +162,14 @@ impl Game {
             if !tile.walkable || tile.biome == Biome::Platform {
                 continue;
             }
+            // A nest is checked before an entrance in `move_player`, so a
+            // breach sharing a nest's tile is a breach that can never be
+            // walked into — the bump attacks the nest instead, forever.
+            // Nests are already down by the time this runs, in both
+            // `Game::new` and `enter_next_zone`.
             if self.find_dungeon_entrance_at(x, y).is_some()
                 || self.find_blocking_structure_at(x, y).is_some()
+                || self.find_nest_at(x, y).is_some()
             {
                 continue;
             }
@@ -518,7 +524,8 @@ impl Game {
         let Some((species, is_boss)) = self.pick_lair_species(pos) else {
             return;
         };
-        let pack = self.spawn_pack(&species, is_boss, ex, ey);
+        let depth_mult = self.dungeon_depth_multiplier();
+        let pack = self.spawn_pack(&species, is_boss, ex, ey, depth_mult);
         if pack.is_empty() {
             return;
         }
@@ -709,17 +716,20 @@ impl Game {
             *x = nx;
             *y = ny;
         }
-        // Before the encounter roll, so a corridor the party walked into is
-        // on their map even if something jumps them the moment they enter it,
-        // and so a cache is the party's before anything can interrupt them
-        // reaching for it.
+        // Before anything below can interrupt, so a corridor the party
+        // walked into is on their map even if something jumps them the
+        // moment they enter it. Unconditional because a blocked step still
+        // faces the party at what they shoved into.
         self.remember_view();
-        self.open_cache();
-        self.rouse_lair();
-        // Only a step that actually covered ground draws an encounter —
+        // Only a step that actually covered ground arrives anywhere —
         // shoving at a wall is not travel, the same call `move_player`
-        // makes about an ambush.
+        // makes about an ambush. All three of these are about the cell the
+        // party stepped *onto*: a lair roused on a blocked step is a second
+        // full-HP guardian conjured by a party that jacked out of the first
+        // and misjudged which way it was facing.
         if walkable {
+            self.open_cache();
+            self.rouse_lair();
             self.maybe_dungeon_encounter();
         }
         self.tick();
@@ -774,7 +784,8 @@ impl Game {
         // Spawned onto the breach tile itself: the party's `Position` is
         // pinned there, and a dungeon pack is resolved immediately rather
         // than left to roam, so where on the surface it stands never matters.
-        let pack = self.spawn_pack(&species, false, ex, ey);
+        let depth_mult = self.dungeon_depth_multiplier();
+        let pack = self.spawn_pack(&species, false, ex, ey, depth_mult);
         if pack.is_empty() {
             return;
         }

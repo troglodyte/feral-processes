@@ -85,11 +85,27 @@ impl Game {
     /// `SpeciesDb`, so this is a defensive no-op path, not an expected
     /// outcome). `spawn_nest_guardian` uses the returned entity to attach
     /// `NestGuardian`.
+    ///
+    /// This is the surface spawn: depth costs it nothing. A spawn that
+    /// *is* a dungeon encounter goes through `spawn_pack` with a
+    /// multiplier — see `depth_mult` there for why that is a parameter
+    /// rather than something read back off the party's locale.
     pub(crate) fn spawn_wild_creature(
         &mut self,
         species_id: &str,
         x: i32,
         y: i32,
+    ) -> Option<Entity> {
+        self.spawn_wild_creature_scaled(species_id, x, y, 1.0)
+    }
+
+    /// `spawn_wild_creature` with `depth_mult` folded into every stat.
+    fn spawn_wild_creature_scaled(
+        &mut self,
+        species_id: &str,
+        x: i32,
+        y: i32,
+        depth_mult: f32,
     ) -> Option<Entity> {
         let species = self
             .world
@@ -100,9 +116,6 @@ impl Game {
         let mult = zone_level.stat_multiplier() as f32;
         let zone = zone_level.0;
         let dist_mult = self.distance_stat_multiplier(x, y);
-        // 1.0 on the surface, so this is inert for every spawn that isn't a
-        // dungeon encounter.
-        let depth_mult = self.dungeon_depth_multiplier();
         let potential = self.roll_potential();
         let routines = self.roll_wild_routine();
         let scale = |base: i32, roll: f32| {
@@ -504,12 +517,21 @@ impl Game {
     /// actually spawned. Bosses always spawn alone — packs are an
     /// ordinary-encounter mechanic, not something to stack onto an already
     /// tough boss fight.
+    ///
+    /// `depth_mult` scales every member's stats: `1.0` for a surface pack,
+    /// `Game::dungeon_depth_multiplier` for one conjured underground. It is
+    /// a parameter rather than something the spawn reads off `Locale`
+    /// because the surface does not stop while the party is down a shaft —
+    /// ambient spawns and nest respawns keep rolling on every `tick`, and a
+    /// locale-derived multiplier scaled those too, leaving 3x programs
+    /// standing around the breach mouth for the climb out.
     pub(crate) fn spawn_pack(
         &mut self,
         species_id: &str,
         is_boss: bool,
         x: i32,
         y: i32,
+        depth_mult: f32,
     ) -> Vec<Entity> {
         let group_size = if is_boss {
             1
@@ -535,7 +557,7 @@ impl Game {
                     y + rng.0.random_range(-radius..=radius),
                 )
             };
-            spawned.extend(self.spawn_wild_creature(species_id, gx, gy));
+            spawned.extend(self.spawn_wild_creature_scaled(species_id, gx, gy, depth_mult));
         }
         spawned
     }
@@ -573,7 +595,7 @@ impl Game {
             }
         }
 
-        self.spawn_pack(&pick, spawn_boss, x, y);
+        self.spawn_pack(&pick, spawn_boss, x, y, 1.0);
         true
     }
 }

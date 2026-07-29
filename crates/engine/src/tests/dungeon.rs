@@ -674,6 +674,49 @@ fn breaching_with_a_base_never_opens_a_breach_inside_the_platform() {
     }
 }
 
+/// A nest and a breach on the same tile is a breach that can never be
+/// used: `move_player` checks `find_nest_at` before `find_dungeon_entrance_at`,
+/// so walking onto it attacks the nest forever. Nests are placed first in
+/// both `Game::new` and `enter_next_zone`, which leaves the placement
+/// filter as the only thing that can keep the two apart — and the breach
+/// this eats may be the near one `DUNGEON_NEAREST_ENTRANCE_TILES` exists
+/// to guarantee.
+#[test]
+fn no_entrance_opens_on_top_of_a_nest() {
+    // Where this seed puts its breaches, so a nest can be stood on one.
+    let victim = entrance_tiles(&mut game())[0];
+
+    // The same seed again, with that tile already occupied — placement
+    // draws from a locally seeded stream, so it reaches for the same tiles
+    // in the same order and this one is now taken.
+    let mut game = game();
+    let entrances: Vec<Entity> = game
+        .world
+        .query_filtered::<Entity, With<DungeonEntrance>>()
+        .iter(&game.world)
+        .collect();
+    for entrance in entrances {
+        game.world.despawn(entrance);
+    }
+    game.world.spawn((
+        Nest {
+            species: "scrapper".to_string(),
+            pending_respawns: Vec::new(),
+        },
+        Position {
+            x: victim.0,
+            y: victim.1,
+        },
+    ));
+    game.spawn_dungeon_entrances(crate::tuning::DUNGEON_ENTRANCES_PER_ZONE);
+
+    assert!(
+        !entrance_tiles(&mut game).contains(&victim),
+        "a breach opened at {victim:?}, on top of a nest — walking onto it \
+         attacks the nest instead of descending, forever"
+    );
+}
+
 #[test]
 fn a_structure_cannot_be_deployed_on_top_of_a_breach() {
     let mut game = game();
@@ -1352,6 +1395,39 @@ fn fleeing_the_lair_leaves_it_held() {
     assert!(
         game.has_active_battle(),
         "the guardian did not come back after being fled from"
+    );
+}
+
+/// Shoving at a wall is not travel — the encounter roll is already built
+/// that way. The lair has to make the same call: a party that jacked out
+/// and misjudged which way it was facing would otherwise conjure a second,
+/// full-HP guardian by walking into rock it is already standing next to.
+#[test]
+fn shoving_at_a_wall_in_a_held_lair_does_not_rouse_the_guardian_again() {
+    let mut game = game();
+    descend(&mut game);
+    walk_into_the_lair(&mut game);
+    flee_until_clear(&mut game);
+
+    // Turning is safe here: the lair is held rather than roused, so there
+    // is no fight to be refused by.
+    let mut faced_a_wall = false;
+    for _ in 0..4 {
+        let Locale::Dungeon { x, y, facing, .. } = locale(&game) else {
+            unreachable!()
+        };
+        let (dx, dy) = facing.delta();
+        if !cell_at(&game, x + dx, y + dy).walkable() {
+            game.step_forward();
+            faced_a_wall = true;
+            break;
+        }
+        game.turn_right();
+    }
+    assert!(faced_a_wall, "the lair should border at least one wall");
+    assert!(
+        !game.has_active_battle(),
+        "shoving at the lair's wall roused the guardian a second time"
     );
 }
 
@@ -2092,8 +2168,13 @@ fn deeper_levels_field_tougher_programs() {
                 entrance,
             });
         }
-        let wild = game.spawn_wild_creature("scrapper", pos.x, pos.y).unwrap();
-        game.world.get::<Stats>(wild).unwrap().power()
+        // Through the pack path a dungeon encounter actually uses: depth
+        // is carried into the spawn as an argument, not read back off the
+        // locale, so this is the scaling the game applies rather than a
+        // proxy for it. `is_boss` only to pin the group at one member.
+        let depth_mult = game.dungeon_depth_multiplier();
+        let pack = game.spawn_pack("scrapper", true, pos.x, pos.y, depth_mult);
+        game.world.get::<Stats>(pack[0]).unwrap().power()
     };
 
     let shallow = power_at(1);
@@ -2115,6 +2196,54 @@ fn the_surface_is_untouched_by_the_depth_multiplier() {
     );
     let wild = game.spawn_wild_creature("scrapper", pos.x, pos.y).unwrap();
     assert!(game.world.get::<Stats>(wild).unwrap().hp > 0);
+}
+
+/// The surface keeps running while the party is underground — that is the
+/// point of pinning `Position` to the breach — so `tick` goes on rolling
+/// ambient spawns and nest respawns the whole way down. Those are surface
+/// programs standing on surface tiles, untagged and never swept by
+/// `end_battle`, and they are still there when the party climbs out. Depth
+/// must not reach them: it is the property of a dungeon encounter, not of
+/// the clock.
+#[test]
+fn a_surface_spawn_is_not_scaled_by_how_deep_the_party_is() {
+    let power_at_depth = |depth: Option<u32>| {
+        let mut game = Game::new(77, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+        if let Some(depth) = depth {
+            // Neither entering nor rewriting the locale draws from
+            // `GameRng` — levels carve from their own stream — so both
+            // arms of this reach the spawn with the same rolls queued up.
+            game.enter_dungeon(pos.x, pos.y);
+            let Locale::Dungeon {
+                x,
+                y,
+                facing,
+                entrance,
+                ..
+            } = locale(&game)
+            else {
+                unreachable!()
+            };
+            game.world.insert_resource(Locale::Dungeon {
+                depth,
+                floors: 9,
+                x,
+                y,
+                facing,
+                entrance,
+            });
+        }
+        let wild = game.spawn_wild_creature("scrapper", pos.x, pos.y).unwrap();
+        game.world.get::<Stats>(wild).unwrap().power()
+    };
+
+    assert_eq!(
+        power_at_depth(Some(5)),
+        power_at_depth(None),
+        "a program spawned on the surface was scaled by a shaft the party \
+         happened to be standing in"
+    );
 }
 
 /// A pack conjured for a dungeon fight has no business outliving it: it

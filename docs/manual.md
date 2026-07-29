@@ -157,9 +157,13 @@ has a facing rather than moving a token on a grid.
 Every other map key still works: inventory, party, routines, fusion, perks,
 manifest, research, save and help all open normally underground. The ones
 that reach into the zone map — deploy, cronjob, guard, demolish, upgrade,
-symlink, trade, rest, scan — refuse with a message, because while you are
-underground your position on the zone map is pinned to the breach you came
-in through.
+trade, rest, scan — refuse with a message, because while you are underground
+your position on the zone map is pinned to the breach you came in through.
+
+The symlink (`u`) is the exception: it works at any depth, because rather
+than reaching into the zone map from underground it surfaces you first and
+then teleports. It costs you the descent — you come back to the breach at
+level one — but not your maps.
 
 Every step in a corridor can draw an intrusion. The programs you meet come
 from the biome the breach opens in, and each level of depth multiplies their

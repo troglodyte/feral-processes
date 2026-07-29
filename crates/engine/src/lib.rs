@@ -58,7 +58,7 @@ use resources::{
     ZoneSpawnPoint,
 };
 pub use resources::{DifficultyMode, EffectKind, MessageKind, VisualEffect};
-use species::{MoveDef, SpeciesDb, SpeciesDef, SpeciesId};
+use species::{Affinities, MoveDef, SpeciesDb, SpeciesDef, SpeciesId};
 use structures::{StructureDb, StructureDef, StructureId, TradeDef};
 pub use views::*;
 use world::{Biome, Tile, WorldMap};

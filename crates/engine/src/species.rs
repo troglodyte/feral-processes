@@ -4,6 +4,7 @@ use std::path::Path;
 use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
 
+use crate::abilities::AffinityKind;
 use crate::components::{GlyphColor, StatusKind};
 use crate::items::ItemId;
 use crate::world::Biome;
@@ -58,6 +59,107 @@ pub struct MoveDef {
     /// as they behaved before it existed.
     #[serde(default)]
     pub ranged: bool,
+}
+
+fn default_affinity() -> f32 {
+    crate::tuning::AFFINITY_NEUTRAL
+}
+
+/// A species' multiplier per ability category (see
+/// `abilities::AffinityKind`). Every field defaults individually to
+/// `AFFINITY_NEUTRAL`, so a file may name only the categories it cares
+/// about; the struct as a whole is `#[serde(default)]` on `SpeciesDef`, so
+/// a file may omit it entirely. Both defaults are needed — one covers the
+/// partial form, the other the absent form.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct Affinities {
+    #[serde(default = "default_affinity")]
+    pub damage: f32,
+    #[serde(default = "default_affinity")]
+    pub heal: f32,
+    #[serde(default = "default_affinity")]
+    pub buff: f32,
+    #[serde(default = "default_affinity")]
+    pub debuff: f32,
+    #[serde(default = "default_affinity")]
+    pub drain: f32,
+}
+
+impl Default for Affinities {
+    fn default() -> Self {
+        Affinities::NEUTRAL
+    }
+}
+
+impl Affinities {
+    /// No bonus and no penalty in any category — what the player resolves
+    /// to before perks, and what a species that declares nothing gets.
+    pub const NEUTRAL: Affinities = Affinities {
+        damage: crate::tuning::AFFINITY_NEUTRAL,
+        heal: crate::tuning::AFFINITY_NEUTRAL,
+        buff: crate::tuning::AFFINITY_NEUTRAL,
+        debuff: crate::tuning::AFFINITY_NEUTRAL,
+        drain: crate::tuning::AFFINITY_NEUTRAL,
+    };
+
+    pub fn get(&self, kind: AffinityKind) -> f32 {
+        match kind {
+            AffinityKind::Damage => self.damage,
+            AffinityKind::Heal => self.heal,
+            AffinityKind::Buff => self.buff,
+            AffinityKind::Debuff => self.debuff,
+            AffinityKind::Drain => self.drain,
+        }
+    }
+
+    /// Every category this species is not neutral in, in a fixed order —
+    /// what the manifest screen lists. A species with nothing to say
+    /// returns empty and the screen shows no section at all, rather than
+    /// five rows of 1.00.
+    pub fn non_neutral(&self) -> Vec<(AffinityKind, f32)> {
+        [
+            AffinityKind::Damage,
+            AffinityKind::Heal,
+            AffinityKind::Buff,
+            AffinityKind::Debuff,
+            AffinityKind::Drain,
+        ]
+        .into_iter()
+        .map(|k| (k, self.get(k)))
+        .filter(|&(_, v)| v != crate::tuning::AFFINITY_NEUTRAL)
+        .collect()
+    }
+
+    /// Names the first non-finite field, if any. RON accepts bare
+    /// `NaN`/`inf` literals, and `f32::clamp` returns NaN for a NaN input
+    /// — so the clamp below cannot contain one and the file has to be
+    /// refused instead. Same rationale as `AbilityDef::non_finite_field`.
+    fn non_finite_field(&self) -> Option<&'static str> {
+        for (name, v) in [
+            ("damage", self.damage),
+            ("heal", self.heal),
+            ("buff", self.buff),
+            ("debuff", self.debuff),
+            ("drain", self.drain),
+        ] {
+            if !v.is_finite() {
+                return Some(name);
+            }
+        }
+        None
+    }
+
+    fn clamp_all(&mut self) {
+        for v in [
+            &mut self.damage,
+            &mut self.heal,
+            &mut self.buff,
+            &mut self.debuff,
+            &mut self.drain,
+        ] {
+            *v = v.clamp(crate::tuning::AFFINITY_MIN, crate::tuning::AFFINITY_MAX);
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -118,6 +220,16 @@ pub struct SpeciesDef {
     /// they did before.
     #[serde(default = "default_growth_multiplier")]
     pub growth_multiplier: f32,
+    /// This species' per-category ability multipliers — what a member of it
+    /// is *good at*, as opposed to `growth_multiplier`, which scales all
+    /// three stats uniformly. Applies to whatever is installed in its
+    /// routine slots, not only to the abilities this file grants, so a
+    /// strong heal affinity with no innate heal is a reason to install one
+    /// here rather than a contradiction. `#[serde(default)]` so existing
+    /// species files (including mods) without this field keep parsing at
+    /// neutral.
+    #[serde(default)]
+    pub affinities: Affinities,
     /// Whether this species can spawn as a Nest — a stationary,
     /// destructible object that keeps 2-5 guardians of this species
     /// tethered around it and respawns any that are killed/tamed, until
@@ -170,6 +282,14 @@ impl SpeciesDb {
             match ron::from_str::<SpeciesDef>(&text) {
                 Ok(mut def) => {
                     let id = def.id.clone();
+                    if let Some(field) = def.affinities.non_finite_field() {
+                        warnings.push(format!(
+                            "skipped invalid species file {path:?}: \
+                             affinities.{field} is not a finite number"
+                        ));
+                        continue;
+                    }
+                    def.affinities.clamp_all();
                     def.abilities.retain(|a| {
                         let known = abilities.get(&a.id).is_some();
                         if !known {

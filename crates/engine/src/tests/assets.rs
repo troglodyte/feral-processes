@@ -1,6 +1,8 @@
 //! Startup validation of the shipped and modded asset directories.
 
 use super::support::*;
+use crate::abilities::AffinityKind;
+use crate::tuning::{AFFINITY_MAX, AFFINITY_NEUTRAL};
 use crate::*;
 
 #[test]
@@ -183,4 +185,103 @@ fn every_shipped_ability_but_decompile_has_a_cooldown() {
             def.id
         );
     }
+}
+
+const AFFINITY_SPECIES: &str = r#"(
+    id: "test_healer",
+    name: "Test Healer",
+    glyph: 'h',
+    color: Cyan,
+    base_hp: 10,
+    base_atk: 4,
+    base_def: 2,
+    taming_difficulty: 0.5,
+    habitats: [OpenGrid],
+    moves: [(name: "Poke", power: 3)],
+    affinities: (heal: 1.5, damage: 0.8),
+)"#;
+
+#[test]
+fn a_species_declares_affinities_and_omitted_ones_stay_neutral() {
+    let dir = super::support::modded_assets_dir(
+        "affinity_species",
+        &[],
+        &[],
+        &[("test_healer.ron", AFFINITY_SPECIES)],
+        &[],
+        &[],
+    );
+    let game = Game::new(1, DifficultyMode::Forgiving, &dir).unwrap();
+    let aff = game.species_affinities("test_healer").unwrap();
+    assert_eq!(aff.get(AffinityKind::Heal), 1.5);
+    assert_eq!(aff.get(AffinityKind::Damage), 0.8);
+    // The three the file never named must default individually, not leave
+    // the whole struct at its all-neutral fallback.
+    assert_eq!(aff.get(AffinityKind::Buff), AFFINITY_NEUTRAL);
+    assert_eq!(aff.get(AffinityKind::Debuff), AFFINITY_NEUTRAL);
+    assert_eq!(aff.get(AffinityKind::Drain), AFFINITY_NEUTRAL);
+}
+
+#[test]
+fn a_species_file_with_no_affinities_field_still_loads_neutral() {
+    // The #[serde(default)] contract that keeps every shipped file and
+    // every third-party mod parsing untouched.
+    let dir = super::support::modded_assets_dir(
+        "affinity_absent",
+        &[],
+        &[],
+        &[("test_plain.ron", super::support::TWO_ABILITY_SPECIES)],
+        &[],
+        &[],
+    );
+    let game = Game::new(1, DifficultyMode::Forgiving, &dir).unwrap();
+    let aff = game.species_affinities("test_medic").unwrap();
+    for kind in [
+        AffinityKind::Damage,
+        AffinityKind::Heal,
+        AffinityKind::Buff,
+        AffinityKind::Debuff,
+        AffinityKind::Drain,
+    ] {
+        assert_eq!(aff.get(kind), AFFINITY_NEUTRAL);
+    }
+}
+
+#[test]
+fn an_out_of_range_affinity_is_clamped_at_load() {
+    let body = AFFINITY_SPECIES.replace("heal: 1.5", "heal: 99.0");
+    let dir = super::support::modded_assets_dir(
+        "affinity_clamped",
+        &[],
+        &[],
+        &[("test_healer.ron", &body)],
+        &[],
+        &[],
+    );
+    let game = Game::new(1, DifficultyMode::Forgiving, &dir).unwrap();
+    let aff = game.species_affinities("test_healer").unwrap();
+    assert_eq!(aff.get(AffinityKind::Heal), AFFINITY_MAX);
+}
+
+#[test]
+fn a_nan_affinity_disqualifies_the_file_and_the_rest_still_load() {
+    // NaN specifically, not just inf: f32::clamp returns NaN for a NaN
+    // input, so the clamp alone would pass this straight through into
+    // every magnitude the species ever casts.
+    let body = AFFINITY_SPECIES.replace("heal: 1.5", "heal: NaN");
+    let dir = super::support::modded_assets_dir(
+        "affinity_nan",
+        &[],
+        &[],
+        &[("test_healer.ron", &body)],
+        &[],
+        &[],
+    );
+    let game = Game::new(1, DifficultyMode::Forgiving, &dir).unwrap();
+    assert!(
+        game.species_affinities("test_healer").is_none(),
+        "a species with a non-finite affinity should not have loaded"
+    );
+    // A single bad mod file must not take the shipped roster down with it.
+    assert!(game.species_affinities("drone").is_some());
 }

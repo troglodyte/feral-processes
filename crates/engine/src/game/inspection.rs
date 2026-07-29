@@ -174,6 +174,14 @@ impl Game {
             .collect()
     }
 
+    /// A species' affinities, or `None` if no such species loaded.
+    pub fn species_affinities(&self, id: &str) -> Option<Affinities> {
+        self.world
+            .resource::<SpeciesDb>()
+            .get(id)
+            .map(|s| s.affinities)
+    }
+
     /// Everything known about one subject, for the manifest screen. Works on
     /// the player and on any creature — wild, owned, or in the party.
     /// Read-only: looking a program over never triggers an intrusion.

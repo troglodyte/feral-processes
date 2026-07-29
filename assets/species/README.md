@@ -182,6 +182,24 @@ is skipped with a warning logged in-game rather than crashing startup.
     // 1.5 for Hard, and 2.0 for bosses.
     growth_multiplier: 1.25,
 
+    // Optional; can be left out entirely, and so can any individual
+    // category. Each is a multiplier on the *magnitude* of abilities in
+    // that category when a member of this species casts them: 1.1 is a 10%
+    // stronger heal, 0.8 a 20% weaker one. Clamped to 0.5-2.0 at load; a
+    // non-finite value (RON accepts bare `NaN`/`inf`) skips the whole file
+    // with a warning.
+    //
+    // The five categories match what an ability's `effect` does — see
+    // ../abilities/README.md. `Cleanse` and `Decompile` have no magnitude
+    // and so have no affinity.
+    //
+    // This applies to whatever is *installed* in the program's routine
+    // slots, not only to the abilities listed above — and a routine can be
+    // popped out and installed on a different species entirely. So a
+    // species with a strong `heal` and no innate heal is not a mistake:
+    // it's a reason to spend a researched heal routine on that program.
+    affinities: (heal: 1.4, damage: 0.85),
+
     // Optional; can be left out entirely (defaults to false). If true,
     // this species can spawn as a Nest instead of an ordinary lone
     // creature/pack during habitat spawning: a stationary, destructible

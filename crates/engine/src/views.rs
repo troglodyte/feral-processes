@@ -4,6 +4,7 @@
 //! app-core/gui. They are plain data with no back-reference into the ECS —
 //! that is what keeps the renderer from reaching into the `World`.
 
+use crate::abilities::AffinityKind;
 use crate::battle::ActionOption;
 use crate::components::{EquippedItem, GlyphColor};
 use crate::items::ItemId;
@@ -527,6 +528,10 @@ pub struct ProgramManifest {
     pub decompile_chance: Option<f32>,
     pub growth_multiplier: f32,
     pub base_speed: i32,
+    /// Categories this species is not neutral in, in `AffinityKind` order.
+    /// Empty for a species that declares nothing, so the screen omits the
+    /// section entirely rather than drawing five rows of 1.00.
+    pub affinities: Vec<(AffinityKind, f32)>,
 }
 
 /// An individual's four `Potential` rolls, surfaced separately rather than

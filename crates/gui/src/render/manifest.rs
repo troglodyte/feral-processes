@@ -366,6 +366,19 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
         });
     }
 
+    if !p.affinities.is_empty() {
+        sections.push(Section {
+            title: "AFFINITIES",
+            rows: section_rows(
+                p.affinities
+                    .iter()
+                    .map(|&(kind, v)| stat(kind.label(), format!("{v:.2}x")))
+                    .collect(),
+            ),
+            full_width: false,
+        });
+    }
+
     let mut species = vec![stat(
         "Habitats",
         if p.habitats.is_empty() {

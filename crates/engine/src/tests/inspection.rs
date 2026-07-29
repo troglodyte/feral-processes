@@ -1,6 +1,7 @@
 //! The read-only views the renderer draws from, plus symlink targeting.
 
 use super::support::*;
+use crate::abilities::AffinityKind;
 use crate::game::inspection::difficulty_color;
 use crate::tuning::MAX_FUSIONS;
 use crate::*;
@@ -669,4 +670,41 @@ fn manifest_returns_none_for_anything_that_is_neither_the_player_nor_a_creature(
     let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let structure = game.world.spawn(Position { x: 0, y: 0 }).id();
     assert!(game.manifest(structure).is_none());
+}
+
+#[test]
+fn the_manifest_lists_only_non_neutral_affinities() {
+    const LOPSIDED: &str = r#"(
+    id: "test_lopsided",
+    name: "Test Lopsided",
+    glyph: 'l',
+    color: Cyan,
+    base_hp: 10,
+    base_atk: 4,
+    base_def: 2,
+    taming_difficulty: 0.5,
+    habitats: [OpenGrid],
+    moves: [(name: "Poke", power: 3)],
+    affinities: (heal: 1.4, damage: 0.8),
+)"#;
+    let dir = modded_assets_dir(
+        "manifest_affinities",
+        &[],
+        &[],
+        &[("test_lopsided.ron", LOPSIDED)],
+        &[],
+        &[],
+    );
+    let mut game = Game::new(94, DifficultyMode::Forgiving, &dir).unwrap();
+    let entity = spawn_wild_without_routine(&mut game, "test_lopsided", 3, 3);
+    // `Game::manifest` is the public entry; `program_manifest` behind it is
+    // private to game::inspection and not reachable from here.
+    let ManifestSubject::Program(p) = game.manifest(entity).unwrap().subject else {
+        panic!("expected a program manifest");
+    };
+    assert_eq!(
+        p.affinities,
+        vec![(AffinityKind::Damage, 0.8), (AffinityKind::Heal, 1.4)],
+        "listed in AffinityKind order, and the three neutral ones omitted"
+    );
 }

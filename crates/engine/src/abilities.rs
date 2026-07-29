@@ -168,6 +168,17 @@ impl AffinityKind {
             AffinityKind::Drain => "Drain",
         }
     }
+
+    /// The perk that raises the player's affinity in this category.
+    pub fn perk(self) -> crate::perks::Perk {
+        match self {
+            AffinityKind::Damage => crate::perks::Perk::DamageAffinity,
+            AffinityKind::Heal => crate::perks::Perk::HealAffinity,
+            AffinityKind::Buff => crate::perks::Perk::BuffAffinity,
+            AffinityKind::Debuff => crate::perks::Perk::DebuffAffinity,
+            AffinityKind::Drain => crate::perks::Perk::DrainAffinity,
+        }
+    }
 }
 
 /// What an ability does to each of its recipients.

@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 /// `forage_chance` to `taming::capture_chance`'s HP penalty to a direct
 /// `Stats` write, and there is no shared shape to express in data the way
 /// `SpeciesDef` or `ItemDef` have one. So a modder can rename, re-describe
-/// and re-price the seven perks, but a new perk is still a new variant here
+/// and re-price the twelve perks, but a new perk is still a new variant here
 /// plus a hook wherever its effect belongs — see `CLAUDE.md`.
 ///
 /// The catalogue keys off this enum rather than a string id so that a `.ron`
@@ -63,6 +63,21 @@ pub enum Perk {
     /// player's `Stats` the moment it's bought, fully healing them the same
     /// way a level-up does.
     Buffer,
+    /// Multiplies the magnitude of the player's own `Damage` abilities by
+    /// `AFFINITY_PERK_BONUS_PER_LEVEL` per level. Scoped to the player's
+    /// own casts: a companion's affinity is its species' business, and a
+    /// party-wide perk would multiply against it.
+    DamageAffinity,
+    /// As `DamageAffinity`, for `Heal`.
+    HealAffinity,
+    /// As `DamageAffinity`, for `Buff` — including saps, which are
+    /// negative-power buffs.
+    BuffAffinity,
+    /// As `DamageAffinity`, for `Debuff`.
+    DebuffAffinity,
+    /// As `DamageAffinity`, for `Drain`'s damage. Its `heal_fraction`
+    /// rides the damage dealt and is not scaled again.
+    DrainAffinity,
 }
 
 impl Perk {
@@ -70,7 +85,7 @@ impl Perk {
     /// A perk with no `.ron` entry is dropped from that list by
     /// `PerkDb::catalogue` — this is what *can* be bought, not what is
     /// currently on offer.
-    pub fn all() -> [Perk; 7] {
+    pub fn all() -> [Perk; 12] {
         [
             Perk::KeenScavenger,
             Perk::LowPowerMode,
@@ -79,7 +94,29 @@ impl Perk {
             Perk::Attacker,
             Perk::Defender,
             Perk::Buffer,
+            Perk::DamageAffinity,
+            Perk::HealAffinity,
+            Perk::BuffAffinity,
+            Perk::DebuffAffinity,
+            Perk::DrainAffinity,
         ]
+    }
+
+    /// Which affinity category this perk multiplies, or `None` for the
+    /// seven perks that do something else entirely. The one hook all five
+    /// affinity perks share — they have a common shape, unlike the perks
+    /// above them, so they get a common mapping rather than five bespoke
+    /// arms in `unlock_perk`.
+    pub fn affinity_kind(self) -> Option<crate::abilities::AffinityKind> {
+        use crate::abilities::AffinityKind;
+        match self {
+            Perk::DamageAffinity => Some(AffinityKind::Damage),
+            Perk::HealAffinity => Some(AffinityKind::Heal),
+            Perk::BuffAffinity => Some(AffinityKind::Buff),
+            Perk::DebuffAffinity => Some(AffinityKind::Debuff),
+            Perk::DrainAffinity => Some(AffinityKind::Drain),
+            _ => None,
+        }
     }
 }
 

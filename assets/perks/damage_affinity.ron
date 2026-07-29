@@ -1,0 +1,6 @@
+(
+    id: DamageAffinity,
+    name: "Payload Tuning",
+    description: "Your own offensive routines bite harder. +3% damage per level.",
+    cost: 2,
+)

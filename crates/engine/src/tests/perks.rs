@@ -1,6 +1,7 @@
 //! Perk unlocks and the effects each perk level has.
 
 use super::support::*;
+use crate::abilities::AffinityKind;
 use crate::tuning::{
     ATTACKER_BONUS_PER_LEVEL, BUFFER_MIN_BONUS_PER_LEVEL, DECOMPILER_SKILL_PER_LEVEL,
     DEFENDER_BONUS_PER_LEVEL, LEAN_COMPILER_DISCOUNT_PER_LEVEL,
@@ -299,4 +300,62 @@ fn buffer_perk_scales_past_the_floor_at_high_max_hp() {
         status.max_hp, 2020,
         "1% of 2000 is 20, above the floor, so that's what should apply"
     );
+}
+
+#[test]
+fn the_original_seven_perks_keep_their_positions() {
+    // Perk's variant order IS the save format: bincode encodes an enum
+    // positionally and PlayerSave::unlocked_perks holds indices, so a
+    // reordering would turn one player's Attacker levels into Defender
+    // levels on load. The five affinity perks must be appended.
+    let all = Perk::all();
+    assert_eq!(all[0], Perk::KeenScavenger);
+    assert_eq!(all[1], Perk::LowPowerMode);
+    assert_eq!(all[2], Perk::ExploitFocus);
+    assert_eq!(all[3], Perk::LeanCompiler);
+    assert_eq!(all[4], Perk::Attacker);
+    assert_eq!(all[5], Perk::Defender);
+    assert_eq!(all[6], Perk::Buffer);
+    assert_eq!(all.len(), 12);
+}
+
+#[test]
+fn every_affinity_kind_maps_to_a_perk_and_back() {
+    for kind in [
+        AffinityKind::Damage,
+        AffinityKind::Heal,
+        AffinityKind::Buff,
+        AffinityKind::Debuff,
+        AffinityKind::Drain,
+    ] {
+        assert_eq!(kind.perk().affinity_kind(), Some(kind));
+    }
+}
+
+#[test]
+fn a_non_affinity_perk_has_no_category() {
+    assert_eq!(Perk::Attacker.affinity_kind(), None);
+    assert_eq!(Perk::KeenScavenger.affinity_kind(), None);
+}
+
+#[test]
+fn all_five_affinity_perks_are_on_offer_in_the_picker() {
+    // Driven by PerkDb::catalogue, so this is really "all five .ron files
+    // parse" — a file naming a variant the build lacks is rejected by RON
+    // as an unknown variant and the perk silently stops being offered.
+    let game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let offered: Vec<Perk> = game.perk_defs().iter().map(|d| d.id).collect();
+    for kind in [
+        AffinityKind::Damage,
+        AffinityKind::Heal,
+        AffinityKind::Buff,
+        AffinityKind::Debuff,
+        AffinityKind::Drain,
+    ] {
+        assert!(
+            offered.contains(&kind.perk()),
+            "{:?} affinity perk is not on offer",
+            kind
+        );
+    }
 }

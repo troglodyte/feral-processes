@@ -6,7 +6,7 @@ is skipped with a warning logged in-game rather than crashing startup.
 
 **This directory is a catalogue, not a content directory.** Unlike species,
 structures, items and abilities, you cannot add a perk by dropping in a new
-file — the seven that exist are fixed, and each file here only controls what
+file — the twelve that exist are fixed, and each file here only controls what
 one of them is *called*, how it *reads*, and what it *costs*. A file naming
 anything else fails to parse and is skipped.
 
@@ -15,11 +15,26 @@ moddable thing in this game is numbers and ids the engine already knows how
 to consume; a perk is a hook into a particular formula, and no two hook into
 the same one. Keen Scavenger reaches into the scan roll, Low Power Mode into
 the hunger-decay multiplier, Exploit Focus into the decompile chance's HP
-term, Lean Compiler into recipe costs, and Attacker/Defender/Buffer write
-straight to your stats at purchase time. There is no `effect:` field that
-could cover those without becoming a programming language. So an eighth perk
-means a new `Perk` variant in `crates/engine/src/perks.rs` plus a hook
-wherever its effect belongs — see the repo's `CLAUDE.md`.
+term, Lean Compiler into recipe costs, Attacker/Defender/Buffer write
+straight to your stats at purchase time, and the five `*_affinity` perks each
+multiply one `AffinityKind` category's magnitude for your own casts only —
+see below. There is no `effect:` field that could cover those without
+becoming a programming language. So a thirteenth perk means a new `Perk`
+variant in `crates/engine/src/perks.rs` plus a hook wherever its effect
+belongs — see the repo's `CLAUDE.md`.
+
+**The five `*_affinity` perks share one magnitude, not five.** Payload
+Tuning, Field Medic, Overclocker, Corruption Vector and Siphon Protocol each
+raise your affinity for one `AffinityKind` category (Damage, Heal, Buff,
+Debuff, Drain) by the same `AFFINITY_PERK_BONUS_PER_LEVEL` per level, in
+`crates/engine/src/tuning.rs` — one constant, because all five perks are the
+same shape, not five identical knobs to keep in sync by hand. They scale
+**only your own** ability casts, never a companion's: a companion's affinity
+is its species' business (`SpeciesDef::affinities`), and a party-wide perk
+would double-multiply against it. As with every perk here, the `description`
+below is authored text — the engine never derives it from the constant, so
+retuning `AFFINITY_PERK_BONUS_PER_LEVEL` leaves the wording stale (still
+saying "+3%") until someone edits the five files to match.
 
 What *is* here is worth having: the wording players read, and the price they
 pay. Both are things you'd want to change without a compiler.
@@ -35,7 +50,7 @@ say so in the `description` too — nothing keeps the two in sync for you.
 
 ```ron
 (
-    // Which perk this file describes. One of exactly these seven, written
+    // Which perk this file describes. One of exactly these twelve, written
     // as a bare identifier (not a quoted string):
     //
     //   KeenScavenger   raises the scan (g) success chance
@@ -46,6 +61,12 @@ say so in the `description` too — nothing keeps the two in sync for you.
     //   Attacker        permanent Attack, applied on purchase
     //   Defender        permanent Defense, applied on purchase
     //   Buffer          permanent max Integrity, and heals you on purchase
+    //   DamageAffinity  raises your own Damage-category ability magnitude
+    //   HealAffinity    raises your own Heal-category ability magnitude
+    //   BuffAffinity    raises your own Buff-category ability magnitude
+    //                   (saps included — they're negative-power buffs)
+    //   DebuffAffinity  raises your own Debuff-category ability magnitude
+    //   DrainAffinity   raises your own Drain-category ability damage
     //
     // Two files naming the same perk is not an error; the last one loaded
     // wins, and which that is depends on directory order — so don't.

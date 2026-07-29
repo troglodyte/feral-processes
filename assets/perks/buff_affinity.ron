@@ -1,0 +1,6 @@
+(
+    id: BuffAffinity,
+    name: "Overclocker",
+    description: "Your own boosts and saps run stronger. +3% per level.",
+    cost: 2,
+)

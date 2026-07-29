@@ -667,7 +667,11 @@ impl Game {
                         ActiveBuff {
                             kind: *kind,
                             remaining: *duration,
-                            power: abilities::scaled_power(*power, level),
+                            power: abilities::scaled_power(
+                                *power,
+                                level,
+                                crate::tuning::AFFINITY_NEUTRAL,
+                            ),
                         },
                     );
                     let stat = match kind {
@@ -680,7 +684,8 @@ impl Game {
                     ));
                 }
                 AbilityEffect::Heal { power } => {
-                    let power = abilities::scaled_power(*power, level);
+                    let power =
+                        abilities::scaled_power(*power, level, crate::tuning::AFFINITY_NEUTRAL);
                     if let Some(mut stats) = self.world.get_mut::<Stats>(recipient) {
                         stats.hp = (stats.hp + power).min(stats.max_hp);
                     }
@@ -695,7 +700,11 @@ impl Game {
                         statuses.active = Some(ActiveStatus {
                             kind: *kind,
                             remaining: *duration,
-                            power: abilities::scaled_power(*power, level),
+                            power: abilities::scaled_power(
+                                *power,
+                                level,
+                                crate::tuning::AFFINITY_NEUTRAL,
+                            ),
                         });
                     }
                     match kind {

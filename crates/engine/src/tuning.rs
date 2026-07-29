@@ -851,6 +851,32 @@ pub const ABILITY_POWER_SCALE_PER_LEVEL: f32 = 0.15;
 /// above, this caps the multiplier at 7x.
 pub const ABILITY_POWER_SCALE_LEVEL_CAP: u32 = 40;
 
+/// An ability magnitude's neutral affinity — no bonus, no penalty. The
+/// value every `AffinityKind` defaults to, and what a caster with neither
+/// a species nor perks resolves to.
+pub const AFFINITY_NEUTRAL: f32 = 1.0;
+
+/// Bounds every affinity is clamped to when a species file is loaded.
+/// Deliberately wider than `MIN_INDIVIDUAL_ROLL`..`MAX_INDIVIDUAL_ROLL`
+/// (0.8-1.2): a damage affinity scales only an ability's *authored* power,
+/// which is a minority of `power + ATK - DEF` at a high level, so a narrow
+/// band would make damage affinities imperceptible.
+///
+/// These compound with `ability_power_scale`, which is itself up to 7x.
+/// A companion caps at `CREATURE_MAX_LEVEL` (12), so its ceiling is 2.8x
+/// from level times `AFFINITY_MAX` — 5.6x an authored power. That is the
+/// modder's choice to make, which is the moddability contract.
+pub const AFFINITY_MIN: f32 = 0.5;
+pub const AFFINITY_MAX: f32 = 2.0;
+
+/// Affinity a player affinity perk adds per level: the perk's multiplier is
+/// `AFFINITY_NEUTRAL + this * level`. One shared constant rather than five
+/// identical ones, because all five affinity perks are the same shape — see
+/// `Perk::affinity_kind`. Matches
+/// `EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL`, the closest existing
+/// analogue among the perks that multiply rather than add.
+pub const AFFINITY_PERK_BONUS_PER_LEVEL: f32 = 0.03;
+
 /// Floor on the cooldown a hostile arms after spending a routine.
 ///
 /// `AbilityDef::cooldown` is `#[serde(default)]` 0, and a carrier fires

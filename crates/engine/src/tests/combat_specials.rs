@@ -156,7 +156,7 @@ fn special_ability_heal_restores_player_hp_and_debuff_afflicts_the_wild_creature
     let hp = game.world.get::<Stats>(player).unwrap().hp;
     assert_eq!(
         hp,
-        5 + crate::abilities::scaled_power(8, 1),
+        5 + crate::abilities::scaled_power(8, 1, crate::tuning::AFFINITY_NEUTRAL),
         "Heal should restore the player's HP by its power, capped at max_hp"
     );
 
@@ -165,7 +165,7 @@ fn special_ability_heal_restores_player_hp_and_debuff_afflicts_the_wild_creature
     let active = game.world.get::<StatusEffects>(wild).unwrap().active;
     assert!(
         active.is_some_and(|a| a.kind == StatusKind::Bleed
-            && a.power == crate::abilities::scaled_power(2, 1)
+            && a.power == crate::abilities::scaled_power(2, 1, crate::tuning::AFFINITY_NEUTRAL)
             && a.remaining == 3),
         "Debuff should inflict the status condition memory_leak declares"
     );

@@ -64,11 +64,15 @@ pub fn ability_power_scale(level: u32) -> f32 {
     1.0 + level as f32 * crate::tuning::ABILITY_POWER_SCALE_PER_LEVEL
 }
 
-/// `power` scaled by `ability_power_scale(level)`, rounded to the nearest
-/// whole point. Negative powers scale too — a sap is a negative-power buff,
-/// and it has to sharpen with level the same way a buff does.
-pub fn scaled_power(power: i32, level: u32) -> i32 {
-    (power as f32 * ability_power_scale(level)).round() as i32
+/// `power` scaled by `ability_power_scale(level)` and by the caster's
+/// `affinity` for this effect's category, rounded once. Negative powers
+/// scale too — a sap is a negative-power buff, and it has to sharpen with
+/// level and with affinity the same way a buff does.
+///
+/// Both factors multiply before the single `round`: rounding after each
+/// would drop points that one combined multiply keeps.
+pub fn scaled_power(power: i32, level: u32, affinity: f32) -> i32 {
+    (power as f32 * ability_power_scale(level) * affinity).round() as i32
 }
 
 /// The cooldown armed on a combatant right after it casts an ability whose
@@ -138,6 +142,34 @@ pub enum AbilityTarget {
     AllEnemies,
 }
 
+/// The category an ability's magnitude belongs to, for affinity purposes —
+/// one per `AbilityEffect` variant that *has* a magnitude. A caster's
+/// affinity for a category multiplies every magnitude in it (see
+/// `Game::ability_affinity`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AffinityKind {
+    Damage,
+    Heal,
+    Buff,
+    Debuff,
+    Drain,
+}
+
+impl AffinityKind {
+    /// Display label, for the manifest screen. A taxonomy label rather than
+    /// authored content, so it lives here and not in a `.ron` — same call
+    /// as `Dir::label`.
+    pub fn label(self) -> &'static str {
+        match self {
+            AffinityKind::Damage => "Damage",
+            AffinityKind::Heal => "Healing",
+            AffinityKind::Buff => "Buffs",
+            AffinityKind::Debuff => "Debuffs",
+            AffinityKind::Drain => "Drain",
+        }
+    }
+}
+
 /// What an ability does to each of its recipients.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum AbilityEffect {
@@ -183,6 +215,25 @@ pub enum AbilityEffect {
     /// Carries no numbers of its own: the whole formula is `taming`'s, and
     /// duplicating any of it here would be a second copy to drift.
     Decompile,
+}
+
+impl AbilityEffect {
+    /// Which affinity category this effect's magnitude falls under, or
+    /// `None` for the two variants that have no magnitude to scale.
+    /// `Decompile` is deliberately `None` rather than a category of its own:
+    /// the `Decompiler` stat and `Perk::ExploitFocus` already move those
+    /// odds, and a third multiplier there is a fourth spelling of the same
+    /// thing.
+    pub fn affinity_kind(&self) -> Option<AffinityKind> {
+        match self {
+            AbilityEffect::Damage { .. } => Some(AffinityKind::Damage),
+            AbilityEffect::Heal { .. } => Some(AffinityKind::Heal),
+            AbilityEffect::Buff { .. } => Some(AffinityKind::Buff),
+            AbilityEffect::Debuff { .. } => Some(AffinityKind::Debuff),
+            AbilityEffect::Drain { .. } => Some(AffinityKind::Drain),
+            AbilityEffect::Cleanse | AbilityEffect::Decompile => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -642,11 +693,84 @@ mod tests {
     #[test]
     fn scaled_power_scales_negative_magnitudes_too() {
         assert_eq!(
-            scaled_power(-4, 20),
+            scaled_power(-4, 20, crate::tuning::AFFINITY_NEUTRAL),
             -16,
             "a sap must sharpen with level the same way a buff does"
         );
-        assert_eq!(scaled_power(0, 20), 0);
+        assert_eq!(scaled_power(0, 20, crate::tuning::AFFINITY_NEUTRAL), 0);
+    }
+
+    #[test]
+    fn neutral_affinity_leaves_scaled_power_unchanged() {
+        // The regression guard on the signature change: at 1.0 this must be
+        // exactly the level-only result the three call sites produced before.
+        let level_only = (8.0 * ability_power_scale(20)).round() as i32;
+        assert_eq!(
+            scaled_power(8, 20, crate::tuning::AFFINITY_NEUTRAL),
+            level_only
+        );
+    }
+
+    #[test]
+    fn affinity_multiplies_on_top_of_the_level_scale() {
+        // One combined multiply, not two rounds of rounding: 8 * 1.15 * 1.5
+        // is 13.8 -> 14, where rounding twice gives 9 * 1.5 = 13.5 -> 14 by
+        // luck at this level and diverges at others.
+        assert_eq!(scaled_power(8, 1, 1.5), 14);
+    }
+
+    #[test]
+    fn affinity_scales_negative_magnitudes_too() {
+        // A sap is a negative-power buff (see scaled_power's doc); an affinity
+        // has to sharpen it, not flip or flatten it.
+        assert_eq!(scaled_power(-4, 20, 1.5), -(scaled_power(4, 20, 1.5)));
+    }
+
+    #[test]
+    fn only_magnitude_carrying_effects_have_an_affinity_category() {
+        use crate::components::{BuffKind, StatusKind};
+        assert_eq!(
+            AbilityEffect::Heal { power: 8 }.affinity_kind(),
+            Some(AffinityKind::Heal)
+        );
+        assert_eq!(
+            AbilityEffect::Damage {
+                power: 6,
+                status: None
+            }
+            .affinity_kind(),
+            Some(AffinityKind::Damage)
+        );
+        assert_eq!(
+            AbilityEffect::Buff {
+                kind: BuffKind::Atk,
+                power: 3,
+                duration: 3
+            }
+            .affinity_kind(),
+            Some(AffinityKind::Buff)
+        );
+        assert_eq!(
+            AbilityEffect::Debuff {
+                kind: StatusKind::Stun,
+                power: 0,
+                duration: 1
+            }
+            .affinity_kind(),
+            Some(AffinityKind::Debuff)
+        );
+        assert_eq!(
+            AbilityEffect::Drain {
+                power: 10,
+                heal_fraction: 0.5
+            }
+            .affinity_kind(),
+            Some(AffinityKind::Drain)
+        );
+        // Cleanse has no number to scale; Decompile's axis is already occupied
+        // by the Decompiler stat and Perk::ExploitFocus.
+        assert_eq!(AbilityEffect::Cleanse.affinity_kind(), None);
+        assert_eq!(AbilityEffect::Decompile.affinity_kind(), None);
     }
 
     #[test]

@@ -765,7 +765,7 @@ fn a_negative_power_buff_saps_effective_attack() {
 
     assert_eq!(
         game.effective_atk(enemies[0]),
-        before + crate::abilities::scaled_power(-6, 1),
+        before + crate::abilities::scaled_power(-6, 1, crate::tuning::AFFINITY_NEUTRAL),
         "a negative buff power subtracts, which is the whole sap mechanic"
     );
 }
@@ -832,7 +832,7 @@ fn a_heal_scales_with_the_users_level() {
 
     assert_eq!(
         game.world.get::<Stats>(player).unwrap().hp,
-        100 + crate::abilities::scaled_power(8, 20),
+        100 + crate::abilities::scaled_power(8, 20, crate::tuning::AFFINITY_NEUTRAL),
         "an 8-point patch at level 20 is 32, not 8"
     );
 }
@@ -867,7 +867,7 @@ fn a_buff_stores_the_scaled_power_so_the_tick_needs_no_change() {
             .active
             .unwrap()
             .power,
-        crate::abilities::scaled_power(3, 20),
+        crate::abilities::scaled_power(3, 20, crate::tuning::AFFINITY_NEUTRAL),
         "the scaled figure is stored, not recomputed at read time"
     );
 }
@@ -902,7 +902,7 @@ fn a_bleed_debuffs_per_round_damage_scales_with_the_users_level() {
             .active
             .unwrap()
             .power,
-        crate::abilities::scaled_power(2, 20),
+        crate::abilities::scaled_power(2, 20, crate::tuning::AFFINITY_NEUTRAL),
         "bleed is flat damage per round, so it needs scaling as much as a heal does"
     );
 }

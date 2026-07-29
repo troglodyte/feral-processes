@@ -32,6 +32,15 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   been seen. Opening it costs no time. Each breach keeps its own map, and
   each level of a shaft its own; the map is written to the save, because a
   level regenerates from its seed but what you have seen of it is history.
+- **Something is holding the bottom.** The deepest room of a shaft is now a
+  lair, marked `&`. Walking in starts the fight; what you face is drawn from
+  the breach tile's biome, from the boss pool rather than the ordinary one,
+  and is seeded off the level itself — so leaving and coming back cannot
+  reroll a shaft's guardian into something easier. Biomes with no boss (no
+  shipped Static Field species is one) field the toughest ordinary program
+  they have instead, which at the bottom of a six-level shaft is no small
+  thing. Jacking out leaves the lair held; killing what is in it clears the
+  shaft for good, and that survives a save.
 - **Caches.** Dead ends now hold something. `braid` deliberately leaves half
   of the maze's dead ends in place, and until now walking one was purely a
   waste of time; three cells per level hide a cache, marked `!` in the view

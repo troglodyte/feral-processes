@@ -289,6 +289,8 @@ pub enum DungeonCellView {
     /// as `Floor` — still drawing it would send the party back down a dead
     /// end they have already walked.
     Cache,
+    /// The shaft's lair, still held. A cleared one comes through as `Floor`.
+    Lair,
 }
 
 /// The party's first-person view of the level around them — see
@@ -335,6 +337,8 @@ pub enum DungeonMapCell {
     /// as `Floor`, so the map answers "where is there still something" and
     /// not merely "where was there once".
     Cache,
+    /// The shaft's lair, still held. A cleared one maps as `Floor`.
+    Lair,
 }
 
 /// A landmark pinned to a mapped cell, over and above what the layout says.

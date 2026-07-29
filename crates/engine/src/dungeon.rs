@@ -97,6 +97,11 @@ pub enum CellKind {
     /// already been emptied is not part of the level, which regenerates from
     /// its spec; it lives in `resources::LevelMemory::looted`.
     Cache,
+    /// The deepest room of the shaft, on the bottom level only, where the
+    /// stairs down would otherwise have been. Walking in starts the boss
+    /// fight — see `Game::rouse_lair`. Whether it has already been cleared
+    /// lives in `resources::LevelMemory::cleared`, not in the level.
+    Lair,
 }
 
 impl CellKind {
@@ -136,7 +141,11 @@ impl LevelSpec {
     /// ranges: adjacent breaches differ in a single low bit of one
     /// coordinate far more often than they differ anywhere else, and levels
     /// carved from seeds that close should not be able to rhyme.
-    fn rng_seed(self) -> u64 {
+    ///
+    /// `pub(crate)` so anything else that has to be a stable property of a
+    /// particular shaft — which program guards its lair, say — can salt this
+    /// rather than invent a second scheme that could collide with it.
+    pub(crate) fn rng_seed(self) -> u64 {
         let mut h = 0xcbf2_9ce4_8422_2325_u64;
         for word in [
             self.world_seed as u64,
@@ -207,10 +216,14 @@ pub fn generate(spec: LevelSpec) -> DungeonLevel {
     braid(&mut level, &mut rng);
 
     // The far cell earns its place either way: the way down on a level that
-    // has one, and on the bottom level the deepest room of the whole shaft,
-    // which is where anything worth the walk belongs.
+    // has one, and on the bottom level the lair — the deepest room of the
+    // whole shaft, and the only place the thing guarding it could sensibly
+    // be. Placed before `place_caches`, which only ever builds on plain
+    // floor and so cannot pave over either.
     let far = furthest_floor_from(&level, level.entry);
-    if !spec.is_bottom() {
+    if spec.is_bottom() {
+        level.set(far.0, far.1, CellKind::Lair);
+    } else {
         level.stairs_down = Some(far);
         level.set(far.0, far.1, CellKind::StairsDown);
     }

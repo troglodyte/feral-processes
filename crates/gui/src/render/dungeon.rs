@@ -145,6 +145,7 @@ fn stair_mark(cell: DungeonCellView) -> Option<char> {
         DungeonCellView::StairsDown => Some('>'),
         DungeonCellView::StairsUp => Some('<'),
         DungeonCellView::Cache => Some('!'),
+        DungeonCellView::Lair => Some('&'),
         _ => None,
     }
 }

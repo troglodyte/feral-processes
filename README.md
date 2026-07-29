@@ -70,6 +70,11 @@ distance that decides what lives down there decides how much of it there
 is: the breach inside your opening viewport is two levels, the ones out at
 the edge of the sector are six. The bottom level has no stairs down.
 
+The deepest room of a shaft is a **lair** (`&`), holding something drawn
+from the breach tile's biome. It is seeded off the shaft, so it is the same
+guardian every time you come back — and the fight is scaled by every level
+you descended to reach it.
+
 Materializing in a sector runs a deep scan that logs how many breaches are
 in it and the bearing of the nearest. One is always within sight of where
 you arrive; the rest are a walk. Each opens onto its own dungeon — two

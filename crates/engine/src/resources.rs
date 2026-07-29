@@ -409,6 +409,9 @@ pub struct LevelMemory {
     pub looted: BTreeSet<(i32, i32)>,
     /// Sealed doors that have been opened, which stay open.
     pub opened: BTreeSet<(i32, i32)>,
+    /// Whether this level's lair has been cleared. Only ever true on the
+    /// bottom level of a shaft, which is the only level that has one.
+    pub cleared: bool,
     /// Where the party was jumped. Kept for the map alone: a corridor that
     /// has cost you something is worth marking, and it is the one landmark
     /// the level's own layout can't tell you about.

@@ -1058,6 +1058,249 @@ fn a_deeper_cache_pays_better() {
     );
 }
 
+/// Walks the party to the bottom of the shaft they are in and stands them
+/// at the mouth of the lair, facing it. Returns the lair's cell.
+fn stand_before_the_lair(game: &mut Game) -> (i32, i32) {
+    loop {
+        let Locale::Dungeon { depth, floors, .. } = locale(game) else {
+            unreachable!("not underground")
+        };
+        if depth >= floors {
+            break;
+        }
+        stand_on_stairs_down(game);
+        game.descend();
+    }
+
+    let level = game
+        .world
+        .resource::<CurrentDungeon>()
+        .0
+        .as_ref()
+        .unwrap()
+        .clone();
+    let lair = (0..level.height)
+        .flat_map(|y| (0..level.width).map(move |x| (x, y)))
+        .find(|&(x, y)| level.cell(x, y) == CellKind::Lair)
+        .expect("the bottom level should hold a lair");
+
+    let (facing, mouth) = [Dir::North, Dir::East, Dir::South, Dir::West]
+        .into_iter()
+        .find_map(|dir| {
+            let (dx, dy) = dir.delta();
+            let neighbour = (lair.0 + dx, lair.1 + dy);
+            level
+                .walkable(neighbour.0, neighbour.1)
+                .then_some((dir.turn_left().turn_left(), neighbour))
+        })
+        .expect("the lair must be reachable");
+
+    let Locale::Dungeon {
+        depth,
+        floors,
+        entrance,
+        ..
+    } = locale(game)
+    else {
+        unreachable!()
+    };
+    game.world.insert_resource(Locale::Dungeon {
+        depth,
+        floors,
+        x: mouth.0,
+        y: mouth.1,
+        facing,
+        entrance,
+    });
+    lair
+}
+
+/// The bottom level puts a lair where a level with a way down puts its
+/// stairs — the deepest room of the shaft, and the only place its guardian
+/// could sensibly be.
+#[test]
+fn only_the_bottom_level_of_a_shaft_holds_a_lair() {
+    let mut game = game();
+    descend(&mut game);
+
+    let lairs = |game: &Game| {
+        let level = game.world.resource::<CurrentDungeon>().0.clone().unwrap();
+        (0..level.height)
+            .flat_map(|y| (0..level.width).map(move |x| (x, y)))
+            .filter(|&(x, y)| level.cell(x, y) == CellKind::Lair)
+            .count()
+    };
+
+    let Locale::Dungeon { floors, .. } = locale(&game) else {
+        unreachable!()
+    };
+    for _ in 1..floors {
+        assert_eq!(lairs(&game), 0, "a level with a way down held a lair");
+        stand_on_stairs_down(&mut game);
+        game.descend();
+    }
+    assert_eq!(lairs(&game), 1, "the bottom of the shaft held no lair");
+}
+
+#[test]
+fn walking_into_the_lair_starts_a_fight() {
+    let mut game = game();
+    descend(&mut game);
+    let lair = stand_before_the_lair(&mut game);
+
+    game.step_forward();
+
+    let Locale::Dungeon { x, y, .. } = locale(&game) else {
+        unreachable!()
+    };
+    assert_eq!((x, y), lair, "the fixture should walk into the lair");
+    assert!(
+        game.has_active_battle(),
+        "the deepest room of the shaft was empty"
+    );
+}
+
+/// Jacking out of the boss fight has to leave the boss there. Otherwise the
+/// bottom of every shaft is cleared by walking in and immediately leaving.
+#[test]
+fn fleeing_the_lair_leaves_it_held() {
+    let mut game = game();
+    descend(&mut game);
+    let lair = stand_before_the_lair(&mut game);
+    game.step_forward();
+    flee_until_clear(&mut game);
+
+    assert_eq!(
+        map_cell(&map(&game), lair.0, lair.1),
+        DungeonMapCell::Lair,
+        "fleeing cleared the lair"
+    );
+
+    // Step out and back in: it should rouse again.
+    game.step_back();
+    game.step_forward();
+    assert!(
+        game.has_active_battle(),
+        "the guardian did not come back after being fled from"
+    );
+}
+
+/// Beating the guardian has to clear the lair for good, or the bottom of a
+/// shaft is a treadmill rather than an ending.
+#[test]
+fn killing_the_guardian_clears_the_lair_for_good() {
+    let mut game = game();
+    descend(&mut game);
+    let lair = stand_before_the_lair(&mut game);
+
+    // Overwhelming force, so this is testing what a win does rather than
+    // whether a level-1 party can manage one.
+    {
+        let player = game.player_entity();
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 100_000;
+        stats.hp = 100_000;
+        stats.atk = 100_000;
+        stats.def = 100_000;
+    }
+
+    game.step_forward();
+    assert!(game.has_active_battle(), "the lair should have roused");
+
+    let mut rounds = 0;
+    while game.has_active_battle() && rounds < 60 {
+        player_attacks(&mut game);
+        rounds += 1;
+    }
+    assert!(!game.has_active_battle(), "60 rounds and it is still up");
+
+    assert_eq!(
+        map_cell(&map(&game), lair.0, lair.1),
+        DungeonMapCell::Floor,
+        "a cleared lair should stop being marked"
+    );
+    // Counting the lair's own line rather than asserting no battle at all:
+    // an ordinary encounter can roll on any step, and would otherwise fail
+    // this test at random.
+    let before = roused_count(&game);
+    game.step_back();
+    game.step_forward();
+    assert_eq!(
+        roused_count(&game),
+        before,
+        "the guardian roused again after being killed"
+    );
+}
+
+/// How many times the lair has announced itself — see `Game::rouse_lair`.
+/// The line is a `MessageKind::Outcome`, so it survives the prune when a
+/// battle ends rather than vanishing with the blow-by-blow.
+fn roused_count(game: &Game) -> usize {
+    game.message_log(200)
+        .iter()
+        .filter(|(_, line)| line.contains("very large"))
+        .count()
+}
+
+#[test]
+fn a_cleared_lair_stays_cleared_across_a_save_and_load() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    game.enter_dungeon(pos.x, pos.y);
+    stand_before_the_lair(&mut game);
+    {
+        let player = game.player_entity();
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 100_000;
+        stats.hp = 100_000;
+        stats.atk = 100_000;
+        stats.def = 100_000;
+    }
+    game.step_forward();
+    let mut rounds = 0;
+    while game.has_active_battle() && rounds < 60 {
+        player_attacks(&mut game);
+        rounds += 1;
+    }
+    assert!(!game.has_active_battle());
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_lair_cleared_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let before = roused_count(&loaded);
+    loaded.step_back();
+    loaded.step_forward();
+    assert_eq!(
+        roused_count(&loaded),
+        before,
+        "loading refilled a lair the party had already cleared"
+    );
+}
+
+/// Which program guards a shaft is a property of the shaft, seeded off its
+/// level spec — so leaving and coming back cannot reroll it into something
+/// easier.
+#[test]
+fn the_same_shaft_always_fields_the_same_guardian() {
+    let name_of_guardian = || {
+        let mut game = Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+        game.enter_dungeon(pos.x, pos.y);
+        stand_before_the_lair(&mut game);
+        game.step_forward();
+        game.battle_view().map(|v| v.groups[0].species_name.clone())
+    };
+    let first = name_of_guardian();
+    assert!(first.is_some(), "the lair should have fielded something");
+    assert_eq!(first, name_of_guardian());
+}
+
 /// True if any of the last `n` log lines contains `needle`.
 fn logged(game: &Game, needle: &str) -> bool {
     game.message_log(12)

@@ -74,6 +74,10 @@ impl Game {
             }
         }
 
+        // Underground this is the shaft's guardian going down, and the one
+        // point that knows it actually died rather than being fled from.
+        self.mark_lair_cleared();
+
         if species.is_boss {
             let qty = {
                 let mut rng = self.world.resource_mut::<GameRng>();

@@ -439,6 +439,97 @@ impl Game {
         }
     }
 
+    /// Starts the boss fight if the party has just walked into an uncleared
+    /// lair.
+    ///
+    /// The species is drawn from the breach tile's biome, like every other
+    /// dungeon encounter, but from the boss pool rather than the ordinary
+    /// one, and from an RNG seeded off the level spec rather than off
+    /// `GameRng`: which thing guards a shaft is a property of the shaft, not
+    /// of how many rolls happened first, so leaving and coming back cannot
+    /// reroll it into something easier.
+    ///
+    /// Not every biome fields a boss — no shipped Static Field species does
+    /// — and there the lair falls back to the toughest ordinary program the
+    /// biome has, which at the bottom of a deep shaft is no small thing.
+    fn rouse_lair(&mut self) {
+        if self.has_active_battle() || self.is_game_over().is_some() {
+            return;
+        }
+        let Some(pos) = self.dungeon_pos() else {
+            return;
+        };
+        if self.cell_underfoot() != Some(CellKind::Lair) || self.lair_cleared(pos) {
+            return;
+        }
+
+        let (ex, ey) = pos.entrance;
+        let Some((species, is_boss)) = self.pick_lair_species(pos) else {
+            return;
+        };
+        let pack = self.spawn_pack(&species, is_boss, ex, ey);
+        if pack.is_empty() {
+            return;
+        }
+        for &member in &pack {
+            self.world.entity_mut(member).insert(DungeonSpawn);
+        }
+        self.remember_fight();
+        self.log_kind(
+            MessageKind::Outcome,
+            "The shaft opens out. Something very large is already awake.",
+        );
+        self.start_battle(pack);
+    }
+
+    fn pick_lair_species(&mut self, pos: DungeonPos) -> Option<(String, bool)> {
+        let (ex, ey) = pos.entrance;
+        let biome = self.world.resource_mut::<WorldMap>().tile(ex, ey).biome;
+        let spec = self.level_spec(pos.depth, pos.floors, pos.entrance);
+
+        let bosses: Vec<String> = self
+            .world
+            .resource::<SpeciesDb>()
+            .boss_habitat_matches(biome)
+            .into_iter()
+            .map(|s| s.id.clone())
+            .collect();
+        if !bosses.is_empty() {
+            // Salted off the level's own stream so the choice of guardian
+            // doesn't correlate with the shape of the room it stands in.
+            const LAIR_SALT: u64 = 0x1A19_B055;
+            let mut rng = StdRng::seed_from_u64(spec.rng_seed() ^ LAIR_SALT);
+            return Some((bosses[rng.random_range(0..bosses.len())].clone(), true));
+        }
+
+        let db = self.world.resource::<SpeciesDb>();
+        db.habitat_matches(biome)
+            .into_iter()
+            .max_by_key(|s| s.base_hp + s.base_atk + s.base_def)
+            .map(|s| (s.id.clone(), false))
+    }
+
+    fn lair_cleared(&self, pos: DungeonPos) -> bool {
+        self.world
+            .resource::<DungeonMemory>()
+            .0
+            .get(&(pos.entrance, pos.depth))
+            .is_some_and(|m| m.cleared)
+    }
+
+    /// Records that this shaft's guardian is down, so its lair does not
+    /// refill. Called from `award_loot`, which is the one place that knows a
+    /// hostile actually died rather than merely being fled from.
+    pub(crate) fn mark_lair_cleared(&mut self) {
+        let Some(pos) = self.dungeon_pos() else {
+            return;
+        };
+        if self.cell_underfoot() != Some(CellKind::Lair) {
+            return;
+        }
+        self.level_memory_mut(pos).cleared = true;
+    }
+
     /// Whether the cache on `cell` of the level the party is in is still
     /// unopened — what both views use to stop advertising an empty one.
     fn cache_unopened(&self, pos: DungeonPos, cell: (i32, i32)) -> bool {
@@ -558,6 +649,7 @@ impl Game {
         // reaching for it.
         self.remember_view();
         self.open_cache();
+        self.rouse_lair();
         // Only a step that actually covered ground draws an encounter —
         // shoving at a wall is not travel, the same call `move_player`
         // makes about an ambush.
@@ -785,6 +877,8 @@ impl Game {
                                 DungeonMapCell::Cache
                             }
                             CellKind::Cache => DungeonMapCell::Floor,
+                            CellKind::Lair if !self.lair_cleared(pos) => DungeonMapCell::Lair,
+                            CellKind::Lair => DungeonMapCell::Floor,
                         }
                     })
                     .collect()
@@ -857,6 +951,8 @@ impl Game {
                             DungeonCellView::Cache
                         }
                         CellKind::Cache => DungeonCellView::Floor,
+                        CellKind::Lair if !self.lair_cleared(pos) => DungeonCellView::Lair,
+                        CellKind::Lair => DungeonCellView::Floor,
                     })
                     .collect()
             })
@@ -869,6 +965,7 @@ impl Game {
             // Emptied on arrival rather than on a key, so this reports what
             // already happened rather than offering a choice.
             CellKind::Cache => Some("An empty casing".to_string()),
+            CellKind::Lair => Some("The lair, and nothing left holding it".to_string()),
             _ => None,
         };
 

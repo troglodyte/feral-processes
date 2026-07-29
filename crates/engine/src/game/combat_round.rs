@@ -294,7 +294,7 @@ impl Game {
 
     pub fn battle_view(&self) -> Option<BattleView> {
         let battle = self.world.get_resource::<BattleState>()?;
-        let decompiler_skill = self.player_decompiler_skill();
+        let bonuses = self.player_decompiler_bonuses();
         let catalyst_potency = self.taming_catalyst().map(|(_, potency)| potency);
 
         let groups: Vec<EnemyGroupView> = battle
@@ -333,7 +333,7 @@ impl Game {
                             stats.hp_fraction(),
                             potency,
                             taming_difficulty,
-                            decompiler_skill,
+                            bonuses,
                         )
                     }),
                 })
@@ -374,7 +374,7 @@ impl Game {
                 .map(|slot| self.battle_action_options(slot))
                 .unwrap_or_default(),
             round: battle.round,
-            player_decompiler: decompiler_skill,
+            player_decompiler: bonuses.skill,
         })
     }
 

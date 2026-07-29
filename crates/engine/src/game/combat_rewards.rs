@@ -242,9 +242,8 @@ impl Game {
             .get(&species_id)
             .map(|s| s.taming_difficulty)
             .unwrap_or(DEFAULT_TAMING_DIFFICULTY);
-        let decompiler_skill = self.player_decompiler_skill();
-        let chance =
-            taming::capture_chance(hp_fraction, potency, taming_difficulty, decompiler_skill);
+        let bonuses = self.player_decompiler_bonuses();
+        let chance = taming::capture_chance(hp_fraction, potency, taming_difficulty, bonuses);
         let roll = {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_bool(chance as f64)

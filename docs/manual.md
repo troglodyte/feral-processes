@@ -497,7 +497,7 @@ Shown in the status panel (always) and the intrusion screen (in battle):
 | **Level / XP** | Grows from defeating or decompiling rogue programs, or (for a compiled program) completing cronjob cycles. Each level-up grows Attack/Defense/max Integrity, fully heals, and grants 1 Perk Point — see [Perks](#perks). **You** have no level ceiling at all; **tamed programs** stop at level 12, and further XP from any source is simply ignored once one is maxed. |
 | **Attack** | How hard your hits land. Battle damage is roughly `move power + attacker's Attack − defender's Defense` (always at least 1). The same formula covers every combatant: your own strike has a fixed move power, while a program — yours or wild — rolls one of its species' moves. |
 | **Defense** | How much incoming damage you shrug off — see the Attack formula above. |
-| **Decompiler** | Player-only skill at cracking ICE. Grows by 1 every time you level up (starts at 0). Adds a flat bonus to your decompile odds — see Decompile chance below. Tamed programs never have this stat; only you attempt decompiles. |
+| **Decompiler** | Player-only skill at cracking ICE. Grows by 1 every time you level up (starts at 0), and equipment can add more. *Multiplies* your decompile odds rather than adding to them, so it makes you better at every attempt without ever flattening the gap between an easy program and a hard one — see Decompile chance below. Tamed programs never have this stat; only you attempt decompiles. |
 | **Decompile chance** | Shown live during an intrusion and on the manifest. Your odds of successfully compiling (taming) the program *this attempt*, given its remaining HP fraction, its species' difficulty, your Decompiler stat, and the potency of the taming catalyst the attempt would spend — weakening it first, leveling up over time, and carrying a stronger catalyst all raise your odds. With no catalyst in hand there's nothing to quote (you can't attempt at all), so the readout says "needs a taming catalyst" instead. |
 
 ### Perks
@@ -511,7 +511,7 @@ on top of whatever you already have, at the same Perk Point cost every time:
 | --- | --- | --- |
 | Keen Scavenger | 2 | +1 percentage point to scan (`g`)'s success chance |
 | Low Power Mode | 2 | Power drains 1 percentage point slower (floor: stops draining entirely) |
-| Exploit Focus | 3 | +1 effective Decompiler skill toward decompile odds |
+| Exploit Focus | 3 | A decompile target's remaining Integrity counts 3% less against you — worth most against a program you haven't worn down, and nothing against one already at death's door |
 | Lean Compiler | 3 | Compiling (`c`) costs 1 less of each required item (min 1 each) |
 | Attacker | 2 | +1 permanent Attack |
 | Defender | 2 | +1 permanent Defense |

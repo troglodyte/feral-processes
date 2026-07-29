@@ -321,7 +321,7 @@ pub const MAX_INDIVIDUAL_ROLL: f32 = 1.2;
 ///
 /// Multiplicative rather than added on top, because `Decompiler` skill has no
 /// ceiling (+1 per player level forever, +1..=4 from each of fifteen gear
-/// items, +1 per `Perk::ExploitFocus` level) while the base it applies to
+/// items) while the base it applies to
 /// cannot exceed 0.33 — the ICE Breaker's `taming_potency` of 0.4 is the
 /// strongest catalyst that ships. As a flat addend, skill 40 was worth +0.80
 /// and pinned every attempt to `CAPTURE_CHANCE_MAX` regardless of species,
@@ -334,12 +334,28 @@ pub const DECOMPILER_SKILL_BONUS: f32 = 0.02;
 /// even a fully-weakened, zero-difficulty target isn't a sure thing on item
 /// potency alone; the two penalties subtract the target's remaining HP
 /// fraction and its species' `taming_difficulty` from that ceiling.
+///
+/// `CAPTURE_HP_PENALTY` is the one of the three a player can move directly,
+/// via `Perk::ExploitFocus` — see
+/// `EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL`. It is also the largest
+/// swing in the formula: at the ceiling of 0.9 it takes a full-HP target's
+/// term down to 0.25, so draining one before attempting a decompile is worth
+/// 3.6x.
 pub const CAPTURE_POTENCY_CEILING: f32 = 0.9;
 pub const CAPTURE_HP_PENALTY: f32 = 0.65;
 pub const CAPTURE_DIFFICULTY_PENALTY: f32 = 0.6;
 
 /// Hard bounds on the final decompile chance, applied after skill bonuses.
 /// No attempt is ever hopeless and none is ever certain.
+///
+/// These are safety rails, not balance levers — in particular the maximum is
+/// unreachable with the content that ships and shouldn't be reached for when
+/// tuning. The only catalyst is the ICE Breaker at `taming_potency` 0.4, so
+/// the best base the formula can produce is a fully-drained Drone at
+/// `0.4 * 0.9 * 0.91 = 0.328`; clearing 0.95 would need a 2.9x skill
+/// multiplier, i.e. `Decompiler` skill 95, against a realistic ceiling near
+/// 38 (level 30 plus the best 8 points of gear). See
+/// `high_skill_does_not_flatten_the_gap_between_easy_and_boss_species`.
 pub const CAPTURE_CHANCE_MIN: f32 = 0.05;
 pub const CAPTURE_CHANCE_MAX: f32 = 0.95;
 
@@ -740,9 +756,19 @@ pub const KEEN_SCAVENGER_BONUS_PER_LEVEL: f64 = 0.01;
 /// multiplier is `1.0 - this * level`, floored at 0.0).
 pub const LOW_POWER_MODE_REDUCTION_PER_LEVEL: f32 = 0.01;
 
-/// Effective Decompiler skill `Perk::ExploitFocus` adds on top of the
-/// player's real `Decompiler` stat, per level.
-pub const EXPLOIT_FOCUS_BONUS_PER_LEVEL: i32 = 1;
+/// How much `Perk::ExploitFocus` shaves off `CAPTURE_HP_PENALTY` per level,
+/// floored at a penalty of 0.
+///
+/// Deliberately *not* effective Decompiler skill, which is what this perk
+/// used to grant. That stat already grows `DECOMPILER_SKILL_PER_LEVEL` per
+/// player level for free, so the perk was buying one level's worth of
+/// automatic growth for `PERK_COST_EXPLOIT_FOCUS` levels' worth of points —
+/// strictly dominated, and invisible next to the free growth. The HP penalty
+/// is a separate axis: it decides how far a target must be worn down before
+/// decompiling it is realistic, so this perk buys attempts on *healthier*
+/// programs rather than better odds across the board. At 0 HP it does
+/// nothing, which is the point.
+pub const EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL: f32 = 0.03;
 
 /// Per-item discount `Perk::LeanCompiler` applies to `Game::craft` recipe
 /// costs, per level (never below 1 each).

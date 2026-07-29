@@ -153,6 +153,19 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ### Balance
 
+- **Exploit Focus buys healthier targets, not better odds.** The perk used
+  to grant +1 effective Decompiler skill per level, which was the same thing
+  levelling up already hands you for free — so three levels' worth of Perk
+  Points bought one level's worth of automatic growth, and the perk was
+  strictly the worst purchase on the menu (about +0.5 percentage points of
+  decompile chance for 3 points, against Attacker's +1 permanent Attack for
+  2). It now shaves 3% per level off how much a target's *remaining
+  Integrity* counts against the attempt. That is a different axis from the
+  Decompiler stat: it is worth most against a program at full health and
+  nothing at all against one you have already drained, so it buys you the
+  option of cracking something early rather than a flat lift on every roll.
+  Draining a target first is still worth up to 3.6x and no stack of the perk
+  inverts that.
 - **Bosses can no longer be decompiled.** A boss is built to be a wall —
   roughly thirteen times the Integrity of the toughest ordinary species —
   and capturing one moved that wall into your roster, where fusing two of

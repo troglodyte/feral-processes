@@ -285,7 +285,7 @@ impl Game {
         let exp = self.world.get::<Experience>(entity);
         let is_tamed = self.world.get::<Tamed>(entity).is_some();
         let custom = self.world.get::<CustomName>(entity).map(|c| c.0.clone());
-        let decompiler_skill = self.player_decompiler_skill();
+        let bonuses = self.player_decompiler_bonuses();
         Some(ManifestView {
             entity,
             name: match &custom {
@@ -334,7 +334,7 @@ impl Game {
                         stats.hp_fraction(),
                         potency,
                         species.taming_difficulty,
-                        decompiler_skill,
+                        bonuses,
                     )
                 }),
                 growth_multiplier: species.growth_multiplier,

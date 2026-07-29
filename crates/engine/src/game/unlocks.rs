@@ -1,9 +1,10 @@
 //! Perk and research progression — what the player has unlocked and what
 //! unlocking costs.
 
+use crate::taming::DecompilerBonuses;
 use crate::tuning::{
     ATTACKER_BONUS_PER_LEVEL, BUFFER_BONUS_PERCENT_PER_LEVEL, BUFFER_MIN_BONUS_PER_LEVEL,
-    DEFENDER_BONUS_PER_LEVEL, EXPLOIT_FOCUS_BONUS_PER_LEVEL,
+    DEFENDER_BONUS_PER_LEVEL, EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL,
 };
 use crate::*;
 
@@ -17,17 +18,23 @@ impl Game {
             .unwrap_or(0)
     }
 
-    /// The player's effective Decompiler skill for decompile-chance
-    /// calculations: their real `Decompiler` stat plus
-    /// `EXPLOIT_FOCUS_BONUS_PER_LEVEL` for every level of `Perk::ExploitFocus`.
-    pub(crate) fn player_decompiler_skill(&self) -> i32 {
+    /// Everything the player brings to a decompile attempt: their real
+    /// `Decompiler` stat (levels plus equipment) and whatever
+    /// `Perk::ExploitFocus` has bought off the target's HP penalty. The one
+    /// place either is assembled — all three `taming::capture_chance` call
+    /// sites go through here, so the odds a player is shown and the odds
+    /// they are rolled against cannot drift apart.
+    pub(crate) fn player_decompiler_bonuses(&self) -> DecompilerBonuses {
         let player = self.player_entity();
-        let base = self
-            .world
-            .get::<Decompiler>(player)
-            .map(|d| d.skill)
-            .unwrap_or(0);
-        base + EXPLOIT_FOCUS_BONUS_PER_LEVEL * self.player_perk_level(Perk::ExploitFocus) as i32
+        DecompilerBonuses {
+            skill: self
+                .world
+                .get::<Decompiler>(player)
+                .map(|d| d.skill)
+                .unwrap_or(0),
+            hp_penalty_reduction: EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL
+                * self.player_perk_level(Perk::ExploitFocus) as f32,
+        }
     }
 
     /// The taming catalyst a decompile attempt would spend, paired with its

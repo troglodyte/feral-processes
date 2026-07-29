@@ -19,9 +19,12 @@ pub enum Perk {
     /// -1 percentage point off Power (hunger) drain per level, down to a
     /// floor of 0 (hunger stops draining at all).
     LowPowerMode,
-    /// +1 effective Decompiler skill per level toward decompile-chance
-    /// calculations, stacking with the real `Decompiler` stat from
-    /// leveling/equipment.
+    /// Softens how much a decompile target's remaining Integrity counts
+    /// against the attempt, by
+    /// `EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL` per level. Worth most
+    /// against a program at full health and nothing at all against a drained
+    /// one — deliberately a different axis from the `Decompiler` stat, which
+    /// scales every attempt and already grows for free on level-up.
     ExploitFocus,
     /// -1 to the cost of each item Compiling (`Game::craft`) requires per
     /// level, down to a minimum of 1 each.
@@ -69,7 +72,10 @@ impl Perk {
                 "+1% chance to find a Core Fragment when scanning (g), per level"
             }
             Perk::LowPowerMode => "Power drains 1% slower per level (floor: doesn't drain at all)",
-            Perk::ExploitFocus => "+1 effective Decompiler skill toward decompile odds, per level",
+            Perk::ExploitFocus => {
+                "Decompile healthier programs — a target's remaining Integrity counts \
+                 3% less against you, per level"
+            }
             Perk::LeanCompiler => {
                 "Compiling costs 1 less of each required item per level (min 1 each)"
             }

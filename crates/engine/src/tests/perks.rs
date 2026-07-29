@@ -80,17 +80,17 @@ fn unlock_perk_rejects_without_enough_points() {
     assert_eq!(game.player_perk_level(Perk::ExploitFocus), 0);
 }
 
-#[test]
-fn exploit_focus_boosts_effective_decompiler_skill_per_level() {
-    let mut game = Game::new(112, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let player = game.player_entity();
+/// Spawns a wild program of the easiest species to decompile, at `hp` of
+/// `max_hp` Integrity. The easiest species on purpose: a hard one at full
+/// health sits close enough to `CAPTURE_CHANCE_MIN` that the clamp, not the
+/// perk, would decide what these tests measure.
+fn spawn_wild_at_hp(game: &mut Game, hp: i32, max_hp: i32) -> Entity {
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .min_by(|a, b| a.taming_difficulty.total_cmp(&b.taming_difficulty))
         .expect("at least one species");
-    let wild = game
-        .world
+    game.world
         .spawn((
             Creature {
                 species: species.id.clone(),
@@ -98,13 +98,20 @@ fn exploit_focus_boosts_effective_decompiler_skill_per_level() {
             Hostile,
             Position { x: 3, y: 3 },
             Stats {
-                hp: 10,
-                max_hp: 10,
+                hp,
+                max_hp,
                 atk: 1,
                 def: 1,
             },
         ))
-        .id();
+        .id()
+}
+
+#[test]
+fn exploit_focus_raises_decompile_odds_against_a_healthy_target_per_level() {
+    let mut game = Game::new(112, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let wild = spawn_wild_at_hp(&mut game, 10, 10);
 
     let before = program_manifest(&game, wild).decompile_chance;
 
@@ -116,11 +123,39 @@ fn exploit_focus_boosts_effective_decompiler_skill_per_level() {
 
     assert!(
         after_one > before,
-        "Exploit Focus should raise the decompile chance shown for the same target"
+        "Exploit Focus should raise the decompile chance shown for a full-Integrity target"
     );
     assert!(
         after_two > after_one,
         "a second level of Exploit Focus should raise it further still"
+    );
+}
+
+/// What makes the perk worth its cost alongside the `Decompiler` stat that
+/// levelling already grants for free: it buys attempts on programs you
+/// haven't worn down, so its value falls away as the target does. A change
+/// that turned it back into a flat bonus would fail here while still passing
+/// the test above.
+#[test]
+fn exploit_focus_is_worth_far_less_against_an_already_drained_target() {
+    let mut game = Game::new(119, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let healthy = spawn_wild_at_hp(&mut game, 10, 10);
+    let drained = spawn_wild_at_hp(&mut game, 1, 10);
+
+    let healthy_before = program_manifest(&game, healthy).decompile_chance.unwrap();
+    let drained_before = program_manifest(&game, drained).decompile_chance.unwrap();
+
+    game.world.get_mut::<Perks>(player).unwrap().points = 10;
+    game.unlock_perk(Perk::ExploitFocus).unwrap();
+
+    let healthy_gain = program_manifest(&game, healthy).decompile_chance.unwrap() - healthy_before;
+    let drained_gain = program_manifest(&game, drained).decompile_chance.unwrap() - drained_before;
+
+    assert!(
+        healthy_gain > drained_gain * 2.0,
+        "the perk should pay off mainly on targets that still have their Integrity: \
+         {healthy_gain} vs {drained_gain}"
     );
 }
 

@@ -80,14 +80,21 @@ A struct of five `f32`s, not a map — the categories are a closed set.
 entirely still parses, *and* a per-field default of 1.0, so the partial form
 above works without naming all five.
 
-Two load-time guards, both following existing patterns:
+Two load-time guards:
 
-- **Finite check** via `SpeciesDef::non_finite_field`, the same mechanism
-  `AbilityDef` and `ItemDef` use. RON accepts bare `NaN`/`inf` and they
-  survive every clamp downstream, so the file is refused at load.
+- **Finite check.** `SpeciesDef` has **no** `non_finite_field` today — that
+  mechanism exists on `AbilityDef` and `ItemDef` only, so this adds it rather
+  than following it. RON accepts bare `NaN`/`inf`, and `f32::clamp` returns
+  NaN for a NaN input, so a clamp alone does not contain it: the check is
+  required, and the file is refused at load with a warning.
+
+  Scoped to `affinities`. `taming_difficulty` and `growth_multiplier` are
+  also unchecked floats on the same struct, and closing that hole is a
+  one-line extension — but it could newly reject a species file that loads
+  today, which is a behaviour change beyond this feature. Noted, not done.
 - **Clamp** to `AFFINITY_MIN`..`AFFINITY_MAX` at load, once, not on every
-  read. A malformed or out-of-range file is skipped or clamped with a logged
-  warning, never a panic.
+  read. `SpeciesDb::load_dir` already binds `Ok(mut def)` and mutates it (it
+  retains known abilities), so the clamp goes there.
 
 ### Player side — perk
 
@@ -231,7 +238,8 @@ TDD, failing test first, per category of risk:
 3. A species file with no `affinities` field parses and resolves 1.0 for all
    five — the `#[serde(default)]` contract that keeps mods working.
 4. A non-finite affinity disqualifies that species file with a warning while
-   the rest of the directory still loads.
+   the rest of the directory still loads. Assert on NaN specifically, not
+   just infinity — NaN is the case a clamp would silently pass through.
 5. An out-of-range affinity is clamped at load, and a read returns the
    clamped value.
 6. A player affinity perk scales the player's own ability **and does not

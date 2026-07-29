@@ -1195,34 +1195,87 @@ fn a_wild_carrier_gets_its_species_damage_affinity() {
 }
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [ ] **Step 2: Run it — it should pass immediately**
 
 Run: `cargo test -p feral-processes-engine wild_carrier 2>&1 | tail -20`
 
-Expected: FAIL — asserts 2.0, gets 1.0 — only if you have *not* yet done
-Task 4. If Task 4 is done this test should pass immediately; that is fine,
-it is a characterisation test for the hostile path. Note in the commit which
-it was.
+Expected: **PASS on the first run.** This is deliberate and it is not a
+TDD violation to flag: it is a **characterisation test**, not a
+red-then-green one. Task 4 already made the hostile path work, because
+`use_ability` serves both sides of a fight and a wild program carries a
+`Creature` component like any other. Nothing here is new code — the test
+exists to pin a behaviour that arrived as a side effect, so a later change
+to `ability_affinity` cannot quietly drop it.
+
+If it *fails*, that is a real problem: it means `ability_affinity` is not
+reachable from a hostile actor, and Task 4 is incomplete. Stop and report
+rather than editing the test.
 
 - [ ] **Step 3: Give shipped species affinities**
 
-Read every file in `assets/species/` first. Then, per the spec's rule rather
-than a fixed table:
+Add exactly these lines, one per file, and **change nothing else in any
+species file**. These six values were chosen against the roster's stats and
+innate ability kits; they are not for the implementer to re-derive.
 
-- At most **one strength and one weakness** per species.
-- Leave most of the roster **neutral**. A roster where every species has five
-  non-1.0 numbers is a roster where affinity means nothing.
-- Pick from what each species already reads as — its `name`, `glyph`, stat
-  spread, `moves`, and `abilities` list. A species whose innate ability is a
-  heal is the obvious `heal` candidate; a `base_atk`-heavy one is the obvious
-  `damage` candidate.
-- Values inside `AFFINITY_MIN`..`AFFINITY_MAX`, and away from the bounds for
-  a first pass — roughly 0.8 to 1.4.
-- Do **not** give a boss a non-neutral affinity in this pass. A boss's stats
-  are already authored huge and `is_boss` bars decompiling, so an affinity on
-  top moves a number nobody has playtested.
+`assets/species/sub_process.ron` — innate `hot_patch` + `redundancy_sync`,
+both heals; 54 HP and 5 ATK. The roster's medic.
 
-Record which species you changed and why in the commit body.
+```ron
+    affinities: (heal: 1.4, damage: 0.8),
+```
+
+`assets/species/sentinel.ron` — innate `sandbox` (Buff Def) and
+`redundancy_sync`; 120 HP, DEF 10, speed 7. The wall.
+
+```ron
+    affinities: (buff: 1.3, damage: 0.85),
+```
+
+`assets/species/cipher.ron` — innate `memory_leak` and `null_route`, both
+debuffs.
+
+```ron
+    affinities: (debuff: 1.35, heal: 0.85),
+```
+
+`assets/species/rootkit.ron` — 96 HP, DEF 8. Deliberately given `drain`
+rather than the `debuff` its innate kit implies: it is the spec's showcase
+for affinity applying to *installed* routines, so a player who moves
+`siphon_cycles` or `leech_array` onto a Rootkit is rewarded for reading the
+manifest. Keeps it distinct from Cipher, the debuff specialist.
+
+```ron
+    affinities: (drain: 1.3, buff: 0.85),
+```
+
+`assets/species/scrapper.ron` — innate `cascade_overflow` (Damage), growth
+1.25, taming 0.45. The accessible workhorse.
+
+```ron
+    affinities: (damage: 1.2, heal: 0.85),
+```
+
+`assets/species/ghost.ron` — 78 HP, ATK 11, DEF 3, no innate abilities. The
+glass cannon.
+
+```ron
+    affinities: (damage: 1.25, buff: 0.85),
+```
+
+**Leave neutral — do not add an `affinities` line to any of these:**
+`construct.ron`, `drone.ron`, `glitch.ron`, `phantom.ron`, `sprite.ron`,
+`trojan.ron`, `virus.ron`, `worm.ron`, `wraith.ron`. Nine of the fifteen
+non-boss species stay neutral on purpose: a roster where everything has an
+affinity is a roster where affinity means nothing.
+
+**Leave the two bosses alone entirely:** `overseer.ron`, `wintermute.ron`.
+Their stats are already authored huge and `is_boss` bars decompiling, so an
+affinity on top moves a number nobody has playtested.
+
+Each of the five categories gets exactly one strength across the roster
+(heal → SubProcess, buff → Sentinel, debuff → Cipher, drain → Rootkit,
+damage → Scrapper and Ghost), so every affinity perk and every category has
+content exercising it.
 
 - [ ] **Step 4: Run the full suite**
 

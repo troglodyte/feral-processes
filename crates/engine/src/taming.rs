@@ -16,6 +16,11 @@ pub struct DecompilerBonuses {
     /// the penalty itself never goes negative — a target's remaining HP must
     /// never *help* the attempt.
     pub hp_penalty_reduction: f32,
+    /// Running `FieldBuffKind::CaptureBoost` power, in percentage points.
+    /// Assembled by `Game::player_decompiler_bonuses` from the player's own
+    /// field buff — that kind is `FieldScope::Run`, so it applies here
+    /// regardless of which party member is doing the decompiling.
+    pub capture_boost_pct: i32,
 }
 
 /// ICE-breaking odds: weaker (lower `hp_fraction`) and easier-compiled
@@ -30,6 +35,11 @@ pub struct DecompilerBonuses {
 /// `player.hp_penalty_reduction` is the one term that does *not* scale the
 /// whole attempt: it only softens how much the target's remaining HP counts
 /// against you, so it is worth most at full HP and exactly nothing at zero.
+///
+/// `player.capture_boost_pct` scales the whole attempt again, on top of
+/// `skill_multiplier`, before the final clamp — a running `CaptureBoost`
+/// field buff raises the odds by that many percentage points regardless of
+/// species or catalyst.
 pub fn capture_chance(
     hp_fraction: f32,
     item_potency: f32,
@@ -41,7 +51,8 @@ pub fn capture_chance(
         * (CAPTURE_POTENCY_CEILING - hp_fraction * hp_penalty)
         * (1.0 - taming_difficulty * CAPTURE_DIFFICULTY_PENALTY);
     let skill_multiplier = 1.0 + player.skill as f32 * DECOMPILER_SKILL_BONUS;
-    (base * skill_multiplier).clamp(CAPTURE_CHANCE_MIN, CAPTURE_CHANCE_MAX)
+    let boost_multiplier = 1.0 + player.capture_boost_pct as f32 / 100.0;
+    (base * skill_multiplier * boost_multiplier).clamp(CAPTURE_CHANCE_MIN, CAPTURE_CHANCE_MAX)
 }
 
 #[cfg(test)]
@@ -53,6 +64,7 @@ mod tests {
     const RAW: DecompilerBonuses = DecompilerBonuses {
         skill: 0,
         hp_penalty_reduction: 0.0,
+        capture_boost_pct: 0,
     };
 
     fn with_skill(skill: i32) -> DecompilerBonuses {
@@ -149,6 +161,33 @@ mod tests {
         );
     }
 
+    /// The whole point of `capture_boost_pct` existing separately from
+    /// `skill`: it's a temporary field-routine effect, not a permanent
+    /// stat, but it has to move the same roll the same way.
+    #[test]
+    fn capture_boost_pct_raises_chance_multiplicatively() {
+        let base = capture_chance(0.5, 0.4, 0.4, RAW);
+        let boosted = capture_chance(
+            0.5,
+            0.4,
+            0.4,
+            DecompilerBonuses {
+                capture_boost_pct: 20,
+                ..RAW
+            },
+        );
+        assert!(
+            boosted > base,
+            "a running CaptureBoost should raise the odds: {boosted} vs {base}"
+        );
+        assert!(
+            (boosted - base * 1.2).abs() < 1e-6,
+            "20 percentage points should scale the chance by 1.2x ahead of the \
+             final clamp: {boosted} vs {}",
+            base * 1.2
+        );
+    }
+
     #[test]
     fn chance_is_always_within_bounds() {
         for hp in [0.0, 0.25, 0.5, 0.75, 1.0] {
@@ -162,6 +201,7 @@ mod tests {
                             DecompilerBonuses {
                                 skill,
                                 hp_penalty_reduction: reduction,
+                                capture_boost_pct: 0,
                             },
                         );
                         assert!((0.05..=0.95).contains(&c), "out of bounds: {c}");

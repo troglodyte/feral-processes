@@ -52,17 +52,25 @@ pub fn apply_setback_xp_penalty(exp: &mut Experience) -> u32 {
 /// pass `BASELINE_GROWTH_MULTIPLIER` for the player, who has no species)
 /// and fully heals. Returns how many levels were gained, so callers can
 /// decide whether to log a "level up" message.
+///
+/// `xp_boost_pct` scales `gained` itself, before anything else runs, by a
+/// running `FieldBuffKind::XpBoost` field buff's power in percentage
+/// points — callers with no such buff pass `0`. Kept as a parameter rather
+/// than read off the world in here: `add_xp` has to stay a pure function so
+/// it's testable without constructing a `Game`.
 pub fn add_xp(
     exp: &mut Experience,
     stats: &mut Stats,
     gained: u32,
     growth_multiplier: f32,
     level_cap: Option<u32>,
+    xp_boost_pct: i32,
 ) -> u32 {
     let cap = level_cap.unwrap_or(u32::MAX);
     if exp.level >= cap {
         return 0;
     }
+    let gained = (gained as f32 * (1.0 + xp_boost_pct as f32 / 100.0)).round() as u32;
     exp.xp += gained;
     let mut levels_gained = 0;
     while exp.level < cap && exp.xp >= exp.xp_to_next {
@@ -96,7 +104,7 @@ mod tests {
     fn xp_below_threshold_does_not_level_up() {
         let mut exp = Experience::default();
         let mut stats = base_stats();
-        let levels = add_xp(&mut exp, &mut stats, 5, BASELINE_GROWTH_MULTIPLIER, None);
+        let levels = add_xp(&mut exp, &mut stats, 5, BASELINE_GROWTH_MULTIPLIER, None, 0);
         assert_eq!(levels, 0);
         assert_eq!(exp.level, 1);
         assert_eq!(exp.xp, 5);
@@ -107,7 +115,14 @@ mod tests {
     fn enough_xp_levels_up_and_grows_stats() {
         let mut exp = Experience::default();
         let mut stats = base_stats();
-        let levels = add_xp(&mut exp, &mut stats, 20, BASELINE_GROWTH_MULTIPLIER, None);
+        let levels = add_xp(
+            &mut exp,
+            &mut stats,
+            20,
+            BASELINE_GROWTH_MULTIPLIER,
+            None,
+            0,
+        );
         assert_eq!(levels, 1);
         assert_eq!(exp.level, 2);
         assert_eq!(stats.max_hp, 10 + HP_PER_LEVEL);
@@ -121,7 +136,14 @@ mod tests {
         let mut exp = Experience::default();
         let mut stats = base_stats();
         // level 1->2 costs 20, 2->3 costs 40: 65 xp should clear both.
-        let levels = add_xp(&mut exp, &mut stats, 65, BASELINE_GROWTH_MULTIPLIER, None);
+        let levels = add_xp(
+            &mut exp,
+            &mut stats,
+            65,
+            BASELINE_GROWTH_MULTIPLIER,
+            None,
+            0,
+        );
         assert_eq!(levels, 2);
         assert_eq!(exp.level, 3);
         assert_eq!(exp.xp, 5);
@@ -134,7 +156,7 @@ mod tests {
         // 1.5x rounds HP_PER_LEVEL (12) to 18 and ATK/DEF_PER_LEVEL (1) to 2,
         // crossing the rounding boundary scaled_growth's doc comment warns
         // about — a smaller multiplier like 1.25 wouldn't move ATK/DEF at all.
-        let levels = add_xp(&mut exp, &mut stats, 20, 1.5, None);
+        let levels = add_xp(&mut exp, &mut stats, 20, 1.5, None, 0);
         assert_eq!(levels, 1);
         assert_eq!(
             stats.max_hp,
@@ -159,7 +181,7 @@ mod tests {
         let mut stats = base_stats();
         for _ in 0..3 {
             let needed = exp.xp_to_next;
-            add_xp(&mut exp, &mut stats, needed, 1.5, None);
+            add_xp(&mut exp, &mut stats, needed, 1.5, None, 0);
         }
         let projected = stats_after_levels(base_stats(), 3, 1.5);
         assert_eq!(stats.max_hp, projected.max_hp);
@@ -182,6 +204,7 @@ mod tests {
             10_000,
             BASELINE_GROWTH_MULTIPLIER,
             Some(CREATURE_MAX_LEVEL),
+            0,
         );
 
         assert_eq!(
@@ -212,6 +235,7 @@ mod tests {
             100_000,
             BASELINE_GROWTH_MULTIPLIER,
             Some(CREATURE_MAX_LEVEL),
+            0,
         );
 
         assert_eq!(
@@ -238,6 +262,7 @@ mod tests {
             100_000,
             BASELINE_GROWTH_MULTIPLIER,
             None,
+            0,
         );
 
         assert!(levels > 0, "an uncapped entity should keep leveling");
@@ -250,6 +275,43 @@ mod tests {
             stats.max_hp > 10,
             "uncapped level-ups should still grow stats"
         );
+    }
+
+    /// A 50% `XpBoost` turns 15 gained xp into 23, clearing the 20-xp
+    /// threshold to level 2 — a case a flat "differs in the right
+    /// direction" assertion wouldn't catch, since the unboosted gain alone
+    /// wouldn't level up at all.
+    #[test]
+    fn xp_boost_pct_scales_gained_xp_before_leveling() {
+        let mut unboosted_exp = Experience::default();
+        let mut unboosted_stats = base_stats();
+        let levels = add_xp(
+            &mut unboosted_exp,
+            &mut unboosted_stats,
+            15,
+            BASELINE_GROWTH_MULTIPLIER,
+            None,
+            0,
+        );
+        assert_eq!(levels, 0, "15 xp alone doesn't clear the 20xp threshold");
+        assert_eq!(unboosted_exp.xp, 15);
+
+        let mut boosted_exp = Experience::default();
+        let mut boosted_stats = base_stats();
+        let levels = add_xp(
+            &mut boosted_exp,
+            &mut boosted_stats,
+            15,
+            BASELINE_GROWTH_MULTIPLIER,
+            None,
+            50,
+        );
+        assert_eq!(
+            levels, 1,
+            "a 50% XpBoost turns 15 xp into 23, clearing the 20xp threshold"
+        );
+        assert_eq!(boosted_exp.level, 2);
+        assert_eq!(boosted_exp.xp, 3, "23 - 20 carries over into the new level");
     }
 
     #[test]

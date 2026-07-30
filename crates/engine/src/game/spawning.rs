@@ -39,6 +39,14 @@ pub(crate) fn swarm_radius(n: u32) -> i32 {
     PACK_GATHER_RADIUS.max(crate::battle::ceil_sqrt(n) as i32)
 }
 
+/// `WILD_SPAWN_CHANCE`, cut by `damp_pct` percentage points of a running
+/// `FieldBuffKind::EncounterDamp` field buff. Floored at 0 rather than
+/// allowed to go negative, so a large enough buff can suppress wandering
+/// encounters entirely but never invert into a spawn bonus.
+pub(crate) fn damped_wild_spawn_chance(damp_pct: i32) -> f64 {
+    (WILD_SPAWN_CHANCE * (1.0 - damp_pct as f64 / 100.0)).max(0.0)
+}
+
 impl Game {
     /// Rolls whether a fresh wild program carries a routine, and which —
     /// the `Routines` payload for one creature, empty on the (usual) miss.
@@ -356,10 +364,11 @@ impl Game {
 
     pub(crate) fn maybe_spawn_wild_creature(&mut self) {
         let player_pos = *self.world.get::<Position>(self.player_entity()).unwrap();
+        let damp_pct = self.field_buff_power(self.player_entity(), FieldBuffKind::EncounterDamp);
         // Roll first: culling is wasted work if nothing was going to spawn.
         let roll = {
             let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_bool(WILD_SPAWN_CHANCE)
+            rng.0.random_bool(damped_wild_spawn_chance(damp_pct))
         };
         if !roll {
             return;

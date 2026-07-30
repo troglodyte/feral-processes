@@ -19,11 +19,12 @@ impl Game {
     }
 
     /// Everything the player brings to a decompile attempt: their real
-    /// `Decompiler` stat (levels plus equipment) and whatever
-    /// `Perk::ExploitFocus` has bought off the target's HP penalty. The one
-    /// place either is assembled — all three `taming::capture_chance` call
-    /// sites go through here, so the odds a player is shown and the odds
-    /// they are rolled against cannot drift apart.
+    /// `Decompiler` stat (levels plus equipment), whatever
+    /// `Perk::ExploitFocus` has bought off the target's HP penalty, and any
+    /// running `CaptureBoost` field buff. The one place all three are
+    /// assembled — all three `taming::capture_chance` call sites go through
+    /// here, so the odds a player is shown and the odds they are rolled
+    /// against cannot drift apart.
     pub(crate) fn player_decompiler_bonuses(&self) -> DecompilerBonuses {
         let player = self.player_entity();
         DecompilerBonuses {
@@ -34,6 +35,7 @@ impl Game {
                 .unwrap_or(0),
             hp_penalty_reduction: EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL
                 * self.player_perk_level(Perk::ExploitFocus) as f32,
+            capture_boost_pct: self.field_buff_power(player, FieldBuffKind::CaptureBoost),
         }
     }
 

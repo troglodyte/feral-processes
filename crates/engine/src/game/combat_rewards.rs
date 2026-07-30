@@ -15,6 +15,12 @@ impl Game {
     /// both sides is rolled once at the better chance rather than twice.
     /// Sorted by item id so a seeded run always consumes its rolls in the
     /// same order.
+    ///
+    /// A running `DropBoost` field buff scales every chance here by its
+    /// power, last — so it applies uniformly regardless of which side of
+    /// the schema a drop came from. The result can run past 1.0; the one
+    /// caller, `award_loot`, already clamps before rolling, so this leaves
+    /// it unclamped rather than duplicating that.
     pub(crate) fn equipment_drops_for(&self, species: &SpeciesDef) -> Vec<(ItemId, f32)> {
         let mut drops: Vec<(ItemId, f32)> = species.equipment_drop.iter().cloned().collect();
         for def in self.world.resource::<ItemDb>().all() {
@@ -33,6 +39,13 @@ impl Game {
             }
         }
         drops.sort_by(|a, b| a.0.as_str().cmp(b.0.as_str()));
+        let boost_pct = self.field_buff_power(self.player_entity(), FieldBuffKind::DropBoost);
+        if boost_pct != 0 {
+            let multiplier = 1.0 + boost_pct as f32 / 100.0;
+            for (_, chance) in &mut drops {
+                *chance *= multiplier;
+            }
+        }
         drops
     }
 
@@ -108,6 +121,10 @@ impl Game {
     /// nothing for the player if they're somehow missing an `Experience`
     /// component (shouldn't happen in practice).
     pub(crate) fn award_player_xp(&mut self, player: Entity, amount: u32) {
+        // `XpBoost` is `FieldScope::Run`, so it reads off the player
+        // regardless of whether `player` here is the player themself (the
+        // only caller today, but the parameter doesn't guarantee it).
+        let xp_boost_pct = self.field_buff_power(self.player_entity(), FieldBuffKind::XpBoost);
         let (levels, new_level) = {
             let mut query = self.world.query::<(&mut Experience, &mut Stats)>();
             let Ok((mut exp, mut stats)) = query.get_mut(&mut self.world, player) else {
@@ -120,6 +137,7 @@ impl Game {
                 crate::tuning::BASELINE_GROWTH_MULTIPLIER,
                 // The player has no level ceiling — only creatures do.
                 None,
+                xp_boost_pct,
             );
             (levels, exp.level)
         };
@@ -151,6 +169,7 @@ impl Game {
         if amount == 0 {
             return;
         }
+        let xp_boost_pct = self.field_buff_power(self.player_entity(), FieldBuffKind::XpBoost);
         let party = self.world.resource::<Party>().0.clone();
         for companion in party {
             let species_growth = self
@@ -181,6 +200,7 @@ impl Game {
                     amount,
                     growth_multiplier,
                     Some(crate::tuning::CREATURE_MAX_LEVEL),
+                    xp_boost_pct,
                 );
             }
             let level = self

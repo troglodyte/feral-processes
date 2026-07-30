@@ -210,6 +210,37 @@ fn the_decompile_preview_follows_the_catalyst_held_not_a_fixed_item() {
 }
 
 #[test]
+fn a_running_capture_boost_field_buff_raises_the_quoted_decompile_odds() {
+    let mut game = Game::new(3106, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_on_player_tile(&mut game);
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 1)]);
+
+    let before = program_manifest(&game, wild)
+        .decompile_chance
+        .expect("holding a catalyst should quote odds");
+
+    let player = game.player_entity();
+    game.world.entity_mut(player).insert(FieldBuff {
+        active: vec![ActiveFieldBuff {
+            kind: FieldBuffKind::CaptureBoost,
+            name: "Test Capture Boost".to_string(),
+            power: 30,
+            remaining: 10,
+            source: BuffSource::Routine,
+        }],
+    });
+
+    let after = program_manifest(&game, wild)
+        .decompile_chance
+        .expect("holding a catalyst should still quote odds");
+
+    assert!(
+        after > before,
+        "a running CaptureBoost should raise the quoted decompile odds: {after} vs {before}"
+    );
+}
+
+#[test]
 fn battle_view_offers_no_decompile_odds_without_a_catalyst() {
     let mut game = Game::new(3105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     start_battle_with_a_wild_program(&mut game);

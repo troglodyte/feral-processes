@@ -201,12 +201,17 @@ pub fn task_progress_system(
                     .map(|p| p.growth_roll)
                     .unwrap_or(Potential::NEUTRAL.growth_roll);
                 let growth_multiplier = species_growth * individual_roll;
+                // A plain bevy system, not a `Game` method — it has no
+                // convenient way to read the player's `FieldBuff` without a
+                // query wired in just for this, and passive cronjob XP is
+                // not one of the paths `XpBoost` was scoped to cover.
                 let levels = progression::add_xp(
                     &mut exp,
                     &mut stats,
                     WORK_XP_PER_CYCLE,
                     growth_multiplier,
                     Some(crate::tuning::CREATURE_MAX_LEVEL),
+                    0,
                 );
                 if levels > 0 {
                     format!(" It levels up to {}!", exp.level)

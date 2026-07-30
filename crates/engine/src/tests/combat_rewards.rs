@@ -156,6 +156,47 @@ fn defeating_a_boss_guarantees_a_cache_of_portal_fragments() {
 }
 
 #[test]
+fn a_running_drop_boost_field_buff_scales_every_equipment_drop_chance() {
+    let mut game = Game::new(38, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|s| !game.equipment_drops_for(s).is_empty())
+        .expect("at least one species should have equipment drops for this test");
+
+    let before = game.equipment_drops_for(&species);
+    assert!(!before.is_empty());
+
+    let player = game.player_entity();
+    game.world.entity_mut(player).insert(FieldBuff {
+        active: vec![ActiveFieldBuff {
+            kind: FieldBuffKind::DropBoost,
+            name: "Test Drop Boost".to_string(),
+            power: 50,
+            remaining: 10,
+            source: BuffSource::Routine,
+        }],
+    });
+
+    let after = game.equipment_drops_for(&species);
+
+    assert_eq!(after.len(), before.len());
+    for ((before_item, before_chance), (after_item, after_chance)) in
+        before.iter().zip(after.iter())
+    {
+        assert_eq!(
+            before_item, after_item,
+            "a DropBoost must not reorder drops"
+        );
+        assert!(
+            (after_chance - before_chance * 1.5).abs() < 1e-6,
+            "a 50% DropBoost should scale every drop chance by 1.5x: \
+             {after_chance} vs {before_chance}"
+        );
+    }
+}
+
+#[test]
 fn award_player_xp_also_grants_party_members_half_as_much() {
     let mut game = Game::new(36, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
@@ -174,6 +215,30 @@ fn award_player_xp_also_grants_party_members_half_as_much() {
         game.world.get::<Experience>(not_in_party).unwrap().xp,
         0,
         "a tamed program outside the party shouldn't gain any XP from a kill"
+    );
+}
+
+#[test]
+fn a_running_xp_boost_field_buff_raises_player_xp_gain() {
+    let mut game = Game::new(361, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+
+    game.world.entity_mut(player).insert(FieldBuff {
+        active: vec![ActiveFieldBuff {
+            kind: FieldBuffKind::XpBoost,
+            name: "Test XP Boost".to_string(),
+            power: 50,
+            remaining: 10,
+            source: BuffSource::Routine,
+        }],
+    });
+
+    game.award_player_xp(player, 10);
+
+    assert_eq!(
+        game.world.get::<Experience>(player).unwrap().xp,
+        15,
+        "a 50% XpBoost should turn a 10 XP award into 15"
     );
 }
 

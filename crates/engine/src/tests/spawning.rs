@@ -1176,3 +1176,26 @@ fn a_wild_carrier_survives_a_save_load_round_trip() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// `damped_wild_spawn_chance` is the small pure function
+/// `Game::maybe_spawn_wild_creature` derives its roll from — asserted
+/// directly rather than through a spawn roll, since the roll itself is
+/// seeded RNG and would make this test flaky.
+#[test]
+fn encounter_damp_reduces_the_wild_spawn_chance_proportionally() {
+    use crate::game::spawning::damped_wild_spawn_chance;
+    use crate::tuning::WILD_SPAWN_CHANCE;
+
+    assert_eq!(damped_wild_spawn_chance(0), WILD_SPAWN_CHANCE);
+    assert_eq!(damped_wild_spawn_chance(40), WILD_SPAWN_CHANCE * 0.6);
+    assert_eq!(
+        damped_wild_spawn_chance(100),
+        0.0,
+        "a full EncounterDamp should suppress wandering spawns entirely"
+    );
+    assert_eq!(
+        damped_wild_spawn_chance(150),
+        0.0,
+        "must floor at 0 rather than invert into a spawn bonus"
+    );
+}

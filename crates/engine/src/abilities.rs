@@ -191,14 +191,14 @@ impl AffinityKind {
     }
 
     /// The affinity perk's per-level rate for this category — see
-    /// `tuning::AFFINITY_PERK_BONUS_PER_LEVEL_FLAT`'s doc for why `Damage`
+    /// `tuning::AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED`'s doc for why `Damage`
     /// and `Drain` need a different (higher) number than the other three.
     /// One lookup here rather than a match at the call site in
     /// `Game::ability_affinity`.
     pub fn perk_bonus_per_level(self) -> f32 {
         match self {
             AffinityKind::Damage | AffinityKind::Drain => {
-                crate::tuning::AFFINITY_PERK_BONUS_PER_LEVEL_FLAT
+                crate::tuning::AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED
             }
             AffinityKind::Heal | AffinityKind::Buff | AffinityKind::Debuff => {
                 crate::tuning::AFFINITY_PERK_BONUS_PER_LEVEL

@@ -883,7 +883,7 @@ pub const AFFINITY_MAX: f32 = 2.0;
 /// move by a visible +1.
 ///
 /// `Damage` and `Drain` do **not** use this constant — see
-/// `AFFINITY_PERK_BONUS_PER_LEVEL_FLAT`, right below.
+/// `AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED`, right below.
 pub const AFFINITY_PERK_BONUS_PER_LEVEL: f32 = 0.05;
 
 /// Affinity a player affinity perk adds per level, for `Damage` and `Drain`
@@ -913,7 +913,7 @@ pub const AFFINITY_PERK_BONUS_PER_LEVEL: f32 = 0.05;
 /// from this perk specifically. That tradeoff (better per-point value early,
 /// a hard ceiling Attacker doesn't have) was the owner's call, not a
 /// balance-formula default.
-pub const AFFINITY_PERK_BONUS_PER_LEVEL_FLAT: f32 = 0.15;
+pub const AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED: f32 = 0.15;
 
 /// Floor on the cooldown a hostile arms after spending a routine.
 ///

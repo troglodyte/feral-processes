@@ -29,7 +29,7 @@ raise your affinity for one `AffinityKind` category (Damage, Heal, Buff,
 Debuff, Drain), in `crates/engine/src/tuning.rs` — but not all by the same
 rate. Field Medic (`Heal`), Overclocker (`Buff`) and Corruption Vector
 (`Debuff`) use `AFFINITY_PERK_BONUS_PER_LEVEL`; Payload Tuning (`Damage`) and
-Siphon Protocol (`Drain`) use the higher `AFFINITY_PERK_BONUS_PER_LEVEL_FLAT`
+Siphon Protocol (`Drain`) use the higher `AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED`
 instead, because those two categories skip the level-scaling every other
 category gets from `abilities::ability_power_scale` (see that constant's
 doc) — the higher rate is what keeps them from being a strictly worse

@@ -42,39 +42,34 @@ pub(super) enum SectionRow {
 /// trimmed.
 pub(super) const MAX_SECTION_ROWS: usize = 6;
 
-/// The AFFINITIES box's own cap, tighter than `MAX_SECTION_ROWS`. Measured
-/// with `MAX_BAND_ROWS` also in place and `best_column_split`'s exact
-/// partition doing the packing (not the greedy it replaced — see that
-/// function's doc): 2 affinity rows clears the tightest supported window
-/// (720px) by 56px; 3 clears by 37px; 4 *also* now clears, at every swept
-/// height, by 17px at its tightest (1000px) — the exact partition recovers
-/// enough margin that 4 is no longer the failure point it was under the
-/// old greedy. 5 is still out of reach: it fails at 4 of the 9 swept
-/// heights, worst at 1000px (-10px). 2 costs nothing shipped regardless of
-/// any of that margin: every species Task 5 gave affinities to carries
-/// exactly one strength and one weakness. A modded species naming three or
-/// more only ever loses rows to the "+N more" note below, never crashes
-/// the page.
+/// The AFFINITIES box's own cap, tighter than `MAX_SECTION_ROWS`. Above 2,
+/// clearance at the tightest window shrinks fast enough that a mod pushing
+/// this constant up is a real layout risk — see
+/// `tests::the_real_worst_case_pages_fit_the_tightest_window` for the
+/// current measured clearance at every value and every window size; that
+/// test is the one place this file lets a pixel figure live, precisely so
+/// a doc comment quoting numbers can't go stale the way this one has
+/// twice already. 2 costs nothing shipped regardless of the margin: every
+/// species Task 5 gave affinities to carries exactly one strength and one
+/// weakness. A modded species naming three or more only ever loses rows
+/// to the "+N more" note below, never crashes the page.
 pub(super) const MAX_AFFINITY_ROWS: usize = 2;
 
-/// The full-width band's own cap. `MAX_SECTION_ROWS` covers the columned
-/// boxes, but the band is what actually overflows once a fifth columned box
-/// (AFFINITIES) exists — that was true against the old greedy packer, where
-/// `MAX_SECTION_ROWS` (6) here overlapped the footer by
-/// 2.00px/10.00px/3.33px at 900px/1000px/1080px (720px and every other
-/// swept height were fine). `best_column_split`'s exact partition (see its
-/// doc) recovers enough margin on its own that this specific case — the
-/// shipped `MAX_AFFINITY_ROWS` (2) combined with `MOVES` at the *full*
-/// `MAX_SECTION_ROWS` (6) — now clears at every swept height too, by 17px
-/// at its tightest. This constant is kept anyway, at the owner's explicit
-/// call: it is real defence against the mod-maximal combination
-/// (`AFFINITIES` at 5, which still fails at 4 of 9 heights even with the
-/// exact partition), and there's value in the headroom regardless of
-/// whether today's shipped worst case strictly needs it. Deliberately a
-/// separate constant from `MAX_SECTION_ROWS` rather than lowering that one:
-/// 6 is also `COMPANION_ROUTINE_SLOT_CAP`, so shrinking `MAX_SECTION_ROWS`
-/// would trim a player's full 6-slot routine kit — nothing shipped has
-/// more than 2 moves, so 4 trims nothing that exists today, only a mod.
+/// The full-width band's own cap, separate from `MAX_SECTION_ROWS` because
+/// `MOVES` is the one box a mod can genuinely grow past what any shipped
+/// species needs, and `best_column_split`'s exact partition (see its doc)
+/// changed how much of that growth the layout can absorb before a
+/// columned box's overflow reaches the band — again, see
+/// `tests::the_real_worst_case_pages_fit_the_tightest_window` for the
+/// current clearance figures rather than a restated copy here. Kept
+/// deliberately below `MAX_SECTION_ROWS` even where the exact partition
+/// alone would clear today's shipped worst case: this is the only defence
+/// against a mod-maximal `MOVES` list regardless of packer, and the
+/// headroom has value on its own, at the owner's explicit call. A separate
+/// constant rather than lowering `MAX_SECTION_ROWS` itself: 6 is also
+/// `COMPANION_ROUTINE_SLOT_CAP`, so shrinking it would trim a player's full
+/// 6-slot routine kit — nothing shipped has more than 2 moves, so 4 trims
+/// nothing that exists today, only a mod.
 pub(super) const MAX_BAND_ROWS: usize = 4;
 
 /// Trims `rows` to `MAX_SECTION_ROWS`, spending the last line on a count of
@@ -241,6 +236,19 @@ pub(super) fn manifest_layout(
 /// could shuffle between runs would be that bug again, one layer up.
 fn best_column_split(heights: &[f32]) -> Vec<usize> {
     let n = heights.len();
+    // The "a handful" in this function's doc is aspirational unless
+    // enforced: at n >= 32, `1u32 << n` panics in debug and silently
+    // evaluates to 1 in release, which would put every box in the left
+    // column. No shipped or moddable page comes remotely close — sections
+    // are hardcoded pushes, not something a mod can add to — so this
+    // should never trip; it exists to fail loudly if that assumption ever
+    // stops holding, rather than silently mis-laying out a page in release.
+    debug_assert!(
+        n < 32,
+        "best_column_split: {n} columned boxes on one page — 1u32 << n panics past 31 in \
+         debug and silently misbehaves in release; this function needs a real bitset before \
+         a page can have this many boxes"
+    );
     let bit = |i: usize| 1u32 << (n - 1 - i);
     let mut best_mask: u32 = 0;
     let mut best_worst = f32::MAX;
@@ -383,14 +391,33 @@ mod tests {
             && inner.y + inner.h <= outer.y + outer.h + 0.5
     }
 
+    /// The floor this test holds the gap between the tallest content box and
+    /// the footer to, on top of "doesn't overlap". Chosen to be meaningful
+    /// rather than trivially true: far past `TOUCH_EPSILON` (0.5px) so this
+    /// is never satisfied by a rounding tail, comfortably below today's
+    /// measured minimums (see the test's own failure output for the current
+    /// numbers — a doc comment restating them would only go stale again,
+    /// which is exactly what happened three times on this branch) so
+    /// legitimate content changes don't trip it by accident, but tight
+    /// enough to catch a real regression while there's still room to see it
+    /// coming rather than after it's already an overlap.
+    const MIN_CLEARANCE_PX: f32 = 10.0;
+
     /// The gate this whole module exists for: the fullest page either subject
     /// can produce has to fit the tightest window, at every window size, with
-    /// nothing overlapping and nothing escaping the frame.
+    /// nothing overlapping, nothing escaping the frame, and real clearance
+    /// left over — not just "doesn't overlap yet". This is the test to cite
+    /// for the current clearance figures at any window size: run it (or read
+    /// its `MIN_CLEARANCE_PX` failure message) rather than trusting a comment
+    /// elsewhere that copied a number out of it.
     ///
-    /// 720px is the binding case — the UI font is 19px there, and the header,
-    /// four meters and the footer eat most of the box before a single stat
-    /// row is drawn. If this fails, the fix is content, not the assertion:
-    /// lower `MAX_SECTION_ROWS`, then merge two of the player's boxes.
+    /// 720px is usually the binding case — the UI font is 19px there, and the
+    /// header, four meters and the footer eat most of the box before a
+    /// single stat row is drawn — but which height actually binds depends on
+    /// the current box set, not a fixed fact about 720px specifically. If
+    /// this fails, the fix is content, not the assertion: lower
+    /// `MAX_SECTION_ROWS` or `MAX_BAND_ROWS`, or merge two of the player's
+    /// boxes.
     #[test]
     fn the_real_worst_case_pages_fit_the_tightest_window() {
         for window_h in WINDOW_HEIGHTS {
@@ -422,6 +449,16 @@ mod tests {
                             );
                         }
                     }
+
+                    let tallest_content_bottom =
+                        l.sections.iter().map(|r| r.y + r.h).fold(0.0_f32, f32::max);
+                    let clearance = l.footer.y - tallest_content_bottom;
+                    assert!(
+                        clearance >= MIN_CLEARANCE_PX,
+                        "the fullest {who} page at {window_w}x{window_h}: only {clearance:.2}px \
+                         between the tallest box and the footer, below the {MIN_CLEARANCE_PX}px \
+                         floor this test holds"
+                    );
                 }
             }
         }

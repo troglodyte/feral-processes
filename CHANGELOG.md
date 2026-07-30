@@ -206,10 +206,11 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   direct stat write — with no shape shared *across the full set* to put in
   a file, so a thirteenth perk still means Rust. (The five affinity perks
   added since are the one family that does share a shape among themselves —
-  one `AFFINITY_PERK_BONUS_PER_LEVEL` and one generic `Perk::affinity_kind`
-  hook cover all five — but the magnitude is still a difficulty knob, not
-  a per-perk `effect:` field, so the catalogue stays name/description/cost
-  only.) Per-level magnitudes stay in `tuning.rs` with the rest of the
+  one generic `Perk::affinity_kind` hook, and one of two per-level rates
+  depending on category, cover all five — but the magnitude is still a
+  difficulty knob, not a per-perk `effect:` field, so the catalogue stays
+  name/description/cost only.) Per-level magnitudes stay in `tuning.rs`
+  with the rest of the
   difficulty knobs; only cost moved. Deleting a file removes that perk from
   the picker without touching levels a save already holds.
 

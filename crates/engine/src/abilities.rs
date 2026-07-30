@@ -156,7 +156,7 @@ pub enum AbilityTarget {
 /// one per `AbilityEffect` variant that *has* a magnitude. A caster's
 /// affinity for a category multiplies every magnitude in it (see
 /// `Game::ability_affinity`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum AffinityKind {
     Damage,
     Heal,
@@ -187,6 +187,22 @@ impl AffinityKind {
             AffinityKind::Buff => crate::perks::Perk::BuffAffinity,
             AffinityKind::Debuff => crate::perks::Perk::DebuffAffinity,
             AffinityKind::Drain => crate::perks::Perk::DrainAffinity,
+        }
+    }
+
+    /// The affinity perk's per-level rate for this category — see
+    /// `tuning::AFFINITY_PERK_BONUS_PER_LEVEL_FLAT`'s doc for why `Damage`
+    /// and `Drain` need a different (higher) number than the other three.
+    /// One lookup here rather than a match at the call site in
+    /// `Game::ability_affinity`.
+    pub fn perk_bonus_per_level(self) -> f32 {
+        match self {
+            AffinityKind::Damage | AffinityKind::Drain => {
+                crate::tuning::AFFINITY_PERK_BONUS_PER_LEVEL_FLAT
+            }
+            AffinityKind::Heal | AffinityKind::Buff | AffinityKind::Debuff => {
+                crate::tuning::AFFINITY_PERK_BONUS_PER_LEVEL
+            }
         }
     }
 }

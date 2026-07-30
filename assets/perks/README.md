@@ -23,22 +23,29 @@ becoming a programming language. So a thirteenth perk means a new `Perk`
 variant in `crates/engine/src/perks.rs` plus a hook wherever its effect
 belongs — see the repo's `CLAUDE.md`.
 
-**The five `*_affinity` perks share one magnitude, not five.** Payload
+**The five `*_affinity` perks share two magnitudes, not five.** Payload
 Tuning, Field Medic, Overclocker, Corruption Vector and Siphon Protocol each
 raise your affinity for one `AffinityKind` category (Damage, Heal, Buff,
-Debuff, Drain) by the same `AFFINITY_PERK_BONUS_PER_LEVEL` per level, in
-`crates/engine/src/tuning.rs` — one constant, because all five perks are the
-same shape, not five identical knobs to keep in sync by hand. The result is
-clamped at `AFFINITY_MAX`, the same ceiling a species file is clamped to at
-load — perk levels are uncapped, so without the clamp a long enough game
-would let your own casts exceed the bound every other affinity is held to.
-They scale **only your own** ability casts, never a companion's: a
-companion's affinity is its species' business (`SpeciesDef::affinities`), and
-a party-wide perk would double-multiply against it. As with every perk here,
+Debuff, Drain), in `crates/engine/src/tuning.rs` — but not all by the same
+rate. Field Medic (`Heal`), Overclocker (`Buff`) and Corruption Vector
+(`Debuff`) use `AFFINITY_PERK_BONUS_PER_LEVEL`; Payload Tuning (`Damage`) and
+Siphon Protocol (`Drain`) use the higher `AFFINITY_PERK_BONUS_PER_LEVEL_FLAT`
+instead, because those two categories skip the level-scaling every other
+category gets from `abilities::ability_power_scale` (see that constant's
+doc) — the higher rate is what keeps them from being a strictly worse
+purchase than the `Attacker` perk. `AffinityKind::perk_bonus_per_level`
+picks the right one, so a perk's category decides its rate rather than a
+match at each of the five call sites. The result is clamped at
+`AFFINITY_MAX`, the same ceiling a species file is clamped to at load — perk
+levels are uncapped, so without the clamp a long enough game would let your
+own casts exceed the bound every other affinity is held to. They scale
+**only your own** ability casts, never a companion's: a companion's
+affinity is its species' business (`SpeciesDef::affinities`), and a
+party-wide perk would double-multiply against it. As with every perk here,
 the `description` below is authored text — the engine never derives it from
-the constant, so retuning `AFFINITY_PERK_BONUS_PER_LEVEL` leaves the wording
-stale (still quoting the old percentage) until someone edits the five files
-to match.
+the constant, so retuning either rate leaves the wording stale (still
+quoting the old percentage) until someone edits the affected files to
+match.
 
 What *is* here is worth having: the wording players read, and the price they
 pay. Both are things you'd want to change without a compiler.

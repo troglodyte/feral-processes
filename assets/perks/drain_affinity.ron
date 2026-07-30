@@ -1,6 +1,6 @@
 (
     id: DrainAffinity,
     name: "Siphon Protocol",
-    description: "Your own siphons take more. +5% drain damage per level.",
+    description: "Your own siphons take more. +15% drain damage per level.",
     cost: 2,
 )

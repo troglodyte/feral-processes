@@ -3,8 +3,8 @@
 
 use crate::abilities::AbilityId;
 use crate::tuning::{
-    AFFINITY_MAX, AFFINITY_NEUTRAL, AFFINITY_PERK_BONUS_PER_LEVEL, DEFAULT_BASE_SPEED,
-    DEFEND_DEF_BONUS, INITIATIVE_DIE, PLAYER_BASE_SPEED,
+    AFFINITY_MAX, AFFINITY_NEUTRAL, DEFAULT_BASE_SPEED, DEFEND_DEF_BONUS, INITIATIVE_DIE,
+    PLAYER_BASE_SPEED,
 };
 use crate::*;
 
@@ -657,7 +657,7 @@ impl Game {
         };
         if actor == self.player_entity() {
             let affinity = AFFINITY_NEUTRAL
-                + AFFINITY_PERK_BONUS_PER_LEVEL * self.player_perk_level(kind.perk()) as f32;
+                + kind.perk_bonus_per_level() * self.player_perk_level(kind.perk()) as f32;
             return affinity.min(AFFINITY_MAX);
         }
         self.world

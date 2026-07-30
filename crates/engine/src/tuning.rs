@@ -869,20 +869,51 @@ pub const AFFINITY_NEUTRAL: f32 = 1.0;
 pub const AFFINITY_MIN: f32 = 0.5;
 pub const AFFINITY_MAX: f32 = 2.0;
 
-/// Affinity a player affinity perk adds per level: the perk's multiplier is
-/// `AFFINITY_NEUTRAL + this * level`, clamped at `AFFINITY_MAX` in
-/// `Game::ability_affinity` the same way a species' affinity is clamped at
-/// load. One shared constant rather than five identical ones, because all
-/// five affinity perks are the same shape — see `Perk::affinity_kind`.
+/// Affinity a player affinity perk adds per level, for the three
+/// *level-scaled* categories (`Heal`, `Buff`, `Debuff`): the perk's
+/// multiplier is `AFFINITY_NEUTRAL + this * level`, clamped at
+/// `AFFINITY_MAX` in `Game::ability_affinity` the same way a species'
+/// affinity is clamped at load. One shared constant rather than three
+/// identical ones, because those perks are the same shape — see
+/// `Perk::affinity_kind` and `AffinityKind::perk_bonus_per_level`.
 ///
 /// Higher than `EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL` (0.03) on
-/// purpose rather than matching it: `Damage` and `Drain` deliberately skip
-/// level scaling (see `ABILITY_POWER_SCALE_PER_LEVEL`'s doc), so their
-/// magnitudes stay small next to a heal or buff's, and a 3% nudge on a
-/// small `i32` power rounds away to nothing for most shipped abilities —
-/// `packet_shred` and `kernel_panic` both round-trip unchanged at one perk
-/// level. At 0.05 the same abilities move by a visible +1.
+/// purpose rather than matching it: a 3% nudge on a small `i32` power rounds
+/// away to nothing for most shipped abilities. At 0.05 the same abilities
+/// move by a visible +1.
+///
+/// `Damage` and `Drain` do **not** use this constant — see
+/// `AFFINITY_PERK_BONUS_PER_LEVEL_FLAT`, right below.
 pub const AFFINITY_PERK_BONUS_PER_LEVEL: f32 = 0.05;
+
+/// Affinity a player affinity perk adds per level, for `Damage` and `Drain`
+/// only — deliberately a different rate from `AFFINITY_PERK_BONUS_PER_LEVEL`,
+/// not a second copy of the same number.
+///
+/// `Damage` and `Drain` route through `abilities::scaled_affinity_power`,
+/// which skips `ability_power_scale` on purpose: `compute_damage` already
+/// adds the caster's ATK, which grows with level on its own, so scaling the
+/// authored power by level too would double-count that growth (see
+/// `scaled_affinity_power`'s doc). Every other category goes through
+/// `abilities::scaled_power` instead, which *does* carry `ability_power_scale`
+/// (up to 7x at the level cap) on top of the affinity multiplier — so the
+/// same percentage-per-level buys those categories far more than it buys
+/// Damage or Drain, whose total scaling is the affinity term alone.
+///
+/// At the shared 0.05 rate, Payload Tuning and Siphon Protocol were
+/// strictly worse value than the `Attacker` perk for every shipped
+/// Damage/Drain ability except `broadcast_storm`: `compute_damage` gives
+/// Attacker +1 flat damage per level for 2 Perk Points on *every* attack,
+/// while 0.05/level of authored `power` 10 (`packet_shred`, `siphon_cycles`)
+/// is only +0.5 damage per level for the same 2 points, and only on that
+/// one category. 0.15 makes the level-for-level comparison favor the
+/// affinity perk instead (1.5 damage per level against Attacker's 1), at
+/// the cost of reaching `AFFINITY_MAX` sooner — 7 levels / 14 Perk Points,
+/// instead of 20 levels / 40 — after which further levels buy nothing more
+/// from this perk specifically. That tradeoff (better per-point value early,
+/// a hard ceiling Attacker doesn't have) was the owner's call, not a
+/// balance-formula default.
+pub const AFFINITY_PERK_BONUS_PER_LEVEL_FLAT: f32 = 0.15;
 
 /// Floor on the cooldown a hostile arms after spending a routine.
 ///

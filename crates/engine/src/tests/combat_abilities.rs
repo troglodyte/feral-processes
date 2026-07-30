@@ -7,7 +7,8 @@ use crate::*;
 
 use super::support::*;
 use crate::tuning::{
-    AFFINITY_MAX, AFFINITY_NEUTRAL, AFFINITY_PERK_BONUS_PER_LEVEL, COMPANION_COMMAND_FATIGUE_COST,
+    AFFINITY_MAX, AFFINITY_NEUTRAL, AFFINITY_PERK_BONUS_PER_LEVEL,
+    AFFINITY_PERK_BONUS_PER_LEVEL_FLAT, COMPANION_COMMAND_FATIGUE_COST,
 };
 
 #[test]
@@ -1295,6 +1296,35 @@ fn a_player_affinity_perk_scales_the_players_own_ability() {
     assert_eq!(
         game.ability_affinity(player, &effect),
         AFFINITY_NEUTRAL + 2.0 * AFFINITY_PERK_BONUS_PER_LEVEL
+    );
+}
+
+/// `Damage`/`Drain` use a different (higher) per-level rate than `Heal` —
+/// see `AFFINITY_PERK_BONUS_PER_LEVEL_FLAT`'s doc. Same shape as the test
+/// above, but for `DamageAffinity`, to prove `AffinityKind::perk_bonus_per_level`
+/// actually dispatches rather than both categories silently sharing one rate.
+#[test]
+fn a_damage_affinity_perk_uses_the_flat_rate_not_the_level_scaled_one() {
+    let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let effect = AbilityEffect::Damage {
+        power: 10,
+        status: None,
+    };
+    let before = game.ability_affinity(player, &effect);
+
+    {
+        let mut perks = game.world.get_mut::<Perks>(player).unwrap();
+        perks.points = 99;
+    }
+    game.unlock_perk(Perk::DamageAffinity).unwrap();
+    game.unlock_perk(Perk::DamageAffinity).unwrap();
+
+    assert_eq!(before, AFFINITY_NEUTRAL);
+    assert_eq!(
+        game.ability_affinity(player, &effect),
+        AFFINITY_NEUTRAL + 2.0 * AFFINITY_PERK_BONUS_PER_LEVEL_FLAT,
+        "Damage must scale by the flat rate, not AFFINITY_PERK_BONUS_PER_LEVEL"
     );
 }
 

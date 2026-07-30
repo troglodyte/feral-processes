@@ -316,6 +316,16 @@ fn the_original_seven_perks_keep_their_positions() {
     assert_eq!(all[4], Perk::Attacker);
     assert_eq!(all[5], Perk::Defender);
     assert_eq!(all[6], Perk::Buffer);
+    // The five affinity perks are just as save-format-fixed as the
+    // original seven once shipped: reordering *among themselves* would
+    // pass a test that only pins indices 0-6 and checks len() == 12, while
+    // silently turning one player's DamageAffinity levels into
+    // HealAffinity levels on load.
+    assert_eq!(all[7], Perk::DamageAffinity);
+    assert_eq!(all[8], Perk::HealAffinity);
+    assert_eq!(all[9], Perk::BuffAffinity);
+    assert_eq!(all[10], Perk::DebuffAffinity);
+    assert_eq!(all[11], Perk::DrainAffinity);
     assert_eq!(all.len(), 12);
 }
 

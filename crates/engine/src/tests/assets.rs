@@ -2,7 +2,7 @@
 
 use super::support::*;
 use crate::abilities::AffinityKind;
-use crate::tuning::{AFFINITY_MAX, AFFINITY_NEUTRAL};
+use crate::tuning::{AFFINITY_MAX, AFFINITY_MIN, AFFINITY_NEUTRAL};
 use crate::*;
 
 #[test]
@@ -261,6 +261,22 @@ fn an_out_of_range_affinity_is_clamped_at_load() {
     let game = Game::new(1, DifficultyMode::Forgiving, &dir).unwrap();
     let aff = game.species_affinities("test_healer").unwrap();
     assert_eq!(aff.get(AffinityKind::Heal), AFFINITY_MAX);
+}
+
+#[test]
+fn an_affinity_below_the_floor_is_clamped_at_load() {
+    let body = AFFINITY_SPECIES.replace("heal: 1.5", "heal: 0.0");
+    let dir = super::support::modded_assets_dir(
+        "affinity_clamped_low",
+        &[],
+        &[],
+        &[("test_healer.ron", &body)],
+        &[],
+        &[],
+    );
+    let game = Game::new(1, DifficultyMode::Forgiving, &dir).unwrap();
+    let aff = game.species_affinities("test_healer").unwrap();
+    assert_eq!(aff.get(AffinityKind::Heal), AFFINITY_MIN);
 }
 
 #[test]

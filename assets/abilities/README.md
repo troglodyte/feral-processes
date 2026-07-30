@@ -173,6 +173,14 @@ scaling the flat term as well would count the same growth twice.
 A wild program has no level — it scales by zone and distance — so a carrier
 scales its routine from the current zone instead.
 
+`power` also carries a caster-side multiplier that has nothing to do with
+level: every effect above belongs to an `AffinityKind` category (`Damage`,
+`Heal`, `Buff`, `Debuff`, `Drain`), and the caster's affinity for that
+category — from its species' `affinities` field, or from the player's
+matching perk — multiplies the magnitude on top of everything in this
+section. See `assets/species/README.md`'s `affinities` entry for the
+schema and the categories.
+
 ## Referencing an ability from a species
 
 In a species file, `abilities` is a list of entries naming an `id` and the

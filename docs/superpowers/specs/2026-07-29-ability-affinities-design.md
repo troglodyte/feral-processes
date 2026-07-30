@@ -107,9 +107,17 @@ Five new `assets/perks/*.ron` files carry name, description and cost, exactly
 as the seven existing perks do. Cost 2, matching `Attacker`.
 
 The magnitude is **one shared const**, `AFFINITY_PERK_BONUS_PER_LEVEL`, in
-`tuning.rs` at 0.03 — the same figure as `EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL`,
-the closest existing analogue. Five identical consts would be five things to
-keep in sync. A perk's affinity is `1.0 + 0.03 × level`.
+`tuning.rs`. Five identical consts would be five things to keep in sync.
+
+> **Revised at implementation (Task 3):** shipped at **0.05**, not the 0.03
+> proposed here to match `EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL`.
+> `Damage` and `Drain` deliberately skip level scaling (see the Damage
+> section below), so their authored `power` is a small `i32` — at 0.03 per
+> level, one purchase of Payload Tuning or Siphon Protocol rounds straight
+> back to the unmodified value for most shipped abilities (`packet_shred`
+> and `kernel_panic` both round-trip unchanged at one perk level), buying
+> nothing perceptible. 0.05 moves the same abilities by a visible +1. A
+> perk's affinity is `1.0 + 0.05 × level`.
 
 `Perk::affinity_kind() -> Option<AffinityKind>` gives one generic hook in the
 read path rather than five bespoke ones. This is the shared shape being
@@ -178,8 +186,17 @@ compound:
   authored power. Reachable, and it is the modder's choice — that is the
   moddability contract.
 - **Player**: uncapped level → 7x from level, but affinity comes only from
-  perks at 0.03/level, so 2.0 needs ~33 perk levels ≈ 66 Perk Points at 1 per
-  level-up. Distant, not unreachable.
+  perks at 0.05/level.
+
+> **Revised at implementation:** the perk path clamps at `AFFINITY_MAX`
+> (2.0) in `Game::ability_affinity`, the same way a species' affinity
+> clamps at load — this spec's framing above, that the player ceiling is
+> merely "distant, not unreachable," was wrong to imply the perk multiplier
+> keeps growing past 2.0. At 0.05/level the clamp is reached at **level 20,
+> i.e. 40 Perk Points** (one per level-up), not the ~33 levels / 66 points
+> this spec computed for the discarded 0.03 rate. Clamping was the owner's
+> call once 0.05 made the ceiling reachable in an ordinary playthrough
+> rather than a hypothetical one.
 
 `AFFINITY_MIN` 0.5 / `AFFINITY_MAX` 2.0 is a wider band than the existing
 `MIN_INDIVIDUAL_ROLL`..`MAX_INDIVIDUAL_ROLL` (0.8–1.2), deliberately, per the
@@ -270,7 +287,7 @@ cargo fmt
 
 `balance_sim` not moving is the *expected* result, not a pass: it models no
 abilities, so it cannot see this feature. **Affinities ship with no automated
-balance coverage.** Every magnitude here — 0.03 per perk level, the 0.5–2.0
+balance coverage.** Every magnitude here — 0.05 per perk level, the 0.5–2.0
 clamp, and whatever the shipped species files claim — is
 arithmetic-plausible and unplayed, the same state the ability set and the
 dungeon tuning are in. Say so rather than implying the green suite is

@@ -13,6 +13,45 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Affinities
+
+- **A species can now be good at something, not just tougher or softer.**
+  Five categories — `damage`, `heal`, `buff`, `debuff`, `drain`, one for
+  every `AbilityEffect` that carries a magnitude — get a per-species
+  multiplier declared in the species' `.ron` file, clamped to 0.5–2.0 at
+  load. It applies to whatever is *installed* in a program's routine slot,
+  not only to abilities its species natively grants, so a species with a
+  strong heal affinity and no innate heal is now a reason to pop a
+  researched or extracted heal routine onto it rather than another program.
+  Six shipped species carry one strength and one weakness apiece —
+  SubProcess leans heal over damage, Sentinel buff over damage, Cipher
+  debuff over heal, Rootkit drain over buff, Scrapper damage over heal,
+  Ghost damage over buff — and the rest of the roster, both bosses
+  included, stays neutral across the board. `Cleanse` and `Decompile` have
+  no magnitude, so no affinity ever touches them.
+- **Five new perks buy the same specialization for the player**: Payload
+  Tuning, Field Medic, Overclocker, Corruption Vector, and Siphon Protocol,
+  2 Perk Points each, +5% per level to their category, clamped at the same
+  2.0 ceiling a species' own affinity is. A player perk only ever sharpens
+  the *player's* own casts — a companion answers to its species instead —
+  and the two sources can never stack: the player has no `Creature`
+  component to hold a species affinity, and a companion has no `Perks` to
+  hold a perk one.
+- **The manifest screen shows a program's non-neutral affinities**, up to
+  two, with any further ones collapsed into a "+N more" line rather than
+  crowding the panel.
+- **No save-format bump.** Species affinities are `.ron` data, reloaded
+  fresh every start same as any other species field; the five new `Perk`
+  variants were appended to the end of the enum rather than inserted, so
+  every index an existing save already holds in `PlayerSave::unlocked_perks`
+  still points at the same perk it always did.
+- **The magnitudes are unplayed.** The +5%-per-level rate, the 0.5–2.0
+  clamp, and all twelve shipped species values are arithmetic-plausible and
+  nothing more — none of it has been through an actual playthrough, and
+  `balance_sim` structurally cannot vouch for it either, since that
+  simulator models no abilities at all. A green suite here is evidence the
+  arithmetic doesn't crash, not evidence the numbers are right.
+
 ### Dungeons
 
 - **First-person dungeon levels.** Every zone is now seeded with a handful

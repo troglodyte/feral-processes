@@ -34,7 +34,13 @@ assets, `bevy` + `bevy_egui` (gui). Spec:
   documented `pub const`s. Do not inline them in formulas or duplicate `.ron`
   values into them.
 - **Affinity range:** `AFFINITY_MIN = 0.5`, `AFFINITY_MAX = 2.0`,
-  `AFFINITY_NEUTRAL = 1.0`, `AFFINITY_PERK_BONUS_PER_LEVEL = 0.03`.
+  `AFFINITY_NEUTRAL = 1.0`, `AFFINITY_PERK_BONUS_PER_LEVEL = 0.03`. **Shipped
+  at 0.05 instead** — this plan was written against 0.03 and got revised
+  during Task 3 because `Damage`/`Drain` skip level scaling, so 0.03 rounded
+  away to nothing on a small `i32` power for most shipped abilities. See
+  `tuning.rs`'s doc comment on the const. The perk path also ended up
+  clamped at `AFFINITY_MAX` in `Game::ability_affinity`, which Task 4 below
+  does not show.
 - **Update `assets/species/README.md` and `assets/perks/README.md`** in the
   same change as the schema they document. Also root `README.md` and
   `CHANGELOG.md`.
@@ -169,13 +175,22 @@ pub const AFFINITY_MIN: f32 = 0.5;
 pub const AFFINITY_MAX: f32 = 2.0;
 
 /// Affinity a player affinity perk adds per level: the perk's multiplier is
-/// `AFFINITY_NEUTRAL + this * level`. One shared constant rather than five
-/// identical ones, because all five affinity perks are the same shape — see
-/// `Perk::affinity_kind`. Matches
-/// `EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL`, the closest existing
-/// analogue among the perks that multiply rather than add.
-pub const AFFINITY_PERK_BONUS_PER_LEVEL: f32 = 0.03;
+/// `AFFINITY_NEUTRAL + this * level`, clamped at `AFFINITY_MAX` in
+/// `Game::ability_affinity` the same way a species' affinity is clamped at
+/// load. One shared constant rather than five identical ones, because all
+/// five affinity perks are the same shape — see `Perk::affinity_kind`.
+///
+/// Higher than `EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL` (0.03) on
+/// purpose rather than matching it: `Damage` and `Drain` deliberately skip
+/// level scaling, so their magnitudes stay small next to a heal or buff's,
+/// and a 3% nudge on a small `i32` power rounds away to nothing for most
+/// shipped abilities. At 0.05 the same abilities move by a visible +1.
+pub const AFFINITY_PERK_BONUS_PER_LEVEL: f32 = 0.05;
 ```
+
+*(Shipped exactly as above — the 0.03 this plan opened with, above in Global
+Constraints, was revised to 0.05 before this constant landed; this code
+block already reflects the shipped value and reasoning.)*
 
 - [ ] **Step 4: Add `AffinityKind` and the mapping**
 
@@ -789,7 +804,7 @@ In `crates/engine/src/abilities.rs`, in `impl AffinityKind`:
 (
     id: HealAffinity,
     name: "Field Medic",
-    description: "Your own repair routines mend deeper. +3% healing per level.",
+    description: "Your own repair routines mend deeper. +5% healing per level.",
     cost: 2,
 )
 ```
@@ -800,7 +815,7 @@ In `crates/engine/src/abilities.rs`, in `impl AffinityKind`:
 (
     id: DamageAffinity,
     name: "Payload Tuning",
-    description: "Your own offensive routines bite harder. +3% damage per level.",
+    description: "Your own offensive routines bite harder. +5% damage per level.",
     cost: 2,
 )
 ```
@@ -811,7 +826,7 @@ In `crates/engine/src/abilities.rs`, in `impl AffinityKind`:
 (
     id: BuffAffinity,
     name: "Overclocker",
-    description: "Your own boosts and saps run stronger. +3% per level.",
+    description: "Your own boosts and saps run stronger. +5% per level.",
     cost: 2,
 )
 ```
@@ -822,7 +837,7 @@ In `crates/engine/src/abilities.rs`, in `impl AffinityKind`:
 (
     id: DebuffAffinity,
     name: "Corruption Vector",
-    description: "Your own afflictions land heavier. +3% per level.",
+    description: "Your own afflictions land heavier. +5% per level.",
     cost: 2,
 )
 ```
@@ -833,7 +848,7 @@ In `crates/engine/src/abilities.rs`, in `impl AffinityKind`:
 (
     id: DrainAffinity,
     name: "Siphon Protocol",
-    description: "Your own siphons take more. +3% drain damage per level.",
+    description: "Your own siphons take more. +5% drain damage per level.",
     cost: 2,
 )
 ```
@@ -1474,7 +1489,8 @@ Under `## Unreleased`, add an `### Affinities` block in the voice of the
 existing entries. State explicitly that **there is no save-format bump** and
 why (species affinities are data; `Perk` variants were appended so existing
 indices stay valid). Say plainly that the magnitudes are unplayed — the
-0.03 per perk level, the 0.5-2.0 clamp, and the shipped species values are
+0.05 per perk level (shipped; this plan opened with 0.03, see Global
+Constraints), the 0.5-2.0 clamp, and the shipped species values are
 arithmetic-plausible and have never been playtested, and `balance_sim`
 cannot see them because it models no abilities.
 

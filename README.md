@@ -177,6 +177,28 @@ to fuse two programs into one stronger one — the result takes the
 higher-level parent's species plus half the lower one's stats, and anything
 can only be fused three times.
 
+## Affinities
+
+A species' `.ron` file can declare it's good at something: a per-category
+multiplier on the magnitude of any ability that ends up running on it —
+`damage`, `heal`, `buff`, `debuff`, and `drain`, one for each `AbilityEffect`
+that carries a number. A Scrapper hits harder and heals worse than the
+species baseline; a SubProcess is the other way around. `Cleanse` and
+`Decompile` have no magnitude to scale, so no affinity touches them. You buy
+the same five categories yourself as perks — Payload Tuning, Field Medic,
+Overclocker, Corruption Vector, Siphon Protocol — each adding a flat
+percentage per level, capped the same way a species' own affinity is
+capped. The two never stack: a perk sharpens only the moves *you* cast, a
+species affinity only the moves *its programs* cast, and nothing in the
+game is both at once.
+
+Affinity follows the ability into whatever slot it's installed in, not
+just what the species was born with — a routine popped out at a Compiler
+and plugged into a different program takes that program's affinity with
+it. A species with a strong heal affinity and no innate heal isn't wasted;
+it's a reason to move a researched or extracted heal routine onto it rather
+than leave that program running whatever it started with.
+
 ## Items and equipment
 
 The consumable economy is deliberately tight: Core Fragment is the universal
@@ -251,10 +273,11 @@ its schema. A new piece of equipment or a new combat ability is a single
 file and no Rust at all.
 
 Perks are the one deliberate half-exception. `assets/perks/*.ron` sets what
-each perk is called, how it reads and what it costs, but the set of seven is
+each perk is called, how it reads and what it costs, but the set of twelve is
 fixed and lives in `crates/engine/src/perks.rs` — a perk's effect is a hook
 into one particular formula rather than a shape the engine can read from a
-file, so there is no `effect:` field to write and an eighth perk means Rust.
+file, so there is no `effect:` field to write and a thirteenth perk means
+Rust.
 
 The economy needs exactly one item holding each of the `Currency`,
 `ResearchCurrency`, and `CraftCurrency` roles or the game won't start.

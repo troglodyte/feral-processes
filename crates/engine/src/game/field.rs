@@ -64,6 +64,15 @@ impl Game {
     /// Every check runs before the first write (the Power deduction), so a
     /// refused cast leaves both Power and every `FieldBuff` untouched: no
     /// buff armed with the cost unpaid, no cost paid with nothing armed.
+    ///
+    /// A successful cast ticks the clock, the same as `use_item` spending a
+    /// turn on a consumable that arms the identical `ActiveFieldBuff`
+    /// through the same `arm_field_buff`. Power is renewable and an item is
+    /// one-shot, so the item path is already the costlier of the two; not
+    /// ticking here would leave a strictly better option on the table for
+    /// no reason anyone chose. A refused cast spends nothing and so costs
+    /// no time — the tick sits only on the success path, after the buff is
+    /// armed.
     pub fn cast_field_routine(
         &mut self,
         index: usize,
@@ -156,6 +165,7 @@ impl Game {
             );
         }
         self.log(format!("{holder_label} runs {}.", def.name));
+        self.tick();
         Ok(())
     }
 }

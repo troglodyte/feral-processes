@@ -43,15 +43,49 @@ fn casting_arms_the_buff_and_deducts_power() {
     game.cast_field_routine(0, Some(player))
         .expect("casting a field routine you can afford should succeed");
 
-    assert_eq!(player_hunger(&game), before - 5.0);
+    // A successful cast ticks the clock (see `cast_field_routine`'s doc), so
+    // the ordinary per-tick Power decay lands on top of the routine's own
+    // cost. `systems::decay_needs` is the one place that decay formula
+    // lives — read through it rather than restating its constant here.
+    let (expected_hunger, _) = crate::systems::decay_needs(before - 5.0, 0.0, 1.0);
+    assert_eq!(player_hunger(&game), expected_hunger);
     let active = &game.world.get::<FieldBuff>(player).unwrap().active;
     assert_eq!(active.len(), 1);
     let buff = &active[0];
     assert_eq!(buff.kind, FieldBuffKind::Regen);
     assert_eq!(buff.name, "Test Field Regen");
     assert_eq!(buff.power, abilities::scaled_power(2, 1, AFFINITY_NEUTRAL));
-    assert_eq!(buff.remaining, 20);
+    // duration: 20, aged by the one tick the successful cast itself spends.
+    assert_eq!(buff.remaining, 19);
     assert_eq!(buff.source, BuffSource::Routine);
+}
+
+#[test]
+fn a_successful_cast_ticks_the_clock_and_a_refused_one_does_not() {
+    let mut game = game_with_field_ability();
+    let player = game.player_entity();
+    game.world
+        .entity_mut(player)
+        .insert(Routines(vec!["test_field_regen".to_string()]));
+    let start = game.current_tick();
+
+    game.world.get_mut::<Needs>(player).unwrap().hunger = 4.0;
+    let refused = game.cast_field_routine(0, Some(player));
+    assert!(refused.is_err(), "4.0 Power can't cover a 5.0 cost");
+    assert_eq!(
+        game.current_tick(),
+        start,
+        "a refused cast spends nothing, so it must cost no time"
+    );
+
+    game.world.get_mut::<Needs>(player).unwrap().hunger = 100.0;
+    game.cast_field_routine(0, Some(player))
+        .expect("100.0 Power covers a 5.0 cost");
+    assert_eq!(
+        game.current_tick(),
+        start + 1,
+        "a successful cast is a turn, exactly like use_item spending one on the same buff"
+    );
 }
 
 #[test]

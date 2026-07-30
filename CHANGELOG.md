@@ -21,12 +21,15 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   for 6 per interval. Unlocked by **Fortification**, the same research node
   that unlocks the Shield, which now reads as the two halves of one answer:
   a Shield stops raid damage landing, a Patch Node undoes what lands anyway.
-- **Unaided structure regen drops from 4 Durability per interval to 1.** It
-  was set equal to `RAID_DAMAGE`, which meant one interval fully undid one
-  raid and a base won the attrition race by doing nothing at all — raids
-  were an inconvenience with a timer on them rather than pressure. At 1 it
-  is a trickle that keeps a quiet base from rotting, and outpacing raids is
-  now something you build for.
+- **Raid damage is now permanent until you repair it.** Structures used to
+  regenerate 4 Durability per interval for free — exactly `RAID_DAMAGE`, so
+  one interval fully undid one raid and a base won the attrition race by
+  doing nothing at all. Raids were an inconvenience with a timer on them.
+  Free regen is gone entirely (`STRUCTURE_REGEN_AMOUNT` deleted rather than
+  lowered), so every point of repair now comes from a deployed Patch Node.
+  This is gentler than it sounds — an undefended structure still takes ~7
+  raids to lose, and workers and guards already cut incoming damage — but
+  the slope finally runs the other way if you ignore it.
 - **Fixed: nests were quietly regenerating.** A nest carries Durability like
   a structure does, and the regen pass healed every Durability holder
   indiscriminately — so chipping a nest down with bump-attacks was racing its

@@ -243,13 +243,13 @@ cronjob worker or a program posted to guard (`G`) fights the raid off at a
 cost to its own HP, and every deployed Shield shaves flat damage off every
 raid anywhere in the base.
 
-Damage does not stay done. Every structure trickles back 1 Durability every
-20 ticks on its own, but a raid lands four at a time — so an unattended base
-slowly loses the attrition race. A **Patch Node**, unlocked by the same
-Fortification research that unlocks the Shield, is the answer: it recompiles
-every structure in the base, itself included, for 1 Durability per upgrade
-tier per interval, and several of them stack. Shields stop raid damage
-arriving; Patch Nodes undo what got through.
+Raid damage is permanent. Nothing heals on its own — a chipped structure
+stays chipped until you build the thing that fixes it. That thing is the
+**Patch Node**, unlocked by the same Fortification research as the Shield:
+it recompiles every structure in the base, itself included, for 1 Durability
+per upgrade tier every 20 ticks, and several of them stack. Shields stop raid
+damage arriving; Patch Nodes undo what got through; until you have either,
+attrition only runs one way.
 
 ## Reading back
 

@@ -147,8 +147,9 @@ is skipped with a warning logged in-game rather than crashing startup.
     // being destroyed. An assigned cronjob worker/guard fights a raid off,
     // reducing the damage by its Defense stat; an unassigned structure
     // takes the raid's full damage (less any raid_defense below).
-    // Damaged structures slowly regenerate over time regardless. Ignored
-    // entirely when `raidable: false` (see below).
+    // Damage is permanent unless something with a `repair` field (see below)
+    // is standing — structures never heal on their own. Ignored entirely
+    // when `raidable: false` (see below).
     durability: 30,
 
     // Optional; can be left out entirely (defaults to true). Set to false
@@ -207,9 +208,9 @@ is skipped with a warning logged in-game rather than crashing startup.
     // one — only structures.
     //
     // This is how the Patch Node works: `repair: Some((per_tier: 1))` with
-    // no `work` recipe. Every structure also regenerates 1 Durability per
-    // 20 ticks unaided, which is a trickle rather than an answer to raids —
-    // outpacing raid attrition is what a repairer is for.
+    // no `work` recipe. It is also the *only* source of repair in the game —
+    // structures do not heal on their own at all, so raid damage is permanent
+    // until something declaring this field is standing.
     repair: Some((per_tier: 1)),
 
     // Optional; can be left out entirely (defaults to un-upgradeable). If

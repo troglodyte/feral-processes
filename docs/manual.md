@@ -1123,16 +1123,17 @@ hitting a random one of your *other* deployed structures:
 - An unassigned (and unguarded) structure — after Shield reduction — takes
   whatever raid damage is left. At 0 Durability it's destroyed outright,
   and any cronjob/guard assignment pointed at it is dropped.
-- Every damaged structure trickles back **1** Durability every 20 ticks on
-  its own. That is deliberately less than the 4 a raid takes off: left
-  alone, a structure under regular raids loses ground.
+- **Raid damage is permanent.** Structures do not heal on their own at all,
+  so every point a raid takes off stays off until you build something that
+  puts it back. A `[HP 22/30]` node you never repair is a `[HP 22/30]` node
+  a thousand ticks later.
 - Every deployed **Patch Node** repairs **every** structure in the base —
-  itself included — by 1 Durability per upgrade tier, on that same 20-tick
-  beat. A Mk1 doubles the trickle; a Mk5 restores 6 per interval, comfortably
-  ahead of raid attrition. Like Shields they stack, so a big sprawling base
-  can want a second one. It never heals a nest, only your own structures,
-  and it's a raid target like anything else — nothing protects it but a
-  guard, a Shield, or another Patch Node.
+  itself included — by 1 Durability per upgrade tier, every 20 ticks. It is
+  the only source of repair in the game: a Mk1 restores 1 per interval, a
+  Mk5 restores 5, and like Shields they stack, so a big sprawling base can
+  want a second one. It never heals a nest, only your own structures, and
+  it's a raid target like anything else — nothing protects it but a guard,
+  a Shield, or another Patch Node.
 - Recharging overnight (`r`) fully heals **every** tamed program you own,
   not just your active party — including one left behind defending a
   raid while you were elsewhere.

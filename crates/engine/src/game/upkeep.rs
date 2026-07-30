@@ -2,16 +2,18 @@
 //! visual effects, and raids.
 
 use crate::tuning::{
-    RAID_CHANCE_PER_TICK, RAID_DAMAGE, RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_AMOUNT,
-    STRUCTURE_REGEN_INTERVAL,
+    RAID_CHANCE_PER_TICK, RAID_DAMAGE, RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_INTERVAL,
 };
 use crate::*;
 
 impl Game {
-    /// Healing for damaged structures — every `STRUCTURE_REGEN_INTERVAL`
-    /// ticks, every structure below max `Durability` recovers
-    /// `STRUCTURE_REGEN_AMOUNT` plus whatever the base's repairers add
-    /// (`total_repair_rate`).
+    /// Repairs damaged structures — every `STRUCTURE_REGEN_INTERVAL` ticks,
+    /// every structure below max `Durability` recovers whatever the base's
+    /// repairers restore between them (`total_repair_rate`).
+    ///
+    /// That total is the only source: nothing heals on its own, so a base
+    /// with no repairer standing never recovers a point and raid damage is
+    /// permanent until the player builds something that undoes it.
     ///
     /// `With<Structure>` is load-bearing, not tidiness: a `Nest` carries
     /// `Durability` too, and an unfiltered pass healed it alongside the
@@ -23,7 +25,10 @@ impl Game {
         if !tick.is_multiple_of(STRUCTURE_REGEN_INTERVAL) {
             return;
         }
-        let amount = STRUCTURE_REGEN_AMOUNT + self.total_repair_rate();
+        let amount = self.total_repair_rate();
+        if amount == 0 {
+            return;
+        }
         let mut query = self
             .world
             .query_filtered::<&mut Durability, With<Structure>>();

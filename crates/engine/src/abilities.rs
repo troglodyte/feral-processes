@@ -768,12 +768,28 @@ mod tests {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../assets")
             .join("abilities");
+        let ron_file_count = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.path().extension().and_then(|e| e.to_str()) == Some("ron"))
+            .count();
         let (db, warnings) = AbilityDb::load_dir(&dir).unwrap();
         assert!(
             warnings.is_empty(),
             "the shipped set must not warn: {warnings:?}"
         );
-        assert_eq!(db.all().count(), 41, "41 abilities ship with the game");
+        // Counted against the directory rather than a hardcoded number, so
+        // shipping a new file never requires hand-updating this assertion.
+        // What it still catches that no `tests::assets` coverage check
+        // would: two files sharing an `id` silently overwrite one another in
+        // `db.abilities.insert` (a `HashMap`, no warning on either side), so
+        // the loaded count would fall below the file count with nothing
+        // else to notice the collision.
+        assert_eq!(
+            db.all().count(),
+            ron_file_count,
+            "every .ron file in assets/abilities should have loaded as a distinct ability"
+        );
         assert!(
             db.get(FALLBACK_ABILITY_ID).is_some(),
             "the fallback ability must ship, or every companion loses its Special"

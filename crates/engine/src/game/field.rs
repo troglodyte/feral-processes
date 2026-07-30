@@ -144,9 +144,19 @@ impl Game {
         // stronger off a levelled companion than fresh off capture. The
         // scaled value is what's stored on the buff (not the authored one),
         // so a later level-up doesn't retroactively change it.
-        let level = self.ability_user_level(holder);
-        let affinity = self.ability_affinity(holder, &def.effect);
-        let magnitude = abilities::scaled_power(power, level, affinity);
+        //
+        // `kind.scales_with_caster()` gates this: a percentage-point kind
+        // (`Mitigation`, `CaptureBoost`, `XpBoost`, `EncounterDamp`,
+        // `DropBoost`) is delivered exactly as authored regardless of who
+        // casts it — see that method's doc for why a rate doesn't scale the
+        // way a point amount does.
+        let magnitude = if kind.scales_with_caster() {
+            let level = self.ability_user_level(holder);
+            let affinity = self.ability_affinity(holder, &def.effect);
+            abilities::scaled_power(power, level, affinity)
+        } else {
+            power
+        };
 
         {
             let mut needs = self.world.get_mut::<Needs>(player).unwrap();

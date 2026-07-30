@@ -1,7 +1,7 @@
 (
     id: "ghost_protocol",
     name: "Ghost Protocol",
-    description: "-25% wild encounter chance for 90 turns",
+    description: "-20% wild encounter chance for 90 turns",
     target: WholeParty,
-    effect: FieldBuff(kind: EncounterDamp, power: 25, duration: 90, power_cost: 16.0),
+    effect: FieldBuff(kind: EncounterDamp, power: 20, duration: 90, power_cost: 18.0),
 )

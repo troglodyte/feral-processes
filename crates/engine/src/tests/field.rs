@@ -2,9 +2,9 @@
 //! `Game::cast_field_routine`.
 
 use super::support::*;
-use crate::components::{FieldBuff, FieldBuffKind, Needs, Routines};
+use crate::components::{FieldBuff, FieldBuffKind, Needs, Perks, Routines};
 use crate::resources::Party;
-use crate::tuning::AFFINITY_NEUTRAL;
+use crate::tuning::{AFFINITY_MAX, AFFINITY_NEUTRAL};
 use crate::*;
 
 fn game_with_field_ability() -> Game {
@@ -200,6 +200,87 @@ fn a_higher_level_holder_casts_a_larger_magnitude() {
         high_power > low_power,
         "a level-20 holder's cast should outscale a level-1 holder's: \
          {high_power} vs {low_power}"
+    );
+}
+
+/// The two `FieldBuffKind::scales_with_caster` tests below share this
+/// holder shape — level 20 (`ABILITY_POWER_SCALE_LEVEL_CAP` is 40, so this
+/// is short of the cap but still well past level 1) and `AFFINITY_MAX`
+/// worth of the `BuffAffinity` perk, bought directly onto `Perks` rather
+/// than through the purchase flow since only the resulting level matters
+/// here. Both `Def` and `Mitigation` fall under `AffinityKind::Buff`, so one
+/// holder proves both halves of the split against the same multiplier.
+fn buff_affinity_maxed_player(game: &mut Game) -> Entity {
+    let player = game.player_entity();
+    set_level(game, player, 20);
+    let levels_to_max = ((AFFINITY_MAX - AFFINITY_NEUTRAL)
+        / crate::tuning::AFFINITY_PERK_BONUS_PER_LEVEL)
+        .ceil() as usize;
+    game.world.entity_mut(player).insert(Perks {
+        points: 0,
+        unlocked: vec![Perk::BuffAffinity; levels_to_max],
+    });
+    game.world.get_mut::<Needs>(player).unwrap().hunger = 100.0;
+    player
+}
+
+#[test]
+fn a_percentage_kind_is_delivered_at_its_authored_value_regardless_of_level_or_affinity() {
+    let dir = modded_assets_dir(
+        "field_cast_pct_unscaled",
+        &[],
+        &[],
+        &[],
+        &[],
+        &[("test_field_mitigation.ron", FIELD_ONLY_MITIGATION_ABILITY)],
+    );
+    let mut game = Game::new(9105, DifficultyMode::Forgiving, &dir).unwrap();
+    let player = buff_affinity_maxed_player(&mut game);
+    game.world
+        .entity_mut(player)
+        .insert(Routines(vec!["test_field_mitigation".to_string()]));
+
+    game.cast_field_routine(0, None)
+        .expect("a WholeParty target needs no picked ally");
+
+    let power = game.world.get::<FieldBuff>(player).unwrap().active[0].power;
+    // scaled_power(10, 20, AFFINITY_MAX) would be 40 — if this test passed
+    // against that number instead of 10, the split below would be a no-op.
+    assert_ne!(abilities::scaled_power(10, 20, AFFINITY_MAX), 10);
+    assert_eq!(
+        power, 10,
+        "a percentage-point kind must land at exactly its authored value"
+    );
+}
+
+#[test]
+fn a_flat_kind_still_scales_for_the_same_high_level_high_affinity_holder() {
+    let dir = modded_assets_dir(
+        "field_cast_flat_still_scales",
+        &[],
+        &[],
+        &[],
+        &[],
+        &[("test_field_def.ron", FIELD_ONLY_PARTY_ABILITY)],
+    );
+    let mut game = Game::new(9106, DifficultyMode::Forgiving, &dir).unwrap();
+    let player = buff_affinity_maxed_player(&mut game);
+    game.world
+        .entity_mut(player)
+        .insert(Routines(vec!["test_field_def".to_string()]));
+
+    game.cast_field_routine(0, None)
+        .expect("a WholeParty target needs no picked ally");
+
+    let power = game.world.get::<FieldBuff>(player).unwrap().active[0].power;
+    assert_eq!(
+        power,
+        abilities::scaled_power(4, 20, AFFINITY_MAX),
+        "a point-amount kind must still scale for the same holder the percentage test above did not"
+    );
+    assert_ne!(
+        power, 4,
+        "if this equals the authored value, the holder in this test isn't actually scaling anything"
     );
 }
 

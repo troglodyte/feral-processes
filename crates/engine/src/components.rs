@@ -523,6 +523,26 @@ impl FieldBuffKind {
         }
     }
 
+    /// Whether `Game::cast_field_routine` should run this kind's authored
+    /// `power` through `abilities::scaled_power` (level and affinity) or
+    /// deliver it unchanged. The five point-amount kinds scale; the five
+    /// percentage-point kinds — the same split `magnitude_label` already
+    /// documents — do not, for the reason `AbilityEffect::Drain`'s
+    /// `heal_fraction` is excluded from `scaled_power` too: a value that
+    /// already carries its own ceiling doesn't need a second one stacked on
+    /// top. A percentage is a property of the routine, not of how strong the
+    /// caster is — scaling one the way a flat point value scales would let
+    /// an authored 10% cut land anywhere up to 140% off a high-level,
+    /// high-affinity caster, the exact ceiling-defeating outcome the cap on
+    /// `Mitigation` exists to prevent.
+    pub fn scales_with_caster(self) -> bool {
+        use FieldBuffKind::*;
+        match self {
+            Regen | Coolant | Trickle | Def | Atk => true,
+            Mitigation | CaptureBoost | XpBoost | EncounterDamp | DropBoost => false,
+        }
+    }
+
     /// The short tag a buff list shows next to a running entry, e.g.
     /// `"DEF+2"` or `"XP+15%"`. `power` is points for the five flat kinds
     /// and percentage points for the rest. `HP` rather than `INT` for

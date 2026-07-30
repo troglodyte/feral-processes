@@ -707,6 +707,20 @@ pub(super) const FIELD_ONLY_PARTY_ABILITY: &str = r#"(
     effect: FieldBuff(kind: Def, power: 4, duration: 10, power_cost: 3.0),
 )"#;
 
+/// A `Creature`-scoped, percentage-magnitude `FieldBuff` — `Mitigation` is
+/// the one percentage kind with a real `affinity_kind` (`Buff`, the same
+/// category `FIELD_ONLY_PARTY_ABILITY`'s `Def` uses), so casting the two off
+/// the same high-level, high-affinity holder is what proves
+/// `FieldBuffKind::scales_with_caster` actually splits them: `Def` scales,
+/// `Mitigation` lands at exactly its authored value either way.
+pub(super) const FIELD_ONLY_MITIGATION_ABILITY: &str = r#"(
+    id: "test_field_mitigation",
+    name: "Test Field Mitigation",
+    description: "d",
+    target: WholeParty,
+    effect: FieldBuff(kind: Mitigation, power: 10, duration: 20, power_cost: 5.0),
+)"#;
+
 /// A species declaring two abilities, so the multi-ability paths can be
 /// exercised without depending on shipped kit assignments. The second is
 /// gated above a fresh companion's level 1, which is what pins down

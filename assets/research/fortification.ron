@@ -1,8 +1,8 @@
 (
     id: "fortification",
     name: "Fortification",
-    description: "Automated perimeter defense. Unlocks the Shield.",
+    description: "Automated perimeter defense and self-repair. Unlocks the Shield and the Patch Node.",
     cost: 15,
     requires: ["power_grid"],
-    unlocks_structures: ["shield"],
+    unlocks_structures: ["shield", "patch_node"],
 )

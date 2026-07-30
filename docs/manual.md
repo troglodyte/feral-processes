@@ -341,7 +341,7 @@ creature to work" mechanic.
    else after — and nothing else can be built until a Home is standing.
    The menu only lists structures you've actually unlocked: Home, Mining
    Node, Research Node, Recharger Node, Data Cache, and the Zone Portal are
-   available from turn one, and the other seven each sit behind a research
+   available from turn one, and the other eight each sit behind a research
    node (see [Research](#research)). Your base travels with you through a
    zone transition (see [Zones and portals](#zones-and-portals)), so you
    only ever need to place a Home once.
@@ -424,7 +424,7 @@ visit.
 | Automation | 8 | — | Compiler |
 | Power Grid | 10 | — | Terminal, Power Conduit |
 | Isometric Commerce | 12 | — | iso Market |
-| Fortification | 15 | Power Grid | Shield |
+| Fortification | 15 | Power Grid | Shield, Patch Node |
 | Weapon Fabrication | 18 | Automation | Fabricator |
 | Reactive Armor | 18 | Automation | Armory |
 | Overclock Cores | 22 | Weapon Fabrication | Overclock Core recipe (6 Portal Fragments) |
@@ -1026,6 +1026,7 @@ enough of them, then walk onto it to breach into the next zone.
 | Power Conduit | 14 Core Fragments | Power Grid | Cronjob a compiled program to it to produce Power Cells over time |
 | iso Market | 16 Core Fragments | Isometric Commerce | `t` ("trade") to sell inventory items or compiled programs, or buy consumables, for Core Fragments — see [Trading](#trading) |
 | Shield | 16 Core Fragments | Fortification | Passively reduces raid damage against **every** deployed structure by 4 — see [Base defense](#base-defense) |
+| Patch Node | 18 Core Fragments, 4 Power Cells | Fortification | Passively repairs **every** deployed structure, itself included, by 1 Durability per tier every 20 ticks. Upgradeable to Mk5 — see [Base defense](#base-defense) |
 | Fabricator | 18 Core Fragments | Weapon Fabrication | Not cronjob-workable — the bench for every researched weapon/module recipe, plus the 13 catalog recipes that name it (see [Equipment](#equipment)) |
 | Armory | 18 Core Fragments | Reactive Armor | Not cronjob-workable — the bench for every researched armor recipe, plus the 6 catalog armor recipes that name it (see [Equipment](#equipment)) |
 
@@ -1071,9 +1072,9 @@ Mining Node, Research Node, Power Conduit, and Compiler use **active**
 automation (an assigned cronjob produces over time); Terminal uses
 **passive** automation (it processes on its own whenever you're in range);
 Fabricator and Armory use neither — they're benches, making already-
-researched recipes compilable while they stand; Shield uses neither either
-— it just sits there passively defending (see
-[Base defense](#base-defense)).
+researched recipes compilable while they stand; Shield and Patch Node use
+neither either — they just sit there, one absorbing raid damage and the
+other repairing it afterwards (see [Base defense](#base-defense)).
 Home is a **symlink target** — a third category, neither cronjob nor
 passive: press `u`, pick it from the list of deployed symlink structures,
 and pay the Power Cell cost to warp there instantly, no matter how far
@@ -1120,7 +1121,16 @@ hitting a random one of your *other* deployed structures:
 - An unassigned (and unguarded) structure — after Shield reduction — takes
   whatever raid damage is left. At 0 Durability it's destroyed outright,
   and any cronjob/guard assignment pointed at it is dropped.
-- Damaged structures slowly regenerate Durability over time regardless.
+- Every damaged structure trickles back **1** Durability every 20 ticks on
+  its own. That is deliberately less than the 4 a raid takes off: left
+  alone, a structure under regular raids loses ground.
+- Every deployed **Patch Node** repairs **every** structure in the base —
+  itself included — by 1 Durability per upgrade tier, on that same 20-tick
+  beat. A Mk1 doubles the trickle; a Mk5 restores 6 per interval, comfortably
+  ahead of raid attrition. Like Shields they stack, so a big sprawling base
+  can want a second one. It never heals a nest, only your own structures,
+  and it's a raid target like anything else — nothing protects it but a
+  guard, a Shield, or another Patch Node.
 - Recharging overnight (`r`) fully heals **every** tamed program you own,
   not just your active party — including one left behind defending a
   raid while you were elsewhere.
@@ -1128,7 +1138,10 @@ hitting a random one of your *other* deployed structures:
 Keeping your key structures staffed is the cheapest defense early on; a
 Shield (or several) is the scalable version once you can afford one — an
 idle Mining Node out on its own is the one most likely to get chipped away
-without either.
+without either. Fortification unlocks both halves of the answer, and they
+do different jobs: a Shield stops damage landing, a Patch Node undoes what
+lands anyway. A base that raids never quite kill but never quite repairs is
+the one missing the second half.
 
 ### Trading
 

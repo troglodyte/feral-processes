@@ -729,11 +729,15 @@ pub const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 7;
 /// trickle, not a substitute for staying ahead of raids.
 pub const STRUCTURE_REGEN_INTERVAL: u64 = 20;
 
-/// How much `Durability` a damaged structure regenerates every
-/// `STRUCTURE_REGEN_INTERVAL` ticks — set to match `RAID_DAMAGE` so one
-/// interval fully undoes one raid. Below that, a base loses the attrition
-/// race no matter how it's played.
-pub const STRUCTURE_REGEN_AMOUNT: u32 = 4;
+/// How much `Durability` a damaged structure regenerates unaided every
+/// `STRUCTURE_REGEN_INTERVAL` ticks. Deliberately a fraction of
+/// `RAID_DAMAGE`: this is a trickle that keeps a quiet base from rotting,
+/// not an answer to raids. The answer is a Patch Node
+/// (`StructureDef::repair`), which adds its upgrade tier on top of this —
+/// see `Game::structure_regen`. Raise this and you design the repair
+/// structure out from under itself; there is a test that says so
+/// (`unaided_regen_does_not_fully_undo_one_raids_damage`).
+pub const STRUCTURE_REGEN_AMOUNT: u32 = 1;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Perk magnitudes

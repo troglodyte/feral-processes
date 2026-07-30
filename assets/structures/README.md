@@ -195,6 +195,23 @@ is skipped with a warning logged in-game rather than crashing startup.
     // used to rest than by sitting there idle.
     temporary: Some((max_ticks: 20)),
 
+    // Optional; can be left out entirely (defaults to repairing nothing).
+    // If set, this structure restores `per_tier` Durability to *every*
+    // deployed structure — itself included — every 20 ticks, multiplied by
+    // its own upgrade tier. It stacks additively across every deployed
+    // structure that sets this, the same way `raid_defense` does, so a
+    // tier-2 repairer and a tier-3 repairer restore five between them.
+    //
+    // Pair it with `upgrade` or the tier is always 1 and `per_tier` is just
+    // a flat rate. Nests carry Durability too, but a repairer never heals
+    // one — only structures.
+    //
+    // This is how the Patch Node works: `repair: Some((per_tier: 1))` with
+    // no `work` recipe. Every structure also regenerates 1 Durability per
+    // 20 ticks unaided, which is a trickle rather than an answer to raids —
+    // outpacing raid attrition is what a repairer is for.
+    repair: Some((per_tier: 1)),
+
     // Optional; can be left out entirely (defaults to un-upgradeable). If
     // set, the player can upgrade this structure (`U`) through
     // tiers, starting at Mk1 and stopping at `max_tier`. The cost to reach

@@ -8,18 +8,48 @@ use crate::tuning::{
 use crate::*;
 
 impl Game {
-    /// Slow passive healing for damaged structures — every
-    /// `STRUCTURE_REGEN_INTERVAL` ticks, everything below max `Durability`
-    /// recovers `STRUCTURE_REGEN_AMOUNT`.
+    /// Healing for damaged structures — every `STRUCTURE_REGEN_INTERVAL`
+    /// ticks, everything below max `Durability` recovers
+    /// `STRUCTURE_REGEN_AMOUNT`, and everything that is *also* a structure
+    /// recovers `total_repair_rate` on top.
+    ///
+    /// The split is why this isn't one number: a `Nest` carries `Durability`
+    /// too and has always drawn the baseline trickle, but the base's own
+    /// maintenance daemons have no business patching up what spawns the
+    /// raiders.
     pub(crate) fn structure_regen(&mut self) {
         let tick = self.world.resource::<GameClock>().tick;
         if !tick.is_multiple_of(STRUCTURE_REGEN_INTERVAL) {
             return;
         }
-        let mut query = self.world.query::<&mut Durability>();
-        for mut durability in query.iter_mut(&mut self.world) {
-            durability.hp = (durability.hp + STRUCTURE_REGEN_AMOUNT).min(durability.max_hp);
+        let repair = self.total_repair_rate();
+        let mut query = self.world.query::<(&mut Durability, Option<&Structure>)>();
+        for (mut durability, structure) in query.iter_mut(&mut self.world) {
+            let amount = STRUCTURE_REGEN_AMOUNT + if structure.is_some() { repair } else { 0 };
+            durability.hp = (durability.hp + amount).min(durability.max_hp);
         }
+    }
+
+    /// `Durability` restored to every deployed structure per regen interval
+    /// by the base's repairers — each one's `RepairDef::per_tier` times its
+    /// own `StructureTier`, summed. Derived on each call rather than cached,
+    /// so a Patch Node lost to a raid stops contributing with no
+    /// invalidation step, the same way `pet_capacity` handles a lost Data
+    /// Cache.
+    pub(crate) fn total_repair_rate(&mut self) -> u32 {
+        let repairers: Vec<(StructureId, u32)> = {
+            let mut query = self.world.query::<(&Structure, Option<&StructureTier>)>();
+            query
+                .iter(&self.world)
+                .map(|(s, tier)| (s.kind.clone(), tier.map_or(1, |t| t.0)))
+                .collect()
+        };
+        let db = self.world.resource::<StructureDb>();
+        repairers
+            .iter()
+            .filter_map(|(kind, tier)| Some((db.get(kind.as_str())?.repair?, tier)))
+            .map(|(repair, tier)| repair.per_tier * tier)
+            .sum()
     }
 
     /// Advances every `Nest`'s `pending_respawns` countdown by one tick,

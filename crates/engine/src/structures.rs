@@ -104,6 +104,19 @@ pub struct TemporaryDef {
     pub max_ticks: u32,
 }
 
+/// How fast a structure patches the rest of the base back up — see
+/// `Game::total_repair_rate`. Deliberately has no `radius`: like
+/// `raid_defense`, a repairer works base-wide from wherever it stands,
+/// which is the only sensible reading given every non-Home structure has
+/// to sit within `MAX_BUILD_DISTANCE_FROM_HOME` of the Home anyway.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct RepairDef {
+    /// `Durability` restored to every deployed structure per upgrade tier,
+    /// every `STRUCTURE_REGEN_INTERVAL` ticks. A tier-3 repairer restores
+    /// three times this; two repairers add together.
+    pub per_tier: u32,
+}
+
 /// A structure's upgrade path — see `Game::upgrade_structure`. The cost to
 /// reach tier N is each amount in `cost` multiplied by N, so upgrades get
 /// steadily more expensive without needing a per-tier table.
@@ -210,6 +223,16 @@ pub struct StructureDef {
     /// files keep parsing.
     #[serde(default)]
     pub temporary: Option<TemporaryDef>,
+    /// If set, this structure repairs every deployed structure — itself
+    /// included — by `per_tier` times its own upgrade tier, every
+    /// `STRUCTURE_REGEN_INTERVAL` ticks (see `Game::structure_regen`).
+    /// Stacks additively across every deployed structure that sets it, the
+    /// same way `raid_defense` and `pet_slot_bonus` do, and pairs with
+    /// `upgrade` — without one the tier is always 1. `#[serde(default)]` so
+    /// existing structure files (including mods) repair nothing, exactly as
+    /// before this field existed.
+    #[serde(default)]
+    pub repair: Option<RepairDef>,
     /// If set, this structure can be upgraded through tiers (see
     /// `Game::upgrade_structure`). Each tier multiplies the structure's work
     /// payout and becomes its `ResourceNode::level`, so extraction gets more

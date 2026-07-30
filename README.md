@@ -128,8 +128,8 @@ onto it, and it banks **Research Data** separately from your carrying
 capacity, up to 200 — which is also why it's the one output that doesn't
 scale with zone depth. Nodes cost a flat amount, may require other nodes
 first, and unlock permanently and one-way: the Compiler, Terminal, Power
-Conduit, iso Market, Shield, and the Fabricator/Armory benches, plus six
-discounted equipment recipes. The tree is data, not code — every node is a
+Conduit, iso Market, Shield, Patch Node, and the Fabricator/Armory benches,
+plus six discounted equipment recipes. The tree is data, not code — every node is a
 `.ron` file in `assets/research/`.
 
 ## Intrusions
@@ -234,13 +234,22 @@ Structures are `.ron` files declaring any combination of roles: cronjob-
 workable (Mining Node, Research Node, Power Conduit, Compiler), passively
 processing (Terminal), a symlink target you can `u` to from anywhere (Home),
 a rest gate, a power source (Recharger Node), a trading post (iso Market),
-or a plain bench (Fabricator, Armory). Producers upgrade to Mk5 with `U`,
-each tier adding to the payout and raising the chance a cycle pays out at
+a repairer (Patch Node), or a plain bench (Fabricator, Armory). Producers
+upgrade to Mk5 with `U`, each tier adding to the payout and raising the
+chance a cycle pays out at
 all, and upgrades ride through portals with the rest of the base. Every structure
 except Home has raid Durability and can be chipped away by random raids: a
 cronjob worker or a program posted to guard (`G`) fights the raid off at a
 cost to its own HP, and every deployed Shield shaves flat damage off every
 raid anywhere in the base.
+
+Damage does not stay done. Every structure trickles back 1 Durability every
+20 ticks on its own, but a raid lands four at a time — so an unattended base
+slowly loses the attrition race. A **Patch Node**, unlocked by the same
+Fortification research that unlocks the Shield, is the answer: it recompiles
+every structure in the base, itself included, for 1 Durability per upgrade
+tier per interval, and several of them stack. Shields stop raid damage
+arriving; Patch Nodes undo what got through.
 
 ## Reading back
 

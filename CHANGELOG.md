@@ -13,6 +13,28 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Raid damage is something you repair, not something you wait out
+
+- **New structure: the Patch Node.** It repairs every deployed structure in
+  the base — itself included — by 1 Durability per upgrade tier, every 20
+  ticks. Several of them stack, the way Shields do, and it upgrades to Mk5
+  for 6 per interval. Unlocked by **Fortification**, the same research node
+  that unlocks the Shield, which now reads as the two halves of one answer:
+  a Shield stops raid damage landing, a Patch Node undoes what lands anyway.
+- **Unaided structure regen drops from 4 Durability per interval to 1.** It
+  was set equal to `RAID_DAMAGE`, which meant one interval fully undid one
+  raid and a base won the attrition race by doing nothing at all — raids
+  were an inconvenience with a timer on them rather than pressure. At 1 it
+  is a trickle that keeps a quiet base from rotting, and outpacing raids is
+  now something you build for.
+- A repairer never heals a **nest**. Nests carry Durability like structures
+  do and have always drawn the baseline trickle; the new repair pass is
+  filtered to your own structures, so the base's maintenance daemon doesn't
+  patch up what spawns the raiders.
+- `StructureDef` gains an optional `repair: Some((per_tier: N))` field, so a
+  mod can declare a repairer of its own without touching Rust — documented
+  in `assets/structures/README.md`. Existing structure files parse unchanged.
+
 ### Fatigue is visible where it is spent
 
 - **The battle roster has a `FATIGUE` column.** Fatigue prices every routine

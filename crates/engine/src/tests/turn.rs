@@ -670,7 +670,7 @@ fn a_prebattle_buff_survives_the_battle_it_was_armed_for() {
 
 /// Bug 2: before `FieldBuff` existed there was nowhere to put a map-armed
 /// item buff in `PlayerSave`, so it vanished on the round trip. Arming it
-/// now writes `FieldBuff`, which Task 3 already persists.
+/// now writes `FieldBuff`, which `PlayerSave` already persists.
 #[test]
 fn a_prebattle_buff_survives_a_save_load_round_trip() {
     let dir = modded_assets_dir(

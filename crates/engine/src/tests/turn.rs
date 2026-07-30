@@ -2,7 +2,7 @@
 
 use super::support::*;
 use crate::game::turn::forage_chance;
-use crate::tuning::{KEEN_SCAVENGER_BONUS_PER_LEVEL, MAX_BUILD_DISTANCE_FROM_HOME};
+use crate::tuning::{KEEN_SCAVENGER_BONUS_PER_LEVEL, MAX_BUILD_DISTANCE_FROM_HOME, REST_TICKS};
 use crate::*;
 
 #[test]
@@ -213,6 +213,155 @@ fn rest_is_a_no_op_without_a_nearby_rest_structure() {
     assert_eq!(
         needs.fatigue, 10.0,
         "resting with no Home in range shouldn't restore anything"
+    );
+}
+
+#[test]
+fn tick_field_buffs_decrements_and_expires_after_the_exact_tick_count() {
+    let mut game = Game::new(600, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Def,
+            name: "Test Shield".to_string(),
+            power: 2,
+            remaining: 5,
+            source: BuffSource::Routine,
+        },
+    );
+
+    for _ in 0..4 {
+        game.tick_field_buffs();
+    }
+    assert_eq!(
+        game.world.get::<FieldBuff>(player).unwrap().active.len(),
+        1,
+        "a 5-tick buff should still be running after only 4 ticks"
+    );
+
+    game.tick_field_buffs();
+    assert!(
+        game.world
+            .get::<FieldBuff>(player)
+            .unwrap()
+            .active
+            .is_empty(),
+        "a 5-tick buff should be gone after the 5th tick"
+    );
+}
+
+#[test]
+fn tick_field_buffs_logs_the_armed_name_not_the_kind_on_expiry() {
+    let mut game = Game::new(601, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::CaptureBoost,
+            name: "Snare Protocol".to_string(),
+            power: 10,
+            remaining: 1,
+            source: BuffSource::Consumable,
+        },
+    );
+
+    game.tick_field_buffs();
+
+    let log = game.message_log(10);
+    assert!(
+        log.iter().any(|(_, line)| line.contains("Snare Protocol")),
+        "the expiry line should name the armed buff, not its kind: {log:?}"
+    );
+}
+
+#[test]
+fn tick_field_buffs_ages_buffs_on_party_members_too() {
+    let mut game = Game::new(602, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(companion).unwrap();
+    game.arm_field_buff(
+        companion,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Atk,
+            name: "Overclock".to_string(),
+            power: 3,
+            remaining: 2,
+            source: BuffSource::Routine,
+        },
+    );
+
+    game.tick_field_buffs();
+
+    let remaining = game
+        .world
+        .get::<FieldBuff>(companion)
+        .unwrap()
+        .active
+        .first()
+        .unwrap()
+        .remaining;
+    assert_eq!(remaining, 1, "a companion's field buff should tick too");
+}
+
+/// The regression guard for the ordering constraint in `tick_inner`: a
+/// field buff keeps aging through `rest` while a `Temporary` structure's
+/// lifespan does not. Losing this distinction is exactly the kind of
+/// "tidy up the call site" refactor that would silently make buffs
+/// immortal through every night's rest.
+#[test]
+fn rest_ages_field_buffs_but_not_temporary_structures() {
+    let mut game = Game::new(603, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    spawn_rest_structure_at_player(&mut game);
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Coolant,
+            name: "Heat Sink".to_string(),
+            power: 1,
+            remaining: REST_TICKS + 5,
+            source: BuffSource::Routine,
+        },
+    );
+    let pos = *game.world.get::<Position>(player).unwrap();
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "test_temp".to_string(),
+            },
+            Position {
+                x: pos.x + 2,
+                y: pos.y,
+            },
+            Temporary {
+                ticks_remaining: 100,
+            },
+        ))
+        .id();
+
+    game.rest();
+
+    let buff_remaining = game
+        .world
+        .get::<FieldBuff>(player)
+        .unwrap()
+        .active
+        .first()
+        .unwrap()
+        .remaining;
+    assert_eq!(
+        buff_remaining, 5,
+        "a field buff should lose exactly REST_TICKS while resting"
+    );
+    assert_eq!(
+        game.world
+            .get::<Temporary>(structure)
+            .unwrap()
+            .ticks_remaining,
+        100,
+        "a Temporary structure must not age while the player rests"
     );
 }
 

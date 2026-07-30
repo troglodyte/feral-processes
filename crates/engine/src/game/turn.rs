@@ -100,6 +100,11 @@ impl Game {
         if age_temporary {
             self.age_temporary_structures();
         }
+        // Deliberately outside the `age_temporary` guard, unlike the call
+        // just above: a `Temporary` structure does not decay while the
+        // player rests, but a field buff does — rest is time passing for a
+        // buff, not base upkeep the player paused by staying home.
+        self.tick_field_buffs();
         self.world.resource_mut::<GameClock>().tick += 1;
     }
 

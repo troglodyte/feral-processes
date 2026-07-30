@@ -556,6 +556,41 @@ impl Game {
             .unwrap_or(0)
     }
 
+    /// Ages every field buff (see `FieldBuff`) on the player and each party
+    /// member by one tick, dropping any that just hit zero and logging one
+    /// line per expiry — named from `ActiveFieldBuff::name`, not `kind`,
+    /// since two different routines can arm the same kind and the buff list
+    /// has to say which one actually faded.
+    ///
+    /// Scoped to the player and party, unlike `age_temporary_structures`
+    /// (`game/turn.rs`), which walks every `Temporary` entity that exists —
+    /// a field buff only ever lands on a combatant (see
+    /// `FieldBuffKind::scope`), never on a structure.
+    pub(crate) fn tick_field_buffs(&mut self) {
+        let player = self.player_entity();
+        let subjects: Vec<Entity> = std::iter::once(player)
+            .chain(self.world.resource::<Party>().0.clone())
+            .collect();
+        let mut expired: Vec<String> = Vec::new();
+        for entity in subjects {
+            let Some(mut field_buff) = self.world.get_mut::<FieldBuff>(entity) else {
+                continue;
+            };
+            field_buff.active.retain_mut(|buff| {
+                buff.remaining = buff.remaining.saturating_sub(1);
+                if buff.remaining == 0 {
+                    expired.push(buff.name.clone());
+                    false
+                } else {
+                    true
+                }
+            });
+        }
+        for name in expired {
+            self.log(format!("{name} fades."));
+        }
+    }
+
     pub(crate) fn begin_defend(&mut self, entity: Entity) {
         self.arm_buff(
             entity,

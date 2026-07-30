@@ -9,23 +9,25 @@ use crate::*;
 
 impl Game {
     /// Healing for damaged structures — every `STRUCTURE_REGEN_INTERVAL`
-    /// ticks, everything below max `Durability` recovers
-    /// `STRUCTURE_REGEN_AMOUNT`, and everything that is *also* a structure
-    /// recovers `total_repair_rate` on top.
+    /// ticks, every structure below max `Durability` recovers
+    /// `STRUCTURE_REGEN_AMOUNT` plus whatever the base's repairers add
+    /// (`total_repair_rate`).
     ///
-    /// The split is why this isn't one number: a `Nest` carries `Durability`
-    /// too and has always drawn the baseline trickle, but the base's own
-    /// maintenance daemons have no business patching up what spawns the
-    /// raiders.
+    /// `With<Structure>` is load-bearing, not tidiness: a `Nest` carries
+    /// `Durability` too, and an unfiltered pass healed it alongside the
+    /// player's own buildings — so chipping a nest down with bump-attacks
+    /// raced its own regeneration. Nothing the player builds maintains what
+    /// spawns the raiders; a nest's Durability is only ever spent.
     pub(crate) fn structure_regen(&mut self) {
         let tick = self.world.resource::<GameClock>().tick;
         if !tick.is_multiple_of(STRUCTURE_REGEN_INTERVAL) {
             return;
         }
-        let repair = self.total_repair_rate();
-        let mut query = self.world.query::<(&mut Durability, Option<&Structure>)>();
-        for (mut durability, structure) in query.iter_mut(&mut self.world) {
-            let amount = STRUCTURE_REGEN_AMOUNT + if structure.is_some() { repair } else { 0 };
+        let amount = STRUCTURE_REGEN_AMOUNT + self.total_repair_rate();
+        let mut query = self
+            .world
+            .query_filtered::<&mut Durability, With<Structure>>();
+        for mut durability in query.iter_mut(&mut self.world) {
             durability.hp = (durability.hp + amount).min(durability.max_hp);
         }
     }

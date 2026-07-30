@@ -27,10 +27,13 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   were an inconvenience with a timer on them rather than pressure. At 1 it
   is a trickle that keeps a quiet base from rotting, and outpacing raids is
   now something you build for.
-- A repairer never heals a **nest**. Nests carry Durability like structures
-  do and have always drawn the baseline trickle; the new repair pass is
-  filtered to your own structures, so the base's maintenance daemon doesn't
-  patch up what spawns the raiders.
+- **Fixed: nests were quietly regenerating.** A nest carries Durability like
+  a structure does, and the regen pass healed every Durability holder
+  indiscriminately — so chipping a nest down with bump-attacks was racing its
+  own healing, and walking away from a half-destroyed one gave the progress
+  back. The manual already said a nest's Durability "is only ever spent by
+  you"; the code just didn't agree. The pass is now `With<Structure>`, so
+  neither the baseline trickle nor a Patch Node's repair reaches a nest.
 - `StructureDef` gains an optional `repair: Some((per_tier: N))` field, so a
   mod can declare a repairer of its own without touching Rust — documented
   in `assets/structures/README.md`. Existing structure files parse unchanged.

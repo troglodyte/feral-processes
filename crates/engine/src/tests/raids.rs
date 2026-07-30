@@ -954,11 +954,13 @@ fn a_patch_node_repairs_itself() {
     );
 }
 
-/// A nest carries `Durability` like a structure does, and the baseline
-/// trickle has always reached it. The repair bonus must not — the base's
-/// maintenance daemon has no business patching up what spawns the raiders.
+/// A nest carries `Durability` like a structure does, and the regen pass
+/// used to heal every `Durability` holder indiscriminately — so chipping a
+/// nest down with bump-attacks was quietly racing its own healing. Nothing
+/// the player builds maintains what spawns the raiders: a nest's Durability
+/// is only ever spent, never restored.
 #[test]
-fn patch_node_repair_does_not_heal_nests() {
+fn nests_do_not_regenerate_at_all() {
     let mut game = Game::new(144, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let nest = game
         .world
@@ -981,8 +983,8 @@ fn patch_node_repair_does_not_heal_nests() {
 
     assert_eq!(
         game.world.get::<Durability>(nest).unwrap().hp,
-        5 + STRUCTURE_REGEN_AMOUNT,
-        "a nest should get the baseline trickle and nothing from the Patch Node"
+        5,
+        "a nest gets neither the baseline trickle nor a Patch Node's repair"
     );
 }
 

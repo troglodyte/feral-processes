@@ -968,7 +968,9 @@ species file).
   side, and no retaliation, so it's pure chip damage rather than a battle.
 - Destroying it frees every surviving guardian (they scatter into ordinary
   wandering) and cancels any queued respawns.
-- Raids never target a nest; its Durability is only ever spent by you.
+- Raids never target a nest; its Durability is only ever spent by you, and
+  it never regenerates — chip damage you deal to one is banked permanently,
+  so you can walk away from a half-destroyed nest and come back to it.
 
 A nest is a deliberate risk/reward pocket: a dense cluster of one species
 worth farming for that species' loot, at the cost of being outnumbered

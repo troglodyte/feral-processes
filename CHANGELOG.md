@@ -32,12 +32,15 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   they're pressure or economy knobs the whole run feels rather than one
   combatant's stats: Coolant Flush (Fatigue over time), Trickle Charge
   (Power over time), Deep Scan (capture odds), Trace Analysis (XP), Ghost
-  Protocol (encounter chance), Salvage Routine (drop chance). The four flat
-  kinds scale with the caster's level and affinity like any other ability;
-  the six percentage kinds deliver their authored number unscaled, so a
-  routine's percent bonus can't be pushed past its own ceiling by a
-  high-level, high-affinity caster. See `assets/abilities/README.md`'s
-  `FieldBuff` section for the full scope and targeting rules.
+  Protocol (encounter chance), Salvage Routine (drop chance). Scaling cuts
+  across that scope split, not along it: five kinds — Repair Loop, Overclock,
+  Hardened Shell, Coolant Flush and Trickle Charge — scale with the caster's
+  level and affinity like any other ability; the other five — Ablative
+  Layer and the four remaining percentage kinds — deliver their authored
+  number unscaled, so a routine's percent bonus can't be pushed past its own
+  ceiling by a high-level, high-affinity caster. See
+  `assets/abilities/README.md`'s `FieldBuff` section for the full scope and
+  targeting rules.
 - **None of the ten is granted by a shipped species or research node.**
   They load, they're fully functional, and nothing currently names one in
   `unlocks_abilities` or gives it a wild-carrier weight — reaching one today

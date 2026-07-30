@@ -415,11 +415,11 @@ impl AbilityDef {
     /// there is unambiguous authorial intent worth naming.
     /// `assets/abilities/README.md` tells a modder directly that
     /// `fatigue_cost` doesn't apply here instead.
-    fn field_buff_dead_fields(&self) -> Option<String> {
+    fn field_buff_dead_fields(&self) -> Option<&'static str> {
         if !matches!(self.effect, AbilityEffect::FieldBuff { .. }) {
             return None;
         }
-        (self.cooldown != 0).then(|| "cooldown".to_string())
+        (self.cooldown != 0).then_some("cooldown")
     }
 
     /// Bounds a `Drain`'s `heal_fraction` to `0.0..=1.0`. Applied at load so

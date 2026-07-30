@@ -151,6 +151,18 @@ way deleting the Currency item does.
     //         EncounterDamp percent reduction to wild encounter odds
     //         DropBoost     percent bonus to drop rates
     //
+    //     Five of the ten run `power` through the same level/affinity
+    //     scaling every other ability effect gets (`abilities::scaled_power`)
+    //     before delivering it: Regen, Coolant, Trickle, Def, Atk. The other
+    //     five — Mitigation and the four rate kinds (CaptureBoost, XpBoost,
+    //     EncounterDamp, DropBoost) — are percentage points, delivered at
+    //     exactly the authored `power` regardless of who casts them. A
+    //     percentage already carries its own ceiling; scaling one the way a
+    //     flat amount scales would let it exceed that ceiling, which is what
+    //     the cap on Mitigation exists to prevent. This split is orthogonal
+    //     to the Creature/Run scope above — author `power` as points for the
+    //     first five, percentage points for the rest, regardless of scope.
+    //
     //     `cooldown` and `fatigue_cost` are both dead on this variant —
     //     neither battle-round throttling nor commanding a battle action
     //     applies outside one. A nonzero `cooldown` logs a warning naming the

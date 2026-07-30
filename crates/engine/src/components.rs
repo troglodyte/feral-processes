@@ -526,8 +526,7 @@ impl FieldBuffKind {
     /// Whether `Game::cast_field_routine` should run this kind's authored
     /// `power` through `abilities::scaled_power` (level and affinity) or
     /// deliver it unchanged. The five point-amount kinds scale; the five
-    /// percentage-point kinds — the same split `magnitude_label` already
-    /// documents — do not, for the reason `AbilityEffect::Drain`'s
+    /// percentage-point kinds do not, for the reason `AbilityEffect::Drain`'s
     /// `heal_fraction` is excluded from `scaled_power` too: a value that
     /// already carries its own ceiling doesn't need a second one stacked on
     /// top. A percentage is a property of the routine, not of how strong the

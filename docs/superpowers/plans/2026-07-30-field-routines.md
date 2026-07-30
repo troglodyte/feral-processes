@@ -407,9 +407,13 @@ The buff panel is a list of `Game::active_buffs` rows: name, magnitude, remainin
 
 **No graphics-library calls in `render/`.** Everything goes through `Painter`. If a needed operation is missing from `Painter`'s thirteen, add it to `paint.rs` and use it — do not reach around the seam.
 
+**This crate has tests and TDD applies here too.** `render/base.rs` and `render/battle.rs` each carry a `#[cfg(test)] mod tests` (10 and 16 tests). The pattern is to extract a pure row-building function — `history_rows(&entries, selected) -> Vec<Row>` is the model — and assert on the returned rows, not on drawing. Build `buff_rows(&[ActiveBuffView]) -> Vec<Row>` the same way and test it; the `draw_` function stays a thin painter loop over those rows.
+
 **Steps:**
 
-- [ ] Implement the screen and both panels.
+- [ ] Write failing tests against `buff_rows`: a row per active buff in order; the holder tag appears only for companion-borne buffs; an empty input produces no rows at all (the panel hides rather than showing an empty box); a long buff name does not push the magnitude column out of the panel.
+- [ ] Run, confirm fail. Implement `buff_rows`. Green.
+- [ ] Implement the cast screen and wire both panels through `buff_rows`.
 - [ ] `cargo build -p feral-processes-gui` and `cargo clippy --workspace`.
 - [ ] **Launch the game and actually look at it** — cast a routine, confirm the panel shows on the map, start a fight, confirm it still shows and the number counts down. A green suite is not evidence the screen is readable.
 - [ ] Commit.

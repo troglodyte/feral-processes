@@ -294,7 +294,20 @@ pub(super) fn draw_popup(
 /// `max_y` is a last-resort safety clamp — normal layout keeps every row
 /// within bounds via `draw_popup`'s capacity accounting, so this only ever
 /// bites if that accounting is off by a line.
-fn draw_row(row: &Row, x: f32, w: f32, cy: f32, max_y: f32, painter: &Painter, m: &Metrics) -> f32 {
+///
+/// `pub(super)` rather than private: the active-buff panel (`render/field.rs`)
+/// draws the same `Row::Item` shape outside a popup's box — an ambient list,
+/// not a modal menu — and reuses this rather than a second copy of the
+/// suffix-placement arithmetic.
+pub(super) fn draw_row(
+    row: &Row,
+    x: f32,
+    w: f32,
+    cy: f32,
+    max_y: f32,
+    painter: &Painter,
+    m: &Metrics,
+) -> f32 {
     if cy > max_y {
         return cy;
     }

@@ -26,6 +26,7 @@ mod building;
 mod crafting;
 mod dungeon;
 mod dungeon_map;
+mod field;
 mod inventory;
 mod manifest;
 mod manifest_layout;
@@ -47,6 +48,7 @@ use building::{
 };
 use crafting::{draw_craft_menu, draw_craft_quantity};
 use dungeon_map::draw_dungeon_map;
+use field::{draw_field_cast, draw_field_cast_ally};
 use inventory::{draw_erase_quantity, draw_inventory, draw_inventory_item_action};
 use manifest::{ManifestNav, draw_manifest, draw_manifest_pick};
 use meta::{
@@ -313,6 +315,7 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
     let selected = app.menu_selected;
     let pending_manifest = app.pending_manifest;
     let manifest_from_picker = app.manifest_from_picker;
+    let pending_field_routine = app.pending_field_routine;
     let Some(game) = &mut app.game else { return };
     match app.mode {
         Mode::Build => draw_build_menu(game, selected, painter, m),
@@ -428,6 +431,10 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             painter,
             m,
         ),
+        Mode::FieldCast => draw_field_cast(game, selected, painter, m),
+        Mode::FieldCastAlly => {
+            draw_field_cast_ally(game, pending_field_routine, selected, painter, m)
+        }
         Mode::RoutineTarget => draw_routine_target(game, selected, painter, m),
         Mode::Routines => draw_routines(game, app.pending_routine_holder, selected, painter, m),
         Mode::RoutineInstall => draw_routine_install(game, selected, painter, m),

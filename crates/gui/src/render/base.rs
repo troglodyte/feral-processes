@@ -2,6 +2,7 @@
 
 use super::bars::*;
 use super::dungeon::draw_dungeon;
+use super::field::draw_status_buffs;
 use super::*;
 
 /// How far a bare tile's background may stray from its biome's flat colour,
@@ -72,6 +73,10 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
     let map_h = painter.screen_h() * 0.72;
 
     let status = game.player_status();
+    // `Game::active_buffs` needs `&mut self`; fetched here rather than
+    // inside `draw_status_panel`, which only ever needed `&Game` before
+    // this and shouldn't have to start borrowing mutably just to draw.
+    let buffs = game.active_buffs();
     if let Some(view) = game.dungeon_view() {
         draw_dungeon(&view, painter, map_w, map_h, m);
     } else {
@@ -81,6 +86,7 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
     draw_status_panel(
         Rect::new(map_w, 0.0, painter.screen_w() - map_w, map_h),
         &status,
+        &buffs,
         game,
         painter,
         m,
@@ -306,6 +312,7 @@ fn draw_surface_map(
 fn draw_status_panel(
     rect: Rect,
     status: &feral_processes_engine::PlayerStatus,
+    buffs: &[feral_processes_engine::ActiveBuffView],
     game: &Game,
     painter: &Painter,
     m: &Metrics,
@@ -409,6 +416,7 @@ fn draw_status_panel(
         cy += m.line_height;
     }
     cy += m.gap;
+    cy = draw_status_buffs(buffs, x + m.inset, cy, painter, m);
     painter.ui("Inventory:", x + m.inset, cy, m.font_size, TEXT);
     cy += m.line_height;
     if status.inventory.is_empty() {

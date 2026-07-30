@@ -2,6 +2,7 @@
 //! the pickers layered over them.
 
 use super::bars::*;
+use super::field::draw_battle_buffs;
 use super::popup::*;
 use super::*;
 use feral_processes_engine::battle::SpecialOption;
@@ -28,7 +29,11 @@ fn status_tag(status: &Option<String>) -> String {
 /// is player-chosen, so either can hold multi-byte glyphs that byte slicing
 /// would panic on. The UI font advances `…` exactly like every other glyph;
 /// `tests/font_rasterization.rs` checks that.
-fn cell(s: &str, width: usize) -> String {
+///
+/// `pub(super)`, like `right` below it: the buff panel (`render/field.rs`)
+/// clips a routine name to a fixed column the same way a roster clips a
+/// species name, and it's the same algorithm either way.
+pub(super) fn cell(s: &str, width: usize) -> String {
     if s.chars().count() > width {
         s.chars()
             .take(width.saturating_sub(1))
@@ -188,6 +193,10 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
     let Some(view) = game.battle_view() else {
         return;
     };
+    // A field buff cast before the fight keeps ticking through it (see
+    // `Game::active_buffs`), so the panel has to survive the transition
+    // from the map screen rather than being a `Mode::Playing`-only readout.
+    let buffs = game.active_buffs();
 
     let w = painter.screen_w();
     // The battle screen sits straight on the window instead of inside a
@@ -310,6 +319,11 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
         draw_message_line(*kind, line, margin + m.inset, ly, painter, m);
         ly += m.line_height;
     }
+    // Anchored to the narration pane's own top-right corner and drawn over
+    // it last: that pane is flavor text, not tactical data, so occasionally
+    // covering a line of it costs far less than putting this over either
+    // roster's HP/DECOMP columns, which is everywhere else on this screen.
+    draw_battle_buffs(&buffs, w - margin, y, painter, m);
 
     y = party_top;
     painter.ui(

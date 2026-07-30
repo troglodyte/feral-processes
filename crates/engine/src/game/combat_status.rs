@@ -324,6 +324,7 @@ impl Game {
     /// Only party members are announced. A hostile reaching 0 is reported by
     /// `finish_member`, and the player by `difficulty::death_handling_system`.
     pub(crate) fn apply_damage(&mut self, target: Entity, dmg: i32) {
+        let dmg = self.mitigate_incoming_damage(target, dmg);
         let killed = {
             let Some(mut stats) = self.world.get_mut::<Stats>(target) else {
                 return;
@@ -335,6 +336,27 @@ impl Game {
         if killed && self.world.resource::<Party>().0.contains(&target) {
             self.announce_program_death(target);
         }
+    }
+
+    /// Cuts `dmg` by `target`'s running `Mitigation` field buff power
+    /// (percentage points), read off `target` itself since the kind is
+    /// `FieldScope::Creature` — it protects whoever carries it, not the
+    /// whole party.
+    ///
+    /// Rounds once, in the same expression as the percentage cut, rather
+    /// than rounding the reduction and then subtracting it — two roundings
+    /// can discard a point the combined operation keeps.
+    ///
+    /// Floors at 1 so a landed hit stays a hit under heavy mitigation, but
+    /// only when there was a hit to protect: `dmg <= 0` (already a miss, or
+    /// no buff at all) passes through untouched rather than being raised to 1.
+    fn mitigate_incoming_damage(&self, target: Entity, dmg: i32) -> i32 {
+        let power = self.field_buff_power(target, FieldBuffKind::Mitigation);
+        if power <= 0 || dmg <= 0 {
+            return dmg;
+        }
+        let reduced = (dmg as f32 * (1.0 - power as f32 / 100.0)).round() as i32;
+        reduced.max(1)
     }
 
     /// The `Outcome` line for a party member killed in battle: what died and

@@ -747,6 +747,86 @@ fn the_death_line_fires_once_on_the_transition_to_zero_and_never_above_it() {
     );
 }
 
+/// A running `Mitigation` routine cuts the hit by its percentage, computed
+/// and rounded once against the raw damage.
+#[test]
+fn mitigation_field_buff_cuts_incoming_damage_by_its_percentage() {
+    let mut game = Game::new(4246, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 100, 3);
+    game.add_companion(companion).unwrap();
+    game.arm_field_buff(companion, routine(FieldBuffKind::Mitigation, 25));
+
+    game.apply_damage(companion, 20);
+
+    assert_eq!(
+        game.world.get::<Stats>(companion).unwrap().hp,
+        85,
+        "25% mitigation must cut a 20-point hit to 15, for 100 - 15 = 85 HP left"
+    );
+}
+
+/// The floor is on mitigation's own effect, not damage in general: a hit
+/// that would otherwise round to 0 must still land for 1, but mitigation
+/// must never be the reason a hit that was already 0 becomes nonzero (that
+/// case is covered by `apply_damage` flooring `dmg` at 0 well before this
+/// path is reached).
+#[test]
+fn mitigation_never_reduces_a_landed_hit_below_one() {
+    let mut game = Game::new(4247, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 100, 3);
+    game.add_companion(companion).unwrap();
+    // 3 * (1 - 0.95) = 0.15, which rounds to 0 — the case the floor exists for.
+    game.arm_field_buff(companion, routine(FieldBuffKind::Mitigation, 95));
+
+    game.apply_damage(companion, 3);
+
+    assert_eq!(
+        game.world.get::<Stats>(companion).unwrap().hp,
+        99,
+        "a chip hit must stay a hit even under heavy mitigation"
+    );
+}
+
+/// No buff, no discount — proves the mitigation term is inert when absent
+/// rather than, say, defaulting to some nonzero cut.
+#[test]
+fn no_mitigation_buff_leaves_damage_untouched() {
+    let mut game = Game::new(4248, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 100, 3);
+    game.add_companion(companion).unwrap();
+
+    game.apply_damage(companion, 20);
+
+    assert_eq!(game.world.get::<Stats>(companion).unwrap().hp, 80);
+}
+
+/// Mitigation is `FieldScope::Creature`, so it has to be read off the entity
+/// taking the hit — a companion's own buff must not leak protection onto,
+/// or borrow it from, anyone else in the party.
+#[test]
+fn a_companions_own_mitigation_protects_only_that_companion() {
+    let mut game = Game::new(4249, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let shielded = spawn_tamed(&mut game, 100, 3);
+    let unshielded = spawn_tamed(&mut game, 100, 3);
+    game.add_companion(shielded).unwrap();
+    game.add_companion(unshielded).unwrap();
+    game.arm_field_buff(shielded, routine(FieldBuffKind::Mitigation, 25));
+
+    game.apply_damage(shielded, 20);
+    game.apply_damage(unshielded, 20);
+
+    assert_eq!(
+        game.world.get::<Stats>(shielded).unwrap().hp,
+        85,
+        "the shielded companion's own buff must cut its hit"
+    );
+    assert_eq!(
+        game.world.get::<Stats>(unshielded).unwrap().hp,
+        80,
+        "a party-mate's buff must not protect a companion that doesn't carry it"
+    );
+}
+
 /// The player is not a party member and must never be reaped by this path —
 /// flatlining stays with `difficulty::death_handling_system`, which is what
 /// `DifficultyMode` selects between. A player deleted from the world would

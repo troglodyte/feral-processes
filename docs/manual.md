@@ -520,14 +520,19 @@ on top of whatever you already have, at the same Perk Point cost every time:
 | Attacker | 2 | +1 permanent Attack |
 | Defender | 2 | +1 permanent Defense |
 | Buffer | 3 | +1% permanent max Integrity per level, minimum +10 (fully heals on purchase) |
+| Field Medic | 2 | +5% to your own heal affinity — see [Affinities](#affinities) |
+| Payload Tuning | 2 | +5% to your own damage affinity — see [Affinities](#affinities) |
+| Overclocker | 2 | +5% to your own buff affinity — see [Affinities](#affinities) |
+| Corruption Vector | 2 | +5% to your own debuff affinity — see [Affinities](#affinities) |
+| Siphon Protocol | 2 | +5% to your own drain affinity — see [Affinities](#affinities) |
 
 The `x` menu shows each perk's current level next to it.
 
 Each perk's **name, description and cost** are authored in
-`assets/perks/*.ron` and can be edited without recompiling. The set of seven
-cannot: unlike species, structures, items, abilities and research, a perk is
-a hook into a particular formula rather than a shape the engine knows how to
-read from data, so an eighth one means editing
+`assets/perks/*.ron` and can be edited without recompiling. The set of
+twelve cannot: unlike species, structures, items, abilities and research, a
+perk is a hook into a particular formula rather than a shape the engine
+knows how to read from data, so a thirteenth one means editing
 `crates/engine/src/perks.rs`. How much each perk gives per level isn't in
 the file either — that's difficulty tuning, and it stays in
 `crates/engine/src/tuning.rs`. See `assets/perks/README.md`.
@@ -766,6 +771,9 @@ be active party members, fighting alongside you at once.
   (see `assets/species/README.md`'s `growth_multiplier` field) — so a
   higher-tier catch keeps pulling ahead of an easy one as both level up,
   on top of already having tougher base stats.
+- **A species can also be good at something, not just tougher or softer.**
+  Tier and growth rate say how *much* a program is worth; a species'
+  affinities say what it's worth *at* — see [Affinities](#affinities).
 - **No two individuals of the same species are quite identical.** Every
   creature rolls its own HP/Attack/Defense independently within ±20% of
   the species/zone-scaled baseline when it's created, plus its own
@@ -809,6 +817,49 @@ the routine item on its own isn't enough.
   Press `M` to break a program you own down into exactly one of its
   routines. The program and every other routine it carried are gone for
   good.
+
+### Affinities
+
+An **affinity** is a per-category multiplier on how strong an ability's
+effect comes out — a 1.4 heal affinity makes every point of healing a
+program's repair routines land worth 40% more. There are five categories,
+one for each ability effect that carries a magnitude: **damage**, **heal**,
+**buff**, **debuff**, and **drain**. `Cleanse` and `Decompile` don't have a
+magnitude to scale, so no affinity ever touches either of them.
+
+Affinity comes from two places that never mix:
+
+- **A species' own `.ron` file** can declare it's stronger in some
+  categories and weaker in others — SubProcess, for instance, heals better
+  than it hits, Rootkit drains better than it buffs. Every shipped affinity
+  is clamped between 0.5 and 2.0 when the file loads, so a modded species
+  can lean hard into a specialty without breaking the formula. Most species
+  ship with no affinities at all — an even 1.0 across the board — including
+  both bosses.
+- **You buy the same five categories as perks** — Field Medic, Payload
+  Tuning, Overclocker, Corruption Vector, Siphon Protocol, in the
+  [Perks](#perks) table above — at +5% per level, capped at the same 2.0
+  a species' own affinity is.
+
+The two never combine on the same cast. A perk you've bought sharpens only
+**your own** casts — you have no species to carry an affinity of its own —
+and a companion's casts answer only to **its species**' affinity — a
+compiled program holds no Perk Points. A party-wide version of the perk
+would multiply against a companion's own affinity on top of it, which is
+exactly the double-dip the split is there to avoid.
+
+Affinity follows the **ability**, not the program's birthright: it applies
+to whatever is installed in a routine slot at the moment it's cast, the
+same routine system covered above, regardless of whether that program's
+species natively grants it. A program with a strong heal affinity but no
+innate heal in its kit isn't a wasted stat — it's a standing invitation to
+pop a researched or extracted heal routine into one of its slots and let
+the affinity do the rest, rather than leaving that slot running whatever
+it started with.
+
+The manifest (`d`) lists a program's non-neutral affinities alongside its
+Potential roll — at most two, with any further ones folded into a
+"+N more" line rather than crowding the screen.
 
 ### Fusing programs
 
@@ -1108,9 +1159,9 @@ schema. A malformed file is skipped with an in-game warning rather than
 crashing startup.
 
 `assets/perks/*.ron` works differently: it's a **catalogue**, not a content
-directory. The seven perks are fixed, and each file only sets what one of
+directory. The twelve perks are fixed, and each file only sets what one of
 them is called, how it reads, and what it costs — see
-`assets/perks/README.md` for why an eighth perk needs Rust.
+`assets/perks/README.md` for why a thirteenth perk needs Rust.
 
 A new piece of equipment is a **single file** and no Rust at all: `equipment`
 gives it a slot and any mix of Attack/Defense/Decompiler, `craftable` gives it

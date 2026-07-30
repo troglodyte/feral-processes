@@ -189,9 +189,12 @@ damage reduction, each running for a set number of turns), and six always
 land on the player regardless of who casts them, since they're pressure or
 economy knobs the whole run feels rather than one combatant's stats —
 Fatigue and Power regeneration, and percentage bonuses to capture odds, XP,
-encounter chance, and drop rate. None of the ten is granted by a shipped
-species or research node yet, so reaching one today means naming it
-yourself in a mod.
+encounter chance, and drop rate. All ten come from research, off the same
+`self_exec` root the other player routines hang from: Field Operations
+compiles the three regeneration routines, then Adaptive Plating and Deep
+Analysis branch off it for the combat trio and the four run-wide knobs.
+Researching one drops it into cargo; installing it into a slot with `m` is
+a separate act, as with any other routine.
 
 ## Affinities
 

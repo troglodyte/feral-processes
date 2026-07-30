@@ -320,16 +320,31 @@ mod tests {
     #[test]
     fn the_shipped_tree_loads_clean() {
         let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let research_dir = assets.join("research");
+        let ron_file_count = std::fs::read_dir(&research_dir)
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.path().extension().and_then(|e| e.to_str()) == Some("ron"))
+            .count();
         let (structures, _) = StructureDb::load_dir(&assets.join("structures")).unwrap();
         let (abilities, _) =
             crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
-        let (db, warnings) =
-            ResearchDb::load_dir(&assets.join("research"), &structures, &abilities).unwrap();
+        let (db, warnings) = ResearchDb::load_dir(&research_dir, &structures, &abilities).unwrap();
         assert!(
             warnings.is_empty(),
             "the shipped tree must not warn: {warnings:?}"
         );
-        assert_eq!(db.all().count(), 15, "15 nodes ship with the game");
+        // Counted against the directory rather than a hardcoded number, so
+        // adding a node never requires hand-updating this assertion. What it
+        // still catches: two files sharing an `id` overwrite one another in
+        // the `HashMap` with no warning from either side, and a node dropped
+        // for naming an unknown prereq or structure disappears just as
+        // quietly — both leave the loaded count short of the file count.
+        assert_eq!(
+            db.all().count(),
+            ron_file_count,
+            "every .ron file in assets/research should have loaded as a distinct node"
+        );
         assert_eq!(
             db.get("cortex").map(|d| d.cost),
             Some(45),

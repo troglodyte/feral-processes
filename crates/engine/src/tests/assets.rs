@@ -430,3 +430,51 @@ fn a_nan_affinity_disqualifies_the_file_and_the_rest_still_load() {
     // A single bad mod file must not take the shipped roster down with it.
     assert!(game.species_affinities("drone").is_some());
 }
+
+/// A routine nothing grants is content that cannot be reached: it loads, it
+/// passes every schema check, and no player will ever see it. The ten field
+/// routines shipped in exactly that state once, so this pins the *other* half
+/// of the contract — an ability file existing is not the same as it being
+/// obtainable.
+///
+/// Research hands routine items to the player; a species file is what a
+/// companion's kit comes from. Either counts as reachable.
+#[test]
+fn every_shipped_field_routine_can_actually_be_obtained() {
+    let game = Game::new(4711, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    let granted: std::collections::HashSet<&str> = game
+        .world
+        .resource::<crate::research::ResearchDb>()
+        .all()
+        .flat_map(|node| node.unlocks_abilities.iter())
+        .map(|id| id.as_str())
+        .chain(
+            game.world
+                .resource::<SpeciesDb>()
+                .all()
+                .flat_map(|s| s.abilities.iter())
+                .map(|a| a.id.as_str()),
+        )
+        .collect();
+
+    let unreachable: Vec<&str> = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .all()
+        .filter(|def| {
+            matches!(
+                def.effect,
+                crate::abilities::AbilityEffect::FieldBuff { .. }
+            )
+        })
+        .map(|def| def.id.as_str())
+        .filter(|id| !granted.contains(id))
+        .collect();
+
+    assert!(
+        unreachable.is_empty(),
+        "these field routines are in no research node and no species kit, \
+         so nothing in a real game can ever hand them over: {unreachable:?}"
+    );
+}

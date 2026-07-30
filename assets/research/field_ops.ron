@@ -1,0 +1,8 @@
+(
+    id: "field_ops",
+    name: "Field Operations",
+    description: "Routines that keep running while you are away from the base. Compiles Repair Loop, Coolant Flush and Trickle Charge into cargo.",
+    cost: 16,
+    requires: ["self_exec"],
+    unlocks_abilities: ["repair_loop", "coolant_flush", "trickle_charge"],
+)

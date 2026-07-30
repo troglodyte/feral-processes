@@ -41,11 +41,17 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   ceiling by a high-level, high-affinity caster. See
   `assets/abilities/README.md`'s `FieldBuff` section for the full scope and
   targeting rules.
-- **None of the ten is granted by a shipped species or research node.**
-  They load, they're fully functional, and nothing currently names one in
-  `unlocks_abilities` or gives it a wild-carrier weight — reaching one today
-  means naming it yourself in a mod. That's a deliberate scope cut made
-  while building this feature, not an oversight.
+- **Three research nodes hand the ten over**, branching off `self_exec`
+  where the other player routines already hang: Field Operations (16) for
+  Repair Loop, Coolant Flush and Trickle Charge, then Adaptive Plating (32)
+  for Hardened Shell, Overclock and Ablative Layer, and Deep Analysis (46)
+  for Deep Scan, Trace Analysis, Ghost Protocol and Salvage Routine. As with
+  every other researched routine, unlocking a node drops the item into cargo
+  and installing it is a separate act. No species grants one and none has a
+  wild-carrier weight, so a companion's own kit is unchanged.
+  `every_shipped_field_routine_can_actually_be_obtained` pins this: a
+  routine in no research node and no species kit fails the suite, because an
+  ability file existing is not the same as a player ever seeing it.
 - **An item's `prebattle_buff` now arms the same mechanism**, fixing two
   bugs it had carried since it shipped: the buff it armed was destroyed at
   the end of every battle despite the name, and it never survived a save.

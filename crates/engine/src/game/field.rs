@@ -168,4 +168,60 @@ impl Game {
         self.tick();
         Ok(())
     }
+
+    /// Every buff currently running on the player or a party member, for the
+    /// map's buff list and the battle roster alike. Reads `FieldBuff` (which
+    /// outlives a battle) and `CombatBuff` (armed only during one, e.g. a
+    /// brace) off the same holders with no branching on whether a battle is
+    /// active — outside one, `CombatBuff` is simply empty, so the list is
+    /// field buffs only, exactly the shape `Game::message_history` and
+    /// `Game::structure_report` use to keep a screen's row-shaping in the
+    /// engine rather than split across it and the renderer.
+    ///
+    /// Ordered player first, then party members in `Party`'s order — the
+    /// same convention `PartySlotView` uses for the roster, so this list and
+    /// that one agree on "whose row is whose" without either side having to
+    /// think about it. Within one holder, `FieldBuff::active`'s own order
+    /// comes first, then any `CombatBuff`; both are small enough that this
+    /// is just "stable and explainable" rather than a meaningful priority.
+    pub fn active_buffs(&mut self) -> Vec<ActiveBuffView> {
+        let player = self.player_entity();
+        let mut holders = vec![player];
+        holders.extend(self.world.resource::<Party>().0.clone());
+
+        let mut views = Vec::new();
+        for holder in holders {
+            let holder_label = (holder != player).then(|| self.creature_label(holder));
+
+            if let Some(field) = self.world.get::<FieldBuff>(holder) {
+                for buff in field.active.clone() {
+                    views.push(ActiveBuffView {
+                        name: buff.name,
+                        magnitude: buff.kind.magnitude_label(buff.power),
+                        remaining: buff.remaining,
+                        holder_label: holder_label.clone(),
+                    });
+                }
+            }
+
+            if let Some(active) = self.world.get::<CombatBuff>(holder).and_then(|b| b.active) {
+                // `CombatBuff` carries no cast-time name like `FieldBuff`
+                // does, only which stat it moves — `Def`/`Atk` share the
+                // same two `FieldBuffKind` variants, so the tag is built by
+                // the one function that already owns that format rather
+                // than a second copy of it here.
+                let (name, kind) = match active.kind {
+                    BuffKind::Atk => ("Attack", FieldBuffKind::Atk),
+                    BuffKind::Def => ("Defense", FieldBuffKind::Def),
+                };
+                views.push(ActiveBuffView {
+                    name: name.to_string(),
+                    magnitude: kind.magnitude_label(active.power),
+                    remaining: active.remaining,
+                    holder_label,
+                });
+            }
+        }
+        views
+    }
 }

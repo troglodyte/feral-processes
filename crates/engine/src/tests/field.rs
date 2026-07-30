@@ -325,3 +325,124 @@ fn field_routines_lists_across_holders_and_excludes_non_field() {
     );
     assert!(routines.iter().all(|r| r.ability == "test_field_regen"));
 }
+
+#[test]
+fn active_buffs_is_empty_when_nothing_is_running() {
+    let mut game = game_with_field_ability();
+
+    assert!(
+        game.active_buffs().is_empty(),
+        "a fresh game has no field buff and no combat buff armed"
+    );
+}
+
+#[test]
+fn active_buffs_reports_a_player_buff_with_no_holder_label() {
+    let mut game = game_with_field_ability();
+    let player = game.player_entity();
+    game.world
+        .entity_mut(player)
+        .insert(Routines(vec!["test_field_regen".to_string()]));
+
+    game.cast_field_routine(0, Some(player)).unwrap();
+    let stored = game.world.get::<FieldBuff>(player).unwrap().active[0].clone();
+
+    let buffs = game.active_buffs();
+
+    assert_eq!(buffs.len(), 1);
+    assert_eq!(buffs[0].name, "Test Field Regen");
+    assert_eq!(
+        buffs[0].holder_label, None,
+        "the player carries no holder label"
+    );
+    assert_eq!(buffs[0].remaining, stored.remaining);
+    assert_eq!(
+        buffs[0].magnitude,
+        FieldBuffKind::Regen.magnitude_label(stored.power)
+    );
+}
+
+#[test]
+fn active_buffs_reports_a_companion_buff_with_its_name() {
+    let mut game = game_with_field_ability();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(companion).unwrap();
+    game.world
+        .entity_mut(companion)
+        .insert(Routines(vec!["test_field_regen".to_string()]));
+    game.world
+        .get_mut::<Needs>(game.player_entity())
+        .unwrap()
+        .hunger = 100.0;
+
+    let routines = game.field_routines();
+    let index = routines
+        .iter()
+        .position(|r| r.holder == companion)
+        .expect("the companion's routine is listed");
+    game.cast_field_routine(index, Some(companion)).unwrap();
+    let expected_label = game.creature_label(companion);
+
+    let buffs = game.active_buffs();
+
+    assert_eq!(buffs.len(), 1);
+    assert_eq!(buffs[0].holder_label, Some(expected_label));
+}
+
+#[test]
+fn active_buffs_magnitude_reflects_the_scaled_power_not_the_authored_one() {
+    let mut game = game_with_field_ability();
+    let holder = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(holder).unwrap();
+    set_level(&mut game, holder, 20);
+    game.world
+        .entity_mut(holder)
+        .insert(Routines(vec!["test_field_regen".to_string()]));
+    game.world
+        .get_mut::<Needs>(game.player_entity())
+        .unwrap()
+        .hunger = 100.0;
+
+    let routines = game.field_routines();
+    let index = routines
+        .iter()
+        .position(|r| r.holder == holder)
+        .expect("the level-20 holder's routine is listed");
+    game.cast_field_routine(index, Some(holder)).unwrap();
+
+    let scaled = abilities::scaled_power(2, 20, AFFINITY_NEUTRAL);
+    // The authored magnitude in `FIELD_ONLY_ABILITY` is 2 — a level-20
+    // holder's cast must scale well past that, so asserting against the
+    // scaled value (rather than "2") actually exercises the distinction.
+    assert_ne!(scaled, 2);
+
+    let buffs = game.active_buffs();
+
+    assert_eq!(buffs.len(), 1);
+    assert_eq!(
+        buffs[0].magnitude,
+        FieldBuffKind::Regen.magnitude_label(scaled)
+    );
+}
+
+#[test]
+fn active_buffs_includes_a_combat_buff_and_the_map_shows_none_without_one() {
+    let mut game = Game::new(9105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+
+    assert!(
+        game.active_buffs().is_empty(),
+        "outside battle, with no field buff armed, the list must be empty"
+    );
+
+    let wild = spawn_wild_on_player_tile(&mut game);
+    insert_battle(&mut game, player, vec![wild]);
+    game.begin_defend(player);
+
+    let buffs = game.active_buffs();
+
+    assert_eq!(buffs.len(), 1);
+    assert_eq!(buffs[0].name, "Defense");
+    assert_eq!(buffs[0].remaining, 1);
+    assert_eq!(buffs[0].holder_label, None);
+}

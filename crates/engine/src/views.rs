@@ -492,6 +492,23 @@ pub struct FieldRoutineView {
     pub needs_ally_target: bool,
 }
 
+/// One row of the buff list — the map screen's field buffs plus, during a
+/// battle, any running `CombatBuff`. See `Game::active_buffs`.
+pub struct ActiveBuffView {
+    /// `ActiveFieldBuff::name` (the ability or item that armed it), or the
+    /// stat name for a `CombatBuff` — that component carries no cast-time
+    /// name of its own, only which stat it moves.
+    pub name: String,
+    /// `FieldBuffKind::magnitude_label` of the power actually stored, which
+    /// is already scaled — see that method's doc for why the tag is built
+    /// here rather than in the renderer.
+    pub magnitude: String,
+    pub remaining: u32,
+    /// `Some(program name)` when the buff sits on a companion, `None` for
+    /// the player.
+    pub holder_label: Option<String>,
+}
+
 /// Everything the engine knows about one subject, for the manifest screen —
 /// the player, a program you own, or a wild one. Shared header fields plus a
 /// `subject` carrying the half that differs, so "the player has no Potential

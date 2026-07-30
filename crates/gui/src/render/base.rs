@@ -123,31 +123,49 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
 /// The message log in full — everything the pane at the bottom of the map
 /// has room for a few lines of.
 ///
-/// Oldest first, matching that pane, and each line in its `MessageKind`
-/// colour through the same `message_color` the pane's own `draw_message_line`
-/// calls. Rows are `Row::Item` because that is what `popup_layout` scrolls;
-/// the highlight is the scroll position, not a selection, and
-/// `App::handle_history_key` accepts nothing that would pick one.
-///
-/// The footer states the screen's two limits rather than leaving the player to
-/// infer them from an absence: the engine keeps `MESSAGE_LOG_CAP` lines, and
+/// The footer states the screen's three limits rather than leaving the player
+/// to infer them from an absence: the engine keeps `MESSAGE_LOG_CAP` lines,
+/// repeats are folded into one row apiece, and
 /// `MessageLog::retain_outcomes_since_battle` drops a finished intrusion's
 /// blow-by-blow, so an old fight reads as its results.
 pub(super) fn draw_history(game: &Game, selected: usize, painter: &Painter, m: &Metrics) {
-    let lines = game.message_log(MESSAGE_LOG_CAP);
-    let mut rows = Vec::new();
-    if lines.is_empty() {
-        rows.push(text_row("Nothing has happened yet."));
-    }
-    for (i, (kind, line)) in lines.iter().enumerate() {
-        rows.push(colored_item_row(line, i == selected, message_color(*kind)));
-    }
+    let entries = game.message_history(MESSAGE_LOG_CAP);
+    let mut rows = history_rows(&entries, selected);
     rows.push(text_row(""));
     rows.push(text_row(format!(
-        "The last {MESSAGE_LOG_CAP} lines. A finished intrusion keeps its results, not its blow-by-blow."
+        "The last {MESSAGE_LOG_CAP} lines, repeats folded. A finished intrusion keeps its results, not its blow-by-blow."
     )));
     rows.push(text_row("Up/Down to scroll, Esc to close."));
     draw_popup("History", PopupSize::Large, &rows, painter, m);
+}
+
+/// The scrollable body of the history screen: one row per folded entry (see
+/// `Game::message_history`), oldest first to match the map's pane, each in its
+/// `MessageKind` colour through the same `message_color` that pane's
+/// `draw_message_line` calls.
+///
+/// Rows are `Row::Item` because that is what `popup_layout` scrolls; the
+/// highlight is the scroll position, not a selection, and
+/// `App::handle_history_key` accepts nothing that would pick one. Which makes
+/// the row count load-bearing: app-core counts the same folded entries to
+/// bound that highlight, so a row here without one there is a highlight
+/// pointing at nothing.
+fn history_rows(entries: &[LogEntry], selected: usize) -> Vec<Row> {
+    if entries.is_empty() {
+        return vec![text_row("Nothing has happened yet.")];
+    }
+    entries
+        .iter()
+        .enumerate()
+        .map(|(i, entry)| {
+            counted_item_row(
+                &entry.text,
+                entry.repeats,
+                i == selected,
+                message_color(entry.kind),
+            )
+        })
+        .collect()
 }
 
 /// The zone map: terrain, entities and effects, drawn top-down into the pane
@@ -432,6 +450,39 @@ fn draw_status_panel(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn entry(text: &str, repeats: usize) -> LogEntry {
+        LogEntry {
+            kind: MessageKind::Info,
+            text: text.to_string(),
+            repeats,
+        }
+    }
+
+    fn suffix_of(row: &Row) -> Option<&str> {
+        match row {
+            Row::Item { suffix, .. } => suffix.as_deref(),
+            _ => None,
+        }
+    }
+
+    /// The count is an annotation on the row, not part of the sentence — so it
+    /// only appears where there is something to count.
+    #[test]
+    fn a_folded_row_carries_its_count_and_a_lone_row_carries_none() {
+        let entries = vec![entry("extracted 2 Data Shard.", 14), entry("a raid", 1)];
+        let rows = history_rows(&entries, 0);
+        assert_eq!(rows.len(), 2, "one row per entry, folded or not");
+        assert_eq!(suffix_of(&rows[0]), Some("×14"));
+        assert_eq!(suffix_of(&rows[1]), None);
+    }
+
+    #[test]
+    fn an_empty_history_says_so_instead_of_listing_nothing() {
+        let rows = history_rows(&[], 0);
+        assert_eq!(rows.len(), 1);
+        assert!(matches!(rows[0], Row::Text(_)), "nothing to scroll to");
+    }
 
     #[test]
     fn tile_shade_is_stable_for_a_given_world_coordinate() {

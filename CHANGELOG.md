@@ -33,10 +33,20 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   lines, so anything that scrolled past was gone. The new screen is the last
   `MESSAGE_LOG_CAP` (100) lines, oldest-first like the pane, each in its
   `MessageKind` colour, scrolled with Up/Down and opening on the newest line —
-  the one that just left the pane. Its footer states its own two limits
-  instead of leaving them to be discovered: the 100-line bound, and that
-  `retain_outcomes_since_battle` keeps a finished intrusion's results rather
-  than its narration.
+  the one that just left the pane. Its footer states its own three limits
+  instead of leaving them to be discovered: the 100-line bound, the folding
+  below, and that `retain_outcomes_since_battle` keeps a finished intrusion's
+  results rather than its narration.
+- **Repeated lines fold into one row with a dim `×N`.** Automation is
+  repetitive by nature — a base with three cronjobs pushes a yield line per
+  producer per cycle — and the screen was mostly forty copies of the same
+  extraction with the raid you were looking for buried among them. An
+  identical line now folds into a recent one even with a couple of lines
+  between it, which is what catches several cronjobs interleaving their
+  yields; the same line again much later stays its own row, so two starvation
+  warnings still read as two events. The stored log is untouched, folding is
+  the screen's alone — the pane under the map and a battle's narration still
+  show every line.
 - **`B` shows every structure and what is assigned to it.** Tier, tile,
   distance and raid Durability per structure, and *every* program posted to
   each one — a cronjob worker and a guard can share a structure, which the

@@ -15,7 +15,8 @@ use feral_processes_engine::items::ItemId;
 use feral_processes_engine::tuning::MAX_FUSIONS;
 use feral_processes_engine::world::Biome;
 use feral_processes_engine::{
-    Assignee, Entity, Game, MESSAGE_LOG_CAP, MessageKind, PetInfo, ProgramSaleOption, ResearchState,
+    Assignee, Entity, Game, LogEntry, MESSAGE_LOG_CAP, MessageKind, PetInfo, ProgramSaleOption,
+    ResearchState,
 };
 
 mod bars;
@@ -53,7 +54,7 @@ use meta::{
     draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
 };
 use party::{draw_companion_menu, draw_fuse_menu, draw_fuse_name_menu, draw_fuse_second_menu};
-use popup::{PopupSize, colored_item_row, draw_popup, text_row};
+use popup::{PopupSize, Row, counted_item_row, draw_popup, text_row};
 use progression::{draw_perks_menu, draw_research_menu};
 use routines::{
     draw_extract, draw_extract_confirm, draw_extract_pick, draw_routine_install,

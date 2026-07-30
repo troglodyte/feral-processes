@@ -17,6 +17,9 @@ pub(super) enum Row {
         /// command you are picking — see `draw_battle_target_menu`.
         bold: bool,
         color: Color,
+        /// A trailing annotation drawn dim, set apart from the row's own text
+        /// — the history screen's repeat count. See `counted_item_row`.
+        suffix: Option<String>,
     },
 }
 
@@ -30,6 +33,7 @@ pub(super) fn item_row(s: impl Into<String>, selected: bool) -> Row {
         selected,
         bold: false,
         color: TEXT,
+        suffix: None,
     }
 }
 
@@ -42,6 +46,7 @@ pub(super) fn spent_item_row(s: impl Into<String>, selected: bool) -> Row {
         selected,
         bold: false,
         color: TEXT_DIM,
+        suffix: None,
     }
 }
 
@@ -54,6 +59,7 @@ pub(super) fn critical_item_row(s: impl Into<String>, selected: bool) -> Row {
         selected,
         bold: false,
         color: RED,
+        suffix: None,
     }
 }
 
@@ -66,6 +72,26 @@ pub(super) fn colored_item_row(s: impl Into<String>, selected: bool, color: Colo
         selected,
         bold: false,
         color,
+        suffix: None,
+    }
+}
+
+/// `colored_item_row` for a row standing for `repeats` identical log lines —
+/// the history screen's folded rows (see `Game::message_history`). The count
+/// is drawn dim and set apart, so it reads as an annotation rather than as
+/// part of the line, and a row standing for one line carries nothing at all.
+pub(super) fn counted_item_row(
+    s: impl Into<String>,
+    repeats: usize,
+    selected: bool,
+    color: Color,
+) -> Row {
+    Row::Item {
+        text: s.into(),
+        selected,
+        bold: false,
+        color,
+        suffix: (repeats > 1).then(|| format!("×{repeats}")),
     }
 }
 
@@ -76,6 +102,7 @@ pub(super) fn creature_row(s: impl Into<String>, selected: bool) -> Row {
         selected,
         bold: true,
         color: TEXT,
+        suffix: None,
     }
 }
 
@@ -283,6 +310,7 @@ fn draw_row(row: &Row, x: f32, w: f32, cy: f32, max_y: f32, painter: &Painter, m
             selected,
             bold,
             color,
+            suffix,
         } => {
             if *selected {
                 // Anchored to the same `m.pad` the row text uses, so the
@@ -300,9 +328,24 @@ fn draw_row(row: &Row, x: f32, w: f32, cy: f32, max_y: f32, painter: &Painter, m
             let prefix = if *selected { "> " } else { "  " };
             let label = format!("{prefix}{s}");
             if *selected && *bold {
-                painter.ui_bold(label, x + m.pad, cy, m.font_size, *color);
+                painter.ui_bold(&label, x + m.pad, cy, m.font_size, *color);
             } else {
-                painter.ui(label, x + m.pad, cy, m.font_size, *color);
+                painter.ui(&label, x + m.pad, cy, m.font_size, *color);
+            }
+            // Placed by measuring the row's own text rather than padded into
+            // it, so the gap is one inset at every font size instead of a
+            // count of spaces that drifts with the glyph width. Never bold, so
+            // measuring the regular face is right for every row that has one:
+            // `bold` is a creature list's, and those carry no suffix.
+            if let Some(suffix) = suffix {
+                let text_w = painter.measure_ui(&label, m.font_size).width;
+                painter.ui(
+                    suffix,
+                    x + m.pad + text_w + m.inset,
+                    cy,
+                    m.font_size,
+                    TEXT_DIM,
+                );
             }
         }
     }

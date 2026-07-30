@@ -60,7 +60,7 @@ impl App {
             Mode::History => self
                 .game
                 .as_ref()
-                .map(|g| g.message_log(MESSAGE_LOG_CAP).len().saturating_sub(1))
+                .map(|g| g.message_history(MESSAGE_LOG_CAP).len().saturating_sub(1))
                 .unwrap_or(0),
             _ => 0,
         }

@@ -29,18 +29,20 @@ fn b_opens_the_structure_roster_and_esc_returns_to_the_map() {
 #[test]
 fn up_and_down_scroll_the_history_without_leaving_it() {
     let mut app = test_app(92);
-    // Two lines to scroll between. `r` away from any power source logs "You
-    // have nothing to recharge from." — an action with a guaranteed line and
-    // no dependence on what the seed rolled onto the map.
+    // Two rows to scroll between, and they have to be two *different* lines:
+    // `r` rests and `g` scans the ground, each with a guaranteed line whatever
+    // the seed rolled onto the map, and no line in common. Pressing `r` twice
+    // would fold into a single row — see
+    // `repeated_lines_are_one_scrollable_row`.
     app.handle_key(GameKey::Char('r'));
-    app.handle_key(GameKey::Char('r'));
+    app.handle_key(GameKey::Char('g'));
     let lines = app
         .game
         .as_ref()
         .unwrap()
-        .message_log(MESSAGE_LOG_CAP)
+        .message_history(MESSAGE_LOG_CAP)
         .len();
-    assert!(lines >= 2, "the test needs two lines to scroll between");
+    assert!(lines >= 2, "the test needs two rows to scroll between");
     app.handle_key(GameKey::Char('L'));
     // Lines run oldest-first, matching the map's pane, so the newest is the
     // last row — and it is the one the player opened the screen to read.
@@ -56,6 +58,36 @@ fn up_and_down_scroll_the_history_without_leaving_it() {
     app.handle_key(GameKey::Down);
     assert_eq!(app.menu_selected, lines - 1);
     assert_eq!(app.mode, Mode::History, "scrolling never leaves the screen");
+}
+
+/// The screen scrolls the *folded* rows (see `Game::message_history`), so its
+/// row count has to come from the same place the renderer's does. Counting raw
+/// lines instead would open the screen on a row that isn't drawn and let the
+/// highlight run off the end of the list.
+#[test]
+fn repeated_lines_are_one_scrollable_row() {
+    let mut app = test_app(96);
+    app.handle_key(GameKey::Char('r'));
+    app.handle_key(GameKey::Char('r'));
+    let game = app.game.as_ref().unwrap();
+    let raw = game.message_log(MESSAGE_LOG_CAP).len();
+    let rows = game.message_history(MESSAGE_LOG_CAP).len();
+    assert!(
+        rows < raw,
+        "two identical refusals should fold into one row ({raw} lines, {rows} rows)"
+    );
+
+    app.handle_key(GameKey::Char('L'));
+    assert_eq!(
+        app.menu_selected,
+        rows - 1,
+        "the history opens on its newest row, counted after the fold"
+    );
+    app.handle_key(GameKey::Down);
+    assert_eq!(
+        app.menu_selected, 0,
+        "Down from the last folded row wraps to the first"
+    );
 }
 
 /// The roster is a list of things, not a timeline, so it opens at the top

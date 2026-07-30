@@ -111,12 +111,16 @@ impl App {
             self.mode = Mode::Playing;
             return;
         }
-        let lines = self
+        // Folded rows, not raw lines: repeats are condensed into one row (see
+        // `Game::message_history`), and the highlight *is* the scroll
+        // position, so counting anything the renderer doesn't draw would let
+        // it run off the end of the list.
+        let rows = self
             .game
             .as_ref()
-            .map(|g| g.message_log(MESSAGE_LOG_CAP).len())
+            .map(|g| g.message_history(MESSAGE_LOG_CAP).len())
             .unwrap_or(0);
-        self.scroll(key, lines);
+        self.scroll(key, rows);
     }
 
     /// The structure roster. Read-only for the same reason the history is:

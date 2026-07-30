@@ -276,14 +276,21 @@ pub(super) fn draw_structures(game: &mut Game, selected: usize, painter: &Painte
             i == selected,
             color,
         ));
+        // A structure's sub-lines are `Row::Item` (never selected) rather than
+        // `Row::Text` so they sit inside the popup's scrollable body:
+        // `popup_layout` ends that body at the *last* Item and pins whatever
+        // follows it as a footer, which would otherwise leave the final
+        // structure's assignees stuck on screen while the list scrolled past
+        // them.
         if is_idle {
-            rows.push(Row::TextColored(
-                "    idle — nobody assigned".into(),
-                YELLOW,
-            ));
+            rows.push(colored_item_row("  idle — nobody assigned", false, YELLOW));
         }
         for a in &s.assignees {
-            rows.push(text_row(format!("    {}", assignee_line(a))));
+            rows.push(colored_item_row(
+                format!("  {}", assignee_line(a)),
+                false,
+                TEXT_DIM,
+            ));
         }
     }
     rows.push(text_row(""));

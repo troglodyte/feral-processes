@@ -766,6 +766,7 @@ impl Game {
                 targeting: ability.target.targeting(),
                 sweeps_party: ability.target == AbilityTarget::WholeParty,
                 unavailable: self.ability_unavailable(entity, &ability),
+                fatigue_cost: ability.fatigue_cost,
             })
             .collect()
     }

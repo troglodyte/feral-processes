@@ -4,6 +4,8 @@
 use super::bars::*;
 use super::popup::*;
 use super::*;
+use feral_processes_engine::battle::SpecialOption;
+use feral_processes_engine::components::NEED_MAX;
 
 /// Offset that keeps party-slot bar keys clear of the enemy-group keys they
 /// share `Fx::bar_ghost`'s map with. Far above `MAX_ENEMY_GROUPS`, so the
@@ -64,6 +66,9 @@ const REACH_W: usize = 7;
 const STATUS_W: usize = 13;
 /// `DECOMP` itself is the widest thing in the column; `100%` fits under it.
 const DECOMP_W: usize = 6;
+/// `FATIGUE` itself is the widest thing in the column — `100/100` fits under
+/// it exactly, which `the_fatigue_column_holds_its_place` pins.
+const FATIGUE_W: usize = 7;
 /// The one line shape both rosters and both headers are built from, so a
 /// column cannot move in a row without moving in its header too.
 fn roster_line(
@@ -95,6 +100,25 @@ fn hostile_tail(status: &str, decomp: &str) -> String {
     format!("{} {}", cell(status, STATUS_W), right(decomp, DECOMP_W))
 }
 
+/// The party roster's counterpart: a fixed FATIGUE cell, then the ragged
+/// ACTION column. Composed here for the reason `hostile_tail` is — the
+/// header and every row are built from one set of widths or they drift.
+fn party_tail(fatigue: &str, action: &str) -> String {
+    format!("{} {}", right(fatigue, FATIGUE_W), action)
+}
+
+/// The FATIGUE cell: what this member has left to spend on routines, or a
+/// dash for one that has none to spend. Every companion is a dash — Fatigue
+/// is the player's alone, whoever a routine is ordered for — and a dash
+/// rather than a copy of the player's number, which would read as five
+/// separate pools.
+fn fatigue_cell(fatigue: Option<f32>) -> String {
+    match fatigue {
+        Some(f) => format!("{f:.0}/{NEED_MAX:.0}"),
+        None => "—".to_string(),
+    }
+}
+
 /// The DECOMP cell: the engine's odds against *this* group, or a dash when no
 /// taming catalyst is held and there is nothing to quote. Not `0%`, which
 /// would read as an allowed-but-hopeless attempt when the action isn't
@@ -123,7 +147,15 @@ fn hostile_header() -> String {
 }
 
 fn party_header() -> String {
-    roster_line("   ", "NAME", "HP", "ATK", "DEF", "POS", "ACTION")
+    roster_line(
+        "   ",
+        "NAME",
+        "HP",
+        "ATK",
+        "DEF",
+        "POS",
+        &party_tail("FATIGUE", "ACTION"),
+    )
 }
 
 /// `roster_line` with the two stat columns taken as the numbers they are.
@@ -319,12 +351,15 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
                 p.def,
                 if p.front { "FRONT" } else { "BACK" },
                 // A member's own condition rides in the ACTION column
-                // rather than getting a seventh fixed cell that would be
+                // rather than getting a fixed cell of its own that would be
                 // empty on almost every row.
-                &format!(
-                    "{}{}",
-                    p.planned.as_deref().unwrap_or("—"),
-                    status_tag(&p.status_effect),
+                &party_tail(
+                    &fatigue_cell(p.fatigue),
+                    &format!(
+                        "{}{}",
+                        p.planned.as_deref().unwrap_or("—"),
+                        status_tag(&p.status_effect),
+                    ),
                 ),
             ),
             p.hp as f32,
@@ -391,12 +426,38 @@ pub(super) fn draw_battle_special_menu(app: &mut App, painter: &Painter, m: &Met
     };
     let mut rows = vec![text_row("Which ability?")];
     for (i, o) in game.battle_special_options(slot).into_iter().enumerate() {
-        rows.push(creature_row(
-            format!("[{}] {}", i + 1, o.detail),
-            i == selected,
-        ));
+        let label = special_row(i, &o);
+        // Greyed rather than hidden, and still selectable: the engine refuses
+        // it again on commit, and a row that vanished would leave the player
+        // wondering where a routine they installed went.
+        rows.push(match o.unavailable {
+            Some(_) => spent_item_row(label, i == selected),
+            None => creature_row(label, i == selected),
+        });
     }
     draw_popup("Pick a special", PopupSize::Large, &rows, painter, m);
+}
+
+/// One row of that picker: the routine, what it costs the player's Fatigue to
+/// order, what it does, and — greyed — why it can't be run right now.
+///
+/// The price is shown because the engine's refusal for an unaffordable
+/// routine ("not enough Fatigue") names a number the player otherwise
+/// couldn't compare against anything; the Fatigue it is measured against is
+/// the FATIGUE column of the roster this popup sits over.
+fn special_row(index: usize, option: &SpecialOption) -> String {
+    let reason = option
+        .unavailable
+        .as_deref()
+        .map(|r| format!(" ({r})"))
+        .unwrap_or_default();
+    format!(
+        "[{}] {} — {:.0} FTG — {}{reason}",
+        index + 1,
+        option.name,
+        option.fatigue_cost,
+        option.detail,
+    )
 }
 
 /// Who does this buff or heal land on? Lists you and every standing
@@ -514,8 +575,24 @@ mod tests {
                 &hostile_tail("OK", &odds_cell(Some(0.18))),
             ),
             party_header(),
-            roster_row(">1 ", "You", "21/30", 11, 6, "FRONT", "Attack A"),
-            roster_row(" 2 ", "Sparkgrub", "18/18", 7, 3, "FRONT", "Defend"),
+            roster_row(
+                ">1 ",
+                "You",
+                "21/30",
+                11,
+                6,
+                "FRONT",
+                &party_tail(&fatigue_cell(Some(62.0)), "Attack A"),
+            ),
+            roster_row(
+                " 2 ",
+                "Sparkgrub",
+                "18/18",
+                7,
+                3,
+                "FRONT",
+                &party_tail(&fatigue_cell(None), "Defend"),
+            ),
         ];
         for line in &lines {
             assert_eq!(
@@ -526,8 +603,8 @@ mod tests {
         }
         assert!(at(&lines[0], TAIL_COL).starts_with("STATUS"));
         assert!(at(&lines[1], TAIL_COL).starts_with("BLEEDING"));
-        assert!(at(&lines[3], TAIL_COL).starts_with("ACTION"));
-        assert!(at(&lines[4], TAIL_COL).starts_with("Attack A"));
+        assert!(at(&lines[3], TAIL_COL).starts_with("FATIGUE"));
+        assert!(at(&lines[4], TAIL_COL).starts_with(" 62/100"));
     }
 
     /// A whole roster block, character-exact. The other tests assert the
@@ -535,7 +612,7 @@ mod tests {
     /// change to any width is reviewable as a diff of the output rather than
     /// of arithmetic.
     #[test]
-    fn a_roster_block_reads_as_an_aligned_table() {
+    fn a_hostile_block_reads_as_an_aligned_table() {
         let block = [
             hostile_header(),
             roster_row(
@@ -573,6 +650,41 @@ mod tests {
              A  4 Null Daemons     18/30       9   4 ENGAGED BLEEDING (2)     62%\n\
              B  Warden Process     44/44      14   9 BACK    OK               18%\n\
              C  Sentinel [BOSS]    120/120    22  15 BACK    OK                 —"
+        );
+    }
+
+    /// The party block, character-exact for the same reason — and this one is
+    /// the diagram `docs/manual.md` prints under "Both sides are listed as a
+    /// stat table", which is copied from here rather than aligned by hand.
+    #[test]
+    fn a_party_block_reads_as_an_aligned_table() {
+        let block = [
+            party_header(),
+            roster_row(
+                ">1 ",
+                "You",
+                "21/30",
+                11,
+                6,
+                "FRONT",
+                &party_tail(&fatigue_cell(Some(62.0)), "Attack A"),
+            ),
+            roster_row(
+                " 2 ",
+                "Sparkgrub",
+                "18/18",
+                7,
+                3,
+                "FRONT",
+                &party_tail(&fatigue_cell(None), "Defend"),
+            ),
+        ]
+        .join("\n");
+        assert_eq!(
+            block,
+            "   NAME               HP        ATK DEF POS     FATIGUE ACTION\n\
+             >1 You                21/30      11   6 FRONT    62/100 Attack A\n\
+             \u{20}2 Sparkgrub          18/18       7   3 FRONT         — Defend"
         );
     }
 
@@ -629,7 +741,92 @@ mod tests {
         let h = party_header();
         assert!(at(&h, MARK_W).starts_with("NAME"));
         assert!(at(&h, MARK_W + NAME_W + 1).starts_with("HP"));
-        assert!(at(&h, TAIL_COL).starts_with("ACTION"));
+        assert!(at(&h, TAIL_COL).starts_with("FATIGUE"));
+        assert!(at(&h, TAIL_COL + FATIGUE_W + 1).starts_with("ACTION"));
+    }
+
+    /// FATIGUE is a fixed cell in the party tail, so ACTION starts at the
+    /// same column whether the row is the player's or a companion's — and
+    /// `100/100`, the widest reading there is, fits under the header without
+    /// widening it.
+    #[test]
+    fn the_fatigue_column_holds_its_place() {
+        const ACTION_COL: usize = TAIL_COL + FATIGUE_W + 1;
+        let you = roster_row(
+            ">1 ",
+            "You",
+            "21/30",
+            11,
+            6,
+            "FRONT",
+            &party_tail(&fatigue_cell(Some(NEED_MAX)), "Special: Null Route"),
+        );
+        let pet = roster_row(
+            " 2 ",
+            "Sparkgrub",
+            "18/18",
+            7,
+            3,
+            "FRONT",
+            &party_tail(&fatigue_cell(None), "Defend"),
+        );
+        assert_eq!(fatigue_cell(Some(NEED_MAX)).chars().count(), FATIGUE_W);
+        assert_eq!(
+            at(&you, TAIL_COL)
+                .chars()
+                .take(FATIGUE_W)
+                .collect::<String>(),
+            "100/100"
+        );
+        assert_eq!(
+            at(&pet, TAIL_COL)
+                .chars()
+                .take(FATIGUE_W)
+                .collect::<String>(),
+            "      —"
+        );
+        assert!(at(&you, ACTION_COL).starts_with("Special: Null Route"));
+        assert!(at(&pet, ACTION_COL).starts_with("Defend"));
+    }
+
+    /// The picker prices each routine against the FATIGUE column behind it,
+    /// and an unaffordable one still says what it would have cost — the
+    /// number the engine's refusal is talking about.
+    #[test]
+    fn a_special_row_prices_the_routine_and_carries_its_refusal() {
+        fn option(unavailable: Option<&str>) -> SpecialOption {
+            SpecialOption {
+                index: 0,
+                name: "Cascade Overflow".to_string(),
+                detail: "Damage a whole group".to_string(),
+                targeting: feral_processes_engine::battle::SpecialTargeting::Enemy,
+                sweeps_party: false,
+                unavailable: unavailable.map(str::to_string),
+                fatigue_cost: 8.0,
+            }
+        }
+
+        assert_eq!(
+            special_row(0, &option(None)),
+            "[1] Cascade Overflow — 8 FTG — Damage a whole group"
+        );
+        assert_eq!(
+            special_row(2, &option(Some("not enough Fatigue"))),
+            "[3] Cascade Overflow — 8 FTG — Damage a whole group (not enough Fatigue)"
+        );
+    }
+
+    /// Fatigue is one pool, the player's, spent by every routine whoever it
+    /// was ordered for. A companion's cell holds a dash rather than a copy of
+    /// that number, which would read as a pool of its own.
+    #[test]
+    fn a_companions_fatigue_cell_is_a_dash() {
+        assert_eq!(fatigue_cell(None), "—");
+        assert_eq!(fatigue_cell(Some(0.0)), "0/100");
+        // Rounded, not truncated toward a reading the player can't act on:
+        // decay leaves fractions, and `4.6` left of a 5.0-cost routine is
+        // nearer 5 than 4.
+        assert_eq!(fatigue_cell(Some(61.5)), "62/100");
     }
 
     /// An over-long name is clipped rather than allowed to shove the stats

@@ -367,6 +367,56 @@ fn an_ability_costing_more_fatigue_than_you_have_is_unavailable() {
     let _ = sweeper;
 }
 
+/// The refusal above quotes a price the picker never printed, so a player
+/// who couldn't afford a routine had no way to find out what it wanted. The
+/// cost travels on the option for the same reason the reason does: neither
+/// renderer gets to author it.
+#[test]
+fn a_special_option_carries_the_fatigue_it_would_spend() {
+    let (mut game, _) = game_with_a_sweeper();
+    battle_with_a_pack_of(&mut game, 2, 500);
+
+    let options = game.battle_special_options(1);
+    assert_eq!(
+        options[0].fatigue_cost, 8.0,
+        "cascade_overflow declares fatigue_cost 8.0"
+    );
+    assert_eq!(
+        options[1].fatigue_cost, 15.0,
+        "broadcast_storm declares fatigue_cost 15.0"
+    );
+}
+
+/// Fatigue prices every routine the player side runs and refuses the ones
+/// they can't afford, and the battle screen was the one place it wasn't
+/// shown. It rides on the party slot rather than on the view as a whole
+/// because the roster shows it as a per-member column — and only the player
+/// has `Needs`, so a companion's cell is honestly empty rather than a second
+/// copy of the player's number.
+#[test]
+fn the_battle_view_carries_the_players_fatigue_and_no_one_elses() {
+    let (mut game, sweeper) = game_with_a_sweeper();
+    let player = game.player_entity();
+    battle_with_a_pack_of(&mut game, 2, 500);
+    game.world.get_mut::<Needs>(player).unwrap().fatigue = 62.0;
+
+    let view = game.battle_view().expect("the pack opened a battle");
+    assert_eq!(
+        view.party[0].fatigue,
+        Some(62.0),
+        "slot 0 is the player, whose Fatigue is what every routine spends"
+    );
+    assert_eq!(
+        view.party[1].entity, sweeper,
+        "the sweeper should be the second party slot"
+    );
+    assert_eq!(
+        view.party[1].fatigue, None,
+        "a companion carries no Needs of its own, and must not be shown the \
+         player's"
+    );
+}
+
 #[test]
 fn the_player_has_no_abilities_until_they_research_one() {
     let game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

@@ -13,6 +13,20 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Fatigue is visible where it is spent
+
+- **The battle roster has a `FATIGUE` column.** Fatigue prices every routine
+  and refuses the ones you can't pay for, and the intrusion screen was the one
+  place it wasn't shown — so "not enough Fatigue" quoted a figure nothing on
+  screen named. It sits on your row alone: Fatigue is one pool, yours, spent
+  whichever member runs the routine, so a companion's cell is a `—` rather
+  than a fourth copy of your number.
+- **The ability picker prices each routine** (`8 FTG`) next to what it does,
+  and lists an unavailable one greyed with the engine's own reason — a
+  cooldown, no catalyst, a full roster, or Fatigue you don't have. It
+  previously showed descriptions alone, with neither the name nor the cost nor
+  the reason.
+
 ### Two read-only screens
 
 - **`L` shows the message log in full.** The pane under the map fits a few

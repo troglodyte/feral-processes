@@ -298,6 +298,11 @@ pub struct PartySlotView {
     pub atk: i32,
     pub def: i32,
     pub status_effect: Option<String>,
+    /// What this member has left to spend on routines, or `None` for one
+    /// that has none to spend — every companion. Fatigue lives on the
+    /// player's `Needs` alone, and it is the player who pays for a routine
+    /// however it was ordered, so this is `Some` on slot 0 and nowhere else.
+    pub fatigue: Option<f32>,
     /// This round's chosen action rendered for the roster, or `None` if the
     /// slot is still awaiting one.
     pub planned: Option<String>,

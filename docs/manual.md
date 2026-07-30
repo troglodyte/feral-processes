@@ -204,7 +204,7 @@ into the renderer, so a new action appears without the UI being touched:
 | --- | --- |
 | `a` | Attack — then pick which enemy group to hit |
 | `d` | Defend — brace for the round: a Defense bonus, and you draw more of the incoming fire |
-| `s` | Special — picks one of that member's installed **routines**, then a target if it needs one. The row is hidden entirely, not greyed, for a member with nothing installed. Costs you Fatigue — how much the routine decides — and may sit out a few rounds afterwards. See [Routines](#routines) |
+| `s` | Special — picks one of that member's installed **routines**, then a target if it needs one. The row is hidden entirely, not greyed, for a member with nothing installed. Costs you Fatigue — how much the routine decides, printed on its row in the picker — and may sit out a few rounds afterwards. One you can't pay for, or that is still cooling down, is listed greyed with the reason. See [Routines](#routines) |
 | `u` | Use item (you only) — spend a consumable as that slot's action for the round |
 | `j` | Jack out (flee) — an *attempt*, not a guarantee: the odds weigh your party's strength against the pack's. Success costs a mild XP setback, same as flatlining; failure burns the round and draws a free volley, but costs no XP. A party-level command, not a per-member action |
 | `A` | All attack — every unplanned slot attacks. Asks which group only if more than one is left |
@@ -223,14 +223,21 @@ be compared by scanning down its column:
 A  4 Null Daemons     18/30       9   4 ENGAGED BLEEDING (2)     62%
 B  Warden Process     44/44      14   9 BACK    OK               18%
 
-   NAME               HP        ATK DEF POS   ACTION
->1 You                21/30      11   6 FRONT Attack A
- 2 Sparkgrub          18/18       7   3 FRONT Defend
+   NAME               HP        ATK DEF POS     FATIGUE ACTION
+>1 You                21/30      11   6 FRONT    62/100 Attack A
+ 2 Sparkgrub          18/18       7   3 FRONT         — Defend
 ```
 
 `RANGE` is whether a hostile group can reach you at all (see above); `POS`
 is your own member's rank. `>` marks the member currently choosing. Each row
 also carries the HP bar the table's numbers summarise.
+
+`FATIGUE` is what you have left to spend on routines — see
+[Stats](#stats). It sits on your row and nowhere else because it is one
+pool, yours, and *you* pay for a routine whichever member runs it; a
+companion's cell reads `—` rather than repeating your number. Watch it,
+because a routine you can't afford is refused, and the ability picker prices
+each one (`8 FTG`) against it.
 
 `DECOMP` is your live chance of compiling that group's front program if you
 decompiled it right now — see [Decompile chance](#stats). It moves as you
@@ -497,7 +504,7 @@ Shown in the status panel (always) and the intrusion screen (in battle):
 | --- | --- |
 | **Integrity** | Your HP. Hits 0 and you flatline — final in Permadeath, a costly soft-reboot in Forgiving mode. Leveling up or recharging overnight (`r`) both fully restore it. |
 | **Power** | Your hunger-equivalent. Drains over time; hits 0 and you start taking Integrity damage each tick. Below 50%, your Attack also starts weakening — a linear falloff to half strength at 0 Power, on top of (not instead of) the tick damage. Restored by draining a Power Cell (`e`), standing near a cooking Terminal, or passively anywhere in a base with a Recharger Node. |
-| **Fatigue** | Drains over time; restored to full by recharging overnight (`r`). Directing a party member's Special in battle (`s`) also costs some of it — how much is the ability's own business, so a field-wide sweep bites far harder than an ordinary command. Run short and that ability is refused until you rest. Rest also advances a lot of game time, so use both deliberately. |
+| **Fatigue** | Drains over time; restored to full by recharging overnight (`r`). Directing a party member's Special in battle (`s`) also costs some of it — how much is the ability's own business, so a field-wide sweep bites far harder than an ordinary command. Run short and that ability is refused until you rest. Rest also advances a lot of game time, so use both deliberately. In battle it is a column of its own on your roster row, and the ability picker prints what each routine would spend, so you can see a refusal coming. |
 | **Level / XP** | Grows from defeating or decompiling rogue programs, or (for a compiled program) completing cronjob cycles. Each level-up grows Attack/Defense/max Integrity, fully heals, and grants 1 Perk Point — see [Perks](#perks). **You** have no level ceiling at all; **tamed programs** stop at level 12, and further XP from any source is simply ignored once one is maxed. |
 | **Attack** | How hard your hits land. Battle damage is roughly `move power + attacker's Attack − defender's Defense` (always at least 1). The same formula covers every combatant: your own strike has a fixed move power, while a program — yours or wild — rolls one of its species' moves. |
 | **Defense** | How much incoming damage you shrug off — see the Attack formula above. |

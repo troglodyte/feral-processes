@@ -1,0 +1,7 @@
+(
+    id: "trace_analysis",
+    name: "Trace Analysis",
+    description: "+20% XP gained for 100 turns",
+    target: WholeParty,
+    effect: FieldBuff(kind: XpBoost, power: 20, duration: 100, power_cost: 18.0),
+)

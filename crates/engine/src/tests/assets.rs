@@ -167,16 +167,35 @@ fn no_species_or_research_file_grants_a_wild_only_ability() {
     }
 }
 
-/// A cooldown of 0 means a hostile carrier fires the routine every single
-/// round (see `Game::wild_retaliate`). `decompile` is the one exception: it
-/// is the player's capture mechanism, hostiles never use it, and a cooldown
-/// on a failed capture roll would change the core loop.
+/// A cooldown is measured in battle rounds (`Game::wild_retaliate` ticks it
+/// down once per round a hostile carrier could have fired again), so it only
+/// means something for an ability that can enter a battle. A cooldown of 0
+/// there means a hostile carrier fires the routine every single round.
+///
+/// Two kinds of ability never enter a battle at all, so a cooldown on either
+/// would just be inert: `decompile`, the player's capture mechanism, which
+/// hostiles never use and which must stay spammable so a failed capture roll
+/// doesn't change the core loop; and any `FieldBuff` ability, which is cast
+/// outside battle and limited by `power_cost` instead — the doc on
+/// `AbilityEffect::FieldBuff` explains why `cooldown` is dead weight on that
+/// variant.
 #[test]
-fn every_shipped_ability_but_decompile_has_a_cooldown() {
+fn every_shipped_ability_but_decompile_and_field_routines_has_a_cooldown() {
     let game = Game::new(3302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
         if def.id == crate::abilities::DECOMPILE_ABILITY_ID {
             assert_eq!(def.cooldown, 0, "decompile stays spammable, deliberately");
+            continue;
+        }
+        if matches!(
+            def.effect,
+            crate::abilities::AbilityEffect::FieldBuff { .. }
+        ) {
+            assert_eq!(
+                def.cooldown, 0,
+                "ability {:?} is field-only, so cooldown should be left at its default",
+                def.id
+            );
             continue;
         }
         assert!(
@@ -277,6 +296,116 @@ fn an_affinity_below_the_floor_is_clamped_at_load() {
     let game = Game::new(1, DifficultyMode::Forgiving, &dir).unwrap();
     let aff = game.species_affinities("test_healer").unwrap();
     assert_eq!(aff.get(AffinityKind::Heal), AFFINITY_MIN);
+}
+
+/// The ten field routines this file ships, one per `FieldBuffKind` variant.
+/// Mirrors the table in `assets/abilities/README.md`'s `FieldBuff` section.
+const FIELD_ROUTINE_IDS: &[&str] = &[
+    "repair_loop",
+    "coolant_flush",
+    "trickle_charge",
+    "hardened_shell",
+    "overclock",
+    "ablative_layer",
+    "deep_scan",
+    "trace_analysis",
+    "ghost_protocol",
+    "salvage_routine",
+];
+
+/// Each of the ten field routines loads, carries a `FieldBuff` effect, ships
+/// a real description (the picker's only detail line for it — see
+/// `AbilityDef::description`), and stays out of the wild-carrier pool: a
+/// field routine is installed, never found on a hostile.
+#[test]
+fn the_ten_field_routines_load_with_real_descriptions_and_no_wild_weight() {
+    let game = Game::new(3303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let db = game.world.resource::<crate::abilities::AbilityDb>();
+    for id in FIELD_ROUTINE_IDS {
+        let def = db
+            .get(id)
+            .unwrap_or_else(|| panic!("missing field routine {id:?}"));
+        assert!(
+            matches!(
+                def.effect,
+                crate::abilities::AbilityEffect::FieldBuff { .. }
+            ),
+            "{id:?} should carry a FieldBuff effect, got {:?}",
+            def.effect
+        );
+        assert!(
+            !def.description.trim().is_empty(),
+            "{id:?} ships with no description"
+        );
+        assert_eq!(
+            def.wild_weight, 0,
+            "{id:?} should never spawn on a wild carrier"
+        );
+    }
+}
+
+/// Every `FieldBuffKind` variant must be exercised by at least one shipped
+/// ability. The match below is exhaustive on purpose — no wildcard arm — so
+/// an eleventh `FieldBuffKind` added later without shipped content fails to
+/// *compile* here rather than silently shipping a buff kind nothing grants.
+#[test]
+fn every_field_buff_kind_is_exercised_by_a_shipped_ability() {
+    use crate::abilities::AbilityEffect;
+    use crate::components::FieldBuffKind;
+
+    let game = Game::new(3304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let db = game.world.resource::<crate::abilities::AbilityDb>();
+
+    let mut regen = false;
+    let mut coolant = false;
+    let mut trickle = false;
+    let mut def_kind = false;
+    let mut atk = false;
+    let mut mitigation = false;
+    let mut capture_boost = false;
+    let mut xp_boost = false;
+    let mut encounter_damp = false;
+    let mut drop_boost = false;
+
+    for def in db.all() {
+        if let AbilityEffect::FieldBuff { kind, .. } = &def.effect {
+            match kind {
+                FieldBuffKind::Regen => regen = true,
+                FieldBuffKind::Coolant => coolant = true,
+                FieldBuffKind::Trickle => trickle = true,
+                FieldBuffKind::Def => def_kind = true,
+                FieldBuffKind::Atk => atk = true,
+                FieldBuffKind::Mitigation => mitigation = true,
+                FieldBuffKind::CaptureBoost => capture_boost = true,
+                FieldBuffKind::XpBoost => xp_boost = true,
+                FieldBuffKind::EncounterDamp => encounter_damp = true,
+                FieldBuffKind::DropBoost => drop_boost = true,
+            }
+        }
+    }
+
+    assert!(regen, "no shipped ability grants a Regen field buff");
+    assert!(coolant, "no shipped ability grants a Coolant field buff");
+    assert!(trickle, "no shipped ability grants a Trickle field buff");
+    assert!(def_kind, "no shipped ability grants a Def field buff");
+    assert!(atk, "no shipped ability grants an Atk field buff");
+    assert!(
+        mitigation,
+        "no shipped ability grants a Mitigation field buff"
+    );
+    assert!(
+        capture_boost,
+        "no shipped ability grants a CaptureBoost field buff"
+    );
+    assert!(xp_boost, "no shipped ability grants an XpBoost field buff");
+    assert!(
+        encounter_damp,
+        "no shipped ability grants an EncounterDamp field buff"
+    );
+    assert!(
+        drop_boost,
+        "no shipped ability grants a DropBoost field buff"
+    );
 }
 
 #[test]

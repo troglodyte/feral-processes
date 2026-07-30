@@ -773,7 +773,7 @@ mod tests {
             warnings.is_empty(),
             "the shipped set must not warn: {warnings:?}"
         );
-        assert_eq!(db.all().count(), 31, "31 abilities ship with the game");
+        assert_eq!(db.all().count(), 41, "41 abilities ship with the game");
         assert!(
             db.get(FALLBACK_ABILITY_ID).is_some(),
             "the fallback ability must ship, or every companion loses its Special"

@@ -1,0 +1,7 @@
+(
+    id: "repair_loop",
+    name: "Repair Loop",
+    description: "+2 Integrity per turn to one ally for 100 turns",
+    target: OneAlly,
+    effect: FieldBuff(kind: Regen, power: 2, duration: 100, power_cost: 18.0),
+)

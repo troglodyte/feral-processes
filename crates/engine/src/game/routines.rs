@@ -53,37 +53,40 @@ impl Game {
             .collect()
     }
 
-    /// You, then every program you own — everyone who has routine slots.
-    pub fn routine_holders(&mut self) -> Vec<RoutineHolderView> {
-        let player = self.player_entity();
+    /// Builds one `RoutineHolderView` row for `entity`, labelled `name`.
+    /// Shared by `routine_holders` (every program you own) and
+    /// `Game::field_cast_targets` (just you and your active `Party`) so the
+    /// two lists can't describe the same holder's slot count two different
+    /// ways.
+    pub(crate) fn routine_holder_view(
+        &mut self,
+        entity: Entity,
+        name: String,
+    ) -> RoutineHolderView {
         let level = self
             .world
-            .get::<Experience>(player)
+            .get::<Experience>(entity)
             .map(|e| e.level)
             .unwrap_or(1);
-        let mut holders = vec![RoutineHolderView {
-            entity: player,
-            name: "You".to_string(),
+        RoutineHolderView {
+            entity,
+            name,
             level,
             filled: self
                 .world
-                .get::<Routines>(player)
+                .get::<Routines>(entity)
                 .map(|r| r.0.len())
                 .unwrap_or(0),
-            slots: self.routine_slots(player),
-        }];
+            slots: self.routine_slots(entity),
+        }
+    }
+
+    /// You, then every program you own — everyone who has routine slots.
+    pub fn routine_holders(&mut self) -> Vec<RoutineHolderView> {
+        let player = self.player_entity();
+        let mut holders = vec![self.routine_holder_view(player, "You".to_string())];
         for pet in self.owned_pets() {
-            holders.push(RoutineHolderView {
-                entity: pet.entity,
-                name: pet.name.clone(),
-                level: pet.level,
-                filled: self
-                    .world
-                    .get::<Routines>(pet.entity)
-                    .map(|r| r.0.len())
-                    .unwrap_or(0),
-                slots: self.routine_slots(pet.entity),
-            });
+            holders.push(self.routine_holder_view(pet.entity, pet.name.clone()));
         }
         holders
     }

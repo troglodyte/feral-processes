@@ -114,16 +114,38 @@ fn an_unaffordable_routine_is_refused_and_does_not_change_mode() {
 }
 
 #[test]
-fn the_ally_picker_never_offers_an_unowned_entity() {
+fn the_ally_picker_offers_only_the_player_and_the_active_party() {
     let mut app = app_with_owned_and_wild_neighbors(76, &["hardened_shell"]);
     app.handle_key(GameKey::Char('a'));
     app.handle_key(GameKey::Char('1'));
     assert_eq!(app.mode, Mode::FieldCastAlly);
 
-    // "You" and the one owned program — the wild neighbor must not be a
-    // third row.
+    // Just "You": the fixture's owned program is never added to the party
+    // (`party_slot: None`), and a `Creature`-scoped buff only ever ticks on
+    // the player and the party (`Game::tick_field_buffs`) — offering a
+    // benched program here used to let a cast pay Power for a buff that
+    // ticked nowhere, same bug as offering the wild neighbor would be.
     let offered = app.field_ally_options();
-    assert_eq!(offered.len(), 2);
+    assert_eq!(
+        offered.len(),
+        1,
+        "only the player should be offered, found {} rows",
+        offered.len()
+    );
+    assert_eq!(offered[0].name, "You");
+
+    let owned = app
+        .game
+        .as_mut()
+        .unwrap()
+        .view_entities(50, 50)
+        .into_iter()
+        .find(|e| !e.is_player && e.is_tamed)
+        .expect("the fixture placed one owned, non-party program");
+    assert!(
+        offered.iter().all(|o| o.entity != owned.entity),
+        "an owned program that isn't in the active party must not be offered"
+    );
 
     let wild = app
         .game
@@ -138,18 +160,23 @@ fn the_ally_picker_never_offers_an_unowned_entity() {
         "the wild neighbor must never be offered as a cast target"
     );
 
-    // A key past the end of the (owned-only) list does nothing — proof the
-    // picker itself has no third, unowned row to select.
-    app.handle_key(GameKey::Char('3'));
+    // A key past the end of the (player-only) list does nothing — proof the
+    // picker has no second row to select.
+    app.handle_key(GameKey::Char('2'));
     assert_eq!(app.mode, Mode::FieldCastAlly);
 
-    // The second row is the owned program, and casting on it works — proof
-    // the picker's own rows are still live, not merely non-empty.
-    app.handle_key(GameKey::Char('2'));
+    // The one real row, "You", still casts fine.
+    app.handle_key(GameKey::Char('1'));
     assert_eq!(
         app.status_line, None,
         "cast was refused with: {:?}",
         app.status_line
     );
     assert_eq!(app.mode, Mode::Playing);
+
+    let buffs = app.game.as_mut().unwrap().active_buffs();
+    assert!(
+        buffs.iter().any(|b| b.name == "Hardened Shell"),
+        "the buff should now be running on the player"
+    );
 }

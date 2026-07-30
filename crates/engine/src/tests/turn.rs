@@ -432,6 +432,50 @@ fn tick_field_buffs_regen_heals_a_companion_not_the_player() {
     );
 }
 
+/// `tick_field_buffs` runs on every `tick()`, including every battle round,
+/// and `Party` deliberately keeps a dead member around until `end_battle`
+/// reaps it — so a `Regen` with no floor check would heal a companion
+/// killed mid-battle back to positive HP on the very next tick. This repo
+/// shipped permadeath; an accidental auto-revive would silently undo it.
+#[test]
+fn tick_field_buffs_regen_does_not_revive_a_dead_companion() {
+    let mut game = Game::new(614, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(companion).unwrap();
+    game.arm_field_buff(
+        companion,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Regen,
+            name: "Self Repair".to_string(),
+            power: 5,
+            remaining: 10,
+            source: BuffSource::Routine,
+        },
+    );
+    let wild = spawn_wild_on_player_tile(&mut game);
+    insert_battle(&mut game, player, vec![wild]);
+    game.world.get_mut::<Stats>(companion).unwrap().hp = -3;
+
+    game.tick_field_buffs();
+
+    assert_eq!(
+        game.world.get::<Stats>(companion).unwrap().hp,
+        -3,
+        "a dead companion's HP must not move on a Regen tick"
+    );
+    assert!(
+        !game.creature_alive(companion),
+        "the companion must still read as dead"
+    );
+
+    game.end_battle(player, None);
+    assert!(
+        game.world.get::<Stats>(companion).is_none(),
+        "end_battle must still reap the dead companion; a running Regen must not save it"
+    );
+}
+
 #[test]
 fn a_full_tick_applies_coolant_and_trickle_on_top_of_that_ticks_decay() {
     let mut game = Game::new(612, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

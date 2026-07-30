@@ -589,9 +589,12 @@ impl Game {
     /// pass that decrements and removes it hasn't run yet.
     ///
     /// Scoped to the player and party, unlike `age_temporary_structures`
-    /// (`game/turn.rs`), which walks every `Temporary` entity that exists —
-    /// a field buff only ever lands on a combatant (see
-    /// `FieldBuffKind::scope`), never on a structure.
+    /// (`game/turn.rs`), which walks every `Temporary` entity that exists.
+    /// This is not just where a field buff happens to end up — it is the
+    /// only set `Game::cast_field_routine` will ever arm one on: a
+    /// `Creature`-scoped `OneAlly` cast is checked against this same
+    /// player-plus-`Party` roster before anything is armed, so nothing this
+    /// loop skips is a buff that's actually running anywhere.
     pub(crate) fn tick_field_buffs(&mut self) {
         let player = self.player_entity();
         let subjects: Vec<Entity> = std::iter::once(player)
@@ -644,10 +647,22 @@ impl Game {
     /// the player has (`FieldBuffKind::scope` makes both `Run`-scoped for
     /// exactly that reason) — a companion carrying one is not an error, the
     /// write simply has nothing to land on.
+    ///
+    /// `Regen` is gated on `creature_alive` first: `tick_field_buffs` runs
+    /// on every `tick()`, including every battle round, and `Party`
+    /// deliberately keeps a dead member around until `end_battle` reaps
+    /// them (`BattleState::planned` indexes `Party` positionally, so
+    /// nothing may leave mid-battle). A `Regen` with no floor check would
+    /// heal that corpse back to positive HP on the very next tick — this
+    /// repo shipped permadeath, so an accidental auto-revive is a real bug,
+    /// not a curiosity. `apply_damage` is still the only path that lowers
+    /// HP; this is the same invariant's other edge, a heal with a floor.
     fn apply_field_buff_tick(&mut self, entity: Entity, kind: FieldBuffKind, power: i32) {
         match kind {
             FieldBuffKind::Regen => {
-                if let Some(mut stats) = self.world.get_mut::<Stats>(entity) {
+                if self.creature_alive(entity)
+                    && let Some(mut stats) = self.world.get_mut::<Stats>(entity)
+                {
                     stats.hp = (stats.hp + power).min(stats.max_hp);
                 }
             }

@@ -55,6 +55,35 @@ impl Game {
         rows
     }
 
+    /// Who a `Creature`-scoped field routine can actually land on: you, then
+    /// each current `Party` member — exactly the walk `tick_field_buffs` and
+    /// `active_buffs` make. `field_routines` above deliberately widens to
+    /// "every program you own" because installing/uninstalling a routine on
+    /// a benched program is legitimate; casting one is not, since nothing
+    /// ticks a buff on an entity that isn't in this narrower set. The ally
+    /// picker (`App::field_ally_options`) and its gui row (`draw_field_cast_ally`)
+    /// both call this rather than `routine_holders`, and `cast_field_routine`
+    /// checks the same set again below so a picker bug can't hand the
+    /// engine a target nothing will ever tick.
+    pub fn field_cast_targets(&mut self) -> Vec<RoutineHolderView> {
+        let player = self.player_entity();
+        let mut targets = vec![self.routine_holder_view(player, "You".to_string())];
+        for member in self.world.resource::<Party>().0.clone() {
+            let name = self.creature_label(member);
+            targets.push(self.routine_holder_view(member, name));
+        }
+        targets
+    }
+
+    /// Whether `entity` is someone a `Creature`-scoped field buff can land
+    /// on: the player, or a current `Party` member. The same set
+    /// `field_cast_targets` offers and `tick_field_buffs`/`active_buffs`
+    /// walk — checked again here because the picker being correct is not a
+    /// substitute for the engine enforcing it.
+    fn is_field_cast_target(&self, entity: Entity) -> bool {
+        entity == self.player_entity() || self.world.resource::<Party>().0.contains(&entity)
+    }
+
     /// Spends `field_routines()[index]`'s Power cost and arms its buff.
     ///
     /// Refused during a battle and after game over, like any other map
@@ -123,6 +152,12 @@ impl Game {
                     let Some(target) = target else {
                         return Err(format!("Choose who to run {} on.", def.name));
                     };
+                    if !self.is_field_cast_target(target) {
+                        return Err(
+                            "That program isn't in your active party — bring it along first."
+                                .into(),
+                        );
+                    }
                     if !self.creature_alive(target) {
                         return Err("That program isn't there anymore.".into());
                     }

@@ -3,16 +3,18 @@
 use crate::*;
 
 impl App {
-    /// Who a `OneAlly` field routine can be aimed at. Reuses
-    /// `Game::routine_holders` — the same "you, then every program you own"
-    /// walk `Mode::RoutineTarget` already trusts — rather than a second one,
-    /// because `Game::cast_field_routine` checks only that a target is
-    /// alive, not that the player owns it. This is what stands between the
-    /// picker and handing the engine a hostile or unowned entity.
+    /// Who a `OneAlly` field routine can be aimed at: you, then your active
+    /// `Party` — `Game::field_cast_targets`, not the wider
+    /// `Game::routine_holders` `Mode::RoutineTarget` uses. That wider list is
+    /// every program you own regardless of location, but only the player and
+    /// the party are ever ticked (`tick_field_buffs`); offering a benched
+    /// program here used to let a cast pay Power for a buff that ticked
+    /// nowhere. `Game::cast_field_routine` checks the same narrower set
+    /// again on its own, so this is a UX narrowing, not the only guard.
     pub(crate) fn field_ally_options(&mut self) -> Vec<RoutineHolderView> {
         self.game
             .as_mut()
-            .map(|g| g.routine_holders())
+            .map(|g| g.field_cast_targets())
             .unwrap_or_default()
     }
 

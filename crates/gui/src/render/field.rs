@@ -217,11 +217,13 @@ pub(super) fn draw_field_cast(game: &mut Game, selected: usize, painter: &Painte
     draw_popup("Run a Routine", PopupSize::Large, &rows, painter, m);
 }
 
-/// Who a `OneAlly` field routine picked in `Mode::FieldCast` lands on.
-/// Offers the same "you, then every program you own" list
-/// `draw_routine_target` does, via `Game::routine_holders` — the picker
-/// itself carries no notion of who owns what, that's enforced by
-/// `App::field_ally_options` before the cast ever reaches the engine.
+/// Who a `OneAlly` field routine picked in `Mode::FieldCast` lands on: you,
+/// then your active `Party`, via `Game::field_cast_targets` — narrower than
+/// `draw_routine_target`'s "you, then every program you own"
+/// (`Game::routine_holders`), since only the player and the party are ever
+/// ticked. `App::field_ally_options` calls the same `Game::field_cast_targets`
+/// to resolve what row was picked, so this list and the target the engine
+/// actually casts on can't disagree.
 pub(super) fn draw_field_cast_ally(
     game: &mut Game,
     pending: Option<usize>,
@@ -235,7 +237,7 @@ pub(super) fn draw_field_cast_ally(
         return;
     };
     let mut rows = vec![text_row(format!("Run {} on whom?", routine.name))];
-    for (i, h) in game.routine_holders().into_iter().enumerate() {
+    for (i, h) in game.field_cast_targets().into_iter().enumerate() {
         rows.push(item_row(
             format!("[{}] {} Lv{}", menu_shortcut(i), h.name, h.level),
             i == selected,

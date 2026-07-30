@@ -162,6 +162,8 @@ fn a_higher_level_holder_casts_a_larger_magnitude() {
     let mut game = game_with_field_ability();
     let low = spawn_tamed(&mut game, 10, 3);
     let high = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(low).unwrap();
+    game.add_companion(high).unwrap();
     set_level(&mut game, high, 20);
     game.world
         .entity_mut(low)
@@ -281,6 +283,69 @@ fn a_flat_kind_still_scales_for_the_same_high_level_high_affinity_holder() {
     assert_ne!(
         power, 4,
         "if this equals the authored value, the holder in this test isn't actually scaling anything"
+    );
+}
+
+/// `field_cast_targets` — what the ally picker offers — is narrower than
+/// `routine_holders`: only the player and the active `Party`, since those
+/// are the only entities `tick_field_buffs` ever walks. An owned program
+/// that isn't in the party must not appear, even though it's a perfectly
+/// valid `routine_holders` row (installing a routine on it is legitimate).
+#[test]
+fn field_cast_targets_excludes_an_owned_program_outside_the_party() {
+    let mut game = game_with_field_ability();
+    let player = game.player_entity();
+    let party_member = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(party_member).unwrap();
+    let benched = spawn_tamed(&mut game, 10, 3);
+
+    let targets = game.field_cast_targets();
+
+    assert!(targets.iter().any(|t| t.entity == player));
+    assert!(targets.iter().any(|t| t.entity == party_member));
+    assert!(
+        targets.iter().all(|t| t.entity != benched),
+        "an owned program outside the active party must not be offered"
+    );
+
+    let holders = game.routine_holders();
+    assert!(
+        holders.iter().any(|h| h.entity == benched),
+        "routine_holders (install/uninstall) still lists it — only casting narrows"
+    );
+}
+
+/// The picker narrowing above is a UX convenience, not the only guard: the
+/// engine has to refuse a `OneAlly` cast aimed at an owned-but-benched
+/// program too, or a caller that bypasses the picker (a bug, a future UI)
+/// could still arm a buff on an entity `tick_field_buffs` never walks — paid
+/// for, frozen at full duration, and doing nothing forever.
+#[test]
+fn casting_on_an_owned_program_outside_the_party_is_refused() {
+    let mut game = game_with_field_ability();
+    let player = game.player_entity();
+    let benched = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(player)
+        .insert(Routines(vec!["test_field_regen".to_string()]));
+    let before = player_hunger(&game);
+
+    let result = game.cast_field_routine(0, Some(benched));
+
+    assert!(
+        result.is_err(),
+        "casting on an owned, non-party program must be refused"
+    );
+    assert_eq!(
+        player_hunger(&game),
+        before,
+        "a refused cast must not spend Power"
+    );
+    assert!(
+        game.world
+            .get::<FieldBuff>(benched)
+            .is_none_or(|b| b.active.is_empty()),
+        "a refused cast must not arm a buff on the rejected target"
     );
 }
 

@@ -535,14 +535,25 @@ impl Game {
         field_buff.active.push(buff);
     }
 
-    /// `entity`'s running `kind` field buff's power, or `0` when none is
-    /// active — a safe default for a caller adding this into a formula,
-    /// since an absent buff should contribute nothing.
+    /// `entity`'s running `kind` field buff power, `0` when none is
+    /// active. Sums every matching entry rather than reading just one: a
+    /// `Consumable` and a `Routine` of the same kind are required to
+    /// coexist (`arm_field_buff`'s whole reason for two separate
+    /// displacement rules), and a reader that only saw one of them would
+    /// make that coexistence pointless — the buff whichever entry it
+    /// skipped would silently apply nothing.
     pub(crate) fn field_buff_power(&self, entity: Entity, kind: FieldBuffKind) -> i32 {
         self.world
             .get::<FieldBuff>(entity)
-            .and_then(|field_buff| field_buff.active.iter().find(|b| b.kind == kind))
-            .map_or(0, |b| b.power)
+            .map(|field_buff| {
+                field_buff
+                    .active
+                    .iter()
+                    .filter(|b| b.kind == kind)
+                    .map(|b| b.power)
+                    .sum()
+            })
+            .unwrap_or(0)
     }
 
     pub(crate) fn begin_defend(&mut self, entity: Entity) {

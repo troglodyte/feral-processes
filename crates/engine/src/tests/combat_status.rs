@@ -852,6 +852,23 @@ fn field_buff_power_is_zero_when_absent_and_the_stored_value_when_present() {
 }
 
 #[test]
+fn field_buff_power_sums_a_consumable_and_a_routine_of_the_same_kind() {
+    let mut game = Game::new(9007, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+
+    game.arm_field_buff(player, consumable(FieldBuffKind::Def, 2));
+    game.arm_field_buff(player, routine(FieldBuffKind::Def, 5));
+
+    assert_eq!(
+        game.field_buff_power(player, FieldBuffKind::Def),
+        7,
+        "a consumable and a routine of the same kind coexist (arm_field_buff's \
+         whole reason for two separate displacement rules), so a reader summing \
+         only one of them would make that coexistence pointless"
+    );
+}
+
+#[test]
 fn arm_field_buff_inserts_the_component_on_demand_for_a_companion() {
     let mut game = Game::new(9006, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 20, 3);

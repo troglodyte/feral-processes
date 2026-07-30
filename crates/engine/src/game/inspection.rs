@@ -174,6 +174,81 @@ impl Game {
             .collect()
     }
 
+    /// Every structure in the zone and every program assigned to it, for the
+    /// roster screen.
+    ///
+    /// Deliberately unbounded where `view_entities` takes a radius: the base
+    /// sits within `MAX_BUILD_DISTANCE_FROM_HOME` of its Home, but the player
+    /// wanders, and a roster that thinned out as they walked away would be
+    /// worse than none. It is still zone-local — structures do not travel
+    /// between zones, they are repositioned around the new spawn point (see
+    /// `enter_next_zone`).
+    ///
+    /// Ordered Home first, then grouped by def id, then nearest first inside
+    /// a group. Sorting here rather than in the frontend keeps one order for
+    /// every consumer.
+    pub fn structure_report(&mut self) -> Vec<StructureReport> {
+        let center = *self.world.get::<Position>(self.player_entity()).unwrap();
+        let mut structures = self.world.query::<(Entity, &Structure, &Position)>();
+        let found: Vec<(Entity, StructureId, Position)> = structures
+            .iter(&self.world)
+            .map(|(e, s, p)| (e, s.kind.clone(), *p))
+            .collect();
+
+        // Grouped by target rather than mapped from it: a cronjob worker and
+        // a guard can be posted on the same structure, and the roster exists
+        // to show both.
+        let mut assignees_by_structure: HashMap<Entity, Vec<Assignee>> = HashMap::new();
+        let mut tasks = self.world.query::<(Entity, &Task)>();
+        let posted: Vec<(Entity, Entity, TaskKind, u32, u32)> = tasks
+            .iter(&self.world)
+            .map(|(worker, task)| (worker, task.target, task.kind, task.progress, task.required))
+            .collect();
+        for (worker, target, kind, progress, required) in posted {
+            assignees_by_structure
+                .entry(target)
+                .or_default()
+                .push(Assignee {
+                    entity: worker,
+                    label: self.entity_label(worker),
+                    kind,
+                    progress,
+                    required,
+                });
+        }
+
+        let mut report: Vec<StructureReport> = found
+            .into_iter()
+            .map(|(entity, kind, pos)| {
+                let def = self.world.resource::<StructureDb>().get(&kind);
+                let workable = def.is_some_and(|d| d.work.is_some());
+                StructureReport {
+                    entity,
+                    is_home: kind == HOME_STRUCTURE_ID,
+                    kind,
+                    label: self.entity_label(entity),
+                    pos: (pos.x, pos.y),
+                    distance: (pos.x - center.x).abs().max((pos.y - center.y).abs()),
+                    tier: self.world.get::<StructureTier>(entity).map(|t| t.0),
+                    durability: self
+                        .world
+                        .get::<Durability>(entity)
+                        .map(|d| (d.hp, d.max_hp)),
+                    workable,
+                    assignees: assignees_by_structure.remove(&entity).unwrap_or_default(),
+                }
+            })
+            .collect();
+        report.sort_by(|a, b| {
+            b.is_home
+                .cmp(&a.is_home)
+                .then_with(|| a.kind.cmp(&b.kind))
+                .then_with(|| a.distance.cmp(&b.distance))
+                .then_with(|| a.pos.cmp(&b.pos))
+        });
+        report
+    }
+
     /// A species' affinities, or `None` if no such species loaded.
     pub fn species_affinities(&self, id: &str) -> Option<Affinities> {
         self.world

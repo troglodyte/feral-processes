@@ -27,7 +27,13 @@ pub struct GameRng(pub StdRng);
 #[derive(Resource, Default)]
 pub struct Research(pub std::collections::HashSet<crate::research::ResearchId>);
 
-const MESSAGE_LOG_CAP: usize = 100;
+/// How many lines the log holds before dropping its oldest.
+///
+/// Public because it is the whole of the history screen's reach: asking
+/// `Game::message_log` for this many is asking for everything still kept,
+/// where any other number would be a frontend guessing at the engine's
+/// bound.
+pub const MESSAGE_LOG_CAP: usize = 100;
 
 /// How a log line should be presented — a display hint set by whatever
 /// engine code produced the line, not derived from the text itself, so

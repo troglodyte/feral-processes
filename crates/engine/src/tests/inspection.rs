@@ -708,3 +708,135 @@ fn the_manifest_lists_only_non_neutral_affinities() {
         "listed in AffinityKind order, and the three neutral ones omitted"
     );
 }
+
+/// A structure can carry a cronjob worker *and* a guard at once, and the
+/// roster's whole purpose is showing what is on what. `view_entities` cannot
+/// answer this — its `structure_worker` comes from a map keyed by the task's
+/// target, so two programs on one structure collapse into one.
+#[test]
+fn structure_report_lists_every_assignee_not_just_one() {
+    let mut game = Game::new(700, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, -1, 0);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 12);
+    game.place_structure("mining_node", 1, 0).unwrap();
+    let node = game
+        .structure_report()
+        .into_iter()
+        .find(|s| s.kind == "mining_node")
+        .expect("the node was just deployed")
+        .entity;
+
+    let miner = spawn_tamed(&mut game, 10, 3);
+    let guard = spawn_tamed(&mut game, 10, 3);
+    game.assign_cronjob(miner, node).unwrap();
+    game.assign_guard(guard, node).unwrap();
+
+    let report = game.structure_report();
+    let node = report
+        .iter()
+        .find(|s| s.entity == node)
+        .expect("the node is still standing");
+    assert_eq!(node.assignees.len(), 2, "both programs should be reported");
+    let kinds: Vec<TaskKind> = node.assignees.iter().map(|a| a.kind).collect();
+    assert!(kinds.contains(&TaskKind::GatherResource));
+    assert!(kinds.contains(&TaskKind::Guard));
+    assert!(
+        node.assignees.iter().all(|a| !a.label.is_empty()),
+        "each assignee is named, so the roster can say who is on what"
+    );
+}
+
+/// Structures cluster within `MAX_BUILD_DISTANCE_FROM_HOME` of the Home, but
+/// the player does not — walk far enough and a radius-limited scan would
+/// report an empty base.
+#[test]
+fn structure_report_is_zone_wide_and_not_relative_to_the_player() {
+    let mut game = Game::new(701, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, -1, 0);
+    let before = game.structure_report().len();
+    assert!(before > 0, "the Home should be reported");
+
+    let player = game.player_entity();
+    let mut pos = game.world.get_mut::<Position>(player).unwrap();
+    pos.x += 500;
+    pos.y += 500;
+
+    let report = game.structure_report();
+    assert_eq!(
+        report.len(),
+        before,
+        "walking away must not shrink the roster"
+    );
+    assert!(
+        report.iter().all(|s| s.distance > 400),
+        "the distance is measured from wherever the player is standing"
+    );
+}
+
+/// Tier and durability are `Some` only where the def declares them: the Home
+/// has no upgrade path and raids can't touch it, a Mining Node has both.
+#[test]
+fn structure_report_carries_tier_durability_and_whether_the_structure_is_workable() {
+    let mut game = Game::new(702, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, -1, 0);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 12);
+    game.place_structure("mining_node", 1, 0).unwrap();
+
+    let report = game.structure_report();
+    let home = report.iter().find(|s| s.is_home).unwrap();
+    assert_eq!(home.tier, None, "Home declares no upgrade path");
+    assert_eq!(home.durability, None, "Home is not raidable");
+    assert!(!home.workable, "Home has no work recipe");
+
+    let node = report.iter().find(|s| s.kind == "mining_node").unwrap();
+    assert_eq!(node.tier, Some(1), "a fresh node sits at tier 1");
+    let (hp, max_hp) = node.durability.expect("a node is raidable");
+    assert!(hp > 0 && hp == max_hp, "an unraided node is at full health");
+    assert!(node.workable, "a node is the workable structure");
+    assert!(
+        node.assignees.is_empty(),
+        "nobody has been assigned, which is what makes it read as idle"
+    );
+}
+
+/// The Home leads, so the roster opens on the thing the rest of the base is
+/// measured from, and identical structures sit together rather than being
+/// interleaved by distance.
+#[test]
+fn structure_report_puts_home_first_and_groups_by_kind() {
+    let mut game = Game::new(703, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "armor_bench");
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 60);
+    place_home(&mut game, 0, 0);
+    game.place_structure("mining_node", 2, 0).unwrap();
+    game.place_structure("armory", 1, 0).unwrap();
+    game.place_structure("mining_node", 3, 0).unwrap();
+
+    let kinds: Vec<String> = game
+        .structure_report()
+        .into_iter()
+        .map(|s| s.kind.to_string())
+        .collect();
+    assert_eq!(kinds[0], "home", "the Home leads the roster");
+    let mining: Vec<usize> = kinds
+        .iter()
+        .enumerate()
+        .filter(|(_, k)| k.as_str() == "mining_node")
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(mining.len(), 2);
+    assert_eq!(
+        mining[1],
+        mining[0] + 1,
+        "both nodes should be adjacent rows, not split by the armory"
+    );
+}

@@ -6,11 +6,12 @@
 
 use crate::abilities::AffinityKind;
 use crate::battle::ActionOption;
-use crate::components::{EquippedItem, GlyphColor};
+use crate::components::{EquippedItem, GlyphColor, TaskKind};
 use crate::items::ItemId;
 use crate::perks::Perk;
 use crate::research::ResearchId;
 use crate::species::MoveDef;
+use crate::structures::StructureId;
 use crate::world::Biome;
 use bevy_ecs::prelude::Entity;
 
@@ -212,6 +213,49 @@ pub struct EntityView {
     /// `MAX_FUSIONS` — see `components::FusionCount`. At `MAX_FUSIONS` it
     /// can no longer be an input to a fusion, which the fuse menus show.
     pub fusions: u32,
+}
+
+/// One structure on the roster screen — see `Game::structure_report`.
+#[derive(Clone)]
+pub struct StructureReport {
+    pub entity: Entity,
+    /// The def id, so a frontend can group identical structures without
+    /// comparing display names.
+    pub kind: StructureId,
+    pub label: String,
+    pub pos: (i32, i32),
+    /// Tiles from wherever the player is standing, as a Chebyshev distance —
+    /// the metric the map's own movement uses. While the party is
+    /// underground this is measured from the entrance tile, because that is
+    /// where `Position` stays; `pos` is absolute either way.
+    pub distance: i32,
+    /// Upgrade tier, or `None` if the def declares no upgrade path — same
+    /// meaning as `EntityView::tier`.
+    pub tier: Option<u32>,
+    /// Current/max raid `Durability`, or `None` for a structure raids can't
+    /// target (see `StructureDef::raidable`).
+    pub durability: Option<(u32, u32)>,
+    pub is_home: bool,
+    /// Whether the def declares a `work` recipe. A workable structure with no
+    /// assignees is idle and producing nothing, which is the one thing on
+    /// this screen the player can act on.
+    pub workable: bool,
+    /// Every program assigned to this structure. A cronjob worker and a
+    /// guard can both be on one structure at once, which is why this is a
+    /// list and why `EntityView::structure_worker` could not answer it.
+    pub assignees: Vec<Assignee>,
+}
+
+/// One program assigned to a structure — see `StructureReport::assignees`.
+#[derive(Clone)]
+pub struct Assignee {
+    pub entity: Entity,
+    pub label: String,
+    pub kind: TaskKind,
+    /// Ticks done and ticks needed for one cycle. Both 0 for a `Guard`,
+    /// which never progresses — `systems::task_progress_system` ignores it.
+    pub progress: u32,
+    pub required: u32,
 }
 
 /// One addressable enemy group on the battle roster — "3 Glitches" as a

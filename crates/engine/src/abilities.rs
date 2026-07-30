@@ -399,24 +399,27 @@ impl AbilityDef {
         }
     }
 
-    /// Names `cooldown` and/or `fatigue_cost` if either is set on a
-    /// `FieldBuff` ability, where neither does anything: `cooldown` throttles
-    /// re-use within a battle and `fatigue_cost` is spent commanding a
-    /// battle action, and a field ability runs neither path. Not a load
-    /// failure — `AbilityDef`'s serde defaults still parse — just something
-    /// worth a modder knowing rather than silently swallowing.
+    /// Names `cooldown` if it's set on a `FieldBuff` ability, where it does
+    /// nothing: cooldown throttles re-use within a battle, and a field
+    /// ability runs outside one. Not a load failure — the def still loads —
+    /// just something worth a modder knowing rather than silently swallowing.
+    ///
+    /// `fatigue_cost` is deliberately not checked here even though it's
+    /// equally dead on this variant: its serde default
+    /// (`default_fatigue_cost`) is the nonzero flat companion-command cost,
+    /// so a file that never mentions the field looks byte-for-byte identical
+    /// at this point to one that spells out the same number on purpose —
+    /// there's nothing here to distinguish "careless" from "correct", so a
+    /// warning on it would fire on every well-formed field ability just as
+    /// often as a mistaken one. `cooldown` defaults to 0, so a nonzero value
+    /// there is unambiguous authorial intent worth naming.
+    /// `assets/abilities/README.md` tells a modder directly that
+    /// `fatigue_cost` doesn't apply here instead.
     fn field_buff_dead_fields(&self) -> Option<String> {
         if !matches!(self.effect, AbilityEffect::FieldBuff { .. }) {
             return None;
         }
-        let mut dead = Vec::new();
-        if self.cooldown != 0 {
-            dead.push("cooldown");
-        }
-        if self.fatigue_cost != 0.0 {
-            dead.push("fatigue_cost");
-        }
-        (!dead.is_empty()).then(|| dead.join(" and "))
+        (self.cooldown != 0).then(|| "cooldown".to_string())
     }
 
     /// Bounds a `Drain`'s `heal_fraction` to `0.0..=1.0`. Applied at load so
@@ -644,16 +647,16 @@ mod tests {
 
     #[test]
     fn a_creature_scoped_field_buff_targeting_one_ally_loads_clean() {
-        // fatigue_cost is spelled out at 0.0 because its serde default is
-        // the nonzero companion command cost — leaving it implicit would
-        // trip `field_buff_dead_fields`'s warning, which is exactly what a
-        // well-formed field ability is supposed to avoid.
+        // fatigue_cost is left at its serde default deliberately: that
+        // default is the nonzero flat companion command cost, so a file
+        // that never mentions the field must load exactly as warning-free
+        // as one that does — see `field_buff_dead_fields`'s doc for why that
+        // field is excluded from the dead-fields warning.
         let good = r#"(
             id: "test_good_regen",
             name: "Good Regen",
             description: "d",
             target: OneAlly,
-            fatigue_cost: 0.0,
             effect: FieldBuff(kind: Regen, power: 2, duration: 20, power_cost: 5.0),
         )"#;
         let (db, warnings) = load("good_creature_scope", &[("good", good)]);
@@ -683,18 +686,21 @@ mod tests {
         assert!(warnings[0].contains("power_cost"), "{}", warnings[0]);
     }
 
-    /// `cooldown` and `fatigue_cost` throttle a battle action; a field
-    /// ability runs neither path, so a non-default value on either is dead
-    /// weight the loader should point out rather than silently accept.
+    /// `cooldown` throttles re-use within a battle; a field ability runs
+    /// outside one, so `cooldown` is dead weight the loader should point out
+    /// rather than silently accept. `cooldown` defaults to 0, so any nonzero
+    /// value here is unambiguous authorial intent — unlike `fatigue_cost`,
+    /// whose own nonzero default makes "the author wrote this on purpose"
+    /// indistinguishable from "the author never touched this field" (see the
+    /// sibling test below and `field_buff_dead_fields`'s doc).
     #[test]
-    fn a_field_buff_declaring_cooldown_or_fatigue_cost_loads_with_a_warning() {
+    fn a_field_buff_declaring_a_cooldown_loads_with_a_warning() {
         let noisy = r#"(
             id: "test_noisy_regen",
             name: "Noisy Regen",
             description: "d",
             target: OneAlly,
             cooldown: 3,
-            fatigue_cost: 8.0,
             effect: FieldBuff(kind: Regen, power: 2, duration: 20, power_cost: 5.0),
         )"#;
         let (db, warnings) = load("noisy_field_buff", &[("noisy", noisy)]);
@@ -704,7 +710,28 @@ mod tests {
         );
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("cooldown"), "{}", warnings[0]);
-        assert!(warnings[0].contains("fatigue_cost"), "{}", warnings[0]);
+    }
+
+    /// The regression this guards: `fatigue_cost`'s serde default is the
+    /// nonzero flat companion command cost, so a naive "warn when nonzero"
+    /// check (the shape `cooldown`'s check uses) would fire on this file even
+    /// though it never mentions the field at all — indistinguishable from a
+    /// file that spells out the same number on purpose. It must stay silent.
+    #[test]
+    fn a_field_buff_leaving_fatigue_cost_at_its_default_is_silent() {
+        let quiet = r#"(
+            id: "test_quiet_regen",
+            name: "Quiet Regen",
+            description: "d",
+            target: OneAlly,
+            effect: FieldBuff(kind: Regen, power: 2, duration: 20, power_cost: 5.0),
+        )"#;
+        let (db, warnings) = load("quiet_field_buff", &[("quiet", quiet)]);
+        assert!(db.get("test_quiet_regen").is_some());
+        assert!(
+            warnings.is_empty(),
+            "fatigue_cost must never trigger the dead-fields warning: {warnings:?}"
+        );
     }
 
     #[test]

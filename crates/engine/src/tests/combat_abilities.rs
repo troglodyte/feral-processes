@@ -1539,3 +1539,91 @@ fn a_field_only_ability_never_appears_in_the_battle_picker_and_indices_survive_f
     );
     assert_eq!(options[0].index, 1);
 }
+
+/// A normal ability sitting *after* a field-only one in `Routines`, so its
+/// stable `actor_abilities` index (1) never lines up with its position in
+/// the filtered `battle_special_options` list (0). Regression for
+/// `battle_set_action` indexing that filtered list positionally instead of
+/// resolving by `SpecialOption::index` the way app-core's own consumers do
+/// (`battle_target_title`, `handle_battle_special_key`).
+const HEAL_AFTER_FIELD_ONLY: &str = r#"(
+    id: "test_heal_after_field",
+    name: "Test Heal After Field",
+    description: "d",
+    target: OneAlly,
+    effect: Heal(power: 5),
+)"#;
+
+#[test]
+fn committing_a_special_that_sits_behind_a_field_only_ability_resolves_the_right_one() {
+    let dir = super::support::modded_assets_dir(
+        "field_only_before_normal",
+        &[],
+        &[],
+        &[],
+        &[],
+        &[
+            ("test_field_regen.ron", super::support::FIELD_ONLY_ABILITY),
+            ("test_heal_after_field.ron", HEAL_AFTER_FIELD_ONLY),
+        ],
+    );
+    let mut game = Game::new(9002, DifficultyMode::Forgiving, &dir).unwrap();
+    let player = game.player_entity();
+    battle_with_a_pack_of(&mut game, 1, 200);
+    // Field-only entry first, so its stable index (0) is filtered out of the
+    // menu and the normal ability behind it keeps stable index 1 while
+    // sitting at menu position 0 — the exact misalignment the fix closes.
+    game.world.entity_mut(player).insert(Routines(vec![
+        "test_field_regen".to_string(),
+        "test_heal_after_field".to_string(),
+    ]));
+    // Comfortably above anything the hostile's single swing this round can
+    // deal, so the player is guaranteed to still be alive for their own
+    // turn regardless of which side initiative favours — the point of this
+    // test is whether the Special resolves to the right ability, not a race
+    // against the enemy's hit.
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.hp = 100;
+        stats.max_hp = 100;
+    }
+
+    let options = game.battle_special_options(0);
+    assert_eq!(
+        options.len(),
+        1,
+        "the field-only entry must not be offered: {options:?}"
+    );
+    let ability_index = options[0].index;
+    assert_eq!(
+        ability_index, 1,
+        "the surviving option must still name its true actor_abilities position"
+    );
+
+    game.battle_set_action(
+        0,
+        BattleAction::Special {
+            ability: ability_index,
+            target: battle::SpecialTarget::Ally { slot: 0 },
+        },
+    )
+    .expect(
+        "committing the one ability the picker actually offered must succeed, not report \
+         \"no such ability\"",
+    );
+    game.battle_resolve_round();
+
+    // Read off the log line the heal itself writes rather than the player's
+    // final HP: the hostile's own swing lands in the same round and could
+    // otherwise mask a real heal behind a bigger hit, making the assertion
+    // race the enemy's stats instead of checking what actually ran.
+    let healed = game
+        .message_log(usize::MAX)
+        .into_iter()
+        .any(|(_, text)| text.contains("patches"));
+    assert!(
+        healed,
+        "the committed Special must have run the heal behind the filtered entry, not \
+         silently resolved to nothing or to the wrong ability"
+    );
+}

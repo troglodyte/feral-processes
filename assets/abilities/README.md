@@ -151,12 +151,14 @@ way deleting the Currency item does.
     //         EncounterDamp percent reduction to wild encounter odds
     //         DropBoost     percent bonus to drop rates
     //
-    //     `cooldown` and `fatigue_cost` are dead on this variant — neither
-    //     battle-round throttling nor commanding a battle action applies
-    //     outside one — and loading a file that sets either above its
-    //     default logs a warning naming the file, so spell out
-    //     `fatigue_cost: 0.0` explicitly rather than leaving its nonzero
-    //     default in place.
+    //     `cooldown` and `fatigue_cost` are both dead on this variant —
+    //     neither battle-round throttling nor commanding a battle action
+    //     applies outside one. A nonzero `cooldown` logs a warning naming the
+    //     file, since its default is 0 and any other value is a deliberate
+    //     (if pointless) choice. `fatigue_cost` does *not* warn, even though
+    //     it's equally unused: its own default is nonzero, so there's no way
+    //     to tell "left alone" from "set on purpose" — leave it out of the
+    //     file, its value simply won't be read.
     effect: Damage(power: 6),
 
     // Optional; defaults to 0 (usable every round). Battle rounds that must

@@ -363,11 +363,19 @@ impl Game {
             {
                 return Err(format!("Slot {ally} isn't in your party."));
             }
+            // `SpecialOption::index` is the stable identity — the position in
+            // `actor_abilities` that `ability` names — not `options`' own
+            // position, which shifts once a field-only entry is filtered out
+            // of the menu. Resolving by that field rather than indexing
+            // `options` positionally is what app-core's own consumers already
+            // do (`battle_target_title`, `handle_battle_special_key`), and
+            // matching that idiom here is what keeps this callsite from
+            // silently disagreeing with the menu about which row is which.
             let options = self.battle_special_options(slot);
-            if *ability >= options.len() {
+            let Some(option) = options.iter().find(|o| o.index == *ability) else {
                 return Err("That party member has no such ability.".to_string());
-            }
-            if let Some(reason) = &options[*ability].unavailable {
+            };
+            if let Some(reason) = &option.unavailable {
                 return Err(format!("That ability isn't ready: {reason}."));
             }
             // A boss is an encounter, never a companion: capturing one puts a

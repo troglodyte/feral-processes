@@ -231,8 +231,12 @@ across three slots (Weapon, Armor, Module). There are 31 pieces of gear:
 six cheap ones behind both a research node and a bench, and 25 that declare
 their own recipe and need only a bench, spanning a Scavenged tier you can
 make from turn one up to a Premium tier paid in Portal Fragments. Gear
-levels double the bonus per zone level reached, fusing duplicates adds +10%
-per tier, and both are locked in at the moment you equip.
+levels double the bonus per zone level reached, and both are locked in at
+the moment you equip. Fusing feeds two copies of a piece in and gives one
+back a tier stronger — worth +10% per tier, or at least a flat point on
+every stat it already has, whichever is more. The floor matters more than
+the percentage does: gear stats sit between 1 and 4, where 10% rounds away
+to nothing.
 
 ## Zones and portals
 

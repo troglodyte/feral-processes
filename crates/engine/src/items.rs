@@ -1,4 +1,6 @@
-use crate::tuning::{GEAR_LEVEL_GROWTH, ITEM_FUSION_BONUS_PER_TIER};
+use crate::tuning::{
+    GEAR_LEVEL_GROWTH, ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_MIN_BONUS_PER_TIER,
+};
 use serde::{Deserialize, Serialize};
 
 /// `#[serde(transparent)]` so an `ItemId` serializes as its bare inner string
@@ -112,9 +114,21 @@ impl EquipmentStats {
     /// This item's bonus scaled up for `tier` fusions (0 = base, no
     /// scaling) — see `ITEM_FUSION_BONUS_PER_TIER`. Applied on top of
     /// `scaled_for_level`, not in place of it.
+    ///
+    /// A stat the item already has gains at least
+    /// `ITEM_FUSION_MIN_BONUS_PER_TIER` per tier, whatever the percentage
+    /// works out to. The percentage alone is worthless at the magnitudes
+    /// equipment actually ships at — 4 × 1.1 rounds straight back to 4 —
+    /// so the floor is what makes a fusion observable rather than a
+    /// silent loss of two items. A stat sitting at zero stays at zero: the
+    /// floor sharpens what an item does and does not hand it a new stat.
     pub fn fused_for_tier(self, tier: u32) -> EquipmentStats {
         let factor = 1.0 + ITEM_FUSION_BONUS_PER_TIER * tier as f64;
-        let scale = |v: i32| (v as f64 * factor).round() as i32;
+        let floor = ITEM_FUSION_MIN_BONUS_PER_TIER * tier as i32;
+        let scale = |v: i32| {
+            let scaled = (v as f64 * factor).round() as i32;
+            if v > 0 { scaled.max(v + floor) } else { scaled }
+        };
         EquipmentStats {
             atk: scale(self.atk),
             def: scale(self.def),

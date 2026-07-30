@@ -353,6 +353,19 @@ impl Game {
             ));
         }
 
+        // A fusion yields one stronger copy, so only the *other* one is
+        // spent. When a copy is worn it is the survivor and never left
+        // cargo; otherwise the survivor goes back. Without this the two
+        // paths charged different amounts for the same act — wearing one
+        // cost a single copy, fusing straight from cargo cost both and left
+        // the player holding nothing.
+        if worn.is_none() {
+            self.world
+                .get_mut::<Inventory>(player)
+                .unwrap()
+                .add(item.clone(), 1);
+        }
+
         let tier = {
             let mut fusions = self.world.get_mut::<ItemFusions>(player).unwrap();
             fusions.increment(item.clone());

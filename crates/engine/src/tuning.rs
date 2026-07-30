@@ -660,6 +660,15 @@ pub const GEAR_LEVEL_GROWTH: f64 = 2.0;
 /// fusion tier — additive, not compounding (tier 2 is +20%, not +21%).
 pub const ITEM_FUSION_BONUS_PER_TIER: f64 = 0.10;
 
+/// Floor on what one fusion tier is worth to a stat the item actually has,
+/// in flat points. Shipped equipment sits in the 1..=4 range, where
+/// `ITEM_FUSION_BONUS_PER_TIER` alone rounds away to nothing — 4 × 1.1 is
+/// 4.4, which rounds back to 4 — so without this the mechanic is invisible
+/// on every real item and a fusion reads as pure loss. Applies only to a
+/// stat that is already non-zero: a floor makes an item better at what it
+/// does, it does not hand it a stat it never had.
+pub const ITEM_FUSION_MIN_BONUS_PER_TIER: i32 = 1;
+
 /// Copies of an item `Game::fuse_item` consumes from inventory per fusion.
 pub const ITEM_FUSION_COST: u32 = 2;
 

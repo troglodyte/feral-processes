@@ -263,8 +263,8 @@ fn fuse_item_consumes_two_copies_and_raises_the_fusion_tier() {
             .iter()
             .find(|(i, _)| *i == ItemId::from(ids::OVERCLOCK_CORE))
             .map(|(_, q)| *q),
-        Some(1),
-        "fusing should consume 2 of the 3 copies"
+        Some(2),
+        "a fusion takes two copies and hands one back, so the net cost is one"
     );
 }
 
@@ -272,8 +272,10 @@ fn fuse_item_consumes_two_copies_and_raises_the_fusion_tier() {
 fn fuse_item_bonus_scales_the_equipped_stat_bonus() {
     let mut game = Game::new(201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    // Ablative Plating's base is +4 def, so a 10%/tier bonus is visible
-    // (unlike a +3 item, where 10% rounds away to nothing at tier 1).
+    // Ablative Plating's base is +4 def. At this magnitude the percentage
+    // is the smaller of the two terms — 4 * 1.2 = 4.8 -> 5 against a floor
+    // of 4 + 2 — so what this pins is that the two combine by taking the
+    // better, not that the percentage alone is doing the work.
     game.world
         .get_mut::<Inventory>(player)
         .unwrap()
@@ -300,8 +302,8 @@ fn fuse_item_bonus_scales_the_equipped_stat_bonus() {
     game.equip(&ItemId::from(ids::ABLATIVE_PLATING)).unwrap();
     assert_eq!(
         game.player_status().def,
-        def_before + 5,
-        "tier 2 is +20%: 4 * 1.2 = 4.8, rounds to 5"
+        def_before + 6,
+        "tier 2: the +1/tier floor (4 + 2 = 6) beats the +20% (4.8 -> 5)"
     );
 }
 
@@ -372,13 +374,15 @@ fn fusing_a_worn_item_counts_it_and_upgrades_the_worn_copy_live() {
         "only one spare consumed — the worn copy counted for the other"
     );
 
-    // Second fuse reaches tier 2, where +20% is visible: 4 * 1.2 = 4.8 -> 5.
+    // Second fuse reaches tier 2. The percentage alone would give
+    // 4 * 1.2 = 4.8 -> 5, but the per-tier floor is worth more at this
+    // magnitude, so the stat lands at 4 + 2 = 6.
     game.fuse_item(&armor).unwrap();
     assert_eq!(game.item_fusion_tier(&armor), 2);
     assert_eq!(held(&game), 0);
     assert_eq!(
         game.player_status().def,
-        base_def + 5,
+        base_def + 6,
         "the worn copy picks up the new tier live, without a re-equip"
     );
 }
@@ -515,4 +519,97 @@ fn equipped_gear_and_its_bonus_survive_save_and_load() {
         })
     );
     assert_eq!(status.decompiler, decompiler_after_equip);
+}
+
+#[test]
+fn fusing_from_inventory_alone_still_leaves_you_holding_one_copy() {
+    let mut game = Game::new(9310, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    // Exactly the fusion cost, none worn — the case a player hits first,
+    // and the one where the two paths through `fuse_item` used to diverge:
+    // wearing a copy left you holding one afterwards, fusing purely from
+    // cargo left you holding nothing at all.
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(armor.clone(), crate::tuning::ITEM_FUSION_COST);
+
+    game.fuse_item(&armor).unwrap();
+
+    assert_eq!(
+        game.player_status()
+            .inventory
+            .iter()
+            .find(|(i, _)| *i == armor)
+            .map(|(_, q)| *q),
+        Some(1),
+        "a fusion yields one stronger copy; it must not consume the result too"
+    );
+    assert_eq!(game.item_fusion_tier(&armor), 1);
+}
+
+#[test]
+fn fusing_costs_the_same_whether_or_not_a_copy_is_worn() {
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    let held_after = |wear: bool| {
+        let mut game = Game::new(9311, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(armor.clone(), 4);
+        if wear {
+            game.equip(&armor).unwrap();
+        }
+        game.fuse_item(&armor).unwrap();
+        let in_cargo = game
+            .player_status()
+            .inventory
+            .iter()
+            .find(|(i, _)| *i == armor)
+            .map(|(_, q)| *q)
+            .unwrap_or(0);
+        // Equipping moves a copy out of cargo, so count it back in to
+        // compare total copies owned rather than cargo alone.
+        in_cargo + u32::from(wear)
+    };
+
+    assert_eq!(
+        held_after(false),
+        held_after(true),
+        "whether a copy happens to be worn must not change what a fusion costs"
+    );
+}
+
+#[test]
+fn a_fusion_tier_is_worth_at_least_one_point_on_every_stat_it_touches() {
+    // Every shipped equipment stat is in the 1..=4 range, where a flat 10%
+    // rounds away to nothing: 4 -> 4.4 -> 4. Without a floor the whole
+    // mechanic is invisible on real content, which is what made fusing feel
+    // like it only destroyed items.
+    let base = EquipmentStats {
+        atk: 4,
+        def: 1,
+        decompiler: 0,
+    };
+
+    let t1 = base.fused_for_tier(1);
+    assert_eq!(
+        t1.atk, 5,
+        "4 at tier 1 must gain a point, not round back to 4"
+    );
+    assert_eq!(t1.def, 2, "the floor applies to every non-zero stat");
+    assert_eq!(
+        t1.decompiler, 0,
+        "a stat the item does not have stays absent — a floor is not a grant"
+    );
+
+    let t3 = base.fused_for_tier(3);
+    assert!(
+        t3.atk >= base.atk + 3,
+        "each tier is worth at least a point: {} should be at least {}",
+        t3.atk,
+        base.atk + 3
+    );
 }

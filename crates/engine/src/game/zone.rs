@@ -388,6 +388,32 @@ impl Game {
         self.spawn_dungeon_entrances(DUNGEON_ENTRANCES_PER_ZONE);
     }
 
+    /// Breaches forward until the party is standing in `zone`, for the
+    /// `savetool` binary — testing zone 6 otherwise means playing to zone 6.
+    ///
+    /// Deliberately a loop over the real `enter_next_zone` rather than a
+    /// write to `ZoneLevel`: everything that makes a breach coherent — the
+    /// base travelling, the zone-local wipes, fresh spawns scaled to the new
+    /// zone — lives in that function, and a shortcut would produce a save
+    /// that no amount of play could have reached. `enter_next_zone` is
+    /// `pub(crate)` and a `src/bin/` target is a separate crate, so this is
+    /// also the seam that lets the tool reach it at all.
+    ///
+    /// Only runs forward: a breach consumes the portal and there is no way
+    /// back, so a backwards warp is refused rather than silently ignored.
+    pub fn warp_to_zone(&mut self, zone: u32) -> Result<(), String> {
+        let current = self.world.resource::<ZoneLevel>().0;
+        if zone <= current {
+            return Err(format!(
+                "already in zone {current}; a breach only runs forward, so zone {zone} is unreachable"
+            ));
+        }
+        for _ in current..zone {
+            self.enter_next_zone();
+        }
+        Ok(())
+    }
+
     /// Where the player materialized on breaching into the current zone —
     /// see `resources::ZoneSpawnPoint`. Marked on the map so a player can
     /// navigate back toward the (comparatively) safer ground near it, per

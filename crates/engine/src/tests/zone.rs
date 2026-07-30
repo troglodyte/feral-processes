@@ -324,6 +324,46 @@ fn stepping_through_a_portal_consumes_it_so_it_never_travels() {
     );
 }
 
+/// `warp_to_zone` exists for the savetool, and its whole value is that it
+/// is not a shortcut: writing `ZoneLevel` directly would leave the party in
+/// zone 4 standing on zone 1's map. Comparing the spawn point is what
+/// catches that — it only moves because a sector was actually generated.
+#[test]
+fn warping_forward_lands_exactly_where_stepping_through_the_breaches_lands() {
+    let mut warped = Game::new(940, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    warped.warp_to_zone(4).unwrap();
+
+    let mut stepped = Game::new(940, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for _ in 0..3 {
+        stepped.enter_next_zone();
+    }
+
+    assert_eq!(warped.player_status().zone, 4);
+    assert_eq!(
+        warped.zone_spawn_point(),
+        stepped.zone_spawn_point(),
+        "warping must generate the sectors, not just relabel the current one"
+    );
+}
+
+/// There is no portal back, so a breach only runs forward.
+#[test]
+fn warping_to_a_zone_that_is_not_ahead_is_refused() {
+    let mut game = Game::new(940, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.warp_to_zone(3).unwrap();
+
+    assert!(
+        game.warp_to_zone(3).is_err(),
+        "the current zone is not ahead"
+    );
+    assert!(game.warp_to_zone(1).is_err(), "and zone 1 is behind");
+    assert_eq!(
+        game.player_status().zone,
+        3,
+        "a refused warp must not have moved the party part of the way"
+    );
+}
+
 #[test]
 fn breaching_carries_every_structure_and_its_offset_from_home() {
     let mut game = Game::new(940, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

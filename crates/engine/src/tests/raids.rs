@@ -1,10 +1,7 @@
 //! Raids against the base — damage, shields, guards, effects, and regeneration.
 
 use super::support::*;
-use crate::tuning::{
-    NEST_DURABILITY, RAID_DAMAGE, RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_AMOUNT,
-    STRUCTURE_REGEN_INTERVAL,
-};
+use crate::tuning::{NEST_DURABILITY, RAID_DAMAGE, RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_INTERVAL};
 use crate::*;
 
 #[test]
@@ -797,10 +794,12 @@ fn a_structure_survives_seven_raids_worth_of_damage() {
     );
 }
 
-/// One regen interval has to fully undo one raid, or the base loses the
-/// attrition race no matter how the player plays.
+/// Raid damage is permanent until the player builds something that repairs
+/// it. There is no free healing: a base with no repairer never recovers a
+/// point. If this ever fails, the Patch Node has been designed out from
+/// under itself.
 #[test]
-fn one_regen_interval_fully_undoes_one_raids_damage() {
+fn raid_damage_is_permanent_without_a_repairer() {
     let mut game = Game::new(12, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let structure = game
         .world
@@ -814,19 +813,242 @@ fn one_regen_interval_fully_undoes_one_raids_damage() {
         .id();
 
     game.damage_structure(structure, RAID_DAMAGE, "Mining Node");
+    let damaged = game.world.get::<Durability>(structure).unwrap().hp;
     assert_eq!(
-        game.world.get::<Durability>(structure).unwrap().hp,
+        damaged,
         30 - RAID_DAMAGE,
         "the raid should have landed before regen is tested"
     );
 
+    for interval in 1..=5 {
+        game.world.resource_mut::<GameClock>().tick = STRUCTURE_REGEN_INTERVAL * interval;
+        game.structure_regen();
+    }
+
+    assert_eq!(
+        game.world.get::<Durability>(structure).unwrap().hp,
+        damaged,
+        "with nothing repairing it, a damaged structure stays damaged forever"
+    );
+}
+
+/// The rate every deployed Patch Node contributes, read off its own
+/// definition so the test moves with the `.ron` rather than pinning a
+/// number the modder is free to change.
+fn patch_node_per_tier(game: &Game) -> u32 {
+    game.structure_defs()
+        .into_iter()
+        .find(|d| d.id == "patch_node")
+        .expect("patch_node.ron should load")
+        .repair
+        .expect("patch_node.ron should declare a repair rate")
+        .per_tier
+}
+
+/// Spawns a deployed Patch Node at `tier`, the way `place_structure` and
+/// `upgrade_structure` between them leave one standing.
+fn spawn_patch_node(game: &mut Game, tier: u32, hp: u32) -> Entity {
+    game.world
+        .spawn((
+            Structure {
+                kind: "patch_node".to_string(),
+            },
+            Position { x: 7, y: 7 },
+            Durability { hp, max_hp: 30 },
+            StructureTier(tier),
+        ))
+        .id()
+}
+
+#[test]
+fn a_patch_node_adds_its_tier_to_every_structures_regen() {
+    let mut game = Game::new(140, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let per_tier = patch_node_per_tier(&game);
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+            Durability { hp: 10, max_hp: 30 },
+        ))
+        .id();
+    spawn_patch_node(&mut game, 1, 30);
     game.world.resource_mut::<GameClock>().tick = STRUCTURE_REGEN_INTERVAL;
+
     game.structure_regen();
 
     assert_eq!(
         game.world.get::<Durability>(structure).unwrap().hp,
-        30,
-        "one regen interval should fully undo one raid's damage"
+        10 + per_tier
+    );
+}
+
+#[test]
+fn patch_node_repair_scales_with_its_upgrade_tier() {
+    let mut game = Game::new(141, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let per_tier = patch_node_per_tier(&game);
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+            Durability { hp: 1, max_hp: 60 },
+        ))
+        .id();
+    spawn_patch_node(&mut game, 3, 30);
+    game.world.resource_mut::<GameClock>().tick = STRUCTURE_REGEN_INTERVAL;
+
+    game.structure_regen();
+
+    assert_eq!(
+        game.world.get::<Durability>(structure).unwrap().hp,
+        1 + per_tier * 3,
+        "a tier-3 Patch Node should repair three times a tier-1 one"
+    );
+}
+
+/// Additive across nodes, the same way `raid_defense` and `pet_slot_bonus`
+/// stack — building a second one is a real answer to a bigger base.
+#[test]
+fn patch_node_repair_stacks_across_several_nodes() {
+    let mut game = Game::new(142, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let per_tier = patch_node_per_tier(&game);
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+            Durability { hp: 1, max_hp: 60 },
+        ))
+        .id();
+    spawn_patch_node(&mut game, 1, 30);
+    spawn_patch_node(&mut game, 2, 30);
+    game.world.resource_mut::<GameClock>().tick = STRUCTURE_REGEN_INTERVAL;
+
+    game.structure_regen();
+
+    assert_eq!(
+        game.world.get::<Durability>(structure).unwrap().hp,
+        1 + per_tier * 3,
+        "a tier-1 and a tier-2 node should contribute three tiers between them"
+    );
+}
+
+#[test]
+fn a_patch_node_repairs_itself() {
+    let mut game = Game::new(143, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let per_tier = patch_node_per_tier(&game);
+    let node = spawn_patch_node(&mut game, 1, 10);
+    game.world.resource_mut::<GameClock>().tick = STRUCTURE_REGEN_INTERVAL;
+
+    game.structure_regen();
+
+    assert_eq!(
+        game.world.get::<Durability>(node).unwrap().hp,
+        10 + per_tier,
+        "a Patch Node is not carved out of its own repair pass"
+    );
+}
+
+/// A nest carries `Durability` like a structure does, and the regen pass
+/// used to heal every `Durability` holder indiscriminately — so chipping a
+/// nest down with bump-attacks was quietly racing its own healing. Nothing
+/// the player builds maintains what spawns the raiders: a nest's Durability
+/// is only ever spent, never restored.
+#[test]
+fn nests_do_not_regenerate_at_all() {
+    let mut game = Game::new(144, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let nest = game
+        .world
+        .spawn((
+            Nest {
+                species: "glitch".to_string(),
+                pending_respawns: Vec::new(),
+            },
+            Position { x: 20, y: 20 },
+            Durability {
+                hp: 5,
+                max_hp: NEST_DURABILITY,
+            },
+        ))
+        .id();
+    spawn_patch_node(&mut game, 5, 30);
+    game.world.resource_mut::<GameClock>().tick = STRUCTURE_REGEN_INTERVAL;
+
+    game.structure_regen();
+
+    assert_eq!(
+        game.world.get::<Durability>(nest).unwrap().hp,
+        5,
+        "a nest gets neither the baseline trickle nor a Patch Node's repair"
+    );
+}
+
+/// The Patch Node is the first structure that is upgradeable *without*
+/// being cronjob-workable, so it is the first to take `upgrade_structure`'s
+/// `ResourceNode` branch with no `ResourceNode` to update. Deploy, upgrade,
+/// and confirm the repair rate actually followed the tier.
+#[test]
+fn a_deployed_patch_node_upgrades_and_repairs_harder_for_it() {
+    let mut game = Game::new(146, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "fortification");
+    place_home(&mut game, 0, 1);
+    {
+        let mut inv = game
+            .world
+            .get_mut::<Inventory>(game.player_entity())
+            .unwrap();
+        inv.add(ItemId::from(ids::CORE_FRAGMENT), 100);
+        inv.add(ItemId::from(ids::POWER_CELL), 10);
+    }
+    game.place_structure("patch_node", 1, 1).unwrap();
+    let node = find_structure_by_kind(&mut game, "patch_node").unwrap();
+    let per_tier = patch_node_per_tier(&game);
+
+    assert_eq!(
+        game.world.get::<StructureTier>(node).unwrap().0,
+        1,
+        "a Patch Node deploys at Mk1 even with no work recipe"
+    );
+    assert_eq!(game.total_repair_rate(), per_tier);
+
+    game.upgrade_structure(node)
+        .expect("a non-workable structure with an upgrade path should still upgrade");
+
+    assert_eq!(game.world.get::<StructureTier>(node).unwrap().0, 2);
+    assert_eq!(
+        game.total_repair_rate(),
+        per_tier * 2,
+        "upgrading should raise what the node repairs, not just its Mk number"
+    );
+}
+
+/// The Patch Node has to be earned, not available from turn one — it is
+/// the payoff of the same node that unlocks the Shield.
+#[test]
+fn the_patch_node_is_gated_behind_fortification_research() {
+    let mut game = Game::new(145, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(
+        !game
+            .buildable_structure_defs()
+            .iter()
+            .any(|d| d.id == "patch_node"),
+        "the Patch Node should not be buildable before Fortification is researched"
+    );
+
+    unlock_research_chain(&mut game, "fortification");
+
+    assert!(
+        game.buildable_structure_defs()
+            .iter()
+            .any(|d| d.id == "patch_node"),
+        "Fortification should unlock the Patch Node alongside the Shield"
     );
 }
 
@@ -853,29 +1075,8 @@ fn a_single_shield_reduces_raid_damage_without_erasing_it() {
     );
 }
 
-#[test]
-fn structure_regen_heals_damaged_structures_over_time() {
-    let mut game = Game::new(102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let structure = game
-        .world
-        .spawn((
-            Structure {
-                kind: "mining_node".to_string(),
-            },
-            Position { x: 5, y: 5 },
-            Durability { hp: 10, max_hp: 30 },
-        ))
-        .id();
-    game.world.resource_mut::<GameClock>().tick = STRUCTURE_REGEN_INTERVAL;
-
-    game.structure_regen();
-
-    assert_eq!(
-        game.world.get::<Durability>(structure).unwrap().hp,
-        10 + STRUCTURE_REGEN_AMOUNT
-    );
-}
-
+/// A repairer overshooting a nearly-full structure must clamp, not wrap.
+/// Tier 5 restores far more than the 1 point missing here.
 #[test]
 fn structure_regen_does_not_exceed_max_durability() {
     let mut game = Game::new(103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -889,6 +1090,7 @@ fn structure_regen_does_not_exceed_max_durability() {
             Durability { hp: 29, max_hp: 30 },
         ))
         .id();
+    spawn_patch_node(&mut game, 5, 30);
     game.world.resource_mut::<GameClock>().tick = STRUCTURE_REGEN_INTERVAL;
 
     game.structure_regen();

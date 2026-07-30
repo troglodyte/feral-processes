@@ -725,15 +725,17 @@ pub const RAID_DEFENDER_DAMAGE: i32 = 6;
 /// rather than sprawling across the map.
 pub const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 7;
 
-/// How often (in ticks) damaged structures passively regenerate — a slow
-/// trickle, not a substitute for staying ahead of raids.
+/// How often (in ticks) the base's repairers restore `Durability` to
+/// damaged structures — see `Game::structure_regen`.
+///
+/// There is deliberately no companion "amount" constant. Structures do not
+/// heal on their own at all: every point of repair comes from a deployed
+/// structure declaring `StructureDef::repair` (the Patch Node), so raid
+/// damage is permanent until the player builds something that undoes it.
+/// Reintroducing a free trickle here would design that structure out from
+/// under itself — `raid_damage_is_permanent_without_a_repairer` is the test
+/// that says so.
 pub const STRUCTURE_REGEN_INTERVAL: u64 = 20;
-
-/// How much `Durability` a damaged structure regenerates every
-/// `STRUCTURE_REGEN_INTERVAL` ticks — set to match `RAID_DAMAGE` so one
-/// interval fully undoes one raid. Below that, a base loses the attrition
-/// race no matter how it's played.
-pub const STRUCTURE_REGEN_AMOUNT: u32 = 4;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Perk magnitudes

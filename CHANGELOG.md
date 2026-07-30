@@ -13,6 +13,34 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Raid damage is something you repair, not something you wait out
+
+- **New structure: the Patch Node.** It repairs every deployed structure in
+  the base — itself included — by 1 Durability per upgrade tier, every 20
+  ticks. Several of them stack, the way Shields do, and it upgrades to Mk5
+  for 6 per interval. Unlocked by **Fortification**, the same research node
+  that unlocks the Shield, which now reads as the two halves of one answer:
+  a Shield stops raid damage landing, a Patch Node undoes what lands anyway.
+- **Raid damage is now permanent until you repair it.** Structures used to
+  regenerate 4 Durability per interval for free — exactly `RAID_DAMAGE`, so
+  one interval fully undid one raid and a base won the attrition race by
+  doing nothing at all. Raids were an inconvenience with a timer on them.
+  Free regen is gone entirely (`STRUCTURE_REGEN_AMOUNT` deleted rather than
+  lowered), so every point of repair now comes from a deployed Patch Node.
+  This is gentler than it sounds — an undefended structure still takes ~7
+  raids to lose, and workers and guards already cut incoming damage — but
+  the slope finally runs the other way if you ignore it.
+- **Fixed: nests were quietly regenerating.** A nest carries Durability like
+  a structure does, and the regen pass healed every Durability holder
+  indiscriminately — so chipping a nest down with bump-attacks was racing its
+  own healing, and walking away from a half-destroyed one gave the progress
+  back. The manual already said a nest's Durability "is only ever spent by
+  you"; the code just didn't agree. The pass is now `With<Structure>`, so
+  neither the baseline trickle nor a Patch Node's repair reaches a nest.
+- `StructureDef` gains an optional `repair: Some((per_tier: N))` field, so a
+  mod can declare a repairer of its own without touching Rust — documented
+  in `assets/structures/README.md`. Existing structure files parse unchanged.
+
 ### Fatigue is visible where it is spent
 
 - **The battle roster has a `FATIGUE` column.** Fatigue prices every routine

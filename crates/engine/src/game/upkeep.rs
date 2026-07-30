@@ -2,24 +2,61 @@
 //! visual effects, and raids.
 
 use crate::tuning::{
-    RAID_CHANCE_PER_TICK, RAID_DAMAGE, RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_AMOUNT,
-    STRUCTURE_REGEN_INTERVAL,
+    RAID_CHANCE_PER_TICK, RAID_DAMAGE, RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_INTERVAL,
 };
 use crate::*;
 
 impl Game {
-    /// Slow passive healing for damaged structures — every
-    /// `STRUCTURE_REGEN_INTERVAL` ticks, everything below max `Durability`
-    /// recovers `STRUCTURE_REGEN_AMOUNT`.
+    /// Repairs damaged structures — every `STRUCTURE_REGEN_INTERVAL` ticks,
+    /// every structure below max `Durability` recovers whatever the base's
+    /// repairers restore between them (`total_repair_rate`).
+    ///
+    /// That total is the only source: nothing heals on its own, so a base
+    /// with no repairer standing never recovers a point and raid damage is
+    /// permanent until the player builds something that undoes it.
+    ///
+    /// `With<Structure>` is load-bearing, not tidiness: a `Nest` carries
+    /// `Durability` too, and an unfiltered pass healed it alongside the
+    /// player's own buildings — so chipping a nest down with bump-attacks
+    /// raced its own regeneration. Nothing the player builds maintains what
+    /// spawns the raiders; a nest's Durability is only ever spent.
     pub(crate) fn structure_regen(&mut self) {
         let tick = self.world.resource::<GameClock>().tick;
         if !tick.is_multiple_of(STRUCTURE_REGEN_INTERVAL) {
             return;
         }
-        let mut query = self.world.query::<&mut Durability>();
-        for mut durability in query.iter_mut(&mut self.world) {
-            durability.hp = (durability.hp + STRUCTURE_REGEN_AMOUNT).min(durability.max_hp);
+        let amount = self.total_repair_rate();
+        if amount == 0 {
+            return;
         }
+        let mut query = self
+            .world
+            .query_filtered::<&mut Durability, With<Structure>>();
+        for mut durability in query.iter_mut(&mut self.world) {
+            durability.hp = (durability.hp + amount).min(durability.max_hp);
+        }
+    }
+
+    /// `Durability` restored to every deployed structure per regen interval
+    /// by the base's repairers — each one's `RepairDef::per_tier` times its
+    /// own `StructureTier`, summed. Derived on each call rather than cached,
+    /// so a Patch Node lost to a raid stops contributing with no
+    /// invalidation step, the same way `pet_capacity` handles a lost Data
+    /// Cache.
+    pub(crate) fn total_repair_rate(&mut self) -> u32 {
+        let repairers: Vec<(StructureId, u32)> = {
+            let mut query = self.world.query::<(&Structure, Option<&StructureTier>)>();
+            query
+                .iter(&self.world)
+                .map(|(s, tier)| (s.kind.clone(), tier.map_or(1, |t| t.0)))
+                .collect()
+        };
+        let db = self.world.resource::<StructureDb>();
+        repairers
+            .iter()
+            .filter_map(|(kind, tier)| Some((db.get(kind.as_str())?.repair?, tier)))
+            .map(|(repair, tier)| repair.per_tier * tier)
+            .sum()
     }
 
     /// Advances every `Nest`'s `pending_respawns` countdown by one tick,

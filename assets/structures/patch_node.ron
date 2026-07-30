@@ -1,0 +1,11 @@
+(
+    id: "patch_node",
+    name: "Patch Node",
+    description: "Recompiles damaged structures across the whole base, itself included, for 1 Durability per tier every 20 ticks. Nothing else repairs raid damage — without one, it is permanent.",
+    glyph: '/',
+    color: Green,
+    build_cost: [("core_fragment", 18), ("power_cell", 4)],
+    work: None,
+    repair: Some((per_tier: 1)),
+    upgrade: Some((max_tier: 5, cost: [("core_fragment", 12)])),
+)

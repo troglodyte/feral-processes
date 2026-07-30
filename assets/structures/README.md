@@ -147,8 +147,9 @@ is skipped with a warning logged in-game rather than crashing startup.
     // being destroyed. An assigned cronjob worker/guard fights a raid off,
     // reducing the damage by its Defense stat; an unassigned structure
     // takes the raid's full damage (less any raid_defense below).
-    // Damaged structures slowly regenerate over time regardless. Ignored
-    // entirely when `raidable: false` (see below).
+    // Damage is permanent unless something with a `repair` field (see below)
+    // is standing — structures never heal on their own. Ignored entirely
+    // when `raidable: false` (see below).
     durability: 30,
 
     // Optional; can be left out entirely (defaults to true). Set to false
@@ -194,6 +195,23 @@ is skipped with a warning logged in-game rather than crashing startup.
     // sets `enables_rest` isn't worn down any faster by actually being
     // used to rest than by sitting there idle.
     temporary: Some((max_ticks: 20)),
+
+    // Optional; can be left out entirely (defaults to repairing nothing).
+    // If set, this structure restores `per_tier` Durability to *every*
+    // deployed structure — itself included — every 20 ticks, multiplied by
+    // its own upgrade tier. It stacks additively across every deployed
+    // structure that sets this, the same way `raid_defense` does, so a
+    // tier-2 repairer and a tier-3 repairer restore five between them.
+    //
+    // Pair it with `upgrade` or the tier is always 1 and `per_tier` is just
+    // a flat rate. Nests carry Durability too, but a repairer never heals
+    // one — only structures.
+    //
+    // This is how the Patch Node works: `repair: Some((per_tier: 1))` with
+    // no `work` recipe. It is also the *only* source of repair in the game —
+    // structures do not heal on their own at all, so raid damage is permanent
+    // until something declaring this field is standing.
+    repair: Some((per_tier: 1)),
 
     // Optional; can be left out entirely (defaults to un-upgradeable). If
     // set, the player can upgrade this structure (`U`) through

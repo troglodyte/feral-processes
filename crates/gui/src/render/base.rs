@@ -416,13 +416,13 @@ fn draw_status_panel(
         cy += m.line_height;
     }
     cy += m.gap;
-    cy = draw_status_buffs(buffs, x + m.inset, cy, painter, m);
-    painter.ui("Inventory:", x + m.inset, cy, m.font_size, TEXT);
-    cy += m.line_height;
-    if status.inventory.is_empty() {
-        painter.ui("(empty)", x + m.inset, cy, m.font_size, TEXT_DIM);
-        cy += m.line_height;
-    }
+
+    // Computed ahead of the routines section (rather than just above the
+    // inventory loop, which is the only place that used to need it) so
+    // `draw_status_buffs` can clip its own rows against the same footer
+    // the inventory list already does — a party running routines on every
+    // slot of every holder can outgrow the column exactly the way a full
+    // inventory can.
     let keys = [
         "hjkl/arrows move  . wait  e drain  r recharge",
         "g scan   c compile   b deploy   w cronjob  G guard  R demolish",
@@ -433,6 +433,14 @@ fn draw_status_panel(
     let keys_line_height = m.line_height - m.gap;
     let keys_block_h = keys.len() as f32 * keys_line_height + m.inset;
     let keys_y = y + h - keys_block_h;
+
+    cy = draw_status_buffs(buffs, x + m.inset, cy, keys_y, painter, m);
+    painter.ui("Inventory:", x + m.inset, cy, m.font_size, TEXT);
+    cy += m.line_height;
+    if status.inventory.is_empty() {
+        painter.ui("(empty)", x + m.inset, cy, m.font_size, TEXT_DIM);
+        cy += m.line_height;
+    }
 
     for (item, qty) in &status.inventory {
         if cy > keys_y - m.line_height {

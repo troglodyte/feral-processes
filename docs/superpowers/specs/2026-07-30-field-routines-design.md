@@ -90,6 +90,7 @@ the `is_defending` power-sniff. Nothing in this feature writes to it.
 ```rust
 pub struct ActiveFieldBuff {
     pub kind: FieldBuffKind,
+    pub name: String,      // the ability or item that armed it, captured at cast
     pub power: i32,        // already scaled; see Casting
     pub remaining: u32,    // ticks
     pub source: BuffSource,
@@ -97,6 +98,9 @@ pub struct ActiveFieldBuff {
 
 pub enum BuffSource { Consumable, Routine }
 ```
+
+`name` is stored rather than derived from `kind` because two different
+routines can arm the same kind, and the buff list has to tell them apart.
 
 - Duration in **ticks**, not rounds.
 - Never touched by `clear_battle_status_effects`. That is the carry-over.
@@ -209,8 +213,11 @@ An expiring buff logs a line naming what faded.
 `PlayerSave` and `CompanionSave` each gain:
 
 ```rust
-pub field_buffs: Vec<(FieldBuffKind, i32, u32, BuffSource)>,
+pub field_buffs: Vec<ActiveFieldBuff>,
 ```
+
+The component's own type, not a parallel tuple — a tuple is a second shape to
+keep in sync, and the copy that drifts is the one nobody runs.
 
 Companions need it because creature-scoped buffs land on them.
 `SAVE_FORMAT_VERSION` → **15**. Bincode has no migration, so existing v14

@@ -78,7 +78,13 @@ impl App {
             self.mode = Mode::Playing;
             return;
         };
-        let currency = game.currency();
+        // The trade currency, not the build salvage — the same filter
+        // `render/trade.rs::draw_trade_action_menu` draws with, and it has
+        // to be: these two lists are indexed by the same row number, so a
+        // different exclusion here would sell the line above or below the
+        // one the player is looking at. Salvage is ordinary goods to a
+        // trader; Credits are what it won't buy (see `Game::sell_item`).
+        let currency = game.trade_currency();
         let sell_items: Vec<ItemId> = game
             .player_status()
             .inventory
@@ -147,10 +153,24 @@ impl App {
                 Err(e) => self.status_line = Some(e),
             }
         }
-        // Matches an item sale: the visit ends rather than looping back into
-        // a list whose rows have just shifted under the player.
-        self.pending_trade_structure = None;
-        self.mode = Mode::Playing;
+        self.return_to_trade_list();
+    }
+
+    /// Where a finished transaction leaves the player: back on the trader's
+    /// list, since a visit is normally a run of trades — clear the pack a
+    /// stack at a time, then spend the proceeds — and dropping to the map
+    /// after each one means walking the whole menu path again for the next.
+    ///
+    /// A trade costs a tick (`Game::sell_item` and friends call it), and a
+    /// tick can be the one that starves the player. That is the only thing
+    /// that takes the screen away instead.
+    fn return_to_trade_list(&mut self) {
+        self.check_game_over();
+        if self.mode == Mode::GameOver {
+            self.pending_trade_structure = None;
+            return;
+        }
+        self.mode = Mode::TradeAction;
     }
 
     /// Types a quantity for the pending sell/buy line item; Enter commits it.
@@ -182,9 +202,10 @@ impl App {
                     self.trade_quantity_input.parse().unwrap_or(0)
                 };
                 self.trade_quantity_input.clear();
+                // Nothing traded and no tick spent, so this is the same
+                // step back Esc takes.
                 if quantity == 0 {
-                    self.pending_trade_structure = None;
-                    self.mode = Mode::Playing;
+                    self.mode = Mode::TradeAction;
                     return;
                 }
                 if let Some(game) = &mut self.game {
@@ -198,8 +219,7 @@ impl App {
                         Err(e) => self.status_line = Some(e),
                     }
                 }
-                self.pending_trade_structure = None;
-                self.mode = Mode::Playing;
+                self.return_to_trade_list();
             }
             _ => {}
         }

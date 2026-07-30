@@ -116,6 +116,65 @@ pub(crate) fn app_owning_a_program_and_a_compiler(seed: u32, routines: &[&str]) 
     app
 }
 
+/// A game where the player stands next to a Black Market — the shipped
+/// trader that buys programs as well as items — holding exactly
+/// `inventory`, and owning one tamed program so the trader's program rows
+/// are populated too. Built by editing a save and reloading it, for the
+/// same reason `app_owning_a_program_and_a_compiler` is: staging a trading
+/// post through the build flow needs a Home, build clearance and 16 Core
+/// Fragments, and the player starts with 5.
+pub(crate) fn app_at_a_trading_post(seed: u32, inventory: &[(&str, u32)]) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = std::env::temp_dir().join(format!("feral_processes_appcore_market_{seed}.sav"));
+    let game = app.game.as_mut().unwrap();
+    let species = game.species_defs()[0].id.clone();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.inventory = inventory
+        .iter()
+        .map(|(item, qty)| (ItemId::from(*item), *qty))
+        .collect();
+    let (px, py) = data.player.position;
+    data.creatures.push(CreatureSave {
+        species,
+        position: (px + 2, py),
+        hp: 10,
+        max_hp: 10,
+        atk: 3,
+        def: 2,
+        tamed: true,
+        level: 1,
+        xp: 0,
+        xp_to_next: 10,
+        cronjob: None,
+        party_slot: None,
+        zone: 1,
+        custom_name: None,
+        hp_roll: 1.0,
+        atk_roll: 1.0,
+        def_roll: 1.0,
+        growth_roll: 1.0,
+        fusions: 0,
+        routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
+        field_buffs: Vec::new(),
+    });
+    data.structures.push(save::StructureSave {
+        kind: "market".to_string(),
+        position: (px + 1, py),
+        resource_amount: None,
+        durability: None,
+        tier: None,
+    });
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Game::load(&path, &assets_dir).ok();
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}
+
 /// A game where the player has `routines` installed (in place of the
 /// default `decompile`) and `hunger` set to a chosen level, so a field-cast
 /// test can pin affordability on either side of a routine's `power_cost`

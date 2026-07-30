@@ -1,7 +1,103 @@
 //! Selling programs, and the confirmation that gates it.
 
+use feral_processes_engine::items::ids;
+
 use super::support::*;
 use crate::*;
+
+/// Opens the trade screen on the fixture's Black Market: `t`'s picker, then
+/// its only nearby trader.
+fn open_the_trading_post(app: &mut App) {
+    app.mode = Mode::Trade;
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.mode, Mode::TradeAction);
+}
+
+fn held(app: &App, item: &str) -> u32 {
+    app.game
+        .as_ref()
+        .unwrap()
+        .player_status()
+        .inventory
+        .iter()
+        .find(|(i, _)| i.as_str() == item)
+        .map(|(_, qty)| *qty)
+        .unwrap_or(0)
+}
+
+/// A sale is one of a run of them — you clear out a full pack a stack at a
+/// time — so finishing one leaves the player on the trader's list, not back
+/// on the map having to walk the whole menu path again.
+#[test]
+fn selling_an_item_lands_back_on_the_traders_list() {
+    let mut app = app_at_a_trading_post(920, &[(ids::CREDITS, 4), (ids::CORE_FRAGMENT, 5)]);
+    open_the_trading_post(&mut app);
+
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.mode, Mode::TradeQuantity);
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::TradeAction, "the visit continues");
+    assert!(
+        app.pending_trade_structure.is_some(),
+        "staying on the list means staying with the trader that drew it"
+    );
+    assert_eq!(held(&app, ids::CORE_FRAGMENT), 4, "one fragment sold");
+    assert!(held(&app, ids::CREDITS) > 4, "and paid for");
+    assert!(app.pending_trade_choice.is_none());
+}
+
+/// Rows shift as stock sells out, so the highlight goes back to the top
+/// rather than staying on a line number that now means something else.
+#[test]
+fn a_completed_sale_puts_the_highlight_back_on_the_first_row() {
+    let mut app = app_at_a_trading_post(921, &[(ids::CREDITS, 4), (ids::CORE_FRAGMENT, 1)]);
+    open_the_trading_post(&mut app);
+    app.menu_selected = 3;
+
+    app.handle_key(GameKey::Char('1'));
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.menu_selected, 0);
+}
+
+/// The row the player picks has to be the row the renderer drew. Both
+/// sides list the inventory minus the trade currency — Credits, which a
+/// trader won't buy for more Credits — and *not* minus the build salvage,
+/// which is ordinary goods to a trader and the main thing there is to sell.
+#[test]
+fn the_sell_list_hides_credits_and_offers_the_salvage() {
+    let mut app = app_at_a_trading_post(922, &[(ids::CREDITS, 4), (ids::CORE_FRAGMENT, 5)]);
+    open_the_trading_post(&mut app);
+
+    app.handle_key(GameKey::Char('1'));
+
+    assert_eq!(app.mode, Mode::TradeQuantity);
+    assert!(
+        matches!(&app.pending_trade_choice, Some(TradeChoice::Sell(item))
+            if item.as_str() == ids::CORE_FRAGMENT),
+        "the first sell row is the salvage, not the money"
+    );
+}
+
+/// A program sale ends the same way an item sale does — back on the list,
+/// which is where the payout can be spent.
+#[test]
+fn selling_a_program_lands_back_on_the_traders_list() {
+    let mut app = app_at_a_trading_post(923, &[(ids::CREDITS, 4)]);
+    open_the_trading_post(&mut app);
+    let structure = app.pending_trade_structure.unwrap();
+    let programs = app.game.as_mut().unwrap().program_sale_options(structure);
+    assert_eq!(programs.len(), 1, "the fixture owns exactly one program");
+
+    app.pending_trade_program = Some(programs[0].clone());
+    app.mode = Mode::TradeProgramConfirm;
+    app.handle_key(GameKey::Char('y'));
+
+    assert_eq!(app.mode, Mode::TradeAction);
+    assert!(app.pending_trade_structure.is_some());
+    assert!(held(&app, ids::CREDITS) > 4, "the program sold");
+}
 
 /// Esc out of the sale confirmation abandons it and steps back to the
 /// trade list, leaving the program alive and nothing pending.

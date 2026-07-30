@@ -144,6 +144,19 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ### Fixed
 
+- **A trade dropped you back on the map.** Every completed transaction —
+  item sale, purchase, buyback, program sale — closed the trader's screen,
+  so clearing a full pack a stack at a time meant walking `t` → trader →
+  row → quantity again for every line. A finished trade now lands back on
+  the trader's list, and only a death mid-visit takes the screen away. The
+  list also shows your Credit balance now: the payout is announced in the
+  log pane, which the trade popup covers.
+- **The sell list offered the money and hid the salvage.** The screen drew
+  your inventory minus Credits (a trader won't buy Credits for Credits),
+  but the key handler behind it filtered out Core Fragments instead — so
+  the two lists disagreed by a row whenever you carried both, and picking
+  the top sell row offered the trader your Credits and got refused. Both
+  sides now filter on the trade currency.
 - **A battle refusal never faded.** Every message clears itself after four
   seconds, because it is drawn over the action bar it explains — but any key
   press restarted that window, on the theory that a message left standing

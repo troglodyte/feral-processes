@@ -299,6 +299,10 @@ them, or sell a compiled program for a tenth of its power. Credits are the
 only currency a trader deals in — Core Fragments are salvage, and a trader
 buys those off you like anything else rather than paying in them.
 
+A finished trade leaves you on the trader's list rather than back on the
+map, since a visit is usually a run of them — the header carries your
+Credit balance so a sale shows up somewhere the popup isn't covering.
+
 A trader keeps what you sell it. Anything you hand over goes onto its
 buyback shelf, and you can purchase it back at **double** what it paid — so
 a sale you regret costs a fee to undo rather than being final. The shelf

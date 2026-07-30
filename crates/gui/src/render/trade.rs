@@ -51,7 +51,22 @@ pub(super) fn draw_trade_action_menu(
     let currency = game.trade_currency();
     let money = game.item_name(&currency).to_string();
 
-    let mut rows = vec![Row::TextColored("Sell (from inventory):".to_string(), TEXT)];
+    // The balance, because the screen no longer closes after a trade (see
+    // `App::return_to_trade_list`) — without it a run of sales is a run of
+    // rows vanishing with no sign of what they fetched, since the popup
+    // covers the log pane the payout is announced in.
+    let purse = inventory
+        .iter()
+        .find(|(item, _)| *item == currency)
+        .map(|(_, qty)| *qty)
+        .unwrap_or(0);
+    // One line, not two with a spacer: everything above the first
+    // `Row::Item` is pinned header (see `draw_popup`), so it costs the
+    // scrollable list its height.
+    let mut rows = vec![
+        text_row(format!("You have: {purse} {money}")),
+        Row::TextColored("Sell (from inventory):".to_string(), TEXT),
+    ];
     let sellable: Vec<_> = inventory
         .iter()
         .filter(|(item, _)| *item != currency)

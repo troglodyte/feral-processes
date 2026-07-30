@@ -566,11 +566,16 @@ impl Game {
             .unwrap_or(0)
     }
 
-    /// Ages every field buff (see `FieldBuff`) on the player and each party
-    /// member by one tick, dropping any that just hit zero and logging one
-    /// line per expiry — named from `ActiveFieldBuff::name`, not `kind`,
-    /// since two different routines can arm the same kind and the buff list
-    /// has to say which one actually faded.
+    /// Applies every field buff's per-tick effect (see
+    /// `apply_field_buff_tick`) on the player and each party member, then
+    /// ages every buff by one tick, dropping any that just hit zero and
+    /// logging one line per expiry — named from `ActiveFieldBuff::name`,
+    /// not `kind`, since two different routines can arm the same kind and
+    /// the buff list has to say which one actually faded.
+    ///
+    /// The two passes are deliberately separate: applying first means a
+    /// buff with one tick left still does its last tick of work, since the
+    /// pass that decrements and removes it hasn't run yet.
     ///
     /// Scoped to the player and party, unlike `age_temporary_structures`
     /// (`game/turn.rs`), which walks every `Temporary` entity that exists —
@@ -581,6 +586,21 @@ impl Game {
         let subjects: Vec<Entity> = std::iter::once(player)
             .chain(self.world.resource::<Party>().0.clone())
             .collect();
+
+        for &entity in &subjects {
+            let Some(field_buff) = self.world.get::<FieldBuff>(entity) else {
+                continue;
+            };
+            let ticking: Vec<(FieldBuffKind, i32)> = field_buff
+                .active
+                .iter()
+                .map(|b| (b.kind, b.power))
+                .collect();
+            for (kind, power) in ticking {
+                self.apply_field_buff_tick(entity, kind, power);
+            }
+        }
+
         let mut expired: Vec<String> = Vec::new();
         for entity in subjects {
             let Some(mut field_buff) = self.world.get_mut::<FieldBuff>(entity) else {
@@ -598,6 +618,45 @@ impl Game {
         }
         for name in expired {
             self.log(format!("{name} fades."));
+        }
+    }
+
+    /// One tick of a single running field buff's effect on `entity`. The
+    /// three over-time kinds write here; the rate and flat combat-stat
+    /// kinds have no per-tick effect of their own — they're read on demand
+    /// by `field_buff_power` instead — so they fall through the wildcard.
+    ///
+    /// `Regen` is a heal, not damage, so it writes `Stats::hp` directly
+    /// rather than going through `apply_damage` — that function is the
+    /// only path that *lowers* HP, and routing a heal through it would
+    /// break that invariant. `Coolant`/`Trickle` write `Needs`, which only
+    /// the player has (`FieldBuffKind::scope` makes both `Run`-scoped for
+    /// exactly that reason) — a companion carrying one is not an error, the
+    /// write simply has nothing to land on.
+    fn apply_field_buff_tick(&mut self, entity: Entity, kind: FieldBuffKind, power: i32) {
+        match kind {
+            FieldBuffKind::Regen => {
+                if let Some(mut stats) = self.world.get_mut::<Stats>(entity) {
+                    stats.hp = (stats.hp + power).min(stats.max_hp);
+                }
+            }
+            FieldBuffKind::Coolant => {
+                if let Some(mut needs) = self.world.get_mut::<Needs>(entity) {
+                    needs.fatigue = (needs.fatigue + power as f32).min(NEED_MAX);
+                }
+            }
+            FieldBuffKind::Trickle => {
+                if let Some(mut needs) = self.world.get_mut::<Needs>(entity) {
+                    needs.hunger = (needs.hunger + power as f32).min(NEED_MAX);
+                }
+            }
+            FieldBuffKind::Def
+            | FieldBuffKind::Atk
+            | FieldBuffKind::Mitigation
+            | FieldBuffKind::CaptureBoost
+            | FieldBuffKind::XpBoost
+            | FieldBuffKind::EncounterDamp
+            | FieldBuffKind::DropBoost => {}
         }
     }
 

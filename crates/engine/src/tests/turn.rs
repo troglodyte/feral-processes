@@ -365,6 +365,164 @@ fn rest_ages_field_buffs_but_not_temporary_structures() {
     );
 }
 
+#[test]
+fn tick_field_buffs_regen_heals_the_carrier_and_caps_at_max_hp() {
+    let mut game = Game::new(610, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let max_hp = game.world.get::<Stats>(player).unwrap().max_hp;
+    game.world.get_mut::<Stats>(player).unwrap().hp = max_hp - 10;
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Regen,
+            name: "Nanite Patch".to_string(),
+            power: 4,
+            remaining: 5,
+            source: BuffSource::Routine,
+        },
+    );
+
+    game.tick_field_buffs();
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().hp,
+        max_hp - 6,
+        "Regen should heal by exactly its power on a tick that doesn't hit the cap"
+    );
+
+    // Two more ticks at +4 each would land at max_hp - 6 + 8 = max_hp + 2
+    // if uncapped — proves the clamp, not just that healing happened.
+    game.tick_field_buffs();
+    game.tick_field_buffs();
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().hp,
+        max_hp,
+        "Regen must not heal past max_hp"
+    );
+}
+
+#[test]
+fn tick_field_buffs_regen_heals_a_companion_not_the_player() {
+    let mut game = Game::new(611, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(companion).unwrap();
+    game.world.get_mut::<Stats>(companion).unwrap().hp = 4;
+    let player_hp_before = game.world.get::<Stats>(game.player_entity()).unwrap().hp;
+    game.arm_field_buff(
+        companion,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Regen,
+            name: "Self Repair".to_string(),
+            power: 3,
+            remaining: 5,
+            source: BuffSource::Routine,
+        },
+    );
+
+    game.tick_field_buffs();
+
+    assert_eq!(
+        game.world.get::<Stats>(companion).unwrap().hp,
+        7,
+        "the companion carrying Regen should heal itself"
+    );
+    assert_eq!(
+        game.world.get::<Stats>(game.player_entity()).unwrap().hp,
+        player_hp_before,
+        "Regen on a companion must not heal the player"
+    );
+}
+
+#[test]
+fn a_full_tick_applies_coolant_and_trickle_on_top_of_that_ticks_decay() {
+    let mut game = Game::new(612, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let (hunger_before, fatigue_before) = {
+        let mut needs = game.world.get_mut::<Needs>(player).unwrap();
+        needs.hunger = 90.0;
+        needs.fatigue = 90.0;
+        (needs.hunger, needs.fatigue)
+    };
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Coolant,
+            name: "Heat Sink".to_string(),
+            power: 15,
+            remaining: 5,
+            source: BuffSource::Routine,
+        },
+    );
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Trickle,
+            name: "Power Tap".to_string(),
+            power: 15,
+            remaining: 5,
+            source: BuffSource::Routine,
+        },
+    );
+
+    game.wait();
+
+    // `needs_decay_system` runs inside the same tick's schedule, ahead of
+    // `tick_field_buffs` (see `tick_inner`), so the restore lands on top of
+    // that tick's own drain rather than the pre-decay value. Read through
+    // the live formula instead of restating its constant.
+    let (decayed_hunger, decayed_fatigue) =
+        crate::systems::decay_needs(hunger_before, fatigue_before, 1.0);
+    let needs = *game.world.get::<Needs>(player).unwrap();
+    assert_eq!(
+        needs.fatigue,
+        (decayed_fatigue + 15.0).min(NEED_MAX),
+        "Coolant should restore fatigue on top of the tick's own decay"
+    );
+    assert_eq!(
+        needs.hunger,
+        (decayed_hunger + 15.0).min(NEED_MAX),
+        "Trickle should restore hunger the same way"
+    );
+    assert_eq!(
+        needs.fatigue, NEED_MAX,
+        "90 + 15 minus a hair of decay should still clamp to the cap"
+    );
+    assert_eq!(needs.hunger, NEED_MAX, "same clamp for hunger");
+}
+
+#[test]
+fn tick_field_buffs_applies_a_buffs_last_tick_before_it_expires() {
+    let mut game = Game::new(613, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let max_hp = game.world.get::<Stats>(player).unwrap().max_hp;
+    game.world.get_mut::<Stats>(player).unwrap().hp = max_hp - 5;
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Regen,
+            name: "Last Gasp".to_string(),
+            power: 3,
+            remaining: 1,
+            source: BuffSource::Routine,
+        },
+    );
+
+    game.tick_field_buffs();
+
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().hp,
+        max_hp - 2,
+        "a buff with 1 tick left must still apply its effect before it expires"
+    );
+    assert!(
+        game.world
+            .get::<FieldBuff>(player)
+            .unwrap()
+            .active
+            .is_empty(),
+        "the buff should be gone after its last tick"
+    );
+}
+
 /// Task 3: `ActiveFieldBuff`/`FieldBuffKind`/`BuffSource` all need to survive
 /// a save/load round trip intact, on both the player and a party member —
 /// not just the count, but every field, since a save that silently dropped

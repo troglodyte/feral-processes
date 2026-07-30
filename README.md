@@ -242,6 +242,21 @@ cronjob worker or a program posted to guard (`G`) fights the raid off at a
 cost to its own HP, and every deployed Shield shaves flat damage off every
 raid anywhere in the base.
 
+## Reading back
+
+Two screens exist only to be read. `L` opens the message log in full — the
+pane under the map has room for a handful of lines, and this is the last 100,
+scrolled with Up/Down. It is bounded on purpose: a finished intrusion keeps
+its results and drops its blow-by-blow, and the screen says so rather than
+implying a complete transcript.
+
+`B` opens the structure roster: every structure standing in the zone, its
+tier, tile, distance and raid Durability, and every program posted to it —
+both the cronjob worker and the guard, where the map's own labels can only
+show one. A workable structure with nobody on it is called out as idle, which
+is usually why you looked. Neither screen takes an action and neither passes
+game time; assigning, demolishing and upgrading stay on `w`, `G`, `R` and `U`.
+
 ## Trading
 
 Press `t` at a nearby iso Market to sell inventory items for **Credits** at

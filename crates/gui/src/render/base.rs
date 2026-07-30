@@ -120,6 +120,36 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
     }
 }
 
+/// The message log in full — everything the pane at the bottom of the map
+/// has room for a few lines of.
+///
+/// Oldest first, matching that pane, and each line in its `MessageKind`
+/// colour through the same `message_color` the pane's own `draw_message_line`
+/// calls. Rows are `Row::Item` because that is what `popup_layout` scrolls;
+/// the highlight is the scroll position, not a selection, and
+/// `App::handle_history_key` accepts nothing that would pick one.
+///
+/// The footer states the screen's two limits rather than leaving the player to
+/// infer them from an absence: the engine keeps `MESSAGE_LOG_CAP` lines, and
+/// `MessageLog::retain_outcomes_since_battle` drops a finished intrusion's
+/// blow-by-blow, so an old fight reads as its results.
+pub(super) fn draw_history(game: &Game, selected: usize, painter: &Painter, m: &Metrics) {
+    let lines = game.message_log(MESSAGE_LOG_CAP);
+    let mut rows = Vec::new();
+    if lines.is_empty() {
+        rows.push(text_row("Nothing has happened yet."));
+    }
+    for (i, (kind, line)) in lines.iter().enumerate() {
+        rows.push(colored_item_row(line, i == selected, message_color(*kind)));
+    }
+    rows.push(text_row(""));
+    rows.push(text_row(format!(
+        "The last {MESSAGE_LOG_CAP} lines. A finished intrusion keeps its results, not its blow-by-blow."
+    )));
+    rows.push(text_row("Up/Down to scroll, Esc to close."));
+    draw_popup("History", PopupSize::Large, &rows, painter, m);
+}
+
 /// The zone map: terrain, entities and effects, drawn top-down into the pane
 /// at the origin. The other half of the pane's contents is `draw_dungeon`,
 /// which replaces this entirely while the party is underground.

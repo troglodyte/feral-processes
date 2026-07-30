@@ -10,6 +10,7 @@ mod inventory;
 mod menus;
 mod playing;
 mod quitting;
+mod readonly_screens;
 mod research;
 mod routines;
 mod saves;

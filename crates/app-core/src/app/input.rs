@@ -41,6 +41,31 @@ impl App {
         }
     }
 
+    /// Up/Down scrolling for a screen with nothing to pick: the read-only
+    /// views (see `handle_history_key`) are drawn into the same popup as every
+    /// menu, and its window follows the highlighted row, so moving that
+    /// highlight *is* scrolling. `selected_index` already does the moving;
+    /// what this adds is discarding the row it would have resolved to, in one
+    /// named place rather than at each call site.
+    pub(crate) fn scroll(&mut self, key: GameKey, len: usize) {
+        let _ = self.selected_index(key, len);
+    }
+
+    /// Which row a freshly opened screen highlights. Every menu starts at its
+    /// first, and the history starts at its last: its lines run oldest-first
+    /// to match the map's pane, so the newest is at the bottom — and the line
+    /// that just scrolled off that pane is the reason the screen was opened.
+    fn opening_row(&self) -> usize {
+        match self.mode {
+            Mode::History => self
+                .game
+                .as_ref()
+                .map(|g| g.message_log(MESSAGE_LOG_CAP).len().saturating_sub(1))
+                .unwrap_or(0),
+            _ => 0,
+        }
+    }
+
     pub fn handle_key(&mut self, key: GameKey) {
         // A key pressed while narration is still scrolling in dumps the rest
         // and is not acted on. Without this the pacing would be a tax on
@@ -99,6 +124,8 @@ impl App {
             Mode::TradeQuantity => self.handle_trade_quantity_key(key),
             Mode::Perks => self.handle_perks_key(key),
             Mode::Research => self.handle_research_key(key),
+            Mode::History => self.handle_history_key(key),
+            Mode::Structures => self.handle_structures_key(key),
             Mode::Help => self.handle_help_key(),
             Mode::DungeonMap => self.handle_dungeon_map_key(),
             Mode::GameOver => self.handle_game_over_key(),
@@ -114,7 +141,7 @@ impl App {
         if self.mode != mode_before
             && !(mode_before == Mode::Manifest && self.mode == Mode::ManifestPick)
         {
-            self.menu_selected = 0;
+            self.menu_selected = self.opening_row();
         }
         self.maybe_autosave();
     }

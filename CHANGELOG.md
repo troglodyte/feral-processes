@@ -13,6 +13,41 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Two read-only screens
+
+- **`L` shows the message log in full.** The pane under the map fits a few
+  lines, so anything that scrolled past was gone. The new screen is the last
+  `MESSAGE_LOG_CAP` (100) lines, oldest-first like the pane, each in its
+  `MessageKind` colour, scrolled with Up/Down and opening on the newest line —
+  the one that just left the pane. Its footer states its own two limits
+  instead of leaving them to be discovered: the 100-line bound, and that
+  `retain_outcomes_since_battle` keeps a finished intrusion's results rather
+  than its narration.
+- **`B` shows every structure and what is assigned to it.** Tier, tile,
+  distance and raid Durability per structure, and *every* program posted to
+  each one — a cronjob worker and a guard can share a structure, which the
+  map's `structure_worker` label could never show, since it comes from a map
+  keyed by the task's target and collapses the two. A workable structure with
+  nobody on it is flagged idle. Backed by a new `Game::structure_report`,
+  which is deliberately zone-wide where `view_entities` takes a radius: the
+  base sits near its Home but the player wanders, and a roster that thinned
+  out as they walked away would be worse than none.
+- Neither screen takes an action or advances a tick.
+
+### Fixed
+
+- **A held letter or digit drove the screen its own press opened.** Extracting
+  a routine looked broken — nothing salvaged, the program still alive, and no
+  refusal saying why. Letters and digits reach the game from
+  `KeyboardInput::text`, which carries the OS auto-repeat (that is what makes
+  `hjkl` walking work) and which `KeyRepeat::block_held` cannot reach. So a
+  `2` held on the extraction picker chose the routine, opened the
+  confirmation, and the repeat landed there — where every key but Enter backs
+  out. The new `TextGate` applies `block_held`'s own rule to that path: one
+  screen per press, until the key is released. The same hole dismissed the
+  dungeon map and the help page instantly, and could carry a held key
+  straight through `Mode::GameOver`.
+
 ### Affinities
 
 - **A species can now be good at something, not just tougher or softer.**

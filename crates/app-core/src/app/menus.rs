@@ -99,6 +99,43 @@ impl App {
         self.mode = Mode::Playing;
     }
 
+    /// The message log in full. Nothing here is selectable, so the only keys
+    /// that do anything are Up/Down — which move `menu_selected`, and with it
+    /// the popup's scroll window (see `popup_layout`) — and Esc.
+    ///
+    /// Deliberately not closing on any key, the way `Help` and `DungeonMap`
+    /// do: those are glanced at, this one is read, and a screen you scroll
+    /// through must not vanish under the keys you scroll it with.
+    pub(crate) fn handle_history_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.mode = Mode::Playing;
+            return;
+        }
+        let lines = self
+            .game
+            .as_ref()
+            .map(|g| g.message_log(MESSAGE_LOG_CAP).len())
+            .unwrap_or(0);
+        self.scroll(key, lines);
+    }
+
+    /// The structure roster. Read-only for the same reason the history is:
+    /// assigning a worker, demolishing and upgrading each have their own
+    /// screen, and this one exists to answer "what have I got, and what is on
+    /// it" without becoming a fourth way to do any of that.
+    pub(crate) fn handle_structures_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.mode = Mode::Playing;
+            return;
+        }
+        let rows = self
+            .game
+            .as_mut()
+            .map(|g| g.structure_report().len())
+            .unwrap_or(0);
+        self.scroll(key, rows);
+    }
+
     /// The map closes on any key, like the help screen: it is something you
     /// glance at mid-corridor, and making the player find the right key to
     /// put it away would be friction on the one screen meant to remove some.

@@ -18,7 +18,9 @@ use feral_processes_engine::battle::{
 };
 use feral_processes_engine::items::{EquipmentSlot, ItemId};
 use feral_processes_engine::tuning::{ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST};
-use feral_processes_engine::{DifficultyMode, Entity, Game, MessageKind, ProgramSaleOption};
+use feral_processes_engine::{
+    DifficultyMode, Entity, Game, MESSAGE_LOG_CAP, MessageKind, ProgramSaleOption,
+};
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
 /// visible viewport size.
@@ -306,6 +308,15 @@ pub enum Mode {
     /// The research tree (see `Game::research_nodes`). Stays open after each
     /// unlock so several nodes can be taken in one visit.
     Research,
+    /// The message log in full, scrolled with Up/Down — the map's pane shows
+    /// only its last few lines. Read-only, and bounded by what the engine
+    /// keeps: `MESSAGE_LOG_CAP` lines, minus the blow-by-blow that
+    /// `MessageLog::retain_outcomes_since_battle` drops when a fight ends.
+    History,
+    /// Every structure in the zone and what is assigned to it — see
+    /// `Game::structure_report`. Read-only: assigning and demolishing stay
+    /// on their own screens.
+    Structures,
     Help,
     GameOver,
     /// Confirming `q` from `Mode::Playing`, which abandons the run. Offers to
@@ -377,6 +388,8 @@ impl Mode {
             | Mode::TradeProgramConfirm
             | Mode::Perks
             | Mode::Research
+            | Mode::History
+            | Mode::Structures
             | Mode::Help
             | Mode::DungeonMap
             | Mode::GameOver

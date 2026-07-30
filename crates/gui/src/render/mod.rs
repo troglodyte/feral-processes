@@ -10,12 +10,12 @@ use feral_processes_app_core::{
     App, MENU_SCAN_RADIUS, Mode, TradeChoice, equip_preview_tag, inventory_item_actions,
     menu_shortcut,
 };
-use feral_processes_engine::components::GlyphColor;
+use feral_processes_engine::components::{GlyphColor, TaskKind};
 use feral_processes_engine::items::ItemId;
 use feral_processes_engine::tuning::MAX_FUSIONS;
 use feral_processes_engine::world::Biome;
 use feral_processes_engine::{
-    Entity, Game, MessageKind, PetInfo, ProgramSaleOption, ResearchState,
+    Assignee, Entity, Game, MESSAGE_LOG_CAP, MessageKind, PetInfo, ProgramSaleOption, ResearchState,
 };
 
 mod bars;
@@ -35,14 +35,14 @@ mod progression;
 mod routines;
 mod trade;
 
-use base::draw_playing_base;
+use base::{draw_history, draw_playing_base};
 use battle::{
     draw_battle, draw_battle_ally_menu, draw_battle_item_menu, draw_battle_special_menu,
     draw_battle_target_menu,
 };
 use building::{
-    draw_build_menu, draw_remove_confirm, draw_remove_menu, draw_structure_menu, draw_symlink_menu,
-    draw_upgrade_menu, draw_worker_menu,
+    draw_build_menu, draw_remove_confirm, draw_remove_menu, draw_structure_menu, draw_structures,
+    draw_symlink_menu, draw_upgrade_menu, draw_worker_menu,
 };
 use crafting::{draw_craft_menu, draw_craft_quantity};
 use dungeon_map::draw_dungeon_map;
@@ -53,7 +53,7 @@ use meta::{
     draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
 };
 use party::{draw_companion_menu, draw_fuse_menu, draw_fuse_name_menu, draw_fuse_second_menu};
-use popup::{PopupSize, draw_popup, text_row};
+use popup::{PopupSize, colored_item_row, draw_popup, text_row};
 use progression::{draw_perks_menu, draw_research_menu};
 use routines::{
     draw_extract, draw_extract_confirm, draw_extract_pick, draw_routine_install,
@@ -459,6 +459,8 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         }
         Mode::Perks => draw_perks_menu(game, selected, painter, m),
         Mode::Research => draw_research_menu(game, selected, painter, m),
+        Mode::History => draw_history(game, selected, painter, m),
+        Mode::Structures => draw_structures(game, selected, painter, m),
         Mode::QuitRunConfirm => draw_quit_run_confirm(selected, painter, m),
         _ => {}
     }

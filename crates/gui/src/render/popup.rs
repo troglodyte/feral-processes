@@ -57,6 +57,18 @@ pub(super) fn critical_item_row(s: impl Into<String>, selected: bool) -> Row {
     }
 }
 
+/// `item_row` in a caller-chosen colour, for a list whose rows carry their
+/// own meaning rather than a menu's uniform one — a log line's
+/// `MessageKind`, a structure standing idle.
+pub(super) fn colored_item_row(s: impl Into<String>, selected: bool, color: Color) -> Row {
+    Row::Item {
+        text: s.into(),
+        selected,
+        bold: false,
+        color,
+    }
+}
+
 /// `item_row` for a list of creatures — see `Row::Item::bold`.
 pub(super) fn creature_row(s: impl Into<String>, selected: bool) -> Row {
     Row::Item {

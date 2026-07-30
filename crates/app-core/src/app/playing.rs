@@ -73,6 +73,14 @@ impl App {
                 self.mode = Mode::Research;
                 return;
             }
+            GameKey::Char('L') => {
+                self.mode = Mode::History;
+                return;
+            }
+            GameKey::Char('B') => {
+                self.mode = Mode::Structures;
+                return;
+            }
             GameKey::Char('s') => {
                 self.save_game();
                 return;

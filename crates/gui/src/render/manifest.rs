@@ -351,6 +351,15 @@ fn equip_row(slot: &ManifestEquipSlot) -> SectionRow {
     )
 }
 
+/// Every `sections.push` in here must have a matching entry in
+/// `manifest_layout::tests::worst_case_program` (at its real cap, not a
+/// smaller placeholder) — that fixture is the layout module's only defence
+/// against the page overflowing at some window size, and it defends
+/// exactly the box set it's told about. The affinities regression this
+/// screen shipped with was not a wrong row count, it was a missing box:
+/// AFFINITIES existed here before the fixture knew a fifth columned box
+/// existed at all. Adding a section here without adding it there passes
+/// every test and still ships a page that doesn't fit.
 fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifest) {
     if let Some(q) = &p.potential {
         sections.push(Section {

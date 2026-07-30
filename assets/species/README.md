@@ -199,10 +199,12 @@ is skipped with a warning logged in-game rather than crashing startup.
     // species with a strong `heal` and no innate heal is not a mistake:
     // it's a reason to spend a researched heal routine on that program.
     //
-    // The manifest screen shows at most two non-neutral categories — the
-    // rest collapse into a single "+N more" line. Name only one or two if
-    // you want every one of them visible; a species naming three or more
-    // still works, it just won't all be shown on the same screen.
+    // The manifest screen shows both categories if you name two or fewer.
+    // Name three or more and only the first is shown, with the rest
+    // collapsing into a single "+N more" line — the note itself costs a
+    // row, so three declared categories show one, not two. Name only one
+    // or two if you want every one of them visible; a species naming three
+    // or more still works, it just won't all be shown on the same screen.
     affinities: (heal: 1.4, damage: 0.85),
 
     // Optional; can be left out entirely (defaults to false). If true,

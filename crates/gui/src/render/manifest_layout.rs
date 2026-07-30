@@ -36,16 +36,15 @@ pub(super) enum SectionRow {
 /// routine-slot cap, so a full kit is never trimmed.
 pub(super) const MAX_SECTION_ROWS: usize = 6;
 
-/// The AFFINITIES box's own cap, tighter than `MAX_SECTION_ROWS`. Measured at
-/// 720px (the tightest supported window): a fifth columned box — COMBAT,
-/// POTENTIAL, AFFINITIES, SPECIES, ROUTINES, plus the full-width MOVES band —
-/// has room for 2 affinity rows; 3 overlaps the footer by ~20px and 4-5
-/// escape the frame outright (see the git history of
-/// `the_real_worst_case_pages_fit_the_tightest_window` for the measurements).
-/// 2 costs nothing shipped: every species Task 5 gave affinities to carries
-/// exactly one strength and one weakness. A modded species naming three or
-/// more only ever loses rows to the "+N more" note below, never crashes the
-/// page.
+/// The AFFINITIES box's own cap, tighter than `MAX_SECTION_ROWS`. With
+/// `MAX_BAND_ROWS` also in place, 2 affinity rows clears the tightest
+/// supported window (720px) by 37px; 3 still clears, by 17-25px across the
+/// swept heights (the MOVES band cap bought that row back); 4 comes up
+/// short at four of the nine heights, and 5 fails at every height as a
+/// footer overlap. 2 costs nothing shipped regardless of that margin:
+/// every species Task 5 gave affinities to carries exactly one strength
+/// and one weakness. A modded species naming three or more only ever loses
+/// rows to the "+N more" note below, never crashes the page.
 pub(super) const MAX_AFFINITY_ROWS: usize = 2;
 
 /// The full-width band's own cap. `MAX_SECTION_ROWS` covers the columned
@@ -67,10 +66,14 @@ pub(super) fn section_rows(rows: Vec<SectionRow>) -> Vec<SectionRow> {
     section_rows_capped(rows, MAX_SECTION_ROWS)
 }
 
-/// `section_rows` at an arbitrary cap, for the one box (AFFINITIES) whose
-/// real worst case is narrower than `MAX_SECTION_ROWS` — see
-/// `MAX_AFFINITY_ROWS`.
+/// `section_rows` at an arbitrary cap, for the boxes (AFFINITIES, MOVES)
+/// whose real worst case is narrower than `MAX_SECTION_ROWS` — see
+/// `MAX_AFFINITY_ROWS` and `MAX_BAND_ROWS`.
 pub(super) fn section_rows_capped(mut rows: Vec<SectionRow>, cap: usize) -> Vec<SectionRow> {
+    debug_assert!(
+        cap >= 1,
+        "a zero cap can't reserve a row for the note below"
+    );
     if rows.len() <= cap {
         return rows;
     }
@@ -278,14 +281,7 @@ mod tests {
     /// that sum can land a fraction of a pixel past the boundary, so the
     /// tolerance here is what separates "adjacent" from "genuinely on top of
     /// each other". A real overlap is tens of pixels, never a rounding tail.
-    ///
-    /// Raised from 0.5 to 1.0 when AFFINITIES became a fifth columned box:
-    /// five stacked boxes accumulate more float error across a
-    /// percentage-based frame than four did, and at the shipped 2-row
-    /// affinity cap the resulting gap was a 0.67px rounding tail that 0.5
-    /// flagged as an overlap. 1.0 still catches a real one — the tightest
-    /// remaining margin between any two real boxes is nowhere near a pixel.
-    const TOUCH_EPSILON: f32 = 1.0;
+    const TOUCH_EPSILON: f32 = 0.5;
 
     fn overlaps(a: &Rect, b: &Rect) -> bool {
         a.x + TOUCH_EPSILON < b.x + b.w
@@ -467,7 +463,7 @@ mod tests {
         let SectionRow::Note(last) = &trimmed[MAX_AFFINITY_ROWS - 1] else {
             panic!("the trailing row is a note");
         };
-        assert_eq!(last, "+4 more");
+        assert_eq!(last, &format!("+{} more", 5 - (MAX_AFFINITY_ROWS - 1)));
     }
 
     /// A modded species naming more moves than `MAX_BAND_ROWS` must not push

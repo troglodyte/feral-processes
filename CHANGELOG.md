@@ -13,6 +13,53 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Field routines: buffs cast outside battle that keep running into one
+
+- **An ability can now be field-only.** `AbilityEffect::FieldBuff` is the
+  marker — there's no separate flag — and an ability carrying it never
+  appears in the in-battle Special picker and is never used by a wild
+  carrier. Instead it arms a buff from the map: press `a` to open the cast
+  screen, spend Power and a turn, and the buff starts ticking. There is no
+  cooldown. The buff keeps running through whatever battle follows and
+  survives a save — unlike the buff a companion's Special arms mid-fight,
+  which is still wiped the instant that battle ends. A panel under the map,
+  and another in the battle roster, list every buff currently running,
+  however it was cast.
+- **Ten field routines ship, one per `FieldBuffKind`.** Four land on one
+  ally you choose — Repair Loop (heal over time), Overclock (flat Attack),
+  Hardened Shell (flat Defense), Ablative Layer (percent damage reduction)
+  — and six always land on the player regardless of who casts them, since
+  they're pressure or economy knobs the whole run feels rather than one
+  combatant's stats: Coolant Flush (Fatigue over time), Trickle Charge
+  (Power over time), Deep Scan (capture odds), Trace Analysis (XP), Ghost
+  Protocol (encounter chance), Salvage Routine (drop chance). The four flat
+  kinds scale with the caster's level and affinity like any other ability;
+  the six percentage kinds deliver their authored number unscaled, so a
+  routine's percent bonus can't be pushed past its own ceiling by a
+  high-level, high-affinity caster. See `assets/abilities/README.md`'s
+  `FieldBuff` section for the full scope and targeting rules.
+- **None of the ten is granted by a shipped species or research node.**
+  They load, they're fully functional, and nothing currently names one in
+  `unlocks_abilities` or gives it a wild-carrier weight — reaching one today
+  means naming it yourself in a mod. That's a deliberate scope cut made
+  while building this feature, not an oversight.
+- **An item's `prebattle_buff` now arms the same mechanism**, fixing two
+  bugs it had carried since it shipped: the buff it armed was destroyed at
+  the end of every battle despite the name, and it never survived a save.
+  Both are now true of it, because it's the same `FieldBuff` a routine arms.
+  See `assets/items/README.md` — the field now carries a `kind` and counts
+  in ticks, not rounds.
+- **The numbers are unplayed.** Every duration, magnitude and Power cost
+  across the ten shipped routines is an arithmetic-plausible starting
+  guess, not a tuned value — most visibly `trickle_charge`, which returns
+  more Power over its run than it costs to cast, a choice made knowingly
+  rather than caught late. None of this has been through an actual
+  playthrough.
+- **Save format bumped to v15.** Both `PlayerSave` and `CreatureSave` gained
+  a `field_buffs` list. **A save written under v14 will not load** —
+  bincode has no field-level migration path, so it's rejected up front with
+  a clear message, the same policy as every prior bump.
+
 ### Raid damage is something you repair, not something you wait out
 
 - **New structure: the Patch Node.** It repairs every deployed structure in
@@ -728,6 +775,8 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   as any other routine item.
 - **Every ability has a cooldown now, except Decompile** — it stays
   spammable, since it's the capture mechanic rather than a combat move.
+  (Field routines, added later, ignore `cooldown` entirely: a field-only
+  ability never reaches the Special picker, so there's nothing to throttle.)
 
 ## 0.2.0 — 2026-07-24
 

@@ -98,8 +98,8 @@ fn selling_a_program_pays_a_tenth_of_its_power_and_despawns_it() {
     );
 }
 
-/// Task 3: `dissolve_tamed_program` (which `sell_companion` calls) despawns
-/// the whole entity, so a `FieldBuff` riding on a sold program needs no
+/// `dissolve_tamed_program` (which `sell_companion` calls) despawns the
+/// whole entity, so a `FieldBuff` riding on a sold program needs no
 /// dedicated hook to avoid being orphaned — this pins that down rather than
 /// trusting it stays true across future edits to the despawn path.
 #[test]

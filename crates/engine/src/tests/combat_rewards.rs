@@ -411,8 +411,8 @@ fn every_member_of_a_group_pays_its_own_xp_when_it_dies() {
     let mut game = Game::new(88, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.resource_mut::<ZoneLevel>().0 = 6;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    // Deep and far, so the per-group ceiling this fixture will live under
-    // once Task 5 lands is 100 rather than 1.
+    // Deep and far, so the per-group ceiling this fixture lives under is
+    // 100 rather than 1.
     let (x, y) = (spawn.x + DISTANCE_STAT_STEP_TILES * 8, spawn.y);
     let player = game.player_entity();
 

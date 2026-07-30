@@ -177,6 +177,22 @@ to fuse two programs into one stronger one — the result takes the
 higher-level parent's species plus half the lower one's stats, and anything
 can only be fused three times.
 
+Some routines are field-only: instead of appearing in the Special menu in
+battle, they cast straight from the map with `a`, for a Power cost and a
+turn and no cooldown, arming a buff that keeps ticking through whatever
+battle follows and survives a save — unlike the buff a companion's Special
+arms mid-fight, which is wiped the instant that battle ends. A panel under
+the map, and another in the battle roster, list every buff currently
+running, however it was cast. Ten field routines ship: four land on one
+ally you choose (a heal, a flat Attack or Defense bump, or a percentage of
+damage reduction, each running for a set number of turns), and six always
+land on the player regardless of who casts them, since they're pressure or
+economy knobs the whole run feels rather than one combatant's stats —
+Fatigue and Power regeneration, and percentage bonuses to capture odds, XP,
+encounter chance, and drop rate. None of the ten is granted by a shipped
+species or research node yet, so reaching one today means naming it
+yourself in a mod.
+
 ## Affinities
 
 A species' `.ron` file can declare it's good at something: a per-category

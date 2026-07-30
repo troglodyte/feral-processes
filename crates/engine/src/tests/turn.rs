@@ -523,9 +523,9 @@ fn tick_field_buffs_applies_a_buffs_last_tick_before_it_expires() {
     );
 }
 
-/// Task 3: `ActiveFieldBuff`/`FieldBuffKind`/`BuffSource` all need to survive
-/// a save/load round trip intact, on both the player and a party member —
-/// not just the count, but every field, since a save that silently dropped
+/// `ActiveFieldBuff`/`FieldBuffKind`/`BuffSource` all need to survive a
+/// save/load round trip intact, on both the player and a party member — not
+/// just the count, but every field, since a save that silently dropped
 /// `power` or `source` would still pass a length check.
 #[test]
 fn field_buffs_survive_a_save_load_round_trip() {

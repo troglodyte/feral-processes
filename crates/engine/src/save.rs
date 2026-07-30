@@ -349,10 +349,10 @@ mod tests {
         );
     }
 
-    /// Task 3 bumped `SAVE_FORMAT_VERSION` 14 -> 15 to add `field_buffs`.
-    /// There is no migration path (see that constant's docs), so a save
-    /// genuinely written under the prior version must be refused exactly
-    /// like any other version mismatch, not silently decoded into garbage.
+    /// `SAVE_FORMAT_VERSION` moved 14 -> 15 to add `field_buffs`. There is
+    /// no migration path (see that constant's docs), so a save genuinely
+    /// written under the prior version must be refused exactly like any
+    /// other version mismatch, not silently decoded into garbage.
     #[test]
     fn a_save_written_at_v14_is_refused_now_that_v15_is_current() {
         let path = std::env::temp_dir().join(format!(

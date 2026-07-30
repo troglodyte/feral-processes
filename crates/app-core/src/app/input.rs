@@ -119,6 +119,8 @@ impl App {
             Mode::RoutineTarget => self.handle_routine_target_key(key),
             Mode::Routines => self.handle_routines_key(key),
             Mode::RoutineInstall => self.handle_routine_install_key(key),
+            Mode::FieldCast => self.handle_field_cast_key(key),
+            Mode::FieldCastAlly => self.handle_field_cast_ally_key(key),
             Mode::Extract => self.handle_extract_key(key),
             Mode::ExtractPick => self.handle_extract_pick_key(key),
             Mode::ExtractConfirm => self.handle_extract_confirm_key(key),

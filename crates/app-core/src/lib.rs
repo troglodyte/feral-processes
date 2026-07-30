@@ -20,6 +20,7 @@ use feral_processes_engine::items::{EquipmentSlot, ItemId};
 use feral_processes_engine::tuning::{ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST};
 use feral_processes_engine::{
     DifficultyMode, Entity, Game, MESSAGE_LOG_CAP, MessageKind, ProgramSaleOption,
+    RoutineHolderView,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -286,6 +287,22 @@ pub enum Mode {
     /// Picking which loose routine to drop into the slot chosen in
     /// `Mode::Routines`.
     RoutineInstall,
+    /// Picking which installed field routine to run — a `FieldBuff` ability
+    /// on you or a program you own, cast outside battle rather than spent as
+    /// a Special. Reached with `a` from `Mode::Playing`; rows come from
+    /// `Game::field_routines`. A row with no ally target casts immediately
+    /// and returns here to `Mode::Playing`; one that needs an ally instead
+    /// goes to `Mode::FieldCastAlly`.
+    FieldCast,
+    /// Picking who a `OneAlly` field routine lands on. Entered from
+    /// `Mode::FieldCast` only when the chosen row's
+    /// `FieldRoutineView::needs_ally_target` is set — same split
+    /// `Mode::BattleSpecial`/`Mode::BattleAlly` makes, for the same reason:
+    /// the routine and its target are separate choices. Offers only the
+    /// player and programs the player owns (`App::field_ally_options`),
+    /// since `Game::cast_field_routine` checks a target is alive but not
+    /// that the player owns it.
+    FieldCastAlly,
     /// Picking which program to break down for a routine. Reached with `M`
     /// from `Mode::Playing`.
     Extract,
@@ -379,6 +396,8 @@ impl Mode {
             | Mode::RoutineTarget
             | Mode::Routines
             | Mode::RoutineInstall
+            | Mode::FieldCast
+            | Mode::FieldCastAlly
             | Mode::Extract
             | Mode::ExtractPick
             | Mode::ExtractConfirm
@@ -495,6 +514,12 @@ pub struct App {
     /// The routine index picked in `Mode::ExtractPick`, awaiting confirmation
     /// from `Mode::ExtractConfirm` before `Game::extract_routine` is called.
     pub pending_extract_index: Option<usize>,
+    /// The index into `Game::field_routines` picked in `Mode::FieldCast`,
+    /// awaiting a target from `Mode::FieldCastAlly` before
+    /// `Game::cast_field_routine` is called. `None` outside that wait — a
+    /// routine needing no ally casts straight from `Mode::FieldCast` and
+    /// never sets this.
+    pub pending_field_routine: Option<usize>,
     /// The action kind picked in `Mode::Battle`, awaiting an enemy group
     /// from `Mode::BattleTarget` before it becomes a `BattleAction`.
     pub pending_battle_action: Option<ActionKind>,

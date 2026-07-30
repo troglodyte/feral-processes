@@ -57,6 +57,10 @@ impl App {
                 self.mode = Mode::RoutineTarget;
                 return;
             }
+            GameKey::Char('a') => {
+                self.mode = Mode::FieldCast;
+                return;
+            }
             GameKey::Char('M') => {
                 self.mode = Mode::Extract;
                 return;

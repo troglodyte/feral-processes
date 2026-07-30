@@ -6,6 +6,7 @@
 mod battle;
 mod building;
 mod crafting;
+mod field;
 mod input;
 mod inspection;
 mod inventory;

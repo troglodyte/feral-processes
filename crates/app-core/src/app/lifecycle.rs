@@ -26,6 +26,7 @@ impl App {
             pending_routine_holder: None,
             pending_extract_program: None,
             pending_extract_index: None,
+            pending_field_routine: None,
             pending_battle_action: None,
             pending_party_attack: false,
             pending_special_ability: None,

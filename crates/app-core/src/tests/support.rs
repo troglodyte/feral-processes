@@ -115,3 +115,76 @@ pub(crate) fn app_owning_a_program_and_a_compiler(seed: u32, routines: &[&str]) 
     app.mode = Mode::Playing;
     app
 }
+
+/// A game where the player has `routines` installed (in place of the
+/// default `decompile`) and `hunger` set to a chosen level, so a field-cast
+/// test can pin affordability on either side of a routine's `power_cost`
+/// exactly. Built by editing a save and reloading it, for the same reason
+/// `app_owning_a_program_and_a_compiler` is.
+pub(crate) fn app_with_player_routines(seed: u32, routines: &[&str], hunger: f32) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = std::env::temp_dir().join(format!("feral_processes_appcore_field_{seed}.sav"));
+    let game = app.game.as_mut().unwrap();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.routines = routines.iter().map(|r| r.to_string()).collect();
+    data.player.hunger = hunger;
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Game::load(&path, &assets_dir).ok();
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}
+
+/// Same as `app_with_player_routines`, but the player also owns one program
+/// (parked next to them) and one wild, unowned creature is nearby too — for
+/// asserting the field-cast ally picker (`Mode::FieldCastAlly`) offers the
+/// former and never the latter. Full Power, since affordability isn't what
+/// these tests are checking.
+pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = std::env::temp_dir().join(format!("feral_processes_appcore_field_own_{seed}.sav"));
+    let game = app.game.as_mut().unwrap();
+    let species = game.species_defs()[0].id.clone();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.routines = routines.iter().map(|r| r.to_string()).collect();
+    data.player.hunger = 100.0;
+    let (px, py) = data.player.position;
+    for (offset, tamed) in [(1, true), (2, false)] {
+        data.creatures.push(CreatureSave {
+            species: species.clone(),
+            position: (px + offset, py),
+            hp: 10,
+            max_hp: 10,
+            atk: 3,
+            def: 2,
+            tamed,
+            level: 1,
+            xp: 0,
+            xp_to_next: 10,
+            cronjob: None,
+            party_slot: None,
+            zone: 1,
+            custom_name: None,
+            hp_roll: 1.0,
+            atk_roll: 1.0,
+            def_roll: 1.0,
+            growth_roll: 1.0,
+            fusions: 0,
+            routines: Vec::new(),
+            field_buffs: Vec::new(),
+        });
+    }
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Game::load(&path, &assets_dir).ok();
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}

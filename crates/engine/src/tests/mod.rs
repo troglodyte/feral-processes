@@ -18,6 +18,7 @@ mod combat_targeting;
 mod crafting;
 mod dungeon;
 mod equipment;
+mod field;
 mod inspection;
 mod message_log;
 mod party;

@@ -683,6 +683,30 @@ pub(super) const FIELD_ONLY_ABILITY: &str = r#"(
     effect: FieldBuff(kind: Regen, power: 2, duration: 20, power_cost: 5.0),
 )"#;
 
+/// A `Run`-scoped `FieldBuff` — `field_buff_target_mismatch` requires
+/// `target: WholeParty` on this scope even though `Game::cast_field_routine`
+/// ignores it and always lands the buff on the player alone. For the test
+/// asserting that a `Run`-scoped routine held by a companion still lands on
+/// the player, not the companion.
+pub(super) const FIELD_ONLY_RUN_ABILITY: &str = r#"(
+    id: "test_field_trickle",
+    name: "Test Field Trickle",
+    description: "d",
+    target: WholeParty,
+    effect: FieldBuff(kind: Trickle, power: 3, duration: 15, power_cost: 4.0),
+)"#;
+
+/// A `Creature`-scoped, `WholeParty`-targeted `FieldBuff` — for the test
+/// asserting a cast arms every living party member (and skips a dead one)
+/// rather than just the caster.
+pub(super) const FIELD_ONLY_PARTY_ABILITY: &str = r#"(
+    id: "test_field_def",
+    name: "Test Field Def",
+    description: "d",
+    target: WholeParty,
+    effect: FieldBuff(kind: Def, power: 4, duration: 10, power_cost: 3.0),
+)"#;
+
 /// A species declaring two abilities, so the multi-ability paths can be
 /// exercised without depending on shipped kit assignments. The second is
 /// gated above a fresh companion's level 1, which is what pins down

@@ -470,6 +470,28 @@ pub struct RoutineItemView {
     pub count: u32,
 }
 
+/// One row of the field-routine picker — a `FieldBuff` ability installed on
+/// you or a program you own, run outside battle rather than spent as a
+/// battle Special. See `Game::field_routines`.
+pub struct FieldRoutineView {
+    pub ability: crate::abilities::AbilityId,
+    pub name: String,
+    pub description: String,
+    pub holder: Entity,
+    /// "You" for the player, the program's display name otherwise — same
+    /// convention as `RoutineHolderView::name`.
+    pub holder_label: String,
+    pub power_cost: f32,
+    /// Whether the player can pay `power_cost` right now.
+    pub affordable: bool,
+    /// Whether casting this routine needs a `target` — true only for a
+    /// `Creature`-scoped `FieldBuff` authoring `AbilityTarget::OneAlly`; a
+    /// `Run`-scoped routine (always `WholeParty`, see
+    /// `abilities::AbilityDef::field_buff_target_mismatch`) or a
+    /// `WholeParty` one needs no picker.
+    pub needs_ally_target: bool,
+}
+
 /// Everything the engine knows about one subject, for the manifest screen —
 /// the player, a program you own, or a wild one. Shared header fields plus a
 /// `subject` carrying the half that differs, so "the player has no Potential

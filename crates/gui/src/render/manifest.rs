@@ -245,6 +245,24 @@ fn stat(label: impl Into<String>, value: impl Into<String>) -> SectionRow {
     SectionRow::Stat(label.into(), value.into())
 }
 
+/// Builds COMBAT, dispatches to `player_sections` or `program_sections` for
+/// the subject-specific middle, then appends ROUTINES **last** — after
+/// whichever of those two returns, not as one of their own pushes. That
+/// makes this function, not either of them, the one place that knows the
+/// page's *full* section set.
+///
+/// `manifest_layout`'s column packer is an exact 2-partition
+/// (`best_column_split`), not the order-sensitive greedy it used to be, so
+/// the *set* of boxes is what decides whether a page fits — order no
+/// longer changes the tallest column's height. Order still decides which
+/// specific box lands in which column when two partitions tie (see
+/// `best_column_split`'s doc), which is what `columned_sections_fill_left_
+/// then_right` pins. Either way, every section this function or its callee
+/// pushes must have a matching entry in
+/// `manifest_layout::tests::worst_case_program` or `worst_case_player` —
+/// the branch's original regression was a missing box, not a wrong row
+/// count or a wrong order, and a fixture that omits a box passes every
+/// test while the real page still doesn't fit.
 fn sections_for(game: &Game, view: &ManifestView) -> Vec<Section> {
     let mut sections = vec![Section {
         title: "COMBAT",
@@ -281,6 +299,15 @@ fn sections_for(game: &Game, view: &ManifestView) -> Vec<Section> {
 ///
 /// XP is deliberately not a row here: the Experience meter above already
 /// reads `xp/to_next`.
+///
+/// Every `sections.push` here, plus COMBAT and ROUTINES which `sections_for`
+/// pushes around this call (see its doc), must have a matching entry in
+/// `manifest_layout::tests::worst_case_player`. Keep ROUTINES **last** in
+/// that fixture too, matching the real page — not because the packer's
+/// exact-partition column split cares about order (it doesn't decide
+/// whether the page fits), but because `sections_for` appends ROUTINES
+/// after this function returns, and a fixture that silently drops or
+/// reorders a box is the failure mode this whole file exists to catch.
 fn player_sections(sections: &mut Vec<Section>, p: &PlayerManifest) {
     sections.push(Section {
         title: "PROGRESSION",
@@ -351,15 +378,19 @@ fn equip_row(slot: &ManifestEquipSlot) -> SectionRow {
     )
 }
 
-/// Every `sections.push` in here must have a matching entry in
+/// Every `sections.push` here, plus COMBAT and ROUTINES which `sections_for`
+/// pushes around this call (see its doc), must have a matching entry in
 /// `manifest_layout::tests::worst_case_program` (at its real cap, not a
 /// smaller placeholder) — that fixture is the layout module's only defence
 /// against the page overflowing at some window size, and it defends
-/// exactly the box set it's told about. The affinities regression this
-/// screen shipped with was not a wrong row count, it was a missing box:
-/// AFFINITIES existed here before the fixture knew a fifth columned box
-/// existed at all. Adding a section here without adding it there passes
-/// every test and still ships a page that doesn't fit.
+/// exactly the box set it's told about (order matters for which column a
+/// box lands in on a tie, not for whether the page fits — see
+/// `best_column_split`'s doc). The affinities regression this screen
+/// shipped with was not a wrong row count, it was a missing box: AFFINITIES
+/// existed here before the fixture knew a fifth columned box existed at
+/// all. Adding a section here without adding it there passes every test
+/// and still ships a page that doesn't
+/// fit.
 fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifest) {
     if let Some(q) = &p.potential {
         sections.push(Section {

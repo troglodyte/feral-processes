@@ -30,34 +30,51 @@ pub(super) enum SectionRow {
 /// page height is bounded — otherwise a modded species with twenty moves
 /// would silently push the footer off the bottom.
 ///
-/// 6 is what the tightest supported window (720px, where the UI font is 19px)
-/// has room for once the header, four meters and the footer are paid for —
-/// see `the_real_worst_case_pages_fit_the_tightest_window`. It is also the
-/// routine-slot cap, so a full kit is never trimmed.
+/// 6 is what 720px (the tightest supported window, where the UI font is
+/// 19px) has room for, for the box set this constant originally protected —
+/// see `the_real_worst_case_pages_fit_the_tightest_window`. Which height
+/// actually binds is a property of the *current* box set, not a fixed fact
+/// about 720px: `MAX_BAND_ROWS`'s doc records a configuration (a fifth
+/// columned box at `MOVES` = 6) where 900/1000/1080px failed while 720px
+/// passed. Don't assume 720px is always the worst case — the sweep is what
+/// decides it, for whatever `worst_case_program`/`worst_case_player`
+/// currently model. 6 is also the routine-slot cap, so a full kit is never
+/// trimmed.
 pub(super) const MAX_SECTION_ROWS: usize = 6;
 
-/// The AFFINITIES box's own cap, tighter than `MAX_SECTION_ROWS`. With
-/// `MAX_BAND_ROWS` also in place, 2 affinity rows clears the tightest
-/// supported window (720px) by 37px; 3 still clears, by 17-25px across the
-/// swept heights (the MOVES band cap bought that row back); 4 comes up
-/// short at four of the nine heights, and 5 fails at every height as a
-/// footer overlap. 2 costs nothing shipped regardless of that margin:
-/// every species Task 5 gave affinities to carries exactly one strength
-/// and one weakness. A modded species naming three or more only ever loses
-/// rows to the "+N more" note below, never crashes the page.
+/// The AFFINITIES box's own cap, tighter than `MAX_SECTION_ROWS`. Measured
+/// with `MAX_BAND_ROWS` also in place and `best_column_split`'s exact
+/// partition doing the packing (not the greedy it replaced — see that
+/// function's doc): 2 affinity rows clears the tightest supported window
+/// (720px) by 56px; 3 clears by 37px; 4 *also* now clears, at every swept
+/// height, by 17px at its tightest (1000px) — the exact partition recovers
+/// enough margin that 4 is no longer the failure point it was under the
+/// old greedy. 5 is still out of reach: it fails at 4 of the 9 swept
+/// heights, worst at 1000px (-10px). 2 costs nothing shipped regardless of
+/// any of that margin: every species Task 5 gave affinities to carries
+/// exactly one strength and one weakness. A modded species naming three or
+/// more only ever loses rows to the "+N more" note below, never crashes
+/// the page.
 pub(super) const MAX_AFFINITY_ROWS: usize = 2;
 
 /// The full-width band's own cap. `MAX_SECTION_ROWS` covers the columned
 /// boxes, but the band is what actually overflows once a fifth columned box
-/// (AFFINITIES) exists: at `MAX_SECTION_ROWS` (6) it overlapped the footer
-/// by 2.00px/10.00px/3.33px at 900px/1000px/1080px (720px and every other
-/// swept height were fine — the failure is height-band-specific, not
-/// universal). 4 clears all of it with margin. Deliberately a separate
-/// constant from `MAX_SECTION_ROWS` rather than lowering that one: 6 is also
-/// `COMPANION_ROUTINE_SLOT_CAP`, so shrinking `MAX_SECTION_ROWS` would trim
-/// a player's full 6-slot routine kit, which is a real regression the band
-/// cap doesn't have to cause — nothing shipped has more than 2 moves, so 4
-/// trims nothing that exists today, only a mod.
+/// (AFFINITIES) exists — that was true against the old greedy packer, where
+/// `MAX_SECTION_ROWS` (6) here overlapped the footer by
+/// 2.00px/10.00px/3.33px at 900px/1000px/1080px (720px and every other
+/// swept height were fine). `best_column_split`'s exact partition (see its
+/// doc) recovers enough margin on its own that this specific case — the
+/// shipped `MAX_AFFINITY_ROWS` (2) combined with `MOVES` at the *full*
+/// `MAX_SECTION_ROWS` (6) — now clears at every swept height too, by 17px
+/// at its tightest. This constant is kept anyway, at the owner's explicit
+/// call: it is real defence against the mod-maximal combination
+/// (`AFFINITIES` at 5, which still fails at 4 of 9 heights even with the
+/// exact partition), and there's value in the headroom regardless of
+/// whether today's shipped worst case strictly needs it. Deliberately a
+/// separate constant from `MAX_SECTION_ROWS` rather than lowering that one:
+/// 6 is also `COMPANION_ROUTINE_SLOT_CAP`, so shrinking `MAX_SECTION_ROWS`
+/// would trim a player's full 6-slot routine kit — nothing shipped has
+/// more than 2 moves, so 4 trims nothing that exists today, only a mod.
 pub(super) const MAX_BAND_ROWS: usize = 4;
 
 /// Trims `rows` to `MAX_SECTION_ROWS`, spending the last line on a count of
@@ -143,37 +160,45 @@ pub(super) fn manifest_layout(
 
     let col_gap = m.pad;
     let col_w = (inner_w - col_gap) / 2.0;
-    // Running bottom edge of each column. A box lands under whichever side is
-    // currently shorter, so an uneven set of boxes still fills evenly instead
-    // of leaving one column short.
-    let mut col_y = [y, y];
     // `None` for a full-width band, which can't be placed until every
     // columned box is down and the grid's true bottom is known.
-    let mut placed: Vec<Option<Rect>> = Vec::with_capacity(sections.len());
+    let mut placed: Vec<Option<Rect>> = vec![None; sections.len()];
 
-    for section in sections {
-        if section.full_width {
-            placed.push(None);
-            continue;
-        }
-        let side = usize::from(col_y[0] > col_y[1]);
-        let box_h = section_height(section, m);
-        placed.push(Some(Rect::new(
-            inner_x + side as f32 * (col_w + col_gap),
-            col_y[side],
+    // Indices into `sections` of the columned boxes, in emission order —
+    // the partition below decides which column each lands in, but not
+    // their relative order within a column.
+    let columned: Vec<usize> = sections
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| !s.full_width)
+        .map(|(i, _)| i)
+        .collect();
+    let heights: Vec<f32> = columned
+        .iter()
+        .map(|&i| section_height(&sections[i], m) + m.gap)
+        .collect();
+    let side = best_column_split(&heights);
+
+    let mut col_y = [y, y];
+    for (slot, &i) in columned.iter().enumerate() {
+        let s = side[slot];
+        let box_h = heights[slot] - m.gap;
+        placed[i] = Some(Rect::new(
+            inner_x + s as f32 * (col_w + col_gap),
+            col_y[s],
             col_w,
             box_h,
-        )));
-        col_y[side] += box_h + m.gap;
+        ));
+        col_y[s] += heights[slot];
     }
 
     let mut band_y = col_y[0].max(col_y[1]);
-    for (slot, section) in placed.iter_mut().zip(sections) {
-        if slot.is_some() {
+    for (i, section) in sections.iter().enumerate() {
+        if !section.full_width {
             continue;
         }
         let box_h = section_height(section, m);
-        *slot = Some(Rect::new(inner_x, band_y, inner_w, box_h));
+        placed[i] = Some(Rect::new(inner_x, band_y, inner_w, box_h));
         band_y += box_h + m.gap;
     }
 
@@ -184,6 +209,55 @@ pub(super) fn manifest_layout(
         sections: placed.into_iter().flatten().collect(),
         footer,
     }
+}
+
+/// Which column (0 or 1) each of `heights` (already each including its own
+/// trailing gap) lands in, minimising the taller column's total — an exact
+/// 2-partition, not the single-pass "assign to whichever side is currently
+/// shorter" greedy this replaced. The greedy could land measurably further
+/// from balanced than optimal: with `AFFINITIES` making the program page a
+/// fifth columned box, it left 19-38px on the table (see the git history
+/// around `MAX_BAND_ROWS`), and on the player page — which has no mod-only
+/// box to trim, unlike the program page's `MOVES` — that gap was the whole
+/// reason `worst_case_player`'s corrected box order failed at 7 of 9 swept
+/// heights before this function existed.
+///
+/// Brute force over every subset is exact and cheap: a manifest page has at
+/// most a handful of columned boxes, so `2^n` is never more than a few
+/// dozen iterations. Do not replace this with a heuristic (LPT, sorting by
+/// descending height then greedy) — measured against this exact case, LPT
+/// produced *zero* improvement over the naive order-dependent greedy,
+/// because the greedy's failure here isn't about visitation order.
+///
+/// Ties are broken by the lowest bitmask found in ascending order (`<`, not
+/// `<=`, so the first minimum wins), with box 0 (the first emitted) weighted
+/// as the *most* significant bit — so among tied partitions, the ascending
+/// scan finds the one that keeps the earliest-emitted boxes on the left
+/// first, matching the pre-existing "fill left then right" contract
+/// `columned_sections_fill_left_then_right` pins for equal-height boxes.
+/// Not by iterating any hash-based structure, either way: this repo has
+/// shipped a flaky test before from a `HashMap`'s iteration order leaking
+/// into behavior (see the species-habitat-lookup fix), and a layout that
+/// could shuffle between runs would be that bug again, one layer up.
+fn best_column_split(heights: &[f32]) -> Vec<usize> {
+    let n = heights.len();
+    let bit = |i: usize| 1u32 << (n - 1 - i);
+    let mut best_mask: u32 = 0;
+    let mut best_worst = f32::MAX;
+    for mask in 0u32..(1u32 << n) {
+        let mut total = [0.0f32; 2];
+        for (i, h) in heights.iter().enumerate() {
+            total[usize::from(mask & bit(i) != 0)] += h;
+        }
+        let worst = total[0].max(total[1]);
+        if worst < best_worst {
+            best_worst = worst;
+            best_mask = mask;
+        }
+    }
+    (0..n)
+        .map(|i| usize::from(best_mask & bit(i) != 0))
+        .collect()
 }
 
 /// A stat row's height inside a box — tighter than `m.line_height`, which is
@@ -258,16 +332,28 @@ mod tests {
     }
 
     /// The fullest page the player can produce — six columned boxes, no
-    /// band. Perks caps at `MAX_SECTION_ROWS` (there are 7 perk types), party
-    /// at `MAX_PARTY_SIZE`.
+    /// band. Perks caps at `MAX_SECTION_ROWS` (there are 12 perk types now,
+    /// still well past the cap of 6), party at `MAX_PARTY_SIZE`.
+    ///
+    /// `manifest_layout`'s column packer is an exact 2-partition
+    /// (`best_column_split`), so *whether the page fits* no longer depends
+    /// on this list's order — only on the set of box heights. The order
+    /// below is still kept matching what `manifest::sections_for` +
+    /// `manifest::player_sections` actually emit — COMBAT, PROGRESSION,
+    /// EQUIPMENT, PERKS, PARTY, then ROUTINES **last**, since
+    /// `sections_for` appends it after `player_sections` returns rather
+    /// than as its fourth push — because a fixture that silently drops or
+    /// reorders a box relative to reality is still the failure mode this
+    /// file exists to catch, even though a wrong *order* alone can no
+    /// longer hide an overflow the way it could under the old greedy.
     fn worst_case_player() -> Vec<Section> {
         vec![
             section("COMBAT", 3, false),
             section("PROGRESSION", 4, false),
             section("EQUIPMENT", 3, false),
-            section("ROUTINES", 6, false),
             section("PERKS", MAX_SECTION_ROWS, false),
             section("PARTY", 5, false),
+            section("ROUTINES", 6, false),
         ]
     }
 
@@ -405,6 +491,43 @@ mod tests {
         );
     }
 
+    /// The partition search itself, isolated from window metrics: an uneven
+    /// set of boxes must land at the true minimum taller-column height, not
+    /// whatever the old greedy (assign to whichever side is shorter so far)
+    /// happened to find.
+    #[test]
+    fn best_column_split_finds_the_true_minimum_not_a_greedy_approximation() {
+        // Hand-verifiable counterexample: the old greedy (assign each box,
+        // in order, to whichever side is currently shorter) processes
+        // 1, 1, 1, 3 as side0=1, side1=1, side0=2, side1=4 — columns of 2
+        // and 4, a taller column of 4. The true optimum groups the three
+        // 1s together against the lone 3: columns of 3 and 3, a taller
+        // column of only 3. A function that was secretly still the old
+        // greedy under a new name would fail this.
+        let heights = [1.0, 1.0, 1.0, 3.0];
+        let sides = best_column_split(&heights);
+        let mut total = [0.0f32; 2];
+        for (i, h) in heights.iter().enumerate() {
+            total[sides[i]] += h;
+        }
+        let worst = total[0].max(total[1]);
+        assert_eq!(
+            worst, 3.0,
+            "the true optimum is 3 and 3, not the greedy's 2 and 4"
+        );
+    }
+
+    /// Ties resolve deterministically and don't depend on iteration over
+    /// any hash-based structure — same input, same output, every call.
+    #[test]
+    fn best_column_split_is_deterministic_across_repeated_calls() {
+        let heights = [4.0, 4.0, 4.0, 4.0, 4.0];
+        let first = best_column_split(&heights);
+        for _ in 0..20 {
+            assert_eq!(best_column_split(&heights), first);
+        }
+    }
+
     /// A full-width band spans both columns and sits below every columned box.
     #[test]
     fn a_full_width_section_spans_both_columns_below_the_grid() {
@@ -463,7 +586,7 @@ mod tests {
         let SectionRow::Note(last) = &trimmed[MAX_AFFINITY_ROWS - 1] else {
             panic!("the trailing row is a note");
         };
-        assert_eq!(last, &format!("+{} more", 5 - (MAX_AFFINITY_ROWS - 1)));
+        assert_eq!(last, "+4 more");
     }
 
     /// A modded species naming more moves than `MAX_BAND_ROWS` must not push

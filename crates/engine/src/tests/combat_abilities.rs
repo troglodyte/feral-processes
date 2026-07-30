@@ -1498,3 +1498,44 @@ fn a_wild_carrier_gets_its_species_damage_affinity() {
     };
     assert_eq!(game.ability_affinity(biter, &effect), 2.0);
 }
+
+/// A `FieldBuff` effect is field-only — it has no in-battle resolution, so
+/// `battle_special_options` must never offer it, and the offer that survives
+/// filtering must keep the index it holds in `actor_abilities`, since
+/// `battle_set_action` resolves that index straight back against the
+/// unfiltered list.
+#[test]
+fn a_field_only_ability_never_appears_in_the_battle_picker_and_indices_survive_filtering() {
+    let dir = super::support::modded_assets_dir(
+        "field_only_picker",
+        &[],
+        &[],
+        &[],
+        &[],
+        &[("test_field_regen.ron", super::support::FIELD_ONLY_ABILITY)],
+    );
+    let mut game = Game::new(9001, DifficultyMode::Forgiving, &dir).unwrap();
+    let player = game.player_entity();
+    battle_with_a_pack_of(&mut game, 1, 200);
+    game.world.entity_mut(player).insert(Routines(vec![
+        "test_field_regen".to_string(),
+        crate::abilities::DECOMPILE_ABILITY_ID.to_string(),
+    ]));
+
+    let options = game.battle_special_options(0);
+    assert!(
+        options.iter().all(|o| o.name != "Test Field Regen"),
+        "a field-only ability must never appear in the in-battle picker: {options:?}"
+    );
+    assert_eq!(
+        options.len(),
+        1,
+        "only decompile should remain once the field-only row is filtered"
+    );
+    assert!(
+        options[0].name.to_lowercase().contains("decompile"),
+        "decompile is actor_abilities()[1]; the surviving row must keep that index rather \
+         than being renumbered to 0, or battle_set_action would resolve the wrong ability"
+    );
+    assert_eq!(options[0].index, 1);
+}

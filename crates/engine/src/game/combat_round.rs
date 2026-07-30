@@ -770,6 +770,14 @@ impl Game {
                 AbilityEffect::Decompile => unreachable!(
                     "Decompile never reaches use_ability; resolve_one_action handles it directly"
                 ),
+                // The two paths that pick an ability for `use_ability` to run
+                // — `battle_special_options` (player) and `wild_routine_ready`
+                // (a carrier's retaliation) — both exclude a `FieldBuff`
+                // effect, since it is field-only and has nothing to resolve
+                // against a battle recipient.
+                AbilityEffect::FieldBuff { .. } => unreachable!(
+                    "FieldBuff is field-only; battle_special_options and wild_routine_ready both exclude it"
+                ),
             }
         }
     }

@@ -4,7 +4,7 @@ use std::path::Path;
 use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
 
-use crate::components::{BuffKind, StatusKind};
+use crate::components::{BuffKind, FieldBuffKind, FieldScope, StatusKind};
 use crate::species::MoveEffect;
 
 pub type AbilityId = String;
@@ -252,6 +252,20 @@ pub enum AbilityEffect {
     /// Carries no numbers of its own: the whole formula is `taming`'s, and
     /// duplicating any of it here would be a second copy to drift.
     Decompile,
+    /// Arms a `components::ActiveFieldBuff` outside battle rather than
+    /// resolving against a recipient in one. This is the field-only marker:
+    /// there is no separate `field_cast: bool` on `AbilityDef`, an ability
+    /// carrying this effect *is* field-only, and `AbilityDb::load_dir`
+    /// rejects a `target` its `kind`'s `FieldScope` can't reach. `power_cost`
+    /// is Power spent to cast, not `AbilityDef::fatigue_cost` — that field
+    /// (and `cooldown`) are dead on this variant, since neither battle
+    /// throttling concept applies outside one.
+    FieldBuff {
+        kind: FieldBuffKind,
+        power: i32,
+        duration: u32,
+        power_cost: f32,
+    },
 }
 
 impl AbilityEffect {
@@ -269,6 +283,7 @@ impl AbilityEffect {
             AbilityEffect::Debuff { .. } => Some(AffinityKind::Debuff),
             AbilityEffect::Drain { .. } => Some(AffinityKind::Drain),
             AbilityEffect::Cleanse | AbilityEffect::Decompile => None,
+            AbilityEffect::FieldBuff { kind, .. } => kind.affinity_kind(),
         }
     }
 }
@@ -331,6 +346,11 @@ impl AbilityDef {
         {
             return Some("effect.heal_fraction");
         }
+        if let AbilityEffect::FieldBuff { power_cost, .. } = &self.effect
+            && !power_cost.is_finite()
+        {
+            return Some("effect.power_cost");
+        }
         None
     }
 
@@ -352,6 +372,51 @@ impl AbilityDef {
             );
         }
         None
+    }
+
+    /// A `FieldBuff` effect paired with a `target` its `kind`'s
+    /// `FieldScope` can't reach. A `Run`-scoped kind always lands on the
+    /// player (`FieldBuffKind::scope`, `Game::arm_field_buff`), so anything
+    /// but `WholeParty` is a stated target the cast never actually honours.
+    /// A `Creature`-scoped kind may aim at a party member — `OneAlly` or
+    /// `WholeParty` — but never an enemy: there is no mechanic to aim a
+    /// field buff at a hostile. Caught here for the same reason
+    /// `decompile_target_mismatch` is: refused loudly at load rather than
+    /// silently doing nothing (or nothing coherent) at cast time.
+    fn field_buff_target_mismatch(&self) -> Option<&'static str> {
+        let AbilityEffect::FieldBuff { kind, .. } = &self.effect else {
+            return None;
+        };
+        match (kind.scope(), self.target) {
+            (FieldScope::Run, AbilityTarget::WholeParty) => None,
+            (FieldScope::Run, _) => {
+                Some("effect: a Run-scoped FieldBuff requires target: WholeParty")
+            }
+            (FieldScope::Creature, AbilityTarget::OneAlly | AbilityTarget::WholeParty) => None,
+            (FieldScope::Creature, _) => {
+                Some("effect: a Creature-scoped FieldBuff requires target: OneAlly or WholeParty")
+            }
+        }
+    }
+
+    /// Names `cooldown` and/or `fatigue_cost` if either is set on a
+    /// `FieldBuff` ability, where neither does anything: `cooldown` throttles
+    /// re-use within a battle and `fatigue_cost` is spent commanding a
+    /// battle action, and a field ability runs neither path. Not a load
+    /// failure — `AbilityDef`'s serde defaults still parse — just something
+    /// worth a modder knowing rather than silently swallowing.
+    fn field_buff_dead_fields(&self) -> Option<String> {
+        if !matches!(self.effect, AbilityEffect::FieldBuff { .. }) {
+            return None;
+        }
+        let mut dead = Vec::new();
+        if self.cooldown != 0 {
+            dead.push("cooldown");
+        }
+        if self.fatigue_cost != 0.0 {
+            dead.push("fatigue_cost");
+        }
+        (!dead.is_empty()).then(|| dead.join(" and "))
     }
 
     /// Bounds a `Drain`'s `heal_fraction` to `0.0..=1.0`. Applied at load so
@@ -411,7 +476,16 @@ impl AbilityDb {
                         warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
                         continue;
                     }
+                    if let Some(reason) = def.field_buff_target_mismatch() {
+                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
+                        continue;
+                    }
                     def.clamp_ranges();
+                    if let Some(dead) = def.field_buff_dead_fields() {
+                        warnings.push(format!(
+                            "ability file {path:?} sets {dead}, which has no effect on a field-only ability"
+                        ));
+                    }
                     db.abilities.insert(def.id.clone(), def);
                 }
                 Err(e) => warnings.push(format!("skipped invalid ability file {path:?}: {e}")),
@@ -516,6 +590,121 @@ mod tests {
         );
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("Decompile"), "{}", warnings[0]);
+    }
+
+    /// `Coolant` is `Run`-scoped (`FieldBuffKind::scope`) — it always lands
+    /// on the player, so authoring `OneAlly` states a target the cast never
+    /// actually reaches.
+    #[test]
+    fn a_run_scoped_field_buff_targeting_one_ally_is_skipped() {
+        let mismatched = r#"(
+            id: "test_bad_coolant",
+            name: "Bad Coolant",
+            description: "d",
+            target: OneAlly,
+            effect: FieldBuff(kind: Coolant, power: 4, duration: 20, power_cost: 5.0),
+        )"#;
+        let (db, warnings) = load(
+            "bad_run_scope",
+            &[("test_sweep", VALID), ("bad", mismatched)],
+        );
+        assert!(db.get("test_sweep").is_some(), "the valid file still loads");
+        assert!(
+            db.get("test_bad_coolant").is_none(),
+            "a Run-scoped kind paired with anything but WholeParty must not load"
+        );
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("Run-scoped"), "{}", warnings[0]);
+    }
+
+    /// `Regen` is `Creature`-scoped and may aim at `OneAlly` or
+    /// `WholeParty` — never an enemy target, since there is no mechanic to
+    /// aim a field buff at a hostile.
+    #[test]
+    fn a_creature_scoped_field_buff_targeting_an_enemy_group_is_skipped() {
+        let mismatched = r#"(
+            id: "test_bad_regen",
+            name: "Bad Regen",
+            description: "d",
+            target: WholeEnemyGroup,
+            effect: FieldBuff(kind: Regen, power: 2, duration: 20, power_cost: 5.0),
+        )"#;
+        let (db, warnings) = load(
+            "bad_creature_scope",
+            &[("test_sweep", VALID), ("bad", mismatched)],
+        );
+        assert!(db.get("test_sweep").is_some(), "the valid file still loads");
+        assert!(
+            db.get("test_bad_regen").is_none(),
+            "a Creature-scoped kind can't be aimed at an enemy"
+        );
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("Creature-scoped"), "{}", warnings[0]);
+    }
+
+    #[test]
+    fn a_creature_scoped_field_buff_targeting_one_ally_loads_clean() {
+        // fatigue_cost is spelled out at 0.0 because its serde default is
+        // the nonzero companion command cost — leaving it implicit would
+        // trip `field_buff_dead_fields`'s warning, which is exactly what a
+        // well-formed field ability is supposed to avoid.
+        let good = r#"(
+            id: "test_good_regen",
+            name: "Good Regen",
+            description: "d",
+            target: OneAlly,
+            fatigue_cost: 0.0,
+            effect: FieldBuff(kind: Regen, power: 2, duration: 20, power_cost: 5.0),
+        )"#;
+        let (db, warnings) = load("good_creature_scope", &[("good", good)]);
+        assert!(
+            db.get("test_good_regen").is_some(),
+            "OneAlly is a legal target for a Creature-scoped kind"
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    #[test]
+    fn a_field_buff_with_a_non_finite_power_cost_is_skipped() {
+        let bad = r#"(
+            id: "test_bad_power_cost",
+            name: "Bad Power Cost",
+            description: "d",
+            target: OneAlly,
+            effect: FieldBuff(kind: Regen, power: 2, duration: 20, power_cost: NaN),
+        )"#;
+        let (db, warnings) = load("bad_power_cost", &[("test_sweep", VALID), ("bad", bad)]);
+        assert!(db.get("test_sweep").is_some(), "the valid file still loads");
+        assert!(
+            db.get("test_bad_power_cost").is_none(),
+            "a NaN power_cost must not reach the cast formula"
+        );
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("power_cost"), "{}", warnings[0]);
+    }
+
+    /// `cooldown` and `fatigue_cost` throttle a battle action; a field
+    /// ability runs neither path, so a non-default value on either is dead
+    /// weight the loader should point out rather than silently accept.
+    #[test]
+    fn a_field_buff_declaring_cooldown_or_fatigue_cost_loads_with_a_warning() {
+        let noisy = r#"(
+            id: "test_noisy_regen",
+            name: "Noisy Regen",
+            description: "d",
+            target: OneAlly,
+            cooldown: 3,
+            fatigue_cost: 8.0,
+            effect: FieldBuff(kind: Regen, power: 2, duration: 20, power_cost: 5.0),
+        )"#;
+        let (db, warnings) = load("noisy_field_buff", &[("noisy", noisy)]);
+        assert!(
+            db.get("test_noisy_regen").is_some(),
+            "a dead field is a warning, not a load failure"
+        );
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("cooldown"), "{}", warnings[0]);
+        assert!(warnings[0].contains("fatigue_cost"), "{}", warnings[0]);
     }
 
     #[test]

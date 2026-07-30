@@ -131,6 +131,11 @@ impl Game {
     /// *wild* side and would do nothing coherent aimed the other way. Only a
     /// mod can put it on a hostile — `decompile.ron` has no `wild_weight` —
     /// but a mod that does gets a normal move rather than a wasted round.
+    ///
+    /// `FieldBuff` is excluded the same way: it's field-only and has no
+    /// battle mechanic to run, so a carrier with nothing else installed
+    /// falls back to a normal move instead of the `unreachable!` in
+    /// `use_ability`.
     pub(crate) fn wild_routine_ready(&self, wild: Entity) -> Option<AbilityDef> {
         let cooling = self
             .world
@@ -145,7 +150,12 @@ impl Game {
             .iter()
             .filter(|id| !cooling.contains_key(*id))
             .filter_map(|id| db.get(id))
-            .find(|def| !matches!(def.effect, AbilityEffect::Decompile))
+            .find(|def| {
+                !matches!(
+                    def.effect,
+                    AbilityEffect::Decompile | AbilityEffect::FieldBuff { .. }
+                )
+            })
             .cloned()
     }
 

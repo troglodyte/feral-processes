@@ -61,7 +61,7 @@ way deleting the Currency item does.
     // spent on a downed member would be wasted.
     target: WholeEnemyGroup,
 
-    // What it does to each recipient. Exactly one of seven:
+    // What it does to each recipient. Exactly one of eight:
     //
     //   Damage(power: 6)
     //     Direct damage through the same formula a move uses
@@ -119,6 +119,44 @@ way deleting the Currency item does.
     //     is full" — instead of being refused silently. This is what
     //     `decompile.ron` uses; there is no reason to declare a second
     //     ability with this effect.
+    //
+    //   FieldBuff(kind: Regen, power: 3, duration: 40, power_cost: 15.0)
+    //     The field-only marker: an ability carrying this effect never
+    //     appears in the in-battle Special picker and a wild carrier never
+    //     retaliates with it — there is no separate `field_cast: bool` to
+    //     set, this variant *is* the flag. Instead it arms a running field
+    //     buff outside battle, through whatever cast path spends `power_cost`
+    //     of the caster's Power to start it. `duration` is in turns, not
+    //     battle rounds, and keeps ticking through any battle that follows
+    //     until it runs out.
+    //
+    //     `kind` is one of ten, split into two scopes that gate `target`:
+    //
+    //       Creature-scoped (`target: OneAlly` or `WholeParty` only —
+    //       anything enemy-facing is refused at load, since there is no
+    //       mechanic to aim a field buff at a hostile):
+    //         Regen        heals HP each turn
+    //         Def          flat Defense bonus
+    //         Atk          flat Attack bonus
+    //         Mitigation   percent damage reduction
+    //
+    //       Run-scoped (`target: WholeParty` only — these always land on
+    //       the player regardless of who casts them, so any other target is
+    //       a lie about where the buff actually goes, and is refused at
+    //       load):
+    //         Coolant       restores Fatigue each turn
+    //         Trickle       restores Power each turn
+    //         CaptureBoost  percent bonus to capture odds
+    //         XpBoost       percent bonus to XP earned
+    //         EncounterDamp percent reduction to wild encounter odds
+    //         DropBoost     percent bonus to drop rates
+    //
+    //     `cooldown` and `fatigue_cost` are dead on this variant — neither
+    //     battle-round throttling nor commanding a battle action applies
+    //     outside one — and loading a file that sets either above its
+    //     default logs a warning naming the file, so spell out
+    //     `fatigue_cost: 0.0` explicitly rather than leaving its nonzero
+    //     default in place.
     effect: Damage(power: 6),
 
     // Optional; defaults to 0 (usable every round). Battle rounds that must

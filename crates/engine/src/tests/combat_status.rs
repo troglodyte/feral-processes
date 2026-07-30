@@ -547,6 +547,32 @@ fn a_cooldown_zero_routine_still_cannot_fire_two_rounds_running() {
     );
 }
 
+/// A `FieldBuff` effect is field-only and has no in-battle resolution — see
+/// the `unreachable!` arm `AbilityEffect::FieldBuff` hits in `use_ability`.
+/// A carrier holding nothing else must fall back to an ordinary move rather
+/// than picking a routine it can't run.
+#[test]
+fn a_carrier_whose_only_routine_is_field_only_has_nothing_ready() {
+    let dir = super::support::modded_assets_dir(
+        "field_only_carrier",
+        &[],
+        &[],
+        &[],
+        &[],
+        &[("test_field_regen.ron", super::support::FIELD_ONLY_ABILITY)],
+    );
+    let mut game = Game::new(7704, DifficultyMode::Forgiving, &dir).unwrap();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    game.world
+        .entity_mut(enemies[0])
+        .insert(Routines(vec!["test_field_regen".to_string()]));
+
+    assert!(
+        game.wild_routine_ready(enemies[0]).is_none(),
+        "a FieldBuff-only carrier has nothing it can spend a battle round on"
+    );
+}
+
 /// A buff aimed at a hostile has to expire on schedule. While abilities
 /// were party-only, `tick_combat_buff` was never called for a hostile — so
 /// a mirrored buff or sap would have lasted the whole fight regardless of

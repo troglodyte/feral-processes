@@ -671,6 +671,18 @@ pub(super) fn fatigue_spent_commanding_companion(seed: u32, stunned: bool) -> f3
     fatigue_before - fatigue_after
 }
 
+/// A `Creature`-scoped `FieldBuff` ability — field-only, so it must never
+/// surface as something a battle picker or a wild carrier can spend a round
+/// on. Shared between the picker-filtering and wild-retaliation tests
+/// rather than defined twice.
+pub(super) const FIELD_ONLY_ABILITY: &str = r#"(
+    id: "test_field_regen",
+    name: "Test Field Regen",
+    description: "d",
+    target: OneAlly,
+    effect: FieldBuff(kind: Regen, power: 2, duration: 20, power_cost: 5.0),
+)"#;
+
 /// A species declaring two abilities, so the multi-ability paths can be
 /// exercised without depending on shipped kit assignments. The second is
 /// gated above a fresh companion's level 1, which is what pins down

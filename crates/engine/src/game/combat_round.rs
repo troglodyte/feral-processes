@@ -783,8 +783,10 @@ impl Game {
     }
 
     /// `entity`'s effective ATK for damage purposes: its real `Stats`
-    /// value, plus an active `CombatBuff::Atk` bonus if any. If `entity` is
-    /// the player, this also adds the standing party bonus (see
+    /// value, plus an active `CombatBuff::Atk` bonus if any, plus any
+    /// running `FieldBuffKind::Atk` power (see `field_buff_power`) — the
+    /// two sources are separate components and both apply, summed. If
+    /// `entity` is the player, this also adds the standing party bonus (see
     /// `party_stat_bonus`) and applies the low-power attack penalty (see
     /// `battle::power_attack_multiplier`) — both are player-only effects.
     /// `entity` isn't always the player: `wild_retaliate` can call this
@@ -800,10 +802,11 @@ impl Game {
             .filter(|a| a.kind == BuffKind::Atk)
             .map(|a| a.power)
             .unwrap_or(0);
+        let field_bonus = self.field_buff_power(entity, FieldBuffKind::Atk);
         if entity != self.player_entity() {
-            return base + bonus;
+            return base + bonus + field_bonus;
         }
-        let total = base + bonus + self.party_stat_bonus().0;
+        let total = base + bonus + field_bonus + self.party_stat_bonus().0;
         let hunger = self
             .world
             .get::<Needs>(entity)
@@ -813,9 +816,16 @@ impl Game {
     }
 
     /// `entity`'s effective DEF against incoming damage: its real `Stats`
-    /// value, plus an active `CombatBuff::Def` bonus if any, plus the
-    /// standing party bonus (see `party_stat_bonus`) if `entity` is the
+    /// value, plus an active `CombatBuff::Def` bonus if any, plus any
+    /// running `FieldBuffKind::Def` power (see `field_buff_power`) — the
+    /// two sources are separate components and both apply, summed — plus
+    /// the standing party bonus (see `party_stat_bonus`) if `entity` is the
     /// player. Same non-player-safe behavior as `effective_atk`.
+    ///
+    /// `is_defending` deliberately does not read `FieldBuff`: it identifies
+    /// a brace by sniffing `CombatBuff` for `Def` at exactly
+    /// `DEFEND_DEF_BONUS`, and a field buff landing on that same power must
+    /// not be mistaken for one.
     pub(crate) fn effective_def(&self, entity: Entity) -> i32 {
         let base = self.world.get::<Stats>(entity).map(|s| s.def).unwrap_or(0);
         let bonus = self
@@ -825,10 +835,11 @@ impl Game {
             .filter(|a| a.kind == BuffKind::Def)
             .map(|a| a.power)
             .unwrap_or(0);
+        let field_bonus = self.field_buff_power(entity, FieldBuffKind::Def);
         if entity != self.player_entity() {
-            return base + bonus;
+            return base + bonus + field_bonus;
         }
-        base + bonus + self.party_stat_bonus().1
+        base + bonus + field_bonus + self.party_stat_bonus().1
     }
 
     /// Standing `(atk, def)` bonus the player gets just for having programs

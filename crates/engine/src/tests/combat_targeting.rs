@@ -2,6 +2,7 @@
 //! bracing, and how far back an enemy group can reach.
 
 use super::support::*;
+use crate::components::{ActiveFieldBuff, BuffSource, FieldBuffKind};
 use crate::tuning::{DEFEND_DEF_BONUS, FRONT_SLOTS};
 use crate::*;
 
@@ -244,6 +245,99 @@ fn a_companion_can_hold_the_buff_defend_grants() {
         game.effective_def(pet),
         raw_def + DEFEND_DEF_BONUS,
         "a bracing companion must actually gain the DEF, not silently no-op"
+    );
+}
+
+fn test_field_buff(kind: FieldBuffKind, power: i32) -> ActiveFieldBuff {
+    ActiveFieldBuff {
+        kind,
+        name: "Test Field Buff".to_string(),
+        power,
+        remaining: 5,
+        source: BuffSource::Routine,
+    }
+}
+
+/// A running `Def`/`Atk` field buff has to actually raise the stat it
+/// names, or casting a routine for one is a no-op dressed up as a choice.
+#[test]
+fn a_field_buff_raises_the_effective_stat_it_names() {
+    let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 30, 5);
+    let raw_def = game.world.get::<Stats>(pet).unwrap().def;
+    let raw_atk = game.world.get::<Stats>(pet).unwrap().atk;
+
+    game.arm_field_buff(pet, test_field_buff(FieldBuffKind::Def, 11));
+    assert_eq!(game.effective_def(pet), raw_def + 11);
+
+    game.arm_field_buff(pet, test_field_buff(FieldBuffKind::Atk, 13));
+    assert_eq!(game.effective_atk(pet), raw_atk + 13);
+}
+
+/// A field `Def` buff and a `CombatBuff` Def bonus (e.g. from Defend) are
+/// two separate sources and both apply — `arm_field_buff` was built as a
+/// distinct component from `CombatBuff` specifically so the two can
+/// coexist. Distinct, non-round-numbered powers so no other formula could
+/// produce the same total by coincidence.
+#[test]
+fn a_field_buff_stacks_with_a_combat_buff_of_the_same_kind() {
+    let mut game = Game::new(95, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 30, 5);
+    let raw_def = game.world.get::<Stats>(pet).unwrap().def;
+
+    game.arm_buff(
+        pet,
+        ActiveBuff {
+            kind: BuffKind::Def,
+            remaining: 3,
+            power: 17,
+        },
+    );
+    game.arm_field_buff(pet, test_field_buff(FieldBuffKind::Def, 23));
+
+    assert_eq!(
+        game.effective_def(pet),
+        raw_def + 17 + 23,
+        "the CombatBuff and FieldBuff Def bonuses must both apply, summed"
+    );
+}
+
+/// The landmine this is guarding against: `is_defending` identifies a
+/// brace by sniffing `CombatBuff` for `Def` at exactly `DEFEND_DEF_BONUS`.
+/// A field `Def` buff that happens to land on that same power must not be
+/// mistaken for a brace — `FieldBuff` exists as a separate component from
+/// `CombatBuff` precisely so `is_defending` never has to look at it.
+#[test]
+fn is_defending_ignores_a_field_def_buff_even_at_the_defend_power() {
+    let mut game = Game::new(96, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 30, 5);
+
+    game.arm_field_buff(pet, test_field_buff(FieldBuffKind::Def, DEFEND_DEF_BONUS));
+
+    assert!(
+        !game.is_defending(pet),
+        "a field Def buff, even at exactly the Defend power, must not read as bracing"
+    );
+}
+
+/// Each companion's own field buff affects only that companion — proof
+/// `FieldBuff` is per-entity rather than something that leaks across the
+/// party the way the player's passive party bonus does not.
+#[test]
+fn a_companions_own_field_buff_affects_only_that_companions_stat() {
+    let mut game = Game::new(97, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let buffed = spawn_tamed(&mut game, 30, 5);
+    let other = spawn_tamed(&mut game, 30, 5);
+    let raw_atk = game.world.get::<Stats>(buffed).unwrap().atk;
+    let other_raw_atk = game.world.get::<Stats>(other).unwrap().atk;
+
+    game.arm_field_buff(buffed, test_field_buff(FieldBuffKind::Atk, 9));
+
+    assert_eq!(game.effective_atk(buffed), raw_atk + 9);
+    assert_eq!(
+        game.effective_atk(other),
+        other_raw_atk,
+        "an unbuffed companion must be untouched by another companion's field buff"
     );
 }
 

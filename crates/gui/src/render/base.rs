@@ -427,7 +427,7 @@ fn draw_status_panel(
         "hjkl/arrows move  . wait  e drain  r recharge",
         "g scan   c compile   b deploy   w cronjob  G guard  R demolish",
         "u symlink   i inspect   v inventory",
-        "p companions  f fuse  t trade  x perks",
+        "p companions  f fuse  t trade  x perks  a routine",
         "s save   q main menu   ? help   +/- zoom",
     ];
     let keys_line_height = m.line_height - m.gap;

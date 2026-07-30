@@ -74,10 +74,13 @@ impl App {
             self.finish_reveal();
             return;
         }
-        // Restarts the refusal window: whatever this key produces (or leaves
-        // standing) gets its full time on screen, rather than inheriting the
-        // remainder of the previous message's.
-        self.status_age = 0.0;
+        // Whatever this key raises gets its full time on screen rather than
+        // inheriting the remainder of the previous message's — but a message
+        // it leaves *standing* keeps the window it was already ageing
+        // through. Restarting the window unconditionally meant that in a
+        // battle, where nothing clears a refusal on success and several keys
+        // go into planning a round, a refusal never aged out at all.
+        let carried = self.status_line.clone();
         let mode_before = self.mode;
         match self.mode {
             Mode::MainMenu => self.handle_main_menu_key(key),
@@ -144,6 +147,10 @@ impl App {
             self.menu_selected = self.opening_row();
         }
         self.maybe_autosave();
+        // Last, because `maybe_autosave` is itself allowed to raise a message.
+        if self.status_line != carried {
+            self.status_age = 0.0;
+        }
     }
 
     /// Releases battle narration into the log pane at

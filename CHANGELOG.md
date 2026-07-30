@@ -36,6 +36,14 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ### Fixed
 
+- **A battle refusal never faded.** Every message clears itself after four
+  seconds, because it is drawn over the action bar it explains — but any key
+  press restarted that window, on the theory that a message left standing
+  deserved its full time. In a battle, where planning a round is several key
+  presses and nothing clears a refusal on success the way the map menus do,
+  that meant "Can't do that — 3 more rounds." stayed over the action bar for
+  as long as the player kept playing. A message now keeps the window it was
+  raised with, and only a *new* one gets a fresh window.
 - **A held letter or digit drove the screen its own press opened.** Extracting
   a routine looked broken — nothing salvaged, the program still alive, and no
   refusal saying why. Letters and digits reach the game from

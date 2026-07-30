@@ -627,21 +627,51 @@ fn a_refusal_clears_itself_so_the_action_bar_comes_back() {
 
 /// The window belongs to the newest message. Without the reset, a refusal
 /// raised just as an older one aged out would flash and vanish.
+///
+/// Raised through a real key rather than by writing the field, because that
+/// is now what tells a fresh message from a carried one — see
+/// `a_standing_refusal_ages_out_while_the_player_keeps_planning`.
 #[test]
-fn a_new_keypress_restarts_the_refusal_window() {
+fn a_new_refusal_gets_a_window_of_its_own() {
     let mut app = battling_app();
     app.status_line = Some("stale".to_string());
     app.advance_status(STATUS_LINE_SECONDS * 0.9);
 
-    // Any key press restarts the clock.
-    app.handle_key(GameKey::Char('d'));
-    app.status_line = Some("fresh".to_string());
+    // Esc on the first slot has nothing to back up to, so it refuses.
+    app.handle_key(GameKey::Esc);
+    assert!(
+        app.status_line.as_deref() != Some("stale"),
+        "Esc on slot 0 should have raised a refusal of its own"
+    );
     app.advance_status(STATUS_LINE_SECONDS * 0.5);
 
-    assert_eq!(
-        app.status_line.as_deref(),
-        Some("fresh"),
+    assert!(
+        app.status_line.is_some(),
         "the new message inherited the old one's remaining time"
+    );
+}
+
+/// Nothing in a battle clears a refusal on the way *out* — unlike the map
+/// menus, which clear it on every success — so the window is the only thing
+/// that takes it down. Restarting that window on every key press meant a
+/// player planning a round kept "Can't do that — 3 more rounds." on screen
+/// for as long as they went on pressing keys, over the action bar it is
+/// drawn on top of.
+#[test]
+fn a_standing_refusal_ages_out_while_the_player_keeps_planning() {
+    let mut app = battling_app();
+    app.status_line = Some("Can't do that — 3 more rounds.".to_string());
+    app.advance_status(STATUS_LINE_SECONDS * 0.6);
+
+    // An arrow is not an action in `Mode::Battle`: it raises nothing, so it
+    // has nothing to say and no claim on the screen.
+    app.handle_key(GameKey::Down);
+    app.advance_status(STATUS_LINE_SECONDS * 0.6);
+
+    assert_eq!(
+        app.status_line, None,
+        "the refusal was handed a fresh window by a key that said nothing, \
+         and is still covering the action bar"
     );
 }
 

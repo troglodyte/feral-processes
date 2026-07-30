@@ -576,6 +576,25 @@ pub struct FieldBuff {
     pub active: Vec<ActiveFieldBuff>,
 }
 
+/// `buff`'s running `kind` power, `0` when none is active. Sums every
+/// matching entry rather than reading just one: a `Consumable` and a
+/// `Routine` of the same kind are required to coexist (`arm_field_buff`'s
+/// whole reason for two separate displacement rules), and a reader that
+/// only saw one of them would make that coexistence pointless — the buff
+/// whichever entry it skipped would silently apply nothing.
+///
+/// A free function taking the component directly, not a method needing a
+/// `Game`/`World`, so a plain bevy system with its own `Query<&FieldBuff>`
+/// can call it too — `Game::field_buff_power` is a thin wrapper around this
+/// for callers that already have an `Entity` and a `World` to fetch from.
+pub fn field_buff_power_of(buff: &FieldBuff, kind: FieldBuffKind) -> i32 {
+    buff.active
+        .iter()
+        .filter(|b| b.kind == kind)
+        .map(|b| b.power)
+        .sum()
+}
+
 /// Rounds remaining before each ability this combatant has spent can be
 /// used again. Battle-scoped exactly like `CombatBuff` and `StatusEffects`
 /// — armed during a fight, ticked at end of round, cleared when the

@@ -3,9 +3,9 @@ use bevy_ecs::system::SystemParam;
 use rand::RngExt;
 
 use crate::components::{
-    Creature, Experience, Inventory, NEED_MAX, NEED_MIN, Needs, Nest, NestGuardian,
-    PassiveProcessor, Perks, Player, Position, Potential, ResourceNode, Stats, Structure,
-    StructureTier, Tamed, Task, TaskKind, WanderAi,
+    Creature, Experience, FieldBuff, FieldBuffKind, Inventory, NEED_MAX, NEED_MIN, Needs, Nest,
+    NestGuardian, PassiveProcessor, Perks, Player, Position, Potential, ResourceNode, Stats,
+    Structure, StructureTier, Tamed, Task, TaskKind, WanderAi, field_buff_power_of,
 };
 use crate::items_db::ItemDb;
 use crate::perks::Perk;
@@ -143,6 +143,7 @@ pub fn task_progress_system(
     mut tasks: Query<CronjobWorker>,
     mut nodes: Query<(&mut ResourceNode, Option<&StructureTier>)>,
     mut inventories: Query<&mut Inventory>,
+    player_buff: Query<&FieldBuff, With<Player>>,
     db: CronjobLookups,
     mut log: ResMut<MessageLog>,
     mut rng: ResMut<GameRng>,
@@ -152,6 +153,15 @@ pub fn task_progress_system(
         items: item_db,
         zone,
     } = db;
+    // `XpBoost` is `FieldScope::Run`: every worker's cronjob XP is boosted
+    // by the same running buff on the player, not by anything the worker
+    // itself carries. Read once, outside the loop, since it can't vary
+    // per worker.
+    let xp_boost_pct = player_buff
+        .iter()
+        .next()
+        .map(|buff| field_buff_power_of(buff, FieldBuffKind::XpBoost))
+        .unwrap_or(0);
     for (mut task, tamed, creature, potential, mut exp, mut stats) in &mut tasks {
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
@@ -201,17 +211,13 @@ pub fn task_progress_system(
                     .map(|p| p.growth_roll)
                     .unwrap_or(Potential::NEUTRAL.growth_roll);
                 let growth_multiplier = species_growth * individual_roll;
-                // A plain bevy system, not a `Game` method — it has no
-                // convenient way to read the player's `FieldBuff` without a
-                // query wired in just for this, and passive cronjob XP is
-                // not one of the paths `XpBoost` was scoped to cover.
                 let levels = progression::add_xp(
                     &mut exp,
                     &mut stats,
                     WORK_XP_PER_CYCLE,
                     growth_multiplier,
                     Some(crate::tuning::CREATURE_MAX_LEVEL),
-                    0,
+                    xp_boost_pct,
                 );
                 if levels > 0 {
                     format!(" It levels up to {}!", exp.level)

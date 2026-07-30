@@ -567,24 +567,13 @@ impl Game {
         field_buff.active.push(buff);
     }
 
-    /// `entity`'s running `kind` field buff power, `0` when none is
-    /// active. Sums every matching entry rather than reading just one: a
-    /// `Consumable` and a `Routine` of the same kind are required to
-    /// coexist (`arm_field_buff`'s whole reason for two separate
-    /// displacement rules), and a reader that only saw one of them would
-    /// make that coexistence pointless — the buff whichever entry it
-    /// skipped would silently apply nothing.
+    /// `entity`'s running `kind` field buff power, `0` when it has no
+    /// `FieldBuff` at all (an entity that has never had one armed) — see
+    /// `components::field_buff_power_of` for what happens when it does.
     pub(crate) fn field_buff_power(&self, entity: Entity, kind: FieldBuffKind) -> i32 {
         self.world
             .get::<FieldBuff>(entity)
-            .map(|field_buff| {
-                field_buff
-                    .active
-                    .iter()
-                    .filter(|b| b.kind == kind)
-                    .map(|b| b.power)
-                    .sum()
-            })
+            .map(|field_buff| crate::components::field_buff_power_of(field_buff, kind))
             .unwrap_or(0)
     }
 

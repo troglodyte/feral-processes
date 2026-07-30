@@ -560,6 +560,84 @@ fn cronjob_work_grants_no_more_xp_once_the_worker_hits_the_work_level_cap() {
     );
 }
 
+/// `WORK_XP_PER_CYCLE` is 5; 40% is chosen so the boosted result (7, from
+/// `round(5 * 1.4)`) can't coincide with the unboosted one (5) through
+/// rounding — a smaller boost percentage risks the two values landing on
+/// the same integer and hiding a broken hookup behind a passing assertion.
+#[test]
+fn cronjob_work_xp_is_boosted_by_a_running_xp_boost_field_buff() {
+    let mut unboosted = Game::new(304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut unboosted, 10, 3);
+    let structure = unboosted
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 3, y: 4 },
+            ResourceNode {
+                resource: ItemId::from(ids::CORE_FRAGMENT),
+                amount: 5,
+                capacity: 5,
+                level: None,
+            },
+        ))
+        .id();
+    unboosted.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: structure,
+        progress: 0,
+        required: 1,
+    });
+    unboosted.tick();
+    let unboosted_xp = unboosted.world.get::<Experience>(worker).unwrap().xp;
+
+    let mut boosted = Game::new(304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut boosted, 10, 3);
+    let structure = boosted
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 3, y: 4 },
+            ResourceNode {
+                resource: ItemId::from(ids::CORE_FRAGMENT),
+                amount: 5,
+                capacity: 5,
+                level: None,
+            },
+        ))
+        .id();
+    boosted.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: structure,
+        progress: 0,
+        required: 1,
+    });
+    let player = boosted.player_entity();
+    boosted.world.entity_mut(player).insert(FieldBuff {
+        active: vec![ActiveFieldBuff {
+            kind: FieldBuffKind::XpBoost,
+            name: "Test XP Boost".to_string(),
+            power: 40,
+            remaining: 10,
+            source: BuffSource::Routine,
+        }],
+    });
+    boosted.tick();
+    let boosted_xp = boosted.world.get::<Experience>(worker).unwrap().xp;
+
+    assert_eq!(
+        unboosted_xp, 5,
+        "an unboosted cycle earns WORK_XP_PER_CYCLE"
+    );
+    assert_eq!(
+        boosted_xp, 7,
+        "a 40% XpBoost should turn WORK_XP_PER_CYCLE (5) into 7 for a companion's own cronjob income"
+    );
+}
+
 #[test]
 fn cronjob_work_still_grants_xp_below_the_work_level_cap() {
     let mut game = Game::new(302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

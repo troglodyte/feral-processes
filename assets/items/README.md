@@ -80,19 +80,24 @@ disqualifies the whole file.
     // Optional; can be left out entirely (defaults to no out-of-battle
     // effect). If set, this item can be used via `Game::use_item` outside
     // battle. All fields inside are optional (default 0/None) so one item
-    // can restore several resources and/or arm a pre-battle buff:
+    // can restore several resources and/or arm a field buff:
     //   power  — restores this much Power
     //   fatigue — restores this much (reduces Fatigue by this much)
     //   heal   — restores this much HP
-    //   prebattle_buff — arms a buff that survives on the map and applies
-    //     during the player's next intrusion (buffs only tick in battle);
-    //     `kind` is one of `Atk`, `Def`, `power` is the flat bonus, and
-    //     `rounds` is how many battle rounds it lasts.
+    //   prebattle_buff — arms a buff that keeps running on the map, through
+    //     any battle that follows, and through a save — unlike a buff a
+    //     companion's Special arms mid-fight, which is wiped the moment
+    //     that battle ends. `kind` is one of `Regen`, `Coolant`, `Trickle`,
+    //     `Def`, `Atk`, `Mitigation`, `CaptureBoost`, `XpBoost`,
+    //     `EncounterDamp`, or `DropBoost`; `power` is its magnitude (flat
+    //     for the stat kinds, percentage points for the rest); `ticks` is
+    //     how many game ticks it lasts (ordinary turns, not battle rounds —
+    //     it keeps counting down whether or not the player is in a fight).
     consume: Some((
         power: 25.0,
         fatigue: 10.0,
         heal: 5,
-        prebattle_buff: Some((kind: Atk, power: 2, rounds: 3)),
+        prebattle_buff: Some((kind: Atk, power: 2, ticks: 30)),
     )),
 
     // Optional; can be left out entirely (defaults to not craftable). If

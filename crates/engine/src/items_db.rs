@@ -5,7 +5,7 @@ use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
 
 use crate::abilities::AbilityDb;
-use crate::components::BuffKind;
+use crate::components::FieldBuffKind;
 use crate::items::{EquipmentSlot, EquipmentStats, ItemId};
 use crate::species::SpeciesId;
 use crate::structures::StructureId;
@@ -40,13 +40,15 @@ pub struct ConsumeDef {
     pub prebattle_buff: Option<PrebattleBuff>,
 }
 
-/// Arms a `CombatBuff` that survives on the map and applies during the next
-/// intrusion — buffs only tick in battle (see `Game::tick_combat_buff`).
+/// Arms a `FieldBuff` that survives on the map, through any battle that
+/// follows, and through a save (see `Game::arm_field_buff`) — unlike
+/// `CombatBuff`, which is wiped the moment a battle ends.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct PrebattleBuff {
-    pub kind: BuffKind,
+    pub kind: FieldBuffKind,
     pub power: i32,
-    pub rounds: u32,
+    /// Game ticks, not battle rounds — see `ActiveFieldBuff::remaining`.
+    pub ticks: u32,
 }
 
 /// A craft recipe declared by the item itself, replacing the two

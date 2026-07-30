@@ -561,12 +561,28 @@ fn use_item_on_an_empty_stack_is_a_no_op() {
 fn a_prebattle_buff_armed_on_the_map_is_live_at_the_next_intrusion() {
     let mut game = Game::new(504, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    // Arm an Atk buff directly (models what a prebattle_buff consumable does).
+    // Arm an Atk buff directly — models a companion's Rally/Shield left
+    // active going into a fight, `CombatBuff`'s own reason to exist. A
+    // pre-battle consumable no longer arms this component; see
+    // `arm_field_buff` below for what it arms instead.
     game.world.get_mut::<CombatBuff>(player).unwrap().active = Some(ActiveBuff {
         kind: BuffKind::Atk,
         remaining: 3,
         power: 5,
     });
+    // And a field buff, modeling what a prebattle_buff consumable arms
+    // now (see `Game::arm_field_buff`) — it must carry into the fight the
+    // same way a `CombatBuff` does.
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Atk,
+            name: "Test Stim".to_string(),
+            power: 5,
+            remaining: 5,
+            source: BuffSource::Consumable,
+        },
+    );
 
     let wild = spawn_wild_on_player_tile(&mut game);
     game.start_battle(vec![wild]);
@@ -582,6 +598,124 @@ fn a_prebattle_buff_armed_on_the_map_is_live_at_the_next_intrusion() {
             })
         ),
         "a buff armed before the fight must still be active when it starts"
+    );
+    assert_eq!(
+        game.field_buff_power(player, FieldBuffKind::Atk),
+        5,
+        "a field buff armed before the fight must also still be active when it starts"
+    );
+}
+
+/// One `.ron` item, shared by the two reproducers below, declaring a
+/// `prebattle_buff` — no shipped item declares one, so a fixture is the
+/// only way to drive `use_item`'s real code path.
+const TEST_STIM_ITEM: &str = r#"(
+    id: "test_stim",
+    name: "Test Stim",
+    consume: Some((
+        prebattle_buff: Some((kind: Atk, power: 5, ticks: 5)),
+    )),
+)"#;
+
+/// Bug 1: `clear_battle_status_effects` used to null the player's
+/// `CombatBuff` unconditionally whenever a battle ended — correct for a
+/// companion's Rally, but the pre-battle item buff was living in that same
+/// component, so a 5-round stim was destroyed by a battle that ended after
+/// 1 round, 4 rounds still on the clock. It now arms `FieldBuff`, which
+/// battle end never touches.
+#[test]
+fn a_prebattle_buff_survives_the_battle_it_was_armed_for() {
+    let dir = modded_assets_dir(
+        "prebattle_stim_survives_battle",
+        &[],
+        &[("test_stim.ron", TEST_STIM_ITEM)],
+        &[],
+        &[],
+        &[],
+    );
+    let mut game = Game::new(9101, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let player = game.player_entity();
+    let stim = ItemId::from("test_stim");
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(stim.clone(), 1);
+
+    game.use_item(&stim);
+    assert!(
+        game.world
+            .get::<FieldBuff>(player)
+            .unwrap()
+            .active
+            .iter()
+            .any(|b| b.kind == FieldBuffKind::Atk && b.power == 5),
+        "arming a prebattle_buff item should land it on FieldBuff, not the \
+         battle-scoped CombatBuff"
+    );
+
+    start_battle_with_a_wild_program(&mut game);
+    game.end_battle(player, None);
+
+    assert!(
+        game.world
+            .get::<FieldBuff>(player)
+            .unwrap()
+            .active
+            .iter()
+            .any(|b| b.kind == FieldBuffKind::Atk && b.power == 5),
+        "a field buff must still be running once the battle it was armed for ends"
+    );
+}
+
+/// Bug 2: before `FieldBuff` existed there was nowhere to put a map-armed
+/// item buff in `PlayerSave`, so it vanished on the round trip. Arming it
+/// now writes `FieldBuff`, which Task 3 already persists.
+#[test]
+fn a_prebattle_buff_survives_a_save_load_round_trip() {
+    let dir = modded_assets_dir(
+        "prebattle_stim_survives_save",
+        &[],
+        &[("test_stim.ron", TEST_STIM_ITEM)],
+        &[],
+        &[],
+        &[],
+    );
+    let mut game = Game::new(9102, DifficultyMode::Forgiving, &dir).unwrap();
+    let player = game.player_entity();
+    let stim = ItemId::from("test_stim");
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(stim.clone(), 1);
+    game.use_item(&stim);
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_prebattle_buff_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &dir).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let buff = loaded
+        .world
+        .get::<FieldBuff>(loaded.player_entity())
+        .unwrap()
+        .active
+        .first()
+        .cloned();
+    assert!(
+        matches!(
+            buff,
+            Some(ActiveFieldBuff {
+                kind: FieldBuffKind::Atk,
+                power: 5,
+                ..
+            })
+        ),
+        "a prebattle buff must survive a save/load round trip: {buff:?}"
     );
 }
 

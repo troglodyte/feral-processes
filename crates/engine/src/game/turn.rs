@@ -293,9 +293,10 @@ impl Game {
     }
 
     /// Consume one unit of `id` out of battle, applying its `ConsumeDef`:
-    /// restore Power/Fatigue/Integrity (each clamped) and/or arm a pre-battle
-    /// combat buff (see `use_item`'s `prebattle_buff`, applied at the next
-    /// intrusion). A non-consumable or an empty stack is a logged no-op.
+    /// restore Power/Fatigue/Integrity (each clamped) and/or arm a
+    /// `FieldBuff` (see `use_item`'s `prebattle_buff`) that outlives
+    /// whatever intrusion it's next used in. A non-consumable or an empty
+    /// stack is a logged no-op.
     pub fn use_item(&mut self, id: &ItemId) {
         // Still refused mid-intrusion: in battle an item is a *planned
         // action* costing that slot its round (`BattleAction::UseItem`), not
@@ -344,14 +345,19 @@ impl Game {
             let mut stats = self.world.get_mut::<Stats>(player).unwrap();
             stats.hp = (stats.hp + effect.heal).min(stats.max_hp);
         }
-        if let Some(buff) = effect.prebattle_buff {
-            self.world.get_mut::<CombatBuff>(player).unwrap().active = Some(ActiveBuff {
-                kind: buff.kind,
-                remaining: buff.rounds,
-                power: buff.power,
-            });
-        }
         let name = self.item_name(id).to_string();
+        if let Some(buff) = effect.prebattle_buff {
+            self.arm_field_buff(
+                player,
+                ActiveFieldBuff {
+                    kind: buff.kind,
+                    name: name.clone(),
+                    power: buff.power,
+                    remaining: buff.ticks,
+                    source: BuffSource::Consumable,
+                },
+            );
+        }
         self.log(format!("You use a {name}."));
         true
     }

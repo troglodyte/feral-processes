@@ -139,9 +139,12 @@ impl Game {
 
     pub(crate) fn start_battle(&mut self, pack: Vec<Entity>) {
         let player = self.player_entity();
-        // A `CombatBuff` armed on the map by a consumable (see `use_item`'s
-        // `prebattle_buff`) must carry into the fight it was armed for —
-        // intentionally left untouched here, unlike `clear_battle_status_effects`.
+        // Neither `CombatBuff` nor `FieldBuff` is touched here — a
+        // companion's Rally/Shield left active going into a fight lives in
+        // the former, a pre-battle consumable's buff in the latter (see
+        // `use_item`'s `prebattle_buff`), and both must carry into the
+        // fight they were armed for. `clear_battle_status_effects` is what
+        // clears `CombatBuff` once the fight ends; `FieldBuff` outlives it.
         let groups = self.group_pack(pack);
         let name = groups
             .first()

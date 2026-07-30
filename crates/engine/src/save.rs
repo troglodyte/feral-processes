@@ -221,6 +221,23 @@ pub struct SaveData {
 /// building real schema migration.
 pub const SAVE_FORMAT_VERSION: u32 = 15;
 
+/// Renders a save as editable RON, for the `savetool` binary.
+///
+/// This is the one place the save is legible: the on-disk form is bincode,
+/// which is positional and carries no field names (see
+/// `SAVE_FORMAT_VERSION`), so there is nothing to hand-edit without going
+/// through here. Round-trip fidelity is what makes it safe to edit —
+/// `a_save_survives_a_round_trip_through_ron_unchanged` pins that.
+pub fn to_ron(data: &SaveData) -> io::Result<String> {
+    ron::ser::to_string_pretty(data, ron::ser::PrettyConfig::default())
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+}
+
+/// Parses the RON produced by `to_ron` back into a save.
+pub fn from_ron(text: &str) -> io::Result<SaveData> {
+    ron::from_str(text).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+}
+
 pub fn save_to_file(path: &Path, data: &SaveData) -> io::Result<()> {
     let encoded = bincode::serde::encode_to_vec(data, bincode::config::standard())
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
@@ -312,6 +329,56 @@ mod tests {
             locale: crate::resources::Locale::Surface,
             dungeon_memory: crate::resources::DungeonMemory::default(),
         }
+    }
+
+    /// The savetool's whole premise: a save dumped to RON, then packed back,
+    /// must be the same save. Byte identity of the bincode encoding is the
+    /// strictest form of that and catches a field silently dropped by the
+    /// text encoding, which a field-by-field assertion would miss.
+    #[test]
+    fn a_save_survives_a_round_trip_through_ron_unchanged() {
+        let mut data = sample_data();
+        data.player.inventory = vec![(ItemId::from("core_fragment"), 3)];
+        data.player.hunger = 62.5;
+        data.tile_overrides = vec![(
+            (4, -7),
+            Tile {
+                biome: crate::world::Biome::Platform,
+                walkable: true,
+            },
+        )];
+        data.zone = 3;
+        // `DungeonMemory` is a map keyed by a *tuple* (`LevelKey`), which is
+        // exactly where a text encoding tends to give up, and `Locale` is a
+        // struct-variant enum. Both are in the round trip deliberately.
+        data.locale = crate::resources::Locale::Dungeon {
+            depth: 2,
+            floors: 4,
+            x: 9,
+            y: 11,
+            facing: crate::dungeon::Dir::West,
+            entrance: (4, -7),
+        };
+        data.dungeon_memory.0.insert(
+            ((4, -7), 2),
+            crate::resources::LevelMemory {
+                seen: [(1, 1), (1, 2)].into_iter().collect(),
+                looted: [(3, 3)].into_iter().collect(),
+                opened: Default::default(),
+                cleared: true,
+                fights: [(5, 5)].into_iter().collect(),
+            },
+        );
+
+        let before = bincode::serde::encode_to_vec(&data, bincode::config::standard()).unwrap();
+        let text = to_ron(&data).unwrap();
+        let parsed = from_ron(&text).unwrap();
+        let after = bincode::serde::encode_to_vec(&parsed, bincode::config::standard()).unwrap();
+
+        assert_eq!(
+            before, after,
+            "a RON round trip must not change a single byte of the save"
+        );
     }
 
     #[test]

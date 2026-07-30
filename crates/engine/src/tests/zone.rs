@@ -325,12 +325,31 @@ fn stepping_through_a_portal_consumes_it_so_it_never_travels() {
 }
 
 /// `warp_to_zone` exists for the savetool, and its whole value is that it
-/// is not a shortcut: writing `ZoneLevel` directly would leave the party in
-/// zone 4 standing on zone 1's map. Comparing the spawn point is what
-/// catches that — it only moves because a sector was actually generated.
+/// is not a shortcut: writing `ZoneLevel` directly would relabel the party
+/// as being in zone 4 while leaving zone 1's map and zone 1's wild programs
+/// around them.
+///
+/// The wild population is what discriminates. The spawn point does *not* —
+/// `find_walkable_start` spirals out from the origin, so for most seeds it
+/// answers (0, 0) in every sector and is identical either way. An earlier
+/// version of this test asserted on it and would have passed against a
+/// `ZoneLevel` write.
 #[test]
 fn warping_forward_lands_exactly_where_stepping_through_the_breaches_lands() {
+    let wild = |game: &mut Game| {
+        let mut query = game
+            .world
+            .query_filtered::<(&Creature, &Stats), With<Hostile>>();
+        let mut found: Vec<_> = query
+            .iter(&game.world)
+            .map(|(c, s)| (c.species.clone(), s.max_hp))
+            .collect();
+        found.sort();
+        found
+    };
+
     let mut warped = Game::new(940, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let before = wild(&mut warped);
     warped.warp_to_zone(4).unwrap();
 
     let mut stepped = Game::new(940, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -339,10 +358,15 @@ fn warping_forward_lands_exactly_where_stepping_through_the_breaches_lands() {
     }
 
     assert_eq!(warped.player_status().zone, 4);
+    let after = wild(&mut warped);
+    assert_ne!(
+        after, before,
+        "warping must generate new sectors, not just relabel the current one"
+    );
     assert_eq!(
-        warped.zone_spawn_point(),
-        stepped.zone_spawn_point(),
-        "warping must generate the sectors, not just relabel the current one"
+        after,
+        wild(&mut stepped),
+        "and must leave exactly what walking through three portals leaves"
     );
 }
 

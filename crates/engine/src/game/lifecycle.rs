@@ -89,6 +89,7 @@ impl Game {
                 ItemFusions::default(),
                 StatusEffects::default(),
                 CombatBuff::default(),
+                FieldBuff::default(),
                 Perks::default(),
                 Routines(vec![abilities::DECOMPILE_ABILITY_ID.to_string()]),
             ))
@@ -236,6 +237,7 @@ impl Game {
                 },
                 StatusEffects::default(),
                 CombatBuff::default(),
+                FieldBuff::default(),
                 Perks {
                     points: data.player.perk_points,
                     unlocked: data.player.unlocked_perks,

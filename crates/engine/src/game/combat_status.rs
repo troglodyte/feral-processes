@@ -509,6 +509,42 @@ impl Game {
         }
     }
 
+    /// Arms `buff` on `entity`, inserting `FieldBuff` if it has none — only
+    /// the player is spawned holding one, the same gap `arm_buff` fills for
+    /// `CombatBuff`.
+    ///
+    /// The only writer of `FieldBuff::active`, and the sole place either of
+    /// its two collision rules is enforced: a `Consumable` displaces
+    /// whatever consumable buff was running, of any kind, since an item
+    /// slot holds one effect; a `Routine` displaces only a running
+    /// `Routine` of the *same* kind, so recasting one routine leaves every
+    /// other one alone.
+    pub(crate) fn arm_field_buff(&mut self, entity: Entity, buff: ActiveFieldBuff) {
+        if self.world.get::<FieldBuff>(entity).is_none() {
+            self.world.entity_mut(entity).insert(FieldBuff::default());
+        }
+        let mut field_buff = self.world.get_mut::<FieldBuff>(entity).unwrap();
+        match buff.source {
+            BuffSource::Consumable => field_buff
+                .active
+                .retain(|b| b.source != BuffSource::Consumable),
+            BuffSource::Routine => field_buff
+                .active
+                .retain(|b| !(b.source == BuffSource::Routine && b.kind == buff.kind)),
+        }
+        field_buff.active.push(buff);
+    }
+
+    /// `entity`'s running `kind` field buff's power, or `0` when none is
+    /// active — a safe default for a caller adding this into a formula,
+    /// since an absent buff should contribute nothing.
+    pub(crate) fn field_buff_power(&self, entity: Entity, kind: FieldBuffKind) -> i32 {
+        self.world
+            .get::<FieldBuff>(entity)
+            .and_then(|field_buff| field_buff.active.iter().find(|b| b.kind == kind))
+            .map_or(0, |b| b.power)
+    }
+
     pub(crate) fn begin_defend(&mut self, entity: Entity) {
         self.arm_buff(
             entity,

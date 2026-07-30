@@ -745,3 +745,122 @@ fn the_player_at_zero_hp_is_not_touched_by_the_program_death_path() {
         "the player does not get a program death line"
     );
 }
+
+fn consumable(kind: FieldBuffKind, power: i32) -> ActiveFieldBuff {
+    ActiveFieldBuff {
+        kind,
+        name: "test item".to_string(),
+        power,
+        remaining: 10,
+        source: BuffSource::Consumable,
+    }
+}
+
+fn routine(kind: FieldBuffKind, power: i32) -> ActiveFieldBuff {
+    ActiveFieldBuff {
+        kind,
+        name: "test routine".to_string(),
+        power,
+        remaining: 10,
+        source: BuffSource::Routine,
+    }
+}
+
+#[test]
+fn a_second_consumable_field_buff_displaces_the_first_even_of_a_different_kind() {
+    let mut game = Game::new(9001, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+
+    game.arm_field_buff(player, consumable(FieldBuffKind::Def, 2));
+    game.arm_field_buff(player, consumable(FieldBuffKind::Atk, 5));
+
+    let active = &game.world.get::<FieldBuff>(player).unwrap().active;
+    assert_eq!(
+        active.len(),
+        1,
+        "a second consumable-armed buff must replace the first, not stack"
+    );
+    assert_eq!(active[0].kind, FieldBuffKind::Atk);
+    assert_eq!(active[0].power, 5);
+}
+
+#[test]
+fn a_second_routine_of_the_same_kind_displaces_only_that_kind() {
+    let mut game = Game::new(9002, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+
+    game.arm_field_buff(player, routine(FieldBuffKind::Def, 2));
+    game.arm_field_buff(player, routine(FieldBuffKind::Atk, 3));
+    game.arm_field_buff(player, routine(FieldBuffKind::Def, 9));
+
+    let active = &game.world.get::<FieldBuff>(player).unwrap().active;
+    assert_eq!(
+        active.len(),
+        2,
+        "recasting one routine kind must not touch a different running routine"
+    );
+    assert_eq!(game.field_buff_power(player, FieldBuffKind::Def), 9);
+    assert_eq!(game.field_buff_power(player, FieldBuffKind::Atk), 3);
+}
+
+#[test]
+fn a_routine_of_a_different_kind_coexists_with_the_first() {
+    let mut game = Game::new(9003, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+
+    game.arm_field_buff(player, routine(FieldBuffKind::Regen, 4));
+    game.arm_field_buff(player, routine(FieldBuffKind::Mitigation, 10));
+
+    let active = &game.world.get::<FieldBuff>(player).unwrap().active;
+    assert_eq!(active.len(), 2, "distinct routine kinds must coexist");
+}
+
+#[test]
+fn an_item_buff_and_a_routine_buff_coexist() {
+    let mut game = Game::new(9004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+
+    game.arm_field_buff(player, consumable(FieldBuffKind::Def, 2));
+    game.arm_field_buff(player, routine(FieldBuffKind::Def, 9));
+
+    let active = &game.world.get::<FieldBuff>(player).unwrap().active;
+    assert_eq!(
+        active.len(),
+        2,
+        "a consumable buff and a routine buff of the same kind must not collide"
+    );
+}
+
+#[test]
+fn field_buff_power_is_zero_when_absent_and_the_stored_value_when_present() {
+    let mut game = Game::new(9005, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+
+    assert_eq!(
+        game.field_buff_power(player, FieldBuffKind::Regen),
+        0,
+        "no FieldBuff has been armed yet"
+    );
+
+    game.arm_field_buff(player, routine(FieldBuffKind::Regen, 7));
+    assert_eq!(game.field_buff_power(player, FieldBuffKind::Regen), 7);
+    assert_eq!(
+        game.field_buff_power(player, FieldBuffKind::Coolant),
+        0,
+        "a different kind stays absent"
+    );
+}
+
+#[test]
+fn arm_field_buff_inserts_the_component_on_demand_for_a_companion() {
+    let mut game = Game::new(9006, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 20, 3);
+    assert!(
+        game.world.get::<FieldBuff>(companion).is_none(),
+        "only the player is spawned holding a FieldBuff"
+    );
+
+    game.arm_field_buff(companion, routine(FieldBuffKind::Def, 3));
+
+    assert_eq!(game.field_buff_power(companion, FieldBuffKind::Def), 3);
+}

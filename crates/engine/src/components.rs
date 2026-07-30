@@ -446,6 +446,136 @@ pub struct CombatBuff {
     pub active: Option<ActiveBuff>,
 }
 
+/// Which routine or item armed a `FieldBuff` entry. Drives the two
+/// collision rules `Game::arm_field_buff` enforces — it is not shown to the
+/// player, `ActiveFieldBuff::name` is.
+///
+/// **The order of these variants is part of the save format**, the same
+/// constraint `Perk` documents (`perks.rs`): saves are bincode, which
+/// encodes an enum positionally, so Task 3's `PlayerSave` field stores
+/// these values directly. Append new variants at the end; never reorder or
+/// remove one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BuffSource {
+    Consumable,
+    Routine,
+}
+
+/// Where a field buff lands. See `FieldBuffKind::scope`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FieldScope {
+    /// Lands on whatever `AbilityTarget` names, and travels with that
+    /// creature into whatever battle it's in.
+    Creature,
+    /// Always lands on the player, regardless of who cast it.
+    Run,
+}
+
+/// A buff a field routine or consumable can arm outside combat that keeps
+/// running after the map turn it was cast on — through any battle that
+/// follows, unlike `CombatBuff` — and, once Task 3 lands, through a save.
+///
+/// **The order of these variants is part of the save format**, the same
+/// constraint as `BuffSource` above: append new kinds at the end, never
+/// reorder or remove one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FieldBuffKind {
+    Regen,
+    Coolant,
+    Trickle,
+    Def,
+    Atk,
+    Mitigation,
+    CaptureBoost,
+    XpBoost,
+    EncounterDamp,
+    DropBoost,
+}
+
+impl FieldBuffKind {
+    /// Which end of a battle party this kind lands on. `Creature`-scoped
+    /// kinds land on whatever `AbilityTarget` names; `Run`-scoped kinds
+    /// always land on the player, since they're pressure or economy
+    /// knobs the whole run feels rather than a single combatant's stats.
+    pub fn scope(self) -> FieldScope {
+        use FieldBuffKind::*;
+        match self {
+            Regen | Def | Atk | Mitigation => FieldScope::Creature,
+            Coolant | Trickle | CaptureBoost | XpBoost | EncounterDamp | DropBoost => {
+                FieldScope::Run
+            }
+        }
+    }
+
+    /// The affinity category `abilities::scaled_power` scales this kind's
+    /// authored magnitude against, the same call as
+    /// `AbilityEffect::affinity_kind`. `None` for the four percentage-rate
+    /// kinds: a rate isn't a magnitude in any of the five affinity
+    /// categories, the same reasoning that gives `Cleanse`/`Decompile`
+    /// `None` there.
+    pub fn affinity_kind(self) -> Option<crate::abilities::AffinityKind> {
+        use crate::abilities::AffinityKind;
+        use FieldBuffKind::*;
+        match self {
+            Regen | Coolant | Trickle => Some(AffinityKind::Heal),
+            Def | Atk | Mitigation => Some(AffinityKind::Buff),
+            CaptureBoost | XpBoost | EncounterDamp | DropBoost => None,
+        }
+    }
+
+    /// The short tag a buff list shows next to a running entry, e.g.
+    /// `"DEF+2"` or `"XP+15%"`. `power` is points for the five flat kinds
+    /// and percentage points for the rest. `HP` rather than `INT` for
+    /// `Regen`, matching the abbreviation the battle roster header already
+    /// uses for Integrity (`render/battle.rs`) — Power and Fatigue have no
+    /// established short form there, so `PWR`/`FTG` are new.
+    pub fn magnitude_label(self, power: i32) -> String {
+        match self {
+            FieldBuffKind::Regen => format!("HP+{power}/t"),
+            FieldBuffKind::Coolant => format!("FTG+{power}/t"),
+            FieldBuffKind::Trickle => format!("PWR+{power}/t"),
+            FieldBuffKind::Def => format!("DEF+{power}"),
+            FieldBuffKind::Atk => format!("ATK+{power}"),
+            FieldBuffKind::Mitigation => format!("DMG-{power}%"),
+            FieldBuffKind::CaptureBoost => format!("TAME+{power}%"),
+            FieldBuffKind::XpBoost => format!("XP+{power}%"),
+            FieldBuffKind::EncounterDamp => format!("ENC-{power}%"),
+            FieldBuffKind::DropBoost => format!("DROP+{power}%"),
+        }
+    }
+}
+
+/// One running field buff and how long it has left.
+#[derive(Clone, Debug)]
+pub struct ActiveFieldBuff {
+    pub kind: FieldBuffKind,
+    /// Display name of the ability or item that armed it, captured at cast.
+    /// Stored rather than derived from `kind`: two different routines can
+    /// arm the same kind, and the buff list has to tell them apart.
+    pub name: String,
+    pub power: i32,
+    /// Ticks remaining. Turns (`Game::tick_inner`), not battle rounds like
+    /// `ActiveBuff::remaining` — a field buff outlives any one battle.
+    pub remaining: u32,
+    pub source: BuffSource,
+}
+
+/// Every field buff currently running on this entity. A `Vec`, not a
+/// single slot like `CombatBuff`: a `Consumable` entry and a `Routine`
+/// entry coexist, and distinct `Routine` kinds coexist with each other —
+/// only a second buff from the *same* source (and, for `Routine`, the same
+/// kind) displaces the one already running. `Game::arm_field_buff` is the
+/// only writer and enforces both rules; nothing else may push or remove an
+/// entry directly.
+///
+/// Only the player is spawned holding one; `arm_field_buff` inserts it on
+/// demand for a companion a `Creature`-scoped buff lands on, the same
+/// pattern `arm_buff` uses for `CombatBuff`.
+#[derive(Component, Default, Clone)]
+pub struct FieldBuff {
+    pub active: Vec<ActiveFieldBuff>,
+}
+
 /// Rounds remaining before each ability this combatant has spent can be
 /// used again. Battle-scoped exactly like `CombatBuff` and `StatusEffects`
 /// — armed during a fight, ticked at end of round, cleared when the

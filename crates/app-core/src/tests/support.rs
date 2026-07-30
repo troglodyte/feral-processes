@@ -64,11 +64,11 @@ pub(crate) fn app_owning_distant_programs(seed: u32, count: i32) -> App {
     app
 }
 
-/// A game where the player owns one tamed program and has a Compiler
-/// standing, so the extraction flow has both of its preconditions. Built by
-/// editing a save and reloading it, for the same reason
-/// `app_owning_distant_programs` is.
-pub(crate) fn app_owning_a_program_and_a_compiler(seed: u32) -> App {
+/// A game where the player owns one tamed program carrying `routines` and
+/// has a Compiler standing, so the extraction flow has both of its
+/// preconditions. Built by editing a save and reloading it, for the same
+/// reason `app_owning_distant_programs` is.
+pub(crate) fn app_owning_a_program_and_a_compiler(seed: u32, routines: &[&str]) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
     let path = std::env::temp_dir().join(format!("feral_processes_appcore_extract_{seed}.sav"));
@@ -98,7 +98,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler(seed: u32) -> App {
         def_roll: 1.0,
         growth_roll: 1.0,
         fusions: 0,
-        routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
+        routines: routines.iter().map(|r| r.to_string()).collect(),
     });
     data.structures.push(save::StructureSave {
         kind: "compiler".to_string(),

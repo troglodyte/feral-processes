@@ -1,5 +1,6 @@
 use super::support::*;
 use crate::*;
+use feral_processes_engine::abilities::FALLBACK_ABILITY_ID;
 
 #[test]
 fn m_opens_the_routine_target_picker_and_esc_backs_all_the_way_out() {
@@ -35,9 +36,40 @@ fn picking_a_filled_slot_uninstalls_and_picking_an_empty_one_opens_the_install_l
     assert_eq!(app.mode, Mode::RoutineInstall);
 }
 
+/// The reported bug: extraction from a program carrying more than one
+/// routine silently did nothing — the program stayed alive and no refusal
+/// reached the status line, so there was nothing on screen to explain it.
+#[test]
+fn extracting_from_a_program_with_two_routines_salvages_the_picked_one() {
+    let mut app = app_owning_a_program_and_a_compiler(64, &[FALLBACK_ABILITY_ID, "decompile"]);
+    app.handle_key(GameKey::Char('M'));
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.mode, Mode::ExtractPick);
+    let offered = {
+        let program = app.pending_extract_program.unwrap();
+        app.game.as_ref().unwrap().extractable_routines(program)
+    };
+    assert_eq!(offered.len(), 2, "both routines should be on offer");
+
+    let before = app.game.as_mut().unwrap().owned_pets().len();
+    app.handle_key(GameKey::Char('2'));
+    assert_eq!(app.mode, Mode::ExtractConfirm);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(
+        app.status_line, None,
+        "extraction was refused with: {:?}",
+        app.status_line
+    );
+    assert_eq!(
+        app.game.as_mut().unwrap().owned_pets().len(),
+        before - 1,
+        "the program should have been broken down"
+    );
+}
+
 #[test]
 fn the_extract_flow_requires_confirmation_before_the_program_is_destroyed() {
-    let mut app = app_owning_a_program_and_a_compiler(63);
+    let mut app = app_owning_a_program_and_a_compiler(63, &[FALLBACK_ABILITY_ID]);
     app.handle_key(GameKey::Char('M'));
     assert_eq!(app.mode, Mode::Extract);
     app.handle_key(GameKey::Char('1'));

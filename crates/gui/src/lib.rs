@@ -22,7 +22,6 @@ mod sounds;
 mod text;
 
 use bevy::ecs::system::SystemParam;
-use bevy::input::ButtonState;
 use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy::window::WindowResolution;
@@ -30,7 +29,7 @@ use bevy_egui::{EguiContexts, EguiPlugin, EguiPreUpdateSet, EguiPrimaryContextPa
 
 use feral_processes_app_core::{App, GameKey, Mode};
 use fx::Fx;
-use keys::KeyRepeat;
+use keys::{KeyRepeat, TextGate};
 use paint::{Color, Painter};
 use sounds::SoundBank;
 
@@ -90,6 +89,7 @@ struct Frontend {
     toast: Option<String>,
     toast_until: f64,
     key_repeat: KeyRepeat,
+    text_gate: TextGate,
     last_mode: Mode,
 }
 
@@ -140,6 +140,7 @@ pub fn run(app: App) {
             toast: None,
             toast_until: 0.0,
             key_repeat: KeyRepeat::new(),
+            text_gate: TextGate::new(),
             last_mode,
         })
         .add_systems(Startup, setup)
@@ -242,17 +243,17 @@ fn frame(
     }
     // Letters and digits arrive as the text a keypress produced rather than
     // as physical key codes, so the bindings follow the player's keyboard
-    // layout instead of assuming QWERTY positions.
+    // layout instead of assuming QWERTY positions. `TextGate` is what stops
+    // the OS auto-repeat riding along that path into the screen the press
+    // just opened — `block_held` below cannot reach these.
     for event in input.typed.read() {
-        if event.state != ButtonState::Pressed {
-            continue;
-        }
-        let Some(text) = &event.text else { continue };
-        for c in text.chars() {
-            if !c.is_control() {
-                fe.app.handle_key(GameKey::Char(c));
-            }
-        }
+        let app = &mut fe.app;
+        fe.text_gate
+            .feed(event.key_code, event.state, event.text.as_deref(), |c| {
+                let before = app.mode;
+                app.handle_key(GameKey::Char(c));
+                app.mode != before
+            });
     }
     // A held key that changed the screen out from under itself — walking
     // into a wild creature, say — must not go on driving the screen it

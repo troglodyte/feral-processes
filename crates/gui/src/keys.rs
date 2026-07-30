@@ -15,6 +15,7 @@
 //! macroquad unchanged: both backends land on the same edge-triggered
 //! semantics, so only the name of the key enum differs.
 
+use bevy::input::ButtonState;
 use bevy::input::keyboard::KeyCode;
 
 /// How long a key must be held before it starts repeating.
@@ -71,9 +72,142 @@ impl KeyRepeat {
     }
 }
 
+/// The other half of `KeyRepeat::block_held`, for the keys that reach the
+/// game as typed text rather than as key codes it paces itself.
+///
+/// Letters and digits are read from `KeyboardInput::text` (see `frame`), so
+/// their repeat is the OS's, not `KeyRepeat`'s — which is what makes `hjkl`
+/// walking work, and what leaves `block_held` no key to silence. A held key
+/// therefore kept driving whatever screen its first press opened: a `2` held
+/// on the extraction picker chose the routine, and the repeat landed on the
+/// confirmation, where every key but Enter backs out. Nothing was extracted
+/// and nothing said why.
+///
+/// Deliberately not keyed off `KeyboardInput::repeat`, though the flag would
+/// identify the same events: a press that changed the screen has had its
+/// effect either way, and "one screen per press, until you let go" needs no
+/// help from the platform to say whether it set the flag. Releases are what
+/// re-arm it, exactly as they do for `block_held`.
+pub struct TextGate {
+    /// The key silenced until its release arrives.
+    blocked: Option<KeyCode>,
+}
+
+impl TextGate {
+    pub fn new() -> Self {
+        Self { blocked: None }
+    }
+
+    /// Feeds one keyboard event through the gate, calling `deliver` for each
+    /// character that should reach the game. `deliver` reports back whether
+    /// handling that character changed the screen; the first one that did
+    /// silences `key` until it is released.
+    pub fn feed(
+        &mut self,
+        key: KeyCode,
+        state: ButtonState,
+        text: Option<&str>,
+        mut deliver: impl FnMut(char) -> bool,
+    ) {
+        if state != ButtonState::Pressed {
+            if self.blocked == Some(key) {
+                self.blocked = None;
+            }
+            return;
+        }
+        let Some(text) = text else { return };
+        for c in text.chars() {
+            if c.is_control() || self.blocked == Some(key) {
+                continue;
+            }
+            if deliver(c) {
+                self.blocked = Some(key);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Feeds `gate` a press of `key` producing `text`, recording every
+    /// character delivered into `seen`. `changed` is what the game does with
+    /// it — whether handling that character swapped the screen.
+    fn press(gate: &mut TextGate, key: KeyCode, text: &str, changed: bool, seen: &mut Vec<char>) {
+        gate.feed(key, ButtonState::Pressed, Some(text), |c| {
+            seen.push(c);
+            changed
+        });
+    }
+
+    fn release(gate: &mut TextGate, key: KeyCode, seen: &mut Vec<char>) {
+        gate.feed(key, ButtonState::Released, None, |c| {
+            seen.push(c);
+            false
+        });
+    }
+
+    /// The reported bug: extracting a routine did nothing, with no error
+    /// saying why. Digits reach the game as typed text, which carries the
+    /// OS auto-repeat — so a held `2` picked the routine, and the repeat
+    /// then landed on the confirmation that press had just opened, where
+    /// any key but Enter backs out. Silently.
+    #[test]
+    fn a_key_that_changed_the_screen_is_silenced_until_it_is_released() {
+        let mut gate = TextGate::new();
+        let mut seen = Vec::new();
+
+        press(&mut gate, KeyCode::Digit2, "2", true, &mut seen);
+        for _ in 0..30 {
+            press(&mut gate, KeyCode::Digit2, "2", true, &mut seen);
+        }
+        assert_eq!(
+            seen,
+            vec!['2'],
+            "the repeat must not drive the screen the press opened"
+        );
+
+        release(&mut gate, KeyCode::Digit2, &mut seen);
+        press(&mut gate, KeyCode::Digit2, "2", true, &mut seen);
+        assert_eq!(seen, vec!['2', '2'], "releasing it clears the block");
+    }
+
+    /// Held `hjkl` walking is the reason letters are read from the text
+    /// events in the first place. A press that leaves the player on the map
+    /// has changed no screen, so nothing is silenced.
+    #[test]
+    fn a_key_that_changed_nothing_keeps_repeating() {
+        let mut gate = TextGate::new();
+        let mut seen = Vec::new();
+        for _ in 0..4 {
+            press(&mut gate, KeyCode::KeyJ, "j", false, &mut seen);
+        }
+        assert_eq!(seen, vec!['j', 'j', 'j', 'j']);
+    }
+
+    /// The block is per key, not global: a blocked key must not silence the
+    /// deliberate press of a different one.
+    #[test]
+    fn blocking_one_key_leaves_the_others_alone() {
+        let mut gate = TextGate::new();
+        let mut seen = Vec::new();
+        press(&mut gate, KeyCode::KeyM, "M", true, &mut seen);
+        press(&mut gate, KeyCode::KeyM, "M", true, &mut seen);
+        press(&mut gate, KeyCode::Digit1, "1", true, &mut seen);
+        assert_eq!(seen, vec!['M', '1']);
+    }
+
+    /// A dead key can produce two characters from one press (see
+    /// `KeyboardInput::text`). The first that changes the screen blocks the
+    /// rest of that same press, for the same reason a repeat is blocked.
+    #[test]
+    fn a_multi_character_press_stops_at_the_one_that_changed_the_screen() {
+        let mut gate = TextGate::new();
+        let mut seen = Vec::new();
+        press(&mut gate, KeyCode::KeyE, "ee", true, &mut seen);
+        assert_eq!(seen, vec!['e']);
+    }
 
     /// A tap has to stay a tap: the repeat starts *later*, it doesn't turn
     /// every frame of a press into a move.

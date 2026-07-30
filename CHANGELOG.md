@@ -31,12 +31,17 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   no magnitude, so no affinity ever touches them.
 - **Five new perks buy the same specialization for the player**: Payload
   Tuning, Field Medic, Overclocker, Corruption Vector, and Siphon Protocol,
-  2 Perk Points each, +5% per level to their category, clamped at the same
-  2.0 ceiling a species' own affinity is. A player perk only ever sharpens
-  the *player's* own casts — a companion answers to its species instead —
-  and the two sources can never stack: the player has no `Creature`
-  component to hold a species affinity, and a companion has no `Perks` to
-  hold a perk one.
+  2 Perk Points each, clamped at the same 2.0 ceiling a species' own
+  affinity is. Field Medic, Overclocker and Corruption Vector are +5% per
+  level; Payload Tuning and Siphon Protocol are +15%, because `Damage` and
+  `Drain` skip the level-scaling the other three categories get for free —
+  at the shared 5% rate they were a strictly worse Perk Point than the
+  `Attacker`/`Defender` perks for nearly every shipped ability, and 15% is
+  what makes them competitive up to their (lower, faster-reached) ceiling.
+  A player perk only ever sharpens the *player's* own casts — a companion
+  answers to its species instead — and the two sources can never stack: the
+  player has no `Creature` component to hold a species affinity, and a
+  companion has no `Perks` to hold a perk one.
 - **The manifest screen shows a program's non-neutral affinities**, up to
   two, with any further ones collapsed into a "+N more" line rather than
   crowding the panel.
@@ -45,7 +50,7 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   variants were appended to the end of the enum rather than inserted, so
   every index an existing save already holds in `PlayerSave::unlocked_perks`
   still points at the same perk it always did.
-- **The magnitudes are unplayed.** The +5%-per-level rate, the 0.5–2.0
+- **The magnitudes are unplayed.** The two per-level rates, the 0.5–2.0
   clamp, and all twelve shipped species values are arithmetic-plausible and
   nothing more — none of it has been through an actual playthrough, and
   `balance_sim` structurally cannot vouch for it either, since that

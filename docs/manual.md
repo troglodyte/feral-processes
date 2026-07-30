@@ -521,10 +521,10 @@ on top of whatever you already have, at the same Perk Point cost every time:
 | Defender | 2 | +1 permanent Defense |
 | Buffer | 3 | +1% permanent max Integrity per level, minimum +10 (fully heals on purchase) |
 | Field Medic | 2 | +5% to your own heal affinity — see [Affinities](#affinities) |
-| Payload Tuning | 2 | +5% to your own damage affinity — see [Affinities](#affinities) |
+| Payload Tuning | 2 | +15% to your own damage affinity — see [Affinities](#affinities) |
 | Overclocker | 2 | +5% to your own buff affinity — see [Affinities](#affinities) |
 | Corruption Vector | 2 | +5% to your own debuff affinity — see [Affinities](#affinities) |
-| Siphon Protocol | 2 | +5% to your own drain affinity — see [Affinities](#affinities) |
+| Siphon Protocol | 2 | +15% to your own drain affinity — see [Affinities](#affinities) |
 
 The `x` menu shows each perk's current level next to it.
 
@@ -838,8 +838,10 @@ Affinity comes from two places that never mix:
   both bosses.
 - **You buy the same five categories as perks** — Field Medic, Payload
   Tuning, Overclocker, Corruption Vector, Siphon Protocol, in the
-  [Perks](#perks) table above — at +5% per level, capped at the same 2.0
-  a species' own affinity is.
+  [Perks](#perks) table above — at +5% per level for Heal/Buff/Debuff, or
+  +15% per level for Damage/Drain (which don't grow with your level the way
+  the other three do, so the perk rate is higher to compensate), capped at
+  the same 2.0 a species' own affinity is.
 
 The two never combine on the same cast. A perk you've bought sharpens only
 **your own** casts — you have no species to carry an affinity of its own —

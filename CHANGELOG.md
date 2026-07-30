@@ -195,13 +195,18 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 - **Perk names, descriptions and prices are data.** `assets/perks/` now
   holds one `.ron` file per perk carrying its name, its picker line and its
   Perk Point cost, so retitling or re-pricing the menu is a file edit. It is
-  a *catalogue* rather than a content directory: the seven perks stay fixed,
-  because a perk's effect is a hook into one particular formula — the scan
-  roll, the hunger multiplier, the decompile HP term, recipe costs, a direct
-  stat write — with no shared shape to put in a file, so an eighth perk
-  still means Rust. Per-level magnitudes stay in `tuning.rs` with the rest
-  of the difficulty knobs; only cost moved. Deleting a file removes that
-  perk from the picker without touching levels a save already holds.
+  a *catalogue* rather than a content directory: the twelve perks stay
+  fixed, because a perk's effect is a hook into one particular formula — the
+  scan roll, the hunger multiplier, the decompile HP term, recipe costs, a
+  direct stat write — with no shape shared *across the full set* to put in
+  a file, so a thirteenth perk still means Rust. (The five affinity perks
+  added since are the one family that does share a shape among themselves —
+  one `AFFINITY_PERK_BONUS_PER_LEVEL` and one generic `Perk::affinity_kind`
+  hook cover all five — but the magnitude is still a difficulty knob, not
+  a per-perk `effect:` field, so the catalogue stays name/description/cost
+  only.) Per-level magnitudes stay in `tuning.rs` with the rest of the
+  difficulty knobs; only cost moved. Deleting a file removes that perk from
+  the picker without touching levels a save already holds.
 
 ### Balance
 

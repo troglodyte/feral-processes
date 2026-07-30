@@ -199,6 +199,64 @@ impl MessageLog {
     }
 }
 
+/// One row of the history screen: a log line, and how many identical lines
+/// it stands for. `repeats` is 1 for a line that stands alone, so a consumer
+/// never has an uncollapsed path to special-case.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LogEntry {
+    pub kind: MessageKind,
+    pub text: String,
+    pub repeats: usize,
+}
+
+/// How far back a repeated line looks for an entry to fold into, counted in
+/// already-emitted entries rather than raw lines. That unit is the whole
+/// design: an unbroken run collapses however long it gets, because each copy
+/// finds its anchor as the newest entry; two or three cronjobs interleaving
+/// their yields each cycle still collapse, because their anchors stay inside
+/// the window; and the same warning again three hundred ticks later falls
+/// outside it, so two starvation events read as two events.
+///
+/// Not in `tuning.rs`: that file is how hard the game is, and this is how the
+/// screen reads.
+pub(crate) const CONDENSE_LOOKBACK: usize = 4;
+
+/// Folds repeated lines together for the history screen — the `L` log,
+/// nowhere else. The map's pane and the battle pane show every line, since
+/// the battle narration's reveal pacing counts rows.
+///
+/// Deliberately a view over the stored log rather than a collapse in
+/// `MessageLog::push_kind`: storage carries the mark arithmetic that
+/// `since_round` and `retain_outcomes_since_battle` slice with, and merging a
+/// new round's first line backwards across `open_round` would drop it out of
+/// the battle pane's range entirely.
+///
+/// Lives here rather than in a frontend because both consumers have to agree
+/// on the row count — app-core scrolls the screen (`App::handle_history_key`)
+/// while the renderer draws it, so a fold applied only while drawing would
+/// leave the highlight indexing rows that no longer exist.
+///
+/// `kind` is part of the match: the same sentence pushed as `Info` and as
+/// `Outcome` is styled differently and means something different.
+pub(crate) fn condense(lines: &[(MessageKind, String)]) -> Vec<LogEntry> {
+    let mut entries: Vec<LogEntry> = Vec::new();
+    for (kind, text) in lines {
+        let window = entries.len().saturating_sub(CONDENSE_LOOKBACK);
+        match entries[window..]
+            .iter_mut()
+            .find(|e| e.kind == *kind && e.text == *text)
+        {
+            Some(entry) => entry.repeats += 1,
+            None => entries.push(LogEntry {
+                kind: *kind,
+                text: text.clone(),
+                repeats: 1,
+            }),
+        }
+    }
+    entries
+}
+
 /// How many effects the queue holds before dropping its oldest — a
 /// backstop for a frontend that never calls `Game::take_effects`, matching
 /// the cap `MessageLog` puts on lines.

@@ -29,6 +29,14 @@ impl Game {
         self.world.resource::<MessageLog>().recent(n).to_vec()
     }
 
+    /// The last `n` lines with repeats folded together — what the history
+    /// screen shows, and what anything scrolling that screen has to count
+    /// rows with. See `resources::condense` for the fold and why it is a view
+    /// rather than a collapse in storage.
+    pub fn message_history(&self, n: usize) -> Vec<LogEntry> {
+        crate::resources::condense(self.world.resource::<MessageLog>().recent(n))
+    }
+
     /// The current round's narration, oldest first — what the battle pane
     /// shows. One round at a time, so a resolved round replaces the last
     /// rather than piling on top of it, and a fresh fight opens on an empty

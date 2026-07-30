@@ -57,7 +57,9 @@ use resources::{
     GameRng, Locale, MessageLog, Party, Platform, PlayerEntity, Research, ZoneLevel,
     ZoneSpawnPoint,
 };
-pub use resources::{DifficultyMode, EffectKind, MESSAGE_LOG_CAP, MessageKind, VisualEffect};
+pub use resources::{
+    DifficultyMode, EffectKind, LogEntry, MESSAGE_LOG_CAP, MessageKind, VisualEffect,
+};
 use species::{Affinities, MoveDef, SpeciesDb, SpeciesDef, SpeciesId};
 use structures::{StructureDb, StructureDef, StructureId, TradeDef};
 pub use views::*;

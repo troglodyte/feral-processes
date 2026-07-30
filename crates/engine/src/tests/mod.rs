@@ -19,6 +19,7 @@ mod crafting;
 mod dungeon;
 mod equipment;
 mod inspection;
+mod message_log;
 mod party;
 mod perks;
 mod raids;

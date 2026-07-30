@@ -3,6 +3,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::components::ActiveFieldBuff;
 use crate::items::ItemId;
 use crate::perks::Perk;
 use crate::resources::DifficultyMode;
@@ -45,6 +46,10 @@ pub struct PlayerSave {
     /// The abilities installed in the player's routine slots, in menu order
     /// — see `components::Routines`.
     pub routines: Vec<crate::abilities::AbilityId>,
+    /// Every field buff currently running on the player — see
+    /// `components::FieldBuff`. Player state, not zone-local, so
+    /// `Game::enter_next_zone` must never clear it.
+    pub field_buffs: Vec<ActiveFieldBuff>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -99,6 +104,12 @@ pub struct CreatureSave {
     /// from its species, because an innate routine can be popped out and a
     /// foreign one plugged in.
     pub routines: Vec<crate::abilities::AbilityId>,
+    /// Every field buff currently running on this creature — see
+    /// `components::FieldBuff`. A companion sold, extracted, fused away or
+    /// killed takes this with it: the entity simply despawns, and neither
+    /// `Game::dissolve_tamed_program` nor `Game::fuse_companions` needs to
+    /// know this field exists.
+    pub field_buffs: Vec<ActiveFieldBuff>,
 }
 
 /// Mirrors `components::TaskKind` for persistence — kept separate so the
@@ -208,7 +219,7 @@ pub struct SaveData {
 /// and every save written under the old version stops loading. That's an
 /// intentional, simple tradeoff for a single-player game rather than
 /// building real schema migration.
-pub const SAVE_FORMAT_VERSION: u32 = 14;
+pub const SAVE_FORMAT_VERSION: u32 = 15;
 
 pub fn save_to_file(path: &Path, data: &SaveData) -> io::Result<()> {
     let encoded = bincode::serde::encode_to_vec(data, bincode::config::standard())
@@ -288,6 +299,7 @@ mod tests {
                 perk_points: 0,
                 unlocked_perks: Vec::new(),
                 routines: Vec::new(),
+                field_buffs: Vec::new(),
             },
             creatures: Vec::new(),
             structures: Vec::new(),
@@ -328,6 +340,33 @@ mod tests {
 
         let Err(err) = load_from_file(&path) else {
             panic!("loading a mismatched-version save should fail, not succeed");
+        };
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert!(
+            err.to_string().contains("incompatible save version"),
+            "error should clearly say the save is from an incompatible version, got: {err}"
+        );
+    }
+
+    /// Task 3 bumped `SAVE_FORMAT_VERSION` 14 -> 15 to add `field_buffs`.
+    /// There is no migration path (see that constant's docs), so a save
+    /// genuinely written under the prior version must be refused exactly
+    /// like any other version mismatch, not silently decoded into garbage.
+    #[test]
+    fn a_save_written_at_v14_is_refused_now_that_v15_is_current() {
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_save_v14_{}.bin",
+            std::process::id()
+        ));
+        let encoded =
+            bincode::serde::encode_to_vec(sample_data(), bincode::config::standard()).unwrap();
+        let mut bytes = 14u32.to_le_bytes().to_vec();
+        bytes.extend(encoded);
+        std::fs::write(&path, bytes).unwrap();
+
+        let Err(err) = load_from_file(&path) else {
+            panic!("a v14 save should not load under the v15 format");
         };
         let _ = std::fs::remove_file(&path);
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);

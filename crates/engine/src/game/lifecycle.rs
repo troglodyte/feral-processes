@@ -237,7 +237,9 @@ impl Game {
                 },
                 StatusEffects::default(),
                 CombatBuff::default(),
-                FieldBuff::default(),
+                FieldBuff {
+                    active: data.player.field_buffs,
+                },
                 Perks {
                     points: data.player.perk_points,
                     unlocked: data.player.unlocked_perks,
@@ -310,6 +312,14 @@ impl Game {
             ));
             if let Some(name) = c.custom_name.clone() {
                 entity.insert(CustomName(name));
+            }
+            // Only the player is spawned holding a `FieldBuff` — see that
+            // component's docs — so a creature with none recorded stays
+            // without one, the same as a freshly tamed program.
+            if !c.field_buffs.is_empty() {
+                entity.insert(FieldBuff {
+                    active: c.field_buffs,
+                });
             }
             if c.tamed {
                 let creature_id = entity.id();
@@ -458,6 +468,11 @@ impl Game {
             .get::<Routines>(player)
             .map(|r| r.0.clone())
             .unwrap_or_default();
+        let field_buffs = self
+            .world
+            .get::<FieldBuff>(player)
+            .map(|f| f.active.clone())
+            .unwrap_or_default();
 
         let party_entities = self.world.resource::<Party>().0.clone();
         let mut creatures = Vec::new();
@@ -474,6 +489,7 @@ impl Game {
             Option<&Potential>,
             Option<&FusionCount>,
             Option<&Routines>,
+            Option<&FieldBuff>,
         )>();
         for (
             entity,
@@ -488,6 +504,7 @@ impl Game {
             potential,
             fusions,
             routines,
+            field_buff,
         ) in creature_query.iter(&self.world)
         {
             let potential = potential.copied().unwrap_or(Potential::NEUTRAL);
@@ -528,6 +545,7 @@ impl Game {
                 growth_roll: potential.growth_roll,
                 fusions: fusions.map(|f| f.0).unwrap_or(0),
                 routines: routines.map(|r| r.0.clone()).unwrap_or_default(),
+                field_buffs: field_buff.map(|f| f.active.clone()).unwrap_or_default(),
             });
         }
 
@@ -595,6 +613,7 @@ impl Game {
                 perk_points: perks.points,
                 unlocked_perks: perks.unlocked,
                 routines,
+                field_buffs,
             },
             creatures,
             structures,

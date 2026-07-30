@@ -55,6 +55,7 @@ pub(crate) fn app_owning_distant_programs(seed: u32, count: i32) -> App {
             growth_roll: 1.0,
             fusions: 0,
             routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
+            field_buffs: Vec::new(),
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -99,6 +100,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler(seed: u32, routines: &[&str]) 
         growth_roll: 1.0,
         fusions: 0,
         routines: routines.iter().map(|r| r.to_string()).collect(),
+        field_buffs: Vec::new(),
     });
     data.structures.push(save::StructureSave {
         kind: "compiler".to_string(),

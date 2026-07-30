@@ -452,10 +452,10 @@ pub struct CombatBuff {
 ///
 /// **The order of these variants is part of the save format**, the same
 /// constraint `Perk` documents (`perks.rs`): saves are bincode, which
-/// encodes an enum positionally, so Task 3's `PlayerSave` field stores
-/// these values directly. Append new variants at the end; never reorder or
-/// remove one.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// encodes an enum positionally, so `PlayerSave`/`CreatureSave`'s
+/// `field_buffs` store these values directly. Append new variants at the
+/// end; never reorder or remove one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BuffSource {
     Consumable,
     Routine,
@@ -473,12 +473,12 @@ pub enum FieldScope {
 
 /// A buff a field routine or consumable can arm outside combat that keeps
 /// running after the map turn it was cast on — through any battle that
-/// follows, unlike `CombatBuff` — and, once Task 3 lands, through a save.
+/// follows, unlike `CombatBuff` — and through a save.
 ///
 /// **The order of these variants is part of the save format**, the same
 /// constraint as `BuffSource` above: append new kinds at the end, never
 /// reorder or remove one.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FieldBuffKind {
     Regen,
     Coolant,
@@ -546,7 +546,7 @@ impl FieldBuffKind {
 }
 
 /// One running field buff and how long it has left.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ActiveFieldBuff {
     pub kind: FieldBuffKind,
     /// Display name of the ability or item that armed it, captured at cast.

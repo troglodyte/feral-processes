@@ -623,6 +623,42 @@ fn breaching_keeps_everything_that_is_not_spendable_currency() {
     );
 }
 
+/// Task 3: a `FieldBuff` is player state, not zone-local — the inverse of
+/// the `BuybackLedger` trap, where anything zone-local has to be wiped by
+/// name in `enter_next_zone`. Nothing should be wiping this one, so a
+/// breach must leave it running untouched.
+#[test]
+fn breaching_keeps_a_running_field_buff() {
+    let mut game = Game::new(948, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::XpBoost,
+            name: "Overclock Protocol".to_string(),
+            power: 20,
+            remaining: 9,
+            source: BuffSource::Consumable,
+        },
+    );
+
+    game.enter_next_zone();
+
+    let buff = game
+        .world
+        .get::<FieldBuff>(player)
+        .unwrap()
+        .active
+        .first()
+        .cloned()
+        .expect("a field buff is player state, not zone-local — it must survive a breach");
+    assert_eq!(buff.kind, FieldBuffKind::XpBoost);
+    assert_eq!(
+        buff.remaining, 9,
+        "a breach must not itself age or reset a buff"
+    );
+}
+
 #[test]
 fn the_decohere_message_only_fires_when_there_was_something_to_lose() {
     let mut game = Game::new(947, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

@@ -98,6 +98,38 @@ fn selling_a_program_pays_a_tenth_of_its_power_and_despawns_it() {
     );
 }
 
+/// Task 3: `dissolve_tamed_program` (which `sell_companion` calls) despawns
+/// the whole entity, so a `FieldBuff` riding on a sold program needs no
+/// dedicated hook to avoid being orphaned — this pins that down rather than
+/// trusting it stays true across future edits to the despawn path.
+#[test]
+fn selling_a_buffed_companion_leaves_no_orphaned_field_buff() {
+    let mut game = Game::new(133, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market(&mut game);
+    let pet = spawn_tamed(&mut game, 30, 5);
+    game.arm_field_buff(
+        pet,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Def,
+            name: "Shield Protocol".to_string(),
+            power: 3,
+            remaining: 4,
+            source: BuffSource::Routine,
+        },
+    );
+
+    game.sell_companion(market, pet).unwrap();
+
+    assert!(
+        game.world.get::<Stats>(pet).is_none(),
+        "the sold program has to be gone"
+    );
+    assert!(
+        game.world.get::<FieldBuff>(pet).is_none(),
+        "its FieldBuff must not survive as an orphaned component on a despawned entity"
+    );
+}
+
 /// The floor exists so a sale can never destroy a program for nothing.
 #[test]
 fn a_program_too_weak_to_price_still_sells_for_one_credit() {

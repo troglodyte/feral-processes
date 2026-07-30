@@ -365,6 +365,73 @@ fn rest_ages_field_buffs_but_not_temporary_structures() {
     );
 }
 
+/// Task 3: `ActiveFieldBuff`/`FieldBuffKind`/`BuffSource` all need to survive
+/// a save/load round trip intact, on both the player and a party member —
+/// not just the count, but every field, since a save that silently dropped
+/// `power` or `source` would still pass a length check.
+#[test]
+fn field_buffs_survive_a_save_load_round_trip() {
+    let mut game = Game::new(604, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(companion).unwrap();
+
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::CaptureBoost,
+            name: "Snare Protocol".to_string(),
+            power: 15,
+            remaining: 7,
+            source: BuffSource::Consumable,
+        },
+    );
+    game.arm_field_buff(
+        companion,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Atk,
+            name: "Overclock".to_string(),
+            power: 4,
+            remaining: 3,
+            source: BuffSource::Routine,
+        },
+    );
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_field_buffs_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let player_buff = loaded
+        .world
+        .get::<FieldBuff>(loaded.player_entity())
+        .unwrap()
+        .active
+        .first()
+        .cloned()
+        .expect("the player's field buff should survive the round trip");
+    assert_eq!(player_buff.kind, FieldBuffKind::CaptureBoost);
+    assert_eq!(player_buff.name, "Snare Protocol");
+    assert_eq!(player_buff.power, 15);
+    assert_eq!(player_buff.remaining, 7);
+    assert_eq!(player_buff.source, BuffSource::Consumable);
+
+    let companion_buff = loaded
+        .owned_pets()
+        .first()
+        .and_then(|p| loaded.world.get::<FieldBuff>(p.entity).cloned())
+        .and_then(|f| f.active.first().cloned())
+        .expect("the companion's field buff should survive the round trip");
+    assert_eq!(companion_buff.kind, FieldBuffKind::Atk);
+    assert_eq!(companion_buff.name, "Overclock");
+    assert_eq!(companion_buff.power, 4);
+    assert_eq!(companion_buff.remaining, 3);
+    assert_eq!(companion_buff.source, BuffSource::Routine);
+}
+
 #[test]
 fn forage_chance_applies_keen_scavenger_per_level_but_never_boosts_a_zero_chance_biome() {
     assert_eq!(forage_chance(Biome::OpenGrid, 0), 0.6);

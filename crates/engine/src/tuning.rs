@@ -576,11 +576,20 @@ pub const NEST_DURABILITY: u32 = 60;
 /// How many ticks a full night's recharge cycle advances the clock by.
 pub const REST_TICKS: u32 = 40;
 
-/// Per-tick drain on the two needs — see `systems::decay_needs`. Hunger
-/// (surfaced as "Power") falls faster than Fatigue, so running out of
-/// power is the pressure that actually paces a session.
+/// Per-tick movement of the two needs — see `systems::tick_needs`. They run
+/// in opposite directions and are not two clocks of the same kind: hunger
+/// (surfaced as "Power") drains and is the only thing that can starve you,
+/// so it alone paces a session.
+///
+/// Fatigue *refills*, because it is the pool battle abilities are paid for
+/// out of (`AbilityDef::fatigue_cost`) rather than a survival need. It used
+/// to drain too, which left it unrecoverable underground: the only full
+/// restore is `Game::rest`, and that refuses anywhere but inside the base.
+///
+/// At this rate a 5.0-cost ability is worth ~62 ticks of walking. That
+/// number is arithmetic, not playtested.
 pub const HUNGER_DECAY_PER_TICK: f32 = 0.15;
-pub const FATIGUE_DECAY_PER_TICK: f32 = 0.08;
+pub const FATIGUE_REGEN_PER_TICK: f32 = 0.08;
 
 /// What a `DifficultyMode::Forgiving` reboot leaves the player with: max HP
 /// divided by this (never below 1), and both needs topped up to at least the

@@ -13,6 +13,33 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Fatigue recovers on its own
+
+- **Fatigue now regenerates every tick instead of draining.** It was never a
+  survival need — nothing starves you for running out of it, and its one
+  job is paying for battle routines (`AbilityDef::fatigue_cost`). But the
+  only full restore is resting, which refuses anywhere outside your base,
+  so a long trip underground drained the pool with no way to refill it and
+  quietly took your abilities away. Hunger is now the only clock that runs
+  down, and the only one that can kill you.
+- **Regen keeps running during a battle.** A routine's cost is a throttle
+  on how often you can afford it in a fight, not a fixed budget for the
+  whole fight. At `FATIGUE_REGEN_PER_TICK` a 5.0-cost routine is worth
+  about 62 ticks of walking — arithmetic, not playtested.
+
+### A save can be edited from the command line
+
+- **`savetool` reads a save out as RON, takes it back, and can warp it
+  forward.** Saves are bincode, which has no field names on disk and can't
+  be hand-edited, so testing anything deep in a run meant playing there.
+  `dump` renders one as text, `pack` re-encodes an edited one at the
+  current save version, and `warp <n>` advances a save to a later zone by
+  running the real breach — the base still travels and spawns still scale,
+  rather than a zone number being overwritten in place.
+- **`pack` always stamps the current save version**, so dumping before a
+  format bump and packing after is the one way to carry a save across a
+  version change. There is still no automatic migration, by design.
+
 ### Field routines: buffs cast outside battle that keep running into one
 
 - **An ability can now be field-only.** `AbilityEffect::FieldBuff` is the

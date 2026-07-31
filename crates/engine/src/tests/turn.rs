@@ -509,21 +509,22 @@ fn a_full_tick_applies_coolant_and_trickle_on_top_of_that_ticks_decay() {
 
     game.wait();
 
-    // `needs_decay_system` runs inside the same tick's schedule, ahead of
+    // `needs_tick_system` runs inside the same tick's schedule, ahead of
     // `tick_field_buffs` (see `tick_inner`), so the restore lands on top of
-    // that tick's own drain rather than the pre-decay value. Read through
-    // the live formula instead of restating its constant.
-    let (decayed_hunger, decayed_fatigue) =
-        crate::systems::decay_needs(hunger_before, fatigue_before, 1.0);
+    // whatever that tick's own movement was — hunger's drain, fatigue's
+    // regen. Read through the live formula instead of restating its
+    // constants.
+    let (ticked_hunger, ticked_fatigue) =
+        crate::systems::tick_needs(hunger_before, fatigue_before, 1.0);
     let needs = *game.world.get::<Needs>(player).unwrap();
     assert_eq!(
         needs.fatigue,
-        (decayed_fatigue + 15.0).min(NEED_MAX),
-        "Coolant should restore fatigue on top of the tick's own decay"
+        (ticked_fatigue + 15.0).min(NEED_MAX),
+        "Coolant should restore fatigue on top of the tick's own regen"
     );
     assert_eq!(
         needs.hunger,
-        (decayed_hunger + 15.0).min(NEED_MAX),
+        (ticked_hunger + 15.0).min(NEED_MAX),
         "Trickle should restore hunger the same way"
     );
     assert_eq!(
@@ -673,7 +674,7 @@ fn use_item_applies_a_power_restore_and_consumes_one() {
     game.use_item(&ItemId::from(ids::POWER_CELL));
 
     // `use_item` ends with `self.tick()` like every other player action,
-    // so `needs_decay_system` also shaves off one tick's worth of hunger
+    // so `needs_tick_system` also shaves off one tick's worth of hunger
     // (see `HUNGER_DECAY_PER_TICK` in systems.rs) on top of the +25
     // restore — same shared-decay caveat documented on
     // `commanding_a_companion_in_battle_costs_more_fatigue_than_a_stunned_one`.
@@ -937,7 +938,7 @@ fn use_power_source_restores_power_and_consumes_one() {
 
     // `use_power_source` dispatches to `use_item`, which ends with
     // `self.tick()` like every other player action, so
-    // `needs_decay_system` also shaves off one tick's worth of hunger
+    // `needs_tick_system` also shaves off one tick's worth of hunger
     // (see `HUNGER_DECAY_PER_TICK` in systems.rs) on top of the +25
     // restore — same shared-decay caveat as `use_item_applies_a_power_
     // restore_and_consumes_one` above.

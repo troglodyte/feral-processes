@@ -318,7 +318,7 @@ impl Game {
     /// Death is detected here rather than at the six call sites because this
     /// is the only path that lowers a creature's HP — every other write to
     /// `Stats::hp` is a heal, one of the two full-heals, or
-    /// `needs_decay_system`, which is `With<Player>`. A seventh caller added
+    /// `needs_tick_system`, which is `With<Player>`. A seventh caller added
     /// later inherits the check for free; six separate checks would not.
     ///
     /// Only party members are announced. A hostile reaching 0 is reported by

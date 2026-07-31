@@ -114,7 +114,7 @@ impl Game {
     pub(crate) fn build_schedule() -> Schedule {
         let mut schedule = Schedule::default();
         schedule.add_systems((
-            (systems::power_regen_system, systems::needs_decay_system).chain(),
+            (systems::power_regen_system, systems::needs_tick_system).chain(),
             systems::wander_ai_system,
             systems::task_progress_system,
             systems::passive_process_system,

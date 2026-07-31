@@ -567,8 +567,9 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
 /// a top-tier routine a budget decision rather than a free extra action.
 ///
 /// Measured against a control round rather than against the raw cost: a
-/// round of any kind drains a little Fatigue on its own, so the ability's
-/// price is the difference between a Special round and a Defend one.
+/// round of any kind hands back a little Fatigue on its own (`tick_needs`
+/// regen), so the ability's price is the difference between a Special round
+/// and a Defend one.
 #[test]
 fn a_player_special_spends_the_players_fatigue_once() {
     fn round_cost(action: BattleAction) -> f32 {
@@ -583,6 +584,10 @@ fn a_player_special_spends_the_players_fatigue_once() {
         let enemy = spawn_wild_on_player_tile(&mut game);
         insert_battle(&mut game, player, vec![enemy]);
 
+        // Start off the cap: a round's own fatigue regen is meant to cancel
+        // between the two measurements, and only does when neither is
+        // clamped at NEED_MAX.
+        game.world.get_mut::<Needs>(player).unwrap().fatigue = 50.0;
         let before = game.world.get::<Needs>(player).unwrap().fatigue;
         resolve_round_with(&mut game, action);
         before - game.world.get::<Needs>(player).unwrap().fatigue

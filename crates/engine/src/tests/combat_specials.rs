@@ -56,11 +56,11 @@ fn a_companions_special_rallies_the_player_instead_of_attacking() {
 
 #[test]
 fn commanding_a_companion_in_battle_costs_more_fatigue_than_a_stunned_one() {
-    // Both paths advance the clock by one tick (a resolved round
-    // always ticks at the end), so both pay the same small natural
-    // fatigue decay regardless — comparing the two deltas rather than
-    // asserting an absolute number isolates just the companion-command
-    // cost from that shared per-tick decay.
+    // Both paths advance the clock by one tick (a resolved round always
+    // ticks at the end), so both take the same small natural fatigue regen
+    // back regardless — comparing the two deltas rather than asserting an
+    // absolute number isolates just the companion-command cost from that
+    // shared per-tick regen.
     let active = fatigue_spent_commanding_companion(84, false);
     let stunned = fatigue_spent_commanding_companion(85, true);
     assert!(

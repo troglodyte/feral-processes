@@ -660,6 +660,10 @@ pub(super) fn fatigue_spent_commanding_companion(seed: u32, stunned: bool) -> f3
         .id();
     insert_battle(&mut game, player, vec![wild]);
 
+    // Start off the cap. Fatigue regenerates per tick (`tick_needs`), and
+    // both arms of the comparison are supposed to absorb one tick's worth
+    // identically — which they only do if neither is clamped at NEED_MAX.
+    game.world.get_mut::<Needs>(player).unwrap().fatigue = 50.0;
     let fatigue_before = game.world.get::<Needs>(player).unwrap().fatigue;
     companion_uses_special(
         &mut game,

@@ -247,7 +247,7 @@ pub fn compute_damage(atk: i32, def: i32, move_power: i32) -> i32 {
 /// below `LOW_POWER_ATTACK_THRESHOLD`: full strength at the threshold and
 /// above, falling off linearly to half strength at 0 power. A separate,
 /// milder penalty from the flat HP drain that already kicks in once power
-/// hits exactly 0 (see `systems::needs_decay_system`) — this one's felt in
+/// hits exactly 0 (see `systems::needs_tick_system`) — this one's felt in
 /// combat well before you're actually starving.
 pub fn power_attack_multiplier(hunger: f32) -> f32 {
     if hunger >= LOW_POWER_ATTACK_THRESHOLD {

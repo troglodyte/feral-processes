@@ -45,9 +45,9 @@ fn casting_arms_the_buff_and_deducts_power() {
 
     // A successful cast ticks the clock (see `cast_field_routine`'s doc), so
     // the ordinary per-tick Power decay lands on top of the routine's own
-    // cost. `systems::decay_needs` is the one place that decay formula
+    // cost. `systems::tick_needs` is the one place that decay formula
     // lives — read through it rather than restating its constant here.
-    let (expected_hunger, _) = crate::systems::decay_needs(before - 5.0, 0.0, 1.0);
+    let (expected_hunger, _) = crate::systems::tick_needs(before - 5.0, 0.0, 1.0);
     assert_eq!(player_hunger(&game), expected_hunger);
     let active = &game.world.get::<FieldBuff>(player).unwrap().active;
     assert_eq!(active.len(), 1);

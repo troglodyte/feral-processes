@@ -98,7 +98,7 @@ pub enum CellKind {
     /// its spec; it lives in `resources::LevelMemory::looted`.
     Cache,
     /// The deepest room of the shaft, on the bottom level only, where the
-    /// stairs down would otherwise have been. Walking in starts the boss
+    /// way down would otherwise have been. Walking in starts the boss
     /// fight — see `Game::rouse_lair`. Whether it has already been cleared
     /// lives in `resources::LevelMemory::cleared`, not in the level.
     Lair,
@@ -111,7 +111,7 @@ pub enum CellKind {
     /// something you have to earn your way to rather than stumble into.
     ///
     /// Walkable as far as the level is concerned — connectivity, dead-end
-    /// detection and the stairs placement all have to see through it, or the
+    /// detection and placing the way down all have to see through it, or the
     /// generator would treat a whole sealed wing as unreachable. Whether the
     /// party may actually pass is `Game::step`'s business, and whether this
     /// one has already been opened lives in `LevelMemory::opened`.
@@ -144,15 +144,15 @@ pub struct LevelSpec {
     pub entrance: (i32, i32),
     /// 1 immediately below the surface, counting up as you descend.
     pub depth: u32,
-    /// How many levels this shaft runs before it bottoms out — see
-    /// `Game::breach_floors`.
-    pub floors: u32,
+    /// How many frames this shaft runs before it bottoms out — see
+    /// `frames_for`.
+    pub frames: u32,
 }
 
 impl LevelSpec {
-    /// The last level of the shaft, which has no way down.
+    /// The last frame of the shaft, which has no way down.
     pub fn is_bottom(self) -> bool {
-        self.depth >= self.floors
+        self.depth >= self.frames
     }
 
     /// Mixes the whole spec down to one RNG seed.
@@ -189,7 +189,7 @@ pub struct DungeonLevel {
     pub entry: (i32, i32),
     /// `None` on the bottom level of a shaft — the point of a shaft having
     /// a bottom is that there is nowhere further to go.
-    pub stairs_down: Option<(i32, i32)>,
+    pub link_down: Option<(i32, i32)>,
 }
 
 impl DungeonLevel {
@@ -229,7 +229,7 @@ pub fn generate(spec: LevelSpec) -> DungeonLevel {
         height: LEVEL_SIZE,
         cells: vec![CellKind::Rock; (LEVEL_SIZE * LEVEL_SIZE) as usize],
         entry: (1, 1),
-        stairs_down: None,
+        link_down: None,
     };
 
     carve_maze(&mut level, &mut rng);
@@ -244,7 +244,7 @@ pub fn generate(spec: LevelSpec) -> DungeonLevel {
     if spec.is_bottom() {
         level.set(far.0, far.1, CellKind::Lair);
     } else {
-        level.stairs_down = Some(far);
+        level.link_down = Some(far);
         level.set(far.0, far.1, CellKind::LinkDown);
     }
     level.set(level.entry.0, level.entry.1, CellKind::LinkUp);
@@ -316,8 +316,8 @@ fn place_doors(level: &mut DungeonLevel, rng: &mut StdRng) {
 /// reason to exist that they were missing — walking one is now a bet rather
 /// than a mistake.
 ///
-/// Runs last so it can see the stairs, which it will not build over: a cache
-/// on the way down would be picked up by anyone descending, for free.
+/// Runs last so it can see the way down, which it will not build over: a
+/// cache on the way down would be picked up by anyone descending, for free.
 fn place_caches(level: &mut DungeonLevel, rng: &mut StdRng) {
     let mut ends: Vec<(i32, i32)> = Vec::new();
     for y in 1..level.height - 1 {
@@ -494,7 +494,7 @@ mod tests {
             world_seed,
             entrance: (0, 0),
             depth,
-            floors: 9,
+            frames: 9,
         }
     }
 
@@ -504,7 +504,7 @@ mod tests {
         let b = generate(spec(1234, 3));
         assert_eq!(floors(&a), floors(&b));
         assert_eq!(a.entry, b.entry);
-        assert_eq!(a.stairs_down, b.stairs_down);
+        assert_eq!(a.link_down, b.link_down);
     }
 
     #[test]
@@ -559,10 +559,10 @@ mod tests {
     }
 
     #[test]
-    fn the_stairs_down_are_placed_and_reachable() {
+    fn the_link_down_is_placed_and_reachable() {
         for depth in 1..=5 {
             let level = generate(spec(7, depth));
-            let down = level.stairs_down.expect("depth {depth} has room below it");
+            let down = level.link_down.expect("depth {depth} has room below it");
             assert_eq!(level.cell(down.0, down.1), CellKind::LinkDown);
             assert_ne!(
                 down, level.entry,
@@ -578,19 +578,19 @@ mod tests {
             world_seed: 7,
             entrance: (3, 4),
             depth: 4,
-            floors: 4,
+            frames: 4,
         });
-        assert_eq!(level.stairs_down, None);
+        assert_eq!(level.link_down, None);
         assert!(
             !floors(&level)
                 .into_iter()
                 .any(|(x, y)| level.cell(x, y) == CellKind::LinkDown),
-            "the bottom level laid stairs down into nothing"
+            "the bottom level laid a way down into nothing"
         );
     }
 
     #[test]
-    fn the_entry_holds_the_stairs_up() {
+    fn the_entry_holds_the_link_up() {
         let level = generate(spec(7, 2));
         assert_eq!(level.cell(level.entry.0, level.entry.1), CellKind::LinkUp);
     }
@@ -603,7 +603,7 @@ mod tests {
             height: LEVEL_SIZE,
             cells: vec![CellKind::Rock; (LEVEL_SIZE * LEVEL_SIZE) as usize],
             entry: (1, 1),
-            stairs_down: None,
+            link_down: None,
         };
         carve_maze(&mut level, &mut rng);
         let before = dead_ends(&level);

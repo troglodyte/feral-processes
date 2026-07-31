@@ -353,7 +353,7 @@ mod tests {
         // struct-variant enum. Both are in the round trip deliberately.
         data.locale = crate::resources::Locale::Dungeon {
             depth: 2,
-            floors: 4,
+            frames: 4,
             x: 9,
             y: 11,
             facing: crate::dungeon::Dir::West,

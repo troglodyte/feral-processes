@@ -33,19 +33,19 @@ fn cell_at(game: &Game, x: i32, y: i32) -> CellKind {
 
 /// Teleports the party onto the current level's way down and returns that
 /// cell, so a test about descending doesn't have to walk the maze to reach
-/// the stairs.
-fn stand_on_stairs_down(game: &mut Game) -> (i32, i32) {
+/// the link.
+fn stand_on_link_down(game: &mut Game) -> (i32, i32) {
     let down = game
         .world
         .resource::<CurrentDungeon>()
         .0
         .as_ref()
         .unwrap()
-        .stairs_down
+        .link_down
         .expect("this level should have a way down");
     let Locale::Dungeon {
         depth,
-        floors,
+        frames,
         facing,
         entrance,
         ..
@@ -55,7 +55,7 @@ fn stand_on_stairs_down(game: &mut Game) -> (i32, i32) {
     };
     game.world.insert_resource(Locale::Dungeon {
         depth,
-        floors,
+        frames,
         x: down.0,
         y: down.1,
         facing,
@@ -83,7 +83,7 @@ fn stand_in_a_doorway(game: &mut Game) -> ((i32, i32), Dir) {
     };
     let Locale::Dungeon {
         depth,
-        floors,
+        frames,
         entrance,
         ..
     } = locale(game)
@@ -92,7 +92,7 @@ fn stand_in_a_doorway(game: &mut Game) -> ((i32, i32), Dir) {
     };
     game.world.insert_resource(Locale::Dungeon {
         depth,
-        floors,
+        frames,
         x: door.0,
         y: door.1,
         facing: heading,
@@ -286,7 +286,7 @@ fn turning_left_and_right_change_the_facing_and_nothing_else() {
 }
 
 #[test]
-fn the_party_arrives_on_the_stairs_up_facing_north() {
+fn the_party_arrives_on_the_link_up_facing_north() {
     let mut game = game();
     descend(&mut game);
     let Locale::Dungeon {
@@ -305,12 +305,12 @@ fn the_party_arrives_on_the_stairs_up_facing_north() {
 }
 
 #[test]
-fn taking_the_stairs_down_increments_the_depth_and_regenerates_the_level() {
+fn taking_the_link_down_increments_the_depth_and_regenerates_the_level() {
     let mut game = game();
     descend(&mut game);
     let first = level_cells(&game);
 
-    stand_on_stairs_down(&mut game);
+    stand_on_link_down(&mut game);
     game.descend();
 
     let Locale::Dungeon { depth, .. } = locale(&game) else {
@@ -320,12 +320,26 @@ fn taking_the_stairs_down_increments_the_depth_and_regenerates_the_level() {
     assert_ne!(first, level_cells(&game), "depth 2 should be its own level");
 }
 
+/// The descend log line is player-facing narration of "the Stack" vocabulary
+/// — it must call a level a frame, not a "dungeon level".
+#[test]
+fn descending_names_the_frame_in_the_log() {
+    let mut game = game();
+    descend(&mut game);
+    stand_on_link_down(&mut game);
+    game.descend();
+    assert!(
+        logged(&game, "frame 2 of"),
+        "the descend log line should name the frame reached"
+    );
+}
+
 #[test]
 fn climbing_out_of_depth_one_returns_to_the_surface_with_movement_working() {
     let mut game = game();
     let entrance = descend(&mut game);
 
-    game.ascend(); // the party arrives standing on the stairs up
+    game.ascend(); // the party arrives standing on the link up
 
     assert!(!game.is_underground());
     assert_eq!(locale(&game), Locale::Surface);
@@ -348,12 +362,12 @@ fn climbing_out_of_depth_one_returns_to_the_surface_with_movement_working() {
 }
 
 #[test]
-fn descending_then_climbing_back_lands_on_that_levels_stairs_down() {
+fn descending_then_climbing_back_lands_on_that_levels_link_down() {
     let mut game = game();
     descend(&mut game);
 
-    let down = stand_on_stairs_down(&mut game);
-    game.descend(); // to depth 2, arriving on its stairs up
+    let down = stand_on_link_down(&mut game);
+    game.descend(); // to depth 2, arriving on its link up
     game.ascend(); // back to depth 1
 
     let Locale::Dungeon { depth, x, y, .. } = locale(&game) else {
@@ -363,7 +377,7 @@ fn descending_then_climbing_back_lands_on_that_levels_stairs_down() {
     assert_eq!(
         (x, y),
         down,
-        "climbing must land on the stairs you went down, not the level's entry"
+        "climbing must land on the link you went down, not the level's entry"
     );
 }
 
@@ -1013,7 +1027,7 @@ fn maps_do_not_ride_a_breach_into_the_next_zone() {
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
     game.enter_dungeon(pos.x, pos.y);
     // Turning maps the entry's surroundings without leaving the cell, so the
-    // climb back out below is from the stairs the party arrived on — a
+    // climb back out below is from the link the party arrived on — a
     // breach can only be taken from the surface.
     for _ in 0..3 {
         game.turn_right();
@@ -1068,7 +1082,7 @@ fn stand_before_a_cache(game: &mut Game) -> (i32, i32) {
 
     let Locale::Dungeon {
         depth,
-        floors,
+        frames,
         entrance,
         ..
     } = locale(game)
@@ -1077,7 +1091,7 @@ fn stand_before_a_cache(game: &mut Game) -> (i32, i32) {
     };
     game.world.insert_resource(Locale::Dungeon {
         depth,
-        floors,
+        frames,
         x: mouth.0,
         y: mouth.1,
         facing,
@@ -1232,7 +1246,7 @@ fn a_deeper_cache_pays_better() {
         };
         game.world.insert_resource(Locale::Dungeon {
             depth,
-            floors: 9,
+            frames: 9,
             x,
             y,
             facing,
@@ -1260,13 +1274,13 @@ fn a_deeper_cache_pays_better() {
 /// lock this is meant to exercise.
 fn stand_before_the_lair(game: &mut Game) -> (i32, i32) {
     loop {
-        let Locale::Dungeon { depth, floors, .. } = locale(game) else {
+        let Locale::Dungeon { depth, frames, .. } = locale(game) else {
             unreachable!("not underground")
         };
-        if depth >= floors {
+        if depth >= frames {
             break;
         }
-        stand_on_stairs_down(game);
+        stand_on_link_down(game);
         game.descend();
     }
 
@@ -1303,7 +1317,7 @@ fn stand_before_the_lair(game: &mut Game) -> (i32, i32) {
 
     let Locale::Dungeon {
         depth,
-        floors,
+        frames,
         entrance,
         ..
     } = locale(game)
@@ -1312,7 +1326,7 @@ fn stand_before_the_lair(game: &mut Game) -> (i32, i32) {
     };
     game.world.insert_resource(Locale::Dungeon {
         depth,
-        floors,
+        frames,
         x: mouth.0,
         y: mouth.1,
         facing,
@@ -1332,7 +1346,7 @@ fn walk_into_the_lair(game: &mut Game) -> (i32, i32) {
 }
 
 /// The bottom level puts a lair where a level with a way down puts its
-/// stairs — the deepest room of the shaft, and the only place its guardian
+/// link — the deepest room of the shaft, and the only place its guardian
 /// could sensibly be.
 #[test]
 fn only_the_bottom_level_of_a_shaft_holds_a_lair() {
@@ -1347,12 +1361,12 @@ fn only_the_bottom_level_of_a_shaft_holds_a_lair() {
             .count()
     };
 
-    let Locale::Dungeon { floors, .. } = locale(&game) else {
+    let Locale::Dungeon { frames, .. } = locale(&game) else {
         unreachable!()
     };
-    for _ in 1..floors {
+    for _ in 1..frames {
         assert_eq!(lairs(&game), 0, "a level with a way down held a lair");
-        stand_on_stairs_down(&mut game);
+        stand_on_link_down(&mut game);
         game.descend();
     }
     assert_eq!(lairs(&game), 1, "the bottom of the shaft held no lair");
@@ -1724,11 +1738,11 @@ fn logged(game: &Game, needle: &str) -> bool {
 #[test]
 fn a_breach_further_from_the_arrival_point_runs_deeper() {
     let spawn = (100, -50);
-    let near = crate::game::dungeon::breach_floors((105, -50), spawn);
-    let far = crate::game::dungeon::breach_floors((138, -50), spawn);
+    let near = crate::game::dungeon::frames_for((105, -50), spawn);
+    let far = crate::game::dungeon::frames_for((138, -50), spawn);
     assert_eq!(
         near,
-        crate::tuning::DUNGEON_FLOORS_MIN,
+        crate::tuning::STACK_FRAMES_MIN,
         "a breach inside the opening viewport should be the shallow one"
     );
     assert!(
@@ -1736,51 +1750,51 @@ fn a_breach_further_from_the_arrival_point_runs_deeper() {
         "walking {} tiles further bought no extra depth",
         138 - 105
     );
-    assert!(far <= crate::tuning::DUNGEON_FLOORS_MAX);
+    assert!(far <= crate::tuning::STACK_FRAMES_MAX);
 }
 
 #[test]
 fn shaft_depth_is_capped_however_far_out_the_breach_sits() {
-    let floors = crate::game::dungeon::breach_floors((10_000, 10_000), (0, 0));
-    assert_eq!(floors, crate::tuning::DUNGEON_FLOORS_MAX);
+    let frames = crate::game::dungeon::frames_for((10_000, 10_000), (0, 0));
+    assert_eq!(frames, crate::tuning::STACK_FRAMES_MAX);
 }
 
-/// The bottom level is generated with no stairs down at all, so a shaft ends
+/// The bottom level is generated with no link down at all, so a shaft ends
 /// rather than running forever — which is what it did before breaches had a
 /// depth: `descend` incremented past any number you like.
 #[test]
 fn a_shaft_bottoms_out_and_says_so() {
     let mut game = game();
     descend(&mut game);
-    let Locale::Dungeon { floors, .. } = locale(&game) else {
+    let Locale::Dungeon { frames, .. } = locale(&game) else {
         unreachable!()
     };
 
-    for _ in 1..floors {
-        stand_on_stairs_down(&mut game);
+    for _ in 1..frames {
+        stand_on_link_down(&mut game);
         game.descend();
     }
 
     let Locale::Dungeon { depth, .. } = locale(&game) else {
         panic!("still underground at the bottom")
     };
-    assert_eq!(depth, floors, "should have walked the shaft to its end");
+    assert_eq!(depth, frames, "should have walked the shaft to its end");
     assert_eq!(
         game.world
             .resource::<CurrentDungeon>()
             .0
             .as_ref()
             .unwrap()
-            .stairs_down,
+            .link_down,
         None,
-        "the bottom level laid stairs into nothing"
+        "the bottom level laid a way down into nothing"
     );
 
     game.descend();
     let Locale::Dungeon { depth, .. } = locale(&game) else {
         unreachable!()
     };
-    assert_eq!(depth, floors, "descending past the bottom moved the party");
+    assert_eq!(depth, frames, "descending past the bottom moved the party");
     assert!(
         logged(&game, "bottoms out"),
         "the bottom of a shaft should say so, not just refuse"
@@ -2161,7 +2175,7 @@ fn deeper_levels_field_tougher_programs() {
                 depth,
                 // Deep enough that this test's depths are all above the
                 // bottom; it is measuring the stat curve, not the shaft.
-                floors: 9,
+                frames: 9,
                 x,
                 y,
                 facing,
@@ -2227,7 +2241,7 @@ fn a_surface_spawn_is_not_scaled_by_how_deep_the_party_is() {
             };
             game.world.insert_resource(Locale::Dungeon {
                 depth,
-                floors: 9,
+                frames: 9,
                 x,
                 y,
                 facing,

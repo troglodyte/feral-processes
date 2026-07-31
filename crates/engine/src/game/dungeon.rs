@@ -10,8 +10,8 @@ use crate::dungeon::{self, CellKind, Dir};
 use crate::resources::{CurrentDungeon, Locale};
 use crate::tuning::{
     DUNGEON_DEPTH_STAT_GROWTH, DUNGEON_ENCOUNTER_CHANCE, DUNGEON_ENTRANCE_SCATTER_TILES,
-    DUNGEON_FLOORS_MAX, DUNGEON_FLOORS_MIN, DUNGEON_MIN_ENTRANCE_TILES,
-    DUNGEON_NEAREST_ENTRANCE_TILES, DUNGEON_TILES_PER_FLOOR,
+    DUNGEON_MIN_ENTRANCE_TILES, DUNGEON_NEAREST_ENTRANCE_TILES, STACK_FRAMES_MAX, STACK_FRAMES_MIN,
+    STACK_TILES_PER_FRAME,
 };
 use crate::*;
 
@@ -46,14 +46,14 @@ pub(crate) fn bearing(dx: i32, dy: i32) -> &'static str {
 #[derive(Clone, Copy)]
 pub(crate) struct DungeonPos {
     pub(crate) depth: u32,
-    pub(crate) floors: u32,
+    pub(crate) frames: u32,
     pub(crate) x: i32,
     pub(crate) y: i32,
     pub(crate) facing: Dir,
     pub(crate) entrance: (i32, i32),
 }
 
-/// How many levels the shaft under a breach at `tile` runs before it
+/// How many frames the shaft under a breach at `tile` runs before it
 /// bottoms out.
 ///
 /// Depth is read off the walk to the breach rather than rolled, so it rides
@@ -61,10 +61,10 @@ pub(crate) struct DungeonPos {
 /// The two then agree — a far breach is deeper *and* fields harder programs
 /// — instead of a nearby hole occasionally being the deepest thing in the
 /// sector for no reason the player could have seen coming.
-pub(crate) fn breach_floors(tile: (i32, i32), spawn: (i32, i32)) -> u32 {
+pub(crate) fn frames_for(tile: (i32, i32), spawn: (i32, i32)) -> u32 {
     let distance = (tile.0 - spawn.0).abs().max((tile.1 - spawn.1).abs());
-    let extra = (distance / DUNGEON_TILES_PER_FLOOR).max(0) as u32;
-    (DUNGEON_FLOORS_MIN + extra).min(DUNGEON_FLOORS_MAX)
+    let extra = (distance / STACK_TILES_PER_FRAME).max(0) as u32;
+    (STACK_FRAMES_MIN + extra).min(STACK_FRAMES_MAX)
 }
 
 impl Game {
@@ -240,44 +240,44 @@ impl Game {
             pos.x = x;
             pos.y = y;
         }
-        let floors = self.breach_floors_at((x, y));
-        self.descend_to(1, floors, (x, y));
+        let frames = self.frames_at((x, y));
+        self.descend_to(1, frames, (x, y));
         self.log(format!(
             "You drop through the breach. The signal above you thins to nothing. \
-             The shaft sounds {floors} levels deep."
+             The shaft sounds {frames} levels deep."
         ));
     }
 
     /// How deep the shaft under the breach at `tile` runs — see
-    /// `breach_floors`, which this feeds the zone's arrival point.
-    pub(crate) fn breach_floors_at(&self, tile: (i32, i32)) -> u32 {
+    /// `frames_for`, which this feeds the zone's arrival point.
+    pub(crate) fn frames_at(&self, tile: (i32, i32)) -> u32 {
         let spawn = self.world.resource::<ZoneSpawnPoint>();
-        breach_floors(tile, (spawn.x, spawn.y))
+        frames_for(tile, (spawn.x, spawn.y))
     }
 
     pub(crate) fn level_spec(
         &self,
         depth: u32,
-        floors: u32,
+        frames: u32,
         entrance: (i32, i32),
     ) -> dungeon::LevelSpec {
         dungeon::LevelSpec {
             world_seed: self.world.resource::<WorldMap>().seed(),
             entrance,
             depth,
-            floors,
+            frames,
         }
     }
 
     /// Generates the level for `depth` and puts the party on its entry cell
-    /// facing north. Shared by the way in and every flight of stairs down.
-    fn descend_to(&mut self, depth: u32, floors: u32, entrance: (i32, i32)) {
-        let level = dungeon::generate(self.level_spec(depth, floors, entrance));
+    /// facing north. Shared by the way in and every descent after it.
+    fn descend_to(&mut self, depth: u32, frames: u32, entrance: (i32, i32)) {
+        let level = dungeon::generate(self.level_spec(depth, frames, entrance));
         let entry = level.entry;
         self.world.insert_resource(CurrentDungeon(Some(level)));
         self.world.insert_resource(Locale::Dungeon {
             depth,
-            floors,
+            frames,
             x: entry.0,
             y: entry.1,
             facing: Dir::North,
@@ -309,14 +309,14 @@ impl Game {
             Locale::Surface => None,
             Locale::Dungeon {
                 depth,
-                floors,
+                frames,
                 x,
                 y,
                 facing,
                 entrance,
             } => Some(DungeonPos {
                 depth,
-                floors,
+                frames,
                 x,
                 y,
                 facing,
@@ -507,22 +507,22 @@ impl Game {
             return;
         };
         if cell != CellKind::LinkDown {
-            // The bottom level is generated without stairs down at all, so
+            // The bottom level is generated without a link down at all, so
             // this is where a finished shaft reports itself. Saying so beats
             // "there's no way down here" on the one cell where the player
             // might reasonably keep looking for one.
-            if pos.depth >= pos.floors {
+            if pos.depth >= pos.frames {
                 self.log("Solid bedrock. This shaft bottoms out here.".to_string());
             } else {
                 self.log("There's no way down here.".to_string());
             }
             return;
         }
-        self.descend_to(pos.depth + 1, pos.floors, pos.entrance);
+        self.descend_to(pos.depth + 1, pos.frames, pos.entrance);
         self.log(format!(
-            "You descend to dungeon level {} of {}.",
+            "You descend to frame {} of {}.",
             pos.depth + 1,
-            pos.floors
+            pos.frames
         ));
         self.tick();
     }
@@ -543,22 +543,19 @@ impl Game {
         if pos.depth == 1 {
             self.leave_dungeon();
         } else {
-            // Climbing lands on the level above's stairs *down*, not its
+            // Climbing lands on the level above's link *down*, not its
             // entry — otherwise every ascent would teleport the party back to
             // that level's entrance and undo the walk they just made.
-            self.ascend_to(pos.depth - 1, pos.floors, pos.entrance);
-            self.log(format!(
-                "You climb back to dungeon level {}.",
-                pos.depth - 1
-            ));
+            self.ascend_to(pos.depth - 1, pos.frames, pos.entrance);
+            self.log(format!("You climb back to frame {}.", pos.depth - 1));
         }
         self.tick();
     }
 
     /// Whether the cell underfoot offers a way down, and a way up — what the
-    /// renderer greys the two stair prompts from, so it never advertises a
+    /// renderer greys the two link prompts from, so it never advertises a
     /// key that would only log a refusal.
-    pub fn stairs_available(&self) -> (bool, bool) {
+    pub fn links_available(&self) -> (bool, bool) {
         match self.cell_underfoot() {
             Some(CellKind::LinkDown) => (true, false),
             Some(CellKind::LinkUp) => (false, true),
@@ -566,17 +563,17 @@ impl Game {
         }
     }
 
-    fn ascend_to(&mut self, depth: u32, floors: u32, entrance: (i32, i32)) {
-        let level = dungeon::generate(self.level_spec(depth, floors, entrance));
+    fn ascend_to(&mut self, depth: u32, frames: u32, entrance: (i32, i32)) {
+        let level = dungeon::generate(self.level_spec(depth, frames, entrance));
         // Infallible: you can only climb *to* a level you already climbed
         // *from*, so it is not the bottom of the shaft and has a way down.
         let landing = level
-            .stairs_down
-            .expect("a level climbed up into must have the stairs that were climbed");
+            .link_down
+            .expect("a level climbed up into must have the link that was climbed");
         self.world.insert_resource(CurrentDungeon(Some(level)));
         self.world.insert_resource(Locale::Dungeon {
             depth,
-            floors,
+            frames,
             x: landing.0,
             y: landing.1,
             facing: Dir::North,
@@ -591,12 +588,12 @@ impl Game {
     pub(crate) fn restore_locale(&mut self, locale: Locale) {
         if let Locale::Dungeon {
             depth,
-            floors,
+            frames,
             entrance,
             ..
         } = locale
         {
-            let level = dungeon::generate(self.level_spec(depth, floors, entrance));
+            let level = dungeon::generate(self.level_spec(depth, frames, entrance));
             self.world.insert_resource(CurrentDungeon(Some(level)));
         }
         self.world.insert_resource(locale);

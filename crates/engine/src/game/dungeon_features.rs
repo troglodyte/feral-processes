@@ -197,7 +197,7 @@ impl Game {
     fn pick_lair_species(&mut self, pos: DungeonPos) -> Option<(String, bool)> {
         let (ex, ey) = pos.entrance;
         let biome = self.world.resource_mut::<WorldMap>().tile(ex, ey).biome;
-        let spec = self.level_spec(pos.depth, pos.floors, pos.entrance);
+        let spec = self.level_spec(pos.depth, pos.frames, pos.entrance);
 
         let bosses: Vec<String> = self
             .world

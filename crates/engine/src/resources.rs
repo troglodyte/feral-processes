@@ -445,12 +445,12 @@ pub enum Locale {
         /// descend. Part of the `dungeon::LevelSpec` the level regenerates
         /// from.
         depth: u32,
-        /// How many levels this shaft runs before it bottoms out. Carried
+        /// How many frames this shaft runs before it bottoms out. Carried
         /// rather than recomputed from `entrance` because it is also part
-        /// of the level spec — the bottom level is generated without a way
+        /// of the level spec — the bottom frame is generated without a way
         /// down — and a shaft that changed length underneath the party
         /// would strand them.
-        floors: u32,
+        frames: u32,
         x: i32,
         y: i32,
         facing: Dir,

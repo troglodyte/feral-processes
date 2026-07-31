@@ -36,7 +36,7 @@ fn tile_color(cell: DungeonMapCell) -> Color {
     }
 }
 
-/// The glyph pinned to a cell, if any. Stairs come off the layout; the
+/// The glyph pinned to a cell, if any. Links come off the layout; the
 /// party and their fights come off `marks`, which is why marks are drawn
 /// second and win.
 fn cell_glyph(cell: DungeonMapCell) -> Option<(char, Color)> {
@@ -86,7 +86,7 @@ pub(super) fn draw_dungeon_map(
     let heading = format!(
         "DEEP SCAN   depth {} / {}   breach {},{}   facing {}   {:.0}% mapped",
         view.depth,
-        view.floors,
+        view.frames,
         view.entrance.0,
         view.entrance.1,
         view.facing,
@@ -175,7 +175,7 @@ mod tests {
     fn view(width: i32, height: i32) -> DungeonMapView {
         DungeonMapView {
             depth: 2,
-            floors: 4,
+            frames: 4,
             width,
             height,
             cells: (0..height)

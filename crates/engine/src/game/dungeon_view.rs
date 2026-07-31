@@ -152,7 +152,7 @@ impl Game {
 
         Some(DungeonMapView {
             depth: pos.depth,
-            floors: pos.floors,
+            frames: pos.frames,
             width: level.width,
             height: level.height,
             cells,
@@ -173,7 +173,7 @@ impl Game {
         let pos = self.dungeon_pos()?;
         let DungeonPos {
             depth,
-            floors,
+            frames,
             x,
             y,
             facing,
@@ -210,9 +210,9 @@ impl Game {
             .collect();
 
         let standing_on = match level.cell(x, y) {
-            CellKind::LinkDown => Some("Stairs lead down  [>] descend".to_string()),
+            CellKind::LinkDown => Some("A link leads down  [>] descend".to_string()),
             CellKind::LinkUp if depth == 1 => Some("The breach out  [<] surface".to_string()),
-            CellKind::LinkUp => Some("Stairs lead up  [<] climb".to_string()),
+            CellKind::LinkUp => Some("A link leads up  [<] climb".to_string()),
             // Emptied on arrival rather than on a key, so this reports what
             // already happened rather than offering a choice.
             CellKind::Cache => Some("An empty casing".to_string()),
@@ -223,7 +223,7 @@ impl Game {
 
         Some(DungeonView {
             depth,
-            floors,
+            frames,
             facing: facing.label(),
             position: (x, y),
             cells,

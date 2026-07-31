@@ -365,17 +365,17 @@ pub enum DungeonCellView {
 /// renderer draws verbatim and authors nothing.
 pub struct DungeonView {
     pub depth: u32,
-    /// How many levels this shaft runs in total, so the renderer can show
+    /// How many frames this shaft runs in total, so the renderer can show
     /// "2 / 4" and the player can tell a long descent from a short one
-    /// without counting stairs.
-    pub floors: u32,
+    /// without counting frames.
+    pub frames: u32,
     /// `Dir::label` — "N", "E", "S", "W". A compass reading for the player,
     /// not something the renderer projects with.
     pub facing: &'static str,
     pub position: (i32, i32),
     pub cells: Vec<Vec<DungeonCellView>>,
-    /// What the party is standing on, worded for a prompt — e.g. "Stairs
-    /// lead down". `None` on plain floor.
+    /// What the party is standing on, worded for a prompt — e.g. "A link
+    /// leads down". `None` on plain floor.
     pub standing_on: Option<String>,
 }
 
@@ -422,7 +422,7 @@ pub enum DungeonMapMark {
 /// seeing the shape of the parts you have walked all at once.
 pub struct DungeonMapView {
     pub depth: u32,
-    pub floors: u32,
+    pub frames: u32,
     pub width: i32,
     pub height: i32,
     /// Row-major, `height` rows of `width` cells.

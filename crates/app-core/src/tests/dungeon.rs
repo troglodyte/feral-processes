@@ -34,12 +34,12 @@ fn app_underground(seed: u32) -> App {
         world_seed: data.seed,
         entrance: data.player.position,
         depth: 1,
-        floors: 2,
+        frames: 2,
     };
     let entry = generate(spec).entry;
     data.locale = Locale::Dungeon {
         depth: spec.depth,
-        floors: spec.floors,
+        frames: spec.frames,
         x: entry.0,
         y: entry.1,
         facing: Dir::North,
@@ -210,7 +210,7 @@ fn g_still_forages_on_the_surface() {
 }
 
 #[test]
-fn taking_the_stairs_up_from_depth_one_surfaces() {
+fn taking_the_link_up_from_depth_one_surfaces() {
     let mut app = app_underground(505);
     // The fixture lands the party on the entry cell, which is the way out.
     app.handle_key(GameKey::Char('<'));
@@ -255,7 +255,7 @@ fn descending_from_the_entry_cell_refuses_instead_of_surfacing() {
 }
 
 #[test]
-fn the_view_names_the_key_that_takes_the_stairs() {
+fn the_view_names_the_key_that_takes_the_link() {
     let app = app_underground(505);
     let view = app.game.as_ref().unwrap().dungeon_view().unwrap();
     let standing = view.standing_on.expect("the entry cell is the way out");
@@ -266,9 +266,9 @@ fn the_view_names_the_key_that_takes_the_stairs() {
 }
 
 #[test]
-fn stairs_available_reports_only_what_the_cell_underfoot_offers() {
+fn links_available_reports_only_what_the_cell_underfoot_offers() {
     let app = app_underground(505);
-    let (down, up) = app.game.as_ref().unwrap().stairs_available();
+    let (down, up) = app.game.as_ref().unwrap().links_available();
     assert!(up, "the entry cell is a way up");
     assert!(!down, "and is not also a way down");
 }

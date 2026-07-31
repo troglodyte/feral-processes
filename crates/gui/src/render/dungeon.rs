@@ -126,10 +126,10 @@ pub(super) fn draw_dungeon(view: &DungeonView, painter: &Painter, w: f32, h: f32
             painter.poly(&[(nr, nt), (fr, ft), (fr, fb), (nr, nb)], dim(WALL, s));
         }
 
-        // Stairs read as a marker on the floor of the cell they're in rather
+        // Links read as a marker on the floor of the cell they're in rather
         // than as geometry — the party needs to spot them down a corridor,
         // and a subtle change in floor shape would not carry that far.
-        if let Some(mark) = stair_mark(row[middle]) {
+        if let Some(mark) = link_mark(row[middle]) {
             let glyph = mark.to_string();
             let dims = painter.measure_map(&glyph, m.font_size * 2);
             painter.map(
@@ -146,7 +146,7 @@ pub(super) fn draw_dungeon(view: &DungeonView, painter: &Painter, w: f32, h: f32
 
     let heading = format!(
         "Facing {}   Depth {} / {}   ({}, {})",
-        view.facing, view.depth, view.floors, view.position.0, view.position.1
+        view.facing, view.depth, view.frames, view.position.0, view.position.1
     );
     painter.ui(
         &heading,
@@ -168,7 +168,7 @@ pub(super) fn draw_dungeon(view: &DungeonView, painter: &Painter, w: f32, h: f32
     }
 }
 
-fn stair_mark(cell: DungeonCellView) -> Option<char> {
+fn link_mark(cell: DungeonCellView) -> Option<char> {
     match cell {
         DungeonCellView::LinkDown => Some('>'),
         DungeonCellView::LinkUp => Some('<'),
@@ -244,11 +244,11 @@ mod tests {
     }
 
     #[test]
-    fn only_stairs_get_a_marker() {
-        assert_eq!(stair_mark(DungeonCellView::LinkDown), Some('>'));
-        assert_eq!(stair_mark(DungeonCellView::LinkUp), Some('<'));
-        assert_eq!(stair_mark(DungeonCellView::Floor), None);
-        assert_eq!(stair_mark(DungeonCellView::Rock), None);
+    fn only_links_get_a_marker() {
+        assert_eq!(link_mark(DungeonCellView::LinkDown), Some('>'));
+        assert_eq!(link_mark(DungeonCellView::LinkUp), Some('<'));
+        assert_eq!(link_mark(DungeonCellView::Floor), None);
+        assert_eq!(link_mark(DungeonCellView::Rock), None);
     }
 
     /// `slice(0)` spans the whole pane, so a face drawn at depth 0 fills the
@@ -272,7 +272,7 @@ mod tests {
         assert!(!solid(DungeonCellView::Floor));
         assert!(
             !solid(DungeonCellView::LinkDown),
-            "stairs are walkable — treating them as wall would seal the way down"
+            "links are walkable — treating them as wall would seal the way down"
         );
         assert!(!solid(DungeonCellView::LinkUp));
     }
@@ -281,11 +281,11 @@ mod tests {
     fn view(ahead: &[DungeonCellView], flank: DungeonCellView) -> DungeonView {
         DungeonView {
             depth: 2,
-            floors: 4,
+            frames: 4,
             facing: "N",
             position: (3, 4),
             cells: ahead.iter().map(|&c| vec![flank, c, flank]).collect(),
-            standing_on: Some("Stairs lead down".to_string()),
+            standing_on: Some("A link leads down".to_string()),
         }
     }
 
@@ -322,7 +322,7 @@ mod tests {
         let m = crate::text::ui_metrics(900.0);
         let empty = DungeonView {
             depth: 1,
-            floors: 1,
+            frames: 1,
             facing: "N",
             position: (0, 0),
             cells: Vec::new(),
@@ -330,7 +330,7 @@ mod tests {
         };
         let single = DungeonView {
             depth: 1,
-            floors: 1,
+            frames: 1,
             facing: "S",
             position: (0, 0),
             cells: vec![vec![DungeonCellView::Floor]],

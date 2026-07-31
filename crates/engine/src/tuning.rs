@@ -428,22 +428,22 @@ pub const DUNGEON_NEAREST_ENTRANCE_TILES: i32 = 8;
 /// "there's a breach here" for no reason the player could have foreseen.
 pub const DUNGEON_MIN_ENTRANCE_TILES: i32 = 5;
 
-/// How many levels the shallowest breach runs before bottoming out.
+/// How many frames the shallowest breach runs before bottoming out.
 ///
 /// Two rather than one so even the on-ramp breach has a descent in it: a
-/// single-level shaft is a room with a boss in it, and the thing being built
+/// single-frame shaft is a room with a boss in it, and the thing being built
 /// here is a dungeon.
-pub const DUNGEON_FLOORS_MIN: u32 = 2;
+pub const STACK_FRAMES_MIN: u32 = 2;
 
 /// The deepest a breach can run, however far out it sits.
 ///
-/// A cap rather than an open curve because the floor count is what the
-/// player commits to when they start down — six levels of walking back up is
+/// A cap rather than an open curve because the frame count is what the
+/// player commits to when they start down — six frames of walking back up is
 /// already a long way from the surface with a hurt party.
-pub const DUNGEON_FLOORS_MAX: u32 = 6;
+pub const STACK_FRAMES_MAX: u32 = 6;
 
-/// How many tiles from the zone's arrival point buys one more level of
-/// depth — see `Game::breach_floors`.
+/// How many tiles from the zone's arrival point buys one more frame of
+/// depth — see `frames_for`.
 ///
 /// Depth rides on the same distance that already scales wild program stats
 /// (`Game::distance_stat_multiplier`), so the two agree instead of pulling
@@ -451,7 +451,7 @@ pub const DUNGEON_FLOORS_MAX: u32 = 6;
 /// and the player can read both off how long the walk there was. With
 /// `DUNGEON_ENTRANCE_SCATTER_TILES` at 40, this puts the outermost breaches
 /// at the cap.
-pub const DUNGEON_TILES_PER_FLOOR: i32 = 8;
+pub const STACK_TILES_PER_FRAME: i32 = 8;
 
 /// How many caches a dungeon level hides — see `dungeon::place_caches`,
 /// which puts them in the dead ends the braid pass left behind.
@@ -494,7 +494,7 @@ pub const DUNGEON_CACHE_FRAGMENT_CHANCE: f64 = 0.12;
 /// Much higher than `RANDOM_ENCOUNTER_CHANCE` on purpose: crossing open
 /// ground is travel that fighting interrupts, but a dungeon is somewhere you
 /// go *to* fight. It is also what makes mapping one tense — every corridor
-/// you walk to find the stairs is a corridor that can cost you.
+/// you walk to find the way down is a corridor that can cost you.
 ///
 /// Arithmetic-plausible only, never playtested. A level is 21x21 with about
 /// half of it floor, so a traversal runs somewhere near 40-80 steps, putting
@@ -506,8 +506,8 @@ pub const DUNGEON_ENCOUNTER_CHANCE: f64 = 0.08;
 /// `Game::distance_stat_multiplier`.
 ///
 /// A float and much gentler than `ZONE_STAT_GROWTH`'s flat doubling, because
-/// descending is cheap — a flight of stairs, not a Portal you had to fund —
-/// so the curve has to be walkable rather than a wall. XP follows for free:
+/// descending is cheap — a link down, not a Portal you had to fund — so the
+/// curve has to be walkable rather than a wall. XP follows for free:
 /// a kill pays the defeated program's `max_hp`, so scaling stats scales the
 /// reward with the risk.
 pub const DUNGEON_DEPTH_STAT_GROWTH: f32 = 1.35;

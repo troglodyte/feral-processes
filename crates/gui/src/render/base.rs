@@ -309,6 +309,15 @@ fn draw_surface_map(
     painter.rect_lines(0.0, 0.0, map_w, map_h, 2.0, BORDER);
 }
 
+/// One party member's line in the status column, indented under the
+/// `Party: n/m` heading it belongs to.
+fn party_row(companion: &feral_processes_engine::CompanionInfo) -> String {
+    format!(
+        "  {} (HP {}/{}, PWR {})",
+        companion.name, companion.hp, companion.max_hp, companion.power
+    )
+}
+
 fn draw_status_panel(
     rect: Rect,
     status: &feral_processes_engine::PlayerStatus,
@@ -394,6 +403,13 @@ fn draw_status_panel(
         GREEN,
     );
     cy += m.line_height;
+    // Drawn between the two counts rather than after both: the rows carry no
+    // label of their own, so the only thing saying they are party members and
+    // not pets is which heading they follow.
+    for companion in &status.companions {
+        painter.ui(party_row(companion), x + m.inset, cy, m.font_size, GREEN);
+        cy += m.line_height;
+    }
     painter.ui(
         format!("Pets: {}/{}", status.pet_count, status.pet_capacity),
         x + m.inset,
@@ -402,19 +418,6 @@ fn draw_status_panel(
         GREEN,
     );
     cy += m.line_height;
-    for companion in &status.companions {
-        painter.ui(
-            format!(
-                "Companion: {} (HP {}/{}, PWR {})",
-                companion.name, companion.hp, companion.max_hp, companion.power
-            ),
-            x + m.inset,
-            cy,
-            m.font_size,
-            GREEN,
-        );
-        cy += m.line_height;
-    }
     cy += m.gap;
 
     // Computed ahead of the routines section (rather than just above the
@@ -473,6 +476,42 @@ mod tests {
             text: text.to_string(),
             repeats,
         }
+    }
+
+    fn companion(name: &str) -> feral_processes_engine::CompanionInfo {
+        feral_processes_engine::CompanionInfo {
+            entity: Entity::PLACEHOLDER,
+            name: name.to_string(),
+            hp: 22,
+            max_hp: 30,
+            atk: 8,
+            def: 5,
+            power: 41,
+            status: None,
+            ability: "Rally".to_string(),
+        }
+    }
+
+    /// The row's own word for what it is was redundant against the
+    /// `Party: n/m` heading it now sits under, and cost the width the stats
+    /// need in a 30%-wide column.
+    #[test]
+    fn a_party_row_names_the_program_without_labelling_it() {
+        let row = party_row(&companion("Sparkgrub"));
+        assert!(!row.contains("Companion"), "{row}");
+        assert!(row.contains("Sparkgrub"), "{row}");
+        assert!(row.contains("HP 22/30"), "{row}");
+        assert!(row.contains("PWR 41"), "{row}");
+    }
+
+    /// Without the prefix the rows are bare names, so the indent is what
+    /// keeps them reading as the heading's contents rather than as further
+    /// headings.
+    #[test]
+    fn a_party_row_is_indented_under_its_heading() {
+        let row = party_row(&companion("Hexweave"));
+        assert!(row.starts_with("  "), "{row:?}");
+        assert!(!row.trim_start().starts_with(' '));
     }
 
     fn suffix_of(row: &Row) -> Option<&str> {

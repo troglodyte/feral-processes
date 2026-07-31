@@ -528,7 +528,7 @@ impl Game {
     /// tough boss fight.
     ///
     /// `depth_mult` scales every member's stats: `1.0` for a surface pack,
-    /// `Game::dungeon_depth_multiplier` for one conjured underground. It is
+    /// `Game::stack_depth_multiplier` for one conjured underground. It is
     /// a parameter rather than something the spawn reads off `Locale`
     /// because the surface does not stop while the party is down a shaft —
     /// ambient spawns and nest respawns keep rolling on every `tick`, and a

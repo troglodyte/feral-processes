@@ -44,7 +44,7 @@ impl Game {
         // ambiguous — `move_player` checks the breach first, so the structure
         // would become unbumpable and you'd descend every time you tried to
         // reach it.
-        if self.find_dungeon_entrance_at(x, y).is_some() {
+        if self.find_surface_link_at(x, y).is_some() {
             return Err("There's a breach here — deploy clear of it.".into());
         }
 

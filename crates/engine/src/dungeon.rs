@@ -95,12 +95,12 @@ pub enum CellKind {
     /// Something worth the walk, sitting in a dead end. Walking onto one
     /// empties it — see `Game::open_cache`. Whether a given cache has
     /// already been emptied is not part of the level, which regenerates from
-    /// its spec; it lives in `resources::LevelMemory::looted`.
+    /// its spec; it lives in `resources::FrameMemory::looted`.
     Cache,
     /// The deepest room of the shaft, on the bottom level only, where the
     /// way down would otherwise have been. Walking in starts the boss
     /// fight — see `Game::rouse_lair`. Whether it has already been cleared
-    /// lives in `resources::LevelMemory::cleared`, not in the level.
+    /// lives in `resources::FrameMemory::cleared`, not in the level.
     Lair,
     /// A doorway. Walkable, but you cannot see past it — which is the whole
     /// reason it exists: a corridor that ends in a door reads as a decision
@@ -114,7 +114,7 @@ pub enum CellKind {
     /// detection and placing the way down all have to see through it, or the
     /// generator would treat a whole sealed wing as unreachable. Whether the
     /// party may actually pass is `Game::step`'s business, and whether this
-    /// one has already been opened lives in `LevelMemory::opened`.
+    /// one has already been opened lives in `FrameMemory::opened`.
     SealedDoor,
 }
 
@@ -136,7 +136,7 @@ impl CellKind {
 /// all integers and three of them are interchangeable at a glance, which is
 /// exactly the shape of call that ends up transposed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct LevelSpec {
+pub struct FrameSpec {
     pub world_seed: u32,
     /// The surface tile of the breach this shaft hangs from. Part of the
     /// seed, so two breaches in one sector are two different dungeons rather
@@ -149,7 +149,7 @@ pub struct LevelSpec {
     pub frames: u32,
 }
 
-impl LevelSpec {
+impl FrameSpec {
     /// The last frame of the shaft, which has no way down.
     pub fn is_bottom(self) -> bool {
         self.depth >= self.frames
@@ -181,7 +181,7 @@ impl LevelSpec {
 }
 
 #[derive(Clone, Debug)]
-pub struct DungeonLevel {
+pub struct Frame {
     pub width: i32,
     pub height: i32,
     cells: Vec<CellKind>,
@@ -192,7 +192,7 @@ pub struct DungeonLevel {
     pub link_down: Option<(i32, i32)>,
 }
 
-impl DungeonLevel {
+impl Frame {
     /// Out of bounds reads as `Rock`, so callers walking a view cone past
     /// the edge of the level don't each need their own bounds check.
     pub fn cell(&self, x: i32, y: i32) -> CellKind {
@@ -221,10 +221,10 @@ impl DungeonLevel {
 /// position is not persisted, so drawing from it would regenerate a
 /// *different* level after a save/load, and the party would find itself
 /// inside solid rock.
-pub fn generate(spec: LevelSpec) -> DungeonLevel {
+pub fn generate(spec: FrameSpec) -> Frame {
     let mut rng = StdRng::seed_from_u64(spec.rng_seed());
 
-    let mut level = DungeonLevel {
+    let mut level = Frame {
         width: LEVEL_SIZE,
         height: LEVEL_SIZE,
         cells: vec![CellKind::Rock; (LEVEL_SIZE * LEVEL_SIZE) as usize],
@@ -266,7 +266,7 @@ pub fn generate(spec: LevelSpec) -> DungeonLevel {
 /// cut vertex would be a lot of machinery to reach the same place. The lair
 /// sits at the end of the longest walk in the level, so it rarely has more
 /// than one or two ways in anyway.
-fn seal_the_lair(level: &mut DungeonLevel, lair: (i32, i32)) {
+fn seal_the_lair(level: &mut Frame, lair: (i32, i32)) {
     for dir in DIRS {
         let (dx, dy) = dir.delta();
         let (nx, ny) = (lair.0 + dx, lair.1 + dy);
@@ -281,7 +281,7 @@ fn seal_the_lair(level: &mut DungeonLevel, lair: (i32, i32)) {
 ///
 /// A junction never gets one: a door you cannot see past, in a cell with
 /// three ways out of it, hides two choices behind one wall.
-fn place_doors(level: &mut DungeonLevel, rng: &mut StdRng) {
+fn place_doors(level: &mut Frame, rng: &mut StdRng) {
     let mut corridors: Vec<(i32, i32)> = Vec::new();
     for y in 1..level.height - 1 {
         for x in 1..level.width - 1 {
@@ -318,7 +318,7 @@ fn place_doors(level: &mut DungeonLevel, rng: &mut StdRng) {
 ///
 /// Runs last so it can see the way down, which it will not build over: a
 /// cache on the way down would be picked up by anyone descending, for free.
-fn place_caches(level: &mut DungeonLevel, rng: &mut StdRng) {
+fn place_caches(level: &mut Frame, rng: &mut StdRng) {
     let mut ends: Vec<(i32, i32)> = Vec::new();
     for y in 1..level.height - 1 {
         for x in 1..level.width - 1 {
@@ -342,7 +342,7 @@ fn place_caches(level: &mut DungeonLevel, rng: &mut StdRng) {
 /// to a neighbour two cells away also clears the wall between them, so the
 /// result is a perfect maze — fully connected, with exactly one route
 /// between any two cells. `braid` then relaxes that.
-fn carve_maze(level: &mut DungeonLevel, rng: &mut StdRng) {
+fn carve_maze(level: &mut Frame, rng: &mut StdRng) {
     let start = level.entry;
     level.set(start.0, start.1, CellKind::Floor);
 
@@ -377,7 +377,7 @@ fn carve_maze(level: &mut DungeonLevel, rng: &mut StdRng) {
 /// Opens `BRAID_PERCENT` of dead ends into a neighbouring corridor, turning
 /// the perfect maze into a looping one. Walks cells in row-major order so
 /// the pass is deterministic for a given RNG stream.
-fn braid(level: &mut DungeonLevel, rng: &mut StdRng) {
+fn braid(level: &mut Frame, rng: &mut StdRng) {
     for y in (1..level.height - 1).step_by(2) {
         for x in (1..level.width - 1).step_by(2) {
             if level.cell(x, y) != CellKind::Floor || !is_dead_end(level, x, y) {
@@ -407,7 +407,7 @@ fn braid(level: &mut DungeonLevel, rng: &mut StdRng) {
     }
 }
 
-fn is_dead_end(level: &DungeonLevel, x: i32, y: i32) -> bool {
+fn is_dead_end(level: &Frame, x: i32, y: i32) -> bool {
     DIRS.iter()
         .filter(|d| {
             let (dx, dy) = d.delta();
@@ -420,7 +420,7 @@ fn is_dead_end(level: &DungeonLevel, x: i32, y: i32) -> bool {
 /// Breadth-first walk from `from`, returning the walkable cell at the
 /// greatest step distance. Ties break toward the lowest row-major index, so
 /// the result is a pure function of the level rather than of hash order.
-fn furthest_floor_from(level: &DungeonLevel, from: (i32, i32)) -> (i32, i32) {
+fn furthest_floor_from(level: &Frame, from: (i32, i32)) -> (i32, i32) {
     let mut dist = vec![u32::MAX; (level.width * level.height) as usize];
     let idx = |x: i32, y: i32| (y * level.width + x) as usize;
 
@@ -452,7 +452,7 @@ fn furthest_floor_from(level: &DungeonLevel, from: (i32, i32)) -> (i32, i32) {
 mod tests {
     use super::*;
 
-    fn floors(level: &DungeonLevel) -> Vec<(i32, i32)> {
+    fn floors(level: &Frame) -> Vec<(i32, i32)> {
         let mut out = Vec::new();
         for y in 0..level.height {
             for x in 0..level.width {
@@ -464,7 +464,7 @@ mod tests {
         out
     }
 
-    fn reachable_from(level: &DungeonLevel, from: (i32, i32)) -> Vec<(i32, i32)> {
+    fn reachable_from(level: &Frame, from: (i32, i32)) -> Vec<(i32, i32)> {
         let mut seen = vec![from];
         let mut queue = VecDeque::from([from]);
         while let Some((x, y)) = queue.pop_front() {
@@ -480,7 +480,7 @@ mod tests {
         seen
     }
 
-    fn dead_ends(level: &DungeonLevel) -> usize {
+    fn dead_ends(level: &Frame) -> usize {
         floors(level)
             .into_iter()
             .filter(|&(x, y)| is_dead_end(level, x, y))
@@ -489,8 +489,8 @@ mod tests {
 
     /// A spec deep in a shaft with plenty of room left below it, so tests
     /// that aren't about the bottom don't accidentally land on one.
-    fn spec(world_seed: u32, depth: u32) -> LevelSpec {
-        LevelSpec {
+    fn spec(world_seed: u32, depth: u32) -> FrameSpec {
+        FrameSpec {
             world_seed,
             entrance: (0, 0),
             depth,
@@ -528,11 +528,11 @@ mod tests {
     /// same maze, and walking to a distant one bought nothing.
     #[test]
     fn breaches_on_different_tiles_diverge_at_the_same_depth() {
-        let here = LevelSpec {
+        let here = FrameSpec {
             entrance: (12, -40),
             ..spec(5, 1)
         };
-        let there = LevelSpec {
+        let there = FrameSpec {
             entrance: (13, -40),
             ..spec(5, 1)
         };
@@ -574,7 +574,7 @@ mod tests {
 
     #[test]
     fn the_bottom_level_of_a_shaft_has_no_way_down() {
-        let level = generate(LevelSpec {
+        let level = generate(FrameSpec {
             world_seed: 7,
             entrance: (3, 4),
             depth: 4,
@@ -598,7 +598,7 @@ mod tests {
     #[test]
     fn braiding_removes_dead_ends_a_perfect_maze_would_leave() {
         let mut rng = StdRng::seed_from_u64(42);
-        let mut level = DungeonLevel {
+        let mut level = Frame {
             width: LEVEL_SIZE,
             height: LEVEL_SIZE,
             cells: vec![CellKind::Rock; (LEVEL_SIZE * LEVEL_SIZE) as usize],

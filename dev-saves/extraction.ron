@@ -1740,11 +1740,11 @@
         "power_grid",
         "self_exec",
     ],
-    dungeon_entrances: [
+    link_sites: [
         (6, -8),
         (-25, -19),
         (28, 31),
     ],
     locale: Surface,
-    dungeon_memory: ({}),
+    stack_memory: ({}),
 )

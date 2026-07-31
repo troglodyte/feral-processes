@@ -396,7 +396,7 @@ pub const INITIAL_WILD_POPULATION: usize = 14;
 pub const INITIAL_SPAWN_SCATTER_TILES: i32 = 15;
 
 /// How many dungeon entrances a zone is seeded with — see
-/// `Game::spawn_dungeon_entrances`. Deliberately few: an entrance is
+/// `Game::spawn_surface_links`. Deliberately few: an entrance is
 /// something you go looking for, and one on every corner would make the
 /// zone map a lobby rather than a place.
 pub const DUNGEON_ENTRANCES_PER_ZONE: usize = 3;

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::battle::{BattleAction, EnemyGroup};
-use crate::dungeon::{Dir, DungeonLevel};
+use crate::dungeon::{Dir, Frame};
 use crate::items::ItemId;
 use crate::structures::StructureId;
 
@@ -440,9 +440,9 @@ impl ZoneLevel {
 pub enum Locale {
     #[default]
     Surface,
-    Dungeon {
+    Stack {
         /// 1 at the first level below the surface, counting up as you
-        /// descend. Part of the `dungeon::LevelSpec` the level regenerates
+        /// descend. Part of the `dungeon::FrameSpec` the level regenerates
         /// from.
         depth: u32,
         /// How many frames this shaft runs before it bottoms out. Carried
@@ -461,25 +461,25 @@ pub enum Locale {
     },
 }
 
-/// Which level of which shaft a `LevelMemory` belongs to.
+/// Which level of which shaft a `FrameMemory` belongs to.
 ///
 /// Keyed by the breach's surface tile rather than by anything about the
 /// level, because that tile is what makes a shaft itself — it is already
-/// half of `dungeon::LevelSpec`. Two breaches in a sector therefore keep
+/// half of `dungeon::FrameSpec`. Two breaches in a sector therefore keep
 /// separate maps of their separate depth-3s.
 pub type LevelKey = ((i32, i32), u32);
 
 /// What the party learned about one dungeon level by walking it.
 ///
 /// This is the only dungeon state that is saved rather than regenerated.
-/// The level itself is a pure function of its `dungeon::LevelSpec`, but what
+/// The level itself is a pure function of its `dungeon::FrameSpec`, but what
 /// the player has *seen* of it is not — that is the run's history, and
 /// losing it on load would hand back a blank map of a level already walked.
 ///
 /// `BTreeSet` rather than `HashSet` so the encoded save bytes don't depend
 /// on hash order.
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
-pub struct LevelMemory {
+pub struct FrameMemory {
     /// Every cell the party has had in view — see `Game::view_cone`, which
     /// both this and the first-person view are filled from.
     pub seen: BTreeSet<(i32, i32)>,
@@ -504,7 +504,7 @@ pub struct LevelMemory {
 /// the previous sector's walked corridors onto a new sector's map at
 /// whatever tile happened to collide.
 #[derive(Resource, Clone, Default, Debug, Serialize, Deserialize)]
-pub struct DungeonMemory(pub BTreeMap<LevelKey, LevelMemory>);
+pub struct StackMemory(pub BTreeMap<LevelKey, FrameMemory>);
 
 /// The level the player is currently standing in, or `None` on the surface.
 ///
@@ -512,7 +512,7 @@ pub struct DungeonMemory(pub BTreeMap<LevelKey, LevelMemory>);
 /// Locale::depth)` on load, exactly as terrain regenerates from the world
 /// seed. See `dungeon::generate`.
 #[derive(Resource, Default)]
-pub struct CurrentDungeon(pub Option<DungeonLevel>);
+pub struct CurrentStack(pub Option<Frame>);
 
 /// Where the player materialized on breaching into the current zone sector
 /// (set alongside `ZoneLevel` in `Game::new`/`Game::enter_next_zone`) — the

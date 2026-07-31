@@ -1,6 +1,6 @@
 //! The first-person dungeon view.
 //!
-//! Draws `DungeonView` as a receding corridor. The engine has already
+//! Draws `StackView` as a receding corridor. The engine has already
 //! rotated the cells into view space (`cells[ahead][lateral]`, middle column
 //! straight ahead), so nothing here knows which way north is — this file
 //! only ever draws forward.
@@ -11,7 +11,7 @@
 //! cross-sections are trapezoids, which is what `Painter::poly` exists for.
 
 use super::*;
-use feral_processes_engine::{DungeonCellView, DungeonView};
+use feral_processes_engine::{StackCellView, StackView};
 
 /// How much narrower each successive slice is. Tuned by eye: much above this
 /// and a four-deep corridor barely converges, much below and depth 2 is
@@ -66,10 +66,10 @@ fn dim(color: Color, factor: f32) -> Color {
 /// Whether this cell is drawn as a face filling its slice rather than as
 /// more corridor. A door is not rock, but you cannot see past it, and
 /// drawing it as open would be the view lying about what is ahead.
-fn solid(cell: DungeonCellView) -> bool {
+fn solid(cell: StackCellView) -> bool {
     matches!(
         cell,
-        DungeonCellView::Rock | DungeonCellView::Door | DungeonCellView::SealedDoor
+        StackCellView::Rock | StackCellView::Door | StackCellView::SealedDoor
     )
 }
 
@@ -79,22 +79,22 @@ fn solid(cell: DungeonCellView) -> bool {
 /// Never at depth 0. That cell is the one the party is standing in, and a
 /// doorway you are inside is open around you — a door is the one cell that
 /// both blocks sight and can be walked onto, so this is reachable.
-fn draws_as_face(depth: usize, cell: DungeonCellView) -> bool {
+fn draws_as_face(depth: usize, cell: StackCellView) -> bool {
     depth > 0 && solid(cell)
 }
 
 /// The colour a solid face is drawn in — doors stand out from the rock they
 /// are set into, and a sealed one stands out from a plain one.
-fn face_color(cell: DungeonCellView) -> Color {
+fn face_color(cell: StackCellView) -> Color {
     match cell {
-        DungeonCellView::Door => DOOR,
-        DungeonCellView::SealedDoor => SEALED,
+        StackCellView::Door => DOOR,
+        StackCellView::SealedDoor => SEALED,
         _ => WALL,
     }
 }
 
 /// Draws the corridor into the pane at the origin, `w` by `h`.
-pub(super) fn draw_dungeon(view: &DungeonView, painter: &Painter, w: f32, h: f32, m: &Metrics) {
+pub(super) fn draw_stack(view: &StackView, painter: &Painter, w: f32, h: f32, m: &Metrics) {
     painter.rect(0.0, 0.0, w, h, VOID);
 
     let middle = view.cells.first().map(|row| row.len() / 2).unwrap_or(0);
@@ -168,12 +168,12 @@ pub(super) fn draw_dungeon(view: &DungeonView, painter: &Painter, w: f32, h: f32
     }
 }
 
-fn link_mark(cell: DungeonCellView) -> Option<char> {
+fn link_mark(cell: StackCellView) -> Option<char> {
     match cell {
-        DungeonCellView::LinkDown => Some('>'),
-        DungeonCellView::LinkUp => Some('<'),
-        DungeonCellView::Cache => Some('!'),
-        DungeonCellView::Lair => Some('&'),
+        StackCellView::LinkDown => Some('>'),
+        StackCellView::LinkUp => Some('<'),
+        StackCellView::Cache => Some('!'),
+        StackCellView::Lair => Some('&'),
         _ => None,
     }
 }
@@ -245,10 +245,10 @@ mod tests {
 
     #[test]
     fn only_links_get_a_marker() {
-        assert_eq!(link_mark(DungeonCellView::LinkDown), Some('>'));
-        assert_eq!(link_mark(DungeonCellView::LinkUp), Some('<'));
-        assert_eq!(link_mark(DungeonCellView::Floor), None);
-        assert_eq!(link_mark(DungeonCellView::Rock), None);
+        assert_eq!(link_mark(StackCellView::LinkDown), Some('>'));
+        assert_eq!(link_mark(StackCellView::LinkUp), Some('<'));
+        assert_eq!(link_mark(StackCellView::Floor), None);
+        assert_eq!(link_mark(StackCellView::Rock), None);
     }
 
     /// `slice(0)` spans the whole pane, so a face drawn at depth 0 fills the
@@ -257,29 +257,29 @@ mod tests {
     /// but nothing on screen tells them which way is out.
     #[test]
     fn the_cell_the_party_is_standing_in_is_never_drawn_as_a_face() {
-        assert!(!draws_as_face(0, DungeonCellView::Door));
-        assert!(!draws_as_face(0, DungeonCellView::SealedDoor));
+        assert!(!draws_as_face(0, StackCellView::Door));
+        assert!(!draws_as_face(0, StackCellView::SealedDoor));
         assert!(
-            draws_as_face(1, DungeonCellView::Door),
+            draws_as_face(1, StackCellView::Door),
             "a door ahead of the party is still a face — you cannot see past it"
         );
-        assert!(draws_as_face(1, DungeonCellView::Rock));
+        assert!(draws_as_face(1, StackCellView::Rock));
     }
 
     #[test]
     fn only_rock_counts_as_a_wall() {
-        assert!(solid(DungeonCellView::Rock));
-        assert!(!solid(DungeonCellView::Floor));
+        assert!(solid(StackCellView::Rock));
+        assert!(!solid(StackCellView::Floor));
         assert!(
-            !solid(DungeonCellView::LinkDown),
+            !solid(StackCellView::LinkDown),
             "links are walkable — treating them as wall would seal the way down"
         );
-        assert!(!solid(DungeonCellView::LinkUp));
+        assert!(!solid(StackCellView::LinkUp));
     }
 
     /// A view whose middle column is `ahead`, with `flank` either side.
-    fn view(ahead: &[DungeonCellView], flank: DungeonCellView) -> DungeonView {
-        DungeonView {
+    fn view(ahead: &[StackCellView], flank: StackCellView) -> StackView {
+        StackView {
             depth: 2,
             frames: 4,
             facing: "N",
@@ -296,7 +296,7 @@ mod tests {
     /// display can — so it asserts only that every shape gets drawn.
     #[test]
     fn drawing_every_shape_of_corridor_does_not_panic() {
-        use DungeonCellView::*;
+        use StackCellView::*;
         let m = crate::text::ui_metrics(900.0);
         let cases = [
             view(&[Floor, Floor, Floor, Floor], Rock),
@@ -309,7 +309,7 @@ mod tests {
         ];
         crate::paint::with_painter(|p| {
             for case in &cases {
-                draw_dungeon(case, p, 1000.0, 640.0, &m);
+                draw_stack(case, p, 1000.0, 640.0, &m);
             }
         });
     }
@@ -320,7 +320,7 @@ mod tests {
     #[test]
     fn drawing_a_degenerate_view_does_not_panic() {
         let m = crate::text::ui_metrics(900.0);
-        let empty = DungeonView {
+        let empty = StackView {
             depth: 1,
             frames: 1,
             facing: "N",
@@ -328,17 +328,17 @@ mod tests {
             cells: Vec::new(),
             standing_on: None,
         };
-        let single = DungeonView {
+        let single = StackView {
             depth: 1,
             frames: 1,
             facing: "S",
             position: (0, 0),
-            cells: vec![vec![DungeonCellView::Floor]],
+            cells: vec![vec![StackCellView::Floor]],
             standing_on: None,
         };
         crate::paint::with_painter(|p| {
-            draw_dungeon(&empty, p, 800.0, 600.0, &m);
-            draw_dungeon(&single, p, 800.0, 600.0, &m);
+            draw_stack(&empty, p, 800.0, 600.0, &m);
+            draw_stack(&single, p, 800.0, 600.0, &m);
         });
     }
 }

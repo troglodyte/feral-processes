@@ -1,7 +1,7 @@
 //! Movement underground: the same four keys, steering a party that has a
 //! facing.
 
-use feral_processes_engine::dungeon::{Dir, LevelSpec, generate};
+use feral_processes_engine::dungeon::{Dir, FrameSpec, generate};
 use feral_processes_engine::resources::Locale;
 use feral_processes_engine::save;
 
@@ -30,14 +30,14 @@ fn app_underground(seed: u32) -> App {
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
-    let spec = LevelSpec {
+    let spec = FrameSpec {
         world_seed: data.seed,
         entrance: data.player.position,
         depth: 1,
         frames: 2,
     };
     let entry = generate(spec).entry;
-    data.locale = Locale::Dungeon {
+    data.locale = Locale::Stack {
         depth: spec.depth,
         frames: spec.frames,
         x: entry.0,
@@ -57,14 +57,14 @@ fn facing(app: &App) -> String {
     app.game
         .as_ref()
         .unwrap()
-        .dungeon_view()
+        .stack_view()
         .unwrap()
         .facing
         .to_string()
 }
 
 fn cell(app: &App) -> (i32, i32) {
-    app.game.as_ref().unwrap().dungeon_view().unwrap().position
+    app.game.as_ref().unwrap().stack_view().unwrap().position
 }
 
 #[test]
@@ -72,7 +72,7 @@ fn the_fixture_actually_puts_the_party_underground() {
     let app = app_underground(303);
     let game = app.game.as_ref().unwrap();
     assert!(game.is_underground());
-    assert!(game.dungeon_view().is_some());
+    assert!(game.stack_view().is_some());
 }
 
 /// The defining difference from the surface: left and right turn the party
@@ -170,9 +170,9 @@ fn the_menu_keys_still_open_their_screens_underground() {
 fn g_opens_the_map_underground_and_any_key_closes_it() {
     let mut app = app_underground(707);
     app.handle_key(GameKey::Char('g'));
-    assert_eq!(app.mode, Mode::DungeonMap);
+    assert_eq!(app.mode, Mode::FrameMap);
     assert!(
-        app.game.as_ref().unwrap().dungeon_map().is_some(),
+        app.game.as_ref().unwrap().frame_map().is_some(),
         "the map screen must have a map to draw"
     );
 
@@ -216,7 +216,7 @@ fn taking_the_link_up_from_depth_one_surfaces() {
     app.handle_key(GameKey::Char('<'));
     let game = app.game.as_ref().unwrap();
     assert!(!game.is_underground());
-    assert!(game.dungeon_view().is_none());
+    assert!(game.stack_view().is_none());
 }
 
 #[test]
@@ -257,7 +257,7 @@ fn descending_from_the_entry_cell_refuses_instead_of_surfacing() {
 #[test]
 fn the_view_names_the_key_that_takes_the_link() {
     let app = app_underground(505);
-    let view = app.game.as_ref().unwrap().dungeon_view().unwrap();
+    let view = app.game.as_ref().unwrap().stack_view().unwrap();
     let standing = view.standing_on.expect("the entry cell is the way out");
     assert!(
         standing.contains("[<]"),

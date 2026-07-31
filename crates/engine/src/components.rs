@@ -726,7 +726,7 @@ pub struct Nest {
 /// Walking onto one is checked in `Game::move_player` before the generic
 /// blocking-structure test, the same way a nest and a zone portal are.
 #[derive(Component, Clone, Copy, Debug)]
-pub struct DungeonEntrance;
+pub struct SurfaceLink;
 
 /// Tags a wild program that was conjured for a dungeon encounter rather
 /// than found on the zone map.
@@ -738,7 +738,7 @@ pub struct DungeonEntrance;
 /// the party climbs back out, a pack from a place the player left. So
 /// `Game::end_battle` despawns whatever still carries this.
 #[derive(Component, Clone, Copy, Debug)]
-pub struct DungeonSpawn;
+pub struct StackSpawn;
 
 /// Tags a wild creature as tethered to a `Nest` — see
 /// `systems::wander_ai_system`'s radius check. Removed (not the

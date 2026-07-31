@@ -178,20 +178,20 @@ pub struct SaveData {
     /// iteration order.
     pub researched: Vec<crate::research::ResearchId>,
     /// Every dungeon entrance standing on the zone map — see
-    /// `components::DungeonEntrance`. Only the tile: an entrance carries no
+    /// `components::SurfaceLink`. Only the tile: an entrance carries no
     /// state of its own, and which dungeon it opens onto is a pure function
     /// of the world seed and the depth walked to.
-    pub dungeon_entrances: Vec<(i32, i32)>,
+    pub link_sites: Vec<(i32, i32)>,
     /// Whether the player was on the surface or down a dungeon, and where —
     /// see `resources::Locale`. The level itself is *not* here: it
     /// regenerates from `seed` and the saved depth, exactly as terrain
     /// regenerates from `seed` alone.
     pub locale: crate::resources::Locale,
     /// What the party has learned about each dungeon level walked in this
-    /// zone — see `resources::DungeonMemory`. The one piece of dungeon state
+    /// zone — see `resources::StackMemory`. The one piece of dungeon state
     /// that is saved rather than regenerated: a level is a pure function of
     /// its spec, but which parts of it the player has *seen* is history.
-    pub dungeon_memory: crate::resources::DungeonMemory,
+    pub stack_memory: crate::resources::StackMemory,
 }
 
 /// Bumped whenever `SaveData` (or anything it contains, transitively)
@@ -325,9 +325,9 @@ mod tests {
             spawn_point: (0, 0),
             buyback: Vec::new(),
             researched: Vec::new(),
-            dungeon_entrances: Vec::new(),
+            link_sites: Vec::new(),
             locale: crate::resources::Locale::Surface,
-            dungeon_memory: crate::resources::DungeonMemory::default(),
+            stack_memory: crate::resources::StackMemory::default(),
         }
     }
 
@@ -348,10 +348,10 @@ mod tests {
             },
         )];
         data.zone = 3;
-        // `DungeonMemory` is a map keyed by a *tuple* (`LevelKey`), which is
+        // `StackMemory` is a map keyed by a *tuple* (`LevelKey`), which is
         // exactly where a text encoding tends to give up, and `Locale` is a
         // struct-variant enum. Both are in the round trip deliberately.
-        data.locale = crate::resources::Locale::Dungeon {
+        data.locale = crate::resources::Locale::Stack {
             depth: 2,
             frames: 4,
             x: 9,
@@ -359,9 +359,9 @@ mod tests {
             facing: crate::dungeon::Dir::West,
             entrance: (4, -7),
         };
-        data.dungeon_memory.0.insert(
+        data.stack_memory.0.insert(
             ((4, -7), 2),
-            crate::resources::LevelMemory {
+            crate::resources::FrameMemory {
                 seen: [(1, 1), (1, 2)].into_iter().collect(),
                 looted: [(3, 3)].into_iter().collect(),
                 opened: Default::default(),
@@ -440,6 +440,51 @@ mod tests {
         assert!(
             err.to_string().contains("incompatible save version"),
             "error should clearly say the save is from an incompatible version, got: {err}"
+        );
+    }
+
+    /// `dev-saves/extraction.ron` deserializes by field name — RON is
+    /// self-describing, unlike the positional bincode save (see
+    /// `SAVE_FORMAT_VERSION`'s docs) — so a `SaveData` field rename that
+    /// forgets to update the template's keys breaks `--template extraction`
+    /// at load. Nothing in the launcher's `dev_template` tests loads this
+    /// file by name, so this is the guard.
+    #[test]
+    fn the_extraction_template_parses_into_save_data() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../dev-saves/extraction.ron");
+        let text =
+            std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        if let Err(e) = from_ron(&text) {
+            panic!("dev-saves/extraction.ron should parse into SaveData: {e}");
+        }
+    }
+
+    /// The claim `SAVE_FORMAT_VERSION` staying at 15 rests on: a save
+    /// carrying a Stack position, written and read back through the real
+    /// file round trip (not just the RON one above), still has that
+    /// position, and the version prefix is unmoved.
+    #[test]
+    fn a_stack_position_survives_a_binary_save_round_trip() {
+        assert_eq!(SAVE_FORMAT_VERSION, 15);
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_save_stack_roundtrip_{}.bin",
+            std::process::id()
+        ));
+        let mut data = sample_data();
+        data.locale = crate::resources::Locale::Stack {
+            depth: 2,
+            frames: 4,
+            x: 9,
+            y: 11,
+            facing: crate::dungeon::Dir::West,
+            entrance: (4, -7),
+        };
+        save_to_file(&path, &data).unwrap();
+        let loaded = load_from_file(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(
+            loaded.locale, data.locale,
+            "the Stack position did not survive the round trip"
         );
     }
 

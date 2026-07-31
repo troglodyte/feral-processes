@@ -179,7 +179,7 @@ impl Game {
         let strays: Vec<Entity> = {
             let mut query = self
                 .world
-                .query_filtered::<Entity, (With<DungeonSpawn>, Without<Tamed>)>();
+                .query_filtered::<Entity, (With<StackSpawn>, Without<Tamed>)>();
             query.iter(&self.world).collect()
         };
         for stray in strays {

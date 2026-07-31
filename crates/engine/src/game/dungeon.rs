@@ -3,11 +3,11 @@
 //!
 //! Everything here operates on `resources::Locale` and leaves the player's
 //! `Position` component alone — see that resource's docs for why. The one
-//! exception is `enter_dungeon`, which pins `Position` to the entrance tile
+//! exception is `enter_stack`, which pins `Position` to the entrance tile
 //! on the way in.
 
 use crate::dungeon::{self, CellKind, Dir};
-use crate::resources::{CurrentDungeon, Locale};
+use crate::resources::{CurrentStack, Locale};
 use crate::tuning::{
     DUNGEON_DEPTH_STAT_GROWTH, DUNGEON_ENCOUNTER_CHANCE, DUNGEON_ENTRANCE_SCATTER_TILES,
     DUNGEON_MIN_ENTRANCE_TILES, DUNGEON_NEAREST_ENTRANCE_TILES, STACK_FRAMES_MAX, STACK_FRAMES_MIN,
@@ -40,11 +40,11 @@ pub(crate) fn bearing(dx: i32, dy: i32) -> &'static str {
     }
 }
 
-/// The `Locale::Dungeon` payload, unpacked — see `Game::dungeon_pos`. A
+/// The `Locale::Stack` payload, unpacked — see `Game::stack_pos`. A
 /// named struct rather than a five-tuple so call sites read as fields
 /// rather than as positions.
 #[derive(Clone, Copy)]
-pub(crate) struct DungeonPos {
+pub(crate) struct StackPos {
     pub(crate) depth: u32,
     pub(crate) frames: u32,
     pub(crate) x: i32,
@@ -68,13 +68,13 @@ pub(crate) fn frames_for(tile: (i32, i32), spawn: (i32, i32)) -> u32 {
 }
 
 impl Game {
-    /// Finds a `DungeonEntrance` at `(x, y)`, if any — checked in
+    /// Finds a `SurfaceLink` at `(x, y)`, if any — checked in
     /// `move_player` before the generic blocking-structure check, so walking
     /// onto one descends instead of just bumping into it.
-    pub(crate) fn find_dungeon_entrance_at(&mut self, x: i32, y: i32) -> Option<Entity> {
+    pub(crate) fn find_surface_link_at(&mut self, x: i32, y: i32) -> Option<Entity> {
         let mut query = self
             .world
-            .query_filtered::<(Entity, &Position), With<DungeonEntrance>>();
+            .query_filtered::<(Entity, &Position), With<SurfaceLink>>();
         query
             .iter(&self.world)
             .find(|(_, p)| p.x == x && p.y == y)
@@ -99,7 +99,7 @@ impl Game {
     /// suite. `ENTRANCE_SALT` keeps this stream off the one the levels
     /// themselves are carved from, so entrance placement and maze layout
     /// don't correlate.
-    pub(crate) fn spawn_dungeon_entrances(&mut self, count: usize) {
+    pub(crate) fn spawn_surface_links(&mut self, count: usize) {
         const ENTRANCE_SALT: u64 = 0xD07E_5A17;
 
         let origin = *self.world.get::<Position>(self.player_entity()).unwrap();
@@ -135,7 +135,7 @@ impl Game {
             // walked into — the bump attacks the nest instead, forever.
             // Nests are already down by the time this runs, in both
             // `Game::new` and `enter_next_zone`.
-            if self.find_dungeon_entrance_at(x, y).is_some()
+            if self.find_surface_link_at(x, y).is_some()
                 || self.find_blocking_structure_at(x, y).is_some()
                 || self.find_nest_at(x, y).is_some()
             {
@@ -156,9 +156,7 @@ impl Game {
     /// have to be told the breaches are there before looking for one is a
     /// choice rather than an accident.
     fn announce_dungeon_entrances(&mut self, origin: Position) {
-        let mut query = self
-            .world
-            .query_filtered::<&Position, With<DungeonEntrance>>();
+        let mut query = self.world.query_filtered::<&Position, With<SurfaceLink>>();
         let mut found: Vec<(i32, i32, i32)> = query
             .iter(&self.world)
             .map(|p| {
@@ -180,8 +178,8 @@ impl Game {
     }
 
     /// Rebuilds the entrances a save recorded — see
-    /// `save::SaveData::dungeon_entrances`.
-    pub(crate) fn restore_dungeon_entrances(&mut self, tiles: Vec<(i32, i32)>) {
+    /// `save::SaveData::link_sites`.
+    pub(crate) fn restore_surface_links(&mut self, tiles: Vec<(i32, i32)>) {
         for (x, y) in tiles {
             self.spawn_entrance_at(x, y);
         }
@@ -197,7 +195,7 @@ impl Game {
     /// on a staircase.
     fn spawn_entrance_at(&mut self, x: i32, y: i32) {
         self.world.spawn((
-            DungeonEntrance,
+            SurfaceLink,
             Position { x, y },
             Glyph {
                 ch: '>',
@@ -207,7 +205,7 @@ impl Game {
     }
 
     pub fn is_underground(&self) -> bool {
-        matches!(self.world.resource::<Locale>(), Locale::Dungeon { .. })
+        matches!(self.world.resource::<Locale>(), Locale::Stack { .. })
     }
 
     /// `Err` if the party is underground — for actions that reach into the
@@ -234,7 +232,7 @@ impl Game {
     /// Descends into the dungeon reached through the entrance standing at
     /// `(x, y)`, which the player is stepping onto. The entrance itself
     /// survives — unlike a zone portal, it is a place you can come back to.
-    pub(crate) fn enter_dungeon(&mut self, x: i32, y: i32) {
+    pub(crate) fn enter_stack(&mut self, x: i32, y: i32) {
         let player = self.player_entity();
         if let Some(mut pos) = self.world.get_mut::<Position>(player) {
             pos.x = x;
@@ -255,13 +253,13 @@ impl Game {
         frames_for(tile, (spawn.x, spawn.y))
     }
 
-    pub(crate) fn level_spec(
+    pub(crate) fn frame_spec(
         &self,
         depth: u32,
         frames: u32,
         entrance: (i32, i32),
-    ) -> dungeon::LevelSpec {
-        dungeon::LevelSpec {
+    ) -> dungeon::FrameSpec {
+        dungeon::FrameSpec {
             world_seed: self.world.resource::<WorldMap>().seed(),
             entrance,
             depth,
@@ -272,10 +270,10 @@ impl Game {
     /// Generates the level for `depth` and puts the party on its entry cell
     /// facing north. Shared by the way in and every descent after it.
     fn descend_to(&mut self, depth: u32, frames: u32, entrance: (i32, i32)) {
-        let level = dungeon::generate(self.level_spec(depth, frames, entrance));
+        let level = dungeon::generate(self.frame_spec(depth, frames, entrance));
         let entry = level.entry;
-        self.world.insert_resource(CurrentDungeon(Some(level)));
-        self.world.insert_resource(Locale::Dungeon {
+        self.world.insert_resource(CurrentStack(Some(level)));
+        self.world.insert_resource(Locale::Stack {
             depth,
             frames,
             x: entry.0,
@@ -292,29 +290,29 @@ impl Game {
     ///
     /// Unnarrated, because the breach is no longer the only way out —
     /// `use_symlink` leaves by its own route and says so in its own words.
-    pub(crate) fn clear_dungeon(&mut self) {
+    pub(crate) fn clear_stack(&mut self) {
         self.world.insert_resource(Locale::Surface);
-        self.world.insert_resource(CurrentDungeon(None));
+        self.world.insert_resource(CurrentStack(None));
     }
 
     /// Climbs out through the breach the party walked in through.
     fn leave_dungeon(&mut self) {
-        self.clear_dungeon();
+        self.clear_stack();
         self.log("You surface through the breach, back onto open grid.".to_string());
     }
 
     /// The party's current cell and facing, or `None` on the surface.
-    pub(crate) fn dungeon_pos(&self) -> Option<DungeonPos> {
+    pub(crate) fn stack_pos(&self) -> Option<StackPos> {
         match *self.world.resource::<Locale>() {
             Locale::Surface => None,
-            Locale::Dungeon {
+            Locale::Stack {
                 depth,
                 frames,
                 x,
                 y,
                 facing,
                 entrance,
-            } => Some(DungeonPos {
+            } => Some(StackPos {
                 depth,
                 frames,
                 x,
@@ -332,7 +330,7 @@ impl Game {
     }
 
     fn set_facing(&mut self, dir: Dir) {
-        if let Locale::Dungeon { facing, .. } = &mut *self.world.resource_mut::<Locale>() {
+        if let Locale::Stack { facing, .. } = &mut *self.world.resource_mut::<Locale>() {
             *facing = dir;
         }
         self.remember_view();
@@ -342,7 +340,7 @@ impl Game {
         if !self.can_act_underground() {
             return;
         }
-        let Some(pos) = self.dungeon_pos() else {
+        let Some(pos) = self.stack_pos() else {
             return;
         };
         self.set_facing(pos.facing.turn_left());
@@ -353,7 +351,7 @@ impl Game {
         if !self.can_act_underground() {
             return;
         }
-        let Some(pos) = self.dungeon_pos() else {
+        let Some(pos) = self.stack_pos() else {
             return;
         };
         self.set_facing(pos.facing.turn_right());
@@ -378,7 +376,7 @@ impl Game {
         if !self.can_act_underground() {
             return;
         }
-        let Some(pos) = self.dungeon_pos() else {
+        let Some(pos) = self.stack_pos() else {
             return;
         };
         let (dx, dy) = pos.facing.delta();
@@ -386,7 +384,7 @@ impl Game {
 
         let target = self
             .world
-            .resource::<CurrentDungeon>()
+            .resource::<CurrentStack>()
             .0
             .as_ref()
             .map(|level| level.cell(nx, ny))
@@ -397,8 +395,7 @@ impl Game {
         let walkable =
             target.walkable() && (target != CellKind::SealedDoor || self.pass_seal(pos, (nx, ny)));
 
-        if walkable && let Locale::Dungeon { x, y, .. } = &mut *self.world.resource_mut::<Locale>()
-        {
+        if walkable && let Locale::Stack { x, y, .. } = &mut *self.world.resource_mut::<Locale>() {
             *x = nx;
             *y = ny;
         }
@@ -428,8 +425,8 @@ impl Game {
     /// `distance_stat_multiplier` rather than replacing them: a breach far
     /// out in a deep zone is a nastier hole than one beside your base, and
     /// going down makes either worse.
-    pub(crate) fn dungeon_depth_multiplier(&self) -> f32 {
-        match self.dungeon_pos() {
+    pub(crate) fn stack_depth_multiplier(&self) -> f32 {
+        match self.stack_pos() {
             None => 1.0,
             Some(pos) => DUNGEON_DEPTH_STAT_GROWTH.powi(pos.depth as i32 - 1),
         }
@@ -452,7 +449,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
-        let Some(pos) = self.dungeon_pos() else {
+        let Some(pos) = self.stack_pos() else {
             return;
         };
         let encountered = {
@@ -470,13 +467,13 @@ impl Game {
         // Spawned onto the breach tile itself: the party's `Position` is
         // pinned there, and a dungeon pack is resolved immediately rather
         // than left to roam, so where on the surface it stands never matters.
-        let depth_mult = self.dungeon_depth_multiplier();
+        let depth_mult = self.stack_depth_multiplier();
         let pack = self.spawn_pack(&species, false, ex, ey, depth_mult);
         if pack.is_empty() {
             return;
         }
         for &member in &pack {
-            self.world.entity_mut(member).insert(DungeonSpawn);
+            self.world.entity_mut(member).insert(StackSpawn);
         }
         self.remember_fight();
         self.log("Something moves in the dark ahead.".to_string());
@@ -485,9 +482,9 @@ impl Game {
 
     /// The cell the party is standing on, or `None` on the surface.
     pub(crate) fn cell_underfoot(&self) -> Option<CellKind> {
-        let pos = self.dungeon_pos()?;
+        let pos = self.stack_pos()?;
         self.world
-            .resource::<CurrentDungeon>()
+            .resource::<CurrentStack>()
             .0
             .as_ref()
             .map(|level| level.cell(pos.x, pos.y))
@@ -503,7 +500,7 @@ impl Game {
         if !self.can_act_underground() {
             return;
         }
-        let (Some(pos), Some(cell)) = (self.dungeon_pos(), self.cell_underfoot()) else {
+        let (Some(pos), Some(cell)) = (self.stack_pos(), self.cell_underfoot()) else {
             return;
         };
         if cell != CellKind::LinkDown {
@@ -533,7 +530,7 @@ impl Game {
         if !self.can_act_underground() {
             return;
         }
-        let (Some(pos), Some(cell)) = (self.dungeon_pos(), self.cell_underfoot()) else {
+        let (Some(pos), Some(cell)) = (self.stack_pos(), self.cell_underfoot()) else {
             return;
         };
         if cell != CellKind::LinkUp {
@@ -564,14 +561,14 @@ impl Game {
     }
 
     fn ascend_to(&mut self, depth: u32, frames: u32, entrance: (i32, i32)) {
-        let level = dungeon::generate(self.level_spec(depth, frames, entrance));
+        let level = dungeon::generate(self.frame_spec(depth, frames, entrance));
         // Infallible: you can only climb *to* a level you already climbed
         // *from*, so it is not the bottom of the shaft and has a way down.
         let landing = level
             .link_down
             .expect("a level climbed up into must have the link that was climbed");
-        self.world.insert_resource(CurrentDungeon(Some(level)));
-        self.world.insert_resource(Locale::Dungeon {
+        self.world.insert_resource(CurrentStack(Some(level)));
+        self.world.insert_resource(Locale::Stack {
             depth,
             frames,
             x: landing.0,
@@ -584,17 +581,17 @@ impl Game {
 
     /// Restores a saved dungeon position, regenerating the level from the
     /// world seed and the saved spec rather than reading it off disk — see
-    /// `resources::CurrentDungeon`.
+    /// `resources::CurrentStack`.
     pub(crate) fn restore_locale(&mut self, locale: Locale) {
-        if let Locale::Dungeon {
+        if let Locale::Stack {
             depth,
             frames,
             entrance,
             ..
         } = locale
         {
-            let level = dungeon::generate(self.level_spec(depth, frames, entrance));
-            self.world.insert_resource(CurrentDungeon(Some(level)));
+            let level = dungeon::generate(self.frame_spec(depth, frames, entrance));
+            self.world.insert_resource(CurrentStack(Some(level)));
         }
         self.world.insert_resource(locale);
         self.remember_view();

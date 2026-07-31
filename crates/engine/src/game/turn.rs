@@ -179,10 +179,10 @@ impl Game {
             self.tick();
             return;
         }
-        if self.find_dungeon_entrance_at(nx, ny).is_some() {
+        if self.find_surface_link_at(nx, ny).is_some() {
             // The entrance survives, unlike a zone portal — it is a place
             // you come back to, not a one-way door.
-            self.enter_dungeon(nx, ny);
+            self.enter_stack(nx, ny);
             self.tick();
             return;
         }

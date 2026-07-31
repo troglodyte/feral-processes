@@ -516,11 +516,11 @@ impl Game {
         // Only once every check above has passed: a symlink that is refused
         // must not have surfaced the party on its way to refusing. Doing it
         // here also keeps `Position` from ever being written while
-        // `Locale::Dungeon` is live, which is what `require_surface` guards
+        // `Locale::Stack` is live, which is what `require_surface` guards
         // the other actions against — underground it *is* the entrance tile.
         let surfaced = self.is_underground();
         if surfaced {
-            self.clear_dungeon();
+            self.clear_stack();
         }
         {
             let mut pos = self.world.get_mut::<Position>(player).unwrap();

@@ -190,7 +190,7 @@ impl App {
         // map is not an action, and a dungeon that advanced a turn every
         // time you checked where you were would punish mapping.
         if key == GameKey::Char('g') {
-            self.mode = Mode::DungeonMap;
+            self.mode = Mode::FrameMap;
             return;
         }
 

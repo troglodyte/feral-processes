@@ -103,7 +103,7 @@ impl App {
     /// that do anything are Up/Down — which move `menu_selected`, and with it
     /// the popup's scroll window (see `popup_layout`) — and Esc.
     ///
-    /// Deliberately not closing on any key, the way `Help` and `DungeonMap`
+    /// Deliberately not closing on any key, the way `Help` and `FrameMap`
     /// do: those are glanced at, this one is read, and a screen you scroll
     /// through must not vanish under the keys you scroll it with.
     pub(crate) fn handle_history_key(&mut self, key: GameKey) {
@@ -143,7 +143,7 @@ impl App {
     /// The map closes on any key, like the help screen: it is something you
     /// glance at mid-corridor, and making the player find the right key to
     /// put it away would be friction on the one screen meant to remove some.
-    pub(crate) fn handle_dungeon_map_key(&mut self) {
+    pub(crate) fn handle_frame_map_key(&mut self) {
         self.mode = Mode::Playing;
     }
 

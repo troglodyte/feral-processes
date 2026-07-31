@@ -3,7 +3,7 @@
 
 use super::support::*;
 use crate::dungeon::{CellKind, Dir};
-use crate::resources::{CurrentDungeon, Locale};
+use crate::resources::{CurrentStack, Locale};
 use crate::*;
 
 fn game() -> Game {
@@ -14,7 +14,7 @@ fn game() -> Game {
 /// tile, which is what walking onto one does.
 fn descend(game: &mut Game) -> (i32, i32) {
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    game.enter_dungeon(pos.x, pos.y);
+    game.enter_stack(pos.x, pos.y);
     (pos.x, pos.y)
 }
 
@@ -24,7 +24,7 @@ fn locale(game: &Game) -> Locale {
 
 fn cell_at(game: &Game, x: i32, y: i32) -> CellKind {
     game.world
-        .resource::<CurrentDungeon>()
+        .resource::<CurrentStack>()
         .0
         .as_ref()
         .unwrap()
@@ -37,13 +37,13 @@ fn cell_at(game: &Game, x: i32, y: i32) -> CellKind {
 fn stand_on_link_down(game: &mut Game) -> (i32, i32) {
     let down = game
         .world
-        .resource::<CurrentDungeon>()
+        .resource::<CurrentStack>()
         .0
         .as_ref()
         .unwrap()
         .link_down
         .expect("this level should have a way down");
-    let Locale::Dungeon {
+    let Locale::Stack {
         depth,
         frames,
         facing,
@@ -53,7 +53,7 @@ fn stand_on_link_down(game: &mut Game) -> (i32, i32) {
     else {
         unreachable!("not underground")
     };
-    game.world.insert_resource(Locale::Dungeon {
+    game.world.insert_resource(Locale::Stack {
         depth,
         frames,
         x: down.0,
@@ -69,7 +69,7 @@ fn stand_on_link_down(game: &mut Game) -> (i32, i32) {
 /// exactly two exits opposite each other, so such a heading always exists.
 fn stand_in_a_doorway(game: &mut Game) -> ((i32, i32), Dir) {
     let (door, heading) = {
-        let level = game.world.resource::<CurrentDungeon>().0.as_ref().unwrap();
+        let level = game.world.resource::<CurrentStack>().0.as_ref().unwrap();
         let door = (0..level.height)
             .flat_map(|y| (0..level.width).map(move |x| (x, y)))
             .find(|&(x, y)| level.cell(x, y) == CellKind::Door)
@@ -81,7 +81,7 @@ fn stand_in_a_doorway(game: &mut Game) -> ((i32, i32), Dir) {
         };
         (door, heading)
     };
-    let Locale::Dungeon {
+    let Locale::Stack {
         depth,
         frames,
         entrance,
@@ -90,7 +90,7 @@ fn stand_in_a_doorway(game: &mut Game) -> ((i32, i32), Dir) {
     else {
         unreachable!("not underground")
     };
-    game.world.insert_resource(Locale::Dungeon {
+    game.world.insert_resource(Locale::Stack {
         depth,
         frames,
         x: door.0,
@@ -104,7 +104,7 @@ fn stand_in_a_doorway(game: &mut Game) -> ((i32, i32), Dir) {
 /// Every cell of the level the party is standing in, row-major — for
 /// asserting that two levels are or aren't the same maze.
 fn level_cells(game: &Game) -> Vec<CellKind> {
-    let level = game.world.resource::<CurrentDungeon>().0.as_ref().unwrap();
+    let level = game.world.resource::<CurrentStack>().0.as_ref().unwrap();
     (0..level.height)
         .flat_map(|y| (0..level.width).map(move |x| (x, y)))
         .map(|(x, y)| level.cell(x, y))
@@ -134,7 +134,7 @@ fn walk_corridors(game: &mut Game, steps: usize) {
 /// assertion isn't silently testing a wall.
 fn face_an_open_way(game: &mut Game) -> Dir {
     for _ in 0..4 {
-        let Locale::Dungeon { x, y, facing, .. } = locale(game) else {
+        let Locale::Stack { x, y, facing, .. } = locale(game) else {
             panic!("not underground");
         };
         let (dx, dy) = facing.delta();
@@ -183,14 +183,14 @@ fn stepping_forward_advances_along_the_facing() {
     let mut game = game();
     descend(&mut game);
     let facing = face_an_open_way(&mut game);
-    let Locale::Dungeon { x, y, .. } = locale(&game) else {
+    let Locale::Stack { x, y, .. } = locale(&game) else {
         unreachable!()
     };
 
     game.step_forward();
 
     let (dx, dy) = facing.delta();
-    let Locale::Dungeon {
+    let Locale::Stack {
         x: nx,
         y: ny,
         facing: after,
@@ -208,14 +208,14 @@ fn backing_up_retreats_without_turning_round() {
     let mut game = game();
     descend(&mut game);
     let facing = face_an_open_way(&mut game);
-    let Locale::Dungeon { x, y, .. } = locale(&game) else {
+    let Locale::Stack { x, y, .. } = locale(&game) else {
         unreachable!()
     };
 
     game.step_forward();
     game.step_back();
 
-    let Locale::Dungeon {
+    let Locale::Stack {
         x: nx,
         y: ny,
         facing: after,
@@ -236,13 +236,13 @@ fn stepping_into_rock_does_not_move_the_party() {
     // Turn until a wall is dead ahead, then shove at it.
     let mut faced_a_wall = false;
     for _ in 0..4 {
-        let Locale::Dungeon { x, y, facing, .. } = locale(&game) else {
+        let Locale::Stack { x, y, facing, .. } = locale(&game) else {
             unreachable!()
         };
         let (dx, dy) = facing.delta();
         if !cell_at(&game, x + dx, y + dy).walkable() {
             game.step_forward();
-            let Locale::Dungeon { x: nx, y: ny, .. } = locale(&game) else {
+            let Locale::Stack { x: nx, y: ny, .. } = locale(&game) else {
                 unreachable!()
             };
             assert_eq!((nx, ny), (x, y), "walked into solid rock");
@@ -261,12 +261,12 @@ fn stepping_into_rock_does_not_move_the_party() {
 fn turning_left_and_right_change_the_facing_and_nothing_else() {
     let mut game = game();
     descend(&mut game);
-    let Locale::Dungeon { x, y, facing, .. } = locale(&game) else {
+    let Locale::Stack { x, y, facing, .. } = locale(&game) else {
         unreachable!()
     };
 
     game.turn_left();
-    let Locale::Dungeon {
+    let Locale::Stack {
         x: lx,
         y: ly,
         facing: left,
@@ -279,7 +279,7 @@ fn turning_left_and_right_change_the_facing_and_nothing_else() {
     assert_eq!((lx, ly), (x, y));
 
     game.turn_right();
-    let Locale::Dungeon { facing: back, .. } = locale(&game) else {
+    let Locale::Stack { facing: back, .. } = locale(&game) else {
         unreachable!()
     };
     assert_eq!(back, facing);
@@ -289,7 +289,7 @@ fn turning_left_and_right_change_the_facing_and_nothing_else() {
 fn the_party_arrives_on_the_link_up_facing_north() {
     let mut game = game();
     descend(&mut game);
-    let Locale::Dungeon {
+    let Locale::Stack {
         depth,
         x,
         y,
@@ -313,7 +313,7 @@ fn taking_the_link_down_increments_the_depth_and_regenerates_the_level() {
     stand_on_link_down(&mut game);
     game.descend();
 
-    let Locale::Dungeon { depth, .. } = locale(&game) else {
+    let Locale::Stack { depth, .. } = locale(&game) else {
         panic!("descending should leave us underground")
     };
     assert_eq!(depth, 2);
@@ -344,7 +344,7 @@ fn climbing_out_of_depth_one_returns_to_the_surface_with_movement_working() {
     assert!(!game.is_underground());
     assert_eq!(locale(&game), Locale::Surface);
     assert!(
-        game.world.resource::<CurrentDungeon>().0.is_none(),
+        game.world.resource::<CurrentStack>().0.is_none(),
         "surfacing should drop the level"
     );
 
@@ -370,7 +370,7 @@ fn descending_then_climbing_back_lands_on_that_levels_link_down() {
     game.descend(); // to depth 2, arriving on its link up
     game.ascend(); // back to depth 1
 
-    let Locale::Dungeon { depth, x, y, .. } = locale(&game) else {
+    let Locale::Stack { depth, x, y, .. } = locale(&game) else {
         panic!("climbing from depth 2 should stay underground")
     };
     assert_eq!(depth, 1);
@@ -425,7 +425,7 @@ fn shoving_at_a_wall_still_passes_time() {
     descend(&mut game);
     // Face a wall.
     for _ in 0..4 {
-        let Locale::Dungeon { x, y, facing, .. } = locale(&game) else {
+        let Locale::Stack { x, y, facing, .. } = locale(&game) else {
             unreachable!()
         };
         let (dx, dy) = facing.delta();
@@ -477,7 +477,7 @@ fn stock_for_symlink(game: &mut Game, target: Entity) {
 
 /// The symlink is the one guarded action that gets to *change* locale rather
 /// than be refused by it: it pulls the party out of the shaft and then
-/// teleports them. `Position` is never written while `Locale::Dungeon` is
+/// teleports them. `Position` is never written while `Locale::Stack` is
 /// live, which is the thing `require_surface` exists to prevent.
 #[test]
 fn a_symlink_used_underground_surfaces_the_party_and_teleports_them() {
@@ -492,7 +492,7 @@ fn a_symlink_used_underground_surfaces_the_party_and_teleports_them() {
         "the symlink should have surfaced us"
     );
     assert!(
-        game.dungeon_view().is_none(),
+        game.stack_view().is_none(),
         "the level should have been dropped, not left loaded"
     );
     let player = game.player_entity();
@@ -537,7 +537,7 @@ fn a_symlink_out_keeps_the_maps_of_the_levels_already_walked() {
     let mut game = game();
     let (home, _) = home_then_descend(&mut game);
     let breach = match locale(&game) {
-        Locale::Dungeon { entrance, .. } => entrance,
+        Locale::Stack { entrance, .. } => entrance,
         Locale::Surface => unreachable!("just descended"),
     };
     walk_corridors(&mut game, 12);
@@ -545,7 +545,7 @@ fn a_symlink_out_keeps_the_maps_of_the_levels_already_walked() {
     stock_for_symlink(&mut game, home);
 
     game.use_symlink(home).unwrap();
-    game.enter_dungeon(breach.0, breach.1);
+    game.enter_stack(breach.0, breach.1);
 
     assert!(
         (map(&game).explored - before).abs() < f32::EPSILON,
@@ -575,9 +575,9 @@ fn party_management_still_works_underground() {
 #[test]
 fn the_view_is_none_on_the_surface_and_some_underground() {
     let mut game = game();
-    assert!(game.dungeon_view().is_none());
+    assert!(game.stack_view().is_none());
     descend(&mut game);
-    assert!(game.dungeon_view().is_some());
+    assert!(game.stack_view().is_some());
 }
 
 #[test]
@@ -586,10 +586,10 @@ fn the_view_cone_is_rotated_so_straight_ahead_is_always_the_middle_column() {
     descend(&mut game);
 
     for _ in 0..4 {
-        let Locale::Dungeon { x, y, facing, .. } = locale(&game) else {
+        let Locale::Stack { x, y, facing, .. } = locale(&game) else {
             unreachable!()
         };
-        let view = game.dungeon_view().unwrap();
+        let view = game.stack_view().unwrap();
         let (dx, dy) = facing.delta();
 
         // Row 0 is the cell the party stands in; row 1 middle is one step
@@ -597,7 +597,7 @@ fn the_view_cone_is_rotated_so_straight_ahead_is_always_the_middle_column() {
         let ahead = cell_at(&game, x + dx, y + dy);
         let middle = crate::game::dungeon_view::DUNGEON_VIEW_HALF_WIDTH;
         assert_eq!(
-            view.cells[1][middle] == DungeonCellView::Rock,
+            view.cells[1][middle] == StackCellView::Rock,
             !ahead.walkable()
         );
         assert_eq!(view.facing, facing.label());
@@ -611,9 +611,9 @@ fn the_view_reads_solid_rock_past_the_edge_of_the_level() {
     let mut game = game();
     descend(&mut game);
     // The entry sits at (1, 1) facing north — one step off the top edge.
-    let view = game.dungeon_view().unwrap();
+    let view = game.stack_view().unwrap();
     let middle = crate::game::dungeon_view::DUNGEON_VIEW_HALF_WIDTH;
-    assert_eq!(view.cells[1][middle], DungeonCellView::Rock);
+    assert_eq!(view.cells[1][middle], StackCellView::Rock);
     assert!(view.cells.len() >= 2);
 }
 
@@ -621,7 +621,7 @@ fn the_view_reads_solid_rock_past_the_edge_of_the_level() {
 fn the_view_names_what_the_party_is_standing_on() {
     let mut game = game();
     descend(&mut game);
-    let view = game.dungeon_view().unwrap();
+    let view = game.stack_view().unwrap();
     assert!(
         view.standing_on
             .as_deref()
@@ -637,7 +637,7 @@ fn a_new_zone_is_seeded_with_dungeon_entrances() {
     let entrances = game
         .world
         .iter_entities()
-        .filter(|e| e.contains::<DungeonEntrance>())
+        .filter(|e| e.contains::<SurfaceLink>())
         .count();
     assert_eq!(entrances, crate::tuning::DUNGEON_ENTRANCES_PER_ZONE);
 }
@@ -689,7 +689,7 @@ fn breaching_with_a_base_never_opens_a_breach_inside_the_platform() {
 }
 
 /// A nest and a breach on the same tile is a breach that can never be
-/// used: `move_player` checks `find_nest_at` before `find_dungeon_entrance_at`,
+/// used: `move_player` checks `find_nest_at` before `find_surface_link_at`,
 /// so walking onto it attacks the nest forever. Nests are placed first in
 /// both `Game::new` and `enter_next_zone`, which leaves the placement
 /// filter as the only thing that can keep the two apart — and the breach
@@ -706,7 +706,7 @@ fn no_entrance_opens_on_top_of_a_nest() {
     let mut game = game();
     let entrances: Vec<Entity> = game
         .world
-        .query_filtered::<Entity, With<DungeonEntrance>>()
+        .query_filtered::<Entity, With<SurfaceLink>>()
         .iter(&game.world)
         .collect();
     for entrance in entrances {
@@ -722,7 +722,7 @@ fn no_entrance_opens_on_top_of_a_nest() {
             y: victim.1,
         },
     ));
-    game.spawn_dungeon_entrances(crate::tuning::DUNGEON_ENTRANCES_PER_ZONE);
+    game.spawn_surface_links(crate::tuning::DUNGEON_ENTRANCES_PER_ZONE);
 
     assert!(
         !entrance_tiles(&mut game).contains(&victim),
@@ -737,7 +737,7 @@ fn a_structure_cannot_be_deployed_on_top_of_a_breach() {
     let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
     // Clear the way, then put a breach right where the Home would go.
     game.world.spawn((
-        DungeonEntrance,
+        SurfaceLink,
         Position {
             x: ppos.x + 1,
             y: ppos.y,
@@ -759,7 +759,7 @@ fn walking_onto_an_entrance_descends_and_leaves_the_entrance_standing() {
     let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
     let target = (ppos.x + 1, ppos.y);
     game.world.spawn((
-        DungeonEntrance,
+        SurfaceLink,
         Position {
             x: target.0,
             y: target.1,
@@ -775,7 +775,7 @@ fn walking_onto_an_entrance_descends_and_leaves_the_entrance_standing() {
     assert!(game.is_underground());
     // Unlike a zone portal, an entrance is a place you come back to.
     assert!(
-        game.find_dungeon_entrance_at(target.0, target.1).is_some(),
+        game.find_surface_link_at(target.0, target.1).is_some(),
         "the entrance must survive being used"
     );
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
@@ -792,7 +792,7 @@ fn a_dungeon_position_survives_a_save_and_load_with_an_identical_level() {
     game.turn_right();
     let before = locale(&game);
     let cells_before: Vec<CellKind> = {
-        let level = game.world.resource::<CurrentDungeon>().0.as_ref().unwrap();
+        let level = game.world.resource::<CurrentStack>().0.as_ref().unwrap();
         (0..level.height)
             .flat_map(|y| (0..level.width).map(move |x| (x, y)))
             .map(|(x, y)| level.cell(x, y))
@@ -813,12 +813,7 @@ fn a_dungeon_position_survives_a_save_and_load_with_an_identical_level() {
         "depth, cell and facing must all survive"
     );
     let cells_after: Vec<CellKind> = {
-        let level = loaded
-            .world
-            .resource::<CurrentDungeon>()
-            .0
-            .as_ref()
-            .unwrap();
+        let level = loaded.world.resource::<CurrentStack>().0.as_ref().unwrap();
         (0..level.height)
             .flat_map(|y| (0..level.width).map(move |x| (x, y)))
             .map(|(x, y)| level.cell(x, y))
@@ -830,18 +825,18 @@ fn a_dungeon_position_survives_a_save_and_load_with_an_identical_level() {
     );
 }
 
-fn map(game: &Game) -> DungeonMapView {
-    game.dungeon_map().expect("underground")
+fn map(game: &Game) -> FrameMapView {
+    game.frame_map().expect("underground")
 }
 
-fn map_cell(view: &DungeonMapView, x: i32, y: i32) -> DungeonMapCell {
+fn map_cell(view: &FrameMapView, x: i32, y: i32) -> FrameMapCell {
     view.cells[y as usize][x as usize]
 }
 
 #[test]
 fn the_surface_has_no_map() {
     let game = game();
-    assert!(game.dungeon_map().is_none());
+    assert!(game.frame_map().is_none());
 }
 
 #[test]
@@ -850,19 +845,19 @@ fn arriving_maps_what_the_party_can_see_and_nothing_else() {
     descend(&mut game);
     let view = map(&game);
 
-    let Locale::Dungeon { x, y, .. } = locale(&game) else {
+    let Locale::Stack { x, y, .. } = locale(&game) else {
         unreachable!()
     };
     assert_eq!(
         map_cell(&view, x, y),
-        DungeonMapCell::LinkUp,
+        FrameMapCell::LinkUp,
         "the cell the party is standing on must be mapped"
     );
     assert!(
         view.cells
             .iter()
             .flatten()
-            .any(|&c| c == DungeonMapCell::Unknown),
+            .any(|&c| c == FrameMapCell::Unknown),
         "standing on the entry should not reveal a 21x21 level"
     );
     assert!(view.explored > 0.0 && view.explored < 1.0);
@@ -877,9 +872,9 @@ fn the_map_records_exactly_what_the_first_person_view_showed() {
     let facing = face_an_open_way(&mut game);
     game.step_forward();
 
-    let view = game.dungeon_view().unwrap();
+    let view = game.stack_view().unwrap();
     let mapped = map(&game);
-    let Locale::Dungeon { x, y, .. } = locale(&game) else {
+    let Locale::Stack { x, y, .. } = locale(&game) else {
         unreachable!()
     };
 
@@ -889,7 +884,7 @@ fn the_map_records_exactly_what_the_first_person_view_showed() {
     if (0..mapped.width).contains(&ax) && (0..mapped.height).contains(&ay) {
         assert_ne!(
             map_cell(&mapped, ax, ay),
-            DungeonMapCell::Unknown,
+            FrameMapCell::Unknown,
             "a cell the view is drawing was left off the map"
         );
     }
@@ -918,7 +913,7 @@ fn standing_in_a_doorway_maps_the_corridor_beyond_it() {
     let (dx, dy) = heading.delta();
     assert_ne!(
         map_cell(&map(&game), door.0 + dx * 2, door.1 + dy * 2),
-        DungeonMapCell::Unknown,
+        FrameMapCell::Unknown,
         "the party is standing in the doorway looking down the corridor, and \
          it is not on their map past the cell they could touch"
     );
@@ -960,7 +955,7 @@ fn the_map_survives_a_save_and_load() {
     let assets = test_assets_dir();
     let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    game.enter_dungeon(pos.x, pos.y);
+    game.enter_stack(pos.x, pos.y);
     walk_corridors(&mut game, 20);
     let before = map(&game);
 
@@ -985,12 +980,12 @@ fn each_breach_keeps_its_own_map() {
     let tiles = entrance_tiles(&mut game);
     assert!(tiles.len() >= 2);
 
-    game.enter_dungeon(tiles[0].0, tiles[0].1);
+    game.enter_stack(tiles[0].0, tiles[0].1);
     walk_corridors(&mut game, 20);
     let walked = map(&game).explored;
     game.ascend();
 
-    game.enter_dungeon(tiles[1].0, tiles[1].1);
+    game.enter_stack(tiles[1].0, tiles[1].1);
     assert!(
         map(&game).explored < walked,
         "the second breach opened onto the first one's map"
@@ -1001,19 +996,19 @@ fn each_breach_keeps_its_own_map() {
 fn a_dungeon_fight_is_pinned_to_the_corridor_it_happened_in() {
     let mut game = game();
     descend(&mut game);
-    let Locale::Dungeon { x, y, .. } = locale(&game) else {
+    let Locale::Stack { x, y, .. } = locale(&game) else {
         unreachable!()
     };
     game.remember_fight();
 
     let marks = map(&game).marks;
     assert!(
-        marks.contains(&((x, y), DungeonMapMark::Fight)),
+        marks.contains(&((x, y), FrameMapMark::Fight)),
         "a fight should leave a mark on the map"
     );
     assert_eq!(
         marks.last().map(|&(_, m)| m),
-        Some(DungeonMapMark::Party),
+        Some(FrameMapMark::Party),
         "the party must be drawn last, or a fight marker hides them"
     );
 }
@@ -1025,7 +1020,7 @@ fn a_dungeon_fight_is_pinned_to_the_corridor_it_happened_in() {
 fn maps_do_not_ride_a_breach_into_the_next_zone() {
     let mut game = game();
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    game.enter_dungeon(pos.x, pos.y);
+    game.enter_stack(pos.x, pos.y);
     // Turning maps the entry's surroundings without leaving the cell, so the
     // climb back out below is from the link the party arrived on — a
     // breach can only be taken from the surface.
@@ -1035,13 +1030,13 @@ fn maps_do_not_ride_a_breach_into_the_next_zone() {
     game.ascend();
     assert!(!game.is_underground(), "the fixture must surface to breach");
     assert!(
-        !game.world.resource::<DungeonMemory>().0.is_empty(),
+        !game.world.resource::<StackMemory>().0.is_empty(),
         "the fixture should have mapped something to lose"
     );
 
     game.enter_next_zone();
     assert!(
-        game.world.resource::<DungeonMemory>().0.is_empty(),
+        game.world.resource::<StackMemory>().0.is_empty(),
         "last sector's maps rode the breach through"
     );
 }
@@ -1057,7 +1052,7 @@ fn maps_do_not_ride_a_breach_into_the_next_zone() {
 fn stand_before_a_cache(game: &mut Game) -> (i32, i32) {
     let level = game
         .world
-        .resource::<CurrentDungeon>()
+        .resource::<CurrentStack>()
         .0
         .as_ref()
         .unwrap()
@@ -1080,7 +1075,7 @@ fn stand_before_a_cache(game: &mut Game) -> (i32, i32) {
         })
         .expect("a dead end must have one way in");
 
-    let Locale::Dungeon {
+    let Locale::Stack {
         depth,
         frames,
         entrance,
@@ -1089,7 +1084,7 @@ fn stand_before_a_cache(game: &mut Game) -> (i32, i32) {
     else {
         unreachable!("not underground")
     };
-    game.world.insert_resource(Locale::Dungeon {
+    game.world.insert_resource(Locale::Stack {
         depth,
         frames,
         x: mouth.0,
@@ -1116,7 +1111,7 @@ fn credits(game: &Game) -> u32 {
 fn a_level_hides_caches_in_its_dead_ends() {
     let mut game = game();
     descend(&mut game);
-    let level = game.world.resource::<CurrentDungeon>().0.clone().unwrap();
+    let level = game.world.resource::<CurrentStack>().0.clone().unwrap();
 
     let caches: Vec<(i32, i32)> = (0..level.height)
         .flat_map(|y| (0..level.width).map(move |x| (x, y)))
@@ -1141,7 +1136,7 @@ fn walking_onto_a_cache_pays_out() {
 
     game.step_forward();
 
-    let Locale::Dungeon { x, y, .. } = locale(&game) else {
+    let Locale::Stack { x, y, .. } = locale(&game) else {
         unreachable!()
     };
     assert_eq!((x, y), cache, "the fixture should walk onto the cache");
@@ -1177,7 +1172,7 @@ fn an_emptied_cache_stays_emptied_across_a_save_and_load() {
     let assets = test_assets_dir();
     let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    game.enter_dungeon(pos.x, pos.y);
+    game.enter_stack(pos.x, pos.y);
     let cache = stand_before_a_cache(&mut game);
     game.step_forward();
     if game.has_active_battle() {
@@ -1202,8 +1197,8 @@ fn an_emptied_cache_stays_emptied_across_a_save_and_load() {
         "loading refilled a cache the party had already emptied"
     );
     assert_eq!(
-        loaded.dungeon_map().unwrap().cells[cache.1 as usize][cache.0 as usize],
-        DungeonMapCell::Floor,
+        loaded.frame_map().unwrap().cells[cache.1 as usize][cache.0 as usize],
+        FrameMapCell::Floor,
         "an emptied cache should stop being advertised on the map"
     );
 }
@@ -1219,13 +1214,10 @@ fn the_map_marks_caches_the_party_has_seen_and_not_opened() {
     game.turn_left();
     game.turn_right();
     let seen = map(&game);
-    assert_eq!(map_cell(&seen, cache.0, cache.1), DungeonMapCell::Cache);
+    assert_eq!(map_cell(&seen, cache.0, cache.1), FrameMapCell::Cache);
 
     game.step_forward();
-    assert_eq!(
-        map_cell(&map(&game), cache.0, cache.1),
-        DungeonMapCell::Floor
-    );
+    assert_eq!(map_cell(&map(&game), cache.0, cache.1), FrameMapCell::Floor);
 }
 
 #[test]
@@ -1233,8 +1225,8 @@ fn a_deeper_cache_pays_better() {
     let payout_at = |depth: u32| {
         let mut game = Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
-        game.enter_dungeon(pos.x, pos.y);
-        let Locale::Dungeon {
+        game.enter_stack(pos.x, pos.y);
+        let Locale::Stack {
             x,
             y,
             facing,
@@ -1244,7 +1236,7 @@ fn a_deeper_cache_pays_better() {
         else {
             unreachable!()
         };
-        game.world.insert_resource(Locale::Dungeon {
+        game.world.insert_resource(Locale::Stack {
             depth,
             frames: 9,
             x,
@@ -1274,7 +1266,7 @@ fn a_deeper_cache_pays_better() {
 /// lock this is meant to exercise.
 fn stand_before_the_lair(game: &mut Game) -> (i32, i32) {
     loop {
-        let Locale::Dungeon { depth, frames, .. } = locale(game) else {
+        let Locale::Stack { depth, frames, .. } = locale(game) else {
             unreachable!("not underground")
         };
         if depth >= frames {
@@ -1286,7 +1278,7 @@ fn stand_before_the_lair(game: &mut Game) -> (i32, i32) {
 
     let level = game
         .world
-        .resource::<CurrentDungeon>()
+        .resource::<CurrentStack>()
         .0
         .as_ref()
         .unwrap()
@@ -1315,7 +1307,7 @@ fn stand_before_the_lair(game: &mut Game) -> (i32, i32) {
         })
         .expect("the seal must have a way up to it");
 
-    let Locale::Dungeon {
+    let Locale::Stack {
         depth,
         frames,
         entrance,
@@ -1324,7 +1316,7 @@ fn stand_before_the_lair(game: &mut Game) -> (i32, i32) {
     else {
         unreachable!()
     };
-    game.world.insert_resource(Locale::Dungeon {
+    game.world.insert_resource(Locale::Stack {
         depth,
         frames,
         x: mouth.0,
@@ -1354,14 +1346,14 @@ fn only_the_bottom_level_of_a_shaft_holds_a_lair() {
     descend(&mut game);
 
     let lairs = |game: &Game| {
-        let level = game.world.resource::<CurrentDungeon>().0.clone().unwrap();
+        let level = game.world.resource::<CurrentStack>().0.clone().unwrap();
         (0..level.height)
             .flat_map(|y| (0..level.width).map(move |x| (x, y)))
             .filter(|&(x, y)| level.cell(x, y) == CellKind::Lair)
             .count()
     };
 
-    let Locale::Dungeon { frames, .. } = locale(&game) else {
+    let Locale::Stack { frames, .. } = locale(&game) else {
         unreachable!()
     };
     for _ in 1..frames {
@@ -1378,7 +1370,7 @@ fn walking_into_the_lair_starts_a_fight() {
     descend(&mut game);
     let lair = walk_into_the_lair(&mut game);
 
-    let Locale::Dungeon { x, y, .. } = locale(&game) else {
+    let Locale::Stack { x, y, .. } = locale(&game) else {
         unreachable!()
     };
     assert_eq!((x, y), lair, "the fixture should walk into the lair");
@@ -1399,7 +1391,7 @@ fn fleeing_the_lair_leaves_it_held() {
 
     assert_eq!(
         map_cell(&map(&game), lair.0, lair.1),
-        DungeonMapCell::Lair,
+        FrameMapCell::Lair,
         "fleeing cleared the lair"
     );
 
@@ -1427,7 +1419,7 @@ fn shoving_at_a_wall_in_a_held_lair_does_not_rouse_the_guardian_again() {
     // is no fight to be refused by.
     let mut faced_a_wall = false;
     for _ in 0..4 {
-        let Locale::Dungeon { x, y, facing, .. } = locale(&game) else {
+        let Locale::Stack { x, y, facing, .. } = locale(&game) else {
             unreachable!()
         };
         let (dx, dy) = facing.delta();
@@ -1474,7 +1466,7 @@ fn killing_the_guardian_clears_the_lair_for_good() {
 
     assert_eq!(
         map_cell(&map(&game), lair.0, lair.1),
-        DungeonMapCell::Floor,
+        FrameMapCell::Floor,
         "a cleared lair should stop being marked"
     );
     // Counting the lair's own line rather than asserting no battle at all:
@@ -1505,7 +1497,7 @@ fn a_cleared_lair_stays_cleared_across_a_save_and_load() {
     let assets = test_assets_dir();
     let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    game.enter_dungeon(pos.x, pos.y);
+    game.enter_stack(pos.x, pos.y);
     {
         let player = game.player_entity();
         let mut stats = game.world.get_mut::<Stats>(player).unwrap();
@@ -1548,7 +1540,7 @@ fn the_same_shaft_always_fields_the_same_guardian() {
     let name_of_guardian = || {
         let mut game = Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
-        game.enter_dungeon(pos.x, pos.y);
+        game.enter_stack(pos.x, pos.y);
         walk_into_the_lair(&mut game);
         game.battle_view().map(|v| v.groups[0].species_name.clone())
     };
@@ -1580,7 +1572,7 @@ fn give_shards(game: &mut Game, qty: u32) {
 /// The party has to get through a sealed door to reach the guardian, so
 /// `stand_before_the_lair` puts them on one. Returns its cell.
 fn a_seal_before_the_lair(game: &Game, lair: (i32, i32)) -> (i32, i32) {
-    let level = game.world.resource::<CurrentDungeon>().0.clone().unwrap();
+    let level = game.world.resource::<CurrentStack>().0.clone().unwrap();
     [Dir::North, Dir::East, Dir::South, Dir::West]
         .into_iter()
         .map(|dir| {
@@ -1596,7 +1588,7 @@ fn the_lair_is_sealed_off_behind_doors() {
     let mut game = game();
     descend(&mut game);
     let lair = stand_before_the_lair(&mut game);
-    let level = game.world.resource::<CurrentDungeon>().0.clone().unwrap();
+    let level = game.world.resource::<CurrentStack>().0.clone().unwrap();
 
     let ways_in: Vec<CellKind> = [Dir::North, Dir::East, Dir::South, Dir::West]
         .into_iter()
@@ -1636,7 +1628,7 @@ fn an_access_shard_opens_a_sealed_door_and_is_spent() {
 
     game.step_forward();
 
-    let Locale::Dungeon { x, y, .. } = locale(&game) else {
+    let Locale::Stack { x, y, .. } = locale(&game) else {
         unreachable!()
     };
     assert_eq!((x, y), seal, "the shard should have let the party through");
@@ -1667,7 +1659,7 @@ fn an_opened_door_stays_open_across_a_save_and_load() {
     let assets = test_assets_dir();
     let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    game.enter_dungeon(pos.x, pos.y);
+    game.enter_stack(pos.x, pos.y);
     stand_before_the_lair(&mut game);
     give_shards(&mut game, 1);
     game.step_forward();
@@ -1700,7 +1692,7 @@ fn a_shut_door_stops_the_view() {
     // Standing at the mouth looking at a sealed door with the lair behind it.
     assert_eq!(
         map_cell(&map(&game), lair.0, lair.1),
-        DungeonMapCell::Unknown,
+        FrameMapCell::Unknown,
         "the view saw straight through a shut door"
     );
 }
@@ -1709,7 +1701,7 @@ fn a_shut_door_stops_the_view() {
 fn a_level_hangs_doorways_in_corridors_not_junctions() {
     let mut game = game();
     descend(&mut game);
-    let level = game.world.resource::<CurrentDungeon>().0.clone().unwrap();
+    let level = game.world.resource::<CurrentStack>().0.clone().unwrap();
 
     let doors: Vec<(i32, i32)> = (0..level.height)
         .flat_map(|y| (0..level.width).map(move |x| (x, y)))
@@ -1766,7 +1758,7 @@ fn shaft_depth_is_capped_however_far_out_the_breach_sits() {
 fn a_shaft_bottoms_out_and_says_so() {
     let mut game = game();
     descend(&mut game);
-    let Locale::Dungeon { frames, .. } = locale(&game) else {
+    let Locale::Stack { frames, .. } = locale(&game) else {
         unreachable!()
     };
 
@@ -1775,13 +1767,13 @@ fn a_shaft_bottoms_out_and_says_so() {
         game.descend();
     }
 
-    let Locale::Dungeon { depth, .. } = locale(&game) else {
+    let Locale::Stack { depth, .. } = locale(&game) else {
         panic!("still underground at the bottom")
     };
     assert_eq!(depth, frames, "should have walked the shaft to its end");
     assert_eq!(
         game.world
-            .resource::<CurrentDungeon>()
+            .resource::<CurrentStack>()
             .0
             .as_ref()
             .unwrap()
@@ -1791,7 +1783,7 @@ fn a_shaft_bottoms_out_and_says_so() {
     );
 
     game.descend();
-    let Locale::Dungeon { depth, .. } = locale(&game) else {
+    let Locale::Stack { depth, .. } = locale(&game) else {
         unreachable!()
     };
     assert_eq!(depth, frames, "descending past the bottom moved the party");
@@ -1810,11 +1802,11 @@ fn two_breaches_in_a_sector_open_onto_different_dungeons() {
     let tiles = entrance_tiles(&mut game);
     assert!(tiles.len() >= 2, "this seed should field several breaches");
 
-    game.enter_dungeon(tiles[0].0, tiles[0].1);
+    game.enter_stack(tiles[0].0, tiles[0].1);
     let first = level_cells(&game);
     game.ascend();
 
-    game.enter_dungeon(tiles[1].0, tiles[1].1);
+    game.enter_stack(tiles[1].0, tiles[1].1);
     assert_ne!(
         first,
         level_cells(&game),
@@ -1828,7 +1820,7 @@ fn how_deep_a_shaft_runs_survives_a_save_and_load() {
     let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
     let tiles = entrance_tiles(&mut game);
     let far = *tiles.last().unwrap();
-    game.enter_dungeon(far.0, far.1);
+    game.enter_stack(far.0, far.1);
     let before = locale(&game);
 
     let path = std::env::temp_dir().join(format!(
@@ -1843,9 +1835,7 @@ fn how_deep_a_shaft_runs_survives_a_save_and_load() {
 }
 
 fn entrance_tiles(game: &mut Game) -> Vec<(i32, i32)> {
-    let mut query = game
-        .world
-        .query_filtered::<&Position, With<DungeonEntrance>>();
+    let mut query = game.world.query_filtered::<&Position, With<SurfaceLink>>();
     let mut tiles: Vec<(i32, i32)> = query.iter(&game.world).map(|p| (p.x, p.y)).collect();
     tiles.sort();
     tiles
@@ -1881,7 +1871,7 @@ fn a_save_made_on_the_surface_loads_back_onto_the_surface() {
     let loaded = Game::load(&path, &assets).unwrap();
     let _ = std::fs::remove_file(&path);
     assert_eq!(loaded.locale(), Locale::Surface);
-    assert!(loaded.dungeon_view().is_none());
+    assert!(loaded.stack_view().is_none());
 }
 
 /// Placing entrances must not touch `GameRng`. It did once, and shifting the
@@ -1896,7 +1886,7 @@ fn seeding_a_zones_entrances_does_not_disturb_the_shared_rng_stream() {
     };
 
     let mut fresh = game();
-    fresh.spawn_dungeon_entrances(crate::tuning::DUNGEON_ENTRANCES_PER_ZONE);
+    fresh.spawn_surface_links(crate::tuning::DUNGEON_ENTRANCES_PER_ZONE);
     let after: Vec<u32> = {
         let mut rng = fresh.world.resource_mut::<GameRng>();
         (0..8).map(|_| rng.0.random_range(0..1_000_000)).collect()
@@ -2103,7 +2093,7 @@ fn shoving_at_a_wall_cannot_draw_an_encounter() {
     // Face a wall and grind at it. A blocked step is not travel, so it must
     // never roll for a fight, however many times it is repeated.
     for _ in 0..4 {
-        let Locale::Dungeon { x, y, facing, .. } = locale(&game) else {
+        let Locale::Stack { x, y, facing, .. } = locale(&game) else {
             unreachable!()
         };
         let (dx, dy) = facing.delta();
@@ -2133,13 +2123,10 @@ fn a_dungeon_pack_is_drawn_from_the_biome_the_breach_opens_in() {
     assert!(walk_until_a_fight(&mut game, 400), "no fight to inspect");
 
     let species: Vec<SpeciesId> = {
-        let mut query = game.world.query_filtered::<&Creature, With<DungeonSpawn>>();
+        let mut query = game.world.query_filtered::<&Creature, With<StackSpawn>>();
         query.iter(&game.world).map(|c| c.species.clone()).collect()
     };
-    assert!(
-        !species.is_empty(),
-        "the pack should be tagged DungeonSpawn"
-    );
+    assert!(!species.is_empty(), "the pack should be tagged StackSpawn");
     for id in species {
         let def = game
             .species_defs()
@@ -2159,9 +2146,9 @@ fn deeper_levels_field_tougher_programs() {
     let power_at = |depth: u32| {
         let mut game = Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
-        game.enter_dungeon(pos.x, pos.y);
+        game.enter_stack(pos.x, pos.y);
         if depth > 1 {
-            let Locale::Dungeon {
+            let Locale::Stack {
                 x,
                 y,
                 facing,
@@ -2171,7 +2158,7 @@ fn deeper_levels_field_tougher_programs() {
             else {
                 unreachable!()
             };
-            game.world.insert_resource(Locale::Dungeon {
+            game.world.insert_resource(Locale::Stack {
                 depth,
                 // Deep enough that this test's depths are all above the
                 // bottom; it is measuring the stat curve, not the shaft.
@@ -2186,7 +2173,7 @@ fn deeper_levels_field_tougher_programs() {
         // is carried into the spawn as an argument, not read back off the
         // locale, so this is the scaling the game applies rather than a
         // proxy for it. `is_boss` only to pin the group at one member.
-        let depth_mult = game.dungeon_depth_multiplier();
+        let depth_mult = game.stack_depth_multiplier();
         let pack = game.spawn_pack("scrapper", true, pos.x, pos.y, depth_mult);
         game.world.get::<Stats>(pack[0]).unwrap().power()
     };
@@ -2204,7 +2191,7 @@ fn the_surface_is_untouched_by_the_depth_multiplier() {
     let mut game = game();
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
     assert_eq!(
-        game.dungeon_depth_multiplier(),
+        game.stack_depth_multiplier(),
         1.0,
         "the multiplier must be inert above ground"
     );
@@ -2228,8 +2215,8 @@ fn a_surface_spawn_is_not_scaled_by_how_deep_the_party_is() {
             // Neither entering nor rewriting the locale draws from
             // `GameRng` — levels carve from their own stream — so both
             // arms of this reach the spawn with the same rolls queued up.
-            game.enter_dungeon(pos.x, pos.y);
-            let Locale::Dungeon {
+            game.enter_stack(pos.x, pos.y);
+            let Locale::Stack {
                 x,
                 y,
                 facing,
@@ -2239,7 +2226,7 @@ fn a_surface_spawn_is_not_scaled_by_how_deep_the_party_is() {
             else {
                 unreachable!()
             };
-            game.world.insert_resource(Locale::Dungeon {
+            game.world.insert_resource(Locale::Stack {
                 depth,
                 frames: 9,
                 x,
@@ -2270,7 +2257,7 @@ fn a_dungeon_pack_that_survives_a_jack_out_does_not_linger_on_the_surface() {
     assert!(walk_until_a_fight(&mut game, 400), "no fight to flee");
 
     let before = {
-        let mut query = game.world.query_filtered::<Entity, With<DungeonSpawn>>();
+        let mut query = game.world.query_filtered::<Entity, With<StackSpawn>>();
         query.iter(&game.world).count()
     };
     assert!(before > 0);
@@ -2278,7 +2265,7 @@ fn a_dungeon_pack_that_survives_a_jack_out_does_not_linger_on_the_surface() {
     flee_until_clear(&mut game);
 
     let after = {
-        let mut query = game.world.query_filtered::<Entity, With<DungeonSpawn>>();
+        let mut query = game.world.query_filtered::<Entity, With<StackSpawn>>();
         query.iter(&game.world).count()
     };
     assert_eq!(after, 0, "{before} dungeon programs outlived the fight");

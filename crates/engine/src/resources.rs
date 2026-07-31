@@ -337,8 +337,22 @@ pub struct BattleState {
 /// intrusion. Membership is mutually exclusive with an active cronjob
 /// `Task` on the same entity — a program is either working a structure or
 /// fighting beside the player, never both at once.
+///
+/// The order is the battle line and is mechanically meaningful: the player
+/// is aggro slot 0 and members follow in this order, so a front member draws
+/// more fire (see `battle::slot_aggro_weight`). `Game::move_party_member` is
+/// the only thing that reorders it.
 #[derive(Resource, Default, Clone)]
 pub struct Party(pub Vec<Entity>);
+
+/// Which way along the battle line `Game::move_party_member` shifts a
+/// member — toward the player (`Forward`, drawing more fire) or away from
+/// them.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SlotShift {
+    Forward,
+    Back,
+}
 
 /// Center of the player's base platform — the slab of `Biome::Platform`
 /// stamped across `MAX_BUILD_DISTANCE_FROM_HOME` when a Home is deployed.

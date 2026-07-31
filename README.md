@@ -175,7 +175,10 @@ it. Decompile the carrier and the routine comes over installed, ready to pop
 out into whichever program you want running it instead; destroy the carrier
 and the routine goes down with it. The player gets slots too, just slower:
 one per ten of your own levels, same cap of six, starting with only
-Decompile installed. A program
+Decompile installed. Party order is the battle line, and `<`/`>` on that
+screen move the highlighted member along it: the front slots draw more enemy
+fire than the ones behind, so who leads is a decision, not the order you
+happened to tame them in. A program
 is either fighting or working a cronjob, never both. Every individual rolls
 its own stats and growth rate within ±20% of the species baseline, surfaced
 as a **Potential** tag, and tougher species grow faster per level. Press `f`

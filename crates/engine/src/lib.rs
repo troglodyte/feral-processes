@@ -58,7 +58,7 @@ use resources::{
     ZoneSpawnPoint,
 };
 pub use resources::{
-    DifficultyMode, EffectKind, LogEntry, MESSAGE_LOG_CAP, MessageKind, VisualEffect,
+    DifficultyMode, EffectKind, LogEntry, MESSAGE_LOG_CAP, MessageKind, SlotShift, VisualEffect,
 };
 use species::{Affinities, MoveDef, SpeciesDb, SpeciesDef, SpeciesId};
 use structures::{StructureDb, StructureDef, StructureId, TradeDef};

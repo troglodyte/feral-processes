@@ -9,6 +9,7 @@ mod field;
 mod fusion;
 mod inventory;
 mod menus;
+mod party;
 mod playing;
 mod quitting;
 mod readonly_screens;

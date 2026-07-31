@@ -183,6 +183,101 @@ fn clear_companion_reverts_to_no_companion() {
 }
 
 #[test]
+fn moving_a_party_member_forward_swaps_it_with_the_slot_ahead() {
+    let mut game = Game::new(27, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let first = spawn_tamed(&mut game, 10, 3);
+    let second = spawn_tamed(&mut game, 11, 4);
+    game.add_companion(first).unwrap();
+    game.add_companion(second).unwrap();
+
+    game.move_party_member(second, SlotShift::Forward).unwrap();
+
+    let party = game.world.resource::<Party>().0.clone();
+    assert_eq!(
+        party,
+        vec![second, first],
+        "moving forward takes the slot ahead and pushes its occupant back"
+    );
+
+    game.move_party_member(second, SlotShift::Back).unwrap();
+    assert_eq!(
+        game.world.resource::<Party>().0,
+        vec![first, second],
+        "moving back undoes it"
+    );
+}
+
+#[test]
+fn a_party_member_at_either_end_cannot_move_past_it() {
+    let mut game = Game::new(28, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let first = spawn_tamed(&mut game, 10, 3);
+    let second = spawn_tamed(&mut game, 11, 4);
+    game.add_companion(first).unwrap();
+    game.add_companion(second).unwrap();
+
+    assert!(game.move_party_member(first, SlotShift::Forward).is_err());
+    assert!(game.move_party_member(second, SlotShift::Back).is_err());
+    assert_eq!(
+        game.world.resource::<Party>().0,
+        vec![first, second],
+        "a refused move leaves the order untouched"
+    );
+}
+
+#[test]
+fn a_program_outside_the_party_has_no_slot_to_move() {
+    let mut game = Game::new(29, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let member = spawn_tamed(&mut game, 10, 3);
+    let bystander = spawn_tamed(&mut game, 11, 4);
+    game.add_companion(member).unwrap();
+
+    assert!(
+        game.move_party_member(bystander, SlotShift::Forward)
+            .is_err()
+    );
+}
+
+#[test]
+fn party_order_is_frozen_during_a_battle() {
+    let mut game = Game::new(30, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let first = spawn_tamed(&mut game, 10, 3);
+    let second = spawn_tamed(&mut game, 11, 4);
+    game.add_companion(first).unwrap();
+    game.add_companion(second).unwrap();
+
+    let player = game.player_entity();
+    let enemy = spawn_wild_on_player_tile(&mut game);
+    insert_battle(&mut game, player, vec![enemy]);
+
+    // `BattleState::planned` indexes `Party` positionally, so a mid-battle
+    // swap would point two slots' planned actions at each other's actor.
+    assert!(game.move_party_member(second, SlotShift::Forward).is_err());
+    assert_eq!(game.world.resource::<Party>().0, vec![first, second]);
+}
+
+#[test]
+fn owned_pets_lists_the_party_first_in_slot_order() {
+    let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let bystander = spawn_tamed(&mut game, 9, 2);
+    let first = spawn_tamed(&mut game, 10, 3);
+    let second = spawn_tamed(&mut game, 11, 4);
+    game.add_companion(first).unwrap();
+    game.add_companion(second).unwrap();
+
+    let slots: Vec<Option<u32>> = game.owned_pets().iter().map(|p| p.party_slot).collect();
+    assert_eq!(
+        slots,
+        vec![Some(0), Some(1), None],
+        "the roster leads with the party in slot order so a frontend's row \
+         numbering matches the battle line"
+    );
+
+    game.move_party_member(second, SlotShift::Forward).unwrap();
+    let order: Vec<Entity> = game.owned_pets().iter().map(|p| p.entity).collect();
+    assert_eq!(order, vec![second, first, bystander]);
+}
+
+#[test]
 fn owned_pets_reports_every_owned_creature_regardless_of_location_or_job() {
     let mut game = Game::new(34, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
@@ -221,11 +316,11 @@ fn owned_pets_reports_every_owned_creature_regardless_of_location_or_job() {
     );
 
     let companion_info = pets.iter().find(|p| p.entity == companion).unwrap();
-    assert!(companion_info.is_companion);
+    assert_eq!(companion_info.party_slot, Some(0));
     assert_eq!(companion_info.activity, "in party");
 
     let worker_info = pets.iter().find(|p| p.entity == far_worker).unwrap();
-    assert!(!worker_info.is_companion);
+    assert_eq!(worker_info.party_slot, None);
     assert_ne!(
         worker_info.activity, "idle",
         "a far-off cronjob worker should still be reported as working"
@@ -234,7 +329,7 @@ fn owned_pets_reports_every_owned_creature_regardless_of_location_or_job() {
     assert_eq!(worker_info.atk, 4);
 
     let idle_info = pets.iter().find(|p| p.entity == idle).unwrap();
-    assert!(!idle_info.is_companion);
+    assert_eq!(idle_info.party_slot, None);
     assert_eq!(idle_info.activity, "idle");
 }
 

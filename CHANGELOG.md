@@ -13,6 +13,24 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### The party line is yours to arrange
+
+- **`<` and `>` on the companions screen move a member along the battle
+  line.** Slot order already decided who drew enemy fire — front slots are
+  weighted heavier in the target roll — but the only way to change it was to
+  stand a program down and re-add it, which appends to the back. `Game::
+  move_party_member` swaps two adjacent slots and nothing else; no tick, so
+  shuffling the roster stays free the way adding and standing down already
+  were.
+- **Refused during a battle.** `BattleState::planned` indexes the party
+  positionally, so a mid-round swap would hand two slots each other's
+  planned action.
+- **The roster now leads with the party in slot order,** with each member's
+  slot on its row. The sort lives in `Game::owned_pets` rather than in a
+  renderer: app-core maps number keys by index while gui draws the rows, and
+  sorting in one but not the other picks a different program than the one
+  the player pressed.
+
 ### You can work a node yourself
 
 - **`W` works a structure the way a program does.** The player takes the

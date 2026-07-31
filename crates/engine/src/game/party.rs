@@ -170,10 +170,16 @@ impl Game {
     /// map — unlike `view_entities`, not limited to what's currently in
     /// view. Lets you check on a cronjob worker's HP/level without walking
     /// over to it.
+    ///
+    /// Party members lead the list in slot order, everything else follows in
+    /// spawn order. The sort lives here rather than in a renderer because
+    /// app-core maps number keys by index while gui draws the rows: sorting
+    /// in one and not the other would pick a different program than the one
+    /// the player pressed.
     pub fn owned_pets(&mut self) -> Vec<PetInfo> {
         let player = self.player_entity();
         let party = self.world.resource::<Party>().0.clone();
-        let owned: Vec<Entity> = {
+        let mut owned: Vec<Entity> = {
             let mut query = self.world.query::<(Entity, &Tamed)>();
             query
                 .iter(&self.world)
@@ -181,6 +187,9 @@ impl Game {
                 .map(|(e, _)| e)
                 .collect()
         };
+        let slot_of = |entity: &Entity| party.iter().position(|p| p == entity);
+        // Stable, so non-members keep the order the query produced them in.
+        owned.sort_by_key(|e| slot_of(e).unwrap_or(usize::MAX));
         owned
             .into_iter()
             .filter_map(|entity| {
@@ -199,7 +208,7 @@ impl Game {
                     atk: stats.atk,
                     def: stats.def,
                     power: stats.power(),
-                    is_companion: party.contains(&entity),
+                    party_slot: slot_of(&entity).map(|s| s as u32),
                     activity: self.program_activity(entity),
                     quality: self.potential_quality_label(entity),
                     fusions: self.fusion_count(entity),
@@ -275,6 +284,40 @@ impl Game {
             let name = self.creature_label(creature);
             self.log(format!("{name} falls back from active duty."));
         }
+    }
+
+    /// Shifts `creature` one slot along the battle line. Front slots draw
+    /// more fire (see `battle::slot_aggro_weight`), so this is how the
+    /// player decides who tanks — the only other way to change the order is
+    /// to stand a program down and re-add it, which appends to the back.
+    ///
+    /// Refused during a battle: `BattleState::planned` indexes `Party`
+    /// positionally, so a swap mid-round would hand two slots each other's
+    /// planned action. Like `add_companion` it doesn't tick — shuffling the
+    /// roster is free.
+    pub fn move_party_member(&mut self, creature: Entity, shift: SlotShift) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        let party = &self.world.resource::<Party>().0;
+        let slot = party
+            .iter()
+            .position(|&e| e == creature)
+            .ok_or_else(|| "That program isn't in your party.".to_string())?;
+        let target = match shift {
+            SlotShift::Forward => slot.checked_sub(1),
+            SlotShift::Back => (slot + 1 < party.len()).then_some(slot + 1),
+        };
+        let name = self.creature_label(creature);
+        let Some(target) = target else {
+            return Err(match shift {
+                SlotShift::Forward => format!("{name} already leads the party."),
+                SlotShift::Back => format!("{name} is already at the back."),
+            });
+        };
+        self.world.resource_mut::<Party>().0.swap(slot, target);
+        self.log(format!("{name} moves to slot {}.", target + 1));
+        Ok(())
     }
 
     /// Fuses two of the player's tamed programs (`a` and `b`, any species,

@@ -10,13 +10,22 @@ pub(super) fn draw_companion_menu(
     m: &Metrics,
 ) {
     let pets = game.owned_pets();
-    let mut rows = vec![text_row(
-        "Pick a program to add to your party (max 3) - select a party member's own number to stand it down.",
-    )];
+    let mut rows = vec![
+        text_row(format!(
+            "Pick a program to add to your party (max {MAX_PARTY_SIZE}) - select a party member's own number to stand it down."
+        )),
+        text_row(
+            "< and > move the highlighted member along the battle line; the front slot draws the most fire.",
+        ),
+    ];
     if pets.is_empty() {
         rows.push(text_row("(you don't have any compiled programs yet)"));
     }
     for (i, p) in pets.iter().enumerate() {
+        let slot = p
+            .party_slot
+            .map(|s| format!("#{} ", s + 1))
+            .unwrap_or_default();
         let activity = activity_tag(&p.activity);
         let quality = p
             .quality
@@ -26,7 +35,7 @@ pub(super) fn draw_companion_menu(
         let fused = fusion_tag(p.fusions);
         let critical = hp_critical(p.hp, p.max_hp);
         let text = format!(
-            "[{}] {} Lv{} - HP {}/{}  PWR {}{}{}{}{}",
+            "[{}] {slot}{} Lv{} - HP {}/{}  PWR {}{}{}{}{}",
             menu_shortcut(i),
             p.name,
             p.level,

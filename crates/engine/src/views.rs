@@ -140,7 +140,11 @@ pub struct PetInfo {
     pub def: i32,
     /// A rough overall-strength scalar — see `components::Stats::power`.
     pub power: i32,
-    pub is_companion: bool,
+    /// This program's slot in the active party, or `None` if it isn't a
+    /// member. Slot order is mechanically meaningful — front slots draw more
+    /// fire (see `battle::slot_aggro_weight`) — so a frontend showing the
+    /// roster shows the number, not just membership.
+    pub party_slot: Option<u32>,
     /// What this pet is doing right now — see `Game::program_activity`.
     pub activity: String,
     /// This individual's rolled quality tier (see `components::Potential`),

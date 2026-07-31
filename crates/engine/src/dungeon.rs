@@ -90,8 +90,8 @@ pub enum CellKind {
     Floor,
     /// Back the way you came — the level's `entry`. On depth 1 this leads
     /// out to the surface.
-    StairsUp,
-    StairsDown,
+    LinkUp,
+    LinkDown,
     /// Something worth the walk, sitting in a dead end. Walking onto one
     /// empties it — see `Game::open_cache`. Whether a given cache has
     /// already been emptied is not part of the level, which regenerates from
@@ -185,7 +185,7 @@ pub struct DungeonLevel {
     pub width: i32,
     pub height: i32,
     cells: Vec<CellKind>,
-    /// Where the party arrives, and where `StairsUp` sits.
+    /// Where the party arrives, and where `LinkUp` sits.
     pub entry: (i32, i32),
     /// `None` on the bottom level of a shaft — the point of a shaft having
     /// a bottom is that there is nowhere further to go.
@@ -245,9 +245,9 @@ pub fn generate(spec: LevelSpec) -> DungeonLevel {
         level.set(far.0, far.1, CellKind::Lair);
     } else {
         level.stairs_down = Some(far);
-        level.set(far.0, far.1, CellKind::StairsDown);
+        level.set(far.0, far.1, CellKind::LinkDown);
     }
-    level.set(level.entry.0, level.entry.1, CellKind::StairsUp);
+    level.set(level.entry.0, level.entry.1, CellKind::LinkUp);
 
     if spec.is_bottom() {
         seal_the_lair(&mut level, far);
@@ -563,7 +563,7 @@ mod tests {
         for depth in 1..=5 {
             let level = generate(spec(7, depth));
             let down = level.stairs_down.expect("depth {depth} has room below it");
-            assert_eq!(level.cell(down.0, down.1), CellKind::StairsDown);
+            assert_eq!(level.cell(down.0, down.1), CellKind::LinkDown);
             assert_ne!(
                 down, level.entry,
                 "depth {depth} put the way down on top of the way in"
@@ -584,7 +584,7 @@ mod tests {
         assert!(
             !floors(&level)
                 .into_iter()
-                .any(|(x, y)| level.cell(x, y) == CellKind::StairsDown),
+                .any(|(x, y)| level.cell(x, y) == CellKind::LinkDown),
             "the bottom level laid stairs down into nothing"
         );
     }
@@ -592,7 +592,7 @@ mod tests {
     #[test]
     fn the_entry_holds_the_stairs_up() {
         let level = generate(spec(7, 2));
-        assert_eq!(level.cell(level.entry.0, level.entry.1), CellKind::StairsUp);
+        assert_eq!(level.cell(level.entry.0, level.entry.1), CellKind::LinkUp);
     }
 
     #[test]

@@ -112,8 +112,8 @@ impl Game {
                         match level.cell(x, y) {
                             CellKind::Rock => DungeonMapCell::Rock,
                             CellKind::Floor => DungeonMapCell::Floor,
-                            CellKind::StairsUp => DungeonMapCell::StairsUp,
-                            CellKind::StairsDown => DungeonMapCell::StairsDown,
+                            CellKind::LinkUp => DungeonMapCell::LinkUp,
+                            CellKind::LinkDown => DungeonMapCell::LinkDown,
                             CellKind::Cache if self.cache_unopened(pos, (x, y)) => {
                                 DungeonMapCell::Cache
                             }
@@ -188,8 +188,8 @@ impl Game {
                     .map(|(cx, cy)| match level.cell(cx, cy) {
                         CellKind::Rock => DungeonCellView::Rock,
                         CellKind::Floor => DungeonCellView::Floor,
-                        CellKind::StairsUp => DungeonCellView::StairsUp,
-                        CellKind::StairsDown => DungeonCellView::StairsDown,
+                        CellKind::LinkUp => DungeonCellView::LinkUp,
+                        CellKind::LinkDown => DungeonCellView::LinkDown,
                         // An emptied cache is just an alcove. Still drawing
                         // one would send the player back down a dead end
                         // they have already walked.
@@ -210,9 +210,9 @@ impl Game {
             .collect();
 
         let standing_on = match level.cell(x, y) {
-            CellKind::StairsDown => Some("Stairs lead down  [>] descend".to_string()),
-            CellKind::StairsUp if depth == 1 => Some("The breach out  [<] surface".to_string()),
-            CellKind::StairsUp => Some("Stairs lead up  [<] climb".to_string()),
+            CellKind::LinkDown => Some("Stairs lead down  [>] descend".to_string()),
+            CellKind::LinkUp if depth == 1 => Some("The breach out  [<] surface".to_string()),
+            CellKind::LinkUp => Some("Stairs lead up  [<] climb".to_string()),
             // Emptied on arrival rather than on a key, so this reports what
             // already happened rather than offering a choice.
             CellKind::Cache => Some("An empty casing".to_string()),

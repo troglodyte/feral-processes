@@ -27,8 +27,8 @@ fn tile_color(cell: DungeonMapCell) -> Color {
         DungeonMapCell::Unknown => UNKNOWN,
         DungeonMapCell::Rock => ROCK,
         DungeonMapCell::Floor
-        | DungeonMapCell::StairsUp
-        | DungeonMapCell::StairsDown
+        | DungeonMapCell::LinkUp
+        | DungeonMapCell::LinkDown
         | DungeonMapCell::Cache
         | DungeonMapCell::Lair
         | DungeonMapCell::Door
@@ -41,8 +41,8 @@ fn tile_color(cell: DungeonMapCell) -> Color {
 /// second and win.
 fn cell_glyph(cell: DungeonMapCell) -> Option<(char, Color)> {
     match cell {
-        DungeonMapCell::StairsDown => Some(('>', YELLOW)),
-        DungeonMapCell::StairsUp => Some(('<', YELLOW)),
+        DungeonMapCell::LinkDown => Some(('>', YELLOW)),
+        DungeonMapCell::LinkUp => Some(('<', YELLOW)),
         DungeonMapCell::Cache => Some(('!', GREEN)),
         DungeonMapCell::Lair => Some(('&', RED)),
         DungeonMapCell::Door => Some(('+', ORANGE)),
@@ -240,12 +240,9 @@ mod tests {
     }
 
     #[test]
-    fn stairs_carry_the_same_glyphs_as_the_first_person_view() {
-        assert_eq!(
-            cell_glyph(DungeonMapCell::StairsDown).map(|g| g.0),
-            Some('>')
-        );
-        assert_eq!(cell_glyph(DungeonMapCell::StairsUp).map(|g| g.0), Some('<'));
+    fn links_carry_the_same_glyphs_as_the_first_person_view() {
+        assert_eq!(cell_glyph(DungeonMapCell::LinkDown).map(|g| g.0), Some('>'));
+        assert_eq!(cell_glyph(DungeonMapCell::LinkUp).map(|g| g.0), Some('<'));
         assert_eq!(cell_glyph(DungeonMapCell::Floor), None);
     }
 

@@ -301,7 +301,7 @@ fn the_party_arrives_on_the_stairs_up_facing_north() {
     };
     assert_eq!(depth, 1);
     assert_eq!(facing, Dir::North);
-    assert_eq!(cell_at(&game, x, y), CellKind::StairsUp);
+    assert_eq!(cell_at(&game, x, y), CellKind::LinkUp);
 }
 
 #[test]
@@ -841,7 +841,7 @@ fn arriving_maps_what_the_party_can_see_and_nothing_else() {
     };
     assert_eq!(
         map_cell(&view, x, y),
-        DungeonMapCell::StairsUp,
+        DungeonMapCell::LinkUp,
         "the cell the party is standing on must be mapped"
     );
     assert!(

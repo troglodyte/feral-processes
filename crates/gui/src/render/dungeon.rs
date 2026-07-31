@@ -170,8 +170,8 @@ pub(super) fn draw_dungeon(view: &DungeonView, painter: &Painter, w: f32, h: f32
 
 fn stair_mark(cell: DungeonCellView) -> Option<char> {
     match cell {
-        DungeonCellView::StairsDown => Some('>'),
-        DungeonCellView::StairsUp => Some('<'),
+        DungeonCellView::LinkDown => Some('>'),
+        DungeonCellView::LinkUp => Some('<'),
         DungeonCellView::Cache => Some('!'),
         DungeonCellView::Lair => Some('&'),
         _ => None,
@@ -245,8 +245,8 @@ mod tests {
 
     #[test]
     fn only_stairs_get_a_marker() {
-        assert_eq!(stair_mark(DungeonCellView::StairsDown), Some('>'));
-        assert_eq!(stair_mark(DungeonCellView::StairsUp), Some('<'));
+        assert_eq!(stair_mark(DungeonCellView::LinkDown), Some('>'));
+        assert_eq!(stair_mark(DungeonCellView::LinkUp), Some('<'));
         assert_eq!(stair_mark(DungeonCellView::Floor), None);
         assert_eq!(stair_mark(DungeonCellView::Rock), None);
     }
@@ -271,10 +271,10 @@ mod tests {
         assert!(solid(DungeonCellView::Rock));
         assert!(!solid(DungeonCellView::Floor));
         assert!(
-            !solid(DungeonCellView::StairsDown),
+            !solid(DungeonCellView::LinkDown),
             "stairs are walkable — treating them as wall would seal the way down"
         );
-        assert!(!solid(DungeonCellView::StairsUp));
+        assert!(!solid(DungeonCellView::LinkUp));
     }
 
     /// A view whose middle column is `ahead`, with `flank` either side.
@@ -303,7 +303,7 @@ mod tests {
             view(&[Floor, Rock, Rock, Rock], Rock), // blocked one step ahead
             view(&[Rock, Rock, Rock, Rock], Rock),  // sealed in
             view(&[Floor, Floor, Floor, Floor], Floor), // open hall, no walls
-            view(&[StairsUp, Floor, StairsDown, Floor], Rock),
+            view(&[LinkUp, Floor, LinkDown, Floor], Rock),
             view(&[Door, Floor, Floor, Floor], Rock), // standing in a doorway
             view(&[Floor, Door, Floor, Floor], Rock), // a shut door one step on
         ];

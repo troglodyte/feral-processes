@@ -506,7 +506,7 @@ impl Game {
         let (Some(pos), Some(cell)) = (self.dungeon_pos(), self.cell_underfoot()) else {
             return;
         };
-        if cell != CellKind::StairsDown {
+        if cell != CellKind::LinkDown {
             // The bottom level is generated without stairs down at all, so
             // this is where a finished shaft reports itself. Saying so beats
             // "there's no way down here" on the one cell where the player
@@ -536,7 +536,7 @@ impl Game {
         let (Some(pos), Some(cell)) = (self.dungeon_pos(), self.cell_underfoot()) else {
             return;
         };
-        if cell != CellKind::StairsUp {
+        if cell != CellKind::LinkUp {
             self.log("There's no way up here.".to_string());
             return;
         }
@@ -560,8 +560,8 @@ impl Game {
     /// key that would only log a refusal.
     pub fn stairs_available(&self) -> (bool, bool) {
         match self.cell_underfoot() {
-            Some(CellKind::StairsDown) => (true, false),
-            Some(CellKind::StairsUp) => (false, true),
+            Some(CellKind::LinkDown) => (true, false),
+            Some(CellKind::LinkUp) => (false, true),
             _ => (false, false),
         }
     }

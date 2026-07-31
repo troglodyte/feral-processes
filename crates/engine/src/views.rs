@@ -337,8 +337,8 @@ pub enum DungeonCellView {
     /// renderer draws this as a wall face.
     Rock,
     Floor,
-    StairsUp,
-    StairsDown,
+    LinkUp,
+    LinkDown,
     /// An unopened cache. One that has already been emptied comes through
     /// as `Floor` — still drawing it would send the party back down a dead
     /// end they have already walked.
@@ -391,8 +391,8 @@ pub enum DungeonMapCell {
     Unknown,
     Rock,
     Floor,
-    StairsUp,
-    StairsDown,
+    LinkUp,
+    LinkDown,
     /// A cache the party has seen and not yet emptied. An emptied one maps
     /// as `Floor`, so the map answers "where is there still something" and
     /// not merely "where was there once".

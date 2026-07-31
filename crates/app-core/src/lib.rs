@@ -61,7 +61,20 @@ pub fn menu_shortcut(index: usize) -> char {
 /// held: hiding it below `ITEM_FUSION_COST` meant a player holding the
 /// usual single copy of a piece of gear never learned the action existed.
 /// `Game::fuse_item` refuses with a count when the stack is too small.
-pub fn inventory_item_actions(game: &Game, item: &ItemId) -> Vec<(char, String)> {
+/// Whether any structure the player could trade with is close enough to
+/// reach from a menu — the same scan `Mode::Trade`'s picker runs, so the
+/// two can't disagree about whether selling is possible.
+pub fn trader_in_range(game: &mut Game) -> bool {
+    game.view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
+        .into_iter()
+        .any(|e| e.can_trade)
+}
+
+/// `[S]ell` is the one action gated on the world rather than the item: it
+/// is listed only when a trading post is inside `MENU_SCAN_RADIUS`, and
+/// hidden otherwise. That is why this takes `&mut Game` — the scan runs
+/// through `Game::view_entities`, and a bevy query needs `&mut World`.
+pub fn inventory_item_actions(game: &mut Game, item: &ItemId) -> Vec<(char, String)> {
     let mut actions = Vec::new();
     if game.is_equippable(item) {
         actions.push(('e', "[E]quip".to_string()));
@@ -75,6 +88,9 @@ pub fn inventory_item_actions(game: &Game, item: &ItemId) -> Vec<(char, String)>
     }
     if game.is_consumable(item) {
         actions.push(('c', "[C]onsume".to_string()));
+    }
+    if trader_in_range(game) {
+        actions.push(('s', "[S]ell".to_string()));
     }
     actions.push(('d', "[D]escribe".to_string()));
     actions.push(('x', "[X] Erase".to_string()));
@@ -425,6 +441,20 @@ impl Mode {
     }
 }
 
+/// Which screen a trade was started from, and therefore which screen
+/// finishing or abandoning it returns to.
+///
+/// A trade begun at the trader's list is one of a run of them and goes back
+/// there (see `App::return_to_trade_list`); one begun with `[S]ell` in the
+/// inventory has to go back to the inventory, because the trader's list is
+/// a screen that player never opened.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum TradeOrigin {
+    #[default]
+    Trader,
+    Inventory,
+}
+
 /// A line item picked in `Mode::TradeAction`, awaiting a quantity from
 /// `Mode::TradeQuantity` before `Game::sell_item`/`Game::buy_item`/
 /// `Game::buy_back` is actually called.
@@ -555,6 +585,9 @@ pub struct App {
     /// quantity from `Mode::TradeQuantity` before `Game::sell_item`/
     /// `Game::buy_item` is actually called.
     pub pending_trade_choice: Option<TradeChoice>,
+    /// Which screen the in-flight trade was started from — see
+    /// `TradeOrigin`. Set when a trade begins, read when it ends.
+    pub trade_origin: TradeOrigin,
     /// The program picked in `Mode::TradeAction`, awaiting confirmation in
     /// `Mode::TradeProgramConfirm`. Holds the whole priced row rather than
     /// just the entity, so the confirmation shows the payout and detach list

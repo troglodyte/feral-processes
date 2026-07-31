@@ -180,7 +180,7 @@ pub(super) fn draw_item_describe(
 }
 
 pub(super) fn draw_inventory_item_action(
-    game: &Game,
+    game: &mut Game,
     item: Option<ItemId>,
     zone_level: u32,
     fusion_tier: u32,

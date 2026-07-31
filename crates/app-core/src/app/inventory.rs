@@ -48,7 +48,7 @@ impl App {
             return;
         };
         let actions: Vec<char> = {
-            let Some(game) = &self.game else {
+            let Some(game) = &mut self.game else {
                 self.mode = Mode::Inventory;
                 return;
             };
@@ -68,6 +68,10 @@ impl App {
             self.erase_quantity_input.clear();
             self.mode = Mode::EraseQuantity;
             self.pending_inventory_item = None;
+            return;
+        }
+        if idx.map(|i| actions[i]) == Some('s') {
+            self.begin_sale_from_inventory(item);
             return;
         }
         if idx.map(|i| actions[i]) == Some('d') {
@@ -101,6 +105,39 @@ impl App {
         self.status_line = outcome;
         self.pending_inventory_item = None;
         self.mode = Mode::Inventory;
+    }
+
+    /// Starts a sale of `item` from the inventory rather than from the
+    /// trader's list, reusing the same quantity page the trader flow ends
+    /// on. With exactly one trading post in range there is nothing to
+    /// choose, so the picker is skipped; with several the player still has
+    /// to say which, and `Mode::Trade` already asks that question.
+    ///
+    /// `[S]ell` is only listed when a post is in range at all
+    /// (`inventory_item_actions`), so the empty case is unreachable from
+    /// the menu and falls back to the inventory rather than inventing an
+    /// error for it.
+    fn begin_sale_from_inventory(&mut self, item: ItemId) {
+        let Some(game) = &mut self.game else { return };
+        let posts: Vec<_> = game
+            .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
+            .into_iter()
+            .filter(|e| e.can_trade)
+            .collect();
+        self.trade_origin = TradeOrigin::Inventory;
+        self.pending_trade_choice = Some(TradeChoice::Sell(item));
+        self.trade_quantity_input.clear();
+        match posts.as_slice() {
+            [] => {
+                self.pending_trade_choice = None;
+                self.mode = Mode::Inventory;
+            }
+            [only] => {
+                self.pending_trade_structure = Some(only.entity);
+                self.mode = Mode::TradeQuantity;
+            }
+            _ => self.mode = Mode::Trade,
+        }
     }
 
     /// The describe page is read-only: any key steps back to the actions.

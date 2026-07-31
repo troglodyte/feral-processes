@@ -66,6 +66,10 @@ impl App {
                 return;
             }
             GameKey::Char('t') => {
+                // Opening the trader list from the map is a fresh visit, not
+                // the tail of a sale begun in the inventory.
+                self.trade_origin = TradeOrigin::Trader;
+                self.pending_trade_choice = None;
                 self.mode = Mode::Trade;
                 return;
             }

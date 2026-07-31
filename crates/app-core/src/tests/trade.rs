@@ -25,6 +25,57 @@ fn held(app: &App, item: &str) -> u32 {
         .unwrap_or(0)
 }
 
+/// Selling is reachable straight from the inventory, but only when there is
+/// somewhere to sell: the action is hidden rather than offered-and-refused.
+#[test]
+fn sell_is_offered_from_the_inventory_only_with_a_trading_post_in_range() {
+    let keys = |app: &mut App| -> Vec<char> {
+        let item = ItemId::from(ids::CORE_FRAGMENT);
+        let game = app.game.as_mut().unwrap();
+        inventory_item_actions(game, &item)
+            .into_iter()
+            .map(|(k, _)| k)
+            .collect()
+    };
+
+    let mut at_post = app_at_a_trading_post(921, &[(ids::CORE_FRAGMENT, 5)]);
+    assert!(
+        keys(&mut at_post).contains(&'s'),
+        "a trading post is in range, so selling should be on offer"
+    );
+
+    let mut in_the_field = test_app(922);
+    assert!(
+        !keys(&mut in_the_field).contains(&'s'),
+        "with nowhere to sell, the action should not be listed at all"
+    );
+}
+
+/// The mirror of `selling_an_item_lands_back_on_the_traders_list`: where a
+/// sale returns you depends on where you started it. Coming from the
+/// inventory, the trader's list is a screen the player never opened.
+#[test]
+fn selling_from_the_inventory_lands_back_in_the_inventory() {
+    let mut app = app_at_a_trading_post(923, &[(ids::CORE_FRAGMENT, 5)]);
+    app.pending_inventory_item = Some(ItemId::from(ids::CORE_FRAGMENT));
+    app.mode = Mode::InventoryItemAction;
+
+    app.handle_key(GameKey::Char('s'));
+    assert_eq!(
+        app.mode,
+        Mode::TradeQuantity,
+        "one trader in range, so the picker should be skipped"
+    );
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(
+        app.mode,
+        Mode::Inventory,
+        "a sale begun in the inventory returns to the inventory"
+    );
+    assert_eq!(held(&app, ids::CORE_FRAGMENT), 4, "one unit was sold");
+}
+
 /// A sale is one of a run of them — you clear out a full pack a stack at a
 /// time — so finishing one leaves the player on the trader's list, not back
 /// on the map having to walk the whole menu path again.

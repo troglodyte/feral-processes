@@ -80,8 +80,8 @@ fn escaping_the_erase_prompt_erases_nothing() {
 
 #[test]
 fn every_equippable_item_offers_equip_fuse_and_erase() {
-    let app = test_app(904);
-    let game = app.game.as_ref().unwrap();
+    let mut app = test_app(904);
+    let game = app.game.as_mut().unwrap();
     for item in [
         ItemId::from(ids::OVERCLOCK_CORE),
         ItemId::from(ids::MONOFILAMENT_WHIP),
@@ -105,8 +105,8 @@ fn every_equippable_item_offers_equip_fuse_and_erase() {
 
 #[test]
 fn a_plain_resource_offers_only_describe_and_erase() {
-    let app = test_app(905);
-    let game = app.game.as_ref().unwrap();
+    let mut app = test_app(905);
+    let game = app.game.as_mut().unwrap();
     let keys: Vec<char> = inventory_item_actions(game, &ItemId::from(ids::CORE_FRAGMENT))
         .into_iter()
         .map(|(k, _)| k)

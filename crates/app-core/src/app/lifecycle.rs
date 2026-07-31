@@ -37,6 +37,7 @@ impl App {
             craft_quantity_input: String::new(),
             pending_trade_structure: None,
             pending_trade_choice: None,
+            trade_origin: TradeOrigin::Trader,
             pending_trade_program: None,
             trade_quantity_input: String::new(),
             zoom: 2,

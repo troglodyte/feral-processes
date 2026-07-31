@@ -356,11 +356,22 @@ covers it**: the launcher's three `dev_template` tests do not load
 Separate from Task 4 because `tuning.rs` is where difficulty lives and a
 constants rename should be reviewable without the type churn around it.
 
+**Two of these constants are not in `tuning.rs`** — found during Task 4's
+review. `DUNGEON_VIEW_DEPTH` and `DUNGEON_VIEW_HALF_WIDTH` are declared in
+`crates/engine/src/game/dungeon_view.rs:22,27`, because they describe the
+shape of the view cone rather than a difficulty knob. They still take the
+`STACK_*` prefix. A brief scoped to `tuning.rs` alone would miss them, and
+the phase's final `rg -i dungeon` gate would then fail at the end.
+
 **Files:**
 - Modify: `crates/engine/src/tuning.rs` and every consumer —
   `crates/engine/src/{dungeon,views}.rs`,
   `crates/engine/src/game/{dungeon,dungeon_view,dungeon_features,zone,lifecycle}.rs`,
   `crates/engine/src/tests/dungeon.rs`
+- Modify: `crates/engine/src/game/dungeon_view.rs:22,27` — the two view-cone
+  constants above, plus their uses at `:39,41,76` and in
+  `crates/engine/src/tests/dungeon.rs:598,615`, and the doc comment naming
+  `DUNGEON_VIEW_HALF_WIDTH` at `crates/engine/src/views.rs:362`
 
 **Interfaces:**
 - Consumes: Task 3 already renamed `DUNGEON_FLOORS_*` and
@@ -382,10 +393,35 @@ guard — if a curve moves, a value was altered, not just renamed.
 
 ---
 
-## Task 6: File and module renames
+## Task 6: File and module renames, and the last stragglers
 
 Last of the code tasks, so every earlier diff is readable as a content change
 rather than as a file move.
+
+**The stragglers** (found during Task 4's review and the sweep after it).
+None of these appeared in either mapping table, and all of them will fail the
+phase's final `rg -i dungeon` gate:
+
+- Four functions: `App::handle_dungeon_key`
+  (`crates/app-core/src/app/playing.rs:135,187`), `announce_dungeon_entrances`
+  (`crates/engine/src/game/dungeon.rs:147,158`), `leave_dungeon` (`:299`),
+  `maybe_dungeon_encounter` (`:448`). Name them for what they now do —
+  `handle_stack_key`, `announce_surface_links`, `leave_stack`,
+  `maybe_stack_encounter`.
+- About ten test names carrying "dungeon", mostly in
+  `crates/engine/src/tests/dungeon.rs` — e.g.
+  `a_dungeon_position_survives_a_save_and_load_with_an_identical_level`,
+  `two_breaches_in_a_sector_open_onto_different_dungeons`,
+  `a_new_zone_is_seeded_with_dungeon_entrances`,
+  `walking_a_dungeon_eventually_draws_an_encounter`. Note several also carry
+  "breach" and "level" — rename to the new vocabulary throughout, and mind
+  the three senses of "breach" documented in Task 7.
+- Three test scratch-file prefixes: `feral_processes_dungeon_save_`,
+  `feral_processes_dungeon_map_` (`crates/engine/src/tests/dungeon.rs:803,963`)
+  and `feral_processes_appcore_dungeon_`
+  (`crates/app-core/src/tests/dungeon.rs:27`). These exist to stop fixture
+  scratch files colliding between tests (commit `0edc715`) — they must stay
+  mutually unique after renaming.
 
 **Files:** the eight moves in the "Files" table, plus the `mod` declarations
 in `crates/engine/src/lib.rs:6`, `crates/engine/src/game/mod.rs:18-20`,

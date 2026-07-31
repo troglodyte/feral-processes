@@ -1,11 +1,34 @@
 //! Fixtures shared by the app-core tests.
 
+use std::sync::atomic::{AtomicU32, Ordering};
+
 use feral_processes_engine::save::{self, CreatureSave};
 
 use crate::*;
 
 pub(crate) fn test_assets_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+}
+
+/// A scratch path no other fixture call can be using.
+///
+/// Keying these on `(fixture, seed)` alone was not enough: the test binary
+/// runs its cases as concurrent threads, so two tests that reach for the
+/// same fixture with the same seed shared one file and raced — one loading
+/// what the other had half-written. That is not hypothetical, it is how
+/// `a_full_party_is_asked_slot_by_slot_and_only_then_resolves` failed in the
+/// suite while passing alone, and `app_at_a_trading_post(921, ..)` had the
+/// same collision waiting in two other tests.
+///
+/// A counter rather than a timestamp or a random suffix, deliberately: it is
+/// unique across the process without making the run depend on a clock or on
+/// RNG nobody seeded.
+fn scratch_path(fixture: &str, seed: u32) -> PathBuf {
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+    let unique = NEXT.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!(
+        "feral_processes_appcore_{fixture}_{seed}_{unique}.sav"
+    ))
 }
 
 pub(crate) fn test_app(seed: u32) -> App {
@@ -26,7 +49,7 @@ pub(crate) fn test_app(seed: u32) -> App {
 pub(crate) fn app_owning_distant_programs(seed: u32, count: i32) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
-    let path = std::env::temp_dir().join(format!("feral_processes_appcore_distant_{seed}.sav"));
+    let path = scratch_path("distant", seed);
     let game = app.game.as_mut().unwrap();
     let species = game.species_defs()[0].id.clone();
     game.save(&path).unwrap();
@@ -72,7 +95,7 @@ pub(crate) fn app_owning_distant_programs(seed: u32, count: i32) -> App {
 pub(crate) fn app_owning_a_program_and_a_compiler(seed: u32, routines: &[&str]) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
-    let path = std::env::temp_dir().join(format!("feral_processes_appcore_extract_{seed}.sav"));
+    let path = scratch_path("extract", seed);
     let game = app.game.as_mut().unwrap();
     let species = game.species_defs()[0].id.clone();
     game.save(&path).unwrap();
@@ -126,7 +149,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler(seed: u32, routines: &[&str]) 
 pub(crate) fn app_at_a_trading_post(seed: u32, inventory: &[(&str, u32)]) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
-    let path = std::env::temp_dir().join(format!("feral_processes_appcore_market_{seed}.sav"));
+    let path = scratch_path("market", seed);
     let game = app.game.as_mut().unwrap();
     let species = game.species_defs()[0].id.clone();
     game.save(&path).unwrap();
@@ -183,7 +206,7 @@ pub(crate) fn app_at_a_trading_post(seed: u32, inventory: &[(&str, u32)]) -> App
 pub(crate) fn app_with_player_routines(seed: u32, routines: &[&str], hunger: f32) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
-    let path = std::env::temp_dir().join(format!("feral_processes_appcore_field_{seed}.sav"));
+    let path = scratch_path("field", seed);
     let game = app.game.as_mut().unwrap();
     game.save(&path).unwrap();
 
@@ -206,7 +229,7 @@ pub(crate) fn app_with_player_routines(seed: u32, routines: &[&str], hunger: f32
 pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
-    let path = std::env::temp_dir().join(format!("feral_processes_appcore_field_own_{seed}.sav"));
+    let path = scratch_path("field_own", seed);
     let game = app.game.as_mut().unwrap();
     let species = game.species_defs()[0].id.clone();
     game.save(&path).unwrap();
@@ -257,7 +280,7 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
 pub(crate) fn app_with_companions_in_the_party(seed: u32, count: u32) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
-    let path = std::env::temp_dir().join(format!("feral_processes_appcore_party_{seed}.sav"));
+    let path = scratch_path("party", seed);
     let game = app.game.as_mut().unwrap();
     let species = game.species_defs()[0].id.clone();
     game.save(&path).unwrap();

@@ -247,3 +247,51 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
     app.mode = Mode::Playing;
     app
 }
+
+/// A game where the player has one program standing in the active `Party`,
+/// so a battle opens with two planning slots rather than the single one
+/// every other battle fixture here produces. Built by editing a save and
+/// reloading it, for the reason `app_owning_a_program_and_a_compiler` is:
+/// nothing outside the engine can hand-place a tamed program, and
+/// `party_slot` is the save field that puts one on the roster.
+pub(crate) fn app_with_companions_in_the_party(seed: u32, count: u32) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = std::env::temp_dir().join(format!("feral_processes_appcore_party_{seed}.sav"));
+    let game = app.game.as_mut().unwrap();
+    let species = game.species_defs()[0].id.clone();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    for slot in 0..count {
+        data.creatures.push(CreatureSave {
+            species: species.clone(),
+            position: (px, py),
+            hp: 30,
+            max_hp: 30,
+            atk: 3,
+            def: 1,
+            tamed: true,
+            level: 1,
+            xp: 0,
+            xp_to_next: 20,
+            cronjob: None,
+            party_slot: Some(slot),
+            zone: 1,
+            custom_name: None,
+            hp_roll: 1.0,
+            atk_roll: 1.0,
+            def_roll: 1.0,
+            growth_roll: 1.0,
+            fusions: 0,
+            routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
+            field_buffs: Vec::new(),
+        });
+    }
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}

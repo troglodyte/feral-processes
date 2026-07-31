@@ -26,14 +26,12 @@ pub(super) fn draw_companion_menu(
         let fused = fusion_tag(p.fusions);
         let critical = hp_critical(p.hp, p.max_hp);
         let text = format!(
-            "[{}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}{}{}{}{}",
+            "[{}] {} Lv{} - HP {}/{}  PWR {}{}{}{}{}",
             menu_shortcut(i),
             p.name,
             p.level,
             p.hp,
             p.max_hp,
-            p.atk,
-            p.def,
             p.power,
             quality,
             fused,

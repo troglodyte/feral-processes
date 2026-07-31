@@ -507,7 +507,7 @@ impl FieldBuffKind {
         }
     }
 
-    /// The affinity category `abilities::scaled_power` scales this kind's
+    /// The affinity category `abilities::scaled_stat_power` scales this kind's
     /// authored magnitude against, the same call as
     /// `AbilityEffect::affinity_kind`. `None` for the four percentage-rate
     /// kinds: a rate isn't a magnitude in any of the five affinity
@@ -524,10 +524,10 @@ impl FieldBuffKind {
     }
 
     /// Whether `Game::cast_field_routine` should run this kind's authored
-    /// `power` through `abilities::scaled_power` (level and affinity) or
+    /// `power` through `abilities::scaled_stat_power` (level and affinity) or
     /// deliver it unchanged. The five point-amount kinds scale; the five
     /// percentage-point kinds do not, for the reason `AbilityEffect::Drain`'s
-    /// `heal_fraction` is excluded from `scaled_power` too: a value that
+    /// `heal_fraction` is excluded from `scaled_hp_power` too: a value that
     /// already carries its own ceiling doesn't need a second one stacked on
     /// top. A percentage is a property of the routine, not of how strong the
     /// caster is — scaling one the way a flat point value scales would let

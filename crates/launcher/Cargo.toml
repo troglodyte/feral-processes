@@ -9,6 +9,12 @@ edition.workspace = true
 # the suite would report green having run nothing.
 default-run = "feral-processes"
 
+# Exists only to share `dev_template` between the two bins and give it
+# somewhere unit-testable to live. See `src/lib.rs`.
+[lib]
+name = "feral_processes"
+path = "src/lib.rs"
+
 [[bin]]
 name = "feral-processes"
 path = "src/main.rs"

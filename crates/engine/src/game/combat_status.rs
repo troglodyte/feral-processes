@@ -338,6 +338,22 @@ impl Game {
         }
     }
 
+    /// Raises `target`'s HP by `amount`, capped at its maximum, and returns
+    /// how much actually landed — zero on a full-health target.
+    ///
+    /// The return value is what battle logs print. Printing the requested
+    /// figure instead let a heal claim twenty points on a target with three
+    /// to spare, which reads as the heal having been wasted by the game
+    /// rather than by the player's timing.
+    pub(crate) fn restore_hp(&mut self, target: Entity, amount: i32) -> i32 {
+        let Some(mut stats) = self.world.get_mut::<Stats>(target) else {
+            return 0;
+        };
+        let before = stats.hp;
+        stats.hp = (stats.hp + amount).min(stats.max_hp);
+        stats.hp - before
+    }
+
     /// Cuts `dmg` by `target`'s running `Mitigation` field buff power
     /// (percentage points), read off `target` itself since the kind is
     /// `FieldScope::Creature` — it protects whoever carries it, not the

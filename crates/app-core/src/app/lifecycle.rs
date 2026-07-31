@@ -132,7 +132,12 @@ impl App {
         }
     }
 
-    pub(crate) fn load_game(&mut self, path: PathBuf) {
+    /// Public for the launcher's `--template` flag, which boots straight
+    /// into a generated save rather than by way of the load menu. A failure
+    /// leaves the app on the main menu with the reason in the status line,
+    /// which is what that path wants too — a bad template should drop you
+    /// into the game you could have started anyway, not kill the process.
+    pub fn load_game(&mut self, path: PathBuf) {
         match Game::load(&path, &self.assets_dir) {
             Ok(game) => {
                 self.last_autosave_tick = game.current_tick();

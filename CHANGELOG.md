@@ -56,6 +56,24 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 - **`pack` always stamps the current save version**, so dumping before a
   format bump and packing after is the one way to carry a save across a
   version change. There is still no automatic migration, by design.
+- **`dev-saves/` holds named worlds you can generate into.** A state you
+  had to play up to becomes one you can regenerate in a second:
+  `savetool capture <save.bin> <name>` records a save as a checked-in RON
+  fixture, and `cargo run -- --template <name>` regenerates it and boots
+  straight in. Shipped with `extraction` — nine tamed programs, four of
+  them carrying 4–6 routines across every effect category, and a standing
+  Compiler — because testing routine extraction otherwise starts with an
+  hour of taming.
+- **A template is copied, not played in place.** `--template` writes
+  `saves/dev_<name>.bin` and opens that, overwriting it every run. The game
+  autosaves, so opening the fixture directly would rewrite it, and it would
+  decay into a record of the last session instead of a known world.
+- **Templates are RON so they can outlive a save-format bump**, and
+  `every_checked_in_template_still_loads` says whether they have. It
+  generates each one through the real `Game::load` and compares the tamed
+  count across it — a species id that has left `assets/species/` is skipped
+  on load rather than rejected, so a gutted template would otherwise still
+  open and simply be missing the programs it exists to provide.
 
 ### Field routines: buffs cast outside battle that keep running into one
 
@@ -186,8 +204,52 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   out as they walked away would be worse than none.
 - Neither screen takes an action or advances a tick.
 
+### Balance
+
+- **Routines now scale with the level of whoever runs them.** Ability
+  `Damage` and `Drain` never did: `battle::compute_damage` is
+  `power + ATK - DEF`, and the caster's ATK was held to carry the whole
+  progression. It cannot — `ATK_PER_LEVEL` is 1 against `HP_PER_LEVEL`'s 12,
+  and zone depth doubles Integrity again on top — so an authored power fell
+  further behind its target every level. A level-10 player with the Damage
+  affinity perk five deep, spending the heaviest single-target routine in
+  the game against a 400-Integrity program, hit for **35**. The same cast
+  now lands **147**.
+- **There are two level curves now, not one, split by what the magnitude is
+  measured in.** `Damage`, `Drain`, `Heal` and `Debuff` are HP figures and
+  scale on the new, steeper `ABILITY_HP_SCALE_PER_LEVEL`; `Buff` and
+  `FieldBuff` are stat points or percentages and stay on
+  `ABILITY_STAT_SCALE_PER_LEVEL`, unchanged at its old rate. Putting a `Buff`
+  on the HP curve would have turned a +3 attack routine into a tripling — the
+  single-curve version of this change was not viable, which is why the split
+  exists rather than one raised number.
+- Heals move with damage: a Checksum Repair on a perked level-10 caster goes
+  from 78 to 156, a Cold Boot from 156 to 313. Bleed, whose power is HP per
+  round, moves with them for the same reason.
+- Hostile carriers get the same curve, read off the zone rather than a level
+  they don't have (`Game::ability_user_level`), so a wild routine at zone 4
+  goes from 16 to 42. That is the cost of the change and it is deliberate:
+  the player's own level outruns the zone number they are standing in.
+- No authored `.ron` power changed. `balance_sim` models no abilities at all,
+  so its curves do not move and never covered any of this — the new
+  `a_perked_level_ten_kernel_panic_lands_in_the_intended_band` is the only
+  regression gate on ability magnitudes.
+
 ### Fixed
 
+- **A heal announced what it rolled, not what it landed.** "Medic patches
+  you for 23 HP." was the scaled figure the ability produced, printed
+  before the target's ceiling was applied — so a patch on someone three
+  points down claimed twenty-three, and a patch on someone at full health
+  claimed all of it while doing nothing. Both the `Heal` line and Drain's
+  "restoring" figure now report HP actually restored, which is `0` when
+  there was none to give back. `Game::restore_hp` is the single clamp both
+  read from, the way `apply_damage` is for damage.
+- **The party roster no longer prints ATK and DEF.** The row had grown long
+  enough to crowd the quality, fusion and activity tags that only appear
+  situationally; Integrity and Power carry the at-a-glance comparison. The
+  fuse pickers still show the full stat line, since that is the screen where
+  the numbers decide something.
 - **A trade dropped you back on the map.** Every completed transaction —
   item sale, purchase, buyback, program sale — closed the trader's screen,
   so clearing a full pack a stack at a time meant walking `t` → trader →

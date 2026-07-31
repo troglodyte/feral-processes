@@ -853,23 +853,38 @@ pub const PLAYER_ROUTINE_SLOT_CAP: u32 = 6;
 /// reaches for its *move's* status effect on a given swing.
 pub const WILD_ROUTINE_CHANCE: f64 = 0.06;
 
-/// How much each level adds to an ability's magnitude: the multiplier is
-/// `1.0 + level * this`. A flat `Heal(power: 8)` is a real patch at level 1
-/// and noise against a level-20 program with 400 Integrity taking 100-point
-/// hits, which is what this exists to fix.
+/// How much each level adds to an ability magnitude measured in **stat
+/// points** — a `Buff` or `FieldBuff` power, which is added straight to ATK
+/// or DEF or read as percentage points. The multiplier is
+/// `1.0 + level * this`.
 ///
-/// Applies to `Heal`, `Buff` and `Debuff` magnitudes only. Ability `Damage`
-/// is deliberately excluded — `battle::compute_damage` is
-/// `power + ATK - DEF`, so it already rides the user's ATK, and scaling the
-/// flat term too would double-dip through every curve `balance_sim`
-/// projects.
-pub const ABILITY_POWER_SCALE_PER_LEVEL: f32 = 0.15;
+/// Deliberately gentle, because the curve it has to keep pace with is
+/// gentle: `ATK_PER_LEVEL` and `DEF_PER_LEVEL` are both 1. A +3 attack buff
+/// against a base ATK of 6 is already half again; scaling it on the HP curve
+/// below would turn the same routine into a tripling.
+pub const ABILITY_STAT_SCALE_PER_LEVEL: f32 = 0.15;
 
-/// Level ceiling on `abilities::ability_power_scale`. The player has no
-/// level cap (`progression::add_xp` takes `None`), so without this a long
-/// enough game multiplies every heal and buff without bound. At the value
-/// above, this caps the multiplier at 7x.
-pub const ABILITY_POWER_SCALE_LEVEL_CAP: u32 = 40;
+/// How much each level adds to an ability magnitude measured in **HP** —
+/// `Damage`, `Drain`, `Heal`, and the per-round bite of a `Debuff`. Steeper
+/// than `ABILITY_STAT_SCALE_PER_LEVEL` by design, and for the same reason
+/// that one is gentle: these are weighed against Integrity, which grows at
+/// `HP_PER_LEVEL` (12) per level and doubles again per zone
+/// (`ZONE_STAT_GROWTH`).
+///
+/// Ability damage used not to be level-scaled at all. `compute_damage` is
+/// `power + ATK - DEF`, and ATK was held to carry the progression on its own
+/// — but ATK grows at 1 per level against Integrity's 12, so an authored
+/// power fell further behind its target every level. By the time a level-10
+/// player with the affinity perk five deep faced a 400-Integrity program,
+/// the heaviest shipped routine hit for 35. That is what this rate exists to
+/// fix; `tests::combat_abilities` pins the resulting figure.
+pub const ABILITY_HP_SCALE_PER_LEVEL: f32 = 0.40;
+
+/// Level ceiling on both ability scales. The player has no level cap
+/// (`progression::add_xp` takes `None`), so without this a long enough game
+/// multiplies every routine without bound. A companion is capped far lower
+/// by `CREATURE_MAX_LEVEL` and never reaches this.
+pub const ABILITY_SCALE_LEVEL_CAP: u32 = 40;
 
 /// An ability magnitude's neutral affinity — no bonus, no penalty. The
 /// value every `AffinityKind` defaults to, and what a caster with neither
@@ -882,10 +897,11 @@ pub const AFFINITY_NEUTRAL: f32 = 1.0;
 /// which is a minority of `power + ATK - DEF` at a high level, so a narrow
 /// band would make damage affinities imperceptible.
 ///
-/// These compound with `ability_power_scale`, which is itself up to 7x.
-/// A companion caps at `CREATURE_MAX_LEVEL` (12), so its ceiling is 2.8x
-/// from level times `AFFINITY_MAX` — 5.6x an authored power. That is the
-/// modder's choice to make, which is the moddability contract.
+/// These compound with whichever level scale the category uses. A companion
+/// caps at `CREATURE_MAX_LEVEL` (12), so a stat magnitude's ceiling is 2.8x
+/// from level times `AFFINITY_MAX` — 5.6x an authored power — and an HP
+/// magnitude's is 5.8x times `AFFINITY_MAX`. That is the modder's choice to
+/// make, which is the moddability contract.
 pub const AFFINITY_MIN: f32 = 0.5;
 pub const AFFINITY_MAX: f32 = 2.0;
 
@@ -910,15 +926,13 @@ pub const AFFINITY_PERK_BONUS_PER_LEVEL: f32 = 0.05;
 /// only — deliberately a different rate from `AFFINITY_PERK_BONUS_PER_LEVEL`,
 /// not a second copy of the same number.
 ///
-/// `Damage` and `Drain` route through `abilities::scaled_affinity_power`,
-/// which skips `ability_power_scale` on purpose: `compute_damage` already
-/// adds the caster's ATK, which grows with level on its own, so scaling the
-/// authored power by level too would double-count that growth (see
-/// `scaled_affinity_power`'s doc). Every other category goes through
-/// `abilities::scaled_power` instead, which *does* carry `ability_power_scale`
-/// (up to 7x at the level cap) on top of the affinity multiplier — so the
-/// same percentage-per-level buys those categories far more than it buys
-/// Damage or Drain, whose total scaling is the affinity term alone.
+/// The reason this rate was split off no longer holds: `Damage` and `Drain`
+/// once skipped level scaling entirely, so the affinity term was their only
+/// multiplier and had to be steep to be felt. They now scale on
+/// `ABILITY_HP_SCALE_PER_LEVEL` like every other HP magnitude. The rate is
+/// kept apart anyway, for the reason below, which never depended on that —
+/// what these two perks compete against is not what the other three compete
+/// against.
 ///
 /// At the shared 0.05 rate, Payload Tuning and Siphon Protocol were
 /// strictly worse value than the `Attacker` perk for every shipped

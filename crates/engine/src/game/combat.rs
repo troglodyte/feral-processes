@@ -625,7 +625,7 @@ impl Game {
     }
 
     /// The level an ability's magnitude scales from when `entity` uses it —
-    /// see `abilities::scaled_power`.
+    /// see `abilities::scaled_stat_power` and `abilities::scaled_hp_power`.
     ///
     /// The player and companions have `Experience`. Wild programs do not:
     /// they scale by zone and distance instead, so a hostile carrier reads

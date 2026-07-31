@@ -52,37 +52,42 @@ pub fn player_routine_slots(level: u32) -> usize {
     )
 }
 
-/// The multiplier an ability's authored magnitude is scaled by when a
-/// combatant of `level` uses it — see
-/// `tuning::ABILITY_POWER_SCALE_PER_LEVEL`.
-///
-/// `level` is clamped at `tuning::ABILITY_POWER_SCALE_LEVEL_CAP` because the
-/// player has no level ceiling; see `player_routine_slots`, which clamps for
-/// the same reason.
-pub fn ability_power_scale(level: u32) -> f32 {
-    let level = level.min(crate::tuning::ABILITY_POWER_SCALE_LEVEL_CAP);
-    1.0 + level as f32 * crate::tuning::ABILITY_POWER_SCALE_PER_LEVEL
+/// `level`'s multiplier at `per_level`, clamped at
+/// `tuning::ABILITY_SCALE_LEVEL_CAP` because the player has no level
+/// ceiling; see `player_routine_slots`, which clamps for the same reason.
+fn level_scale(level: u32, per_level: f32) -> f32 {
+    let level = level.min(crate::tuning::ABILITY_SCALE_LEVEL_CAP);
+    1.0 + level as f32 * per_level
 }
 
-/// `power` scaled by `ability_power_scale(level)` and by the caster's
-/// `affinity` for this effect's category, rounded once. Negative powers
-/// scale too — a sap is a negative-power buff, and it has to sharpen with
-/// level and with affinity the same way a buff does.
+/// The multiplier a **stat-point** magnitude is scaled by at `level` — a
+/// `Buff` or `FieldBuff` power. See `tuning::ABILITY_STAT_SCALE_PER_LEVEL`
+/// for why this is the gentler of the two.
+pub fn ability_stat_scale(level: u32) -> f32 {
+    level_scale(level, crate::tuning::ABILITY_STAT_SCALE_PER_LEVEL)
+}
+
+/// The multiplier an **HP** magnitude is scaled by at `level` — `Damage`,
+/// `Drain`, `Heal`, `Debuff`. See `tuning::ABILITY_HP_SCALE_PER_LEVEL`.
+pub fn ability_hp_scale(level: u32) -> f32 {
+    level_scale(level, crate::tuning::ABILITY_HP_SCALE_PER_LEVEL)
+}
+
+/// A stat-point `power` scaled by `ability_stat_scale(level)` and by the
+/// caster's `affinity` for this effect's category, rounded once. Negative
+/// powers scale too — a sap is a negative-power buff, and it has to sharpen
+/// with level and with affinity the same way a buff does.
 ///
 /// Both factors multiply before the single `round`: rounding after each
 /// would drop points that one combined multiply keeps.
-pub fn scaled_power(power: i32, level: u32, affinity: f32) -> i32 {
-    (power as f32 * ability_power_scale(level) * affinity).round() as i32
+pub fn scaled_stat_power(power: i32, level: u32, affinity: f32) -> i32 {
+    (power as f32 * ability_stat_scale(level) * affinity).round() as i32
 }
 
-/// `power` scaled by `affinity` alone, for the two effects whose magnitude
-/// goes through `battle::compute_damage` rather than standing on its own.
-/// Level scaling is deliberately absent: `compute_damage` adds the caster's
-/// ATK, which already grows with level, and applying
-/// `ability_power_scale` here as well would scale the same progression
-/// twice.
-pub fn scaled_affinity_power(power: i32, affinity: f32) -> i32 {
-    (power as f32 * affinity).round() as i32
+/// An HP `power` scaled by `ability_hp_scale(level)` and `affinity`, on the
+/// same terms as `scaled_stat_power` — only the per-level rate differs.
+pub fn scaled_hp_power(power: i32, level: u32, affinity: f32) -> i32 {
+    (power as f32 * ability_hp_scale(level) * affinity).round() as i32
 }
 
 /// The cooldown armed on a combatant right after it casts an ability whose
@@ -235,7 +240,7 @@ pub enum AbilityEffect {
     /// `heal_fraction` of the damage it actually dealt, capped at its own
     /// maximum Integrity.
     ///
-    /// Deliberately excluded from `scaled_power`: the heal rides the damage,
+    /// Deliberately excluded from `scaled_hp_power`: the heal rides the damage,
     /// which already rides the user's ATK, so this scales with level without
     /// being scaled.
     Drain {
@@ -941,41 +946,43 @@ mod tests {
     }
 
     #[test]
-    fn ability_power_scale_grows_per_level_and_stops_at_the_cap() {
-        assert_eq!(ability_power_scale(0), 1.0, "no level, no bonus");
+    fn both_ability_scales_grow_per_level_and_stop_at_the_shared_cap() {
+        assert_eq!(ability_stat_scale(0), 1.0, "no level, no bonus");
+        assert_eq!(ability_hp_scale(0), 1.0, "no level, no bonus");
         assert!(
-            (ability_power_scale(12) - 2.8).abs() < 1e-5,
-            "a companion at its level cap runs routines at 2.8x"
+            (ability_stat_scale(12) - 2.8).abs() < 1e-5,
+            "a companion at its level cap runs stat routines at 2.8x"
         );
         assert!(
-            (ability_power_scale(20) - 4.0).abs() < 1e-5,
-            "the level-20 case that motivated the change"
+            ability_hp_scale(10) > ability_stat_scale(10),
+            "an HP magnitude has Integrity's curve to keep pace with, not ATK's"
         );
-        let capped = ability_power_scale(crate::tuning::ABILITY_POWER_SCALE_LEVEL_CAP);
-        assert_eq!(
-            ability_power_scale(9_999),
-            capped,
-            "the player has no level cap, so this clamp is the only bound"
-        );
+        for scale in [ability_stat_scale as fn(u32) -> f32, ability_hp_scale] {
+            assert_eq!(
+                scale(9_999),
+                scale(crate::tuning::ABILITY_SCALE_LEVEL_CAP),
+                "the player has no level cap, so this clamp is the only bound"
+            );
+        }
     }
 
     #[test]
     fn scaled_power_scales_negative_magnitudes_too() {
         assert_eq!(
-            scaled_power(-4, 20, crate::tuning::AFFINITY_NEUTRAL),
+            scaled_stat_power(-4, 20, crate::tuning::AFFINITY_NEUTRAL),
             -16,
             "a sap must sharpen with level the same way a buff does"
         );
-        assert_eq!(scaled_power(0, 20, crate::tuning::AFFINITY_NEUTRAL), 0);
+        assert_eq!(scaled_stat_power(0, 20, crate::tuning::AFFINITY_NEUTRAL), 0);
     }
 
     #[test]
     fn neutral_affinity_leaves_scaled_power_unchanged() {
         // The regression guard on the signature change: at 1.0 this must be
         // exactly the level-only result the three call sites produced before.
-        let level_only = (8.0 * ability_power_scale(20)).round() as i32;
+        let level_only = (8.0 * ability_stat_scale(20)).round() as i32;
         assert_eq!(
-            scaled_power(8, 20, crate::tuning::AFFINITY_NEUTRAL),
+            scaled_stat_power(8, 20, crate::tuning::AFFINITY_NEUTRAL),
             level_only
         );
     }
@@ -985,14 +992,17 @@ mod tests {
         // One combined multiply, not two rounds of rounding: 8 * 1.15 * 1.5
         // is 13.8 -> 14, where rounding twice gives 9 * 1.5 = 13.5 -> 14 by
         // luck at this level and diverges at others.
-        assert_eq!(scaled_power(8, 1, 1.5), 14);
+        assert_eq!(scaled_stat_power(8, 1, 1.5), 14);
     }
 
     #[test]
     fn affinity_scales_negative_magnitudes_too() {
-        // A sap is a negative-power buff (see scaled_power's doc); an affinity
+        // A sap is a negative-power buff (see scaled_stat_power's doc); an affinity
         // has to sharpen it, not flip or flatten it.
-        assert_eq!(scaled_power(-4, 20, 1.5), -(scaled_power(4, 20, 1.5)));
+        assert_eq!(
+            scaled_stat_power(-4, 20, 1.5),
+            -(scaled_stat_power(4, 20, 1.5))
+        );
     }
 
     #[test]

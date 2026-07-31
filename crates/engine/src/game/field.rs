@@ -188,7 +188,7 @@ impl Game {
         let magnitude = if kind.scales_with_caster() {
             let level = self.ability_user_level(holder);
             let affinity = self.ability_affinity(holder, &def.effect);
-            abilities::scaled_power(power, level, affinity)
+            abilities::scaled_stat_power(power, level, affinity)
         } else {
             power
         };

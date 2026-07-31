@@ -54,7 +54,10 @@ fn casting_arms_the_buff_and_deducts_power() {
     let buff = &active[0];
     assert_eq!(buff.kind, FieldBuffKind::Regen);
     assert_eq!(buff.name, "Test Field Regen");
-    assert_eq!(buff.power, abilities::scaled_power(2, 1, AFFINITY_NEUTRAL));
+    assert_eq!(
+        buff.power,
+        abilities::scaled_stat_power(2, 1, AFFINITY_NEUTRAL)
+    );
     // duration: 20, aged by the one tick the successful cast itself spends.
     assert_eq!(buff.remaining, 19);
     assert_eq!(buff.source, BuffSource::Routine);
@@ -196,8 +199,14 @@ fn a_higher_level_holder_casts_a_larger_magnitude() {
 
     let low_power = game.world.get::<FieldBuff>(low).unwrap().active[0].power;
     let high_power = game.world.get::<FieldBuff>(high).unwrap().active[0].power;
-    assert_eq!(low_power, abilities::scaled_power(2, 1, AFFINITY_NEUTRAL));
-    assert_eq!(high_power, abilities::scaled_power(2, 20, AFFINITY_NEUTRAL));
+    assert_eq!(
+        low_power,
+        abilities::scaled_stat_power(2, 1, AFFINITY_NEUTRAL)
+    );
+    assert_eq!(
+        high_power,
+        abilities::scaled_stat_power(2, 20, AFFINITY_NEUTRAL)
+    );
     assert!(
         high_power > low_power,
         "a level-20 holder's cast should outscale a level-1 holder's: \
@@ -206,7 +215,7 @@ fn a_higher_level_holder_casts_a_larger_magnitude() {
 }
 
 /// The two `FieldBuffKind::scales_with_caster` tests below share this
-/// holder shape — level 20 (`ABILITY_POWER_SCALE_LEVEL_CAP` is 40, so this
+/// holder shape — level 20 (`ABILITY_SCALE_LEVEL_CAP` is 40, so this
 /// is short of the cap but still well past level 1) and `AFFINITY_MAX`
 /// worth of the `BuffAffinity` perk, bought directly onto `Perks` rather
 /// than through the purchase flow since only the resulting level matters
@@ -246,9 +255,9 @@ fn a_percentage_kind_is_delivered_at_its_authored_value_regardless_of_level_or_a
         .expect("a WholeParty target needs no picked ally");
 
     let power = game.world.get::<FieldBuff>(player).unwrap().active[0].power;
-    // scaled_power(10, 20, AFFINITY_MAX) would be 40 — if this test passed
+    // scaled_stat_power(10, 20, AFFINITY_MAX) would be 40 — if this test passed
     // against that number instead of 10, the split below would be a no-op.
-    assert_ne!(abilities::scaled_power(10, 20, AFFINITY_MAX), 10);
+    assert_ne!(abilities::scaled_stat_power(10, 20, AFFINITY_MAX), 10);
     assert_eq!(
         power, 10,
         "a percentage-point kind must land at exactly its authored value"
@@ -277,7 +286,7 @@ fn a_flat_kind_still_scales_for_the_same_high_level_high_affinity_holder() {
     let power = game.world.get::<FieldBuff>(player).unwrap().active[0].power;
     assert_eq!(
         power,
-        abilities::scaled_power(4, 20, AFFINITY_MAX),
+        abilities::scaled_stat_power(4, 20, AFFINITY_MAX),
         "a point-amount kind must still scale for the same holder the percentage test above did not"
     );
     assert_ne!(
@@ -556,7 +565,7 @@ fn active_buffs_magnitude_reflects_the_scaled_power_not_the_authored_one() {
         .expect("the level-20 holder's routine is listed");
     game.cast_field_routine(index, Some(holder)).unwrap();
 
-    let scaled = abilities::scaled_power(2, 20, AFFINITY_NEUTRAL);
+    let scaled = abilities::scaled_stat_power(2, 20, AFFINITY_NEUTRAL);
     // The authored magnitude in `FIELD_ONLY_ABILITY` is 2 — a level-20
     // holder's cast must scale well past that, so asserting against the
     // scaled value (rather than "2") actually exercises the distinction.

@@ -151,8 +151,9 @@ way deleting the Currency item does.
     //         EncounterDamp percent reduction to wild encounter odds
     //         DropBoost     percent bonus to drop rates
     //
-    //     Five of the ten run `power` through the same level/affinity
-    //     scaling every other ability effect gets (`abilities::scaled_power`)
+    //     Five of the ten run `power` through the stat-point level/affinity
+    //     scaling (`abilities::scaled_stat_power` — see "Magnitudes scale
+    //     with level")
     //     before delivering it: Regen, Coolant, Trickle, Def, Atk. The other
     //     five — Mitigation and the four rate kinds (CaptureBoost, XpBoost,
     //     EncounterDamp, DropBoost) — are percentage points, delivered at
@@ -211,16 +212,27 @@ way deleting the Currency item does.
 
 ## Magnitudes scale with level
 
-`power` is an authored *baseline*, not the figure that lands. `Heal`, `Buff`
-and `Debuff` magnitudes are multiplied by the level of whoever used the
-ability, so a `Heal(power: 8)` restores 9 at level 1 and 32 at level 20. The
-curve is `1 + level x ABILITY_POWER_SCALE_PER_LEVEL`, capped at
-`ABILITY_POWER_SCALE_LEVEL_CAP` — both in `crates/engine/src/tuning.rs`.
-Author powers as a level-1 baseline.
+`power` is an authored *baseline*, not the figure that lands. Every effect's
+magnitude is multiplied by the level of whoever used the ability. Author
+powers as a level-1 baseline.
 
-`duration` never scales. Neither does `Damage` power, nor `Drain`: both go
-through `power + ATK - DEF`, so they already grow with the user's ATK, and
-scaling the flat term as well would count the same growth twice.
+There are two curves, and which one applies depends on what the magnitude is
+measured in:
+
+- **HP** — `Damage`, `Drain`, `Heal`, `Debuff`. These are weighed against a
+  target's Integrity, which grows fast (12 per level, and doubles again per
+  zone), so they scale on the steeper
+  `1 + level x ABILITY_HP_SCALE_PER_LEVEL`.
+- **Stat points** — `Buff` and `FieldBuff`. These are added to ATK or DEF, or
+  read as percentage points, and ATK/DEF grow at 1 per level — so they scale
+  on the gentler `1 + level x ABILITY_STAT_SCALE_PER_LEVEL`. A `Buff` on the
+  HP curve would turn a +3 attack routine into a tripling.
+
+Both are capped at `ABILITY_SCALE_LEVEL_CAP`; all three constants are in
+`crates/engine/src/tuning.rs`.
+
+`duration` never scales, and neither does `Drain`'s `heal_fraction` — it
+rides damage that has already been scaled.
 
 A wild program has no level — it scales by zone and distance — so a carrier
 scales its routine from the current zone instead.

@@ -198,9 +198,12 @@ fn an_all_enemies_ability_reaches_every_group_including_past_engagement_range() 
                         x: gx + i as i32,
                         y: gy,
                     },
+                    // Deep enough to survive the sweep: this asserts on
+                    // reach, and a group that dies outright is despawned and
+                    // has no Integrity left to read.
                     Stats {
-                        hp: 50,
-                        max_hp: 50,
+                        hp: 500,
+                        max_hp: 500,
                         atk: 0,
                         def: 0,
                     },
@@ -221,7 +224,10 @@ fn an_all_enemies_ability_reaches_every_group_including_past_engagement_range() 
 
     for (group, enemy) in enemies.iter().enumerate() {
         let hp = game.world.get::<Stats>(*enemy).unwrap().hp;
-        assert!(hp < 50, "group {group} should have been hit, still at {hp}");
+        assert!(
+            hp < 500,
+            "group {group} should have been hit, still at {hp}"
+        );
     }
 }
 
@@ -754,6 +760,116 @@ fn drain_never_heals_the_user_past_its_maximum() {
     );
 }
 
+/// The heal line reports HP actually restored, not the figure the ability
+/// rolled — a patch on a full-health target reads "for 0 HP" rather than
+/// claiming an amount the target's ceiling swallowed.
+#[test]
+fn a_heal_logs_what_it_actually_restored_not_what_it_rolled() {
+    let mut game = Game::new(4104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    battle_with_a_pack_of(&mut game, 1, 200);
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 100;
+        stats.hp = 97;
+    }
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_patch".into(),
+        name: "Test Patch".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::OneAlly,
+        effect: crate::abilities::AbilityEffect::Heal { power: 20 },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+    game.use_ability(&ability, player, "You", &[player]);
+
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().hp,
+        100,
+        "the heal itself still caps at max Integrity"
+    );
+    assert!(
+        game.message_log(usize::MAX)
+            .into_iter()
+            .any(|(_, text)| text.contains("patches you for 3 HP")),
+        "the log must name the 3 points that landed, not the 20 that were rolled: {:?}",
+        game.message_log(usize::MAX)
+    );
+}
+
+#[test]
+fn a_heal_on_a_full_health_target_logs_zero() {
+    let mut game = Game::new(4105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    battle_with_a_pack_of(&mut game, 1, 200);
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 100;
+        stats.hp = 100;
+    }
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_patch".into(),
+        name: "Test Patch".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::OneAlly,
+        effect: crate::abilities::AbilityEffect::Heal { power: 20 },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+    game.use_ability(&ability, player, "You", &[player]);
+
+    assert!(
+        game.message_log(usize::MAX)
+            .into_iter()
+            .any(|(_, text)| text.contains("patches you for 0 HP")),
+        "a wasted heal must say so: {:?}",
+        game.message_log(usize::MAX)
+    );
+}
+
+/// Drain's line has the same obligation as a plain heal: the restore figure
+/// is what the user's ceiling let in, not the fraction it computed.
+#[test]
+fn drain_logs_what_it_actually_restored() {
+    let mut game = Game::new(4106, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 60;
+        stats.hp = 59;
+        stats.atk = 40;
+    }
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_drain".into(),
+        name: "Test Drain".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
+        effect: crate::abilities::AbilityEffect::Drain {
+            power: 10,
+            heal_fraction: 1.0,
+        },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+    };
+    game.use_ability(&ability, player, "You", &[enemies[0]]);
+
+    assert!(
+        game.message_log(usize::MAX)
+            .into_iter()
+            .any(|(_, text)| text.contains("restoring 1.")),
+        "a full-lifesteal drain one point from max restores exactly 1: {:?}",
+        game.message_log(usize::MAX)
+    );
+}
+
 #[test]
 fn cleanse_clears_an_active_status_and_is_silent_on_a_clean_target() {
     let mut game = Game::new(4103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -823,7 +939,7 @@ fn a_negative_power_buff_saps_effective_attack() {
 
     assert_eq!(
         game.effective_atk(enemies[0]),
-        before + crate::abilities::scaled_power(-6, 1, crate::tuning::AFFINITY_NEUTRAL),
+        before + crate::abilities::scaled_stat_power(-6, 1, crate::tuning::AFFINITY_NEUTRAL),
         "a negative buff power subtracts, which is the whole sap mechanic"
     );
 }
@@ -890,7 +1006,7 @@ fn a_heal_scales_with_the_users_level() {
 
     assert_eq!(
         game.world.get::<Stats>(player).unwrap().hp,
-        100 + crate::abilities::scaled_power(8, 20, crate::tuning::AFFINITY_NEUTRAL),
+        100 + crate::abilities::scaled_hp_power(8, 20, crate::tuning::AFFINITY_NEUTRAL),
         "an 8-point patch at level 20 is 32, not 8"
     );
 }
@@ -925,7 +1041,7 @@ fn a_buff_stores_the_scaled_power_so_the_tick_needs_no_change() {
             .active
             .unwrap()
             .power,
-        crate::abilities::scaled_power(3, 20, crate::tuning::AFFINITY_NEUTRAL),
+        crate::abilities::scaled_stat_power(3, 20, crate::tuning::AFFINITY_NEUTRAL),
         "the scaled figure is stored, not recomputed at read time"
     );
 }
@@ -960,16 +1076,18 @@ fn a_bleed_debuffs_per_round_damage_scales_with_the_users_level() {
             .active
             .unwrap()
             .power,
-        crate::abilities::scaled_power(2, 20, crate::tuning::AFFINITY_NEUTRAL),
+        crate::abilities::scaled_hp_power(2, 20, crate::tuning::AFFINITY_NEUTRAL),
         "bleed is flat damage per round, so it needs scaling as much as a heal does"
     );
 }
 
-/// `compute_damage` is `power + ATK - DEF`, so ability damage already rides
-/// the user's ATK. Scaling the flat term as well would double-dip through
-/// every curve `balance_sim` projects.
+/// `compute_damage` is `power + ATK - DEF`, and ATK was once held to carry
+/// the whole progression. It cannot: `ATK_PER_LEVEL` is 1 against
+/// `HP_PER_LEVEL`'s 12, so an unscaled authored power falls further behind
+/// its target's Integrity every single level. A damage magnitude is measured
+/// in HP and has to grow on the HP curve.
 #[test]
-fn ability_damage_is_not_scaled_by_level() {
+fn ability_damage_scales_with_the_users_level() {
     let mut game = Game::new(4204, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let enemies = battle_with_a_pack_of(&mut game, 2, 500);
@@ -999,16 +1117,17 @@ fn ability_damage_is_not_scaled_by_level() {
     game.use_ability(&ability, player, "You", &[enemies[1]]);
     let at_level_20 = before - game.world.get::<Stats>(enemies[1]).unwrap().hp;
 
-    assert_eq!(
-        at_level_1, at_level_20,
-        "ability damage scales through ATK alone — scaling power too would double-dip"
+    assert!(
+        at_level_20 > at_level_1 * 3,
+        "a level-20 hit should dwarf a level-1 one: {at_level_1} vs {at_level_20}"
     );
 }
 
-/// Drain's heal rides the damage it dealt, which already rides ATK, so it
-/// must not be scaled a second time.
+/// Drain's damage half is a damage magnitude like any other, so it scales
+/// the same way. Its `heal_fraction` still doesn't — that rides the damage
+/// it already dealt.
 #[test]
-fn drain_is_not_scaled_by_level() {
+fn drain_scales_with_the_users_level() {
     let mut game = Game::new(4205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let enemies = battle_with_a_pack_of(&mut game, 2, 500);
@@ -1038,7 +1157,52 @@ fn drain_is_not_scaled_by_level() {
     game.use_ability(&ability, player, "You", &[enemies[1]]);
     let at_level_20 = before - game.world.get::<Stats>(enemies[1]).unwrap().hp;
 
-    assert_eq!(at_level_1, at_level_20, "a drain scales through ATK alone");
+    assert!(
+        at_level_20 > at_level_1 * 3,
+        "a level-20 drain should dwarf a level-1 one: {at_level_1} vs {at_level_20}"
+    );
+}
+
+/// The pin for the whole HP-magnitude retune, in the terms the retune was
+/// asked for: a level-10 player with the Damage affinity perk five levels
+/// deep, spending the heaviest shipped single-target routine, against a
+/// program with the Integrity a mid-zone one actually has.
+///
+/// `balance_sim` cannot hold this — it models no abilities at all — so this
+/// is the only gate on ability magnitudes. A number that moves here means
+/// routine damage was retuned, which is the signal, not a broken test.
+#[test]
+fn a_perked_level_ten_kernel_panic_lands_in_the_intended_band() {
+    let mut game = Game::new(4207, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 400);
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.atk = 16;
+    }
+    game.world.get_mut::<Stats>(enemies[0]).unwrap().def = 9;
+    game.world.get_mut::<Experience>(player).unwrap().level = 10;
+    for _ in 0..5 {
+        game.world
+            .get_mut::<Perks>(player)
+            .unwrap()
+            .unlocked
+            .push(Perk::DamageAffinity);
+    }
+
+    let before = game.world.get::<Stats>(enemies[0]).unwrap().hp;
+    game.use_ability(
+        &ability(&game, "kernel_panic"),
+        player,
+        "You",
+        &[enemies[0]],
+    );
+    let dealt = before - game.world.get::<Stats>(enemies[0]).unwrap().hp;
+
+    assert!(
+        (140..=165).contains(&dealt),
+        "a perked level-10 Kernel Panic should land near 150 against 400 Integrity, got {dealt}"
+    );
 }
 
 /// Wild programs have no `Experience` — they scale by zone and distance —
@@ -1159,17 +1323,17 @@ fn a_species_heal_affinity_scales_the_heal_it_casts() {
 
     let healed = game.world.get::<Stats>(player).unwrap().hp - before;
     // hot_patch is Heal(power: 8); the medic is level 1.
-    let expected = crate::abilities::scaled_power(8, 1, 1.5);
+    let expected = crate::abilities::scaled_hp_power(8, 1, 1.5);
     assert_eq!(healed, expected, "heal affinity should scale the heal");
     assert!(
-        expected > crate::abilities::scaled_power(8, 1, AFFINITY_NEUTRAL),
+        expected > crate::abilities::scaled_hp_power(8, 1, AFFINITY_NEUTRAL),
         "the fixture must actually differ from neutral, or this proves nothing"
     );
 }
 
 /// A species with a damage affinity, for the `Damage` arm of `use_ability` —
-/// the one that feeds `scaled_affinity_power` into `battle::compute_damage`
-/// rather than standing on `scaled_power` alone.
+/// the one that feeds its scaled power into `battle::compute_damage`
+/// rather than standing on that figure alone.
 const STRIKER_WITH_AFFINITY: &str = r#"(
     id: "test_striker",
     name: "Test Striker",
@@ -1231,16 +1395,15 @@ fn a_species_damage_affinity_scales_the_damage_it_deals() {
     game.use_ability(&kernel_panic, striker, "Test Striker", &[target]);
 
     let taken = 200 - game.world.get::<Stats>(target).unwrap().hp;
-    // kernel_panic is Damage(power: 16); Damage takes affinity alone, with
-    // no level term, since compute_damage already adds the caster's ATK.
-    let scaled = crate::abilities::scaled_affinity_power(16, 1.5);
+    // kernel_panic is Damage(power: 16); the striker is level 1.
+    let scaled = crate::abilities::scaled_hp_power(16, 1, 1.5);
     let expected = battle::compute_damage(game.effective_atk(striker), 3, scaled);
     assert_eq!(
         taken, expected,
         "damage affinity should scale the authored power fed to compute_damage"
     );
     assert!(
-        scaled > crate::abilities::scaled_affinity_power(16, AFFINITY_NEUTRAL),
+        scaled > crate::abilities::scaled_hp_power(16, 1, AFFINITY_NEUTRAL),
         "the fixture must actually differ from neutral, or this proves nothing"
     );
 }
@@ -1309,9 +1472,9 @@ fn a_species_drain_affinity_scales_the_damage_but_not_the_heal_fraction() {
     game.use_ability(&siphon_cycles, drainer, "Test Drainer", &[target]);
 
     let taken = 200 - game.world.get::<Stats>(target).unwrap().hp;
-    // siphon_cycles is Drain(power: 10, heal_fraction: 0.5); affinity alone
-    // scales the authored power, same as Damage.
-    let scaled = crate::abilities::scaled_affinity_power(10, 1.5);
+    // siphon_cycles is Drain(power: 10, heal_fraction: 0.5); level and
+    // affinity scale the authored power, same as Damage.
+    let scaled = crate::abilities::scaled_hp_power(10, 1, 1.5);
     let expected_dmg = battle::compute_damage(game.effective_atk(drainer), 3, scaled);
     assert_eq!(
         taken, expected_dmg,

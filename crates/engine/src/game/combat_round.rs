@@ -669,7 +669,7 @@ impl Game {
                         ActiveBuff {
                             kind: *kind,
                             remaining: *duration,
-                            power: abilities::scaled_power(*power, level, affinity),
+                            power: abilities::scaled_stat_power(*power, level, affinity),
                         },
                     );
                     let stat = match kind {
@@ -682,11 +682,9 @@ impl Game {
                     ));
                 }
                 AbilityEffect::Heal { power } => {
-                    let power = abilities::scaled_power(*power, level, affinity);
-                    if let Some(mut stats) = self.world.get_mut::<Stats>(recipient) {
-                        stats.hp = (stats.hp + power).min(stats.max_hp);
-                    }
-                    self.log(format!("{name} patches {on} for {power} HP."));
+                    let power = abilities::scaled_hp_power(*power, level, affinity);
+                    let restored = self.restore_hp(recipient, power);
+                    self.log(format!("{name} patches {on} for {restored} HP."));
                 }
                 AbilityEffect::Debuff {
                     kind,
@@ -697,7 +695,7 @@ impl Game {
                         statuses.active = Some(ActiveStatus {
                             kind: *kind,
                             remaining: *duration,
-                            power: abilities::scaled_power(*power, level, affinity),
+                            power: abilities::scaled_hp_power(*power, level, affinity),
                         });
                     }
                     match kind {
@@ -714,7 +712,7 @@ impl Game {
                     let dmg = battle::compute_damage(
                         self.effective_atk(actor),
                         def,
-                        abilities::scaled_affinity_power(*power, affinity),
+                        abilities::scaled_hp_power(*power, level, affinity),
                     );
                     self.apply_damage(recipient, dmg);
                     self.log_kind(hit_kind, format!("{name} hits {on} for {dmg} damage."));
@@ -734,17 +732,15 @@ impl Game {
                     let dmg = battle::compute_damage(
                         self.effective_atk(actor),
                         def,
-                        abilities::scaled_affinity_power(*power, affinity),
+                        abilities::scaled_hp_power(*power, level, affinity),
                     );
                     self.apply_damage(recipient, dmg);
                     // Off the damage actually dealt, not the authored power:
                     // DEF has already eaten into it, and healing off the
                     // pre-mitigation figure would make a drain better against
                     // an armoured target than a soft one.
-                    let restored = (dmg as f32 * heal_fraction).round() as i32;
-                    if let Some(mut stats) = self.world.get_mut::<Stats>(actor) {
-                        stats.hp = (stats.hp + restored).min(stats.max_hp);
-                    }
+                    let siphoned = (dmg as f32 * heal_fraction).round() as i32;
+                    let restored = self.restore_hp(actor, siphoned);
                     self.log_kind(
                         hit_kind,
                         format!("{name} siphons {dmg} from {on}, restoring {restored}."),

@@ -1,19 +1,40 @@
 //! The `feral-processes` binary. Resolves the game's on-disk paths and hands
 //! off to the graphical frontend (`feral-processes-gui`) — this crate itself
 //! draws nothing and knows nothing about game rules.
+//!
+//! ```sh
+//! cargo run                          # the game
+//! cargo run -- --template extraction # ...starting from a known world
+//! ```
 
 use std::io;
-use std::path::PathBuf;
 
+use feral_processes::dev_template;
 use feral_processes_app_core::App;
 
+const USAGE: &str = "\
+usage:
+  feral-processes                   play
+  feral-processes --template <name> regenerate a dev-saves/ world and play it";
+
 fn main() -> io::Result<()> {
-    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let repo_root = crate_dir
-        .parent()
-        .and_then(|p| p.parent())
-        .unwrap_or(&crate_dir)
-        .to_path_buf();
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let template = match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
+        [] => None,
+        ["--template", name] => Some(name.to_string()),
+        // A bare `--template` is a likely typo rather than a request to
+        // list, so it answers with the names it would have accepted.
+        ["--template"] => {
+            eprintln!("--template needs a name\n{}", dev_template::known());
+            std::process::exit(1);
+        }
+        _ => {
+            eprintln!("{USAGE}");
+            std::process::exit(1);
+        }
+    };
+
+    let repo_root = dev_template::repo_root();
     let assets_dir = repo_root.join("assets");
     let saves_dir = repo_root.join("saves");
     std::fs::create_dir_all(&saves_dir)?;
@@ -32,7 +53,20 @@ fn main() -> io::Result<()> {
         eprintln!("No display detected; feral-processes needs a graphical display.");
         std::process::exit(1);
     }
-    feral_processes_gui::run(App::new(assets_dir, saves_dir, history_path));
+    let mut app = App::new(assets_dir, saves_dir, history_path);
+    // Generated into an expendable copy under `saves/`, never opened on the
+    // `dev-saves/` source — the game autosaves, so playing the fixture
+    // directly would rewrite it into a record of this session.
+    if let Some(name) = template {
+        let working_copy = dev_template::working_copy(&name);
+        if let Err(e) = dev_template::generate(&name, &working_copy) {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+        eprintln!("playing template `{name}` at {}", working_copy.display());
+        app.load_game(working_copy);
+    }
+    feral_processes_gui::run(app);
     Ok(())
 }
 

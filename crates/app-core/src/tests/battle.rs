@@ -756,3 +756,109 @@ fn every_round_takes_real_time_to_scroll_in() {
         );
     }
 }
+
+/// The reported bug: one `a` appeared to command the whole party. Every
+/// other fixture in this file fights with an empty `Party`, where a single
+/// slot really is the whole round — so nothing here had ever driven a
+/// two-slot battle from key presses.
+#[test]
+fn attack_plans_only_the_active_slot_when_a_companion_is_in_the_party() {
+    let mut app = None;
+    for seed in 0..200u32 {
+        let mut candidate = app_with_companions_in_the_party(seed, 1);
+        let game = candidate.game.as_mut().unwrap();
+        let player = game.player_status().position;
+        let target = game
+            .view_entities(12, 12)
+            .into_iter()
+            .filter(|e| e.is_hostile && !e.is_tamed && !e.is_structure)
+            .find(|e| (e.pos.0 - player.0).abs() + (e.pos.1 - player.1).abs() == 1);
+        let Some(target) = target else { continue };
+        candidate.handle_key(match (target.pos.0 - player.0, target.pos.1 - player.1) {
+            (1, 0) => GameKey::Right,
+            (-1, 0) => GameKey::Left,
+            (0, 1) => GameKey::Down,
+            _ => GameKey::Up,
+        });
+        let single_group = candidate
+            .game
+            .as_ref()
+            .and_then(|g| g.battle_view())
+            .is_some_and(|v| v.groups.len() == 1);
+        if candidate.mode == Mode::Battle && single_group {
+            let _ = candidate.take_sounds();
+            candidate.finish_reveal();
+            app = Some(candidate);
+            break;
+        }
+    }
+    let mut app = app.expect("no seed under 200 opened a lone-group battle with a companion");
+
+    assert_eq!(
+        app.game.as_ref().unwrap().battle_active_slot(),
+        Some(0),
+        "the player picks first"
+    );
+
+    app.handle_key(GameKey::Char('a'));
+    assert_eq!(
+        app.mode,
+        Mode::BattleTarget,
+        "attack always asks which group, even when there is only one"
+    );
+    app.handle_key(GameKey::Char('a')); // group A
+
+    assert_eq!(
+        app.mode,
+        Mode::Battle,
+        "one slot's attack must not resolve the round"
+    );
+    assert_eq!(
+        app.game.as_ref().unwrap().battle_active_slot(),
+        Some(1),
+        "the companion's slot is now the one awaiting an action"
+    );
+}
+
+/// The reported shape: a full party of three, each slot asked in turn. One
+/// companion could pass by luck — a three-slot round is what "everyone
+/// attacks off one key" would actually have to break.
+#[test]
+fn a_full_party_is_asked_slot_by_slot_and_only_then_resolves() {
+    let mut app = None;
+    for seed in 0..200u32 {
+        let mut candidate = app_with_companions_in_the_party(seed, 3);
+        let game = candidate.game.as_mut().unwrap();
+        let player = game.player_status().position;
+        let target = game
+            .view_entities(12, 12)
+            .into_iter()
+            .filter(|e| e.is_hostile && !e.is_tamed && !e.is_structure)
+            .find(|e| (e.pos.0 - player.0).abs() + (e.pos.1 - player.1).abs() == 1);
+        let Some(target) = target else { continue };
+        candidate.handle_key(match (target.pos.0 - player.0, target.pos.1 - player.1) {
+            (1, 0) => GameKey::Right,
+            (-1, 0) => GameKey::Left,
+            (0, 1) => GameKey::Down,
+            _ => GameKey::Up,
+        });
+        if candidate.mode == Mode::Battle {
+            let _ = candidate.take_sounds();
+            candidate.finish_reveal();
+            app = Some(candidate);
+            break;
+        }
+    }
+    let mut app = app.expect("no seed under 200 opened a battle with a full party");
+
+    for slot in 0..4 {
+        assert_eq!(
+            app.game.as_ref().unwrap().battle_active_slot(),
+            Some(slot),
+            "slot {slot} should be the one being asked"
+        );
+        app.handle_key(GameKey::Char('a'));
+        assert_eq!(app.mode, Mode::BattleTarget, "slot {slot} picks a group");
+        app.handle_key(GameKey::Char('a'));
+    }
+}

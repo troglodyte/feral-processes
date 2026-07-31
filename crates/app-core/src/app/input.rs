@@ -99,6 +99,7 @@ impl App {
             Mode::CraftQuantity => self.handle_craft_quantity_key(key),
             Mode::Cronjob => self.handle_cronjob_key(key),
             Mode::CronjobStructure => self.handle_cronjob_structure_key(key),
+            Mode::WorkStructure => self.handle_work_structure_key(key),
             Mode::Guard => self.handle_guard_key(key),
             Mode::GuardStructure => self.handle_guard_structure_key(key),
             Mode::Remove => self.handle_remove_key(key),

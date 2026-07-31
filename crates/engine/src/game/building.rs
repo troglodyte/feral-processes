@@ -301,6 +301,51 @@ impl Game {
         Ok(())
     }
 
+    /// How many ticks one gather cycle against `structure` takes, from its
+    /// def's `work` recipe. Shared by `assign_cronjob` and `work_structure`
+    /// so a program and the player grind at the same rate.
+    fn work_ticks_for(&mut self, structure: Entity) -> u32 {
+        let kind = self.world.get::<Structure>(structure).unwrap().kind.clone();
+        self.world
+            .resource::<StructureDb>()
+            .get(&kind)
+            .and_then(|d| d.work.as_ref())
+            .map(|w| w.ticks_per_unit)
+            .unwrap_or(5)
+    }
+
+    /// Works `structure` yourself instead of posting a program to it — the
+    /// same `Task` a cronjob worker carries, on the player, advanced by
+    /// `systems::player_gather_system` and paying out through the same
+    /// `resolve_gather_cycle`.
+    ///
+    /// There is no separate "working" mode: the job simply runs while the
+    /// world ticks, which is what makes stepping away end it (`move_player`
+    /// drops the `Task`). It is deliberately not persisted — `PlayerSave`
+    /// carries no task, so loading a save puts you next to the node rather
+    /// than mid-cycle at it, and that costs at most one cycle's progress
+    /// without a save-format bump.
+    pub fn work_structure(&mut self, structure: Entity) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        self.require_surface()?;
+        if self.world.get::<ResourceNode>(structure).is_none() {
+            return Err("That structure can't be worked.".into());
+        }
+        let ticks = self.work_ticks_for(structure);
+        let player = self.player_entity();
+        self.world.entity_mut(player).insert(Task {
+            kind: TaskKind::GatherResource,
+            target: structure,
+            progress: 0,
+            required: ticks,
+        });
+        self.log("You set to work. Moving off breaks your concentration.");
+        self.tick();
+        Ok(())
+    }
+
     pub fn assign_cronjob(&mut self, worker: Entity, structure: Entity) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -317,14 +362,7 @@ impl Game {
         if self.world.get::<ResourceNode>(structure).is_none() {
             return Err("That structure can't be worked.".into());
         }
-        let structure_kind = self.world.get::<Structure>(structure).unwrap().kind.clone();
-        let ticks = self
-            .world
-            .resource::<StructureDb>()
-            .get(&structure_kind)
-            .and_then(|d| d.work.as_ref())
-            .map(|w| w.ticks_per_unit)
-            .unwrap_or(5);
+        let ticks = self.work_ticks_for(structure);
         if self.world.resource::<Party>().0.contains(&worker) {
             self.world
                 .resource_mut::<Party>()

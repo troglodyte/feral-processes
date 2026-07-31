@@ -149,3 +149,15 @@ fn remove_key_on_home_requires_confirmation_before_demolishing() {
         "confirming should demolish Home"
     );
 }
+
+/// `w` posts a program to a node; `W` is the same job done yourself, so it
+/// offers the same `can_work` list rather than a second kind of screen.
+#[test]
+fn working_a_structure_yourself_opens_the_same_structure_list() {
+    let mut app = test_app(960);
+    app.handle_key(GameKey::Char('W'));
+    assert_eq!(app.mode, Mode::WorkStructure);
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing, "Esc should back out to the map");
+}

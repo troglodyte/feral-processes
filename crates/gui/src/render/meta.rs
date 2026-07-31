@@ -134,7 +134,8 @@ pub(super) fn draw_quit_app_confirm(selected: usize, painter: &Painter, m: &Metr
 pub(super) fn draw_help(painter: &Painter, m: &Metrics) {
     let rows = vec![
         text_row("hjkl/arrows move   . wait   e drain   r recharge"),
-        text_row("g scan   c compile   b deploy   w cronjob   G guard   R demolish"),
+        text_row("g scan   c compile   b deploy   w cronjob   W work it yourself"),
+        text_row("G guard   R demolish"),
         text_row("u symlink   i inspect   d manifest   v inventory   p companions"),
         text_row("f fuse   m routines   a routine   M extract   t trade   x perks   T research"),
         text_row("L history   B structures"),

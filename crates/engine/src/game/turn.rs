@@ -158,6 +158,13 @@ impl Game {
             return;
         }
         let player = self.player_entity();
+        // Any attempt to move ends a job you were working (see
+        // `Game::work_structure`) — including one that turns into a fight or
+        // bounces off a wall, since either way you stopped working to do it.
+        if self.world.get::<Task>(player).is_some() {
+            self.world.entity_mut(player).remove::<Task>();
+            self.log("You break off what you were doing.");
+        }
         let pos = *self.world.get::<Position>(player).unwrap();
         let (nx, ny) = (pos.x + dx, pos.y + dy);
 

@@ -117,6 +117,7 @@ impl Game {
             (systems::power_regen_system, systems::needs_tick_system).chain(),
             systems::wander_ai_system,
             systems::task_progress_system,
+            systems::player_gather_system,
             systems::passive_process_system,
             difficulty::death_handling_system,
         ));

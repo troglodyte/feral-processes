@@ -253,6 +253,10 @@ pub enum Mode {
     CraftQuantity,
     Cronjob,
     CronjobStructure,
+    /// Picking a nearby structure for the *player* to work themselves rather
+    /// than posting a program to it — see `Game::work_structure`. Same
+    /// `can_work` list `CronjobStructure` offers.
+    WorkStructure,
     Guard,
     GuardStructure,
     /// Lists nearby structures to demolish (see `App::pending_remove_structure`).
@@ -399,6 +403,7 @@ impl Mode {
             | Mode::CraftQuantity
             | Mode::Cronjob
             | Mode::CronjobStructure
+            | Mode::WorkStructure
             | Mode::Guard
             | Mode::GuardStructure
             | Mode::Remove

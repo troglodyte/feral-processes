@@ -13,6 +13,23 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### You can work a node yourself
+
+- **`W` works a structure the way a program does.** The player takes the
+  same `Task` a cronjob worker carries, advanced by the same tick and paid
+  through the same `resolve_gather_cycle`, so the yield off a given node is
+  identical whoever is standing at it. Extracted rather than reimplemented
+  — a second payout formula for the player is precisely the drift this
+  codebase has been bitten by before.
+- **Moving breaks off the job.** There is no separate working mode: the job
+  runs while the world ticks, and any attempt to move drops it — including
+  one that walks into a fight or bounces off a wall, since either way you
+  stopped working to do it.
+- **No XP, unlike a cronjob.** A posted program levels from its work; the
+  player doesn't, or a node becomes a risk-free XP faucet. The job is also
+  not saved, so loading puts you beside the node rather than mid-cycle at
+  it — that costs at most one cycle and no save-format bump.
+
 ### Fatigue recovers on its own
 
 - **Fatigue now regenerates every tick instead of draining.** It was never a

@@ -17,6 +17,10 @@ impl App {
                 self.mode = Mode::Cronjob;
                 return;
             }
+            GameKey::Char('W') => {
+                self.mode = Mode::WorkStructure;
+                return;
+            }
             GameKey::Char('G') => {
                 self.mode = Mode::Guard;
                 return;

@@ -87,6 +87,30 @@ impl App {
         }
     }
 
+    /// Picks a nearby workable structure for the player to work themselves —
+    /// the same `can_work` list `Mode::CronjobStructure` offers, since it is
+    /// the same job either way (see `Game::work_structure`).
+    pub(crate) fn handle_work_structure_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.mode = Mode::Playing;
+            return;
+        }
+        let Some(game) = &mut self.game else { return };
+        let structures: Vec<_> = game
+            .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
+            .into_iter()
+            .filter(|e| e.can_work)
+            .collect();
+        if let Some(idx) = self.selected_index(key, structures.len()) {
+            let Some(game) = &mut self.game else { return };
+            match game.work_structure(structures[idx].entity) {
+                Ok(()) => self.status_line = None,
+                Err(e) => self.status_line = Some(e),
+            }
+            self.mode = Mode::Playing;
+        }
+    }
+
     pub(crate) fn handle_guard_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.mode = Mode::Playing;

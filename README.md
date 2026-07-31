@@ -121,6 +121,12 @@ are, paying out into your inventory at a rate that adds the structure's
 upgrade tier to your zone depth — so upgrading what you have is worth more
 than rushing the next portal, and neither lever runs away with the economy.
 
+You can also work a node yourself with `W`, which is the same job for the
+same payout — you just have to stand there and do it, and stepping away
+breaks off the cycle. It is what you fall back on before you have programs
+worth posting, not a replacement for them: a cronjob runs whether or not
+you are there, and earns its worker XP besides.
+
 ## Research
 
 Press `T` for the research tree. Deploy a Research Node, cronjob a program

@@ -359,6 +359,15 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             painter,
             m,
         ),
+        Mode::WorkStructure => draw_structure_menu(
+            game,
+            "Work",
+            "Work which structure yourself?",
+            true,
+            selected,
+            painter,
+            m,
+        ),
         Mode::Guard => draw_worker_menu(
             game,
             "Assign Guard",

@@ -112,6 +112,39 @@ pub(crate) fn mining_success_chance(level: u32) -> f64 {
     (MINING_SUCCESS_BASE + level as f64 * MINING_SUCCESS_PER_LEVEL).min(1.0)
 }
 
+/// One completed gather cycle against `node`: rolls the node's reliability
+/// and, on success, spends a unit of its stock and reports what the cycle
+/// earned. `None` is a fizzle — the cycle is spent and nothing produced.
+///
+/// Shared by `task_progress_system` (a program running a cronjob) and
+/// `player_gather_system` (the player working the node themselves) so the
+/// two cannot drift apart on payout or on reliability. Both are the same
+/// job; only who is standing there differs. Callers word their own log
+/// line, which is the one thing that legitimately differs between them.
+pub(crate) fn resolve_gather_cycle(
+    node: &mut ResourceNode,
+    tier: Option<&StructureTier>,
+    zone: ZoneLevel,
+    item_db: &ItemDb,
+    rng: &mut GameRng,
+) -> Option<(crate::items::ItemId, u32)> {
+    if let Some(level) = node.level
+        && !rng.0.random_bool(mining_success_chance(level))
+    {
+        return None;
+    }
+    node.amount -= 1;
+    let def = item_db.get(node.resource.as_str());
+    // Read per cycle rather than baked in at deploy, so a base that travels
+    // to a deeper zone immediately earns at the new rate.
+    let payout = if def.and_then(|d| d.bank_limit).is_some() {
+        1
+    } else {
+        node_payout(tier.map(|t| t.0).unwrap_or(1), zone)
+    };
+    Some((node.resource.clone(), payout))
+}
+
 /// The worker-side components `task_progress_system` reads per cronjob
 /// assignment. Aliased rather than written inline because the tuple is long
 /// enough to trip clippy's `type_complexity` lint.
@@ -180,26 +213,18 @@ pub fn task_progress_system(
             continue;
         }
         task.progress = 0;
-        if let Some(level) = node.level
-            && !rng.0.random_bool(mining_success_chance(level))
-        {
+        let Some((resource, payout)) =
+            resolve_gather_cycle(&mut node, tier, *zone, &item_db, &mut rng)
+        else {
             log.push("Your subroutine's extraction attempt fails to compile.".to_string());
             continue;
-        }
-        node.amount -= 1;
+        };
         if let Ok(mut inv) = inventories.get_mut(tamed.owner) {
-            let def = item_db.get(node.resource.as_str());
-            let resource_name = def
+            let resource_name = item_db
+                .get(resource.as_str())
                 .map(|d| d.name.as_str())
-                .unwrap_or(node.resource.as_str());
-            // Read per cycle rather than baked in at deploy, so a base that
-            // travels to a deeper zone immediately earns at the new rate.
-            let payout = if def.and_then(|d| d.bank_limit).is_some() {
-                1
-            } else {
-                node_payout(tier.map(|t| t.0).unwrap_or(1), *zone)
-            };
-            let landed = inv.add_capped(node.resource.clone(), payout, &item_db);
+                .unwrap_or(resource.as_str());
+            let landed = inv.add_capped(resource.clone(), payout, &item_db);
             if landed == 0 {
                 log.push(format!(
                     "A cronjob yields {resource_name} but there's no room to store it."
@@ -235,6 +260,61 @@ pub fn task_progress_system(
                 format!("Your subroutine extracted {landed} {resource_name}.{level_note}"),
             );
         }
+    }
+}
+
+/// The player running a gather job themselves, rather than posting a
+/// program to it — see `Game::work_structure`. The player carries the same
+/// `Task` a worker does and earns through the same `resolve_gather_cycle`,
+/// so the two produce identical output from the same node.
+///
+/// No XP is awarded, unlike a program's cronjob: a worker levels from its
+/// job, and handing the player the same per-cycle XP would make a node an
+/// XP faucet with no risk attached to it.
+pub fn player_gather_system(
+    mut player: Query<(&mut Task, &mut Inventory), With<Player>>,
+    mut nodes: Query<(&mut ResourceNode, Option<&StructureTier>)>,
+    item_db: Res<ItemDb>,
+    zone: Res<ZoneLevel>,
+    mut log: ResMut<MessageLog>,
+    mut rng: ResMut<GameRng>,
+) {
+    for (mut task, mut inv) in &mut player {
+        if !matches!(task.kind, TaskKind::GatherResource) {
+            continue;
+        }
+        let Ok((mut node, tier)) = nodes.get_mut(task.target) else {
+            continue;
+        };
+        if node.amount == 0 {
+            node.amount = node.capacity;
+        }
+        task.progress += 1;
+        if task.progress < task.required {
+            continue;
+        }
+        task.progress = 0;
+        let Some((resource, payout)) =
+            resolve_gather_cycle(&mut node, tier, *zone, &item_db, &mut rng)
+        else {
+            log.push("Your extraction attempt fails to compile.".to_string());
+            continue;
+        };
+        let resource_name = item_db
+            .get(resource.as_str())
+            .map(|d| d.name.as_str())
+            .unwrap_or(resource.as_str());
+        let landed = inv.add_capped(resource.clone(), payout, &item_db);
+        if landed == 0 {
+            log.push(format!(
+                "You pull {resource_name} loose but there's no room to store it."
+            ));
+            continue;
+        }
+        log.push_kind(
+            MessageKind::Loot,
+            format!("You extract {landed} {resource_name}."),
+        );
     }
 }
 

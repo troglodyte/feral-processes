@@ -978,3 +978,73 @@ fn a_banked_resource_never_scales_with_zone_depth() {
          cycles and turn the research economy into 'no room to store it' spam"
     );
 }
+
+/// Working a node yourself is the same job a cronjob runs, so it has to pay
+/// the same `systems::node_payout` — a second, parallel payout formula for
+/// the player is exactly the drift this repo has been bitten by before.
+///
+/// The node's reliability roll is switched off for the measurement so the
+/// assertion is about the payout, not about `mining_success_chance`.
+#[test]
+fn working_a_node_yourself_pays_what_a_cronjob_pays() {
+    let mut game = Game::new(950, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = deploy_upgradeable_node(&mut game);
+    game.world.get_mut::<ResourceNode>(node).unwrap().level = None;
+    let resource = game
+        .world
+        .get::<ResourceNode>(node)
+        .unwrap()
+        .resource
+        .clone();
+    let held = |game: &Game| {
+        game.world
+            .get::<Inventory>(game.player_entity())
+            .unwrap()
+            .count(&resource)
+    };
+    let before = held(&game);
+
+    game.work_structure(node)
+        .expect("a deployed node is workable");
+
+    let mut ticks = 0;
+    while held(&game) == before && ticks < 40 {
+        game.wait();
+        ticks += 1;
+    }
+
+    let zone = *game.world.resource::<ZoneLevel>();
+    let tier = game
+        .world
+        .get::<StructureTier>(node)
+        .map(|t| t.0)
+        .unwrap_or(1);
+    assert_eq!(
+        held(&game) - before,
+        crate::systems::node_payout(tier, zone),
+        "a cycle the player ran must pay exactly what the same cycle pays a worker"
+    );
+}
+
+/// The job is something you are standing there doing, so stepping away ends
+/// it rather than leaving it running unattended.
+#[test]
+fn walking_away_stops_the_job() {
+    let mut game = Game::new(951, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = deploy_upgradeable_node(&mut game);
+    let player = game.player_entity();
+
+    game.work_structure(node)
+        .expect("a deployed node is workable");
+    assert!(
+        game.world.get::<Task>(player).is_some(),
+        "starting the job should put the same Task on you a worker would carry"
+    );
+
+    game.move_player(1, 0);
+
+    assert!(
+        game.world.get::<Task>(player).is_none(),
+        "walking away should end the job, not leave it running"
+    );
+}

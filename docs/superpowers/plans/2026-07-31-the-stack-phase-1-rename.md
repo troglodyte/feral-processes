@@ -248,7 +248,7 @@ half-renamed vocabulary survives the phase.
   `crates/app-core/src/tests/dungeon.rs` (the helper, and the test names
   Task 2's review flagged as left mid-rename)
 
-Take the four constants this task touches all the way to their final
+Take the three constants this task touches all the way to their final
 `STACK_*` names rather than renaming only their noun — `tuning.rs` will
 carry a mix of `STACK_*` and `DUNGEON_*` prefixes until Task 5, which is
 expected and compiles fine. Renaming any identifier twice across two tasks
@@ -406,9 +406,66 @@ in `crates/engine/src/lib.rs:6`, `crates/engine/src/game/mod.rs:18-20`,
 
 ---
 
-## Task 7: Documentation
+## Task 7: Everything the player reads
+
+In-game strings and documentation together.
+
+**Scope note (rewritten after Task 3).** The original plan claimed three
+player-visible strings and named only `render/meta.rs:151`. That was
+measured by grepping the single word "dungeon". The real figure across the
+whole vocabulary is about eleven, listed below. Task 3 fixed four of them;
+this task owns the rest. Player-facing text is the only part of this phase
+a player can actually see, so leaving it half-renamed would mean doing all
+the churn and shipping none of the benefit.
+
+### "Breach" has three senses. Only one changes.
+
+A naive find-and-replace corrupts the other two. Check every occurrence:
+
+1. **The hole in the ground → becomes "link".** This is the rename.
+2. **Zone travel → stays "breach".** `game/zone.rs:375,384,408` — "You
+   breach the portal and materialize in a level {n} sector", "lost to the
+   breach", "a breach only runs forward". Freeing this word is the *point*
+   of renaming sense 1; changing it here would defeat the exercise.
+3. **Breaking ICE → stays "breached".** `game/combat_rewards.rs:311` —
+   "ICE breached! The program now runs under your control." Unrelated third
+   sense, in combat, nowhere near the Stack.
+
+### The in-game strings
+
+Sense 1 — "breach" as the hole, becomes "link":
+
+- `crates/gui/src/render/meta.rs:151,152` — help screen: "In a dungeon:" and
+  "climb / leave the breach"
+- `crates/gui/src/render/dungeon_map.rs:87` — the DEEP SCAN heading
+- `crates/engine/src/game/dungeon.rs:175` — "Deep scan: {} breach{} in this
+  sector…" (note the pluralisation — "breach"/"breaches" becomes
+  "link"/"links", which changes the suffix logic)
+- `crates/engine/src/game/dungeon.rs:303` — "You surface through the breach…"
+- `crates/engine/src/game/building.rs:48` — "There's a breach here — deploy
+  clear of it."
+- `crates/engine/src/game/dungeon_view.rs:214` — "The breach out  [<] surface"
+- `crates/engine/src/dungeon.rs:542` — a test assertion message, not
+  player-visible, but same vocabulary
+
+"Shaft" — becomes "stack", per the spec's vocabulary table:
+
+- `crates/engine/src/game/dungeon.rs:247` — "The shaft sounds {frames}
+  levels deep." **Also still says "levels"** — flagged as a Minor by Task 3's
+  review, since it contains neither "stairs" nor "floors" and so slipped
+  that task's grep gate.
+- `crates/engine/src/game/dungeon.rs:515` — "Solid bedrock. This shaft
+  bottoms out here."
+- `crates/engine/src/game/inspection.rs:531` — "The symlink hauls you up out
+  of the shaft…"
+- `crates/engine/src/game/dungeon_features.rs:192` — "The shaft opens out.
+  Something very large is already awake."
+
+Keep every `[>]` / `[<]` key hint verbatim — they name keyboard keys, not
+glyphs, and the keys are not changing.
 
 **Files:**
+- Modify: the seven engine and gui files listed above
 - Modify: `README.md` (the "Dungeons" section at line 51 and every "breach"
   used for the hole rather than for zone travel), `docs/manual.md` (the
   "In a dungeon:" section at 137 and the surrounding passages at 161-188),
@@ -417,26 +474,24 @@ in `crates/engine/src/lib.rs:6`, `crates/engine/src/game/mod.rs:18-20`,
   `DungeonMemory`, `dungeon::generate`, `LevelSpec::rng_seed`,
   `Game::view_cone`, `game/dungeon_view.rs`, `game/dungeon_features.rs` —
   all of which move), then `cp CLAUDE.md AGENTS.md`
-- Modify: `crates/gui/src/render/meta.rs:151` — the third and last
-  player-visible string, in the help screen's key list
 
 **Interfaces:** none.
 
-**The distinction to hold throughout the docs:** "breach" now means zone
-travel *only*. Every use of it for the hole in the ground becomes "link".
-Both README and manual currently use it for both, which is the ambiguity
-this rename exists to remove — a pass that renames the types but leaves the
-docs saying "breach" for both has done the churn without the benefit.
-
-- [ ] **Step 1: Rewrite the README and manual sections** in the new
+- [ ] **Step 1: Reword the in-game strings**, checking each "breach" against
+      the three senses above
+- [ ] **Step 2: Run `cargo test --workspace`** — some tests assert on this
+      wording and will need updating; the count must not fall
+- [ ] **Step 3: Rewrite the README and manual sections** in the new
       vocabulary, checking each "breach" for which meaning it carries
-- [ ] **Step 2: Update CLAUDE.md's seams entries and `cp` to AGENTS.md**
-- [ ] **Step 3: Update `render/meta.rs:151`** and its `cargo test -p
-      feral-processes-gui` layout tests if the longer string reflows
-- [ ] **Step 4: `rg -i 'dungeon' -g '!target' .`** — expect zero hits outside
-      CHANGELOG history
-- [ ] **Step 5: Run `cargo test --workspace`** — PASS, count unchanged
-- [ ] **Step 6: Commit** — `docs: the dungeon is the Stack`
+- [ ] **Step 4: Update CLAUDE.md's seams entries and `cp CLAUDE.md AGENTS.md`**
+- [ ] **Step 5: Check the gui layout tests** — `render/meta.rs`'s help rows
+      are width-sensitive; a longer string can reflow the panel
+- [ ] **Step 6: `rg -i 'dungeon|shaft' -g '!target' .`** — expect zero hits
+      outside CHANGELOG history. Then `rg -i breach` and confirm every
+      remaining hit is sense 2 or sense 3.
+- [ ] **Step 7: Run `cargo test --workspace`** — PASS, count unchanged from
+      1057
+- [ ] **Step 8: Commit** — `docs: the dungeon is the Stack`
 
 ---
 

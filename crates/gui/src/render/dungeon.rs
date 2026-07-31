@@ -5,22 +5,22 @@
 //! straight ahead), so nothing here knows which way north is — this file
 //! only ever draws forward.
 //!
-//! The projection is the classic blobber one: a stack of nested "frames",
-//! each the cross-section of the corridor at one cell of distance, shrinking
-//! toward a vanishing point at the centre of the pane. Walls between two
-//! frames are trapezoids, which is what `Painter::poly` exists for.
+//! The projection is the classic blobber one: successive cross-sections of
+//! the corridor, each one cell further away than the last, shrinking toward
+//! a vanishing point at the centre of the pane. Walls between two
+//! cross-sections are trapezoids, which is what `Painter::poly` exists for.
 
 use super::*;
 use feral_processes_engine::{DungeonCellView, DungeonView};
 
-/// How much narrower each successive frame is. Tuned by eye: much above this
+/// How much narrower each successive slice is. Tuned by eye: much above this
 /// and a four-deep corridor barely converges, much below and depth 2 is
 /// already a dot.
 const SHRINK: f32 = 0.58;
 
 /// Brightness of the nearest wall, and the factor each cell of distance
 /// multiplies it by. The fog is what makes distance legible at all — with
-/// flat shading every frame is the same colour and the corridor reads as
+/// flat shading every slice is the same colour and the corridor reads as
 /// concentric rectangles rather than as depth.
 const NEAR_SHADE: f32 = 1.0;
 const FOG: f32 = 0.62;
@@ -39,9 +39,9 @@ const SEALED: Color = Color::new(0.62, 0.20, 0.24, 1.0);
 
 /// The corridor's cross-section `depth` cells away, in pane-local pixels.
 ///
-/// Returned as (left, top, right, bottom). Every frame is centred on the
+/// Returned as (left, top, right, bottom). Every slice is centred on the
 /// vanishing point at the pane's middle, so the walls converge there.
-fn frame(depth: usize, w: f32, h: f32) -> (f32, f32, f32, f32) {
+fn slice(depth: usize, w: f32, h: f32) -> (f32, f32, f32, f32) {
     let scale = SHRINK.powi(depth as i32);
     let (cx, cy) = (w / 2.0, h / 2.0);
     let half_w = w / 2.0 * scale;
@@ -63,7 +63,7 @@ fn dim(color: Color, factor: f32) -> Color {
     )
 }
 
-/// Whether this cell is drawn as a face filling its frame rather than as
+/// Whether this cell is drawn as a face filling its slice rather than as
 /// more corridor. A door is not rock, but you cannot see past it, and
 /// drawing it as open would be the view lying about what is ahead.
 fn solid(cell: DungeonCellView) -> bool {
@@ -73,7 +73,7 @@ fn solid(cell: DungeonCellView) -> bool {
     )
 }
 
-/// Whether the cell `depth` away fills its frame with a face rather than
+/// Whether the cell `depth` away fills its slice with a face rather than
 /// opening into more corridor.
 ///
 /// Never at depth 0. That cell is the one the party is standing in, and a
@@ -103,19 +103,19 @@ pub(super) fn draw_dungeon(view: &DungeonView, painter: &Painter, w: f32, h: f32
     // depth sorting is needed.
     for depth in (0..view.cells.len()).rev() {
         let row = &view.cells[depth];
-        let (nl, nt, nr, nb) = frame(depth, w, h);
-        let (fl, ft, fr, fb) = frame(depth + 1, w, h);
+        let (nl, nt, nr, nb) = slice(depth, w, h);
+        let (fl, ft, fr, fb) = slice(depth + 1, w, h);
         let s = shade(depth);
 
         if draws_as_face(depth, row[middle]) {
             // The corridor is blocked here: this cell's face toward us fills
-            // the whole frame. Anything beyond it was drawn already and is
+            // the whole slice. Anything beyond it was drawn already and is
             // now covered, which is exactly right.
             painter.rect(nl, nt, nr - nl, nb - nt, dim(face_color(row[middle]), s));
             continue;
         }
 
-        // An open cell: floor and ceiling recede from this frame to the next.
+        // An open cell: floor and ceiling recede from this slice to the next.
         painter.poly(&[(nl, nb), (nr, nb), (fr, fb), (fl, fb)], dim(FLOOR, s));
         painter.poly(&[(nl, nt), (nr, nt), (fr, ft), (fl, ft)], dim(CEILING, s));
 
@@ -183,15 +183,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn frames_shrink_monotonically_with_distance() {
+    fn slices_shrink_monotonically_with_distance() {
         let (w, h) = (800.0, 600.0);
         let mut last_width = f32::MAX;
         for depth in 0..6 {
-            let (l, _, r, _) = frame(depth, w, h);
+            let (l, _, r, _) = slice(depth, w, h);
             let width = r - l;
             assert!(
                 width < last_width,
-                "depth {depth} is no narrower than the frame in front of it"
+                "depth {depth} is no narrower than the slice in front of it"
             );
             assert!(width > 0.0);
             last_width = width;
@@ -199,10 +199,10 @@ mod tests {
     }
 
     #[test]
-    fn every_frame_is_centred_on_the_vanishing_point() {
+    fn every_slice_is_centred_on_the_vanishing_point() {
         let (w, h) = (800.0, 600.0);
         for depth in 0..6 {
-            let (l, t, r, b) = frame(depth, w, h);
+            let (l, t, r, b) = slice(depth, w, h);
             assert!(
                 ((l + r) / 2.0 - w / 2.0).abs() < 0.001,
                 "depth {depth} is off-centre horizontally"
@@ -215,18 +215,18 @@ mod tests {
     }
 
     #[test]
-    fn the_nearest_frame_spans_the_full_width_of_the_pane() {
-        let (l, _, r, _) = frame(0, 800.0, 600.0);
+    fn the_nearest_slice_spans_the_full_width_of_the_pane() {
+        let (l, _, r, _) = slice(0, 800.0, 600.0);
         assert!((l - 0.0).abs() < 0.001);
         assert!((r - 800.0).abs() < 0.001);
     }
 
     #[test]
-    fn frames_nest_strictly_inside_one_another() {
+    fn slices_nest_strictly_inside_one_another() {
         let (w, h) = (800.0, 600.0);
         for depth in 0..5 {
-            let (nl, nt, nr, nb) = frame(depth, w, h);
-            let (fl, ft, fr, fb) = frame(depth + 1, w, h);
+            let (nl, nt, nr, nb) = slice(depth, w, h);
+            let (fl, ft, fr, fb) = slice(depth + 1, w, h);
             assert!(fl > nl && fr < nr, "depth {depth} walls cross over");
             assert!(ft > nt && fb < nb, "depth {depth} floor and ceiling cross");
         }
@@ -251,7 +251,7 @@ mod tests {
         assert_eq!(stair_mark(DungeonCellView::Rock), None);
     }
 
-    /// `frame(0)` spans the whole pane, so a face drawn at depth 0 fills the
+    /// `slice(0)` spans the whole pane, so a face drawn at depth 0 fills the
     /// view and `continue` skips every corridor surface behind it — the
     /// screen becomes one flat rectangle of door. The party is not stuck,
     /// but nothing on screen tells them which way is out.

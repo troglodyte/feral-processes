@@ -19,12 +19,12 @@ use crate::*;
 /// How far ahead the first-person view reaches, in cells. Four is enough
 /// corridor to read a junction coming without the far wall shrinking to
 /// nothing.
-pub const DUNGEON_VIEW_DEPTH: usize = 4;
+pub const STACK_VIEW_DEPTH: usize = 4;
 
 /// Cells visible either side of the party's line of sight. One gives the
 /// three-wide cone a classic blobber shows — the corridor you are in, plus
 /// whatever opens off it.
-pub const DUNGEON_VIEW_HALF_WIDTH: usize = 1;
+pub const STACK_VIEW_HALF_WIDTH: usize = 1;
 
 /// The world coordinates of the view cone from `(x, y)` facing `facing`,
 /// indexed `[ahead][lateral]` — the same shape and order
@@ -36,9 +36,9 @@ pub const DUNGEON_VIEW_HALF_WIDTH: usize = 1;
 fn view_cone(x: i32, y: i32, facing: Dir) -> Vec<Vec<(i32, i32)>> {
     let (fx, fy) = facing.delta();
     let (rx, ry) = facing.right_delta();
-    let span = DUNGEON_VIEW_HALF_WIDTH as i32;
+    let span = STACK_VIEW_HALF_WIDTH as i32;
 
-    (0..DUNGEON_VIEW_DEPTH as i32)
+    (0..STACK_VIEW_DEPTH as i32)
         .map(|ahead| {
             (-span..=span)
                 .map(|lateral| (x + fx * ahead + rx * lateral, y + fy * ahead + ry * lateral))
@@ -73,7 +73,7 @@ impl Game {
             // row is recorded before the break, not after the check.
             let blocked = ahead > 0
                 && row
-                    .get(DUNGEON_VIEW_HALF_WIDTH)
+                    .get(STACK_VIEW_HALF_WIDTH)
                     .is_some_and(|&(cx, cy)| level.cell(cx, cy).blocks_sight());
             seen.extend(row);
             if blocked {

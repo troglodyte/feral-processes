@@ -7,7 +7,7 @@
 
 use std::collections::VecDeque;
 
-use crate::tuning::{DUNGEON_CACHES_PER_LEVEL, DUNGEON_DOORS_PER_LEVEL};
+use crate::tuning::{STACK_CACHES_PER_LEVEL, STACK_DOORS_PER_LEVEL};
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use serde::{Deserialize, Serialize};
@@ -303,7 +303,7 @@ fn place_doors(level: &mut Frame, rng: &mut StdRng) {
     for i in (1..corridors.len()).rev() {
         corridors.swap(i, rng.random_range(0..=i));
     }
-    for &(x, y) in corridors.iter().take(DUNGEON_DOORS_PER_LEVEL) {
+    for &(x, y) in corridors.iter().take(STACK_DOORS_PER_LEVEL) {
         level.set(x, y, CellKind::Door);
     }
 }
@@ -333,7 +333,7 @@ fn place_caches(level: &mut Frame, rng: &mut StdRng) {
     for i in (1..ends.len()).rev() {
         ends.swap(i, rng.random_range(0..=i));
     }
-    for &(x, y) in ends.iter().take(DUNGEON_CACHES_PER_LEVEL) {
+    for &(x, y) in ends.iter().take(STACK_CACHES_PER_LEVEL) {
         level.set(x, y, CellKind::Cache);
     }
 }

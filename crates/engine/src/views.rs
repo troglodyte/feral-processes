@@ -359,7 +359,7 @@ pub enum StackCellView {
 /// `cells` is already rotated into **view space**: `cells[ahead][lateral]`,
 /// where `ahead` counts cells away from the party (0 is the cell they stand
 /// in) and `lateral` runs left to right across the cone, with
-/// `DUNGEON_VIEW_HALF_WIDTH` in the middle. The engine does that rotation so
+/// `STACK_VIEW_HALF_WIDTH` in the middle. The engine does that rotation so
 /// the renderer only ever draws a forward-facing corridor and never learns
 /// which way north is — the same contract `ActionOption` has, where the
 /// renderer draws verbatim and authors nothing.

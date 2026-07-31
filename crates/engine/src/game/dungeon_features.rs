@@ -15,9 +15,7 @@
 use super::dungeon::StackPos;
 use crate::dungeon::CellKind;
 use crate::resources::{FrameMemory, StackMemory};
-use crate::tuning::{
-    DUNGEON_CACHE_CREDITS, DUNGEON_CACHE_DEPTH_GROWTH, DUNGEON_CACHE_FRAGMENT_CHANCE,
-};
+use crate::tuning::{STACK_CACHE_CREDITS, STACK_CACHE_DEPTH_GROWTH, STACK_CACHE_FRAGMENT_CHANCE};
 use crate::*;
 
 impl Game {
@@ -61,10 +59,10 @@ impl Game {
         }
         self.frame_memory_mut(pos).looted.insert((pos.x, pos.y));
 
-        let depth_mult = DUNGEON_CACHE_DEPTH_GROWTH.powi(pos.depth as i32 - 1);
+        let depth_mult = STACK_CACHE_DEPTH_GROWTH.powi(pos.depth as i32 - 1);
         let credits = {
             let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_range(DUNGEON_CACHE_CREDITS)
+            rng.0.random_range(STACK_CACHE_CREDITS)
         };
         let credits = ((credits as f32) * depth_mult).round() as u32;
 
@@ -78,7 +76,7 @@ impl Game {
         }
 
         let fragment_roll = {
-            let chance = (DUNGEON_CACHE_FRAGMENT_CHANCE * pos.depth as f64).min(1.0);
+            let chance = (STACK_CACHE_FRAGMENT_CHANCE * pos.depth as f64).min(1.0);
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_bool(chance)
         };

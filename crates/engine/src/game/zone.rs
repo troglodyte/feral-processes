@@ -3,7 +3,7 @@
 //! zone.
 
 use crate::tuning::{
-    DUNGEON_ENTRANCES_PER_ZONE, INITIAL_WILD_POPULATION, MAX_BUILD_DISTANCE_FROM_HOME,
+    INITIAL_WILD_POPULATION, MAX_BUILD_DISTANCE_FROM_HOME, STACK_ENTRANCES_PER_ZONE,
 };
 use crate::*;
 
@@ -385,7 +385,7 @@ impl Game {
             ));
         }
         self.spawn_initial_creatures(INITIAL_WILD_POPULATION);
-        self.spawn_surface_links(DUNGEON_ENTRANCES_PER_ZONE);
+        self.spawn_surface_links(STACK_ENTRANCES_PER_ZONE);
     }
 
     /// Breaches forward until the party is standing in `zone`, for the

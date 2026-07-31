@@ -6,7 +6,7 @@
 
 use crate::abilities::AbilityId;
 use crate::game::zone::find_walkable_start;
-use crate::tuning::{DEFAULT_WORK_CAPACITY, DUNGEON_ENTRANCES_PER_ZONE, INITIAL_WILD_POPULATION};
+use crate::tuning::{DEFAULT_WORK_CAPACITY, INITIAL_WILD_POPULATION, STACK_ENTRANCES_PER_ZONE};
 use crate::*;
 
 /// Splits a persisted routine list into what `db` still recognizes and what
@@ -103,7 +103,7 @@ impl Game {
             game.log(warning);
         }
         game.spawn_initial_creatures(INITIAL_WILD_POPULATION);
-        game.spawn_surface_links(DUNGEON_ENTRANCES_PER_ZONE);
+        game.spawn_surface_links(STACK_ENTRANCES_PER_ZONE);
         game.log("Connection established. You materialize at the edge of the Grid.");
         Ok(game)
     }

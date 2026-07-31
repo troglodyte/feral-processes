@@ -9,8 +9,8 @@
 use crate::dungeon::{self, CellKind, Dir};
 use crate::resources::{CurrentStack, Locale};
 use crate::tuning::{
-    DUNGEON_DEPTH_STAT_GROWTH, DUNGEON_ENCOUNTER_CHANCE, DUNGEON_ENTRANCE_SCATTER_TILES,
-    DUNGEON_MIN_ENTRANCE_TILES, DUNGEON_NEAREST_ENTRANCE_TILES, STACK_FRAMES_MAX, STACK_FRAMES_MIN,
+    STACK_DEPTH_STAT_GROWTH, STACK_ENCOUNTER_CHANCE, STACK_ENTRANCE_SCATTER_TILES,
+    STACK_FRAMES_MAX, STACK_FRAMES_MIN, STACK_MIN_ENTRANCE_TILES, STACK_NEAREST_ENTRANCE_TILES,
     STACK_TILES_PER_FRAME,
 };
 use crate::*;
@@ -81,7 +81,7 @@ impl Game {
             .map(|(e, _)| e)
     }
 
-    /// Spawns `DUNGEON_ENTRANCES_PER_ZONE` breaches scattered around the
+    /// Spawns `STACK_ENTRANCES_PER_ZONE` breaches scattered around the
     /// player's arrival point, on walkable ground outside the base platform.
     /// Called once per zone, alongside `spawn_initial_creatures`.
     ///
@@ -112,17 +112,17 @@ impl Game {
         while placed < count && attempts < count * 40 {
             attempts += 1;
             // The first one lands inside the opening viewport; the rest
-            // scatter. See `DUNGEON_NEAREST_ENTRANCE_TILES`.
+            // scatter. See `STACK_NEAREST_ENTRANCE_TILES`.
             let reach = if placed == 0 {
-                DUNGEON_NEAREST_ENTRANCE_TILES
+                STACK_NEAREST_ENTRANCE_TILES
             } else {
-                DUNGEON_ENTRANCE_SCATTER_TILES
+                STACK_ENTRANCE_SCATTER_TILES
             };
             let (dx, dy) = (
                 rng.random_range(-reach..=reach),
                 rng.random_range(-reach..=reach),
             );
-            if dx.abs().max(dy.abs()) < DUNGEON_MIN_ENTRANCE_TILES {
+            if dx.abs().max(dy.abs()) < STACK_MIN_ENTRANCE_TILES {
                 continue;
             }
             let (x, y) = (origin.x + dx, origin.y + dy);
@@ -428,11 +428,11 @@ impl Game {
     pub(crate) fn stack_depth_multiplier(&self) -> f32 {
         match self.stack_pos() {
             None => 1.0,
-            Some(pos) => DUNGEON_DEPTH_STAT_GROWTH.powi(pos.depth as i32 - 1),
+            Some(pos) => STACK_DEPTH_STAT_GROWTH.powi(pos.depth as i32 - 1),
         }
     }
 
-    /// Rolls `DUNGEON_ENCOUNTER_CHANCE` for an encounter after a step, and
+    /// Rolls `STACK_ENCOUNTER_CHANCE` for an encounter after a step, and
     /// starts the fight if it hits.
     ///
     /// The pack is drawn from the biome of the **entrance tile** — the
@@ -454,7 +454,7 @@ impl Game {
         };
         let encountered = {
             let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_bool(DUNGEON_ENCOUNTER_CHANCE)
+            rng.0.random_bool(STACK_ENCOUNTER_CHANCE)
         };
         if !encountered {
             return;

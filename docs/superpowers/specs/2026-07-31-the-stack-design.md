@@ -22,7 +22,14 @@ And "dungeon" is the wrong word for it. Every other place-noun in this game
 is a computer word used as a physical place — Data Void, Static Field, Null
 Sector, Black Ice, iso Market. "Dungeon" is the only fantasy import, and it
 survives mostly in code and docs: exactly three player-visible strings
-contain it.
+contain the word "dungeon".
+
+That count was used during design to argue the rename is nearly free at the
+surface, and it is too narrow — corrected during Task 2 of phase 1. Two more
+player-visible strings say "Stairs" (`game/dungeon_view.rs:213,215`), which
+the vocabulary change also moves. Five strings, not three. The conclusion
+holds — this is still overwhelmingly a code-and-docs rename — but "three"
+was measured against one word rather than against the vocabulary.
 
 ## Vocabulary
 

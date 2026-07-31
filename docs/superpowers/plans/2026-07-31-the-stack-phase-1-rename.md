@@ -17,9 +17,13 @@ Spec: `docs/superpowers/specs/2026-07-31-the-stack-design.md`
 
 ## Global Constraints
 
-- **Behaviour must not change.** This phase is inert. `cargo test --workspace`
-  must pass with the **same test count** it starts at (1049 at time of
-  writing — confirm the actual number before Task 1 and hold it).
+- **Behaviour must not change.** This phase is inert — no field, variant, or
+  behaviour is added. `cargo test --workspace` must pass throughout, and the
+  test count must never *fall* below the baseline. Confirm the baseline
+  before Task 1 and record it in the ledger. Exactly three tests are added,
+  all guards on the rename itself: one in Task 3 (the descend log wording)
+  and two in Task 4 (binary save round-trip, RON template parse). Every
+  other task holds the count exactly.
 - **Do not bump `SAVE_FORMAT_VERSION`.** The on-disk save is bincode with
   `bincode::config::standard()`, which is positional — no field names, enum
   variants by index (`crates/engine/src/save.rs:201-206`). A rename moves no
@@ -65,6 +69,7 @@ than repeating it.
 | `CurrentDungeon` | `CurrentStack` |
 | `CellKind::StairsUp` / `StairsDown` | `CellKind::LinkUp` / `LinkDown` |
 | `FrameMapCell::StairsUp` / `StairsDown` | `FrameMapCell::LinkUp` / `LinkDown` |
+| `StackCellView::StairsUp` / `StairsDown` | `StackCellView::LinkUp` / `LinkDown` |
 | `Mode::DungeonMap` | `Mode::FrameMap` |
 
 `Dir`, `CellKind::{Rock, Floor, Cache, Lair, Door, SealedDoor}` and
@@ -88,6 +93,10 @@ the spec.
 | `Game::level_memory_mut` | `Game::frame_memory_mut` |
 | `Game::breach_floors_at` | `Game::frames_at` |
 | `breach_floors` (free fn) | `frames_for` |
+| `DungeonLevel::stairs_down` (field) | `Frame::link_down` |
+| `Game::stairs_available` | `Game::links_available` |
+| `stair_mark` (`render/dungeon.rs`) | `link_mark` |
+| `stand_on_stairs_down` (test helper) | `stand_on_link_down` |
 | `SaveData::dungeon_entrances` | `SaveData::link_sites` |
 | `SaveData::dungeon_memory` | `SaveData::stack_memory` |
 | `App::handle_dungeon_map_key` | `App::handle_frame_map_key` |
@@ -206,18 +215,38 @@ makes the code agree with what was always drawn.
 
 ---
 
-## Task 3: `floors` → `frames`, and the two player-visible descent lines
+## Task 3: The vocabulary of moving between frames
+
+Everything about vertical movement: `floors` → `frames`, the remaining
+`stairs` identifiers and prose, and all four player-visible strings that
+name either.
+
+**Scope note (added after Task 2).** Task 2 renamed the three *enum
+variants* to `LinkUp`/`LinkDown`, which left the surrounding vocabulary
+inconsistent — fields, methods, helpers, test names and player-facing
+strings still say "stairs" while the variants they exercise say "link".
+The original plan missed this entirely and claimed three player-visible
+strings existed where there are five. Task 3 owns the whole sweep so no
+half-renamed vocabulary survives the phase.
 
 **Files:**
 - Modify: `crates/engine/src/resources.rs` (the `Locale::Dungeon` variant's
   `floors` field — **rename only, do not move it**),
   `crates/engine/src/game/dungeon.rs` (`breach_floors`, `breach_floors_at`,
-  and the descend/ascend log lines around 523 and 551),
+  `stairs_available`, the descend/ascend log lines around 523 and 551, and
+  the three "stairs" comments around 273, 510 and 546),
+  `crates/engine/src/dungeon.rs` (`DungeonLevel::stairs_down` and its
+  comments), `crates/engine/src/game/dungeon_view.rs` (**the two
+  player-visible prompts at 213 and 215**),
   `crates/engine/src/views.rs` (`DungeonView::floors`,
-  `DungeonMapView::floors`), `crates/engine/src/tuning.rs`
+  `DungeonMapView::floors`, the "standing_on" doc at 377), `crates/engine/src/tuning.rs`
   (`DUNGEON_FLOORS_MIN`/`MAX`, `DUNGEON_TILES_PER_FLOOR` — see the tuning
-  table), `crates/gui/src/render/dungeon_map.rs` (the heading string),
-  `crates/gui/src/render/dungeon.rs`, plus test files
+  table, plus the two "stairs" prose comments at 497 and 509),
+  `crates/gui/src/render/dungeon_map.rs` (the heading string, the
+  `cell_glyph` doc), `crates/gui/src/render/dungeon.rs` (`stair_mark`),
+  `crates/engine/src/tests/dungeon.rs` and
+  `crates/app-core/src/tests/dungeon.rs` (the helper, and the test names
+  Task 2's review flagged as left mid-rename)
 
 Take the four constants this task touches all the way to their final
 `STACK_*` names rather than renaming only their noun — `tuning.rs` will
@@ -230,23 +259,38 @@ is the thing to avoid.
 - Produces: `Locale::Dungeon { frames, .. }` (the variant itself is still
   `Dungeon` until Task 4), `Game::frames_at(tile) -> u32`
   (was `breach_floors_at`), free fn `frames_for(tile, spawn) -> u32` (was
-  `breach_floors`).
+  `breach_floors`), `Game::links_available() -> (bool, bool)` (was
+  `stairs_available`), `DungeonLevel::link_down` (was `stairs_down`),
+  `link_mark` (was `stair_mark`).
 
-**Test intent:** the two log lines are player-visible and currently read
+**The four player-visible strings.** Two log lines in `game/dungeon.rs`:
 "You descend to dungeon level {} of {}." and "You climb back to dungeon
-level {}." They become frame lines. Add an engine test asserting the descend
-line contains `"frame 2 of"` after one `descend` from a known template —
-this is one of only three player-visible strings in the whole rename, and
-the only two that a test can reach.
+level {}." Two standing-on prompts in `game/dungeon_view.rs:213,215`:
+"Stairs lead down  [>] descend" and "Stairs lead up  [<] climb". All four
+become frame-and-link wording. Keep the `[>]` / `[<]` key hints exactly as
+they are — those name keyboard keys, not glyphs, and the keys do not change.
 
-- [ ] **Step 1: Write the failing test** for the descend log line's wording.
-      Use `crates/engine/src/tests/support.rs` fixtures; check what is there
-      before writing a new one.
+**Test intent:** one new test only. Assert the descend log line names a
+frame — e.g. contains `"frame 2 of"` after one `descend`. Use the fixtures
+in `crates/engine/src/tests/support.rs`; check what is there before writing
+a new one. The prompt strings are already covered by
+`crates/app-core/src/tests/dungeon.rs` (`the_view_names_the_key_that_takes_the_stairs`),
+which asserts on the key hint rather than the wording — update its name, and
+check whether it asserts on wording that your change breaks.
+
+- [ ] **Step 1: Write the failing test** for the descend log line's wording
 - [ ] **Step 2: Run it** — FAIL on the old wording
-- [ ] **Step 3: Rename the field, the two free functions, the tuning consts,
-      and reword both log lines**
-- [ ] **Step 4: Run `cargo test --workspace`** — PASS, count +1
-- [ ] **Step 5: Commit** — `refactor(engine): a shaft has frames, not floors`
+- [ ] **Step 3: Rename `floors` → `frames`** across the field, the two free
+      functions, the view structs and the four tuning constants
+- [ ] **Step 4: Rename the remaining `stairs` identifiers** — the field, the
+      method, `stair_mark`, the test helper, and the test names
+- [ ] **Step 5: Reword all four player-visible strings**, and sweep the
+      "stairs" prose comments in the files listed above
+- [ ] **Step 6: Run `cargo test --workspace`** — PASS, count 1057 (+1)
+- [ ] **Step 7: Verify** `rg -i 'stairs|floors' --type rust -g '!target' .`
+      returns nothing outside genuinely unrelated prose, and report anything
+      you deliberately left
+- [ ] **Step 8: Commit** — `refactor(engine): frames and links, not floors and stairs`
 
 ---
 

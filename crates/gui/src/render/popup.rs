@@ -299,6 +299,18 @@ pub(super) fn draw_popup(
 /// draws the same `Row::Item` shape outside a popup's box — an ambient list,
 /// not a modal menu — and reuses this rather than a second copy of the
 /// suffix-placement arithmetic.
+/// Where a row's suffix starts: one inset past the right edge of the row's
+/// own drawn text, given the row's left edge `row_x`.
+///
+/// Split out of `draw_row` so the advance-versus-ink distinction is held by
+/// a test rather than by a comment — measuring `label`'s ink box here reads
+/// as harmless and silently drops the suffix on top of the row's tail,
+/// because every `Row::Item` label opens with a two-space prefix that has no
+/// ink of its own. See `a_rows_suffix_clears_the_text_it_follows`.
+fn suffix_x(label: &str, row_x: f32, painter: &Painter, m: &Metrics) -> f32 {
+    row_x + m.pad + painter.measure_ui_advance(label, m.font_size) + m.inset
+}
+
 pub(super) fn draw_row(
     row: &Row,
     x: f32,
@@ -350,11 +362,15 @@ pub(super) fn draw_row(
             // count of spaces that drifts with the glyph width. Never bold, so
             // measuring the regular face is right for every row that has one:
             // `bold` is a creature list's, and those carry no suffix.
+            //
+            // Measured by *advance*, not by `measure_ui`'s ink box: `label`
+            // always opens with a two-space prefix, which has no ink, so the
+            // ink box would report a width that starts two characters into
+            // the row and drop the suffix on top of the row's own tail.
             if let Some(suffix) = suffix {
-                let text_w = painter.measure_ui(&label, m.font_size).width;
                 painter.ui(
                     suffix,
-                    x + m.pad + text_w + m.inset,
+                    suffix_x(&label, x, painter, m),
                     cy,
                     m.font_size,
                     TEXT_DIM,
@@ -394,6 +410,31 @@ pub(super) fn wrap_text(text: &str, columns: usize) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The bug this guards: `measure_ui` reports the *ink* box, which begins
+    /// at the first visible glyph. Every `Row::Item` label opens with a
+    /// two-space prefix, so measuring ink here put the suffix roughly two
+    /// characters back, printing a buff's tick countdown on top of its own
+    /// magnitude in the map's Routines panel.
+    #[test]
+    fn a_rows_suffix_clears_the_text_it_follows() {
+        let m = Metrics {
+            font_size: 16,
+            line_height: 20.0,
+            pad: 8.0,
+            inset: 4.0,
+            gap: 6.0,
+        };
+        crate::paint::with_painter(|p| {
+            let label = "  Coolant Flush       FTG+4";
+            let row_x = 100.0;
+            let text_right = row_x + m.pad + p.measure_ui_advance(label, m.font_size);
+            assert!(
+                suffix_x(label, row_x, p, &m) >= text_right,
+                "the suffix must start past the row text, not inside it"
+            );
+        })
+    }
 
     #[test]
     fn wrapping_breaks_on_spaces_and_never_exceeds_the_column_budget() {

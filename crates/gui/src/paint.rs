@@ -321,6 +321,25 @@ impl Painter {
     pub fn measure_map(&self, glyph: impl AsRef<str>, size: u16) -> TextDims {
         self.measure(Face::Map, glyph, size)
     }
+
+    /// How far the pen advances across `text` in the UI face — the layout
+    /// width, *not* `measure_ui`'s ink box.
+    ///
+    /// The distinction matters whenever something is placed after a run of
+    /// text rather than centred on it. The ink box starts at the first
+    /// visible glyph, so leading whitespace contributes nothing to it, and
+    /// every `Row::Item` label carries a two-space prefix — measuring the
+    /// ink there puts the next thing two characters back on top of the row.
+    pub fn measure_ui_advance(&self, text: impl AsRef<str>, size: u16) -> f32 {
+        self.painter
+            .layout_no_wrap(
+                text.as_ref().to_owned(),
+                Face::Ui.font_id(size),
+                egui::Color32::WHITE,
+            )
+            .rect
+            .width()
+    }
 }
 
 /// The layout job behind `Painter::ui_runs`. Split out so the arithmetic it
@@ -427,6 +446,32 @@ mod tests {
     }
 
     const FACES: [Face; 3] = [Face::Ui, Face::UiBold, Face::Map];
+
+    /// `measure_ui` reports the *ink* box, which starts at the first visible
+    /// glyph — so a leading space contributes nothing to it. That is right
+    /// for centring a glyph in a map tile, and wrong for placing something
+    /// after a run of text: `draw_row` puts a row's suffix at the measured
+    /// width past the row's start, and every `Row::Item` label begins with a
+    /// two-space prefix. `measure_ui_advance` is the layout width, which
+    /// counts that prefix.
+    #[test]
+    fn advance_width_counts_a_leading_space_where_the_ink_box_cannot() {
+        with_painter(|p| {
+            let inked = p.measure_ui("  Coolant Flush", 16).width;
+            let bare = p.measure_ui("Coolant Flush", 16).width;
+            assert!(
+                (inked - bare).abs() < 0.5,
+                "ink measurement ignores a leading prefix entirely: {inked} vs {bare}"
+            );
+
+            let advance = p.measure_ui_advance("  Coolant Flush", 16);
+            assert!(
+                advance > inked + 1.0,
+                "advance width must include the prefix the ink box skips: \
+                 advance {advance}, ink {inked}"
+            );
+        })
+    }
 
     /// A family name that doesn't match what `install_fonts` registered would
     /// leave egui with nothing to draw the string in. Since

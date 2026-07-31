@@ -129,10 +129,14 @@ fn buff_panel_width(rows: &[Row], title: &str, painter: &Painter, m: &Metrics) -
     let mut width = painter.measure_ui(title, m.font_size).width;
     for row in rows {
         let w = match row {
+            // By advance, matching how `draw_row` actually lays the row out —
+            // the two-space prefix has no ink, so an ink measurement here
+            // would size the box too narrow and push the suffix past its
+            // right border. See `Painter::measure_ui_advance`.
             Row::Item { text, suffix, .. } => {
-                let mut w = painter.measure_ui(format!("  {text}"), m.font_size).width;
+                let mut w = painter.measure_ui_advance(format!("  {text}"), m.font_size);
                 if let Some(suffix) = suffix {
-                    w += m.inset + painter.measure_ui(suffix, m.font_size).width;
+                    w += m.inset + painter.measure_ui_advance(suffix, m.font_size);
                 }
                 w
             }

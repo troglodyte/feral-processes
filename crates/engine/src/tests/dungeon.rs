@@ -581,7 +581,7 @@ fn the_view_cone_is_rotated_so_straight_ahead_is_always_the_middle_column() {
         // Row 0 is the cell the party stands in; row 1 middle is one step
         // ahead along the facing, whichever way that points.
         let ahead = cell_at(&game, x + dx, y + dy);
-        let middle = crate::game::dungeon::DUNGEON_VIEW_HALF_WIDTH;
+        let middle = crate::game::dungeon_view::DUNGEON_VIEW_HALF_WIDTH;
         assert_eq!(
             view.cells[1][middle] == DungeonCellView::Rock,
             !ahead.walkable()
@@ -598,7 +598,7 @@ fn the_view_reads_solid_rock_past_the_edge_of_the_level() {
     descend(&mut game);
     // The entry sits at (1, 1) facing north — one step off the top edge.
     let view = game.dungeon_view().unwrap();
-    let middle = crate::game::dungeon::DUNGEON_VIEW_HALF_WIDTH;
+    let middle = crate::game::dungeon_view::DUNGEON_VIEW_HALF_WIDTH;
     assert_eq!(view.cells[1][middle], DungeonCellView::Rock);
     assert!(view.cells.len() >= 2);
 }

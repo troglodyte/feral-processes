@@ -16,6 +16,8 @@ pub(crate) mod combat_status;
 pub(crate) mod combat_teardown;
 pub(crate) mod crafting;
 pub(crate) mod dungeon;
+pub(crate) mod dungeon_features;
+pub(crate) mod dungeon_view;
 pub(crate) mod field;
 pub(crate) mod inspection;
 pub(crate) mod lifecycle;

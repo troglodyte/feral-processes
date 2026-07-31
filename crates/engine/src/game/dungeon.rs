@@ -7,24 +7,13 @@
 //! on the way in.
 
 use crate::dungeon::{self, CellKind, Dir};
-use crate::resources::{CurrentDungeon, DungeonMemory, LevelMemory, Locale};
+use crate::resources::{CurrentDungeon, Locale};
 use crate::tuning::{
-    DUNGEON_CACHE_CREDITS, DUNGEON_CACHE_DEPTH_GROWTH, DUNGEON_CACHE_FRAGMENT_CHANCE,
     DUNGEON_DEPTH_STAT_GROWTH, DUNGEON_ENCOUNTER_CHANCE, DUNGEON_ENTRANCE_SCATTER_TILES,
     DUNGEON_FLOORS_MAX, DUNGEON_FLOORS_MIN, DUNGEON_MIN_ENTRANCE_TILES,
     DUNGEON_NEAREST_ENTRANCE_TILES, DUNGEON_TILES_PER_FLOOR,
 };
 use crate::*;
-
-/// How far ahead the first-person view reaches, in cells. Four is enough
-/// corridor to read a junction coming without the far wall shrinking to
-/// nothing.
-pub const DUNGEON_VIEW_DEPTH: usize = 4;
-
-/// Cells visible either side of the party's line of sight. One gives the
-/// three-wide cone a classic blobber shows — the corridor you are in, plus
-/// whatever opens off it.
-pub const DUNGEON_VIEW_HALF_WIDTH: usize = 1;
 
 /// Eight-point compass heading for an offset, with north as `-y` to match
 /// `dungeon::Dir`.
@@ -51,38 +40,17 @@ pub(crate) fn bearing(dx: i32, dy: i32) -> &'static str {
     }
 }
 
-/// The world coordinates of the view cone from `(x, y)` facing `facing`,
-/// indexed `[ahead][lateral]` — the same shape and order
-/// `views::DungeonView::cells` carries.
-///
-/// The first-person view and the map's record of what has been seen are both
-/// filled by walking this, so the map cannot mark a cell the view never
-/// showed and the view cannot show one the map won't remember.
-fn view_cone(x: i32, y: i32, facing: Dir) -> Vec<Vec<(i32, i32)>> {
-    let (fx, fy) = facing.delta();
-    let (rx, ry) = facing.right_delta();
-    let span = DUNGEON_VIEW_HALF_WIDTH as i32;
-
-    (0..DUNGEON_VIEW_DEPTH as i32)
-        .map(|ahead| {
-            (-span..=span)
-                .map(|lateral| (x + fx * ahead + rx * lateral, y + fy * ahead + ry * lateral))
-                .collect()
-        })
-        .collect()
-}
-
 /// The `Locale::Dungeon` payload, unpacked — see `Game::dungeon_pos`. A
 /// named struct rather than a five-tuple so call sites read as fields
 /// rather than as positions.
 #[derive(Clone, Copy)]
-struct DungeonPos {
-    depth: u32,
-    floors: u32,
-    x: i32,
-    y: i32,
-    facing: Dir,
-    entrance: (i32, i32),
+pub(crate) struct DungeonPos {
+    pub(crate) depth: u32,
+    pub(crate) floors: u32,
+    pub(crate) x: i32,
+    pub(crate) y: i32,
+    pub(crate) facing: Dir,
+    pub(crate) entrance: (i32, i32),
 }
 
 /// How many levels the shaft under a breach at `tile` runs before it
@@ -287,7 +255,12 @@ impl Game {
         breach_floors(tile, (spawn.x, spawn.y))
     }
 
-    fn level_spec(&self, depth: u32, floors: u32, entrance: (i32, i32)) -> dungeon::LevelSpec {
+    pub(crate) fn level_spec(
+        &self,
+        depth: u32,
+        floors: u32,
+        entrance: (i32, i32),
+    ) -> dungeon::LevelSpec {
         dungeon::LevelSpec {
             world_seed: self.world.resource::<WorldMap>().seed(),
             entrance,
@@ -330,295 +303,8 @@ impl Game {
         self.log("You surface through the breach, back onto open grid.".to_string());
     }
 
-    /// Records everything the party can see from where they are standing.
-    ///
-    /// Called from every place that moves the party or turns them, plus the
-    /// load path — anywhere the view changes, the map has to change with it,
-    /// or the player is told they never looked down a corridor they are
-    /// currently staring at.
-    fn remember_view(&mut self) {
-        let Some(pos) = self.dungeon_pos() else {
-            return;
-        };
-        let Some(level) = self.world.resource::<CurrentDungeon>().0.clone() else {
-            return;
-        };
-
-        let mut seen = Vec::new();
-        for (ahead, row) in view_cone(pos.x, pos.y, pos.facing).into_iter().enumerate() {
-            // The party's own cell can never stop their view out of it. That
-            // is not hypothetical: a door both blocks sight and is walkable —
-            // the only cell that is both — so standing in a doorway would
-            // otherwise blind the party to the corridor they are standing in.
-            //
-            // The wall that stops the view is itself in plain sight, so the
-            // row is recorded before the break, not after the check.
-            let blocked = ahead > 0
-                && row
-                    .get(DUNGEON_VIEW_HALF_WIDTH)
-                    .is_some_and(|&(cx, cy)| level.cell(cx, cy).blocks_sight());
-            seen.extend(row);
-            if blocked {
-                break;
-            }
-        }
-
-        let memory = self.level_memory_mut(pos);
-        memory.seen.extend(seen);
-    }
-
-    /// The memory of the level the party is standing in, created empty on
-    /// first sight of it.
-    fn level_memory_mut(&mut self, pos: DungeonPos) -> &mut LevelMemory {
-        self.world
-            .resource_mut::<DungeonMemory>()
-            .into_inner()
-            .0
-            .entry((pos.entrance, pos.depth))
-            .or_default()
-    }
-
-    /// Empties the cache the party is standing on, if there is one and it
-    /// has not already been emptied.
-    ///
-    /// Payout is a depth-scaled pile of Credits, a chance at a portal
-    /// fragment, and whatever the item set declares — see
-    /// `ItemDef::cache_drop`, which is how a mod adds to what caches hold
-    /// without touching this function.
-    ///
-    /// Credits rather than Core Fragments deliberately: they are the one
-    /// currency that survives a breach, so a dungeon run banks something the
-    /// next sector can still spend.
-    fn open_cache(&mut self) {
-        let Some(pos) = self.dungeon_pos() else {
-            return;
-        };
-        if self.cell_underfoot() != Some(CellKind::Cache) {
-            return;
-        }
-        if self
-            .world
-            .resource::<DungeonMemory>()
-            .0
-            .get(&(pos.entrance, pos.depth))
-            .is_some_and(|m| m.looted.contains(&(pos.x, pos.y)))
-        {
-            return;
-        }
-        self.level_memory_mut(pos).looted.insert((pos.x, pos.y));
-
-        let depth_mult = DUNGEON_CACHE_DEPTH_GROWTH.powi(pos.depth as i32 - 1);
-        let credits = {
-            let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_range(DUNGEON_CACHE_CREDITS)
-        };
-        let credits = ((credits as f32) * depth_mult).round() as u32;
-
-        self.log_kind(MessageKind::Loot, "A cache, still sealed. You crack it.");
-        let landed = self.grant_loot(self.trade_currency(), credits);
-        if landed > 0 {
-            self.log_kind(
-                MessageKind::Loot,
-                format!("{landed} credits, skimmed off some long-dead process."),
-            );
-        }
-
-        let fragment_roll = {
-            let chance = (DUNGEON_CACHE_FRAGMENT_CHANCE * pos.depth as f64).min(1.0);
-            let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_bool(chance)
-        };
-        if fragment_roll && self.grant_loot(self.craft_currency(), 1) > 0 {
-            self.log_kind(
-                MessageKind::Loot,
-                "A portal fragment, wedged in the casing.",
-            );
-        }
-
-        // Sorted by id so a seeded run consumes its rolls in the same order
-        // however the item files happen to load — the same guarantee
-        // `equipment_drops_for` makes.
-        let mut table: Vec<(ItemId, f32)> = self
-            .world
-            .resource::<ItemDb>()
-            .all()
-            .filter_map(|def| def.cache_drop.map(|chance| (def.id.clone(), chance)))
-            .collect();
-        table.sort_by(|a, b| a.0.as_str().cmp(b.0.as_str()));
-
-        for (item, chance) in table {
-            let roll = {
-                let mut rng = self.world.resource_mut::<GameRng>();
-                rng.0.random_bool(chance.clamp(0.0, 1.0) as f64)
-            };
-            if roll && self.grant_loot(item.clone(), 1) > 0 {
-                self.log_kind(
-                    MessageKind::Loot,
-                    format!("Also inside: a {}.", self.item_name(&item)),
-                );
-            }
-        }
-    }
-
-    /// Whether the party may walk into `cell`, opening a sealed door on the
-    /// way if they are carrying something that opens it.
-    ///
-    /// Spends the shard rather than keeping it, and records the door as open
-    /// so the way back out is free — a one-way vault that charged you again
-    /// on the return trip would be a tax on having gone in.
-    fn pass_seal(&mut self, pos: DungeonPos, cell: (i32, i32)) -> bool {
-        let already_open = self
-            .world
-            .resource::<DungeonMemory>()
-            .0
-            .get(&(pos.entrance, pos.depth))
-            .is_some_and(|m| m.opened.contains(&cell));
-        if already_open {
-            return true;
-        }
-
-        let shard = ItemId::from(ids::ACCESS_SHARD);
-        let player = self.player_entity();
-        let spent = self
-            .world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .take(shard, 1);
-        if spent == 0 {
-            self.log("Sealed. The lock wants authorization you don't have.".to_string());
-            return false;
-        }
-        self.level_memory_mut(pos).opened.insert(cell);
-        self.log_kind(
-            MessageKind::Outcome,
-            "You burn an access shard. The seal releases.",
-        );
-        true
-    }
-
-    /// Starts the boss fight if the party has just walked into an uncleared
-    /// lair.
-    ///
-    /// The species is drawn from the breach tile's biome, like every other
-    /// dungeon encounter, but from the boss pool rather than the ordinary
-    /// one, and from an RNG seeded off the level spec rather than off
-    /// `GameRng`: which thing guards a shaft is a property of the shaft, not
-    /// of how many rolls happened first, so leaving and coming back cannot
-    /// reroll it into something easier.
-    ///
-    /// Not every biome fields a boss — no shipped Static Field species does
-    /// — and there the lair falls back to the toughest ordinary program the
-    /// biome has, which at the bottom of a deep shaft is no small thing.
-    fn rouse_lair(&mut self) {
-        if self.has_active_battle() || self.is_game_over().is_some() {
-            return;
-        }
-        let Some(pos) = self.dungeon_pos() else {
-            return;
-        };
-        if self.cell_underfoot() != Some(CellKind::Lair) || self.lair_cleared(pos) {
-            return;
-        }
-
-        let (ex, ey) = pos.entrance;
-        let Some((species, is_boss)) = self.pick_lair_species(pos) else {
-            return;
-        };
-        let depth_mult = self.dungeon_depth_multiplier();
-        let pack = self.spawn_pack(&species, is_boss, ex, ey, depth_mult);
-        if pack.is_empty() {
-            return;
-        }
-        for &member in &pack {
-            self.world.entity_mut(member).insert(DungeonSpawn);
-        }
-        self.remember_fight();
-        self.log_kind(
-            MessageKind::Outcome,
-            "The shaft opens out. Something very large is already awake.",
-        );
-        self.start_battle(pack);
-    }
-
-    fn pick_lair_species(&mut self, pos: DungeonPos) -> Option<(String, bool)> {
-        let (ex, ey) = pos.entrance;
-        let biome = self.world.resource_mut::<WorldMap>().tile(ex, ey).biome;
-        let spec = self.level_spec(pos.depth, pos.floors, pos.entrance);
-
-        let bosses: Vec<String> = self
-            .world
-            .resource::<SpeciesDb>()
-            .boss_habitat_matches(biome)
-            .into_iter()
-            .map(|s| s.id.clone())
-            .collect();
-        if !bosses.is_empty() {
-            // Salted off the level's own stream so the choice of guardian
-            // doesn't correlate with the shape of the room it stands in.
-            const LAIR_SALT: u64 = 0x1A19_B055;
-            let mut rng = StdRng::seed_from_u64(spec.rng_seed() ^ LAIR_SALT);
-            return Some((bosses[rng.random_range(0..bosses.len())].clone(), true));
-        }
-
-        let db = self.world.resource::<SpeciesDb>();
-        db.habitat_matches(biome)
-            .into_iter()
-            .max_by_key(|s| s.base_hp + s.base_atk + s.base_def)
-            .map(|s| (s.id.clone(), false))
-    }
-
-    /// Whether the sealed door on `cell` has already been burned open.
-    fn seal_open(&self, pos: DungeonPos, cell: (i32, i32)) -> bool {
-        self.world
-            .resource::<DungeonMemory>()
-            .0
-            .get(&(pos.entrance, pos.depth))
-            .is_some_and(|m| m.opened.contains(&cell))
-    }
-
-    fn lair_cleared(&self, pos: DungeonPos) -> bool {
-        self.world
-            .resource::<DungeonMemory>()
-            .0
-            .get(&(pos.entrance, pos.depth))
-            .is_some_and(|m| m.cleared)
-    }
-
-    /// Records that this shaft's guardian is down, so its lair does not
-    /// refill. Called from `award_loot`, which is the one place that knows a
-    /// hostile actually died rather than merely being fled from.
-    pub(crate) fn mark_lair_cleared(&mut self) {
-        let Some(pos) = self.dungeon_pos() else {
-            return;
-        };
-        if self.cell_underfoot() != Some(CellKind::Lair) {
-            return;
-        }
-        self.level_memory_mut(pos).cleared = true;
-    }
-
-    /// Whether the cache on `cell` of the level the party is in is still
-    /// unopened — what both views use to stop advertising an empty one.
-    fn cache_unopened(&self, pos: DungeonPos, cell: (i32, i32)) -> bool {
-        !self
-            .world
-            .resource::<DungeonMemory>()
-            .0
-            .get(&(pos.entrance, pos.depth))
-            .is_some_and(|m| m.looted.contains(&cell))
-    }
-
-    /// Marks the cell the party is standing on as somewhere a fight started,
-    /// for the map to pin.
-    pub(crate) fn remember_fight(&mut self) {
-        let Some(pos) = self.dungeon_pos() else {
-            return;
-        };
-        self.level_memory_mut(pos).fights.insert((pos.x, pos.y));
-    }
-
     /// The party's current cell and facing, or `None` on the surface.
-    fn dungeon_pos(&self) -> Option<DungeonPos> {
+    pub(crate) fn dungeon_pos(&self) -> Option<DungeonPos> {
         match *self.world.resource::<Locale>() {
             Locale::Surface => None,
             Locale::Dungeon {
@@ -798,7 +484,7 @@ impl Game {
     }
 
     /// The cell the party is standing on, or `None` on the surface.
-    fn cell_underfoot(&self) -> Option<CellKind> {
+    pub(crate) fn cell_underfoot(&self) -> Option<CellKind> {
         let pos = self.dungeon_pos()?;
         self.world
             .resource::<CurrentDungeon>()
@@ -919,151 +605,5 @@ impl Game {
 
     pub(crate) fn locale(&self) -> Locale {
         *self.world.resource::<Locale>()
-    }
-
-    /// The party's map of the level they are in — see
-    /// `views::DungeonMapView`. `None` on the surface.
-    ///
-    /// Drawn from `DungeonMemory` rather than from the level, so it shows
-    /// what has been seen and not what is there. The level is consulted only
-    /// to say what each *remembered* cell holds.
-    pub fn dungeon_map(&self) -> Option<DungeonMapView> {
-        let pos = self.dungeon_pos()?;
-        let level = self.world.resource::<CurrentDungeon>().0.as_ref()?;
-        let memory = self.world.resource::<DungeonMemory>();
-        let seen = memory
-            .0
-            .get(&(pos.entrance, pos.depth))
-            .map(|m| &m.seen)
-            .cloned()
-            .unwrap_or_default();
-
-        let cells = (0..level.height)
-            .map(|y| {
-                (0..level.width)
-                    .map(|x| {
-                        if !seen.contains(&(x, y)) {
-                            return DungeonMapCell::Unknown;
-                        }
-                        match level.cell(x, y) {
-                            CellKind::Rock => DungeonMapCell::Rock,
-                            CellKind::Floor => DungeonMapCell::Floor,
-                            CellKind::StairsUp => DungeonMapCell::StairsUp,
-                            CellKind::StairsDown => DungeonMapCell::StairsDown,
-                            CellKind::Cache if self.cache_unopened(pos, (x, y)) => {
-                                DungeonMapCell::Cache
-                            }
-                            CellKind::Cache => DungeonMapCell::Floor,
-                            CellKind::Lair if !self.lair_cleared(pos) => DungeonMapCell::Lair,
-                            CellKind::Lair => DungeonMapCell::Floor,
-                            CellKind::Door => DungeonMapCell::Door,
-                            CellKind::SealedDoor if self.seal_open(pos, (x, y)) => {
-                                DungeonMapCell::Door
-                            }
-                            CellKind::SealedDoor => DungeonMapCell::SealedDoor,
-                        }
-                    })
-                    .collect()
-            })
-            .collect();
-
-        let mut marks: Vec<((i32, i32), DungeonMapMark)> = memory
-            .0
-            .get(&(pos.entrance, pos.depth))
-            .map(|m| {
-                m.fights
-                    .iter()
-                    .map(|&c| (c, DungeonMapMark::Fight))
-                    .collect()
-            })
-            .unwrap_or_default();
-        // Last, so a fight marker on the party's own cell doesn't hide them.
-        marks.push(((pos.x, pos.y), DungeonMapMark::Party));
-
-        let walkable = (0..level.height)
-            .flat_map(|y| (0..level.width).map(move |x| (x, y)))
-            .filter(|&(x, y)| level.walkable(x, y))
-            .count();
-        let walked = seen.iter().filter(|&&(x, y)| level.walkable(x, y)).count();
-
-        Some(DungeonMapView {
-            depth: pos.depth,
-            floors: pos.floors,
-            width: level.width,
-            height: level.height,
-            cells,
-            marks,
-            facing: pos.facing.label(),
-            entrance: pos.entrance,
-            explored: if walkable == 0 {
-                0.0
-            } else {
-                walked as f32 / walkable as f32
-            },
-        })
-    }
-
-    /// The first-person view of the cells around the party, already rotated
-    /// into view space — see `views::DungeonView`. `None` on the surface.
-    pub fn dungeon_view(&self) -> Option<DungeonView> {
-        let pos = self.dungeon_pos()?;
-        let DungeonPos {
-            depth,
-            floors,
-            x,
-            y,
-            facing,
-            ..
-        } = pos;
-        let level = self.world.resource::<CurrentDungeon>().0.as_ref()?;
-
-        let cells = view_cone(x, y, facing)
-            .into_iter()
-            .map(|row| {
-                row.into_iter()
-                    .map(|(cx, cy)| match level.cell(cx, cy) {
-                        CellKind::Rock => DungeonCellView::Rock,
-                        CellKind::Floor => DungeonCellView::Floor,
-                        CellKind::StairsUp => DungeonCellView::StairsUp,
-                        CellKind::StairsDown => DungeonCellView::StairsDown,
-                        // An emptied cache is just an alcove. Still drawing
-                        // one would send the player back down a dead end
-                        // they have already walked.
-                        CellKind::Cache if self.cache_unopened(pos, (cx, cy)) => {
-                            DungeonCellView::Cache
-                        }
-                        CellKind::Cache => DungeonCellView::Floor,
-                        CellKind::Lair if !self.lair_cleared(pos) => DungeonCellView::Lair,
-                        CellKind::Lair => DungeonCellView::Floor,
-                        CellKind::Door => DungeonCellView::Door,
-                        CellKind::SealedDoor if self.seal_open(pos, (cx, cy)) => {
-                            DungeonCellView::Door
-                        }
-                        CellKind::SealedDoor => DungeonCellView::SealedDoor,
-                    })
-                    .collect()
-            })
-            .collect();
-
-        let standing_on = match level.cell(x, y) {
-            CellKind::StairsDown => Some("Stairs lead down  [>] descend".to_string()),
-            CellKind::StairsUp if depth == 1 => Some("The breach out  [<] surface".to_string()),
-            CellKind::StairsUp => Some("Stairs lead up  [<] climb".to_string()),
-            // Emptied on arrival rather than on a key, so this reports what
-            // already happened rather than offering a choice.
-            CellKind::Cache => Some("An empty casing".to_string()),
-            CellKind::Lair => Some("The lair, and nothing left holding it".to_string()),
-            CellKind::Door | CellKind::SealedDoor => Some("A doorway".to_string()),
-            _ => None,
-        };
-
-        Some(DungeonView {
-            depth,
-            floors,
-            facing: facing.label(),
-            position: (x, y),
-            cells,
-            standing_on,
-        })
     }
 }

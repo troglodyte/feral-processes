@@ -2384,6 +2384,7 @@ name = "feral-processes"
 version = "0.2.0"
 dependencies = [
  "feral-processes-app-core",
+ "feral-processes-engine",
  "feral-processes-gui",
 ]
 

@@ -2,11 +2,22 @@
 name = "feral-processes"
 version.workspace = true
 edition.workspace = true
+# `savetool` is the second bin in this crate, so a bare `cargo run` would be
+# ambiguous without this. The game is what you run; the tool is asked for by
+# name. Set here rather than as a workspace `default-members` because that
+# would also narrow a bare `cargo test` to this crate, which has no tests —
+# the suite would report green having run nothing.
+default-run = "feral-processes"
 
 [[bin]]
 name = "feral-processes"
 path = "src/main.rs"
 
+[[bin]]
+name = "savetool"
+path = "src/bin/savetool.rs"
+
 [dependencies]
 feral-processes-app-core = { workspace = true }
+feral-processes-engine = { workspace = true }
 feral-processes-gui = { workspace = true }

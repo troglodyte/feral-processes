@@ -7,10 +7,14 @@
 //! `Game::warp_to_zone` for why that distinction matters.
 //!
 //! ```sh
-//! cargo run -p feral-processes-engine --bin savetool -- dump saves/save.bin s.ron
-//! cargo run -p feral-processes-engine --bin savetool -- pack s.ron saves/save.bin
-//! cargo run -p feral-processes-engine --bin savetool -- warp saves/save.bin 6
+//! cargo run --bin savetool -- dump saves/save.bin s.ron
+//! cargo run --bin savetool -- pack s.ron saves/save.bin
+//! cargo run --bin savetool -- warp saves/save.bin 6
 //! ```
+//!
+//! It lives in the launcher crate rather than the engine so that it and the
+//! game are the same package's two bins, which is what lets `default-run`
+//! keep a bare `cargo run` launching the game.
 //!
 //! `pack` always stamps the *current* `SAVE_FORMAT_VERSION`, so dumping a
 //! save before a format bump and packing it after is the one way to carry a
@@ -90,8 +94,9 @@ fn warp(save_path: &Path, zone: &str) -> Result<(), String> {
 }
 
 /// Warping runs the real sim, so it needs the game's assets. Resolved from
-/// the crate's own location the same way the launcher resolves them, since
-/// this tool is only ever run out of the repo.
+/// this crate's location exactly as `main.rs` resolves them — same crate,
+/// so the same two levels up to the repo root — since the tool is only ever
+/// run out of the repo.
 fn assets_dir() -> PathBuf {
     let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     crate_dir

@@ -8,9 +8,12 @@
 pub(crate) mod building;
 pub(crate) mod catalog;
 pub(crate) mod combat;
+pub(crate) mod combat_damage;
+pub(crate) mod combat_enemy;
 pub(crate) mod combat_rewards;
 pub(crate) mod combat_round;
 pub(crate) mod combat_status;
+pub(crate) mod combat_teardown;
 pub(crate) mod crafting;
 pub(crate) mod dungeon;
 pub(crate) mod field;

@@ -46,6 +46,17 @@ impl Game {
             .unwrap_or_else(|| id.as_str())
     }
 
+    /// The item's authored description, straight out of its `.ron` file.
+    ///
+    /// Deliberately *not* derived the way `item_blurb` is: this is prose a
+    /// modder writes and can edit without touching Rust, which is the whole
+    /// point of it living in the asset. `None` for an item the current item
+    /// set doesn't define, or one whose file leaves the field blank.
+    pub fn item_description(&self, id: &ItemId) -> Option<&str> {
+        let def = self.world.resource::<ItemDb>().get(id.as_str())?;
+        (!def.description.is_empty()).then_some(def.description.as_str())
+    }
+
     /// A two-or-three word gloss of what an item *does*, for menus that list
     /// items by name and cost without saying why you'd want one.
     ///

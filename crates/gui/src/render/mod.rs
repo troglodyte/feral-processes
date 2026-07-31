@@ -49,7 +49,9 @@ use building::{
 use crafting::{draw_craft_menu, draw_craft_quantity};
 use dungeon_map::draw_dungeon_map;
 use field::{draw_field_cast, draw_field_cast_ally};
-use inventory::{draw_erase_quantity, draw_inventory, draw_inventory_item_action};
+use inventory::{
+    draw_erase_quantity, draw_inventory, draw_inventory_item_action, draw_item_describe,
+};
 use manifest::{ManifestNav, draw_manifest, draw_manifest_pick};
 use meta::{
     draw_difficulty_pick, draw_game_over, draw_help, draw_load_game, draw_main_menu,
@@ -414,6 +416,22 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
                 zone,
                 fusion_tier,
                 selected,
+                painter,
+                m,
+            )
+        }
+        Mode::ItemDescribe => {
+            let zone = game.player_status().zone;
+            let fusion_tier = app
+                .pending_inventory_item
+                .as_ref()
+                .map(|item| game.item_fusion_tier(item))
+                .unwrap_or(0);
+            draw_item_describe(
+                game,
+                app.pending_inventory_item.clone(),
+                zone,
+                fusion_tier,
                 painter,
                 m,
             )

@@ -96,7 +96,7 @@ fn every_equippable_item_offers_equip_fuse_and_erase() {
             .collect();
         assert_eq!(
             keys,
-            vec!['e', 'u', 'x'],
+            vec!['e', 'u', 'd', 'x'],
             "{} should offer fuse regardless of how many copies are held",
             game.item_name(&item)
         );
@@ -104,14 +104,56 @@ fn every_equippable_item_offers_equip_fuse_and_erase() {
 }
 
 #[test]
-fn a_plain_resource_offers_only_erase() {
+fn a_plain_resource_offers_only_describe_and_erase() {
     let app = test_app(905);
     let game = app.game.as_ref().unwrap();
     let keys: Vec<char> = inventory_item_actions(game, &ItemId::from(ids::CORE_FRAGMENT))
         .into_iter()
         .map(|(k, _)| k)
         .collect();
-    assert_eq!(keys, vec!['x']);
+    assert_eq!(
+        keys,
+        vec!['d', 'x'],
+        "even a plain resource has an authored description worth reading"
+    );
+}
+
+#[test]
+fn describe_opens_a_page_and_esc_returns_to_the_action_list() {
+    let mut app = test_app(906);
+    app.pending_inventory_item = Some(ItemId::from(ids::CORE_FRAGMENT));
+    app.mode = Mode::InventoryItemAction;
+
+    app.handle_key(GameKey::Char('d'));
+    assert_eq!(app.mode, Mode::ItemDescribe);
+    assert_eq!(
+        app.pending_inventory_item,
+        Some(ItemId::from(ids::CORE_FRAGMENT)),
+        "the page needs to still know which item it is describing"
+    );
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(
+        app.mode,
+        Mode::InventoryItemAction,
+        "Esc should step back to the actions, not out to the inventory"
+    );
+}
+
+/// Descriptions are authored in `assets/items/*.ron` so they can be edited
+/// without touching Rust — the page must read that text, not a derived
+/// gloss like `Game::item_blurb`.
+#[test]
+fn the_describe_page_reads_the_authored_ron_description() {
+    let app = test_app(907);
+    let game = app.game.as_ref().unwrap();
+    let text = game
+        .item_description(&ItemId::from(ids::CORE_FRAGMENT))
+        .expect("core_fragment.ron authors a description");
+    assert!(
+        !text.is_empty(),
+        "an authored description should not come back blank"
+    );
 }
 
 #[test]

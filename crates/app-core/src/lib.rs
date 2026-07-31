@@ -76,6 +76,7 @@ pub fn inventory_item_actions(game: &Game, item: &ItemId) -> Vec<(char, String)>
     if game.is_consumable(item) {
         actions.push(('c', "[C]onsume".to_string()));
     }
+    actions.push(('d', "[D]escribe".to_string()));
     actions.push(('x', "[X] Erase".to_string()));
     actions
 }
@@ -264,6 +265,11 @@ pub enum Mode {
     ManifestPick,
     Inventory,
     InventoryItemAction,
+    /// The authored description of `pending_inventory_item`, read out of its
+    /// `.ron` file. Reached with `d` from `Mode::InventoryItemAction`, and
+    /// Esc steps back there rather than out to the inventory — it is a page
+    /// about the item you already picked, not a separate errand.
+    ItemDescribe,
     /// Second page of the erase flow: asks how many units of
     /// `pending_erase` to destroy before calling `Game::erase_item`. A
     /// hard inventory cap makes partial erasure the common case — dumping a
@@ -388,6 +394,7 @@ impl Mode {
             | Mode::ManifestPick
             | Mode::Inventory
             | Mode::InventoryItemAction
+            | Mode::ItemDescribe
             | Mode::EraseQuantity
             | Mode::Companion
             | Mode::Fuse

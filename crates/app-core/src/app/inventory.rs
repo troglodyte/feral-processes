@@ -70,6 +70,12 @@ impl App {
             self.pending_inventory_item = None;
             return;
         }
+        if idx.map(|i| actions[i]) == Some('d') {
+            // `pending_inventory_item` deliberately survives: the describe
+            // page is about that item, and Esc comes back here.
+            self.mode = Mode::ItemDescribe;
+            return;
+        }
         if idx.map(|i| actions[i]) == Some('c') {
             let Some(game) = &mut self.game else { return };
             game.use_item(&item);
@@ -95,6 +101,11 @@ impl App {
         self.status_line = outcome;
         self.pending_inventory_item = None;
         self.mode = Mode::Inventory;
+    }
+
+    /// The describe page is read-only: any key steps back to the actions.
+    pub(crate) fn handle_item_describe_key(&mut self, _key: GameKey) {
+        self.mode = Mode::InventoryItemAction;
     }
 
     /// Second page of the erase flow: how many units of `pending_erase` to

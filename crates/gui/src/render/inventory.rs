@@ -129,6 +129,56 @@ fn equipped_row(
     }
 }
 
+/// How wide the describe page lets prose run before wrapping. Deliberately
+/// conservative rather than derived from the popup's pixel width, which is
+/// a percentage of the window and so varies per machine — the longest
+/// description any shipped item carries is about 165 characters, which lands
+/// in three rows here with room to spare on the narrowest supported window.
+const DESCRIBE_WRAP_COLUMNS: usize = 72;
+
+/// The read-only description page reached with `d` from the action list.
+///
+/// The prose is the item's own authored `.ron` text — see
+/// `Game::item_description` — not `item_blurb`'s derived gloss, so editing
+/// an item's flavour never means touching Rust. The stat tag is still shown
+/// above it, since the two answer different questions.
+pub(super) fn draw_item_describe(
+    game: &Game,
+    item: Option<ItemId>,
+    zone_level: u32,
+    fusion_tier: u32,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let Some(item) = item else {
+        draw_popup(
+            "Item",
+            PopupSize::Small,
+            &[text_row("Nothing selected.")],
+            painter,
+            m,
+        );
+        return;
+    };
+    let title = format!(
+        "{}{}",
+        game.item_name(&item),
+        equip_preview_tag(game, &item, zone_level, fusion_tier)
+    );
+    let mut rows = vec![Row::TextColored(title, TEXT), text_row("")];
+    match game.item_description(&item) {
+        Some(text) => rows.extend(
+            wrap_text(text, DESCRIBE_WRAP_COLUMNS)
+                .into_iter()
+                .map(text_row),
+        ),
+        None => rows.push(text_row("(no description)")),
+    }
+    rows.push(text_row(""));
+    rows.push(text_row("Any key to go back"));
+    draw_popup("Item", PopupSize::Large, &rows, painter, m);
+}
+
 pub(super) fn draw_inventory_item_action(
     game: &Game,
     item: Option<ItemId>,

@@ -7,6 +7,49 @@ more than one kind of floor, and inhabitants that aren't fights.
 Five phases, each shippable alone. Phase 1 is inert; phases 2–4 each add
 mechanics; phase 5 is renderer-only.
 
+## Status
+
+Updated 2026-07-31. Each phase gets its own plan, written when its
+predecessor lands — not up front, since a plan written against vocabulary
+that does not exist yet goes stale.
+
+| # | Phase | State | Save bump | Crates |
+| --- | --- | --- | --- | --- |
+| 1 | **The rename** — Stack, frames, links | ✅ **done**, merged `1ffa7ca` | no | engine, app-core, gui |
+| 2 | **Trace** — greed-driven pressure, escalating ambushes | not started | **yes** | engine, app-core, gui |
+| 3 | **Cell kinds** — breakpoint, fault, corruption | not started | **yes** | engine, gui |
+| 4 | **Inhabitants** — orphaned process, derelict trader, crash log | not started | **yes** | engine, gui, assets |
+| 5 | **Corner map inset** | not started | no | gui only |
+
+Phase 1's plan is at
+`docs/superpowers/plans/2026-07-31-the-stack-phase-1-rename.md`. It was
+amended six times mid-execution and those amendments are the useful part —
+they record where the plan was wrong, which is the same shape of error the
+later phases will make.
+
+### Open question carried into phase 2
+
+**Should phase 5 (the corner map) be pulled forward, ahead of Trace?** It is
+renderer-only, needs no engine or save change, and would make every later
+playtest better by having the map visible while you walk. The argument for
+leaving it last is unchanged: the shared glyph function it introduces gets
+written once the three new cell kinds exist, instead of being touched again
+in phase 3. Cost of reordering is roughly one match arm per kind. Undecided.
+
+### What phase 1 did *not* change
+
+Anything visible, beyond five strings. The Stack looks and plays exactly as
+the dungeon did. The frame map is still a full-screen mode on `g`
+(`app/playing.rs:192`); there is no corner inset, and there will not be one
+before phase 5.
+
+### Before building on phase 2
+
+The spec's closing note stands and is the most important line in this
+document: the Trace band thresholds and per-source gains are
+arithmetic-plausible and nothing more. Capture a `dev-saves/` template and
+actually play phase 2 before phases 3 and 4 are built on top of it.
+
 ## Why
 
 The descent is currently a checklist. You walk a braided maze, crack every

@@ -109,6 +109,57 @@ impl App {
         // only — so this screen is unchanged at such a trader.
         let programs = game.program_sale_options(structure);
         let total = sell_items.len() + buy_items.len() + buybacks.len() + programs.len();
+
+        // One unit off the highlighted row, no quantity page — a visit is
+        // normally a run of trades, so the four-screen round trip is paid
+        // per item. Uppercase because `selected_index` reserves it: a key
+        // that both moved the selection and spent money would be a bug
+        // waiting for a full pack.
+        if let GameKey::Char(dir @ ('S' | 'B')) = key {
+            let selling = dir == 'S';
+            let row = trade_row(
+                self.menu_selected.min(total.saturating_sub(1)),
+                sell_items.len(),
+                buy_items.len(),
+                buybacks.len(),
+                programs.len(),
+            );
+            match row {
+                Some(TradeRow::Sell(i)) if selling => {
+                    self.execute_trade(structure, TradeChoice::Sell(sell_items[i].clone()), 1)
+                }
+                Some(TradeRow::Buy(i)) if !selling => {
+                    self.execute_trade(structure, TradeChoice::Buy(buy_items[i].clone()), 1)
+                }
+                Some(TradeRow::BuyBack(i)) if !selling => {
+                    self.execute_trade(structure, TradeChoice::BuyBack(buybacks[i].item.clone()), 1)
+                }
+                // Deliberately not a quick sale. Selling a levelled program
+                // is permanent and a quick key is exactly a mis-hit, so this
+                // row goes the slow way however it was reached — see
+                // `handle_trade_program_confirm_key`.
+                Some(TradeRow::Program(i)) if selling => {
+                    self.pending_trade_program = Some(programs[i].clone());
+                    self.mode = Mode::TradeProgramConfirm;
+                }
+                // A row is a sell or a buy, never both, so the other key is
+                // a mis-hit. Say which one this row wants rather than
+                // guessing at a transaction.
+                Some(_) => {
+                    self.status_line = Some(
+                        if selling {
+                            "That's the trader's — [B] buys one."
+                        } else {
+                            "That's yours — [S] sells one."
+                        }
+                        .to_string(),
+                    )
+                }
+                None => {}
+            }
+            return;
+        }
+
         if let Some(idx) = self.selected_index(key, total) {
             let choice = match trade_row(
                 idx,
@@ -132,6 +183,27 @@ impl App {
             self.pending_trade_choice = Some(choice);
             self.trade_quantity_input.clear();
             self.mode = Mode::TradeQuantity;
+        }
+    }
+
+    /// Runs one transaction and reports it, without deciding where the
+    /// player ends up — the quantity page returns to wherever the trade
+    /// began, while a quick key stays on the list.
+    ///
+    /// The single place either path reaches the engine, so what may be
+    /// traded is decided once, by `Game`. A quick key that re-checked the
+    /// rules itself would be a second copy of them, and the copy that
+    /// drifts is the one nobody runs.
+    fn execute_trade(&mut self, structure: Entity, choice: TradeChoice, qty: u32) {
+        let Some(game) = &mut self.game else { return };
+        let result = match choice {
+            TradeChoice::Sell(item) => game.sell_item(structure, item, qty),
+            TradeChoice::Buy(item) => game.buy_item(structure, item, qty),
+            TradeChoice::BuyBack(item) => game.buy_back(structure, item, qty),
+        };
+        match result {
+            Ok(()) => self.status_line = None,
+            Err(e) => self.status_line = Some(e),
         }
     }
 
@@ -252,17 +324,7 @@ impl App {
                     self.mode = self.abandoned_trade_mode();
                     return;
                 }
-                if let Some(game) = &mut self.game {
-                    let result = match choice {
-                        TradeChoice::Sell(item) => game.sell_item(structure, item, quantity),
-                        TradeChoice::Buy(item) => game.buy_item(structure, item, quantity),
-                        TradeChoice::BuyBack(item) => game.buy_back(structure, item, quantity),
-                    };
-                    match result {
-                        Ok(()) => self.status_line = None,
-                        Err(e) => self.status_line = Some(e),
-                    }
-                }
+                self.execute_trade(structure, choice, quantity);
                 self.return_to_trade_list();
             }
             _ => {}

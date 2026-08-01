@@ -243,3 +243,73 @@ fn an_empty_shelf_leaves_the_other_sections_where_they_were() {
 fn the_program_sale_confirmation_is_not_a_battle_screen() {
     assert!(!Mode::TradeProgramConfirm.is_battle());
 }
+
+/// `S` sells one unit off the highlighted row without a trip through the
+/// quantity page, and leaves you on the list — a trade visit is normally a
+/// run of trades, so the screen you want next is the one you're on.
+#[test]
+fn capital_s_sells_one_unit_from_the_highlighted_row() {
+    let mut app = app_at_a_trading_post(940, &[(ids::CORE_FRAGMENT, 5)]);
+    open_the_trading_post(&mut app);
+    app.menu_selected = 0;
+
+    app.handle_key(GameKey::Char('S'));
+
+    assert_eq!(held(&app, ids::CORE_FRAGMENT), 4, "exactly one unit moves");
+    assert_eq!(app.mode, Mode::TradeAction, "the visit continues");
+
+    app.handle_key(GameKey::Char('S'));
+    assert_eq!(held(&app, ids::CORE_FRAGMENT), 3, "presses accumulate");
+}
+
+/// Each row is either a sell or a buy, so the wrong key for a row is a
+/// mis-hit. It says so rather than guessing which one you meant.
+#[test]
+fn the_wrong_direction_key_transacts_nothing_and_says_why() {
+    let mut app = app_at_a_trading_post(941, &[(ids::CORE_FRAGMENT, 5)]);
+    open_the_trading_post(&mut app);
+    app.menu_selected = 0;
+
+    app.handle_key(GameKey::Char('B'));
+
+    assert_eq!(held(&app, ids::CORE_FRAGMENT), 5, "nothing moved");
+    assert_eq!(app.mode, Mode::TradeAction);
+    assert!(
+        app.status_line.is_some(),
+        "a key that did nothing must say why"
+    );
+}
+
+/// The one row `S` refuses to make faster. Selling a levelled program is
+/// permanent, and a quick key is exactly a mis-hit risk — so it lands on
+/// the same confirmation Enter does.
+#[test]
+fn capital_s_on_a_program_row_still_asks_for_confirmation() {
+    let mut app = app_at_a_trading_post(942, &[]);
+    open_the_trading_post(&mut app);
+    let structure = app.pending_trade_structure.unwrap();
+    let game = app.game.as_mut().unwrap();
+    // Programs are the last rows; with an empty pack and an untouched
+    // shelf, everything before them is the trader's own buy list.
+    let first_program_row = game.trade_options(structure).unwrap().buy.len();
+    assert_eq!(game.program_sale_options(structure).len(), 1);
+    app.menu_selected = first_program_row;
+
+    app.handle_key(GameKey::Char('S'));
+
+    assert_eq!(
+        app.mode,
+        Mode::TradeProgramConfirm,
+        "a program sale must be confirmed, however it was reached"
+    );
+    let structure = app.pending_trade_structure.unwrap();
+    assert_eq!(
+        app.game
+            .as_mut()
+            .unwrap()
+            .program_sale_options(structure)
+            .len(),
+        1,
+        "the program is alive until the confirmation is answered"
+    );
+}

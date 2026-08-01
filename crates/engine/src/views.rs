@@ -372,6 +372,14 @@ pub struct StackView {
     /// `Dir::label` — "N", "E", "S", "W". A compass reading for the player,
     /// not something the renderer projects with.
     pub facing: &'static str,
+    /// `TraceBand::label` — how loud the party has been in this stack, and
+    /// the only form they ever see the meter in. A reading, like `facing`,
+    /// not a number the renderer does arithmetic on.
+    ///
+    /// Not decoration: escalating ambushes with no visible cause are
+    /// experienced as bad luck rather than as consequence, and without this
+    /// the whole phase is a difficulty curve nobody can see.
+    pub trace: &'static str,
     pub position: (i32, i32),
     pub cells: Vec<Vec<StackCellView>>,
     /// What the party is standing on, worded for a prompt — e.g. "A link

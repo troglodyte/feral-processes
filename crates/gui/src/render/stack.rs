@@ -145,8 +145,8 @@ pub(super) fn draw_stack(view: &StackView, painter: &Painter, w: f32, h: f32, m:
     painter.rect_lines(0.0, 0.0, w, h, 2.0, BORDER);
 
     let heading = format!(
-        "Facing {}   Depth {} / {}   ({}, {})",
-        view.facing, view.depth, view.frames, view.position.0, view.position.1
+        "Facing {}   Depth {} / {}   ({}, {})   Trace: {}",
+        view.facing, view.depth, view.frames, view.position.0, view.position.1, view.trace
     );
     painter.ui(
         &heading,
@@ -283,6 +283,7 @@ mod tests {
             depth: 2,
             frames: 4,
             facing: "N",
+            trace: "Traced",
             position: (3, 4),
             cells: ahead.iter().map(|&c| vec![flank, c, flank]).collect(),
             standing_on: Some("A link leads down".to_string()),
@@ -324,6 +325,7 @@ mod tests {
             depth: 1,
             frames: 1,
             facing: "N",
+            trace: "Quiet",
             position: (0, 0),
             cells: Vec::new(),
             standing_on: None,
@@ -332,6 +334,7 @@ mod tests {
             depth: 1,
             frames: 1,
             facing: "S",
+            trace: "Hunted",
             position: (0, 0),
             cells: vec![vec![StackCellView::Floor]],
             standing_on: None,

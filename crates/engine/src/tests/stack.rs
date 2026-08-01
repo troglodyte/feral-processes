@@ -2699,3 +2699,18 @@ fn a_hunted_ambush_is_still_never_a_boss() {
         "Hunted drew a boss into an ambush: {bosses:?}"
     );
 }
+
+/// The band is the only form the player ever sees Trace in — a threat
+/// readout rather than a progress bar, since a visible integer invites
+/// playing to the threshold instead of to the risk.
+#[test]
+fn the_stack_view_reports_the_trace_band() {
+    use crate::tuning::TRACE_HUNTED;
+    let mut game = game();
+    descend(&mut game);
+
+    assert_eq!(game.stack_view().unwrap().trace, "Quiet");
+
+    set_trace(&mut game, TRACE_HUNTED);
+    assert_eq!(game.stack_view().unwrap().trace, "Hunted");
+}

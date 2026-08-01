@@ -2275,3 +2275,99 @@ fn an_encounter_underground_leaves_the_players_surface_position_alone() {
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
     assert_eq!((pos.x, pos.y), entrance);
 }
+
+// ---- Trace ------------------------------------------------------------
+
+fn trace(game: &Game) -> u32 {
+    game.world.resource::<crate::resources::Trace>().0
+}
+
+fn set_trace(game: &mut Game, n: u32) {
+    game.world.insert_resource(crate::resources::Trace(n));
+}
+
+/// The reason Trace is a resource and not a field on the `Locale::Stack`
+/// variant. `descend_to` and `ascend_to` each *construct* a fresh variant
+/// rather than mutating the live one, so a field there is silently zeroed on
+/// every frame change — precisely when Trace is supposed to be accumulating.
+#[test]
+fn trace_survives_descending_and_ascending() {
+    let mut game = game();
+    descend(&mut game);
+    set_trace(&mut game, 50);
+
+    stand_on_link_down(&mut game);
+    game.descend();
+    assert_eq!(trace(&game), 50, "descending a frame must not shed Trace");
+
+    game.ascend();
+    assert_eq!(trace(&game), 50, "climbing a frame must not shed Trace");
+}
+
+#[test]
+fn surfacing_clears_trace() {
+    let mut game = game();
+    descend(&mut game);
+    set_trace(&mut game, 50);
+
+    game.ascend(); // from depth 1 this leaves the Stack entirely
+
+    assert_eq!(locale(&game), Locale::Surface);
+    assert_eq!(trace(&game), 0, "the Stack stops caring once you are out");
+}
+
+/// The other way out. CLAUDE.md records `use_symlink` as going *through*
+/// `clear_stack` rather than around it, and this is the assertion that keeps
+/// it true — a second exit that skipped the reset would leave Trace live on
+/// the surface, where nothing can ever clear it again.
+#[test]
+fn a_symlink_out_of_the_stack_clears_trace() {
+    let mut game = game();
+    let (home, _) = home_then_descend(&mut game);
+    stock_for_symlink(&mut game, home);
+    set_trace(&mut game, 50);
+
+    game.use_symlink(home).expect("a symlink should reach home");
+
+    assert!(!game.is_underground());
+    assert_eq!(trace(&game), 0);
+}
+
+#[test]
+fn trace_survives_a_save_and_load_mid_dive() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &assets).unwrap();
+    descend(&mut game);
+    set_trace(&mut game, 77);
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_trace_test_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &assets).unwrap();
+    std::fs::remove_file(&path).ok();
+
+    assert_eq!(
+        trace(&loaded),
+        77,
+        "without persistence, saving mid-dive is a free Trace reset"
+    );
+}
+
+/// Each threshold constant reads as "from", so a value sitting exactly on one
+/// belongs to the band above it.
+#[test]
+fn band_thresholds_are_half_open() {
+    use crate::resources::TraceBand::{self, *};
+    use crate::tuning::{TRACE_HUNTED, TRACE_NOTICED, TRACE_TRACED};
+
+    assert_eq!(TraceBand::from_trace(0), Quiet);
+    assert_eq!(TraceBand::from_trace(TRACE_NOTICED - 1), Quiet);
+    assert_eq!(TraceBand::from_trace(TRACE_NOTICED), Noticed);
+    assert_eq!(TraceBand::from_trace(TRACE_TRACED - 1), Noticed);
+    assert_eq!(TraceBand::from_trace(TRACE_TRACED), Traced);
+    assert_eq!(TraceBand::from_trace(TRACE_HUNTED - 1), Traced);
+    assert_eq!(TraceBand::from_trace(TRACE_HUNTED), Hunted);
+    assert_eq!(TraceBand::from_trace(u32::MAX), Hunted);
+}

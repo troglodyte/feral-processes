@@ -57,6 +57,41 @@ pub mod ids {
     pub const ACCESS_SHARD: &str = "access_shard";
 }
 
+/// What kind of thing an item is, for grouping the inventory and a trader's
+/// list. Derived from the fields an `ItemDef` already declares — see
+/// `ItemDef::category` — rather than authored, so a modded item is grouped
+/// without its author adding a field, and the grouping cannot drift out of
+/// step with the behaviour it describes.
+///
+/// Declaration order is display order: what you spend, then what you wear,
+/// then what you hoard.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ItemCategory {
+    Consumable,
+    Weapon,
+    Armor,
+    Module,
+    Routine,
+    Material,
+    Currency,
+}
+
+impl ItemCategory {
+    /// Compact form for a list row, matching `EquipmentSlot::short_label`'s
+    /// case — the two sit in the same column on the inventory screen.
+    pub fn short_label(self) -> &'static str {
+        match self {
+            ItemCategory::Consumable => "USE",
+            ItemCategory::Weapon => "WEP",
+            ItemCategory::Armor => "ARM",
+            ItemCategory::Module => "MOD",
+            ItemCategory::Routine => "RTN",
+            ItemCategory::Material => "MAT",
+            ItemCategory::Currency => "CUR",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EquipmentSlot {
     Weapon,

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::abilities::AbilityDb;
 use crate::components::FieldBuffKind;
-use crate::items::{EquipmentSlot, EquipmentStats, ItemId};
+use crate::items::{EquipmentSlot, EquipmentStats, ItemCategory, ItemId};
 use crate::species::SpeciesId;
 use crate::structures::StructureId;
 
@@ -107,6 +107,34 @@ pub struct ItemDef {
 }
 
 impl ItemDef {
+    /// Which group this item lists under. Checked in this order because the
+    /// first match wins and the orderings that overlap have a right answer:
+    /// a routine is its ability before it is its slot, and something both
+    /// wearable and drinkable belongs in the gear list a player is scanning
+    /// for gear.
+    ///
+    /// Total by construction — an item declaring none of these fields is
+    /// salvage, which is what most loot is.
+    pub fn category(&self) -> ItemCategory {
+        if self.routine.is_some() {
+            return ItemCategory::Routine;
+        }
+        if let Some((slot, _)) = self.equipment {
+            return match slot {
+                EquipmentSlot::Weapon => ItemCategory::Weapon,
+                EquipmentSlot::Armor => ItemCategory::Armor,
+                EquipmentSlot::Module => ItemCategory::Module,
+            };
+        }
+        if self.consume.is_some() {
+            return ItemCategory::Consumable;
+        }
+        if self.role.is_some() {
+            return ItemCategory::Currency;
+        }
+        ItemCategory::Material
+    }
+
     /// Names the first field holding a NaN or infinity, if any. RON accepts
     /// bare `NaN`/`inf` literals, and they survive every clamp downstream —
     /// a NaN `taming_potency` outranks every real catalyst and then panics
@@ -331,6 +359,60 @@ mod tests {
         assert!(db.get("inf").is_none(), "an infinite restore must not load");
         assert!(db.get("ok").is_some(), "a valid neighbour still loads");
         assert_eq!(warnings.len(), 2, "each skip warns: {warnings:?}");
+    }
+
+    /// Category is derived from the fields an item already declares, so a
+    /// modded item is grouped without its author adding anything.
+    #[test]
+    fn an_items_category_comes_off_the_fields_it_already_declares() {
+        let (db, warnings) = load_fixture(&[
+            (
+                "w.ron",
+                r#"(id: "w", name: "W", equipment: Some((Weapon, (atk: 1))))"#,
+            ),
+            (
+                "a.ron",
+                r#"(id: "a", name: "A", equipment: Some((Armor, (def: 1))))"#,
+            ),
+            (
+                "m.ron",
+                r#"(id: "m", name: "M", equipment: Some((Module, (decompiler: 1))))"#,
+            ),
+            (
+                "c.ron",
+                r#"(id: "c", name: "C", consume: Some((power: 5.0)))"#,
+            ),
+            (
+                "cur.ron",
+                r#"(id: "cur", name: "Cur", role: Some(TradeCurrency))"#,
+            ),
+            ("mat.ron", r#"(id: "mat", name: "Mat")"#),
+        ]);
+        assert!(warnings.is_empty(), "fixtures must load: {warnings:?}");
+
+        let cat = |id: &str| db.get(id).unwrap().category();
+        assert_eq!(cat("w"), ItemCategory::Weapon);
+        assert_eq!(cat("a"), ItemCategory::Armor);
+        assert_eq!(cat("m"), ItemCategory::Module);
+        assert_eq!(cat("c"), ItemCategory::Consumable);
+        assert_eq!(cat("cur"), ItemCategory::Currency);
+        assert_eq!(
+            cat("mat"),
+            ItemCategory::Material,
+            "an item declaring nothing is salvage, not a panic"
+        );
+    }
+
+    /// The one ordering that isn't obvious: an item that is both wearable
+    /// and drinkable belongs in its slot, because that is the list a player
+    /// looking for gear will scan.
+    #[test]
+    fn an_equippable_consumable_is_filed_under_its_slot() {
+        let (db, _) = load_fixture(&[(
+            "both.ron",
+            r#"(id: "both", name: "Both", equipment: Some((Armor, (def: 1))), consume: Some((power: 5.0)))"#,
+        )]);
+        assert_eq!(db.get("both").unwrap().category(), ItemCategory::Armor);
     }
 
     #[test]

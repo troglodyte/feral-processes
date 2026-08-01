@@ -91,7 +91,7 @@ pub struct ItemDef {
     /// merged per kill (see `Game::equipment_drops_for`).
     #[serde(default)]
     pub droppable: Option<Vec<(SpeciesId, f32)>>,
-    /// Chance, 0.0-1.0, that a dungeon cache holds this item — see
+    /// Chance, 0.0-1.0, that a Stack cache holds this item — see
     /// `Game::open_cache`. Rolled once per cache per declaring item, so the
     /// expected haul is the sum across the item set rather than a pick from
     /// a list, and a mod adding items adds to what caches can contain

@@ -1,9 +1,9 @@
-//! The things in a dungeon level that can be used up, and the record of
+//! The things in a Stack frame that can be used up, and the record of
 //! their having been.
 //!
 //! A cache, a seal and a lair each need both halves: a `CellKind` in the
 //! generated level, and an entry in `FrameMemory` saying it has been spent.
-//! `dungeon::generate` is a pure function of `FrameSpec`, so the level
+//! `stack::generate` is a pure function of `FrameSpec`, so the level
 //! itself comes back identical every time the party steps off and on — the
 //! record here is the only thing that stops an emptied cache refilling.
 //! Both views consult it through `cache_unopened`, `seal_open` and
@@ -12,9 +12,9 @@
 //! That is also why the record is what gets saved and the maze is not: it is
 //! the run's history, not the world's shape, and no seed can hand it back.
 
-use super::dungeon::StackPos;
-use crate::dungeon::CellKind;
+use super::stack::StackPos;
 use crate::resources::{FrameMemory, StackMemory};
+use crate::stack::CellKind;
 use crate::tuning::{STACK_CACHE_CREDITS, STACK_CACHE_DEPTH_GROWTH, STACK_CACHE_FRAGMENT_CHANCE};
 use crate::*;
 
@@ -39,7 +39,7 @@ impl Game {
     /// without touching this function.
     ///
     /// Credits rather than Core Fragments deliberately: they are the one
-    /// currency that survives a breach, so a dungeon run banks something the
+    /// currency that survives a breach, so a Stack run banks something the
     /// next sector can still spend.
     pub(crate) fn open_cache(&mut self) {
         let Some(pos) = self.stack_pos() else {
@@ -152,7 +152,7 @@ impl Game {
     /// lair.
     ///
     /// The species is drawn from the breach tile's biome, like every other
-    /// dungeon encounter, but from the boss pool rather than the ordinary
+    /// Stack encounter, but from the boss pool rather than the ordinary
     /// one, and from an RNG seeded off the level spec rather than off
     /// `GameRng`: which thing guards a shaft is a property of the shaft, not
     /// of how many rolls happened first, so leaving and coming back cannot

@@ -169,7 +169,7 @@ impl Game {
         for program in dead {
             self.dissolve_tamed_program(program);
         }
-        // A dungeon pack that outlived the fight — the party jacked out —
+        // A Stack pack that outlived the fight — the party jacked out —
         // has nowhere to go: it stands at surface coordinates around the
         // breach mouth, and would be waiting there when they climb back out.
         //

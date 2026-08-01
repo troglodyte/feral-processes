@@ -1,4 +1,4 @@
-//! Walking a dungeon: getting in, moving around inside, and getting back
+//! Walking the Stack: getting in, moving around inside, and getting back
 //! out.
 //!
 //! Everything here operates on `resources::Locale` and leaves the player's
@@ -6,8 +6,8 @@
 //! exception is `enter_stack`, which pins `Position` to the entrance tile
 //! on the way in.
 
-use crate::dungeon::{self, CellKind, Dir};
 use crate::resources::{CurrentStack, Locale};
+use crate::stack::{self, CellKind, Dir};
 use crate::tuning::{
     STACK_DEPTH_STAT_GROWTH, STACK_ENCOUNTER_CHANCE, STACK_FRAMES_MAX, STACK_FRAMES_MIN,
     STACK_LINK_SCATTER_TILES, STACK_MIN_LINK_TILES, STACK_NEAREST_LINK_TILES,
@@ -16,7 +16,7 @@ use crate::tuning::{
 use crate::*;
 
 /// Eight-point compass heading for an offset, with north as `-y` to match
-/// `dungeon::Dir`.
+/// `stack::Dir`.
 ///
 /// A direction counts as diagonal when neither axis dominates the other by
 /// more than half — a strict "whichever is larger" split would call a
@@ -86,14 +86,14 @@ impl Game {
     /// Called once per zone, alongside `spawn_initial_creatures`.
     ///
     /// Platform tiles are skipped rather than merely unlikely: the base is
-    /// the one safe ground in the game, and a hole down into a dungeon in
+    /// the one safe ground in the game, and a hole down into the Stack in
     /// the middle of it would undo that.
     ///
     /// Draws from a locally seeded RNG rather than `resources::GameRng`, for
     /// two reasons. Where the entrances are is world generation, and world
     /// generation should be a function of the seed rather than of however
     /// many rolls happened to precede it — the same argument
-    /// `dungeon::generate` makes. And drawing from the shared stream here
+    /// `stack::generate` makes. And drawing from the shared stream here
     /// would shift every later roll in the run, which is not a private
     /// matter: it silently rewrites the outcome of every seeded test in the
     /// suite. `ENTRANCE_SALT` keeps this stream off the one the levels
@@ -144,7 +144,7 @@ impl Game {
             self.spawn_entrance_at(x, y);
             placed += 1;
         }
-        self.announce_dungeon_entrances(origin);
+        self.announce_surface_links(origin);
     }
 
     /// Logs what the arrival scan picks up: how many breaches are in the
@@ -155,7 +155,7 @@ impl Game {
     /// reason to reward wandering, is not something a player finds — they
     /// have to be told the breaches are there before looking for one is a
     /// choice rather than an accident.
-    fn announce_dungeon_entrances(&mut self, origin: Position) {
+    fn announce_surface_links(&mut self, origin: Position) {
         let mut query = self.world.query_filtered::<&Position, With<SurfaceLink>>();
         let mut found: Vec<(i32, i32, i32)> = query
             .iter(&self.world)
@@ -191,7 +191,7 @@ impl Game {
     /// `>` rather than anything more decorative because every other glyph on
     /// the map is spoken for — `%` is both the Static Field biome and a
     /// species — and because it already reads as "the way down" to anyone
-    /// who has played a roguelike. It is the same mark the dungeon view puts
+    /// who has played a roguelike. It is the same mark the Stack view puts
     /// on a staircase.
     fn spawn_entrance_at(&mut self, x: i32, y: i32) {
         self.world.spawn((
@@ -211,7 +211,7 @@ impl Game {
     /// `Err` if the party is underground — for actions that reach into the
     /// zone map through the player's `Position`.
     ///
-    /// While underground that `Position` is pinned to the dungeon entrance
+    /// While underground that `Position` is pinned to the entrance tile
     /// (see `resources::Locale`), so these would otherwise operate on a tile
     /// out in the wild that the player is nowhere near: deploying a
     /// structure beside the breach, or — worst of all — `use_symlink`
@@ -221,7 +221,7 @@ impl Game {
     /// Party and inventory management deliberately isn't on this list.
     /// Fusing programs, installing routines, crafting, equipping and
     /// spending perk points all work fine four levels down, and stopping to
-    /// sort your gear in a dungeon is a thing the genre expects.
+    /// sort your gear in the Stack is a thing the genre expects.
     pub(crate) fn require_surface(&self) -> Result<(), String> {
         if self.is_underground() {
             return Err("Not down here — that needs open grid.".into());
@@ -229,7 +229,7 @@ impl Game {
         Ok(())
     }
 
-    /// Descends into the dungeon reached through the entrance standing at
+    /// Descends into the Stack reached through the entrance standing at
     /// `(x, y)`, which the player is stepping onto. The entrance itself
     /// survives — unlike a zone portal, it is a place you can come back to.
     pub(crate) fn enter_stack(&mut self, x: i32, y: i32) {
@@ -258,8 +258,8 @@ impl Game {
         depth: u32,
         frames: u32,
         entrance: (i32, i32),
-    ) -> dungeon::FrameSpec {
-        dungeon::FrameSpec {
+    ) -> stack::FrameSpec {
+        stack::FrameSpec {
             world_seed: self.world.resource::<WorldMap>().seed(),
             entrance,
             depth,
@@ -270,7 +270,7 @@ impl Game {
     /// Generates the level for `depth` and puts the party on its entry cell
     /// facing north. Shared by the way in and every descent after it.
     fn descend_to(&mut self, depth: u32, frames: u32, entrance: (i32, i32)) {
-        let level = dungeon::generate(self.frame_spec(depth, frames, entrance));
+        let level = stack::generate(self.frame_spec(depth, frames, entrance));
         let entry = level.entry;
         self.world.insert_resource(CurrentStack(Some(level)));
         self.world.insert_resource(Locale::Stack {
@@ -296,7 +296,7 @@ impl Game {
     }
 
     /// Climbs out through the breach the party walked in through.
-    fn leave_dungeon(&mut self) {
+    fn leave_stack(&mut self) {
         self.clear_stack();
         self.log("You surface through the breach, back onto open grid.".to_string());
     }
@@ -323,7 +323,7 @@ impl Game {
         }
     }
 
-    /// Whether a dungeon action can run at all: underground, alive, and not
+    /// Whether a Stack action can run at all: underground, alive, and not
     /// mid-intrusion. Mirrors the guard at the top of `move_player`.
     fn can_act_underground(&self) -> bool {
         self.is_underground() && self.is_game_over().is_none() && !self.has_active_battle()
@@ -413,12 +413,12 @@ impl Game {
         if walkable {
             self.open_cache();
             self.rouse_lair();
-            self.maybe_dungeon_encounter();
+            self.maybe_stack_encounter();
         }
         self.tick();
     }
 
-    /// What dungeon depth multiplies wild program stats by — `1.0` on the
+    /// What Stack depth multiplies wild program stats by — `1.0` on the
     /// surface, so `spawn_wild_creature` can fold it in unconditionally.
     ///
     /// Compounds with `ZoneLevel::stat_multiplier` and
@@ -436,7 +436,7 @@ impl Game {
     /// starts the fight if it hits.
     ///
     /// The pack is drawn from the biome of the **entrance tile** — the
-    /// surface terrain the breach opens in. A dungeon has no biome of its
+    /// surface terrain the breach opens in. The Stack has no biome of its
     /// own, and rather than invent one, this reads the level as the
     /// substrate beneath the ground above it: descend under a Mainframe
     /// sector and Mainframe programs are what live down there. It costs no
@@ -445,7 +445,7 @@ impl Game {
     ///
     /// Never a boss, for the same reason `maybe_ambush` refuses one: a fight
     /// you never saw coming should not also be the hardest fight available.
-    fn maybe_dungeon_encounter(&mut self) {
+    fn maybe_stack_encounter(&mut self) {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
@@ -465,7 +465,7 @@ impl Game {
             return;
         };
         // Spawned onto the breach tile itself: the party's `Position` is
-        // pinned there, and a dungeon pack is resolved immediately rather
+        // pinned there, and a Stack pack is resolved immediately rather
         // than left to roam, so where on the surface it stands never matters.
         let depth_mult = self.stack_depth_multiplier();
         let pack = self.spawn_pack(&species, false, ex, ey, depth_mult);
@@ -538,7 +538,7 @@ impl Game {
             return;
         }
         if pos.depth == 1 {
-            self.leave_dungeon();
+            self.leave_stack();
         } else {
             // Climbing lands on the level above's link *down*, not its
             // entry — otherwise every ascent would teleport the party back to
@@ -561,7 +561,7 @@ impl Game {
     }
 
     fn ascend_to(&mut self, depth: u32, frames: u32, entrance: (i32, i32)) {
-        let level = dungeon::generate(self.frame_spec(depth, frames, entrance));
+        let level = stack::generate(self.frame_spec(depth, frames, entrance));
         // Infallible: you can only climb *to* a level you already climbed
         // *from*, so it is not the bottom of the shaft and has a way down.
         let landing = level
@@ -579,7 +579,7 @@ impl Game {
         self.remember_view();
     }
 
-    /// Restores a saved dungeon position, regenerating the level from the
+    /// Restores a saved Stack position, regenerating the level from the
     /// world seed and the saved spec rather than reading it off disk — see
     /// `resources::CurrentStack`.
     pub(crate) fn restore_locale(&mut self, locale: Locale) {
@@ -590,7 +590,7 @@ impl Game {
             ..
         } = locale
         {
-            let level = dungeon::generate(self.frame_spec(depth, frames, entrance));
+            let level = stack::generate(self.frame_spec(depth, frames, entrance));
             self.world.insert_resource(CurrentStack(Some(level)));
         }
         self.world.insert_resource(locale);

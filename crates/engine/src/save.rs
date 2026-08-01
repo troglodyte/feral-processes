@@ -177,18 +177,18 @@ pub struct SaveData {
     /// Sorted on write so the encoded bytes don't depend on `HashSet`
     /// iteration order.
     pub researched: Vec<crate::research::ResearchId>,
-    /// Every dungeon entrance standing on the zone map — see
+    /// Every Stack entrance standing on the zone map — see
     /// `components::SurfaceLink`. Only the tile: an entrance carries no
-    /// state of its own, and which dungeon it opens onto is a pure function
+    /// state of its own, and which shaft it opens onto is a pure function
     /// of the world seed and the depth walked to.
     pub link_sites: Vec<(i32, i32)>,
-    /// Whether the player was on the surface or down a dungeon, and where —
+    /// Whether the player was on the surface or down the Stack, and where —
     /// see `resources::Locale`. The level itself is *not* here: it
     /// regenerates from `seed` and the saved depth, exactly as terrain
     /// regenerates from `seed` alone.
     pub locale: crate::resources::Locale,
-    /// What the party has learned about each dungeon level walked in this
-    /// zone — see `resources::StackMemory`. The one piece of dungeon state
+    /// What the party has learned about each Stack frame walked in this
+    /// zone — see `resources::StackMemory`. The one piece of Stack state
     /// that is saved rather than regenerated: a level is a pure function of
     /// its spec, but which parts of it the player has *seen* is history.
     pub stack_memory: crate::resources::StackMemory,
@@ -356,7 +356,7 @@ mod tests {
             frames: 4,
             x: 9,
             y: 11,
-            facing: crate::dungeon::Dir::West,
+            facing: crate::stack::Dir::West,
             entrance: (4, -7),
         };
         data.stack_memory.0.insert(
@@ -476,7 +476,7 @@ mod tests {
             frames: 4,
             x: 9,
             y: 11,
-            facing: crate::dungeon::Dir::West,
+            facing: crate::stack::Dir::West,
             entrance: (4, -7),
         };
         save_to_file(&path, &data).unwrap();

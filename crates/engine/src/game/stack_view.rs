@@ -1,4 +1,4 @@
-//! The two views of a dungeon level, and the record of what they showed.
+//! The two views of a Stack frame, and the record of what they showed.
 //!
 //! `view_cone` is the single walk both are built from, which is why it and
 //! both its consumers live here and it stays private to this file: the map
@@ -12,8 +12,8 @@
 //! standing inside an occluder is reachable and both consumers carry that
 //! exception explicitly.
 
-use super::dungeon::StackPos;
-use crate::dungeon::{CellKind, Dir};
+use super::stack::StackPos;
+use crate::stack::{CellKind, Dir};
 use crate::*;
 
 /// How far ahead the first-person view reaches, in cells. Four is enough

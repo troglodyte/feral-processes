@@ -1,6 +1,6 @@
-//! The party's own map of the dungeon level they are standing in.
+//! The party's own map of the Stack frame they are standing in.
 //!
-//! Drawn north-up as a plain grid, which is the one place the dungeon layer
+//! Drawn north-up as a plain grid, which is the one place the Stack layer
 //! deliberately breaks from the first-person view: a map you have to rotate
 //! in your head is a second puzzle on top of the maze. The renderer knows
 //! nothing about what has or hasn't been explored — `Game::frame_map`

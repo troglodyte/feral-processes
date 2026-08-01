@@ -24,9 +24,8 @@ mod base;
 mod battle;
 mod building;
 mod crafting;
-mod dungeon;
-mod dungeon_map;
 mod field;
+mod frame_map;
 mod inventory;
 mod manifest;
 mod manifest_layout;
@@ -35,6 +34,7 @@ mod party;
 mod popup;
 mod progression;
 mod routines;
+mod stack;
 mod trade;
 
 use base::{draw_history, draw_playing_base};
@@ -47,8 +47,8 @@ use building::{
     draw_symlink_menu, draw_upgrade_menu, draw_worker_menu,
 };
 use crafting::{draw_craft_menu, draw_craft_quantity};
-use dungeon_map::draw_frame_map;
 use field::{draw_field_cast, draw_field_cast_ally};
+use frame_map::draw_frame_map;
 use inventory::{
     draw_erase_quantity, draw_inventory, draw_inventory_item_action, draw_item_describe,
 };

@@ -1,9 +1,9 @@
-//! The dungeon layer: getting in, moving around, and the surface carrying
+//! The Stack layer: getting in, moving around, and the surface carrying
 //! on without you.
 
 use super::support::*;
-use crate::dungeon::{CellKind, Dir};
 use crate::resources::{CurrentStack, Locale};
+use crate::stack::{CellKind, Dir};
 use crate::*;
 
 fn game() -> Game {
@@ -147,7 +147,7 @@ fn face_an_open_way(game: &mut Game) -> Dir {
 }
 
 #[test]
-fn entering_a_dungeon_pins_the_players_surface_position_to_the_entrance() {
+fn entering_the_stack_pins_the_players_surface_position_to_the_entrance() {
     let mut game = game();
     let entrance = descend(&mut game);
 
@@ -321,7 +321,7 @@ fn taking_the_link_down_increments_the_depth_and_regenerates_the_level() {
 }
 
 /// The descend log line is player-facing narration of "the Stack" vocabulary
-/// — it must call a level a frame, not a "dungeon level".
+/// — it must call a level a frame, not the pre-rename wording.
 #[test]
 fn descending_names_the_frame_in_the_log() {
     let mut game = game();
@@ -415,7 +415,7 @@ fn the_surface_simulation_keeps_ticking_while_the_party_is_underground() {
 
     assert!(
         game.current_tick() > before,
-        "walking a dungeon must still pass surface time"
+        "walking the Stack must still pass surface time"
     );
 }
 
@@ -444,7 +444,7 @@ fn deploying_a_structure_is_refused_underground() {
     let mut game = game();
     descend(&mut game);
     let Err(reason) = game.place_structure("home", 1, 0) else {
-        panic!("a Home should not go up inside a dungeon");
+        panic!("a Home should not go up inside the Stack");
     };
     assert!(
         reason.contains("open grid"),
@@ -504,7 +504,7 @@ fn a_symlink_used_underground_surfaces_the_party_and_teleports_them() {
 }
 
 /// The surfacing happens after every check, so a symlink that cannot be paid
-/// for is not a one-way trip out of the dungeon.
+/// for is not a one-way trip out of the Stack.
 #[test]
 fn a_symlink_that_cannot_be_paid_for_leaves_the_party_underground() {
     let mut game = game();
@@ -595,7 +595,7 @@ fn the_view_cone_is_rotated_so_straight_ahead_is_always_the_middle_column() {
         // Row 0 is the cell the party stands in; row 1 middle is one step
         // ahead along the facing, whichever way that points.
         let ahead = cell_at(&game, x + dx, y + dy);
-        let middle = crate::game::dungeon_view::STACK_VIEW_HALF_WIDTH;
+        let middle = crate::game::stack_view::STACK_VIEW_HALF_WIDTH;
         assert_eq!(
             view.cells[1][middle] == StackCellView::Rock,
             !ahead.walkable()
@@ -612,7 +612,7 @@ fn the_view_reads_solid_rock_past_the_edge_of_the_level() {
     descend(&mut game);
     // The entry sits at (1, 1) facing north — one step off the top edge.
     let view = game.stack_view().unwrap();
-    let middle = crate::game::dungeon_view::STACK_VIEW_HALF_WIDTH;
+    let middle = crate::game::stack_view::STACK_VIEW_HALF_WIDTH;
     assert_eq!(view.cells[1][middle], StackCellView::Rock);
     assert!(view.cells.len() >= 2);
 }
@@ -632,7 +632,7 @@ fn the_view_names_what_the_party_is_standing_on() {
 }
 
 #[test]
-fn a_new_zone_is_seeded_with_dungeon_entrances() {
+fn a_new_zone_is_seeded_with_surface_links() {
     let game = game();
     let entrances = game
         .world
@@ -657,7 +657,7 @@ fn no_entrance_opens_onto_unwalkable_ground() {
 /// base slab is stamped down *before* the new sector's breaches are placed
 /// (see `enter_next_zone`). On a fresh run no platform exists yet, and a
 /// player later stamping a Home over a breach is their own doing — that
-/// still works, and a dungeon mouth inside your base is a fine place for one.
+/// still works, and a Stack mouth inside your base is a fine place for one.
 #[test]
 fn breaching_with_a_base_never_opens_a_breach_inside_the_platform() {
     let mut game = game();
@@ -783,7 +783,7 @@ fn walking_onto_an_entrance_descends_and_leaves_the_entrance_standing() {
 }
 
 #[test]
-fn a_dungeon_position_survives_a_save_and_load_with_an_identical_level() {
+fn a_stack_position_survives_a_save_and_load_with_an_identical_level() {
     let assets = test_assets_dir();
     let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
     descend(&mut game);
@@ -800,7 +800,7 @@ fn a_dungeon_position_survives_a_save_and_load_with_an_identical_level() {
     };
 
     let path = std::env::temp_dir().join(format!(
-        "feral_processes_dungeon_save_{}.bin",
+        "feral_processes_stack_save_{}.bin",
         std::process::id()
     ));
     game.save(&path).unwrap();
@@ -960,7 +960,7 @@ fn the_map_survives_a_save_and_load() {
     let before = map(&game);
 
     let path = std::env::temp_dir().join(format!(
-        "feral_processes_dungeon_map_{}.bin",
+        "feral_processes_stack_map_{}.bin",
         std::process::id()
     ));
     game.save(&path).unwrap();
@@ -972,7 +972,7 @@ fn the_map_survives_a_save_and_load() {
     assert!((before.explored - after.explored).abs() < f32::EPSILON);
 }
 
-/// Two breaches are two dungeons, so they are two maps. Sharing one would
+/// Two breaches are two shafts, so they are two maps. Sharing one would
 /// pre-reveal a level the party has never set foot in.
 #[test]
 fn each_breach_keeps_its_own_map() {
@@ -993,7 +993,7 @@ fn each_breach_keeps_its_own_map() {
 }
 
 #[test]
-fn a_dungeon_fight_is_pinned_to_the_corridor_it_happened_in() {
+fn a_stack_fight_is_pinned_to_the_corridor_it_happened_in() {
     let mut game = game();
     descend(&mut game);
     let Locale::Stack { x, y, .. } = locale(&game) else {
@@ -1015,7 +1015,7 @@ fn a_dungeon_fight_is_pinned_to_the_corridor_it_happened_in() {
 
 /// Breaching does not despawn what a zone accumulated, so anything
 /// zone-local has to be wiped by name — the trap `BuybackLedger` already
-/// documents, and one a dungeon map falls into just as readily.
+/// documents, and one a Stack map falls into just as readily.
 #[test]
 fn maps_do_not_ride_a_breach_into_the_next_zone() {
     let mut game = game();
@@ -1730,8 +1730,8 @@ fn logged(game: &Game, needle: &str) -> bool {
 #[test]
 fn a_breach_further_from_the_arrival_point_runs_deeper() {
     let spawn = (100, -50);
-    let near = crate::game::dungeon::frames_for((105, -50), spawn);
-    let far = crate::game::dungeon::frames_for((138, -50), spawn);
+    let near = crate::game::stack::frames_for((105, -50), spawn);
+    let far = crate::game::stack::frames_for((138, -50), spawn);
     assert_eq!(
         near,
         crate::tuning::STACK_FRAMES_MIN,
@@ -1747,7 +1747,7 @@ fn a_breach_further_from_the_arrival_point_runs_deeper() {
 
 #[test]
 fn shaft_depth_is_capped_however_far_out_the_breach_sits() {
-    let frames = crate::game::dungeon::frames_for((10_000, 10_000), (0, 0));
+    let frames = crate::game::stack::frames_for((10_000, 10_000), (0, 0));
     assert_eq!(frames, crate::tuning::STACK_FRAMES_MAX);
 }
 
@@ -1794,10 +1794,10 @@ fn a_shaft_bottoms_out_and_says_so() {
 }
 
 /// Before the entrance tile went into the level seed, every breach in a
-/// sector opened onto the same maze — three holes, one dungeon, and no
+/// sector opened onto the same maze — three holes, one shaft, and no
 /// reason to walk to the far one.
 #[test]
-fn two_breaches_in_a_sector_open_onto_different_dungeons() {
+fn two_links_in_a_sector_open_onto_different_shafts() {
     let mut game = game();
     let tiles = entrance_tiles(&mut game);
     assert!(tiles.len() >= 2, "this seed should field several breaches");
@@ -1992,8 +1992,8 @@ fn breaching_a_zone_scans_the_new_sector_too() {
 
 #[test]
 fn a_bearing_names_the_direction_you_would_actually_walk() {
-    use crate::game::dungeon::bearing;
-    // North is -y, matching dungeon::Dir and the renderer.
+    use crate::game::stack::bearing;
+    // North is -y, matching stack::Dir and the renderer.
     assert_eq!(bearing(0, -10), "north");
     assert_eq!(bearing(0, 10), "south");
     assert_eq!(bearing(10, 0), "east");
@@ -2006,7 +2006,7 @@ fn a_bearing_names_the_direction_you_would_actually_walk() {
 
 #[test]
 fn a_bearing_only_goes_diagonal_when_neither_axis_dominates() {
-    use crate::game::dungeon::bearing;
+    use crate::game::stack::bearing;
     // Mostly east with a slight northerly lean is still east — calling it
     // north-east would send the player off at an angle.
     assert_eq!(bearing(20, -3), "east");
@@ -2045,7 +2045,7 @@ fn a_breach_leaves_the_previous_sectors_entrances_behind() {
 
 /// A breach on the arrival tile means starting the run standing on one; a
 /// breach one step away means the first movement key of the run drops the
-/// player into a dungeon they never chose to enter.
+/// player into the Stack they never chose to enter.
 #[test]
 fn no_breach_opens_on_top_of_the_player_or_within_a_step_of_them() {
     for seed in 0u32..40 {
@@ -2077,7 +2077,7 @@ fn walk_until_a_fight(game: &mut Game, steps: usize) -> bool {
 }
 
 #[test]
-fn walking_a_dungeon_eventually_draws_an_encounter() {
+fn walking_the_stack_eventually_draws_an_encounter() {
     let mut game = game();
     descend(&mut game);
     assert!(
@@ -2112,7 +2112,7 @@ fn shoving_at_a_wall_cannot_draw_an_encounter() {
 }
 
 #[test]
-fn a_dungeon_pack_is_drawn_from_the_biome_the_breach_opens_in() {
+fn a_stack_pack_is_drawn_from_the_biome_the_link_opens_in() {
     let mut game = game();
     let entrance = descend(&mut game);
     let biome = game
@@ -2169,7 +2169,7 @@ fn deeper_levels_field_tougher_programs() {
                 entrance,
             });
         }
-        // Through the pack path a dungeon encounter actually uses: depth
+        // Through the pack path a Stack encounter actually uses: depth
         // is carried into the spawn as an argument, not read back off the
         // locale, so this is the scaling the game applies rather than a
         // proxy for it. `is_boss` only to pin the group at one member.
@@ -2204,7 +2204,7 @@ fn the_surface_is_untouched_by_the_depth_multiplier() {
 /// ambient spawns and nest respawns the whole way down. Those are surface
 /// programs standing on surface tiles, untagged and never swept by
 /// `end_battle`, and they are still there when the party climbs out. Depth
-/// must not reach them: it is the property of a dungeon encounter, not of
+/// must not reach them: it is the property of a Stack encounter, not of
 /// the clock.
 #[test]
 fn a_surface_spawn_is_not_scaled_by_how_deep_the_party_is() {
@@ -2247,11 +2247,11 @@ fn a_surface_spawn_is_not_scaled_by_how_deep_the_party_is() {
     );
 }
 
-/// A pack conjured for a dungeon fight has no business outliving it: it
+/// A pack conjured for a Stack fight has no business outliving it: it
 /// stands at surface coordinates around the breach mouth, and would be
 /// waiting there when the party climbs out.
 #[test]
-fn a_dungeon_pack_that_survives_a_jack_out_does_not_linger_on_the_surface() {
+fn a_stack_pack_that_survives_a_jack_out_does_not_linger_on_the_surface() {
     let mut game = game();
     descend(&mut game);
     assert!(walk_until_a_fight(&mut game, 400), "no fight to flee");
@@ -2268,7 +2268,7 @@ fn a_dungeon_pack_that_survives_a_jack_out_does_not_linger_on_the_surface() {
         let mut query = game.world.query_filtered::<Entity, With<StackSpawn>>();
         query.iter(&game.world).count()
     };
-    assert_eq!(after, 0, "{before} dungeon programs outlived the fight");
+    assert_eq!(after, 0, "{before} Stack programs outlived the fight");
 }
 
 #[test]

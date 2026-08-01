@@ -95,7 +95,7 @@ impl Game {
     /// `NestGuardian`.
     ///
     /// This is the surface spawn: depth costs it nothing. A spawn that
-    /// *is* a dungeon encounter goes through `spawn_pack` with a
+    /// *is* a Stack encounter goes through `spawn_pack` with a
     /// multiplier — see `depth_mult` there for why that is a parameter
     /// rather than something read back off the party's locale.
     pub(crate) fn spawn_wild_creature(

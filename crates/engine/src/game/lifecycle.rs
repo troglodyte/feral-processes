@@ -441,7 +441,7 @@ impl Game {
         // where they are standing and would otherwise write into a map that
         // is about to be overwritten.
         game.world.insert_resource(data.stack_memory);
-        // Last, and after the WorldMap is in place: restoring a dungeon
+        // Last, and after the WorldMap is in place: restoring a Stack
         // locale regenerates its level from that map's seed.
         game.restore_locale(data.locale);
 

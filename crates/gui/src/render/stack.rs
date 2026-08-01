@@ -1,4 +1,4 @@
-//! The first-person dungeon view.
+//! The first-person Stack view.
 //!
 //! Draws `StackView` as a receding corridor. The engine has already
 //! rotated the cells into view space (`cells[ahead][lateral]`, middle column

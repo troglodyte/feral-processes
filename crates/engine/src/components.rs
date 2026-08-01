@@ -719,7 +719,7 @@ pub struct Nest {
     pub pending_respawns: Vec<u32>,
 }
 
-/// A way down into a dungeon, standing on the zone map. Carries `Position`
+/// A way down into the Stack, standing on the zone map. Carries `Position`
 /// and `Glyph` alongside this, the way a `Nest` does, but no `Durability`:
 /// an entrance is walked into, not attacked.
 ///
@@ -728,7 +728,7 @@ pub struct Nest {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct SurfaceLink;
 
-/// Tags a wild program that was conjured for a dungeon encounter rather
+/// Tags a wild program that was conjured for a Stack encounter rather
 /// than found on the zone map.
 ///
 /// It exists at surface coordinates like any other creature — the player's

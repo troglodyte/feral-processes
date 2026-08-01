@@ -1,9 +1,9 @@
-//! The dungeon map model and its generator.
+//! The Stack's frame model and its generator.
 //!
-//! Pure data and pure functions — no ECS, no `Game`. A level is never
+//! Pure data and pure functions — no ECS, no `Game`. A frame is never
 //! persisted: it regenerates deterministically from `(world seed, depth)`,
 //! exactly the way `world::WorldMap` regenerates terrain from its seed. The
-//! save carries only where in the dungeon the player is standing.
+//! save carries only where in the Stack the player is standing.
 
 use std::collections::VecDeque;
 
@@ -139,7 +139,7 @@ impl CellKind {
 pub struct FrameSpec {
     pub world_seed: u32,
     /// The surface tile of the breach this shaft hangs from. Part of the
-    /// seed, so two breaches in one sector are two different dungeons rather
+    /// seed, so two breaches in one sector are two different shafts rather
     /// than two doors onto the same maze.
     pub entrance: (i32, i32),
     /// 1 immediately below the surface, counting up as you descend.
@@ -523,7 +523,7 @@ mod tests {
         assert_ne!(floors(&generate(spec(1, 1))), floors(&generate(spec(2, 1))));
     }
 
-    /// Two breaches in one sector must be two dungeons. Without the
+    /// Two breaches in one sector must be two shafts. Without the
     /// entrance tile in the seed every hole in the ground opened onto the
     /// same maze, and walking to a distant one bought nothing.
     #[test]

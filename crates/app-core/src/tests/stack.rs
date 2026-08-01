@@ -1,18 +1,18 @@
 //! Movement underground: the same four keys, steering a party that has a
 //! facing.
 
-use feral_processes_engine::dungeon::{Dir, FrameSpec, generate};
 use feral_processes_engine::resources::Locale;
 use feral_processes_engine::save;
+use feral_processes_engine::stack::{Dir, FrameSpec, generate};
 
 use super::support::*;
 use crate::*;
 
-/// An `App` standing on the entry cell of dungeon level 1.
+/// An `App` standing on the entry cell of Stack frame 1.
 ///
 /// Built by editing a save and reloading it, the same trick
 /// `app_owning_distant_programs` uses: the engine deliberately exposes no
-/// way to drop the player into a dungeon from outside the crate, since on a
+/// way to drop the player into the Stack from outside the crate, since on a
 /// real run that only ever happens by walking onto an entrance.
 fn app_underground(seed: u32) -> App {
     // Counted rather than keyed on the seed alone: tests run in parallel and
@@ -23,9 +23,8 @@ fn app_underground(seed: u32) -> App {
 
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
-    let path = std::env::temp_dir().join(format!(
-        "feral_processes_appcore_dungeon_{seed}_{unique}.sav"
-    ));
+    let path =
+        std::env::temp_dir().join(format!("feral_processes_appcore_stack_{seed}_{unique}.sav"));
     let game = app.game.as_mut().unwrap();
     game.save(&path).unwrap();
 
@@ -152,8 +151,8 @@ fn a_movement_key_underground_still_queues_a_step_sound() {
 
 #[test]
 fn the_menu_keys_still_open_their_screens_underground() {
-    // Party and inventory management is deliberately available down a
-    // dungeon — see `Game::require_surface`.
+    // Party and inventory management is deliberately available down the
+    // Stack — see `Game::require_surface`.
     for (key, expected) in [
         (GameKey::Char('v'), Mode::Inventory),
         (GameKey::Char('p'), Mode::Companion),
@@ -180,9 +179,9 @@ fn g_opens_the_map_underground_and_any_key_closes_it() {
     assert_eq!(app.mode, Mode::Playing);
 }
 
-/// Reading your own map is not an action. A dungeon that advanced a turn
-/// every time you checked where you were would punish mapping, which is the
-/// one thing this screen exists to make easier.
+/// Reading your own map is not an action. The Stack advancing a turn every
+/// time you checked where you were would punish mapping, which is the one
+/// thing this screen exists to make easier.
 #[test]
 fn opening_the_map_costs_no_time() {
     let mut app = app_underground(808);
@@ -276,7 +275,7 @@ fn links_available_reports_only_what_the_cell_underfoot_offers() {
 /// The whole chain: a step underground rolls an encounter, the engine starts
 /// the battle, and `after_world_action` drops the app into `Mode::Battle`.
 /// That transition is shared with the surface path rather than copied, and
-/// this is what proves the dungeon path actually reaches it.
+/// this is what proves the Stack path actually reaches it.
 #[test]
 fn an_encounter_underground_opens_the_battle_screen() {
     let mut app = app_underground(606);

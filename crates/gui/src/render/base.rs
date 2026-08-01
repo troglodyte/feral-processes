@@ -1,8 +1,8 @@
 //! The map screen: terrain, entities, effects, and the status panel beside them.
 
 use super::bars::*;
-use super::dungeon::draw_stack;
 use super::field::draw_status_buffs;
+use super::stack::draw_stack;
 use super::*;
 
 /// How far a bare tile's background may stray from its biome's flat colour,

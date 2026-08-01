@@ -272,7 +272,7 @@ pub enum Mode {
     Upgrade,
     Symlink,
     InspectDirection,
-    /// The party's own map of the dungeon level they are standing in — see
+    /// The party's own map of the Stack frame they are standing in — see
     /// `Game::frame_map`. Underground only, opened with the same `g` that
     /// scans the ground on the surface: it is the same verb, and the two
     /// screens never both apply.

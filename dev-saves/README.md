@@ -63,4 +63,5 @@ small; each one is a fixture somebody has to repair after a format change.
 
 | template | what it sets up |
 |---|---|
+| `stack` | The `extraction` world, but standing on frame 3 of a 6-frame stack instead of on the surface. Built for playtesting the Stack layer — Trace's bands and phase 3's cell kinds — without walking to a link and descending three times first. The party lands on that frame's way up, since `stack::generate` always puts `entry` at `(1, 1)`, so there is room to climb as well as descend. |
 | `extraction` | Zone 2, level 36, Forgiving. Nine tamed programs — four of them (Six-Slot, Five-Slot, Drainer, Four-Slot) carry 4–6 routines each, spanning damage, heal, buff, debuff, drain and field effects. A Compiler stands, so `can_extract_routines()` is true. Built for exercising the extraction and routine-install screens. |

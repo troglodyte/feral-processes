@@ -151,16 +151,16 @@ impl Game {
     /// Starts the boss fight if the party has just walked into an uncleared
     /// lair.
     ///
-    /// The species is drawn from the breach tile's biome, like every other
+    /// The species is drawn from the link tile's biome, like every other
     /// Stack encounter, but from the boss pool rather than the ordinary
     /// one, and from an RNG seeded off the level spec rather than off
-    /// `GameRng`: which thing guards a shaft is a property of the shaft, not
+    /// `GameRng`: which thing guards a stack is a property of the stack, not
     /// of how many rolls happened first, so leaving and coming back cannot
     /// reroll it into something easier.
     ///
     /// Not every biome fields a boss — no shipped Static Field species does
     /// — and there the lair falls back to the toughest ordinary program the
-    /// biome has, which at the bottom of a deep shaft is no small thing.
+    /// biome has, which at the bottom of a deep stack is no small thing.
     pub(crate) fn rouse_lair(&mut self) {
         if self.has_active_battle() || self.is_game_over().is_some() {
             return;
@@ -187,7 +187,7 @@ impl Game {
         self.remember_fight();
         self.log_kind(
             MessageKind::Outcome,
-            "The shaft opens out. Something very large is already awake.",
+            "The stack opens out. Something very large is already awake.",
         );
         self.start_battle(pack);
     }
@@ -236,7 +236,7 @@ impl Game {
             .is_some_and(|m| m.cleared)
     }
 
-    /// Records that this shaft's guardian is down, so its lair does not
+    /// Records that this stack's guardian is down, so its lair does not
     /// refill. Called from `award_loot`, which is the one place that knows a
     /// hostile actually died rather than merely being fled from.
     pub(crate) fn mark_lair_cleared(&mut self) {

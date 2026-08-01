@@ -13,6 +13,27 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### The dungeon is the Stack
+
+- **Renamed the underground layer, top to bottom: dungeon → the Stack,
+  level → frame, shaft → stack, entrance/breach → link.** Nothing about how
+  it plays changed — this is a vocabulary pass, not a mechanics one. "Link"
+  covers both scales deliberately: the hole on the zone map and the way
+  between frames are the same kind of thing at different scales, and one
+  word for both says so. The help screen, the deep-scan log line, the
+  descend/climb/bottom-out messages, the map heading, the first-person
+  prompts, the README and manual all speak the new vocabulary now.
+- **"Breach" survives, narrowed to zone travel.** That word already meant
+  three different things — the old dungeon entrance, stepping through a
+  Zone Portal, and "ICE breached!" in combat — and renaming sense one is
+  what frees the word to mean just the other two. "You breach the portal
+  and materialize in a level {n} sector" and "ICE breached!" are unchanged.
+- **Item and structure `.ron` ids and field names are untouched.**
+  `access_shard` is still `access_shard` — only its human-readable
+  `description` changed, along with `assets/items/README.md`'s
+  `cache_drop` schema note. Ids are save-and-recipe keys mods depend on;
+  they were never part of what this pass renamed.
+
 ### The party line is yours to arrange
 
 - **`<` and `>` on the companions screen move a member along the battle

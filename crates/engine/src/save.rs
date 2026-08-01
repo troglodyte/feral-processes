@@ -179,7 +179,7 @@ pub struct SaveData {
     pub researched: Vec<crate::research::ResearchId>,
     /// Every Stack entrance standing on the zone map — see
     /// `components::SurfaceLink`. Only the tile: an entrance carries no
-    /// state of its own, and which shaft it opens onto is a pure function
+    /// state of its own, and which stack it opens onto is a pure function
     /// of the world seed and the depth walked to.
     pub link_sites: Vec<(i32, i32)>,
     /// Whether the player was on the surface or down the Stack, and where —

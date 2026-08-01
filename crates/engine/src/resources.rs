@@ -445,10 +445,10 @@ pub enum Locale {
         /// descend. Part of the `stack::FrameSpec` the level regenerates
         /// from.
         depth: u32,
-        /// How many frames this shaft runs before it bottoms out. Carried
+        /// How many frames this stack runs before it bottoms out. Carried
         /// rather than recomputed from `entrance` because it is also part
         /// of the level spec — the bottom frame is generated without a way
-        /// down — and a shaft that changed length underneath the party
+        /// down — and a stack that changed length underneath the party
         /// would strand them.
         frames: u32,
         x: i32,
@@ -461,11 +461,11 @@ pub enum Locale {
     },
 }
 
-/// Which level of which shaft a `FrameMemory` belongs to.
+/// Which level of which stack a `FrameMemory` belongs to.
 ///
-/// Keyed by the breach's surface tile rather than by anything about the
-/// level, because that tile is what makes a shaft itself — it is already
-/// half of `stack::FrameSpec`. Two breaches in a sector therefore keep
+/// Keyed by the link's surface tile rather than by anything about the
+/// level, because that tile is what makes a stack itself — it is already
+/// half of `stack::FrameSpec`. Two links in a sector therefore keep
 /// separate maps of their separate depth-3s.
 pub type LevelKey = ((i32, i32), u32);
 
@@ -488,7 +488,7 @@ pub struct FrameMemory {
     /// Sealed doors that have been opened, which stay open.
     pub opened: BTreeSet<(i32, i32)>,
     /// Whether this level's lair has been cleared. Only ever true on the
-    /// bottom level of a shaft, which is the only level that has one.
+    /// bottom level of a stack, which is the only level that has one.
     pub cleared: bool,
     /// Where the party was jumped. Kept for the map alone: a corridor that
     /// has cost you something is worth marking, and it is the one landmark

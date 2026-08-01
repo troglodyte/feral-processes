@@ -171,7 +171,7 @@ impl Game {
         }
         // A Stack pack that outlived the fight — the party jacked out —
         // has nowhere to go: it stands at surface coordinates around the
-        // breach mouth, and would be waiting there when they climb back out.
+        // link mouth, and would be waiting there when they climb back out.
         //
         // `Without<Tamed>` is load-bearing, not defensive: decompiling one of
         // these mid-fight makes it the player's, and sweeping it up with the

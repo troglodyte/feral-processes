@@ -413,29 +413,29 @@ pub const STACK_LINK_SCATTER_TILES: i32 = 40;
 /// default zoom the pane shows roughly ±16 by ±9 tiles, so anything past
 /// this is off screen when the player materializes. With all three links
 /// scattered to `STACK_LINK_SCATTER_TILES`, most seeds put every one
-/// of them out of sight, and a player with no reason to think breaches exist
+/// of them out of sight, and a player with no reason to think links exist
 /// has no reason to go looking. One always within the opening view is the
 /// on-ramp; the other two are still a trip.
 pub const STACK_NEAREST_LINK_TILES: i32 = 8;
 
-/// How close a breach may get to where the player materializes.
+/// How close a link may get to where the player materializes.
 ///
 /// Without a floor, `STACK_NEAREST_LINK_TILES` can put one on the
-/// arrival tile itself — the player starts standing on a breach — or one
+/// arrival tile itself — the player starts standing on a link — or one
 /// step from it, so the first movement key of the run drops them into the
-/// Stack they never chose to enter. It also keeps breaches off the tiles a
+/// Stack they never chose to enter. It also keeps links off the tiles a
 /// base's first few structures go on, which would otherwise be refused with
-/// "there's a breach here" for no reason the player could have foreseen.
+/// "there's a link here" for no reason the player could have foreseen.
 pub const STACK_MIN_LINK_TILES: i32 = 5;
 
-/// How many frames the shallowest breach runs before bottoming out.
+/// How many frames the shallowest stack runs before bottoming out.
 ///
-/// Two rather than one so even the on-ramp breach has a descent in it: a
-/// single-frame shaft is a room with a boss in it, and the thing being built
+/// Two rather than one so even the on-ramp link has a descent in it: a
+/// single-frame stack is a room with a boss in it, and the thing being built
 /// here is the Stack.
 pub const STACK_FRAMES_MIN: u32 = 2;
 
-/// The deepest a breach can run, however far out it sits.
+/// The deepest a stack can run, however far out it sits.
 ///
 /// A cap rather than an open curve because the frame count is what the
 /// player commits to when they start down — six frames of walking back up is
@@ -447,9 +447,9 @@ pub const STACK_FRAMES_MAX: u32 = 6;
 ///
 /// Depth rides on the same distance that already scales wild program stats
 /// (`Game::distance_stat_multiplier`), so the two agree instead of pulling
-/// against each other: a far breach is deeper *and* fields harder programs,
+/// against each other: a far link is deeper *and* fields harder programs,
 /// and the player can read both off how long the walk there was. With
-/// `STACK_LINK_SCATTER_TILES` at 40, this puts the outermost breaches
+/// `STACK_LINK_SCATTER_TILES` at 40, this puts the outermost links
 /// at the cap.
 pub const STACK_TILES_PER_FRAME: i32 = 8;
 
@@ -478,7 +478,7 @@ pub const STACK_CACHE_CREDITS: std::ops::RangeInclusive<u32> = 12..=30;
 
 /// What each level of depth multiplies a cache's credit payout by,
 /// compounding. Deliberately steeper than `STACK_DEPTH_STAT_GROWTH`: going
-/// deeper has to pay better than it costs, or the bottom of a shaft is a
+/// deeper has to pay better than it costs, or the bottom of a stack is a
 /// place with no reason to visit it.
 pub const STACK_CACHE_DEPTH_GROWTH: f32 = 1.5;
 

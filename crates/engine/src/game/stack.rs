@@ -53,12 +53,12 @@ pub(crate) struct StackPos {
     pub(crate) entrance: (i32, i32),
 }
 
-/// How many frames the shaft under a breach at `tile` runs before it
+/// How many frames the stack under a link at `tile` runs before it
 /// bottoms out.
 ///
-/// Depth is read off the walk to the breach rather than rolled, so it rides
+/// Depth is read off the walk to the link rather than rolled, so it rides
 /// the same distance-from-arrival that already scales wild program stats.
-/// The two then agree — a far breach is deeper *and* fields harder programs
+/// The two then agree — a far link is deeper *and* fields harder programs
 /// — instead of a nearby hole occasionally being the deepest thing in the
 /// sector for no reason the player could have seen coming.
 pub(crate) fn frames_for(tile: (i32, i32), spawn: (i32, i32)) -> u32 {
@@ -81,7 +81,7 @@ impl Game {
             .map(|(e, _)| e)
     }
 
-    /// Spawns `STACK_LINKS_PER_ZONE` breaches scattered around the
+    /// Spawns `STACK_LINKS_PER_ZONE` links scattered around the
     /// player's arrival point, on walkable ground outside the base platform.
     /// Called once per zone, alongside `spawn_initial_creatures`.
     ///
@@ -131,7 +131,7 @@ impl Game {
                 continue;
             }
             // A nest is checked before an entrance in `move_player`, so a
-            // breach sharing a nest's tile is a breach that can never be
+            // link sharing a nest's tile is a link that can never be
             // walked into — the bump attacks the nest instead, forever.
             // Nests are already down by the time this runs, in both
             // `Game::new` and `enter_next_zone`.
@@ -147,13 +147,13 @@ impl Game {
         self.announce_surface_links(origin);
     }
 
-    /// Logs what the arrival scan picks up: how many breaches are in the
+    /// Logs what the arrival scan picks up: how many links are in the
     /// sector and where the nearest one lies.
     ///
     /// Without this the layer is invisible. Three unmarked holes scattered
     /// across an unbounded procedural field, in a game that has never had a
     /// reason to reward wandering, is not something a player finds — they
-    /// have to be told the breaches are there before looking for one is a
+    /// have to be told the links are there before looking for one is a
     /// choice rather than an accident.
     fn announce_surface_links(&mut self, origin: Position) {
         let mut query = self.world.query_filtered::<&Position, With<SurfaceLink>>();
@@ -170,9 +170,9 @@ impl Game {
             return;
         };
         self.log(format!(
-            "Deep scan: {} breach{} in this sector. Nearest bears {} at {distance} tiles.",
+            "Deep scan: {} link{} in this sector. Nearest bears {} at {distance} tiles.",
             found.len(),
-            if found.len() == 1 { "" } else { "es" },
+            if found.len() == 1 { "" } else { "s" },
             bearing(dx, dy),
         ));
     }
@@ -185,7 +185,7 @@ impl Game {
         }
     }
 
-    /// The one place an entrance entity is built, so a fresh zone's breaches
+    /// The one place an entrance entity is built, so a fresh zone's links
     /// and a reloaded save's cannot end up looking like different things.
     ///
     /// `>` rather than anything more decorative because every other glyph on
@@ -214,7 +214,7 @@ impl Game {
     /// While underground that `Position` is pinned to the entrance tile
     /// (see `resources::Locale`), so these would otherwise operate on a tile
     /// out in the wild that the player is nowhere near: deploying a
-    /// structure beside the breach, or — worst of all — `use_symlink`
+    /// structure beside the link, or — worst of all — `use_symlink`
     /// teleporting the pinned entrance somewhere else and changing where
     /// climbing back up puts you.
     ///
@@ -241,12 +241,12 @@ impl Game {
         let frames = self.frames_at((x, y));
         self.descend_to(1, frames, (x, y));
         self.log(format!(
-            "You drop through the breach. The signal above you thins to nothing. \
-             The shaft sounds {frames} levels deep."
+            "You drop through the link. The signal above you thins to nothing. \
+             The stack sounds {frames} frames deep."
         ));
     }
 
-    /// How deep the shaft under the breach at `tile` runs — see
+    /// How deep the stack under the link at `tile` runs — see
     /// `frames_for`, which this feeds the zone's arrival point.
     pub(crate) fn frames_at(&self, tile: (i32, i32)) -> u32 {
         let spawn = self.world.resource::<ZoneSpawnPoint>();
@@ -288,17 +288,17 @@ impl Game {
     /// pinned to the entrance tile the whole time, so there is nothing to
     /// restore.
     ///
-    /// Unnarrated, because the breach is no longer the only way out —
+    /// Unnarrated, because the link is no longer the only way out —
     /// `use_symlink` leaves by its own route and says so in its own words.
     pub(crate) fn clear_stack(&mut self) {
         self.world.insert_resource(Locale::Surface);
         self.world.insert_resource(CurrentStack(None));
     }
 
-    /// Climbs out through the breach the party walked in through.
+    /// Climbs out through the link the party walked in through.
     fn leave_stack(&mut self) {
         self.clear_stack();
-        self.log("You surface through the breach, back onto open grid.".to_string());
+        self.log("You surface through the link, back onto open grid.".to_string());
     }
 
     /// The party's current cell and facing, or `None` on the surface.
@@ -422,7 +422,7 @@ impl Game {
     /// surface, so `spawn_wild_creature` can fold it in unconditionally.
     ///
     /// Compounds with `ZoneLevel::stat_multiplier` and
-    /// `distance_stat_multiplier` rather than replacing them: a breach far
+    /// `distance_stat_multiplier` rather than replacing them: a link far
     /// out in a deep zone is a nastier hole than one beside your base, and
     /// going down makes either worse.
     pub(crate) fn stack_depth_multiplier(&self) -> f32 {
@@ -436,11 +436,11 @@ impl Game {
     /// starts the fight if it hits.
     ///
     /// The pack is drawn from the biome of the **entrance tile** — the
-    /// surface terrain the breach opens in. The Stack has no biome of its
+    /// surface terrain the link opens in. The Stack has no biome of its
     /// own, and rather than invent one, this reads the level as the
     /// substrate beneath the ground above it: descend under a Mainframe
     /// sector and Mainframe programs are what live down there. It costs no
-    /// new content and it gives the player a reason to care which breach
+    /// new content and it gives the player a reason to care which link
     /// they picked.
     ///
     /// Never a boss, for the same reason `maybe_ambush` refuses one: a fight
@@ -464,7 +464,7 @@ impl Game {
         let Some((species, _)) = self.pick_habitat_species(ex, ey, false) else {
             return;
         };
-        // Spawned onto the breach tile itself: the party's `Position` is
+        // Spawned onto the link tile itself: the party's `Position` is
         // pinned there, and a Stack pack is resolved immediately rather
         // than left to roam, so where on the surface it stands never matters.
         let depth_mult = self.stack_depth_multiplier();
@@ -505,11 +505,11 @@ impl Game {
         };
         if cell != CellKind::LinkDown {
             // The bottom level is generated without a link down at all, so
-            // this is where a finished shaft reports itself. Saying so beats
+            // this is where a finished stack reports itself. Saying so beats
             // "there's no way down here" on the one cell where the player
             // might reasonably keep looking for one.
             if pos.depth >= pos.frames {
-                self.log("Solid bedrock. This shaft bottoms out here.".to_string());
+                self.log("Solid bedrock. This stack bottoms out here.".to_string());
             } else {
                 self.log("There's no way down here.".to_string());
             }
@@ -525,7 +525,7 @@ impl Game {
     }
 
     /// Goes up a level, if the party is standing on a way up. From depth 1
-    /// that is the breach itself, and climbing it surfaces.
+    /// that is the link itself, and climbing it surfaces.
     pub fn ascend(&mut self) {
         if !self.can_act_underground() {
             return;
@@ -563,7 +563,7 @@ impl Game {
     fn ascend_to(&mut self, depth: u32, frames: u32, entrance: (i32, i32)) {
         let level = stack::generate(self.frame_spec(depth, frames, entrance));
         // Infallible: you can only climb *to* a level you already climbed
-        // *from*, so it is not the bottom of the shaft and has a way down.
+        // *from*, so it is not the bottom of the stack and has a way down.
         let landing = level
             .link_down
             .expect("a level climbed up into must have the link that was climbed");

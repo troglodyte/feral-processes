@@ -1,6 +1,6 @@
 (
     id: "access_shard",
     name: "Access Shard",
-    description: "A fragment of stolen authorization. Spends itself opening one sealed door in a dungeon. Worth carrying spares — a shaft can hold more than one.",
+    description: "A fragment of stolen authorization. Spends itself opening one sealed door in the Stack. Worth carrying spares — a stack can hold more than one.",
     cache_drop: Some(0.35),
 )

@@ -48,27 +48,27 @@ scale with zone depth and distance from your base — a zone-1 fight beside
 where you materialize is a genuine one-on-one, and the deep field can throw
 four groups of a hundred at you.
 
-## Dungeons
+## The Stack
 
-Scattered across every zone are **breaches** (`>`) — holes down into
-procedurally generated dungeon levels, seeded from the world seed and the
+Scattered across every zone are **links** (`>`) — holes down into the
+Stack, procedurally generated frames seeded from the world seed and the
 depth you have walked to. Step onto one and the view changes: the top-down
 grid gives way to a **first-person corridor**, and `hjkl`/arrows stop being
 compass directions and start being forward, back, turn left, turn right.
-`<` and `>` take the stairs under you.
+`<` and `>` follow whichever link is underfoot.
 
 `g` — the same key that scans the ground on the surface — opens the party's
-map of the level. It shows what you have seen and nothing else: corridors
-walked, stairs found, and the corridors something jumped you in. Cells you
+map of the frame. It shows what you have seen and nothing else: corridors
+walked, links found, and the corridors something jumped you in. Cells you
 have never had in view stay dark, and are drawn differently from rock you
 have seen, because "I have not been here" and "there is nothing here" are
 the two things worth telling apart.
 
-A breach opens onto a shaft of fixed length rather than an endless descent.
+A link opens onto a stack of fixed length rather than an endless descent.
 How deep it runs is read off how far the walk to it was, so the same
 distance that decides what lives down there decides how much of it there
-is: the breach inside your opening viewport is two levels, the ones out at
-the edge of the sector are six. The bottom level has no stairs down.
+is: the link inside your opening viewport is two frames, the ones out at
+the edge of the sector are six. The bottom frame has no link down.
 
 Corridors hang the occasional **doorway** (`+`) — walkable, but you cannot
 see past one, so a corridor that ends in a door is a decision rather than
@@ -76,36 +76,36 @@ more corridor. The lair is walled off behind **sealed doors**, and opening
 one burns an **Access Shard**, which is what caches are for. Once opened a
 door stays open.
 
-The deepest room of a shaft is a **lair** (`&`), holding something drawn
-from the breach tile's biome. It is seeded off the shaft, so it is the same
-guardian every time you come back — and the fight is scaled by every level
+The deepest room of a stack is a **lair** (`&`), holding something drawn
+from the link tile's biome. It is seeded off the stack, so it is the same
+guardian every time you come back — and the fight is scaled by every frame
 you descended to reach it.
 
-Materializing in a sector runs a deep scan that logs how many breaches are
+Materializing in a sector runs a deep scan that logs how many links are
 in it and the bearing of the nearest. One is always within sight of where
-you arrive; the rest are a walk. Each opens onto its own dungeon — two
-breaches are never two doors onto the same maze.
+you arrive; the rest are a walk. Each opens onto its own stack — two
+links are never two doors onto the same maze.
 
 Corridors are not safe. Every step you take underground can draw an
-intrusion, and the programs down there are drawn from the biome the breach
+intrusion, and the programs down there are drawn from the biome the link
 opens in — descend under a Mainframe sector and Mainframe programs are what
-live below it. Each level down multiplies their stats, and since a kill pays
+live below it. Each frame down multiplies their stats, and since a kill pays
 out the defeated program's Integrity, it multiplies the XP too. Descending
 is the trade: harder fights, better returns, and a longer walk back.
 
 Your base does not stop while you are down there. The player's position on
-the zone map stays pinned to the breach you entered by, so cronjobs keep
+the zone map stays pinned to the link you entered by, so cronjobs keep
 paying out, needs keep decaying, and a raid can land on your Home while you
-are four levels below it. Anything that reaches into the zone map — deploying
+are four frames below it. Anything that reaches into the zone map — deploying
 structures, trading, resting — is refused underground; managing your party,
 inventory, routines and perks is not.
 
 The one exception is the symlink. `u` works at any depth: it hauls the party
-up out of the shaft and drops them at the structure they linked to, paying
+up out of the stack and drops them at the structure they linked to, paying
 the usual cost. It will not save you from a fight — like every symlink it is
 refused mid-battle — and it abandons the descent, since walking back into the
-breach starts you at the top again. What it does not cost you is the mapping:
-every level you had walked is still drawn when you come back down.
+link starts you at the top again. What it does not cost you is the mapping:
+every frame you had walked is still drawn when you come back down.
 
 ## Building and cronjobs
 

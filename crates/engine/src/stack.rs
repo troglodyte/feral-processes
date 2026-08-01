@@ -97,7 +97,7 @@ pub enum CellKind {
     /// already been emptied is not part of the level, which regenerates from
     /// its spec; it lives in `resources::FrameMemory::looted`.
     Cache,
-    /// The deepest room of the shaft, on the bottom level only, where the
+    /// The deepest room of the stack, on the bottom level only, where the
     /// way down would otherwise have been. Walking in starts the boss
     /// fight — see `Game::rouse_lair`. Whether it has already been cleared
     /// lives in `resources::FrameMemory::cleared`, not in the level.
@@ -138,19 +138,19 @@ impl CellKind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FrameSpec {
     pub world_seed: u32,
-    /// The surface tile of the breach this shaft hangs from. Part of the
-    /// seed, so two breaches in one sector are two different shafts rather
+    /// The surface tile of the link this stack hangs from. Part of the
+    /// seed, so two links in a sector are two different stacks rather
     /// than two doors onto the same maze.
     pub entrance: (i32, i32),
     /// 1 immediately below the surface, counting up as you descend.
     pub depth: u32,
-    /// How many frames this shaft runs before it bottoms out — see
+    /// How many frames this stack runs before it bottoms out — see
     /// `frames_for`.
     pub frames: u32,
 }
 
 impl FrameSpec {
-    /// The last frame of the shaft, which has no way down.
+    /// The last frame of the stack, which has no way down.
     pub fn is_bottom(self) -> bool {
         self.depth >= self.frames
     }
@@ -158,12 +158,12 @@ impl FrameSpec {
     /// Mixes the whole spec down to one RNG seed.
     ///
     /// An FNV-1a pass rather than shifting the parts into disjoint bit
-    /// ranges: adjacent breaches differ in a single low bit of one
+    /// ranges: adjacent links differ in a single low bit of one
     /// coordinate far more often than they differ anywhere else, and levels
     /// carved from seeds that close should not be able to rhyme.
     ///
     /// `pub(crate)` so anything else that has to be a stable property of a
-    /// particular shaft — which program guards its lair, say — can salt this
+    /// particular stack — which program guards its lair, say — can salt this
     /// rather than invent a second scheme that could collide with it.
     pub(crate) fn rng_seed(self) -> u64 {
         let mut h = 0xcbf2_9ce4_8422_2325_u64;
@@ -187,7 +187,7 @@ pub struct Frame {
     cells: Vec<CellKind>,
     /// Where the party arrives, and where `LinkUp` sits.
     pub entry: (i32, i32),
-    /// `None` on the bottom level of a shaft — the point of a shaft having
+    /// `None` on the bottom level of a stack — the point of a stack having
     /// a bottom is that there is nowhere further to go.
     pub link_down: Option<(i32, i32)>,
 }
@@ -237,7 +237,7 @@ pub fn generate(spec: FrameSpec) -> Frame {
 
     // The far cell earns its place either way: the way down on a level that
     // has one, and on the bottom level the lair — the deepest room of the
-    // whole shaft, and the only place the thing guarding it could sensibly
+    // whole stack, and the only place the thing guarding it could sensibly
     // be. Placed before `place_caches`, which only ever builds on plain
     // floor and so cannot pave over either.
     let far = furthest_floor_from(&level, level.entry);
@@ -487,7 +487,7 @@ mod tests {
             .count()
     }
 
-    /// A spec deep in a shaft with plenty of room left below it, so tests
+    /// A spec deep in a stack with plenty of room left below it, so tests
     /// that aren't about the bottom don't accidentally land on one.
     fn spec(world_seed: u32, depth: u32) -> FrameSpec {
         FrameSpec {
@@ -523,11 +523,11 @@ mod tests {
         assert_ne!(floors(&generate(spec(1, 1))), floors(&generate(spec(2, 1))));
     }
 
-    /// Two breaches in one sector must be two shafts. Without the
+    /// Two links in one sector must be two stacks. Without the
     /// entrance tile in the seed every hole in the ground opened onto the
     /// same maze, and walking to a distant one bought nothing.
     #[test]
-    fn breaches_on_different_tiles_diverge_at_the_same_depth() {
+    fn links_on_different_tiles_diverge_at_the_same_depth() {
         let here = FrameSpec {
             entrance: (12, -40),
             ..spec(5, 1)
@@ -539,7 +539,7 @@ mod tests {
         assert_ne!(
             floors(&generate(here)),
             floors(&generate(there)),
-            "adjacent breaches carved the same maze"
+            "adjacent links carved the same maze"
         );
     }
 
@@ -573,7 +573,7 @@ mod tests {
     }
 
     #[test]
-    fn the_bottom_level_of_a_shaft_has_no_way_down() {
+    fn the_bottom_level_of_a_stack_has_no_way_down() {
         let level = generate(FrameSpec {
             world_seed: 7,
             entrance: (3, 4),

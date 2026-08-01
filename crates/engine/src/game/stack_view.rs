@@ -206,7 +206,7 @@ impl Game {
 
         let standing_on = match level.cell(x, y) {
             CellKind::LinkDown => Some("A link leads down  [>] descend".to_string()),
-            CellKind::LinkUp if depth == 1 => Some("The breach out  [<] surface".to_string()),
+            CellKind::LinkUp if depth == 1 => Some("The link out  [<] surface".to_string()),
             CellKind::LinkUp => Some("A link leads up  [<] climb".to_string()),
             // Emptied on arrival rather than on a key, so this reports what
             // already happened rather than offering a choice.

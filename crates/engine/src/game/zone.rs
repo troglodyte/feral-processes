@@ -350,10 +350,10 @@ impl Game {
         // trader was rebuilt on the matching tile.
         self.world.insert_resource(BuybackLedger::default());
 
-        // Same reason, and the same trap: the entrances a zone's breaches
-        // stood on are gone, but their maps are keyed by tile and would
-        // otherwise draw the last sector's walked corridors onto a fresh
-        // breach that happened to land on a matching coordinate.
+        // Same reason, and the same trap: a zone's links are gone, but their
+        // maps are keyed by tile and would otherwise draw the last sector's
+        // walked corridors onto a fresh link that happens to land on a
+        // matching coordinate.
         self.world.insert_resource(StackMemory::default());
 
         let spendable = [self.currency(), self.craft_currency()];

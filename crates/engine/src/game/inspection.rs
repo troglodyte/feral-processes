@@ -528,7 +528,7 @@ impl Game {
             pos.y = target_pos.y;
         }
         self.log(if surfaced {
-            format!("The symlink hauls you up out of the shaft and drops you at {name}.")
+            format!("The symlink hauls you up out of the stack and drops you at {name}.")
         } else {
             format!("You use a symlink and teleport to {name}.")
         });

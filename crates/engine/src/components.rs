@@ -732,9 +732,9 @@ pub struct SurfaceLink;
 /// than found on the zone map.
 ///
 /// It exists at surface coordinates like any other creature — the player's
-/// `Position` is pinned to the breach while they're underground, so that is
+/// `Position` is pinned to the link while they're underground, so that is
 /// where the pack lands — but it has no business surviving the fight. Left
-/// alive after a jack-out it would be standing around the breach mouth when
+/// alive after a jack-out it would be standing around the link mouth when
 /// the party climbs back out, a pack from a place the player left. So
 /// `Game::end_battle` despawns whatever still carries this.
 #[derive(Component, Clone, Copy, Debug)]

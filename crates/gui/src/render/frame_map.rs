@@ -78,7 +78,7 @@ pub(super) fn draw_frame_map(view: &FrameMapView, painter: &Painter, w: f32, h: 
     painter.rect_lines(0.0, 0.0, w, h, 2.0, BORDER);
 
     let heading = format!(
-        "DEEP SCAN   depth {} / {}   breach {},{}   facing {}   {:.0}% mapped",
+        "DEEP SCAN   depth {} / {}   link {},{}   facing {}   {:.0}% mapped",
         view.depth,
         view.frames,
         view.entrance.0,

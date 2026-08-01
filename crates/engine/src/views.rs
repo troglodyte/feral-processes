@@ -343,7 +343,7 @@ pub enum StackCellView {
     /// as `Floor` — still drawing it would send the party back down a dead
     /// end they have already walked.
     Cache,
-    /// The shaft's lair, still held. A cleared one comes through as `Floor`.
+    /// The stack's lair, still held. A cleared one comes through as `Floor`.
     Lair,
     /// A doorway. Walkable, but the view stops here — a door is drawn as a
     /// face, not as more corridor. A sealed door already burned open comes
@@ -365,7 +365,7 @@ pub enum StackCellView {
 /// renderer draws verbatim and authors nothing.
 pub struct StackView {
     pub depth: u32,
-    /// How many frames this shaft runs in total, so the renderer can show
+    /// How many frames this stack runs in total, so the renderer can show
     /// "2 / 4" and the player can tell a long descent from a short one
     /// without counting frames.
     pub frames: u32,
@@ -397,7 +397,7 @@ pub enum FrameMapCell {
     /// as `Floor`, so the map answers "where is there still something" and
     /// not merely "where was there once".
     Cache,
-    /// The shaft's lair, still held. A cleared one maps as `Floor`.
+    /// The stack's lair, still held. A cleared one maps as `Floor`.
     Lair,
     /// A doorway, or a seal already burned open.
     Door,
@@ -432,8 +432,8 @@ pub struct FrameMapView {
     /// `Dir::label` for the party's heading — the map is drawn north-up, so
     /// unlike `StackView` this is a real bearing rather than a readout.
     pub facing: &'static str,
-    /// The surface tile of the breach this shaft hangs from, so the map can
-    /// say which of a sector's breaches it belongs to.
+    /// The surface tile of the link this stack hangs from, so the map can
+    /// say which of a sector's links it belongs to.
     pub entrance: (i32, i32),
     /// How much of the level's walkable area has been seen, 0.0 to 1.0.
     pub explored: f32,

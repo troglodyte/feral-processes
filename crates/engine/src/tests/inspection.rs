@@ -840,3 +840,50 @@ fn structure_report_puts_home_first_and_groups_by_kind() {
         "both nodes should be adjacent rows, not split by the armory"
     );
 }
+
+/// The inventory view groups by category so a player scanning for gear
+/// isn't reading a list interleaved with salvage. Sorted here, in the view,
+/// rather than in `Inventory` — that component's order is persisted through
+/// `PlayerSave`, and pickup order is not the renderer's business to rewrite.
+#[test]
+fn the_inventory_view_comes_back_grouped_by_category() {
+    let mut game = Game::new(50, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        // Added in deliberately scrambled order: material, weapon,
+        // consumable, armor.
+        inv.add(ItemId::from(ids::CORE_FRAGMENT), 5);
+        inv.add(ItemId::from(ids::MONOFILAMENT_WHIP), 1);
+        inv.add(ItemId::from(ids::POWER_CELL), 2);
+        inv.add(ItemId::from(ids::FIREWALL_PLATING), 1);
+    }
+
+    let inventory = game.player_status().inventory;
+    let categories: Vec<ItemCategory> = inventory
+        .iter()
+        .map(|(item, _)| game.item_category(item))
+        .collect();
+    let mut sorted = categories.clone();
+    sorted.sort();
+    assert_eq!(
+        categories, sorted,
+        "rows must arrive grouped: {inventory:?}"
+    );
+
+    // And the grouping is the documented one, not merely *some* order.
+    let whip = inventory
+        .iter()
+        .position(|(i, _)| i.as_str() == ids::MONOFILAMENT_WHIP)
+        .unwrap();
+    let cell = inventory
+        .iter()
+        .position(|(i, _)| i.as_str() == ids::POWER_CELL)
+        .unwrap();
+    let frag = inventory
+        .iter()
+        .position(|(i, _)| i.as_str() == ids::CORE_FRAGMENT)
+        .unwrap();
+    assert!(cell < whip, "consumables list before weapons");
+    assert!(whip < frag, "weapons list before salvage");
+}

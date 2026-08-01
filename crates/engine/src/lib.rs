@@ -45,7 +45,7 @@ use components::{
     Routines, StackSpawn, Stats, StatusEffects, StatusKind, Structure, StructureTier, SurfaceLink,
     Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
 };
-use items::{EquipmentSlot, EquipmentStats, ItemId, ids};
+use items::{EquipmentSlot, EquipmentStats, ItemCategory, ItemId, ids};
 use items_db::ItemDb;
 #[cfg(test)]
 use items_db::ItemDef;

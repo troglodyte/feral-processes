@@ -9,11 +9,19 @@ impl Game {
     /// renderer to show prices before the player commits.
     pub fn trade_options(&self, entity: Entity) -> Option<TradeDef> {
         let kind = self.world.get::<Structure>(entity)?.kind.clone();
-        self.world
+        let mut trade = self
+            .world
             .resource::<StructureDb>()
             .get(&kind)?
             .trade
-            .clone()
+            .clone()?;
+        // Sorted on the clone, never in `StructureDb` — the catalogue is
+        // loaded once from `.ron` and read by everything, so reordering it
+        // in place would be a global edit to satisfy one screen.
+        trade
+            .buy
+            .sort_by_key(|(item, _)| self.category_sort_key(item));
+        Some(trade)
     }
 
     /// Sells `qty` of `item` from inventory to the trading post `structure`,
@@ -153,7 +161,7 @@ impl Game {
             .0
             .get(&key)
             .map(|shelf| {
-                shelf
+                let mut options: Vec<BuybackOption> = shelf
                     .iter()
                     .map(|(item, qty)| BuybackOption {
                         name: self.item_name(item).to_string(),
@@ -161,7 +169,9 @@ impl Game {
                         qty: *qty,
                         unit_cost,
                     })
-                    .collect()
+                    .collect();
+                options.sort_by_key(|o| self.category_sort_key(&o.item));
+                options
             })
             .unwrap_or_default()
     }

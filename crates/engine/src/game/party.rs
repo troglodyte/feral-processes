@@ -28,6 +28,12 @@ impl Game {
         let atk = self.effective_atk(player);
         let def = self.effective_def(player);
         let db = self.world.resource::<ItemDb>();
+        // Grouped here, in the view, and deliberately not in `Inventory`:
+        // that component's order is persisted through `PlayerSave`, so
+        // sorting it would rewrite save contents and overwrite pickup order
+        // to change what is only ever a display concern.
+        let mut inventory = inv.items.clone();
+        inventory.sort_by_key(|(item, _)| self.category_sort_key(item));
         PlayerStatus {
             position: (pos.x, pos.y),
             hp: stats.hp,
@@ -38,7 +44,7 @@ impl Game {
             decompiler,
             hunger: needs.hunger,
             fatigue: needs.fatigue,
-            inventory: inv.items.clone(),
+            inventory,
             inventory_used: inv.cargo_used(db),
             pet_count,
             pet_capacity,

@@ -46,6 +46,25 @@ impl Game {
             .unwrap_or_else(|| id.as_str())
     }
 
+    /// Which group this item lists under. An id with no definition behind it
+    /// sorts as salvage rather than panicking, matching `item_name`'s habit
+    /// of falling back to the raw id: a list is not the place to discover a
+    /// broken mod.
+    pub fn item_category(&self, id: &ItemId) -> ItemCategory {
+        self.world
+            .resource::<ItemDb>()
+            .get(id.as_str())
+            .map(|d| d.category())
+            .unwrap_or(ItemCategory::Material)
+    }
+
+    /// Sort key putting a list in category order, then alphabetical inside a
+    /// category. The one place that ordering is decided, so the inventory
+    /// screen and a trader's shelf cannot disagree about it.
+    pub(crate) fn category_sort_key(&self, id: &ItemId) -> (ItemCategory, String) {
+        (self.item_category(id), self.item_name(id).to_string())
+    }
+
     /// The item's authored description, straight out of its `.ron` file.
     ///
     /// Deliberately *not* derived the way `item_blurb` is: this is prose a

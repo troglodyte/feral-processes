@@ -348,7 +348,7 @@ mod tests {
             },
         )];
         data.zone = 3;
-        // `StackMemory` is a map keyed by a *tuple* (`LevelKey`), which is
+        // `StackMemory` is a map keyed by a *tuple* (`FrameKey`), which is
         // exactly where a text encoding tends to give up, and `Locale` is a
         // struct-variant enum. Both are in the round trip deliberately.
         data.locale = crate::resources::Locale::Stack {
@@ -447,8 +447,13 @@ mod tests {
     /// self-describing, unlike the positional bincode save (see
     /// `SAVE_FORMAT_VERSION`'s docs) — so a `SaveData` field rename that
     /// forgets to update the template's keys breaks `--template extraction`
-    /// at load. Nothing in the launcher's `dev_template` tests loads this
-    /// file by name, so this is the guard.
+    /// at load. The launcher's `dev_template` tests do cover this file too
+    /// (`every_checked_in_template_still_loads` enumerates every template
+    /// and parses it), but this test still earns its place: it lives in the
+    /// crate that owns `SaveData`, so `cargo test -p feral-processes-engine`
+    /// catches RON-key drift without building the launcher, and it is a bare
+    /// parse, so a failure here names the field mismatch directly instead of
+    /// surfacing as the launcher's more generic "template does not load".
     #[test]
     fn the_extraction_template_parses_into_save_data() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../dev-saves/extraction.ron");

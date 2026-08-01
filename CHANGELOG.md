@@ -22,7 +22,13 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
   between frames are the same kind of thing at different scales, and one
   word for both says so. The help screen, the deep-scan log line, the
   descend/climb/bottom-out messages, the map heading, the first-person
-  prompts, the README and manual all speak the new vocabulary now.
+  prompts, the README and manual all speak the new vocabulary now. That
+  makes three player-visible senses of "link," not two: `use_symlink`
+  already used the word for the action that leaves the Stack ("The symlink
+  hauls you up out of the stack and drops you at {name}"). In Unix register
+  a symlink is a symbolic link, so the overlap reads as coherent rather
+  than accidental — noted here so it doesn't look overlooked, not because
+  it's being reopened.
 - **"Breach" survives, narrowed to zone travel.** That word already meant
   three different things — the old dungeon entrance, stepping through a
   Zone Portal, and "ICE breached!" in combat — and renaming sense one is

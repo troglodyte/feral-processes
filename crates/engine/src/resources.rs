@@ -467,7 +467,7 @@ pub enum Locale {
 /// frame, because that tile is what makes a stack itself — it is already
 /// half of `stack::FrameSpec`. Two links in a sector therefore keep
 /// separate maps of their separate depth-3s.
-pub type LevelKey = ((i32, i32), u32);
+pub type FrameKey = ((i32, i32), u32);
 
 /// What the party learned about one Stack frame by walking it.
 ///
@@ -504,7 +504,7 @@ pub struct FrameMemory {
 /// the previous sector's walked corridors onto a new sector's map at
 /// whatever tile happened to collide.
 #[derive(Resource, Clone, Default, Debug, Serialize, Deserialize)]
-pub struct StackMemory(pub BTreeMap<LevelKey, FrameMemory>);
+pub struct StackMemory(pub BTreeMap<FrameKey, FrameMemory>);
 
 /// The frame the player is currently standing in, or `None` on the surface.
 ///

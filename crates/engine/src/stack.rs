@@ -12,14 +12,14 @@ use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use serde::{Deserialize, Serialize};
 
-/// Side length of a generated level, in cells. Odd, because the maze carver
+/// Side length of a generated frame, in cells. Odd, because the maze carver
 /// below puts cells on odd coordinates and walls on even ones — 21 gives a
 /// 10x10 lattice of cells inside a solid border.
-const LEVEL_SIZE: i32 = 21;
+const FRAME_SIZE: i32 = 21;
 
 /// Percent of dead ends the braid pass opens back up into the rest of the
 /// maze. A perfect maze is *all* dead ends, which is tedious to walk and
-/// reads as noise from a first-person view; loops are what make a level feel
+/// reads as noise from a first-person view; loops are what make a frame feel
 /// like a place rather than a puzzle box. Not in `tuning.rs` for the same
 /// reason `world::WorldMap::classify` keeps its noise thresholds inline —
 /// this is the shape of generated content, not a difficulty knob.
@@ -80,7 +80,7 @@ impl Dir {
 }
 
 /// Every direction, in a fixed order. The generator iterates this rather
-/// than an ad-hoc list so a given seed always produces the same level.
+/// than an ad-hoc list so a given seed always produces the same frame.
 const DIRS: [Dir; 4] = [Dir::North, Dir::East, Dir::South, Dir::West];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -88,13 +88,13 @@ pub enum CellKind {
     /// Solid. Not walkable, and what every out-of-bounds read returns.
     Rock,
     Floor,
-    /// Back the way you came — the level's `entry`. On depth 1 this leads
+    /// Back the way you came — the frame's `entry`. On depth 1 this leads
     /// out to the surface.
     LinkUp,
     LinkDown,
     /// Something worth the walk, sitting in a dead end. Walking onto one
     /// empties it — see `Game::open_cache`. Whether a given cache has
-    /// already been emptied is not part of the level, which regenerates from
+    /// already been emptied is not part of the frame, which regenerates from
     /// its spec; it lives in `resources::FrameMemory::looted`.
     Cache,
     /// The deepest room of the stack, on the bottom frame only, where the
@@ -107,10 +107,10 @@ pub enum CellKind {
     /// rather than as more corridor.
     Door,
     /// A door that will not open without an `ids::ACCESS_SHARD`. Seals the
-    /// lair off from the rest of the bottom level, so the guardian is
+    /// lair off from the rest of the bottom frame, so the guardian is
     /// something you have to earn your way to rather than stumble into.
     ///
-    /// Walkable as far as the level is concerned — connectivity, dead-end
+    /// Walkable as far as the frame is concerned — connectivity, dead-end
     /// detection and placing the way down all have to see through it, or the
     /// generator would treat a whole sealed wing as unreachable. Whether the
     /// party may actually pass is `Game::step`'s business, and whether this
@@ -130,7 +130,7 @@ impl CellKind {
     }
 }
 
-/// Everything a level is a function of.
+/// Everything a frame is a function of.
 ///
 /// A struct rather than four positional arguments because the arguments are
 /// all integers and three of them are interchangeable at a glance, which is
@@ -194,7 +194,7 @@ pub struct Frame {
 
 impl Frame {
     /// Out of bounds reads as `Rock`, so callers walking a view cone past
-    /// the edge of the level don't each need their own bounds check.
+    /// the edge of the frame don't each need their own bounds check.
     pub fn cell(&self, x: i32, y: i32) -> CellKind {
         if x < 0 || y < 0 || x >= self.width || y >= self.height {
             return CellKind::Rock;
@@ -214,20 +214,20 @@ impl Frame {
     }
 }
 
-/// Builds the level `spec` describes.
+/// Builds the frame `spec` describes.
 ///
 /// Deterministic in the spec and nothing else. The RNG is seeded locally
 /// rather than drawn from `resources::GameRng`: that generator's stream
 /// position is not persisted, so drawing from it would regenerate a
-/// *different* level after a save/load, and the party would find itself
+/// *different* frame after a save/load, and the party would find itself
 /// inside solid rock.
 pub fn generate(spec: FrameSpec) -> Frame {
     let mut rng = StdRng::seed_from_u64(spec.rng_seed());
 
     let mut level = Frame {
-        width: LEVEL_SIZE,
-        height: LEVEL_SIZE,
-        cells: vec![CellKind::Rock; (LEVEL_SIZE * LEVEL_SIZE) as usize],
+        width: FRAME_SIZE,
+        height: FRAME_SIZE,
+        cells: vec![CellKind::Rock; (FRAME_SIZE * FRAME_SIZE) as usize],
         entry: (1, 1),
         link_down: None,
     };
@@ -264,7 +264,7 @@ pub fn generate(spec: FrameSpec) -> Frame {
 /// the route in: `braid` leaves loops, so one door on the shortest path is
 /// no guarantee there isn't a way round it, and the analysis to find a true
 /// cut vertex would be a lot of machinery to reach the same place. The lair
-/// sits at the end of the longest walk in the level, so it rarely has more
+/// sits at the end of the longest walk in the frame, so it rarely has more
 /// than one or two ways in anyway.
 fn seal_the_lair(level: &mut Frame, lair: (i32, i32)) {
     for dir in DIRS {
@@ -419,7 +419,7 @@ fn is_dead_end(level: &Frame, x: i32, y: i32) -> bool {
 
 /// Breadth-first walk from `from`, returning the walkable cell at the
 /// greatest step distance. Ties break toward the lowest row-major index, so
-/// the result is a pure function of the level rather than of hash order.
+/// the result is a pure function of the frame rather than of hash order.
 fn furthest_floor_from(level: &Frame, from: (i32, i32)) -> (i32, i32) {
     let mut dist = vec![u32::MAX; (level.width * level.height) as usize];
     let idx = |x: i32, y: i32| (y * level.width + x) as usize;
@@ -499,7 +499,7 @@ mod tests {
     }
 
     #[test]
-    fn the_same_spec_yields_an_identical_level() {
+    fn the_same_spec_yields_an_identical_frame() {
         let a = generate(spec(1234, 3));
         let b = generate(spec(1234, 3));
         assert_eq!(floors(&a), floors(&b));
@@ -514,7 +514,7 @@ mod tests {
         assert_ne!(
             floors(&a),
             floors(&b),
-            "each depth must be its own level, not the same maze restated"
+            "each depth must be its own frame, not the same maze restated"
         );
     }
 
@@ -599,9 +599,9 @@ mod tests {
     fn braiding_removes_dead_ends_a_perfect_maze_would_leave() {
         let mut rng = StdRng::seed_from_u64(42);
         let mut level = Frame {
-            width: LEVEL_SIZE,
-            height: LEVEL_SIZE,
-            cells: vec![CellKind::Rock; (LEVEL_SIZE * LEVEL_SIZE) as usize],
+            width: FRAME_SIZE,
+            height: FRAME_SIZE,
+            cells: vec![CellKind::Rock; (FRAME_SIZE * FRAME_SIZE) as usize],
             entry: (1, 1),
             link_down: None,
         };
@@ -627,7 +627,7 @@ mod tests {
     }
 
     #[test]
-    fn the_level_is_walled_in() {
+    fn the_frame_is_walled_in() {
         let level = generate(spec(5, 1));
         for i in 0..level.width {
             assert!(!level.walkable(i, 0), "top edge leaks at {i}");

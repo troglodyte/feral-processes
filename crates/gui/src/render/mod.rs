@@ -273,7 +273,7 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
             draw_help(painter, &m);
         }
         // Full-pane rather than a popup over the corridor: the whole point
-        // is seeing the level's shape at once, and a map you have to peer
+        // is seeing the frame's shape at once, and a map you have to peer
         // around the first-person view to read is not that.
         Mode::FrameMap => match app.game.as_ref().and_then(|g| g.frame_map()) {
             Some(view) => {

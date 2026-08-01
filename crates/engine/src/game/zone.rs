@@ -229,7 +229,7 @@ impl Game {
         // Breaching does not despawn structures — the base travels — so
         // anything zone-local has to be named here or it comes along at its
         // old coordinates. A `SurfaceLink` is zone-local: it opens onto a
-        // level generated for the sector it stands in, and left alive it
+        // frame generated for the sector it stands in, and left alive it
         // would ride the breach and could land inside the newly stamped base
         // platform.
         let stale: Vec<Entity> = {

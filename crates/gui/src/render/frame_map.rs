@@ -61,7 +61,7 @@ fn mark_glyph(mark: FrameMapMark) -> (char, Color) {
 /// Side length of one map cell in pixels, and the top-left corner the grid
 /// starts at, for a `view` drawn into a `w` by `h` pane.
 ///
-/// Square cells — the level is square and a stretched map would misreport
+/// Square cells — the frame is square and a stretched map would misreport
 /// distances the player is trying to count.
 fn layout(view: &FrameMapView, w: f32, h: f32) -> (f32, f32, f32) {
     if view.width <= 0 || view.height <= 0 {
@@ -212,10 +212,10 @@ mod tests {
         assert!((oy + cell * 21.0 / 2.0 - h / 2.0).abs() < 0.001);
     }
 
-    /// A non-square level must still get square cells rather than being
+    /// A non-square frame must still get square cells rather than being
     /// stretched to fill the pane — the player counts corridors off this.
     #[test]
-    fn an_oblong_level_still_gets_square_cells() {
+    fn an_oblong_frame_still_gets_square_cells() {
         let (_, _, cell) = layout(&view(31, 11), 1000.0, 640.0);
         assert!(cell * 31.0 <= 1000.0 + 0.001);
         assert!(cell * 11.0 <= 640.0 + 0.001);

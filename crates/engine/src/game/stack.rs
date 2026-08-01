@@ -96,7 +96,7 @@ impl Game {
     /// `stack::generate` makes. And drawing from the shared stream here
     /// would shift every later roll in the run, which is not a private
     /// matter: it silently rewrites the outcome of every seeded test in the
-    /// suite. `ENTRANCE_SALT` keeps this stream off the one the levels
+    /// suite. `ENTRANCE_SALT` keeps this stream off the one the frames
     /// themselves are carved from, so entrance placement and maze layout
     /// don't correlate.
     pub(crate) fn spawn_surface_links(&mut self, count: usize) {
@@ -390,7 +390,7 @@ impl Game {
             .map(|level| level.cell(nx, ny))
             .unwrap_or(CellKind::Rock);
 
-        // A sealed door is walkable as far as the level is concerned — the
+        // A sealed door is walkable as far as the frame is concerned — the
         // generator has to see through it — so the lock is checked here.
         let walkable =
             target.walkable() && (target != CellKind::SealedDoor || self.pass_seal(pos, (nx, ny)));
@@ -490,10 +490,10 @@ impl Game {
             .map(|level| level.cell(pos.x, pos.y))
     }
 
-    /// Goes down a level, if the party is standing on a way down.
+    /// Goes down a frame, if the party is standing on a way down.
     ///
     /// Separate from `ascend` rather than one key that does whichever the
-    /// cell offers: descending is a commitment — the level below is harder
+    /// cell offers: descending is a commitment — the frame below is harder
     /// and the way back is a walk — and a single key would sometimes take it
     /// when the player meant to leave.
     pub fn descend(&mut self) {

@@ -73,7 +73,7 @@ fn stand_in_a_doorway(game: &mut Game) -> ((i32, i32), Dir) {
         let door = (0..level.height)
             .flat_map(|y| (0..level.width).map(move |x| (x, y)))
             .find(|&(x, y)| level.cell(x, y) == CellKind::Door)
-            .expect("every level hangs doors");
+            .expect("every frame hangs doors");
         let heading = if level.walkable(door.0, door.1 - 1) {
             Dir::North
         } else {
@@ -101,9 +101,9 @@ fn stand_in_a_doorway(game: &mut Game) -> ((i32, i32), Dir) {
     (door, heading)
 }
 
-/// Every cell of the level the party is standing in, row-major — for
-/// asserting that two levels are or aren't the same maze.
-fn level_cells(game: &Game) -> Vec<CellKind> {
+/// Every cell of the frame the party is standing in, row-major — for
+/// asserting that two frames are or aren't the same maze.
+fn frame_cells(game: &Game) -> Vec<CellKind> {
     let level = game.world.resource::<CurrentStack>().0.as_ref().unwrap();
     (0..level.height)
         .flat_map(|y| (0..level.width).map(move |x| (x, y)))
@@ -308,7 +308,7 @@ fn the_party_arrives_on_the_link_up_facing_north() {
 fn taking_the_link_down_increments_the_depth_and_regenerates_the_frame() {
     let mut game = game();
     descend(&mut game);
-    let first = level_cells(&game);
+    let first = frame_cells(&game);
 
     stand_on_link_down(&mut game);
     game.descend();
@@ -317,7 +317,7 @@ fn taking_the_link_down_increments_the_depth_and_regenerates_the_frame() {
         panic!("descending should leave us underground")
     };
     assert_eq!(depth, 2);
-    assert_ne!(first, level_cells(&game), "depth 2 should be its own frame");
+    assert_ne!(first, frame_cells(&game), "depth 2 should be its own frame");
 }
 
 /// The descend log line is player-facing narration of "the Stack" vocabulary
@@ -533,7 +533,7 @@ fn a_symlink_that_cannot_be_paid_for_leaves_the_party_underground() {
 /// The maps of every frame walked are keyed by `(link tile, depth)`, so
 /// leaving by symlink costs the descent but not the mapping.
 #[test]
-fn a_symlink_out_keeps_the_maps_of_the_levels_already_walked() {
+fn a_symlink_out_keeps_the_maps_of_the_frames_already_walked() {
     let mut game = game();
     let (home, _) = home_then_descend(&mut game);
     let link = match locale(&game) {
@@ -567,7 +567,7 @@ fn party_management_still_works_underground() {
     let mut game = game();
     let pet = spawn_tamed(&mut game, 20, 5);
     descend(&mut game);
-    // Managing the roster four levels down is a thing the genre expects, so
+    // Managing the roster four frames down is a thing the genre expects, so
     // it must not be swept up by the surface-only guard.
     assert!(game.owned_pets().iter().any(|p| p.entity == pet));
 }
@@ -607,7 +607,7 @@ fn the_view_cone_is_rotated_so_straight_ahead_is_always_the_middle_column() {
 }
 
 #[test]
-fn the_view_reads_solid_rock_past_the_edge_of_the_level() {
+fn the_view_reads_solid_rock_past_the_edge_of_the_frame() {
     let mut game = game();
     descend(&mut game);
     // The entry sits at (1, 1) facing north — one step off the top edge.
@@ -783,7 +783,7 @@ fn walking_onto_an_entrance_descends_and_leaves_the_entrance_standing() {
 }
 
 #[test]
-fn a_stack_position_survives_a_save_and_load_with_an_identical_level() {
+fn a_stack_position_survives_a_save_and_load_with_an_identical_frame() {
     let assets = test_assets_dir();
     let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
     descend(&mut game);
@@ -821,7 +821,7 @@ fn a_stack_position_survives_a_save_and_load_with_an_identical_level() {
     };
     assert_eq!(
         cells_before, cells_after,
-        "the level regenerates from the seed — a different one would strand the party in rock"
+        "the frame regenerates from the seed — a different one would strand the party in rock"
     );
 }
 
@@ -858,7 +858,7 @@ fn arriving_maps_what_the_party_can_see_and_nothing_else() {
             .iter()
             .flatten()
             .any(|&c| c == FrameMapCell::Unknown),
-        "standing on the entry should not reveal a 21x21 level"
+        "standing on the entry should not reveal a 21x21 frame"
     );
     assert!(view.explored > 0.0 && view.explored < 1.0);
 }
@@ -935,7 +935,7 @@ fn turning_in_place_maps_the_new_heading() {
 }
 
 #[test]
-fn walking_a_level_maps_more_of_it() {
+fn walking_a_frame_maps_more_of_it() {
     let mut game = game();
     descend(&mut game);
     let before = map(&game).explored;
@@ -948,8 +948,8 @@ fn walking_a_level_maps_more_of_it() {
     );
 }
 
-/// A level regenerates from its spec, but what the player has *seen* of it
-/// does not — losing that on load hands back a blank map of a walked level.
+/// A frame regenerates from its spec, but what the player has *seen* of it
+/// does not — losing that on load hands back a blank map of a walked frame.
 #[test]
 fn the_map_survives_a_save_and_load() {
     let assets = test_assets_dir();
@@ -1060,7 +1060,7 @@ fn stand_before_a_cache(game: &mut Game) -> (i32, i32) {
     let cache = (0..level.height)
         .flat_map(|y| (0..level.width).map(move |x| (x, y)))
         .find(|&(x, y)| level.cell(x, y) == CellKind::Cache)
-        .expect("every level should hide at least one cache");
+        .expect("every frame should hide at least one cache");
 
     // A dead end has exactly one open neighbour; stand there looking in.
     let (facing, mouth) = [Dir::North, Dir::East, Dir::South, Dir::West]
@@ -1108,7 +1108,7 @@ fn credits(game: &Game) -> u32 {
 }
 
 #[test]
-fn a_level_hides_caches_in_its_dead_ends() {
+fn a_frame_hides_caches_in_its_dead_ends() {
     let mut game = game();
     descend(&mut game);
     let level = game.world.resource::<CurrentStack>().0.clone().unwrap();
@@ -1698,7 +1698,7 @@ fn a_shut_door_stops_the_view() {
 }
 
 #[test]
-fn a_level_hangs_doorways_in_corridors_not_junctions() {
+fn a_frame_hangs_doorways_in_corridors_not_junctions() {
     let mut game = game();
     descend(&mut game);
     let level = game.world.resource::<CurrentStack>().0.clone().unwrap();
@@ -1707,7 +1707,7 @@ fn a_level_hangs_doorways_in_corridors_not_junctions() {
         .flat_map(|y| (0..level.width).map(move |x| (x, y)))
         .filter(|&(x, y)| level.cell(x, y) == CellKind::Door)
         .collect();
-    assert!(!doors.is_empty(), "the level hung no doorways at all");
+    assert!(!doors.is_empty(), "the frame hung no doorways at all");
     assert!(doors.len() <= crate::tuning::STACK_DOORS_PER_FRAME);
 
     for (x, y) in doors {
@@ -1803,11 +1803,11 @@ fn two_links_in_a_sector_open_onto_different_stacks() {
     assert!(tiles.len() >= 2, "this seed should field several links");
 
     game.enter_stack(tiles[0].0, tiles[0].1);
-    let first = level_cells(&game);
+    let first = frame_cells(&game);
     game.ascend();
 
     game.enter_stack(tiles[1].0, tiles[1].1);
-    assert_ne!(first, level_cells(&game), "two links carved the same maze");
+    assert_ne!(first, frame_cells(&game), "two links carved the same maze");
 }
 
 #[test]
@@ -2012,7 +2012,7 @@ fn a_bearing_only_goes_diagonal_when_neither_axis_dominates() {
 
 /// Breaching does not despawn structures — the base travels — so anything
 /// zone-local has to be wiped by name in `enter_next_zone`. Entrances are
-/// zone-local: each opens onto a level generated for its own sector.
+/// zone-local: each opens onto a frame generated for its own sector.
 #[test]
 fn a_breach_leaves_the_previous_sectors_entrances_behind() {
     let mut game = game();
@@ -2137,7 +2137,7 @@ fn a_stack_pack_is_drawn_from_the_biome_the_link_opens_in() {
 }
 
 #[test]
-fn deeper_levels_field_tougher_programs() {
+fn deeper_frames_field_tougher_programs() {
     // Same species, same link, same everything but depth.
     let power_at = |depth: u32| {
         let mut game = Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -2209,7 +2209,7 @@ fn a_surface_spawn_is_not_scaled_by_how_deep_the_party_is() {
         let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
         if let Some(depth) = depth {
             // Neither entering nor rewriting the locale draws from
-            // `GameRng` — levels carve from their own stream — so both
+            // `GameRng` — frames carve from their own stream — so both
             // arms of this reach the spawn with the same rolls queued up.
             game.enter_stack(pos.x, pos.y);
             let Locale::Stack {

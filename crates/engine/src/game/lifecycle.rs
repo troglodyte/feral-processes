@@ -442,7 +442,7 @@ impl Game {
         // is about to be overwritten.
         game.world.insert_resource(data.stack_memory);
         // Last, and after the WorldMap is in place: restoring a Stack
-        // locale regenerates its level from that map's seed.
+        // locale regenerates its frame from that map's seed.
         game.restore_locale(data.locale);
 
         game.log("Session restored. Reconnecting to the Grid.");

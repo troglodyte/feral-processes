@@ -2170,7 +2170,7 @@ fn deeper_frames_field_tougher_programs() {
         // locale, so this is the scaling the game applies rather than a
         // proxy for it. `is_boss` only to pin the group at one member.
         let depth_mult = game.stack_depth_multiplier();
-        let pack = game.spawn_pack("scrapper", true, pos.x, pos.y, depth_mult);
+        let pack = game.spawn_pack("scrapper", true, pos.x, pos.y, depth_mult, 1);
         game.world.get::<Stats>(pack[0]).unwrap().power()
     };
 
@@ -2556,4 +2556,146 @@ fn a_frames_shape_still_matches_what_trace_was_tuned_against() {
             );
         }
     }
+}
+
+#[test]
+fn trace_scales_the_encounter_roll() {
+    use crate::tuning::{STACK_ENCOUNTER_CHANCE, TRACE_HUNTED, TRACE_NOTICED};
+    let mut game = game();
+    descend(&mut game);
+
+    assert_eq!(game.trace_encounter_mult(), 1.0, "Quiet is the baseline");
+
+    set_trace(&mut game, TRACE_NOTICED);
+    assert!(game.trace_encounter_mult() > 1.0);
+
+    set_trace(&mut game, TRACE_HUNTED);
+    let hunted = STACK_ENCOUNTER_CHANCE * game.trace_encounter_mult();
+    assert!(
+        (hunted - 0.16).abs() < 1e-9,
+        "Hunted should double the 0.08 base, got {hunted}"
+    );
+}
+
+/// Folded into `stack_depth_multiplier` rather than applied at the ambush
+/// alone, so the lair guardian inherits it too — a party that looted its way
+/// to Hunted meets a harder boss, having chosen to.
+#[test]
+fn trace_scales_enemy_stats_and_reaches_the_lair_through_depth() {
+    use crate::tuning::{STACK_DEPTH_STAT_GROWTH, TRACE_HUNTED};
+    let mut game = game();
+    descend(&mut game);
+    stand_on_link_down(&mut game);
+    game.descend(); // depth 2
+
+    let quiet = game.stack_depth_multiplier();
+    assert!((quiet - STACK_DEPTH_STAT_GROWTH.powi(1)).abs() < 1e-5);
+
+    set_trace(&mut game, TRACE_HUNTED);
+    let hunted = game.stack_depth_multiplier();
+    assert!(
+        (hunted - STACK_DEPTH_STAT_GROWTH.powi(1) * 1.45).abs() < 1e-5,
+        "Hunted should compound with depth, got {hunted}"
+    );
+}
+
+/// Trace pushes a pack toward its zone's ceiling faster. It must never raise
+/// that ceiling: `zone_group_cap` is a balance bound on how big any fight in
+/// a zone can get, and a meter the player runs up themselves should not
+/// vault it. The zone-1 case is why the lever is inert there.
+#[test]
+fn trace_reaches_the_group_ceiling_faster_but_never_past_it() {
+    use crate::game::spawning::trace_group_ceiling;
+
+    assert_eq!(trace_group_ceiling(1, 1, 9), 1, "Quiet changes nothing");
+    assert_eq!(
+        trace_group_ceiling(2, 3, 9),
+        6,
+        "Hunted triples a small pack"
+    );
+    assert_eq!(
+        trace_group_ceiling(4, 3, 9),
+        9,
+        "the zone cap still bounds it"
+    );
+    assert_eq!(
+        trace_group_ceiling(1, 3, 1),
+        1,
+        "zone 1 pins every group to one member, whatever Trace says"
+    );
+}
+
+/// The leak this phase was most at risk of. `spawn_pack`'s doc records the
+/// same mistake being made once already with `depth_mult`: ambient spawns
+/// and nest respawns keep rolling on every `tick` while the party is
+/// underground, so a scaling factor read off a resource inside the spawn
+/// scaled those too, leaving oversized packs waiting at the link mouth for
+/// the climb out. Group scaling is a parameter for exactly this reason.
+#[test]
+fn a_surface_spawn_is_unscaled_while_the_party_is_hunted() {
+    use crate::tuning::TRACE_HUNTED;
+
+    fn surface_pack_size(trace_value: u32) -> usize {
+        let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.world.insert_resource(ZoneLevel(3));
+        descend(&mut game);
+        set_trace(&mut game, trace_value);
+
+        let (x, y) = multi_group_ground(&game);
+        let before = game.world.query::<&Creature>().iter(&game.world).count();
+        game.try_spawn_habitat_creature(x, y);
+        game.world.query::<&Creature>().iter(&game.world).count() - before
+    }
+
+    assert_eq!(
+        surface_pack_size(TRACE_HUNTED),
+        surface_pack_size(0),
+        "Trace must not reach a spawn happening on the surface"
+    );
+}
+
+/// `maybe_stack_encounter` refuses a boss with its own stated reason — a
+/// fight you never saw coming should not also be the hardest fight
+/// available. Escalation was designed *around* that rule rather than
+/// through it: the phase-2 sketch called for Hunted to open the boss pool,
+/// and it was cut, because reversing a decision that carries its own
+/// reasoning needs a better argument than wanting a spike.
+#[test]
+fn a_hunted_ambush_is_still_never_a_boss() {
+    use crate::tuning::TRACE_HUNTED;
+    let mut game = game();
+    let entrance = descend(&mut game);
+    set_trace(&mut game, TRACE_HUNTED);
+
+    let biome = game
+        .world
+        .resource_mut::<WorldMap>()
+        .tile(entrance.0, entrance.1)
+        .biome;
+    assert!(
+        !game
+            .world
+            .resource::<SpeciesDb>()
+            .boss_habitat_matches(biome)
+            .is_empty(),
+        "this test is only meaningful where a boss pool exists to be drawn from"
+    );
+
+    assert!(walk_until_a_fight(&mut game, 400), "no fight to inspect");
+    let bosses: Vec<String> = game
+        .world
+        .query::<(&Creature, &Hostile)>()
+        .iter(&game.world)
+        .map(|(c, _)| c.species.clone())
+        .filter(|id| {
+            game.world
+                .resource::<SpeciesDb>()
+                .get(id)
+                .is_some_and(|s| s.is_boss)
+        })
+        .collect();
+    assert!(
+        bosses.is_empty(),
+        "Hunted drew a boss into an ambush: {bosses:?}"
+    );
 }

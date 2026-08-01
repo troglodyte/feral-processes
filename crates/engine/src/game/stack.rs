@@ -437,7 +437,9 @@ impl Game {
     pub(crate) fn stack_depth_multiplier(&self) -> f32 {
         match self.stack_pos() {
             None => 1.0,
-            Some(pos) => STACK_DEPTH_STAT_GROWTH.powi(pos.depth as i32 - 1),
+            Some(pos) => {
+                STACK_DEPTH_STAT_GROWTH.powi(pos.depth as i32 - 1) * self.trace_stat_mult()
+            }
         }
     }
 
@@ -461,9 +463,11 @@ impl Game {
         let Some(pos) = self.stack_pos() else {
             return;
         };
+        let mult = self.trace_encounter_mult();
         let encountered = {
             let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_bool(STACK_ENCOUNTER_CHANCE)
+            rng.0
+                .random_bool((STACK_ENCOUNTER_CHANCE * mult).clamp(0.0, 1.0))
         };
         if !encountered {
             return;
@@ -477,7 +481,8 @@ impl Game {
         // pinned there, and a Stack pack is resolved immediately rather
         // than left to roam, so where on the surface it stands never matters.
         let depth_mult = self.stack_depth_multiplier();
-        let pack = self.spawn_pack(&species, false, ex, ey, depth_mult);
+        let group_mult = self.trace_group_mult();
+        let pack = self.spawn_pack(&species, false, ex, ey, depth_mult, group_mult);
         if pack.is_empty() {
             return;
         }

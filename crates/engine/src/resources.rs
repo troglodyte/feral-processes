@@ -499,6 +499,18 @@ impl TraceBand {
             TraceBand::Hunted => "Hunted",
         }
     }
+
+    /// Indexes the per-band multiplier tables in `tuning` — `TRACE_*_MULT`
+    /// are all `[_; 4]` in this order, so a band added here without a column
+    /// added there is a compile error rather than a silent wrong lookup.
+    pub(crate) fn index(self) -> usize {
+        match self {
+            TraceBand::Quiet => 0,
+            TraceBand::Noticed => 1,
+            TraceBand::Traced => 2,
+            TraceBand::Hunted => 3,
+        }
+    }
 }
 
 /// Which frame of which stack a `FrameMemory` belongs to.

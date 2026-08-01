@@ -19,7 +19,10 @@
 //!   variant.
 
 use crate::resources::{Trace, TraceBand};
-use crate::tuning::{TRACE_HUNTED, TRACE_NOTICED, TRACE_TRACED};
+use crate::tuning::{
+    TRACE_ENCOUNTER_MULT, TRACE_GROUP_MULT, TRACE_HUNTED, TRACE_NOTICED, TRACE_STAT_MULT,
+    TRACE_TRACED,
+};
 use crate::*;
 
 impl TraceBand {
@@ -43,6 +46,29 @@ impl TraceBand {
 impl Game {
     pub(crate) fn trace(&self) -> u32 {
         self.world.resource::<Trace>().0
+    }
+
+    pub(crate) fn trace_band(&self) -> TraceBand {
+        TraceBand::from_trace(self.trace())
+    }
+
+    /// Scales `STACK_ENCOUNTER_CHANCE` at the roll in `maybe_stack_encounter`.
+    pub(crate) fn trace_encounter_mult(&self) -> f64 {
+        TRACE_ENCOUNTER_MULT[self.trace_band().index()]
+    }
+
+    /// Folded into `Game::stack_depth_multiplier`, which is why it reaches
+    /// the lair guardian as well as ambushes — those are its only two
+    /// callers, so there is no second path to drift out of sync.
+    pub(crate) fn trace_stat_mult(&self) -> f32 {
+        TRACE_STAT_MULT[self.trace_band().index()]
+    }
+
+    /// Handed to `spawn_pack` as an argument, never read inside it. See
+    /// `trace_group_ceiling` and `spawn_pack`'s own doc for the leak that
+    /// rule exists to prevent.
+    pub(crate) fn trace_group_mult(&self) -> u32 {
+        TRACE_GROUP_MULT[self.trace_band().index()]
     }
 
     /// The one way Trace goes up, and the only place that knows a band was

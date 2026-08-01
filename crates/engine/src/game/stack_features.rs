@@ -182,7 +182,8 @@ impl Game {
             return;
         };
         let depth_mult = self.stack_depth_multiplier();
-        let pack = self.spawn_pack(&species, is_boss, ex, ey, depth_mult);
+        let group_mult = self.trace_group_mult();
+        let pack = self.spawn_pack(&species, is_boss, ex, ey, depth_mult, group_mult);
         if pack.is_empty() {
             return;
         }

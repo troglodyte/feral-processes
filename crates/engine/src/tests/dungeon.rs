@@ -639,7 +639,7 @@ fn a_new_zone_is_seeded_with_dungeon_entrances() {
         .iter_entities()
         .filter(|e| e.contains::<SurfaceLink>())
         .count();
-    assert_eq!(entrances, crate::tuning::STACK_ENTRANCES_PER_ZONE);
+    assert_eq!(entrances, crate::tuning::STACK_LINKS_PER_ZONE);
 }
 
 #[test]
@@ -693,7 +693,7 @@ fn breaching_with_a_base_never_opens_a_breach_inside_the_platform() {
 /// so walking onto it attacks the nest forever. Nests are placed first in
 /// both `Game::new` and `enter_next_zone`, which leaves the placement
 /// filter as the only thing that can keep the two apart — and the breach
-/// this eats may be the near one `STACK_NEAREST_ENTRANCE_TILES` exists
+/// this eats may be the near one `STACK_NEAREST_LINK_TILES` exists
 /// to guarantee.
 #[test]
 fn no_entrance_opens_on_top_of_a_nest() {
@@ -722,7 +722,7 @@ fn no_entrance_opens_on_top_of_a_nest() {
             y: victim.1,
         },
     ));
-    game.spawn_surface_links(crate::tuning::STACK_ENTRANCES_PER_ZONE);
+    game.spawn_surface_links(crate::tuning::STACK_LINKS_PER_ZONE);
 
     assert!(
         !entrance_tiles(&mut game).contains(&victim),
@@ -1117,7 +1117,7 @@ fn a_level_hides_caches_in_its_dead_ends() {
         .flat_map(|y| (0..level.width).map(move |x| (x, y)))
         .filter(|&(x, y)| level.cell(x, y) == CellKind::Cache)
         .collect();
-    assert_eq!(caches.len(), crate::tuning::STACK_CACHES_PER_LEVEL);
+    assert_eq!(caches.len(), crate::tuning::STACK_CACHES_PER_FRAME);
     for (x, y) in caches {
         let exits = [(0, -1), (1, 0), (0, 1), (-1, 0)]
             .iter()
@@ -1708,7 +1708,7 @@ fn a_level_hangs_doorways_in_corridors_not_junctions() {
         .filter(|&(x, y)| level.cell(x, y) == CellKind::Door)
         .collect();
     assert!(!doors.is_empty(), "the level hung no doorways at all");
-    assert!(doors.len() <= crate::tuning::STACK_DOORS_PER_LEVEL);
+    assert!(doors.len() <= crate::tuning::STACK_DOORS_PER_FRAME);
 
     for (x, y) in doors {
         let vertical = level.walkable(x, y - 1) && level.walkable(x, y + 1);
@@ -1886,7 +1886,7 @@ fn seeding_a_zones_entrances_does_not_disturb_the_shared_rng_stream() {
     };
 
     let mut fresh = game();
-    fresh.spawn_surface_links(crate::tuning::STACK_ENTRANCES_PER_ZONE);
+    fresh.spawn_surface_links(crate::tuning::STACK_LINKS_PER_ZONE);
     let after: Vec<u32> = {
         let mut rng = fresh.world.resource_mut::<GameRng>();
         (0..8).map(|_| rng.0.random_range(0..1_000_000)).collect()
@@ -2037,7 +2037,7 @@ fn a_breach_leaves_the_previous_sectors_entrances_behind() {
     let after = entrance_tiles(&mut game);
     assert_eq!(
         after.len(),
-        crate::tuning::STACK_ENTRANCES_PER_ZONE,
+        crate::tuning::STACK_LINKS_PER_ZONE,
         "the new sector should hold its own breaches and no more — old ones rode the breach"
     );
     assert_ne!(before, after, "the new sector needs its own breaches");
@@ -2054,7 +2054,7 @@ fn no_breach_opens_on_top_of_the_player_or_within_a_step_of_them() {
         for (x, y) in entrance_tiles(&mut game) {
             let distance = (x - origin.x).abs().max((y - origin.y).abs());
             assert!(
-                distance >= crate::tuning::STACK_MIN_ENTRANCE_TILES,
+                distance >= crate::tuning::STACK_MIN_LINK_TILES,
                 "seed {seed}: breach at ({x}, {y}) is {distance} tiles from the player"
             );
         }

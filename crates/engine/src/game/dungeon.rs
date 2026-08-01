@@ -9,8 +9,8 @@
 use crate::dungeon::{self, CellKind, Dir};
 use crate::resources::{CurrentStack, Locale};
 use crate::tuning::{
-    STACK_DEPTH_STAT_GROWTH, STACK_ENCOUNTER_CHANCE, STACK_ENTRANCE_SCATTER_TILES,
-    STACK_FRAMES_MAX, STACK_FRAMES_MIN, STACK_MIN_ENTRANCE_TILES, STACK_NEAREST_ENTRANCE_TILES,
+    STACK_DEPTH_STAT_GROWTH, STACK_ENCOUNTER_CHANCE, STACK_FRAMES_MAX, STACK_FRAMES_MIN,
+    STACK_LINK_SCATTER_TILES, STACK_MIN_LINK_TILES, STACK_NEAREST_LINK_TILES,
     STACK_TILES_PER_FRAME,
 };
 use crate::*;
@@ -81,7 +81,7 @@ impl Game {
             .map(|(e, _)| e)
     }
 
-    /// Spawns `STACK_ENTRANCES_PER_ZONE` breaches scattered around the
+    /// Spawns `STACK_LINKS_PER_ZONE` breaches scattered around the
     /// player's arrival point, on walkable ground outside the base platform.
     /// Called once per zone, alongside `spawn_initial_creatures`.
     ///
@@ -112,17 +112,17 @@ impl Game {
         while placed < count && attempts < count * 40 {
             attempts += 1;
             // The first one lands inside the opening viewport; the rest
-            // scatter. See `STACK_NEAREST_ENTRANCE_TILES`.
+            // scatter. See `STACK_NEAREST_LINK_TILES`.
             let reach = if placed == 0 {
-                STACK_NEAREST_ENTRANCE_TILES
+                STACK_NEAREST_LINK_TILES
             } else {
-                STACK_ENTRANCE_SCATTER_TILES
+                STACK_LINK_SCATTER_TILES
             };
             let (dx, dy) = (
                 rng.random_range(-reach..=reach),
                 rng.random_range(-reach..=reach),
             );
-            if dx.abs().max(dy.abs()) < STACK_MIN_ENTRANCE_TILES {
+            if dx.abs().max(dy.abs()) < STACK_MIN_LINK_TILES {
                 continue;
             }
             let (x, y) = (origin.x + dx, origin.y + dy);

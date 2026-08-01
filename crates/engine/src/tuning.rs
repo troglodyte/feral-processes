@@ -395,38 +395,38 @@ pub const INITIAL_WILD_POPULATION: usize = 14;
 /// the player has a base, since nothing can spawn on platform floor.
 pub const INITIAL_SPAWN_SCATTER_TILES: i32 = 15;
 
-/// How many dungeon entrances a zone is seeded with — see
-/// `Game::spawn_surface_links`. Deliberately few: an entrance is
+/// How many dungeon links a zone is seeded with — see
+/// `Game::spawn_surface_links`. Deliberately few: a link is
 /// something you go looking for, and one on every corner would make the
 /// zone map a lobby rather than a place.
-pub const STACK_ENTRANCES_PER_ZONE: usize = 3;
+pub const STACK_LINKS_PER_ZONE: usize = 3;
 
-/// How far from the player's arrival point a zone's dungeon entrances
+/// How far from the player's arrival point a zone's dungeon links
 /// scatter. Wider than `INITIAL_SPAWN_SCATTER_TILES` so finding one is a
-/// trip rather than a glance, and so an entrance never lands under the base
+/// trip rather than a glance, and so a link never lands under the base
 /// platform the player is standing on.
-pub const STACK_ENTRANCE_SCATTER_TILES: i32 = 40;
+pub const STACK_LINK_SCATTER_TILES: i32 = 40;
 
-/// How close the *first* entrance of a zone is placed.
+/// How close the *first* link of a zone is placed.
 ///
 /// Measured against the map viewport rather than picked for feel: at the
 /// default zoom the pane shows roughly ±16 by ±9 tiles, so anything past
-/// this is off screen when the player materializes. With all three entrances
-/// scattered to `STACK_ENTRANCE_SCATTER_TILES`, most seeds put every one
+/// this is off screen when the player materializes. With all three links
+/// scattered to `STACK_LINK_SCATTER_TILES`, most seeds put every one
 /// of them out of sight, and a player with no reason to think breaches exist
 /// has no reason to go looking. One always within the opening view is the
 /// on-ramp; the other two are still a trip.
-pub const STACK_NEAREST_ENTRANCE_TILES: i32 = 8;
+pub const STACK_NEAREST_LINK_TILES: i32 = 8;
 
 /// How close a breach may get to where the player materializes.
 ///
-/// Without a floor, `STACK_NEAREST_ENTRANCE_TILES` can put one on the
+/// Without a floor, `STACK_NEAREST_LINK_TILES` can put one on the
 /// arrival tile itself — the player starts standing on a breach — or one
 /// step from it, so the first movement key of the run drops them into a
 /// dungeon they never chose to enter. It also keeps breaches off the tiles a
 /// base's first few structures go on, which would otherwise be refused with
 /// "there's a breach here" for no reason the player could have foreseen.
-pub const STACK_MIN_ENTRANCE_TILES: i32 = 5;
+pub const STACK_MIN_LINK_TILES: i32 = 5;
 
 /// How many frames the shallowest breach runs before bottoming out.
 ///
@@ -449,25 +449,25 @@ pub const STACK_FRAMES_MAX: u32 = 6;
 /// (`Game::distance_stat_multiplier`), so the two agree instead of pulling
 /// against each other: a far breach is deeper *and* fields harder programs,
 /// and the player can read both off how long the walk there was. With
-/// `STACK_ENTRANCE_SCATTER_TILES` at 40, this puts the outermost breaches
+/// `STACK_LINK_SCATTER_TILES` at 40, this puts the outermost breaches
 /// at the cap.
 pub const STACK_TILES_PER_FRAME: i32 = 8;
 
-/// How many caches a dungeon level hides — see `dungeon::place_caches`,
+/// How many caches a dungeon frame hides — see `dungeon::place_caches`,
 /// which puts them in the dead ends the braid pass left behind.
 ///
 /// A reward rate, so it lives here rather than beside the generator with
 /// `BRAID_PERCENT`: how *many* is balance, where *dead ends specifically* is
 /// the shape of the content.
-pub const STACK_CACHES_PER_LEVEL: usize = 3;
+pub const STACK_CACHES_PER_FRAME: usize = 3;
 
-/// How many plain doorways a dungeon level hangs — see
+/// How many plain doorways a dungeon frame hangs — see
 /// `dungeon::place_doors`.
 ///
 /// Presentation as much as balance: a door blocks the view cone, so it turns
-/// a corridor into a decision. Enough to break up a level, few enough that
+/// a corridor into a decision. Enough to break up a frame, few enough that
 /// the maze doesn't read as a series of closed boxes.
-pub const STACK_DOORS_PER_LEVEL: usize = 4;
+pub const STACK_DOORS_PER_FRAME: usize = 4;
 
 /// Credits a cache holds at depth 1, before `STACK_CACHE_DEPTH_GROWTH`.
 ///

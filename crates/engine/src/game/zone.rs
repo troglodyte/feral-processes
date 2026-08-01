@@ -2,9 +2,7 @@
 //! stamping the base platform, and stepping through a portal to the next
 //! zone.
 
-use crate::tuning::{
-    INITIAL_WILD_POPULATION, MAX_BUILD_DISTANCE_FROM_HOME, STACK_ENTRANCES_PER_ZONE,
-};
+use crate::tuning::{INITIAL_WILD_POPULATION, MAX_BUILD_DISTANCE_FROM_HOME, STACK_LINKS_PER_ZONE};
 use crate::*;
 
 impl Game {
@@ -385,7 +383,7 @@ impl Game {
             ));
         }
         self.spawn_initial_creatures(INITIAL_WILD_POPULATION);
-        self.spawn_surface_links(STACK_ENTRANCES_PER_ZONE);
+        self.spawn_surface_links(STACK_LINKS_PER_ZONE);
     }
 
     /// Breaches forward until the party is standing in `zone`, for the

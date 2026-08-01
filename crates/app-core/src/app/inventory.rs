@@ -14,6 +14,21 @@ impl App {
         let Some(game) = &self.game else { return };
         let inventory = game.player_status().inventory;
         let total = 3 + inventory.len();
+
+        // Sell one of the highlighted item without the item-action page,
+        // the trader picker and the quantity page in between. The three
+        // equipment slot rows come first, so only rows past them are items.
+        if key == GameKey::Char('S') {
+            let item = inventory
+                .get(self.menu_selected.saturating_sub(3))
+                .filter(|_| self.menu_selected >= 3)
+                .map(|(item, _)| item.clone());
+            if let Some(item) = item {
+                self.quick_sell_from_inventory(item);
+            }
+            return;
+        }
+
         let Some(idx) = self.selected_index(key, total) else {
             return;
         };
@@ -34,6 +49,33 @@ impl App {
         if let Some((item, _)) = inventory.get(idx - 3) {
             self.pending_inventory_item = Some(item.clone());
             self.mode = Mode::InventoryItemAction;
+        }
+    }
+
+    /// Sells one `item` to the trader in range, or asks which one.
+    ///
+    /// Two traders is a question this key cannot answer — their buyback
+    /// shelves are separate, so which shop you sell to decides where the
+    /// goods can be bought back. Rather than pick a shop on the player's
+    /// behalf it opens the existing picker with the item already decided,
+    /// which is the `TradeOrigin::Inventory` path.
+    fn quick_sell_from_inventory(&mut self, item: ItemId) {
+        let Some(game) = &mut self.game else { return };
+        let traders = traders_in_range(game);
+        match traders.as_slice() {
+            [] => {
+                self.status_line =
+                    Some("Nothing in range buys anything. Find a trading post.".to_string())
+            }
+            [only] => {
+                let structure = *only;
+                self.execute_trade(structure, TradeChoice::Sell(item), 1);
+            }
+            _ => {
+                self.pending_trade_choice = Some(TradeChoice::Sell(item));
+                self.trade_origin = TradeOrigin::Inventory;
+                self.mode = Mode::Trade;
+            }
         }
     }
 

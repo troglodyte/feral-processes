@@ -194,7 +194,7 @@ impl App {
     /// traded is decided once, by `Game`. A quick key that re-checked the
     /// rules itself would be a second copy of them, and the copy that
     /// drifts is the one nobody runs.
-    fn execute_trade(&mut self, structure: Entity, choice: TradeChoice, qty: u32) {
+    pub(crate) fn execute_trade(&mut self, structure: Entity, choice: TradeChoice, qty: u32) {
         let Some(game) = &mut self.game else { return };
         let result = match choice {
             TradeChoice::Sell(item) => game.sell_item(structure, item, qty),

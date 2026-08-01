@@ -313,3 +313,55 @@ fn capital_s_on_a_program_row_still_asks_for_confirmation() {
         "the program is alive until the confirmation is answered"
     );
 }
+
+/// `S` in the pack sells one to the trader in range, skipping the item
+/// action page, the trader picker and the quantity page.
+#[test]
+fn capital_s_in_the_inventory_sells_one_to_the_only_trader_in_range() {
+    let mut app = app_at_a_trading_post(943, &[(ids::CORE_FRAGMENT, 5)]);
+    app.mode = Mode::Inventory;
+    // Three equipment slot rows come before the pack.
+    app.menu_selected = 3;
+
+    app.handle_key(GameKey::Char('S'));
+
+    assert_eq!(held(&app, ids::CORE_FRAGMENT), 4);
+    assert_eq!(app.mode, Mode::Inventory, "you stay in your pack");
+}
+
+/// With nowhere to sell, `[S]ell` is not offered on the action page either
+/// — so the quick key says so rather than silently doing nothing.
+#[test]
+fn capital_s_in_the_inventory_needs_a_trader_in_range() {
+    let mut app = test_app(944);
+    app.mode = Mode::Inventory;
+    app.menu_selected = 3;
+
+    app.handle_key(GameKey::Char('S'));
+
+    assert_eq!(app.mode, Mode::Inventory);
+    assert!(
+        app.status_line.is_some(),
+        "a key that did nothing must say why"
+    );
+}
+
+/// Two traders is a question the key cannot answer, so it asks instead of
+/// picking a shop for you — the existing picker, with the item already
+/// decided.
+#[test]
+fn capital_s_with_two_traders_in_range_asks_which_one() {
+    let mut app = app_at_trading_posts(945, &[(ids::CORE_FRAGMENT, 5)], 2);
+    app.mode = Mode::Inventory;
+    app.menu_selected = 3;
+
+    app.handle_key(GameKey::Char('S'));
+
+    assert_eq!(app.mode, Mode::Trade, "the trader picker opens");
+    assert!(
+        matches!(&app.pending_trade_choice, Some(TradeChoice::Sell(item))
+            if item.as_str() == ids::CORE_FRAGMENT),
+        "the item is already decided; only the shop is in question"
+    );
+    assert_eq!(held(&app, ids::CORE_FRAGMENT), 5, "nothing sold yet");
+}

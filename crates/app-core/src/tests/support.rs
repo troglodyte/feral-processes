@@ -147,6 +147,12 @@ pub(crate) fn app_owning_a_program_and_a_compiler(seed: u32, routines: &[&str]) 
 /// post through the build flow needs a Home, build clearance and 16 Core
 /// Fragments, and the player starts with 5.
 pub(crate) fn app_at_a_trading_post(seed: u32, inventory: &[(&str, u32)]) -> App {
+    app_at_trading_posts(seed, inventory, 1)
+}
+
+/// `app_at_a_trading_post` with `posts` traders in range instead of one —
+/// the case where "sell this" is no longer a complete instruction.
+pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: i32) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
     let path = scratch_path("market", seed);
@@ -183,13 +189,17 @@ pub(crate) fn app_at_a_trading_post(seed: u32, inventory: &[(&str, u32)]) -> App
         routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
         field_buffs: Vec::new(),
     });
-    data.structures.push(save::StructureSave {
-        kind: "market".to_string(),
-        position: (px + 1, py),
-        resource_amount: None,
-        durability: None,
-        tier: None,
-    });
+    for n in 0..posts {
+        data.structures.push(save::StructureSave {
+            kind: "market".to_string(),
+            // Spread along -y so none lands on the player, the program at
+            // `px + 2` or each other.
+            position: (px + 1, py - n),
+            resource_amount: None,
+            durability: None,
+            tier: None,
+        });
+    }
     save::save_to_file(&path, &data).unwrap();
 
     app.game = Game::load(&path, &assets_dir).ok();

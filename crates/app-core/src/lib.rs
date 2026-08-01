@@ -65,9 +65,20 @@ pub fn menu_shortcut(index: usize) -> char {
 /// reach from a menu — the same scan `Mode::Trade`'s picker runs, so the
 /// two can't disagree about whether selling is possible.
 pub fn trader_in_range(game: &mut Game) -> bool {
+    !traders_in_range(game).is_empty()
+}
+
+/// Every trading post the player could reach from here, in the order
+/// `Mode::Trade`'s picker lists them. The quick-sell key needs to know
+/// whether there is exactly one, not merely whether there is any — and
+/// asking the same scan the picker runs is what keeps "the only trader in
+/// range" meaning the trader the picker would have offered.
+pub fn traders_in_range(game: &mut Game) -> Vec<Entity> {
     game.view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
         .into_iter()
-        .any(|e| e.can_trade)
+        .filter(|e| e.can_trade)
+        .map(|e| e.entity)
+        .collect()
 }
 
 /// `[S]ell` is the one action gated on the world rather than the item: it

@@ -451,9 +451,7 @@ mod tests {
     /// (`every_checked_in_template_still_loads` enumerates every template
     /// and parses it), but this test still earns its place: it lives in the
     /// crate that owns `SaveData`, so `cargo test -p feral-processes-engine`
-    /// catches RON-key drift without building the launcher, and it is a bare
-    /// parse, so a failure here names the field mismatch directly instead of
-    /// surfacing as the launcher's more generic "template does not load".
+    /// catches RON-key drift without building the launcher.
     #[test]
     fn the_extraction_template_parses_into_save_data() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../dev-saves/extraction.ron");

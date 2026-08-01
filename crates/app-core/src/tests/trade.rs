@@ -262,6 +262,40 @@ fn capital_s_sells_one_unit_from_the_highlighted_row() {
     assert_eq!(held(&app, ids::CORE_FRAGMENT), 3, "presses accumulate");
 }
 
+/// `S`'s mirror on the trader's own stock. The pack is stocked with the
+/// item being bought so the sell section keeps its length across the
+/// purchase — otherwise the new stack would open a sell row and shift every
+/// buy row down under the player's highlight.
+#[test]
+fn capital_b_buys_one_unit_from_the_highlighted_row() {
+    let mut app = app_at_a_trading_post(946, &[(ids::CREDITS, 500), (ids::POWER_CELL, 1)]);
+    open_the_trading_post(&mut app);
+    let structure = app.pending_trade_structure.unwrap();
+    let buy = app
+        .game
+        .as_mut()
+        .unwrap()
+        .trade_options(structure)
+        .unwrap()
+        .buy;
+    let offered = buy
+        .iter()
+        .position(|(item, _)| item.as_str() == ids::POWER_CELL)
+        .expect("the Black Market stocks Power Cells");
+    // One sell row: Credits are filtered out of the sell list, leaving the
+    // Power Cells.
+    app.menu_selected = 1 + offered;
+
+    app.handle_key(GameKey::Char('B'));
+
+    assert_eq!(held(&app, ids::POWER_CELL), 2, "exactly one unit moves");
+    assert!(held(&app, ids::CREDITS) < 500, "and was paid for");
+    assert_eq!(app.mode, Mode::TradeAction, "the visit continues");
+
+    app.handle_key(GameKey::Char('B'));
+    assert_eq!(held(&app, ids::POWER_CELL), 3, "presses accumulate");
+}
+
 /// Each row is either a sell or a buy, so the wrong key for a row is a
 /// mis-hit. It says so rather than guessing which one you meant.
 #[test]
@@ -343,6 +377,35 @@ fn capital_s_in_the_inventory_needs_a_trader_in_range() {
     assert!(
         app.status_line.is_some(),
         "a key that did nothing must say why"
+    );
+}
+
+/// The quick key carries no rules of its own about what may be sold — it
+/// calls `Game::sell_item` and surfaces whatever comes back. The trade
+/// screen filters the currency out of its sell list, but the pack lists
+/// everything, so this is the row that proves it. A second copy of the rule
+/// here is the copy that would drift.
+#[test]
+fn capital_s_on_the_currency_is_refused_by_the_engine() {
+    let mut app = app_at_a_trading_post(947, &[(ids::CREDITS, 4), (ids::CORE_FRAGMENT, 5)]);
+    app.mode = Mode::Inventory;
+    let inventory = app.game.as_ref().unwrap().player_status().inventory;
+    let row = inventory
+        .iter()
+        .position(|(item, _)| item.as_str() == ids::CREDITS)
+        .expect("the pack was stocked with Credits");
+    // Three equipment slot rows come before the pack.
+    app.menu_selected = 3 + row;
+
+    app.handle_key(GameKey::Char('S'));
+
+    assert_eq!(held(&app, ids::CREDITS), 4, "the money is not merchandise");
+    assert_eq!(app.mode, Mode::Inventory);
+    assert!(
+        app.status_line
+            .as_ref()
+            .is_some_and(|line| line.contains("Credits")),
+        "the engine's own refusal is what reaches the player"
     );
 }
 

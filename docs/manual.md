@@ -179,8 +179,24 @@ the bottom of each stack, and each one costs an Access Shard to open — shards
 come out of caches. Killing what holds the lair clears that stack for good;
 jacking out leaves it waiting.
 
+Three more kinds of cell turn up in the floor:
+
+- **Breakpoints** (`*`) sit on junctions — one per frame, working once. Walk
+  onto one and the entire frame maps itself, walls and all, saving you the
+  walk. It is also the loudest thing in the game: the Trace it costs is two
+  and a half caches' worth, so it is a trade rather than a gift.
+- **Faults** (`v`) are holes. Walk onto one and you drop to the next frame
+  down, landing in its far half rather than at its way up — quick to
+  descend by, slow to climb back from. A bottom frame has none, having
+  nothing below it, and falling raises no Trace.
+- **Corruption** is rotten ground, drawn as a coloured stretch rather than a
+  glyph because it comes in runs of three cells. Every step through it costs
+  you a slice of your maximum Integrity. Going round costs steps; going
+  through costs health, and which is cheaper is the point.
+
 **Trace** is the stack noticing you. It rises when you crack a cache, burn a
-seal, or kill something — taking, not walking — and the heading above the
+seal, jack into a breakpoint, or kill something — taking, not walking — and
+the heading above the
 corridor reads it back as a band: **Quiet**, **Noticed**, **Traced**,
 **Hunted**. Each step up draws intrusions more often, scales what arrives,
 and lets more of it arrive at once, and the lair guardian is scaled by your
@@ -191,9 +207,9 @@ whether to press on, not to be played up to a threshold. Walking costs
 nothing, so mapping a frame thoroughly is free and stripping it is not.
 
 Trace clears the moment you surface, by either route — the link or a
-symlink. That is not a free reset: caches, seals and lairs are one-shot per
-stack, so a trip up to shed a band means returning to a stack with less left
-in it. The one thing that does survive is the guardian, who waits at
+symlink. That is not a free reset: caches, seals, breakpoints and lairs are
+one-shot per stack, so a trip up to shed a band means returning to a stack
+with less left in it. The one thing that does survive is the guardian, who waits at
 whatever band you come back down at.
 
 `g` opens the **map** — the same key that scans the ground on the surface,

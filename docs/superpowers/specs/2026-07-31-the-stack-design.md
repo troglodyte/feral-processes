@@ -17,7 +17,7 @@ that does not exist yet goes stale.
 | --- | --- | --- | --- | --- |
 | 1 | **The rename** — Stack, frames, links | ✅ **done**, merged `1ffa7ca` | no | engine, app-core, gui |
 | 2 | **Trace** — greed-driven pressure, escalating ambushes | ✅ **built** 2026-08-01, unplaytested | **yes** (15 → 16) | engine, gui |
-| 3 | **Cell kinds** — breakpoint, fault, corruption | 🔨 designed 2026-08-01, building | **yes** (16 → 17) | engine, gui |
+| 3 | **Cell kinds** — breakpoint, fault, corruption | ✅ **built** 2026-08-01, unplaytested — merge gated on a crawl | **yes** (16 → 17) | engine, gui |
 | 4 | **Inhabitants** — orphaned process, derelict trader, crash log | not started | **yes** | engine, gui, assets |
 | 5 | **Corner map inset** | not started | no | gui only |
 

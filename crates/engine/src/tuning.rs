@@ -469,6 +469,45 @@ pub const STACK_CACHES_PER_FRAME: usize = 3;
 /// the maze doesn't read as a series of closed boxes.
 pub const STACK_DOORS_PER_FRAME: usize = 4;
 
+/// How many breakpoints a Stack frame exposes — see
+/// `stack::place_breakpoint`, which puts them on junctions.
+///
+/// One. A breakpoint maps the entire frame, so the second one in a frame has
+/// nothing left to show you; more than one would only ever be a shorter walk
+/// to the same reward. `FrameMemory::jacked` is a set rather than a bool
+/// anyway, so raising this is a one-line change if playtest disagrees.
+pub const STACK_BREAKPOINTS_PER_FRAME: usize = 1;
+
+/// How many faults a Stack frame drops through — see `stack::place_faults`.
+///
+/// Never generated on the bottom frame, which has nothing below it, so the
+/// deepest frame of every stack has zero regardless of this number.
+pub const STACK_FAULTS_PER_FRAME: usize = 1;
+
+/// How many separate corrupted stretches a Stack frame grows, and how many
+/// cells each runs to — see `stack::place_corruption`.
+///
+/// Patches rather than scattered cells, and this is the whole point of the
+/// pair: a lone corrupted cell is a toll booth you pay and forget, where a
+/// stretch is something you can decide to walk around. Two patches of three
+/// against a frame of roughly a hundred walkable cells is sparse enough that
+/// most routes miss them entirely, which is what makes hitting one a
+/// decision rather than a tax.
+pub const STACK_CORRUPTION_PATCHES_PER_FRAME: usize = 2;
+pub const STACK_CORRUPTION_PATCH_CELLS: usize = 3;
+
+/// What one step onto corrupted substrate costs, as a fraction of the
+/// player's maximum HP, with `STACK_CORRUPTION_MIN_DAMAGE` as a floor.
+///
+/// A fraction rather than a flat figure, and rather than the depth scaling
+/// `STACK_CACHE_DEPTH_GROWTH` uses, because Stack depth is uncorrelated with
+/// player level: the party is 90 HP at level 1 (`PLAYER_BASE_STATS`) and
+/// around 510 by mid-run, so any flat number is lethal at one end and free at
+/// the other. At 3%, a three-cell patch costs about a tenth of the bar
+/// wherever the party is in the run.
+pub const STACK_CORRUPTION_HP_PERCENT: f32 = 0.03;
+pub const STACK_CORRUPTION_MIN_DAMAGE: i32 = 2;
+
 /// Credits a cache holds at depth 1, before `STACK_CACHE_DEPTH_GROWTH`.
 ///
 /// Credits rather than Core Fragments because a Stack run should pay for
@@ -546,6 +585,17 @@ pub const TRACE_PER_SEAL: u32 = 5;
 /// `STACK_ENCOUNTER_CHANCE`), so paying them near cache rates would make
 /// Trace a combat meter that feeds its own input.
 pub const TRACE_PER_KILL: u32 = 2;
+
+/// Trace for jacking into a breakpoint. **The single loudest thing the party
+/// can do**, at two and a half caches: a breakpoint hands over the whole
+/// frame's map at a stroke, and announcing yourself to the substrate is what
+/// it costs.
+///
+/// Priced against `TRACE_NOTICED` at 40 — one breakpoint plus two caches
+/// crosses the first band — so taking the free map is a decision about the
+/// rest of the frame rather than a reflex. Note that those thresholds are
+/// themselves unplayed, so this number rides on a guess and moves with it.
+pub const TRACE_PER_BREAKPOINT: u32 = 25;
 
 /// Where each band begins. Half-open: a value sitting exactly on a
 /// threshold is in the band it names.

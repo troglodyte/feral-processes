@@ -7,7 +7,10 @@
 
 use std::collections::VecDeque;
 
-use crate::tuning::{STACK_CACHES_PER_FRAME, STACK_DOORS_PER_FRAME};
+use crate::tuning::{
+    STACK_BREAKPOINTS_PER_FRAME, STACK_CACHES_PER_FRAME, STACK_CORRUPTION_PATCH_CELLS,
+    STACK_CORRUPTION_PATCHES_PER_FRAME, STACK_DOORS_PER_FRAME, STACK_FAULTS_PER_FRAME,
+};
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use serde::{Deserialize, Serialize};
@@ -278,9 +281,140 @@ pub fn generate(spec: FrameSpec) -> Frame {
         seal_the_lair(&mut level, far);
     }
     place_doors(&mut level, &mut rng);
+    // Phase 3's three, between the doors and the caches. Each takes its own
+    // kind of site — a junction, then open floor — and none takes a dead
+    // end, so `place_caches` still sees every dead end it would have seen
+    // without them. All three are walkable, so they don't change what
+    // `is_dead_end` reports either. See
+    // `the_new_passes_leave_the_cache_count_alone`.
+    place_breakpoint(&mut level, &mut rng);
+    if !spec.is_bottom() {
+        place_faults(&mut level, &mut rng);
+    }
+    place_corruption(&mut level, &mut rng);
     place_caches(&mut level, &mut rng);
 
     level
+}
+
+/// Collects every plain `Floor` cell matching `wanted`, shuffled.
+///
+/// Shared by the three phase-3 passes so each one is its predicate and
+/// nothing else. Fisher-Yates over a row-major scan, so which sites get
+/// picked is a function of the seed rather than of iteration order — the
+/// same guarantee `place_caches` and `place_doors` make, and the reason
+/// `the_same_spec_places_every_kind_identically` holds.
+fn shuffled_floor(
+    level: &Frame,
+    rng: &mut StdRng,
+    wanted: impl Fn(&Frame, i32, i32) -> bool,
+) -> Vec<(i32, i32)> {
+    let mut sites: Vec<(i32, i32)> = Vec::new();
+    for y in 1..level.height - 1 {
+        for x in 1..level.width - 1 {
+            if level.cell(x, y) == CellKind::Floor && wanted(level, x, y) {
+                sites.push((x, y));
+            }
+        }
+    }
+    for i in (1..sites.len()).rev() {
+        sites.swap(i, rng.random_range(0..=i));
+    }
+    sites
+}
+
+/// How many walkable neighbours a cell has.
+fn exits(level: &Frame, x: i32, y: i32) -> usize {
+    DIRS.into_iter()
+        .filter(|dir| {
+            let (dx, dy) = dir.delta();
+            level.walkable(x + dx, y + dy)
+        })
+        .count()
+}
+
+/// Puts the frame's breakpoint on a junction.
+///
+/// A junction rather than a dead end, which would have been the obvious home
+/// for something worth walking to: `place_caches` owns dead ends, and taking
+/// one would cost the frame a cache. A hub also reads better for a thing
+/// that is exposed infrastructure rather than someone's stashed loot.
+///
+/// Falls back to nothing at all if the braid left no junction — a frame with
+/// no breakpoint is a frame you map on foot, which is the game as it was.
+fn place_breakpoint(level: &mut Frame, rng: &mut StdRng) {
+    let sites = shuffled_floor(level, rng, |l, x, y| exits(l, x, y) >= 3);
+    for &(x, y) in sites.iter().take(STACK_BREAKPOINTS_PER_FRAME) {
+        level.set(x, y, CellKind::Breakpoint);
+    }
+}
+
+/// Drops holes through the floor, on open corridor rather than in dead ends.
+///
+/// Never called on the bottom frame — see `generate`. A dead end is excluded
+/// for the same reason `place_breakpoint` avoids one: those belong to caches.
+fn place_faults(level: &mut Frame, rng: &mut StdRng) {
+    let sites = shuffled_floor(level, rng, |l, x, y| !is_dead_end(l, x, y));
+    for &(x, y) in sites.iter().take(STACK_FAULTS_PER_FRAME) {
+        level.set(x, y, CellKind::Fault);
+    }
+}
+
+/// Grows `STACK_CORRUPTION_PATCHES_PER_FRAME` stretches of rotten substrate,
+/// each `STACK_CORRUPTION_PATCH_CELLS` long.
+///
+/// Contiguous, and that is the entire point rather than a detail of how it
+/// is written: a single corrupted cell is a toll you pay without a decision,
+/// where a stretch of three is something a player can look at and route
+/// around. See `corruption_arrives_in_contiguous_patches`.
+///
+/// Each patch is a seed cell plus a walk along plain-floor neighbours,
+/// preferring the neighbour the shuffled order offers first. A patch that
+/// runs out of room short of its full length is abandoned whole rather than
+/// left stunted, so the count test means what it says.
+fn place_corruption(level: &mut Frame, rng: &mut StdRng) {
+    let seeds = shuffled_floor(level, rng, |l, x, y| !is_dead_end(l, x, y));
+
+    let mut grown = 0;
+    for &seed in &seeds {
+        if grown == STACK_CORRUPTION_PATCHES_PER_FRAME {
+            break;
+        }
+        // Re-checked because an earlier patch may have grown over this seed.
+        if level.cell(seed.0, seed.1) != CellKind::Floor {
+            continue;
+        }
+
+        let mut patch = vec![seed];
+        while patch.len() < STACK_CORRUPTION_PATCH_CELLS {
+            let mut order = DIRS;
+            for i in (1..order.len()).rev() {
+                order.swap(i, rng.random_range(0..=i));
+            }
+            let next = patch.iter().find_map(|&(x, y)| {
+                order.iter().find_map(|dir| {
+                    let (dx, dy) = dir.delta();
+                    let cell = (x + dx, y + dy);
+                    let free = level.cell(cell.0, cell.1) == CellKind::Floor
+                        && !patch.contains(&cell)
+                        && !is_dead_end(level, cell.0, cell.1);
+                    free.then_some(cell)
+                })
+            });
+            match next {
+                Some(cell) => patch.push(cell),
+                // Boxed in. Abandon this patch rather than ship a short one.
+                None => break,
+            }
+        }
+        if patch.len() < STACK_CORRUPTION_PATCH_CELLS {
+            continue;
+        }
+        for (x, y) in patch {
+            level.set(x, y, CellKind::Corruption);
+        }
+        grown += 1;
+    }
 }
 
 /// Walls the lair off behind sealed doors.
@@ -664,6 +798,167 @@ mod tests {
             assert!(
                 !level.walkable(level.width - 1, i),
                 "right edge leaks at {i}"
+            );
+        }
+    }
+
+    fn cells_of(level: &Frame, kind: CellKind) -> Vec<(i32, i32)> {
+        let mut out = Vec::new();
+        for y in 0..level.height {
+            for x in 0..level.width {
+                if level.cell(x, y) == kind {
+                    out.push((x, y));
+                }
+            }
+        }
+        out
+    }
+
+    /// Every cell of the frame, so determinism can be asserted on the whole
+    /// grid rather than only on which cells are walkable. `floors` was
+    /// enough while every walkable cell was interchangeable; with three new
+    /// kinds it would pass while two frames disagreed about all of them.
+    fn grid(level: &Frame) -> Vec<CellKind> {
+        (0..level.height)
+            .flat_map(|y| (0..level.width).map(move |x| (x, y)))
+            .map(|(x, y)| level.cell(x, y))
+            .collect()
+    }
+
+    #[test]
+    fn each_new_kind_generates_within_its_tuning_count() {
+        for depth in 1..=5 {
+            let level = generate(spec(31, depth));
+            assert_eq!(
+                cells_of(&level, CellKind::Breakpoint).len(),
+                STACK_BREAKPOINTS_PER_FRAME,
+                "depth {depth} breakpoints"
+            );
+            assert_eq!(
+                cells_of(&level, CellKind::Fault).len(),
+                STACK_FAULTS_PER_FRAME,
+                "depth {depth} faults"
+            );
+            assert_eq!(
+                cells_of(&level, CellKind::Corruption).len(),
+                STACK_CORRUPTION_PATCHES_PER_FRAME * STACK_CORRUPTION_PATCH_CELLS,
+                "depth {depth} corruption"
+            );
+        }
+    }
+
+    /// The whole-grid version of `the_same_spec_yields_an_identical_frame`.
+    /// Placement drawing from `GameRng` instead of the local stream would
+    /// pass that test and fail this one.
+    #[test]
+    fn the_same_spec_places_every_kind_identically() {
+        assert_eq!(grid(&generate(spec(88, 2))), grid(&generate(spec(88, 2))));
+    }
+
+    /// The claim the placement order rests on: each kind has its own site
+    /// type, so no new pass can pave over something that was already there.
+    #[test]
+    fn no_new_kind_lands_on_something_that_was_already_there() {
+        for depth in 1..=6 {
+            let level = generate(FrameSpec {
+                frames: 6,
+                ..spec(64, depth)
+            });
+            let taken: Vec<(i32, i32)> = [
+                CellKind::Cache,
+                CellKind::Lair,
+                CellKind::LinkUp,
+                CellKind::LinkDown,
+                CellKind::Door,
+                CellKind::SealedDoor,
+            ]
+            .into_iter()
+            .flat_map(|k| cells_of(&level, k))
+            .collect();
+            for kind in [CellKind::Breakpoint, CellKind::Fault, CellKind::Corruption] {
+                for cell in cells_of(&level, kind) {
+                    assert!(
+                        !taken.contains(&cell),
+                        "depth {depth}: {kind:?} at {cell:?} paved over an existing feature"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Dead ends stay whole. The three new passes run *before* `place_caches`
+    /// and none of them takes a dead end, so the cache count is exactly what
+    /// it was before phase 3 existed — if a new pass started eating dead
+    /// ends, frames would quietly start shipping two caches instead of three.
+    #[test]
+    fn the_new_passes_leave_the_cache_count_alone() {
+        for depth in 1..=5 {
+            let level = generate(spec(17, depth));
+            assert_eq!(
+                cells_of(&level, CellKind::Cache).len(),
+                STACK_CACHES_PER_FRAME,
+                "depth {depth} lost a cache to one of the new passes"
+            );
+        }
+    }
+
+    /// A fault on the bottom frame would drop the party into nothing.
+    #[test]
+    fn the_bottom_frame_generates_no_faults() {
+        let level = generate(FrameSpec {
+            world_seed: 21,
+            entrance: (2, 2),
+            depth: 4,
+            frames: 4,
+        });
+        assert!(
+            cells_of(&level, CellKind::Fault).is_empty(),
+            "the bottom frame laid a hole down into nothing"
+        );
+    }
+
+    /// Corruption has to arrive as contiguous stretches, not as scattered
+    /// cells that merely happen to number six. A count test alone passes
+    /// either way, and the scattered version is a toll booth rather than the
+    /// routing decision this kind exists to create.
+    #[test]
+    fn corruption_arrives_in_contiguous_patches() {
+        let level = generate(spec(43, 3));
+        let cells = cells_of(&level, CellKind::Corruption);
+        assert!(!cells.is_empty(), "nothing to check");
+
+        // Flood-fill through corruption only; the patches it finds must each
+        // be the tuned size.
+        let mut unvisited = cells.clone();
+        let mut patches = Vec::new();
+        while let Some(start) = unvisited.pop() {
+            let mut patch = vec![start];
+            let mut queue = VecDeque::from([start]);
+            while let Some((x, y)) = queue.pop_front() {
+                for dir in DIRS {
+                    let (dx, dy) = dir.delta();
+                    let next = (x + dx, y + dy);
+                    if let Some(i) = unvisited.iter().position(|&c| c == next) {
+                        unvisited.remove(i);
+                        patch.push(next);
+                        queue.push_back(next);
+                    }
+                }
+            }
+            patches.push(patch);
+        }
+
+        assert_eq!(
+            patches.len(),
+            STACK_CORRUPTION_PATCHES_PER_FRAME,
+            "expected {STACK_CORRUPTION_PATCHES_PER_FRAME} patches, got {:?}",
+            patches.iter().map(|p| p.len()).collect::<Vec<_>>()
+        );
+        for patch in &patches {
+            assert_eq!(
+                patch.len(),
+                STACK_CORRUPTION_PATCH_CELLS,
+                "a patch came out the wrong size: {patch:?}"
             );
         }
     }

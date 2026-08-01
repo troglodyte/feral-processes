@@ -21,10 +21,14 @@ impl App {
                 let d = d as usize;
                 return (d >= 1 && d <= len).then_some(d - 1);
             }
-            if !c.is_ascii_alphabetic() {
+            // Lowercase only. Uppercase is reserved for screen actions —
+            // `S`/`B` quick-trade a single unit off the highlighted row —
+            // and a shifted letter that also picked a row would fire both
+            // on one keypress, on a screen where one of them spends money.
+            if !c.is_ascii_lowercase() {
                 return None;
             }
-            let idx = DIGIT_ROWS + (c.to_ascii_lowercase() as usize - 'a' as usize);
+            let idx = DIGIT_ROWS + (c as usize - 'a' as usize);
             return (idx < len).then_some(idx);
         }
         match key {

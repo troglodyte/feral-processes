@@ -233,3 +233,25 @@ fn inspecting_a_direction_still_lands_on_the_manifest() {
         "the inspected program is the manifest's subject"
     );
 }
+
+/// Uppercase is reserved for actions, so the trade screens can bind `S`
+/// and `B` to sell-one and buy-one without shadowing the rows those
+/// letters label. Lowercase keeps picking rows exactly as it did.
+#[test]
+fn uppercase_letters_pick_no_row() {
+    let mut app = test_app(922);
+    let len = 35;
+    for (lower, idx) in [('a', 9), ('b', 10), ('s', 27), ('z', 34)] {
+        assert_eq!(
+            app.selected_index(GameKey::Char(lower), len),
+            Some(idx),
+            "lowercase [{lower}] must still pick row {idx}"
+        );
+        assert_eq!(
+            app.selected_index(GameKey::Char(lower.to_ascii_uppercase()), len),
+            None,
+            "uppercase [{}] must be free for an action",
+            lower.to_ascii_uppercase()
+        );
+    }
+}

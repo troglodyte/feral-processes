@@ -234,7 +234,7 @@ pub struct SaveData {
 /// and every save written under the old version stops loading. That's an
 /// intentional, simple tradeoff for a single-player game rather than
 /// building real schema migration.
-pub const SAVE_FORMAT_VERSION: u32 = 16;
+pub const SAVE_FORMAT_VERSION: u32 = 17;
 
 /// Renders a save as editable RON, for the `savetool` binary.
 ///
@@ -383,6 +383,7 @@ mod tests {
                 opened: Default::default(),
                 cleared: true,
                 fights: [(5, 5)].into_iter().collect(),
+                jacked: [(7, 2)].into_iter().collect(),
             },
         );
 

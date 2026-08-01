@@ -61,7 +61,6 @@ impl Game {
             return;
         }
         self.frame_memory_mut(pos).looted.insert((pos.x, pos.y));
-        self.raise_trace(TRACE_PER_CACHE);
 
         let depth_mult = STACK_CACHE_DEPTH_GROWTH.powi(pos.depth as i32 - 1);
         let credits = {
@@ -71,6 +70,10 @@ impl Game {
         let credits = ((credits as f32) * depth_mult).round() as u32;
 
         self.log_kind(MessageKind::Loot, "A cache, still sealed. You crack it.");
+        // After the line that says what was taken, so a band crossing reads
+        // as the consequence of cracking the cache rather than as something
+        // that happened first. `pass_seal` orders these the same way.
+        self.raise_trace(TRACE_PER_CACHE);
         let landed = self.grant_loot(self.trade_currency(), credits);
         if landed > 0 {
             self.log_kind(

@@ -500,6 +500,26 @@ Sense 1 — "breach" as the hole, becomes "link":
 Keep every `[>]` / `[<]` key hint verbatim — they name keyboard keys, not
 glyphs, and the keys are not changing.
 
+### Player-visible text that lives in `assets/`, not in Rust
+
+Found during Task 6. This project keeps item and structure descriptions in
+`.ron` deliberately, so a sweep of `--type rust` misses them entirely:
+
+- `assets/items/access_shard.ron` — the description says "opening one sealed
+  door in a dungeon" *and* "a shaft can hold more than one". Both senses, one
+  string, and it is the description the player reads on the item that opens
+  sealed doors.
+- `assets/items/README.md:134-135` — the `cache_drop` field's schema doc
+  describes "a dungeon cache" in "generated dungeon levels". CLAUDE.md
+  requires the `assets/*/README.md` files be updated in the same change
+  whenever a field's meaning or wording changes, and this is that.
+- `crates/gui/src/render/popup.rs:442` — a help/description string also
+  naming "a sealed door in a dungeon".
+
+Do not rename any `.ron` **field name** or **item id** — `access_shard` stays
+`access_shard`. Only the human-readable `description` text changes. An id is
+a save-and-recipe key, and mods depend on it.
+
 **Files:**
 - Modify: the seven engine and gui files listed above
 - Modify: `README.md` (the "Dungeons" section at line 51 and every "breach"

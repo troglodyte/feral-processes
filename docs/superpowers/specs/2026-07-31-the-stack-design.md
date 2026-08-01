@@ -9,14 +9,14 @@ mechanics; phase 5 is renderer-only.
 
 ## Status
 
-Updated 2026-07-31. Each phase gets its own plan, written when its
+Updated 2026-08-01. Each phase gets its own plan, written when its
 predecessor lands — not up front, since a plan written against vocabulary
 that does not exist yet goes stale.
 
 | # | Phase | State | Save bump | Crates |
 | --- | --- | --- | --- | --- |
 | 1 | **The rename** — Stack, frames, links | ✅ **done**, merged `1ffa7ca` | no | engine, app-core, gui |
-| 2 | **Trace** — greed-driven pressure, escalating ambushes | not started | **yes** | engine, app-core, gui |
+| 2 | **Trace** — greed-driven pressure, escalating ambushes | ✅ **built** 2026-08-01, unplaytested | **yes** (15 → 16) | engine, gui |
 | 3 | **Cell kinds** — breakpoint, fault, corruption | not started | **yes** | engine, gui |
 | 4 | **Inhabitants** — orphaned process, derelict trader, crash log | not started | **yes** | engine, gui, assets |
 | 5 | **Corner map inset** | not started | no | gui only |
@@ -27,14 +27,13 @@ amended six times mid-execution and those amendments are the useful part —
 they record where the plan was wrong, which is the same shape of error the
 later phases will make.
 
-### Open question carried into phase 2
+### Open question carried into phase 2 — resolved
 
-**Should phase 5 (the corner map) be pulled forward, ahead of Trace?** It is
-renderer-only, needs no engine or save change, and would make every later
-playtest better by having the map visible while you walk. The argument for
-leaving it last is unchanged: the shared glyph function it introduces gets
-written once the three new cell kinds exist, instead of being touched again
-in phase 3. Cost of reordering is roughly one match arm per kind. Undecided.
+**Should phase 5 (the corner map) be pulled forward, ahead of Trace?**
+**No** — decided 2026-08-01. It stays last, so the shared glyph function is
+written once against all three new cell kinds instead of being touched again
+in phase 3. The cost accepted in exchange is that every phase-2 playtest
+walks without a persistent map, hitting `g` for the full screen.
 
 ### What phase 1 did *not* change
 
@@ -46,9 +45,14 @@ before phase 5.
 ### Before building on phase 2
 
 The spec's closing note stands and is the most important line in this
-document: the Trace band thresholds and per-source gains are
-arithmetic-plausible and nothing more. Capture a `dev-saves/` template and
-actually play phase 2 before phases 3 and 4 are built on top of it.
+document, with one qualification earned on 2026-08-01. The per-source
+*ratios* are now grounded in a measured frame — a kill has to be worth far
+less than a cache, or the meter stops being about greed — but the **band
+thresholds are still arithmetic and nothing more**. Where the lines go is
+exactly the part no measurement can settle.
+
+Capture a `dev-saves/` template and actually play phase 2 before phases 3
+and 4 are built on top of it.
 
 ## Why
 
@@ -138,23 +142,64 @@ from "changed".
 
 A meter that rises with what you take, and escalates what comes for you.
 
+Designed 2026-08-01 against a measured frame. Four claims in the original
+sketch were wrong and are corrected below, each in place: where Trace
+lives, what "pack size through `depth_mult`" means, whether Hunted draws a
+boss, and how much a kill can be worth.
+
+### The measurement everything else follows from
+
+A frame is 21×21 with **~206 walkable cells, 3 caches, and seals only on
+the bottom frame** (2 of them, walling off the lair). The encounter roll is
+`STACK_ENCOUNTER_CHANCE` = 0.08 **per successful step, with no cooldown**
+(`game/stack.rs`, in `step`).
+
+So a thorough crawl of one frame is ~300 steps with backtracking, and
+therefore **~24 encounters against 3 caches**. That ratio is the phase's
+central design constraint:
+
+- If a kill is worth anything close to a cache, Trace is a **combat meter,
+  not a greed meter** — which inverts the load-bearing choice below.
+- Worse, it is a **runaway loop**: more Trace → more encounters → more
+  kills → more Trace.
+
+Two rules fall out, and the tuning table obeys both. **A kill is worth a
+fraction of a cache**, because it is the high-frequency source and so sets
+the floor rather than the ceiling. And **encounter chance gets the gentlest
+multiplier of the three**, because it is the only lever that feeds back
+into its own input; the teeth go into the stat multiplier, which feeds back
+into nothing.
+
+A seal is close to a non-source — two per stack, both on the bottom frame,
+so it will rarely fire before the lair. It is kept for completeness, at a
+gain that reflects being a genuine cost the player paid a shard for.
+
 ### Where it lives
 
-A `trace: f32` field on the `Locale::Stack` variant — not a free-standing
-resource.
+A **`Trace(u32)` resource**, cleared in `clear_stack`.
 
-Three reasons. It is genuinely part of where-you-are and how the place
-regards you. `clear_dungeon` drops it for free by dropping the whole
-variant, so there is exactly one place it can leak from. And it is saved,
-which it must be: without persistence, saving mid-dive is a free Trace
-reset — a far worse exploit than the retreat one below.
+Not a `trace: f32` field on the `Locale::Stack` variant, which is what this
+document originally specified on the reasoning that `clear_stack` would
+drop it for free along with the variant. That reasoning is right about the
+reset and wrong about the carry: **`descend_to` and `ascend_to` each
+construct a fresh `Locale::Stack` wholesale**, so a field on the variant is
+silently zeroed every time the party changes frame — precisely when Trace
+should be accumulating. A field would need two carry-forward sites that a
+future frame transition can forget; a resource needs zero, and resets in
+`clear_stack`, which CLAUDE.md already establishes as the single exit door
+that `use_symlink` goes *through* rather than around.
 
-**Bumps `SAVE_FORMAT_VERSION`.**
+`u32` rather than `f32`: exact band comparison, exact save bytes,
+deterministic tests, and no accumulated float error over a long dive.
+
+**Bumps `SAVE_FORMAT_VERSION` 15 → 16** for the new `SaveData` field.
+Persistence is not optional — without it, saving mid-dive is a free Trace
+reset, which is a far worse exploit than the priced one below.
 
 ### What raises it
 
 Taking, not walking. Cracking a cache, burning a seal, killing a hostile.
-Walking is nearly free.
+Walking is free.
 
 This is the load-bearing choice. A time-driven meter would tax exploration
 and map-making directly — rewarding the beeline and punishing the careful
@@ -162,37 +207,126 @@ player, which is backwards for a maze whose per-frame map memory exists
 precisely to reward learning it. A greed meter makes risk proportional to
 reward and leaves the crawl alone.
 
-### Why resetting on exit is safe
+Hook sites, one per source:
 
-Trace vanishes when you surface. That looks like it invites
-retreat-and-return as a free reset, and it does not: caches, seals and lairs
-are all one-shot per stack, recorded in `FrameMemory`. Climbing out to shed
-Trace means returning to a stack with less left to take. The greed driver
-and the existing spent-ness records make the reset self-limiting, which is
-why no decay mechanic is needed.
+| Source | Gain | Hook |
+| --- | --- | --- |
+| Cracking a cache | **10** | `open_cache` (`game/stack_features.rs`) |
+| Burning a seal | **5** | `pass_seal` (same file) |
+| Killing a hostile | **2** each | `award_loot` (`game/combat_rewards.rs`) |
 
-### What it does
+`award_loot` rather than anything in the battle teardown because it is the
+one place that knows a hostile actually *died* rather than being fled from
+— the same reason `mark_lair_cleared` already lives there.
 
-Four named bands — **Quiet / Noticed / Traced / Hunted** — shown in the
-Stack HUD, each crossing logged as `MessageKind::Outcome` so it survives
-`retain_outcomes_since_battle`.
+**Descending does not raise Trace.** It was considered and cut: it is
+walking, not taking, and depth already has its own escalation curve in
+`STACK_DEPTH_STAT_GROWTH`.
 
-Escalation reuses machinery that already exists: scale
-`DUNGEON_ENCOUNTER_CHANCE`, then pack size through the existing
-`depth_mult` path into `spawn_pack`, and at Hunted draw from the boss pool
-the way `pick_lair_species` already does.
+### Bands
 
-The readout and the threshold lines are not decoration. Escalating ambushes
-with no visible cause are experienced as bad luck, not as consequence.
-Without the HUD element this phase is a difficulty curve nobody can see.
+Four names — **Quiet / Noticed / Traced / Hunted**. They are labels on one
+continuous curve, not four discrete mechanics.
+
+| Band | From | Encounter | Stats | Group |
+| --- | --- | --- | --- | --- |
+| Quiet | 0 | ×1.0 | ×1.0 | ×1 |
+| Noticed | 40 | ×1.25 | ×1.10 | ×1 |
+| Traced | 100 | ×1.6 | ×1.25 | ×2 |
+| Hunted | 180 | ×2.0 | ×1.45 | ×3 |
+
+Against a realistic ~120-step frame — ~10 encounters, ~15 hostiles, 3
+caches ≈ 60 Trace per frame — a thorough player crosses into Noticed during
+frame 1 and **arrives at the lair Hunted**; a beeliner arrives around
+Noticed. That difference is the question the shaft is supposed to ask.
+
+**Hunted does not draw from the boss pool.** The original sketch called for
+it. It is cut, because `maybe_stack_encounter` documents the opposite rule
+in place — *"a fight you never saw coming should not also be the hardest
+fight available"* — and reversing a decision that carries its own reasoning
+needs a better argument than escalation wanting a spike. The band's teeth
+are the three multipliers.
+
+### How escalation is applied
+
+- **Encounter chance** — the band multiplier scales
+  `STACK_ENCOUNTER_CHANCE` at the roll in `maybe_stack_encounter`.
+- **Stats** — folded into `Game::stack_depth_multiplier`. Its only two
+  callers are the ambush and the lair, so the guardian is buffed by the
+  party's own greed for free, with no second code path to drift out of
+  sync.
+- **Group size** — a **parameter** threaded into `spawn_pack`, never read
+  off the `Trace` resource inside it. That function's doc comment already
+  documents this exact trap: a locale-derived multiplier read inside the
+  spawn leaked into surface nest respawns, which keep rolling on every
+  `tick` while the party is underground, and left 3× programs standing
+  around the link mouth for the climb out. A Trace-derived multiplier would
+  reproduce it precisely.
+
+Threading a second scalar makes `spawn_pack` a six-parameter function with
+two bare multipliers whose order is easy to swap. Whether that becomes a
+small `PackScaling` value with a `SURFACE` constant — which would also let
+the two surface call sites stop passing bare `1.0` — is a structural
+choice, and goes through the `design-patterns` dialog at implementation
+rather than being settled here.
+
+Note that the group lever is **inert in zone 1**, where `zone_group_cap(1)`
+pins every group to a single member. The tuning constants say so, so that
+it is not later filed as a bug.
+
+### Why resetting on exit is safe, and where it isn't
+
+Trace vanishes when you surface. For caches and seals that is
+self-limiting, and no decay mechanic is needed: both are one-shot per
+stack, recorded in `FrameMemory`, so climbing out to shed Trace means
+returning to a stack with less left to take.
+
+**The lair is the exception, and it is a priced escape hatch rather than a
+closed one.** The guardian stays un-spent until killed, and the party keeps
+its map — so a player can loot a stack to Hunted, climb out, and walk the
+known shortest path back down to meet the boss at Noticed. What that costs
+is the walk itself: ~19 fights of attrition on the way down, at no reward,
+since the caches are already empty. That is a real trade, and it is
+recorded here as a known, accepted price rather than an oversight.
+
+### The readout is not decoration
+
+The band appears in the Stack HUD as a `TraceBand` on `StackView`, appended
+to the existing `Facing N   Depth 1 / 3   (x, y)` heading in
+`render/stack.rs`. Each crossing is logged as `MessageKind::Outcome` so it
+survives `retain_outcomes_since_battle`.
+
+Escalating ambushes with no visible cause are experienced as bad luck, not
+as consequence. Without the HUD element this phase is a difficulty curve
+nobody can see.
+
+**Band only, never the raw number** — it is a threat readout, not a
+progress bar, and a visible integer invites playing to the threshold
+instead of to the risk. Crossings are monotonic within a dive (no decay,
+reset only on surfacing), so only a rise is ever logged.
+
+The full-screen `g` map does **not** get the band in this phase. It is a
+one-line addition if playtesting says the decision to press on is being
+made from that screen.
+
+**No app-core change.** Trace adds no key, no mode and no screen, so the
+input-and-flow state machine is untouched — the readout is engine state
+that gui already asks for. This corrects the crate list in the status
+table.
 
 No persistent Stack entities are introduced. There is no pursuing hunter.
 
 ### Tuning
 
-Band thresholds, per-source Trace gain, and the per-band encounter and pack
-multipliers are `pub const` in `tuning.rs`, in a labelled section, per the
-difficulty-is-code rule.
+Band thresholds, per-source Trace gain, and the per-band encounter, stat
+and group multipliers are `pub const` in `tuning.rs`, in a labelled
+section, per the difficulty-is-code rule.
+
+**Every number in the tables above is arithmetic against a measured frame
+and nothing more.** The measurement makes the *ratios* defensible — a kill
+must be worth far less than a cache, and that is now grounded rather than
+guessed. It says nothing about whether 40 / 100 / 180 are the right places
+to put the lines, which only playing can answer.
 
 ## Phase 3 — cell kinds
 
@@ -295,8 +429,24 @@ Per phase, failing test first.
 - **Phase 2** — Trace rises on cache, seal and kill and not on a plain step;
   band thresholds map to the right band; surfacing clears it; a save/load
   mid-dive preserves it; each band crossing logs an `Outcome`-kind line;
-  escalation actually changes the encounter roll and pack size. Seeded, no
-  wall-clock, no unseeded RNG.
+  escalation actually changes the encounter roll, the stat multiplier and
+  the group size. Seeded, no wall-clock, no unseeded RNG.
+
+  Three of these are regression tests for corrections this design made, and
+  are the ones worth writing first, since each guards a trap the original
+  sketch walked into:
+
+  - **Trace survives a descent and an ascent.** This is the whole reason it
+    is a resource and not a variant field, and it fails against the
+    original design.
+  - **A Trace-escalated group multiplier does not touch a surface spawn.**
+    `spawn_pack`'s doc comment records this leak happening once already
+    with `depth_mult`; tick the surface while underground at Hunted and
+    assert ambient spawns are unscaled.
+  - **A frame's cache, seal and walkable counts** — the measurement the
+    tuning rests on. Left unasserted, a later generator change moves the
+    kill-to-cache ratio and silently turns the greed meter into a combat
+    meter, with the suite still green.
 - **Phase 3** — each kind generates within its tuning count; placement is
   identical for a given `LevelSpec` across two `generate` calls; corruption
   routes through `apply_damage`; a fault lands somewhere walkable and not on
@@ -322,6 +472,13 @@ progression changed — that is the signal, not a broken test.
 Phases 2–4 each change save format. Bump `SAVE_FORMAT_VERSION` once per
 phase, and re-capture any `dev-saves/` template the change invalidates.
 
+**Phase 2 invalidates none of them.** Templates are field-named RON, not
+`.bin` — `crates/launcher/src/dev_template.rs` documents that a new
+`#[serde(default)]` field still parses and that `generate` stamps the
+current version on the way out. `dev-saves/extraction.ron` needs no
+re-capture, and neither will phases 3 and 4 if they add fields the same
+way.
+
 ## Out of scope
 
 - **Dark strata** — frames where the view cone shortens. Cut. It is the one
@@ -332,7 +489,9 @@ phase, and re-capture any `dev-saves/` template the change invalidates.
   a persistent Stack entity, and adding one later is a real design decision,
   not an increment.
 - **Trace decay over surface turns** — unnecessary given spent-ness makes the
-  reset self-limiting.
+  reset self-limiting for caches and seals. It would not close the lair
+  hatch either, which is priced by the walk back down rather than by the
+  time spent up top; decay is the wrong tool for the one case that leaks.
 - **Renaming zone travel.** "Breach" keeps its verb and is now unambiguous.
 
 ## Playtest note

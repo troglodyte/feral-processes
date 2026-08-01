@@ -496,9 +496,16 @@ pub const STACK_CACHE_FRAGMENT_CHANCE: f64 = 0.12;
 /// go *to* fight. It is also what makes mapping one tense — every corridor
 /// you walk to find the way down is a corridor that can cost you.
 ///
-/// Arithmetic-plausible only, never playtested. A frame is 21x21 with about
-/// half of it floor, so a traversal runs somewhere near 40-80 steps, putting
-/// this at roughly three to six fights per frame.
+/// Arithmetic-plausible only, never playtested. Measured 2026-08-01: a frame
+/// is 21x21 with **~206 walkable cells**, so a direct route to the way down
+/// is 40-80 steps — three to six fights — while an exhaustive crawl with
+/// backtracking is nearer 300, or **~24 fights against the frame's 3
+/// caches**.
+///
+/// That second number is what the Trace gains below are shaped around. A
+/// meter that paid per kill anything like what it pays per cache would be
+/// driven almost entirely by combat, and would feed itself: more Trace,
+/// more encounters, more kills. See `TRACE_PER_KILL`.
 pub const STACK_ENCOUNTER_CHANCE: f64 = 0.08;
 
 /// What each frame of Stack depth multiplies wild program stats by,
@@ -511,6 +518,70 @@ pub const STACK_ENCOUNTER_CHANCE: f64 = 0.08;
 /// a kill pays the defeated program's `max_hp`, so scaling stats scales the
 /// reward with the risk.
 pub const STACK_DEPTH_STAT_GROWTH: f32 = 1.35;
+
+// ---- The Stack: Trace ------------------------------------------------
+//
+// Trace rises with what the party *takes* from a stack and escalates what
+// comes for them. The design argument for every number below is in
+// `docs/superpowers/specs/2026-07-31-the-stack-design.md`, "Phase 2".
+//
+// Walking is free, deliberately. A time-driven meter would tax exploration
+// and map-making, rewarding the beeline and punishing the careful player —
+// backwards for a maze whose per-frame map memory exists to reward
+// learning it.
+
+/// Trace for cracking a cache. The dominant source, and meant to be: a
+/// frame holds exactly three, and the payout scales with depth, so the
+/// meter and the reward rise together.
+pub const TRACE_PER_CACHE: u32 = 10;
+
+/// Trace for burning a seal. Near-negligible in practice — a stack holds
+/// two, both on the bottom frame walling off the lair — but burning one
+/// costs an access shard, and a cost the player paid should register.
+pub const TRACE_PER_SEAL: u32 = 5;
+
+/// Trace per hostile killed. **A fifth of a cache, and that ratio is the
+/// load-bearing part**, not the absolute value. Kills are the
+/// high-frequency source by an order of magnitude (see
+/// `STACK_ENCOUNTER_CHANCE`), so paying them near cache rates would make
+/// Trace a combat meter that feeds its own input.
+pub const TRACE_PER_KILL: u32 = 2;
+
+/// Where each band begins. Half-open: a value sitting exactly on a
+/// threshold is in the band it names.
+///
+/// Sized so that a thorough player — ~60 Trace per frame, from three
+/// caches and the fights a 120-step crawl draws — arrives at the lair
+/// **Hunted**, while a beeliner arrives around **Noticed**. That
+/// difference is the question the descent is supposed to ask.
+///
+/// Purely arithmetic. Where these lines fall is exactly the part no
+/// measurement can settle, and the one thing playing will answer first.
+pub const TRACE_NOTICED: u32 = 40;
+pub const TRACE_TRACED: u32 = 100;
+pub const TRACE_HUNTED: u32 = 180;
+
+/// Per-band multiplier on `STACK_ENCOUNTER_CHANCE`, indexed by
+/// `TraceBand::index`.
+///
+/// The gentlest of the three deliberately: it is the only lever that feeds
+/// back into its own input, since more encounters mean more kills mean
+/// more Trace. The teeth go in `TRACE_STAT_MULT`, which feeds back into
+/// nothing.
+pub const TRACE_ENCOUNTER_MULT: [f64; 4] = [1.0, 1.25, 1.6, 2.0];
+
+/// Per-band multiplier on enemy stats, folded into
+/// `Game::stack_depth_multiplier` and therefore applying to the lair
+/// guardian as well as to ambushes — a party that looted its way to Hunted
+/// meets a harder boss, having chosen to.
+pub const TRACE_STAT_MULT: [f32; 4] = [1.0, 1.10, 1.25, 1.45];
+
+/// Per-band multiplier on the group-size ceiling handed to `spawn_pack`.
+///
+/// **Inert in zone 1**, where `zone_group_cap(1)` pins every group to a
+/// single member whatever this says. That is a consequence of the group
+/// curve, not a defect in this constant.
+pub const TRACE_GROUP_MULT: [u32; 4] = [1, 1, 2, 3];
 
 /// Floor under `swarm_radius`, the radius that actually governs how
 /// tightly a pack's members cluster around the tile a spawn roll picked

@@ -220,6 +220,7 @@ impl Game {
             depth,
             frames,
             facing: facing.label(),
+            trace: self.trace_band().label(),
             position: (x, y),
             cells,
             standing_on,

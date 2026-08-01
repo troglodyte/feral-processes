@@ -58,6 +58,7 @@ impl Game {
         world.insert_resource(Locale::default());
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
+        world.insert_resource(crate::resources::Trace::default());
         world.insert_resource(ZoneSpawnPoint {
             x: start.0,
             y: start.1,
@@ -179,6 +180,7 @@ impl Game {
         world.insert_resource(Locale::default());
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
+        world.insert_resource(crate::resources::Trace::default());
         world.insert_resource(ZoneSpawnPoint {
             x: data.spawn_point.0,
             y: data.spawn_point.1,
@@ -441,6 +443,8 @@ impl Game {
         // where they are standing and would otherwise write into a map that
         // is about to be overwritten.
         game.world.insert_resource(data.stack_memory);
+        game.world
+            .insert_resource(crate::resources::Trace(data.trace));
         // Last, and after the WorldMap is in place: restoring a Stack
         // locale regenerates its frame from that map's seed.
         game.restore_locale(data.locale);
@@ -648,6 +652,7 @@ impl Game {
             },
             locale: self.locale(),
             stack_memory: self.world.resource::<StackMemory>().clone(),
+            trace: self.trace(),
         };
         save::save_to_file(path, &data)
     }

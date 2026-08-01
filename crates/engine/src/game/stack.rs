@@ -6,7 +6,7 @@
 //! exception is `enter_stack`, which pins `Position` to the entrance tile
 //! on the way in.
 
-use crate::resources::{CurrentStack, Locale};
+use crate::resources::{CurrentStack, Locale, Trace};
 use crate::stack::{self, CellKind, Dir};
 use crate::tuning::{
     STACK_DEPTH_STAT_GROWTH, STACK_ENCOUNTER_CHANCE, STACK_FRAMES_MAX, STACK_FRAMES_MIN,
@@ -290,9 +290,18 @@ impl Game {
     ///
     /// Unnarrated, because the link is no longer the only way out —
     /// `use_symlink` leaves by its own route and says so in its own words.
+    /// Trace resets here and nowhere else. That is safe for caches and seals
+    /// — both are one-shot per stack and recorded in `FrameMemory`, so
+    /// climbing out to shed Trace means returning to a stack with less left
+    /// to take. The lair is the known exception: it stays un-spent until
+    /// killed, so a looted-out party can climb out and walk their remembered
+    /// map back down to meet the guardian in a lower band. The price is the
+    /// walk — a descent through emptied frames, at no reward — and the spec
+    /// records that as accepted rather than as a hole to plug.
     pub(crate) fn clear_stack(&mut self) {
         self.world.insert_resource(Locale::Surface);
         self.world.insert_resource(CurrentStack(None));
+        self.world.insert_resource(Trace::default());
     }
 
     /// Climbs out through the link the party walked in through.
@@ -428,7 +437,9 @@ impl Game {
     pub(crate) fn stack_depth_multiplier(&self) -> f32 {
         match self.stack_pos() {
             None => 1.0,
-            Some(pos) => STACK_DEPTH_STAT_GROWTH.powi(pos.depth as i32 - 1),
+            Some(pos) => {
+                STACK_DEPTH_STAT_GROWTH.powi(pos.depth as i32 - 1) * self.trace_stat_mult()
+            }
         }
     }
 
@@ -452,9 +463,11 @@ impl Game {
         let Some(pos) = self.stack_pos() else {
             return;
         };
+        let mult = self.trace_encounter_mult();
         let encountered = {
             let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_bool(STACK_ENCOUNTER_CHANCE)
+            rng.0
+                .random_bool((STACK_ENCOUNTER_CHANCE * mult).clamp(0.0, 1.0))
         };
         if !encountered {
             return;
@@ -468,7 +481,8 @@ impl Game {
         // pinned there, and a Stack pack is resolved immediately rather
         // than left to roam, so where on the surface it stands never matters.
         let depth_mult = self.stack_depth_multiplier();
-        let pack = self.spawn_pack(&species, false, ex, ey, depth_mult);
+        let group_mult = self.trace_group_mult();
+        let pack = self.spawn_pack(&species, false, ex, ey, depth_mult, group_mult);
         if pack.is_empty() {
             return;
         }

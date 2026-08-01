@@ -461,6 +461,58 @@ pub enum Locale {
     },
 }
 
+/// How loud the party has been in the stack they are currently in.
+///
+/// A resource rather than a field on the `Locale::Stack` variant, which is
+/// where it looks like it belongs. `Game::descend_to` and `Game::ascend_to`
+/// each *construct* a fresh variant rather than mutating the live one, so a
+/// field there would be silently zeroed on every frame change — exactly when
+/// Trace is supposed to be accumulating. As a resource it survives frame
+/// changes for free and resets in one place, `Game::clear_stack`, which is
+/// already the single door out of the Stack that even `use_symlink` goes
+/// through rather than around.
+///
+/// `u32` rather than a float: bands compare exactly, save bytes are exact,
+/// and a long dive accumulates no rounding error.
+///
+/// Saved. Without persistence, saving mid-dive would be a free Trace reset.
+#[derive(Resource, Clone, Copy, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Trace(pub u32);
+
+/// The four named readings of `Trace`, and the only form the player ever
+/// sees it in — a threat readout rather than a progress bar, since a visible
+/// integer invites playing to the threshold instead of to the risk.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TraceBand {
+    Quiet,
+    Noticed,
+    Traced,
+    Hunted,
+}
+
+impl TraceBand {
+    pub fn label(self) -> &'static str {
+        match self {
+            TraceBand::Quiet => "Quiet",
+            TraceBand::Noticed => "Noticed",
+            TraceBand::Traced => "Traced",
+            TraceBand::Hunted => "Hunted",
+        }
+    }
+
+    /// Indexes the per-band multiplier tables in `tuning` — `TRACE_*_MULT`
+    /// are all `[_; 4]` in this order, so a band added here without a column
+    /// added there is a compile error rather than a silent wrong lookup.
+    pub(crate) fn index(self) -> usize {
+        match self {
+            TraceBand::Quiet => 0,
+            TraceBand::Noticed => 1,
+            TraceBand::Traced => 2,
+            TraceBand::Hunted => 3,
+        }
+    }
+}
+
 /// Which frame of which stack a `FrameMemory` belongs to.
 ///
 /// Keyed by the link's surface tile rather than by anything about the

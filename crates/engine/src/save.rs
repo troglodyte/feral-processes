@@ -192,6 +192,21 @@ pub struct SaveData {
     /// that is saved rather than regenerated: a frame is a pure function of
     /// its spec, but which parts of it the player has *seen* is history.
     pub stack_memory: crate::resources::StackMemory,
+    /// How loud the party has been in the stack they are currently in — see
+    /// `resources::Trace`. Zero whenever `locale` is `Surface`, since
+    /// `Game::clear_stack` is the one place it resets.
+    ///
+    /// Persisted because without it, saving mid-dive would be a free Trace
+    /// reset — a worse exploit than any the meter creates.
+    ///
+    /// `#[serde(default)]` does nothing for bincode, which is positional and
+    /// covered by the version bump. It is here for the field-named RON that
+    /// `dev-saves/` templates are written in: see
+    /// `crates/launcher/src/dev_template.rs`, which documents that a new
+    /// defaulted field is exactly what lets an existing template keep
+    /// parsing instead of needing re-capture.
+    #[serde(default)]
+    pub trace: u32,
 }
 
 /// Bumped whenever `SaveData` (or anything it contains, transitively)
@@ -219,7 +234,7 @@ pub struct SaveData {
 /// and every save written under the old version stops loading. That's an
 /// intentional, simple tradeoff for a single-player game rather than
 /// building real schema migration.
-pub const SAVE_FORMAT_VERSION: u32 = 15;
+pub const SAVE_FORMAT_VERSION: u32 = 16;
 
 /// Renders a save as editable RON, for the `savetool` binary.
 ///
@@ -328,6 +343,7 @@ mod tests {
             link_sites: Vec::new(),
             locale: crate::resources::Locale::Surface,
             stack_memory: crate::resources::StackMemory::default(),
+            trace: 0,
         }
     }
 
@@ -462,13 +478,18 @@ mod tests {
         }
     }
 
-    /// The claim `SAVE_FORMAT_VERSION` staying at 15 rests on: a save
-    /// carrying a Stack position, written and read back through the real
-    /// file round trip (not just the RON one above), still has that
-    /// position, and the version prefix is unmoved.
+    /// A save carrying a Stack position and a live Trace, written and read
+    /// back through the real file round trip rather than the RON one above.
+    ///
+    /// This used to pin `SAVE_FORMAT_VERSION` to 15, which was the whole
+    /// claim phase 1 of the Stack work rested on: renaming types moves no
+    /// encoded byte. Phase 2 adds `trace`, which genuinely does, so the pin
+    /// is gone rather than merely retargeted at 16 — a hardcoded version in
+    /// a test taxes every future phase that legitimately bumps it, and
+    /// phases 3 and 4 are both expected to. What is worth asserting is that
+    /// the *payload* survives, which is what the bump exists to protect.
     #[test]
-    fn a_stack_position_survives_a_binary_save_round_trip() {
-        assert_eq!(SAVE_FORMAT_VERSION, 15);
+    fn a_stack_position_and_its_trace_survive_a_binary_save_round_trip() {
         let path = std::env::temp_dir().join(format!(
             "feral_processes_save_stack_roundtrip_{}.bin",
             std::process::id()
@@ -482,12 +503,18 @@ mod tests {
             facing: crate::stack::Dir::West,
             entrance: (4, -7),
         };
+        data.trace = 123;
         save_to_file(&path, &data).unwrap();
         let loaded = load_from_file(&path).unwrap();
         let _ = std::fs::remove_file(&path);
         assert_eq!(
             loaded.locale, data.locale,
             "the Stack position did not survive the round trip"
+        );
+        assert_eq!(
+            loaded.trace, 123,
+            "Trace did not survive the round trip — saving mid-dive would \
+             be a free reset"
         );
     }
 

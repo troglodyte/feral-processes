@@ -13,6 +13,32 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Trace: the Stack notices what you take
+
+**Save-format bump** — `SAVE_FORMAT_VERSION` is now 16 and existing saves
+will not load. `dev-saves/` templates are unaffected; they are field-named
+RON and keep parsing.
+
+- **A greed meter, not a timer.** Trace rises when you crack a cache, burn a
+  seal or kill something underground. Walking is free — a meter driven by
+  time or distance would tax exploration and punish the careful player,
+  which is backwards for a maze whose per-frame map memory exists to reward
+  learning it.
+- **Four bands — Quiet, Noticed, Traced, Hunted** — shown in the Stack
+  heading, with each crossing announced in the log. The band is all you see;
+  there is no number, because it is there to tell you whether to press on
+  rather than to be played up to a threshold.
+- **Each band draws ambushes more often, scales what arrives, and sends more
+  of it at once.** The stat scaling reaches the lair guardian too, so a
+  party that stripped a stack on the way down meets its boss at the band
+  they earned.
+- **Trace clears on surfacing**, by either the link or a symlink. Not a free
+  reset: caches, seals and lairs are one-shot per stack, so a trip up to
+  shed a band means coming back to less worth taking.
+- Every number is arithmetic against a measured frame and has not yet been
+  playtested. The per-source ratios are grounded; where the band lines fall
+  is the part that still needs playing.
+
 ### Trading in one keypress
 
 - **`S` sells one, `B` buys one, straight off the highlighted row.** No

@@ -14,6 +14,21 @@ use crate::tuning::{
 };
 use crate::*;
 
+/// How large a pack may roll once Trace has been folded in: `base` scaled by
+/// the band's multiplier, then clamped back under the zone's own ceiling.
+///
+/// The clamp is the point. Trace makes the party reach their zone's ceiling
+/// *faster* — regardless of how far out they are — but must never raise it.
+/// `zone_group_cap` is a balance bound on how big any fight in a zone can
+/// get, and a meter the player runs up themselves should not vault it.
+///
+/// That is also where the lever's zone-1 inertness comes from rather than
+/// being a special case: `zone_group_cap(1)` is 1, so the clamp pins every
+/// group to a single member whatever Trace says.
+pub(crate) fn trace_group_ceiling(base: u32, group_mult: u32, cap: u32) -> u32 {
+    base.saturating_mul(group_mult).clamp(1, cap.max(1))
+}
+
 /// The zone's ceiling on one species group: zone 1 is solo, every level
 /// after multiplies by `ZONE_GROUP_GROWTH`, and `MAX_GROUP_SIZE` is the
 /// hard stop. `checked_pow` because zones are unbounded and `3^21`
@@ -534,6 +549,12 @@ impl Game {
     /// ambient spawns and nest respawns keep rolling on every `tick`, and a
     /// locale-derived multiplier scaled those too, leaving 3x programs
     /// standing around the link mouth for the climb out.
+    ///
+    /// `group_mult` is the party's Trace band, and is a parameter for
+    /// **exactly the same reason** — it is derived from where the party is
+    /// and how loud they have been, so reading it off the `Trace` resource
+    /// in here would reproduce that bug precisely. Surface callers pass `1`.
+    /// See `trace_group_ceiling` for why it cannot exceed the zone cap.
     pub(crate) fn spawn_pack(
         &mut self,
         species_id: &str,
@@ -541,11 +562,13 @@ impl Game {
         x: i32,
         y: i32,
         depth_mult: f32,
+        group_mult: u32,
     ) -> Vec<Entity> {
         let group_size = if is_boss {
             1
         } else {
-            let max_group = self.max_group_size(x, y);
+            let cap = zone_group_cap(self.world.resource::<ZoneLevel>().0);
+            let max_group = trace_group_ceiling(self.max_group_size(x, y), group_mult, cap);
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_range(1..=max_group)
         };
@@ -604,7 +627,7 @@ impl Game {
             }
         }
 
-        self.spawn_pack(&pick, spawn_boss, x, y, 1.0);
+        self.spawn_pack(&pick, spawn_boss, x, y, 1.0, 1);
         true
     }
 }

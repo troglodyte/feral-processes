@@ -476,13 +476,13 @@ pub const STACK_DOORS_PER_FRAME: usize = 4;
 /// `EconomyRole::TradeCurrency`. Fragments are what the surface is for.
 pub const STACK_CACHE_CREDITS: std::ops::RangeInclusive<u32> = 12..=30;
 
-/// What each level of depth multiplies a cache's credit payout by,
+/// What each frame of depth multiplies a cache's credit payout by,
 /// compounding. Deliberately steeper than `STACK_DEPTH_STAT_GROWTH`: going
 /// deeper has to pay better than it costs, or the bottom of a stack is a
 /// place with no reason to visit it.
 pub const STACK_CACHE_DEPTH_GROWTH: f32 = 1.5;
 
-/// Chance a cache also holds a portal fragment, per level of depth (so
+/// Chance a cache also holds a portal fragment, per frame of depth (so
 /// depth 3 rolls at three times this, capped at certainty).
 ///
 /// The one route besides the Market listing and boss kills that pays the
@@ -496,12 +496,12 @@ pub const STACK_CACHE_FRAGMENT_CHANCE: f64 = 0.12;
 /// go *to* fight. It is also what makes mapping one tense — every corridor
 /// you walk to find the way down is a corridor that can cost you.
 ///
-/// Arithmetic-plausible only, never playtested. A level is 21x21 with about
+/// Arithmetic-plausible only, never playtested. A frame is 21x21 with about
 /// half of it floor, so a traversal runs somewhere near 40-80 steps, putting
-/// this at roughly three to six fights per level.
+/// this at roughly three to six fights per frame.
 pub const STACK_ENCOUNTER_CHANCE: f64 = 0.08;
 
-/// What each level of Stack depth multiplies wild program stats by,
+/// What each frame of Stack depth multiplies wild program stats by,
 /// compounding, on top of `ZoneLevel::stat_multiplier` and
 /// `Game::distance_stat_multiplier`.
 ///

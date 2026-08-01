@@ -183,13 +183,13 @@ pub struct SaveData {
     /// of the world seed and the depth walked to.
     pub link_sites: Vec<(i32, i32)>,
     /// Whether the player was on the surface or down the Stack, and where —
-    /// see `resources::Locale`. The level itself is *not* here: it
+    /// see `resources::Locale`. The frame itself is *not* here: it
     /// regenerates from `seed` and the saved depth, exactly as terrain
     /// regenerates from `seed` alone.
     pub locale: crate::resources::Locale,
     /// What the party has learned about each Stack frame walked in this
     /// zone — see `resources::StackMemory`. The one piece of Stack state
-    /// that is saved rather than regenerated: a level is a pure function of
+    /// that is saved rather than regenerated: a frame is a pure function of
     /// its spec, but which parts of it the player has *seen* is history.
     pub stack_memory: crate::resources::StackMemory,
 }

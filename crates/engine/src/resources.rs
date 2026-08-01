@@ -435,19 +435,19 @@ impl ZoneLevel {
 /// — the surface tile they walked in through. Nothing on the surface has to
 /// know the Stack exists, and the consequences are the right ones for
 /// free: the base is where it was left, cronjobs keep paying out, and a raid
-/// can land while the player is four levels down.
+/// can land while the player is four frames down.
 #[derive(Resource, Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum Locale {
     #[default]
     Surface,
     Stack {
-        /// 1 at the first level below the surface, counting up as you
-        /// descend. Part of the `stack::FrameSpec` the level regenerates
+        /// 1 at the first frame below the surface, counting up as you
+        /// descend. Part of the `stack::FrameSpec` the frame regenerates
         /// from.
         depth: u32,
         /// How many frames this stack runs before it bottoms out. Carried
         /// rather than recomputed from `entrance` because it is also part
-        /// of the level spec — the bottom frame is generated without a way
+        /// of the frame spec — the bottom frame is generated without a way
         /// down — and a stack that changed length underneath the party
         /// would strand them.
         frames: u32,
@@ -461,10 +461,10 @@ pub enum Locale {
     },
 }
 
-/// Which level of which stack a `FrameMemory` belongs to.
+/// Which frame of which stack a `FrameMemory` belongs to.
 ///
 /// Keyed by the link's surface tile rather than by anything about the
-/// level, because that tile is what makes a stack itself — it is already
+/// frame, because that tile is what makes a stack itself — it is already
 /// half of `stack::FrameSpec`. Two links in a sector therefore keep
 /// separate maps of their separate depth-3s.
 pub type LevelKey = ((i32, i32), u32);
@@ -472,27 +472,27 @@ pub type LevelKey = ((i32, i32), u32);
 /// What the party learned about one Stack frame by walking it.
 ///
 /// This is the only Stack state that is saved rather than regenerated.
-/// The level itself is a pure function of its `stack::FrameSpec`, but what
+/// The frame itself is a pure function of its `stack::FrameSpec`, but what
 /// the player has *seen* of it is not — that is the run's history, and
-/// losing it on load would hand back a blank map of a level already walked.
+/// losing it on load would hand back a blank map of a frame already walked.
 ///
 /// `BTreeSet` rather than `HashSet` so the encoded save bytes don't depend
 /// on hash order.
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct FrameMemory {
-    /// Every cell the party has had in view — see `Game::view_cone`, which
+    /// Every cell the party has had in view — see `view_cone`, which
     /// both this and the first-person view are filled from.
     pub seen: BTreeSet<(i32, i32)>,
     /// Cells whose cache has been emptied.
     pub looted: BTreeSet<(i32, i32)>,
     /// Sealed doors that have been opened, which stay open.
     pub opened: BTreeSet<(i32, i32)>,
-    /// Whether this level's lair has been cleared. Only ever true on the
-    /// bottom level of a stack, which is the only level that has one.
+    /// Whether this frame's lair has been cleared. Only ever true on the
+    /// bottom frame of a stack, which is the only frame that has one.
     pub cleared: bool,
     /// Where the party was jumped. Kept for the map alone: a corridor that
     /// has cost you something is worth marking, and it is the one landmark
-    /// the level's own layout can't tell you about.
+    /// the frame's own layout can't tell you about.
     pub fights: BTreeSet<(i32, i32)>,
 }
 
@@ -506,7 +506,7 @@ pub struct FrameMemory {
 #[derive(Resource, Clone, Default, Debug, Serialize, Deserialize)]
 pub struct StackMemory(pub BTreeMap<LevelKey, FrameMemory>);
 
-/// The level the player is currently standing in, or `None` on the surface.
+/// The frame the player is currently standing in, or `None` on the surface.
 ///
 /// Deliberately not serialized: it regenerates from `(WorldMap::seed,
 /// Locale::depth)` on load, exactly as terrain regenerates from the world

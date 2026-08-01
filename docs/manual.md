@@ -149,7 +149,7 @@ has a facing rather than moving a token on a grid.
 | `j` / `Down` | Back up, without turning round |
 | `h` / `Left` | Turn 90° left, in place |
 | `l` / `Right` | Turn 90° right, in place |
-| `>` | Descend — follow the link down under you |
+| `>` | Descend — take the link down under you |
 | `<` | Climb — follow the link up, or surface from depth 1 |
 | `.` | Wait in place |
 | `e` | Drain a Power-restoring item |
@@ -175,8 +175,8 @@ Frames hold more than corridors. **Caches** (`!`) sit in dead ends and pay
 depth-scaled Credits, a chance at a portal fragment, and whatever the item
 set declares; walking onto one empties it, once. **Doorways** (`+`) are
 walkable but block your view. **Sealed doors** wall off the **lair** (`&`) at
-the bottom of the stack, and each one costs an Access Shard to open — shards
-come out of caches. Killing what holds the lair clears the stack for good;
+the bottom of each stack, and each one costs an Access Shard to open — shards
+come out of caches. Killing what holds the lair clears that stack for good;
 jacking out leaves it waiting.
 
 `g` opens the **map** — the same key that scans the ground on the surface,

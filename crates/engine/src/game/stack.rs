@@ -192,7 +192,7 @@ impl Game {
     /// the map is spoken for — `%` is both the Static Field biome and a
     /// species — and because it already reads as "the way down" to anyone
     /// who has played a roguelike. It is the same mark the Stack view puts
-    /// on a staircase.
+    /// on a link down.
     fn spawn_entrance_at(&mut self, x: i32, y: i32) {
         self.world.spawn((
             SurfaceLink,
@@ -220,7 +220,7 @@ impl Game {
     ///
     /// Party and inventory management deliberately isn't on this list.
     /// Fusing programs, installing routines, crafting, equipping and
-    /// spending perk points all work fine four levels down, and stopping to
+    /// spending perk points all work fine four frames down, and stopping to
     /// sort your gear in the Stack is a thing the genre expects.
     pub(crate) fn require_surface(&self) -> Result<(), String> {
         if self.is_underground() {
@@ -242,7 +242,7 @@ impl Game {
         self.descend_to(1, frames, (x, y));
         self.log(format!(
             "You drop through the link. The signal above you thins to nothing. \
-             The stack sounds {frames} frames deep."
+             This stack sounds {frames} frames deep."
         ));
     }
 
@@ -267,7 +267,7 @@ impl Game {
         }
     }
 
-    /// Generates the level for `depth` and puts the party on its entry cell
+    /// Generates the frame for `depth` and puts the party on its entry cell
     /// facing north. Shared by the way in and every descent after it.
     fn descend_to(&mut self, depth: u32, frames: u32, entrance: (i32, i32)) {
         let level = stack::generate(self.frame_spec(depth, frames, entrance));
@@ -437,7 +437,7 @@ impl Game {
     ///
     /// The pack is drawn from the biome of the **entrance tile** — the
     /// surface terrain the link opens in. The Stack has no biome of its
-    /// own, and rather than invent one, this reads the level as the
+    /// own, and rather than invent one, this reads the frame as the
     /// substrate beneath the ground above it: descend under a Mainframe
     /// sector and Mainframe programs are what live down there. It costs no
     /// new content and it gives the player a reason to care which link
@@ -504,7 +504,7 @@ impl Game {
             return;
         };
         if cell != CellKind::LinkDown {
-            // The bottom level is generated without a link down at all, so
+            // The bottom frame is generated without a link down at all, so
             // this is where a finished stack reports itself. Saying so beats
             // "there's no way down here" on the one cell where the player
             // might reasonably keep looking for one.
@@ -524,7 +524,7 @@ impl Game {
         self.tick();
     }
 
-    /// Goes up a level, if the party is standing on a way up. From depth 1
+    /// Goes up a frame, if the party is standing on a way up. From depth 1
     /// that is the link itself, and climbing it surfaces.
     pub fn ascend(&mut self) {
         if !self.can_act_underground() {
@@ -540,9 +540,9 @@ impl Game {
         if pos.depth == 1 {
             self.leave_stack();
         } else {
-            // Climbing lands on the level above's link *down*, not its
+            // Climbing lands on the frame above's link *down*, not its
             // entry — otherwise every ascent would teleport the party back to
-            // that level's entrance and undo the walk they just made.
+            // that frame's entrance and undo the walk they just made.
             self.ascend_to(pos.depth - 1, pos.frames, pos.entrance);
             self.log(format!("You climb back to frame {}.", pos.depth - 1));
         }
@@ -562,11 +562,11 @@ impl Game {
 
     fn ascend_to(&mut self, depth: u32, frames: u32, entrance: (i32, i32)) {
         let level = stack::generate(self.frame_spec(depth, frames, entrance));
-        // Infallible: you can only climb *to* a level you already climbed
+        // Infallible: you can only climb *to* a frame you already climbed
         // *from*, so it is not the bottom of the stack and has a way down.
         let landing = level
             .link_down
-            .expect("a level climbed up into must have the link that was climbed");
+            .expect("a frame climbed up into must have the link that was climbed");
         self.world.insert_resource(CurrentStack(Some(level)));
         self.world.insert_resource(Locale::Stack {
             depth,
@@ -579,7 +579,7 @@ impl Game {
         self.remember_view();
     }
 
-    /// Restores a saved Stack position, regenerating the level from the
+    /// Restores a saved Stack position, regenerating the frame from the
     /// world seed and the saved spec rather than reading it off disk — see
     /// `resources::CurrentStack`.
     pub(crate) fn restore_locale(&mut self, locale: Locale) {

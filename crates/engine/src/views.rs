@@ -333,7 +333,7 @@ pub struct BattleView {
 /// `StackView::cells`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StackCellView {
-    /// Solid, and what everything past the edge of the level reads as. The
+    /// Solid, and what everything past the edge of the frame reads as. The
     /// renderer draws this as a wall face.
     Rock,
     Floor,
@@ -353,7 +353,7 @@ pub enum StackCellView {
     SealedDoor,
 }
 
-/// The party's first-person view of the level around them — see
+/// The party's first-person view of the frame around them — see
 /// `Game::stack_view`.
 ///
 /// `cells` is already rotated into **view space**: `cells[ahead][lateral]`,
@@ -415,10 +415,10 @@ pub enum FrameMapMark {
     Fight,
 }
 
-/// The party's own map of the level they are standing in — everything they
+/// The party's own map of the frame they are standing in — everything they
 /// have had in view, and nothing they haven't.
 ///
-/// A whole-level grid rather than a window, because the point of a map is
+/// A whole-frame grid rather than a window, because the point of a map is
 /// seeing the shape of the parts you have walked all at once.
 pub struct FrameMapView {
     pub depth: u32,
@@ -435,7 +435,7 @@ pub struct FrameMapView {
     /// The surface tile of the link this stack hangs from, so the map can
     /// say which of a sector's links it belongs to.
     pub entrance: (i32, i32),
-    /// How much of the level's walkable area has been seen, 0.0 to 1.0.
+    /// How much of the frame's walkable area has been seen, 0.0 to 1.0.
     pub explored: f32,
 }
 

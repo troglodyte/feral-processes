@@ -2,8 +2,8 @@
 //! their having been.
 //!
 //! A cache, a seal and a lair each need both halves: a `CellKind` in the
-//! generated level, and an entry in `FrameMemory` saying it has been spent.
-//! `stack::generate` is a pure function of `FrameSpec`, so the level
+//! generated frame, and an entry in `FrameMemory` saying it has been spent.
+//! `stack::generate` is a pure function of `FrameSpec`, so the frame
 //! itself comes back identical every time the party steps off and on — the
 //! record here is the only thing that stops an emptied cache refilling.
 //! Both views consult it through `cache_unopened`, `seal_open` and
@@ -19,7 +19,7 @@ use crate::tuning::{STACK_CACHE_CREDITS, STACK_CACHE_DEPTH_GROWTH, STACK_CACHE_F
 use crate::*;
 
 impl Game {
-    /// The memory of the level the party is standing in, created empty on
+    /// The memory of the frame the party is standing in, created empty on
     /// first sight of it.
     pub(crate) fn frame_memory_mut(&mut self, pos: StackPos) -> &mut FrameMemory {
         self.world
@@ -153,7 +153,7 @@ impl Game {
     ///
     /// The species is drawn from the link tile's biome, like every other
     /// Stack encounter, but from the boss pool rather than the ordinary
-    /// one, and from an RNG seeded off the level spec rather than off
+    /// one, and from an RNG seeded off the frame spec rather than off
     /// `GameRng`: which thing guards a stack is a property of the stack, not
     /// of how many rolls happened first, so leaving and coming back cannot
     /// reroll it into something easier.
@@ -249,7 +249,7 @@ impl Game {
         self.frame_memory_mut(pos).cleared = true;
     }
 
-    /// Whether the cache on `cell` of the level the party is in is still
+    /// Whether the cache on `cell` of the frame the party is in is still
     /// unopened — what both views use to stop advertising an empty one.
     pub(crate) fn cache_unopened(&self, pos: StackPos, cell: (i32, i32)) -> bool {
         !self

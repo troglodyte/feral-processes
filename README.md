@@ -50,9 +50,9 @@ four groups of a hundred at you.
 
 ## The Stack
 
-Scattered across every zone are **links** (`>`) — holes down into the
-Stack, procedurally generated frames seeded from the world seed and the
-depth you have walked to. Step onto one and the view changes: the top-down
+Scattered across every zone are **links** (`>`) — holes down into a stack
+of procedurally generated frames, seeded from the world seed and the depth
+you have walked to. Step onto one and the view changes: the top-down
 grid gives way to a **first-person corridor**, and `hjkl`/arrows stop being
 compass directions and start being forward, back, turn left, turn right.
 `<` and `>` follow whichever link is underfoot.

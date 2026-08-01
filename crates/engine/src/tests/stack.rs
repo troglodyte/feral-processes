@@ -31,7 +31,7 @@ fn cell_at(game: &Game, x: i32, y: i32) -> CellKind {
         .cell(x, y)
 }
 
-/// Teleports the party onto the current level's way down and returns that
+/// Teleports the party onto the current frame's way down and returns that
 /// cell, so a test about descending doesn't have to walk the maze to reach
 /// the link.
 fn stand_on_link_down(game: &mut Game) -> (i32, i32) {
@@ -42,7 +42,7 @@ fn stand_on_link_down(game: &mut Game) -> (i32, i32) {
         .as_ref()
         .unwrap()
         .link_down
-        .expect("this level should have a way down");
+        .expect("this frame should have a way down");
     let Locale::Stack {
         depth,
         frames,
@@ -305,7 +305,7 @@ fn the_party_arrives_on_the_link_up_facing_north() {
 }
 
 #[test]
-fn taking_the_link_down_increments_the_depth_and_regenerates_the_level() {
+fn taking_the_link_down_increments_the_depth_and_regenerates_the_frame() {
     let mut game = game();
     descend(&mut game);
     let first = level_cells(&game);
@@ -317,7 +317,7 @@ fn taking_the_link_down_increments_the_depth_and_regenerates_the_level() {
         panic!("descending should leave us underground")
     };
     assert_eq!(depth, 2);
-    assert_ne!(first, level_cells(&game), "depth 2 should be its own level");
+    assert_ne!(first, level_cells(&game), "depth 2 should be its own frame");
 }
 
 /// The descend log line is player-facing narration of "the Stack" vocabulary
@@ -345,7 +345,7 @@ fn climbing_out_of_depth_one_returns_to_the_surface_with_movement_working() {
     assert_eq!(locale(&game), Locale::Surface);
     assert!(
         game.world.resource::<CurrentStack>().0.is_none(),
-        "surfacing should drop the level"
+        "surfacing should drop the frame"
     );
 
     // And surface movement works again — it was refused while underground.
@@ -362,7 +362,7 @@ fn climbing_out_of_depth_one_returns_to_the_surface_with_movement_working() {
 }
 
 #[test]
-fn descending_then_climbing_back_lands_on_that_levels_link_down() {
+fn descending_then_climbing_back_lands_on_that_frames_link_down() {
     let mut game = game();
     descend(&mut game);
 
@@ -377,7 +377,7 @@ fn descending_then_climbing_back_lands_on_that_levels_link_down() {
     assert_eq!(
         (x, y),
         down,
-        "climbing must land on the link you went down, not the level's entry"
+        "climbing must land on the link you went down, not the frame's entry"
     );
 }
 
@@ -493,7 +493,7 @@ fn a_symlink_used_underground_surfaces_the_party_and_teleports_them() {
     );
     assert!(
         game.stack_view().is_none(),
-        "the level should have been dropped, not left loaded"
+        "the frame should have been dropped, not left loaded"
     );
     let player = game.player_entity();
     assert_eq!(
@@ -530,7 +530,7 @@ fn a_symlink_that_cannot_be_paid_for_leaves_the_party_underground() {
     );
 }
 
-/// The maps of every level walked are keyed by `(link tile, depth)`, so
+/// The maps of every frame walked are keyed by `(link tile, depth)`, so
 /// leaving by symlink costs the descent but not the mapping.
 #[test]
 fn a_symlink_out_keeps_the_maps_of_the_levels_already_walked() {
@@ -973,7 +973,7 @@ fn the_map_survives_a_save_and_load() {
 }
 
 /// Two links are two stacks, so they are two maps. Sharing one would
-/// pre-reveal a level the party has never set foot in.
+/// pre-reveal a frame the party has never set foot in.
 #[test]
 fn each_link_keeps_its_own_map() {
     let mut game = game();
@@ -1261,7 +1261,7 @@ fn a_deeper_cache_pays_better() {
 /// lair's cell.
 ///
 /// Outside the *seal*, not beside the lair: a sealed door is walkable as far
-/// as the level is concerned (the generator has to see through it), so
+/// as the frame is concerned (the generator has to see through it), so
 /// standing on the lair's neighbour would put the party already past the
 /// lock this is meant to exercise.
 fn stand_before_the_lair(game: &mut Game) -> (i32, i32) {
@@ -1286,7 +1286,7 @@ fn stand_before_the_lair(game: &mut Game) -> (i32, i32) {
     let lair = (0..level.height)
         .flat_map(|y| (0..level.width).map(move |x| (x, y)))
         .find(|&(x, y)| level.cell(x, y) == CellKind::Lair)
-        .expect("the bottom level should hold a lair");
+        .expect("the bottom frame should hold a lair");
 
     let seal = [Dir::North, Dir::East, Dir::South, Dir::West]
         .into_iter()
@@ -1337,11 +1337,11 @@ fn walk_into_the_lair(game: &mut Game) -> (i32, i32) {
     lair
 }
 
-/// The bottom level puts a lair where a level with a way down puts its
+/// The bottom frame puts a lair where a frame with a way down puts its
 /// link — the deepest room of the stack, and the only place its guardian
 /// could sensibly be.
 #[test]
-fn only_the_bottom_level_of_a_stack_holds_a_lair() {
+fn only_the_bottom_frame_of_a_stack_holds_a_lair() {
     let mut game = game();
     descend(&mut game);
 
@@ -1357,7 +1357,7 @@ fn only_the_bottom_level_of_a_stack_holds_a_lair() {
         unreachable!()
     };
     for _ in 1..frames {
-        assert_eq!(lairs(&game), 0, "a level with a way down held a lair");
+        assert_eq!(lairs(&game), 0, "a frame with a way down held a lair");
         stand_on_link_down(&mut game);
         game.descend();
     }
@@ -1533,7 +1533,7 @@ fn a_cleared_lair_stays_cleared_across_a_save_and_load() {
 }
 
 /// Which program guards a stack is a property of the stack, seeded off its
-/// level spec — so leaving and coming back cannot reroll it into something
+/// frame spec — so leaving and coming back cannot reroll it into something
 /// easier.
 #[test]
 fn the_same_stack_always_fields_the_same_guardian() {
@@ -1751,7 +1751,7 @@ fn stack_depth_is_capped_however_far_out_the_link_sits() {
     assert_eq!(frames, crate::tuning::STACK_FRAMES_MAX);
 }
 
-/// The bottom level is generated with no link down at all, so a stack ends
+/// The bottom frame is generated with no link down at all, so a stack ends
 /// rather than running forever — which is what it did before links had a
 /// depth: `descend` incremented past any number you like.
 #[test]
@@ -1779,7 +1779,7 @@ fn a_stack_bottoms_out_and_says_so() {
             .unwrap()
             .link_down,
         None,
-        "the bottom level laid a way down into nothing"
+        "the bottom frame laid a way down into nothing"
     );
 
     game.descend();
@@ -1793,7 +1793,7 @@ fn a_stack_bottoms_out_and_says_so() {
     );
 }
 
-/// Before the entrance tile went into the level seed, every link in a
+/// Before the entrance tile went into the frame seed, every link in a
 /// sector opened onto the same maze — three holes, one stack, and no
 /// reason to walk to the far one.
 #[test]
@@ -2034,7 +2034,7 @@ fn a_breach_leaves_the_previous_sectors_entrances_behind() {
     assert_eq!(
         after.len(),
         crate::tuning::STACK_LINKS_PER_ZONE,
-        "the new sector should hold its own links and no more — the old ones didn't ride the breach along"
+        "the new sector should hold its own links and no more — old ones rode the breach along"
     );
     assert_ne!(before, after, "the new sector needs its own links");
 }

@@ -85,11 +85,11 @@ impl Game {
         memory.seen.extend(seen);
     }
 
-    /// The party's map of the level they are in — see
+    /// The party's map of the frame they are in — see
     /// `views::FrameMapView`. `None` on the surface.
     ///
-    /// Drawn from `StackMemory` rather than from the level, so it shows
-    /// what has been seen and not what is there. The level is consulted only
+    /// Drawn from `StackMemory` rather than from the frame, so it shows
+    /// what has been seen and not what is there. The frame is consulted only
     /// to say what each *remembered* cell holds.
     pub fn frame_map(&self) -> Option<FrameMapView> {
         let pos = self.stack_pos()?;

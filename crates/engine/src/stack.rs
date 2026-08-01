@@ -576,23 +576,21 @@ fn is_dead_end(level: &Frame, x: i32, y: i32) -> bool {
         == 1
 }
 
-/// Breadth-first walk from `from`, returning the walkable cell at the
-/// greatest step distance. Ties break toward the lowest row-major index, so
-/// the result is a pure function of the frame rather than of hash order.
-fn furthest_floor_from(level: &Frame, from: (i32, i32)) -> (i32, i32) {
+/// Step distance from `from` to every cell, row-major, `u32::MAX` where
+/// unreachable.
+///
+/// Extracted so `furthest_floor_from` and `fault_landing` share one walk
+/// rather than each keeping its own copy of the same breadth-first search —
+/// two BFS bodies over the same graph is precisely the drift CLAUDE.md's
+/// mirroring rule is about.
+fn distances_from(level: &Frame, from: (i32, i32)) -> Vec<u32> {
     let mut dist = vec![u32::MAX; (level.width * level.height) as usize];
     let idx = |x: i32, y: i32| (y * level.width + x) as usize;
 
     dist[idx(from.0, from.1)] = 0;
     let mut queue = VecDeque::from([from]);
-    let (mut best, mut best_dist) = (from, 0);
-
     while let Some((x, y)) = queue.pop_front() {
         let d = dist[idx(x, y)];
-        if d > best_dist {
-            best = (x, y);
-            best_dist = d;
-        }
         for dir in DIRS {
             let (dx, dy) = dir.delta();
             let (nx, ny) = (x + dx, y + dy);
@@ -603,8 +601,55 @@ fn furthest_floor_from(level: &Frame, from: (i32, i32)) -> (i32, i32) {
             queue.push_back((nx, ny));
         }
     }
+    dist
+}
 
-    best
+/// The walkable cell at the greatest step distance from `from`. Ties break
+/// toward the lowest row-major index, so the result is a pure function of
+/// the frame rather than of hash order.
+fn furthest_floor_from(level: &Frame, from: (i32, i32)) -> (i32, i32) {
+    let dist = distances_from(level, from);
+    let mut best = (from, 0);
+    for y in 0..level.height {
+        for x in 0..level.width {
+            let d = dist[(y * level.width + x) as usize];
+            if d != u32::MAX && d > best.1 {
+                best = ((x, y), d);
+            }
+        }
+    }
+    best.0
+}
+
+/// Where a party falling into this frame through a fault comes down.
+///
+/// Plain `Floor` in the **far half** of the frame, measured from `entry` —
+/// which is the frame's way up, so a fall always costs a walk back. `Floor`
+/// specifically, so a fall can never deposit the party on the lair, a cache,
+/// or another fault.
+///
+/// Picked from a stream salted off the frame's own seed rather than taken as
+/// "the furthest cell", which would land every fall in the same corner and
+/// always beside the way further down. `None` if the frame somehow offers no
+/// far-half floor, which leaves the caller to fall back on the entry.
+pub(crate) fn fault_landing(level: &Frame, spec: FrameSpec) -> Option<(i32, i32)> {
+    const FALL_SALT: u64 = 0xFA11_1E15;
+
+    let dist = distances_from(level, level.entry);
+    let reach = dist.iter().filter(|&&d| d != u32::MAX).max().copied()?;
+
+    let mut far: Vec<(i32, i32)> = Vec::new();
+    for y in 0..level.height {
+        for x in 0..level.width {
+            let d = dist[(y * level.width + x) as usize];
+            if level.cell(x, y) == CellKind::Floor && d != u32::MAX && d * 2 >= reach {
+                far.push((x, y));
+            }
+        }
+    }
+
+    let mut rng = StdRng::seed_from_u64(spec.rng_seed() ^ FALL_SALT);
+    (!far.is_empty()).then(|| far[rng.random_range(0..far.len())])
 }
 
 #[cfg(test)]

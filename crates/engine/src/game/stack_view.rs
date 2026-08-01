@@ -125,7 +125,10 @@ impl Game {
                                 FrameMapCell::Door
                             }
                             CellKind::SealedDoor => FrameMapCell::SealedDoor,
-                            CellKind::Breakpoint => FrameMapCell::Breakpoint,
+                            CellKind::Breakpoint if !self.breakpoint_spent(pos, (x, y)) => {
+                                FrameMapCell::Breakpoint
+                            }
+                            CellKind::Breakpoint => FrameMapCell::Floor,
                             CellKind::Fault => FrameMapCell::Fault,
                             CellKind::Corruption => FrameMapCell::Corruption,
                         }
@@ -202,7 +205,13 @@ impl Game {
                             StackCellView::Door
                         }
                         CellKind::SealedDoor => StackCellView::SealedDoor,
-                        CellKind::Breakpoint => StackCellView::Breakpoint,
+                        // A spent port is dead hardware. Still drawing it
+                        // would send the party back to a cell with nothing
+                        // left in it, exactly as an emptied cache would.
+                        CellKind::Breakpoint if !self.breakpoint_spent(pos, (cx, cy)) => {
+                            StackCellView::Breakpoint
+                        }
+                        CellKind::Breakpoint => StackCellView::Floor,
                         CellKind::Fault => StackCellView::Fault,
                         CellKind::Corruption => StackCellView::Corruption,
                     })
@@ -219,7 +228,14 @@ impl Game {
             CellKind::Cache => Some("An empty casing".to_string()),
             CellKind::Lair => Some("The lair, and nothing left holding it".to_string()),
             CellKind::Door | CellKind::SealedDoor => Some("A doorway".to_string()),
-            _ => None,
+            // Like the cache above, these report rather than offer: all three
+            // fire on arrival, so by the time this line is read the port is
+            // spent and the substrate has already bitten. A fault never
+            // appears here at all — the party is in the frame below before
+            // the view is next built.
+            CellKind::Breakpoint => Some("A burnt-out debug port".to_string()),
+            CellKind::Corruption => Some("Rotten substrate  — moving on costs".to_string()),
+            CellKind::Rock | CellKind::Floor | CellKind::Fault => None,
         };
 
         Some(StackView {

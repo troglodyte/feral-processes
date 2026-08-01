@@ -267,21 +267,44 @@ impl Game {
         }
     }
 
-    /// Generates the frame for `depth` and puts the party on its entry cell
-    /// facing north. Shared by the way in and every descent after it.
-    fn descend_to(&mut self, depth: u32, frames: u32, entrance: (i32, i32)) {
+    /// Generates the frame for `depth` and puts the party on the cell
+    /// `landing` picks out of it, facing north.
+    ///
+    /// One function for all three ways into a frame — walking down a link,
+    /// climbing up one, and falling through a fault — because they differ in
+    /// exactly one thing and agree on the rest: generate, install the frame,
+    /// rewrite the locale, remember what is now in view. Three copies of that
+    /// spine is three places to fix an ordering bug in.
+    ///
+    /// `landing` takes the generated frame rather than a bare cell because
+    /// two of the three callers cannot name their landing cell until the
+    /// frame exists — an ascent lands on `link_down`, and a fall is placed by
+    /// distance. Each caller's rule therefore stays at its own call site.
+    fn enter_frame(
+        &mut self,
+        depth: u32,
+        frames: u32,
+        entrance: (i32, i32),
+        landing: impl FnOnce(&stack::Frame) -> (i32, i32),
+    ) {
         let level = stack::generate(self.frame_spec(depth, frames, entrance));
-        let entry = level.entry;
+        let (x, y) = landing(&level);
         self.world.insert_resource(CurrentStack(Some(level)));
         self.world.insert_resource(Locale::Stack {
             depth,
             frames,
-            x: entry.0,
-            y: entry.1,
+            x,
+            y,
             facing: Dir::North,
             entrance,
         });
         self.remember_view();
+    }
+
+    /// Arrives on the frame's entry cell — walking in from the surface, and
+    /// every descent by link after it.
+    fn descend_to(&mut self, depth: u32, frames: u32, entrance: (i32, i32)) {
+        self.enter_frame(depth, frames, entrance, |level| level.entry);
     }
 
     /// Puts the party back on the zone map. The player's `Position` was
@@ -420,8 +443,18 @@ impl Game {
         // full-HP guardian conjured by a party that jacked out of the first
         // and misjudged which way it was facing.
         if walkable {
+            // Corruption first: it is a property of arriving rather than
+            // something the cell offers, and if it kills the party the three
+            // below all refuse on their own `is_game_over` checks.
+            self.bleed_corruption();
             self.open_cache();
             self.rouse_lair();
+            self.trip_breakpoint();
+            // Before the encounter roll, so a party that fell rolls for an
+            // ambush in the frame they landed in rather than the one they
+            // left. Landing somewhere strange and being jumped there is the
+            // right reading of a fall.
+            self.take_fault();
             self.maybe_stack_encounter();
         }
         self.tick();
@@ -575,22 +608,31 @@ impl Game {
     }
 
     fn ascend_to(&mut self, depth: u32, frames: u32, entrance: (i32, i32)) {
-        let level = stack::generate(self.frame_spec(depth, frames, entrance));
-        // Infallible: you can only climb *to* a frame you already climbed
-        // *from*, so it is not the bottom of the stack and has a way down.
-        let landing = level
-            .link_down
-            .expect("a frame climbed up into must have the link that was climbed");
-        self.world.insert_resource(CurrentStack(Some(level)));
-        self.world.insert_resource(Locale::Stack {
-            depth,
-            frames,
-            x: landing.0,
-            y: landing.1,
-            facing: Dir::North,
-            entrance,
+        self.enter_frame(depth, frames, entrance, |level| {
+            // Infallible: you can only climb *to* a frame you already climbed
+            // *from*, so it is not the bottom of the stack and has a way down.
+            level
+                .link_down
+                .expect("a frame climbed up into must have the link that was climbed")
         });
-        self.remember_view();
+    }
+
+    /// Drops the party through a fault onto the frame below, landing in its
+    /// far half rather than on its entry — see `stack::fault_landing`.
+    ///
+    /// The fall is a descent the party did not choose, so it is narrated as
+    /// one rather than passing silently, and it costs no Trace: falling
+    /// through a rotten floor is clumsy, not loud, and Trace is a meter for
+    /// what the party takes rather than for what happens to them.
+    pub(crate) fn fall_to(&mut self, depth: u32, frames: u32, entrance: (i32, i32)) {
+        let spec = self.frame_spec(depth, frames, entrance);
+        self.enter_frame(depth, frames, entrance, |level| {
+            stack::fault_landing(level, spec).unwrap_or(level.entry)
+        });
+        self.log_kind(
+            MessageKind::Outcome,
+            format!("The floor gives way. You come down hard on frame {depth}."),
+        );
     }
 
     /// Restores a saved Stack position, regenerating the frame from the

@@ -2751,3 +2751,242 @@ fn a_hunted_ambush_fields_more_of_the_pack_than_a_quiet_one() {
          band multiplier never reached the fight"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 3 — cell kinds
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Puts the party on a walkable neighbour of the frame's first cell of
+/// `kind`, facing it, so `step_forward` walks onto it through the real step
+/// path rather than the test teleporting the party on top of it.
+///
+/// Returns the target cell. `None` when the frame has no such cell — which
+/// is a real case for `Fault` on a bottom frame, and a test that wants one
+/// should say so rather than unwrap blindly.
+fn stand_facing(game: &mut Game, kind: CellKind) -> Option<(i32, i32)> {
+    let (target, from, facing) = {
+        let level = game.world.resource::<CurrentStack>().0.as_ref().unwrap();
+        let target = (0..level.height)
+            .flat_map(|y| (0..level.width).map(move |x| (x, y)))
+            .find(|&(x, y)| level.cell(x, y) == kind)?;
+        let dirs = [Dir::North, Dir::East, Dir::South, Dir::West];
+        let (from, facing) = dirs.into_iter().find_map(|dir| {
+            let (dx, dy) = dir.delta();
+            // Step *from* the neighbour opposite the way we want to face.
+            let from = (target.0 - dx, target.1 - dy);
+            level.walkable(from.0, from.1).then_some((from, dir))
+        })?;
+        (target, from, facing)
+    };
+    let Locale::Stack {
+        depth,
+        frames,
+        entrance,
+        ..
+    } = locale(game)
+    else {
+        unreachable!("not underground")
+    };
+    game.world.insert_resource(Locale::Stack {
+        depth,
+        frames,
+        x: from.0,
+        y: from.1,
+        facing,
+        entrance,
+    });
+    Some(target)
+}
+
+fn trace_of(game: &Game) -> u32 {
+    game.world.resource::<crate::resources::Trace>().0
+}
+
+fn player_hp(game: &Game) -> i32 {
+    game.world.get::<Stats>(game.player_entity()).unwrap().hp
+}
+
+/// The payout: the whole frame, walls included, in one step. Asserted as
+/// *every* in-bounds cell rather than every walkable one — a map drawn from
+/// floors alone is a floor plan floating in nothing.
+#[test]
+fn jacking_into_a_breakpoint_maps_the_entire_frame() {
+    let mut game = game();
+    descend(&mut game);
+    let port = stand_facing(&mut game, CellKind::Breakpoint).expect("every frame exposes a port");
+    game.step_forward();
+
+    let Locale::Stack {
+        depth, entrance, ..
+    } = locale(&game)
+    else {
+        unreachable!()
+    };
+    let (w, h) = {
+        let level = game.world.resource::<CurrentStack>().0.as_ref().unwrap();
+        (level.width, level.height)
+    };
+    let seen = &game
+        .world
+        .resource::<crate::resources::StackMemory>()
+        .0
+        .get(&(entrance, depth))
+        .expect("standing in a frame it has a memory of")
+        .seen;
+    for y in 0..h {
+        for x in 0..w {
+            assert!(seen.contains(&(x, y)), "({x}, {y}) went unmapped");
+        }
+    }
+    assert_eq!(seen.len(), (w * h) as usize);
+    let _ = port;
+}
+
+#[test]
+fn jacking_into_a_breakpoint_is_the_loudest_thing_the_party_can_do() {
+    let mut game = game();
+    descend(&mut game);
+    stand_facing(&mut game, CellKind::Breakpoint).unwrap();
+    let before = trace_of(&game);
+    game.step_forward();
+    assert_eq!(
+        trace_of(&game) - before,
+        crate::tuning::TRACE_PER_BREAKPOINT
+    );
+}
+
+/// The spent-ness half. Without `FrameMemory::jacked` the port refills the
+/// moment the party steps off and back on, and Trace becomes a tap you can
+/// leave running for free maps.
+#[test]
+fn a_spent_breakpoint_stays_spent_when_the_party_steps_off_and_back_on() {
+    let mut game = game();
+    descend(&mut game);
+    stand_facing(&mut game, CellKind::Breakpoint).unwrap();
+    game.step_forward();
+    let after_first = trace_of(&game);
+
+    // Off and back on, through the same real step path.
+    game.step_back();
+    game.step_forward();
+    assert_eq!(
+        trace_of(&game),
+        after_first,
+        "the port paid out a second time — the jacked record is not holding"
+    );
+}
+
+/// A fault is the one cell that moves the party between frames on a plain
+/// step. It has to land them somewhere they could stand, and *not* on the
+/// way back up — landing on the up-link would make a fall a free ride.
+#[test]
+fn falling_through_a_fault_lands_a_frame_down_and_not_on_the_way_up() {
+    let mut game = game();
+    descend(&mut game);
+    let Locale::Stack { depth: before, .. } = locale(&game) else {
+        unreachable!()
+    };
+    stand_facing(&mut game, CellKind::Fault).expect("a non-bottom frame lays a fault");
+    game.step_forward();
+
+    let Locale::Stack { depth, x, y, .. } = locale(&game) else {
+        unreachable!("the fall left the Stack entirely")
+    };
+    assert_eq!(depth, before + 1, "a fault must drop exactly one frame");
+
+    let level = game.world.resource::<CurrentStack>().0.as_ref().unwrap();
+    assert_eq!(
+        level.cell(x, y),
+        CellKind::Floor,
+        "landed on {:?} — a fall must come down on plain floor, never on a \
+         cache, a lair or another fault",
+        level.cell(x, y)
+    );
+    assert_ne!(
+        (x, y),
+        level.entry,
+        "landed on the frame's own way up, which makes a fall a free ride"
+    );
+}
+
+/// Falling is clumsy, not loud. Trace is a meter for what the party takes,
+/// and a fall is something that happens to them.
+#[test]
+fn falling_through_a_fault_raises_no_trace() {
+    let mut game = game();
+    descend(&mut game);
+    stand_facing(&mut game, CellKind::Fault).unwrap();
+    let before = trace_of(&game);
+    game.step_forward();
+    assert_eq!(trace_of(&game), before);
+}
+
+#[test]
+fn stepping_onto_corruption_costs_the_player_hp() {
+    let mut game = game();
+    descend(&mut game);
+    stand_facing(&mut game, CellKind::Corruption).expect("every frame grows corruption");
+    let before = player_hp(&game);
+    game.step_forward();
+
+    let max_hp = game
+        .world
+        .get::<Stats>(game.player_entity())
+        .unwrap()
+        .max_hp;
+    let expected = ((max_hp as f32 * crate::tuning::STACK_CORRUPTION_HP_PERCENT).round() as i32)
+        .max(crate::tuning::STACK_CORRUPTION_MIN_DAMAGE);
+    assert_eq!(before - player_hp(&game), expected);
+}
+
+/// The proof that corruption routes through `Game::apply_damage` rather
+/// than writing `Stats::hp` directly. A direct write would ignore the
+/// Mitigation buff entirely and the two figures would match — so this fails
+/// against the shortcut and passes against the real path.
+#[test]
+fn corruption_goes_through_apply_damage_and_so_mitigation_blunts_it() {
+    let unmitigated = {
+        let mut game = game();
+        descend(&mut game);
+        stand_facing(&mut game, CellKind::Corruption).unwrap();
+        let before = player_hp(&game);
+        game.step_forward();
+        before - player_hp(&game)
+    };
+
+    let mut game = game();
+    descend(&mut game);
+    stand_facing(&mut game, CellKind::Corruption).unwrap();
+    let player = game.player_entity();
+    game.world.entity_mut(player).insert(FieldBuff {
+        active: vec![ActiveFieldBuff {
+            kind: FieldBuffKind::Mitigation,
+            name: "test".to_string(),
+            power: 50,
+            remaining: 99,
+            source: BuffSource::Consumable,
+        }],
+    });
+    let before = player_hp(&game);
+    game.step_forward();
+    let mitigated = before - player_hp(&game);
+
+    assert!(
+        mitigated < unmitigated,
+        "mitigation did not blunt corruption ({mitigated} vs {unmitigated}) — \
+         the damage is bypassing apply_damage"
+    );
+}
+
+/// The player alone. Corrupting the party would route program deaths and
+/// the permadeath path through something that is not a fight.
+#[test]
+fn corruption_does_not_touch_the_party() {
+    let mut game = game();
+    descend(&mut game);
+    let pet = spawn_tamed(&mut game, 40, 5);
+    let before = game.world.get::<Stats>(pet).unwrap().hp;
+    stand_facing(&mut game, CellKind::Corruption).unwrap();
+    game.step_forward();
+    assert_eq!(game.world.get::<Stats>(pet).unwrap().hp, before);
+}

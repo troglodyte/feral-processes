@@ -351,6 +351,16 @@ pub enum StackCellView {
     Door,
     /// A door that still wants an access shard.
     SealedDoor,
+    /// An unused debug port. A spent one comes through as `Floor`, on the
+    /// same argument as an emptied cache — the frame it maps is already
+    /// mapped, so advertising it again is a walk for nothing.
+    Breakpoint,
+    /// A hole down to the next frame. Never spent, so it always draws.
+    Fault,
+    /// Rotten substrate, which costs HP to cross. Always drawn: unlike a
+    /// cache this is a warning rather than a reward, and one the party needs
+    /// every time they consider the route, not once.
+    Corruption,
 }
 
 /// The party's first-person view of the frame around them — see
@@ -412,6 +422,15 @@ pub enum FrameMapCell {
     /// A door that still wants an access shard — worth marking, since it is
     /// the one thing on a map that tells you where to come back to.
     SealedDoor,
+    /// A debug port the party has seen and not yet used. A spent one maps as
+    /// `Floor`, like an emptied cache.
+    Breakpoint,
+    /// A hole down to the next frame.
+    Fault,
+    /// Rotten substrate. The one cell kind the map draws as a warning rather
+    /// than as a destination, and the reason mapping a frame is worth more
+    /// than knowing which cells are walkable.
+    Corruption,
 }
 
 /// A landmark pinned to a mapped cell, over and above what the layout says.

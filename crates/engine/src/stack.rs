@@ -116,6 +116,25 @@ pub enum CellKind {
     /// party may actually pass is `Game::step`'s business, and whether this
     /// one has already been opened lives in `FrameMemory::opened`.
     SealedDoor,
+    /// An exposed debug port. Walking onto one maps the whole frame at a
+    /// stroke — and tells the stack exactly where you are, which is the
+    /// single loudest thing the party can do (`TRACE_PER_BREAKPOINT`).
+    ///
+    /// One-shot; which ones have been used lives in
+    /// `resources::FrameMemory::jacked`, not in the frame.
+    Breakpoint,
+    /// A hole in the floor. Walking onto one drops the party to the frame
+    /// below, landing far from that frame's way up — so it is a descent you
+    /// pay for with the walk back, rather than a free one.
+    ///
+    /// Never generated on the bottom frame, which has nothing below it to
+    /// fall into. Not one-shot: it is terrain, and it works every time.
+    Fault,
+    /// Rotten substrate. Standing on it costs the player HP
+    /// (`Game::bleed_corruption`), so a corrupted stretch of corridor is a
+    /// route you can decide to walk around — the reason this exists at all,
+    /// in a maze that otherwise has exactly one kind of walkable cell.
+    Corruption,
 }
 
 impl CellKind {
@@ -125,6 +144,12 @@ impl CellKind {
 
     /// Whether this cell stops the view cone. Rock does the obvious way;
     /// a door does it by being shut.
+    ///
+    /// Phase 3's three kinds are all deliberately absent: a cell that is both
+    /// walkable and sight-blocking fills the first-person view with its own
+    /// face and truncates the map to the party's own row, which is the trap
+    /// doors sprang and both cone consumers now carry an explicit `ahead == 0`
+    /// exception for. See `the_new_cell_kinds_are_walkable_and_see_through`.
     pub fn blocks_sight(self) -> bool {
         matches!(self, CellKind::Rock | CellKind::Door | CellKind::SealedDoor)
     }
@@ -639,6 +664,24 @@ mod tests {
             assert!(
                 !level.walkable(level.width - 1, i),
                 "right edge leaks at {i}"
+            );
+        }
+    }
+
+    /// The door trap, guarded. A cell that is both walkable and
+    /// sight-blocking fills the first-person view with its own face and
+    /// truncates the map to the party's row — the bug doors shipped with,
+    /// which both cone consumers now carry an `ahead == 0` exception for.
+    /// None of phase 3's kinds is allowed to reopen it.
+    #[test]
+    fn the_new_cell_kinds_are_walkable_and_see_through() {
+        for kind in [CellKind::Breakpoint, CellKind::Fault, CellKind::Corruption] {
+            assert!(kind.walkable(), "{kind:?} is not walkable");
+            assert!(
+                !kind.blocks_sight(),
+                "{kind:?} blocks sight — it inherits the door trap, and both \
+                 remember_view and draws_as_face need the ahead == 0 exception \
+                 before it can ship"
             );
         }
     }

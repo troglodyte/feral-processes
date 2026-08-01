@@ -125,6 +125,9 @@ impl Game {
                                 FrameMapCell::Door
                             }
                             CellKind::SealedDoor => FrameMapCell::SealedDoor,
+                            CellKind::Breakpoint => FrameMapCell::Breakpoint,
+                            CellKind::Fault => FrameMapCell::Fault,
+                            CellKind::Corruption => FrameMapCell::Corruption,
                         }
                     })
                     .collect()
@@ -199,6 +202,9 @@ impl Game {
                             StackCellView::Door
                         }
                         CellKind::SealedDoor => StackCellView::SealedDoor,
+                        CellKind::Breakpoint => StackCellView::Breakpoint,
+                        CellKind::Fault => StackCellView::Fault,
+                        CellKind::Corruption => StackCellView::Corruption,
                     })
                     .collect()
             })

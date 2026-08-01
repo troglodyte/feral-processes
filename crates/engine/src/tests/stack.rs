@@ -2990,3 +2990,31 @@ fn corruption_does_not_touch_the_party() {
     game.step_forward();
     assert_eq!(game.world.get::<Stats>(pet).unwrap().hp, before);
 }
+
+/// The relationship the 2026-08-01 retune rests on, and the reason those
+/// thresholds moved at all.
+///
+/// A frame holds `STACK_CACHES_PER_FRAME` caches worth `TRACE_PER_CACHE`
+/// each. Emptying every one of them is the greediest thing that can be done
+/// to a single floor, and it has to be enough to cross the first band — at
+/// the original 40 against three caches paying 10, it was not, so a player
+/// could strip a frame bare and watch the meter do nothing.
+///
+/// Written against the constants rather than the numbers so it keeps
+/// meaning this after the next retune: raise `TRACE_NOTICED` past what a
+/// frame's caches pay, or cut the cache count, and this fails rather than
+/// the mechanic quietly going inert again.
+#[test]
+fn stripping_a_frames_caches_is_enough_to_be_noticed() {
+    use crate::resources::TraceBand;
+    use crate::tuning::{STACK_CACHES_PER_FRAME, TRACE_NOTICED, TRACE_PER_CACHE};
+
+    let whole_frame = TRACE_PER_CACHE * STACK_CACHES_PER_FRAME as u32;
+    assert!(
+        whole_frame >= TRACE_NOTICED,
+        "a frame's {STACK_CACHES_PER_FRAME} caches pay {whole_frame} Trace \
+         against a first band at {TRACE_NOTICED} — stripping an entire floor \
+         leaves the player Quiet, and the meter never announces itself"
+    );
+    assert_eq!(TraceBand::from_trace(whole_frame), TraceBand::Noticed);
+}

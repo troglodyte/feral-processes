@@ -63,6 +63,17 @@ out wrong, `TRACE_PER_BREAKPOINT` was priced against them and moves too.
 Deferring the evidence, not skipping it — the branch does not land until the
 crawl has happened.
 
+**The crawl happened, and that is exactly what it cost.** Played
+2026-08-01 on `dev-saves/stack.ron`: a cache, four fights, about a third of
+a frame, and the meter never left **Quiet**. Working back from that found an
+arithmetic fault rather than a matter of taste — three caches at 10 is 30
+against a first band at 40, so stripping a whole floor of everything in it
+still read Quiet. Thresholds are now **25/70/140**, and
+`stripping_a_frames_caches_is_enough_to_be_noticed` pins the relationship so
+it cannot silently go inert again. `TRACE_PER_BREAKPOINT` stayed at 25 and
+its argument changed underneath, as predicted above. Only the first band is
+evidence-backed; the session came nowhere near the other two.
+
 ## Why
 
 The descent is currently a checklist. You walk a braided maze, crack every
@@ -392,9 +403,12 @@ set rather than the `bool` that `cleared` uses, so raising
 halves live in `game/stack_features.rs` beside the cache/seal/lair pairs,
 with a `breakpoint_spent` reader for the two views.
 
-`TRACE_PER_BREAKPOINT = 25`, against cache 10, seal 5, kill 2 and
-`TRACE_NOTICED = 40`. A free map costs two and a half caches of noise: dear
-enough to be a decision, not so dear that nobody ever pays it.
+`TRACE_PER_BREAKPOINT = 25`, against cache 10, seal 5 and kill 2. A free map
+costs two and a half caches of noise: dear enough to be a decision, not so
+dear that nobody ever pays it. Written against `TRACE_NOTICED = 40`, where
+that was a breakpoint plus two caches to cross the first band; after the
+retune to 25 it crosses on its own, which reads better for the loudest
+action in the game. The number did not move, only what it buys.
 
 **The Power-for-a-buff half of the original sketch is cut.** Two options
 need a prompt, a prompt needs a `Mode`, and a `Mode` drags app-core into a

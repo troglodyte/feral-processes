@@ -591,10 +591,15 @@ pub const TRACE_PER_KILL: u32 = 2;
 /// frame's map at a stroke, and announcing yourself to the substrate is what
 /// it costs.
 ///
-/// Priced against `TRACE_NOTICED` at 40 — one breakpoint plus two caches
-/// crosses the first band — so taking the free map is a decision about the
-/// rest of the frame rather than a reflex. Note that those thresholds are
-/// themselves unplayed, so this number rides on a guess and moves with it.
+/// Held at 25 through the 2026-08-01 retune, which changed what it *means*:
+/// against `TRACE_NOTICED` at 40 this was one breakpoint plus two caches to
+/// cross the first band, and against 25 a breakpoint alone crosses it on the
+/// spot. That is the better reading of "the loudest thing you can do" — the
+/// map is free and being seen taking it is immediate — so the number stayed
+/// where it was and the argument for it changed underneath.
+///
+/// Still unplayed as a *decision*: the one crawl on record never used a
+/// breakpoint at all, so whether anyone pays this is unmeasured.
 pub const TRACE_PER_BREAKPOINT: u32 = 25;
 
 /// Where each band begins. Half-open: a value sitting exactly on a
@@ -605,11 +610,26 @@ pub const TRACE_PER_BREAKPOINT: u32 = 25;
 /// **Hunted**, while a beeliner arrives around **Noticed**. That
 /// difference is the question the descent is supposed to ask.
 ///
-/// Purely arithmetic. Where these lines fall is exactly the part no
-/// measurement can settle, and the one thing playing will answer first.
-pub const TRACE_NOTICED: u32 = 40;
-pub const TRACE_TRACED: u32 = 100;
-pub const TRACE_HUNTED: u32 = 180;
+/// **Retuned 2026-08-01 from 40/100/180, on the first crawl anyone has
+/// played.** The session cracked a cache and took four fights across about
+/// a third of a frame and never left **Quiet** — and working back from that
+/// showed the real fault, which is arithmetic rather than a matter of
+/// taste: a frame holds `STACK_CACHES_PER_FRAME` caches at
+/// `TRACE_PER_CACHE` each, so **stripping a whole floor of every cache in
+/// it came to 30 against a first band at 40**. Maximal greed on an entire
+/// frame produced no feedback at all, and a meter nobody can make move
+/// cannot teach what it is for. `stripping_a_frames_caches_is_enough_to_be
+/// _noticed` now pins that, so the relationship survives a future change to
+/// either constant.
+///
+/// Only `TRACE_NOTICED` is evidence-backed. The upper two are re-derived
+/// from the same ~60-per-frame model that produced the originals — one
+/// thorough frame lands solidly in Noticed, the second reaches Traced, the
+/// third Hunted — and are still unplayed, because that session never came
+/// close to either.
+pub const TRACE_NOTICED: u32 = 25;
+pub const TRACE_TRACED: u32 = 70;
+pub const TRACE_HUNTED: u32 = 140;
 
 /// Per-band multiplier on `STACK_ENCOUNTER_CHANCE`, indexed by
 /// `TraceBand::index`.

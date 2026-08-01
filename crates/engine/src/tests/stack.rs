@@ -2714,3 +2714,40 @@ fn the_stack_view_reports_the_trace_band() {
     set_trace(&mut game, TRACE_HUNTED);
     assert_eq!(game.stack_view().unwrap().trace, "Hunted");
 }
+
+/// The group lever, asserted where it actually lands.
+///
+/// `trace_group_ceiling` being right is not enough: `spawn_pack` decides how
+/// many bodies exist, but `group_pack` decides how many of them fight, and
+/// it caps each species group independently. Scaling only the spawn made
+/// `TRACE_GROUP_MULT` a no-op in every zone — the surplus was capped back
+/// out at battle assembly and then swept by `end_battle`'s `StackSpawn`
+/// cleanup, so a Hunted ambush fielded exactly as many programs as a Quiet
+/// one while every unit test still passed.
+#[test]
+fn a_hunted_ambush_fields_more_of_the_pack_than_a_quiet_one() {
+    use crate::tuning::TRACE_HUNTED;
+    let mut game = game();
+    game.world.insert_resource(ZoneLevel(3));
+    descend(&mut game);
+
+    let pack: Vec<Entity> = (0..6)
+        .map(|_| spawn_wild_on_player_tile(&mut game))
+        .collect();
+    let fielded = |game: &Game, pack: &[Entity]| -> usize {
+        game.group_pack(pack.to_vec())
+            .iter()
+            .map(|g| g.members.len())
+            .sum()
+    };
+
+    let quiet = fielded(&game, &pack);
+    set_trace(&mut game, TRACE_HUNTED);
+    let hunted = fielded(&game, &pack);
+
+    assert!(
+        hunted > quiet,
+        "Hunted fielded {hunted} of the pack, Quiet fielded {quiet} — the \
+         band multiplier never reached the fight"
+    );
+}

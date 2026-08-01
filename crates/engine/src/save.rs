@@ -432,24 +432,30 @@ mod tests {
         );
     }
 
-    /// `SAVE_FORMAT_VERSION` moved 14 -> 15 to add `field_buffs`. There is
-    /// no migration path (see that constant's docs), so a save genuinely
-    /// written under the prior version must be refused exactly like any
-    /// other version mismatch, not silently decoded into garbage.
+    /// There is no migration path (see `SAVE_FORMAT_VERSION`'s docs), so a
+    /// save written under the immediately preceding version must be refused
+    /// exactly like any other mismatch rather than silently decoded into
+    /// garbage — the adjacent version being the one where a near-miss decode
+    /// is most plausible.
+    ///
+    /// Written relative to the constant rather than against a hardcoded pair
+    /// so it keeps testing the adjacent case across every future bump. It
+    /// last named 14 -> 15 (adding `field_buffs`) and had gone stale by the
+    /// time the constant reached 16.
     #[test]
-    fn a_save_written_at_v14_is_refused_now_that_v15_is_current() {
+    fn a_save_written_at_the_previous_version_is_refused() {
         let path = std::env::temp_dir().join(format!(
-            "feral_processes_save_v14_{}.bin",
+            "feral_processes_save_prev_version_{}.bin",
             std::process::id()
         ));
         let encoded =
             bincode::serde::encode_to_vec(sample_data(), bincode::config::standard()).unwrap();
-        let mut bytes = 14u32.to_le_bytes().to_vec();
+        let mut bytes = (SAVE_FORMAT_VERSION - 1).to_le_bytes().to_vec();
         bytes.extend(encoded);
         std::fs::write(&path, bytes).unwrap();
 
         let Err(err) = load_from_file(&path) else {
-            panic!("a v14 save should not load under the v15 format");
+            panic!("a save one version back should not load");
         };
         let _ = std::fs::remove_file(&path);
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);

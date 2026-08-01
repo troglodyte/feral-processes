@@ -25,13 +25,26 @@ impl Game {
     /// spawned at distance 90 whose anchor sits at 87 would field 32 of its
     /// 64. A max over a set is order-independent, so this stays
     /// deterministic under a seed without sorting anything.
+    ///
+    /// Trace is folded in here as well as in `spawn_pack`, and it has to be
+    /// both: the spawn decides how many bodies exist, this decides how many
+    /// of them fight. Scaling only the spawn made `TRACE_GROUP_MULT` a
+    /// no-op — the surplus was capped back out here and then swept by
+    /// `end_battle`'s `StackSpawn` cleanup, so a Hunted ambush fielded
+    /// exactly as many programs as a Quiet one.
+    ///
+    /// Reading the band off the resource is safe *here*, unlike inside
+    /// `spawn_pack`: this is only ever reached from `start_battle`, which is
+    /// the player's own fight, and Trace is zero unless they are underground.
     fn widest_group_size(&self, members: &[Entity]) -> usize {
-        members
+        let base = members
             .iter()
             .filter_map(|&e| self.world.get::<Position>(e))
-            .map(|p| self.max_group_size(p.x, p.y) as usize)
+            .map(|p| self.max_group_size(p.x, p.y))
             .max()
-            .unwrap_or(1)
+            .unwrap_or(1);
+        let cap = crate::game::spawning::zone_group_cap(self.world.resource::<ZoneLevel>().0);
+        crate::game::spawning::trace_group_ceiling(base, self.trace_group_mult(), cap) as usize
     }
 
     /// The widest `max_enemy_groups` among `members`' own tiles, measured

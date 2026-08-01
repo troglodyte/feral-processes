@@ -44,4 +44,42 @@ impl Game {
     pub(crate) fn trace(&self) -> u32 {
         self.world.resource::<Trace>().0
     }
+
+    /// The one way Trace goes up, and the only place that knows a band was
+    /// crossed.
+    ///
+    /// Two things live here rather than at the three call sites. The
+    /// **underground guard**, because `award_loot` fires for every kill in
+    /// the game and the overwhelming majority of those are on the surface —
+    /// one check beats three, and a fourth source added later inherits it.
+    /// And the **crossing announcement**, logged as `MessageKind::Outcome`
+    /// so it survives `MessageLog::retain_outcomes_since_battle`: a
+    /// kill-driven crossing is logged during a battle teardown, where a
+    /// plain `Info` line would be pruned before the player ever saw it.
+    ///
+    /// Crossings are monotonic — nothing lowers Trace, and it resets only on
+    /// leaving the Stack — so only a rise is ever announced.
+    pub(crate) fn raise_trace(&mut self, amount: u32) {
+        if !self.is_underground() {
+            return;
+        }
+        let before = TraceBand::from_trace(self.trace());
+        let raised = self.trace().saturating_add(amount);
+        self.world.insert_resource(Trace(raised));
+
+        let after = TraceBand::from_trace(raised);
+        if after == before {
+            return;
+        }
+        let line = match after {
+            // Unreachable while Trace only ever rises, and stated as a
+            // no-op rather than a panic so that stays a design property
+            // rather than a crash if it ever changes.
+            TraceBand::Quiet => return,
+            TraceBand::Noticed => "Something in the substrate turns to look at you.",
+            TraceBand::Traced => "You are being traced. The dark is routing around you.",
+            TraceBand::Hunted => "Hunted. Whatever is down here has your address.",
+        };
+        self.log_kind(MessageKind::Outcome, line);
+    }
 }

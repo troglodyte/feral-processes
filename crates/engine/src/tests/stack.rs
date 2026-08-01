@@ -2371,3 +2371,189 @@ fn band_thresholds_are_half_open() {
     assert_eq!(TraceBand::from_trace(TRACE_HUNTED), Hunted);
     assert_eq!(TraceBand::from_trace(u32::MAX), Hunted);
 }
+
+/// Trace pays for *taking*, so the three things a stack can be robbed of
+/// each raise it, and walking does not.
+#[test]
+fn cracking_a_cache_raises_trace() {
+    use crate::tuning::TRACE_PER_CACHE;
+    let mut game = game();
+    descend(&mut game);
+    stand_before_a_cache(&mut game);
+
+    game.step_forward();
+    assert_eq!(trace(&game), TRACE_PER_CACHE);
+
+    // The cache is spent, so stepping off and back on must not charge again.
+    game.step_back();
+    game.step_forward();
+    assert_eq!(
+        trace(&game),
+        TRACE_PER_CACHE,
+        "an emptied cache should not keep paying Trace"
+    );
+}
+
+#[test]
+fn burning_a_seal_raises_trace() {
+    use crate::tuning::TRACE_PER_SEAL;
+    let mut game = game();
+    descend(&mut game);
+    stand_before_the_lair(&mut game);
+    give_shards(&mut game, 2);
+
+    game.step_forward();
+    assert_eq!(trace(&game), TRACE_PER_SEAL);
+
+    // An already-open seal is not a second theft.
+    game.step_back();
+    game.step_forward();
+    assert_eq!(trace(&game), TRACE_PER_SEAL, "the seal was already burned");
+}
+
+/// A seal that refuses the party took nothing from them, so it costs
+/// nothing in Trace either.
+#[test]
+fn a_refused_seal_raises_no_trace() {
+    let mut game = game();
+    descend(&mut game);
+    stand_before_the_lair(&mut game);
+    assert_eq!(shards(&game), 0, "this test needs an empty pack");
+
+    game.step_forward();
+
+    assert_eq!(trace(&game), 0);
+}
+
+#[test]
+fn killing_a_hostile_raises_trace() {
+    use crate::tuning::TRACE_PER_KILL;
+    let mut game = game();
+    descend(&mut game);
+    let wild = spawn_wild_on_player_tile(&mut game);
+
+    game.award_loot(wild);
+
+    assert_eq!(trace(&game), TRACE_PER_KILL);
+}
+
+/// `award_loot` fires for every kill in the game, the overwhelming majority
+/// of them on the surface. The guard lives inside `raise_trace` so there is
+/// one of it rather than one per hook.
+#[test]
+fn a_surface_kill_raises_no_trace() {
+    let mut game = game();
+    let wild = spawn_wild_on_player_tile(&mut game);
+
+    game.award_loot(wild);
+
+    assert!(!game.is_underground());
+    assert_eq!(trace(&game), 0);
+}
+
+/// The load-bearing choice of the whole phase: a meter driven by time or
+/// distance would tax exploration and map-making, rewarding the beeline and
+/// punishing the careful player.
+#[test]
+fn a_plain_step_raises_no_trace() {
+    let mut game = game();
+    descend(&mut game);
+
+    for _ in 0..12 {
+        game.step_forward();
+        game.turn_left();
+    }
+
+    assert_eq!(trace(&game), 0, "walking must be free");
+}
+
+/// Escalating ambushes with no visible cause are experienced as bad luck
+/// rather than as consequence, so every band crossing announces itself —
+/// and as `Outcome`, which `retain_outcomes_since_battle` keeps. A kill-driven
+/// crossing is logged during a battle teardown, where a plain `Info` line
+/// would be pruned before the player ever saw it.
+#[test]
+fn crossing_a_band_logs_an_outcome_line() {
+    use crate::tuning::{TRACE_NOTICED, TRACE_PER_CACHE};
+    let mut game = game();
+    descend(&mut game);
+    set_trace(&mut game, TRACE_NOTICED - TRACE_PER_CACHE);
+    stand_before_a_cache(&mut game);
+
+    game.step_forward();
+
+    assert_eq!(trace(&game), TRACE_NOTICED);
+    assert!(
+        game.message_log(12)
+            .iter()
+            .any(|(kind, line)| *kind == MessageKind::Outcome
+                && line.contains("turns to look at you")),
+        "crossing into Noticed should announce itself as an Outcome"
+    );
+}
+
+#[test]
+fn staying_inside_a_band_logs_nothing() {
+    let mut game = game();
+    descend(&mut game);
+    stand_before_a_cache(&mut game);
+
+    game.step_forward();
+
+    assert!(
+        !logged(&game, "turns to look at you"),
+        "a rise that crosses no threshold should be silent"
+    );
+}
+
+/// The measurement the whole Trace tuning table rests on.
+///
+/// A frame's kill-to-cache ratio is what makes Trace a greed meter rather
+/// than a combat meter: `STACK_ENCOUNTER_CHANCE` at 0.08 per step over a
+/// ~300-step exhaustive crawl draws roughly 24 fights against these 3
+/// caches, which is why `TRACE_PER_KILL` is a fifth of `TRACE_PER_CACHE`
+/// and not comparable to it.
+///
+/// Left unasserted, a later change to frame size or cache count moves that
+/// ratio and silently turns the meter into something else, with the whole
+/// suite still green. Ranges rather than equalities because the generator
+/// legitimately varies per depth.
+#[test]
+fn a_frames_shape_still_matches_what_trace_was_tuned_against() {
+    for depth in 1..=4u32 {
+        let spec = crate::stack::FrameSpec {
+            world_seed: 12345,
+            entrance: (30, 30),
+            depth,
+            frames: 4,
+        };
+        let frame = crate::stack::generate(spec);
+        let cells = || (0..frame.height).flat_map(|y| (0..frame.width).map(move |x| (x, y)));
+
+        let walkable = cells().filter(|&(x, y)| frame.walkable(x, y)).count();
+        let caches = cells()
+            .filter(|&(x, y)| frame.cell(x, y) == CellKind::Cache)
+            .count();
+        let seals = cells()
+            .filter(|&(x, y)| frame.cell(x, y) == CellKind::SealedDoor)
+            .count();
+
+        assert!(
+            (190..=220).contains(&walkable),
+            "depth {depth}: {walkable} walkable cells, outside the 190-220 \
+             the encounter-to-cache ratio was measured against"
+        );
+        assert!(
+            (2..=3).contains(&caches),
+            "depth {depth}: {caches} caches, outside the 2-3 TRACE_PER_CACHE assumes"
+        );
+        if depth < 4 {
+            assert_eq!(seals, 0, "depth {depth}: only the bottom frame is sealed");
+        } else {
+            assert!(
+                seals > 0,
+                "the bottom frame walls its lair off behind seals"
+            );
+        }
+    }
+}

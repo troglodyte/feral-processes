@@ -15,7 +15,10 @@
 use super::stack::StackPos;
 use crate::resources::{FrameMemory, StackMemory};
 use crate::stack::CellKind;
-use crate::tuning::{STACK_CACHE_CREDITS, STACK_CACHE_DEPTH_GROWTH, STACK_CACHE_FRAGMENT_CHANCE};
+use crate::tuning::{
+    STACK_CACHE_CREDITS, STACK_CACHE_DEPTH_GROWTH, STACK_CACHE_FRAGMENT_CHANCE, TRACE_PER_CACHE,
+    TRACE_PER_SEAL,
+};
 use crate::*;
 
 impl Game {
@@ -58,6 +61,7 @@ impl Game {
             return;
         }
         self.frame_memory_mut(pos).looted.insert((pos.x, pos.y));
+        self.raise_trace(TRACE_PER_CACHE);
 
         let depth_mult = STACK_CACHE_DEPTH_GROWTH.powi(pos.depth as i32 - 1);
         let credits = {
@@ -145,6 +149,7 @@ impl Game {
             MessageKind::Outcome,
             "You burn an access shard. The seal releases.",
         );
+        self.raise_trace(TRACE_PER_SEAL);
         true
     }
 

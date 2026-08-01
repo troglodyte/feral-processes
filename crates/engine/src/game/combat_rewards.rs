@@ -91,6 +91,11 @@ impl Game {
         // point that knows it actually died rather than being fled from.
         self.mark_lair_cleared();
 
+        // Same "it actually died" guarantee, spent on the other thing that
+        // needs it. `raise_trace` no-ops on the surface, which is where the
+        // overwhelming majority of these calls come from.
+        self.raise_trace(crate::tuning::TRACE_PER_KILL);
+
         if species.is_boss {
             let qty = {
                 let mut rng = self.world.resource_mut::<GameRng>();

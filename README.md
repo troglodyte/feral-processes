@@ -79,7 +79,7 @@ door stays open.
 The deepest room of a stack is a **lair** (`&`), holding something drawn
 from the link tile's biome. It is seeded off the stack, so it is the same
 guardian every time you come back — and the fight is scaled by every frame
-you descended to reach it.
+you descended to reach it, and by how loud you were on the way down.
 
 Materializing in a sector runs a deep scan that logs how many links are
 in it and the bearing of the nearest. One is always within sight of where
@@ -92,6 +92,19 @@ opens in — descend under a Mainframe sector and Mainframe programs are what
 live below it. Each frame down multiplies their stats, and since a kill pays
 out the defeated program's Integrity, it multiplies the XP too. Descending
 is the trade: harder fights, better returns, and a longer walk back.
+
+The stack also notices what you take from it. **Trace** rises when you crack
+a cache, burn a seal or kill something, and the HUD reads it back as one of
+four bands — **Quiet**, **Noticed**, **Traced**, **Hunted**. Each band draws
+ambushes more often, makes what comes hit harder, and sends more of it at
+once. Walking is free: the meter is about greed, not time, so mapping a
+frame carefully costs you nothing and stripping it costs you plenty. Clear
+a stack out floor by floor and you will meet its guardian at the top band,
+having asked for it.
+
+Trace resets when you surface, which is less of a let-off than it looks —
+caches, seals and lairs are each one-shot per stack, so climbing out to shed
+it means coming back to a stack with less left worth taking.
 
 Your base does not stop while you are down there. The player's position on
 the zone map stays pinned to the link you entered by, so cronjobs keep

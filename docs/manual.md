@@ -179,6 +179,23 @@ the bottom of each stack, and each one costs an Access Shard to open — shards
 come out of caches. Killing what holds the lair clears that stack for good;
 jacking out leaves it waiting.
 
+**Trace** is the stack noticing you. It rises when you crack a cache, burn a
+seal, or kill something — taking, not walking — and the heading above the
+corridor reads it back as a band: **Quiet**, **Noticed**, **Traced**,
+**Hunted**. Each step up draws intrusions more often, scales what arrives,
+and lets more of it arrive at once, and the lair guardian is scaled by your
+band as well as by depth. Crossing into a band announces itself in the log.
+
+You are shown the band and not a number on purpose: it is there to tell you
+whether to press on, not to be played up to a threshold. Walking costs
+nothing, so mapping a frame thoroughly is free and stripping it is not.
+
+Trace clears the moment you surface, by either route — the link or a
+symlink. That is not a free reset: caches, seals and lairs are one-shot per
+stack, so a trip up to shed a band means returning to a stack with less left
+in it. The one thing that does survive is the guardian, who waits at
+whatever band you come back down at.
+
 `g` opens the **map** — the same key that scans the ground on the surface,
 since the two screens never both apply. It is drawn north-up and shows only
 what the party has had in view: cells never seen stay dark, and are drawn

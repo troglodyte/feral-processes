@@ -82,8 +82,9 @@ pub(super) fn draw_trade_action_menu(
         let tag = equip_preview_tag(game, item, status.zone, game.item_fusion_tier(item));
         rows.push(item_row(
             format!(
-                "[{}] Sell {} x{qty}{} ({} {money} each)",
+                "[{}] {}  Sell {} x{qty}{} ({} {money} each)",
                 menu_shortcut(idx),
+                game.item_category(item).short_label(),
                 game.item_name(item),
                 tag,
                 trade.sell_rate
@@ -100,8 +101,9 @@ pub(super) fn draw_trade_action_menu(
         let tag = equip_preview_tag(game, item, status.zone, 0);
         rows.push(item_row(
             format!(
-                "[{}] Buy {}{} ({cost} {money} each)",
+                "[{}] {}  Buy {}{} ({cost} {money} each)",
                 menu_shortcut(idx),
+                game.item_category(item).short_label(),
                 game.item_name(item),
                 tag
             ),
@@ -120,8 +122,9 @@ pub(super) fn draw_trade_action_menu(
             let tag = equip_preview_tag(game, &row.item, status.zone, 0);
             rows.push(item_row(
                 format!(
-                    "[{}] Buy back {}{} x{} ({} {money} each)",
+                    "[{}] {}  Buy back {}{} x{} ({} {money} each)",
                     menu_shortcut(idx),
+                    game.item_category(&row.item).short_label(),
                     row.name,
                     tag,
                     row.qty,
@@ -159,7 +162,9 @@ pub(super) fn draw_trade_action_menu(
         }
     }
     rows.push(text_row(""));
-    rows.push(text_row("Esc to cancel; Up/Down + Enter also work"));
+    rows.push(text_row(
+        "[S] sell one, [B] buy one — no quantity page; Esc to cancel; Up/Down + Enter also work",
+    ));
     draw_popup("Trade", PopupSize::Large, &rows, painter, m);
 }
 

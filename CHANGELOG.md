@@ -13,6 +13,25 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Trading in one keypress
+
+- **`S` sells one, `B` buys one, straight off the highlighted row.** No
+  quantity page, and the list stays put. A trade visit is normally a run of
+  trades, so the four-screen round trip was being paid per item. `S` also
+  works from the inventory screen when there is a trader in range; with two
+  in range it asks which, since their buyback shelves are separate.
+- **A program row is deliberately excluded.** `S` there opens the same
+  confirmation Enter does — selling a levelled program is permanent, and a
+  single keypress is exactly the mis-hit that confirmation exists to catch.
+- **Inventory and trade lists are grouped by category** — consumables,
+  weapons, armour, modules, routines, salvage, currency — with each row
+  tagged `USE`/`WEP`/`ARM`/`MOD`/`RTN`/`MAT`/`CUR`. The category is derived
+  from the fields an item already declares, so a modded item is grouped
+  without its author adding anything.
+- **Uppercase letters no longer pick menu rows.** They are reserved for
+  screen actions now, matching what battle already did with `A` and `D`.
+  Lowercase row shortcuts are unchanged.
+
 ### The dungeon is the Stack
 
 - **Renamed the underground layer, top to bottom: dungeon → the Stack,

@@ -66,10 +66,14 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
     for (i, (item, qty)) in status.inventory.iter().enumerate() {
         let fusion_tier = game.item_fusion_tier(item);
         let tag = equip_preview_tag(game, item, status.zone, fusion_tier);
+        // The engine hands this list back grouped, so the category column
+        // reads as a heading for the run of rows beneath it rather than as
+        // noise repeated at random.
         rows.push(item_row(
             format!(
-                "[{}] {} x{}{}",
+                "[{}] {}  {} x{}{}",
                 menu_shortcut(i + 3),
+                game.item_category(item).short_label(),
                 game.item_name(item),
                 qty,
                 tag
@@ -78,7 +82,9 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
         ));
     }
     rows.push(text_row(""));
-    rows.push(text_row("Esc to close; Up/Down + Enter also work"));
+    rows.push(text_row(
+        "[S] sell one to a trader in range; Esc to close; Up/Down + Enter also work",
+    ));
     draw_popup("Inventory", PopupSize::Large, &rows, painter, m);
 }
 

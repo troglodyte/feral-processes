@@ -1154,6 +1154,26 @@ Commerce research node). Pick the structure, then a line item: sell offers
 the market will take. Items and buys go on to a quantity prompt; a program
 goes straight to a confirmation.
 
+Both lists are **grouped by category** — consumables, then weapons, armour
+and modules, then routines, then salvage — with each row tagged `USE`,
+`WEP`, `ARM`, `MOD`, `RTN`, `MAT` or `CUR`. The same grouping applies to
+your inventory screen.
+
+**Moving one unit doesn't need the quantity prompt.** With a row
+highlighted, `S` sells one and `B` buys one, and the list stays put — a
+visit is normally a run of trades, and the round trip was otherwise paid per
+item. The wrong key for a row (`B` on something of yours, `S` on the
+market's stock) does nothing and says which one that row wants.
+
+`S` also works straight from your inventory screen, selling one to the
+trader in range. With two markets in range it asks which, since their
+buyback shelves are separate.
+
+A **program row is deliberately excluded** from the quick key: `S` there
+opens the same confirmation Enter does. Selling a levelled program is
+permanent, and a single keypress is exactly the mis-hit that confirmation
+exists to catch.
+
 - **Sell** any inventory item (except Core Fragments — trading them for
   more Core Fragments is a no-op the game refuses) for Core Fragments at
   the market's flat sell rate (1 each, for the base iso Market) — a

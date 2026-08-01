@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::battle::{BattleAction, EnemyGroup};
-use crate::dungeon::{Dir, DungeonLevel};
 use crate::items::ItemId;
+use crate::stack::{Dir, Frame};
 use crate::structures::StructureId;
 
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -419,38 +419,38 @@ impl ZoneLevel {
     }
 }
 
-/// Whether the player is walking the zone map or is down inside a dungeon,
+/// Whether the player is walking the zone map or is down inside the Stack,
 /// and where in it.
 ///
-/// The dungeon coordinates live *here* rather than on the player's
+/// The Stack coordinates live *here* rather than on the player's
 /// `Position` component, and that is the load-bearing decision of the whole
-/// dungeon layer. `Position` is the shared coordinate space that structures,
+/// Stack layer. `Position` is the shared coordinate space that structures,
 /// wild programs, nests, cronjob targets, raid pathing, the build radius and
-/// `Game::view_entities` all live in. Moving the player into dungeon
+/// `Game::view_entities` all live in. Moving the player into Stack
 /// coordinates through it would put them on a surface tile that means
 /// something else entirely, and every one of those systems would quietly
 /// misbehave.
 ///
 /// So while underground the player's `Position` stays pinned to `entrance`
 /// — the surface tile they walked in through. Nothing on the surface has to
-/// know the dungeon exists, and the consequences are the right ones for
+/// know the Stack exists, and the consequences are the right ones for
 /// free: the base is where it was left, cronjobs keep paying out, and a raid
-/// can land while the player is four levels down.
+/// can land while the player is four frames down.
 #[derive(Resource, Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum Locale {
     #[default]
     Surface,
-    Dungeon {
-        /// 1 at the first level below the surface, counting up as you
-        /// descend. Part of the `dungeon::LevelSpec` the level regenerates
+    Stack {
+        /// 1 at the first frame below the surface, counting up as you
+        /// descend. Part of the `stack::FrameSpec` the frame regenerates
         /// from.
         depth: u32,
-        /// How many levels this shaft runs before it bottoms out. Carried
+        /// How many frames this stack runs before it bottoms out. Carried
         /// rather than recomputed from `entrance` because it is also part
-        /// of the level spec — the bottom level is generated without a way
-        /// down — and a shaft that changed length underneath the party
+        /// of the frame spec — the bottom frame is generated without a way
+        /// down — and a stack that changed length underneath the party
         /// would strand them.
-        floors: u32,
+        frames: u32,
         x: i32,
         y: i32,
         facing: Dir,
@@ -461,42 +461,42 @@ pub enum Locale {
     },
 }
 
-/// Which level of which shaft a `LevelMemory` belongs to.
+/// Which frame of which stack a `FrameMemory` belongs to.
 ///
-/// Keyed by the breach's surface tile rather than by anything about the
-/// level, because that tile is what makes a shaft itself — it is already
-/// half of `dungeon::LevelSpec`. Two breaches in a sector therefore keep
+/// Keyed by the link's surface tile rather than by anything about the
+/// frame, because that tile is what makes a stack itself — it is already
+/// half of `stack::FrameSpec`. Two links in a sector therefore keep
 /// separate maps of their separate depth-3s.
-pub type LevelKey = ((i32, i32), u32);
+pub type FrameKey = ((i32, i32), u32);
 
-/// What the party learned about one dungeon level by walking it.
+/// What the party learned about one Stack frame by walking it.
 ///
-/// This is the only dungeon state that is saved rather than regenerated.
-/// The level itself is a pure function of its `dungeon::LevelSpec`, but what
+/// This is the only Stack state that is saved rather than regenerated.
+/// The frame itself is a pure function of its `stack::FrameSpec`, but what
 /// the player has *seen* of it is not — that is the run's history, and
-/// losing it on load would hand back a blank map of a level already walked.
+/// losing it on load would hand back a blank map of a frame already walked.
 ///
 /// `BTreeSet` rather than `HashSet` so the encoded save bytes don't depend
 /// on hash order.
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
-pub struct LevelMemory {
-    /// Every cell the party has had in view — see `Game::view_cone`, which
+pub struct FrameMemory {
+    /// Every cell the party has had in view — see `view_cone`, which
     /// both this and the first-person view are filled from.
     pub seen: BTreeSet<(i32, i32)>,
     /// Cells whose cache has been emptied.
     pub looted: BTreeSet<(i32, i32)>,
     /// Sealed doors that have been opened, which stay open.
     pub opened: BTreeSet<(i32, i32)>,
-    /// Whether this level's lair has been cleared. Only ever true on the
-    /// bottom level of a shaft, which is the only level that has one.
+    /// Whether this frame's lair has been cleared. Only ever true on the
+    /// bottom frame of a stack, which is the only frame that has one.
     pub cleared: bool,
     /// Where the party was jumped. Kept for the map alone: a corridor that
     /// has cost you something is worth marking, and it is the one landmark
-    /// the level's own layout can't tell you about.
+    /// the frame's own layout can't tell you about.
     pub fights: BTreeSet<(i32, i32)>,
 }
 
-/// Everything the party has learned about every dungeon level in this zone.
+/// Everything the party has learned about every Stack frame in this zone.
 ///
 /// Zone-local, and **not** self-clearing: like `BuybackLedger` this has to
 /// be wiped by name in `Game::enter_next_zone`, because breaching does not
@@ -504,15 +504,15 @@ pub struct LevelMemory {
 /// the previous sector's walked corridors onto a new sector's map at
 /// whatever tile happened to collide.
 #[derive(Resource, Clone, Default, Debug, Serialize, Deserialize)]
-pub struct DungeonMemory(pub BTreeMap<LevelKey, LevelMemory>);
+pub struct StackMemory(pub BTreeMap<FrameKey, FrameMemory>);
 
-/// The level the player is currently standing in, or `None` on the surface.
+/// The frame the player is currently standing in, or `None` on the surface.
 ///
 /// Deliberately not serialized: it regenerates from `(WorldMap::seed,
 /// Locale::depth)` on load, exactly as terrain regenerates from the world
-/// seed. See `dungeon::generate`.
+/// seed. See `stack::generate`.
 #[derive(Resource, Default)]
-pub struct CurrentDungeon(pub Option<DungeonLevel>);
+pub struct CurrentStack(pub Option<Frame>);
 
 /// Where the player materialized on breaching into the current zone sector
 /// (set alongside `ZoneLevel` in `Game::new`/`Game::enter_next_zone`) — the

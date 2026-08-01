@@ -245,9 +245,9 @@ impl Painter {
     /// Fills a convex polygon given in order around its perimeter.
     ///
     /// The one primitive `rect` cannot stand in for: the side walls of the
-    /// first-person dungeon corridor recede toward a vanishing point, so
+    /// first-person Stack corridor recede toward a vanishing point, so
     /// they are trapezoids, not axis-aligned boxes. Convex only — every
-    /// shape `render/dungeon.rs` builds is a quad, and the backend's
+    /// shape `render/stack.rs` builds is a quad, and the backend's
     /// triangulation assumes it.
     ///
     /// Fewer than three points draws nothing rather than erroring: a

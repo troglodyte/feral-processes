@@ -95,7 +95,7 @@ impl Game {
     /// `NestGuardian`.
     ///
     /// This is the surface spawn: depth costs it nothing. A spawn that
-    /// *is* a dungeon encounter goes through `spawn_pack` with a
+    /// *is* a Stack encounter goes through `spawn_pack` with a
     /// multiplier — see `depth_mult` there for why that is a parameter
     /// rather than something read back off the party's locale.
     pub(crate) fn spawn_wild_creature(
@@ -528,12 +528,12 @@ impl Game {
     /// tough boss fight.
     ///
     /// `depth_mult` scales every member's stats: `1.0` for a surface pack,
-    /// `Game::dungeon_depth_multiplier` for one conjured underground. It is
+    /// `Game::stack_depth_multiplier` for one conjured underground. It is
     /// a parameter rather than something the spawn reads off `Locale`
-    /// because the surface does not stop while the party is down a shaft —
+    /// because the surface does not stop while the party is down a stack —
     /// ambient spawns and nest respawns keep rolling on every `tick`, and a
     /// locale-derived multiplier scaled those too, leaving 3x programs
-    /// standing around the breach mouth for the climb out.
+    /// standing around the link mouth for the climb out.
     pub(crate) fn spawn_pack(
         &mut self,
         species_id: &str,

@@ -395,122 +395,122 @@ pub const INITIAL_WILD_POPULATION: usize = 14;
 /// the player has a base, since nothing can spawn on platform floor.
 pub const INITIAL_SPAWN_SCATTER_TILES: i32 = 15;
 
-/// How many dungeon entrances a zone is seeded with — see
-/// `Game::spawn_dungeon_entrances`. Deliberately few: an entrance is
+/// How many Stack links a zone is seeded with — see
+/// `Game::spawn_surface_links`. Deliberately few: a link is
 /// something you go looking for, and one on every corner would make the
 /// zone map a lobby rather than a place.
-pub const DUNGEON_ENTRANCES_PER_ZONE: usize = 3;
+pub const STACK_LINKS_PER_ZONE: usize = 3;
 
-/// How far from the player's arrival point a zone's dungeon entrances
+/// How far from the player's arrival point a zone's Stack links
 /// scatter. Wider than `INITIAL_SPAWN_SCATTER_TILES` so finding one is a
-/// trip rather than a glance, and so an entrance never lands under the base
+/// trip rather than a glance, and so a link never lands under the base
 /// platform the player is standing on.
-pub const DUNGEON_ENTRANCE_SCATTER_TILES: i32 = 40;
+pub const STACK_LINK_SCATTER_TILES: i32 = 40;
 
-/// How close the *first* entrance of a zone is placed.
+/// How close the *first* link of a zone is placed.
 ///
 /// Measured against the map viewport rather than picked for feel: at the
 /// default zoom the pane shows roughly ±16 by ±9 tiles, so anything past
-/// this is off screen when the player materializes. With all three entrances
-/// scattered to `DUNGEON_ENTRANCE_SCATTER_TILES`, most seeds put every one
-/// of them out of sight, and a player with no reason to think breaches exist
+/// this is off screen when the player materializes. With all three links
+/// scattered to `STACK_LINK_SCATTER_TILES`, most seeds put every one
+/// of them out of sight, and a player with no reason to think links exist
 /// has no reason to go looking. One always within the opening view is the
 /// on-ramp; the other two are still a trip.
-pub const DUNGEON_NEAREST_ENTRANCE_TILES: i32 = 8;
+pub const STACK_NEAREST_LINK_TILES: i32 = 8;
 
-/// How close a breach may get to where the player materializes.
+/// How close a link may get to where the player materializes.
 ///
-/// Without a floor, `DUNGEON_NEAREST_ENTRANCE_TILES` can put one on the
-/// arrival tile itself — the player starts standing on a breach — or one
-/// step from it, so the first movement key of the run drops them into a
-/// dungeon they never chose to enter. It also keeps breaches off the tiles a
+/// Without a floor, `STACK_NEAREST_LINK_TILES` can put one on the
+/// arrival tile itself — the player starts standing on a link — or one
+/// step from it, so the first movement key of the run drops them into the
+/// Stack they never chose to enter. It also keeps links off the tiles a
 /// base's first few structures go on, which would otherwise be refused with
-/// "there's a breach here" for no reason the player could have foreseen.
-pub const DUNGEON_MIN_ENTRANCE_TILES: i32 = 5;
+/// "there's a link here" for no reason the player could have foreseen.
+pub const STACK_MIN_LINK_TILES: i32 = 5;
 
-/// How many levels the shallowest breach runs before bottoming out.
+/// How many frames the shallowest stack runs before bottoming out.
 ///
-/// Two rather than one so even the on-ramp breach has a descent in it: a
-/// single-level shaft is a room with a boss in it, and the thing being built
-/// here is a dungeon.
-pub const DUNGEON_FLOORS_MIN: u32 = 2;
+/// Two rather than one so even the on-ramp link has a descent in it: a
+/// single-frame stack is a room with a boss in it, and the thing being built
+/// here is the Stack.
+pub const STACK_FRAMES_MIN: u32 = 2;
 
-/// The deepest a breach can run, however far out it sits.
+/// The deepest a stack can run, however far out it sits.
 ///
-/// A cap rather than an open curve because the floor count is what the
-/// player commits to when they start down — six levels of walking back up is
+/// A cap rather than an open curve because the frame count is what the
+/// player commits to when they start down — six frames of walking back up is
 /// already a long way from the surface with a hurt party.
-pub const DUNGEON_FLOORS_MAX: u32 = 6;
+pub const STACK_FRAMES_MAX: u32 = 6;
 
-/// How many tiles from the zone's arrival point buys one more level of
-/// depth — see `Game::breach_floors`.
+/// How many tiles from the zone's arrival point buys one more frame of
+/// depth — see `frames_for`.
 ///
 /// Depth rides on the same distance that already scales wild program stats
 /// (`Game::distance_stat_multiplier`), so the two agree instead of pulling
-/// against each other: a far breach is deeper *and* fields harder programs,
+/// against each other: a far link is deeper *and* fields harder programs,
 /// and the player can read both off how long the walk there was. With
-/// `DUNGEON_ENTRANCE_SCATTER_TILES` at 40, this puts the outermost breaches
+/// `STACK_LINK_SCATTER_TILES` at 40, this puts the outermost links
 /// at the cap.
-pub const DUNGEON_TILES_PER_FLOOR: i32 = 8;
+pub const STACK_TILES_PER_FRAME: i32 = 8;
 
-/// How many caches a dungeon level hides — see `dungeon::place_caches`,
+/// How many caches a Stack frame hides — see `stack::place_caches`,
 /// which puts them in the dead ends the braid pass left behind.
 ///
 /// A reward rate, so it lives here rather than beside the generator with
 /// `BRAID_PERCENT`: how *many* is balance, where *dead ends specifically* is
 /// the shape of the content.
-pub const DUNGEON_CACHES_PER_LEVEL: usize = 3;
+pub const STACK_CACHES_PER_FRAME: usize = 3;
 
-/// How many plain doorways a dungeon level hangs — see
-/// `dungeon::place_doors`.
+/// How many plain doorways a Stack frame hangs — see
+/// `stack::place_doors`.
 ///
 /// Presentation as much as balance: a door blocks the view cone, so it turns
-/// a corridor into a decision. Enough to break up a level, few enough that
+/// a corridor into a decision. Enough to break up a frame, few enough that
 /// the maze doesn't read as a series of closed boxes.
-pub const DUNGEON_DOORS_PER_LEVEL: usize = 4;
+pub const STACK_DOORS_PER_FRAME: usize = 4;
 
-/// Credits a cache holds at depth 1, before `DUNGEON_CACHE_DEPTH_GROWTH`.
+/// Credits a cache holds at depth 1, before `STACK_CACHE_DEPTH_GROWTH`.
 ///
-/// Credits rather than Core Fragments because a dungeon run should pay for
+/// Credits rather than Core Fragments because a Stack run should pay for
 /// itself in the one currency that survives a breach — see
 /// `EconomyRole::TradeCurrency`. Fragments are what the surface is for.
-pub const DUNGEON_CACHE_CREDITS: std::ops::RangeInclusive<u32> = 12..=30;
+pub const STACK_CACHE_CREDITS: std::ops::RangeInclusive<u32> = 12..=30;
 
-/// What each level of depth multiplies a cache's credit payout by,
-/// compounding. Deliberately steeper than `DUNGEON_DEPTH_STAT_GROWTH`: going
-/// deeper has to pay better than it costs, or the bottom of a shaft is a
+/// What each frame of depth multiplies a cache's credit payout by,
+/// compounding. Deliberately steeper than `STACK_DEPTH_STAT_GROWTH`: going
+/// deeper has to pay better than it costs, or the bottom of a stack is a
 /// place with no reason to visit it.
-pub const DUNGEON_CACHE_DEPTH_GROWTH: f32 = 1.5;
+pub const STACK_CACHE_DEPTH_GROWTH: f32 = 1.5;
 
-/// Chance a cache also holds a portal fragment, per level of depth (so
+/// Chance a cache also holds a portal fragment, per frame of depth (so
 /// depth 3 rolls at three times this, capped at certainty).
 ///
 /// The one route besides the Market listing and boss kills that pays the
 /// breaching currency — see `market-portal-fragment-listing-is-load-bearing`.
-pub const DUNGEON_CACHE_FRAGMENT_CHANCE: f64 = 0.12;
+pub const STACK_CACHE_FRAGMENT_CHANCE: f64 = 0.12;
 
-/// Chance per step that walking a dungeon corridor draws an encounter.
+/// Chance per step that walking a Stack corridor draws an encounter.
 ///
 /// Much higher than `RANDOM_ENCOUNTER_CHANCE` on purpose: crossing open
-/// ground is travel that fighting interrupts, but a dungeon is somewhere you
+/// ground is travel that fighting interrupts, but the Stack is somewhere you
 /// go *to* fight. It is also what makes mapping one tense — every corridor
-/// you walk to find the stairs is a corridor that can cost you.
+/// you walk to find the way down is a corridor that can cost you.
 ///
-/// Arithmetic-plausible only, never playtested. A level is 21x21 with about
+/// Arithmetic-plausible only, never playtested. A frame is 21x21 with about
 /// half of it floor, so a traversal runs somewhere near 40-80 steps, putting
-/// this at roughly three to six fights per level.
-pub const DUNGEON_ENCOUNTER_CHANCE: f64 = 0.08;
+/// this at roughly three to six fights per frame.
+pub const STACK_ENCOUNTER_CHANCE: f64 = 0.08;
 
-/// What each level of dungeon depth multiplies wild program stats by,
+/// What each frame of Stack depth multiplies wild program stats by,
 /// compounding, on top of `ZoneLevel::stat_multiplier` and
 /// `Game::distance_stat_multiplier`.
 ///
 /// A float and much gentler than `ZONE_STAT_GROWTH`'s flat doubling, because
-/// descending is cheap — a flight of stairs, not a Portal you had to fund —
-/// so the curve has to be walkable rather than a wall. XP follows for free:
+/// descending is cheap — a link down, not a Portal you had to fund — so the
+/// curve has to be walkable rather than a wall. XP follows for free:
 /// a kill pays the defeated program's `max_hp`, so scaling stats scales the
 /// reward with the risk.
-pub const DUNGEON_DEPTH_STAT_GROWTH: f32 = 1.35;
+pub const STACK_DEPTH_STAT_GROWTH: f32 = 1.35;
 
 /// Floor under `swarm_radius`, the radius that actually governs how
 /// tightly a pack's members cluster around the tile a spawn roll picked

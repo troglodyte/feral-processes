@@ -153,7 +153,7 @@ impl Game {
         // Underground the party moves through `step_forward`/`turn_left` and
         // friends instead — `Position` is pinned to the entrance tile while
         // down there, so walking it would drag the player across the zone
-        // map without their ever leaving the dungeon.
+        // map without their ever leaving the Stack.
         if self.is_game_over().is_some() || self.has_active_battle() || self.is_underground() {
             return;
         }
@@ -179,10 +179,10 @@ impl Game {
             self.tick();
             return;
         }
-        if self.find_dungeon_entrance_at(nx, ny).is_some() {
+        if self.find_surface_link_at(nx, ny).is_some() {
             // The entrance survives, unlike a zone portal — it is a place
             // you come back to, not a one-way door.
-            self.enter_dungeon(nx, ny);
+            self.enter_stack(nx, ny);
             self.tick();
             return;
         }

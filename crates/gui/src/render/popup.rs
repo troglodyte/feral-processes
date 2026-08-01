@@ -439,7 +439,7 @@ mod tests {
     #[test]
     fn wrapping_breaks_on_spaces_and_never_exceeds_the_column_budget() {
         let text = "A fragment of stolen authorization. Spends itself opening one \
-                    sealed door in a dungeon.";
+                    sealed door in the Stack.";
         let lines = wrap_text(text, 30);
         assert!(
             lines.iter().all(|l| l.chars().count() <= 30),

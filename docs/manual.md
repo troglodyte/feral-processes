@@ -134,13 +134,13 @@ change what gets stored — a save from a different build shows up as
 | `\` | Toggle visual effects on/off |
 | `?` | In-game help / full control list |
 
-**In a dungeon:**
+**In the Stack:**
 
-Walking onto a breach (`>`) on the zone map drops you into a first-person
-dungeon level. Each sector holds three, and materializing in one runs a deep
+Walking onto a link (`>`) on the zone map drops you into a first-person
+Stack frame. Each sector holds three, and materializing in one runs a deep
 scan that logs how many there are and the bearing of the nearest — one is
 always within sight of your arrival point, the others are a walk. A
-structure cannot be deployed on a breach tile. The movement keys change meaning — they steer a party that
+structure cannot be deployed on a link tile. The movement keys change meaning — they steer a party that
 has a facing rather than moving a token on a grid.
 
 | Key | Action |
@@ -149,8 +149,8 @@ has a facing rather than moving a token on a grid.
 | `j` / `Down` | Back up, without turning round |
 | `h` / `Left` | Turn 90° left, in place |
 | `l` / `Right` | Turn 90° right, in place |
-| `>` | Descend — take the stairs down under you |
-| `<` | Climb — take the stairs up, or surface from depth 1 |
+| `>` | Descend — take the link down under you |
+| `<` | Climb — follow the link up, or surface from depth 1 |
 | `.` | Wait in place |
 | `e` | Drain a Power-restoring item |
 
@@ -158,35 +158,35 @@ Every other map key still works: inventory, party, routines, fusion, perks,
 manifest, research, save and help all open normally underground. The ones
 that reach into the zone map — deploy, cronjob, guard, demolish, upgrade,
 trade, rest, scan — refuse with a message, because while you are underground
-your position on the zone map is pinned to the breach you came in through.
+your position on the zone map is pinned to the link you came in through.
 
 The symlink (`u`) is the exception: it works at any depth, because rather
 than reaching into the zone map from underground it surfaces you first and
-then teleports. It costs you the descent — you come back to the breach at
-level one — but not your maps.
+then teleports. It costs you the descent — you come back to the link at
+frame one — but not your maps.
 
 Every step in a corridor can draw an intrusion. The programs you meet come
-from the biome the breach opens in, and each level of depth multiplies their
+from the biome the link opens in, and each frame of depth multiplies their
 stats — and so the XP they pay, since a kill awards the defeated program's
 Integrity. Shoving at a wall is not travel and never rolls for a fight.
 Jacking out ends the fight where you stand.
 
-Levels hold more than corridors. **Caches** (`!`) sit in dead ends and pay
+Frames hold more than corridors. **Caches** (`!`) sit in dead ends and pay
 depth-scaled Credits, a chance at a portal fragment, and whatever the item
 set declares; walking onto one empties it, once. **Doorways** (`+`) are
 walkable but block your view. **Sealed doors** wall off the **lair** (`&`) at
-the bottom of the shaft, and each one costs an Access Shard to open — shards
-come out of caches. Killing what holds the lair clears the shaft for good;
+the bottom of each stack, and each one costs an Access Shard to open — shards
+come out of caches. Killing what holds the lair clears that stack for good;
 jacking out leaves it waiting.
 
 `g` opens the **map** — the same key that scans the ground on the surface,
 since the two screens never both apply. It is drawn north-up and shows only
 what the party has had in view: cells never seen stay dark, and are drawn
-differently from rock that has been seen. Stairs are marked, so are the
+differently from rock that has been seen. Links are marked, so are the
 corridors you were jumped in. Opening it costs no time.
 
-Each breach keeps its own map, and each level of a shaft its own. The map
-survives saving and loading — a level regenerates from its seed, but what
+Each link keeps its own map, and each frame of a stack its own. The map
+survives saving and loading — a frame regenerates from its seed, but what
 you have seen of it is history and is written to the save.
 
 Every numbered or lettered menu (compile, deploy, cronjob, inventory,

@@ -1,18 +1,18 @@
 //! Movement underground: the same four keys, steering a party that has a
 //! facing.
 
-use feral_processes_engine::dungeon::{Dir, LevelSpec, generate};
 use feral_processes_engine::resources::Locale;
 use feral_processes_engine::save;
+use feral_processes_engine::stack::{Dir, FrameSpec, generate};
 
 use super::support::*;
 use crate::*;
 
-/// An `App` standing on the entry cell of dungeon level 1.
+/// An `App` standing on the entry cell of Stack frame 1.
 ///
 /// Built by editing a save and reloading it, the same trick
 /// `app_owning_distant_programs` uses: the engine deliberately exposes no
-/// way to drop the player into a dungeon from outside the crate, since on a
+/// way to drop the player into the Stack from outside the crate, since on a
 /// real run that only ever happens by walking onto an entrance.
 fn app_underground(seed: u32) -> App {
     // Counted rather than keyed on the seed alone: tests run in parallel and
@@ -23,23 +23,22 @@ fn app_underground(seed: u32) -> App {
 
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
-    let path = std::env::temp_dir().join(format!(
-        "feral_processes_appcore_dungeon_{seed}_{unique}.sav"
-    ));
+    let path =
+        std::env::temp_dir().join(format!("feral_processes_appcore_stack_{seed}_{unique}.sav"));
     let game = app.game.as_mut().unwrap();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
-    let spec = LevelSpec {
+    let spec = FrameSpec {
         world_seed: data.seed,
         entrance: data.player.position,
         depth: 1,
-        floors: 2,
+        frames: 2,
     };
     let entry = generate(spec).entry;
-    data.locale = Locale::Dungeon {
+    data.locale = Locale::Stack {
         depth: spec.depth,
-        floors: spec.floors,
+        frames: spec.frames,
         x: entry.0,
         y: entry.1,
         facing: Dir::North,
@@ -57,14 +56,14 @@ fn facing(app: &App) -> String {
     app.game
         .as_ref()
         .unwrap()
-        .dungeon_view()
+        .stack_view()
         .unwrap()
         .facing
         .to_string()
 }
 
 fn cell(app: &App) -> (i32, i32) {
-    app.game.as_ref().unwrap().dungeon_view().unwrap().position
+    app.game.as_ref().unwrap().stack_view().unwrap().position
 }
 
 #[test]
@@ -72,7 +71,7 @@ fn the_fixture_actually_puts_the_party_underground() {
     let app = app_underground(303);
     let game = app.game.as_ref().unwrap();
     assert!(game.is_underground());
-    assert!(game.dungeon_view().is_some());
+    assert!(game.stack_view().is_some());
 }
 
 /// The defining difference from the surface: left and right turn the party
@@ -152,8 +151,8 @@ fn a_movement_key_underground_still_queues_a_step_sound() {
 
 #[test]
 fn the_menu_keys_still_open_their_screens_underground() {
-    // Party and inventory management is deliberately available down a
-    // dungeon — see `Game::require_surface`.
+    // Party and inventory management is deliberately available down the
+    // Stack — see `Game::require_surface`.
     for (key, expected) in [
         (GameKey::Char('v'), Mode::Inventory),
         (GameKey::Char('p'), Mode::Companion),
@@ -170,9 +169,9 @@ fn the_menu_keys_still_open_their_screens_underground() {
 fn g_opens_the_map_underground_and_any_key_closes_it() {
     let mut app = app_underground(707);
     app.handle_key(GameKey::Char('g'));
-    assert_eq!(app.mode, Mode::DungeonMap);
+    assert_eq!(app.mode, Mode::FrameMap);
     assert!(
-        app.game.as_ref().unwrap().dungeon_map().is_some(),
+        app.game.as_ref().unwrap().frame_map().is_some(),
         "the map screen must have a map to draw"
     );
 
@@ -180,9 +179,9 @@ fn g_opens_the_map_underground_and_any_key_closes_it() {
     assert_eq!(app.mode, Mode::Playing);
 }
 
-/// Reading your own map is not an action. A dungeon that advanced a turn
-/// every time you checked where you were would punish mapping, which is the
-/// one thing this screen exists to make easier.
+/// Reading your own map is not an action. The Stack advancing a turn every
+/// time you checked where you were would punish mapping, which is the one
+/// thing this screen exists to make easier.
 #[test]
 fn opening_the_map_costs_no_time() {
     let mut app = app_underground(808);
@@ -210,13 +209,13 @@ fn g_still_forages_on_the_surface() {
 }
 
 #[test]
-fn taking_the_stairs_up_from_depth_one_surfaces() {
+fn taking_the_link_up_from_depth_one_surfaces() {
     let mut app = app_underground(505);
     // The fixture lands the party on the entry cell, which is the way out.
     app.handle_key(GameKey::Char('<'));
     let game = app.game.as_ref().unwrap();
     assert!(!game.is_underground());
-    assert!(game.dungeon_view().is_none());
+    assert!(game.stack_view().is_none());
 }
 
 #[test]
@@ -255,9 +254,9 @@ fn descending_from_the_entry_cell_refuses_instead_of_surfacing() {
 }
 
 #[test]
-fn the_view_names_the_key_that_takes_the_stairs() {
+fn the_view_names_the_key_that_takes_the_link() {
     let app = app_underground(505);
-    let view = app.game.as_ref().unwrap().dungeon_view().unwrap();
+    let view = app.game.as_ref().unwrap().stack_view().unwrap();
     let standing = view.standing_on.expect("the entry cell is the way out");
     assert!(
         standing.contains("[<]"),
@@ -266,9 +265,9 @@ fn the_view_names_the_key_that_takes_the_stairs() {
 }
 
 #[test]
-fn stairs_available_reports_only_what_the_cell_underfoot_offers() {
+fn links_available_reports_only_what_the_cell_underfoot_offers() {
     let app = app_underground(505);
-    let (down, up) = app.game.as_ref().unwrap().stairs_available();
+    let (down, up) = app.game.as_ref().unwrap().links_available();
     assert!(up, "the entry cell is a way up");
     assert!(!down, "and is not also a way down");
 }
@@ -276,7 +275,7 @@ fn stairs_available_reports_only_what_the_cell_underfoot_offers() {
 /// The whole chain: a step underground rolls an encounter, the engine starts
 /// the battle, and `after_world_action` drops the app into `Mode::Battle`.
 /// That transition is shared with the surface path rather than copied, and
-/// this is what proves the dungeon path actually reaches it.
+/// this is what proves the Stack path actually reaches it.
 #[test]
 fn an_encounter_underground_opens_the_battle_screen() {
     let mut app = app_underground(606);

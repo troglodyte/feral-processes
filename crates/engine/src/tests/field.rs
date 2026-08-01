@@ -149,7 +149,7 @@ fn casting_underground_succeeds() {
         .entity_mut(player)
         .insert(Routines(vec!["test_field_regen".to_string()]));
     let pos = *game.world.get::<Position>(player).unwrap();
-    game.enter_dungeon(pos.x, pos.y);
+    game.enter_stack(pos.x, pos.y);
 
     let result = game.cast_field_routine(0, Some(player));
 

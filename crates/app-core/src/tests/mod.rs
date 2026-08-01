@@ -4,7 +4,6 @@ mod support;
 
 mod battle;
 mod building;
-mod dungeon;
 mod field;
 mod fusion;
 mod inventory;
@@ -16,4 +15,5 @@ mod readonly_screens;
 mod research;
 mod routines;
 mod saves;
+mod stack;
 mod trade;

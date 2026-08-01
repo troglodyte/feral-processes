@@ -330,20 +330,20 @@ pub struct BattleView {
 }
 
 /// What one cell of the first-person view cone contains — see
-/// `DungeonView::cells`.
+/// `StackView::cells`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DungeonCellView {
-    /// Solid, and what everything past the edge of the level reads as. The
+pub enum StackCellView {
+    /// Solid, and what everything past the edge of the frame reads as. The
     /// renderer draws this as a wall face.
     Rock,
     Floor,
-    StairsUp,
-    StairsDown,
+    LinkUp,
+    LinkDown,
     /// An unopened cache. One that has already been emptied comes through
     /// as `Floor` — still drawing it would send the party back down a dead
     /// end they have already walked.
     Cache,
-    /// The shaft's lair, still held. A cleared one comes through as `Floor`.
+    /// The stack's lair, still held. A cleared one comes through as `Floor`.
     Lair,
     /// A doorway. Walkable, but the view stops here — a door is drawn as a
     /// face, not as more corridor. A sealed door already burned open comes
@@ -353,33 +353,33 @@ pub enum DungeonCellView {
     SealedDoor,
 }
 
-/// The party's first-person view of the level around them — see
-/// `Game::dungeon_view`.
+/// The party's first-person view of the frame around them — see
+/// `Game::stack_view`.
 ///
 /// `cells` is already rotated into **view space**: `cells[ahead][lateral]`,
 /// where `ahead` counts cells away from the party (0 is the cell they stand
 /// in) and `lateral` runs left to right across the cone, with
-/// `DUNGEON_VIEW_HALF_WIDTH` in the middle. The engine does that rotation so
+/// `STACK_VIEW_HALF_WIDTH` in the middle. The engine does that rotation so
 /// the renderer only ever draws a forward-facing corridor and never learns
 /// which way north is — the same contract `ActionOption` has, where the
 /// renderer draws verbatim and authors nothing.
-pub struct DungeonView {
+pub struct StackView {
     pub depth: u32,
-    /// How many levels this shaft runs in total, so the renderer can show
+    /// How many frames this stack runs in total, so the renderer can show
     /// "2 / 4" and the player can tell a long descent from a short one
-    /// without counting stairs.
-    pub floors: u32,
+    /// without counting frames.
+    pub frames: u32,
     /// `Dir::label` — "N", "E", "S", "W". A compass reading for the player,
     /// not something the renderer projects with.
     pub facing: &'static str,
     pub position: (i32, i32),
-    pub cells: Vec<Vec<DungeonCellView>>,
-    /// What the party is standing on, worded for a prompt — e.g. "Stairs
-    /// lead down". `None` on plain floor.
+    pub cells: Vec<Vec<StackCellView>>,
+    /// What the party is standing on, worded for a prompt — e.g. "A link
+    /// leads down". `None` on plain floor.
     pub standing_on: Option<String>,
 }
 
-/// One cell of `DungeonMapView`.
+/// One cell of `FrameMapView`.
 ///
 /// `Unknown` is a cell the party has never had in view. It is deliberately
 /// indistinguishable from solid rock the party *has* seen only in that both
@@ -387,17 +387,17 @@ pub struct DungeonView {
 /// been here" and "there is nothing here" are the two things a mapper most
 /// needs to tell apart.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum DungeonMapCell {
+pub enum FrameMapCell {
     Unknown,
     Rock,
     Floor,
-    StairsUp,
-    StairsDown,
+    LinkUp,
+    LinkDown,
     /// A cache the party has seen and not yet emptied. An emptied one maps
     /// as `Floor`, so the map answers "where is there still something" and
     /// not merely "where was there once".
     Cache,
-    /// The shaft's lair, still held. A cleared one maps as `Floor`.
+    /// The stack's lair, still held. A cleared one maps as `Floor`.
     Lair,
     /// A doorway, or a seal already burned open.
     Door,
@@ -408,34 +408,34 @@ pub enum DungeonMapCell {
 
 /// A landmark pinned to a mapped cell, over and above what the layout says.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum DungeonMapMark {
+pub enum FrameMapMark {
     /// Where the party is standing, and which way they are looking.
     Party,
     /// A corridor the party was jumped in.
     Fight,
 }
 
-/// The party's own map of the level they are standing in — everything they
+/// The party's own map of the frame they are standing in — everything they
 /// have had in view, and nothing they haven't.
 ///
-/// A whole-level grid rather than a window, because the point of a map is
+/// A whole-frame grid rather than a window, because the point of a map is
 /// seeing the shape of the parts you have walked all at once.
-pub struct DungeonMapView {
+pub struct FrameMapView {
     pub depth: u32,
-    pub floors: u32,
+    pub frames: u32,
     pub width: i32,
     pub height: i32,
     /// Row-major, `height` rows of `width` cells.
-    pub cells: Vec<Vec<DungeonMapCell>>,
+    pub cells: Vec<Vec<FrameMapCell>>,
     /// Landmarks by cell, in a stable order.
-    pub marks: Vec<((i32, i32), DungeonMapMark)>,
+    pub marks: Vec<((i32, i32), FrameMapMark)>,
     /// `Dir::label` for the party's heading — the map is drawn north-up, so
-    /// unlike `DungeonView` this is a real bearing rather than a readout.
+    /// unlike `StackView` this is a real bearing rather than a readout.
     pub facing: &'static str,
-    /// The surface tile of the breach this shaft hangs from, so the map can
-    /// say which of a sector's breaches it belongs to.
+    /// The surface tile of the link this stack hangs from, so the map can
+    /// say which of a sector's links it belongs to.
     pub entrance: (i32, i32),
-    /// How much of the level's walkable area has been seen, 0.0 to 1.0.
+    /// How much of the frame's walkable area has been seen, 0.0 to 1.0.
     pub explored: f32,
 }
 

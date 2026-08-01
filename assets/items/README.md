@@ -131,8 +131,8 @@ disqualifies the whole file.
     // the better of the two chances.
     droppable: Some([("scrapper", 0.1), ("worm", 0.08)]),
 
-    // Optional. Chance, 0.0-1.0, that a dungeon cache holds one of these.
-    // Caches sit in the dead ends of generated dungeon levels; walking onto
+    // Optional. Chance, 0.0-1.0, that a Stack cache holds one of these.
+    // Caches sit in the dead ends of generated Stack frames; walking onto
     // one empties it, once, for good.
     //
     // Rolled once per cache for every item that declares this, so the

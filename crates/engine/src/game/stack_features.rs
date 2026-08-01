@@ -1,9 +1,9 @@
-//! The things in a dungeon level that can be used up, and the record of
+//! The things in a Stack frame that can be used up, and the record of
 //! their having been.
 //!
 //! A cache, a seal and a lair each need both halves: a `CellKind` in the
-//! generated level, and an entry in `LevelMemory` saying it has been spent.
-//! `dungeon::generate` is a pure function of `LevelSpec`, so the level
+//! generated frame, and an entry in `FrameMemory` saying it has been spent.
+//! `stack::generate` is a pure function of `FrameSpec`, so the frame
 //! itself comes back identical every time the party steps off and on — the
 //! record here is the only thing that stops an emptied cache refilling.
 //! Both views consult it through `cache_unopened`, `seal_open` and
@@ -12,20 +12,18 @@
 //! That is also why the record is what gets saved and the maze is not: it is
 //! the run's history, not the world's shape, and no seed can hand it back.
 
-use super::dungeon::DungeonPos;
-use crate::dungeon::CellKind;
-use crate::resources::{DungeonMemory, LevelMemory};
-use crate::tuning::{
-    DUNGEON_CACHE_CREDITS, DUNGEON_CACHE_DEPTH_GROWTH, DUNGEON_CACHE_FRAGMENT_CHANCE,
-};
+use super::stack::StackPos;
+use crate::resources::{FrameMemory, StackMemory};
+use crate::stack::CellKind;
+use crate::tuning::{STACK_CACHE_CREDITS, STACK_CACHE_DEPTH_GROWTH, STACK_CACHE_FRAGMENT_CHANCE};
 use crate::*;
 
 impl Game {
-    /// The memory of the level the party is standing in, created empty on
+    /// The memory of the frame the party is standing in, created empty on
     /// first sight of it.
-    pub(crate) fn level_memory_mut(&mut self, pos: DungeonPos) -> &mut LevelMemory {
+    pub(crate) fn frame_memory_mut(&mut self, pos: StackPos) -> &mut FrameMemory {
         self.world
-            .resource_mut::<DungeonMemory>()
+            .resource_mut::<StackMemory>()
             .into_inner()
             .0
             .entry((pos.entrance, pos.depth))
@@ -41,10 +39,10 @@ impl Game {
     /// without touching this function.
     ///
     /// Credits rather than Core Fragments deliberately: they are the one
-    /// currency that survives a breach, so a dungeon run banks something the
+    /// currency that survives a breach, so a Stack run banks something the
     /// next sector can still spend.
     pub(crate) fn open_cache(&mut self) {
-        let Some(pos) = self.dungeon_pos() else {
+        let Some(pos) = self.stack_pos() else {
             return;
         };
         if self.cell_underfoot() != Some(CellKind::Cache) {
@@ -52,19 +50,19 @@ impl Game {
         }
         if self
             .world
-            .resource::<DungeonMemory>()
+            .resource::<StackMemory>()
             .0
             .get(&(pos.entrance, pos.depth))
             .is_some_and(|m| m.looted.contains(&(pos.x, pos.y)))
         {
             return;
         }
-        self.level_memory_mut(pos).looted.insert((pos.x, pos.y));
+        self.frame_memory_mut(pos).looted.insert((pos.x, pos.y));
 
-        let depth_mult = DUNGEON_CACHE_DEPTH_GROWTH.powi(pos.depth as i32 - 1);
+        let depth_mult = STACK_CACHE_DEPTH_GROWTH.powi(pos.depth as i32 - 1);
         let credits = {
             let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_range(DUNGEON_CACHE_CREDITS)
+            rng.0.random_range(STACK_CACHE_CREDITS)
         };
         let credits = ((credits as f32) * depth_mult).round() as u32;
 
@@ -78,7 +76,7 @@ impl Game {
         }
 
         let fragment_roll = {
-            let chance = (DUNGEON_CACHE_FRAGMENT_CHANCE * pos.depth as f64).min(1.0);
+            let chance = (STACK_CACHE_FRAGMENT_CHANCE * pos.depth as f64).min(1.0);
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_bool(chance)
         };
@@ -120,10 +118,10 @@ impl Game {
     /// Spends the shard rather than keeping it, and records the door as open
     /// so the way back out is free — a one-way vault that charged you again
     /// on the return trip would be a tax on having gone in.
-    pub(crate) fn pass_seal(&mut self, pos: DungeonPos, cell: (i32, i32)) -> bool {
+    pub(crate) fn pass_seal(&mut self, pos: StackPos, cell: (i32, i32)) -> bool {
         let already_open = self
             .world
-            .resource::<DungeonMemory>()
+            .resource::<StackMemory>()
             .0
             .get(&(pos.entrance, pos.depth))
             .is_some_and(|m| m.opened.contains(&cell));
@@ -142,7 +140,7 @@ impl Game {
             self.log("Sealed. The lock wants authorization you don't have.".to_string());
             return false;
         }
-        self.level_memory_mut(pos).opened.insert(cell);
+        self.frame_memory_mut(pos).opened.insert(cell);
         self.log_kind(
             MessageKind::Outcome,
             "You burn an access shard. The seal releases.",
@@ -153,21 +151,21 @@ impl Game {
     /// Starts the boss fight if the party has just walked into an uncleared
     /// lair.
     ///
-    /// The species is drawn from the breach tile's biome, like every other
-    /// dungeon encounter, but from the boss pool rather than the ordinary
-    /// one, and from an RNG seeded off the level spec rather than off
-    /// `GameRng`: which thing guards a shaft is a property of the shaft, not
+    /// The species is drawn from the link tile's biome, like every other
+    /// Stack encounter, but from the boss pool rather than the ordinary
+    /// one, and from an RNG seeded off the frame spec rather than off
+    /// `GameRng`: which thing guards a stack is a property of the stack, not
     /// of how many rolls happened first, so leaving and coming back cannot
     /// reroll it into something easier.
     ///
     /// Not every biome fields a boss — no shipped Static Field species does
     /// — and there the lair falls back to the toughest ordinary program the
-    /// biome has, which at the bottom of a deep shaft is no small thing.
+    /// biome has, which at the bottom of a deep stack is no small thing.
     pub(crate) fn rouse_lair(&mut self) {
         if self.has_active_battle() || self.is_game_over().is_some() {
             return;
         }
-        let Some(pos) = self.dungeon_pos() else {
+        let Some(pos) = self.stack_pos() else {
             return;
         };
         if self.cell_underfoot() != Some(CellKind::Lair) || self.lair_cleared(pos) {
@@ -178,26 +176,26 @@ impl Game {
         let Some((species, is_boss)) = self.pick_lair_species(pos) else {
             return;
         };
-        let depth_mult = self.dungeon_depth_multiplier();
+        let depth_mult = self.stack_depth_multiplier();
         let pack = self.spawn_pack(&species, is_boss, ex, ey, depth_mult);
         if pack.is_empty() {
             return;
         }
         for &member in &pack {
-            self.world.entity_mut(member).insert(DungeonSpawn);
+            self.world.entity_mut(member).insert(StackSpawn);
         }
         self.remember_fight();
         self.log_kind(
             MessageKind::Outcome,
-            "The shaft opens out. Something very large is already awake.",
+            "The stack opens out. Something very large is already awake.",
         );
         self.start_battle(pack);
     }
 
-    fn pick_lair_species(&mut self, pos: DungeonPos) -> Option<(String, bool)> {
+    fn pick_lair_species(&mut self, pos: StackPos) -> Option<(String, bool)> {
         let (ex, ey) = pos.entrance;
         let biome = self.world.resource_mut::<WorldMap>().tile(ex, ey).biome;
-        let spec = self.level_spec(pos.depth, pos.floors, pos.entrance);
+        let spec = self.frame_spec(pos.depth, pos.frames, pos.entrance);
 
         let bosses: Vec<String> = self
             .world
@@ -222,41 +220,41 @@ impl Game {
     }
 
     /// Whether the sealed door on `cell` has already been burned open.
-    pub(crate) fn seal_open(&self, pos: DungeonPos, cell: (i32, i32)) -> bool {
+    pub(crate) fn seal_open(&self, pos: StackPos, cell: (i32, i32)) -> bool {
         self.world
-            .resource::<DungeonMemory>()
+            .resource::<StackMemory>()
             .0
             .get(&(pos.entrance, pos.depth))
             .is_some_and(|m| m.opened.contains(&cell))
     }
 
-    pub(crate) fn lair_cleared(&self, pos: DungeonPos) -> bool {
+    pub(crate) fn lair_cleared(&self, pos: StackPos) -> bool {
         self.world
-            .resource::<DungeonMemory>()
+            .resource::<StackMemory>()
             .0
             .get(&(pos.entrance, pos.depth))
             .is_some_and(|m| m.cleared)
     }
 
-    /// Records that this shaft's guardian is down, so its lair does not
+    /// Records that this stack's guardian is down, so its lair does not
     /// refill. Called from `award_loot`, which is the one place that knows a
     /// hostile actually died rather than merely being fled from.
     pub(crate) fn mark_lair_cleared(&mut self) {
-        let Some(pos) = self.dungeon_pos() else {
+        let Some(pos) = self.stack_pos() else {
             return;
         };
         if self.cell_underfoot() != Some(CellKind::Lair) {
             return;
         }
-        self.level_memory_mut(pos).cleared = true;
+        self.frame_memory_mut(pos).cleared = true;
     }
 
-    /// Whether the cache on `cell` of the level the party is in is still
+    /// Whether the cache on `cell` of the frame the party is in is still
     /// unopened — what both views use to stop advertising an empty one.
-    pub(crate) fn cache_unopened(&self, pos: DungeonPos, cell: (i32, i32)) -> bool {
+    pub(crate) fn cache_unopened(&self, pos: StackPos, cell: (i32, i32)) -> bool {
         !self
             .world
-            .resource::<DungeonMemory>()
+            .resource::<StackMemory>()
             .0
             .get(&(pos.entrance, pos.depth))
             .is_some_and(|m| m.looted.contains(&cell))
@@ -265,9 +263,9 @@ impl Game {
     /// Marks the cell the party is standing on as somewhere a fight started,
     /// for the map to pin.
     pub(crate) fn remember_fight(&mut self) {
-        let Some(pos) = self.dungeon_pos() else {
+        let Some(pos) = self.stack_pos() else {
             return;
         };
-        self.level_memory_mut(pos).fights.insert((pos.x, pos.y));
+        self.frame_memory_mut(pos).fights.insert((pos.x, pos.y));
     }
 }

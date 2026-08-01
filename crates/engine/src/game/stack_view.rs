@@ -1,4 +1,4 @@
-//! The two views of a dungeon level, and the record of what they showed.
+//! The two views of a Stack frame, and the record of what they showed.
 //!
 //! `view_cone` is the single walk both are built from, which is why it and
 //! both its consumers live here and it stays private to this file: the map
@@ -12,23 +12,23 @@
 //! standing inside an occluder is reachable and both consumers carry that
 //! exception explicitly.
 
-use super::dungeon::DungeonPos;
-use crate::dungeon::{CellKind, Dir};
+use super::stack::StackPos;
+use crate::stack::{CellKind, Dir};
 use crate::*;
 
 /// How far ahead the first-person view reaches, in cells. Four is enough
 /// corridor to read a junction coming without the far wall shrinking to
 /// nothing.
-pub const DUNGEON_VIEW_DEPTH: usize = 4;
+pub const STACK_VIEW_DEPTH: usize = 4;
 
 /// Cells visible either side of the party's line of sight. One gives the
 /// three-wide cone a classic blobber shows — the corridor you are in, plus
 /// whatever opens off it.
-pub const DUNGEON_VIEW_HALF_WIDTH: usize = 1;
+pub const STACK_VIEW_HALF_WIDTH: usize = 1;
 
 /// The world coordinates of the view cone from `(x, y)` facing `facing`,
 /// indexed `[ahead][lateral]` — the same shape and order
-/// `views::DungeonView::cells` carries.
+/// `views::StackView::cells` carries.
 ///
 /// The first-person view and the map's record of what has been seen are both
 /// filled by walking this, so the map cannot mark a cell the view never
@@ -36,9 +36,9 @@ pub const DUNGEON_VIEW_HALF_WIDTH: usize = 1;
 fn view_cone(x: i32, y: i32, facing: Dir) -> Vec<Vec<(i32, i32)>> {
     let (fx, fy) = facing.delta();
     let (rx, ry) = facing.right_delta();
-    let span = DUNGEON_VIEW_HALF_WIDTH as i32;
+    let span = STACK_VIEW_HALF_WIDTH as i32;
 
-    (0..DUNGEON_VIEW_DEPTH as i32)
+    (0..STACK_VIEW_DEPTH as i32)
         .map(|ahead| {
             (-span..=span)
                 .map(|lateral| (x + fx * ahead + rx * lateral, y + fy * ahead + ry * lateral))
@@ -55,10 +55,10 @@ impl Game {
     /// or the player is told they never looked down a corridor they are
     /// currently staring at.
     pub(crate) fn remember_view(&mut self) {
-        let Some(pos) = self.dungeon_pos() else {
+        let Some(pos) = self.stack_pos() else {
             return;
         };
-        let Some(level) = self.world.resource::<CurrentDungeon>().0.clone() else {
+        let Some(level) = self.world.resource::<CurrentStack>().0.clone() else {
             return;
         };
 
@@ -73,7 +73,7 @@ impl Game {
             // row is recorded before the break, not after the check.
             let blocked = ahead > 0
                 && row
-                    .get(DUNGEON_VIEW_HALF_WIDTH)
+                    .get(STACK_VIEW_HALF_WIDTH)
                     .is_some_and(|&(cx, cy)| level.cell(cx, cy).blocks_sight());
             seen.extend(row);
             if blocked {
@@ -81,20 +81,20 @@ impl Game {
             }
         }
 
-        let memory = self.level_memory_mut(pos);
+        let memory = self.frame_memory_mut(pos);
         memory.seen.extend(seen);
     }
 
-    /// The party's map of the level they are in — see
-    /// `views::DungeonMapView`. `None` on the surface.
+    /// The party's map of the frame they are in — see
+    /// `views::FrameMapView`. `None` on the surface.
     ///
-    /// Drawn from `DungeonMemory` rather than from the level, so it shows
-    /// what has been seen and not what is there. The level is consulted only
+    /// Drawn from `StackMemory` rather than from the frame, so it shows
+    /// what has been seen and not what is there. The frame is consulted only
     /// to say what each *remembered* cell holds.
-    pub fn dungeon_map(&self) -> Option<DungeonMapView> {
-        let pos = self.dungeon_pos()?;
-        let level = self.world.resource::<CurrentDungeon>().0.as_ref()?;
-        let memory = self.world.resource::<DungeonMemory>();
+    pub fn frame_map(&self) -> Option<FrameMapView> {
+        let pos = self.stack_pos()?;
+        let level = self.world.resource::<CurrentStack>().0.as_ref()?;
+        let memory = self.world.resource::<StackMemory>();
         let seen = memory
             .0
             .get(&(pos.entrance, pos.depth))
@@ -107,42 +107,37 @@ impl Game {
                 (0..level.width)
                     .map(|x| {
                         if !seen.contains(&(x, y)) {
-                            return DungeonMapCell::Unknown;
+                            return FrameMapCell::Unknown;
                         }
                         match level.cell(x, y) {
-                            CellKind::Rock => DungeonMapCell::Rock,
-                            CellKind::Floor => DungeonMapCell::Floor,
-                            CellKind::StairsUp => DungeonMapCell::StairsUp,
-                            CellKind::StairsDown => DungeonMapCell::StairsDown,
+                            CellKind::Rock => FrameMapCell::Rock,
+                            CellKind::Floor => FrameMapCell::Floor,
+                            CellKind::LinkUp => FrameMapCell::LinkUp,
+                            CellKind::LinkDown => FrameMapCell::LinkDown,
                             CellKind::Cache if self.cache_unopened(pos, (x, y)) => {
-                                DungeonMapCell::Cache
+                                FrameMapCell::Cache
                             }
-                            CellKind::Cache => DungeonMapCell::Floor,
-                            CellKind::Lair if !self.lair_cleared(pos) => DungeonMapCell::Lair,
-                            CellKind::Lair => DungeonMapCell::Floor,
-                            CellKind::Door => DungeonMapCell::Door,
+                            CellKind::Cache => FrameMapCell::Floor,
+                            CellKind::Lair if !self.lair_cleared(pos) => FrameMapCell::Lair,
+                            CellKind::Lair => FrameMapCell::Floor,
+                            CellKind::Door => FrameMapCell::Door,
                             CellKind::SealedDoor if self.seal_open(pos, (x, y)) => {
-                                DungeonMapCell::Door
+                                FrameMapCell::Door
                             }
-                            CellKind::SealedDoor => DungeonMapCell::SealedDoor,
+                            CellKind::SealedDoor => FrameMapCell::SealedDoor,
                         }
                     })
                     .collect()
             })
             .collect();
 
-        let mut marks: Vec<((i32, i32), DungeonMapMark)> = memory
+        let mut marks: Vec<((i32, i32), FrameMapMark)> = memory
             .0
             .get(&(pos.entrance, pos.depth))
-            .map(|m| {
-                m.fights
-                    .iter()
-                    .map(|&c| (c, DungeonMapMark::Fight))
-                    .collect()
-            })
+            .map(|m| m.fights.iter().map(|&c| (c, FrameMapMark::Fight)).collect())
             .unwrap_or_default();
         // Last, so a fight marker on the party's own cell doesn't hide them.
-        marks.push(((pos.x, pos.y), DungeonMapMark::Party));
+        marks.push(((pos.x, pos.y), FrameMapMark::Party));
 
         let walkable = (0..level.height)
             .flat_map(|y| (0..level.width).map(move |x| (x, y)))
@@ -150,9 +145,9 @@ impl Game {
             .count();
         let walked = seen.iter().filter(|&&(x, y)| level.walkable(x, y)).count();
 
-        Some(DungeonMapView {
+        Some(FrameMapView {
             depth: pos.depth,
-            floors: pos.floors,
+            frames: pos.frames,
             width: level.width,
             height: level.height,
             cells,
@@ -168,51 +163,51 @@ impl Game {
     }
 
     /// The first-person view of the cells around the party, already rotated
-    /// into view space — see `views::DungeonView`. `None` on the surface.
-    pub fn dungeon_view(&self) -> Option<DungeonView> {
-        let pos = self.dungeon_pos()?;
-        let DungeonPos {
+    /// into view space — see `views::StackView`. `None` on the surface.
+    pub fn stack_view(&self) -> Option<StackView> {
+        let pos = self.stack_pos()?;
+        let StackPos {
             depth,
-            floors,
+            frames,
             x,
             y,
             facing,
             ..
         } = pos;
-        let level = self.world.resource::<CurrentDungeon>().0.as_ref()?;
+        let level = self.world.resource::<CurrentStack>().0.as_ref()?;
 
         let cells = view_cone(x, y, facing)
             .into_iter()
             .map(|row| {
                 row.into_iter()
                     .map(|(cx, cy)| match level.cell(cx, cy) {
-                        CellKind::Rock => DungeonCellView::Rock,
-                        CellKind::Floor => DungeonCellView::Floor,
-                        CellKind::StairsUp => DungeonCellView::StairsUp,
-                        CellKind::StairsDown => DungeonCellView::StairsDown,
+                        CellKind::Rock => StackCellView::Rock,
+                        CellKind::Floor => StackCellView::Floor,
+                        CellKind::LinkUp => StackCellView::LinkUp,
+                        CellKind::LinkDown => StackCellView::LinkDown,
                         // An emptied cache is just an alcove. Still drawing
                         // one would send the player back down a dead end
                         // they have already walked.
                         CellKind::Cache if self.cache_unopened(pos, (cx, cy)) => {
-                            DungeonCellView::Cache
+                            StackCellView::Cache
                         }
-                        CellKind::Cache => DungeonCellView::Floor,
-                        CellKind::Lair if !self.lair_cleared(pos) => DungeonCellView::Lair,
-                        CellKind::Lair => DungeonCellView::Floor,
-                        CellKind::Door => DungeonCellView::Door,
+                        CellKind::Cache => StackCellView::Floor,
+                        CellKind::Lair if !self.lair_cleared(pos) => StackCellView::Lair,
+                        CellKind::Lair => StackCellView::Floor,
+                        CellKind::Door => StackCellView::Door,
                         CellKind::SealedDoor if self.seal_open(pos, (cx, cy)) => {
-                            DungeonCellView::Door
+                            StackCellView::Door
                         }
-                        CellKind::SealedDoor => DungeonCellView::SealedDoor,
+                        CellKind::SealedDoor => StackCellView::SealedDoor,
                     })
                     .collect()
             })
             .collect();
 
         let standing_on = match level.cell(x, y) {
-            CellKind::StairsDown => Some("Stairs lead down  [>] descend".to_string()),
-            CellKind::StairsUp if depth == 1 => Some("The breach out  [<] surface".to_string()),
-            CellKind::StairsUp => Some("Stairs lead up  [<] climb".to_string()),
+            CellKind::LinkDown => Some("A link leads down  [>] descend".to_string()),
+            CellKind::LinkUp if depth == 1 => Some("The link out  [<] surface".to_string()),
+            CellKind::LinkUp => Some("A link leads up  [<] climb".to_string()),
             // Emptied on arrival rather than on a key, so this reports what
             // already happened rather than offering a choice.
             CellKind::Cache => Some("An empty casing".to_string()),
@@ -221,9 +216,9 @@ impl Game {
             _ => None,
         };
 
-        Some(DungeonView {
+        Some(StackView {
             depth,
-            floors,
+            frames,
             facing: facing.label(),
             position: (x, y),
             cells,

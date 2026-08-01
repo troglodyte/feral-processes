@@ -1,8 +1,8 @@
 //! The map screen: terrain, entities, effects, and the status panel beside them.
 
 use super::bars::*;
-use super::dungeon::draw_dungeon;
 use super::field::draw_status_buffs;
+use super::stack::draw_stack;
 use super::*;
 
 /// How far a bare tile's background may stray from its biome's flat colour,
@@ -77,8 +77,8 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
     // inside `draw_status_panel`, which only ever needed `&Game` before
     // this and shouldn't have to start borrowing mutably just to draw.
     let buffs = game.active_buffs();
-    if let Some(view) = game.dungeon_view() {
-        draw_dungeon(&view, painter, map_w, map_h, m);
+    if let Some(view) = game.stack_view() {
+        draw_stack(&view, painter, map_w, map_h, m);
     } else {
         draw_surface_map(game, fx, painter, map_w, map_h, tile_px, glyph_px, &status);
     }
@@ -175,7 +175,7 @@ fn history_rows(entries: &[LogEntry], selected: usize) -> Vec<Row> {
 }
 
 /// The zone map: terrain, entities and effects, drawn top-down into the pane
-/// at the origin. The other half of the pane's contents is `draw_dungeon`,
+/// at the origin. The other half of the pane's contents is `draw_stack`,
 /// which replaces this entirely while the party is underground.
 #[allow(clippy::too_many_arguments)]
 fn draw_surface_map(

@@ -2,9 +2,7 @@
 //! stamping the base platform, and stepping through a portal to the next
 //! zone.
 
-use crate::tuning::{
-    DUNGEON_ENTRANCES_PER_ZONE, INITIAL_WILD_POPULATION, MAX_BUILD_DISTANCE_FROM_HOME,
-};
+use crate::tuning::{INITIAL_WILD_POPULATION, MAX_BUILD_DISTANCE_FROM_HOME, STACK_LINKS_PER_ZONE};
 use crate::*;
 
 impl Game {
@@ -230,14 +228,14 @@ impl Game {
     pub(crate) fn enter_next_zone(&mut self) {
         // Breaching does not despawn structures — the base travels — so
         // anything zone-local has to be named here or it comes along at its
-        // old coordinates. A `DungeonEntrance` is zone-local: it opens onto a
-        // level generated for the sector it stands in, and left alive it
+        // old coordinates. A `SurfaceLink` is zone-local: it opens onto a
+        // frame generated for the sector it stands in, and left alive it
         // would ride the breach and could land inside the newly stamped base
         // platform.
         let stale: Vec<Entity> = {
             let mut query = self
                 .world
-                .query_filtered::<Entity, Or<(With<Hostile>, With<Nest>, With<DungeonEntrance>)>>();
+                .query_filtered::<Entity, Or<(With<Hostile>, With<Nest>, With<SurfaceLink>)>>();
             query.iter(&self.world).collect()
         };
         for e in stale {
@@ -352,11 +350,11 @@ impl Game {
         // trader was rebuilt on the matching tile.
         self.world.insert_resource(BuybackLedger::default());
 
-        // Same reason, and the same trap: the entrances a zone's breaches
-        // stood on are gone, but their maps are keyed by tile and would
-        // otherwise draw the last sector's walked corridors onto a fresh
-        // breach that happened to land on a matching coordinate.
-        self.world.insert_resource(DungeonMemory::default());
+        // Same reason, and the same trap: a zone's links are gone, but their
+        // maps are keyed by tile and would otherwise draw the last sector's
+        // walked corridors onto a fresh link that happens to land on a
+        // matching coordinate.
+        self.world.insert_resource(StackMemory::default());
 
         let spendable = [self.currency(), self.craft_currency()];
         let player = self.player_entity();
@@ -385,7 +383,7 @@ impl Game {
             ));
         }
         self.spawn_initial_creatures(INITIAL_WILD_POPULATION);
-        self.spawn_dungeon_entrances(DUNGEON_ENTRANCES_PER_ZONE);
+        self.spawn_surface_links(STACK_LINKS_PER_ZONE);
     }
 
     /// Breaches forward until the party is standing in `zone`, for the

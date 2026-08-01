@@ -1,14 +1,14 @@
-//! The party's own map of the dungeon level they are standing in.
+//! The party's own map of the Stack frame they are standing in.
 //!
-//! Drawn north-up as a plain grid, which is the one place the dungeon layer
+//! Drawn north-up as a plain grid, which is the one place the Stack layer
 //! deliberately breaks from the first-person view: a map you have to rotate
 //! in your head is a second puzzle on top of the maze. The renderer knows
-//! nothing about what has or hasn't been explored — `Game::dungeon_map`
-//! hands over `DungeonMapCell::Unknown` for anything never seen, and this
+//! nothing about what has or hasn't been explored — `Game::frame_map`
+//! hands over `FrameMapCell::Unknown` for anything never seen, and this
 //! file only has to draw it.
 
 use super::*;
-use feral_processes_engine::{DungeonMapCell, DungeonMapMark, DungeonMapView};
+use feral_processes_engine::{FrameMapCell, FrameMapMark, FrameMapView};
 
 /// Fraction of the shorter pane axis the map grid fills, leaving room for
 /// the heading above it and the legend below.
@@ -22,48 +22,48 @@ const UNKNOWN: Color = Color::new(0.05, 0.06, 0.09, 1.0);
 const ROCK: Color = Color::new(0.13, 0.16, 0.20, 1.0);
 const WALKED: Color = Color::new(0.16, 0.38, 0.42, 1.0);
 
-fn tile_color(cell: DungeonMapCell) -> Color {
+fn tile_color(cell: FrameMapCell) -> Color {
     match cell {
-        DungeonMapCell::Unknown => UNKNOWN,
-        DungeonMapCell::Rock => ROCK,
-        DungeonMapCell::Floor
-        | DungeonMapCell::StairsUp
-        | DungeonMapCell::StairsDown
-        | DungeonMapCell::Cache
-        | DungeonMapCell::Lair
-        | DungeonMapCell::Door
-        | DungeonMapCell::SealedDoor => WALKED,
+        FrameMapCell::Unknown => UNKNOWN,
+        FrameMapCell::Rock => ROCK,
+        FrameMapCell::Floor
+        | FrameMapCell::LinkUp
+        | FrameMapCell::LinkDown
+        | FrameMapCell::Cache
+        | FrameMapCell::Lair
+        | FrameMapCell::Door
+        | FrameMapCell::SealedDoor => WALKED,
     }
 }
 
-/// The glyph pinned to a cell, if any. Stairs come off the layout; the
+/// The glyph pinned to a cell, if any. Links come off the layout; the
 /// party and their fights come off `marks`, which is why marks are drawn
 /// second and win.
-fn cell_glyph(cell: DungeonMapCell) -> Option<(char, Color)> {
+fn cell_glyph(cell: FrameMapCell) -> Option<(char, Color)> {
     match cell {
-        DungeonMapCell::StairsDown => Some(('>', YELLOW)),
-        DungeonMapCell::StairsUp => Some(('<', YELLOW)),
-        DungeonMapCell::Cache => Some(('!', GREEN)),
-        DungeonMapCell::Lair => Some(('&', RED)),
-        DungeonMapCell::Door => Some(('+', ORANGE)),
-        DungeonMapCell::SealedDoor => Some(('+', RED)),
+        FrameMapCell::LinkDown => Some(('>', YELLOW)),
+        FrameMapCell::LinkUp => Some(('<', YELLOW)),
+        FrameMapCell::Cache => Some(('!', GREEN)),
+        FrameMapCell::Lair => Some(('&', RED)),
+        FrameMapCell::Door => Some(('+', ORANGE)),
+        FrameMapCell::SealedDoor => Some(('+', RED)),
         _ => None,
     }
 }
 
-fn mark_glyph(mark: DungeonMapMark) -> (char, Color) {
+fn mark_glyph(mark: FrameMapMark) -> (char, Color) {
     match mark {
-        DungeonMapMark::Party => ('@', CYAN),
-        DungeonMapMark::Fight => ('x', RED),
+        FrameMapMark::Party => ('@', CYAN),
+        FrameMapMark::Fight => ('x', RED),
     }
 }
 
 /// Side length of one map cell in pixels, and the top-left corner the grid
 /// starts at, for a `view` drawn into a `w` by `h` pane.
 ///
-/// Square cells — the level is square and a stretched map would misreport
+/// Square cells — the frame is square and a stretched map would misreport
 /// distances the player is trying to count.
-fn layout(view: &DungeonMapView, w: f32, h: f32) -> (f32, f32, f32) {
+fn layout(view: &FrameMapView, w: f32, h: f32) -> (f32, f32, f32) {
     if view.width <= 0 || view.height <= 0 {
         return (0.0, 0.0, 0.0);
     }
@@ -73,20 +73,14 @@ fn layout(view: &DungeonMapView, w: f32, h: f32) -> (f32, f32, f32) {
     ((w - grid_w) / 2.0, (h - grid_h) / 2.0, cell)
 }
 
-pub(super) fn draw_dungeon_map(
-    view: &DungeonMapView,
-    painter: &Painter,
-    w: f32,
-    h: f32,
-    m: &Metrics,
-) {
+pub(super) fn draw_frame_map(view: &FrameMapView, painter: &Painter, w: f32, h: f32, m: &Metrics) {
     painter.rect(0.0, 0.0, w, h, PANEL_BG);
     painter.rect_lines(0.0, 0.0, w, h, 2.0, BORDER);
 
     let heading = format!(
-        "DEEP SCAN   depth {} / {}   breach {},{}   facing {}   {:.0}% mapped",
+        "DEEP SCAN   depth {} / {}   link {},{}   facing {}   {:.0}% mapped",
         view.depth,
-        view.floors,
+        view.frames,
         view.entrance.0,
         view.entrance.1,
         view.facing,
@@ -172,10 +166,10 @@ fn draw_cell_glyph(
 mod tests {
     use super::*;
 
-    fn view(width: i32, height: i32) -> DungeonMapView {
-        DungeonMapView {
+    fn view(width: i32, height: i32) -> FrameMapView {
+        FrameMapView {
             depth: 2,
-            floors: 4,
+            frames: 4,
             width,
             height,
             cells: (0..height)
@@ -183,20 +177,17 @@ mod tests {
                     (0..width)
                         .map(|x| {
                             if (x + y) % 3 == 0 {
-                                DungeonMapCell::Unknown
+                                FrameMapCell::Unknown
                             } else if x % 2 == 0 {
-                                DungeonMapCell::Rock
+                                FrameMapCell::Rock
                             } else {
-                                DungeonMapCell::Floor
+                                FrameMapCell::Floor
                             }
                         })
                         .collect()
                 })
                 .collect(),
-            marks: vec![
-                ((1, 1), DungeonMapMark::Fight),
-                ((3, 5), DungeonMapMark::Party),
-            ],
+            marks: vec![((1, 1), FrameMapMark::Fight), ((3, 5), FrameMapMark::Party)],
             facing: "N",
             entrance: (12, -40),
             explored: 0.42,
@@ -221,10 +212,10 @@ mod tests {
         assert!((oy + cell * 21.0 / 2.0 - h / 2.0).abs() < 0.001);
     }
 
-    /// A non-square level must still get square cells rather than being
+    /// A non-square frame must still get square cells rather than being
     /// stretched to fill the pane — the player counts corridors off this.
     #[test]
-    fn an_oblong_level_still_gets_square_cells() {
+    fn an_oblong_frame_still_gets_square_cells() {
         let (_, _, cell) = layout(&view(31, 11), 1000.0, 640.0);
         assert!(cell * 31.0 <= 1000.0 + 0.001);
         assert!(cell * 11.0 <= 640.0 + 0.001);
@@ -233,28 +224,25 @@ mod tests {
     #[test]
     fn unknown_and_seen_rock_are_drawn_differently() {
         assert_ne!(
-            tile_color(DungeonMapCell::Unknown),
-            tile_color(DungeonMapCell::Rock),
+            tile_color(FrameMapCell::Unknown),
+            tile_color(FrameMapCell::Rock),
             "'never been here' and 'nothing here' are what a mapper most needs to tell apart"
         );
     }
 
     #[test]
-    fn stairs_carry_the_same_glyphs_as_the_first_person_view() {
-        assert_eq!(
-            cell_glyph(DungeonMapCell::StairsDown).map(|g| g.0),
-            Some('>')
-        );
-        assert_eq!(cell_glyph(DungeonMapCell::StairsUp).map(|g| g.0), Some('<'));
-        assert_eq!(cell_glyph(DungeonMapCell::Floor), None);
+    fn links_carry_the_same_glyphs_as_the_first_person_view() {
+        assert_eq!(cell_glyph(FrameMapCell::LinkDown).map(|g| g.0), Some('>'));
+        assert_eq!(cell_glyph(FrameMapCell::LinkUp).map(|g| g.0), Some('<'));
+        assert_eq!(cell_glyph(FrameMapCell::Floor), None);
     }
 
     #[test]
     fn drawing_a_map_does_not_panic() {
         let m = crate::text::ui_metrics(900.0);
         crate::paint::with_painter(|p| {
-            draw_dungeon_map(&view(21, 21), p, 1000.0, 640.0, &m);
-            draw_dungeon_map(&view(31, 11), p, 1000.0, 640.0, &m);
+            draw_frame_map(&view(21, 21), p, 1000.0, 640.0, &m);
+            draw_frame_map(&view(31, 11), p, 1000.0, 640.0, &m);
         });
     }
 
@@ -266,9 +254,9 @@ mod tests {
         let mut empty = view(0, 0);
         empty.cells = Vec::new();
         // A mark outside the grid: clipped, not indexed with.
-        empty.marks = vec![((99, 99), DungeonMapMark::Party)];
+        empty.marks = vec![((99, 99), FrameMapMark::Party)];
         crate::paint::with_painter(|p| {
-            draw_dungeon_map(&empty, p, 800.0, 600.0, &m);
+            draw_frame_map(&empty, p, 800.0, 600.0, &m);
         });
     }
 }

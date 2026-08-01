@@ -6,7 +6,7 @@
 
 use crate::abilities::AbilityId;
 use crate::game::zone::find_walkable_start;
-use crate::tuning::{DEFAULT_WORK_CAPACITY, DUNGEON_ENTRANCES_PER_ZONE, INITIAL_WILD_POPULATION};
+use crate::tuning::{DEFAULT_WORK_CAPACITY, INITIAL_WILD_POPULATION, STACK_LINKS_PER_ZONE};
 use crate::*;
 
 /// Splits a persisted routine list into what `db` still recognizes and what
@@ -56,8 +56,8 @@ impl Game {
         world.insert_resource(ZoneLevel::default());
         world.insert_resource(Platform::default());
         world.insert_resource(Locale::default());
-        world.insert_resource(CurrentDungeon::default());
-        world.insert_resource(DungeonMemory::default());
+        world.insert_resource(CurrentStack::default());
+        world.insert_resource(StackMemory::default());
         world.insert_resource(ZoneSpawnPoint {
             x: start.0,
             y: start.1,
@@ -103,7 +103,7 @@ impl Game {
             game.log(warning);
         }
         game.spawn_initial_creatures(INITIAL_WILD_POPULATION);
-        game.spawn_dungeon_entrances(DUNGEON_ENTRANCES_PER_ZONE);
+        game.spawn_surface_links(STACK_LINKS_PER_ZONE);
         game.log("Connection established. You materialize at the edge of the Grid.");
         Ok(game)
     }
@@ -177,8 +177,8 @@ impl Game {
         world.insert_resource(ZoneLevel(data.zone));
         world.insert_resource(Platform::default());
         world.insert_resource(Locale::default());
-        world.insert_resource(CurrentDungeon::default());
-        world.insert_resource(DungeonMemory::default());
+        world.insert_resource(CurrentStack::default());
+        world.insert_resource(StackMemory::default());
         world.insert_resource(ZoneSpawnPoint {
             x: data.spawn_point.0,
             y: data.spawn_point.1,
@@ -436,13 +436,13 @@ impl Game {
             }
         }
 
-        game.restore_dungeon_entrances(data.dungeon_entrances);
+        game.restore_surface_links(data.link_sites);
         // Before `restore_locale`, which records what the party can see from
         // where they are standing and would otherwise write into a map that
         // is about to be overwritten.
-        game.world.insert_resource(data.dungeon_memory);
-        // Last, and after the WorldMap is in place: restoring a dungeon
-        // locale regenerates its level from that map's seed.
+        game.world.insert_resource(data.stack_memory);
+        // Last, and after the WorldMap is in place: restoring a Stack
+        // locale regenerates its frame from that map's seed.
         game.restore_locale(data.locale);
 
         game.log("Session restored. Reconnecting to the Grid.");
@@ -642,14 +642,12 @@ impl Game {
                 ids.sort();
                 ids
             },
-            dungeon_entrances: {
-                let mut query = self
-                    .world
-                    .query_filtered::<&Position, With<DungeonEntrance>>();
+            link_sites: {
+                let mut query = self.world.query_filtered::<&Position, With<SurfaceLink>>();
                 query.iter(&self.world).map(|p| (p.x, p.y)).collect()
             },
             locale: self.locale(),
-            dungeon_memory: self.world.resource::<DungeonMemory>().clone(),
+            stack_memory: self.world.resource::<StackMemory>().clone(),
         };
         save::save_to_file(path, &data)
     }

@@ -132,7 +132,7 @@ impl App {
         // than a separate set — walking is walking, and the view makes which
         // one you're doing obvious.
         if self.game.as_ref().is_some_and(|g| g.is_underground()) {
-            self.handle_dungeon_key(key, is_move_key);
+            self.handle_stack_key(key, is_move_key);
             return;
         }
 
@@ -178,19 +178,19 @@ impl App {
     }
 
     /// Movement for a party that has a facing. Forward and back walk along
-    /// it; left and right turn in place, which is what makes the dungeon a
+    /// it; left and right turn in place, which is what makes the Stack a
     /// first-person space rather than a top-down one seen at an angle.
     ///
     /// Everything else on the map screen is left alone — the mode keys above
     /// already ran, and the ones that need open grid refuse in the engine
     /// (see `Game::require_surface`).
-    fn handle_dungeon_key(&mut self, key: GameKey, is_move_key: bool) {
+    fn handle_stack_key(&mut self, key: GameKey, is_move_key: bool) {
         // The same `g` that scans the ground on the surface. Checked before
         // the game is borrowed below, and costing no tick: reading your own
-        // map is not an action, and a dungeon that advanced a turn every
+        // map is not an action, and the Stack advancing a turn every
         // time you checked where you were would punish mapping.
         if key == GameKey::Char('g') {
-            self.mode = Mode::DungeonMap;
+            self.mode = Mode::FrameMap;
             return;
         }
 
@@ -240,7 +240,7 @@ impl App {
     /// into `Mode::Battle` if one just started, the movement cue, and the
     /// game-over check.
     ///
-    /// Shared by the surface and dungeon paths rather than copied into both.
+    /// Shared by the surface and Stack paths rather than copied into both.
     /// The battle transition especially: Phase 2 puts random encounters
     /// underground, and a second copy of this is exactly the kind of thing
     /// that gets updated on one side only.

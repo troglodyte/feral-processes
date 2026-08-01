@@ -719,26 +719,26 @@ pub struct Nest {
     pub pending_respawns: Vec<u32>,
 }
 
-/// A way down into a dungeon, standing on the zone map. Carries `Position`
+/// A way down into the Stack, standing on the zone map. Carries `Position`
 /// and `Glyph` alongside this, the way a `Nest` does, but no `Durability`:
 /// an entrance is walked into, not attacked.
 ///
 /// Walking onto one is checked in `Game::move_player` before the generic
 /// blocking-structure test, the same way a nest and a zone portal are.
 #[derive(Component, Clone, Copy, Debug)]
-pub struct DungeonEntrance;
+pub struct SurfaceLink;
 
-/// Tags a wild program that was conjured for a dungeon encounter rather
+/// Tags a wild program that was conjured for a Stack encounter rather
 /// than found on the zone map.
 ///
 /// It exists at surface coordinates like any other creature — the player's
-/// `Position` is pinned to the breach while they're underground, so that is
+/// `Position` is pinned to the link while they're underground, so that is
 /// where the pack lands — but it has no business surviving the fight. Left
-/// alive after a jack-out it would be standing around the breach mouth when
+/// alive after a jack-out it would be standing around the link mouth when
 /// the party climbs back out, a pack from a place the player left. So
 /// `Game::end_battle` despawns whatever still carries this.
 #[derive(Component, Clone, Copy, Debug)]
-pub struct DungeonSpawn;
+pub struct StackSpawn;
 
 /// Tags a wild creature as tethered to a `Nest` — see
 /// `systems::wander_ai_system`'s radius check. Removed (not the

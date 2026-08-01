@@ -3,7 +3,6 @@ pub mod balance_sim;
 pub mod battle;
 pub mod components;
 pub mod difficulty;
-pub mod dungeon;
 mod game;
 pub mod items;
 pub mod items_db;
@@ -13,6 +12,7 @@ pub mod research;
 pub mod resources;
 pub mod save;
 pub mod species;
+pub mod stack;
 pub mod structures;
 pub mod systems;
 pub mod taming;
@@ -39,11 +39,11 @@ use battle::{
 };
 use components::{
     AbilityCooldowns, ActiveBuff, ActiveFieldBuff, ActiveStatus, BuffKind, BuffSource, CombatBuff,
-    Creature, CustomName, Decompiler, DungeonEntrance, DungeonSpawn, Durability, Equipment,
-    EquippedItem, Experience, FieldBuff, FieldBuffKind, FusionCount, Glyph, GlyphColor, Hostile,
-    Inventory, ItemFusions, NEED_MAX, Needs, Nest, NestGuardian, PassiveProcessor, Perks, Player,
-    Position, Potential, ResourceNode, Routines, Stats, StatusEffects, StatusKind, Structure,
-    StructureTier, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
+    Creature, CustomName, Decompiler, Durability, Equipment, EquippedItem, Experience, FieldBuff,
+    FieldBuffKind, FusionCount, Glyph, GlyphColor, Hostile, Inventory, ItemFusions, NEED_MAX,
+    Needs, Nest, NestGuardian, PassiveProcessor, Perks, Player, Position, Potential, ResourceNode,
+    Routines, StackSpawn, Stats, StatusEffects, StatusKind, Structure, StructureTier, SurfaceLink,
+    Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
 };
 use items::{EquipmentSlot, EquipmentStats, ItemId, ids};
 use items_db::ItemDb;
@@ -53,9 +53,8 @@ pub use perks::{Perk, PerkDb, PerkDef};
 use research::{ResearchDb, ResearchDef};
 pub use research::{ResearchId, ResearchRecipe};
 use resources::{
-    BattleState, BuybackLedger, CurrentDungeon, DungeonMemory, EffectQueue, GameClock, GameOver,
-    GameRng, Locale, MessageLog, Party, Platform, PlayerEntity, Research, ZoneLevel,
-    ZoneSpawnPoint,
+    BattleState, BuybackLedger, CurrentStack, EffectQueue, GameClock, GameOver, GameRng, Locale,
+    MessageLog, Party, Platform, PlayerEntity, Research, StackMemory, ZoneLevel, ZoneSpawnPoint,
 };
 pub use resources::{
     DifficultyMode, EffectKind, LogEntry, MESSAGE_LOG_CAP, MessageKind, SlotShift, VisualEffect,

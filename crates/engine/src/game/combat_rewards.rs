@@ -87,7 +87,7 @@ impl Game {
             }
         }
 
-        // Underground this is the shaft's guardian going down, and the one
+        // Underground this is the stack's guardian going down, and the one
         // point that knows it actually died rather than being fled from.
         self.mark_lair_cleared();
 

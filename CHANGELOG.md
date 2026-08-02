@@ -13,6 +13,25 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Bosses are a wall, not a wait
+
+Data-only: both boss `.ron` files, no engine change and no save-format bump.
+A boss already in a save keeps the stats it spawned with.
+
+- **Overseer drops from 1450 HP to 500, Wintermute from 1600 to 550.** They
+  were 12–13x the toughest ordinary program's HP while their attack was only
+  ~3x it and their defense ~1.5x, so a boss could not really kill you faster
+  than a Sentinel could — you just had to hit it forty more times. That is a
+  long fight, not a hard one.
+- Projected against `balance_sim`'s round loop, a *single* Overseer at 1450
+  needed a level-15 party at zone 1, where a full zone-cap *group* of the
+  toughest ordinary species needs level 1; at zone 5 neither boss was
+  beatable at level 200. At the new numbers the same zone-1 fight lands at
+  level 8 and runs 17 rounds.
+- `balance_sim` does not gate this and did not move: `toughest_ordinary_species`
+  filters bosses out by design, so its curves are blind to boss stats. The
+  numbers above came from a throwaway probe, not a committed test.
+
 ### The frame map, in the corner of the corridor
 
 No save-format change: the renderer draws a view the engine already had.

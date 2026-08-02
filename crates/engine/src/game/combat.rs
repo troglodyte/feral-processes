@@ -392,8 +392,8 @@ impl Game {
                 return Err(format!("That ability isn't ready: {reason}."));
             }
             // A boss is an encounter, never a companion: capturing one puts a
-            // creature with an order-of-magnitude larger `base_hp` into the
-            // roster, where fusion's `max + min/2` then compounds it.
+            // creature with several times the toughest ordinary `base_hp`
+            // into the roster, where fusion's `max + min/2` then compounds it.
             //
             // This can't join Decompile's other two refusals in
             // `ability_unavailable` — that takes no target, because the

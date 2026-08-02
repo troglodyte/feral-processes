@@ -486,6 +486,17 @@ pub enum TradeChoice {
 pub const MIN_ZOOM: u16 = 1;
 pub const MAX_ZOOM: u16 = 4;
 
+/// Zoom levels for the Stack's corner map. The minimum is the whole frame,
+/// which is what the inset showed before there was a choice, so a player who
+/// never presses `+` sees exactly what they saw before.
+///
+/// Presentation state, so it lives here beside the zone map's zoom rather
+/// than in `tuning.rs` — what the renderer crops to is not difficulty. The
+/// cell radius each level maps to is the renderer's business
+/// (`render/frame_map.rs::window_radius`).
+pub const STACK_MAP_MIN_ZOOM: u16 = 1;
+pub const STACK_MAP_MAX_ZOOM: u16 = 4;
+
 /// Builds the `BattleAction` an `ActionKind` becomes once the UI has
 /// collected whatever its `TargetSpec` called for. One arm per kind, so a
 /// new action is added here rather than by editing the key handlers.
@@ -613,6 +624,14 @@ pub struct App {
     pub trade_quantity_input: String,
     /// How many screen characters render each world tile along each axis.
     pub zoom: u16,
+    /// How close the Stack's corner map is drawn in: `STACK_MAP_MIN_ZOOM`
+    /// shows the whole frame, higher levels a window around the party.
+    ///
+    /// Its own field rather than a second use of `zoom`, which is the zone
+    /// map's tile size: the two are different scales with no sensible
+    /// mapping between them, and sharing one would resize the surface after
+    /// a dive spent reading the maze.
+    pub stack_zoom: u16,
     /// Which row is highlighted on the current numbered/lettered menu, for
     /// Up/Down-plus-Enter navigation (see `App::selected_index`) — on top
     /// of, not instead of, typing a row's own number/letter directly.

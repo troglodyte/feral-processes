@@ -231,6 +231,12 @@ It is drawn north-up and shows only what the party has had in view: cells
 never seen stay dark, and are drawn differently from rock that has been
 seen. Links are marked, so are the corridors you were jumped in.
 
+`+` and `-` zoom it — the same keys that size the tiles on the surface,
+since the two maps are never both on screen. The widest setting is the whole
+frame, and each step in draws a smaller window around you at a larger size,
+down to the junction you are standing in. Against a wall the window slides
+to stay inside the frame rather than showing you the outside of it.
+
 `g` opens the same map full-screen — the same key that scans the ground on
 the surface, since the two screens never both apply. It is the corner map
 at three times the size, with a legend naming every glyph, and it is the

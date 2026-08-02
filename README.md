@@ -58,9 +58,11 @@ compass directions and start being forward, back, turn left, turn right.
 `<` and `>` follow whichever link is underfoot.
 
 The party's map of the frame sits in the corner of the corridor the whole
-time you are down there, and `g` — the same key that scans the ground on
-the surface — opens it full-screen with a legend, for when the question is
-which wing you have not walked rather than which way you are facing. Either
+time you are down there — `+` and `-` zoom it from the whole frame down to
+the junction you are standing in — and `g`, the same key that scans the
+ground on the surface, opens it full-screen with a legend, for when the
+question is which wing you have not walked rather than which way you are
+facing. Either
 way it shows what you have seen and nothing else: corridors walked, links
 found, and the corridors something jumped you in. Cells you have never had
 in view stay dark, and are drawn differently from rock you have seen,

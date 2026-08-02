@@ -27,6 +27,12 @@ No save-format change: the renderer draws a view the engine already had.
   carries no text of its own for that reason.
 - Both are drawn by one function, so a cell can never mean one thing on the
   small map and another on the large one.
+- **`+` and `-` zoom the corner map**, from the whole frame down to a
+  seven-cell window around the party — the same keys that size the surface
+  map's tiles, since the two are never both on screen. They are separate
+  settings, so a dive spent reading the maze up close does not resize the
+  zone map you climb back out to. Against a wall the window slides to stay
+  inside the frame instead of showing you the outside of it.
 - Not playtested. How much of the corridor an always-on inset should cover
   is a matter of taste, and the size was picked by what stays legible at
   1280x720 rather than by playing with it.

@@ -74,6 +74,51 @@ fn the_fixture_actually_puts_the_party_underground() {
     assert!(game.stack_view().is_some());
 }
 
+/// `+` and `-` mean "zoom the map I am looking at", and underground that is
+/// the corner inset rather than the zone map behind it. Separate fields
+/// rather than one shared level: climbing out to find the surface tiles
+/// resized by a dive spent reading the maze would read as a bug.
+#[test]
+fn plus_and_minus_zoom_the_stack_map_and_leave_the_surface_zoom_alone() {
+    let mut app = app_underground(505);
+    let surface_zoom = app.zoom;
+    let before = app.stack_zoom;
+
+    app.handle_key(GameKey::Char('+'));
+    assert_eq!(app.stack_zoom, before + 1, "+ did not zoom the frame map");
+    assert_eq!(app.zoom, surface_zoom, "+ underground resized the zone map");
+
+    app.handle_key(GameKey::Char('-'));
+    assert_eq!(app.stack_zoom, before);
+    assert_eq!(app.zoom, surface_zoom);
+}
+
+/// And the other way about: the same keys on the surface must not quietly
+/// re-frame the map waiting for the next descent.
+#[test]
+fn zooming_on_the_surface_leaves_the_stack_map_alone() {
+    let mut app = test_app(606);
+    let before = app.stack_zoom;
+    app.handle_key(GameKey::Char('+'));
+    assert!(app.zoom > MIN_ZOOM);
+    assert_eq!(app.stack_zoom, before);
+}
+
+/// Both ends clamp, so holding either key parks at a level that still draws
+/// rather than at a zero-cell window or a level nothing maps to.
+#[test]
+fn the_stack_map_zoom_clamps_at_both_ends() {
+    let mut app = app_underground(707);
+    for _ in 0..12 {
+        app.handle_key(GameKey::Char('+'));
+    }
+    assert_eq!(app.stack_zoom, STACK_MAP_MAX_ZOOM);
+    for _ in 0..12 {
+        app.handle_key(GameKey::Char('-'));
+    }
+    assert_eq!(app.stack_zoom, STACK_MAP_MIN_ZOOM);
+}
+
 /// The defining difference from the surface: left and right turn the party
 /// rather than strafing it sideways.
 #[test]

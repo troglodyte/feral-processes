@@ -75,6 +75,8 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
     // Read before the `game` borrow below: the results of a battle that just
     // ended are at the tail of the log and scroll in one at a time.
     let hidden = app.hidden_log_lines();
+    // Read before the `game` borrow, like `status_line` above.
+    let stack_zoom = app.stack_zoom;
     let Some(game) = &mut app.game else { return };
 
     let map_w = painter.screen_w() * PANE_W;
@@ -90,7 +92,7 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
         // Over the corridor, not part of it: the same map the `g` screen
         // draws, small enough to leave the view readable.
         if let Some(map) = game.frame_map() {
-            draw_map_inset(&map, painter, map_w, map_h, m);
+            draw_map_inset(&map, stack_zoom, painter, map_w, map_h, m);
         }
     } else {
         draw_surface_map(game, fx, painter, map_w, map_h, tile_px, glyph_px, &status);

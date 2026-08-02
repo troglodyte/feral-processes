@@ -155,6 +155,7 @@ pub(super) fn draw_help(painter: &Painter, m: &Metrics) {
         text_row("                  > descend   < climb / leave the link"),
         text_row("                  o adopt an orphaned process (costs a catalyst)"),
         text_row("                  g map — only what you have seen"),
+        text_row("                  +/- zoom the corner map, whole frame to close in"),
         text_row(""),
         text_row("In an intrusion:  a attack   d defend   s special"),
         text_row("                  u use item   j jack out"),

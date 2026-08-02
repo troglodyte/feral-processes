@@ -73,9 +73,10 @@ structure.
 
 ### 2. Scan is deleted
 
-`Game::forage`, `forage_chance`, the four `FORAGE_CHANCE_*` constants, and the
-surface `g` binding in `app-core/src/app/playing.rs`. `g` keeps its Stack
-meaning — the frame map — untouched.
+`Game::forage`, `forage_chance`, the three `FORAGE_CHANCE_*` constants, and
+the surface `g` binding in `app-core/src/app/playing.rs`, which drops to the
+existing `_ => false` arm and becomes a no-op. `g` keeps its Stack meaning —
+the frame map — untouched.
 
 Biomes do not become inert: habitat pools (`species.rs`) and walkability
 (`world.rs`) are what carry them. `forage_chance` was a third consumer, not

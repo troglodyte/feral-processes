@@ -13,11 +13,41 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
-### Cell kinds: the Stack gets more than one kind of floor
+### The orphaned process: a second way into the roster
 
-**Save-format bump** — `SAVE_FORMAT_VERSION` is now 17 and existing saves
+**Save-format bump** — `SAVE_FORMAT_VERSION` is now 18 and existing saves
 will not load. `dev-saves/` templates are unaffected; they are field-named
 RON and keep parsing.
+
+- **Orphaned processes** (`o`) — a program still running in a dead end with
+  nothing left to serve, drawn from the same biome as everything else under
+  that link. Press `o` while standing on one and it joins your roster for an
+  ICE Breaker: no capture roll to win, no fight to survive, and no Trace,
+  since taking one is a rescue rather than something you broke. Once per
+  orphan; the dead end reads as empty afterwards.
+- **The roster is the limit, not the catalysts.** A six-frame stack offers
+  four or five programs against a base capacity of three, so a thorough
+  descent gets refused near the bottom and the last orphans are scenery
+  until you have built the space for them. Whether that reads as pressure
+  toward capacity-granting structures or as a dead mechanic is the open
+  question — the balance simulator models no roster and cannot answer it.
+- **One per frame, in a dead end the caches did not take.** The placement
+  pass runs after the caches and wants the same site type, so a frame needs
+  four plain dead ends to field one and about a quarter of frames haven't
+  got that many. "One per frame" is really three frames in four.
+- **Which program it is survives a save and load.** The species is drawn
+  from an RNG seeded off the frame itself rather than the run's shared
+  stream, so you can see what is down there before deciding to pay for it.
+  What it turns out to be *worth* is still rolled at adoption, like every
+  other spawn in the game.
+- Not playtested. The numbers above are arithmetic against a measured frame.
+
+### Cell kinds: the Stack gets more than one kind of floor
+
+**Save-format bump** — this shipped at `SAVE_FORMAT_VERSION` 17; the
+orphaned process above took it to 18 before either was released.
+`dev-saves/` templates are unaffected; they are field-named RON and keep
+parsing.
 
 - **Breakpoint** (`*`) — an exposed debug port on a junction. Walking onto
   one maps the entire frame at a stroke, walls included, and costs the

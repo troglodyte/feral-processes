@@ -87,6 +87,15 @@ because it comes in stretches rather than single cells) is rotten substrate
 that costs you Integrity every step you take through it — which is the first
 time the maze has asked whether the short route is worth what it charges.
 
+Not everything down there wants a fight. Most frames leave one **orphaned
+process** (`o`) running in a dead end the caches did not take — a program
+with nothing left to serve, drawn from the same biome as everything else
+below that link. Press `o` while standing on one and it joins your roster
+for an **ICE Breaker**, with no capture roll to win and no fight to survive.
+The catalyst is not what limits this: your roster is. A full stack offers
+more programs than you have slots to hold them, so the deeper ones are
+scenery unless you have built the space to take them home.
+
 The deepest room of a stack is a **lair** (`&`), holding something drawn
 from the link tile's biome. It is seeded off the stack, so it is the same
 guardian every time you come back — and the fight is scaled by every frame
@@ -115,8 +124,9 @@ a stack out floor by floor and you will meet its guardian at the top band,
 having asked for it.
 
 Trace resets when you surface, which is less of a let-off than it looks —
-caches, seals, breakpoints and lairs are each one-shot per stack, so climbing
-out to shed it means coming back to a stack with less left worth taking.
+caches, seals, breakpoints, orphans and lairs are each one-shot per stack, so
+climbing out to shed it means coming back to a stack with less left worth
+taking.
 
 Your base does not stop while you are down there. The player's position on
 the zone map stays pinned to the link you entered by, so cronjobs keep

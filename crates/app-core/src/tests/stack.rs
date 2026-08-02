@@ -299,3 +299,33 @@ fn an_encounter_underground_opens_the_battle_screen() {
     }
     panic!("600 steps of corridor never opened a fight");
 }
+
+/// The key reaches the engine. The refusal is the assertion rather than a
+/// success, because the fixture lands on the entry cell rather than on the
+/// frame's orphan and walking one down through the key handler would be a
+/// maze solver in a keybinding test — what this has to prove is that `o`
+/// gets past the mode block above and into `handle_stack_key` at all.
+///
+/// `t` would not: it is spent on `Mode::Trade` before the underground
+/// dispatch is reached, which the second half asserts so the binding cannot
+/// quietly move onto a taken letter.
+#[test]
+fn o_reaches_adopt_orphan_underground() {
+    let mut app = app_underground(505);
+    app.handle_key(GameKey::Char('o'));
+
+    assert_eq!(app.mode, Mode::Playing, "'o' must not open a screen");
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("There's nothing like that here."),
+        "the engine's refusal should reach the status line"
+    );
+
+    let mut app = app_underground(505);
+    app.handle_key(GameKey::Char('t'));
+    assert_eq!(
+        app.mode,
+        Mode::Trade,
+        "'t' is the trader list even underground — the adopt key cannot be it"
+    );
+}

@@ -18,7 +18,7 @@ that does not exist yet goes stale.
 | 1 | **The rename** — Stack, frames, links | ✅ **done**, merged `1ffa7ca` | no | engine, app-core, gui |
 | 2 | **Trace** — greed-driven pressure, escalating ambushes | ✅ **merged** `b4a2e07`; band 1 retuned from the crawl, bands 2–3 unplayed | **yes** (15 → 16) | engine, gui |
 | 3 | **Cell kinds** — breakpoint, fault, corruption | ✅ **merged** `97fe0ce`; the gating crawl met none of the three | **yes** (16 → 17) | engine, gui |
-| 4 | **Orphaned process** | designed 2026-08-02, not built | **yes** (17 → 18) | engine, app-core, gui |
+| 4 | **Orphaned process** | ✅ **built** 2026-08-02 on `stack-phase-4-orphaned-process`, unplayed; the key is `o`, not `t` | **yes** (17 → 18) | engine, app-core, gui |
 | 5 | **Corner map inset** | not started | no | gui only |
 | — | *deferred from 4*: derelict trader, crash log | sketched only | — | — |
 
@@ -537,6 +537,13 @@ cache is no longer `Floor`, so it is excluded for free and the two passes
 stay uncoupled. A frame with no dead end left places none, exactly as
 `place_caches` already degrades through `.take()`.
 
+**Measured while building, 2026-08-02: that last sentence is the common
+case, not the edge case.** A frame needs four plain-floor dead ends to
+field a cache set *and* an orphan, and about **a quarter of frames haven't
+got that many** — so "one per frame" is really three frames in four. Pinned
+by `most_frames_place_an_orphan_and_none_places_two`, which asserts the
+ceiling and a floor on the rate rather than a flat count.
+
 `walkable()` and not `blocks_sight()`, like phase 3's three, so it extends
 `the_new_cell_kinds_are_walkable_and_see_through` rather than inheriting the
 trap that entry pins.
@@ -558,8 +565,12 @@ later roll in the run. It is the invariant CLAUDE.md already pins for
 
 **Not on step.** A cache opens by walking onto it; an orphan costs an
 `ice_breaker`, and auto-spending a consumable by walking into a dead end is
-the worst version of this. It is a deliberate key (`t`) beside `>` and `<`
-in `app/playing.rs` — a two-line dispatch, no new `Mode`.
+the worst version of this. It is a deliberate key beside `>` and `<`
+in `app/playing.rs` — a short dispatch, no new `Mode`.
+
+**The key is `o`, not `t`.** `t` is bound in `handle_playing_key`'s mode
+block, which runs *before* the underground dispatch, so `t` in the Stack
+opens the trader list. `o` was unbound and matches the glyph.
 
 `Game::adopt_orphan()` refuses before anything is spent:
 
@@ -606,10 +617,12 @@ the first knob to reach for.
 
 #### What this design cannot answer
 
-One guaranteed orphan across six frames is six programs per stack, but
-`BASE_PET_CAPACITY` is **3**. The binding limit is therefore the roster cap,
-not the `ice_breaker` supply — most descents will refuse with "roster is
-full" after one or two, and the rest of the stack's orphans are scenery.
+One orphan across six frames is six programs per stack — **four or five in
+practice**, per the placement measurement above — but `BASE_PET_CAPACITY` is
+**3**. The binding limit is therefore the roster cap, not the `ice_breaker`
+supply — most descents will refuse with "roster is full" after one or two,
+and the rest of the stack's orphans are scenery. The measurement narrows
+that gap rather than widening it, but does not close it.
 That is either useful pressure toward capacity-granting structures or a dead
 mechanic, and **`balance_sim` models no roster, so it cannot gate it.** Only
 playing tells. Compare the arithmetic fault that survived a spec, a plan and

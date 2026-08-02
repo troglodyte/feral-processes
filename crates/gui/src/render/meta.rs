@@ -153,6 +153,7 @@ pub(super) fn draw_help(painter: &Painter, m: &Metrics) {
         text_row(""),
         text_row("In the Stack:     hjkl/arrows  forward, back, turn left, turn right"),
         text_row("                  > descend   < climb / leave the link"),
+        text_row("                  o adopt an orphaned process (costs a catalyst)"),
         text_row("                  g map — only what you have seen"),
         text_row(""),
         text_row("In an intrusion:  a attack   d defend   s special"),

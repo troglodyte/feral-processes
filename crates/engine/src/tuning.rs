@@ -496,6 +496,25 @@ pub const STACK_FAULTS_PER_FRAME: usize = 1;
 pub const STACK_CORRUPTION_PATCHES_PER_FRAME: usize = 2;
 pub const STACK_CORRUPTION_PATCH_CELLS: usize = 3;
 
+/// How many orphaned processes a Stack frame leaves running — see
+/// `stack::place_orphan`, which puts them in the dead ends the caches left.
+///
+/// A ceiling rather than a promise: the pass runs after `place_caches` and
+/// wants the same site type, so a frame needs four plain-floor dead ends to
+/// field one and about a quarter of them haven't got that many. The
+/// measured rate is pinned by
+/// `most_frames_place_an_orphan_and_none_places_two`.
+///
+/// One, and the supply is not what limits this. Each costs the player a
+/// taming catalyst, which is cheap; what actually binds is
+/// `BASE_PET_CAPACITY`, which is **3**. Six frames of a full stack therefore
+/// offer four or five programs to a roster that holds three, so a thorough
+/// descent still refuses at the end. Whether that reads as pressure toward
+/// capacity-granting structures or as a dead mechanic is the one question
+/// phase 4 shipped without an answer to — `balance_sim` models no roster and
+/// cannot gate it.
+pub const STACK_ORPHANS_PER_FRAME: usize = 1;
+
 /// What one step onto corrupted substrate costs, as a fraction of the
 /// player's maximum HP, with `STACK_CORRUPTION_MIN_DAMAGE` as a floor.
 ///

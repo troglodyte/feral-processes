@@ -123,9 +123,12 @@ Power Cells and 5 Core Fragments.
 path. `crates/app-core/src/tests/stack.rs`'s surrounding tests assert that
 separation and must still pass.
 
-`Perk::KeenScavenger` still references forage after this task and is fixed in
-Task 4. Expect the crate not to compile in between — do Tasks 3 and 4 back to
-back, or fold them into one commit if that is cleaner.
+**The crate still compiles after this task.** `KeenScavenger` appears in
+`perks.rs` only as a variant and a doc comment; its one effect wiring is the
+`turn.rs:513` call this task deletes along with `forage`. The perk is left
+inert until Task 4 gives it a new job — that is expected, not a broken build.
+Also update the module doc at `perks.rs:18`, which cites `forage_chance` as
+its example of a perk hook.
 
 - [ ] **Step 1: Change the failing test first.** The `g` arm currently returns
   `true` (it acted); deleting it drops `g` to the `_ => false` arm, so on the

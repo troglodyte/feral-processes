@@ -138,6 +138,17 @@ pub enum CellKind {
     /// route you can decide to walk around — the reason this exists at all,
     /// in a maze that otherwise has exactly one kind of walkable cell.
     Corruption,
+    /// A program left running down here with nothing left to serve. Sits in
+    /// a dead end, and joins the roster for a taming catalyst rather than
+    /// for a won capture roll — see `Game::adopt_orphan`. Taken on a key,
+    /// never on arrival: a cache costs nothing to walk into, and an orphan
+    /// costs a consumable.
+    ///
+    /// There is no creature here until it is adopted. What species this one
+    /// would be is a function of the frame spec (`Game::orphan_species`),
+    /// and whether it has already been taken lives in
+    /// `resources::FrameMemory::adopted`, not in the frame.
+    Orphan,
 }
 
 impl CellKind {
@@ -1012,10 +1023,16 @@ mod tests {
     /// sight-blocking fills the first-person view with its own face and
     /// truncates the map to the party's row — the bug doors shipped with,
     /// which both cone consumers now carry an `ahead == 0` exception for.
-    /// None of phase 3's kinds is allowed to reopen it.
+    /// Neither phase 3's three kinds nor phase 4's orphan is allowed to
+    /// reopen it.
     #[test]
     fn the_new_cell_kinds_are_walkable_and_see_through() {
-        for kind in [CellKind::Breakpoint, CellKind::Fault, CellKind::Corruption] {
+        for kind in [
+            CellKind::Breakpoint,
+            CellKind::Fault,
+            CellKind::Corruption,
+            CellKind::Orphan,
+        ] {
             assert!(kind.walkable(), "{kind:?} is not walkable");
             assert!(
                 !kind.blocks_sight(),

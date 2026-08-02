@@ -131,6 +131,7 @@ impl Game {
                             CellKind::Breakpoint => FrameMapCell::Floor,
                             CellKind::Fault => FrameMapCell::Fault,
                             CellKind::Corruption => FrameMapCell::Corruption,
+                            CellKind::Orphan => FrameMapCell::Orphan,
                         }
                     })
                     .collect()
@@ -214,6 +215,7 @@ impl Game {
                         CellKind::Breakpoint => StackCellView::Floor,
                         CellKind::Fault => StackCellView::Fault,
                         CellKind::Corruption => StackCellView::Corruption,
+                        CellKind::Orphan => StackCellView::Orphan,
                     })
                     .collect()
             })
@@ -235,6 +237,10 @@ impl Game {
             // the view is next built.
             CellKind::Breakpoint => Some("A burnt-out debug port".to_string()),
             CellKind::Corruption => Some("Rotten substrate  — moving on costs".to_string()),
+            // The one line here that offers rather than reports. Everything
+            // else underfoot has already happened by the time this is read;
+            // an orphan costs a catalyst, so it waits for the key.
+            CellKind::Orphan => Some("An orphaned process  [o] adopt".to_string()),
             CellKind::Rock | CellKind::Floor | CellKind::Fault => None,
         };
 

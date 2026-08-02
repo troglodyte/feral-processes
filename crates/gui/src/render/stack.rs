@@ -187,6 +187,7 @@ fn floor_mark(cell: StackCellView) -> Option<(char, Color)> {
         StackCellView::Breakpoint => Some(('*', BLUE)),
         StackCellView::Fault => Some(('v', ORANGE)),
         StackCellView::Corruption => Some(('~', MAGENTA)),
+        StackCellView::Orphan => Some(('o', GREEN)),
         StackCellView::Rock | StackCellView::Floor => None,
         StackCellView::Door | StackCellView::SealedDoor => None,
     }

@@ -18,8 +18,9 @@ that does not exist yet goes stale.
 | 1 | **The rename** — Stack, frames, links | ✅ **done**, merged `1ffa7ca` | no | engine, app-core, gui |
 | 2 | **Trace** — greed-driven pressure, escalating ambushes | ✅ **merged** `b4a2e07`; band 1 retuned from the crawl, bands 2–3 unplayed | **yes** (15 → 16) | engine, gui |
 | 3 | **Cell kinds** — breakpoint, fault, corruption | ✅ **merged** `97fe0ce`; the gating crawl met none of the three | **yes** (16 → 17) | engine, gui |
-| 4 | **Inhabitants** — orphaned process, derelict trader, crash log | not started | **yes** | engine, gui, assets |
+| 4 | **Orphaned process** | designed 2026-08-02, not built | **yes** (17 → 18) | engine, app-core, gui |
 | 5 | **Corner map inset** | not started | no | gui only |
+| — | *deferred from 4*: derelict trader, crash log | sketched only | — | — |
 
 Phase 1's plan is at
 `docs/superpowers/plans/2026-07-31-the-stack-phase-1-rename.md`. It was
@@ -492,24 +493,127 @@ Corruption can kill, and should. It reaches `is_game_over` through the
 
 ## Phase 4 — inhabitants
 
-- **Orphaned process** — a fragmented program in a dead end that joins for
-  an item rather than by winning a capture roll. A second route into the
-  party, and a reason to descend with a slot free. Reuses the existing
-  `Party` and tamed-program machinery.
+Three inhabitants were sketched here. **Phase 4 ships one of them** — the
+orphaned process — decided 2026-08-02. Three features in one phase is three
+chances the numbers are wrong with no way to tell which, and the orphan is
+the only one of the three that changes how you descend. The other two keep
+their sketches below and get their own phase when someone wants them.
+
+### The two that are deferred, and what was already found wrong with them
+
 - **Derelict trader** — buys and sells deep, at a markup. **This knowingly
-  punches a hole in `require_surface`**, which currently guards trade in four
-  places (`game/trade.rs:30,180,362,397`). Underground trade must not touch
-  the zone map through `Position`, which is what that guard exists to
-  prevent — so this is a narrower entry point, not a relaxed guard.
+  punches a hole in `require_surface`**, which guards trade in four places:
+  `sell_item`, `buy_back`, `sell_companion` and `buy_item`
+  (`game/trade.rs:38,190,372,407` — this document said `30,180,362,397`,
+  which had drifted). Underground trade must not touch the zone map through
+  `Position`, which is what that guard exists to prevent — so this is a
+  narrower entry point, not a relaxed guard. It also has to answer for
+  `BuybackLedger`, which is keyed by `(kind, tile)` and assumes a surface
+  structure.
 - **Crash log** — readable remains of the last party: a message, sometimes a
-  hint about what is below.
+  hint about what is below. Its text lives in `assets/` as data, not in Rust
+  — same rule as item and structure descriptions, and a malformed file is
+  skipped with a logged warning following `ItemDb::load_dir`.
 
-Crash log text lives in `assets/` as data, not in Rust — same rule as item
-and structure descriptions. A malformed file is skipped with a logged
-warning, following `ItemDb::load_dir`.
+### Orphaned process
 
-Orphaned processes and crash logs each need a spent-ness record in
-`FrameMemory`, so this phase bumps the save format too.
+Designed 2026-08-02 against the source. The sketch above said it "reuses the
+existing `Party` and tamed-program machinery" and **`Party` is the wrong
+noun**: `attempt_decompile` (`game/combat_rewards.rs:243`) never touches
+that resource. It inserts `Tamed { owner }` + `Experience`, calls
+`install_innate_routines`, and gates on `pet_count() >= pet_capacity()`.
+`Party` is the ≤ `MAX_PARTY_SIZE` *fielded* subset, chosen separately. So
+"a reason to descend with a slot free" means a **roster** slot — a different
+and much larger number than the sketch implied. That is the fourth time this
+document's forward-looking prose has aged badly.
+
+**Bumps `SAVE_FORMAT_VERSION` 17 → 18** for the adoption record.
+
+#### The cell
+
+`CellKind::Orphan`, `STACK_ORPHANS_PER_FRAME = 1`, in a dead end. The pass
+runs **after** `place_caches` and re-scans for `Floor && is_dead_end` — a
+cache is no longer `Floor`, so it is excluded for free and the two passes
+stay uncoupled. A frame with no dead end left places none, exactly as
+`place_caches` already degrades through `.take()`.
+
+`walkable()` and not `blocks_sight()`, like phase 3's three, so it extends
+`the_new_cell_kinds_are_walkable_and_see_through` rather than inheriting the
+trap that entry pins.
+
+#### What is in it
+
+One program, species from `pick_habitat_species` above the link and scaled
+by depth — the same source `maybe_stack_encounter` draws from, so it costs
+no new content and which link you picked still matters.
+
+**Rolled from a local `StdRng` salted off `FrameSpec::rng_seed`, never
+`GameRng`.** This is forced rather than chosen: the party must see what the
+program is before paying for it, which means the answer has to survive a
+save/load, and drawing it from the shared stream would also shift every
+later roll in the run. It is the invariant CLAUDE.md already pins for
+`stack::generate`, `spawn_surface_links` and `pick_lair_species`.
+
+#### Taking it
+
+**Not on step.** A cache opens by walking onto it; an orphan costs an
+`ice_breaker`, and auto-spending a consumable by walking into a dead end is
+the worst version of this. It is a deliberate key (`t`) beside `>` and `<`
+in `app/playing.rs` — a two-line dispatch, no new `Mode`.
+
+`Game::adopt_orphan()` refuses before anything is spent:
+
+- not standing on an unadopted `Orphan`
+- no taming catalyst — reusing decompile's own "no taming catalyst" string
+- `pet_count() >= pet_capacity()` — "roster is full", likewise
+
+On success: spend one `ice_breaker` through `taming_catalyst()` (highest
+potency held), spawn, insert `Tamed { owner }` + `Experience`, call
+`install_innate_routines`, record the cell.
+
+**The creature does not exist until it is adopted.** Before that the orphan
+is a `CellKind` and a seed, nothing more — so this does not introduce the
+persistent Stack entity that "a pursuing hunter" is cut for below, and there
+is no entity to leak if the party walks away or the game is saved mid-frame.
+
+Deliberately **not** done, each for a reason:
+
+- no `StackSpawn` tag — it never fights, and `end_battle` despawns whatever
+  still carries that component (`game/combat_teardown.rs:182`)
+- no XP — no fight was won
+- no `Party` push — the roster is the destination, and fielding stays a
+  separate choice
+
+#### Persistence and the views
+
+`FrameMemory::adopted: BTreeSet<(i32, i32)>`, `#[serde(default)]`, the same
+shape as `jacked` and for the same reason. Both views drop an adopted orphan
+to plain floor, so an emptied dead end stops advertising itself — the rule
+"a Stack cell that can be used up needs both halves".
+
+`floor_mark` is exhaustive, so a `StackCellView::Orphan` will not compile
+until someone decides what it looks like down a corridor: `o` in green,
+against cache-yellow, breakpoint-blue, fault-orange and corruption-magenta.
+`frame_map.rs` carries the same glyph — a call to one table, not a copy.
+
+#### No Trace
+
+Trace's three sources are things you *break* — a kill, a cache, a
+breakpoint. An orphan is a rescue, and the meter reads better for having one
+thing down there you can take without making noise. This is a design
+judgement, not a constraint; if playtest says the Stack is too quiet it is
+the first knob to reach for.
+
+#### What this design cannot answer
+
+One guaranteed orphan across six frames is six programs per stack, but
+`BASE_PET_CAPACITY` is **3**. The binding limit is therefore the roster cap,
+not the `ice_breaker` supply — most descents will refuse with "roster is
+full" after one or two, and the rest of the stack's orphans are scenery.
+That is either useful pressure toward capacity-granting structures or a dead
+mechanic, and **`balance_sim` models no roster, so it cannot gate it.** Only
+playing tells. Compare the arithmetic fault that survived a spec, a plan and
+a code review in phase 2.
 
 ## Phase 5 — the corner map
 
@@ -592,9 +696,14 @@ Per phase, failing test first.
   all; the cache count is unchanged by the three new passes running before
   it, which is the claim "dead ends stay whole" makes; and a corruption
   patch is contiguous rather than three cells scattered across the frame.
-- **Phase 4** — underground trade works and still cannot reach the zone map;
-  a recovered orphan lands in `Party` and does not recur; a malformed crash
-  log file is skipped, not panicked on.
+- **Phase 4** — an adopted orphan lands in the **roster** (`Tamed`, and
+  `pet_count` up by one), not in `Party`; it does not recur after the party
+  steps off and back on, nor after a save/load; each of the three refusals
+  fires *before* the `ice_breaker` is spent, which a naive success-path test
+  would not catch; the species a frame offers is the same one after a
+  save/load, since it is salted off `FrameSpec::rng_seed` rather than drawn
+  from `GameRng`; the orphan lands on a dead end that is not a cache, and a
+  frame short of dead ends places none rather than panicking.
 - **Phase 5** — the inset fits its rect at both window sizes above and does
   not overlap the status panel or log; the glyph table has exactly one
   definition; drawing a degenerate view does not panic, matching the

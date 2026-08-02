@@ -768,7 +768,8 @@ pub const WORK_RESOURCE_DROP: std::ops::RangeInclusive<u32> = 1..=2;
 
 /// A mining node's per-cycle success chance is `MINING_SUCCESS_BASE` plus
 /// `MINING_SUCCESS_PER_LEVEL` per tier, capped at 1.0 — so a basic level-1
-/// node succeeds about half the time and upgrading buys reliability. See
+/// node succeeds about half the time and upgrading buys reliability. The
+/// player's `Perk::KeenScavenger` adds a third term; see
 /// `systems::mining_success_chance`.
 pub const MINING_SUCCESS_BASE: f64 = 0.4;
 pub const MINING_SUCCESS_PER_LEVEL: f64 = 0.1;
@@ -916,9 +917,15 @@ pub const STRUCTURE_REGEN_INTERVAL: u64 = 20;
 // edit. The magnitudes below stay code for the reason at the top of this
 // module: content is moddable, how hard the game is, is not.
 
-/// Per-level bonus `Perk::KeenScavenger` grants — currently unused, since
-/// the perk's one effect hook was deleted along with the scan action it
-/// boosted; see `Perk::KeenScavenger`.
+/// How much `Perk::KeenScavenger` adds to `systems::mining_success_chance`
+/// per level, on top of what the node's own level is worth (still clamped
+/// at a certainty).
+///
+/// A node is the base's income and a level-1 one yields barely half the time,
+/// so this is deliberately small: at `MINING_SUCCESS_PER_LEVEL`'s rate a
+/// single upgrade tier is worth ten levels of the perk. The perk smooths the
+/// early game, when there is nothing to spend Perk Points on and no
+/// fragments to upgrade with; it is not a substitute for upgrading.
 pub const KEEN_SCAVENGER_BONUS_PER_LEVEL: f64 = 0.01;
 
 /// `Perk::LowPowerMode`'s hunger-decay reduction, per level (the decay

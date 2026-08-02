@@ -17,7 +17,8 @@ use crate::tuning::{
     FATIGUE_REGEN_PER_TICK, HUNGER_DECAY_PER_TICK, WORK_XP_LEVEL_CAP, WORK_XP_PER_CYCLE,
 };
 use crate::tuning::{
-    MINING_SUCCESS_BASE, MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS,
+    KEEN_SCAVENGER_BONUS_PER_LEVEL, MINING_SUCCESS_BASE, MINING_SUCCESS_PER_LEVEL,
+    NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS,
 };
 use crate::world::WorldMap;
 
@@ -108,8 +109,17 @@ pub(crate) fn node_payout(tier: u32, zone: ZoneLevel) -> u32 {
 /// costing the cycle for nothing. Scales up with level so a node can be
 /// made more reliable over time; a basic level-1 node succeeds only about
 /// half the time.
-pub(crate) fn mining_success_chance(level: u32) -> f64 {
-    (MINING_SUCCESS_BASE + level as f64 * MINING_SUCCESS_PER_LEVEL).min(1.0)
+///
+/// `keen_scavenger_level` is the player's `Perk::KeenScavenger` level, which
+/// adds `KEEN_SCAVENGER_BONUS_PER_LEVEL` on top of whatever the node itself
+/// is worth. It is a parameter rather than a lookup because this runs inside
+/// systems iterating worker programs, and the perk belongs to the player —
+/// callers read it once, outside their loop.
+pub(crate) fn mining_success_chance(level: u32, keen_scavenger_level: u32) -> f64 {
+    (MINING_SUCCESS_BASE
+        + level as f64 * MINING_SUCCESS_PER_LEVEL
+        + keen_scavenger_level as f64 * KEEN_SCAVENGER_BONUS_PER_LEVEL)
+        .min(1.0)
 }
 
 /// One completed gather cycle against `node`: rolls the node's reliability
@@ -120,16 +130,21 @@ pub(crate) fn mining_success_chance(level: u32) -> f64 {
 /// `player_gather_system` (the player working the node themselves) so the
 /// two cannot drift apart on payout or on reliability. Both are the same
 /// job; only who is standing there differs. Callers word their own log
-/// line, which is the one thing that legitimately differs between them.
+/// line, which is the one thing that legitimately differs between them, and
+/// each reads `keen_scavenger_level` off the player for itself — the perk is
+/// the player's wherever the cycle is being run.
 pub(crate) fn resolve_gather_cycle(
     node: &mut ResourceNode,
     tier: Option<&StructureTier>,
     zone: ZoneLevel,
+    keen_scavenger_level: u32,
     item_db: &ItemDb,
     rng: &mut GameRng,
 ) -> Option<(crate::items::ItemId, u32)> {
     if let Some(level) = node.level
-        && !rng.0.random_bool(mining_success_chance(level))
+        && !rng
+            .0
+            .random_bool(mining_success_chance(level, keen_scavenger_level))
     {
         return None;
     }
@@ -179,7 +194,7 @@ pub fn task_progress_system(
     mut tasks: Query<CronjobWorker>,
     mut nodes: Query<(&mut ResourceNode, Option<&StructureTier>)>,
     mut inventories: Query<&mut Inventory>,
-    player_buff: Query<&FieldBuff, With<Player>>,
+    player: Query<(Option<&FieldBuff>, Option<&Perks>), With<Player>>,
     db: CronjobLookups,
     mut log: ResMut<MessageLog>,
     mut rng: ResMut<GameRng>,
@@ -189,15 +204,21 @@ pub fn task_progress_system(
         items: item_db,
         zone,
     } = db;
-    // `XpBoost` is `FieldScope::Run`: every worker's cronjob XP is boosted
-    // by the same running buff on the player, not by anything the worker
-    // itself carries. Read once, outside the loop, since it can't vary
-    // per worker.
-    let xp_boost_pct = player_buff
+    // Both of these are the player's, not the worker's: `XpBoost` is
+    // `FieldScope::Run`, so every worker's cronjob XP rides the same running
+    // buff, and `KeenScavenger` is a perk only the player can buy. Read once,
+    // outside the loop, since neither can vary per worker.
+    let (xp_boost_pct, keen_scavenger_level) = player
         .iter()
         .next()
-        .map(|buff| field_buff_power_of(buff, FieldBuffKind::XpBoost))
-        .unwrap_or(0);
+        .map(|(buff, perks)| {
+            (
+                buff.map(|b| field_buff_power_of(b, FieldBuffKind::XpBoost))
+                    .unwrap_or(0),
+                perks.map(|p| p.level(Perk::KeenScavenger)).unwrap_or(0),
+            )
+        })
+        .unwrap_or((0, 0));
     for (mut task, tamed, creature, potential, mut exp, mut stats) in &mut tasks {
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
@@ -213,9 +234,14 @@ pub fn task_progress_system(
             continue;
         }
         task.progress = 0;
-        let Some((resource, payout)) =
-            resolve_gather_cycle(&mut node, tier, *zone, &item_db, &mut rng)
-        else {
+        let Some((resource, payout)) = resolve_gather_cycle(
+            &mut node,
+            tier,
+            *zone,
+            keen_scavenger_level,
+            &item_db,
+            &mut rng,
+        ) else {
             log.push("Your subroutine's extraction attempt fails to compile.".to_string());
             continue;
         };
@@ -272,14 +298,14 @@ pub fn task_progress_system(
 /// job, and handing the player the same per-cycle XP would make a node an
 /// XP faucet with no risk attached to it.
 pub fn player_gather_system(
-    mut player: Query<(&mut Task, &mut Inventory), With<Player>>,
+    mut player: Query<(&mut Task, &mut Inventory, Option<&Perks>), With<Player>>,
     mut nodes: Query<(&mut ResourceNode, Option<&StructureTier>)>,
     item_db: Res<ItemDb>,
     zone: Res<ZoneLevel>,
     mut log: ResMut<MessageLog>,
     mut rng: ResMut<GameRng>,
 ) {
-    for (mut task, mut inv) in &mut player {
+    for (mut task, mut inv, perks) in &mut player {
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
         }
@@ -294,9 +320,15 @@ pub fn player_gather_system(
             continue;
         }
         task.progress = 0;
-        let Some((resource, payout)) =
-            resolve_gather_cycle(&mut node, tier, *zone, &item_db, &mut rng)
-        else {
+        let keen_scavenger_level = perks.map(|p| p.level(Perk::KeenScavenger)).unwrap_or(0);
+        let Some((resource, payout)) = resolve_gather_cycle(
+            &mut node,
+            tier,
+            *zone,
+            keen_scavenger_level,
+            &item_db,
+            &mut rng,
+        ) else {
             log.push("Your extraction attempt fails to compile.".to_string());
             continue;
         };
@@ -764,8 +796,8 @@ mod tests {
 
     #[test]
     fn mining_success_chance_rises_with_level_and_caps_at_one() {
-        let level_1 = mining_success_chance(1);
-        let level_2 = mining_success_chance(2);
+        let level_1 = mining_success_chance(1, 0);
+        let level_2 = mining_success_chance(2, 0);
         assert!(
             level_1 > 0.0 && level_1 < 1.0,
             "a basic level-1 node shouldn't be a sure thing"
@@ -775,9 +807,25 @@ mod tests {
             "a higher-level node should succeed more reliably"
         );
         assert_eq!(
-            mining_success_chance(100),
+            mining_success_chance(100, 0),
             1.0,
             "chance should never exceed a sure thing"
+        );
+    }
+
+    #[test]
+    fn keen_scavenger_adds_to_the_mining_roll_and_still_caps_at_one() {
+        let plain = mining_success_chance(1, 0);
+        let boosted = mining_success_chance(1, 3);
+        assert!(
+            (boosted - (plain + 3.0 * crate::tuning::KEEN_SCAVENGER_BONUS_PER_LEVEL)).abs()
+                < f64::EPSILON,
+            "each perk level should add exactly its tuning constant to the roll"
+        );
+        assert_eq!(
+            mining_success_chance(1, 1000),
+            1.0,
+            "the perk must not push the roll past a sure thing either"
         );
     }
 

@@ -34,8 +34,15 @@ use serde::{Deserialize, Serialize};
 /// names its variant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Perk {
-    /// Currently inert — its one effect hook was deleted along with the
-    /// scan action it boosted, and it is not yet rewired to a replacement.
+    /// Adds `KEEN_SCAVENGER_BONUS_PER_LEVEL` per level to a mining node's
+    /// per-cycle success roll (`systems::mining_success_chance`), on top of
+    /// what the node's own upgrade tier is worth.
+    ///
+    /// It used to boost the scan action, which was deleted for being
+    /// unbounded income. The variant survived that rather than being removed
+    /// because its position here is save format (see below), and the mining
+    /// roll is where the same flavour — reading the terrain better — now
+    /// pays off.
     KeenScavenger,
     /// Slows Power (hunger) drain by `LOW_POWER_MODE_REDUCTION_PER_LEVEL`
     /// per level, down to a floor of 0 (hunger stops draining at all).

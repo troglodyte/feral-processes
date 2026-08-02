@@ -203,7 +203,10 @@ pub fn ticks_to_afford_portal(
     market_price: u32,
 ) -> f64 {
     let payout = crate::systems::node_payout(tier, ZoneLevel(zone)) as f64;
-    let success = crate::systems::mining_success_chance(tier);
+    // No `Perk::KeenScavenger`: the sweep projects a mid-grade party that has
+    // bought nothing, so the curve stays a property of the node rather than
+    // of how the points were spent.
+    let success = crate::systems::mining_success_chance(tier, 0);
     let per_tick = payout * success / ticks_per_unit as f64;
     // Priced through the same helper the game charges with (see
     // `crate::zone_portal_cost`), and fragments are bought with the

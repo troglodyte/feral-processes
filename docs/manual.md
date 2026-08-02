@@ -586,7 +586,7 @@ on top of whatever you already have, at the same Perk Point cost every time:
 
 | Perk | Cost/level | Effect per level |
 | --- | --- | --- |
-| Keen Scavenger | 2 | +1 percentage point to scan (`g`)'s success chance |
+| Keen Scavenger | 2 | +1 percentage point to a mining node's chance of yielding on each gather cycle |
 | Low Power Mode | 2 | Power drains 1 percentage point slower (floor: stops draining entirely) |
 | Exploit Focus | 3 | A decompile target's remaining Integrity counts 3% less against you — worth most against a program you haven't worn down, and nothing against one already at death's door |
 | Lean Compiler | 3 | Compiling (`c`) costs 1 less of each required item (min 1 each) |

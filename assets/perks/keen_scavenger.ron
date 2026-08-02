@@ -1,6 +1,6 @@
 (
     id: KeenScavenger,
     name: "Keen Scavenger",
-    description: "You read the terrain better. Scanning (g) turns up a Core Fragment 1 percentage point more often, per level.",
+    description: "You read the terrain better. Every mining node's extraction succeeds 1 percentage point more often, per level.",
     cost: 2,
 )

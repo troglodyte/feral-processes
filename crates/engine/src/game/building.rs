@@ -346,6 +346,37 @@ impl Game {
         Ok(())
     }
 
+    /// Stands down whoever currently holds `kind` on `structure`, so no
+    /// structure ever has two of the same job running on it. Returns the
+    /// displaced entity, if there was one.
+    ///
+    /// The two kinds are counted separately: a worked structure is still
+    /// worth guarding, and a guard produces nothing, so they never compete.
+    ///
+    /// Occupancy is read off the `Task` components rather than cached on the
+    /// structure. `Task` is already the only record of who works what, and
+    /// eight sites remove one (raid damage, demolition, sale, breach, party
+    /// recall, fusion, rest, zone change) — a cached field would have to be
+    /// kept in step with every one of them, which is the shape of bug
+    /// `announce_lost_shelf` already exists to work around.
+    fn displace_task_holder(&mut self, structure: Entity, kind: TaskKind) -> Option<Entity> {
+        let holder = {
+            let mut tasks = self.world.query::<(Entity, &Task)>();
+            tasks
+                .iter(&self.world)
+                .find(|(_, t)| t.target == structure && t.kind == kind)
+                .map(|(e, _)| e)
+        }?;
+        self.world.entity_mut(holder).remove::<Task>();
+        if holder == self.player_entity() {
+            self.log("You break off what you were doing.");
+        } else {
+            let name = self.creature_label(holder);
+            self.log(format!("{name} stands down."));
+        }
+        Some(holder)
+    }
+
     pub fn assign_cronjob(&mut self, worker: Entity, structure: Entity) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -370,6 +401,7 @@ impl Game {
                 .retain(|&e| e != worker);
             self.log("It stands down as your companion to run this cronjob.");
         }
+        self.displace_task_holder(structure, TaskKind::GatherResource);
         self.world.entity_mut(worker).insert(Task {
             kind: TaskKind::GatherResource,
             target: structure,
@@ -426,6 +458,7 @@ impl Game {
                 .retain(|&e| e != worker);
             self.log("It stands down as your companion to guard this structure.");
         }
+        self.displace_task_holder(structure, TaskKind::Guard);
         self.world.entity_mut(worker).insert(Task {
             kind: TaskKind::Guard,
             target: structure,

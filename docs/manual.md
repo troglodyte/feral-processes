@@ -412,6 +412,14 @@ creature to work" mechanic.
    `(active companion)` or `(on a cronjob: <structure>)`, and the structure
    picker flags `(assigned: <program>)`, so you can see who's already
    spoken for before reassigning them.
+
+   **A structure runs one cronjob and holds one guard.** The two are counted
+   separately, so a worked Mining Node can still be defended — but a second
+   program of the same job stands the first one down, with a line in the log
+   saying so. That includes working a structure yourself with `W`: putting a
+   cronjob on the node you're standing at breaks your own concentration.
+   Piling three programs onto one node used to triple its output, which is
+   what this rule closes.
 4. **Production runs automatically after that**, tick by tick, regardless of
    where you are or what you're doing:
    - Each tick, the assigned program's progress advances by 1.

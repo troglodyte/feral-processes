@@ -1048,3 +1048,113 @@ fn walking_away_stops_the_job() {
         "walking away should end the job, not leave it running"
     );
 }
+
+/// Spawns a workable structure with a full node, away from anything else.
+fn workable_structure(game: &mut Game, x: i32, y: i32) -> Entity {
+    let def = game
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.work.is_some() && d.raidable)
+        .expect("a workable, raidable structure should exist");
+    game.world
+        .spawn((
+            Structure {
+                kind: def.id.clone(),
+            },
+            Position { x, y },
+            ResourceNode {
+                resource: def.work.as_ref().unwrap().produces.clone(),
+                amount: 20,
+                capacity: 20,
+                level: None,
+            },
+        ))
+        .id()
+}
+
+/// Every entity currently carrying a `Task` of `kind` aimed at `structure`.
+fn holders(game: &mut Game, structure: Entity, kind: TaskKind) -> Vec<Entity> {
+    game.world
+        .query::<(Entity, &Task)>()
+        .iter(&game.world)
+        .filter(|(_, t)| t.target == structure && t.kind == kind)
+        .map(|(e, _)| e)
+        .collect()
+}
+
+#[test]
+fn a_second_cronjob_on_one_structure_displaces_the_first() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structure = workable_structure(&mut game, 3, 4);
+    let first = spawn_tamed(&mut game, 10, 3);
+    let second = spawn_tamed(&mut game, 10, 3);
+
+    game.assign_cronjob(first, structure).unwrap();
+    game.assign_cronjob(second, structure).unwrap();
+
+    assert!(
+        game.world.get::<Task>(first).is_none(),
+        "the first worker should have been stood down by the second"
+    );
+    assert!(game.world.get::<Task>(second).is_some());
+    assert_eq!(
+        holders(&mut game, structure, TaskKind::GatherResource).len(),
+        1,
+        "a structure must never have two programs drawing from one node"
+    );
+}
+
+#[test]
+fn a_guard_and_a_cronjob_can_share_a_structure() {
+    let mut game = Game::new(42, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structure = workable_structure(&mut game, 3, 4);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    let guard = spawn_tamed(&mut game, 10, 3);
+
+    game.assign_cronjob(worker, structure).unwrap();
+    game.assign_guard(guard, structure).unwrap();
+
+    assert!(
+        game.world.get::<Task>(worker).is_some(),
+        "posting a guard must not displace the cronjob worker — the two jobs \
+         are counted separately"
+    );
+    assert!(game.world.get::<Task>(guard).is_some());
+}
+
+#[test]
+fn a_second_guard_on_one_structure_displaces_the_first() {
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structure = workable_structure(&mut game, 3, 4);
+    let first = spawn_tamed(&mut game, 10, 3);
+    let second = spawn_tamed(&mut game, 10, 3);
+
+    game.assign_guard(first, structure).unwrap();
+    game.assign_guard(second, structure).unwrap();
+
+    assert!(game.world.get::<Task>(first).is_none());
+    assert_eq!(holders(&mut game, structure, TaskKind::Guard).len(), 1);
+}
+
+#[test]
+fn the_players_own_work_holds_the_cronjob_slot() {
+    let mut game = Game::new(44, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structure = workable_structure(&mut game, 3, 4);
+    let worker = spawn_tamed(&mut game, 10, 3);
+
+    game.work_structure(structure).unwrap();
+    let player = game.player_entity();
+    assert!(game.world.get::<Task>(player).is_some());
+
+    game.assign_cronjob(worker, structure).unwrap();
+
+    assert!(
+        game.world.get::<Task>(player).is_none(),
+        "a cronjob on the node you are working yourself must break your own \
+         work, or both draw from it at once"
+    );
+    assert_eq!(
+        holders(&mut game, structure, TaskKind::GatherResource).len(),
+        1
+    );
+}

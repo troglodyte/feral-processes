@@ -13,6 +13,29 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### One program per structure, per job
+
+Engine-only, no save-format bump. A save that already has three programs on
+one node keeps them until one is reassigned — the rule is enforced where a
+job is handed out, not retroactively.
+
+- **A structure runs one cronjob and holds one guard**, counted separately,
+  so a worked Mining Node can still be defended. Assigning a second program
+  to the same job stands the first one down and says so in the log.
+- **Working a structure yourself holds the cronjob slot too.** `work_structure`
+  puts the same `Task` on the player that a cronjob worker carries, so a
+  player mining a node while a program worked it was the same double-payout
+  in a different shape. Putting a cronjob on the node you're standing at now
+  breaks your own concentration.
+- Why this mattered: `task_progress_system` iterates *per worker* against the
+  target node, and an emptied node refills to capacity, so three programs on
+  one Mining Node was three times the income from one structure forever.
+- Occupancy is read off the `Task` components rather than cached on the
+  structure. `Task` is already the only record of who works what, and eight
+  sites remove one — raid damage, demolition, sale, breach, party recall,
+  fusion, rest and zone change — so a cached field would have had to be kept
+  in step with all eight.
+
 ### Bosses are a wall, not a wait
 
 Both boss `.ron` files, plus the comment on Decompile's boss refusal. No

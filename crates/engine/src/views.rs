@@ -470,7 +470,16 @@ pub struct FrameMapView {
     /// say which of a sector's links it belongs to.
     pub entrance: (i32, i32),
     /// How much of the frame's walkable area has been seen, 0.0 to 1.0.
+    ///
+    /// Counted from what the party has actually walked even when `revealed`
+    /// is drawing the rest, so the one figure worth having while hunting an
+    /// unwalked wing keeps telling the truth.
     pub explored: f32,
+    /// Whether `FERAL_DEV_REVEAL` drew this, rather than the party's own
+    /// memory. Carried so a screen can say so — a map that silently knows
+    /// more than the party is a debugging session that outlives its
+    /// session.
+    pub revealed: bool,
 }
 
 /// One entry in `Game::craft_recipes` — compiling `result` consumes `cost`.

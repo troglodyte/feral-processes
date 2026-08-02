@@ -188,13 +188,17 @@ pub(super) fn draw_frame_map(view: &FrameMapView, painter: &Painter, w: f32, h: 
     painter.rect_lines(0.0, 0.0, w, h, 2.0, BORDER);
 
     let heading = format!(
-        "DEEP SCAN   depth {} / {}   link {},{}   facing {}   {:.0}% mapped",
+        "DEEP SCAN   depth {} / {}   link {},{}   facing {}   {:.0}% mapped{}",
         view.depth,
         view.frames,
         view.entrance.0,
         view.entrance.1,
         view.facing,
         view.explored * 100.0,
+        // Said out loud, because a map showing corridors the party has not
+        // walked is otherwise indistinguishable from a bug in what the map
+        // remembers.
+        if view.revealed { "   [DEV REVEAL]" } else { "" },
     );
     painter.ui(
         &heading,
@@ -275,6 +279,7 @@ mod tests {
             facing: "N",
             entrance: (12, -40),
             explored: 0.42,
+            revealed: false,
         }
     }
 

@@ -26,6 +26,28 @@ pub const STACK_VIEW_DEPTH: usize = 4;
 /// whatever opens off it.
 pub const STACK_VIEW_HALF_WIDTH: usize = 1;
 
+/// Whether `FERAL_DEV_REVEAL` is set in the environment — a development
+/// switch that draws the whole frame on the map instead of what the party
+/// has walked, for finding a fault or an orphan without walking a maze
+/// first.
+///
+/// Read once and never written, so it is configuration rather than global
+/// state: it cannot change during a run and nothing can toggle it. It is
+/// deliberately *not* a `Game` field threaded from the launcher — every
+/// path that builds a `Game` (new run, load, dev template) would have to
+/// remember to set it, and one that forgot would look like the switch was
+/// broken.
+///
+/// The map only. The first-person view, the encounter rolls and everything
+/// the party can *do* are untouched, so a session with this on is still the
+/// real game with the lights on.
+fn dev_reveal() -> bool {
+    static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+        std::env::var_os("FERAL_DEV_REVEAL").is_some_and(|v| !v.is_empty() && v != "0")
+    });
+    *ON
+}
+
 /// The world coordinates of the view cone from `(x, y)` facing `facing`,
 /// indexed `[ahead][lateral]` — the same shape and order
 /// `views::StackView::cells` carries.
@@ -92,6 +114,17 @@ impl Game {
     /// what has been seen and not what is there. The frame is consulted only
     /// to say what each *remembered* cell holds.
     pub fn frame_map(&self) -> Option<FrameMapView> {
+        self.frame_map_revealed(dev_reveal())
+    }
+
+    /// The map the party would have if they had seen `revealed` of the
+    /// frame — everything, or only what they walked.
+    ///
+    /// Split from `frame_map` so the reveal is testable without touching
+    /// the environment: `std::env::set_var` is process-wide and unsafe, and
+    /// this suite runs in parallel, so a test that set the variable would
+    /// reach every other test in the binary.
+    pub(crate) fn frame_map_revealed(&self, revealed: bool) -> Option<FrameMapView> {
         let pos = self.stack_pos()?;
         let level = self.world.resource::<CurrentStack>().0.as_ref()?;
         let memory = self.world.resource::<StackMemory>();
@@ -106,7 +139,7 @@ impl Game {
             .map(|y| {
                 (0..level.width)
                     .map(|x| {
-                        if !seen.contains(&(x, y)) {
+                        if !revealed && !seen.contains(&(x, y)) {
                             return FrameMapCell::Unknown;
                         }
                         match level.cell(x, y) {
@@ -169,6 +202,7 @@ impl Game {
             } else {
                 walked as f32 / walkable as f32
             },
+            revealed,
         })
     }
 

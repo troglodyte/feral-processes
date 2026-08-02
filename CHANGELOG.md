@@ -13,6 +13,49 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Bounded income: rest costs a consumable, scan is deleted
+
+Engine-only, no save-format bump. The outlet is an ordinary inventory item,
+`RestDef::cost` is asset data, and `Perk::KeenScavenger` keeps its save
+index — nothing new is persisted.
+
+- **Rest now spends a Power Outlet**, a new craftable item
+  (`assets/items/outlet.ron`, 5 Core Fragments), and refuses with no outlet
+  held. `Game::rest` checks and spends it after every existing gate
+  (game-over, active battle, `require_surface`, `nearby_rest_structure`) and
+  before the 40-tick loop, so a refused rest never consumes one and a rest
+  that starts has already bought its ticks. The price lives on the
+  structure that grants rest — `home.ron`'s `enables_rest` gained a `cost`
+  field on `RestDef`, `#[serde(default)]` so an older `.ron` still parses,
+  as a free rest, unchanged from before the field existed.
+- **The scan action (`g` on the surface) is gone**, along with `Game::forage`,
+  `forage_chance`, and the three `FORAGE_CHANCE_*` constants. `g` keeps its
+  Stack meaning — the frame map — untouched; on the surface it is now a
+  no-op.
+- **`Perk::KeenScavenger` now boosts the mining roll instead of scan**,
+  since its entire effect was a scan bonus and deleting the variant would
+  have shifted every later save index. The flavour survives, the index
+  doesn't move, and the perk now backs the thing this change wants players
+  investing in: `mining_success_chance`, 50% at a level-1 node.
+- **Two Power Outlets go into new-game starting inventory**, beside the 3
+  ICE Breakers, 3 Power Cells and 5 Core Fragments, to cover getting
+  established before the base earns anything of its own.
+- Why: nothing limited how much a player could earn. Scanning was 1 tick for
+  ~0.6 Core Fragments in a rich biome, returned roughly 50x the Power it
+  burned, and inside a Recharger Node's radius Power *rose* while scanning —
+  so Power was never a real cost, and research, gear and structures all
+  reduced to keyboard time on one tile. The fix moves the limiter onto the
+  actions themselves: **the base is the farm**. Rest is now an investment
+  against 40 ticks of base output rather than a free action — at zone 1,
+  tier 1, a Mining Node worked for a full rest cycle yields ~2 Core
+  Fragments against a 5-fragment rest (a net loss), and break-even is
+  roughly three worked nodes, which under the one-cronjob-per-structure rule
+  means three structures and three programs, not three stacked on one node.
+- This is unplayed balance — 5 fragments per rest and 2 starting outlets are
+  arithmetic, not evidence, the same footing the Trace bands were on before
+  playing moved them. The starting outlet count is the softener most likely
+  to need retuning.
+
 ### One program per structure, per job
 
 Engine-only, no save-format bump. A save that already has three programs on

@@ -85,6 +85,7 @@ impl Game {
                         (ItemId::from(ids::ICE_BREAKER), 3),
                         (ItemId::from(ids::POWER_CELL), 3),
                         (ItemId::from(ids::CORE_FRAGMENT), 5),
+                        (ItemId::from(ids::OUTLET), 2),
                     ],
                 },
                 ItemFusions::default(),

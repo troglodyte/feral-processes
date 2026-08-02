@@ -558,9 +558,25 @@ fn a_symlink_out_keeps_the_maps_of_the_frames_already_walked() {
 fn resting_is_refused_underground() {
     let mut game = game();
     descend(&mut game);
+    let player = game.player_entity();
+    let outlets_before = game
+        .world
+        .get::<Inventory>(player)
+        .unwrap()
+        .count(&ItemId::from(ids::OUTLET));
     let before = game.current_tick();
+
     game.rest();
+
     assert_eq!(before, game.current_tick(), "rest should not have run");
+    assert_eq!(
+        outlets_before,
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::OUTLET)),
+        "a rest refused by the require_surface gate must spend nothing"
+    );
 }
 
 #[test]

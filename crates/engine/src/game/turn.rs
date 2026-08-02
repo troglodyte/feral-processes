@@ -394,13 +394,20 @@ impl Game {
     /// keep roaming), then Fatigue and Integrity are both restored to full.
     /// Requires the player to be standing within the radius of a structure
     /// that sets `StructureDef::enables_rest` — Home, and only Home, among
-    /// the shipped structures — and there's no other way to rest. Beyond
-    /// that gate, there's no separate "rest" system beyond replaying the
-    /// normal tick loop plus a Fatigue/HP reset at the end (via
-    /// `tick_inner(false)`, so these ticks don't age the rest structure
-    /// itself — see `age_temporary_structures`). If Power runs out and you
-    /// take lethal damage mid-rest, the loop bails out via the
-    /// `is_game_over` check before either restore happens.
+    /// the shipped structures — and, since it grants a free heal otherwise
+    /// unbounded by anything Power can limit, spending that structure's
+    /// `RestDef::cost` (an empty cost is a free rest, unchanged from before
+    /// the field existed). Both gates run before a single tick does; the
+    /// price is resolved and taken here rather than as its own system
+    /// because a refused rest must not spend anything, and a rest that
+    /// *starts* has already bought its ticks — the mid-loop `is_game_over`
+    /// bail below does not refund it. Beyond that, there's no separate
+    /// "rest" system beyond replaying the normal tick loop plus a
+    /// Fatigue/HP reset at the end (via `tick_inner(false)`, so these ticks
+    /// don't age the rest structure itself — see
+    /// `age_temporary_structures`). If Power runs out and you take lethal
+    /// damage mid-rest, the loop bails out via the `is_game_over` check
+    /// before either restore happens.
     pub fn rest(&mut self) {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
@@ -410,9 +417,31 @@ impl Game {
             return;
         }
         let player_pos = *self.world.get::<Position>(self.player_entity()).unwrap();
-        if self.nearby_rest_structure(player_pos).is_none() {
+        let Some(rest_structure) = self.nearby_rest_structure(player_pos) else {
             self.log("You need to be within your base, near Home, to power down and rest.");
             return;
+        };
+        let cost = self.rest_cost(rest_structure);
+        let player = self.player_entity();
+        let missing = {
+            let inv = self.world.get::<Inventory>(player).unwrap();
+            cost.iter()
+                .find(|(item, qty)| inv.count(item) < *qty)
+                .cloned()
+        };
+        if let Some((item, qty)) = missing {
+            self.log(format!(
+                "Resting needs {} {}, and you're short.",
+                qty,
+                self.item_name(&item)
+            ));
+            return;
+        }
+        {
+            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
+            for (item, qty) in &cost {
+                inv.take(item.clone(), *qty);
+            }
         }
         self.log("You drop into low-power standby to recharge.");
         for _ in 0..REST_TICKS {

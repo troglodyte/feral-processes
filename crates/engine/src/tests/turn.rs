@@ -181,6 +181,170 @@ fn rest_heals_every_party_member() {
 }
 
 #[test]
+fn a_new_game_starts_with_two_power_outlets() {
+    let game = Game::new(701, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let held = game
+        .world
+        .get::<Inventory>(player)
+        .unwrap()
+        .count(&ItemId::from(ids::OUTLET));
+    assert_eq!(
+        held, 2,
+        "the bounded-income opening softener is two outlets, beside the \
+         3 ICE Breakers / 3 Power Cells / 5 Core Fragments"
+    );
+}
+
+#[test]
+fn rest_is_refused_with_no_outlet_and_does_not_tick() {
+    let mut game = Game::new(702, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    spawn_rest_structure_at_player(&mut game);
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        let held = inv.count(&ItemId::from(ids::OUTLET));
+        inv.take(ItemId::from(ids::OUTLET), held);
+    }
+    let before = game.current_tick();
+
+    game.rest();
+
+    assert_eq!(
+        before,
+        game.current_tick(),
+        "a rest refused for lacking an outlet must not advance the clock — \
+         the ticks are what the outlet buys"
+    );
+    assert!(
+        game.message_log(5)
+            .iter()
+            .any(|(_, line)| line.to_lowercase().contains("outlet")),
+        "the refusal should say why"
+    );
+}
+
+#[test]
+fn rest_spends_exactly_one_outlet_not_the_whole_stack() {
+    let mut game = Game::new(703, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    spawn_rest_structure_at_player(&mut game);
+
+    game.rest();
+
+    let remaining = game
+        .world
+        .get::<Inventory>(player)
+        .unwrap()
+        .count(&ItemId::from(ids::OUTLET));
+    assert_eq!(
+        remaining, 1,
+        "a fresh game starts with 2 outlets; one rest should leave exactly 1, not 0"
+    );
+}
+
+#[test]
+fn rest_refused_by_game_over_consumes_no_outlet() {
+    let mut game = Game::new(704, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    spawn_rest_structure_at_player(&mut game);
+    game.world.resource_mut::<GameOver>().reason = Some("test".to_string());
+
+    game.rest();
+
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::OUTLET)),
+        2,
+        "a rest refused by the game-over gate must spend nothing"
+    );
+}
+
+#[test]
+fn rest_refused_by_active_battle_consumes_no_outlet() {
+    let mut game = Game::new(705, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    spawn_rest_structure_at_player(&mut game);
+    start_battle_with_a_wild_program(&mut game);
+
+    game.rest();
+
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::OUTLET)),
+        2,
+        "a rest refused by the active-battle gate must spend nothing"
+    );
+}
+
+#[test]
+fn rest_refused_by_no_nearby_rest_structure_consumes_no_outlet() {
+    let mut game = Game::new(706, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+
+    game.rest();
+
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::OUTLET)),
+        2,
+        "a rest refused for having no rest structure in range must spend nothing"
+    );
+}
+
+const FREE_REST_PAD: &str = r#"(
+    id: "free_rest_pad",
+    name: "Free Rest Pad",
+    description: "Test fixture: a rest structure whose RestDef carries no cost.",
+    glyph: '#',
+    color: White,
+    build_cost: [],
+    work: None,
+    enables_rest: Some((radius: 7)),
+)"#;
+
+/// Guards the wiring, not just the parsing: `structures::tests::a_rest_def_-
+/// without_a_cost_field_defaults_to_a_free_rest` (Task 1) already proves an
+/// old-format `RestDef` parses with an empty `cost`; this proves `Game::rest`
+/// actually treats that empty `cost` as free rather than, say, silently
+/// requiring some other implicit price.
+#[test]
+fn a_rest_structure_with_no_cost_field_still_rests_for_free() {
+    let dir = assets_dir_with_extra_structure("free_rest_pad", "free_rest_pad.ron", FREE_REST_PAD);
+    let mut game = Game::new(707, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let player = game.player_entity();
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        let held = inv.count(&ItemId::from(ids::OUTLET));
+        inv.take(ItemId::from(ids::OUTLET), held);
+    }
+    let pos = *game.world.get::<Position>(player).unwrap();
+    game.world.spawn((
+        Structure {
+            kind: "free_rest_pad".to_string(),
+        },
+        Position { x: pos.x, y: pos.y },
+    ));
+    game.world.get_mut::<Needs>(player).unwrap().fatigue = 10.0;
+
+    game.rest();
+
+    assert_eq!(
+        game.world.get::<Needs>(player).unwrap().fatigue,
+        100.0,
+        "a rest structure whose def sets no cost should still rest for free, \
+         with zero outlets held"
+    );
+}
+
+#[test]
 fn home_enables_rest_across_the_whole_base_footprint() {
     let game = Game::new(402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let def = game
@@ -997,8 +1161,8 @@ fn use_power_source_picks_the_power_item_over_an_earlier_non_power_item() {
     let mut game = Game::new(506, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
-    // Drain all three starting stacks (see `Game::new`: Ice Breaker,
-    // Power Cell, Core Fragment) and rebuild the inventory with the
+    // Drain all four starting stacks (see `Game::new`: Ice Breaker, Power
+    // Cell, Core Fragment, Power Outlet) and rebuild the inventory with the
     // non-power item (Core Fragment) added *first*, so it's ahead of
     // the Power Cell in `Inventory::items`. This pins selection to the
     // `ConsumeDef.power > 0.0` predicate rather than to iteration
@@ -1010,6 +1174,8 @@ fn use_power_source_picks_the_power_item_over_an_earlier_non_power_item() {
     inv.take(ItemId::from(ids::POWER_CELL), power_held);
     let fragments_held = inv.count(&ItemId::from(ids::CORE_FRAGMENT));
     inv.take(ItemId::from(ids::CORE_FRAGMENT), fragments_held);
+    let outlets_held = inv.count(&ItemId::from(ids::OUTLET));
+    inv.take(ItemId::from(ids::OUTLET), outlets_held);
     inv.add(ItemId::from(ids::CORE_FRAGMENT), 5);
     inv.add(ItemId::from(ids::POWER_CELL), 2);
     assert_eq!(

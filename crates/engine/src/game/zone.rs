@@ -191,6 +191,22 @@ impl Game {
         })
     }
 
+    /// The `RestDef::cost` of whichever structure `nearby_rest_structure`
+    /// found, resolved to an owned `Vec` so `Game::rest` can drop this
+    /// `StructureDb` borrow before taking a mutable one on the player's
+    /// `Inventory` for the same call. Priced on the structure that actually
+    /// granted the rest, never on Home by id, so a modded alternate rest
+    /// structure can charge differently.
+    pub(crate) fn rest_cost(&self, rest_structure: Entity) -> Vec<(ItemId, u32)> {
+        let kind = &self.world.get::<Structure>(rest_structure).unwrap().kind;
+        self.world
+            .resource::<StructureDb>()
+            .get(kind)
+            .and_then(|def| def.enables_rest.as_ref())
+            .map(|rest| rest.cost.clone())
+            .unwrap_or_default()
+    }
+
     /// Finds a zone-portal structure (`StructureDef::zone_portal`) at
     /// `(x, y)`, if any — checked before the generic blocking-structure
     /// check in `move_player` so walking onto one breaches the zone instead

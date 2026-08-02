@@ -391,9 +391,11 @@ impl Game {
             if let Some(reason) = &option.unavailable {
                 return Err(format!("That ability isn't ready: {reason}."));
             }
-            // A boss is an encounter, never a companion: capturing one puts a
-            // creature with several times the toughest ordinary `base_hp`
-            // into the roster, where fusion's `max + min/2` then compounds it.
+            // A boss is an encounter, never a companion. The durable reason
+            // is `growth_multiplier` — 2.0 on both bosses against 1.5 on
+            // every ordinary species — so a captured one outgrows the roster
+            // it joins however modest its `base_hp` looks at capture, and
+            // fusion's `max + min/2` then compounds that.
             //
             // This can't join Decompile's other two refusals in
             // `ability_unavailable` — that takes no target, because the

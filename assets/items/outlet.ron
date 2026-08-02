@@ -1,0 +1,6 @@
+(
+    id: "outlet",
+    name: "Power Outlet",
+    description: "Spent by resting. What turns a base's output into your own uptime.",
+    craftable: Some((cost: [("core_fragment", 5)])),
+)

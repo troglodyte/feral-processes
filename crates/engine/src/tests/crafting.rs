@@ -143,10 +143,41 @@ fn item_blurbs_gloss_what_a_shipped_item_actually_does() {
     );
 }
 
+/// The outlet is what `Game::rest` will spend (Task 2) — this task only
+/// needs it craftable, starter (no bench), at the price the spec fixes.
+/// Asserted against a fresh game, which unlocks no perks, so
+/// `LeanCompiler`'s discount can't shave the 5 down and make this brittle.
+#[test]
+fn the_outlet_is_craftable_from_five_core_fragments_with_no_perks() {
+    let game = Game::new(98, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let recipe = game
+        .craft_recipes()
+        .into_iter()
+        .find(|r| r.result == ItemId::from(ids::OUTLET))
+        .expect("outlet.ron should declare a craftable recipe");
+    assert_eq!(recipe.cost, vec![(ItemId::from(ids::CORE_FRAGMENT), 5)]);
+    assert_eq!(
+        game.craft_cost(&ItemId::from(ids::OUTLET)),
+        vec![(ItemId::from(ids::CORE_FRAGMENT), 5)],
+        "with no perks unlocked, craft_cost should match the raw recipe"
+    );
+}
+
 #[test]
 fn every_compilable_item_either_has_a_blurb_or_is_plain_currency() {
     let game = Game::new(97, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     for recipe in game.craft_recipes() {
+        // `item_blurb` only glosses `equipment`, `consume` and
+        // `taming_potency` — exactly the fields `ItemDef::category` checks
+        // before falling back to `Material`/`Currency`, so a material or
+        // currency has nothing for it to say and that's fine: the outlet
+        // reads fine as itself, the same as a bare currency would.
+        if matches!(
+            game.item_category(&recipe.result),
+            ItemCategory::Material | ItemCategory::Currency
+        ) {
+            continue;
+        }
         let blurb = game.item_blurb(&recipe.result);
         assert!(
             blurb.is_some(),

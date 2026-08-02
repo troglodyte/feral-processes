@@ -91,6 +91,15 @@ pub struct RestDef {
     /// Chebyshev distance (in tiles) the player must be within to rest
     /// using this structure.
     pub radius: i32,
+    /// Items spent per rest, each as `(item, quantity)`, checked and taken
+    /// after every other gate passes and before the rest ticks run (see
+    /// `Game::rest`). Priced on the structure that grants rest rather than
+    /// as a global rate, so a modded alternate rest structure can charge
+    /// differently — or nothing. `#[serde(default)]` so a `RestDef` written
+    /// before this field existed (including a mod's) still parses, as a
+    /// free rest, exactly as before this field existed.
+    #[serde(default)]
+    pub cost: Vec<(ItemId, u32)>,
 }
 
 /// Marks a structure as temporary — see `StructureDef::temporary`.
@@ -378,6 +387,16 @@ mod tests {
         )
         .expect("an older trade block must still parse");
         assert_eq!(def.trade.unwrap().program_sell_divisor, None);
+    }
+
+    /// The mod-compatibility guarantee: a `RestDef` written before `cost`
+    /// existed (or a modder who never touched it) still parses, and rests
+    /// for free — today's behaviour, preserved by defaulting to empty
+    /// rather than requiring every rest structure to price itself.
+    #[test]
+    fn a_rest_def_without_a_cost_field_defaults_to_a_free_rest() {
+        let def: RestDef = ron::from_str("(radius: 7)").expect("an older RestDef must still parse");
+        assert!(def.cost.is_empty());
     }
 
     #[test]

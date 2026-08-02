@@ -8,5 +8,5 @@
     work: None,
     teleport_cost: Some([("power_cell", 4)]),
     raidable: false,
-    enables_rest: Some((radius: 7)),
+    enables_rest: Some((radius: 7, cost: [("outlet", 1)])),
 )

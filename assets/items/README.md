@@ -101,6 +101,14 @@ disqualifies the whole file.
         prebattle_buff: Some((kind: Atk, power: 2, ticks: 30)),
     )),
 
+    // `consume` is the *only* way `Game::use_item` spends an item, but it
+    // isn't the only way an item gets spent at all — a mechanic elsewhere
+    // can name an item id and take it directly. The Power Outlet is
+    // craftable (see below) but has no `consume` block: it's spent by
+    // `Game::rest`, priced on the rest-granting structure's own
+    // `enables_rest.cost` (see assets/structures/README.md), not by the
+    // player using it out of inventory.
+
     // Optional; can be left out entirely (defaults to not craftable). If
     // set, this item has a crafting recipe: `cost` is a list of (item id,
     // quantity) pairs the player must have in inventory to craft one unit.

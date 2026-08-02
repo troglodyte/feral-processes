@@ -9,15 +9,15 @@ mechanics; phase 5 is renderer-only.
 
 ## Status
 
-Updated 2026-08-01. Each phase gets its own plan, written when its
+Updated 2026-08-02. Each phase gets its own plan, written when its
 predecessor lands — not up front, since a plan written against vocabulary
 that does not exist yet goes stale.
 
 | # | Phase | State | Save bump | Crates |
 | --- | --- | --- | --- | --- |
 | 1 | **The rename** — Stack, frames, links | ✅ **done**, merged `1ffa7ca` | no | engine, app-core, gui |
-| 2 | **Trace** — greed-driven pressure, escalating ambushes | ✅ **built** 2026-08-01, unplaytested | **yes** (15 → 16) | engine, gui |
-| 3 | **Cell kinds** — breakpoint, fault, corruption | ✅ **built** 2026-08-01, unplaytested — merge gated on a crawl | **yes** (16 → 17) | engine, gui |
+| 2 | **Trace** — greed-driven pressure, escalating ambushes | ✅ **merged** `b4a2e07`; band 1 retuned from the crawl, bands 2–3 unplayed | **yes** (15 → 16) | engine, gui |
+| 3 | **Cell kinds** — breakpoint, fault, corruption | ✅ **merged** `97fe0ce`; the gating crawl met none of the three | **yes** (16 → 17) | engine, gui |
 | 4 | **Inhabitants** — orphaned process, derelict trader, crash log | not started | **yes** | engine, gui, assets |
 | 5 | **Corner map inset** | not started | no | gui only |
 

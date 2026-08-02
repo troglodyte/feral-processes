@@ -2,6 +2,7 @@
 //! on without you.
 
 use super::support::*;
+use crate::game::stack::StackPos;
 use crate::resources::{CurrentStack, Locale};
 use crate::stack::{CellKind, Dir};
 use crate::*;
@@ -3082,5 +3083,56 @@ fn an_adopted_orphan_reads_as_plain_floor_in_both_views() {
         game.stack_view().unwrap().standing_on,
         None,
         "an adopted orphan still offers itself underfoot"
+    );
+}
+
+/// The invariant the whole of `orphan_species` exists for. The party has to
+/// see what a program is before paying an `ice_breaker` for it, so the
+/// answer has to survive a save/load — which a `GameRng` draw would not,
+/// since that stream's position is not persisted. A test that merely called
+/// it twice in one session would pass against exactly the implementation
+/// this forbids.
+#[test]
+fn the_species_a_frame_offers_survives_a_save_and_load() {
+    let mut game = game();
+    descend(&mut game);
+    let pos = game.stack_pos().unwrap();
+    let before = game.orphan_species(pos);
+    assert!(before.is_some(), "the entrance biome fields nothing at all");
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_orphan_species_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let pos = loaded.stack_pos().unwrap();
+    assert_eq!(
+        loaded.orphan_species(pos),
+        before,
+        "the frame offered a different program after a reload"
+    );
+}
+
+/// Two frames of one stack share an entrance and therefore a biome pool, so
+/// this pins that the *seed* differs by depth rather than the pool doing the
+/// work. Without the depth in the salt every frame of a stack would offer
+/// the same program.
+#[test]
+fn two_depths_of_one_stack_draw_their_orphans_independently() {
+    let mut game = game();
+    descend(&mut game);
+    let pos = game.stack_pos().unwrap();
+
+    let mut seen = Vec::new();
+    for depth in 1..=6 {
+        seen.push(game.orphan_species(StackPos { depth, ..pos }));
+    }
+    assert!(
+        seen.iter().any(|s| *s != seen[0]),
+        "every depth of the stack offered {:?} — the depth is not in the salt",
+        seen[0]
     );
 }

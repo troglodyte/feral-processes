@@ -319,6 +319,36 @@ impl Game {
             .is_some_and(|m| m.jacked.contains(&cell))
     }
 
+    /// Which program this frame's orphan is, or `None` if the entrance's
+    /// biome fields nothing ordinary at all.
+    ///
+    /// The same pool `maybe_stack_encounter` fights out of — the biome
+    /// above the link, so which link you picked still matters and no new
+    /// content is needed — but drawn from an RNG seeded off the frame spec
+    /// rather than off `GameRng`. That is forced, not chosen: the party has
+    /// to be able to see what a program is before paying an `ice_breaker`
+    /// for it, so the answer has to survive a save/load, and `GameRng`'s
+    /// stream position is not persisted. See
+    /// `the_species_a_frame_offers_survives_a_save_and_load`.
+    ///
+    /// Never a boss. `maybe_stack_encounter` refuses one for a fight the
+    /// party did not see coming, and a free boss companion is a stronger
+    /// version of the same objection.
+    pub(crate) fn orphan_species(&mut self, pos: StackPos) -> Option<String> {
+        let (ex, ey) = pos.entrance;
+        let spec = self.frame_spec(pos.depth, pos.frames, pos.entrance);
+        let (candidates, _) = self.habitat_pools(ex, ey)?;
+        if candidates.is_empty() {
+            return None;
+        }
+        // Salted off the frame's own stream, like `pick_lair_species`, so
+        // which program is down here doesn't correlate with the shape of
+        // the dead end it is sitting in.
+        const ORPHAN_SALT: u64 = 0xDEAD_C0DE;
+        let mut rng = StdRng::seed_from_u64(spec.rng_seed() ^ ORPHAN_SALT);
+        Some(candidates[rng.random_range(0..candidates.len())].clone())
+    }
+
     /// Whether the orphan on `cell` is still there to be adopted — what
     /// both views use to stop advertising one already taken, and what
     /// `adopt_orphan` refuses a second adoption on.

@@ -123,7 +123,13 @@ impl Game {
     }
 
     /// `spawn_wild_creature` with `depth_mult` folded into every stat.
-    fn spawn_wild_creature_scaled(
+    ///
+    /// `pub(crate)` for `Game::adopt_orphan`, which is a sibling module and
+    /// spawns the same way a Stack encounter does — depth-scaled, and with
+    /// its potential and wild routines rolled from `GameRng` at spawn time
+    /// like every other creature. Only *which species* an orphan is was ever
+    /// pinned to the frame seed; what it turns out to be worth is not.
+    pub(crate) fn spawn_wild_creature_scaled(
         &mut self,
         species_id: &str,
         x: i32,

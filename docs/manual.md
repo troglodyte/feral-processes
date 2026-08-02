@@ -226,11 +226,16 @@ lairs are one-shot per stack, so a trip up to shed a band means returning to
 a stack with less left in it. The one thing that does survive is the guardian, who waits at
 whatever band you come back down at.
 
-`g` opens the **map** — the same key that scans the ground on the surface,
-since the two screens never both apply. It is drawn north-up and shows only
-what the party has had in view: cells never seen stay dark, and are drawn
-differently from rock that has been seen. Links are marked, so are the
-corridors you were jumped in. Opening it costs no time.
+A **map of the frame** sits in the top-left of the corridor at all times.
+It is drawn north-up and shows only what the party has had in view: cells
+never seen stay dark, and are drawn differently from rock that has been
+seen. Links are marked, so are the corridors you were jumped in.
+
+`g` opens the same map full-screen — the same key that scans the ground on
+the surface, since the two screens never both apply. It is the corner map
+at three times the size, with a legend naming every glyph, and it is the
+one to open when the question is which wing you have not walked yet rather
+than which way you are facing. Opening it costs no time.
 
 Each link keeps its own map, and each frame of a stack its own. The map
 survives saving and loading — a frame regenerates from its seed, but what

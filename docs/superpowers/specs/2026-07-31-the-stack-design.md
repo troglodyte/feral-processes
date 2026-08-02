@@ -19,7 +19,7 @@ that does not exist yet goes stale.
 | 2 | **Trace** — greed-driven pressure, escalating ambushes | ✅ **merged** `b4a2e07`; band 1 retuned from the crawl, bands 2–3 unplayed | **yes** (15 → 16) | engine, gui |
 | 3 | **Cell kinds** — breakpoint, fault, corruption | ✅ **merged** `97fe0ce`; the gating crawl met none of the three | **yes** (16 → 17) | engine, gui |
 | 4 | **Orphaned process** | ✅ **built** 2026-08-02 on `stack-phase-4-orphaned-process`, unplayed; the key is `o`, not `t` | **yes** (17 → 18) | engine, app-core, gui |
-| 5 | **Corner map inset** | not started | no | gui only |
+| 5 | **Corner map inset** | ✅ **built** 2026-08-02 on `stack-phase-5-corner-map`, unplayed | no | gui only |
 | — | *deferred from 4*: derelict trader, crash log | sketched only | — | — |
 
 Phase 1's plan is at
@@ -39,9 +39,9 @@ walks without a persistent map, hitting `g` for the full screen.
 ### What phase 1 did *not* change
 
 Anything visible, beyond five strings. The Stack looks and plays exactly as
-the dungeon did. The frame map is still a full-screen mode on `g`
-(`app/playing.rs:192`); there is no corner inset, and there will not be one
-before phase 5.
+the dungeon did. The frame map was still a full-screen mode on `g`
+(`app/playing.rs:192`) and nothing else, until phase 5 added the inset
+beside it.
 
 ### Before building on phase 2
 
@@ -660,14 +660,26 @@ the one screen where a stale glyph silently misinforms.
 
 ### Placement
 
-The playing pane is 70% × 72% at the origin (`render/base.rs:72-73`). The
-corridor's vanishing point is at that pane's centre, so its corners are
-ceiling and floor wedges — the least information-dense pixels on screen.
+The playing pane is 70% × 72% at the origin — now `base::PANE_W`/`PANE_H`
+rather than two literals, so `frame_map`'s tests build the pane the game
+draws into instead of a copy of it. The corridor's vanishing point is at
+that pane's centre, so its corners are ceiling and floor wedges — the least
+information-dense pixels on screen.
 
 Sizing is the real risk. At 1920×1080 the pane is 1344×778, so a 28%-wide
 inset gives ~18px cells. At 1280×720 it is ~12px cells with ~9px glyphs:
 legible for tiles, tight for the `!`/`&`/`+` markers. The inset fraction is a
 presentation constant in the renderer, not a `tuning.rs` value.
+
+**Built 2026-08-02, and three things moved.** The fraction is **0.30**, not
+0.28: at 0.28 the 1280×720 glyph came out at 8px, and the floor the design
+had already named was 9. The anchor is the top-left *under the heading*
+rather than the corner itself, because `draw_stack` writes
+`Facing / Depth / Trace` across those pixels and the Trace band is the one
+readout this layer's escalation is explained by. And the inset covers ~52%
+of the pane's height at both window sizes — a square 21×21 grid at a
+legible cell size is simply that big, which is the cost of showing the
+whole frame rather than a window around the party.
 
 ## Testing
 
@@ -721,6 +733,15 @@ Per phase, failing test first.
   not overlap the status panel or log; the glyph table has exactly one
   definition; drawing a degenerate view does not panic, matching the
   existing test in `render/dungeon_map.rs`.
+
+  **Built 2026-08-02: four tests, and the middle one is not among them.**
+  "Exactly one definition" is a property of the source rather than of any
+  value the suite can read — both maps calling `draw_grid` is what holds
+  it, and a test that could tell would have to grep its own file. What went
+  in instead is a fourth the design did not ask for and needs more:
+  `inset_glyphs_stay_legible_at_the_smallest_window`, asserting the 1280×720
+  glyph clears 9px. That is the number the whole feature turns on, and it
+  was already wrong at the fraction this document specified.
 
 ## Gates
 

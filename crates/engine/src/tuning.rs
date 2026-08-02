@@ -766,15 +766,6 @@ pub const FORGIVING_RESPAWN_NEED_FLOOR: f32 = 40.0;
 /// program drops.
 pub const WORK_RESOURCE_DROP: std::ops::RangeInclusive<u32> = 1..=2;
 
-/// `Game::forage`'s success chance by biome richness — see
-/// `game::turn::forage_chance`. Barren biomes (the Data Void, Black ICE, and
-/// a base's own manufactured platform floor) are a flat zero and don't get a
-/// constant: a base must never be a risk-free forage spot, or there'd be no
-/// reason to leave the platform.
-pub const FORAGE_CHANCE_RICH: f64 = 0.6;
-pub const FORAGE_CHANCE_MODERATE: f64 = 0.3;
-pub const FORAGE_CHANCE_SPARSE: f64 = 0.15;
-
 /// A mining node's per-cycle success chance is `MINING_SUCCESS_BASE` plus
 /// `MINING_SUCCESS_PER_LEVEL` per tier, capped at 1.0 — so a basic level-1
 /// node succeeds about half the time and upgrading buys reliability. See
@@ -925,7 +916,9 @@ pub const STRUCTURE_REGEN_INTERVAL: u64 = 20;
 // edit. The magnitudes below stay code for the reason at the top of this
 // module: content is moddable, how hard the game is, is not.
 
-/// Bonus `Perk::KeenScavenger` adds to `Game::forage`'s success chance, per level.
+/// Per-level bonus `Perk::KeenScavenger` grants — currently unused, since
+/// the perk's one effect hook was deleted along with the scan action it
+/// boosted; see `Perk::KeenScavenger`.
 pub const KEEN_SCAVENGER_BONUS_PER_LEVEL: f64 = 0.01;
 
 /// `Perk::LowPowerMode`'s hunger-decay reduction, per level (the decay

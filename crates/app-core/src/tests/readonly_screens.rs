@@ -30,12 +30,13 @@ fn b_opens_the_structure_roster_and_esc_returns_to_the_map() {
 fn up_and_down_scroll_the_history_without_leaving_it() {
     let mut app = test_app(92);
     // Two rows to scroll between, and they have to be two *different* lines:
-    // `r` rests and `g` scans the ground, each with a guaranteed line whatever
-    // the seed rolled onto the map, and no line in common. Pressing `r` twice
-    // would fold into a single row — see
+    // `r` rests (refused this far from Home, but the refusal is a guaranteed
+    // line) and `e` drains a starting Power Cell, each with a guaranteed line
+    // whatever the seed rolled onto the map, and no line in common. Pressing
+    // `r` twice would fold into a single row — see
     // `repeated_lines_are_one_scrollable_row`.
     app.handle_key(GameKey::Char('r'));
-    app.handle_key(GameKey::Char('g'));
+    app.handle_key(GameKey::Char('e'));
     let lines = app
         .game
         .as_ref()

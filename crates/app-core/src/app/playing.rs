@@ -178,10 +178,6 @@ impl App {
                     game.rest();
                     true
                 }
-                GameKey::Char('g') => {
-                    game.forage();
-                    true
-                }
                 _ => false,
             }
         };
@@ -196,10 +192,10 @@ impl App {
     /// already ran, and the ones that need open grid refuse in the engine
     /// (see `Game::require_surface`).
     fn handle_stack_key(&mut self, key: GameKey, is_move_key: bool) {
-        // The same `g` that scans the ground on the surface. Checked before
-        // the game is borrowed below, and costing no tick: reading your own
-        // map is not an action, and the Stack advancing a turn every
-        // time you checked where you were would punish mapping.
+        // The same `g` that is a no-op on the surface. Checked before the
+        // game is borrowed below, and costing no tick: reading your own map
+        // is not an action, and the Stack advancing a turn every time you
+        // checked where you were would punish mapping.
         if key == GameKey::Char('g') {
             self.mode = Mode::FrameMap;
             return;

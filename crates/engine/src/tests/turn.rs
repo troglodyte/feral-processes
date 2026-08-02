@@ -1,8 +1,7 @@
 //! The turn loop: ticking, resting, waiting, and consuming items.
 
 use super::support::*;
-use crate::game::turn::forage_chance;
-use crate::tuning::{KEEN_SCAVENGER_BONUS_PER_LEVEL, MAX_BUILD_DISTANCE_FROM_HOME, REST_TICKS};
+use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, REST_TICKS};
 use crate::*;
 
 #[test]
@@ -797,30 +796,6 @@ fn field_buffs_survive_a_save_load_round_trip() {
     assert_eq!(companion_buff.power, 4);
     assert_eq!(companion_buff.remaining, 3);
     assert_eq!(companion_buff.source, BuffSource::Routine);
-}
-
-#[test]
-fn forage_chance_applies_keen_scavenger_per_level_but_never_boosts_a_zero_chance_biome() {
-    assert_eq!(forage_chance(Biome::OpenGrid, 0), 0.6);
-    assert_eq!(
-        forage_chance(Biome::OpenGrid, 1),
-        0.6 + KEEN_SCAVENGER_BONUS_PER_LEVEL
-    );
-    assert_eq!(
-        forage_chance(Biome::OpenGrid, 3),
-        0.6 + KEEN_SCAVENGER_BONUS_PER_LEVEL * 3.0
-    );
-    assert_eq!(
-        forage_chance(Biome::DataVoid, 1),
-        0.0,
-        "an unwalkable biome's 0% chance shouldn't be boosted into a nonzero one"
-    );
-    assert_eq!(
-        forage_chance(Biome::Platform, 3),
-        0.0,
-        "a base platform is manufactured floor with nothing to scavenge, and no amount \
-         of Keen Scavenger should turn a safe haven into a risk-free forage spot"
-    );
 }
 
 #[test]

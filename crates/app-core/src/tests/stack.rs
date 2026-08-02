@@ -244,13 +244,24 @@ fn opening_the_map_costs_no_time() {
     );
 }
 
-/// On the surface `g` forages. The two screens never both apply, so the
-/// key is shared rather than a second one being invented for the same verb.
+/// `g` used to scan the sector for salvage on the surface; that action was
+/// deleted in the bounded-income pass. The key is still shared with the
+/// Stack's map screen (see `g_opens_the_map_underground_and_any_key_closes_it`),
+/// so above ground it now falls through to the no-op arm rather than doing
+/// anything — it must neither change mode nor advance a turn.
 #[test]
-fn g_still_forages_on_the_surface() {
+fn g_does_nothing_on_the_surface() {
     let mut app = test_app(909);
+    let ticks = app.game.as_ref().unwrap().message_log(200).len();
+
     app.handle_key(GameKey::Char('g'));
+
     assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(
+        app.game.as_ref().unwrap().message_log(200).len(),
+        ticks,
+        "g should be a no-op on the surface now that scanning is gone"
+    );
 }
 
 #[test]

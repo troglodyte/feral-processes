@@ -560,6 +560,16 @@ pub struct FrameMemory {
     /// positional bincode save is what the version bump is for.
     #[serde(default)]
     pub jacked: BTreeSet<(i32, i32)>,
+    /// Orphaned processes already adopted. The dead end they were sitting
+    /// in has nothing left in it, so both views drop it back to plain
+    /// floor — the same argument as `jacked` and `looted`.
+    ///
+    /// A set for the same reason `jacked` is one, and `#[serde(default)]`
+    /// for the same reason too: the field-named RON that `dev-saves/`
+    /// templates are written in keeps parsing without re-capture, and the
+    /// positional bincode save is what the version bump is for.
+    #[serde(default)]
+    pub adopted: BTreeSet<(i32, i32)>,
 }
 
 /// Everything the party has learned about every Stack frame in this zone.

@@ -319,6 +319,123 @@ impl Game {
             .is_some_and(|m| m.jacked.contains(&cell))
     }
 
+    /// Adopts the orphaned process the party is standing on, for one taming
+    /// catalyst.
+    ///
+    /// **Every refusal lands before anything is spent and before anything is
+    /// spawned**, which is the whole of this function's ordering and the one
+    /// thing worth reading it for. `attempt_decompile` is the model, and the
+    /// refusal strings are deliberately its own — this is the second way
+    /// into the roster and it should not invent a second vocabulary for
+    /// being full.
+    ///
+    /// Deliberately **not** done, each for a reason a later reader should
+    /// not undo:
+    ///
+    /// - **No `StackSpawn` tag.** That component marks a creature
+    ///   `end_battle` despawns on the way out (`game/combat_teardown.rs`).
+    ///   An orphan never fights; tagging one would delete it the next time
+    ///   the party won a fight underground.
+    /// - **No XP.** `attempt_decompile` awards it for a fight that was won.
+    ///   Nothing was fought here.
+    /// - **No `Party` push.** The roster is the destination; which programs
+    ///   are *fielded* is a separate choice the player makes elsewhere.
+    /// - **No Trace.** Trace's three sources are all things the party
+    ///   *breaks*, and an orphan is a rescue. That is a design judgement
+    ///   rather than a constraint — if the first playtest says the Stack is
+    ///   too quiet, `raise_trace` here is the first knob to reach for.
+    pub fn adopt_orphan(&mut self) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        let Some(pos) = self.stack_pos() else {
+            return Err("There's nothing like that here.".into());
+        };
+        let cell = (pos.x, pos.y);
+        if self.cell_underfoot() != Some(CellKind::Orphan) || !self.orphan_present(pos, cell) {
+            return Err("There's nothing like that here.".into());
+        }
+        let Some((catalyst, _)) = self.taming_catalyst() else {
+            return Err("no taming catalyst".into());
+        };
+        if self.pet_count() >= self.pet_capacity() {
+            return Err("roster is full".into());
+        }
+        let species = self
+            .orphan_species(pos)
+            .ok_or_else(|| "The process is too far gone to reach.".to_string())?;
+
+        // Past every refusal: from here the catalyst is spent and the
+        // program exists.
+        let player = self.player_entity();
+        self.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .take(catalyst, 1);
+        let depth_mult = self.stack_depth_multiplier();
+        let (ex, ey) = pos.entrance;
+        let Some(program) = self.spawn_wild_creature_scaled(&species, ex, ey, depth_mult) else {
+            return Err("The process is too far gone to reach.".into());
+        };
+        self.world
+            .entity_mut(program)
+            .remove::<(Hostile, WanderAi)>();
+        self.world
+            .entity_mut(program)
+            .insert((Tamed { owner: player }, Experience::default()));
+        self.install_innate_routines(program);
+        self.frame_memory_mut(pos).adopted.insert(cell);
+
+        let name = self.creature_label(program);
+        self.log_kind(
+            MessageKind::Outcome,
+            format!("{name} has been running alone down here. It comes with you."),
+        );
+        Ok(())
+    }
+
+    /// Which program this frame's orphan is, or `None` if the entrance's
+    /// biome fields nothing ordinary at all.
+    ///
+    /// The same pool `maybe_stack_encounter` fights out of — the biome
+    /// above the link, so which link you picked still matters and no new
+    /// content is needed — but drawn from an RNG seeded off the frame spec
+    /// rather than off `GameRng`. That is forced, not chosen: the party has
+    /// to be able to see what a program is before paying an `ice_breaker`
+    /// for it, so the answer has to survive a save/load, and `GameRng`'s
+    /// stream position is not persisted. See
+    /// `the_species_a_frame_offers_survives_a_save_and_load`.
+    ///
+    /// Never a boss. `maybe_stack_encounter` refuses one for a fight the
+    /// party did not see coming, and a free boss companion is a stronger
+    /// version of the same objection.
+    pub(crate) fn orphan_species(&mut self, pos: StackPos) -> Option<String> {
+        let (ex, ey) = pos.entrance;
+        let spec = self.frame_spec(pos.depth, pos.frames, pos.entrance);
+        let (candidates, _) = self.habitat_pools(ex, ey)?;
+        if candidates.is_empty() {
+            return None;
+        }
+        // Salted off the frame's own stream, like `pick_lair_species`, so
+        // which program is down here doesn't correlate with the shape of
+        // the dead end it is sitting in.
+        const ORPHAN_SALT: u64 = 0xDEAD_C0DE;
+        let mut rng = StdRng::seed_from_u64(spec.rng_seed() ^ ORPHAN_SALT);
+        Some(candidates[rng.random_range(0..candidates.len())].clone())
+    }
+
+    /// Whether the orphan on `cell` is still there to be adopted — what
+    /// both views use to stop advertising one already taken, and what
+    /// `adopt_orphan` refuses a second adoption on.
+    pub(crate) fn orphan_present(&self, pos: StackPos, cell: (i32, i32)) -> bool {
+        !self
+            .world
+            .resource::<StackMemory>()
+            .0
+            .get(&(pos.entrance, pos.depth))
+            .is_some_and(|m| m.adopted.contains(&cell))
+    }
+
     /// Drops the party a frame if they have walked onto a fault.
     ///
     /// The depth guard is belt and braces over `stack::generate`, which does

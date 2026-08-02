@@ -194,6 +194,10 @@ impl App {
             return;
         }
 
+        // Set after the `self.game` borrow below releases. A refusal is not
+        // an action, so it leaves `acted` false and `after_world_action`
+        // returns before it can clear the line that explains why.
+        let mut refusal = None;
         let acted = {
             let Some(game) = &mut self.game else { return };
             match key {
@@ -229,9 +233,22 @@ impl App {
                     game.use_power_source();
                     true
                 }
+                // Not 't', which the mode block above already spends on the
+                // trader list before this arm is ever reached. 'o' is free
+                // and matches the glyph the orphan draws as in both views.
+                GameKey::Char('o') => match game.adopt_orphan() {
+                    Ok(()) => true,
+                    Err(reason) => {
+                        refusal = Some(reason);
+                        false
+                    }
+                },
                 _ => false,
             }
         };
+        if refusal.is_some() {
+            self.status_line = refusal;
+        }
         self.after_world_action(acted, is_move_key);
     }
 

@@ -153,6 +153,7 @@ has a facing rather than moving a token on a grid.
 | `<` | Climb — follow the link up, or surface from depth 1 |
 | `.` | Wait in place |
 | `e` | Drain a Power-restoring item |
+| `o` | Adopt the orphaned process under you, for a taming catalyst |
 
 Every other map key still works: inventory, party, routines, fusion, perks,
 manifest, research, save and help all open normally underground. The ones
@@ -179,7 +180,7 @@ the bottom of each stack, and each one costs an Access Shard to open — shards
 come out of caches. Killing what holds the lair clears that stack for good;
 jacking out leaves it waiting.
 
-Three more kinds of cell turn up in the floor:
+Four more kinds of cell turn up in the floor:
 
 - **Breakpoints** (`*`) sit on junctions — one per frame, working once. Walk
   onto one and the entire frame maps itself, walls and all, saving you the
@@ -193,6 +194,19 @@ Three more kinds of cell turn up in the floor:
   glyph because it comes in runs of three cells. Every step through it costs
   you a slice of your maximum Integrity. Going round costs steps; going
   through costs health, and which is cheaper is the point.
+- **Orphaned processes** (`o`) are programs still running with nothing left
+  to serve, one per frame in a dead end the caches did not take, drawn from
+  the same biome as everything else under that link. Press `o` while
+  standing on one and it joins your roster for an ICE Breaker — no capture
+  roll, no fight, and no Trace, since taking one is a rescue rather than
+  something you broke. Once per orphan, and the dead end reads as empty
+  afterwards. Roughly three frames in four have one; the rest ran short of
+  dead ends.
+
+  **Your roster is what limits this, not the catalysts.** A six-frame stack
+  offers four or five programs against a base capacity of three, so a
+  thorough descent will be refused near the bottom and the last orphans are
+  scenery until you have built the space for them.
 
 **Trace** is the stack noticing you. It rises when you crack a cache, burn a
 seal, jack into a breakpoint, or kill something — taking, not walking — and
@@ -207,9 +221,9 @@ whether to press on, not to be played up to a threshold. Walking costs
 nothing, so mapping a frame thoroughly is free and stripping it is not.
 
 Trace clears the moment you surface, by either route — the link or a
-symlink. That is not a free reset: caches, seals, breakpoints and lairs are
-one-shot per stack, so a trip up to shed a band means returning to a stack
-with less left in it. The one thing that does survive is the guardian, who waits at
+symlink. That is not a free reset: caches, seals, breakpoints, orphans and
+lairs are one-shot per stack, so a trip up to shed a band means returning to
+a stack with less left in it. The one thing that does survive is the guardian, who waits at
 whatever band you come back down at.
 
 `g` opens the **map** — the same key that scans the ground on the surface,

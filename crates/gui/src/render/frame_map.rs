@@ -40,7 +40,8 @@ fn tile_color(cell: FrameMapCell) -> Color {
         | FrameMapCell::Door
         | FrameMapCell::SealedDoor
         | FrameMapCell::Breakpoint
-        | FrameMapCell::Fault => WALKED,
+        | FrameMapCell::Fault
+        | FrameMapCell::Orphan => WALKED,
     }
 }
 
@@ -57,6 +58,7 @@ fn cell_glyph(cell: FrameMapCell) -> Option<(char, Color)> {
         FrameMapCell::SealedDoor => Some(('+', RED)),
         FrameMapCell::Breakpoint => Some(('*', BLUE)),
         FrameMapCell::Fault => Some(('v', ORANGE)),
+        FrameMapCell::Orphan => Some(('o', GREEN)),
         // Corruption deliberately has none: it is the one kind carrying its
         // meaning in `tile_color` instead. See `CORRUPT`.
         _ => None,

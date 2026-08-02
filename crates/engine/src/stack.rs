@@ -10,6 +10,7 @@ use std::collections::VecDeque;
 use crate::tuning::{
     STACK_BREAKPOINTS_PER_FRAME, STACK_CACHES_PER_FRAME, STACK_CORRUPTION_PATCH_CELLS,
     STACK_CORRUPTION_PATCHES_PER_FRAME, STACK_DOORS_PER_FRAME, STACK_FAULTS_PER_FRAME,
+    STACK_ORPHANS_PER_FRAME,
 };
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
@@ -138,6 +139,17 @@ pub enum CellKind {
     /// route you can decide to walk around — the reason this exists at all,
     /// in a maze that otherwise has exactly one kind of walkable cell.
     Corruption,
+    /// A program left running down here with nothing left to serve. Sits in
+    /// a dead end, and joins the roster for a taming catalyst rather than
+    /// for a won capture roll — see `Game::adopt_orphan`. Taken on a key,
+    /// never on arrival: a cache costs nothing to walk into, and an orphan
+    /// costs a consumable.
+    ///
+    /// There is no creature here until it is adopted. What species this one
+    /// would be is a function of the frame spec (`Game::orphan_species`),
+    /// and whether it has already been taken lives in
+    /// `resources::FrameMemory::adopted`, not in the frame.
+    Orphan,
 }
 
 impl CellKind {
@@ -293,6 +305,11 @@ pub fn generate(spec: FrameSpec) -> Frame {
     }
     place_corruption(&mut level, &mut rng);
     place_caches(&mut level, &mut rng);
+    // After the caches, and the only pass that wants the same site type
+    // they do. A cache is no longer `Floor`, so re-scanning excludes one
+    // for free — the two passes stay uncoupled and neither has to know the
+    // other's count. See `an_orphan_sits_in_a_dead_end_the_caches_left`.
+    place_orphan(&mut level, &mut rng);
 
     level
 }
@@ -494,6 +511,20 @@ fn place_caches(level: &mut Frame, rng: &mut StdRng) {
     }
     for &(x, y) in ends.iter().take(STACK_CACHES_PER_FRAME) {
         level.set(x, y, CellKind::Cache);
+    }
+}
+
+/// Leaves a program running in a dead end.
+///
+/// A dead end for the same reason a cache gets one — a corridor with
+/// nothing at the end of it wasted your time — and one the caches did not
+/// take, which is what running after them buys. A frame short of dead ends
+/// places fewer, exactly as `place_caches` degrades through `.take()`: a
+/// missing orphan is a quiet frame, not a bug worth a panic.
+fn place_orphan(level: &mut Frame, rng: &mut StdRng) {
+    let ends = shuffled_floor(level, rng, is_dead_end);
+    for &(x, y) in ends.iter().take(STACK_ORPHANS_PER_FRAME) {
+        level.set(x, y, CellKind::Orphan);
     }
 }
 
@@ -920,7 +951,12 @@ mod tests {
             .into_iter()
             .flat_map(|k| cells_of(&level, k))
             .collect();
-            for kind in [CellKind::Breakpoint, CellKind::Fault, CellKind::Corruption] {
+            for kind in [
+                CellKind::Breakpoint,
+                CellKind::Fault,
+                CellKind::Corruption,
+                CellKind::Orphan,
+            ] {
                 for cell in cells_of(&level, kind) {
                     assert!(
                         !taken.contains(&cell),
@@ -931,10 +967,13 @@ mod tests {
         }
     }
 
-    /// Dead ends stay whole. The three new passes run *before* `place_caches`
-    /// and none of them takes a dead end, so the cache count is exactly what
-    /// it was before phase 3 existed — if a new pass started eating dead
-    /// ends, frames would quietly start shipping two caches instead of three.
+    /// Dead ends stay whole. The three phase-3 passes run *before*
+    /// `place_caches` and none of them takes a dead end; `place_orphan`
+    /// takes one but runs *after*, so it can only ever have the dead ends
+    /// the caches left. Either way the cache count is exactly what it was
+    /// before phase 3 existed — if a new pass started eating dead ends
+    /// first, frames would quietly start shipping two caches instead of
+    /// three.
     #[test]
     fn the_new_passes_leave_the_cache_count_alone() {
         for depth in 1..=5 {
@@ -944,6 +983,64 @@ mod tests {
                 STACK_CACHES_PER_FRAME,
                 "depth {depth} lost a cache to one of the new passes"
             );
+        }
+    }
+
+    /// The count is a ceiling, not a promise, and the gap is wide enough to
+    /// be worth pinning rather than waving at. `place_orphan` runs after
+    /// `place_caches` and wants the same site type, so a frame needs
+    /// `STACK_CACHES_PER_FRAME + STACK_ORPHANS_PER_FRAME` plain-floor dead
+    /// ends to field one — and measured over this sample, **about three
+    /// frames in four do**. A count test asserting one per frame would be
+    /// asserting something the generator has never done.
+    ///
+    /// The floor is deliberately well under the measured rate: this exists
+    /// to catch a generator change that quietly stops placing orphans at
+    /// all, not to freeze the braid's exact output.
+    #[test]
+    fn most_frames_place_an_orphan_and_none_places_two() {
+        let mut placed = 0;
+        let mut frames = 0;
+        for world_seed in 0..100 {
+            for depth in 1..=6 {
+                let level = generate(FrameSpec {
+                    frames: 6,
+                    ..spec(world_seed, depth)
+                });
+                let orphans = cells_of(&level, CellKind::Orphan).len();
+                assert!(
+                    orphans <= STACK_ORPHANS_PER_FRAME,
+                    "seed {world_seed} depth {depth} placed {orphans} orphans"
+                );
+                placed += orphans;
+                frames += 1;
+            }
+        }
+        assert!(
+            placed * 10 >= frames * 6,
+            "only {placed} of {frames} frames left an orphan running — the \
+             dead ends the caches leave have dried up"
+        );
+    }
+
+    /// The claim `place_orphan` running last rests on, and the one a count
+    /// test alone would pass while getting wrong: an orphan takes a dead
+    /// end, which is the site type `place_caches` owns — so it can only
+    /// have the ones the caches did not. A cache is no longer `Floor` by
+    /// the time this pass scans, which is the whole mechanism.
+    #[test]
+    fn an_orphan_sits_in_a_dead_end_the_caches_left() {
+        for depth in 1..=6 {
+            let level = generate(FrameSpec {
+                frames: 6,
+                ..spec(64, depth)
+            });
+            for cell in cells_of(&level, CellKind::Orphan) {
+                assert!(
+                    is_dead_end(&level, cell.0, cell.1),
+                    "depth {depth}: the orphan at {cell:?} is not in a dead end"
+                );
+            }
         }
     }
 
@@ -1012,10 +1109,16 @@ mod tests {
     /// sight-blocking fills the first-person view with its own face and
     /// truncates the map to the party's row — the bug doors shipped with,
     /// which both cone consumers now carry an `ahead == 0` exception for.
-    /// None of phase 3's kinds is allowed to reopen it.
+    /// Neither phase 3's three kinds nor phase 4's orphan is allowed to
+    /// reopen it.
     #[test]
     fn the_new_cell_kinds_are_walkable_and_see_through() {
-        for kind in [CellKind::Breakpoint, CellKind::Fault, CellKind::Corruption] {
+        for kind in [
+            CellKind::Breakpoint,
+            CellKind::Fault,
+            CellKind::Corruption,
+            CellKind::Orphan,
+        ] {
             assert!(kind.walkable(), "{kind:?} is not walkable");
             assert!(
                 !kind.blocks_sight(),

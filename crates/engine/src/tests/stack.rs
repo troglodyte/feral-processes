@@ -2,6 +2,7 @@
 //! on without you.
 
 use super::support::*;
+use crate::game::stack::StackPos;
 use crate::resources::{CurrentStack, Locale};
 use crate::stack::{CellKind, Dir};
 use crate::*;
@@ -3017,4 +3018,260 @@ fn stripping_a_frames_caches_is_enough_to_be_noticed() {
          leaves the player Quiet, and the meter never announces itself"
     );
     assert_eq!(TraceBand::from_trace(whole_frame), TraceBand::Noticed);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 4 — the orphaned process
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Walks the party onto the frame's orphan and returns its cell.
+///
+/// `None` when the frame has none — about one frame in four has no plain
+/// dead end left after the caches take theirs, so a test that needs one
+/// says so rather than unwrapping blindly. See
+/// `most_frames_place_an_orphan_and_none_places_two`.
+fn stand_on_orphan(game: &mut Game) -> Option<(i32, i32)> {
+    let cell = stand_facing(game, CellKind::Orphan)?;
+    game.step_forward();
+    Some(cell)
+}
+
+/// The other half of a cell that can be used up. Without the record the
+/// orphan refills the moment the party steps off and back on, and both
+/// views keep advertising a dead end with nothing in it.
+#[test]
+fn an_adopted_orphan_reads_as_plain_floor_in_both_views() {
+    let mut game = game();
+    descend(&mut game);
+    let cell = stand_on_orphan(&mut game).expect("this seed's depth 1 leaves an orphan");
+
+    let view = game.stack_view().unwrap();
+    assert!(
+        view.cells[0].contains(&StackCellView::Orphan),
+        "the party is standing on it and the view does not show one"
+    );
+    assert_eq!(
+        game.frame_map().unwrap().cells[cell.1 as usize][cell.0 as usize],
+        FrameMapCell::Orphan
+    );
+
+    let Locale::Stack {
+        depth, entrance, ..
+    } = locale(&game)
+    else {
+        unreachable!()
+    };
+    game.world
+        .resource_mut::<crate::resources::StackMemory>()
+        .0
+        .entry((entrance, depth))
+        .or_default()
+        .adopted
+        .insert(cell);
+
+    let view = game.stack_view().unwrap();
+    assert!(
+        !view.cells[0].contains(&StackCellView::Orphan),
+        "an adopted orphan is still drawn down the corridor"
+    );
+    assert_eq!(
+        game.frame_map().unwrap().cells[cell.1 as usize][cell.0 as usize],
+        FrameMapCell::Floor,
+        "an adopted orphan is still marked on the map"
+    );
+    assert_eq!(
+        game.stack_view().unwrap().standing_on,
+        None,
+        "an adopted orphan still offers itself underfoot"
+    );
+}
+
+/// The invariant the whole of `orphan_species` exists for. The party has to
+/// see what a program is before paying an `ice_breaker` for it, so the
+/// answer has to survive a save/load — which a `GameRng` draw would not,
+/// since that stream's position is not persisted. A test that merely called
+/// it twice in one session would pass against exactly the implementation
+/// this forbids.
+#[test]
+fn the_species_a_frame_offers_survives_a_save_and_load() {
+    let mut game = game();
+    descend(&mut game);
+    let pos = game.stack_pos().unwrap();
+    let before = game.orphan_species(pos);
+    assert!(before.is_some(), "the entrance biome fields nothing at all");
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_orphan_species_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let pos = loaded.stack_pos().unwrap();
+    assert_eq!(
+        loaded.orphan_species(pos),
+        before,
+        "the frame offered a different program after a reload"
+    );
+}
+
+/// Two frames of one stack share an entrance and therefore a biome pool, so
+/// this pins that the *seed* differs by depth rather than the pool doing the
+/// work. Without the depth in the salt every frame of a stack would offer
+/// the same program.
+#[test]
+fn two_depths_of_one_stack_draw_their_orphans_independently() {
+    let mut game = game();
+    descend(&mut game);
+    let pos = game.stack_pos().unwrap();
+
+    let mut seen = Vec::new();
+    for depth in 1..=6 {
+        seen.push(game.orphan_species(StackPos { depth, ..pos }));
+    }
+    assert!(
+        seen.iter().any(|s| *s != seen[0]),
+        "every depth of the stack offered {:?} — the depth is not in the salt",
+        seen[0]
+    );
+}
+
+/// Puts the party on this frame's orphan with one `ice_breaker` in hand.
+/// `None` when the frame left no orphan.
+fn ready_to_adopt(game: &mut Game) -> Option<(i32, i32)> {
+    let cell = stand_on_orphan(game)?;
+    set_inventory(game, &[(ids::ICE_BREAKER, 1)]);
+    Some(cell)
+}
+
+fn ice_breakers(game: &Game) -> u32 {
+    game.world
+        .get::<Inventory>(game.player_entity())
+        .unwrap()
+        .count(&ItemId::from(ids::ICE_BREAKER))
+}
+
+#[test]
+fn adopting_an_orphan_puts_a_program_in_the_roster() {
+    let mut game = game();
+    descend(&mut game);
+    let cell = ready_to_adopt(&mut game).expect("this seed's depth 1 leaves an orphan");
+    let before = game.pet_count();
+    let player = game.player_entity();
+
+    game.adopt_orphan().expect("standing on one, holding one");
+
+    assert_eq!(game.pet_count(), before + 1, "the roster did not grow");
+    assert_eq!(ice_breakers(&game), 0, "the catalyst was not spent");
+    let adopted = game
+        .world
+        .iter_entities()
+        .filter(|e| e.get::<Tamed>().is_some_and(|t| t.owner == player))
+        .count();
+    assert_eq!(adopted, before + 1);
+
+    let Locale::Stack {
+        depth, entrance, ..
+    } = locale(&game)
+    else {
+        unreachable!()
+    };
+    assert!(
+        game.world
+            .resource::<crate::resources::StackMemory>()
+            .0
+            .get(&(entrance, depth))
+            .is_some_and(|m| m.adopted.contains(&cell)),
+        "the cell was not recorded as spent"
+    );
+}
+
+#[test]
+fn adopting_off_an_orphan_is_refused_and_costs_nothing() {
+    let mut game = game();
+    descend(&mut game);
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 1)]);
+    let before = game.pet_count();
+
+    assert!(game.adopt_orphan().is_err());
+    assert_eq!(ice_breakers(&game), 1);
+    assert_eq!(game.pet_count(), before);
+}
+
+/// The refusal has to land *before* anything is spawned. A message-only
+/// assertion passes against an implementation that has already created the
+/// creature and then declined to charge for it.
+#[test]
+fn adopting_without_a_catalyst_is_refused_before_anything_is_spawned() {
+    let mut game = game();
+    descend(&mut game);
+    ready_to_adopt(&mut game).expect("this seed's depth 1 leaves an orphan");
+    set_inventory(&mut game, &[]);
+    let before = game.pet_count();
+
+    let err = game.adopt_orphan().unwrap_err();
+    assert!(err.contains("no taming catalyst"), "{err}");
+    assert_eq!(game.pet_count(), before, "a refused adoption still spawned");
+}
+
+/// The ordering bug this phase is most likely to ship: refusing for a full
+/// roster *after* the catalyst has been taken charges the player for
+/// nothing.
+#[test]
+fn adopting_with_a_full_roster_is_refused_before_the_catalyst_is_spent() {
+    let mut game = game();
+    descend(&mut game);
+    ready_to_adopt(&mut game).expect("this seed's depth 1 leaves an orphan");
+    while game.pet_count() < game.pet_capacity() {
+        spawn_tamed(&mut game, 10, 2);
+    }
+    let before = game.pet_count();
+
+    let err = game.adopt_orphan().unwrap_err();
+    assert!(err.contains("roster is full"), "{err}");
+    assert_eq!(
+        ice_breakers(&game),
+        1,
+        "a refused adoption spent the catalyst"
+    );
+    assert_eq!(game.pet_count(), before);
+}
+
+/// The spent-ness half, through the real step path. Without
+/// `FrameMemory::adopted` the dead end refills every time the party steps
+/// off and back on, and one `ice_breaker` buys a program per lap.
+#[test]
+fn an_orphan_does_not_recur_when_the_party_steps_off_and_back_on() {
+    let mut game = game();
+    descend(&mut game);
+    let cell = ready_to_adopt(&mut game).expect("this seed's depth 1 leaves an orphan");
+    game.adopt_orphan().unwrap();
+    let after_first = game.pet_count();
+
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 1)]);
+    game.step_back();
+    game.step_forward();
+    // A step underground can roll an encounter, and a live battle refuses
+    // every action for its own reason — which passed this test against an
+    // `adopt_orphan` with no spent-ness check in it at all.
+    flee_until_clear(&mut game);
+    assert_eq!(
+        game.stack_pos().map(|p| (p.x, p.y)),
+        Some(cell),
+        "the party did not walk back onto the cell"
+    );
+
+    let err = game.adopt_orphan().unwrap_err();
+    assert!(
+        err.contains("nothing like that here"),
+        "the orphan came back: {err}"
+    );
+    assert_eq!(
+        game.stack_view().unwrap().standing_on,
+        None,
+        "the emptied dead end still offers itself"
+    );
+    assert_eq!(game.pet_count(), after_first);
+    assert_eq!(ice_breakers(&game), 1);
 }

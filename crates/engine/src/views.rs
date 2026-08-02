@@ -361,6 +361,10 @@ pub enum StackCellView {
     /// cache this is a warning rather than a reward, and one the party needs
     /// every time they consider the route, not once.
     Corruption,
+    /// A program waiting to be adopted. One already taken comes through as
+    /// `Floor`, on the same argument as an emptied cache — the dead end has
+    /// nothing left in it, so advertising it is a walk for nothing.
+    Orphan,
 }
 
 /// The party's first-person view of the frame around them — see
@@ -431,6 +435,9 @@ pub enum FrameMapCell {
     /// than as a destination, and the reason mapping a frame is worth more
     /// than knowing which cells are walkable.
     Corruption,
+    /// A program the party has seen and not yet adopted. An adopted one maps
+    /// as `Floor`, like an emptied cache.
+    Orphan,
 }
 
 /// A landmark pinned to a mapped cell, over and above what the layout says.

@@ -319,6 +319,18 @@ impl Game {
             .is_some_and(|m| m.jacked.contains(&cell))
     }
 
+    /// Whether the orphan on `cell` is still there to be adopted — what
+    /// both views use to stop advertising one already taken, and what
+    /// `adopt_orphan` refuses a second adoption on.
+    pub(crate) fn orphan_present(&self, pos: StackPos, cell: (i32, i32)) -> bool {
+        !self
+            .world
+            .resource::<StackMemory>()
+            .0
+            .get(&(pos.entrance, pos.depth))
+            .is_some_and(|m| m.adopted.contains(&cell))
+    }
+
     /// Drops the party a frame if they have walked onto a fault.
     ///
     /// The depth guard is belt and braces over `stack::generate`, which does

@@ -3018,3 +3018,69 @@ fn stripping_a_frames_caches_is_enough_to_be_noticed() {
     );
     assert_eq!(TraceBand::from_trace(whole_frame), TraceBand::Noticed);
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 4 — the orphaned process
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Walks the party onto the frame's orphan and returns its cell.
+///
+/// `None` when the frame has none — about one frame in four has no plain
+/// dead end left after the caches take theirs, so a test that needs one
+/// says so rather than unwrapping blindly. See
+/// `most_frames_place_an_orphan_and_none_places_two`.
+fn stand_on_orphan(game: &mut Game) -> Option<(i32, i32)> {
+    let cell = stand_facing(game, CellKind::Orphan)?;
+    game.step_forward();
+    Some(cell)
+}
+
+/// The other half of a cell that can be used up. Without the record the
+/// orphan refills the moment the party steps off and back on, and both
+/// views keep advertising a dead end with nothing in it.
+#[test]
+fn an_adopted_orphan_reads_as_plain_floor_in_both_views() {
+    let mut game = game();
+    descend(&mut game);
+    let cell = stand_on_orphan(&mut game).expect("this seed's depth 1 leaves an orphan");
+
+    let view = game.stack_view().unwrap();
+    assert!(
+        view.cells[0].contains(&StackCellView::Orphan),
+        "the party is standing on it and the view does not show one"
+    );
+    assert_eq!(
+        game.frame_map().unwrap().cells[cell.1 as usize][cell.0 as usize],
+        FrameMapCell::Orphan
+    );
+
+    let Locale::Stack {
+        depth, entrance, ..
+    } = locale(&game)
+    else {
+        unreachable!()
+    };
+    game.world
+        .resource_mut::<crate::resources::StackMemory>()
+        .0
+        .entry((entrance, depth))
+        .or_default()
+        .adopted
+        .insert(cell);
+
+    let view = game.stack_view().unwrap();
+    assert!(
+        !view.cells[0].contains(&StackCellView::Orphan),
+        "an adopted orphan is still drawn down the corridor"
+    );
+    assert_eq!(
+        game.frame_map().unwrap().cells[cell.1 as usize][cell.0 as usize],
+        FrameMapCell::Floor,
+        "an adopted orphan is still marked on the map"
+    );
+    assert_eq!(
+        game.stack_view().unwrap().standing_on,
+        None,
+        "an adopted orphan still offers itself underfoot"
+    );
+}

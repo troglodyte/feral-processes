@@ -131,7 +131,10 @@ impl Game {
                             CellKind::Breakpoint => FrameMapCell::Floor,
                             CellKind::Fault => FrameMapCell::Fault,
                             CellKind::Corruption => FrameMapCell::Corruption,
-                            CellKind::Orphan => FrameMapCell::Orphan,
+                            CellKind::Orphan if self.orphan_present(pos, (x, y)) => {
+                                FrameMapCell::Orphan
+                            }
+                            CellKind::Orphan => FrameMapCell::Floor,
                         }
                     })
                     .collect()
@@ -215,7 +218,14 @@ impl Game {
                         CellKind::Breakpoint => StackCellView::Floor,
                         CellKind::Fault => StackCellView::Fault,
                         CellKind::Corruption => StackCellView::Corruption,
-                        CellKind::Orphan => StackCellView::Orphan,
+                        // An adopted orphan is an empty dead end. Still
+                        // drawing it would send the party back down a
+                        // corridor with nothing at the end of it, exactly
+                        // as an emptied cache would.
+                        CellKind::Orphan if self.orphan_present(pos, (cx, cy)) => {
+                            StackCellView::Orphan
+                        }
+                        CellKind::Orphan => StackCellView::Floor,
                     })
                     .collect()
             })
@@ -239,8 +249,12 @@ impl Game {
             CellKind::Corruption => Some("Rotten substrate  — moving on costs".to_string()),
             // The one line here that offers rather than reports. Everything
             // else underfoot has already happened by the time this is read;
-            // an orphan costs a catalyst, so it waits for the key.
-            CellKind::Orphan => Some("An orphaned process  [o] adopt".to_string()),
+            // an orphan costs a catalyst, so it waits for the key — and
+            // stops offering once it has been taken.
+            CellKind::Orphan if self.orphan_present(pos, (x, y)) => {
+                Some("An orphaned process  [o] adopt".to_string())
+            }
+            CellKind::Orphan => None,
             CellKind::Rock | CellKind::Floor | CellKind::Fault => None,
         };
 

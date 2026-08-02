@@ -452,6 +452,49 @@ impl Game {
         y: i32,
         allow_boss: bool,
     ) -> Option<(String, bool)> {
+        let (candidates, boss_candidates) = self.habitat_pools(x, y)?;
+        // A boss takes the tile's one spawn slot instead of an ordinary
+        // habitat creature, but only rarely, and only where one is defined
+        // for this biome at all.
+        let spawn_boss = allow_boss && !boss_candidates.is_empty() && {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_bool(BOSS_SPAWN_CHANCE)
+        };
+        let pool = if spawn_boss || candidates.is_empty() {
+            if !allow_boss {
+                // Only reachable with an empty ordinary pool: a biome whose
+                // sole residents are bosses has nothing an ambush may field.
+                return None;
+            }
+            &boss_candidates
+        } else {
+            &candidates
+        };
+        let pick = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            let idx = rng.0.random_range(0..pool.len());
+            pool[idx].clone()
+        };
+        Some((pick, spawn_boss))
+    }
+
+    /// The ordinary and boss candidate pools for a spawn at `(x, y)`, after
+    /// the opening-ring gentling and before any draw. `None` for an
+    /// unwalkable tile or a biome with nothing eligible.
+    ///
+    /// Split out so the draw itself belongs to the caller.
+    /// `pick_habitat_species` spends `GameRng`; `orphan_species` spends a
+    /// frame-seeded `StdRng`, because the party has to be able to see what
+    /// an orphan is before paying for it and so the answer has to survive a
+    /// save/load. Copying the biome and opening-ring rules into the second
+    /// caller instead is exactly the duplicated-formula trap this repo keeps
+    /// falling into.
+    ///
+    /// `allow_boss` is deliberately not a parameter: both places it is
+    /// consulted sit *after* the pools are built, so it stays with the draw.
+    /// That is also why this split changes `pick_habitat_species`'s RNG draw
+    /// order not at all, which the seeded spawn tests depend on.
+    pub(crate) fn habitat_pools(&mut self, x: i32, y: i32) -> Option<(Vec<String>, Vec<String>)> {
         let tile = self.world.resource_mut::<WorldMap>().tile(x, y);
         if !tile.walkable {
             return None;
@@ -512,29 +555,7 @@ impl Game {
                 return None;
             }
         }
-        // A boss takes the tile's one spawn slot instead of an ordinary
-        // habitat creature, but only rarely, and only where one is defined
-        // for this biome at all.
-        let spawn_boss = allow_boss && !boss_candidates.is_empty() && {
-            let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_bool(BOSS_SPAWN_CHANCE)
-        };
-        let pool = if spawn_boss || candidates.is_empty() {
-            if !allow_boss {
-                // Only reachable with an empty ordinary pool: a biome whose
-                // sole residents are bosses has nothing an ambush may field.
-                return None;
-            }
-            &boss_candidates
-        } else {
-            &candidates
-        };
-        let pick = {
-            let mut rng = self.world.resource_mut::<GameRng>();
-            let idx = rng.0.random_range(0..pool.len());
-            pool[idx].clone()
-        };
-        Some((pick, spawn_boss))
+        Some((candidates, boss_candidates))
     }
 
     /// Places a group of `species_id` around `(x, y)` and returns whatever

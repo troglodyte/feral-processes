@@ -14,6 +14,23 @@ use feral_processes_engine::{FrameMapCell, FrameMapMark, FrameMapView};
 /// the heading above it and the legend below.
 const GRID_FILL: f32 = 0.74;
 
+/// The same, for the always-on inset, which carries no text of its own —
+/// so the grid fills its rect but for the border it is drawn inside.
+const INSET_FILL: f32 = 0.94;
+
+/// Side of the corner inset, as a fraction of the first-person pane's width.
+///
+/// Sized by the *smallest* window's legibility floor rather than by taste:
+/// a 21-wide frame has to leave map glyphs readable at 1280x720, which is
+/// what pins this at 0.30 rather than the tidier quarter-pane. Run
+/// `inset_glyphs_stay_legible_at_the_smallest_window` for the figures — a
+/// doc comment restating them is a copy that goes stale, which this repo
+/// has already paid for three times in `manifest_layout`.
+///
+/// Presentation, so it lives here and not in `tuning.rs` — how much of the
+/// corridor the map covers is not difficulty.
+const INSET_FRACTION: f32 = 0.30;
+
 /// How much of each cell the tile actually covers. Below 1.0 so the grid
 /// reads as cells rather than as a single flood of colour.
 const TILE_FILL: f32 = 0.86;
@@ -73,47 +90,50 @@ fn mark_glyph(mark: FrameMapMark) -> (char, Color) {
 }
 
 /// Side length of one map cell in pixels, and the top-left corner the grid
-/// starts at, for a `view` drawn into a `w` by `h` pane.
+/// starts at, for a `view` drawn into a `w` by `h` rect filling `fill` of it.
 ///
 /// Square cells — the frame is square and a stretched map would misreport
 /// distances the player is trying to count.
-fn layout(view: &FrameMapView, w: f32, h: f32) -> (f32, f32, f32) {
+fn layout(view: &FrameMapView, w: f32, h: f32, fill: f32) -> (f32, f32, f32) {
     if view.width <= 0 || view.height <= 0 {
         return (0.0, 0.0, 0.0);
     }
-    let cell = (w * GRID_FILL / view.width as f32).min(h * GRID_FILL / view.height as f32);
+    let cell = (w * fill / view.width as f32).min(h * fill / view.height as f32);
     let grid_w = cell * view.width as f32;
     let grid_h = cell * view.height as f32;
     ((w - grid_w) / 2.0, (h - grid_h) / 2.0, cell)
 }
 
-pub(super) fn draw_frame_map(view: &FrameMapView, painter: &Painter, w: f32, h: f32, m: &Metrics) {
-    painter.rect(0.0, 0.0, w, h, PANEL_BG);
-    painter.rect_lines(0.0, 0.0, w, h, 2.0, BORDER);
+/// Map glyphs are sized off the cell they sit in, so both maps shrink their
+/// lettering with their grid rather than one of them clipping.
+fn glyph_px(cell: f32) -> u16 {
+    (cell * 0.8) as u16
+}
 
-    let heading = format!(
-        "DEEP SCAN   depth {} / {}   link {},{}   facing {}   {:.0}% mapped",
-        view.depth,
-        view.frames,
-        view.entrance.0,
-        view.entrance.1,
-        view.facing,
-        view.explored * 100.0,
-    );
-    painter.ui(
-        &heading,
-        m.inset,
-        m.inset + m.font_size as f32,
-        m.font_size,
-        CYAN,
-    );
+/// The rect the corner inset occupies inside a `w` by `h` first-person pane.
+///
+/// Top-left, one heading line down: the pane's top-left corner already
+/// carries `draw_stack`'s `Facing / Depth / Trace` line, and the map covering
+/// the Trace band would trade the readout this layer's escalation is
+/// explained by for the map that explains the maze.
+fn inset_rect(w: f32, h: f32, m: &Metrics) -> Rect {
+    let top = m.inset + m.font_size as f32 + m.gap;
+    let side = (w * INSET_FRACTION)
+        .min(w - m.inset * 2.0)
+        .min(h - top - m.inset)
+        .max(0.0);
+    Rect::new(m.inset, top, side, side)
+}
 
-    let (ox, oy, cell) = layout(view, w, h);
-    if cell <= 0.0 {
-        return;
-    }
+/// The grid itself: tiles, their glyphs, and the marks over the top.
+///
+/// The one drawing path both maps share. The full screen and the inset differ
+/// in where they put it and what they write around it, never in what a cell
+/// looks like — a second glyph table is the drift that would let the inset
+/// quietly teach the wrong vocabulary.
+fn draw_grid(view: &FrameMapView, painter: &Painter, ox: f32, oy: f32, cell: f32) {
     let inset = cell * (1.0 - TILE_FILL) / 2.0;
-    let glyph_px = (cell * 0.8) as u16;
+    let glyph_px = glyph_px(cell);
 
     for (y, row) in view.cells.iter().enumerate() {
         for (x, &kind) in row.iter().enumerate() {
@@ -140,6 +160,59 @@ pub(super) fn draw_frame_map(view: &FrameMapView, painter: &Painter, w: f32, h: 
         let (px, py) = (ox + x as f32 * cell, oy + y as f32 * cell);
         draw_cell_glyph(painter, ch, color, px, py, cell, glyph_px);
     }
+}
+
+/// The frame map as a permanent inset in the corner of the first-person
+/// pane, drawn over the corridor after it.
+///
+/// Answers "which way am I facing, where have I been" at a glance; the `g`
+/// screen still answers "where is the wing I haven't walked", with three
+/// times the cell size and the legend that teaches the glyphs.
+pub(super) fn draw_map_inset(view: &FrameMapView, painter: &Painter, w: f32, h: f32, m: &Metrics) {
+    let r = inset_rect(w, h, m);
+    if r.w <= 0.0 || r.h <= 0.0 {
+        return;
+    }
+    painter.rect(r.x, r.y, r.w, r.h, PANEL_BG);
+    painter.rect_lines(r.x, r.y, r.w, r.h, 1.0, BORDER);
+
+    let (ox, oy, cell) = layout(view, r.w, r.h, INSET_FILL);
+    if cell <= 0.0 {
+        return;
+    }
+    draw_grid(view, painter, r.x + ox, r.y + oy, cell);
+}
+
+pub(super) fn draw_frame_map(view: &FrameMapView, painter: &Painter, w: f32, h: f32, m: &Metrics) {
+    painter.rect(0.0, 0.0, w, h, PANEL_BG);
+    painter.rect_lines(0.0, 0.0, w, h, 2.0, BORDER);
+
+    let heading = format!(
+        "DEEP SCAN   depth {} / {}   link {},{}   facing {}   {:.0}% mapped{}",
+        view.depth,
+        view.frames,
+        view.entrance.0,
+        view.entrance.1,
+        view.facing,
+        view.explored * 100.0,
+        // Said out loud, because a map showing corridors the party has not
+        // walked is otherwise indistinguishable from a bug in what the map
+        // remembers.
+        if view.revealed { "   [DEV REVEAL]" } else { "" },
+    );
+    painter.ui(
+        &heading,
+        m.inset,
+        m.inset + m.font_size as f32,
+        m.font_size,
+        CYAN,
+    );
+
+    let (ox, oy, cell) = layout(view, w, h, GRID_FILL);
+    if cell <= 0.0 {
+        return;
+    }
+    draw_grid(view, painter, ox, oy, cell);
 
     let legend = "@ you  < up  > down  ! cache  + door  & lair  * port  v fault  \
                   purple = corrupt  x fight  unlit = unmapped";
@@ -206,12 +279,111 @@ mod tests {
             facing: "N",
             entrance: (12, -40),
             explored: 0.42,
+            revealed: false,
         }
+    }
+
+    /// The pane the inset lives in, at a given window size — built from the
+    /// same constants `draw_playing_base` divides the screen with, so a
+    /// change to the layout moves these tests rather than leaving them
+    /// asserting against a pane that no longer exists.
+    fn pane(window_w: f32, window_h: f32) -> (f32, f32) {
+        (
+            window_w * super::super::base::PANE_W,
+            window_h * super::super::base::PANE_H,
+        )
+    }
+
+    /// The two window sizes the design sized the inset against.
+    const WINDOWS: [(f32, f32); 2] = [(1920.0, 1080.0), (1280.0, 720.0)];
+
+    /// Below this, a `!` or `+` on the inset is a smudge rather than a
+    /// marker. The floor `INSET_FRACTION` was chosen against, kept here so
+    /// the number lives with the assertion that checks it.
+    const MIN_INSET_GLYPH_PX: u16 = 9;
+
+    /// The inset shares the pane with the heading above it, the status panel
+    /// to its right and the message log below — it may overlap none of them.
+    #[test]
+    fn the_inset_clears_the_heading_and_stays_inside_the_pane() {
+        for (ww, wh) in WINDOWS {
+            let m = crate::text::ui_metrics(wh);
+            let (w, h) = pane(ww, wh);
+            let r = inset_rect(w, h, &m);
+            assert!(
+                r.y >= m.inset + m.font_size as f32,
+                "{ww}x{wh}: the inset covers the Facing/Depth/Trace heading"
+            );
+            assert!(r.x >= 0.0 && r.y >= 0.0);
+            assert!(
+                r.x + r.w <= w,
+                "{ww}x{wh}: the inset runs into the status panel"
+            );
+            assert!(
+                r.y + r.h <= h,
+                "{ww}x{wh}: the inset runs into the message log"
+            );
+        }
+    }
+
+    /// The inset shows the whole frame, so every cell of it has to fit —
+    /// a grid clipped by its own border would silently hide a wing.
+    #[test]
+    fn the_whole_frame_fits_inside_the_inset() {
+        for (ww, wh) in WINDOWS {
+            let m = crate::text::ui_metrics(wh);
+            let (w, h) = pane(ww, wh);
+            let r = inset_rect(w, h, &m);
+            let v = view(21, 21);
+            let (ox, oy, cell) = layout(&v, r.w, r.h, INSET_FILL);
+            assert!(cell > 0.0);
+            assert!(ox >= -0.001 && oy >= -0.001);
+            assert!(
+                ox + cell * 21.0 <= r.w + 0.001,
+                "{ww}x{wh}: the grid overflows the inset"
+            );
+            assert!(
+                oy + cell * 21.0 <= r.h + 0.001,
+                "{ww}x{wh}: the grid overflows the inset"
+            );
+        }
+    }
+
+    /// The inset's whole risk is being too small to read. A `!` cache marker
+    /// drawn at four pixels is not a map, it is noise — so the smallest
+    /// window the game is played at pins the floor, and a later tweak to
+    /// `INSET_FRACTION` that crosses it fails here rather than on screen.
+    #[test]
+    fn inset_glyphs_stay_legible_at_the_smallest_window() {
+        let (ww, wh) = WINDOWS[1];
+        let m = crate::text::ui_metrics(wh);
+        let (w, h) = pane(ww, wh);
+        let r = inset_rect(w, h, &m);
+        let (_, _, cell) = layout(&view(21, 21), r.w, r.h, INSET_FILL);
+        assert!(
+            glyph_px(cell) >= MIN_INSET_GLYPH_PX,
+            "{ww}x{wh}: inset glyphs are {}px, below the {MIN_INSET_GLYPH_PX}px floor",
+            glyph_px(cell)
+        );
+    }
+
+    #[test]
+    fn drawing_the_inset_does_not_panic() {
+        let m = crate::text::ui_metrics(720.0);
+        let (w, h) = pane(1280.0, 720.0);
+        let mut empty = view(0, 0);
+        empty.cells = Vec::new();
+        empty.marks = vec![((99, 99), FrameMapMark::Party)];
+        crate::paint::with_painter(|p| {
+            draw_map_inset(&view(21, 21), p, w, h, &m);
+            draw_map_inset(&view(31, 11), p, w, h, &m);
+            draw_map_inset(&empty, p, w, h, &m);
+        });
     }
 
     #[test]
     fn map_cells_are_square() {
-        let (_, _, cell) = layout(&view(21, 21), 1000.0, 640.0);
+        let (_, _, cell) = layout(&view(21, 21), 1000.0, 640.0, GRID_FILL);
         assert!(cell > 0.0);
         // One cell size drives both axes, so squareness is structural; what
         // needs checking is that it fits the *shorter* axis.
@@ -222,7 +394,7 @@ mod tests {
     fn the_grid_is_centred_in_the_pane() {
         let (w, h) = (1000.0, 640.0);
         let v = view(21, 21);
-        let (ox, oy, cell) = layout(&v, w, h);
+        let (ox, oy, cell) = layout(&v, w, h, GRID_FILL);
         assert!((ox + cell * 21.0 / 2.0 - w / 2.0).abs() < 0.001);
         assert!((oy + cell * 21.0 / 2.0 - h / 2.0).abs() < 0.001);
     }
@@ -231,7 +403,7 @@ mod tests {
     /// stretched to fill the pane — the player counts corridors off this.
     #[test]
     fn an_oblong_frame_still_gets_square_cells() {
-        let (_, _, cell) = layout(&view(31, 11), 1000.0, 640.0);
+        let (_, _, cell) = layout(&view(31, 11), 1000.0, 640.0, GRID_FILL);
         assert!(cell * 31.0 <= 1000.0 + 0.001);
         assert!(cell * 11.0 <= 640.0 + 0.001);
     }

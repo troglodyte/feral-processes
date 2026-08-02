@@ -13,6 +13,24 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### The frame map, in the corner of the corridor
+
+No save-format change: the renderer draws a view the engine already had.
+
+- **The map of the frame you are in is always on screen**, in the top-left
+  of the first-person corridor. Reading it no longer means leaving the view
+  you are reading it *about*.
+- **`g` still opens the full screen**, and the two answer different
+  questions: the corner map is which way you are facing and where you have
+  been, the full one is where the wing you have not walked is — three times
+  the cell size, plus the legend that names every glyph. The corner map
+  carries no text of its own for that reason.
+- Both are drawn by one function, so a cell can never mean one thing on the
+  small map and another on the large one.
+- Not playtested. How much of the corridor an always-on inset should cover
+  is a matter of taste, and the size was picked by what stays legible at
+  1280x720 rather than by playing with it.
+
 ### The orphaned process: a second way into the roster
 
 **Save-format bump** — `SAVE_FORMAT_VERSION` is now 18 and existing saves

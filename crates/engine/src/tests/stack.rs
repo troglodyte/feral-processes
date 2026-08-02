@@ -834,6 +834,60 @@ fn map_cell(view: &FrameMapView, x: i32, y: i32) -> FrameMapCell {
     view.cells[y as usize][x as usize]
 }
 
+/// The dev reveal is a *view*, not a state change: it draws the frame the
+/// party has not walked without pretending they walked it. Tested through
+/// the inner function rather than by setting the environment variable,
+/// because `std::env::set_var` reaches every other test in the process and
+/// this suite runs in parallel.
+#[test]
+fn the_dev_reveal_shows_a_cell_the_party_has_never_seen() {
+    let mut game = game();
+    descend(&mut game);
+
+    let hidden = {
+        let plain = game.frame_map_revealed(false).expect("underground");
+        (0..plain.height)
+            .flat_map(|y| (0..plain.width).map(move |x| (x, y)))
+            .find(|&(x, y)| map_cell(&plain, x, y) == FrameMapCell::Unknown)
+            .expect("a frame the party has only stepped into has unseen cells")
+    };
+
+    let revealed = game.frame_map_revealed(true).expect("underground");
+    assert_ne!(
+        map_cell(&revealed, hidden.0, hidden.1),
+        FrameMapCell::Unknown,
+        "the reveal left a cell dark"
+    );
+    assert!(
+        revealed.revealed,
+        "the view does not report that it is revealed"
+    );
+}
+
+/// The heading still says how much of the frame has actually been walked.
+/// A reveal that read 100% mapped would take away the one number worth
+/// having while hunting for the wing you have not been down.
+#[test]
+fn the_dev_reveal_does_not_inflate_the_explored_figure() {
+    let mut game = game();
+    descend(&mut game);
+    let plain = game.frame_map_revealed(false).expect("underground");
+    let revealed = game.frame_map_revealed(true).expect("underground");
+    assert_eq!(plain.explored, revealed.explored);
+    assert!(
+        plain.explored < 1.0,
+        "a frame just entered is not fully walked"
+    );
+}
+
+/// Off unless asked for: the shipped game must not ship with the map open.
+#[test]
+fn the_dev_reveal_is_off_by_default() {
+    let mut game = game();
+    descend(&mut game);
+    assert!(!game.frame_map().unwrap().revealed);
+}
+
 #[test]
 fn the_surface_has_no_map() {
     let game = game();

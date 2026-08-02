@@ -48,7 +48,7 @@ use building::{
 };
 use crafting::{draw_craft_menu, draw_craft_quantity};
 use field::{draw_field_cast, draw_field_cast_ally};
-use frame_map::draw_frame_map;
+use frame_map::{draw_frame_map, draw_map_inset};
 use inventory::{
     draw_erase_quantity, draw_inventory, draw_inventory_item_action, draw_item_describe,
 };

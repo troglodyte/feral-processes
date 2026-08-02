@@ -12,6 +12,28 @@ cargo run -- --template extraction   # regenerate the world and play it
 cargo run --bin savetool -- template # what's available
 ```
 
+## Seeing the whole frame
+
+`FERAL_DEV_REVEAL=1` draws the entire Stack frame on both maps — the corner
+inset and the `g` screen — instead of only what the party has walked. It
+exists because testing a Stack feature otherwise starts by walking a maze
+until you happen upon the cell you meant to test.
+
+```sh
+FERAL_DEV_REVEAL=1 cargo run -- --template stack
+```
+
+**The map only.** The first-person view, the encounter rolls and everything
+the party can do are untouched, so a session with it on is the real game with
+the lights on. The "% mapped" figure still counts what has actually been
+walked rather than what is drawn, and the `g` screen's heading says
+`[DEV REVEAL]` so a screenshot taken with it on cannot be mistaken for the
+real thing.
+
+Read once at startup (`stack_view.rs::dev_reveal`), so nothing can toggle it
+mid-run and the shipped build never asks. Any value but empty or `0` counts
+as on.
+
 ## The two directions
 
 ```sh

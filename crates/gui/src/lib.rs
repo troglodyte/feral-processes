@@ -314,6 +314,168 @@ fn frame(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use feral_processes_engine::resources::Locale;
+    use feral_processes_engine::stack::{CellKind, Dir, FrameSpec, generate};
+    use feral_processes_engine::{DifficultyMode, Game, save};
+    use std::path::PathBuf;
+
+    fn assets_dir() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+    }
+
+    /// An `App` standing on `(x, y)` of Stack frame 1 with the given facing.
+    ///
+    /// Built by editing a save and reloading it, which is what
+    /// `app-core`'s own Stack tests do and for the same reason: the engine
+    /// deliberately exposes no way in from outside the crate, since on a
+    /// real run it only ever happens by walking onto an entrance.
+    fn app_underground(seed: u32, at: (i32, i32), facing: Dir) -> (App, FrameSpec) {
+        // Counted, not keyed on the seed: these tests run in parallel and
+        // share one, so a seed-named scratch file has two of them writing
+        // and deleting the same path. `app-core`'s helper learned this
+        // first.
+        static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let seed_tag = format!(
+            "{seed}_{}",
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        );
+        let assets = assets_dir();
+        let tmp = std::env::temp_dir();
+        let mut app = App::new(
+            assets.clone(),
+            tmp.join(format!("feral_processes_gui_{seed_tag}_saves")),
+            tmp.join(format!("feral_processes_gui_{seed_tag}.log")),
+        );
+        app.game = Game::new(seed, DifficultyMode::Forgiving, &assets).ok();
+        app.mode = Mode::Playing;
+
+        let path = tmp.join(format!("feral_processes_gui_{seed_tag}.sav"));
+        app.game.as_mut().unwrap().save(&path).unwrap();
+        let mut data = save::load_from_file(&path).unwrap();
+        let spec = FrameSpec {
+            world_seed: data.seed,
+            entrance: data.player.position,
+            depth: 1,
+            frames: 2,
+        };
+        data.locale = Locale::Stack {
+            depth: spec.depth,
+            frames: spec.frames,
+            x: at.0,
+            y: at.1,
+            facing,
+            entrance: spec.entrance,
+        };
+        save::save_to_file(&path, &data).unwrap();
+        app.game = Some(Game::load(&path, &assets).unwrap());
+        let _ = std::fs::remove_file(&path);
+        (app, spec)
+    }
+
+    /// The cell of `kind` a party could step onto, and the neighbour to
+    /// stand on facing it.
+    fn approach(spec: FrameSpec, kind: CellKind) -> Option<((i32, i32), Dir)> {
+        let frame = generate(spec);
+        let target = (0..frame.height)
+            .flat_map(|y| (0..frame.width).map(move |x| (x, y)))
+            .find(|&(x, y)| frame.cell(x, y) == kind)?;
+        [Dir::North, Dir::East, Dir::South, Dir::West]
+            .into_iter()
+            .find_map(|dir| {
+                let (dx, dy) = dir.delta();
+                let from = (target.0 - dx, target.1 - dy);
+                frame.walkable(from.0, from.1).then_some((from, dir))
+            })
+    }
+
+    /// One turn of the real frontend loop: drain effects the way `frame`
+    /// does, then draw whatever mode the app is now in.
+    fn draw_a_frame(app: &mut App, fx: &mut Fx, now: f64) {
+        let in_battle = app.mode.is_battle();
+        let (effects, last_log) = match &mut app.game {
+            Some(game) => (game.take_effects(), game.message_log(1).pop()),
+            None => (Vec::new(), None),
+        };
+        fx.begin_frame(now, effects, in_battle);
+        fx.observe_log(last_log.as_ref());
+        paint::with_painter(|p| render::draw(app, fx, p));
+    }
+
+    /// Changing frame is the one thing that swaps the map out from under the
+    /// corner inset mid-run: the party is drawn into frame 1, falls, and the
+    /// very next draw is of a frame they have seen three cells of. This
+    /// walks the real loop across that boundary — engine step, effect drain
+    /// and draw — because the inset is rebuilt from `Game::frame_map` every
+    /// pass and a frame change is where "rebuilt" has to actually mean it.
+    #[test]
+    fn the_map_redraws_when_a_fall_changes_frame() {
+        let (_, spec) = app_underground(16, (0, 0), Dir::North);
+        let (from, facing) = approach(spec, CellKind::Fault).expect("frame 1 lays a fault");
+        let (mut app, _) = app_underground(16, from, facing);
+
+        let mut fx = Fx::new();
+        draw_a_frame(&mut app, &mut fx, 0.0);
+
+        let before = app
+            .game
+            .as_ref()
+            .unwrap()
+            .frame_map()
+            .expect("a map on frame 1");
+        assert_eq!(before.depth, 1);
+
+        app.handle_key(GameKey::Up);
+
+        let after = app
+            .game
+            .as_ref()
+            .unwrap()
+            .frame_map()
+            .expect("a map on the frame fallen into");
+        assert_eq!(after.depth, 2, "the fall did not change frame");
+        assert_ne!(
+            after.cells, before.cells,
+            "the map handed to the renderer is still the frame the party left"
+        );
+
+        draw_a_frame(&mut app, &mut fx, 1.0 / 60.0);
+    }
+
+    /// The same boundary by the other route. A fall is `fall_to` and a link
+    /// is `descend_to`, and they reach `enter_frame` from different sides —
+    /// so the map the inset is handed after each one is worth pinning
+    /// separately rather than assuming the shared spine covers both.
+    #[test]
+    fn the_map_redraws_when_a_link_changes_frame() {
+        let (_, spec) = app_underground(16, (0, 0), Dir::North);
+        let frame = generate(spec);
+        let link = frame.link_down.expect("a non-bottom frame has a way down");
+        let (mut app, _) = app_underground(16, link, Dir::North);
+
+        let mut fx = Fx::new();
+        draw_a_frame(&mut app, &mut fx, 0.0);
+        let before = app
+            .game
+            .as_ref()
+            .unwrap()
+            .frame_map()
+            .expect("a map on frame 1");
+
+        app.handle_key(GameKey::Char('>'));
+
+        let after = app
+            .game
+            .as_ref()
+            .unwrap()
+            .frame_map()
+            .expect("a map on the frame descended into");
+        assert_eq!(
+            after.depth,
+            before.depth + 1,
+            "the link did not change frame"
+        );
+        draw_a_frame(&mut app, &mut fx, 1.0 / 60.0);
+    }
 
     /// The whole frontend draws in three font families that only exist
     /// because `install_fonts` registered them, and `FontDefinitions::empty()`

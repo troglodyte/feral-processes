@@ -58,6 +58,33 @@ state worth keeping, `capture` it back deliberately.
 generate, progress and all. That is the point — the same starting state every
 run. Rename the `.bin` if you want to keep a session.
 
+## A template freezes creature stats, and a species retune does not reach it
+
+A creature's stats are written into the save when it *spawns*, scaled by zone,
+distance and Stack depth at that moment. A template is a save, so every
+creature in one is a fossil of the `.ron` files as they stood the day it was
+captured. Editing `base_hp` changes what spawns from now on and nothing that
+already exists.
+
+This has already cost a retune. On 2026-08-02 the Wintermute at `(-1, -8)`
+still read **6489 HP** after two successive cuts to its `base_hp`, because
+6489 was `1600 x 4` from before either of them — and the second cut was
+argued from that number, against a creature no current spawn could produce.
+Its stats were hand-edited to match, preserving the original potential roll
+so it stays the same individual.
+
+So when a balance change is the thing under test, check whether what you are
+looking at is spawned or stored:
+
+- **Spawned fresh, and therefore live** — Stack lair guards
+  (`Game::spawn_lair_guard`), corridor encounters, ambient surface spawns,
+  nest respawns. All of these read the species file at the moment they appear.
+- **Stored, and therefore stale** — anything standing on the map when the
+  template opens, and every tamed program in the party.
+
+Grep the `.ron` for the species id before concluding a tuning change did
+nothing.
+
 ## Why RON and not `.bin`
 
 Bincode has no field names on disk, so a `SAVE_FORMAT_VERSION` bump

@@ -507,8 +507,8 @@
         (
             species: "wintermute",
             position: (-1, -8),
-            hp: 6489,
-            max_hp: 6489,
+            hp: 892,
+            max_hp: 892,
             atk: 130,
             def: 65,
             tamed: false,

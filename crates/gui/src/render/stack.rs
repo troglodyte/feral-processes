@@ -129,7 +129,7 @@ pub(super) fn draw_stack(view: &StackView, painter: &Painter, w: f32, h: f32, m:
         // Links read as a marker on the floor of the cell they're in rather
         // than as geometry — the party needs to spot them down a corridor,
         // and a subtle change in floor shape would not carry that far.
-        if let Some(mark) = link_mark(row[middle]) {
+        if let Some((mark, color)) = floor_mark(row[middle]) {
             let glyph = mark.to_string();
             let dims = painter.measure_map(&glyph, m.font_size * 2);
             painter.map(
@@ -137,7 +137,7 @@ pub(super) fn draw_stack(view: &StackView, painter: &Painter, w: f32, h: f32, m:
                 (fl + fr) / 2.0 - dims.width / 2.0,
                 fb - (fb - ft) * 0.15,
                 m.font_size * 2,
-                dim(YELLOW, s),
+                dim(color, s),
             );
         }
     }
@@ -168,13 +168,27 @@ pub(super) fn draw_stack(view: &StackView, painter: &Painter, w: f32, h: f32, m:
     }
 }
 
-fn link_mark(cell: StackCellView) -> Option<char> {
+/// The glyph laid on the floor of a cell, and the colour to draw it in.
+///
+/// Carries its own colour rather than being painted a single yellow by the
+/// caller, because phase 3's three kinds are not all the same kind of news:
+/// a fault and a breakpoint are places to go, corruption is a place not to.
+/// The four original marks keep the yellow they have always had.
+fn floor_mark(cell: StackCellView) -> Option<(char, Color)> {
     match cell {
-        StackCellView::LinkDown => Some('>'),
-        StackCellView::LinkUp => Some('<'),
-        StackCellView::Cache => Some('!'),
-        StackCellView::Lair => Some('&'),
-        _ => None,
+        StackCellView::LinkDown => Some(('>', YELLOW)),
+        StackCellView::LinkUp => Some(('<', YELLOW)),
+        StackCellView::Cache => Some(('!', YELLOW)),
+        StackCellView::Lair => Some(('&', YELLOW)),
+        // Matched to `frame_map.rs`'s glyphs so the corridor and the map
+        // teach one vocabulary. Corruption is the exception in shape only —
+        // the map carries it as a tile colour, since it is an area rather
+        // than a point — but both are purple.
+        StackCellView::Breakpoint => Some(('*', BLUE)),
+        StackCellView::Fault => Some(('v', ORANGE)),
+        StackCellView::Corruption => Some(('~', MAGENTA)),
+        StackCellView::Rock | StackCellView::Floor => None,
+        StackCellView::Door | StackCellView::SealedDoor => None,
     }
 }
 
@@ -244,11 +258,34 @@ mod tests {
     }
 
     #[test]
-    fn only_links_get_a_marker() {
-        assert_eq!(link_mark(StackCellView::LinkDown), Some('>'));
-        assert_eq!(link_mark(StackCellView::LinkUp), Some('<'));
-        assert_eq!(link_mark(StackCellView::Floor), None);
-        assert_eq!(link_mark(StackCellView::Rock), None);
+    fn plain_corridor_gets_no_marker() {
+        assert_eq!(
+            floor_mark(StackCellView::LinkDown).map(|(c, _)| c),
+            Some('>')
+        );
+        assert_eq!(floor_mark(StackCellView::LinkUp).map(|(c, _)| c), Some('<'));
+        assert_eq!(floor_mark(StackCellView::Floor), None);
+        assert_eq!(floor_mark(StackCellView::Rock), None);
+    }
+
+    /// Every cell kind that is not plain corridor has to be visible from
+    /// down a corridor. The trap this guards is specific: `floor_mark` used
+    /// to end in `_ => None`, so a new `StackCellView` variant compiled
+    /// perfectly and drew as bare floor — the party would have walked into
+    /// corruption with nothing on screen to warn them. The match is now
+    /// exhaustive, and this pins the three kinds it exists for.
+    #[test]
+    fn the_new_cell_kinds_are_marked_in_the_corridor() {
+        for cell in [
+            StackCellView::Breakpoint,
+            StackCellView::Fault,
+            StackCellView::Corruption,
+        ] {
+            assert!(
+                floor_mark(cell).is_some(),
+                "{cell:?} draws as bare corridor — invisible until stepped on"
+            );
+        }
     }
 
     /// `slice(0)` spans the whole pane, so a face drawn at depth 0 fills the

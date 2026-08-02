@@ -13,11 +13,12 @@
 //! the run's history, not the world's shape, and no seed can hand it back.
 
 use super::stack::StackPos;
-use crate::resources::{FrameMemory, StackMemory};
+use crate::resources::{CurrentStack, FrameMemory, StackMemory};
 use crate::stack::CellKind;
 use crate::tuning::{
-    STACK_CACHE_CREDITS, STACK_CACHE_DEPTH_GROWTH, STACK_CACHE_FRAGMENT_CHANCE, TRACE_PER_CACHE,
-    TRACE_PER_SEAL,
+    STACK_CACHE_CREDITS, STACK_CACHE_DEPTH_GROWTH, STACK_CACHE_FRAGMENT_CHANCE,
+    STACK_CORRUPTION_HP_PERCENT, STACK_CORRUPTION_MIN_DAMAGE, TRACE_PER_BREAKPOINT,
+    TRACE_PER_CACHE, TRACE_PER_SEAL,
 };
 use crate::*;
 
@@ -267,6 +268,104 @@ impl Game {
             .0
             .get(&(pos.entrance, pos.depth))
             .is_some_and(|m| m.looted.contains(&cell))
+    }
+
+    /// Jacks into the breakpoint the party is standing on, if there is one
+    /// and it has not already been used.
+    ///
+    /// Marks **every** in-bounds cell of the frame seen, walls included, so
+    /// the map draws as a complete frame rather than as a floor plan
+    /// floating in nothing. That is the whole payout — and
+    /// `TRACE_PER_BREAKPOINT` is the loudest single thing the party can do,
+    /// since handing yourself the map means announcing where you are.
+    ///
+    /// Ordered like `open_cache`: the line saying what happened, then the
+    /// Trace raise, so a band crossing reads as the consequence rather than
+    /// as something that happened first.
+    pub(crate) fn trip_breakpoint(&mut self) {
+        let Some(pos) = self.stack_pos() else {
+            return;
+        };
+        if self.cell_underfoot() != Some(CellKind::Breakpoint)
+            || self.breakpoint_spent(pos, (pos.x, pos.y))
+        {
+            return;
+        }
+        self.frame_memory_mut(pos).jacked.insert((pos.x, pos.y));
+
+        let Some(level) = self.world.resource::<CurrentStack>().0.as_ref() else {
+            return;
+        };
+        let every_cell: Vec<(i32, i32)> = (0..level.height)
+            .flat_map(|y| (0..level.width).map(move |x| (x, y)))
+            .collect();
+        self.frame_memory_mut(pos).seen.extend(every_cell);
+
+        self.log_kind(
+            MessageKind::Outcome,
+            "You jack into the port. The frame resolves around you, whole.",
+        );
+        self.raise_trace(TRACE_PER_BREAKPOINT);
+    }
+
+    /// Whether the breakpoint on `cell` has already been jacked into — what
+    /// both views use to stop advertising a spent one, exactly as
+    /// `cache_unopened` does for an emptied cache.
+    pub(crate) fn breakpoint_spent(&self, pos: StackPos, cell: (i32, i32)) -> bool {
+        self.world
+            .resource::<StackMemory>()
+            .0
+            .get(&(pos.entrance, pos.depth))
+            .is_some_and(|m| m.jacked.contains(&cell))
+    }
+
+    /// Drops the party a frame if they have walked onto a fault.
+    ///
+    /// The depth guard is belt and braces over `stack::generate`, which does
+    /// not lay faults on a bottom frame at all — but a fault that fired there
+    /// would put the party inside a frame that does not exist, and this is
+    /// cheaper than the bug.
+    pub(crate) fn take_fault(&mut self) {
+        if self.has_active_battle() || self.is_game_over().is_some() {
+            return;
+        }
+        let Some(pos) = self.stack_pos() else {
+            return;
+        };
+        if self.cell_underfoot() != Some(CellKind::Fault) || pos.depth >= pos.frames {
+            return;
+        }
+        self.fall_to(pos.depth + 1, pos.frames, pos.entrance);
+    }
+
+    /// Bleeds the player for standing on corrupted substrate.
+    ///
+    /// A fraction of maximum HP rather than a flat figure: Stack depth is
+    /// uncorrelated with player level, so any constant is lethal at level 1
+    /// and free by mid-run. See `STACK_CORRUPTION_HP_PERCENT`.
+    ///
+    /// Goes through `Game::apply_damage`, the one path that lowers a
+    /// creature's HP — so anything that must see all damage sees this too,
+    /// and a Mitigation field buff blunts it, which is exactly what a
+    /// mitigation field ought to do.
+    ///
+    /// The player alone. Corrupting the party would route program deaths and
+    /// the permadeath path through something that is not a fight.
+    pub(crate) fn bleed_corruption(&mut self) {
+        if self.cell_underfoot() != Some(CellKind::Corruption) {
+            return;
+        }
+        let player = self.player_entity();
+        let Some(stats) = self.world.get::<Stats>(player) else {
+            return;
+        };
+        let damage = ((stats.max_hp as f32 * STACK_CORRUPTION_HP_PERCENT).round() as i32)
+            .max(STACK_CORRUPTION_MIN_DAMAGE);
+        self.apply_damage(player, damage);
+        self.log_kind(
+            MessageKind::Outcome,
+            format!("The substrate here is rotten. It takes {damage} off you."),
+        );
     }
 
     /// Marks the cell the party is standing on as somewhere a fight started,

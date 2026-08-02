@@ -13,11 +13,38 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
-### Trace: the Stack notices what you take
+### Cell kinds: the Stack gets more than one kind of floor
 
-**Save-format bump** — `SAVE_FORMAT_VERSION` is now 16 and existing saves
+**Save-format bump** — `SAVE_FORMAT_VERSION` is now 17 and existing saves
 will not load. `dev-saves/` templates are unaffected; they are field-named
 RON and keep parsing.
+
+- **Breakpoint** (`*`) — an exposed debug port on a junction. Walking onto
+  one maps the entire frame at a stroke, walls included, and costs the
+  single largest Trace spike in the game: two and a half caches' worth. One
+  per frame, and each works once. The free map is meant to be a decision
+  about the rest of the frame rather than a reflex.
+- **Fault** (`v`) — a hole in the floor. Step on it and you drop a frame,
+  landing in the far half of the one below rather than on its way up, so a
+  fall is a quick way down and a long way back. Never generated on a bottom
+  frame, which has nothing below it. Raises no Trace — falling is clumsy,
+  not loud.
+- **Corruption** — rotten substrate that costs Integrity every step through
+  it, drawn as coloured ground rather than a glyph because it comes in
+  stretches of three rather than single cells. That is the whole point: a
+  lone bad cell is a toll you pay without thinking, where a stretch is
+  something you can see and route around. The cost is a percentage of your
+  maximum Integrity, so it stays meaningful at level 1 and at level 30 —
+  Stack depth is uncorrelated with your level, and any flat number would be
+  lethal at one end and free at the other.
+- The frame map and the first-person corridor teach one vocabulary: the same
+  glyphs and colours in both, with the map's legend extended to match.
+
+### Trace: the Stack notices what you take
+
+**Save-format bump** — this shipped at `SAVE_FORMAT_VERSION` 16; the cell
+kinds above took it to 17 before either was released. `dev-saves/`
+templates are unaffected; they are field-named RON and keep parsing.
 
 - **A greed meter, not a timer.** Trace rises when you crack a cache, burn a
   seal or kill something underground. Walking is free — a meter driven by

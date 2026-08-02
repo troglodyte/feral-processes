@@ -76,6 +76,17 @@ more corridor. The lair is walled off behind **sealed doors**, and opening
 one burns an **Access Shard**, which is what caches are for. Once opened a
 door stays open.
 
+Three other things turn up in the floor. A **breakpoint** (`*`) is an
+exposed debug port: walk onto it and the whole frame resolves at once, walls
+and all, without your having walked a step of it — and it is the loudest
+thing you can do, spiking Trace harder than anything else in the game. Each
+one works once. A **fault** (`v`) is a hole: step on it and you drop a frame,
+coming down far from that frame's way up, so a fall is a fast way down and a
+slow way back. **Corruption** (drawn as purple ground rather than a glyph,
+because it comes in stretches rather than single cells) is rotten substrate
+that costs you Integrity every step you take through it — which is the first
+time the maze has asked whether the short route is worth what it charges.
+
 The deepest room of a stack is a **lair** (`&`), holding something drawn
 from the link tile's biome. It is seeded off the stack, so it is the same
 guardian every time you come back — and the fight is scaled by every frame
@@ -94,7 +105,8 @@ out the defeated program's Integrity, it multiplies the XP too. Descending
 is the trade: harder fights, better returns, and a longer walk back.
 
 The stack also notices what you take from it. **Trace** rises when you crack
-a cache, burn a seal or kill something, and the HUD reads it back as one of
+a cache, burn a seal, jack into a breakpoint or kill something, and the HUD
+reads it back as one of
 four bands — **Quiet**, **Noticed**, **Traced**, **Hunted**. Each band draws
 ambushes more often, makes what comes hit harder, and sends more of it at
 once. Walking is free: the meter is about greed, not time, so mapping a
@@ -103,8 +115,8 @@ a stack out floor by floor and you will meet its guardian at the top band,
 having asked for it.
 
 Trace resets when you surface, which is less of a let-off than it looks —
-caches, seals and lairs are each one-shot per stack, so climbing out to shed
-it means coming back to a stack with less left worth taking.
+caches, seals, breakpoints and lairs are each one-shot per stack, so climbing
+out to shed it means coming back to a stack with less left worth taking.
 
 Your base does not stop while you are down there. The player's position on
 the zone map stays pinned to the link you entered by, so cronjobs keep

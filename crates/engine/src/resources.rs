@@ -546,6 +546,20 @@ pub struct FrameMemory {
     /// has cost you something is worth marking, and it is the one landmark
     /// the frame's own layout can't tell you about.
     pub fights: BTreeSet<(i32, i32)>,
+    /// Breakpoints already jacked into. A used one has nothing left to show
+    /// — the frame it maps is already mapped — so both views drop it back to
+    /// plain floor, exactly as an emptied cache stops being advertised.
+    ///
+    /// A set rather than the `bool` `cleared` uses, even though
+    /// `STACK_BREAKPOINTS_PER_FRAME` is 1: raising that constant is a
+    /// plausible outcome of playtest, and a `bool` would silently spend every
+    /// breakpoint in the frame the moment one was used.
+    ///
+    /// `#[serde(default)]` so the field-named RON that `dev-saves/`
+    /// templates are written in keeps parsing without re-capture — the
+    /// positional bincode save is what the version bump is for.
+    #[serde(default)]
+    pub jacked: BTreeSet<(i32, i32)>,
 }
 
 /// Everything the party has learned about every Stack frame in this zone.

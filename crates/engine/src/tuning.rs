@@ -469,6 +469,45 @@ pub const STACK_CACHES_PER_FRAME: usize = 3;
 /// the maze doesn't read as a series of closed boxes.
 pub const STACK_DOORS_PER_FRAME: usize = 4;
 
+/// How many breakpoints a Stack frame exposes — see
+/// `stack::place_breakpoint`, which puts them on junctions.
+///
+/// One. A breakpoint maps the entire frame, so the second one in a frame has
+/// nothing left to show you; more than one would only ever be a shorter walk
+/// to the same reward. `FrameMemory::jacked` is a set rather than a bool
+/// anyway, so raising this is a one-line change if playtest disagrees.
+pub const STACK_BREAKPOINTS_PER_FRAME: usize = 1;
+
+/// How many faults a Stack frame drops through — see `stack::place_faults`.
+///
+/// Never generated on the bottom frame, which has nothing below it, so the
+/// deepest frame of every stack has zero regardless of this number.
+pub const STACK_FAULTS_PER_FRAME: usize = 1;
+
+/// How many separate corrupted stretches a Stack frame grows, and how many
+/// cells each runs to — see `stack::place_corruption`.
+///
+/// Patches rather than scattered cells, and this is the whole point of the
+/// pair: a lone corrupted cell is a toll booth you pay and forget, where a
+/// stretch is something you can decide to walk around. Two patches of three
+/// against a frame of roughly a hundred walkable cells is sparse enough that
+/// most routes miss them entirely, which is what makes hitting one a
+/// decision rather than a tax.
+pub const STACK_CORRUPTION_PATCHES_PER_FRAME: usize = 2;
+pub const STACK_CORRUPTION_PATCH_CELLS: usize = 3;
+
+/// What one step onto corrupted substrate costs, as a fraction of the
+/// player's maximum HP, with `STACK_CORRUPTION_MIN_DAMAGE` as a floor.
+///
+/// A fraction rather than a flat figure, and rather than the depth scaling
+/// `STACK_CACHE_DEPTH_GROWTH` uses, because Stack depth is uncorrelated with
+/// player level: the party is 90 HP at level 1 (`PLAYER_BASE_STATS`) and
+/// around 510 by mid-run, so any flat number is lethal at one end and free at
+/// the other. At 3%, a three-cell patch costs about a tenth of the bar
+/// wherever the party is in the run.
+pub const STACK_CORRUPTION_HP_PERCENT: f32 = 0.03;
+pub const STACK_CORRUPTION_MIN_DAMAGE: i32 = 2;
+
 /// Credits a cache holds at depth 1, before `STACK_CACHE_DEPTH_GROWTH`.
 ///
 /// Credits rather than Core Fragments because a Stack run should pay for
@@ -547,6 +586,22 @@ pub const TRACE_PER_SEAL: u32 = 5;
 /// Trace a combat meter that feeds its own input.
 pub const TRACE_PER_KILL: u32 = 2;
 
+/// Trace for jacking into a breakpoint. **The single loudest thing the party
+/// can do**, at two and a half caches: a breakpoint hands over the whole
+/// frame's map at a stroke, and announcing yourself to the substrate is what
+/// it costs.
+///
+/// Held at 25 through the 2026-08-01 retune, which changed what it *means*:
+/// against `TRACE_NOTICED` at 40 this was one breakpoint plus two caches to
+/// cross the first band, and against 25 a breakpoint alone crosses it on the
+/// spot. That is the better reading of "the loudest thing you can do" — the
+/// map is free and being seen taking it is immediate — so the number stayed
+/// where it was and the argument for it changed underneath.
+///
+/// Still unplayed as a *decision*: the one crawl on record never used a
+/// breakpoint at all, so whether anyone pays this is unmeasured.
+pub const TRACE_PER_BREAKPOINT: u32 = 25;
+
 /// Where each band begins. Half-open: a value sitting exactly on a
 /// threshold is in the band it names.
 ///
@@ -555,11 +610,26 @@ pub const TRACE_PER_KILL: u32 = 2;
 /// **Hunted**, while a beeliner arrives around **Noticed**. That
 /// difference is the question the descent is supposed to ask.
 ///
-/// Purely arithmetic. Where these lines fall is exactly the part no
-/// measurement can settle, and the one thing playing will answer first.
-pub const TRACE_NOTICED: u32 = 40;
-pub const TRACE_TRACED: u32 = 100;
-pub const TRACE_HUNTED: u32 = 180;
+/// **Retuned 2026-08-01 from 40/100/180, on the first crawl anyone has
+/// played.** The session cracked a cache and took four fights across about
+/// a third of a frame and never left **Quiet** — and working back from that
+/// showed the real fault, which is arithmetic rather than a matter of
+/// taste: a frame holds `STACK_CACHES_PER_FRAME` caches at
+/// `TRACE_PER_CACHE` each, so **stripping a whole floor of every cache in
+/// it came to 30 against a first band at 40**. Maximal greed on an entire
+/// frame produced no feedback at all, and a meter nobody can make move
+/// cannot teach what it is for. `stripping_a_frames_caches_is_enough_to_be
+/// _noticed` now pins that, so the relationship survives a future change to
+/// either constant.
+///
+/// Only `TRACE_NOTICED` is evidence-backed. The upper two are re-derived
+/// from the same ~60-per-frame model that produced the originals — one
+/// thorough frame lands solidly in Noticed, the second reaches Traced, the
+/// third Hunted — and are still unplayed, because that session never came
+/// close to either.
+pub const TRACE_NOTICED: u32 = 25;
+pub const TRACE_TRACED: u32 = 70;
+pub const TRACE_HUNTED: u32 = 140;
 
 /// Per-band multiplier on `STACK_ENCOUNTER_CHANCE`, indexed by
 /// `TraceBand::index`.

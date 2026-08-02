@@ -21,18 +21,26 @@ const TILE_FILL: f32 = 0.86;
 const UNKNOWN: Color = Color::new(0.05, 0.06, 0.09, 1.0);
 const ROCK: Color = Color::new(0.13, 0.16, 0.20, 1.0);
 const WALKED: Color = Color::new(0.16, 0.38, 0.42, 1.0);
+/// Corruption is the one walkable kind with its own tile colour rather than
+/// a glyph on `WALKED`. It is an *area* to route around rather than a point
+/// to walk to, and at the inset sizes phase 5 will use, a coloured region
+/// survives being small in a way a 9px glyph does not.
+const CORRUPT: Color = Color::new(0.36, 0.14, 0.30, 1.0);
 
 fn tile_color(cell: FrameMapCell) -> Color {
     match cell {
         FrameMapCell::Unknown => UNKNOWN,
         FrameMapCell::Rock => ROCK,
+        FrameMapCell::Corruption => CORRUPT,
         FrameMapCell::Floor
         | FrameMapCell::LinkUp
         | FrameMapCell::LinkDown
         | FrameMapCell::Cache
         | FrameMapCell::Lair
         | FrameMapCell::Door
-        | FrameMapCell::SealedDoor => WALKED,
+        | FrameMapCell::SealedDoor
+        | FrameMapCell::Breakpoint
+        | FrameMapCell::Fault => WALKED,
     }
 }
 
@@ -47,6 +55,10 @@ fn cell_glyph(cell: FrameMapCell) -> Option<(char, Color)> {
         FrameMapCell::Lair => Some(('&', RED)),
         FrameMapCell::Door => Some(('+', ORANGE)),
         FrameMapCell::SealedDoor => Some(('+', RED)),
+        FrameMapCell::Breakpoint => Some(('*', BLUE)),
+        FrameMapCell::Fault => Some(('v', ORANGE)),
+        // Corruption deliberately has none: it is the one kind carrying its
+        // meaning in `tile_color` instead. See `CORRUPT`.
         _ => None,
     }
 }
@@ -127,7 +139,8 @@ pub(super) fn draw_frame_map(view: &FrameMapView, painter: &Painter, w: f32, h: 
         draw_cell_glyph(painter, ch, color, px, py, cell, glyph_px);
     }
 
-    let legend = "@ you  < up  > down  ! cache  + door  & lair  x fight  unlit = unmapped";
+    let legend = "@ you  < up  > down  ! cache  + door  & lair  * port  v fault  \
+                  purple = corrupt  x fight  unlit = unmapped";
     let dims = painter.measure_ui(legend, m.font_size);
     painter.ui(
         legend,

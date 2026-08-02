@@ -17,7 +17,7 @@ that does not exist yet goes stale.
 | --- | --- | --- | --- | --- |
 | 1 | **The rename** — Stack, frames, links | ✅ **done**, merged `1ffa7ca` | no | engine, app-core, gui |
 | 2 | **Trace** — greed-driven pressure, escalating ambushes | ✅ **built** 2026-08-01, unplaytested | **yes** (15 → 16) | engine, gui |
-| 3 | **Cell kinds** — breakpoint, fault, corruption | not started | **yes** | engine, gui |
+| 3 | **Cell kinds** — breakpoint, fault, corruption | ✅ **built** 2026-08-01, unplaytested — merge gated on a crawl | **yes** (16 → 17) | engine, gui |
 | 4 | **Inhabitants** — orphaned process, derelict trader, crash log | not started | **yes** | engine, gui, assets |
 | 5 | **Corner map inset** | not started | no | gui only |
 
@@ -53,6 +53,26 @@ exactly the part no measurement can settle.
 
 Capture a `dev-saves/` template and actually play phase 2 before phases 3
 and 4 are built on top of it.
+
+**Amended 2026-08-01, when phase 3 was designed.** The gate moved rather than
+being dropped: phase 3 is designed and built against the unplayed bands, and
+the playtest happens **before it merges**, covering Trace and the three new
+cell kinds in one crawl. What that buys is a single session answering both
+sets of questions instead of two; what it costs is that if 40/100/180 turn
+out wrong, `TRACE_PER_BREAKPOINT` was priced against them and moves too.
+Deferring the evidence, not skipping it — the branch does not land until the
+crawl has happened.
+
+**The crawl happened, and that is exactly what it cost.** Played
+2026-08-01 on `dev-saves/stack.ron`: a cache, four fights, about a third of
+a frame, and the meter never left **Quiet**. Working back from that found an
+arithmetic fault rather than a matter of taste — three caches at 10 is 30
+against a first band at 40, so stripping a whole floor of everything in it
+still read Quiet. Thresholds are now **25/70/140**, and
+`stripping_a_frames_caches_is_enough_to_be_noticed` pins the relationship so
+it cannot silently go inert again. `TRACE_PER_BREAKPOINT` stayed at 25 and
+its argument changed underneath, as predicted above. Only the first band is
+evidence-backed; the session came nowhere near the other two.
 
 ## Why
 
@@ -330,16 +350,122 @@ to put the lines, which only playing can answer.
 
 ## Phase 3 — cell kinds
 
-- **Breakpoint** — jack in to reveal the current frame's map, or spend Power
-  for a buff. The loudest thing you can do; spikes Trace hard. Needs a
-  spent-ness record, so it is a new `FrameMemory` field.
-- **Fault** — falls you one frame, landing away from that frame's up-link.
-  Close to `descend` with a different landing cell.
-- **Corruption** — bleeds HP per step. Creates routing decisions in a maze
-  that currently has exactly one kind of walkable cell, and gives the map
-  memory something worth having beyond "seen".
+Designed 2026-08-01, against the source rather than against this document's
+own sketch — which named `LevelSpec::rng_seed` and `dungeon::generate`, both
+of them pre-rename spellings that phase 1 replaced with `FrameSpec::rng_seed`
+and `stack::generate`. That is the third time this spec's forward-looking
+prose has aged badly, and the reason each phase gets designed when its
+predecessor lands rather than up front.
 
-**Bumps `SAVE_FORMAT_VERSION`** for the breakpoint record.
+Three new `CellKind` variants — `Breakpoint`, `Fault`, `Corruption`. All
+three are `walkable()`, none `blocks_sight()`.
+
+**Bumps `SAVE_FORMAT_VERSION` 16 → 17** for the breakpoint record.
+
+### Placement, and the order it happens in
+
+Each kind gets its own site type, so no two compete for the same cells and
+the existing caches keep every dead end to themselves:
+
+```
+carve_maze → braid → far cell (LinkDown|Lair) → LinkUp → seal_the_lair
+  → place_doors        corridors: exactly 2 opposite exits    [existing]
+  → place_breakpoint   junctions: 3+ exits                    [new]
+  → place_faults       plain Floor, not dead ends             [new]
+  → place_corruption   plain Floor, not dead ends, in patches [new]
+  → place_caches       dead ends                              [existing]
+```
+
+Every new pass builds only on `CellKind::Floor`, the discipline
+`place_caches` already follows, so none can pave over a link, the lair, a
+door or a cache. Because all three are walkable, placing them before
+`place_caches` leaves `is_dead_end` topology unchanged — the cache pass sees
+exactly the dead ends it would have seen without them.
+
+**Breakpoint sits on a junction, not a dead end.** A dead end is the natural
+home for a reward earned by a walk, but caches already own those, and a hub
+reads better for a thing that is infrastructure rather than loot.
+
+**Faults are generated only on frames that have a way down**
+(`!spec.is_bottom()`). A fault on the bottom frame has nowhere to drop you,
+and one that is inert is a lie the player cannot see from the cell.
+
+### Breakpoint
+
+Fires from `Game::step`'s post-move block, beside `open_cache`. Inserts
+every in-bounds cell of the frame into `FrameMemory::seen` — walls included,
+so the `g` map draws as a complete frame rather than a floor plan floating in
+nothing — then calls `raise_trace(TRACE_PER_BREAKPOINT)`.
+
+One-shot, recorded in a new `FrameMemory::jacked: BTreeSet<(i32, i32)>`. A
+set rather than the `bool` that `cleared` uses, so raising
+`STACK_BREAKPOINTS_PER_FRAME` above 1 later cannot silently break it. Both
+halves live in `game/stack_features.rs` beside the cache/seal/lair pairs,
+with a `breakpoint_spent` reader for the two views.
+
+`TRACE_PER_BREAKPOINT = 25`, against cache 10, seal 5 and kill 2. A free map
+costs two and a half caches of noise: dear enough to be a decision, not so
+dear that nobody ever pays it. Written against `TRACE_NOTICED = 40`, where
+that was a breakpoint plus two caches to cross the first band; after the
+retune to 25 it crosses on its own, which reads better for the loudest
+action in the game. The number did not move, only what it buys.
+
+**The Power-for-a-buff half of the original sketch is cut.** Two options
+need a prompt, a prompt needs a `Mode`, and a `Mode` drags app-core into a
+phase billed as engine-and-gui. Walking on reveals the map and nothing else.
+If the reveal alone reads thin in playtest, the buff is a later phase with a
+UI budget of its own.
+
+### Fault
+
+`descend_to` and `ascend_to` (`game/stack.rs`) are already one function
+differing only in landing cell; the fault is the third caller. They collapse
+into a single `enter_frame(depth, frames, entrance, landing)` rather than
+gaining a third near-copy.
+
+The landing cell is drawn from the frame below's plain `Floor` cells,
+furthest from that frame's `entry`, from an RNG salted off its own
+`rng_seed` — the scheme `pick_lair_species`'s `LAIR_SALT` established, not a
+second one. `Floor` specifically, so a fall can land on neither the lair, a
+cache, nor another fault.
+
+Not one-shot, so no `FrameMemory` record: it is terrain, and climbing back to
+fall again is allowed. **Raises no Trace** — falling is clumsy, not loud, and
+Trace is a greed meter.
+
+Inside `step` the fall happens after `open_cache` and `rouse_lair` (a fault
+cell is neither) and **before** `maybe_stack_encounter`, so the ambush roll
+happens in the frame the party landed in. Landing somewhere strange and being
+jumped there is the right reading of the order.
+
+### Corruption
+
+Bleeds HP on each step onto a corrupted cell, through `Game::apply_damage`
+and never a direct `Stats::hp` write. That routes it through
+`mitigate_incoming_damage`, so a Mitigation field buff blunts it — accepted
+as correct rather than as a leak: a mitigation field is exactly the thing
+that ought to help here.
+
+**The player only, not the party.** Hitting party members would pull in
+`announce_program_death` and the permadeath path for something that is not a
+fight.
+
+**Placed in patches of `STACK_CORRUPTION_PATCH_CELLS`, not as single cells.**
+A lone corrupted cell is a toll booth — one hit, walk on. A contiguous
+stretch is something a player can decide to walk around, which is the
+"routing decisions in a maze that has exactly one kind of walkable cell" this
+phase exists to create. Each patch is a seed cell plus a short walk along
+walkable neighbours.
+
+**Damage is a percent of max HP** (`STACK_CORRUPTION_HP_PERCENT`) with a flat
+floor (`STACK_CORRUPTION_MIN_DAMAGE`). The player is 90 HP at level 1
+(`PLAYER_BASE_STATS`) and around 510 mid-run, and Stack depth is uncorrelated
+with player level — so a flat figure, or one scaled by depth the way cache
+payout is, would be lethal at level 1 and free at level 20. A percentage
+costs the same fraction of the bar at either end.
+
+Corruption can kill, and should. It reaches `is_game_over` through the
+`tick()` that ends every step.
 
 ### Constraints these inherit
 
@@ -349,13 +475,20 @@ to put the lines, which only playing can answer.
   later variant that *does* block sight must handle the `ahead == 0`
   exception in both `remember_view` and `draws_as_face`.
 - Generation must not draw from `resources::GameRng`. Placement salts off
-  `LevelSpec::rng_seed`, like everything else in `dungeon::generate`.
-- Corruption's HP loss goes through `Game::apply_damage`
-  (`game/combat_damage.rs`), which is the only path that lowers a creature's
-  HP. Not a direct `Stats::hp` write.
+  `FrameSpec::rng_seed`, like everything else in `stack::generate`.
 - Placement counts go in `tuning.rs`. The kinds themselves stay engine code —
   same argument as `Perk` variants: each is a hook into generation and step
   handling with no shared shape to express as data.
+- The frame map's glyph table stays **one** definition. Phase 5 extracts it
+  for the corner inset; phase 3 must not fork it in the meantime, which is
+  precisely the drift CLAUDE.md's mirroring rule warns about.
+
+### New tuning constants
+
+`STACK_BREAKPOINTS_PER_FRAME`, `STACK_FAULTS_PER_FRAME`,
+`STACK_CORRUPTION_PATCHES_PER_FRAME`, `STACK_CORRUPTION_PATCH_CELLS`,
+`STACK_CORRUPTION_HP_PERCENT`, `STACK_CORRUPTION_MIN_DAMAGE`,
+`TRACE_PER_BREAKPOINT`.
 
 ## Phase 4 — inhabitants
 
@@ -448,10 +581,17 @@ Per phase, failing test first.
     kill-to-cache ratio and silently turns the greed meter into a combat
     meter, with the suite still green.
 - **Phase 3** — each kind generates within its tuning count; placement is
-  identical for a given `LevelSpec` across two `generate` calls; corruption
-  routes through `apply_damage`; a fault lands somewhere walkable and not on
-  the up-link; a spent breakpoint stays spent across leaving and re-entering
-  the frame.
+  identical for a given `FrameSpec` across two `generate` calls; corruption
+  routes through `apply_damage`; a fault lands on `Floor` and not on the
+  frame's `LinkUp`; a spent breakpoint stays spent across leaving and
+  re-entering the frame.
+
+  Four more, each guarding a placement rule the design above rests on and
+  none of which a naive count test would catch: no new kind lands on a
+  cache, a link, a door or the lair; the bottom frame generates no faults at
+  all; the cache count is unchanged by the three new passes running before
+  it, which is the claim "dead ends stay whole" makes; and a corruption
+  patch is contiguous rather than three cells scattered across the frame.
 - **Phase 4** — underground trade works and still cannot reach the zone map;
   a recovered orphan lands in `Party` and does not recur; a malformed crash
   log file is skipped, not panicked on.

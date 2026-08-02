@@ -5,6 +5,14 @@ use super::field::draw_status_buffs;
 use super::stack::draw_stack;
 use super::*;
 
+/// Fraction of the window the map pane occupies — the zone map or, while the
+/// party is underground, the first-person corridor. Named rather than inline
+/// because the corner map inset is placed and sized inside this rect, and
+/// `frame_map`'s tests have to be able to build the pane the real one draws
+/// into rather than a plausible-looking copy of it.
+pub(super) const PANE_W: f32 = 0.7;
+pub(super) const PANE_H: f32 = 0.72;
+
 /// How far a bare tile's background may stray from its biome's flat colour,
 /// as a fraction either side. Enough to break up a field of identical tiles,
 /// not enough to read as two different biomes.
@@ -69,8 +77,8 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
     let hidden = app.hidden_log_lines();
     let Some(game) = &mut app.game else { return };
 
-    let map_w = painter.screen_w() * 0.7;
-    let map_h = painter.screen_h() * 0.72;
+    let map_w = painter.screen_w() * PANE_W;
+    let map_h = painter.screen_h() * PANE_H;
 
     let status = game.player_status();
     // `Game::active_buffs` needs `&mut self`; fetched here rather than
@@ -79,6 +87,11 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
     let buffs = game.active_buffs();
     if let Some(view) = game.stack_view() {
         draw_stack(&view, painter, map_w, map_h, m);
+        // Over the corridor, not part of it: the same map the `g` screen
+        // draws, small enough to leave the view readable.
+        if let Some(map) = game.frame_map() {
+            draw_map_inset(&map, painter, map_w, map_h, m);
+        }
     } else {
         draw_surface_map(game, fx, painter, map_w, map_h, tile_px, glyph_px, &status);
     }

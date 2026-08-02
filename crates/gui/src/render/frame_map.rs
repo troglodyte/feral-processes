@@ -8,6 +8,7 @@
 //! file only has to draw it.
 
 use super::*;
+use feral_processes_app_core::STACK_MAP_MIN_ZOOM;
 use feral_processes_engine::{FrameMapCell, FrameMapMark, FrameMapView};
 
 /// Fraction of the shorter pane axis the map grid fills, leaving room for
@@ -125,6 +126,79 @@ fn inset_rect(w: f32, h: f32, m: &Metrics) -> Rect {
     Rect::new(m.inset, top, side, side)
 }
 
+/// How many cells either side of the party a zoom level shows, or `None`
+/// for the whole frame.
+///
+/// Odd side lengths so the party sits in the middle cell rather than on a
+/// seam. The steps are 15, 11 and 7 cells across a 21-wide frame: the first
+/// is most of it, the last is the junction you are standing in.
+fn window_radius(zoom: u16) -> Option<i32> {
+    match zoom {
+        STACK_MAP_MIN_ZOOM => None,
+        2 => Some(7),
+        3 => Some(5),
+        _ => Some(3),
+    }
+}
+
+/// The view a zoom level draws: the whole frame, or a window of it centred
+/// on the party.
+///
+/// A cropped `FrameMapView` rather than a window passed down into
+/// `draw_grid`, so the one drawing path stays the one drawing path — the
+/// grid loop never learns that zoom exists, and every glyph and colour
+/// decision keeps being made in exactly one place.
+///
+/// The centre comes off the party's own mark, which is the only thing in the
+/// view that knows where they are. No party mark, a frame smaller than the
+/// window, or the widest zoom all mean "draw the lot" rather than a special
+/// case downstream.
+fn crop(view: &FrameMapView, zoom: u16) -> FrameMapView {
+    let Some(radius) = window_radius(zoom) else {
+        return view.clone();
+    };
+    let side = radius * 2 + 1;
+    if view.width <= side || view.height <= side {
+        return view.clone();
+    }
+    let Some((cx, cy)) = view
+        .marks
+        .iter()
+        .find(|(_, mark)| *mark == FrameMapMark::Party)
+        .map(|&(cell, _)| cell)
+    else {
+        return view.clone();
+    };
+
+    // Clamped rather than centred at the edges: a window hanging half off
+    // the frame wastes half the inset, and would index past the rows.
+    let x0 = (cx - radius).clamp(0, view.width - side);
+    let y0 = (cy - radius).clamp(0, view.height - side);
+
+    FrameMapView {
+        width: side,
+        height: side,
+        cells: (y0..y0 + side)
+            .map(|y| {
+                (x0..x0 + side)
+                    .map(|x| view.cells[y as usize][x as usize])
+                    .collect()
+            })
+            .collect(),
+        // Dropped rather than clamped: a fight marker pinned to the window's
+        // edge would report a corridor that never had one.
+        marks: view
+            .marks
+            .iter()
+            .filter_map(|&((x, y), mark)| {
+                let (lx, ly) = (x - x0, y - y0);
+                (lx >= 0 && lx < side && ly >= 0 && ly < side).then_some(((lx, ly), mark))
+            })
+            .collect(),
+        ..view.clone()
+    }
+}
+
 /// The grid itself: tiles, their glyphs, and the marks over the top.
 ///
 /// The one drawing path both maps share. The full screen and the inset differ
@@ -168,7 +242,16 @@ fn draw_grid(view: &FrameMapView, painter: &Painter, ox: f32, oy: f32, cell: f32
 /// Answers "which way am I facing, where have I been" at a glance; the `g`
 /// screen still answers "where is the wing I haven't walked", with three
 /// times the cell size and the legend that teaches the glyphs.
-pub(super) fn draw_map_inset(view: &FrameMapView, painter: &Painter, w: f32, h: f32, m: &Metrics) {
+/// `zoom` is `App::stack_zoom`: the lowest level draws the whole frame,
+/// higher ones a window around the party.
+pub(super) fn draw_map_inset(
+    view: &FrameMapView,
+    zoom: u16,
+    painter: &Painter,
+    w: f32,
+    h: f32,
+    m: &Metrics,
+) {
     let r = inset_rect(w, h, m);
     if r.w <= 0.0 || r.h <= 0.0 {
         return;
@@ -176,11 +259,12 @@ pub(super) fn draw_map_inset(view: &FrameMapView, painter: &Painter, w: f32, h: 
     painter.rect(r.x, r.y, r.w, r.h, PANEL_BG);
     painter.rect_lines(r.x, r.y, r.w, r.h, 1.0, BORDER);
 
-    let (ox, oy, cell) = layout(view, r.w, r.h, INSET_FILL);
+    let view = crop(view, zoom);
+    let (ox, oy, cell) = layout(&view, r.w, r.h, INSET_FILL);
     if cell <= 0.0 {
         return;
     }
-    draw_grid(view, painter, r.x + ox, r.y + oy, cell);
+    draw_grid(&view, painter, r.x + ox, r.y + oy, cell);
 }
 
 pub(super) fn draw_frame_map(view: &FrameMapView, painter: &Painter, w: f32, h: f32, m: &Metrics) {
@@ -253,6 +337,7 @@ fn draw_cell_glyph(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use feral_processes_app_core::STACK_MAP_MAX_ZOOM;
 
     fn view(width: i32, height: i32) -> FrameMapView {
         FrameMapView {
@@ -375,10 +460,122 @@ mod tests {
         empty.cells = Vec::new();
         empty.marks = vec![((99, 99), FrameMapMark::Party)];
         crate::paint::with_painter(|p| {
-            draw_map_inset(&view(21, 21), p, w, h, &m);
-            draw_map_inset(&view(31, 11), p, w, h, &m);
-            draw_map_inset(&empty, p, w, h, &m);
+            draw_map_inset(&view(21, 21), STACK_MAP_MIN_ZOOM, p, w, h, &m);
+            draw_map_inset(&view(31, 11), STACK_MAP_MAX_ZOOM, p, w, h, &m);
+            draw_map_inset(&empty, STACK_MAP_MAX_ZOOM, p, w, h, &m);
         });
+    }
+
+    /// Level 1 is the whole frame, which is what the inset drew before zoom
+    /// existed — a player who never presses `+` sees no change.
+    #[test]
+    fn the_lowest_zoom_shows_the_whole_frame() {
+        let v = view(21, 21);
+        let cropped = crop(&v, STACK_MAP_MIN_ZOOM);
+        assert_eq!((cropped.width, cropped.height), (21, 21));
+        assert_eq!(cropped.cells, v.cells);
+        assert_eq!(cropped.marks, v.marks);
+    }
+
+    /// Zoomed in, the window follows the party rather than the frame's
+    /// middle — the whole point is reading the cells around you.
+    #[test]
+    fn a_zoomed_window_is_centred_on_the_party() {
+        let mut v = view(21, 21);
+        v.marks = vec![((10, 10), FrameMapMark::Party)];
+        let cropped = crop(&v, STACK_MAP_MAX_ZOOM);
+        let side = window_radius(STACK_MAP_MAX_ZOOM).unwrap() * 2 + 1;
+        assert_eq!((cropped.width, cropped.height), (side, side));
+        assert_eq!(
+            cropped.marks,
+            vec![((side / 2, side / 2), FrameMapMark::Party)],
+            "the party is not in the middle of their own window"
+        );
+    }
+
+    /// Against a wall the window slides rather than hanging off the frame:
+    /// half a map of nothing is half a map wasted, and an out-of-range
+    /// index would panic.
+    #[test]
+    fn a_window_at_the_frames_edge_slides_inside_it() {
+        for corner in [(0, 0), (20, 20), (0, 20), (20, 0)] {
+            let mut v = view(21, 21);
+            v.marks = vec![(corner, FrameMapMark::Party)];
+            let cropped = crop(&v, STACK_MAP_MAX_ZOOM);
+            let side = window_radius(STACK_MAP_MAX_ZOOM).unwrap() * 2 + 1;
+            assert_eq!((cropped.width, cropped.height), (side, side));
+            assert_eq!(cropped.cells.len(), side as usize);
+            for row in &cropped.cells {
+                assert_eq!(row.len(), side as usize);
+            }
+            let (at, _) = cropped.marks[0];
+            assert!(
+                at.0 >= 0 && at.0 < side && at.1 >= 0 && at.1 < side,
+                "the party fell outside their own window at {corner:?}"
+            );
+        }
+    }
+
+    /// A frame smaller than the window asked for is shown whole rather than
+    /// padded — and, more to the point, without indexing past its rows.
+    #[test]
+    fn a_frame_smaller_than_the_window_is_left_alone() {
+        let mut v = view(5, 5);
+        v.marks = vec![((2, 2), FrameMapMark::Party)];
+        let cropped = crop(&v, STACK_MAP_MAX_ZOOM);
+        assert_eq!((cropped.width, cropped.height), (5, 5));
+    }
+
+    /// A fight marker three cells away has to still be three cells away
+    /// after the crop, or the window is a different map rather than a
+    /// closer look at the same one.
+    #[test]
+    fn marks_move_with_the_window() {
+        let mut v = view(21, 21);
+        v.marks = vec![
+            ((10, 10), FrameMapMark::Party),
+            ((10, 7), FrameMapMark::Fight),
+        ];
+        let cropped = crop(&v, STACK_MAP_MAX_ZOOM);
+        let party = cropped
+            .marks
+            .iter()
+            .find(|(_, m)| *m == FrameMapMark::Party)
+            .unwrap()
+            .0;
+        let fight = cropped
+            .marks
+            .iter()
+            .find(|(_, m)| *m == FrameMapMark::Fight)
+            .unwrap()
+            .0;
+        assert_eq!((party.0 - fight.0, party.1 - fight.1), (0, 3));
+    }
+
+    /// A mark outside the window is dropped rather than clamped to its edge,
+    /// which would draw a fight in a corridor that never had one.
+    #[test]
+    fn a_mark_outside_the_window_is_dropped() {
+        let mut v = view(21, 21);
+        v.marks = vec![
+            ((10, 10), FrameMapMark::Party),
+            ((0, 0), FrameMapMark::Fight),
+        ];
+        let cropped = crop(&v, STACK_MAP_MAX_ZOOM);
+        assert!(cropped.marks.iter().all(|(_, m)| *m != FrameMapMark::Fight));
+    }
+
+    /// Zooming in has to actually make the cells bigger, which is the whole
+    /// reason to do it.
+    #[test]
+    fn zooming_in_grows_the_cells() {
+        let v = view(21, 21);
+        let (_, _, wide) = layout(&crop(&v, STACK_MAP_MIN_ZOOM), 300.0, 300.0, INSET_FILL);
+        let (_, _, close) = layout(&crop(&v, STACK_MAP_MAX_ZOOM), 300.0, 300.0, INSET_FILL);
+        assert!(
+            close > wide,
+            "the closest zoom draws no larger than the widest"
+        );
     }
 
     #[test]

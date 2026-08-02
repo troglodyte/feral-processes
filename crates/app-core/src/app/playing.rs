@@ -105,12 +105,23 @@ impl App {
                 self.mode = Mode::Help;
                 return;
             }
+            // Whichever map is on screen: underground the zone map is not
+            // drawn at all, so resizing its tiles from down there would be
+            // a keypress with nothing to show for it.
             GameKey::Char('+') | GameKey::Char('=') => {
-                self.zoom = (self.zoom + 1).min(MAX_ZOOM);
+                if self.game.as_ref().is_some_and(|g| g.is_underground()) {
+                    self.stack_zoom = (self.stack_zoom + 1).min(STACK_MAP_MAX_ZOOM);
+                } else {
+                    self.zoom = (self.zoom + 1).min(MAX_ZOOM);
+                }
                 return;
             }
             GameKey::Char('-') | GameKey::Char('_') => {
-                self.zoom = self.zoom.saturating_sub(1).max(MIN_ZOOM);
+                if self.game.as_ref().is_some_and(|g| g.is_underground()) {
+                    self.stack_zoom = self.stack_zoom.saturating_sub(1).max(STACK_MAP_MIN_ZOOM);
+                } else {
+                    self.zoom = self.zoom.saturating_sub(1).max(MIN_ZOOM);
+                }
                 return;
             }
             _ => {}

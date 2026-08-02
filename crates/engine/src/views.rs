@@ -453,7 +453,10 @@ pub enum FrameMapMark {
 /// have had in view, and nothing they haven't.
 ///
 /// A whole-frame grid rather than a window, because the point of a map is
-/// seeing the shape of the parts you have walked all at once.
+/// seeing the shape of the parts you have walked all at once. The corner
+/// inset can be zoomed into a window around the party, but it crops this on
+/// its way to the screen rather than asking the engine for less.
+#[derive(Clone)]
 pub struct FrameMapView {
     pub depth: u32,
     pub frames: u32,

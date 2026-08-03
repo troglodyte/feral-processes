@@ -13,5 +13,5 @@
         (name: "Ping", power: 5, ranged: true),
         (name: "Pulse", power: 8),
     ],
-    work_resource: None,
+    work_resource: Some("core_fragment"),
 )

@@ -40,6 +40,17 @@ index — nothing new is persisted.
 - **Two Power Outlets go into new-game starting inventory**, beside the 3
   ICE Breakers, 3 Power Cells and 5 Core Fragments, to cover getting
   established before the base earns anything of its own.
+- **Core Fragments now drop from species a fresh player can actually beat.**
+  Ranked by stat total, all three Power Cell droppers (`glitch`,
+  `sub_process`, `scrapper`) sat in the gentle band the opening ring fields,
+  while three of the four Fragment droppers (`worm`, `virus`, `construct`)
+  sat behind fights a new player loses — so `drone` was effectively the only
+  early Fragment source, and ten of seventeen species drop nothing at all.
+  That was backwards: Fragments are what you build with, and Power Cells
+  restore Power, which a Recharger Node gives away free. `sub_process` now
+  drops Core Fragments instead of Power Cells, and `sprite` — which dropped
+  nothing — now drops them too. `glitch` and `scrapper` keep Power Cells, so
+  the early game still has a source before a Recharger is affordable.
 - **A defeated program now drops 2–4 of its work resource, up from 1–2.**
   With scan gone, kills are the only source of Core Fragments outside a
   built base, and the first Mining Node — 12 fragments on top of Home's 5 —

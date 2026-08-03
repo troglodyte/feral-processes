@@ -13,7 +13,7 @@
         (name: "Fork Bomb", power: 6, effect: Some((kind: Bleed, chance: 0.35, duration: 3, power: 2))),
         (name: "Signal Spam", power: 4, ranged: true),
     ],
-    work_resource: Some("power_cell"),
+    work_resource: Some("core_fragment"),
     abilities: [(id: "hot_patch"), (id: "redundancy_sync", level: 7)],
     affinities: (heal: 1.4, damage: 0.8),
 )

@@ -50,8 +50,14 @@ impl Game {
     }
 
     /// Defeated (not tamed) rogue programs drop whatever resource their
-    /// species is associated with, if any — the same `work_resource` used
-    /// to decide what a tamed member of that species can gather.
+    /// species is associated with, if any.
+    ///
+    /// `SpeciesDef::work_resource` does *not* decide what a tamed member of
+    /// that species gathers, despite the name — a cronjob's output comes
+    /// from the structure's `produces`, and any species can work any
+    /// structure. Its only other reader is the inspection view. So changing
+    /// a species' `work_resource` changes what killing it drops and nothing
+    /// else.
     pub(crate) fn award_loot(&mut self, wild: Entity) {
         let Some(species_id) = self.world.get::<Creature>(wild).map(|c| c.species.clone()) else {
             return;

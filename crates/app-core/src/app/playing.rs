@@ -89,6 +89,13 @@ impl App {
                 self.mode = Mode::History;
                 return;
             }
+            // Next to `L` because it acts on the same log, and a `return`
+            // rather than a fallthrough because changing what you can see
+            // must not cost a turn.
+            GameKey::Char('F') => {
+                self.log_filter = self.log_filter.next();
+                return;
+            }
             GameKey::Char('B') => {
                 self.mode = Mode::Structures;
                 return;

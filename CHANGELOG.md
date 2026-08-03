@@ -13,6 +13,28 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### The log pane filters by base or field
+
+`F` on the map cycles the log pane through All → Field → Base → All. The base
+talks constantly — cronjob payouts, failed extractions, construction, raid
+damage — and in the six rows the pane has room for, that steadily pushed
+combat and Stack lines off the top before they could be read.
+
+Every log line now carries a `MessageSource` alongside its `MessageKind`. The
+two are separate axes on purpose: kind is read by the colour table, by
+`retain_outcomes_since_battle`'s prune, and by `condense`'s notion of line
+identity, and a raid alert has to stay `MessageKind::Raid` for all three while
+still being base news. `Field` is the default, so only the ~24 base-side log
+calls moved. Power reserves stay field — a need follows you into the Stack.
+
+The pane header names the active filter and counts what it is holding back, so
+a raid landing while you are watching the other channel still announces
+itself. The history screen (`L`) is deliberately unfiltered: it is the
+complete record, and app-core's row count for it stays the one the renderer
+draws.
+
+No save-format bump — the message log was never persisted.
+
 ### Nests fight back, and destroying one pays
 
 Bumps `SAVE_FORMAT_VERSION` 18 → 19 — existing saves need a new game.

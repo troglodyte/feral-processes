@@ -7,6 +7,7 @@ mod building;
 mod field;
 mod fusion;
 mod inventory;
+mod log_filter;
 mod menus;
 mod party;
 mod playing;

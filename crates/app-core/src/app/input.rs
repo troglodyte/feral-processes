@@ -251,6 +251,34 @@ impl App {
         lines
     }
 
+    /// The map log pane's rows under the active filter, oldest first — see
+    /// `pane_rows` for why the chop, the filter and the capacity cut happen in
+    /// that order.
+    ///
+    /// Row selection lives here rather than in the renderer for the same
+    /// reason the history screen's fold does: app-core owns what a read-only
+    /// screen's rows *are*, and gui draws them.
+    pub fn visible_log(&self, capacity: usize) -> Vec<LogLine> {
+        let Some(game) = &self.game else {
+            return Vec::new();
+        };
+        let hidden = self.hidden_log_lines();
+        pane_rows(
+            &game.message_log(MESSAGE_LOG_CAP),
+            hidden,
+            self.log_filter,
+            capacity,
+        )
+    }
+
+    /// How many retained lines the pane's filter is holding back, for the
+    /// header. Counted over the whole log rather than the pane's window: the
+    /// point is to say that a channel you stopped watching has traffic in it.
+    pub fn filtered_out_log_lines(&self) -> usize {
+        let Some(game) = &self.game else { return 0 };
+        filtered_out_count(&game.message_log(MESSAGE_LOG_CAP), self.log_filter)
+    }
+
     /// How many lines the *base* screen must chop off the tail of
     /// `Game::message_log` — the battle results that have not scrolled in
     /// yet. Zero except in the moments after a battle ends.

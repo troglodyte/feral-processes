@@ -138,7 +138,7 @@ pub(super) fn draw_help(painter: &Painter, m: &Metrics) {
         text_row("G guard   R demolish"),
         text_row("u symlink   i inspect   d manifest   v inventory   p companions"),
         text_row("f fuse   m routines   a routine   M extract   t trade   x perks   T research"),
-        text_row("L history   B structures"),
+        text_row("L history   B structures   F filter the log (all/field/base)"),
         text_row("s save   q main menu (confirms first)"),
         text_row("+/- zoom   [/] volume   \\ visual effects"),
         text_row(""),

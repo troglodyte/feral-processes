@@ -7,7 +7,7 @@ use crate::fx::Fx;
 use crate::paint::{Color, DARKGRAY, GRAY, Painter, Rect, TextRun, WHITE};
 use crate::text::{Metrics, map_cell, terrain_color, ui_metrics};
 use feral_processes_app_core::{
-    App, MENU_SCAN_RADIUS, Mode, TradeChoice, equip_preview_tag, inventory_item_actions,
+    App, LogFilter, MENU_SCAN_RADIUS, Mode, TradeChoice, equip_preview_tag, inventory_item_actions,
     menu_shortcut,
 };
 use feral_processes_engine::components::{GlyphColor, TaskKind};

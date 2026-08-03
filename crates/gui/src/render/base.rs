@@ -72,11 +72,14 @@ fn biome_style(biome: Biome) -> (char, Color) {
 pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Metrics) {
     let (tile_px, glyph_px) = map_cell(app.zoom);
     let status_line = app.status_line.clone();
-    // Read before the `game` borrow below: the results of a battle that just
-    // ended are at the tail of the log and scroll in one at a time.
-    let hidden = app.hidden_log_lines();
     // Read before the `game` borrow, like `status_line` above.
     let stack_zoom = app.stack_zoom;
+    // The pane's rows, chosen by app-core (see `pane_rows`), and the header
+    // that says which channel they are. Both read before the `game` borrow.
+    let log_h = painter.screen_h() - painter.screen_h() * PANE_H;
+    let log_capacity = ((log_h - m.line_height) / m.line_height).max(1.0) as usize;
+    let log_lines = app.visible_log(log_capacity.saturating_sub(1));
+    let log_header = log_pane_header(app.log_filter, app.filtered_out_log_lines());
     let Some(game) = &mut app.game else { return };
 
     let map_w = painter.screen_w() * PANE_W;
@@ -108,7 +111,6 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
     );
 
     let log_y = map_h;
-    let log_h = painter.screen_h() - map_h;
     painter.rect(0.0, log_y, painter.screen_w(), log_h, PANEL_BG);
     painter.rect_lines(
         0.0,
@@ -123,22 +125,31 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
         painter.ui(s, m.inset, ly, m.font_size, RED);
         ly += m.line_height;
     }
-    let capacity = ((log_h - m.line_height) / m.line_height).max(1.0) as usize;
-    // Fetch the hidden tail as well, so chopping it still leaves a full
-    // pane's worth of older lines to draw.
-    let lines = game.message_log(capacity + hidden);
-    let shown = lines.len().saturating_sub(hidden);
-    for e in lines
-        .iter()
-        .take(shown)
-        .skip(shown.saturating_sub(capacity))
-    {
+    // Drawn even under `LogFilter::All`, so the key is discoverable from the
+    // screen rather than only from the help popup.
+    painter.ui(&log_header, m.inset, ly, m.font_size, GRAY);
+    ly += m.line_height;
+    for e in &log_lines {
         if ly > painter.screen_h() - m.gap {
             break;
         }
         draw_message_line(e.kind, &e.text, m.inset, ly, painter, m);
         ly += m.line_height;
     }
+}
+
+/// The log pane's one-line header: the active filter, the key that cycles it,
+/// and — when a channel is being suppressed — how much of it is going unread.
+/// That last part is what stops a raid alert landing unseen while the pane is
+/// showing only field news.
+fn log_pane_header(filter: LogFilter, filtered_out: usize) -> String {
+    let mut header = format!("LOG [{}]  F to filter", filter.label());
+    if let Some(channel) = filter.hidden_channel()
+        && filtered_out > 0
+    {
+        header.push_str(&format!("  · {filtered_out} {channel}"));
+    }
+    header
 }
 
 /// The message log in full — everything the pane at the bottom of the map
@@ -485,6 +496,34 @@ fn draw_status_panel(
 mod tests {
     use super::*;
     use feral_processes_engine::MessageSource;
+
+    /// The header is the only place the filter key is advertised, so it draws
+    /// under `All` too — a filter you can only discover from the help popup is
+    /// one nobody turns on.
+    #[test]
+    fn the_unfiltered_header_still_names_the_key_and_counts_nothing() {
+        let header = log_pane_header(LogFilter::All, 0);
+        assert!(header.contains("All"), "{header}");
+        assert!(header.contains('F'), "{header}");
+        assert!(!header.contains('·'), "nothing is hidden: {header}");
+    }
+
+    /// The count is what stops a raid landing unseen while the pane is showing
+    /// only field news.
+    #[test]
+    fn a_filtered_header_counts_the_channel_it_is_hiding() {
+        let header = log_pane_header(LogFilter::Field, 3);
+        assert!(header.contains("Field"), "{header}");
+        assert!(header.contains("3 base"), "{header}");
+    }
+
+    /// A channel with no traffic in it has nothing to report, so the header
+    /// stays quiet rather than saying "0 base".
+    #[test]
+    fn a_filtered_header_with_an_empty_channel_says_nothing() {
+        let header = log_pane_header(LogFilter::Base, 0);
+        assert!(!header.contains('·'), "{header}");
+    }
 
     fn entry(text: &str, repeats: usize) -> LogEntry {
         LogEntry {

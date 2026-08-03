@@ -19,8 +19,8 @@ use feral_processes_engine::battle::{
 use feral_processes_engine::items::{EquipmentSlot, ItemId};
 use feral_processes_engine::tuning::{ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST};
 use feral_processes_engine::{
-    DifficultyMode, Entity, Game, LogLine, MESSAGE_LOG_CAP, ProgramSaleOption, RoutineHolderView,
-    SlotShift,
+    DifficultyMode, Entity, Game, LogLine, MESSAGE_LOG_CAP, MessageSource, ProgramSaleOption,
+    RoutineHolderView, SlotShift,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -224,6 +224,93 @@ pub enum SoundEvent {
     Victory,
     /// The run ended in `Mode::GameOver`.
     Defeat,
+}
+
+/// Which of the log's two channels the map's pane is showing. View state, not
+/// game state: not saved, and cycling it costs no turn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LogFilter {
+    #[default]
+    All,
+    Field,
+    Base,
+}
+
+impl LogFilter {
+    /// The cycle the filter key walks. All → Field → Base → All, so one more
+    /// press always gets you back to seeing everything.
+    pub fn next(self) -> Self {
+        match self {
+            LogFilter::All => LogFilter::Field,
+            LogFilter::Field => LogFilter::Base,
+            LogFilter::Base => LogFilter::All,
+        }
+    }
+
+    pub fn accepts(self, source: MessageSource) -> bool {
+        match self {
+            LogFilter::All => true,
+            LogFilter::Field => source == MessageSource::Field,
+            LogFilter::Base => source == MessageSource::Base,
+        }
+    }
+
+    /// What the pane header calls the active filter.
+    pub fn label(self) -> &'static str {
+        match self {
+            LogFilter::All => "All",
+            LogFilter::Field => "Field",
+            LogFilter::Base => "Base",
+        }
+    }
+
+    /// Which channel this filter is suppressing, for the header's count of
+    /// what you aren't seeing. `None` when nothing is hidden.
+    pub fn hidden_channel(self) -> Option<&'static str> {
+        match self {
+            LogFilter::All => None,
+            LogFilter::Field => Some("base"),
+            LogFilter::Base => Some("field"),
+        }
+    }
+}
+
+/// Picks the map log pane's rows out of the retained log: drop the battle
+/// results that have not scrolled in yet, apply the filter, then keep the
+/// newest `capacity`.
+///
+/// The order is load-bearing. `hidden` counts *raw* tail lines (see
+/// `App::hidden_log_lines`), so it has to come off before the filter thins the
+/// list — chopping the same count out of a filtered list would eat lines that
+/// had already been revealed. And the filter has to come off before the
+/// capacity cut, or a screenful of base chatter would leave the field pane
+/// blank while older field lines were still in reach.
+///
+/// A free function rather than a method so it can be tested against a
+/// hand-built log; `App::visible_log` is the one caller that has a `Game`.
+pub fn pane_rows(
+    lines: &[LogLine],
+    hidden: usize,
+    filter: LogFilter,
+    capacity: usize,
+) -> Vec<LogLine> {
+    let shown = lines.len().saturating_sub(hidden);
+    let mut rows: Vec<LogLine> = lines[..shown]
+        .iter()
+        .filter(|l| filter.accepts(l.source))
+        .cloned()
+        .collect();
+    if rows.len() > capacity {
+        rows.drain(0..rows.len() - capacity);
+    }
+    rows
+}
+
+/// How many of `lines` the filter is holding back — the header's "there is
+/// more you aren't seeing" figure. Zero under `LogFilter::All`, so the pane
+/// says nothing when there is nothing to say.
+pub fn filtered_out_count(lines: &[LogLine], filter: LogFilter) -> usize {
+    lines.iter().filter(|l| !filter.accepts(l.source)).count()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -559,6 +646,9 @@ pub struct App {
     /// is where Esc then goes back to. Reached from the map with `i` instead,
     /// there is no list to return to and Esc goes straight back to play.
     pub manifest_from_picker: bool,
+    /// Which of the log's two channels the map's pane shows. Cycled with `F`;
+    /// see `LogFilter`.
+    pub log_filter: LogFilter,
     /// The first program picked in `Mode::Fuse`, awaiting a second from
     /// `Mode::FuseSecond` before `Game::fuse_companions` is actually called.
     pub pending_fuse_first: Option<Entity>,

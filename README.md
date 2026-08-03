@@ -332,6 +332,15 @@ forty copies of the same extraction. It is bounded on purpose: a finished
 intrusion keeps its results and drops its blow-by-blow, and the screen says so
 rather than implying a complete transcript.
 
+`F` filters the pane under the map, cycling All → Field → Base → All. The base
+talks constantly — every cronjob payout, every failed extraction, every raid —
+and in six rows of pane that steadily pushes what happened to *you* off the
+top. Field shows the world you are standing in; Base shows the one running
+without you, and keeps running while you are four frames down the Stack. The
+header names the active filter and counts what it is holding back, so a raid
+landing while you are reading the other channel still says so. `L` is
+unfiltered whatever the pane is set to — the history is the complete record.
+
 `B` opens the structure roster: every structure standing in the zone, its
 tier, tile, distance and raid Durability, and every program posted to it —
 both the cronjob worker and the guard, where the map's own labels can only

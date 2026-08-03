@@ -8,6 +8,7 @@ impl App {
             mode: Mode::MainMenu,
             game: None,
             status_line: None,
+            log_filter: LogFilter::default(),
             history_written: false,
             assets_dir,
             saves_dir,

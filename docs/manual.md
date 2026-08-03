@@ -111,7 +111,8 @@ change what gets stored — a save from a different build shows up as
 | `r` | Recharge overnight (restores Fatigue and Integrity, costs Power and a Power Outlet) — requires standing within your base, near Home (see [Structures](#structures)) |
 | `c` | Open the compile menu — an ICE Breaker (3 Core Fragments), a Power Cell (2), the six Scavenged-tier gear pieces, and every other recipe whose research and/or bench you have (see [Equipment](#equipment)). Then pick a quantity: type digits and Enter, or `[F]` for 5 at once, or `[M]` for the most you can currently afford |
 | `b` | Deploy a structure |
-| `w` | Assign a compiled program to a cronjob (work a structure) |
+| `w` | Assign a compiled program to a cronjob (work a structure — an extractor or an assembler) |
+| `C` | Collect: empty the output buffer of every structure orthogonally touching you into your inventory — see [Production chains](#production-chains) |
 | `G` | Assign a compiled program to guard a structure against raids (any structure, not just a workable one — see [Base defense](#base-defense)) |
 | `R` | Demolish a nearby structure, refunding 30% of its materials — demolishing Home destroys every other base structure too, after a confirmation warning (see [Structures](#structures)) |
 | `U` | Upgrade a nearby structure one tier — each tier costs more and yields more (see [Structures](#structures)) |
@@ -441,11 +442,12 @@ creature to work" mechanic.
      comes from battling, not idle cronjob work, up to the level 12 cap
      tamed programs share (see the Stats table below — you yourself have no
      cap at all).
-   - Every worked structure holds a stock capped by the `capacity` in its
-     `.ron` file (5 by default; the Research Node's is 4). Each completed
-     cycle draws one down; once mined to 0 it immediately refills back to
-     capacity and the worker keeps going — a worked node is an infinite,
-     bursty resource, never a one-time deposit you can exhaust.
+   - **Output does not reach your inventory.** Every structure has an
+     output buffer holding `capacity` units (20 by default), and a completed
+     cycle deposits there. A node is a tap, not a deposit you can exhaust —
+     but it runs until the buffer is full and then **clogs**, producing
+     nothing more until you walk over and press `C` to collect from
+     everything orthogonally touching you.
 5. **Cronjobs persist across save/load.** A program's assignment, its target
    structure, and its in-progress tick count are all saved — reload and it
    picks up right where it left off, no need to reassign it with `w`.
@@ -457,6 +459,54 @@ the consumable loop, along with almost everything else worth building — see
 [Research](#research) for the tree. The strongest-per-Fragment gear sits at
 the far end of it, though most of the gear catalog needs only a bench, not a
 research node each — see [Equipment](#equipment).
+
+### Production chains
+
+Machines feed each other by **touching**. A structure whose `.ron` file
+declares `assembles` pulls the ingredients it needs out of the output buffers
+of the four structures orthogonally adjacent to it — never diagonally — and
+builds one unit at a time. So a chain is a physical line across your base, and
+where you put things is a decision rather than decoration.
+
+| stage | structure | builds | from |
+| --- | --- | --- | --- |
+| extract | Mining Node | Core Fragments | — |
+| extract | Power Conduit | Power Cells | — |
+| refine | Refinery | Bytecode Blocks | Core Fragments |
+| refine | Winding Node | Charge Coils | Power Cells |
+| assemble | Assembly Bay | Patch Routines | a Block and a Coil |
+
+A machine's recipe is not written on the machine. It runs the *item's* own
+crafting recipe from `assets/items/`, so a bench recipe and a machine recipe
+can never drift apart, and any craftable item a mod adds — including a
+multi-ingredient one — is automatable for free. The bench recipes for the
+three chain items each name their own machine as the required structure, so
+hand-crafting one is the manual fallback for a machine you already own rather
+than a way around building it.
+
+Four rules decide what a machine is doing on a given tick, checked in order,
+and each is a word in the base log the first time it happens — entering a
+state is news, staying in it is not:
+
+- **idle** — nothing is posted to it. Every machine needs an assigned
+  program, assemblers included, which is what makes roster capacity rather
+  than Core Fragments the thing that buys chain length. The full five-machine
+  line needs five programs against a starting cap of three, so a Data Cache
+  (+2) is what makes it reachable and a second one is what buys back a party
+  to adventure with.
+- **starved** — short an ingredient. Its feeder is too slow, or isn't
+  actually touching it.
+- **clogged** — the output buffer is full. Nothing downstream is taking from
+  it and you haven't collected. A clogged machine does not spend the batch it
+  cannot deliver, so it resumes the moment room appears.
+- **running** — otherwise.
+
+A machine stages at most two batches of each ingredient, so a greedy one
+cannot drain a feeder several machines share. `B` opens the roster screen,
+which shows every buffer and every stall at a glance.
+
+The Assembly Bay costs Bytecode Blocks to build, so the two-machine line you
+can afford on a starting roster is what pays for the third stage.
 
 ### Research
 
@@ -1111,7 +1161,10 @@ enough of them, then walk onto it to breach into the next zone.
 | Mining Node | 12 Core Fragments | — | Cronjob a compiled program to it to produce Core Fragments over time (slower and level-gated — see [Getting started](#getting-started-building-and-running-cronjobs)). Upgradeable to Mk5 |
 | Research Node | 10 Core Fragments | — | Cronjob a compiled program to it to produce Research Data over time (14 ticks a cycle, level-gated like a Mining Node) — see [Research](#research). Upgradeable to Mk5 |
 | Recharger Node | 10 Core Fragments | — | Passively refills your Power anywhere within 7 tiles — the whole base |
-| Data Cache | 10 Core Fragments | — | Raises your carrying capacity (Buffer) by 10 while deployed; stacks with every other one |
+| Data Cache | 10 Core Fragments | — | Raises your roster cap by 2 while deployed; stacks with every other one. Since every machine needs a program posted to it, this is what buys chain length — see [Production chains](#production-chains) |
+| Refinery | 18 Core Fragments | — | Assembles Bytecode Blocks from Core Fragments pulled out of whatever is orthogonally touching it. Put it beside a Mining Node |
+| Winding Node | 18 Core Fragments | — | Assembles Charge Coils from Power Cells pulled out of whatever is orthogonally touching it. Put it beside a Power Conduit |
+| Assembly Bay | 20 Core Fragments, 4 Bytecode Blocks | — | Assembles Patch Routines from a Bytecode Block and a Charge Coil. Needs *both* feeders orthogonally adjacent, so it wants a corner |
 | Zone Portal | 10 Portal Fragments *(+50% of that per zone level)* | — | Walk onto it to breach into the next zone. Consumed on use, and your fragments and cores don't survive the trip — see [Zones and portals](#zones-and-portals) |
 | Compiler | 16 Core Fragments | Automation | Cronjob a compiled program to it to produce ICE Breakers over time. Upgradeable to Mk5 |
 | Power Conduit | 14 Core Fragments | Power Grid | Cronjob a compiled program to it to produce Power Cells over time |
@@ -1312,8 +1365,8 @@ optional status rider, a heal, a stat buff, or a status debuff), and
 the level it unlocks at — see `assets/abilities/README.md`.
 
 Structures are equally open-ended: a single `.ron` file decides whether a
-structure is cronjob-workable, passively processing, a symlink target, a
-rest gate, a power source, a trading post, temporary, and — via
+structure is cronjob-workable, an assembler fed by its neighbours, a symlink
+target, a rest gate, a power source, a trading post, temporary, and — via
 `raidable: false` — whether
 raids can target it at all. That last flag is the whole of what makes Home
 safe; any structure you add can claim the same protection.
@@ -1323,11 +1376,12 @@ Rust (see [Perks](#perks)).
 
 ### Item ids
 
-The base game ships **39** items: the eleven below, the 25-piece gear
+The base game ships **42** items: the eleven below, the 25-piece gear
 catalog in [Equipment](#equipment) (whose ids are the snake_case form of
-their names — `arc_lance`, `singularity_matrix`, and so on), and three more
+their names — `arc_lance`, `singularity_matrix`, and so on), three more
 that never carried a PascalCase original to migrate from — Credits, Access
-Shard, and the Power Outlet rest now spends.
+Shard, and the Power Outlet rest now spends — and the three-stage production
+chain's `bytecode_block`, `charge_coil` and `patch_routine`.
 
 Species, structure, and research files all reference items by id. The eleven
 originals predate the data-driven item model and mods named them in

@@ -405,8 +405,6 @@ pub(super) fn assign_worker_producing(game: &mut Game, resource: ItemId) -> Enti
             Position { x: 3, y: 4 },
             ResourceNode {
                 resource,
-                amount: 20,
-                capacity: 20,
                 level: None,
             },
             Stock::new(10_000),
@@ -492,8 +490,6 @@ pub(super) fn run_one_full_gather_cycle_at_tier(
         Position { x: 3, y: 4 },
         ResourceNode {
             resource: ItemId::from(resource),
-            amount: 5,
-            capacity: 5,
             level: None,
         },
         Stock::new(10_000),

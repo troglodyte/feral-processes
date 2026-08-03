@@ -872,12 +872,6 @@ pub const NODE_PAYOUT_ZONE_BONUS: u32 = 1;
 /// `MAX_FUSIONS`, so the compounding can't run away.
 pub const FUSION_LESSER_STAT_DIVISOR: i32 = 2;
 
-/// Defaults for `.ron` structure files that omit the field — a cronjob
-/// node's worker capacity and a structure's starting/max `Durability`. Both
-/// are `#[serde(default)]` fallbacks, so a mod written before either field
-/// existed keeps its original behaviour.
-pub const DEFAULT_WORK_CAPACITY: u32 = 5;
-
 // ---------------------------------------------------------------------------
 // Production chains
 // ---------------------------------------------------------------------------

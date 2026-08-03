@@ -420,8 +420,6 @@ fn cronjob_assignment_survives_save_and_load() {
             Position { x: 3, y: 3 },
             ResourceNode {
                 resource: structure_def.work.as_ref().unwrap().produces.clone(),
-                amount: 20,
-                capacity: 20,
                 level: None,
             },
         ))
@@ -478,47 +476,6 @@ fn cronjob_assignment_survives_save_and_load() {
 }
 
 #[test]
-fn a_mined_out_node_refills_instead_of_stalling_the_cronjob() {
-    let mut game = Game::new(27, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let worker = spawn_tamed(&mut game, 10, 3);
-    let structure = game
-        .world
-        .spawn((
-            Structure {
-                kind: "mining_node".to_string(),
-            },
-            Position { x: 3, y: 4 },
-            ResourceNode {
-                resource: ItemId::from(ids::CORE_FRAGMENT),
-                amount: 1,
-                capacity: 2,
-                level: None,
-            },
-            work_node_parts(),
-        ))
-        .id();
-    game.world.entity_mut(worker).insert(Task {
-        kind: TaskKind::GatherResource,
-        target: structure,
-        progress: 0,
-        required: 1,
-    });
-
-    // First tick mines the last unit down to 0.
-    game.tick();
-    assert_eq!(game.world.get::<ResourceNode>(structure).unwrap().amount, 0);
-
-    // The node refills to capacity on the next tick rather than
-    // leaving the assigned creature permanently idle.
-    game.tick();
-    assert_eq!(game.world.get::<ResourceNode>(structure).unwrap().amount, 1);
-    assert!(
-        game.world.get::<Task>(worker).is_some(),
-        "the cronjob should keep running once the node refills"
-    );
-}
-
-#[test]
 fn cronjob_work_grants_no_more_xp_once_the_worker_hits_the_work_level_cap() {
     let mut game = Game::new(301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let worker = spawn_tamed(&mut game, 10, 3);
@@ -532,8 +489,6 @@ fn cronjob_work_grants_no_more_xp_once_the_worker_hits_the_work_level_cap() {
             Position { x: 3, y: 4 },
             ResourceNode {
                 resource: ItemId::from(ids::CORE_FRAGMENT),
-                amount: 5,
-                capacity: 5,
                 level: None,
             },
             work_node_parts(),
@@ -579,8 +534,6 @@ fn cronjob_work_xp_is_boosted_by_a_running_xp_boost_field_buff() {
             Position { x: 3, y: 4 },
             ResourceNode {
                 resource: ItemId::from(ids::CORE_FRAGMENT),
-                amount: 5,
-                capacity: 5,
                 level: None,
             },
             work_node_parts(),
@@ -606,8 +559,6 @@ fn cronjob_work_xp_is_boosted_by_a_running_xp_boost_field_buff() {
             Position { x: 3, y: 4 },
             ResourceNode {
                 resource: ItemId::from(ids::CORE_FRAGMENT),
-                amount: 5,
-                capacity: 5,
                 level: None,
             },
             work_node_parts(),
@@ -659,8 +610,6 @@ fn cronjob_work_still_grants_xp_below_the_work_level_cap() {
             Position { x: 3, y: 4 },
             ResourceNode {
                 resource: ItemId::from(ids::CORE_FRAGMENT),
-                amount: 5,
-                capacity: 5,
                 level: None,
             },
             work_node_parts(),
@@ -692,8 +641,6 @@ fn a_leveled_node_doesnt_always_yield_on_a_completed_cycle() {
             Position { x: 3, y: 4 },
             ResourceNode {
                 resource: ItemId::from(ids::CORE_FRAGMENT),
-                amount: 20,
-                capacity: 20,
                 level: Some(1),
             },
         ))
@@ -1112,8 +1059,6 @@ fn workable_structure(game: &mut Game, x: i32, y: i32) -> Entity {
             Position { x, y },
             ResourceNode {
                 resource: def.work.as_ref().unwrap().produces.clone(),
-                amount: 20,
-                capacity: 20,
                 level: None,
             },
         ))
@@ -1313,8 +1258,6 @@ fn worked_node_at(
             Position { x, y },
             ResourceNode {
                 resource: ItemId::from(resource),
-                amount: 20,
-                capacity: 20,
                 level: None,
             },
             Stock::new(capacity),

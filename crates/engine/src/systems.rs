@@ -150,8 +150,12 @@ fn node_is_flat_payout(node_entity: Option<&Structure>, structure_db: &Structure
 }
 
 /// One completed gather cycle against `node`: rolls the node's reliability
-/// and, on success, spends a unit of its stock and reports what the cycle
-/// earned. `None` is a fizzle — the cycle is spent and nothing produced.
+/// and, on success, reports what the cycle earned. `None` is a fizzle — the
+/// cycle is spent and nothing produced.
+///
+/// A node has nothing to spend: it is a tap, not a reserve. What paces it is
+/// the caller's output buffer, which is why this function no longer decides
+/// whether there is anything left to give.
 ///
 /// Shared by `task_progress_system` (a program running a cronjob) and
 /// `player_gather_system` (the player working the node themselves) so the
@@ -161,7 +165,7 @@ fn node_is_flat_payout(node_entity: Option<&Structure>, structure_db: &Structure
 /// each reads `keen_scavenger_level` off the player for itself — the perk is
 /// the player's wherever the cycle is being run.
 pub(crate) fn resolve_gather_cycle(
-    node: &mut ResourceNode,
+    node: &ResourceNode,
     tier: Option<&StructureTier>,
     zone: ZoneLevel,
     flat_payout: bool,
@@ -176,7 +180,6 @@ pub(crate) fn resolve_gather_cycle(
     {
         return None;
     }
-    node.amount -= 1;
     let def = item_db.get(node.resource.as_str());
     // Read per cycle rather than baked in at deploy, so a base that travels
     // to a deeper zone immediately earns at the new rate.
@@ -297,17 +300,13 @@ pub fn task_progress_system(
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
         }
-        let Ok((mut node, tier, structure, mut stock, mut status)) = nodes.get_mut(task.target)
-        else {
+        let Ok((node, tier, structure, mut stock, mut status)) = nodes.get_mut(task.target) else {
             continue;
         };
         let machine_name = structure
             .and_then(|s| structure_db.get(&s.kind))
             .map(|d| d.name.as_str())
             .unwrap_or("machine");
-        if node.amount == 0 {
-            node.amount = node.capacity;
-        }
         task.progress += 1;
         if task.progress < task.required {
             continue;
@@ -322,7 +321,7 @@ pub fn task_progress_system(
         }
         task.progress = 0;
         let Some((resource, payout)) = resolve_gather_cycle(
-            &mut node,
+            &node,
             tier,
             *zone,
             node_is_flat_payout(structure, &structure_db),
@@ -401,17 +400,13 @@ pub fn player_gather_system(
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
         }
-        let Ok((mut node, tier, structure, mut stock, mut status)) = nodes.get_mut(task.target)
-        else {
+        let Ok((node, tier, structure, mut stock, mut status)) = nodes.get_mut(task.target) else {
             continue;
         };
         let machine_name = structure
             .and_then(|s| structure_db.get(&s.kind))
             .map(|d| d.name.as_str())
             .unwrap_or("machine");
-        if node.amount == 0 {
-            node.amount = node.capacity;
-        }
         task.progress += 1;
         if task.progress < task.required {
             continue;
@@ -424,7 +419,7 @@ pub fn player_gather_system(
         task.progress = 0;
         let keen_scavenger_level = perks.map(|p| p.level(Perk::KeenScavenger)).unwrap_or(0);
         let Some((resource, payout)) = resolve_gather_cycle(
-            &mut node,
+            &node,
             tier,
             *zone,
             node_is_flat_payout(structure, &structure_db),

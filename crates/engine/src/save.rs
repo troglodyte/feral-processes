@@ -165,7 +165,6 @@ pub struct CronjobSave {
 pub struct StructureSave {
     pub kind: String,
     pub position: (i32, i32),
-    pub resource_amount: Option<u32>,
     /// Current raid durability — see `components::Durability`.
     pub durability: Option<u32>,
     /// Current upgrade tier — see `components::StructureTier`. `None` for a

@@ -47,8 +47,6 @@ fn program_activity_names_the_structure_a_worker_is_on() {
             Position { x: 4, y: 4 },
             ResourceNode {
                 resource: ItemId::from(ids::CORE_FRAGMENT),
-                amount: 5,
-                capacity: 5,
                 level: None,
             },
         ))

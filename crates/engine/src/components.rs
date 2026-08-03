@@ -332,14 +332,13 @@ pub struct Structure {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct StructureTier(pub u32);
 
+/// A structure that can be worked for `resource`. Carries no deposit pool:
+/// a node is not a reserve that gets mined down, it is a tap. What paces it
+/// is `Stock::capacity` — it produces until its output buffer is full and
+/// then clogs until someone collects.
 #[derive(Component)]
 pub struct ResourceNode {
     pub resource: ItemId,
-    pub amount: u32,
-    /// The stock level `amount` refills to once mined down to 0 — see
-    /// `StructureDef::work`'s `capacity` field. Nodes never run dry
-    /// permanently; a worked node just cycles between empty and full.
-    pub capacity: u32,
     /// Mirrors `WorkDef::level`. `None` means a completed gather cycle
     /// always yields, same as before this field existed. `Some(level)` gates
     /// each completion behind a level-based percentage chance instead (see

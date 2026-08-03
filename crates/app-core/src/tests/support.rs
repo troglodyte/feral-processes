@@ -132,7 +132,6 @@ pub(crate) fn app_owning_a_program_and_a_compiler(seed: u32, routines: &[&str]) 
     data.structures.push(save::StructureSave {
         kind: "compiler".to_string(),
         position: (px + 30, py + 30),
-        resource_amount: None,
         durability: None,
         tier: None,
         stock_input: Vec::new(),
@@ -203,7 +202,6 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
             // Spread along -y so none lands on the player, the program at
             // `px + 2` or each other.
             position: (px + 1, py - n),
-            resource_amount: None,
             durability: None,
             tier: None,
             stock_input: Vec::new(),

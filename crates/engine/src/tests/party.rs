@@ -155,8 +155,6 @@ fn assigning_cronjob_to_the_active_companion_clears_companion_status() {
             Position { x: 3, y: 4 },
             ResourceNode {
                 resource: structure_def.work.as_ref().unwrap().produces.clone(),
-                amount: 20,
-                capacity: 20,
                 level: None,
             },
         ))

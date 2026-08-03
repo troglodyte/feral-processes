@@ -92,8 +92,6 @@ impl Game {
             entity.insert((
                 ResourceNode {
                     resource: work.produces.clone(),
-                    amount: work.capacity,
-                    capacity: work.capacity,
                     level: work.level,
                 },
                 MachineStatus::default(),

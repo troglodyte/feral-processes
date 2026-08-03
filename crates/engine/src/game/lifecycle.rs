@@ -7,9 +7,7 @@
 use crate::abilities::AbilityId;
 use crate::game::spawning;
 use crate::game::zone::find_walkable_start;
-use crate::tuning::{
-    DEFAULT_WORK_CAPACITY, INITIAL_WILD_POPULATION, NEST_DURABILITY, STACK_LINKS_PER_ZONE,
-};
+use crate::tuning::{INITIAL_WILD_POPULATION, NEST_DURABILITY, STACK_LINKS_PER_ZONE};
 use crate::*;
 
 /// Splits a persisted routine list into what `db` still recognizes and what
@@ -395,7 +393,6 @@ impl Game {
         game.world.insert_resource(Party(party));
 
         let mut structure_positions: HashMap<(i32, i32), Entity> = HashMap::new();
-        let currency = game.currency();
         for s in data.structures {
             let Some(def) = game.world.resource::<StructureDb>().get(&s.kind).cloned() else {
                 continue;
@@ -432,23 +429,14 @@ impl Game {
             if def.work.is_some() {
                 entity.insert(MachineStatus::default());
             }
-            if let Some(amount) = s.resource_amount {
-                let resource = def
-                    .work
-                    .as_ref()
-                    .map(|w| w.produces.clone())
-                    .unwrap_or_else(|| currency.clone());
-                let capacity = def
-                    .work
-                    .as_ref()
-                    .map(|w| w.capacity)
-                    .unwrap_or(DEFAULT_WORK_CAPACITY);
-                let level = def.work.as_ref().and_then(|w| w.level);
+            // Rebuilt from the def rather than from the save: with the
+            // deposit pool gone, a node carries nothing per-instance that a
+            // `.ron` file doesn't already say. What the node *produced* is
+            // in `Stock` above, which is where the state now lives.
+            if let Some(work) = &def.work {
                 entity.insert(ResourceNode {
-                    resource,
-                    amount,
-                    capacity,
-                    level,
+                    resource: work.produces.clone(),
+                    level: work.level,
                 });
             }
             if def.upgrade.is_some() {
@@ -623,7 +611,6 @@ impl Game {
         let mut structure_query = self.world.query::<(
             &Structure,
             &Position,
-            Option<&ResourceNode>,
             Option<&Durability>,
             Option<&StructureTier>,
             Option<&Stock>,
@@ -631,7 +618,7 @@ impl Game {
         // `Stock` is optional here only because test fixtures hand-spawn
         // bare `Structure`s; `place_structure` and `load` both give every
         // real one a buffer.
-        for (structure, pos, node, durability, tier, stock) in structure_query.iter(&self.world) {
+        for (structure, pos, durability, tier, stock) in structure_query.iter(&self.world) {
             let encode = |map: Option<&std::collections::BTreeMap<ItemId, u32>>| {
                 map.map(|m| m.iter().map(|(i, n)| (i.clone(), *n)).collect())
                     .unwrap_or_default()
@@ -639,7 +626,6 @@ impl Game {
             structures.push(save::StructureSave {
                 kind: structure.kind.clone(),
                 position: (pos.x, pos.y),
-                resource_amount: node.map(|n| n.amount),
                 durability: durability.map(|d| d.hp),
                 tier: tier.map(|t| t.0),
                 stock_input: encode(stock.map(|s| &s.input)),

@@ -171,6 +171,26 @@ pub struct StructureSave {
     /// Current upgrade tier — see `components::StructureTier`. `None` for a
     /// structure whose def declares no upgrade path.
     pub tier: Option<u32>,
+    /// This structure's local buffers — see `components::Stock`. Both are
+    /// live player state: `stock_input` is a batch a machine has already
+    /// pulled from its neighbours and not yet spent, and `stock_output` is
+    /// finished goods nobody has collected. Losing either across a save
+    /// would refund or void whatever the base produced while unattended.
+    ///
+    /// Vec-of-pairs on disk rather than the live `BTreeMap`, matching how
+    /// `build_cost` is already encoded, and rebuilt into the map on restore.
+    /// `Stock::capacity` is *not* here: it is a property of the def, so a
+    /// modder retuning a structure's buffer size should see it apply to the
+    /// ones already standing.
+    ///
+    /// `#[serde(default)]` does nothing for bincode (see
+    /// `SAVE_FORMAT_VERSION`) — it is here for the field-named RON that
+    /// `dev-saves/` templates are written in, so an existing template keeps
+    /// parsing instead of needing re-capture.
+    #[serde(default)]
+    pub stock_input: Vec<(ItemId, u32)>,
+    #[serde(default)]
+    pub stock_output: Vec<(ItemId, u32)>,
 }
 
 /// One trading post's buyback shelf on disk: the trader kind and tile that
@@ -268,7 +288,9 @@ pub struct SaveData {
 /// and every save written under the old version stops loading. That's an
 /// intentional, simple tradeoff for a single-player game rather than
 /// building real schema migration.
-pub const SAVE_FORMAT_VERSION: u32 = 19;
+/// 19 → 20: `StructureSave` gained `stock_input`/`stock_output` for the
+/// production-chain buffers (`components::Stock`).
+pub const SAVE_FORMAT_VERSION: u32 = 20;
 
 /// Renders a save as editable RON, for the `savetool` binary.
 ///

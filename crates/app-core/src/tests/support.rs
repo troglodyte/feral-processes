@@ -135,6 +135,8 @@ pub(crate) fn app_owning_a_program_and_a_compiler(seed: u32, routines: &[&str]) 
         resource_amount: None,
         durability: None,
         tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();
@@ -204,6 +206,8 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
             resource_amount: None,
             durability: None,
             tier: None,
+            stock_input: Vec::new(),
+            stock_output: Vec::new(),
         });
     }
     save::save_to_file(&path, &data).unwrap();

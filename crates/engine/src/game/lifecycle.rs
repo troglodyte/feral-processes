@@ -424,7 +424,11 @@ impl Game {
             }
             let structure_id = entity.id();
             structure_positions.insert(s.position, structure_id);
-            entity.insert(Stock::new(def.capacity));
+            entity.insert(Stock {
+                input: s.stock_input.iter().cloned().collect(),
+                output: s.stock_output.iter().cloned().collect(),
+                capacity: def.capacity,
+            });
             if def.work.is_some() {
                 entity.insert(MachineStatus::default());
             }
@@ -622,14 +626,24 @@ impl Game {
             Option<&ResourceNode>,
             Option<&Durability>,
             Option<&StructureTier>,
+            Option<&Stock>,
         )>();
-        for (structure, pos, node, durability, tier) in structure_query.iter(&self.world) {
+        // `Stock` is optional here only because test fixtures hand-spawn
+        // bare `Structure`s; `place_structure` and `load` both give every
+        // real one a buffer.
+        for (structure, pos, node, durability, tier, stock) in structure_query.iter(&self.world) {
+            let encode = |map: Option<&std::collections::BTreeMap<ItemId, u32>>| {
+                map.map(|m| m.iter().map(|(i, n)| (i.clone(), *n)).collect())
+                    .unwrap_or_default()
+            };
             structures.push(save::StructureSave {
                 kind: structure.kind.clone(),
                 position: (pos.x, pos.y),
                 resource_amount: node.map(|n| n.amount),
                 durability: durability.map(|d| d.hp),
                 tier: tier.map(|t| t.0),
+                stock_input: encode(stock.map(|s| &s.input)),
+                stock_output: encode(stock.map(|s| &s.output)),
             });
         }
 

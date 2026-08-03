@@ -1250,3 +1250,40 @@ fn only_structures_that_run_a_job_get_a_machine_status() {
     );
     assert!(game.world.get::<MachineStatus>(home).is_none());
 }
+
+/// Stock is per-structure player state, so it has to persist. Both halves:
+/// a machine that came home mid-batch must not have its staged ingredients
+/// silently refunded, nor its finished goods silently voided.
+#[test]
+fn partially_filled_buffers_survive_a_save_and_load_round_trip() {
+    let mut game = Game::new(976, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = deploy_upgradeable_node(&mut game);
+    {
+        let mut stock = game.world.get_mut::<Stock>(node).unwrap();
+        stock.input.insert(ItemId::from(ids::CORE_FRAGMENT), 3);
+        stock.output.insert(ItemId::from(ids::POWER_CELL), 7);
+    }
+
+    let path = std::env::temp_dir().join(format!("feral_stock_save_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let restored = find_structure_by_kind(&mut loaded, "mining_node").unwrap();
+    let stock = loaded.world.get::<Stock>(restored).unwrap();
+    assert_eq!(
+        stock.input.get(&ItemId::from(ids::CORE_FRAGMENT)).copied(),
+        Some(3),
+        "staged ingredients are not refunded by saving"
+    );
+    assert_eq!(
+        stock.output.get(&ItemId::from(ids::POWER_CELL)).copied(),
+        Some(7),
+        "finished goods waiting to be collected are not voided by saving"
+    );
+    assert_eq!(
+        stock.capacity,
+        crate::tuning::DEFAULT_OUTPUT_CAPACITY,
+        "capacity comes back off the def, not the save"
+    );
+}

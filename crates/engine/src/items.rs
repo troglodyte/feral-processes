@@ -7,7 +7,10 @@ use serde::{Deserialize, Serialize};
 /// rather than as a `ItemId("...")` tuple-struct — the RON asset files spell
 /// item references as plain quoted strings (e.g. `work_resource: Some("power_cell")`),
 /// and bincode saves encode it identically to a `String`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// `Ord` so `components::Stock` can key its buffers by item in a
+/// `BTreeMap`: iteration order there feeds the production-chain pull phase
+/// and the save encoding, both of which have to be identical run to run.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ItemId(pub String);
 

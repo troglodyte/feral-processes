@@ -2,6 +2,7 @@
 //! ending the fight.
 
 use super::support::*;
+use crate::world::NEIGHBOURS;
 use crate::*;
 
 #[test]
@@ -116,6 +117,52 @@ fn a_failed_jack_out_draws_a_parting_volley() {
         return;
     }
     panic!("no seed in 0..60 produced a failed jack-out against a 100k-power enemy");
+}
+
+/// The other half of the same fix: walled in on every side, there is
+/// nowhere to step, so the guardian — still adjacent, still `Pursuing` —
+/// catches the player again on the very next tick. Pinning this matters as
+/// much as the escape does: without it, a silent fallback (teleporting
+/// somewhere not actually adjacent-free, say) could quietly delete the
+/// danger a real corner is supposed to represent.
+#[test]
+fn a_cornered_jack_out_is_re_caught_immediately() {
+    let mut game = Game::new(731, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let ppos = *game.world.get::<Position>(player).unwrap();
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for (dx, dy) in NEIGHBOURS {
+            map.set_override(
+                ppos.x + dx,
+                ppos.y + dy,
+                Tile {
+                    biome: Biome::DataVoid,
+                    walkable: false,
+                },
+            );
+        }
+    }
+    let nest = spawn_bare_nest(&mut game, ppos.x + 1, ppos.y);
+    let guardian = spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 1, ppos.y);
+    insert_battle(&mut game, player, vec![guardian]);
+
+    for _ in 0..200 {
+        if game.battle_flee() {
+            assert!(
+                game.has_active_battle(),
+                "walled in with nowhere to step, the same adjacent pursuer should re-engage \
+                 within the same jack-out call"
+            );
+            let after = *game.world.get::<Position>(player).unwrap();
+            assert_eq!(
+                after, ppos,
+                "cornered, the player has nowhere to go — position must not change"
+            );
+            return;
+        }
+    }
+    panic!("200 jack-out attempts all failed against a trivial pursuer");
 }
 
 #[test]

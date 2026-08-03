@@ -77,6 +77,11 @@ impl Game {
         }
         let front = self.front_of_group(0);
         self.end_battle(player, front);
+        // See `Game::break_pursuer_contact`'s doc comment: without this,
+        // the `tick` below would run `nest_aggro_tick` against a pack that
+        // is still adjacent and still `Pursuing`, re-engaging the fight the
+        // player just paid an XP setback to leave.
+        self.break_pursuer_contact();
         self.tick();
         true
     }

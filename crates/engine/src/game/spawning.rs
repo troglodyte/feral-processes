@@ -223,12 +223,11 @@ impl Game {
     /// `Game::load` (`lifecycle.rs`) spawns a restored nest's entity
     /// directly rather than calling this — it must not roll fresh guardians
     /// or spend `GameRng` when it's reconstructing an exact recorded state
-    /// — but hand-writes the same four components below (`Nest`,
-    /// `Position`, `Glyph`, `Durability`). Nothing enforces that the two
-    /// stay in step: a component added here alone would make every
-    /// restored nest silently lack it, with no test catching it, since
-    /// every test spawns nests through this function. Keep the load path's
-    /// component list matching this one if either changes.
+    /// — but both it and the `spawn_bare_nest` test fixture build the same
+    /// bundle through `nest_components` below, so the three can't drift the
+    /// way `spawn_bare_nest` once did (it hardcoded `GlyphColor::Red` while
+    /// a real scrapper nest is `Yellow`). Widen `nest_components`, not any
+    /// one of its three callers, if the bundle ever needs a new component.
     pub(crate) fn spawn_nest(&mut self, species_id: &str, x: i32, y: i32) -> Entity {
         let species = self
             .world
@@ -244,20 +243,12 @@ impl Game {
             .unwrap_or_else(|| panic!("spawn_nest: unknown species {species_id}"));
         let nest = self
             .world
-            .spawn((
-                Nest {
-                    species: species.id.clone(),
-                    pending_respawns: Vec::new(),
-                },
-                Position { x, y },
-                Glyph {
-                    ch: 'N',
-                    color: species.color,
-                },
-                Durability {
-                    hp: NEST_DURABILITY,
-                    max_hp: NEST_DURABILITY,
-                },
+            .spawn(nest_components(
+                &species,
+                x,
+                y,
+                NEST_DURABILITY,
+                Vec::new(),
             ))
             .id();
         let guardian_count = {
@@ -735,4 +726,38 @@ impl Game {
         self.spawn_pack(&pick, spawn_boss, x, y, SpawnEscalation::surface());
         true
     }
+}
+
+/// The component bundle every nest entity carries — `Nest`, `Position`,
+/// `Glyph`, `Durability` — assembled once so `spawn_nest`, `Game::load`
+/// (`lifecycle.rs`) and the `spawn_bare_nest` test fixture
+/// (`tests/support.rs`) can't drift the way they already had: `hp` and
+/// `pending_respawns` come in as plain values rather than always-fresh
+/// defaults because a restored nest is neither full-health nor
+/// respawn-queue-empty, and `species` comes in as a resolved `SpeciesDef`
+/// reference rather than an id so the load path doesn't need `GameRng` on
+/// hand to build the same bundle `spawn_nest` does while actually rolling
+/// fresh guardians.
+pub(crate) fn nest_components(
+    species: &SpeciesDef,
+    x: i32,
+    y: i32,
+    hp: u32,
+    pending_respawns: Vec<u32>,
+) -> (Nest, Position, Glyph, Durability) {
+    (
+        Nest {
+            species: species.id.clone(),
+            pending_respawns,
+        },
+        Position { x, y },
+        Glyph {
+            ch: 'N',
+            color: species.color,
+        },
+        Durability {
+            hp,
+            max_hp: NEST_DURABILITY,
+        },
+    )
 }

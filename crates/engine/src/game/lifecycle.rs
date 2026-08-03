@@ -5,6 +5,7 @@
 //! set fails the economy-role check.
 
 use crate::abilities::AbilityId;
+use crate::game::spawning;
 use crate::game::zone::find_walkable_start;
 use crate::tuning::{
     DEFAULT_WORK_CAPACITY, INITIAL_WILD_POPULATION, NEST_DURABILITY, STACK_LINKS_PER_ZONE,
@@ -272,9 +273,9 @@ impl Game {
         // `nest_position` has a live nest to resolve to — mirrors
         // `structure_positions` further down, built for the same reason.
         //
-        // The component set below must stay in step with `Game::spawn_nest`
-        // (`game/spawning.rs`) — see that function's doc comment, which is
-        // the other half of this note.
+        // The bundle itself comes from `nest_components` (`game/spawning.rs`),
+        // shared with `Game::spawn_nest` — see that function's doc comment,
+        // which is the other half of this note.
         let mut nest_positions: HashMap<(i32, i32), Entity> = HashMap::new();
         for n in data.nests {
             let Some(species) = game.world.resource::<SpeciesDb>().get(&n.species).cloned() else {
@@ -282,28 +283,17 @@ impl Game {
             };
             let nest = game
                 .world
-                .spawn((
-                    Nest {
-                        species: species.id.clone(),
-                        pending_respawns: n.pending_respawns,
-                    },
-                    Position {
-                        x: n.position.0,
-                        y: n.position.1,
-                    },
-                    Glyph {
-                        ch: 'N',
-                        color: species.color,
-                    },
-                    Durability {
-                        // Clamped rather than trusted outright: NEST_DURABILITY
-                        // is a tuning.rs constant, not part of the save format,
-                        // so lowering it must not leave an existing save's nest
-                        // loading with hp above the new max — the structure
-                        // path a little further down clamps the same way.
-                        hp: n.durability.min(NEST_DURABILITY),
-                        max_hp: NEST_DURABILITY,
-                    },
+                .spawn(spawning::nest_components(
+                    &species,
+                    n.position.0,
+                    n.position.1,
+                    // Clamped rather than trusted outright: NEST_DURABILITY
+                    // is a tuning.rs constant, not part of the save format,
+                    // so lowering it must not leave an existing save's nest
+                    // loading with hp above the new max — the structure
+                    // path a little further down clamps the same way.
+                    n.durability.min(NEST_DURABILITY),
+                    n.pending_respawns,
                 ))
                 .id();
             nest_positions.insert(n.position, nest);

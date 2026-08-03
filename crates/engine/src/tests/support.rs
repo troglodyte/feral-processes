@@ -1,5 +1,6 @@
 //! Fixtures and helpers shared by the engine's unit tests.
 
+use crate::game::spawning;
 use crate::tuning::{GROUP_SIZE_STEP_TILES, MAX_ENEMY_GROUPS, NEST_DURABILITY};
 use crate::*;
 use std::path::Path;
@@ -980,24 +981,25 @@ pub(super) fn program_manifest(game: &Game, entity: Entity) -> ProgramManifest {
 /// Spawns a bare `Nest` at `(x, y)` with no guardians — for
 /// `nest_aggro_tick` tests that build their own hand-picked guardian set
 /// rather than taking whatever `Game::spawn_nest`'s RNG-picked count and
-/// placement roll. Mirrors the component set `spawn_nest` itself builds
-/// (`Position`, `Glyph`, `Durability`).
+/// placement roll. Built from the same `nest_components` (`game/spawning.rs`)
+/// as `spawn_nest` and the save-load path, rather than a hand-copied
+/// component list — this one used to hardcode `GlyphColor::Red` while a real
+/// scrapper nest is `Yellow`, which is exactly the drift sharing the bundle
+/// closes off.
 pub(super) fn spawn_bare_nest(game: &mut Game, x: i32, y: i32) -> Entity {
+    let species = game
+        .world
+        .resource::<SpeciesDb>()
+        .get("scrapper")
+        .cloned()
+        .expect("scrapper is a shipped species");
     game.world
-        .spawn((
-            Nest {
-                species: "scrapper".to_string(),
-                pending_respawns: Vec::new(),
-            },
-            Position { x, y },
-            Glyph {
-                ch: 'N',
-                color: GlyphColor::Red,
-            },
-            Durability {
-                hp: NEST_DURABILITY,
-                max_hp: NEST_DURABILITY,
-            },
+        .spawn(spawning::nest_components(
+            &species,
+            x,
+            y,
+            NEST_DURABILITY,
+            Vec::new(),
         ))
         .id()
 }

@@ -1635,6 +1635,46 @@ fn nest_aggro_tick_is_a_no_op_while_underground() {
     );
 }
 
+/// Pins the deviation recorded in `nest_aggro_tick`'s "field-absence"
+/// branch (and the matching "Implementation note" in
+/// docs/superpowers/specs/2026-08-03-nest-aggression-design.md): reaching
+/// the base disbands a chase zone-wide, not just for whichever guardian was
+/// closest. Standing on the platform's interior makes every one of the
+/// player's own neighbours `Biome::Platform`, so the pursuit field never
+/// grows past the player's own tile — a guardian 40 tiles off reads as
+/// "absent from the field" exactly the way one merely out of leash range
+/// does, and loses `Pursuing` the same way.
+#[test]
+fn standing_inside_the_base_slab_clears_every_pursuer_zone_wide() {
+    let mut game = Game::new(717, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let ppos = *game.world.get::<Position>(player).unwrap();
+    game.stamp_platform(ppos.x, ppos.y);
+    assert_eq!(
+        game.world
+            .resource_mut::<WorldMap>()
+            .tile(ppos.x, ppos.y)
+            .biome,
+        Biome::Platform,
+        "test premise: the player must actually be standing inside the slab"
+    );
+
+    // Far enough that this can't be mistaken for the ordinary out-of-field
+    // rule tripping on plain distance — this guardian is nowhere near
+    // either the leash radius or the player's own search box, and would
+    // keep closing normally on open ground with no platform involved.
+    let nest = spawn_bare_nest(&mut game, ppos.x + 40, ppos.y);
+    let guardian = spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 40, ppos.y);
+
+    game.tick();
+
+    assert!(
+        game.world.get::<Pursuing>(guardian).is_none(),
+        "reaching the base should disband every pursuer in the zone, however far off its \
+         chase actually is"
+    );
+}
+
 /// The nest cache: `Game::grant_nest_cache`, called from `attack_nest`'s
 /// `destroyed` branch. Content comes entirely from the nest's `SpeciesDef` —
 /// these tests lean on shipped species rather than hardcoded item ids

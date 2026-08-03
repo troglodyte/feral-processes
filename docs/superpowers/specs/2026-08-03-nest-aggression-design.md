@@ -140,6 +140,28 @@ A pursuer whose own tile is absent from the field has no route to the player
 — it stands inside an enclosure, or the player is outside the box. It skips
 its step and wanders. This is a legitimate outcome, not an error.
 
+> **Implementation note:** shipped removing `Pursuing` outright rather than
+> "skips its step and wanders" as written above. A pursuer absent from the
+> field is exactly the guardian `wander_ai_system` would otherwise also
+> skip (it excludes anything `Pursuing`), so "wanders" would have left it
+> frozen solid forever — while still paying for a full field build on its
+> behalf every tick from then on. Dropping the marker is the same give-up
+> the leash check already performs, just triggered by unreachability
+> instead of distance.
+>
+> This has a consequence worth recording in its own right: standing
+> anywhere in the base slab's interior makes every one of the player's
+> eight neighbours `Biome::Platform`, so the field the pursuit step builds
+> comes back holding only the player's own tile — the same shape
+> `pursuit_field`'s enclosed-origin case produces. Every pursuer currently
+> `Pursuing`, however far off its own chase actually is, reads as absent
+> from that field, so reaching home disbands the *whole* swarm at once,
+> not just whichever guardian happened to be closest. **This is the
+> intended rule, not a bug: the base is where a chase ends, zone-wide.**
+> See `Game::nest_aggro_tick` (`game/turn.rs`) and
+> `standing_inside_the_base_slab_clears_every_pursuer_zone_wide`
+> (`tests/zone.rs`).
+
 ### One tick of pursuit
 
 New `Game::nest_aggro_tick`, called from `tick_inner` immediately after

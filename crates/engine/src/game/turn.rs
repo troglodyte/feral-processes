@@ -219,6 +219,16 @@ impl Game {
                 self.start_battle(pack);
                 return;
             }
+            // This is also how the base ends a chase, zone-wide, and
+            // deliberately so: standing in the platform's interior makes
+            // every one of the player's own neighbours Biome::Platform, so
+            // `field` above never grows past {player: 0} — the same shape
+            // `pursuit_field`'s enclosed-origin case produces. Every
+            // pursuer reads as absent from it here, however far off its own
+            // chase actually is, not just whichever guardian was closest.
+            // See the "Implementation note" under "Pathing: one distance
+            // field per tick" in
+            // docs/superpowers/specs/2026-08-03-nest-aggression-design.md.
             if !field.contains_key(&(pos.x, pos.y)) {
                 self.world.entity_mut(pursuer).remove::<Pursuing>();
                 continue;
@@ -253,6 +263,81 @@ impl Game {
                 return;
             }
         }
+    }
+
+    /// Steps the player one tile away from every currently `Pursuing`
+    /// guardian, without touching the marker on any of them — contact is
+    /// broken, not aggro. Only `battle_flee`'s successful path calls this,
+    /// and only between `end_battle` and the `tick` that follows it.
+    ///
+    /// It exists because that gap is a collision: `end_battle` moves no one
+    /// and clears no `Pursuing`, so the `tick` a successful jack-out calls
+    /// next runs `nest_aggro_tick`, whose very first per-pursuer check is
+    /// Chebyshev adjacency — the same pack the player just paid an XP
+    /// setback to escape would engage again before a single input reached
+    /// the game. Anything else that starts a battle from inside
+    /// `tick_inner` (a new ambush type, say) needs to ask whether it has
+    /// the same collision against whatever just tore down the last battle.
+    ///
+    /// Candidates are the player's eight neighbours, filtered to walkable
+    /// ground with nothing already standing on it. Among the candidates
+    /// that put the player more than one tile (Chebyshev) from *every*
+    /// `Pursuing` entity — not just the one that caught up — this picks
+    /// whichever maximises the distance to the nearest of them. If none of
+    /// the eight clears every pursuer, the player is cornered: this does
+    /// nothing, and the pack re-engages on the very next tick. That is the
+    /// intended outcome, not a bug — a swarm that surrounds you is supposed
+    /// to catch you, and inventing a fallback teleport would quietly delete
+    /// the danger the corner represents.
+    pub(crate) fn break_pursuer_contact(&mut self) {
+        if self.is_underground() {
+            return;
+        }
+        let player = self.player_entity();
+        let player_pos = *self.world.get::<Position>(player).unwrap();
+
+        let pursuer_positions: Vec<Position> = {
+            let mut query = self.world.query_filtered::<&Position, With<Pursuing>>();
+            query.iter(&self.world).copied().collect()
+        };
+        if pursuer_positions.is_empty() {
+            return;
+        }
+
+        let clear_of_everyone = |game: &mut Self, pos: Position| -> bool {
+            game.world.resource_mut::<WorldMap>().tile(pos.x, pos.y).walkable
+                && game.find_wild_creature_at(pos.x, pos.y).is_none()
+                && game.find_nest_at(pos.x, pos.y).is_none()
+                && game.find_blocking_structure_at(pos.x, pos.y).is_none()
+        };
+
+        let mut best: Option<(Position, i32)> = None;
+        for (dx, dy) in NEIGHBOURS {
+            let candidate = Position {
+                x: player_pos.x + dx,
+                y: player_pos.y + dy,
+            };
+            if !clear_of_everyone(self, candidate) {
+                continue;
+            }
+            let nearest = pursuer_positions
+                .iter()
+                .map(|&p| chebyshev(candidate, p))
+                .min()
+                .unwrap();
+            if nearest <= 1 {
+                continue;
+            }
+            if best.is_none_or(|(_, best_dist)| nearest > best_dist) {
+                best = Some((candidate, nearest));
+            }
+        }
+        let Some((dest, _)) = best else {
+            return;
+        };
+        let mut p = self.world.get_mut::<Position>(player).unwrap();
+        p.x = dest.x;
+        p.y = dest.y;
     }
 
     /// Ages every deployed `Temporary` structure by one tick, collapsing

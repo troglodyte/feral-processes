@@ -663,7 +663,7 @@ fn losing_a_trader_that_holds_stock_says_so() {
     game.damage_structure(market, u32::MAX, "iso Market");
     let said: Vec<String> = game.world.resource::<MessageLog>().lines[before..]
         .iter()
-        .map(|(_, text)| text.clone())
+        .map(|e| e.text.clone())
         .collect();
 
     assert!(
@@ -691,7 +691,7 @@ fn losing_an_empty_trader_is_silent_about_the_shelf() {
     assert!(
         !game.world.resource::<MessageLog>().lines[before..]
             .iter()
-            .any(|(_, text)| text.to_lowercase().contains("footprint")),
+            .any(|e| e.text.to_lowercase().contains("footprint")),
         "a trader with nothing on its shelf loses nothing"
     );
 }
@@ -713,7 +713,7 @@ fn demolishing_a_trader_that_holds_stock_says_so_too() {
     assert!(
         game.world.resource::<MessageLog>().lines[before..]
             .iter()
-            .any(|(_, text)| text.to_lowercase().contains("footprint")),
+            .any(|e| e.text.to_lowercase().contains("footprint")),
         "demolishing a trader must not go quiet where a raid speaks up"
     );
 }

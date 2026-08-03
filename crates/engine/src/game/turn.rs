@@ -35,7 +35,20 @@ impl Game {
         self.world.resource_mut::<MessageLog>().push_kind(kind, s);
     }
 
-    pub fn message_log(&self, n: usize) -> Vec<(MessageKind, String)> {
+    /// News from the base — production, construction, and the base coming
+    /// under attack. `log` stays the default because most of the game is not
+    /// the base; see `MessageSource`.
+    pub(crate) fn log_base(&mut self, s: impl Into<String>) {
+        self.world.resource_mut::<MessageLog>().push_base(s);
+    }
+
+    pub(crate) fn log_base_kind(&mut self, kind: MessageKind, s: impl Into<String>) {
+        self.world
+            .resource_mut::<MessageLog>()
+            .push_base_kind(kind, s);
+    }
+
+    pub fn message_log(&self, n: usize) -> Vec<LogLine> {
         self.world.resource::<MessageLog>().recent(n).to_vec()
     }
 
@@ -53,7 +66,7 @@ impl Game {
     /// pane rather than the tail of the previous one. Once the battle has
     /// ended this is the pruned result set, which is what a frontend still
     /// mid-reveal is scrolling in.
-    pub fn battle_log(&self) -> Vec<(MessageKind, String)> {
+    pub fn battle_log(&self) -> Vec<LogLine> {
         self.world.resource::<MessageLog>().since_round().to_vec()
     }
 

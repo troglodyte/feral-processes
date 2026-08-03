@@ -297,7 +297,7 @@ fn rest_is_refused_with_no_outlet_and_does_not_tick() {
     assert!(
         game.message_log(5)
             .iter()
-            .any(|(_, line)| line.to_lowercase().contains("outlet")),
+            .any(|e| e.text.to_lowercase().contains("outlet")),
         "the refusal should say why"
     );
 }
@@ -493,7 +493,7 @@ fn rest_refuses_and_refunds_when_a_repeated_cost_item_only_partly_affords() {
     assert!(
         game.message_log(5)
             .iter()
-            .any(|(_, line)| line.to_lowercase().contains("outlet")),
+            .any(|e| e.text.to_lowercase().contains("outlet")),
         "the refusal should say why"
     );
 }
@@ -588,7 +588,7 @@ fn tick_field_buffs_logs_the_armed_name_not_the_kind_on_expiry() {
 
     let log = game.message_log(10);
     assert!(
-        log.iter().any(|(_, line)| line.contains("Snare Protocol")),
+        log.iter().any(|e| e.text.contains("Snare Protocol")),
         "the expiry line should name the armed buff, not its kind: {log:?}"
     );
 }
@@ -1280,7 +1280,7 @@ fn use_power_source_with_nothing_to_recharge_from_is_a_no_op() {
     assert!(
         game.message_log(10)
             .iter()
-            .any(|(_, line)| line == "You have nothing to recharge from."),
+            .any(|e| e.text == "You have nothing to recharge from."),
         "expected the no-power-source message, got: {:?}",
         game.message_log(10)
     );

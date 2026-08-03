@@ -1,12 +1,22 @@
 //! The history screen's fold of repeated lines — see `resources::condense`.
 
 use super::support::test_assets_dir;
-use crate::resources::{CONDENSE_LOOKBACK, DifficultyMode, LogEntry, MessageKind, condense};
+use crate::resources::{
+    CONDENSE_LOOKBACK, DifficultyMode, LogEntry, LogLine, MessageKind, MessageSource, condense,
+};
 
-fn info(lines: &[&str]) -> Vec<(MessageKind, String)> {
+fn line(kind: MessageKind, source: MessageSource, text: &str) -> LogLine {
+    LogLine {
+        kind,
+        source,
+        text: text.to_string(),
+    }
+}
+
+fn info(lines: &[&str]) -> Vec<LogLine> {
     lines
         .iter()
-        .map(|l| (MessageKind::Info, (*l).to_string()))
+        .map(|l| line(MessageKind::Info, MessageSource::Field, l))
         .collect()
 }
 
@@ -68,7 +78,11 @@ fn duplicates_beyond_the_window_stay_separate() {
 fn the_window_is_counted_in_entries() {
     let filler: Vec<String> = (0..CONDENSE_LOOKBACK - 1).map(|i| i.to_string()).collect();
     let mut lines = info(&["repeated"]);
-    lines.extend(filler.iter().map(|f| (MessageKind::Info, f.clone())));
+    lines.extend(
+        filler
+            .iter()
+            .map(|f| line(MessageKind::Info, MessageSource::Field, f)),
+    );
     lines.extend(info(&["repeated"]));
     assert_eq!(
         condense(&lines).first().map(|e| e.repeats),
@@ -78,7 +92,11 @@ fn the_window_is_counted_in_entries() {
 
     let filler: Vec<String> = (0..CONDENSE_LOOKBACK).map(|i| i.to_string()).collect();
     let mut lines = info(&["repeated"]);
-    lines.extend(filler.iter().map(|f| (MessageKind::Info, f.clone())));
+    lines.extend(
+        filler
+            .iter()
+            .map(|f| line(MessageKind::Info, MessageSource::Field, f)),
+    );
     lines.extend(info(&["repeated"]));
     assert_eq!(
         condense(&lines).len(),
@@ -92,8 +110,8 @@ fn the_window_is_counted_in_entries() {
 #[test]
 fn the_same_text_under_two_kinds_stays_two_entries() {
     let lines = vec![
-        (MessageKind::Info, "the same words".to_string()),
-        (MessageKind::Outcome, "the same words".to_string()),
+        line(MessageKind::Info, MessageSource::Field, "the same words"),
+        line(MessageKind::Outcome, MessageSource::Field, "the same words"),
     ];
     let entries = condense(&lines);
     assert_eq!(
@@ -110,6 +128,45 @@ fn the_same_text_under_two_kinds_stays_two_entries() {
 fn a_fold_anchors_at_the_first_occurrence() {
     let lines = info(&["first", "second", "first"]);
     assert_eq!(shape(&condense(&lines)), [("first", 2), ("second", 1)]);
+}
+
+/// Source is part of the key for the same reason kind is. The two channels
+/// are read separately, so a line the base produced and an identical line the
+/// field produced are two events even though they read alike.
+#[test]
+fn the_same_text_from_two_sources_stays_two_entries() {
+    let lines = vec![
+        line(MessageKind::Info, MessageSource::Field, "it comes apart"),
+        line(MessageKind::Info, MessageSource::Base, "it comes apart"),
+    ];
+    let entries = condense(&lines);
+    assert_eq!(
+        shape(&entries),
+        [("it comes apart", 1), ("it comes apart", 1)]
+    );
+    assert_eq!(entries[0].source, MessageSource::Field);
+    assert_eq!(entries[1].source, MessageSource::Base);
+}
+
+/// Field is the default, so the ~130 log calls that predate the split keep
+/// their meaning without being touched.
+#[test]
+fn an_ordinary_log_line_is_field_sourced() {
+    let mut game = crate::Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.log("you strike the sentinel");
+    let last = game.message_log(1);
+    assert_eq!(last[0].source, MessageSource::Field);
+}
+
+/// The two axes are orthogonal: tagging a line base must not disturb the kind
+/// that `retain_outcomes_since_battle` and the colour table read.
+#[test]
+fn a_base_line_keeps_its_kind() {
+    let mut game = crate::Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.log_base_kind(MessageKind::Raid, "a raid strikes the Fabricator");
+    let last = game.message_log(1);
+    assert_eq!(last[0].kind, MessageKind::Raid);
+    assert_eq!(last[0].source, MessageSource::Base);
 }
 
 #[test]

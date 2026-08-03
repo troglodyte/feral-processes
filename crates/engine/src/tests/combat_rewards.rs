@@ -50,7 +50,7 @@ fn award_loot_grants_the_species_work_resource() {
     let tagged = game
         .message_log(10)
         .into_iter()
-        .any(|(kind, _)| kind == MessageKind::Loot);
+        .any(|e| e.kind == MessageKind::Loot);
     assert!(
         tagged,
         "a resource drop should log a MessageKind::Loot line, got: {:?}",
@@ -328,7 +328,7 @@ fn player_level_up_message_is_tagged_message_kind_level_up() {
     let tagged = game
         .message_log(10)
         .into_iter()
-        .any(|(kind, text)| kind == MessageKind::LevelUp && text.contains("reach level"));
+        .any(|e| e.kind == MessageKind::LevelUp && e.text.contains("reach level"));
     assert!(
         tagged,
         "leveling up should log a MessageKind::LevelUp line, got: {:?}",

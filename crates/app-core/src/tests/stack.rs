@@ -304,7 +304,7 @@ fn descending_from_the_entry_cell_refuses_instead_of_surfacing() {
     assert!(
         game.message_log(10)
             .iter()
-            .any(|(_, l)| l.contains("no way down")),
+            .any(|e| e.text.contains("no way down")),
         "the refusal should say why"
     );
 }

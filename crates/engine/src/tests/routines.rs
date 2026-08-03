@@ -117,10 +117,10 @@ fn evicting_a_manually_installed_priority_boost_is_logged() {
         "the unlock still evicts the id-matched slot, manual install or not"
     );
     assert!(
-        game.message_log(10).iter().any(|(_, text)| {
-            text.contains("swaps out")
-                && text.contains("Priority Boost")
-                && text.contains("Sandbox")
+        game.message_log(10).iter().any(|e| {
+            e.text.contains("swaps out")
+                && e.text.contains("Priority Boost")
+                && e.text.contains("Sandbox")
         }),
         "the eviction of a deliberately installed routine must be logged, \
          not just the auto-installed placeholder's: {:?}",
@@ -254,7 +254,7 @@ fn a_routine_naming_a_since_removed_ability_is_dropped_on_load_with_a_warning() 
         loaded
             .message_log(20)
             .iter()
-            .any(|(_, text)| text.contains("no longer available")),
+            .any(|e| e.text.contains("no longer available")),
         "the drop must be logged, not silent: {:?}",
         loaded.message_log(20)
     );

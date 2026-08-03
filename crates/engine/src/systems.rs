@@ -277,7 +277,7 @@ pub fn task_progress_system(
             &item_db,
             &mut rng,
         ) else {
-            log.push("Your subroutine's extraction attempt fails to compile.".to_string());
+            log.push_base("Your subroutine's extraction attempt fails to compile.".to_string());
             continue;
         };
         if let Ok(mut inv) = inventories.get_mut(tamed.owner) {
@@ -287,7 +287,7 @@ pub fn task_progress_system(
                 .unwrap_or(resource.as_str());
             let landed = inv.add_capped(resource.clone(), payout, &item_db);
             if landed == 0 {
-                log.push(format!(
+                log.push_base(format!(
                     "A cronjob yields {resource_name} but there's no room to store it."
                 ));
             }
@@ -316,7 +316,7 @@ pub fn task_progress_system(
             } else {
                 String::new()
             };
-            log.push_kind(
+            log.push_base_kind(
                 MessageKind::Loot,
                 format!("Your subroutine extracted {landed} {resource_name}.{level_note}"),
             );
@@ -370,7 +370,7 @@ pub fn player_gather_system(
             &item_db,
             &mut rng,
         ) else {
-            log.push("Your extraction attempt fails to compile.".to_string());
+            log.push_base("Your extraction attempt fails to compile.".to_string());
             continue;
         };
         let resource_name = item_db
@@ -379,12 +379,12 @@ pub fn player_gather_system(
             .unwrap_or(resource.as_str());
         let landed = inv.add_capped(resource.clone(), payout, &item_db);
         if landed == 0 {
-            log.push(format!(
+            log.push_base(format!(
                 "You pull {resource_name} loose but there's no room to store it."
             ));
             continue;
         }
-        log.push_kind(
+        log.push_base_kind(
             MessageKind::Loot,
             format!("You extract {landed} {resource_name}."),
         );
@@ -440,7 +440,7 @@ pub fn passive_process_system(
                     .get(recipe.produces.as_str())
                     .map(|d| d.name.as_str())
                     .unwrap_or(recipe.produces.as_str());
-                log.push_kind(
+                log.push_base_kind(
                     MessageKind::Loot,
                     format!(
                         "The {} processes a {consumes_name} into a {produces_name}.",

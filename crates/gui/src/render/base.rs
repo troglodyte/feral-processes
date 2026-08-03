@@ -128,7 +128,7 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
     // pane's worth of older lines to draw.
     let lines = game.message_log(capacity + hidden);
     let shown = lines.len().saturating_sub(hidden);
-    for (kind, line) in lines
+    for e in lines
         .iter()
         .take(shown)
         .skip(shown.saturating_sub(capacity))
@@ -136,7 +136,7 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
         if ly > painter.screen_h() - m.gap {
             break;
         }
-        draw_message_line(*kind, line, m.inset, ly, painter, m);
+        draw_message_line(e.kind, &e.text, m.inset, ly, painter, m);
         ly += m.line_height;
     }
 }
@@ -484,10 +484,12 @@ fn draw_status_panel(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use feral_processes_engine::MessageSource;
 
     fn entry(text: &str, repeats: usize) -> LogEntry {
         LogEntry {
             kind: MessageKind::Info,
+            source: MessageSource::Field,
             text: text.to_string(),
             repeats,
         }

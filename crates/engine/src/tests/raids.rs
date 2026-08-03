@@ -4,6 +4,36 @@ use super::support::*;
 use crate::tuning::{NEST_DURABILITY, RAID_DAMAGE, RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_INTERVAL};
 use crate::*;
 
+/// The two axes are independent, and this is the line that proves it. A raid
+/// alert is base news, so the log pane's `Base` filter must show it — while
+/// staying `MessageKind::Raid`, which is what carries it past
+/// `retain_outcomes_since_battle` and colours it. Tag it `Base` by turning
+/// `log_kind` into `log_base_kind` and neither property moves.
+#[test]
+fn a_structure_lost_to_a_raid_is_base_news_without_losing_its_kind() {
+    let mut game = Game::new(600, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+            Durability { hp: 10, max_hp: 30 },
+        ))
+        .id();
+
+    game.damage_structure(structure, 10, "Mining Node");
+
+    let entry = game
+        .message_log(20)
+        .into_iter()
+        .find(|e| e.text.contains("destroyed in a raid"))
+        .expect("a destroyed structure must announce itself");
+    assert_eq!(entry.kind, MessageKind::Raid);
+    assert_eq!(entry.source, MessageSource::Base);
+}
+
 #[test]
 fn raid_check_never_targets_a_nest_even_as_the_only_durability_holder() {
     let mut game = Game::new(600, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -269,7 +299,7 @@ fn raid_damage_message_is_tagged_message_kind_raid() {
             let tagged = game
                 .message_log(10)
                 .into_iter()
-                .any(|(kind, _)| kind == MessageKind::Raid);
+                .any(|e| e.kind == MessageKind::Raid);
             if tagged {
                 return;
             }
@@ -1185,7 +1215,7 @@ fn a_raid_defender_brought_to_zero_is_destroyed_rather_than_standing_down() {
     assert!(
         game.message_log(200)
             .iter()
-            .any(|(k, l)| *k == MessageKind::Raid && l.contains("destroyed defending")),
+            .any(|e| e.kind == MessageKind::Raid && e.text.contains("destroyed defending")),
         "the loss is reported as a Raid line, since the player wasn't there to see it"
     );
 }

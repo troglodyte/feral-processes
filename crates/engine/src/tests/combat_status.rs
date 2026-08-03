@@ -201,8 +201,8 @@ fn the_kill_line_and_xp_award_are_tagged_as_outcomes() {
     let tagged: Vec<String> = game
         .message_log(50)
         .into_iter()
-        .filter(|(kind, _)| *kind == MessageKind::Outcome)
-        .map(|(_, line)| line)
+        .filter(|e| e.kind == MessageKind::Outcome)
+        .map(|e| e.text)
         .collect();
 
     assert!(
@@ -224,7 +224,7 @@ fn the_battle_log_holds_only_the_current_battle() {
     start_battle_with_a_wild_program(&mut game);
     game.log("mid-battle narration");
 
-    let battle: Vec<String> = game.battle_log().into_iter().map(|(_, l)| l).collect();
+    let battle: Vec<String> = game.battle_log().into_iter().map(|e| e.text).collect();
 
     assert!(
         battle.iter().any(|l| l == "mid-battle narration"),
@@ -248,7 +248,7 @@ fn the_mark_survives_a_log_that_overflows_its_cap() {
         game.log(format!("line {i}"));
     }
 
-    let battle: Vec<String> = game.battle_log().into_iter().map(|(_, l)| l).collect();
+    let battle: Vec<String> = game.battle_log().into_iter().map(|e| e.text).collect();
 
     assert_eq!(
         battle.last().map(String::as_str),
@@ -274,7 +274,7 @@ fn ending_a_battle_keeps_results_and_drops_narration() {
 
     game.end_battle(player, None);
 
-    let after: Vec<String> = game.message_log(100).into_iter().map(|(_, l)| l).collect();
+    let after: Vec<String> = game.message_log(100).into_iter().map(|e| e.text).collect();
     assert!(
         !after.iter().any(|l| l.contains("swings and misses")),
         "blow-by-blow survived the prune: {after:?}"
@@ -305,7 +305,7 @@ fn a_second_battle_starts_with_an_empty_pane() {
         game.battle_log_generation(),
         "the pane generation did not advance for the new battle"
     );
-    let battle: Vec<String> = game.battle_log().into_iter().map(|(_, l)| l).collect();
+    let battle: Vec<String> = game.battle_log().into_iter().map(|e| e.text).collect();
     assert!(
         !battle.iter().any(|l| l == "first battle narration"),
         "the previous battle's narration is still in the pane: {battle:?}"
@@ -330,7 +330,7 @@ fn pruning_does_not_drag_the_battle_mark_backwards() {
 
     game.end_battle(player, None);
 
-    let battle: Vec<String> = game.battle_log().into_iter().map(|(_, l)| l).collect();
+    let battle: Vec<String> = game.battle_log().into_iter().map(|e| e.text).collect();
     assert!(
         !battle.iter().any(|l| l.contains("before the fight")),
         "the mark slid back past the battle after pruning: {battle:?}"
@@ -351,13 +351,13 @@ fn resolving_a_round_clears_the_pane_of_the_previous_one() {
     assert!(
         game.battle_log()
             .iter()
-            .any(|(_, l)| l.contains("intercepts your signal")),
+            .any(|e| e.text.contains("intercepts your signal")),
         "the opening line should be in the pane before any round resolves"
     );
 
     resolve_round_with(&mut game, BattleAction::Defend);
 
-    let pane: Vec<String> = game.battle_log().into_iter().map(|(_, l)| l).collect();
+    let pane: Vec<String> = game.battle_log().into_iter().map(|e| e.text).collect();
     assert!(
         !pane.iter().any(|l| l.contains("intercepts your signal")),
         "the opening line survived into the next round: {pane:?}"
@@ -398,7 +398,7 @@ fn wild_programs_only_sometimes_reach_for_their_status_effect() {
             .message_log(200)
             .into_iter()
             .skip(before)
-            .map(|(_, l)| l)
+            .map(|e| e.text)
             .collect();
 
         // Which move was used is only observable through the line naming it.
@@ -680,19 +680,20 @@ fn a_companion_brought_to_zero_announces_its_deletion_and_its_lost_routines() {
 
     game.apply_damage(companion, 10);
 
-    let (kind, line) = game
+    let entry = game
         .message_log(20)
         .into_iter()
-        .find(|(_, l)| l.contains(&name) && l.contains("deleted"))
+        .find(|e| e.text.contains(&name) && e.text.contains("deleted"))
         .expect("a companion reaching 0 HP must announce its deletion");
     assert_eq!(
-        kind,
+        entry.kind,
         MessageKind::Outcome,
         "the death line must survive retain_outcomes_since_battle"
     );
     assert!(
-        line.contains("Priority Boost"),
-        "the line must name the routines lost with it, got: {line}"
+        entry.text.contains("Priority Boost"),
+        "the line must name the routines lost with it, got: {}",
+        entry.text
     );
 }
 
@@ -711,7 +712,7 @@ fn a_hostile_brought_to_zero_is_not_announced_by_the_companion_death_path() {
         !game
             .message_log(20)
             .iter()
-            .any(|(_, l)| l.contains("deleted for good")),
+            .any(|e| e.text.contains("deleted for good")),
         "only party members route through the companion death announcement"
     );
 }
@@ -730,7 +731,7 @@ fn the_death_line_fires_once_on_the_transition_to_zero_and_never_above_it() {
         !game
             .message_log(20)
             .iter()
-            .any(|(_, l)| l.contains("deleted for good")),
+            .any(|e| e.text.contains("deleted for good")),
         "a survivable hit must not announce a death"
     );
 
@@ -739,7 +740,7 @@ fn the_death_line_fires_once_on_the_transition_to_zero_and_never_above_it() {
     let announcements = game
         .message_log(20)
         .iter()
-        .filter(|(_, l)| l.contains("deleted for good"))
+        .filter(|e| e.text.contains("deleted for good"))
         .count();
     assert_eq!(
         announcements, 1,
@@ -847,7 +848,7 @@ fn the_player_at_zero_hp_is_not_touched_by_the_program_death_path() {
         !game
             .message_log(20)
             .iter()
-            .any(|(_, l)| l.contains("deleted for good")),
+            .any(|e| e.text.contains("deleted for good")),
         "the player does not get a program death line"
     );
 }

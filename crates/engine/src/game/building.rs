@@ -109,7 +109,7 @@ impl Game {
         if def.id == HOME_STRUCTURE_ID {
             self.stamp_platform(x, y);
         }
-        self.log(format!("You deploy a {}.", def.name));
+        self.log_base(format!("You deploy a {}.", def.name));
         self.tick();
         Ok(())
     }
@@ -188,7 +188,7 @@ impl Game {
         {
             node.level = Some(next);
         }
-        self.log(format!("You upgrade the {} to Mk{next}.", def.name));
+        self.log_base(format!("You upgrade the {} to Mk{next}.", def.name));
         self.tick();
         Ok(())
     }
@@ -282,7 +282,7 @@ impl Game {
             format!(" You recover {}.", parts.join(", "))
         };
         if is_home && removed_count > 1 {
-            self.log_kind(
+            self.log_base_kind(
                 MessageKind::Loot,
                 format!(
                     "You demolish the Home — without it, {} other base structure{} collapse{}.{refund_note}",
@@ -292,7 +292,7 @@ impl Game {
                 ),
             );
         } else {
-            self.log_kind(
+            self.log_base_kind(
                 MessageKind::Loot,
                 format!("You demolish the {removed_name}.{refund_note}"),
             );
@@ -341,7 +341,7 @@ impl Game {
             progress: 0,
             required: ticks,
         });
-        self.log("You set to work. Moving off breaks your concentration.");
+        self.log_base("You set to work. Moving off breaks your concentration.");
         self.tick();
         Ok(())
     }
@@ -369,10 +369,10 @@ impl Game {
         }?;
         self.world.entity_mut(holder).remove::<Task>();
         if holder == self.player_entity() {
-            self.log("You break off what you were doing.");
+            self.log_base("You break off what you were doing.");
         } else {
             let name = self.creature_label(holder);
-            self.log(format!("{name} stands down."));
+            self.log_base(format!("{name} stands down."));
         }
         Some(holder)
     }
@@ -399,7 +399,7 @@ impl Game {
                 .resource_mut::<Party>()
                 .0
                 .retain(|&e| e != worker);
-            self.log("It stands down as your companion to run this cronjob.");
+            self.log_base("It stands down as your companion to run this cronjob.");
         }
         self.displace_task_holder(structure, TaskKind::GatherResource);
         self.world.entity_mut(worker).insert(Task {
@@ -408,7 +408,7 @@ impl Game {
             progress: 0,
             required: ticks,
         });
-        self.log("Cronjob scheduled.");
+        self.log_base("Cronjob scheduled.");
         self.tick();
         Ok(())
     }
@@ -456,7 +456,7 @@ impl Game {
                 .resource_mut::<Party>()
                 .0
                 .retain(|&e| e != worker);
-            self.log("It stands down as your companion to guard this structure.");
+            self.log_base("It stands down as your companion to guard this structure.");
         }
         self.displace_task_holder(structure, TaskKind::Guard);
         self.world.entity_mut(worker).insert(Task {
@@ -465,7 +465,7 @@ impl Game {
             progress: 0,
             required: 0,
         });
-        self.log("It takes up a defensive position.");
+        self.log_base("It takes up a defensive position.");
         self.tick();
         Ok(())
     }

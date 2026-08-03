@@ -1624,7 +1624,7 @@ fn killing_the_guardian_clears_the_lair_for_good() {
 fn roused_count(game: &Game) -> usize {
     game.message_log(200)
         .iter()
-        .filter(|(_, line)| line.contains("very large"))
+        .filter(|e| e.text.contains("very large"))
         .count()
 }
 
@@ -1858,9 +1858,7 @@ fn a_frame_hangs_doorways_in_corridors_not_junctions() {
 
 /// True if any of the last `n` log lines contains `needle`.
 fn logged(game: &Game, needle: &str) -> bool {
-    game.message_log(12)
-        .iter()
-        .any(|(_, line)| line.contains(needle))
+    game.message_log(12).iter().any(|e| e.text.contains(needle))
 }
 
 #[test]
@@ -2085,8 +2083,8 @@ fn arriving_in_a_zone_scans_for_links_and_says_where_the_nearest_is() {
     let scan = game
         .message_log(50)
         .into_iter()
-        .find(|(_, line)| line.contains("Deep scan"))
-        .map(|(_, line)| line);
+        .find(|e| e.text.contains("Deep scan"))
+        .map(|e| e.text);
     let Some(scan) = scan else {
         panic!("arriving in a zone should report what the scan found");
     };
@@ -2117,7 +2115,7 @@ fn breaching_a_zone_scans_the_new_sector_too() {
     assert!(
         game.message_log(50)
             .iter()
-            .any(|(_, line)| line.contains("Deep scan")),
+            .any(|e| e.text.contains("Deep scan")),
         "a fresh sector needs its own scan, or the layer is invisible again"
     );
 }
@@ -2649,8 +2647,7 @@ fn crossing_a_band_logs_an_outcome_line() {
     assert!(
         game.message_log(12)
             .iter()
-            .any(|(kind, line)| *kind == MessageKind::Outcome
-                && line.contains("turns to look at you")),
+            .any(|e| e.kind == MessageKind::Outcome && e.text.contains("turns to look at you")),
         "crossing into Noticed should announce itself as an Outcome"
     );
 }

@@ -67,7 +67,7 @@ fn every_shipped_asset_file_loads_without_a_warning() {
     let skipped: Vec<String> = game
         .message_log(usize::MAX)
         .into_iter()
-        .map(|(_, text)| text)
+        .map(|e| e.text)
         .filter(|text| text.contains("skipped invalid"))
         .collect();
 

@@ -658,8 +658,8 @@ fn resolving_a_round_logs_one_round_separator_numbered_for_the_round_that_ran() 
     let separators: Vec<String> = game
         .message_log(200)
         .into_iter()
-        .filter(|(kind, _)| *kind == MessageKind::Round)
-        .map(|(_, text)| text)
+        .filter(|e| e.kind == MessageKind::Round)
+        .map(|e| e.text)
         .collect();
     assert_eq!(
         separators.len(),
@@ -814,7 +814,7 @@ fn installing_a_researched_routine_makes_the_players_special_available() {
 /// Every `MessageKind` a resolved round can log, in the order the round
 /// produced them.
 fn logged_kinds(game: &Game) -> Vec<MessageKind> {
-    game.message_log(200).into_iter().map(|(k, _)| k).collect()
+    game.message_log(200).into_iter().map(|e| e.kind).collect()
 }
 
 /// The kinds one `species`'s retaliation logs, across a fixed span of seeds.
@@ -893,8 +893,8 @@ fn a_party_members_hit_is_logged_as_party_damage() {
     let damage_lines: Vec<String> = game
         .message_log(200)
         .into_iter()
-        .filter(|(kind, _)| *kind == MessageKind::PartyDamage)
-        .map(|(_, text)| text)
+        .filter(|e| e.kind == MessageKind::PartyDamage)
+        .map(|e| e.text)
         .collect();
     assert_eq!(
         damage_lines.len(),

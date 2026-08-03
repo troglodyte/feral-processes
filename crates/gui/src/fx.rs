@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 use crate::paint::{Color, Painter};
 use crate::text::Metrics;
-use feral_processes_engine::{EffectKind, MessageKind, VisualEffect};
+use feral_processes_engine::{EffectKind, LogLine, MessageKind, VisualEffect};
 
 /// Alpha a tile flash starts at, before fading linearly to nothing. Chosen
 /// to read against the dim tile backgrounds without hiding the glyph.
@@ -154,7 +154,7 @@ pub struct Fx {
     bars: HashMap<u64, BarTracking>,
     camera: Option<(f32, f32)>,
     log_flash_until: f64,
-    last_log_line: Option<(MessageKind, String)>,
+    last_log_line: Option<LogLine>,
 }
 
 impl Fx {
@@ -319,12 +319,9 @@ impl Fx {
     /// Watches for a newly logged raid line and starts the log pane's
     /// flash. Compares the last line rather than counting lines, since
     /// `message_log` only ever returns a window of recent ones.
-    pub fn observe_log(&mut self, last_line: Option<&(MessageKind, String)>) {
+    pub fn observe_log(&mut self, last_line: Option<&LogLine>) {
         let changed = last_line != self.last_log_line.as_ref();
-        if changed
-            && self.enabled
-            && let Some((MessageKind::Raid, _)) = last_line
-        {
+        if changed && self.enabled && last_line.is_some_and(|l| l.kind == MessageKind::Raid) {
             self.log_flash_until = self.now + LOG_FLASH_SECONDS;
         }
         if changed {

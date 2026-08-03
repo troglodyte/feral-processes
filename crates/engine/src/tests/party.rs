@@ -1065,8 +1065,7 @@ fn fusing_a_program_logs_a_manually_installed_routine_as_lost() {
     assert!(
         game.message_log(10)
             .iter()
-            .any(|(_, text)| text.contains("Routines lost in the fusion")
-                && text.contains("Sandbox")),
+            .any(|e| e.text.contains("Routines lost in the fusion") && e.text.contains("Sandbox")),
         "the loss must be logged, not silent: {:?}",
         game.message_log(10)
     );
@@ -1226,12 +1225,12 @@ fn only_the_outcome_death_line_follows_the_player_out_of_the_battle() {
     let log = game.message_log(40);
     assert!(
         log.iter()
-            .any(|(k, l)| *k == MessageKind::Outcome && l.contains("deleted for good")),
+            .any(|e| e.kind == MessageKind::Outcome && e.text.contains("deleted for good")),
         "the death line survives the end of the battle"
     );
     assert!(
         !log.iter()
-            .any(|(_, l)| l.contains(&name) && l.contains("leaves your battle party")),
+            .any(|e| e.text.contains(&name) && e.text.contains("leaves your battle party")),
         "the dissolve's departure chatter must be pruned, not trail the death line"
     );
 }

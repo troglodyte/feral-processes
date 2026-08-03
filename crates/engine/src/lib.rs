@@ -57,7 +57,8 @@ use resources::{
     MessageLog, Party, Platform, PlayerEntity, Research, StackMemory, ZoneLevel, ZoneSpawnPoint,
 };
 pub use resources::{
-    DifficultyMode, EffectKind, LogEntry, MESSAGE_LOG_CAP, MessageKind, SlotShift, VisualEffect,
+    DifficultyMode, EffectKind, LogEntry, LogLine, MESSAGE_LOG_CAP, MessageKind, MessageSource,
+    SlotShift, VisualEffect,
 };
 use species::{Affinities, MoveDef, SpeciesDb, SpeciesDef, SpeciesId};
 use structures::{StructureDb, StructureDef, StructureId, TradeDef};

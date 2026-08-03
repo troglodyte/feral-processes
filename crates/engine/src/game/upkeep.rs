@@ -188,7 +188,7 @@ impl Game {
                 self.damage_structure(target, raid_damage, &target_label);
             } else {
                 self.push_effect(target, EffectKind::Deflected);
-                self.log(format!(
+                self.log_base(format!(
                     "Your shield network fends off a raid on {target_label} without a scratch!"
                 ));
             }
@@ -202,13 +202,13 @@ impl Game {
             self.damage_structure(target, mitigated, &target_label);
         } else {
             self.push_effect(target, EffectKind::Deflected);
-            self.log(format!(
+            self.log_base(format!(
                 "{worker_label} fends off a raid on {target_label} without a scratch!"
             ));
         }
         self.apply_damage(worker, RAID_DEFENDER_DAMAGE);
         if !self.creature_alive(worker) {
-            self.log_kind(
+            self.log_base_kind(
                 MessageKind::Raid,
                 format!("{worker_label} is destroyed defending {target_label}."),
             );
@@ -242,7 +242,7 @@ impl Game {
             },
         );
         if destroyed {
-            self.log_kind(
+            self.log_base_kind(
                 MessageKind::Raid,
                 format!("{label} is destroyed in a raid!"),
             );
@@ -260,7 +260,7 @@ impl Game {
             self.announce_lost_shelf(structure);
             self.world.despawn(structure);
         } else {
-            self.log_kind(
+            self.log_base_kind(
                 MessageKind::Raid,
                 format!("{label} takes {dmg} raid damage!"),
             );

@@ -66,6 +66,35 @@ pub enum MessageKind {
     EnemySpecial,
 }
 
+/// Which of the two things the player is doing produced a line: running the
+/// base, or being out in the world. Deliberately a second axis rather than
+/// more `MessageKind` variants — kind is read by three consumers that mean
+/// different things by it (the colour table, `retain_outcomes_since_battle`'s
+/// prune, and `condense`'s notion of line identity), and a raid alert has to
+/// stay `MessageKind::Raid` for the first two while still being base news.
+///
+/// `Field` is the default so that a `log` call which predates the split keeps
+/// meaning what it did.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MessageSource {
+    #[default]
+    Field,
+    /// Production, construction and the base coming under attack. Keeps
+    /// accumulating while the party is underground — the base runs whether
+    /// or not anyone is standing in it.
+    Base,
+}
+
+/// One line as stored. A struct rather than the `(kind, text)` tuple it grew
+/// from: with a third field the positional form stops reading, and every
+/// consumer already wanted to name what it was reaching for.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LogLine {
+    pub kind: MessageKind,
+    pub source: MessageSource,
+    pub text: String,
+}
+
 /// Where a battle's narration begins, as a count of lines ever pushed.
 ///
 /// Deliberately not an index into `MessageLog::lines`: the log drains its
@@ -76,7 +105,7 @@ pub struct MessageMark(u64);
 
 #[derive(Resource, Default)]
 pub struct MessageLog {
-    pub lines: Vec<(MessageKind, String)>,
+    pub lines: Vec<LogLine>,
     /// Lines ever pushed, including those since dropped. Marks are minted
     /// from this, and `pushed - dropped == lines.len()` is the invariant
     /// that converts a mark back into an index — every mutation of `lines`
@@ -115,7 +144,24 @@ impl MessageLog {
     }
 
     pub fn push_kind(&mut self, kind: MessageKind, line: impl Into<String>) {
-        self.lines.push((kind, line.into()));
+        self.push_line(kind, MessageSource::Field, line);
+    }
+
+    /// News from the base rather than from wherever the party is standing.
+    pub fn push_base(&mut self, line: impl Into<String>) {
+        self.push_line(MessageKind::Info, MessageSource::Base, line);
+    }
+
+    pub fn push_base_kind(&mut self, kind: MessageKind, line: impl Into<String>) {
+        self.push_line(kind, MessageSource::Base, line);
+    }
+
+    fn push_line(&mut self, kind: MessageKind, source: MessageSource, text: impl Into<String>) {
+        self.lines.push(LogLine {
+            kind,
+            source,
+            text: text.into(),
+        });
         self.pushed += 1;
         if self.lines.len() > MESSAGE_LOG_CAP {
             let excess = self.lines.len() - MESSAGE_LOG_CAP;
@@ -124,7 +170,7 @@ impl MessageLog {
         }
     }
 
-    pub fn recent(&self, n: usize) -> &[(MessageKind, String)] {
+    pub fn recent(&self, n: usize) -> &[LogLine] {
         let start = self.lines.len().saturating_sub(n);
         &self.lines[start..]
     }
@@ -158,7 +204,7 @@ impl MessageLog {
 
     /// The current round's lines, oldest first — what the battle pane shows.
     /// Empty before the run's first battle.
-    pub fn since_round(&self) -> &[(MessageKind, String)] {
+    pub fn since_round(&self) -> &[LogLine] {
         match self.index_of(self.round_start) {
             Some(start) => &self.lines[start..],
             None => &[],
@@ -176,10 +222,10 @@ impl MessageLog {
             return;
         };
         let mut index = 0;
-        self.lines.retain(|(kind, _)| {
+        self.lines.retain(|line| {
             let keep = index < start
                 || matches!(
-                    kind,
+                    line.kind,
                     MessageKind::Outcome
                         | MessageKind::Loot
                         | MessageKind::LevelUp
@@ -205,6 +251,7 @@ impl MessageLog {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LogEntry {
     pub kind: MessageKind,
+    pub source: MessageSource,
     pub text: String,
     pub repeats: usize,
 }
@@ -237,19 +284,22 @@ pub(crate) const CONDENSE_LOOKBACK: usize = 4;
 /// leave the highlight indexing rows that no longer exist.
 ///
 /// `kind` is part of the match: the same sentence pushed as `Info` and as
-/// `Outcome` is styled differently and means something different.
-pub(crate) fn condense(lines: &[(MessageKind, String)]) -> Vec<LogEntry> {
+/// `Outcome` is styled differently and means something different. `source` is
+/// part of it for the same reason — the two channels are read separately, so
+/// identical text from the base and from the field is two events.
+pub(crate) fn condense(lines: &[LogLine]) -> Vec<LogEntry> {
     let mut entries: Vec<LogEntry> = Vec::new();
-    for (kind, text) in lines {
+    for line in lines {
         let window = entries.len().saturating_sub(CONDENSE_LOOKBACK);
         match entries[window..]
             .iter_mut()
-            .find(|e| e.kind == *kind && e.text == *text)
+            .find(|e| e.kind == line.kind && e.source == line.source && e.text == line.text)
         {
             Some(entry) => entry.repeats += 1,
             None => entries.push(LogEntry {
-                kind: *kind,
-                text: text.clone(),
+                kind: line.kind,
+                source: line.source,
+                text: line.text.clone(),
                 repeats: 1,
             }),
         }

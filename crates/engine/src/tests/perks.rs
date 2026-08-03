@@ -417,11 +417,11 @@ fn keen_scavenger_reaches_the_roll_when_you_work_a_node_yourself() {
     let log = game.message_log(MESSAGE_LOG_CAP);
     let extractions = log
         .iter()
-        .filter(|(_, text)| text.starts_with("You extract"))
+        .filter(|e| e.text.starts_with("You extract"))
         .count();
     let fizzles = log
         .iter()
-        .filter(|(_, text)| text.contains("fails to compile"))
+        .filter(|e| e.text.contains("fails to compile"))
         .count();
     assert!(
         extractions > 0,
@@ -452,11 +452,11 @@ fn keen_scavenger_reaches_the_roll_a_cronjob_worker_runs() {
     let log = game.message_log(MESSAGE_LOG_CAP);
     let extractions = log
         .iter()
-        .filter(|(_, text)| text.starts_with("Your subroutine extracted"))
+        .filter(|e| e.text.starts_with("Your subroutine extracted"))
         .count();
     let fizzles = log
         .iter()
-        .filter(|(_, text)| text.contains("fails to compile"))
+        .filter(|e| e.text.contains("fails to compile"))
         .count();
     assert!(
         extractions > 0,

@@ -132,7 +132,7 @@ impl Game {
             }
             inv.add(result.clone(), quantity);
         }
-        self.log_kind(
+        self.log_base_kind(
             MessageKind::Loot,
             format!(
                 "You compile {} {} from salvaged components.",

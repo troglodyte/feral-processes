@@ -242,7 +242,7 @@ impl App {
     /// The battle pane's lines: this battle's narration, truncated to what
     /// has been revealed. The pane draws the tail of this once it overflows,
     /// which is what makes lines scroll up as new ones arrive.
-    pub fn revealed_battle_log(&self) -> Vec<(MessageKind, String)> {
+    pub fn revealed_battle_log(&self) -> Vec<LogLine> {
         let Some(game) = &self.game else {
             return Vec::new();
         };

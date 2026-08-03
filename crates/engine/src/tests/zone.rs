@@ -752,7 +752,7 @@ fn the_decohere_message_only_fires_when_there_was_something_to_lose() {
         !game
             .message_log(20)
             .iter()
-            .any(|(_, m)| m.contains("decohere")),
+            .any(|e| e.text.contains("decohere")),
         "an empty wallet shouldn't be announced as a loss"
     );
 
@@ -768,7 +768,7 @@ fn the_decohere_message_only_fires_when_there_was_something_to_lose() {
     assert!(
         game.message_log(20)
             .iter()
-            .any(|(_, m)| m.contains("3 Portal Fragment")),
+            .any(|e| e.text.contains("3 Portal Fragment")),
         "a real loss is named and counted: {:?}",
         game.message_log(20)
     );
@@ -1876,19 +1876,20 @@ fn the_cache_lines_are_loot_kind() {
     let log = game.message_log(20);
     let cache_lines: Vec<_> = log
         .iter()
-        .filter(|(_, text)| text.contains("wreckage") || text.contains("cache"))
+        .filter(|e| e.text.contains("wreckage") || e.text.contains("cache"))
         .collect();
     assert!(
         !cache_lines.is_empty(),
         "test premise: a nest cache line should have been logged, got: {log:?}"
     );
-    for (kind, text) in &cache_lines {
+    for e in &cache_lines {
         assert_eq!(
-            *kind,
+            e.kind,
             MessageKind::Loot,
-            "cache line {text:?} must be MessageKind::Loot so it survives \
+            "cache line {:?} must be MessageKind::Loot so it survives \
              retain_outcomes_since_battle and follows the player onto the map, not \
-             MessageKind::Info which would be pruned when the swarm fight ends"
+             MessageKind::Info which would be pruned when the swarm fight ends",
+            e.text
         );
     }
 }

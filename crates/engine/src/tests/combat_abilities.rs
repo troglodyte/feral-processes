@@ -794,7 +794,7 @@ fn a_heal_logs_what_it_actually_restored_not_what_it_rolled() {
     assert!(
         game.message_log(usize::MAX)
             .into_iter()
-            .any(|(_, text)| text.contains("patches you for 3 HP")),
+            .any(|e| e.text.contains("patches you for 3 HP")),
         "the log must name the 3 points that landed, not the 20 that were rolled: {:?}",
         game.message_log(usize::MAX)
     );
@@ -826,7 +826,7 @@ fn a_heal_on_a_full_health_target_logs_zero() {
     assert!(
         game.message_log(usize::MAX)
             .into_iter()
-            .any(|(_, text)| text.contains("patches you for 0 HP")),
+            .any(|e| e.text.contains("patches you for 0 HP")),
         "a wasted heal must say so: {:?}",
         game.message_log(usize::MAX)
     );
@@ -864,7 +864,7 @@ fn drain_logs_what_it_actually_restored() {
     assert!(
         game.message_log(usize::MAX)
             .into_iter()
-            .any(|(_, text)| text.contains("restoring 1.")),
+            .any(|e| e.text.contains("restoring 1.")),
         "a full-lifesteal drain one point from max restores exactly 1: {:?}",
         game.message_log(usize::MAX)
     );
@@ -1245,7 +1245,7 @@ fn a_hostile_routines_damage_line_logs_as_enemy_special_not_party_damage() {
         .resource::<MessageLog>()
         .lines
         .iter()
-        .map(|(kind, _)| *kind)
+        .map(|e| e.kind)
         .collect();
     assert!(
         kinds.contains(&MessageKind::EnemySpecial),
@@ -1788,7 +1788,7 @@ fn committing_a_special_that_sits_behind_a_field_only_ability_resolves_the_right
     let healed = game
         .message_log(usize::MAX)
         .into_iter()
-        .any(|(_, text)| text.contains("patches"));
+        .any(|e| e.text.contains("patches"));
     assert!(
         healed,
         "the committed Special must have run the heal behind the filtered entry, not \

@@ -309,14 +309,14 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
     let mut ly = y + margin;
     // The tail, not the head: once a battle's narration outgrows the pane,
     // new lines have to push old ones up and out.
-    for (kind, line) in revealed
+    for e in revealed
         .iter()
         .skip(revealed.len().saturating_sub(capacity))
     {
         if ly + m.line_height > party_top {
             break;
         }
-        draw_message_line(*kind, line, margin + m.inset, ly, painter, m);
+        draw_message_line(e.kind, &e.text, margin + m.inset, ly, painter, m);
         ly += m.line_height;
     }
     // Anchored to the narration pane's own top-right corner and drawn over

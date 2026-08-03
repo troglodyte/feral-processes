@@ -31,6 +31,22 @@ pub struct WorkDef {
     /// without this field keep parsing as guaranteed-yield nodes.
     #[serde(default)]
     pub level: Option<u32>,
+    /// Opts this node out of `systems::node_payout` entirely: every
+    /// completed cycle yields exactly 1, whatever the upgrade tier or zone
+    /// depth. That curve was written for bulk salvage, where a Mk5 in zone 5
+    /// paying 9 a cycle is the reward for having built and travelled; a node
+    /// producing something consumed *one at a time* — a taming catalyst, a
+    /// key — instead outruns its own sink within a zone or two.
+    ///
+    /// Banked items (`ItemDef::bank_limit`) already bypass the curve for
+    /// their own reason, so the two conditions are ORed rather than merged:
+    /// one is a property of the item, this is a property of how the node
+    /// produces it. The same item mined by a bulk node still scales.
+    ///
+    /// `#[serde(default)]` — false, the scaling curve, so existing structure
+    /// files and mods are unaffected.
+    #[serde(default)]
+    pub flat_payout: bool,
 }
 
 fn default_work_capacity() -> u32 {

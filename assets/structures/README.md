@@ -53,10 +53,18 @@ is skipped with a warning logged in-game rather than crashing startup.
     // the cycle completes, not when the structure was deployed, so a base
     // carried into a deeper zone immediately earns at the deeper rate.
     //
-    // The one exception is a `produces` item that declares a `bank_limit`
-    // (see `assets/items/README.md`) — Research Data, for instance. Banked
-    // resources always pay exactly one unit per cycle, because their cap is
-    // what paces them and a scaling payout would just overflow it.
+    // There are two exceptions, and they're independent of each other.
+    //
+    // A `produces` item that declares a `bank_limit` (see
+    // `assets/items/README.md`) — Research Data, for instance — always pays
+    // exactly one unit per cycle, because its cap is what paces it and a
+    // scaling payout would just overflow it.
+    //
+    // `flat_payout` (optional, defaults to `false`) opts *this node* out of
+    // the same curve, whatever it produces. Set it for a node whose output is
+    // consumed one at a time rather than in bulk — the Compiler's ICE
+    // Breakers are spent one per decompile attempt, so a Mk5 in zone 5 paying
+    // nine a cycle outruns the sink entirely. Leave it off for salvage.
     work: Some((produces: "core_fragment", ticks_per_unit: 5, capacity: 5, level: Some(1))),
 
     // Optional; can be left out entirely (defaults to no passive processing).

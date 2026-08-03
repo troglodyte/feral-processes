@@ -122,6 +122,20 @@ pub(crate) fn mining_success_chance(level: u32, keen_scavenger_level: u32) -> f6
         .min(1.0)
 }
 
+/// Whether the structure `node_entity` belongs to declares
+/// `WorkDef::flat_payout`. Read per cycle off the `StructureDb` rather than
+/// mirrored onto `ResourceNode` at build time: the component is rebuilt from
+/// the def on load anyway (`Game::load`), and the one field that *is*
+/// mirrored, `level`, already needed a re-derive there to stop a Mk3 coming
+/// back extracting like a Mk1. A node whose kind isn't in the db — a
+/// hand-spawned test fixture — takes the ordinary scaling curve.
+fn node_is_flat_payout(node_entity: Option<&Structure>, structure_db: &StructureDb) -> bool {
+    node_entity
+        .and_then(|s| structure_db.get(&s.kind))
+        .and_then(|d| d.work.as_ref())
+        .is_some_and(|w| w.flat_payout)
+}
+
 /// One completed gather cycle against `node`: rolls the node's reliability
 /// and, on success, spends a unit of its stock and reports what the cycle
 /// earned. `None` is a fizzle — the cycle is spent and nothing produced.
@@ -137,6 +151,7 @@ pub(crate) fn resolve_gather_cycle(
     node: &mut ResourceNode,
     tier: Option<&StructureTier>,
     zone: ZoneLevel,
+    flat_payout: bool,
     keen_scavenger_level: u32,
     item_db: &ItemDb,
     rng: &mut GameRng,
@@ -152,7 +167,7 @@ pub(crate) fn resolve_gather_cycle(
     let def = item_db.get(node.resource.as_str());
     // Read per cycle rather than baked in at deploy, so a base that travels
     // to a deeper zone immediately earns at the new rate.
-    let payout = if def.and_then(|d| d.bank_limit).is_some() {
+    let payout = if flat_payout || def.and_then(|d| d.bank_limit).is_some() {
         1
     } else {
         node_payout(tier.map(|t| t.0).unwrap_or(1), zone)
@@ -181,6 +196,7 @@ type CronjobWorker = (
 pub struct CronjobLookups<'w> {
     species: Res<'w, SpeciesDb>,
     items: Res<'w, ItemDb>,
+    structures: Res<'w, StructureDb>,
     zone: Res<'w, ZoneLevel>,
 }
 
@@ -192,7 +208,11 @@ pub struct CronjobLookups<'w> {
 /// not just base-building work.
 pub fn task_progress_system(
     mut tasks: Query<CronjobWorker>,
-    mut nodes: Query<(&mut ResourceNode, Option<&StructureTier>)>,
+    mut nodes: Query<(
+        &mut ResourceNode,
+        Option<&StructureTier>,
+        Option<&Structure>,
+    )>,
     mut inventories: Query<&mut Inventory>,
     player: Query<(Option<&FieldBuff>, Option<&Perks>), With<Player>>,
     db: CronjobLookups,
@@ -202,6 +222,7 @@ pub fn task_progress_system(
     let CronjobLookups {
         species: species_db,
         items: item_db,
+        structures: structure_db,
         zone,
     } = db;
     // Both of these are the player's, not the worker's: `XpBoost` is
@@ -223,7 +244,7 @@ pub fn task_progress_system(
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
         }
-        let Ok((mut node, tier)) = nodes.get_mut(task.target) else {
+        let Ok((mut node, tier, structure)) = nodes.get_mut(task.target) else {
             continue;
         };
         if node.amount == 0 {
@@ -238,6 +259,7 @@ pub fn task_progress_system(
             &mut node,
             tier,
             *zone,
+            node_is_flat_payout(structure, &structure_db),
             keen_scavenger_level,
             &item_db,
             &mut rng,
@@ -299,8 +321,13 @@ pub fn task_progress_system(
 /// XP faucet with no risk attached to it.
 pub fn player_gather_system(
     mut player: Query<(&mut Task, &mut Inventory, Option<&Perks>), With<Player>>,
-    mut nodes: Query<(&mut ResourceNode, Option<&StructureTier>)>,
+    mut nodes: Query<(
+        &mut ResourceNode,
+        Option<&StructureTier>,
+        Option<&Structure>,
+    )>,
     item_db: Res<ItemDb>,
+    structure_db: Res<StructureDb>,
     zone: Res<ZoneLevel>,
     mut log: ResMut<MessageLog>,
     mut rng: ResMut<GameRng>,
@@ -309,7 +336,7 @@ pub fn player_gather_system(
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
         }
-        let Ok((mut node, tier)) = nodes.get_mut(task.target) else {
+        let Ok((mut node, tier, structure)) = nodes.get_mut(task.target) else {
             continue;
         };
         if node.amount == 0 {
@@ -325,6 +352,7 @@ pub fn player_gather_system(
             &mut node,
             tier,
             *zone,
+            node_is_flat_payout(structure, &structure_db),
             keen_scavenger_level,
             &item_db,
             &mut rng,

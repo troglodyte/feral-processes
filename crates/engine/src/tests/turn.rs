@@ -141,6 +141,85 @@ fn rest_fully_heals_and_restores_fatigue() {
     assert_eq!(needs.fatigue, 100.0, "rest should fully restore Fatigue");
 }
 
+/// A battle starting mid-`rest` (see the comment at its internal loop in
+/// `game/turn.rs`) must abort the rest before the loop's final heal, not
+/// let a swarm catch up to a player who then walks away fully healed
+/// anyway.
+///
+/// This only bites on the slab's *outer ring*: `home.ron` sets
+/// `enables_rest`'s radius to exactly `MAX_BUILD_DISTANCE_FROM_HOME`, the
+/// same radius `stamp_platform` stamps, so nearly everywhere rest works is
+/// also inside the platform's interior — where decision 4's base-disband
+/// rule (see `standing_inside_the_base_slab_clears_every_pursuer_zone_wide`
+/// in `tests/zone.rs`) would strip the pursuer's `Pursuing` before it ever
+/// got close. Standing exactly on the edge (Chebyshev `half` from Home)
+/// keeps rest enabled while leaving three of the player's eight neighbours
+/// — the ones pointing away from Home — outside the slab and not
+/// `Platform`, so a guardian approaching from that side still has a route
+/// in.
+#[test]
+fn a_battle_starting_mid_rest_aborts_before_the_heal() {
+    let mut game = Game::new(741, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let ppos = *game.world.get::<Position>(player).unwrap();
+    let half = MAX_BUILD_DISTANCE_FROM_HOME;
+
+    // Open ground from Home's site out past the slab's far edge, so both
+    // `place_home` has walkable ground to build on and a guardian
+    // approaching from beyond the slab has somewhere to walk.
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for dx in -(half + 2)..=(half + 6) {
+            for dy in -2..=2 {
+                map.set_override(
+                    ppos.x + dx,
+                    ppos.y + dy,
+                    Tile {
+                        biome: Biome::OpenGrid,
+                        walkable: true,
+                    },
+                );
+            }
+        }
+    }
+    // Home sits `half` tiles west of the player, so the player stands
+    // exactly on the slab's outer edge — see the doc comment above.
+    place_home(&mut game, -half, 0);
+
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.hp = 1;
+    }
+    {
+        let mut needs = game.world.get_mut::<Needs>(player).unwrap();
+        needs.fatigue = 10.0;
+    }
+
+    let nest = spawn_bare_nest(&mut game, ppos.x + 3, ppos.y);
+    spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 3, ppos.y);
+
+    game.rest();
+
+    assert!(
+        game.has_active_battle(),
+        "a pursuer reaching the player mid-rest should interrupt it, same as any other battle"
+    );
+    let stats = *game.world.get::<Stats>(player).unwrap();
+    let needs = *game.world.get::<Needs>(player).unwrap();
+    assert_eq!(
+        stats.hp, 1,
+        "rest must abort before its heal once a battle starts"
+    );
+    // Ordinary per-tick Needs drift moves fatigue a little even during the
+    // handful of ticks before the pursuer catches up, so this checks
+    // "nowhere near the full restore", not "exactly untouched".
+    assert!(
+        needs.fatigue < 50.0,
+        "rest must abort before restoring fatigue to 100, found {}",
+        needs.fatigue
+    );
+}
+
 #[test]
 fn rest_also_fully_heals_the_active_companion() {
     let mut game = Game::new(29, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

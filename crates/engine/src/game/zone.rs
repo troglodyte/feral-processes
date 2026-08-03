@@ -372,14 +372,13 @@ impl Game {
         // doomed stockpile into money before you breach is what a trader is
         // *for*.
         //
-        // Credits can buy a Portal Fragment on the far side, so in principle
-        // a stockpile could fund a breach out of a zone it never worked. That
-        // is priced rather than forbidden: at a 1-Credit sell rate and 8
-        // Credits a fragment, skipping zone 3 means having sold 160 items
-        // into a cargo cap first, which is a zone's work either way. Closing
-        // it instead would mean pulling Portal Fragments off every trader,
-        // and that listing is the only route from base production to
-        // progression — see `balance_sim::ticks_to_afford_portal`.
+        // Credits used to be able to buy a Portal Fragment on the far side,
+        // so a stockpile could in principle fund a breach out of a zone it
+        // never worked. That was priced rather than forbidden, because the
+        // Market's fragment listing was then the only route from base
+        // production to progression. It has since been pulled — breaching is
+        // earned by fighting — so the hole is closed at the source and
+        // Credits surviving a breach no longer buys a way past content.
         // Every trader's shelf goes with it, for the same reason: a shelf
         // holding a zone's worth of salvage is precisely the stockpile that
         // wipe exists to strand. Cleared explicitly rather than left to rot —

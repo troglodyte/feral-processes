@@ -610,7 +610,7 @@ the file either — that's difficulty tuning, and it stays in
 | Power Cell | Starting inventory; compiled (`c`) from 2 Core Fragments; dropped by Scrapper/Glitch; a Power Conduit cronjob | Drain (`e`) to restore Power |
 | ICE Breaker | Starting inventory; compiled (`c`) from 3 Core Fragments; a Compiler cronjob | The taming catalyst Decompile spends — a Special (`s`) in battle, not its own key |
 | Power Outlet | Starting inventory (2); compiled (`c`) from 5 Core Fragments | Spent one per rest (`r`) — see [Structures](#structures) |
-| Portal Fragment | 35% drop from any defeated wild program; a guaranteed 3–6 cache from a boss; buyable at an iso Market (8 Credits) | Deploy a Zone Portal; pay for every equipment recipe |
+| Portal Fragment | 35% drop from any defeated wild program; a guaranteed 3–6 cache from a boss; a chance from a Stack cache. **Not** buyable — breaching is earned by fighting | Deploy a Zone Portal; pay for every equipment recipe |
 | Research Data | A Research Node cronjob | Unlock research nodes (`T`) — see [Research](#research) |
 | Credits | Selling items or programs at an iso Market — nothing else mints them | Buying at an iso Market. The only cache that survives a breach |
 

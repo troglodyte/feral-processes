@@ -1,7 +1,7 @@
 (
     id: "market",
     name: "iso Market",
-    description: "Sell anything here for 1 Credit a unit — including salvage you're about to lose to a breach — sell a program for a tenth of its power, and buy ICE Breakers, Power Cells and Portal Fragments. It keeps what you sell it and will sell it back at double, until you breach. Credits are the only cache that survives a breach.",
+    description: "Sell anything here for 1 Credit a unit — including salvage you're about to lose to a breach — sell a program for a tenth of its power, and buy ICE Breakers and Power Cells. It keeps what you sell it and will sell it back at double, until you breach. Credits are the only cache that survives a breach.",
     glyph: '$',
     color: Yellow,
     build_cost: [("core_fragment", 16)],
@@ -11,14 +11,14 @@
         // Buys tamed programs at a tenth of their power (max_hp + atk + def),
         // rounded down, minimum 1 Credit. Omit to deal in items only.
         program_sell_divisor: Some(10),
-        // Portal Fragments stay on this list on purpose: it is the only route
-        // from base production to progression (mine salvage, sell it, buy a
-        // breach), and `balance_sim::ticks_to_afford_portal` measures the
-        // whole travelling-base economy through this price.
+        // Portal Fragments are deliberately NOT on this list. Breaching is
+        // earned by fighting — a 0.35 drop chance per kill, 3-6 from a boss —
+        // not bought with mined salvage. Putting them back reopens the route
+        // from base production straight to progression, which is the thing
+        // that made settling in one zone strictly better than moving.
         buy: [
             ("ice_breaker", 4),
             ("power_cell", 3),
-            ("portal_fragment", 8),
         ],
     )),
 )

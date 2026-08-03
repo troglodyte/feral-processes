@@ -342,8 +342,9 @@ game time; assigning, demolishing and upgrading stay on `w`, `G`, `R` and `U`.
 ## Trading
 
 Press `t` at a nearby iso Market to sell inventory items for **Credits** at
-a flat floor rate, buy ICE Breakers, Power Cells, or Portal Fragments with
-them, or sell a compiled program for a tenth of its power. Credits are the
+a flat floor rate, buy ICE Breakers or Power Cells with
+them, or sell a compiled program for a tenth of its power. Portal Fragments
+are deliberately not for sale: breaching is earned by fighting. Credits are the
 only currency a trader deals in — Core Fragments are salvage, and a trader
 buys those off you like anything else rather than paying in them.
 

@@ -70,8 +70,7 @@ use world::{Biome, Tile, WorldMap};
 pub const MAX_CUSTOM_NAME_LEN: usize = 12;
 
 /// The quantity a zone-portal structure costing `base_qty` of an item
-/// charges at `zone`. Shared with `balance_sim::ticks_to_afford_portal` so a
-/// projection can't drift from the price the game actually charges.
+/// charges at `zone`.
 pub(crate) fn zone_portal_cost(base_qty: u32, zone: u32) -> u32 {
     base_qty + base_qty * ZONE_PORTAL_COST_GROWTH_PERCENT * zone.saturating_sub(1) / 100
 }

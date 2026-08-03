@@ -2,7 +2,11 @@
 //! stamping the base platform, and stepping through a portal to the next
 //! zone.
 
-use crate::tuning::{INITIAL_WILD_POPULATION, MAX_BUILD_DISTANCE_FROM_HOME, STACK_LINKS_PER_ZONE};
+use crate::tuning::{
+    INITIAL_WILD_POPULATION, MAX_BUILD_DISTANCE_FROM_HOME, NEST_CACHE_EQUIPMENT_ROLLS,
+    NEST_CACHE_FRAGMENT_ZONE_BONUS, NEST_CACHE_FRAGMENTS, NEST_CACHE_WORK_RESOURCE_MULT,
+    STACK_LINKS_PER_ZONE, WORK_RESOURCE_DROP,
+};
 use crate::*;
 
 impl Game {
@@ -52,11 +56,81 @@ impl Game {
         let destroyed = durability.hp == 0;
         if destroyed {
             self.log(format!("The {label} crashes and collapses!"));
+            // Reads Nest::species, so this has to run before despawn_nest
+            // deletes the component it's reading.
+            self.grant_nest_cache(nest);
             self.despawn_nest(nest);
         } else {
             self.log(format!(
                 "You unleash a data strike into the {label} for {dmg} damage."
             ));
+        }
+    }
+
+    /// Pays the loot a destroyed `nest` owes, drawn entirely from its
+    /// species' existing `SpeciesDef` fields — content stays data, only the
+    /// `NEST_CACHE_*` magnitudes in `tuning.rs` are code. Mirrors
+    /// `award_loot`'s clone-then-drop-the-borrow shape (`combat_rewards.rs`)
+    /// so the `SpeciesDb` resource isn't held live across a `grant_loot`
+    /// call that itself needs the world.
+    ///
+    /// No XP: the guardians already paid that on the way down, and this is
+    /// the structure itself coming down.
+    pub(crate) fn grant_nest_cache(&mut self, nest: Entity) {
+        let Some(species_id) = self.world.get::<Nest>(nest).map(|n| n.species.clone()) else {
+            return;
+        };
+        let Some(species) = self.world.resource::<SpeciesDb>().get(&species_id).cloned() else {
+            return;
+        };
+
+        if let Some(resource) = &species.work_resource {
+            let qty = {
+                let mut rng = self.world.resource_mut::<GameRng>();
+                rng.0.random_range(WORK_RESOURCE_DROP) * NEST_CACHE_WORK_RESOURCE_MULT
+            };
+            let landed = self.grant_loot(resource.clone(), qty);
+            if landed > 0 {
+                self.log_kind(
+                    MessageKind::Loot,
+                    format!(
+                        "The wreckage yields {} {}.",
+                        landed,
+                        self.item_name(resource)
+                    ),
+                );
+            }
+        }
+
+        for _ in 0..NEST_CACHE_EQUIPMENT_ROLLS {
+            for (item, chance) in self.equipment_drops_for(&species) {
+                let roll = {
+                    let mut rng = self.world.resource_mut::<GameRng>();
+                    rng.0.random_bool(chance.clamp(0.0, 1.0) as f64)
+                };
+                if roll && self.grant_loot(item.clone(), 1) > 0 {
+                    self.log_kind(
+                        MessageKind::Loot,
+                        format!("The wreckage also yields a {}!", self.item_name(&item)),
+                    );
+                }
+            }
+        }
+
+        let zone_bonus = {
+            let zone = self.world.resource::<ZoneLevel>().0;
+            NEST_CACHE_FRAGMENT_ZONE_BONUS * zone.saturating_sub(1)
+        };
+        let qty = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_range(NEST_CACHE_FRAGMENTS) + zone_bonus
+        };
+        let landed = self.grant_loot(self.craft_currency(), qty);
+        if landed > 0 {
+            self.log_kind(
+                MessageKind::Loot,
+                format!("The cache holds {landed} portal fragments!"),
+            );
         }
     }
 

@@ -4,7 +4,8 @@ use super::support::*;
 use crate::tuning::{
     DISTANCE_STAT_STEP_TILES, GROUP_SIZE_STEP_TILES, MAX_BUILD_DISTANCE_FROM_HOME,
     MAX_DISTANCE_STAT_MULTIPLIER, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_AGGRO_LEASH_RADIUS,
-    NEST_DURABILITY, NEST_PURSUIT_STEPS_PER_TICK, NEST_RESPAWN_TICKS,
+    NEST_CACHE_FRAGMENT_ZONE_BONUS, NEST_CACHE_FRAGMENTS, NEST_CACHE_WORK_RESOURCE_MULT,
+    NEST_DURABILITY, NEST_PURSUIT_STEPS_PER_TICK, NEST_RESPAWN_TICKS, WORK_RESOURCE_DROP,
 };
 use crate::*;
 
@@ -1583,4 +1584,190 @@ fn nest_aggro_tick_is_a_no_op_while_underground() {
         },
         "a pursuer must not move while the party is underground either"
     );
+}
+
+/// The nest cache: `Game::grant_nest_cache`, called from `attack_nest`'s
+/// `destroyed` branch. Content comes entirely from the nest's `SpeciesDef` —
+/// these tests lean on shipped species rather than hardcoded item ids
+/// wherever the range rolls involved make that reliable, and mod in a single
+/// throwaway species only where a shipped one's equipment chance is too low
+/// to force deterministically.
+fn one_shot_nest(game: &mut Game, nest: Entity) {
+    let player = game.player_entity();
+    // Comfortably above NEST_DURABILITY (60), so a single attack_nest call
+    // is always lethal regardless of the player's own starting atk.
+    game.world.get_mut::<Stats>(player).unwrap().atk = 1000;
+    game.attack_nest(nest);
+}
+
+#[test]
+fn destroying_a_nest_grants_its_species_work_resource() {
+    let mut game = Game::new(720, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // scrapper is the can_nest species with a work_resource
+    // (assets/species/scrapper.ron: power_cell) — wraith and trojan have
+    // none, and using them would make this test vacuous.
+    let resource = ItemId::from(ids::POWER_CELL);
+    let nest = game.spawn_nest("scrapper", 400, 400);
+    let before = held(&game, &resource);
+
+    one_shot_nest(&mut game, nest);
+
+    let after = held(&game, &resource);
+    let minimum = NEST_CACHE_WORK_RESOURCE_MULT * WORK_RESOURCE_DROP.start();
+    assert!(
+        after >= before + minimum,
+        "destroying the nest should have granted at least {minimum} power_cell, went from \
+         {before} to {after}"
+    );
+}
+
+#[test]
+fn destroying_a_nest_grants_craft_currency() {
+    let mut game = Game::new(721, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let currency = game.craft_currency();
+    let nest = game.spawn_nest("scrapper", 410, 410);
+    let before = held(&game, &currency);
+
+    one_shot_nest(&mut game, nest);
+
+    let after = held(&game, &currency);
+    // Zone 1 (the default here), so NEST_CACHE_FRAGMENT_ZONE_BONUS
+    // contributes nothing — the floor is the bare range roll.
+    let minimum = *NEST_CACHE_FRAGMENTS.start();
+    assert!(
+        after >= before + minimum,
+        "destroying the nest should have granted at least {minimum} craft currency, went from \
+         {before} to {after}"
+    );
+}
+
+#[test]
+fn a_non_lethal_hit_on_a_nest_grants_nothing() {
+    let mut game = Game::new(722, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let nest = game.spawn_nest("scrapper", 420, 420);
+    let before = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    game.attack_nest(nest);
+
+    assert!(
+        game.world.get::<Durability>(nest).unwrap().hp > 0,
+        "test premise: a fresh player's ordinary hit must not one-shot NEST_DURABILITY"
+    );
+    let after = game.world.get::<Inventory>(player).unwrap().items.clone();
+    assert_eq!(
+        before, after,
+        "a non-lethal hit on a nest must not grant any part of the cache"
+    );
+}
+
+#[test]
+fn a_deeper_zone_pays_a_larger_nest_cache() {
+    let seed = 723;
+    // Same seed, same species, same tile for both runs, so the two games
+    // consume GameRng identically right up to the currency roll itself —
+    // ZoneLevel doesn't change how many draws spawn_nest/spawn_wild_creature
+    // make (see spawn_wild_creature_scaled), only the resulting stats. That
+    // makes this a comparison of the same underlying roll plus a different
+    // zone bonus, not two independent unseeded rolls.
+    let currency_gained_at = |zone: u32| {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.world.resource_mut::<ZoneLevel>().0 = zone;
+        let currency = game.craft_currency();
+        let nest = game.spawn_nest("scrapper", 430, 430);
+        let before = held(&game, &currency);
+        one_shot_nest(&mut game, nest);
+        held(&game, &currency) - before
+    };
+
+    let zone_1 = currency_gained_at(1);
+    let zone_4 = currency_gained_at(4);
+    let minimum_gap = 3 * NEST_CACHE_FRAGMENT_ZONE_BONUS;
+    assert!(
+        zone_4 >= zone_1 + minimum_gap,
+        "a nest cleared at zone 4 should pay at least {minimum_gap} more craft currency than \
+         the same nest at zone 1 (zone_1={zone_1}, zone_4={zone_4})"
+    );
+}
+
+#[test]
+fn destroying_a_nest_rolls_its_species_gear_table_repeatedly() {
+    // No shipped can_nest species has an equipment chance high enough to
+    // force a repeated-roll outcome without new RNG-forcing plumbing (see
+    // the task brief's fallback clause), so this mods in one whose
+    // equipment_drop chance is 1.0 — every one of NEST_CACHE_EQUIPMENT_ROLLS
+    // passes then lands for certain, which is the only way to observe
+    // ROLLS=3 differ from ROLLS=1 without touching the engine.
+    let dir = modded_assets_dir(
+        "nest_cache_gear",
+        &[],
+        &[],
+        &[(
+            "nest_cache_test.ron",
+            r#"(
+                id: "nest_cache_test",
+                name: "Cache Test",
+                glyph: 'X',
+                color: Yellow,
+                base_hp: 50,
+                base_atk: 5,
+                base_def: 2,
+                taming_difficulty: 0.5,
+                habitats: [],
+                moves: [],
+                work_resource: None,
+                equipment_drop: Some(("shiv_routine", 1.0)),
+                can_nest: true,
+            )"#,
+        )],
+        &[],
+        &[],
+    );
+    let mut game = Game::new(724, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let gear = ItemId::from("shiv_routine");
+    let nest = game.spawn_nest("nest_cache_test", 440, 440);
+    let before = held(&game, &gear);
+
+    one_shot_nest(&mut game, nest);
+
+    let after = held(&game, &gear);
+    assert!(
+        after >= before + 2,
+        "a guaranteed gear roll repeated NEST_CACHE_EQUIPMENT_ROLLS times should yield more \
+         than one copy of it — the only observable difference from a single pass — went from \
+         {before} to {after}"
+    );
+}
+
+#[test]
+fn the_cache_lines_are_loot_kind() {
+    let mut game = Game::new(725, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // scrapper's work_resource guarantees the resource-drop cache line lands
+    // even on an unseeded roll (WORK_RESOURCE_DROP's minimum is > 0 and the
+    // Buffer is uncapped), so this doesn't need to force any range roll —
+    // unlike the gear-table test above, which does.
+    let nest = game.spawn_nest("scrapper", 450, 450);
+
+    one_shot_nest(&mut game, nest);
+
+    let log = game.message_log(20);
+    let cache_lines: Vec<_> = log
+        .iter()
+        .filter(|(_, text)| text.contains("wreckage") || text.contains("cache"))
+        .collect();
+    assert!(
+        !cache_lines.is_empty(),
+        "test premise: a nest cache line should have been logged, got: {log:?}"
+    );
+    for (kind, text) in &cache_lines {
+        assert_eq!(
+            *kind,
+            MessageKind::Loot,
+            "cache line {text:?} must be MessageKind::Loot so it survives \
+             retain_outcomes_since_battle and follows the player onto the map, not \
+             MessageKind::Info which would be pruned when the swarm fight ends"
+        );
+    }
 }

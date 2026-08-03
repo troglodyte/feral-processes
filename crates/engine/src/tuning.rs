@@ -774,6 +774,30 @@ pub const NEST_AGGRO_LEASH_RADIUS: i32 = 15;
 /// Added to the leash radius to size the search box.
 pub const NEST_PATH_SEARCH_MARGIN: i32 = 5;
 
+/// Multiplier on an ordinary `WORK_RESOURCE_DROP` roll (see `Game::award_loot`)
+/// applied to the resource a destroyed nest's species pays out (see
+/// `Game::grant_nest_cache`) — the cache reads as several kills' worth of
+/// `work_resource` at once, not a single kill's drop.
+pub const NEST_CACHE_WORK_RESOURCE_MULT: u32 = 4;
+
+/// Craft currency a destroyed nest pays (see `Game::grant_nest_cache`),
+/// before `NEST_CACHE_FRAGMENT_ZONE_BONUS`. Deliberately under
+/// `BOSS_PORTAL_FRAGMENT_DROP` (`3..=6`): a nest is sustained effort, a boss
+/// is a wall.
+pub const NEST_CACHE_FRAGMENTS: std::ops::RangeInclusive<u32> = 2..=5;
+
+/// Added to `NEST_CACHE_FRAGMENTS` per zone below the current one, so a
+/// deeper nest — whose guardians already scale — stays worth clearing.
+/// Additive rather than multiplicative, matching `NODE_PAYOUT_ZONE_BONUS`;
+/// see that constant for why compounding broke the economy.
+pub const NEST_CACHE_FRAGMENT_ZONE_BONUS: u32 = 1;
+
+/// Passes over the nest species' equipment drop table
+/// (`Game::equipment_drops_for`), each entry rolled at its own chance on
+/// each pass. Not a guarantee: a species whose table is empty, or whose
+/// chances are low, can still pay no gear at all.
+pub const NEST_CACHE_EQUIPMENT_ROLLS: u32 = 3;
+
 // ─────────────────────────────────────────────────────────────────────────
 // Needs & rest
 // ─────────────────────────────────────────────────────────────────────────

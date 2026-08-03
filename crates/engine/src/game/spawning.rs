@@ -9,8 +9,8 @@ use crate::tuning::{
     ZONE_GROUP_GROWTH,
 };
 use crate::tuning::{
-    GROUP_SIZE_DISTANCE_GROWTH, MAX_GROUP_SIZE_DISTANCE_STEPS, WILD_ROUTINE_CHANCE,
-    WILD_SPAWN_CHANCE, WILD_SPAWN_RADIUS_TILES,
+    GROUP_SIZE_DISTANCE_GROWTH, GROUP_SIZE_STEP_FRAMES, MAX_GROUP_SIZE_DISTANCE_STEPS,
+    WILD_ROUTINE_CHANCE, WILD_SPAWN_CHANCE, WILD_SPAWN_RADIUS_TILES,
 };
 use crate::*;
 
@@ -27,6 +27,42 @@ use crate::*;
 /// group to a single member whatever Trace says.
 pub(crate) fn trace_group_ceiling(base: u32, group_mult: u32, cap: u32) -> u32 {
     base.saturating_mul(group_mult).clamp(1, cap.max(1))
+}
+
+/// Everything that makes a spawn harder than its own tile would suggest,
+/// decided by the caller and handed in as one value.
+///
+/// The bundling is the rule, not a convenience. Each of these is a property
+/// of *where the party is*, and `spawn_pack` must never read any of them off
+/// the world: ambient surface spawns and nest respawns keep rolling on every
+/// `tick` while the party is underground, so a factor read inside the spawn
+/// scales those too — which is how oversized packs once ended up waiting at
+/// the link mouth for the climb out. Passing them together gives that rule
+/// one place to live instead of three, and `surface()` names the case where
+/// there is no escalation at all.
+#[derive(Clone, Copy)]
+pub(crate) struct SpawnEscalation {
+    /// Multiplier on each member's stats — `Game::stack_depth_multiplier`
+    /// underground, 1.0 on the surface.
+    pub(crate) stat_mult: f32,
+    /// Multiplier on the group-size ceiling — `TRACE_GROUP_MULT`'s band
+    /// value, clamped back under the zone cap by `trace_group_ceiling`.
+    pub(crate) group_mult: u32,
+    /// Frames descended, or `None` on the surface. Stands in for distance
+    /// from the danger origin — see `Game::danger_steps`.
+    pub(crate) depth: Option<u32>,
+}
+
+impl SpawnEscalation {
+    /// An ordinary surface spawn: baseline stats, no Trace, no depth. The
+    /// tile's own distance is still read, by `danger_steps`.
+    pub(crate) fn surface() -> Self {
+        Self {
+            stat_mult: 1.0,
+            group_mult: 1,
+            depth: None,
+        }
+    }
 }
 
 /// The zone's ceiling on one species group: zone 1 is solo, every level
@@ -292,27 +328,54 @@ impl Game {
         }
     }
 
+    /// How many escalation steps a fight sits at — the one input both group
+    /// curves take, so the two halves of the pack ceiling cannot disagree
+    /// about how dangerous a place is.
+    ///
+    /// On the surface that is distance from the danger origin. In the Stack
+    /// it is `depth`, because the party's `Position` is pinned to the
+    /// entrance tile they walked in through: measuring the tile would report
+    /// the base's own doorstep however far down they had gone, which is why
+    /// every frame at every depth used to field one program in one group.
+    /// Depth *replaces* distance rather than adding to it — the entrance is
+    /// not a place the party is standing, and a stack under a far-flung link
+    /// would otherwise start at that link's own escalation and climb from
+    /// there.
+    ///
+    /// `depth` is a parameter rather than a `stack_pos()` read for the
+    /// reason `spawn_pack`'s doc records: ambient surface spawns and nest
+    /// respawns keep rolling every tick while the party is underground, and
+    /// anything read off the party's own locale in here would size those
+    /// from the party's depth.
+    fn danger_steps(&self, x: i32, y: i32, depth: Option<u32>) -> u32 {
+        let steps = match depth {
+            Some(depth) => depth.saturating_sub(1) / GROUP_SIZE_STEP_FRAMES,
+            None => (self.distance_from_danger_origin(x, y) / GROUP_SIZE_STEP_TILES).max(0) as u32,
+        };
+        steps.min(MAX_GROUP_SIZE_DISTANCE_STEPS)
+    }
+
     /// Maximum size of one wild species group at `(x, y)`: capped by the
-    /// zone (`zone_group_cap`), and reached by doubling every
-    /// `GROUP_SIZE_STEP_TILES` from the danger origin — solo at your base,
-    /// a swarm deep in the field. Used to pick how many creatures a group
-    /// spawn roll places together (`try_spawn_habitat_creature`), as the
-    /// per-group ceiling on one fight (`gather_pack`/`group_pack`), and to
-    /// size the room a spawn roll needs (`maybe_spawn_wild_creature`).
-    pub(crate) fn max_group_size(&self, x: i32, y: i32) -> u32 {
+    /// zone (`zone_group_cap`), and reached by doubling every escalation
+    /// step (see `danger_steps`) — solo at your base or on the first frame
+    /// down, a swarm deep in the field or deep in a stack. Used to pick how
+    /// many creatures a group spawn roll places together
+    /// (`try_spawn_habitat_creature`), as the per-group ceiling on one fight
+    /// (`gather_pack`/`group_pack`), and to size the room a spawn roll needs
+    /// (`maybe_spawn_wild_creature`).
+    pub(crate) fn max_group_size(&self, x: i32, y: i32, depth: Option<u32>) -> u32 {
         let cap = zone_group_cap(self.world.resource::<ZoneLevel>().0);
-        let dist = self.distance_from_danger_origin(x, y);
-        let steps =
-            (dist / GROUP_SIZE_STEP_TILES).clamp(0, MAX_GROUP_SIZE_DISTANCE_STEPS as i32) as u32;
-        GROUP_SIZE_DISTANCE_GROWTH.pow(steps).min(cap)
+        GROUP_SIZE_DISTANCE_GROWTH
+            .pow(self.danger_steps(x, y, depth))
+            .min(cap)
     }
 
     /// How many distinct species groups one fight at `(x, y)` may hold: a
-    /// single group at the danger origin, gaining one more every
-    /// `GROUP_SIZE_STEP_TILES` out to `MAX_ENEMY_GROUPS`. Rides the same
-    /// curve as `max_group_size`, and for the same reason — what meets you
-    /// at your own doorstep is one program, and it is pushing out that
-    /// turns it into a swarm.
+    /// single group at the danger origin, gaining one more per escalation
+    /// step out to `MAX_ENEMY_GROUPS`. Rides the same curve as
+    /// `max_group_size`, and for the same reason — what meets you at your
+    /// own doorstep is one program, and it is pushing out that turns it
+    /// into a swarm.
     ///
     /// Without this the two halves of the pack ceiling disagreed near the
     /// origin: group *size* started at one there while the *number* of
@@ -322,9 +385,8 @@ impl Game {
     /// `balance_sim::simulate_roster_fight` scores that as a loss against every
     /// shipped species, including the four that `beatable_by_a_fresh_player`
     /// clears one-on-one.
-    pub(crate) fn max_enemy_groups(&self, x: i32, y: i32) -> usize {
-        let steps = self.distance_from_danger_origin(x, y) / GROUP_SIZE_STEP_TILES;
-        (steps as usize + 1).min(MAX_ENEMY_GROUPS)
+    pub(crate) fn max_enemy_groups(&self, x: i32, y: i32, depth: Option<u32>) -> usize {
+        (self.danger_steps(x, y, depth) as usize + 1).min(MAX_ENEMY_GROUPS)
     }
 
     /// Whether `(x, y)` is in the band a brand-new run opens in: zone 1,
@@ -339,8 +401,8 @@ impl Game {
     /// toothless.
     fn in_opening_ring(&self, x: i32, y: i32) -> bool {
         self.world.resource::<ZoneLevel>().0 == 1
-            && self.max_group_size(x, y) == 1
-            && self.max_enemy_groups(x, y) == 1
+            && self.max_group_size(x, y, None) == 1
+            && self.max_enemy_groups(x, y, None) == 1
     }
 
     /// Spawns `count` wild creatures near the player, retrying with a fresh
@@ -412,7 +474,7 @@ impl Game {
         // doesn't feed the nest's `pending_respawns` the way an actual
         // defeat does. Guardian counts are best-effort once a nest is far
         // behind the player.
-        let needed = self.max_group_size(tx, ty) as usize;
+        let needed = self.max_group_size(tx, ty, None) as usize;
         let mut hostiles: Vec<(Entity, i32)> = {
             let mut query = self
                 .world
@@ -569,33 +631,24 @@ impl Game {
     /// ordinary-encounter mechanic, not something to stack onto an already
     /// tough boss fight.
     ///
-    /// `depth_mult` scales every member's stats: `1.0` for a surface pack,
-    /// `Game::stack_depth_multiplier` for one conjured underground. It is
-    /// a parameter rather than something the spawn reads off `Locale`
-    /// because the surface does not stop while the party is down a stack —
-    /// ambient spawns and nest respawns keep rolling on every `tick`, and a
-    /// locale-derived multiplier scaled those too, leaving 3x programs
-    /// standing around the link mouth for the climb out.
-    ///
-    /// `group_mult` is the party's Trace band, and is a parameter for
-    /// **exactly the same reason** — it is derived from where the party is
-    /// and how loud they have been, so reading it off the `Trace` resource
-    /// in here would reproduce that bug precisely. Surface callers pass `1`.
-    /// See `trace_group_ceiling` for why it cannot exceed the zone cap.
+    /// `esc` carries everything about the fight that its own tile cannot
+    /// say — see `SpawnEscalation`, which documents why all three of its
+    /// fields are handed in rather than read off the world here. Surface
+    /// callers pass `SpawnEscalation::surface()`.
     pub(crate) fn spawn_pack(
         &mut self,
         species_id: &str,
         is_boss: bool,
         x: i32,
         y: i32,
-        depth_mult: f32,
-        group_mult: u32,
+        esc: SpawnEscalation,
     ) -> Vec<Entity> {
         let group_size = if is_boss {
             1
         } else {
             let cap = zone_group_cap(self.world.resource::<ZoneLevel>().0);
-            let max_group = trace_group_ceiling(self.max_group_size(x, y), group_mult, cap);
+            let max_group =
+                trace_group_ceiling(self.max_group_size(x, y, esc.depth), esc.group_mult, cap);
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_range(1..=max_group)
         };
@@ -616,7 +669,7 @@ impl Game {
                     y + rng.0.random_range(-radius..=radius),
                 )
             };
-            spawned.extend(self.spawn_wild_creature_scaled(species_id, gx, gy, depth_mult));
+            spawned.extend(self.spawn_wild_creature_scaled(species_id, gx, gy, esc.stat_mult));
         }
         spawned
     }
@@ -654,7 +707,7 @@ impl Game {
             }
         }
 
-        self.spawn_pack(&pick, spawn_boss, x, y, 1.0, 1);
+        self.spawn_pack(&pick, spawn_boss, x, y, SpawnEscalation::surface());
         true
     }
 }

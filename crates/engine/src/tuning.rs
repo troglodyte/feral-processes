@@ -151,6 +151,18 @@ pub const GROUP_SIZE_STEP_TILES: i32 = DISTANCE_STAT_STEP_TILES;
 pub const GROUP_SIZE_DISTANCE_GROWTH: u32 = 2;
 pub const MAX_GROUP_SIZE_DISTANCE_STEPS: u32 = 7;
 
+/// Frames descended per escalation step in the Stack — the underground
+/// counterpart to `GROUP_SIZE_STEP_TILES`, feeding the same curve through
+/// `Game::danger_steps`.
+///
+/// One frame per step, against fifteen tiles per step on the surface,
+/// because descending *is* the commitment that walking out is: a frame is
+/// a maze to cross and a one-way door at the bottom of it, where fifteen
+/// tiles is a few turns' walk you can turn around in. The party also
+/// arrives at depth 1 already having chosen to be there, so the first frame
+/// stays at step zero — the entrance is the Stack's own opening ring.
+pub const GROUP_SIZE_STEP_FRAMES: u32 = 1;
+
 /// Geometric base for the group size each zone level allows: zone 1 is solo,
 /// and every level after multiplies the cap by this against `MAX_GROUP_SIZE`
 /// (1, 3, 9, 27, 81, 100). Only `battle::attackers_in_group` of a group

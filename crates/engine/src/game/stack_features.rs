@@ -185,9 +185,8 @@ impl Game {
         let Some((species, is_boss)) = self.pick_lair_species(pos) else {
             return;
         };
-        let depth_mult = self.stack_depth_multiplier();
-        let group_mult = self.trace_group_mult();
-        let pack = self.spawn_pack(&species, is_boss, ex, ey, depth_mult, group_mult);
+        let esc = self.stack_escalation(pos.depth);
+        let pack = self.spawn_pack(&species, is_boss, ex, ey, esc);
         if pack.is_empty() {
             return;
         }

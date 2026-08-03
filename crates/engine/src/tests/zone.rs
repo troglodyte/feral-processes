@@ -170,21 +170,22 @@ fn max_group_size_also_counts_from_the_platform_edge() {
     place_home(&mut game, 0, 0);
 
     assert_eq!(
-        game.max_group_size(spawn.x + MAX_BUILD_DISTANCE_FROM_HOME, spawn.y),
+        game.max_group_size(spawn.x + MAX_BUILD_DISTANCE_FROM_HOME, spawn.y, None),
         1,
         "groups shouldn't grow inside territory that's still stat-x1.0"
     );
     // The discriminating case: without the platform offset this is a full
     // GROUP_SIZE_STEP_TILES from spawn and would already have doubled.
     assert_eq!(
-        game.max_group_size(spawn.x + GROUP_SIZE_STEP_TILES, spawn.y),
+        game.max_group_size(spawn.x + GROUP_SIZE_STEP_TILES, spawn.y, None),
         1,
         "a full step from spawn is only half a step from the platform edge"
     );
     assert_eq!(
         game.max_group_size(
             spawn.x + MAX_BUILD_DISTANCE_FROM_HOME + GROUP_SIZE_STEP_TILES,
-            spawn.y
+            spawn.y,
+            None
         ),
         2,
         "the first doubling lands one full step past the platform edge"
@@ -198,7 +199,7 @@ fn max_group_size_doubles_with_distance_and_caps_per_zone() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
     let at = |game: &Game, steps: i32| {
-        game.max_group_size(spawn.x + GROUP_SIZE_STEP_TILES * steps, spawn.y)
+        game.max_group_size(spawn.x + GROUP_SIZE_STEP_TILES * steps, spawn.y, None)
     };
 
     assert_eq!(at(&game, 0), 1, "right at spawn, groups are always solo");
@@ -213,7 +214,7 @@ fn max_group_size_doubles_with_distance_and_caps_per_zone() {
     game.world.resource_mut::<ZoneLevel>().0 = 2;
     assert_eq!(at(&game, 0), 1, "every zone starts solo at its entry point");
     assert_eq!(
-        game.max_group_size(spawn.x + GROUP_SIZE_STEP_TILES - 1, spawn.y),
+        game.max_group_size(spawn.x + GROUP_SIZE_STEP_TILES - 1, spawn.y, None),
         1,
         "one tile short of a full step is still solo — the doubling is keyed \
          to whole steps, and an off-by-one here would double a step early"
@@ -249,7 +250,7 @@ fn max_group_size_doubles_with_distance_and_caps_per_zone() {
     // the width of the type.
     game.world.resource_mut::<ZoneLevel>().0 = 99;
     assert_eq!(
-        game.max_group_size(spawn.x + 10_000, spawn.y),
+        game.max_group_size(spawn.x + 10_000, spawn.y, None),
         MAX_GROUP_SIZE,
         "no zone or distance may push a group past MAX_GROUP_SIZE"
     );
@@ -264,12 +265,12 @@ fn max_enemy_groups_gains_one_group_per_step_out_and_stops_at_the_ceiling() {
     let mut game = Game::new(43, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
     let at = |game: &Game, steps: i32| {
-        game.max_enemy_groups(spawn.x + GROUP_SIZE_STEP_TILES * steps, spawn.y)
+        game.max_enemy_groups(spawn.x + GROUP_SIZE_STEP_TILES * steps, spawn.y, None)
     };
 
     assert_eq!(at(&game, 0), 1, "one group at the danger origin");
     assert_eq!(
-        game.max_enemy_groups(spawn.x + GROUP_SIZE_STEP_TILES - 1, spawn.y),
+        game.max_enemy_groups(spawn.x + GROUP_SIZE_STEP_TILES - 1, spawn.y, None),
         1,
         "one tile short of a full step is still a single group — an off-by-one \
          here would end the opening buffer a tile early"
@@ -291,7 +292,7 @@ fn max_enemy_groups_gains_one_group_per_step_out_and_stops_at_the_ceiling() {
     // And it counts from the platform edge, like every other danger curve.
     place_home(&mut game, 0, 0);
     assert_eq!(
-        game.max_enemy_groups(spawn.x + GROUP_SIZE_STEP_TILES, spawn.y),
+        game.max_enemy_groups(spawn.x + GROUP_SIZE_STEP_TILES, spawn.y, None),
         1,
         "a full step from spawn is only half a step from the platform edge"
     );

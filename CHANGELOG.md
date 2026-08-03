@@ -13,6 +13,36 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Depth is the Stack's distance
+
+Engine-only, no save-format bump. Nothing new is persisted — depth already
+lived in `Locale::Stack`, and both group curves are derived per fight.
+
+- **Descending now widens the fight.** The surface escalates an encounter by
+  distance from the danger origin; the Stack could not, because the party's
+  `Position` is pinned to the entrance tile they walked in through, so
+  `max_group_size` measured the base's own doorstep however far down they
+  had gone. Every frame at every depth fielded one program in one group
+  unless Trace had reached Hunted. `Game::danger_steps` is now the single
+  input to both curves, taking frames descended underground
+  (`GROUP_SIZE_STEP_FRAMES`, one frame per step) and tile distance on the
+  surface.
+- **A Stack ambush draws one species pick per group the depth allows**
+  (`Game::stack_encounter_pack`). `group_pack` partitions by species, so a
+  single draw was a single group however many the count permitted — raising
+  the count alone would have been the same no-op that scaling only the spawn
+  once was for `TRACE_GROUP_MULT`.
+- **`SpawnEscalation` replaces `spawn_pack`'s loose `depth_mult`/`group_mult`
+  pair** and carries depth alongside them. All three are properties of where
+  the party is, and none may be read inside the spawn: ambient surface spawns
+  and nest respawns keep rolling while the party is underground. Bundling
+  gives that rule one home, and `SpawnEscalation::surface()` names the
+  no-escalation case.
+- Depth 1 is unchanged — it is the Stack's opening ring, and `in_opening_ring`
+  and the fresh-player species checks still see a zone-1 surface fight as one
+  program. `zone_group_cap` still binds: zone 2 caps every group at 3 whatever
+  the depth.
+
 ### Bounded income: rest costs a consumable, scan is deleted
 
 Engine-only, no save-format bump. The outlet is an ordinary inventory item,

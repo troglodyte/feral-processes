@@ -1117,9 +1117,9 @@ radius is flattened into base flooring, obliterating the terrain, nests and
 rogue programs that were standing there. Nothing wild ever spawns on
 platform flooring, so your base is a genuine safe haven — the only threat
 that reaches it is a raid (see [Base defense](#base-defense)). Demolishing
-Home tears the platform up again and the natural terrain
-underneath comes back. The platform travels with you between zones, so a
-base founded in zone 1 is the same base you're still standing in at zone 6
+Home tears the platform up again and the natural terrain underneath comes
+back. The platform travels with you between zones, so a base founded in zone
+1 is the same base you're still standing in at zone 6
 — see [Zones and portals](#zones-and-portals).
 
 **Upgrade tiers.** Structures that produce something can be upgraded with
@@ -1144,13 +1144,12 @@ Home is a **symlink target** — a third category, neither cronjob nor
 passive: press `u`, pick it from the list of deployed symlink structures,
 and pay the Power Cell cost to warp there instantly, no matter how far
 away you are. Deploy more than one and `u` lists all of them.
-Recharger Node is a **passive power source** — a fourth category: it
-refills your Power every tick you're inside its 7-tile radius, with no
-worker and no input item. Home doubles as the **rest gate**: `r` only
-works within 7 tiles of it, which is exactly the base footprint, and spends
-one Power Outlet per rest.
-Any structure can define any combination of these via its `.ron` file —
-see [Modding](#modding).
+Recharger Node is a **passive power source** — a fourth category: it refills
+your Power every tick you're inside its 7-tile radius, with no worker and no
+input item. Home doubles as the **rest gate**: `r` only works within 7 tiles
+of it, which is exactly the base footprint, and spends one Power Outlet per
+rest. Any structure can define any combination of these via its `.ron` file
+— see [Modding](#modding).
 
 ### Base defense
 

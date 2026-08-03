@@ -40,6 +40,13 @@ index — nothing new is persisted.
 - **Two Power Outlets go into new-game starting inventory**, beside the 3
   ICE Breakers, 3 Power Cells and 5 Core Fragments, to cover getting
   established before the base earns anything of its own.
+- **A defeated program now drops 2–4 of its work resource, up from 1–2.**
+  With scan gone, kills are the only source of Core Fragments outside a
+  built base, and the first Mining Node — 12 fragments on top of Home's 5 —
+  was about eight kills away while a single rest cost five. Only seven
+  species carry a work resource (four Core Fragments, three Power Cells), so
+  Power Cell drops double too; splitting the range per resource would be new
+  asset data for a seven-species problem.
 - Why: nothing limited how much a player could earn. Scanning was 1 tick for
   ~0.6 Core Fragments in a rich biome, returned roughly 50x the Power it
   burned, and inside a Recharger Node's radius Power *rose* while scanning —

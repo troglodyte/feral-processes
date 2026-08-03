@@ -171,8 +171,8 @@ Press `T` for the research tree. Deploy a Research Node, cronjob a program
 onto it, and it banks **Research Data** separately from your carrying
 capacity, up to 200 — which is also why it's the one output that doesn't
 scale with zone depth. Nodes cost a flat amount, may require other nodes
-first, and unlock permanently and one-way: the Compiler, Terminal, Power
-Conduit, iso Market, Shield, Patch Node, and the Fabricator/Armory benches,
+first, and unlock permanently and one-way: the Compiler, Power Conduit,
+iso Market, Shield, Patch Node, and the Fabricator/Armory benches,
 plus six discounted equipment recipes. The tree is data, not code — every node is a
 `.ron` file in `assets/research/`.
 
@@ -302,7 +302,8 @@ entry point. The portal itself is consumed, and there is no way back down.
 
 Structures are `.ron` files declaring any combination of roles: cronjob-
 workable (Mining Node, Research Node, Power Conduit, Compiler), passively
-processing (Terminal), a symlink target you can `u` to from anywhere (Home),
+processing (no shipped structure, but the schema is there for mods), a
+symlink target you can `u` to from anywhere (Home),
 a rest gate, a power source (Recharger Node), a trading post (iso Market),
 a repairer (Patch Node), or a plain bench (Fabricator, Armory). Producers
 upgrade to Mk5 with `U`, each tier adding to the payout and raising the
@@ -341,8 +342,9 @@ game time; assigning, demolishing and upgrading stay on `w`, `G`, `R` and `U`.
 ## Trading
 
 Press `t` at a nearby iso Market to sell inventory items for **Credits** at
-a flat floor rate, buy ICE Breakers, Power Cells, or Portal Fragments with
-them, or sell a compiled program for a tenth of its power. Credits are the
+a flat floor rate, buy ICE Breakers or Power Cells with
+them, or sell a compiled program for a tenth of its power. Portal Fragments
+are deliberately not for sale: breaching is earned by fighting. Credits are the
 only currency a trader deals in — Core Fragments are salvage, and a trader
 buys those off you like anything else rather than paying in them.
 

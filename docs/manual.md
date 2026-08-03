@@ -402,9 +402,8 @@ creature to work" mechanic.
 3. **Schedule a cronjob with `w`** — pick a compiled (tamed) program, then
    the structure to assign it to. This only works on structures with a
    `work` recipe (Mining Node, Power Conduit, Compiler); Fabricator, Armory,
-   Terminal, and Data Cache aren't assignable this way — Fabricator and
-   Armory unlock crafting instead (see below), and Terminal automates
-   passively. Both pickers show status: the program picker flags
+   and Data Cache aren't assignable this way — Fabricator and Armory unlock
+   crafting instead (see below). Both pickers show status: the program picker flags
    `(active companion)` or `(on a cronjob: <structure>)`, and the structure
    picker flags `(assigned: <program>)`, so you can see who's already
    spoken for before reassigning them.
@@ -447,9 +446,6 @@ creature to work" mechanic.
      cycle draws one down; once mined to 0 it immediately refills back to
      capacity and the worker keeps going — a worked node is an infinite,
      bursty resource, never a one-time deposit you can exhaust.
-   - Terminal works differently: it's **passive**, not cronjob-based — it
-     auto-cooks a Core Fragment into a Power Cell every tick whenever
-     you're standing within 2 tiles, no assignment needed.
 5. **Cronjobs persist across save/load.** A program's assignment, its target
    structure, and its in-progress tick count are all saved — reload and it
    picks up right where it left off, no need to reassign it with `w`.
@@ -484,7 +480,7 @@ visit.
 | Node | Cost | Requires | Unlocks |
 | --- | --- | --- | --- |
 | Automation | 8 | — | Compiler |
-| Power Grid | 10 | — | Terminal, Power Conduit |
+| Power Grid | 10 | — | Power Conduit |
 | Isometric Commerce | 12 | — | iso Market |
 | Fortification | 15 | Power Grid | Shield, Patch Node |
 | Weapon Fabrication | 18 | Automation | Fabricator |
@@ -565,7 +561,7 @@ Shown in the status panel (always) and the intrusion screen (in battle):
 | Stat | What it means |
 | --- | --- |
 | **Integrity** | Your HP. Hits 0 and you flatline — final in Permadeath, a costly soft-reboot in Forgiving mode. Leveling up or recharging overnight (`r`) both fully restore it. |
-| **Power** | Your hunger-equivalent. Drains over time; hits 0 and you start taking Integrity damage each tick. Below 50%, your Attack also starts weakening — a linear falloff to half strength at 0 Power, on top of (not instead of) the tick damage. Restored by draining a Power Cell (`e`), standing near a cooking Terminal, or passively anywhere in a base with a Recharger Node. |
+| **Power** | Your hunger-equivalent. Drains over time; hits 0 and you start taking Integrity damage each tick. Below 50%, your Attack also starts weakening — a linear falloff to half strength at 0 Power, on top of (not instead of) the tick damage. Restored by draining a Power Cell (`e`), or passively anywhere in a base with a Recharger Node. |
 | **Fatigue** | Drains over time; restored to full by recharging overnight (`r`). Directing a party member's Special in battle (`s`) also costs some of it — how much is the ability's own business, so a field-wide sweep bites far harder than an ordinary command. Run short and that ability is refused until you rest. Rest also advances a lot of game time, so use both deliberately. In battle it is a column of its own on your roster row, and the ability picker prints what each routine would spend, so you can see a refusal coming. |
 | **Level / XP** | Grows from defeating or decompiling rogue programs, or (for a compiled program) completing cronjob cycles. Each level-up grows Attack/Defense/max Integrity, fully heals, and grants 1 Perk Point — see [Perks](#perks). **You** have no level ceiling at all; **tamed programs** stop at level 12, and further XP from any source is simply ignored once one is maxed. |
 | **Attack** | How hard your hits land. Battle damage is roughly `move power + attacker's Attack − defender's Defense` (always at least 1). The same formula covers every combatant: your own strike has a fixed move power, while a program — yours or wild — rolls one of its species' moves. |
@@ -611,10 +607,10 @@ the file either — that's difficulty tuning, and it stays in
 | Item | Source | Used for |
 | --- | --- | --- |
 | Core Fragment | Starting inventory; dropped by Virus/Construct; a Mining Node cronjob | Deploy structures (2–6 each); compile an ICE Breaker (3 each) or a Power Cell (2 each) |
-| Power Cell | Starting inventory; compiled (`c`) from 2 Core Fragments; dropped by Scrapper/Glitch; cooked passively at a Terminal; a Power Conduit cronjob | Drain (`e`) to restore Power |
+| Power Cell | Starting inventory; compiled (`c`) from 2 Core Fragments; dropped by Scrapper/Glitch; a Power Conduit cronjob | Drain (`e`) to restore Power |
 | ICE Breaker | Starting inventory; compiled (`c`) from 3 Core Fragments; a Compiler cronjob | The taming catalyst Decompile spends — a Special (`s`) in battle, not its own key |
 | Power Outlet | Starting inventory (2); compiled (`c`) from 5 Core Fragments | Spent one per rest (`r`) — see [Structures](#structures) |
-| Portal Fragment | 35% drop from any defeated wild program; a guaranteed 3–6 cache from a boss; buyable at an iso Market (8 Credits) | Deploy a Zone Portal; pay for every equipment recipe |
+| Portal Fragment | 35% drop from any defeated wild program; a guaranteed 3–6 cache from a boss; a chance from a Stack cache. **Not** buyable — breaching is earned by fighting | Deploy a Zone Portal; pay for every equipment recipe |
 | Research Data | A Research Node cronjob | Unlock research nodes (`T`) — see [Research](#research) |
 | Credits | Selling items or programs at an iso Market — nothing else mints them | Buying at an iso Market. The only cache that survives a breach |
 
@@ -1088,7 +1084,6 @@ enough of them, then walk onto it to breach into the next zone.
 | Data Cache | 10 Core Fragments | — | Raises your carrying capacity (Buffer) by 10 while deployed; stacks with every other one |
 | Zone Portal | 10 Portal Fragments *(+50% of that per zone level)* | — | Walk onto it to breach into the next zone. Consumed on use, and your fragments and cores don't survive the trip — see [Zones and portals](#zones-and-portals) |
 | Compiler | 16 Core Fragments | Automation | Cronjob a compiled program to it to produce ICE Breakers over time. Upgradeable to Mk5 |
-| Terminal | 3 Core Fragments | Power Grid | Passively cooks a Core Fragment into a Power Cell every tick while you're standing within 2 tiles — no cronjob needed |
 | Power Conduit | 14 Core Fragments | Power Grid | Cronjob a compiled program to it to produce Power Cells over time |
 | iso Market | 16 Core Fragments | Isometric Commerce | `t` ("trade") to sell inventory items or compiled programs, or buy consumables, for Core Fragments — see [Trading](#trading) |
 | Shield | 16 Core Fragments | Fortification | Passively reduces raid damage against **every** deployed structure by 4 — see [Base defense](#base-defense) |
@@ -1134,8 +1129,9 @@ main thing worth pouring materials into — an upgraded base is what keeps
 your income ahead of each zone's rising portal cost.
 
 Mining Node, Research Node, Power Conduit, and Compiler use **active**
-automation (an assigned cronjob produces over time); Terminal uses
-**passive** automation (it processes on its own whenever you're in range);
+automation (an assigned cronjob produces over time); **passive** automation
+— a structure that processes on its own whenever you're in range — has no
+shipped structure, but the schema is still there for mods;
 Fabricator and Armory use neither — they're benches, making already-
 researched recipes compilable while they stand; Shield and Patch Node use
 neither either — they just sit there, one absorbing raid damage and the
@@ -1170,7 +1166,7 @@ hitting a random one of your *other* deployed structures:
   recharge (`r`). A program left on a cronjob long enough will eventually
   be lost to raids while you are elsewhere.
 - `G` (guard) works on **any** raidable structure, including ones with no
-  cronjob recipe at all — Terminal, Data Cache, Fabricator, Armory, and so
+  cronjob recipe at all — Data Cache, Fabricator, Armory, and so
   on. It's the only way to defend those. A structure already cronjob-worked
   is already defended by its worker; guard it separately only if you want a
   program standing there purely for defense, doing no production. Guarding

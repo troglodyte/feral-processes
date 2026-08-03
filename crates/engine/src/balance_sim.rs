@@ -185,36 +185,6 @@ pub fn beatable_by_a_fresh_player(species: &SpeciesDef) -> bool {
     .player_won
 }
 
-/// Ticks of a single worked, tiered node needed to fund one Portal at
-/// `zone`, routed through the Market's `portal_fragment` buy price.
-///
-/// Deliberately arithmetic rather than a live sim: this is the check on what
-/// a settled base is worth against the cost of moving it deeper, which is the
-/// whole reason the travelling-base work happened. See
-/// `docs/superpowers/specs/2026-07-24-travelling-base-design.md`.
-///
-/// Calls the real `systems::node_payout` and `systems::mining_success_chance`
-/// rather than restating them, so a rebalance of either shows up here.
-pub fn ticks_to_afford_portal(
-    zone: u32,
-    tier: u32,
-    ticks_per_unit: u32,
-    portal_fragment_rate: u32,
-    market_price: u32,
-) -> f64 {
-    let payout = crate::systems::node_payout(tier, ZoneLevel(zone)) as f64;
-    // No `Perk::KeenScavenger`: the sweep projects a mid-grade party that has
-    // bought nothing, so the curve stays a property of the node rather than
-    // of how the points were spent.
-    let success = crate::systems::mining_success_chance(tier, 0);
-    let per_tick = payout * success / ticks_per_unit as f64;
-    // Priced through the same helper the game charges with (see
-    // `crate::zone_portal_cost`), and fragments are bought with the
-    // currency the base actually produces.
-    let needed = (crate::zone_portal_cost(portal_fragment_rate, zone) * market_price) as f64;
-    needed / per_tick
-}
-
 pub struct BattleOutcome {
     pub player_won: bool,
     pub turns: u32,
@@ -513,39 +483,6 @@ mod tests {
         (weapon, armor)
     }
 
-    /// The shipped economy numbers `ticks_to_afford_portal` needs, read from
-    /// the real structure assets rather than hardcoded, so a rebalance of
-    /// any `.ron` file shows up in these projections instead of silently
-    /// invalidating them.
-    fn shipped_economy() -> (u32, u32, u32) {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/structures");
-        let (db, _) = crate::structures::StructureDb::load_dir(&dir).unwrap();
-
-        let node = db.get("mining_node").expect("mining_node.ron should load");
-        let ticks_per_unit = node.work.as_ref().unwrap().ticks_per_unit;
-
-        let portal = db.get("portal").expect("portal.ron should load");
-        let portal_fragment_rate = portal
-            .build_cost
-            .iter()
-            .find(|(item, _)| item.as_str() == crate::items::ids::PORTAL_FRAGMENT)
-            .map(|(_, qty)| *qty)
-            .expect("a portal is bought with portal fragments");
-
-        let market = db.get("market").expect("black_market.ron should load");
-        let market_price = market
-            .trade
-            .as_ref()
-            .unwrap()
-            .buy
-            .iter()
-            .find(|(item, _)| item.as_str() == crate::items::ids::PORTAL_FRAGMENT)
-            .map(|(_, cost)| *cost)
-            .expect("the market should sell portal fragments");
-
-        (ticks_per_unit, portal_fragment_rate, market_price)
-    }
-
     /// The opening ring filters the shipped roster with
     /// `beatable_by_a_fresh_player`, so that predicate has to keep some
     /// species and turn others away. All-pass and it's inert — the ring
@@ -586,91 +523,6 @@ mod tests {
                 boss.id
             );
         }
-    }
-
-    /// The check this whole change exists to satisfy: a base that's been
-    /// invested in must out-earn its own rising portal cost as it goes
-    /// deeper. If this fails, settling is still a losing move and the
-    /// travelling-base work did not achieve its goal — report the numbers
-    /// rather than relaxing the assertion.
-    #[test]
-    fn a_tiered_base_funds_deeper_portals_faster_than_a_fresh_one_funds_shallow_ones() {
-        let (ticks, rate, price) = shipped_economy();
-
-        let shallow = ticks_to_afford_portal(1, 1, ticks, rate, price);
-        let deep = ticks_to_afford_portal(4, 3, ticks, rate, price);
-
-        eprintln!("zone 1 Mk1: {shallow:.0} ticks/portal; zone 4 Mk3: {deep:.0} ticks/portal");
-        assert!(
-            deep < shallow,
-            "a tiered base at depth must out-earn its own rising portal cost, or settling \
-             is still a losing move: zone 1 Mk1 = {shallow:.0} ticks, zone 4 Mk3 = {deep:.0}"
-        );
-    }
-
-    /// At an upgraded tier, funding the next breach *does* get slower with
-    /// depth: the payout gains a flat `NODE_PAYOUT_ZONE_BONUS` per zone while
-    /// the Portal's cost grows by half its base rate, so cost pulls ahead.
-    /// That's the intended shape — depth should cost time, or fragments stop
-    /// being a constraint the way they did when payout doubled per zone.
-    ///
-    /// What must hold is that it *converges* rather than exploding: the ratio
-    /// tends to a ceiling as depth grows (about 571 ticks against 381 at zone
-    /// 1), so a deeper zone is a longer grind and never a wall. This bound is
-    /// the gate — a change that makes deep zones unfundable trips it.
-    #[test]
-    fn deeper_breaches_cost_more_time_but_stay_bounded() {
-        let (ticks, rate, price) = shipped_economy();
-
-        let shallowest = ticks_to_afford_portal(1, 3, ticks, rate, price);
-        let mut previous = 0.0_f64;
-        for zone in 1..=6 {
-            let t = ticks_to_afford_portal(zone, 3, ticks, rate, price);
-            eprintln!("[Mk3] zone {zone}: {t:.1} ticks/portal");
-            assert!(
-                t >= previous,
-                "funding time should rise with depth, not fall — it dropped at \
-                 zone {zone} ({t:.1} ticks vs {previous:.1} one zone shallower)"
-            );
-            assert!(
-                t <= shallowest * 1.5,
-                "and must stay bounded: zone {zone} costs {t:.1} ticks against \
-                 {shallowest:.1} at zone 1, past the 1.5x ceiling"
-            );
-            previous = t;
-        }
-    }
-
-    /// Pins the *shape* of the un-upgraded curve, which runs opposite to the
-    /// upgraded one above. At Mk1 a flat `NODE_PAYOUT_ZONE_BONUS` per zone
-    /// doubles the payout on the first breach (1 -> 2) while the Portal's
-    /// cost grows by only half its base rate (see
-    /// `crate::tuning::ZONE_PORTAL_COST_GROWTH_PERCENT`), so the early steps
-    /// still pay off — it's only once tier has raised the baseline that the
-    /// linear cost ramp starts to win.
-    ///
-    /// That first step matters because currency does not survive the breach
-    /// that spends it: a player arriving in a new zone with nothing must find
-    /// the next exit no harder to fund than the last.
-    #[test]
-    fn an_unupgraded_base_gains_ground_from_its_very_first_breach() {
-        let (ticks, rate, price) = shipped_economy();
-        let at = |zone| ticks_to_afford_portal(zone, 1, ticks, rate, price);
-
-        assert!(
-            at(2) < at(1),
-            "the first breach must pay for itself even without an upgrade (payout x2, \
-             cost x1.5): {:.0} -> {:.0}",
-            at(1),
-            at(2)
-        );
-        assert!(
-            at(3) < at(2),
-            "and the payout bonus keeps pulling ahead of the cost ramp while tier is \
-             low: {:.0} -> {:.0}",
-            at(2),
-            at(3)
-        );
     }
 
     /// How deep to sweep the gear-free grind baseline. Zones are actually

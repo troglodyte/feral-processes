@@ -614,13 +614,13 @@ fn assign_guard_refuses_a_structure_that_cant_be_raided() {
 #[test]
 fn assign_guard_defends_a_structure_with_no_work_recipe() {
     let mut game = Game::new(4, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    // Terminal, not Home: Home is non-raidable now, so it's the one
+    // A Recharger Node, not Home: Home is non-raidable now, so it is the one
     // structure a guard is refused on.
     let structure = game
         .world
         .spawn((
             Structure {
-                kind: "terminal".to_string(),
+                kind: "recharger_node".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 30, max_hp: 30 },
@@ -678,12 +678,12 @@ fn a_guard_task_never_produces_resources_even_on_a_workable_node() {
 #[test]
 fn guard_assignment_on_a_non_resource_structure_survives_save_and_load() {
     let mut game = Game::new(6, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    // Terminal, not Home: Home is non-raidable, so guarding it is refused.
+    // A Recharger Node, not Home: Home is non-raidable, so guarding it is refused.
     let structure = game
         .world
         .spawn((
             Structure {
-                kind: "terminal".to_string(),
+                kind: "recharger_node".to_string(),
             },
             Position { x: 3, y: 3 },
             Durability { hp: 30, max_hp: 30 },

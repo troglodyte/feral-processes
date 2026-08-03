@@ -40,6 +40,26 @@ index — nothing new is persisted.
 - **Two Power Outlets go into new-game starting inventory**, beside the 3
   ICE Breakers, 3 Power Cells and 5 Core Fragments, to cover getting
   established before the base earns anything of its own.
+- **Portal Fragments are no longer sold at the iso Market.** Breaching is now
+  earned by fighting — a 35% drop from any defeated program, a guaranteed 3–6
+  from a boss, and a chance from a Stack cache. That listing was the only
+  route from base production straight to progression, which is exactly what
+  made settling in one zone and selling salvage a substitute for engaging
+  with it. Credits surviving a breach no longer buys a way past content
+  either, so a hole `enter_next_zone` previously priced rather than closed is
+  now closed at the source.
+- **`balance_sim::ticks_to_afford_portal` and its three tests are deleted.**
+  It measured how long a worked node took to fund a breach *through that buy
+  price*. With no buy price the question no longer exists, and a gate
+  measuring a route the game doesn't have is worse than no gate. The engine
+  suite drops from 1156 to 1153.
+- **The Terminal is gone.** It converted a Core Fragment into a Power Cell
+  every tick while you stood within 2 tiles, for a 3-Fragment build cost —
+  the cheapest thing you could deploy, and a second free-Power source beside
+  the Recharger Node. Power Grid research now unlocks the Power Conduit
+  alone. It was the only shipped structure using `passive_process`, so that
+  schema field and `passive_process_system` now serve mods only; both stay
+  documented in `assets/structures/README.md`.
 - **Deploying a Home now obliterates any Stack link under its platform**,
   the same way it already obliterates the hostiles and nests standing there.
   This is not a rare collision: `STACK_NEAREST_LINK_TILES` puts a zone's

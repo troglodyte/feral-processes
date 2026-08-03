@@ -96,7 +96,7 @@ mod tests {
             .id();
         world.spawn((
             Structure {
-                kind: StructureId::from("terminal"),
+                kind: StructureId::from("recharger_node"),
             },
             Position { x: 5, y: 5 },
         ));

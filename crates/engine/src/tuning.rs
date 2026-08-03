@@ -968,7 +968,7 @@ pub const RAID_DAMAGE: u32 = 4;
 pub const RAID_DEFENDER_DAMAGE: i32 = 6;
 
 /// Every non-Home structure must be deployed within this many tiles (per
-/// axis, same box-radius style as `StructureDef::passive_process`'s
+/// axis, same box-radius style as `StructureDef::power_regen`'s
 /// `radius`) of the Home structure — a base clusters around its Home
 /// rather than sprawling across the map.
 pub const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 7;

@@ -296,8 +296,7 @@ impl Inventory {
     /// Whether `qty` more of `item` would fit. Ordinary cargo is unbounded so
     /// always has room; a banked currency is checked against its own bank
     /// limit. Lets a caller check before committing to an action whose input
-    /// cost it can't undo — see `passive_process_system`, which must not
-    /// consume a conversion's input unless the output will actually land.
+    /// cost it can't undo.
     pub fn has_room(&self, item: &ItemId, qty: u32, db: &ItemDb) -> bool {
         match db.get(item.as_str()).and_then(|d| d.bank_limit) {
             Some(limit) => self.count(item).saturating_add(qty) <= limit,
@@ -348,14 +347,6 @@ pub struct ResourceNode {
     /// structure opts into via its `.ron` file rather than something every
     /// worked node does by default.
     pub level: Option<u32>,
-}
-
-/// Ticks toward a structure's next passive-processing conversion (see
-/// `StructureDef::passive_process`). Present only on structures whose
-/// definition sets that field.
-#[derive(Component, Default)]
-pub struct PassiveProcessor {
-    pub progress: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

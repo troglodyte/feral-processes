@@ -123,7 +123,6 @@ impl Game {
             systems::wander_ai_system,
             systems::task_progress_system,
             systems::player_gather_system,
-            systems::passive_process_system,
             difficulty::death_handling_system,
         ));
         schedule
@@ -443,9 +442,6 @@ impl Game {
                     capacity,
                     level,
                 });
-            }
-            if def.passive_process.is_some() {
-                entity.insert(PassiveProcessor::default());
             }
             if def.upgrade.is_some() {
                 let tier = s.tier.unwrap_or(1);

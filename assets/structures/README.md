@@ -16,7 +16,7 @@ is skipped with a warning logged in-game rather than crashing startup.
                                     //         Orange
     build_cost: [("core_fragment", 3)],  // list of (item id, quantity) pairs
     // build_cost above, and every other item reference below (work.produces,
-    // passive_process.consumes/produces, teleport_cost, trade.buy), all take
+    // teleport_cost, trade.buy), all take
     // any item id from assets/items/*.ron — see assets/items/README.md for
     // the schema, and the top-level README's "Item ids" for the full set.
 
@@ -24,11 +24,11 @@ is skipped with a warning logged in-game rather than crashing startup.
     // the shipped-assets test refuses for anything in this repo). One line
     // on what the structure does, shown in the build menu. This used to be
     // derived automatically from the capability fields below (`work`,
-    // `passive_process`, `raid_defense`, and so on); it's authored text now,
+    // `raid_defense`, and so on); it's authored text now,
     // so a modder controls exactly how their structure reads — but that also
     // means nothing checks it against those fields, so if you change a
     // structure's capabilities, update the description to match by hand.
-    description: "Converts Core Fragments into Power Cells on its own while you stand within 2 tiles. The cheapest thing you can deploy.",
+    description: "Extracts Core Fragments while a program is posted to it. The cheapest thing you can deploy.",
 
     // Omit (`None`) for a purely decorative/utility structure. Set `Some(...)`
     // to make it assignable to a tamed creature via the cronjob menu — it'll
@@ -67,21 +67,10 @@ is skipped with a warning logged in-game rather than crashing startup.
     // nine a cycle outruns the sink entirely. Leave it off for salvage.
     work: Some((produces: "core_fragment", ticks_per_unit: 5, capacity: 5, level: Some(1))),
 
-    // Optional; can be left out entirely (defaults to no passive processing).
-    // If set, the structure automatically converts one `consumes` into one
-    // `produces` every `ticks_per_unit` ticks whenever the player is standing
-    // within `radius` tiles of it — no assigned worker needed, unlike `work`.
-    passive_process: Some((
-        consumes: "core_fragment",
-        produces: "power_cell",
-        ticks_per_unit: 15,
-        radius: 2,
-    )),
-
     // Optional; can be left out entirely (defaults to no regeneration).
     // If set, the structure restores `per_tick` Power to the player every
     // tick that they're standing within `radius` tiles of it — no assigned
-    // worker and no input item, unlike `work` and `passive_process`.
+    // worker and no input item, unlike `work`.
     // Stacks additively across every in-range structure that sets it, and
     // clamps at full Power. This is how the Recharger Node works:
     // `power_regen: Some((per_tick: 1.0, radius: 7))`, a radius chosen to

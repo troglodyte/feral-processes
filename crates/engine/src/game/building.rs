@@ -95,9 +95,6 @@ impl Game {
                 level: work.level,
             });
         }
-        if def.passive_process.is_some() {
-            entity.insert(PassiveProcessor::default());
-        }
         if let Some(temp) = &def.temporary {
             entity.insert(Temporary {
                 ticks_remaining: temp.max_ticks,

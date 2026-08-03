@@ -4,8 +4,8 @@ use rand::RngExt;
 
 use crate::components::{
     Creature, Experience, FieldBuff, FieldBuffKind, Inventory, NEED_MAX, NEED_MIN, Needs, Nest,
-    NestGuardian, PassiveProcessor, Perks, Player, Position, Potential, Pursuing, ResourceNode,
-    Stats, Structure, StructureTier, Tamed, Task, TaskKind, WanderAi, field_buff_power_of,
+    NestGuardian, Perks, Player, Position, Potential, Pursuing, ResourceNode, Stats, Structure,
+    StructureTier, Tamed, Task, TaskKind, WanderAi, field_buff_power_of,
 };
 use crate::items_db::ItemDb;
 use crate::perks::Perk;
@@ -391,70 +391,9 @@ pub fn player_gather_system(
     }
 }
 
-/// Proximity-based automation: a structure with a `passive_process` recipe
-/// (see `StructureDef`) converts one item into another on its own whenever
-/// the player is standing within range — no assigned worker needed. This is
-/// the passive counterpart to `task_progress_system`'s active, creature-run
-/// production.
-pub fn passive_process_system(
-    mut player: Query<(&Position, &mut Inventory), With<Player>>,
-    mut structures: Query<(&Structure, &Position, &mut PassiveProcessor)>,
-    structure_db: Res<StructureDb>,
-    item_db: Res<ItemDb>,
-    mut log: ResMut<MessageLog>,
-) {
-    for (player_pos, mut inventory) in &mut player {
-        let player_pos = *player_pos;
-        for (structure, pos, mut proc) in &mut structures {
-            let Some(def) = structure_db.get(&structure.kind) else {
-                continue;
-            };
-            let Some(recipe) = &def.passive_process else {
-                continue;
-            };
-            if (pos.x - player_pos.x).abs() > recipe.radius
-                || (pos.y - player_pos.y).abs() > recipe.radius
-            {
-                continue;
-            }
-            proc.progress += 1;
-            if proc.progress < recipe.ticks_per_unit {
-                continue;
-            }
-            proc.progress = 0;
-            // Check room before taking the input: this is a conversion, not
-            // an award, so a full bank must refuse rather than consume the
-            // input for an output that never lands. (Ordinary cargo is
-            // unbounded and always has room; only a banked output can be
-            // full.)
-            if !inventory.has_room(&recipe.produces, 1, &item_db) {
-                continue;
-            }
-            if inventory.take(recipe.consumes.clone(), 1) == 1 {
-                inventory.add(recipe.produces.clone(), 1);
-                let consumes_name = item_db
-                    .get(recipe.consumes.as_str())
-                    .map(|d| d.name.as_str())
-                    .unwrap_or(recipe.consumes.as_str());
-                let produces_name = item_db
-                    .get(recipe.produces.as_str())
-                    .map(|d| d.name.as_str())
-                    .unwrap_or(recipe.produces.as_str());
-                log.push_base_kind(
-                    MessageKind::Loot,
-                    format!(
-                        "The {} processes a {consumes_name} into a {produces_name}.",
-                        def.name
-                    ),
-                );
-            }
-        }
-    }
-}
-
 /// Restores the player's Power once per tick for every in-range structure
 /// whose def sets `power_regen` — no worker and no input item, unlike
-/// `task_progress_system` and `passive_process_system`.
+/// `task_progress_system`.
 ///
 /// Chained ahead of `needs_tick_system` (see `Game::build_schedule`), and
 /// that order is load-bearing: run the other way round, a player limping
@@ -496,7 +435,6 @@ pub fn power_regen_system(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::items::{ItemId, ids};
     use crate::structures::StructureDb;
     use crate::tuning::PLAYER_BASE_STATS;
     use std::sync::atomic::{AtomicU32, Ordering};
@@ -685,10 +623,7 @@ mod tests {
     #[test]
     fn power_regen_applies_at_exactly_the_radius_boundary() {
         let hunger = run_regen_once(load_test_recharger(), "test_recharger", 50.0, &[(3, 3)]);
-        assert_eq!(
-            hunger, 52.0,
-            "radius is inclusive, matching passive_process"
-        );
+        assert_eq!(hunger, 52.0, "radius is inclusive");
     }
 
     #[test]
@@ -735,21 +670,10 @@ mod tests {
         );
     }
 
-    fn test_item_db() -> ItemDb {
-        ItemDb::load_dir(
-            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/items"),
-        )
-        .unwrap()
-        .0
-    }
-
-    /// A conversion that consumes ordinary cargo and produces a *banked*
-    /// currency. The Buffer is unbounded now, so a banked output is the only
-    /// kind that can still be "full" — this is how we observe the guard that
-    /// won't consume the input unless the output will land. Written to a
-    /// scratch temp dir and loaded through `StructureDb::load_dir`, same
-    /// fixture pattern `research.rs`'s tests use, since `StructureDb`'s
-    /// fields are private outside its module.
+    /// A def that sets no `power_regen`, so the regen system has to leave the
+    /// player's Power alone. Written to a scratch temp dir and loaded through
+    /// `StructureDb::load_dir`, same fixture pattern `research.rs`'s tests
+    /// use, since `StructureDb`'s fields are private outside its module.
     fn load_test_capacitor() -> StructureDb {
         load_fixture_db(&[(
             "test_capacitor.ron",
@@ -760,58 +684,8 @@ mod tests {
                 color: Cyan,
                 build_cost: [],
                 work: None,
-                passive_process: Some((
-                    consumes: "core_fragment",
-                    produces: "research_data",
-                    ticks_per_unit: 1,
-                    radius: 5,
-                )),
             )"#,
         )])
-    }
-
-    #[test]
-    fn passive_process_does_not_consume_input_when_a_banked_output_is_full() {
-        let structure_db = load_test_capacitor();
-        let item_db = test_item_db();
-        let limit = item_db
-            .get(ids::RESEARCH_DATA)
-            .and_then(|d| d.bank_limit)
-            .expect("research_data ships with a bank limit");
-
-        let mut world = World::new();
-        world.insert_resource(structure_db);
-        world.insert_resource(item_db);
-        world.insert_resource(MessageLog::default());
-
-        let mut inventory = Inventory::default();
-        inventory.add(ItemId::from(ids::RESEARCH_DATA), limit); // bank already full
-        inventory.add(ItemId::from(ids::CORE_FRAGMENT), 10);
-        world.spawn((Player, Position { x: 0, y: 0 }, inventory));
-        world.spawn((
-            Structure {
-                kind: "test_capacitor".to_string(),
-            },
-            Position { x: 0, y: 0 },
-            PassiveProcessor::default(),
-        ));
-
-        let mut schedule = Schedule::default();
-        schedule.add_systems(passive_process_system);
-        schedule.run(&mut world);
-
-        let mut query = world.query::<&Inventory>();
-        let inv = query.iter(&world).next().unwrap();
-        assert_eq!(
-            inv.count(&ItemId::from(ids::CORE_FRAGMENT)),
-            10,
-            "the input must not be consumed when the banked output has no room"
-        );
-        assert_eq!(
-            inv.count(&ItemId::from(ids::RESEARCH_DATA)),
-            limit,
-            "the bank must not grow past its limit"
-        );
     }
 
     #[test]

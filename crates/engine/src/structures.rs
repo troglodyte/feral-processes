@@ -53,15 +53,6 @@ fn default_work_capacity() -> u32 {
     crate::tuning::DEFAULT_WORK_CAPACITY
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct PassiveProcessDef {
-    pub consumes: ItemId,
-    pub produces: ItemId,
-    pub ticks_per_unit: u32,
-    /// Chebyshev distance (in tiles) the player must be within for this to run.
-    pub radius: i32,
-}
-
 /// A structure's power-regeneration capability — see
 /// `StructureDef::power_regen` and `systems::power_regen_system`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -71,7 +62,7 @@ pub struct PowerRegenDef {
     /// structure that sets it.
     pub per_tick: f32,
     /// Chebyshev distance (in tiles) the player must be within for this to
-    /// run, same box-radius style as `PassiveProcessDef::radius`.
+    /// run, same box-radius style as `RestDef::radius`.
     pub radius: i32,
 }
 
@@ -168,16 +159,9 @@ pub struct StructureDef {
     /// If set, a tamed creature can be assigned to work this structure,
     /// producing `produces` every `ticks_per_unit` ticks.
     pub work: Option<WorkDef>,
-    /// If set, this structure automatically converts `consumes` into
-    /// `produces` whenever the player is standing within `radius` tiles —
-    /// no assigned worker needed, unlike `work`. `#[serde(default)]` so
-    /// existing structure files written before this field existed still
-    /// parse (defaulting to no passive processing).
-    #[serde(default)]
-    pub passive_process: Option<PassiveProcessDef>,
     /// If set, this structure restores the player's Power every tick while
     /// they stand within `radius` tiles — no assigned worker and no input
-    /// item, unlike `work` and `passive_process`. `#[serde(default)]` so
+    /// item, unlike `work`. `#[serde(default)]` so
     /// existing structure files (including mods) written before this field
     /// existed still parse (defaulting to no regeneration).
     #[serde(default)]

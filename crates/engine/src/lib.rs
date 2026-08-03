@@ -41,9 +41,9 @@ use components::{
     AbilityCooldowns, ActiveBuff, ActiveFieldBuff, ActiveStatus, BuffKind, BuffSource, CombatBuff,
     Creature, CustomName, Decompiler, Durability, Equipment, EquippedItem, Experience, FieldBuff,
     FieldBuffKind, FusionCount, Glyph, GlyphColor, Hostile, Inventory, ItemFusions, NEED_MAX,
-    Needs, Nest, NestGuardian, PassiveProcessor, Perks, Player, Position, Potential, Pursuing,
-    ResourceNode, Routines, StackSpawn, Stats, StatusEffects, StatusKind, Structure, StructureTier,
-    SurfaceLink, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
+    Needs, Nest, NestGuardian, Perks, Player, Position, Potential, Pursuing, ResourceNode,
+    Routines, StackSpawn, Stats, StatusEffects, StatusKind, Structure, StructureTier, SurfaceLink,
+    Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
 };
 use items::{EquipmentSlot, EquipmentStats, ItemCategory, ItemId, ids};
 use items_db::ItemDb;

@@ -164,18 +164,23 @@ fn the_outlet_is_craftable_from_five_core_fragments_with_no_perks() {
 }
 
 #[test]
-fn every_compilable_item_either_has_a_blurb_or_is_plain_currency() {
+fn every_compilable_item_either_has_a_blurb_or_declares_nothing_blurb_worthy() {
     let game = Game::new(97, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     for recipe in game.craft_recipes() {
-        // `item_blurb` only glosses `equipment`, `consume` and
-        // `taming_potency` — exactly the fields `ItemDef::category` checks
-        // before falling back to `Material`/`Currency`, so a material or
-        // currency has nothing for it to say and that's fine: the outlet
-        // reads fine as itself, the same as a bare currency would.
-        if matches!(
-            game.item_category(&recipe.result),
-            ItemCategory::Material | ItemCategory::Currency
-        ) {
+        // Skip only when the def sets none of the three fields `item_blurb`
+        // (`game/catalog.rs`) actually reads — read directly off the def
+        // rather than through `ItemDef::category`, which checks a different
+        // set (`routine`, `equipment`, `consume`, `role`) and is why this
+        // guard used to silently drop the ICE Breaker: it sets only
+        // `taming_potency`, which `category` never looks at, so it fell
+        // through to `Material` and got skipped even though `item_blurb`
+        // has "taming catalyst" to say about it. The outlet is the one
+        // shipped recipe that genuinely sets none of the three and reads
+        // fine as itself, the same as a bare currency would.
+        let def = game
+            .item_def(&recipe.result)
+            .expect("a craftable recipe's result should have a definition");
+        if def.equipment.is_none() && def.consume.is_none() && def.taming_potency.is_none() {
             continue;
         }
         let blurb = game.item_blurb(&recipe.result);

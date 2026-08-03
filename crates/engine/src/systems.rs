@@ -463,23 +463,31 @@ pub fn player_gather_system(
     }
 }
 
-/// One tick of every assembler: pull ingredients out of the neighbours, then
-/// (Task 9) work them into product.
+/// One tick of every assembler, in two phases: pull ingredients out of the
+/// neighbours, then work a staged batch into one unit of product.
 ///
 /// **Machines are visited in `(x, y)` order.** Bevy's query iteration order is
 /// not stable, so two machines competing for one feeder's scarce output would
 /// otherwise resolve differently between runs — a flaky-test source, and a
 /// base that behaves differently after a reload.
 ///
-/// A machine with no program assigned pulls nothing. Otherwise an unstaffed
-/// machine would hoard from a shared feeder while producing nothing, starving
-/// the line it sits beside for no gain.
+/// Status resolves each tick to exactly one of `Idle` (no program) →
+/// `Starved` (input short) → `Clogged` (output full) → `Running`, checked in
+/// that order, and only a *change* is announced. Each stall returns before
+/// touching anything: a clogged machine in particular must not spend the
+/// batch it has no room to deliver.
+///
+/// A machine with no program assigned pulls nothing either. Otherwise an
+/// unstaffed machine would hoard from a shared feeder while producing
+/// nothing, starving the line it sits beside for no gain.
 pub fn assembler_system(
     structures: Query<(Entity, &Structure, &Position), With<Stock>>,
     mut stocks: Query<&mut Stock>,
-    tasks: Query<&Task>,
+    mut statuses: Query<&mut MachineStatus>,
+    mut tasks: Query<(Entity, &mut Task)>,
     structure_db: Res<StructureDb>,
     item_db: Res<ItemDb>,
+    mut log: ResMut<MessageLog>,
 ) {
     let by_tile: std::collections::HashMap<(i32, i32), Entity> =
         structures.iter().map(|(e, _, p)| ((p.x, p.y), e)).collect();
@@ -498,12 +506,22 @@ pub fn assembler_system(
         let Some(recipe) = assembly_recipe(def, &item_db) else {
             continue;
         };
-        let staffed = tasks
+        let announce = |statuses: &mut Query<&mut MachineStatus>,
+                        log: &mut MessageLog,
+                        next: MachineStatus| {
+            if let Ok(mut status) = statuses.get_mut(machine) {
+                set_machine_status(&mut status, next, &def.name, log);
+            }
+        };
+
+        let Some(worker) = tasks
             .iter()
-            .any(|t| t.target == machine && matches!(t.kind, TaskKind::GatherResource));
-        if !staffed {
+            .find(|(_, t)| t.target == machine && matches!(t.kind, TaskKind::GatherResource))
+            .map(|(e, _)| e)
+        else {
+            announce(&mut statuses, &mut log, MachineStatus::Idle);
             continue;
-        }
+        };
 
         // Planned against a snapshot, then applied, because reading a
         // neighbour's `output` and writing this machine's `input` are the
@@ -568,6 +586,60 @@ pub fn assembler_system(
                 .entry(item)
                 .or_default() += taken;
         }
+
+        // Phase 2: work. Every gate returns before spending anything, so a
+        // stall costs the batch nothing and clears the moment its cause does.
+        let (fed, roomy) = {
+            let Ok(stock) = stocks.get(machine) else {
+                continue;
+            };
+            let fed = recipe
+                .iter()
+                .all(|(item, need)| stock.input.get(item).copied().unwrap_or(0) >= *need);
+            (fed, stock.output_room() > 0)
+        };
+        if !fed {
+            announce(&mut statuses, &mut log, MachineStatus::Starved);
+            continue;
+        }
+        if !roomy {
+            announce(&mut statuses, &mut log, MachineStatus::Clogged);
+            continue;
+        }
+        announce(&mut statuses, &mut log, MachineStatus::Running);
+
+        let ticks_per_unit = def
+            .assembles
+            .as_ref()
+            .map(|a| a.ticks_per_unit.max(1))
+            .unwrap_or(1);
+        let Ok((_, mut task)) = tasks.get_mut(worker) else {
+            continue;
+        };
+        task.progress += 1;
+        if task.progress < ticks_per_unit {
+            continue;
+        }
+        task.progress = 0;
+
+        let Ok(mut stock) = stocks.get_mut(machine) else {
+            continue;
+        };
+        for (item, need) in recipe {
+            match stock.input.get_mut(item) {
+                Some(have) if *have > *need => *have -= need,
+                _ => {
+                    stock.input.remove(item);
+                }
+            }
+        }
+        let product = def
+            .assembles
+            .as_ref()
+            .expect("filtered on `assembles` above")
+            .item
+            .clone();
+        *stock.output.entry(product).or_default() += 1;
     }
 }
 

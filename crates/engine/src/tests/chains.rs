@@ -138,16 +138,18 @@ fn input_stops_at_two_batches_and_leaves_the_rest_in_the_feeder() {
     let mut game = game_with_assembler("chain_cap", 1002);
     let batch = per_batch(&game);
     let stocked = batch * 10;
-    // Unstaffed, so the pull is observable without the work phase spending
-    // what it just took.
-    let machine = assembler_at(&mut game, 40, 40, false);
-    let worker = spawn_tamed(&mut game, 10, 3);
-    game.world.entity_mut(worker).insert(Task {
-        kind: TaskKind::GatherResource,
-        target: machine,
-        progress: 0,
-        required: 10_000,
-    });
+    let machine = assembler_at(&mut game, 40, 40, true);
+    // Deliberately clogged, so the pull is observable without the work phase
+    // spending what it just took. A clogged machine still pulls — bounded at
+    // two batches, and it means the line restarts the instant the clog
+    // clears rather than a cycle later.
+    {
+        let mut stock = game.world.get_mut::<Stock>(machine).unwrap();
+        let capacity = stock.capacity;
+        stock
+            .output
+            .insert(ItemId::from(ids::ICE_BREAKER), capacity);
+    }
     let feeder = feeder_at(&mut game, 41, 40, stocked);
 
     for _ in 0..10 {
@@ -230,4 +232,180 @@ fn a_machine_with_no_program_pulls_nothing() {
     }
 
     assert_eq!(input_of(&game, machine, ids::CORE_FRAGMENT), 0);
+}
+
+fn output_of(game: &Game, machine: Entity, item: &str) -> u32 {
+    game.world
+        .get::<Stock>(machine)
+        .and_then(|s| s.output.get(&ItemId::from(item)).copied())
+        .unwrap_or(0)
+}
+
+fn status_of(game: &Game, machine: Entity) -> Option<MachineStatus> {
+    game.world.get::<MachineStatus>(machine).copied()
+}
+
+fn log_hits(game: &Game, needle: &str) -> usize {
+    game.message_log(usize::MAX)
+        .into_iter()
+        .filter(|e| e.text.contains(needle))
+        .count()
+}
+
+/// The two-machine line, end to end: an extractor feeding an assembler that
+/// turns its output into something else. This is the smallest thing the
+/// design has to make worth building.
+#[test]
+fn a_fed_and_staffed_machine_turns_a_batch_into_product() {
+    let mut game = game_with_assembler("chain_build", 1006);
+    let batch = per_batch(&game);
+    let machine = assembler_at(&mut game, 40, 40, true);
+    // Stocked far past what twenty ticks can consume, so the machine is
+    // still Running at the end rather than having simply eaten the feeder.
+    feeder_at(&mut game, 41, 40, batch * 50);
+
+    for _ in 0..20 {
+        game.tick();
+    }
+
+    assert!(
+        output_of(&game, machine, ids::POWER_CELL) > 0,
+        "a fed, staffed, roomy machine builds the item it assembles"
+    );
+    assert_eq!(status_of(&game, machine), Some(MachineStatus::Running));
+}
+
+/// Every machine needs an assigned program, assemblers included — that is
+/// what makes roster capacity, not fragments, buy chain length.
+#[test]
+fn a_machine_with_no_program_advances_nothing_and_reports_idle() {
+    let mut game = game_with_assembler("chain_noprog", 1007);
+    let batch = per_batch(&game);
+    let machine = assembler_at(&mut game, 40, 40, false);
+    // Pre-stocked directly, since an unstaffed machine cannot pull either.
+    game.world
+        .get_mut::<Stock>(machine)
+        .unwrap()
+        .input
+        .insert(ItemId::from(ids::CORE_FRAGMENT), batch * 2);
+
+    for _ in 0..20 {
+        game.tick();
+    }
+
+    assert_eq!(output_of(&game, machine, ids::POWER_CELL), 0);
+    assert_eq!(status_of(&game, machine), Some(MachineStatus::Idle));
+}
+
+#[test]
+fn a_starved_machine_advances_no_progress() {
+    let mut game = game_with_assembler("chain_starved", 1008);
+    let short = per_batch(&game) - 1;
+    let machine = assembler_at(&mut game, 40, 40, true);
+    // A feeder holding one unit less than a batch: adjacent, staffed, and
+    // still short.
+    feeder_at(&mut game, 41, 40, short);
+
+    for _ in 0..20 {
+        game.tick();
+    }
+
+    assert_eq!(output_of(&game, machine, ids::POWER_CELL), 0);
+    assert_eq!(status_of(&game, machine), Some(MachineStatus::Starved));
+}
+
+/// Asserts the input is *still there*: consuming the batch and then
+/// discarding the product is the plausible wrong implementation, and it
+/// looks identical from the output side.
+#[test]
+fn a_clogged_machine_does_not_consume_its_input() {
+    let mut game = game_with_assembler("chain_clog", 1009);
+    let batch = per_batch(&game);
+    let machine = assembler_at(&mut game, 40, 40, true);
+    feeder_at(&mut game, 41, 40, batch * 4);
+    {
+        let mut stock = game.world.get_mut::<Stock>(machine).unwrap();
+        let capacity = stock.capacity;
+        stock
+            .output
+            .insert(ItemId::from(ids::ICE_BREAKER), capacity);
+    }
+
+    for _ in 0..20 {
+        game.tick();
+    }
+
+    assert_eq!(status_of(&game, machine), Some(MachineStatus::Clogged));
+    assert_eq!(
+        output_of(&game, machine, ids::POWER_CELL),
+        0,
+        "nothing was built"
+    );
+    assert!(
+        input_of(&game, machine, ids::CORE_FRAGMENT) >= batch,
+        "and the batch it could not deliver is still staged, not spent"
+    );
+}
+
+/// A stalled base must not flood the log pane.
+#[test]
+fn a_machine_stalled_for_twenty_ticks_says_so_once() {
+    let mut game = game_with_assembler("chain_once", 1010);
+    let machine = assembler_at(&mut game, 40, 40, true);
+
+    for _ in 0..20 {
+        game.tick();
+    }
+
+    assert_eq!(status_of(&game, machine), Some(MachineStatus::Starved));
+    assert_eq!(
+        log_hits(&game, "is starved"),
+        1,
+        "entering the state is news; staying in it is not"
+    );
+}
+
+/// The stall clears when its cause does, and the recovery is worth a line —
+/// otherwise the player has no way to know their trip home fixed anything.
+#[test]
+fn feeding_a_starved_machine_resumes_it_and_says_so() {
+    let mut game = game_with_assembler("chain_resume", 1011);
+    let batch = per_batch(&game);
+    let machine = assembler_at(&mut game, 40, 40, true);
+    let feeder = feeder_at(&mut game, 41, 40, 0);
+
+    for _ in 0..5 {
+        game.tick();
+    }
+    assert_eq!(status_of(&game, machine), Some(MachineStatus::Starved));
+
+    game.world
+        .get_mut::<Stock>(feeder)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::CORE_FRAGMENT), batch * 4);
+    for _ in 0..10 {
+        game.tick();
+    }
+
+    assert_eq!(status_of(&game, machine), Some(MachineStatus::Running));
+    assert_eq!(log_hits(&game, "resumes"), 1);
+}
+
+/// A program can actually be posted to an assembler through the same
+/// cronjob assignment an extractor uses — there is no second concept, and
+/// the menu and the assignment agree about what is assignable.
+#[test]
+fn a_program_can_be_posted_to_an_assembler() {
+    let mut game = game_with_assembler("chain_assign", 1012);
+    let machine = assembler_at(&mut game, 40, 40, false);
+    let worker = spawn_tamed(&mut game, 10, 3);
+
+    game.assign_cronjob(worker, machine)
+        .expect("an assembler takes a program like any other machine");
+
+    assert_eq!(
+        game.world.get::<Task>(worker).map(|t| t.target),
+        Some(machine)
+    );
 }

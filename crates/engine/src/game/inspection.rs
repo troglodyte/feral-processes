@@ -119,7 +119,7 @@ impl Game {
                     .is_some_and(|s| s.kind == HOME_STRUCTURE_ID);
                 let is_boss = self.is_boss_creature(entity);
                 let tier = self.world.get::<StructureTier>(entity).map(|t| t.0);
-                let can_work = self.world.get::<ResourceNode>(entity).is_some();
+                let can_work = self.accepts_a_program(entity);
                 let can_trade = self.trade_options(entity).is_some();
                 let structure_worker = if is_structure {
                     worker_by_structure

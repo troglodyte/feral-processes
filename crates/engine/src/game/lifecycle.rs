@@ -119,9 +119,16 @@ impl Game {
         schedule.add_systems((
             (systems::power_regen_system, systems::needs_tick_system).chain(),
             systems::wander_ai_system,
-            systems::task_progress_system,
-            systems::player_gather_system,
-            systems::assembler_system,
+            // Chained: `task_progress_system` and `assembler_system` both
+            // write `Task::progress` (for different targets, but bevy can
+            // only see the conflict, not the disjointness), and an
+            // arbitrary-but-fixed order is not the same as a stated one.
+            (
+                systems::task_progress_system,
+                systems::player_gather_system,
+                systems::assembler_system,
+            )
+                .chain(),
             difficulty::death_handling_system,
         ));
         schedule

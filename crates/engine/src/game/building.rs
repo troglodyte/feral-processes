@@ -305,12 +305,30 @@ impl Game {
     /// so a program and the player grind at the same rate.
     fn work_ticks_for(&mut self, structure: Entity) -> u32 {
         let kind = self.world.get::<Structure>(structure).unwrap().kind.clone();
+        let db = self.world.resource::<StructureDb>();
+        let Some(def) = db.get(&kind) else {
+            return 5;
+        };
+        match (&def.work, &def.assembles) {
+            (Some(work), _) => work.ticks_per_unit,
+            (None, Some(assembles)) => assembles.ticks_per_unit,
+            (None, None) => 5,
+        }
+    }
+
+    /// Whether a program can be posted to `structure` — an extractor
+    /// (`ResourceNode`) or an assembler (`StructureDef::assembles`). Named
+    /// once because the cronjob menu and the assignment itself have to agree:
+    /// a structure the menu offers and the assignment refuses is a dead end,
+    /// and one the menu hides but the assignment would take is unreachable.
+    pub(crate) fn accepts_a_program(&self, structure: Entity) -> bool {
+        if self.world.get::<ResourceNode>(structure).is_some() {
+            return true;
+        }
         self.world
-            .resource::<StructureDb>()
-            .get(&kind)
-            .and_then(|d| d.work.as_ref())
-            .map(|w| w.ticks_per_unit)
-            .unwrap_or(5)
+            .get::<Structure>(structure)
+            .and_then(|s| self.world.resource::<StructureDb>().get(&s.kind))
+            .is_some_and(|d| d.assembles.is_some())
     }
 
     /// Works `structure` yourself instead of posting a program to it — the
@@ -389,7 +407,7 @@ impl Game {
         if owner != self.player_entity() {
             return Err("You don't control that program.".into());
         }
-        if self.world.get::<ResourceNode>(structure).is_none() {
+        if !self.accepts_a_program(structure) {
             return Err("That structure can't be worked.".into());
         }
         let ticks = self.work_ticks_for(structure);

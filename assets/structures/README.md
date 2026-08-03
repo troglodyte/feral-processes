@@ -81,6 +81,24 @@ is skipped with a warning logged in-game rather than crashing startup.
     // output buffer without being a work node.
     capacity: 20,
 
+    // Optional; can be left out entirely (defaults to no assembling). If
+    // set, this structure automatically builds `item` — one unit every
+    // `ticks_per_unit` ticks — out of ingredients it pulls from the output
+    // buffers of the four structures orthogonally touching it. Diagonals
+    // feed nothing. Like `work`, it needs a program assigned to it via the
+    // cronjob menu; unlike `work`, it consumes, which is what lets machines
+    // form a chain across the base.
+    //
+    // There is no recipe here, and that's deliberate: the machine runs the
+    // named item's OWN `craftable.cost` from assets/items/*.ron. So a recipe
+    // is written once and can never drift between the crafting bench and the
+    // machine, and any craftable item you add — including one with several
+    // ingredients — is automatable for free.
+    //
+    // `item` must name an item that actually declares `craftable`. One that
+    // doesn't builds a machine that can never run and says nothing about it.
+    assembles: Some((item: "patch_routine", ticks_per_unit: 8)),
+
     // Optional; can be left out entirely (defaults to no regeneration).
     // If set, the structure restores `per_tick` Power to the player every
     // tick that they're standing within `radius` tiles of it — no assigned

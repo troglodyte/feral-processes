@@ -45,6 +45,21 @@ fn default_output_capacity() -> u32 {
     crate::tuning::DEFAULT_OUTPUT_CAPACITY
 }
 
+/// A structure's automated-crafting capability — see
+/// `StructureDef::assembles` and `systems::assembler_system`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AssembleDef {
+    /// What this machine builds. Deliberately an *item id* and not a recipe:
+    /// the machine runs that item's own `ItemDef::craftable.cost`, so there
+    /// is exactly one recipe format in the game and a modder who adds a
+    /// craftable item gets an automatable one for free.
+    pub item: ItemId,
+    /// Ticks of progress a completed unit costs, once the machine has a full
+    /// batch of ingredients staged, room in its output, and a program
+    /// assigned.
+    pub ticks_per_unit: u32,
+}
+
 /// A structure's power-regeneration capability — see
 /// `StructureDef::power_regen` and `systems::power_regen_system`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -160,6 +175,14 @@ pub struct StructureDef {
     /// which would clog on the first unit produced.
     #[serde(default = "default_output_capacity")]
     pub capacity: u32,
+    /// If set, this structure automatically builds the named item from
+    /// ingredients pulled out of its orthogonal neighbours' output buffers,
+    /// once a program is assigned to it. Unlike `work`, which produces from
+    /// nothing, this consumes — which is what lets machines form a chain.
+    /// `#[serde(default)]` so existing structure files (including mods)
+    /// written before this field existed still parse.
+    #[serde(default)]
+    pub assembles: Option<AssembleDef>,
     /// If set, this structure restores the player's Power every tick while
     /// they stand within `radius` tiles — no assigned worker and no input
     /// item, unlike `work`. `#[serde(default)]` so

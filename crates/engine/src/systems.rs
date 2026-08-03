@@ -7,6 +7,7 @@ use crate::components::{
     NestGuardian, Perks, Player, Position, Potential, Pursuing, ResourceNode, Stats, Stock,
     Structure, StructureTier, Tamed, Task, TaskKind, WanderAi, field_buff_power_of,
 };
+use crate::items::ItemId;
 use crate::items_db::ItemDb;
 use crate::perks::Perk;
 use crate::progression;
@@ -189,6 +190,24 @@ pub(crate) fn resolve_gather_cycle(
         node_payout(tier.map(|t| t.0).unwrap_or(1), zone)
     };
     Some((node.resource.clone(), payout))
+}
+
+/// The ingredient list a machine declaring `assembles` runs, which is the
+/// assembled item's own `CraftableDef::cost` — there is no second recipe
+/// format, so a machine's recipe and the bench recipe for the same item
+/// cannot drift apart.
+///
+/// `None` for a structure that assembles nothing, and also for one naming an
+/// item that isn't craftable (a typo, or a mod whose item file was removed).
+/// Both are the same thing to a caller: nothing to run. The shipped-assets
+/// test is what stops the second case reaching a player.
+pub(crate) fn assembly_recipe<'a>(
+    def: &crate::structures::StructureDef,
+    items: &'a ItemDb,
+) -> Option<&'a [(ItemId, u32)]> {
+    let assembles = def.assembles.as_ref()?;
+    let recipe = items.get(assembles.item.as_str())?.craftable.as_ref()?;
+    Some(recipe.cost.as_slice())
 }
 
 /// Moves a machine to `next`, announcing it to the base feed only when the
@@ -441,6 +460,114 @@ pub fn player_gather_system(
             MessageKind::Loot,
             format!("You extract {landed} {resource_name}."),
         );
+    }
+}
+
+/// One tick of every assembler: pull ingredients out of the neighbours, then
+/// (Task 9) work them into product.
+///
+/// **Machines are visited in `(x, y)` order.** Bevy's query iteration order is
+/// not stable, so two machines competing for one feeder's scarce output would
+/// otherwise resolve differently between runs — a flaky-test source, and a
+/// base that behaves differently after a reload.
+///
+/// A machine with no program assigned pulls nothing. Otherwise an unstaffed
+/// machine would hoard from a shared feeder while producing nothing, starving
+/// the line it sits beside for no gain.
+pub fn assembler_system(
+    structures: Query<(Entity, &Structure, &Position), With<Stock>>,
+    mut stocks: Query<&mut Stock>,
+    tasks: Query<&Task>,
+    structure_db: Res<StructureDb>,
+    item_db: Res<ItemDb>,
+) {
+    let by_tile: std::collections::HashMap<(i32, i32), Entity> =
+        structures.iter().map(|(e, _, p)| ((p.x, p.y), e)).collect();
+
+    let mut machines: Vec<(Entity, (i32, i32), &crate::structures::StructureDef)> = structures
+        .iter()
+        .filter_map(|(e, s, p)| {
+            let def = structure_db.get(&s.kind)?;
+            def.assembles.as_ref()?;
+            Some((e, (p.x, p.y), def))
+        })
+        .collect();
+    machines.sort_by_key(|(_, tile, _)| *tile);
+
+    for (machine, (x, y), def) in machines {
+        let Some(recipe) = assembly_recipe(def, &item_db) else {
+            continue;
+        };
+        let staffed = tasks
+            .iter()
+            .any(|t| t.target == machine && matches!(t.kind, TaskKind::GatherResource));
+        if !staffed {
+            continue;
+        }
+
+        // Planned against a snapshot, then applied, because reading a
+        // neighbour's `output` and writing this machine's `input` are the
+        // same `Query<&mut Stock>`. Planned and applied *per machine* rather
+        // than for the whole base at once, so a machine earlier in the sort
+        // order really has taken its share before the next one looks.
+        let plan: Vec<(Entity, ItemId, u32)> = {
+            let Ok(mine) = stocks.get(machine) else {
+                continue;
+            };
+            let mut plan = Vec::new();
+            for (item, per_batch) in recipe {
+                let cap = per_batch * crate::tuning::INPUT_STOCK_BATCHES;
+                let mut want = cap.saturating_sub(mine.input.get(item).copied().unwrap_or(0));
+                for (dx, dy) in crate::game::collect::ORTHOGONAL {
+                    if want == 0 {
+                        break;
+                    }
+                    let Some(&feeder) = by_tile.get(&(x + dx, y + dy)) else {
+                        continue;
+                    };
+                    let available = stocks
+                        .get(feeder)
+                        .ok()
+                        .and_then(|s| s.output.get(item).copied())
+                        .unwrap_or(0);
+                    let take = want.min(available);
+                    if take == 0 {
+                        continue;
+                    }
+                    plan.push((feeder, item.clone(), take));
+                    want -= take;
+                }
+            }
+            plan
+        };
+
+        for (feeder, item, qty) in plan {
+            let taken = {
+                let Ok(mut src) = stocks.get_mut(feeder) else {
+                    continue;
+                };
+                match src.output.get_mut(&item) {
+                    Some(have) => {
+                        let taken = qty.min(*have);
+                        *have -= taken;
+                        if *have == 0 {
+                            src.output.remove(&item);
+                        }
+                        taken
+                    }
+                    None => 0,
+                }
+            };
+            if taken == 0 {
+                continue;
+            }
+            *stocks
+                .get_mut(machine)
+                .expect("planned against this machine's own stock")
+                .input
+                .entry(item)
+                .or_default() += taken;
+        }
     }
 }
 

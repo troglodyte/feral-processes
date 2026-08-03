@@ -121,6 +121,7 @@ impl Game {
             systems::wander_ai_system,
             systems::task_progress_system,
             systems::player_gather_system,
+            systems::assembler_system,
             difficulty::death_handling_system,
         ));
         schedule

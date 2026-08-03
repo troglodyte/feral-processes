@@ -8,6 +8,7 @@ mod support;
 mod assets;
 mod building;
 mod catalog;
+mod chains;
 mod collect;
 mod combat;
 mod combat_abilities;

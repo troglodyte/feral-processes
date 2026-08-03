@@ -221,17 +221,22 @@ pub struct EntityView {
     /// anything that runs no job and so has no state to be in. Lets the map
     /// colour a machine's outline by what it is doing.
     pub machine_status: Option<MachineStatus>,
-    /// The orthogonal offsets of neighbours that produce an ingredient this
-    /// (assembler) entity's recipe wants — what the map draws its wiring
-    /// links from.
+    /// The orthogonal offsets of neighbours this (structure) entity is
+    /// joined to for production — the sides the map leaves un-outlined, so
+    /// that a chain draws as one continuous shape and a machine that should
+    /// be joined and isn't shows a seam.
+    ///
+    /// Symmetric, so both walls of a joined pair come down together; the
+    /// feeding relation underneath is directional. See
+    /// `Game::linked_edges_by_structure`.
     ///
     /// Deliberately a property of the *defs*, not of what is in a buffer
-    /// right now: it answers "is this feeder wired to me", not "did a unit
+    /// right now: it answers "is this feeder joined to me", not "did a unit
     /// move this tick". A healthy chain drains its feeder within a tick or
     /// two, so a live-transfer marker would be dark most of the time and a
     /// correctly-built line would look identical to a broken one. A missing
-    /// link therefore always means the base is laid out wrong.
-    pub feeder_edges: Vec<(i32, i32)>,
+    /// join therefore always means the base is laid out wrong.
+    pub linked_edges: Vec<(i32, i32)>,
 }
 
 /// One structure on the roster screen — see `Game::structure_report`.

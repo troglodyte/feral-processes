@@ -563,12 +563,20 @@ fn deployed(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
 fn a_machine_reports_an_edge_toward_a_neighbour_that_makes_what_it_needs() {
     let mut game = Game::new(1200, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let refinery = deployed(&mut game, "refinery", 41, 40);
-    deployed(&mut game, "mining_node", 40, 40);
+    let mine = deployed(&mut game, "mining_node", 40, 40);
 
     assert_eq!(
         edges_of(&mut game, refinery),
         vec![(-1, 0)],
         "the Mining Node to the west makes the Core Fragments a Refinery wants"
+    );
+    // Symmetric, though the feeding relation is not: a Mining Node has no
+    // recipe and names nobody, but the map has to drop *both* halves of the
+    // wall they share or the one line left reads as a rendering fault.
+    assert_eq!(
+        edges_of(&mut game, mine),
+        vec![(1, 0)],
+        "the feeder reports the join back, so both walls come down together"
     );
 }
 
@@ -605,15 +613,13 @@ fn a_mislaid_assembly_bay_reports_one_edge_rather_than_two() {
 
     assert_eq!(edges_of(&mut game, bay), vec![(-1, 0)]);
 
-    // Move it into place and the second link appears.
+    // Move it into place and the second join appears.
     let mut game = Game::new(1203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let bay = deployed(&mut game, "assembly_bay", 42, 40);
     deployed(&mut game, "refinery", 41, 40);
     deployed(&mut game, "winding_node", 42, 41);
 
-    let mut wired = edges_of(&mut game, bay);
-    wired.sort();
-    assert_eq!(wired, vec![(-1, 0), (0, 1)]);
+    assert_eq!(edges_of(&mut game, bay), vec![(-1, 0), (0, 1)]);
 }
 
 /// A Home assembles nothing and runs no job, so it has neither half of the
@@ -632,7 +638,7 @@ fn a_home_reports_no_edges_and_no_machine_status() {
 /// recipe and walk the same four tiles, so a link can never point somewhere
 /// the pull phase would refuse to take from.
 #[test]
-fn a_wired_edge_is_an_edge_the_pull_phase_actually_uses() {
+fn a_joined_edge_is_an_edge_the_pull_phase_actually_uses() {
     let mut game = Game::new(1205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let refinery = staffed(&mut game, "refinery", 41, 40);
     stocked(&mut game, "mining_node", 40, 40, ids::CORE_FRAGMENT, 100);
@@ -647,7 +653,40 @@ fn a_wired_edge_is_an_edge_the_pull_phase_actually_uses() {
 }
 
 fn edges_of(game: &mut Game, structure: Entity) -> Vec<(i32, i32)> {
-    game.feeder_edges_by_structure()
+    let mut edges = game
+        .linked_edges_by_structure()
         .remove(&structure)
-        .unwrap_or_default()
+        .unwrap_or_default();
+    edges.sort();
+    edges
+}
+
+/// Through the real `place_structure`, not a hand-built fixture. Every test
+/// above stands its machines by spawning the components directly, so none of
+/// them could catch a deploy path that forgets one — and the deploy path did
+/// forget `MachineStatus` for assemblers, which declare `assembles` and no
+/// `work` block. A machine with no status silently reports nothing: no stall
+/// line in the log, no state on the roster, no outline on the map.
+#[test]
+fn a_deployed_assembler_gets_a_machine_status_like_any_other_machine() {
+    let mut game = Game::new(1210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 1);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
+    game.place_structure("refinery", 1, 0)
+        .expect("a Refinery is buildable from the start");
+
+    let refinery = find_structure_by_kind(&mut game, "refinery").unwrap();
+    // `Idle`, not `Running`: `place_structure` ticks, and a machine nobody
+    // is posted to correctly reports having no program. The point of the
+    // assertion is that it reports *at all* — without a `MachineStatus` it
+    // would read as `None`, which every consumer treats as "not a machine".
+    assert_eq!(
+        game.world.get::<MachineStatus>(refinery).copied(),
+        Some(MachineStatus::Idle),
+        "an assembler is a machine and has a state like an extractor does"
+    );
+    assert!(
+        game.world.get::<Stock>(refinery).is_some(),
+        "and it has the buffers it pulls into"
+    );
 }

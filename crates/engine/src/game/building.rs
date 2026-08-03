@@ -88,14 +88,14 @@ impl Game {
             });
         }
         entity.insert(Stock::new(def.capacity));
+        if def.runs_a_job() {
+            entity.insert(MachineStatus::default());
+        }
         if let Some(work) = &def.work {
-            entity.insert((
-                ResourceNode {
-                    resource: work.produces.clone(),
-                    level: work.level,
-                },
-                MachineStatus::default(),
-            ));
+            entity.insert(ResourceNode {
+                resource: work.produces.clone(),
+                level: work.level,
+            });
         }
         if let Some(temp) = &def.temporary {
             entity.insert(Temporary {
@@ -322,13 +322,15 @@ impl Game {
     /// a structure the menu offers and the assignment refuses is a dead end,
     /// and one the menu hides but the assignment would take is unreachable.
     pub(crate) fn accepts_a_program(&self, structure: Entity) -> bool {
+        // `ResourceNode` first so a hand-spawned test node with no def in the
+        // db still counts; otherwise the def is the authority.
         if self.world.get::<ResourceNode>(structure).is_some() {
             return true;
         }
         self.world
             .get::<Structure>(structure)
             .and_then(|s| self.world.resource::<StructureDb>().get(&s.kind))
-            .is_some_and(|d| d.assembles.is_some())
+            .is_some_and(|d| d.runs_a_job())
     }
 
     /// Works `structure` yourself instead of posting a program to it — the

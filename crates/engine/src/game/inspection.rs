@@ -105,7 +105,7 @@ impl Game {
             .get::<Stats>(self.player_entity())
             .unwrap()
             .power();
-        let mut feeder_edges = self.feeder_edges_by_structure();
+        let mut linked_edges = self.linked_edges_by_structure();
 
         hits.into_iter()
             .map(|(entity, pos, glyph)| {
@@ -172,38 +172,46 @@ impl Game {
                     durability,
                     fusions: self.fusion_count(entity),
                     machine_status,
-                    feeder_edges: feeder_edges.remove(&entity).unwrap_or_default(),
+                    linked_edges: linked_edges.remove(&entity).unwrap_or_default(),
                 }
             })
             .collect()
     }
 
-    /// The orthogonal offsets of `structure`'s neighbours that produce an
-    /// ingredient its recipe wants — what the map draws a wiring link from.
-    /// Empty for anything that assembles nothing.
+    /// For each structure, the orthogonal offsets of the neighbours it is
+    /// joined to for production — the sides the map leaves un-outlined so a
+    /// chain draws as one continuous shape.
+    ///
+    /// **Symmetric, though the feeding relation is not.** A Refinery names
+    /// the Mining Node beside it; the Mining Node names nobody, because it
+    /// has no recipe to want anything. Both walls between a joined pair have
+    /// to go or the single remaining line reads as a rendering fault rather
+    /// than as a join, so every link found is recorded from both ends.
     ///
     /// Reads the same `assembly_recipe` and walks the same `ORTHOGONAL` as
-    /// `systems::assembler_system`'s pull phase, so the picture the player
-    /// sees and the behaviour they get cannot disagree about the ingredient
-    /// list or about which tiles count as touching. The one deliberate
-    /// difference is documented on `EntityView::feeder_edges`: this asks
-    /// what a neighbour *makes*, not what is in its buffer this instant.
+    /// `systems::assembler_system`'s pull phase, so a join can never be drawn
+    /// where the pull phase would refuse to take. The one deliberate
+    /// difference is documented on `EntityView::linked_edges`: this asks what
+    /// a neighbour *makes*, not what is in its buffer this instant.
+    ///
     /// Computed for the whole base in one pass rather than per structure:
     /// `view_entities` runs every frame, and asking each machine to re-scan
     /// every structure in the zone would be quadratic in the size of a base
     /// for a picture that only changes when something is built.
-    pub(crate) fn feeder_edges_by_structure(&mut self) -> HashMap<Entity, Vec<(i32, i32)>> {
+    pub(crate) fn linked_edges_by_structure(&mut self) -> HashMap<Entity, Vec<(i32, i32)>> {
         let mut query = self.world.query::<(Entity, &Position, &Structure)>();
         let placed: Vec<(Entity, Position, StructureId)> = query
             .iter(&self.world)
             .map(|(e, p, s)| (e, *p, s.kind.clone()))
             .collect();
-        let by_tile: HashMap<(i32, i32), &StructureId> =
-            placed.iter().map(|(_, p, k)| ((p.x, p.y), k)).collect();
+        let by_tile: HashMap<(i32, i32), (Entity, &StructureId)> = placed
+            .iter()
+            .map(|(e, p, k)| ((p.x, p.y), (*e, k)))
+            .collect();
 
         let db = self.world.resource::<StructureDb>();
         let items = self.world.resource::<ItemDb>();
-        let mut edges = HashMap::new();
+        let mut edges: HashMap<Entity, Vec<(i32, i32)>> = HashMap::new();
         for (entity, pos, kind) in &placed {
             let Some(recipe) = db
                 .get(kind)
@@ -211,19 +219,25 @@ impl Game {
             else {
                 continue;
             };
-            let wired: Vec<(i32, i32)> = crate::game::collect::ORTHOGONAL
-                .into_iter()
-                .filter(|(dx, dy)| {
-                    by_tile
-                        .get(&(pos.x + dx, pos.y + dy))
-                        .and_then(|k| db.get(k))
-                        .and_then(crate::systems::produced_item)
-                        .is_some_and(|made| recipe.iter().any(|(want, _)| want == made))
-                })
-                .collect();
-            if !wired.is_empty() {
-                edges.insert(*entity, wired);
+            for (dx, dy) in crate::game::collect::ORTHOGONAL {
+                let Some((neighbour, neighbour_kind)) = by_tile.get(&(pos.x + dx, pos.y + dy))
+                else {
+                    continue;
+                };
+                let feeds = db
+                    .get(neighbour_kind)
+                    .and_then(crate::systems::produced_item)
+                    .is_some_and(|made| recipe.iter().any(|(want, _)| want == made));
+                if !feeds {
+                    continue;
+                }
+                edges.entry(*entity).or_default().push((dx, dy));
+                edges.entry(*neighbour).or_default().push((-dx, -dy));
             }
+        }
+        for dirs in edges.values_mut() {
+            dirs.sort();
+            dirs.dedup();
         }
         edges
     }
@@ -522,7 +536,7 @@ impl Game {
                 is_hostile: false,
                 is_structure: true,
                 machine_status: None,
-                feeder_edges: Vec::new(),
+                linked_edges: Vec::new(),
                 is_home: kind == HOME_STRUCTURE_ID,
                 tier: self.world.get::<StructureTier>(entity).map(|t| t.0),
                 is_boss: false,

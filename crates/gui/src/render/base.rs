@@ -249,7 +249,7 @@ fn draw_surface_map(
             let py = (ry as f32 - 1.0 - off_y) * tile_px;
             let mut staffed = false;
             let mut machine_status = None;
-            let mut feeder_edges: &[(i32, i32)] = &[];
+            let mut linked_edges: &[(i32, i32)] = &[];
             let mut shielded = false;
             let mut critical = false;
             let mut occupied = false;
@@ -261,7 +261,7 @@ fn draw_surface_map(
                     color = glyph_color(ev.color);
                     staffed = ev.is_structure && ev.structure_worker.is_some();
                     machine_status = ev.machine_status;
-                    feeder_edges = &ev.feeder_edges;
+                    linked_edges = &ev.linked_edges;
                     // Structures wear their raid damage: the glyph dims as
                     // durability drops, and a nearly-destroyed one washes
                     // its tile red, so the base's condition reads at a
@@ -321,40 +321,31 @@ fn draw_surface_map(
             }
             // The shield network is base-wide, not per-structure, so every
             // structure carries the same faint pulse while one is standing.
-            // Drawn under the flash so a raid still reads on top of it.
+            // Drawn under the flash so a raid still reads on top of it, and
+            // through the same open-sided outline so it cannot paint a joined
+            // pair's shared wall back in.
             if let Some(pulse) = shield_outline.filter(|_| shielded) {
-                painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, pulse);
+                outline_open(painter, px, py, tile_px - 1.0, pulse, linked_edges);
             }
-            // A machine wears its state as its outline. Drawn *after* the
-            // shield pulse, which also outlines every structure: an
-            // actionable per-machine state has to win over ambient
-            // base-wide info, or a starved machine goes unnoticed inside a
-            // shielded base. A structure that runs no job has no status and
-            // keeps only the pulse.
+            // A machine wears its state as its outline, and drops the walls
+            // it shares with a machine it trades with — so a working chain
+            // draws as one continuous shape and a machine that should be
+            // joined and isn't shows a seam. Nothing is drawn *between*
+            // tiles; the join is the absence of a line.
+            //
+            // Drawn after the shield pulse, which also outlines every
+            // structure: an actionable per-machine state has to win over
+            // ambient base-wide info, or a starved machine goes unnoticed
+            // inside a shielded base. A structure that runs no job has no
+            // status and keeps only the pulse.
             //
             // This replaces a flat yellow "someone is assigned here" —
             // `Idle` is the same fact in a colour of its own, so nothing is
             // lost and three more states are gained.
             if let Some(color) = machine_status.map(machine_outline) {
-                painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, color);
+                outline_open(painter, px, py, tile_px - 1.0, color, linked_edges);
             } else if staffed {
-                painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, YELLOW);
-            }
-            // Wiring: a stub on the shared edge toward every neighbour that
-            // makes an ingredient this machine wants. A chain reads as a
-            // line across the base, and a machine missing a feeder shows a
-            // missing stub rather than needing a menu to diagnose.
-            for (dx, dy) in feeder_edges {
-                let (cx, cy) = (px + tile_px / 2.0, py + tile_px / 2.0);
-                let reach = tile_px / 2.0;
-                painter.line(
-                    cx + *dx as f32 * reach * 0.35,
-                    cy + *dy as f32 * reach * 0.35,
-                    cx + *dx as f32 * reach,
-                    cy + *dy as f32 * reach,
-                    2.0,
-                    CYAN,
-                );
+                outline_open(painter, px, py, tile_px - 1.0, YELLOW, linked_edges);
             }
             if let Some(flash) = fx.tile_flash(world) {
                 painter.rect(px, py, tile_px - 1.0, tile_px - 1.0, flash);
@@ -362,6 +353,29 @@ fn draw_surface_map(
         }
     }
     painter.rect_lines(0.0, 0.0, map_w, map_h, 2.0, BORDER);
+}
+
+/// A tile outline with the sides in `open` left off — the sides this
+/// machine shares with one it is joined to.
+///
+/// `EntityView::linked_edges` is symmetric for this to work: both halves of
+/// a shared wall have to go, and dropping only the consumer's side would
+/// leave a single line between the pair that reads as a rendering fault
+/// rather than as a join.
+fn outline_open(painter: &Painter, px: f32, py: f32, size: f32, color: Color, open: &[(i32, i32)]) {
+    let closed = |d: (i32, i32)| !open.contains(&d);
+    if closed((0, -1)) {
+        painter.line(px, py, px + size, py, 2.0, color);
+    }
+    if closed((0, 1)) {
+        painter.line(px, py + size, px + size, py + size, 2.0, color);
+    }
+    if closed((-1, 0)) {
+        painter.line(px, py, px, py + size, 2.0, color);
+    }
+    if closed((1, 0)) {
+        painter.line(px + size, py, px + size, py + size, 2.0, color);
+    }
 }
 
 /// A machine's outline colour. The four states are ordered by what the

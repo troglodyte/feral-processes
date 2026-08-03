@@ -318,6 +318,21 @@ pub struct StructureDb {
 }
 
 impl StructureDef {
+    /// Whether this structure runs a job a program can be posted to — an
+    /// extractor (`work`) or an assembler (`assembles`).
+    ///
+    /// Named once because three things have to agree about it and one of
+    /// them already drifted: deploy inserts `components::MachineStatus` on a
+    /// machine, `Game::accepts_a_program` decides what the cronjob menu
+    /// offers, and the map colours an outline by that status. Deploy tested
+    /// `work.is_some()` alone, so every assembler stood without a status —
+    /// which silently cost it its stall log lines, its roster state and its
+    /// outline, because every consumer treats a missing status as "not a
+    /// machine" rather than as an error.
+    pub fn runs_a_job(&self) -> bool {
+        self.work.is_some() || self.assembles.is_some()
+    }
+
     /// Which group this structure lists under. Checked in this order because
     /// the first match wins and the overlaps have a right answer: a bench
     /// that also defends is still where you go to build things, and the

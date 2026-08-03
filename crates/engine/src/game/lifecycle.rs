@@ -434,7 +434,7 @@ impl Game {
                 output: s.stock_output.iter().cloned().collect(),
                 capacity: def.capacity,
             });
-            if def.work.is_some() {
+            if def.runs_a_job() {
                 entity.insert(MachineStatus::default());
             }
             // Rebuilt from the def rather than from the save: with the

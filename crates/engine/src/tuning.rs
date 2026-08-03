@@ -764,7 +764,16 @@ pub const FORGIVING_RESPAWN_NEED_FLOOR: f32 = 40.0;
 
 /// Inclusive quantity range of its species' `work_resource` a defeated wild
 /// program drops.
-pub const WORK_RESOURCE_DROP: std::ops::RangeInclusive<u32> = 1..=2;
+///
+/// Doubled from `1..=2` on 2026-08-02, when deleting the scan action left
+/// kills as the only source of Core Fragments outside a built base. At 1..=2
+/// the first Mining Node — 12 fragments, on top of Home's 5 — was about eight
+/// kills away, and a rest cost five of them. Only seven species carry a
+/// `work_resource` at all (four Core Fragments, three Power Cells), so this
+/// lifts Power Cell drops by the same factor; that is accepted rather than
+/// split into a per-resource range, which would be new asset data for a
+/// seven-species problem.
+pub const WORK_RESOURCE_DROP: std::ops::RangeInclusive<u32> = 2..=4;
 
 /// A mining node's per-cycle success chance is `MINING_SUCCESS_BASE` plus
 /// `MINING_SUCCESS_PER_LEVEL` per tier, capped at 1.0 — so a basic level-1

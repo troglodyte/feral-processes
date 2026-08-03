@@ -1,6 +1,13 @@
 # Adjacency-fed production chains
 
-Status: design approved 2026-08-03, unimplemented.
+Status: implemented 2026-08-03 on `factory-chains`, all twelve plan tasks
+green. **Never played.** Two deviations from what is written below, both
+recorded in the commits that made them: the intermediate's standalone value
+is the Assembly Bay's `build_cost` rather than trade value (the Market's
+`sell_rate` is flat per unit, so refining is a net loss at the counter and
+there is no per-item price to raise), and `player_gather_system` redirects
+into the buffer alongside the cronjob path (it shares `resolve_gather_cycle`,
+and retiring the deposit pool would otherwise leave it unpaced).
 
 ## The problem
 

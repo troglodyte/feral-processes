@@ -40,6 +40,13 @@ index — nothing new is persisted.
 - **Two Power Outlets go into new-game starting inventory**, beside the 3
   ICE Breakers, 3 Power Cells and 5 Core Fragments, to cover getting
   established before the base earns anything of its own.
+- **The Terminal is gone.** It converted a Core Fragment into a Power Cell
+  every tick while you stood within 2 tiles, for a 3-Fragment build cost —
+  the cheapest thing you could deploy, and a second free-Power source beside
+  the Recharger Node. Power Grid research now unlocks the Power Conduit
+  alone. It was the only shipped structure using `passive_process`, so that
+  schema field and `passive_process_system` now serve mods only; both stay
+  documented in `assets/structures/README.md`.
 - **Deploying a Home now obliterates any Stack link under its platform**,
   the same way it already obliterates the hostiles and nests standing there.
   This is not a rare collision: `STACK_NEAREST_LINK_TILES` puts a zone's

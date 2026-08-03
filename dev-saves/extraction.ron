@@ -32,6 +32,7 @@
             ("ablative_plating", 2),
             ("oracle_core", 2),
             ("core_fragment", 15),
+            ("outlet", 8),
             ("portal_fragment", 1),
             ("wraithsteel_plate", 1),
         ],

@@ -29,6 +29,7 @@
 | `crates/engine/src/lib.rs` | Re-export `Pursuing` in the components `use` list (~line 44). |
 | `crates/engine/src/tuning.rs` | Six new constants in the nests section. |
 | `crates/engine/src/systems.rs` | Tether fix in `wander_ai_system`; exclude pursuers from wandering. |
+| `crates/engine/src/world.rs` | Extract `NEIGHBOURS`, the eight movement offsets, out of `maybe_ambush`. |
 | `crates/engine/src/game/pursuit.rs` | **New.** The bounded cost field — a free function, no `Game`. |
 | `crates/engine/src/game/mod.rs` | Declare `mod pursuit;`. |
 | `crates/engine/src/game/zone.rs` | `attack_nest` provokes and pays the cache; `despawn_nest` clears `Pursuing`. |
@@ -267,7 +268,23 @@ let reached = dijkstra_all(&origin, |&(x, y)| {
 
 Then flatten to node → cost and insert `origin => 0`, which `dijkstra_all` does not include.
 
-`NEIGHBOURS` is the eight offsets, matching the game's 8-directional movement. `spawning.rs` and `turn.rs` each already spell this array out inline; a third copy here is fine under this repo's "three similar lines beat a speculative abstraction" rule — do not extract it.
+**`NEIGHBOURS` is extracted, not copied.** `Game::maybe_ambush` (`game/turn.rs:262-272`) currently spells the eight offsets out inline under the comment "The eight neighbours, matching the game's 8-directional movement." Move that array to `crates/engine/src/world.rs` as
+
+```rust
+/// The eight neighbouring tiles, matching the game's 8-directional
+/// movement. Chebyshev distance is "how many moves away" throughout the
+/// engine because of this set; a fourth direction scheme would have to
+/// change every distance comparison with it.
+pub(crate) const NEIGHBOURS: [(i32, i32); 8] = [
+    (-1, -1), (0, -1), (1, -1),
+    (-1, 0),           (1, 0),
+    (-1, 1),  (0, 1),  (1, 1),
+];
+```
+
+and have both `maybe_ambush` and `pursuit_field` use it. `world.rs` is the home because this is map-movement geometry, not a difficulty knob — it does not belong in `tuning.rs`.
+
+This is a deliberate ruling made before execution: the reviewer would otherwise flag a second copy as duplication, and with only one existing site the extraction is two call sites, not a speculative abstraction over three. `cargo test -p feral-processes-engine ambush` must still pass afterwards — `maybe_ambush`'s behaviour is unchanged and any movement there means the array was transcribed wrong.
 
 Unit cost per step is correct: all eight directions cost the same because movement is Chebyshev. Do not weight diagonals.
 

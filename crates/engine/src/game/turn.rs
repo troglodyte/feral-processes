@@ -3,6 +3,7 @@
 
 use crate::game::spawning::SpawnEscalation;
 use crate::tuning::{RANDOM_ENCOUNTER_CHANCE, REST_TICKS};
+use crate::world::NEIGHBOURS;
 use crate::*;
 
 impl Game {
@@ -259,21 +260,11 @@ impl Game {
         if !ambushed {
             return;
         }
-        // The eight neighbours, matching the game's 8-directional movement.
-        let open: Vec<(i32, i32)> = [
-            (-1, -1),
-            (0, -1),
-            (1, -1),
-            (-1, 0),
-            (1, 0),
-            (-1, 1),
-            (0, 1),
-            (1, 1),
-        ]
-        .into_iter()
-        .map(|(dx, dy)| (pos.x + dx, pos.y + dy))
-        .filter(|&(x, y)| self.world.resource_mut::<WorldMap>().tile(x, y).walkable)
-        .collect();
+        let open: Vec<(i32, i32)> = NEIGHBOURS
+            .iter()
+            .map(|(dx, dy)| (pos.x + dx, pos.y + dy))
+            .filter(|&(x, y)| self.world.resource_mut::<WorldMap>().tile(x, y).walkable)
+            .collect();
         if open.is_empty() {
             return;
         }

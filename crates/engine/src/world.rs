@@ -6,6 +6,21 @@ use serde::{Deserialize, Serialize};
 
 pub const CHUNK_SIZE: i32 = 32;
 
+/// The eight neighbouring tiles, matching the game's 8-directional
+/// movement. Chebyshev distance is "how many moves away" throughout the
+/// engine because of this set; a fourth direction scheme would have to
+/// change every distance comparison with it.
+pub(crate) const NEIGHBOURS: [(i32, i32); 8] = [
+    (-1, -1),
+    (0, -1),
+    (1, -1),
+    (-1, 0),
+    (1, 0),
+    (-1, 1),
+    (0, 1),
+    (1, 1),
+];
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Biome {
     DataVoid,

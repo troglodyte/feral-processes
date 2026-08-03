@@ -760,6 +760,20 @@ pub const NEST_RESPAWN_TICKS: u32 = 10;
 /// take real, sustained effort to clear, not a single lucky hit.
 pub const NEST_DURABILITY: u32 = 60;
 
+/// Tiles a pursuer covers per tick. `1` is player speed: you outrun a swarm
+/// in a straight line but never shake it, and it catches you the moment you
+/// stop to work, rest, or swing at the nest again. Above `1` they will reach
+/// you.
+pub const NEST_PURSUIT_STEPS_PER_TICK: u32 = 1;
+
+/// Chebyshev distance **from the nest** past which a pursuer gives up.
+/// Measured from the nest, not from where the chase began — so a nest near
+/// the base can put pursuers on the doorstep.
+pub const NEST_AGGRO_LEASH_RADIUS: i32 = 15;
+
+/// Added to the leash radius to size the search box.
+pub const NEST_PATH_SEARCH_MARGIN: i32 = 5;
+
 // ─────────────────────────────────────────────────────────────────────────
 // Needs & rest
 // ─────────────────────────────────────────────────────────────────────────

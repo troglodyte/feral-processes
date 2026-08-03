@@ -19,6 +19,7 @@ pub(crate) mod field;
 pub(crate) mod inspection;
 pub(crate) mod lifecycle;
 pub(crate) mod party;
+pub(crate) mod pursuit;
 pub(crate) mod routines;
 pub(crate) mod spawning;
 pub(crate) mod stack;

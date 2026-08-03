@@ -424,6 +424,10 @@ impl Game {
             }
             let structure_id = entity.id();
             structure_positions.insert(s.position, structure_id);
+            entity.insert(Stock::new(def.capacity));
+            if def.work.is_some() {
+                entity.insert(MachineStatus::default());
+            }
             if let Some(amount) = s.resource_amount {
                 let resource = def
                     .work

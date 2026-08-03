@@ -53,6 +53,10 @@ fn default_work_capacity() -> u32 {
     crate::tuning::DEFAULT_WORK_CAPACITY
 }
 
+fn default_output_capacity() -> u32 {
+    crate::tuning::DEFAULT_OUTPUT_CAPACITY
+}
+
 /// A structure's power-regeneration capability — see
 /// `StructureDef::power_regen` and `systems::power_regen_system`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -159,6 +163,15 @@ pub struct StructureDef {
     /// If set, a tamed creature can be assigned to work this structure,
     /// producing `produces` every `ticks_per_unit` ticks.
     pub work: Option<WorkDef>,
+    /// How many units this structure's output buffer holds before it clogs
+    /// (see `components::Stock`). Top-level rather than inside `work`
+    /// because an assembler declares `assembles` and no `work` block at all,
+    /// and a storage building declares neither — both still need an output
+    /// size. `#[serde(default = "default_output_capacity")]` so existing
+    /// structure files (including mods) get a usable buffer rather than 0,
+    /// which would clog on the first unit produced.
+    #[serde(default = "default_output_capacity")]
+    pub capacity: u32,
     /// If set, this structure restores the player's Power every tick while
     /// they stand within `radius` tiles — no assigned worker and no input
     /// item, unlike `work`. `#[serde(default)]` so
@@ -387,6 +400,36 @@ mod tests {
         )
         .expect("an older trade block must still parse");
         assert_eq!(def.trade.unwrap().program_sell_divisor, None);
+    }
+
+    /// A structure file written before `capacity` existed gets the default
+    /// output size. Defaulting to 0 instead would clog every existing mod's
+    /// machines on the first unit they produced.
+    #[test]
+    fn a_structure_def_without_capacity_gets_the_default_output_size() {
+        let def: StructureDef = ron::from_str(
+            r#"(
+                id: "old_node", name: "Old Node", glyph: '$', color: Brown,
+                build_cost: [],
+                work: None,
+            )"#,
+        )
+        .expect("a file written before `capacity` existed must still parse");
+        assert_eq!(def.capacity, crate::tuning::DEFAULT_OUTPUT_CAPACITY);
+    }
+
+    #[test]
+    fn a_structure_def_may_set_its_own_output_capacity() {
+        let def: StructureDef = ron::from_str(
+            r#"(
+                id: "big_node", name: "Big Node", glyph: '$', color: Brown,
+                build_cost: [],
+                work: None,
+                capacity: 40,
+            )"#,
+        )
+        .expect("an authored capacity must parse");
+        assert_eq!(def.capacity, 40);
     }
 
     /// The mod-compatibility guarantee: a `RestDef` written before `cost`

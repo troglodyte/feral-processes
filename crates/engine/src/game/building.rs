@@ -87,13 +87,17 @@ impl Game {
                 max_hp: def.durability,
             });
         }
+        entity.insert(Stock::new(def.capacity));
         if let Some(work) = &def.work {
-            entity.insert(ResourceNode {
-                resource: work.produces.clone(),
-                amount: work.capacity,
-                capacity: work.capacity,
-                level: work.level,
-            });
+            entity.insert((
+                ResourceNode {
+                    resource: work.produces.clone(),
+                    amount: work.capacity,
+                    capacity: work.capacity,
+                    level: work.level,
+                },
+                MachineStatus::default(),
+            ));
         }
         if let Some(temp) = &def.temporary {
             entity.insert(Temporary {

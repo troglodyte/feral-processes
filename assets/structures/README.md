@@ -67,6 +67,17 @@ is skipped with a warning logged in-game rather than crashing startup.
     // nine a cycle outruns the sink entirely. Leave it off for salvage.
     work: Some((produces: "core_fragment", ticks_per_unit: 5, capacity: 5, level: Some(1))),
 
+    // Optional; defaults to 20. How many units this structure's *output
+    // buffer* holds before it clogs and stops producing. Every deployed
+    // structure has one, whether or not it produces anything — the player
+    // collects from a structure's output buffer by standing next to it, and
+    // a neighbouring machine pulls its ingredients from the same place.
+    // Counted in total across everything in the buffer, not per item.
+    //
+    // Top-level rather than inside `work` because a structure can have an
+    // output buffer without being a work node.
+    capacity: 20,
+
     // Optional; can be left out entirely (defaults to no regeneration).
     // If set, the structure restores `per_tick` Power to the player every
     // tick that they're standing within `radius` tiles of it — no assigned

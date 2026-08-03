@@ -877,6 +877,23 @@ pub const FUSION_LESSER_STAT_DIVISOR: i32 = 2;
 /// are `#[serde(default)]` fallbacks, so a mod written before either field
 /// existed keeps its original behaviour.
 pub const DEFAULT_WORK_CAPACITY: u32 = 5;
+
+// ---------------------------------------------------------------------------
+// Production chains
+// ---------------------------------------------------------------------------
+
+/// How many units a structure's output buffer holds when its `.ron` file
+/// sets no `capacity` — see `components::Stock`. This is what paces an
+/// extractor now that a node has no deposit pool: it produces until the
+/// buffer is full and then clogs until someone collects, so this number is
+/// how long a base runs unattended.
+pub const DEFAULT_OUTPUT_CAPACITY: u32 = 20;
+
+/// How many full batches of each ingredient a machine will pull into its
+/// input before refusing more. Two, so a machine always has the next batch
+/// staged while working the current one, but a greedy machine still cannot
+/// drain a feeder that several machines share.
+pub const INPUT_STOCK_BATCHES: u32 = 2;
 pub const DEFAULT_STRUCTURE_DURABILITY: u32 = 30;
 
 /// Chance a defeated wild program additionally drops a Portal Fragment,

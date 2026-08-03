@@ -1203,3 +1203,50 @@ fn the_players_own_work_holds_the_cronjob_slot() {
         1
     );
 }
+
+/// Every deployed structure carries a buffer, not just the ones that
+/// produce: a collect must be able to reach any of them, and a storage
+/// building declares neither `work` nor `assembles` and still needs an
+/// output size.
+#[test]
+fn deploying_a_structure_gives_it_an_empty_stock_sized_by_its_def() {
+    let mut game = Game::new(930, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = deploy_upgradeable_node(&mut game);
+
+    let stock = game
+        .world
+        .get::<Stock>(node)
+        .expect("a deployed structure gets a Stock");
+    assert!(
+        stock.input.is_empty() && stock.output.is_empty(),
+        "a freshly deployed machine has nothing buffered"
+    );
+    assert_eq!(
+        stock.capacity,
+        crate::tuning::DEFAULT_OUTPUT_CAPACITY,
+        "mining_node.ron sets no capacity, so it takes the default"
+    );
+
+    let home = find_home(&mut game).unwrap();
+    assert!(
+        game.world.get::<Stock>(home).is_some(),
+        "a Home produces nothing but is still collectable from"
+    );
+}
+
+/// `MachineStatus` marks the things that can stall. Absent means "not a
+/// machine" — a Home has no job to be starved of, and giving it a status
+/// would put a permanently-Running row in the structure report.
+#[test]
+fn only_structures_that_run_a_job_get_a_machine_status() {
+    let mut game = Game::new(931, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = deploy_upgradeable_node(&mut game);
+    let home = find_home(&mut game).unwrap();
+
+    assert_eq!(
+        game.world.get::<MachineStatus>(node).copied(),
+        Some(MachineStatus::Running),
+        "a work node starts optimistic and is corrected on the first tick"
+    );
+    assert!(game.world.get::<MachineStatus>(home).is_none());
+}

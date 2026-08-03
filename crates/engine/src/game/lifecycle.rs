@@ -6,7 +6,9 @@
 
 use crate::abilities::AbilityId;
 use crate::game::zone::find_walkable_start;
-use crate::tuning::{DEFAULT_WORK_CAPACITY, INITIAL_WILD_POPULATION, STACK_LINKS_PER_ZONE};
+use crate::tuning::{
+    DEFAULT_WORK_CAPACITY, INITIAL_WILD_POPULATION, NEST_DURABILITY, STACK_LINKS_PER_ZONE,
+};
 use crate::*;
 
 /// Splits a persisted routine list into what `db` still recognizes and what
@@ -266,6 +268,38 @@ impl Game {
             ));
         }
 
+        // Spawned before the creature loop below so a guardian's
+        // `nest_position` has a live nest to resolve to — mirrors
+        // `structure_positions` further down, built for the same reason.
+        let mut nest_positions: HashMap<(i32, i32), Entity> = HashMap::new();
+        for n in data.nests {
+            let Some(species) = game.world.resource::<SpeciesDb>().get(&n.species).cloned() else {
+                continue;
+            };
+            let nest = game
+                .world
+                .spawn((
+                    Nest {
+                        species: species.id.clone(),
+                        pending_respawns: n.pending_respawns,
+                    },
+                    Position {
+                        x: n.position.0,
+                        y: n.position.1,
+                    },
+                    Glyph {
+                        ch: 'N',
+                        color: species.color,
+                    },
+                    Durability {
+                        hp: n.durability,
+                        max_hp: NEST_DURABILITY,
+                    },
+                ))
+                .id();
+            nest_positions.insert(n.position, nest);
+        }
+
         let mut pending_cronjobs: Vec<(Entity, save::CronjobSave)> = Vec::new();
         // Collected with their slot index and sorted below: creatures come
         // back in whatever order they were written, which is no longer the
@@ -342,6 +376,19 @@ impl Game {
                 }
             } else {
                 entity.insert((Hostile, WanderAi::default()));
+                // A nest_position resolving to nothing (the nest's species
+                // is gone, or the save predates nests) is dropped silently
+                // rather than failing the load — the creature just comes
+                // back as an ordinary wild program.
+                if let Some(nest) = c
+                    .nest_position
+                    .and_then(|p| nest_positions.get(&p).copied())
+                {
+                    entity.insert(NestGuardian { nest });
+                    if c.pursuing {
+                        entity.insert(Pursuing);
+                    }
+                }
             }
         }
         party_slots.sort_by_key(|&(slot, _)| slot);
@@ -496,6 +543,8 @@ impl Game {
             Option<&FusionCount>,
             Option<&Routines>,
             Option<&FieldBuff>,
+            Option<&NestGuardian>,
+            Option<&Pursuing>,
         )>();
         for (
             entity,
@@ -511,6 +560,8 @@ impl Game {
             fusions,
             routines,
             field_buff,
+            nest_guardian,
+            pursuing,
         ) in creature_query.iter(&self.world)
         {
             let potential = potential.copied().unwrap_or(Potential::NEUTRAL);
@@ -526,6 +577,14 @@ impl Game {
                             TaskKind::Guard => save::CronjobKind::Guard,
                         },
                     })
+            });
+            // Same by-position resolution `cronjob` above uses: a
+            // `NestGuardian`'s target entity id isn't stable across the
+            // round trip, but a nest's tile is.
+            let nest_position = nest_guardian.and_then(|g| {
+                self.world
+                    .get::<Position>(g.nest)
+                    .map(|nest_pos| (nest_pos.x, nest_pos.y))
             });
             creatures.push(save::CreatureSave {
                 species: creature.species.clone(),
@@ -552,6 +611,8 @@ impl Game {
                 fusions: fusions.map(|f| f.0).unwrap_or(0),
                 routines: routines.map(|r| r.0.clone()).unwrap_or_default(),
                 field_buffs: field_buff.map(|f| f.active.clone()).unwrap_or_default(),
+                nest_position,
+                pursuing: pursuing.is_some(),
             });
         }
 
@@ -570,6 +631,17 @@ impl Game {
                 resource_amount: node.map(|n| n.amount),
                 durability: durability.map(|d| d.hp),
                 tier: tier.map(|t| t.0),
+            });
+        }
+
+        let mut nests = Vec::new();
+        let mut nest_query = self.world.query::<(&Nest, &Position, &Durability)>();
+        for (nest, pos, durability) in nest_query.iter(&self.world) {
+            nests.push(save::NestSave {
+                species: nest.species.clone(),
+                position: (pos.x, pos.y),
+                durability: durability.hp,
+                pending_respawns: nest.pending_respawns.clone(),
             });
         }
 
@@ -623,6 +695,7 @@ impl Game {
             },
             creatures,
             structures,
+            nests,
             tile_overrides,
             zone: self.world.resource::<ZoneLevel>().0,
             spawn_point: {

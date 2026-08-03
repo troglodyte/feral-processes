@@ -79,6 +79,8 @@ pub(crate) fn app_owning_distant_programs(seed: u32, count: i32) -> App {
             fusions: 0,
             routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
             field_buffs: Vec::new(),
+            nest_position: None,
+            pursuing: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -124,6 +126,8 @@ pub(crate) fn app_owning_a_program_and_a_compiler(seed: u32, routines: &[&str]) 
         fusions: 0,
         routines: routines.iter().map(|r| r.to_string()).collect(),
         field_buffs: Vec::new(),
+        nest_position: None,
+        pursuing: false,
     });
     data.structures.push(save::StructureSave {
         kind: "compiler".to_string(),
@@ -188,6 +192,8 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
         fusions: 0,
         routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
         field_buffs: Vec::new(),
+        nest_position: None,
+        pursuing: false,
     });
     for n in 0..posts {
         data.structures.push(save::StructureSave {
@@ -271,6 +277,8 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
             fusions: 0,
             routines: Vec::new(),
             field_buffs: Vec::new(),
+            nest_position: None,
+            pursuing: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -320,6 +328,8 @@ pub(crate) fn app_with_companions_in_the_party(seed: u32, count: u32) -> App {
             fusions: 0,
             routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
             field_buffs: Vec::new(),
+            nest_position: None,
+            pursuing: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();

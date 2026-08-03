@@ -1272,3 +1272,205 @@ fn encounter_damp_reduces_the_wild_spawn_chance_proportionally() {
         "must floor at 0 rather than invert into a spawn bonus"
     );
 }
+
+/// Without a `NestSave`, save/reload silently deleted every nest in the
+/// zone — a free way out of a swarm the player provoked, and a way to
+/// launder a nest destroyed most of the way to its cache.
+#[test]
+fn a_nest_survives_a_save_load_round_trip() {
+    let mut game = Game::new(608, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let nest = game.spawn_nest("scrapper", 120, 120);
+    game.world.get_mut::<Durability>(nest).unwrap().hp = 17;
+    game.world.get_mut::<Nest>(nest).unwrap().pending_respawns = vec![3, NEST_RESPAWN_TICKS];
+
+    let path = std::env::temp_dir().join(format!("feral_nest_save_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let mut query = loaded.world.query::<(&Nest, &Position, &Durability)>();
+    let (restored_nest, pos, durability) = query
+        .iter(&loaded.world)
+        .find(|(n, _, _)| n.species == "scrapper")
+        .expect("the nest must survive the round trip");
+    assert_eq!((pos.x, pos.y), (120, 120), "position must round-trip");
+    assert_eq!(
+        durability.hp, 17,
+        "durability must round-trip, not reset to full"
+    );
+    assert_eq!(
+        restored_nest.pending_respawns,
+        vec![3, NEST_RESPAWN_TICKS],
+        "queued respawns must round-trip or a reload would silently refill the nest early"
+    );
+}
+
+/// A guardian's `NestGuardian.nest` is a raw `Entity`, which is not stable
+/// across a round trip — so this asserts the tether by the reloaded nest's
+/// `Position` instead, which is the whole reason the save format keys it
+/// by tile rather than by id.
+#[test]
+fn a_guardians_tether_survives_a_save_load_round_trip() {
+    let mut game = Game::new(609, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.spawn_nest("scrapper", 130, 130);
+
+    let path = std::env::temp_dir().join(format!("feral_tether_save_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    // Compared by the reloaded nest's own entity id, which is legitimate
+    // here: both sides come from the same `loaded` world, unlike the
+    // pre-save `nest` entity id, which the whole tile-keyed save format
+    // exists because it does *not* survive the round trip.
+    let mut nest_query = loaded.world.query::<(Entity, &Nest)>();
+    let (restored_nest, _) = nest_query
+        .iter(&loaded.world)
+        .find(|(_, n)| n.species == "scrapper")
+        .expect("the nest must survive the round trip");
+
+    let mut guardian_query = loaded.world.query::<&NestGuardian>();
+    let guardians: Vec<_> = guardian_query.iter(&loaded.world).collect();
+    assert!(
+        !guardians.is_empty(),
+        "spawn_nest always spawns at least NEST_GUARDIAN_MIN guardians"
+    );
+    for guardian in &guardians {
+        assert_eq!(
+            guardian.nest, restored_nest,
+            "every reloaded guardian must resolve to the reloaded nest entity"
+        );
+    }
+}
+
+/// Provoke a nest's guardians, save, and reload — `Pursuing` must still be
+/// set, or a save mid-chase would be a free way to shrug off an aggro'd
+/// swarm.
+#[test]
+fn live_aggro_survives_a_save_load_round_trip() {
+    let mut game = Game::new(610, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let nest = game.spawn_nest("scrapper", 140, 140);
+    game.attack_nest(nest);
+    let pursuing_before = {
+        let mut query = game.world.query::<&NestGuardian>();
+        query.iter(&game.world).count()
+    };
+    assert!(
+        pursuing_before > 0,
+        "attack_nest should have provoked at least one guardian"
+    );
+
+    let path = std::env::temp_dir().join(format!("feral_aggro_save_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let mut query = loaded.world.query::<(&NestGuardian, Option<&Pursuing>)>();
+    let pursuing_after = query
+        .iter(&loaded.world)
+        .filter(|(_, p)| p.is_some())
+        .count();
+    assert_eq!(
+        pursuing_after, pursuing_before,
+        "every guardian provoked before the save must still be Pursuing after the load"
+    );
+}
+
+/// A `nest_position` naming no `NestSave` — the nest's mod was removed, or
+/// the nest was destroyed between save and a hand-edited file — must not
+/// fail the load. The creature comes back as an ordinary wild program
+/// instead, exactly like a save predating nests entirely.
+#[test]
+fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
+    let game = Game::new(611, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let data = save::SaveData {
+        seed: game.world.resource::<WorldMap>().seed(),
+        tick: 0,
+        difficulty: DifficultyMode::Forgiving,
+        player: save::PlayerSave {
+            position: (spawn.x, spawn.y),
+            hp: 30,
+            max_hp: 30,
+            atk: 6,
+            def: 2,
+            hunger: 100.0,
+            fatigue: 100.0,
+            inventory: Vec::new(),
+            level: 1,
+            xp: 0,
+            xp_to_next: 20,
+            decompiler: 0,
+            weapon: None,
+            weapon_level: 1,
+            weapon_fusion_tier: 0,
+            armor: None,
+            armor_level: 1,
+            armor_fusion_tier: 0,
+            module: None,
+            module_level: 1,
+            module_fusion_tier: 0,
+            perk_points: 0,
+            unlocked_perks: Vec::new(),
+            item_fusions: Vec::new(),
+            routines: Vec::new(),
+            field_buffs: Vec::new(),
+        },
+        creatures: vec![save::CreatureSave {
+            species: "scrapper".to_string(),
+            position: (spawn.x + 2, spawn.y),
+            hp: 10,
+            max_hp: 10,
+            atk: 1,
+            def: 1,
+            tamed: false,
+            level: 1,
+            xp: 0,
+            xp_to_next: 20,
+            cronjob: None,
+            party_slot: None,
+            zone: 1,
+            custom_name: None,
+            hp_roll: 1.0,
+            atk_roll: 1.0,
+            def_roll: 1.0,
+            growth_roll: 1.0,
+            fusions: 0,
+            routines: Vec::new(),
+            field_buffs: Vec::new(),
+            // No NestSave anywhere in this data names this tile.
+            nest_position: Some((999, 999)),
+            pursuing: true,
+        }],
+        structures: Vec::new(),
+        nests: Vec::new(),
+        tile_overrides: Vec::new(),
+        zone: 1,
+        spawn_point: (spawn.x, spawn.y),
+        buyback: Vec::new(),
+        researched: Vec::new(),
+        link_sites: Vec::new(),
+        locale: crate::resources::Locale::Surface,
+        stack_memory: crate::resources::StackMemory::default(),
+        trace: 0,
+    };
+    let path = std::env::temp_dir().join(format!("feral_missing_nest_{}.bin", std::process::id()));
+    save::save_to_file(&path, &data).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let mut query = loaded
+        .world
+        .query::<(&Position, &Hostile, &WanderAi, Option<&NestGuardian>)>();
+    let found = query
+        .iter(&loaded.world)
+        .find(|(pos, ..)| pos.x == spawn.x + 2 && pos.y == spawn.y);
+    let (_, _, _, guardian) = found.expect(
+        "the creature must still load as an ordinary wild program even though its nest is missing",
+    );
+    assert!(
+        guardian.is_none(),
+        "a nest_position that resolves to nothing must not produce a NestGuardian"
+    );
+}

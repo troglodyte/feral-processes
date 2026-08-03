@@ -110,6 +110,35 @@ pub struct CreatureSave {
     /// `Game::dissolve_tamed_program` nor `Game::fuse_companions` needs to
     /// know this field exists.
     pub field_buffs: Vec<ActiveFieldBuff>,
+    /// The nest this creature is tethered to, if it's a `NestGuardian` —
+    /// identified by the nest's position rather than its entity id, since
+    /// entity ids aren't stable across a save/load round trip (same reason
+    /// `cronjob` above resolves by position, not by `Entity`). One nest per
+    /// tile, so the key is unambiguous. `None` for an ordinary wild program
+    /// or a tamed one.
+    ///
+    /// This is a shape change to `CreatureSave`, so it required bumping
+    /// `SAVE_FORMAT_VERSION` — see that constant's docs.
+    pub nest_position: Option<(i32, i32)>,
+    /// Whether this creature is currently `Pursuing` the player — see that
+    /// component's docs. Meaningless unless `nest_position` is also `Some`.
+    ///
+    /// This is a shape change to `CreatureSave`, so it required bumping
+    /// `SAVE_FORMAT_VERSION` — see that constant's docs.
+    pub pursuing: bool,
+}
+
+/// A nest's state on disk: its species, position, remaining `Durability`,
+/// and any guardians still queued to respawn. Guardians tethered to it are
+/// *not* stored here — each is its own `CreatureSave` carrying
+/// `nest_position`, reconnected to the restored nest by tile on load.
+#[derive(Serialize, Deserialize)]
+pub struct NestSave {
+    pub species: SpeciesId,
+    pub position: (i32, i32),
+    pub durability: u32,
+    /// See `components::Nest::pending_respawns`.
+    pub pending_respawns: Vec<u32>,
 }
 
 /// Mirrors `components::TaskKind` for persistence — kept separate so the
@@ -162,6 +191,11 @@ pub struct SaveData {
     pub player: PlayerSave,
     pub creatures: Vec<CreatureSave>,
     pub structures: Vec<StructureSave>,
+    /// Every nest standing in the zone — see `components::Nest`. Without
+    /// this, a save/reload silently deleted every nest: a free way out of
+    /// a swarm the player provoked, and a way to launder a nest destroyed
+    /// most of the way to its cache.
+    pub nests: Vec<NestSave>,
     pub tile_overrides: Vec<((i32, i32), Tile)>,
     /// Which zone sector the player had breached into.
     pub zone: u32,
@@ -234,7 +268,7 @@ pub struct SaveData {
 /// and every save written under the old version stops loading. That's an
 /// intentional, simple tradeoff for a single-player game rather than
 /// building real schema migration.
-pub const SAVE_FORMAT_VERSION: u32 = 18;
+pub const SAVE_FORMAT_VERSION: u32 = 19;
 
 /// Renders a save as editable RON, for the `savetool` binary.
 ///
@@ -335,6 +369,7 @@ mod tests {
             },
             creatures: Vec::new(),
             structures: Vec::new(),
+            nests: Vec::new(),
             tile_overrides: Vec::new(),
             zone: 1,
             spawn_point: (0, 0),

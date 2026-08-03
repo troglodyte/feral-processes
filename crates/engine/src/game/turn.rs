@@ -433,11 +433,37 @@ impl Game {
             ));
             return;
         }
+        let taken: Vec<(ItemId, u32)> = {
+            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
+            cost.iter()
+                .map(|(item, qty)| (item.clone(), inv.take(item.clone(), *qty)))
+                .collect()
+        };
+        // The affordability check above tests each `(item, qty)` pair
+        // independently against the full stack, so a `cost` with a repeated
+        // item id can pass it and still come up short here once an earlier
+        // pair has already spent from the same stack. `take`'s return is
+        // exactly how much came off, so a shortfall is caught rather than
+        // silently treated as paid — refund what was taken, since a rest
+        // that can't fully afford itself must spend nothing.
+        if let Some((item, qty)) = cost
+            .iter()
+            .zip(&taken)
+            .find(|((_, qty), (_, got))| got < qty)
+            .map(|((item, qty), _)| (item.clone(), *qty))
         {
             let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
-            for (item, qty) in &cost {
-                inv.take(item.clone(), *qty);
+            for (item, got) in taken {
+                if got > 0 {
+                    inv.add(item, got);
+                }
             }
+            self.log(format!(
+                "Resting needs {} {}, and you're short.",
+                qty,
+                self.item_name(&item)
+            ));
+            return;
         }
         self.log("You drop into low-power standby to recharge.");
         for _ in 0..REST_TICKS {

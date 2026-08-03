@@ -343,6 +343,82 @@ fn a_rest_structure_with_no_cost_field_still_rests_for_free() {
     );
 }
 
+const DOUBLE_CHARGE_REST_PAD: &str = r#"(
+    id: "double_charge_rest_pad",
+    name: "Double-Charge Rest Pad",
+    description: "Test fixture: a rest structure whose RestDef repeats one item id in cost.",
+    glyph: '#',
+    color: White,
+    build_cost: [],
+    work: None,
+    enables_rest: Some((radius: 7, cost: [("outlet", 1), ("outlet", 1)])),
+)"#;
+
+/// `cost`'s affordability check (`turn.rs::rest`) tests each `(item, qty)`
+/// pair independently against the *current* stack rather than simulating
+/// depletion across the list, so a repeated item id can pass that check and
+/// still run out partway through the actual `take` loop. With one outlet
+/// held against a cost that names it twice, both pre-check pairs see
+/// `count == 1 >= 1` and pass; the first `take` empties the stack and the
+/// second must come back short. `Inventory::take`'s return is exactly how
+/// much came off, so the fix has to look at it — this proves the loop does,
+/// by proving nothing is spent and the rest is refused instead of running
+/// on half-paid ticks.
+#[test]
+fn rest_refuses_and_refunds_when_a_repeated_cost_item_only_partly_affords() {
+    let dir = assets_dir_with_extra_structure(
+        "double_charge_rest_pad",
+        "double_charge_rest_pad.ron",
+        DOUBLE_CHARGE_REST_PAD,
+    );
+    let mut game = Game::new(708, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let player = game.player_entity();
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        let held = inv.count(&ItemId::from(ids::OUTLET));
+        inv.take(ItemId::from(ids::OUTLET), held);
+        inv.add(ItemId::from(ids::OUTLET), 1);
+    }
+    let pos = *game.world.get::<Position>(player).unwrap();
+    game.world.spawn((
+        Structure {
+            kind: "double_charge_rest_pad".to_string(),
+        },
+        Position { x: pos.x, y: pos.y },
+    ));
+    game.world.get_mut::<Needs>(player).unwrap().fatigue = 10.0;
+    let before_tick = game.current_tick();
+
+    game.rest();
+
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::OUTLET)),
+        1,
+        "a rest that can't fully afford a repeated-item cost must refund \
+         whatever it took, not keep the partial payment"
+    );
+    assert_eq!(
+        game.world.get::<Needs>(player).unwrap().fatigue,
+        10.0,
+        "a refused rest must not run any ticks, so fatigue is untouched"
+    );
+    assert_eq!(
+        before_tick,
+        game.current_tick(),
+        "a refused rest must not advance the clock"
+    );
+    assert!(
+        game.message_log(5)
+            .iter()
+            .any(|(_, line)| line.to_lowercase().contains("outlet")),
+        "the refusal should say why"
+    );
+}
+
 #[test]
 fn home_enables_rest_across_the_whole_base_footprint() {
     let game = Game::new(402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

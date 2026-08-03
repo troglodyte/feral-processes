@@ -14,9 +14,9 @@ use serde::{Deserialize, Serialize};
 /// **This enum is the moddable seam's limit.** A perk's *catalogue* entry —
 /// its name, its one-line description and what it costs — lives in
 /// `assets/perks/*.ron` and is editable without touching Rust. Its *effect*
-/// cannot: every variant below is a hook into a different formula, from
-/// `forage_chance` to `taming::capture_chance`'s HP penalty to a direct
-/// `Stats` write, and there is no shared shape to express in data the way
+/// cannot: every variant below is a hook into a different formula, from the
+/// hunger-decay multiplier to `taming::capture_chance`'s HP penalty to a
+/// direct `Stats` write, and there is no shared shape to express in data the way
 /// `SpeciesDef` or `ItemDef` have one. So a modder can rename, re-describe
 /// and re-price the twelve perks, but a new perk is still a new variant here
 /// plus a hook wherever its effect belongs — see `CLAUDE.md`.
@@ -34,8 +34,15 @@ use serde::{Deserialize, Serialize};
 /// names its variant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Perk {
-    /// Raises `Game::forage`'s success chance by
-    /// `KEEN_SCAVENGER_BONUS_PER_LEVEL` per level.
+    /// Adds `KEEN_SCAVENGER_BONUS_PER_LEVEL` per level to a mining node's
+    /// per-cycle success roll (`systems::mining_success_chance`), on top of
+    /// what the node's own upgrade tier is worth.
+    ///
+    /// It used to boost the scan action, which was deleted for being
+    /// unbounded income. The variant survived that rather than being removed
+    /// because its position here is save format (see below), and the mining
+    /// roll is where the same flavour — reading the terrain better — now
+    /// pays off.
     KeenScavenger,
     /// Slows Power (hunger) drain by `LOW_POWER_MODE_REDUCTION_PER_LEVEL`
     /// per level, down to a floor of 0 (hunger stops draining at all).

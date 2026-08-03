@@ -13,7 +13,7 @@ anything else fails to parse and is skipped.
 The reason is that a perk has no shape to express as data. Every other
 moddable thing in this game is numbers and ids the engine already knows how
 to consume; a perk is a hook into a particular formula, and no two hook into
-the same one. Keen Scavenger reaches into the scan roll, Low Power Mode into
+the same one. Keen Scavenger reaches into the mining roll, Low Power Mode into
 the hunger-decay multiplier, Exploit Focus into the decompile chance's HP
 term, Lean Compiler into recipe costs, Attacker/Defender/Buffer write
 straight to your stats at purchase time, and the five `*_affinity` perks each
@@ -64,7 +64,7 @@ say so in the `description` too — nothing keeps the two in sync for you.
     // Which perk this file describes. One of exactly these twelve, written
     // as a bare identifier (not a quoted string):
     //
-    //   KeenScavenger   raises the scan (g) success chance
+    //   KeenScavenger   raises a mining node's per-cycle success chance
     //   LowPowerMode    slows Power drain, down to not draining at all
     //   ExploitFocus    softens how much a decompile target's remaining
     //                   Integrity counts against the attempt

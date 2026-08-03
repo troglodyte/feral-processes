@@ -4,7 +4,7 @@ use super::support::*;
 use crate::abilities::AffinityKind;
 use crate::tuning::{
     ATTACKER_BONUS_PER_LEVEL, BUFFER_MIN_BONUS_PER_LEVEL, DECOMPILER_SKILL_PER_LEVEL,
-    DEFENDER_BONUS_PER_LEVEL, LEAN_COMPILER_DISCOUNT_PER_LEVEL,
+    DEFENDER_BONUS_PER_LEVEL, KEEN_SCAVENGER_BONUS_PER_LEVEL, LEAN_COMPILER_DISCOUNT_PER_LEVEL,
 };
 use crate::*;
 
@@ -368,4 +368,102 @@ fn all_five_affinity_perks_are_on_offer_in_the_picker() {
             kind
         );
     }
+}
+
+/// Stacks `Perk::KeenScavenger` high enough that a level-1 node's roll
+/// clamps at 1.0, so "no cycle fizzles" is a property of the formula rather
+/// than of the seed. Derived from the live curve so a retune of either
+/// constant cannot quietly leave the tests below rolling.
+fn buy_enough_keen_scavenger_to_cap_a_level_1_node(game: &mut Game) {
+    let levels = ((1.0 - crate::systems::mining_success_chance(1, 0))
+        / KEEN_SCAVENGER_BONUS_PER_LEVEL)
+        .ceil() as usize;
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Perks>(player)
+        .unwrap()
+        .unlocked
+        .extend(std::iter::repeat_n(Perk::KeenScavenger, levels));
+}
+
+/// The perk belongs to the player, but the mining roll runs per gather
+/// cycle — so what needs covering here is the wiring, not the formula
+/// (`systems::keen_scavenger_adds_to_the_mining_roll_and_still_caps_at_one`
+/// already pins that). Buying enough levels to cap a level-1 node's roll at
+/// a certainty must mean no cycle fizzles; if the perk never reaches the
+/// roll, a 50% node fizzles repeatedly across this many cycles.
+///
+/// The cronjob half of the same wiring is
+/// `keen_scavenger_reaches_the_roll_a_cronjob_worker_runs` — two systems
+/// read the perk by different routes, so one test cannot cover both.
+#[test]
+fn keen_scavenger_reaches_the_roll_when_you_work_a_node_yourself() {
+    let mut game = Game::new(4210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = deploy_upgradeable_node(&mut game);
+    assert_eq!(
+        game.world.get::<ResourceNode>(node).unwrap().level,
+        Some(1),
+        "a fresh node has to roll at all for the perk to be measurable against it"
+    );
+
+    buy_enough_keen_scavenger_to_cap_a_level_1_node(&mut game);
+
+    game.work_structure(node)
+        .expect("a deployed node is workable");
+    for _ in 0..60 {
+        game.wait();
+    }
+
+    let log = game.message_log(MESSAGE_LOG_CAP);
+    let extractions = log
+        .iter()
+        .filter(|(_, text)| text.starts_with("You extract"))
+        .count();
+    let fizzles = log
+        .iter()
+        .filter(|(_, text)| text.contains("fails to compile"))
+        .count();
+    assert!(
+        extractions > 0,
+        "the job should have completed cycles to measure: {log:?}"
+    );
+    assert_eq!(
+        fizzles, 0,
+        "a roll the perk has capped at a certainty must never fizzle: {log:?}"
+    );
+}
+
+/// The other half of the same wiring: a cronjob's roll runs inside a system
+/// iterating worker programs, and the perk is the player's, so
+/// `task_progress_system` has to reach outside its loop for it. The perk is
+/// bought by the owner and applies to the work their programs do.
+#[test]
+fn keen_scavenger_reaches_the_roll_a_cronjob_worker_runs() {
+    let mut game = Game::new(4210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = deploy_upgradeable_node(&mut game);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.assign_cronjob(worker, node).unwrap();
+    buy_enough_keen_scavenger_to_cap_a_level_1_node(&mut game);
+
+    for _ in 0..60 {
+        game.wait();
+    }
+
+    let log = game.message_log(MESSAGE_LOG_CAP);
+    let extractions = log
+        .iter()
+        .filter(|(_, text)| text.starts_with("Your subroutine extracted"))
+        .count();
+    let fizzles = log
+        .iter()
+        .filter(|(_, text)| text.contains("fails to compile"))
+        .count();
+    assert!(
+        extractions > 0,
+        "the cronjob should have completed cycles to measure: {log:?}"
+    );
+    assert_eq!(
+        fizzles, 0,
+        "the perk has to reach the worker's roll too: {log:?}"
+    );
 }

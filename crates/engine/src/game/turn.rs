@@ -1,10 +1,7 @@
 //! The turn loop: advancing the clock, moving, and the actions a player
 //! spends a turn on.
 
-use crate::tuning::{
-    FORAGE_CHANCE_MODERATE, FORAGE_CHANCE_RICH, FORAGE_CHANCE_SPARSE,
-    KEEN_SCAVENGER_BONUS_PER_LEVEL, RANDOM_ENCOUNTER_CHANCE, REST_TICKS,
-};
+use crate::tuning::{RANDOM_ENCOUNTER_CHANCE, REST_TICKS};
 use crate::*;
 
 impl Game {
@@ -222,8 +219,7 @@ impl Game {
     /// Three deliberate limits:
     ///
     /// - Never on the base platform. It is a manufactured floor rather than
-    ///   terrain, nothing spawns there, and it stays the one safe ground —
-    ///   the same call `forage_chance` makes about it.
+    ///   terrain, nothing spawns there, and it stays the one safe ground.
     /// - Never a boss (`pick_habitat_species(.., false)`). A boss you find
     ///   on the map is a fight you chose; one that jumps you is a death
     ///   sentence you never opted into.
@@ -394,13 +390,20 @@ impl Game {
     /// keep roaming), then Fatigue and Integrity are both restored to full.
     /// Requires the player to be standing within the radius of a structure
     /// that sets `StructureDef::enables_rest` — Home, and only Home, among
-    /// the shipped structures — and there's no other way to rest. Beyond
-    /// that gate, there's no separate "rest" system beyond replaying the
-    /// normal tick loop plus a Fatigue/HP reset at the end (via
-    /// `tick_inner(false)`, so these ticks don't age the rest structure
-    /// itself — see `age_temporary_structures`). If Power runs out and you
-    /// take lethal damage mid-rest, the loop bails out via the
-    /// `is_game_over` check before either restore happens.
+    /// the shipped structures — and, since it grants a free heal otherwise
+    /// unbounded by anything Power can limit, spending that structure's
+    /// `RestDef::cost` (an empty cost is a free rest, unchanged from before
+    /// the field existed). Both gates run before a single tick does; the
+    /// price is resolved and taken here rather than as its own system
+    /// because a refused rest must not spend anything, and a rest that
+    /// *starts* has already bought its ticks — the mid-loop `is_game_over`
+    /// bail below does not refund it. Beyond that, there's no separate
+    /// "rest" system beyond replaying the normal tick loop plus a
+    /// Fatigue/HP reset at the end (via `tick_inner(false)`, so these ticks
+    /// don't age the rest structure itself — see
+    /// `age_temporary_structures`). If Power runs out and you take lethal
+    /// damage mid-rest, the loop bails out via the `is_game_over` check
+    /// before either restore happens.
     pub fn rest(&mut self) {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
@@ -410,8 +413,56 @@ impl Game {
             return;
         }
         let player_pos = *self.world.get::<Position>(self.player_entity()).unwrap();
-        if self.nearby_rest_structure(player_pos).is_none() {
+        let Some(rest_structure) = self.nearby_rest_structure(player_pos) else {
             self.log("You need to be within your base, near Home, to power down and rest.");
+            return;
+        };
+        let cost = self.rest_cost(rest_structure);
+        let player = self.player_entity();
+        let missing = {
+            let inv = self.world.get::<Inventory>(player).unwrap();
+            cost.iter()
+                .find(|(item, qty)| inv.count(item) < *qty)
+                .cloned()
+        };
+        if let Some((item, qty)) = missing {
+            self.log(format!(
+                "Resting needs {} {}, and you're short.",
+                qty,
+                self.item_name(&item)
+            ));
+            return;
+        }
+        let taken: Vec<(ItemId, u32)> = {
+            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
+            cost.iter()
+                .map(|(item, qty)| (item.clone(), inv.take(item.clone(), *qty)))
+                .collect()
+        };
+        // The affordability check above tests each `(item, qty)` pair
+        // independently against the full stack, so a `cost` with a repeated
+        // item id can pass it and still come up short here once an earlier
+        // pair has already spent from the same stack. `take`'s return is
+        // exactly how much came off, so a shortfall is caught rather than
+        // silently treated as paid — refund what was taken, since a rest
+        // that can't fully afford itself must spend nothing.
+        if let Some((item, qty)) = cost
+            .iter()
+            .zip(&taken)
+            .find(|((_, qty), (_, got))| got < qty)
+            .map(|((item, qty), _)| (item.clone(), *qty))
+        {
+            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
+            for (item, got) in taken {
+                if got > 0 {
+                    inv.add(item, got);
+                }
+            }
+            self.log(format!(
+                "Resting needs {} {}, and you're short.",
+                qty,
+                self.item_name(&item)
+            ));
             return;
         }
         self.log("You drop into low-power standby to recharge.");
@@ -462,8 +513,9 @@ impl Game {
         self.tick();
     }
 
-    /// Awards unsolicited income — a scan find, battle loot, a boss cache —
-    /// clamped to whatever room is left, returning how many units landed.
+    /// Awards unsolicited income — battle loot, a Stack cache, a demolished
+    /// structure's refund — clamped to whatever room is left, returning how
+    /// many units landed.
     /// Income clamps rather than refusing so a full buffer can never stall
     /// a battle from resolving or a cronjob worker from running; the loss
     /// is logged so it is never silent.
@@ -488,65 +540,5 @@ impl Game {
             self.log(format!("{label} full — {lost} {name} lost."));
         }
         added
-    }
-
-    /// Scan the current sector for salvageable Core Fragments. Chance
-    /// depends on the sector's biome; besides starting inventory and combat
-    /// drops, this and structure cronjobs are the only ways to replenish
-    /// Core Fragments — the raw material Power Cells and ICE Breakers are
-    /// compiled from (see `craft_recipes`).
-    pub fn forage(&mut self) {
-        if self.is_game_over().is_some() || self.has_active_battle() {
-            return;
-        }
-        if let Err(reason) = self.require_surface() {
-            self.log(reason);
-            return;
-        }
-        let player = self.player_entity();
-        let pos = *self.world.get::<Position>(player).unwrap();
-        let biome = self
-            .world
-            .resource_mut::<WorldMap>()
-            .tile(pos.x, pos.y)
-            .biome;
-        let chance = forage_chance(biome, self.player_perk_level(Perk::KeenScavenger));
-        let found = {
-            let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_bool(chance)
-        };
-        if found {
-            if self.grant_loot(self.currency(), 1) > 0 {
-                self.log_kind(
-                    MessageKind::Loot,
-                    "You scan the sector and recover a core fragment.",
-                );
-            }
-        } else {
-            self.log("You scan the sector but find nothing salvageable.");
-        }
-        self.tick();
-    }
-}
-
-/// `Game::forage`'s success chance for `biome`, boosted by
-/// `KEEN_SCAVENGER_BONUS_PER_LEVEL` for every level of `keen_scavenger_level`
-/// (capped at 1.0) — pulled out of the method so the formula is
-/// unit-testable without an RNG.
-pub(crate) fn forage_chance(biome: Biome, keen_scavenger_level: u32) -> f64 {
-    let chance = match biome {
-        Biome::Mainframe | Biome::OpenGrid => FORAGE_CHANCE_RICH,
-        Biome::NullSector => FORAGE_CHANCE_MODERATE,
-        Biome::StaticField => FORAGE_CHANCE_SPARSE,
-        // A base platform is a manufactured floor, not terrain — there's
-        // nothing on it to scavenge. Keeping it at 0.0 also stops a base
-        // from being a risk-free forage spot, which would undercut the
-        // whole reason to leave the platform.
-        Biome::DataVoid | Biome::BlackIce | Biome::Platform => 0.0,
-    };
-    if chance > 0.0 && keen_scavenger_level > 0 {
-        (chance + KEEN_SCAVENGER_BONUS_PER_LEVEL * keen_scavenger_level as f64).min(1.0)
-    } else {
-        chance
     }
 }

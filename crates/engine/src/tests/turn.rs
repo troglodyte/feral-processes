@@ -1,8 +1,7 @@
 //! The turn loop: ticking, resting, waiting, and consuming items.
 
 use super::support::*;
-use crate::game::turn::forage_chance;
-use crate::tuning::{KEEN_SCAVENGER_BONUS_PER_LEVEL, MAX_BUILD_DISTANCE_FROM_HOME, REST_TICKS};
+use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, REST_TICKS};
 use crate::*;
 
 #[test]
@@ -178,6 +177,246 @@ fn rest_heals_every_party_member() {
 
     assert_eq!(game.world.get::<Stats>(a).unwrap().hp, 10);
     assert_eq!(game.world.get::<Stats>(b).unwrap().hp, 10);
+}
+
+#[test]
+fn a_new_game_starts_with_two_power_outlets() {
+    let game = Game::new(701, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let held = game
+        .world
+        .get::<Inventory>(player)
+        .unwrap()
+        .count(&ItemId::from(ids::OUTLET));
+    assert_eq!(
+        held, 2,
+        "the bounded-income opening softener is two outlets, beside the \
+         3 ICE Breakers / 3 Power Cells / 5 Core Fragments"
+    );
+}
+
+#[test]
+fn rest_is_refused_with_no_outlet_and_does_not_tick() {
+    let mut game = Game::new(702, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    spawn_rest_structure_at_player(&mut game);
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        let held = inv.count(&ItemId::from(ids::OUTLET));
+        inv.take(ItemId::from(ids::OUTLET), held);
+    }
+    let before = game.current_tick();
+
+    game.rest();
+
+    assert_eq!(
+        before,
+        game.current_tick(),
+        "a rest refused for lacking an outlet must not advance the clock — \
+         the ticks are what the outlet buys"
+    );
+    assert!(
+        game.message_log(5)
+            .iter()
+            .any(|(_, line)| line.to_lowercase().contains("outlet")),
+        "the refusal should say why"
+    );
+}
+
+#[test]
+fn rest_spends_exactly_one_outlet_not_the_whole_stack() {
+    let mut game = Game::new(703, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    spawn_rest_structure_at_player(&mut game);
+
+    game.rest();
+
+    let remaining = game
+        .world
+        .get::<Inventory>(player)
+        .unwrap()
+        .count(&ItemId::from(ids::OUTLET));
+    assert_eq!(
+        remaining, 1,
+        "a fresh game starts with 2 outlets; one rest should leave exactly 1, not 0"
+    );
+}
+
+#[test]
+fn rest_refused_by_game_over_consumes_no_outlet() {
+    let mut game = Game::new(704, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    spawn_rest_structure_at_player(&mut game);
+    game.world.resource_mut::<GameOver>().reason = Some("test".to_string());
+
+    game.rest();
+
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::OUTLET)),
+        2,
+        "a rest refused by the game-over gate must spend nothing"
+    );
+}
+
+#[test]
+fn rest_refused_by_active_battle_consumes_no_outlet() {
+    let mut game = Game::new(705, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    spawn_rest_structure_at_player(&mut game);
+    start_battle_with_a_wild_program(&mut game);
+
+    game.rest();
+
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::OUTLET)),
+        2,
+        "a rest refused by the active-battle gate must spend nothing"
+    );
+}
+
+#[test]
+fn rest_refused_by_no_nearby_rest_structure_consumes_no_outlet() {
+    let mut game = Game::new(706, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+
+    game.rest();
+
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::OUTLET)),
+        2,
+        "a rest refused for having no rest structure in range must spend nothing"
+    );
+}
+
+const FREE_REST_PAD: &str = r#"(
+    id: "free_rest_pad",
+    name: "Free Rest Pad",
+    description: "Test fixture: a rest structure whose RestDef carries no cost.",
+    glyph: '#',
+    color: White,
+    build_cost: [],
+    work: None,
+    enables_rest: Some((radius: 7)),
+)"#;
+
+/// Guards the wiring, not just the parsing: `structures::tests::a_rest_def_-
+/// without_a_cost_field_defaults_to_a_free_rest` (Task 1) already proves an
+/// old-format `RestDef` parses with an empty `cost`; this proves `Game::rest`
+/// actually treats that empty `cost` as free rather than, say, silently
+/// requiring some other implicit price.
+#[test]
+fn a_rest_structure_with_no_cost_field_still_rests_for_free() {
+    let dir = assets_dir_with_extra_structure("free_rest_pad", "free_rest_pad.ron", FREE_REST_PAD);
+    let mut game = Game::new(707, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let player = game.player_entity();
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        let held = inv.count(&ItemId::from(ids::OUTLET));
+        inv.take(ItemId::from(ids::OUTLET), held);
+    }
+    let pos = *game.world.get::<Position>(player).unwrap();
+    game.world.spawn((
+        Structure {
+            kind: "free_rest_pad".to_string(),
+        },
+        Position { x: pos.x, y: pos.y },
+    ));
+    game.world.get_mut::<Needs>(player).unwrap().fatigue = 10.0;
+
+    game.rest();
+
+    assert_eq!(
+        game.world.get::<Needs>(player).unwrap().fatigue,
+        100.0,
+        "a rest structure whose def sets no cost should still rest for free, \
+         with zero outlets held"
+    );
+}
+
+const DOUBLE_CHARGE_REST_PAD: &str = r#"(
+    id: "double_charge_rest_pad",
+    name: "Double-Charge Rest Pad",
+    description: "Test fixture: a rest structure whose RestDef repeats one item id in cost.",
+    glyph: '#',
+    color: White,
+    build_cost: [],
+    work: None,
+    enables_rest: Some((radius: 7, cost: [("outlet", 1), ("outlet", 1)])),
+)"#;
+
+/// `cost`'s affordability check (`turn.rs::rest`) tests each `(item, qty)`
+/// pair independently against the *current* stack rather than simulating
+/// depletion across the list, so a repeated item id can pass that check and
+/// still run out partway through the actual `take` loop. With one outlet
+/// held against a cost that names it twice, both pre-check pairs see
+/// `count == 1 >= 1` and pass; the first `take` empties the stack and the
+/// second must come back short. `Inventory::take`'s return is exactly how
+/// much came off, so the fix has to look at it — this proves the loop does,
+/// by proving nothing is spent and the rest is refused instead of running
+/// on half-paid ticks.
+#[test]
+fn rest_refuses_and_refunds_when_a_repeated_cost_item_only_partly_affords() {
+    let dir = assets_dir_with_extra_structure(
+        "double_charge_rest_pad",
+        "double_charge_rest_pad.ron",
+        DOUBLE_CHARGE_REST_PAD,
+    );
+    let mut game = Game::new(708, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let player = game.player_entity();
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        let held = inv.count(&ItemId::from(ids::OUTLET));
+        inv.take(ItemId::from(ids::OUTLET), held);
+        inv.add(ItemId::from(ids::OUTLET), 1);
+    }
+    let pos = *game.world.get::<Position>(player).unwrap();
+    game.world.spawn((
+        Structure {
+            kind: "double_charge_rest_pad".to_string(),
+        },
+        Position { x: pos.x, y: pos.y },
+    ));
+    game.world.get_mut::<Needs>(player).unwrap().fatigue = 10.0;
+    let before_tick = game.current_tick();
+
+    game.rest();
+
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::OUTLET)),
+        1,
+        "a rest that can't fully afford a repeated-item cost must refund \
+         whatever it took, not keep the partial payment"
+    );
+    assert_eq!(
+        game.world.get::<Needs>(player).unwrap().fatigue,
+        10.0,
+        "a refused rest must not run any ticks, so fatigue is untouched"
+    );
+    assert_eq!(
+        before_tick,
+        game.current_tick(),
+        "a refused rest must not advance the clock"
+    );
+    assert!(
+        game.message_log(5)
+            .iter()
+            .any(|(_, line)| line.to_lowercase().contains("outlet")),
+        "the refusal should say why"
+    );
 }
 
 #[test]
@@ -636,30 +875,6 @@ fn field_buffs_survive_a_save_load_round_trip() {
 }
 
 #[test]
-fn forage_chance_applies_keen_scavenger_per_level_but_never_boosts_a_zero_chance_biome() {
-    assert_eq!(forage_chance(Biome::OpenGrid, 0), 0.6);
-    assert_eq!(
-        forage_chance(Biome::OpenGrid, 1),
-        0.6 + KEEN_SCAVENGER_BONUS_PER_LEVEL
-    );
-    assert_eq!(
-        forage_chance(Biome::OpenGrid, 3),
-        0.6 + KEEN_SCAVENGER_BONUS_PER_LEVEL * 3.0
-    );
-    assert_eq!(
-        forage_chance(Biome::DataVoid, 1),
-        0.0,
-        "an unwalkable biome's 0% chance shouldn't be boosted into a nonzero one"
-    );
-    assert_eq!(
-        forage_chance(Biome::Platform, 3),
-        0.0,
-        "a base platform is manufactured floor with nothing to scavenge, and no amount \
-         of Keen Scavenger should turn a safe haven into a risk-free forage spot"
-    );
-}
-
-#[test]
 fn use_item_applies_a_power_restore_and_consumes_one() {
     let mut game = Game::new(500, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
@@ -997,8 +1212,8 @@ fn use_power_source_picks_the_power_item_over_an_earlier_non_power_item() {
     let mut game = Game::new(506, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
-    // Drain all three starting stacks (see `Game::new`: Ice Breaker,
-    // Power Cell, Core Fragment) and rebuild the inventory with the
+    // Drain all four starting stacks (see `Game::new`: Ice Breaker, Power
+    // Cell, Core Fragment, Power Outlet) and rebuild the inventory with the
     // non-power item (Core Fragment) added *first*, so it's ahead of
     // the Power Cell in `Inventory::items`. This pins selection to the
     // `ConsumeDef.power > 0.0` predicate rather than to iteration
@@ -1010,6 +1225,8 @@ fn use_power_source_picks_the_power_item_over_an_earlier_non_power_item() {
     inv.take(ItemId::from(ids::POWER_CELL), power_held);
     let fragments_held = inv.count(&ItemId::from(ids::CORE_FRAGMENT));
     inv.take(ItemId::from(ids::CORE_FRAGMENT), fragments_held);
+    let outlets_held = inv.count(&ItemId::from(ids::OUTLET));
+    inv.take(ItemId::from(ids::OUTLET), outlets_held);
     inv.add(ItemId::from(ids::CORE_FRAGMENT), 5);
     inv.add(ItemId::from(ids::POWER_CELL), 2);
     assert_eq!(

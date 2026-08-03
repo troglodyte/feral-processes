@@ -1,12 +1,12 @@
 (
     id: "home",
     name: "Home",
-    description: "Anchors your base — everything else must be deployed within 7 tiles of it, and demolishing it cascades. Raids can't touch it, you can recharge beside it, and you can symlink home from anywhere for 4 Power Cells.",
+    description: "Anchors your base — everything else must be deployed within 7 tiles of it, and demolishing it cascades. Raids can't touch it, you can recharge beside it for a Power Outlet, and you can symlink home from anywhere for 4 Power Cells.",
     glyph: 'H',
     color: Green,
     build_cost: [("core_fragment", 5)],
     work: None,
     teleport_cost: Some([("power_cell", 4)]),
     raidable: false,
-    enables_rest: Some((radius: 7)),
+    enables_rest: Some((radius: 7, cost: [("outlet", 1)])),
 )

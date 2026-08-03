@@ -443,7 +443,7 @@ fn draw_status_panel(
     // inventory can.
     let keys = [
         "hjkl/arrows move  . wait  e drain  r recharge",
-        "g scan   c compile   b deploy   w cronjob  G guard  R demolish",
+        "c compile   b deploy   w cronjob  G guard  R demolish",
         "u symlink   i inspect   v inventory",
         "p companions  f fuse  t trade  x perks  a routine",
         "s save   q main menu   ? help   +/- zoom",

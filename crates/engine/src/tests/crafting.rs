@@ -143,10 +143,46 @@ fn item_blurbs_gloss_what_a_shipped_item_actually_does() {
     );
 }
 
+/// The outlet is what `Game::rest` will spend (Task 2) — this task only
+/// needs it craftable, starter (no bench), at the price the spec fixes.
+/// Asserted against a fresh game, which unlocks no perks, so
+/// `LeanCompiler`'s discount can't shave the 5 down and make this brittle.
 #[test]
-fn every_compilable_item_either_has_a_blurb_or_is_plain_currency() {
+fn the_outlet_is_craftable_from_five_core_fragments_with_no_perks() {
+    let game = Game::new(98, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let recipe = game
+        .craft_recipes()
+        .into_iter()
+        .find(|r| r.result == ItemId::from(ids::OUTLET))
+        .expect("outlet.ron should declare a craftable recipe");
+    assert_eq!(recipe.cost, vec![(ItemId::from(ids::CORE_FRAGMENT), 5)]);
+    assert_eq!(
+        game.craft_cost(&ItemId::from(ids::OUTLET)),
+        vec![(ItemId::from(ids::CORE_FRAGMENT), 5)],
+        "with no perks unlocked, craft_cost should match the raw recipe"
+    );
+}
+
+#[test]
+fn every_compilable_item_either_has_a_blurb_or_declares_nothing_blurb_worthy() {
     let game = Game::new(97, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     for recipe in game.craft_recipes() {
+        // Skip only when the def sets none of the three fields `item_blurb`
+        // (`game/catalog.rs`) actually reads — read directly off the def
+        // rather than through `ItemDef::category`, which checks a different
+        // set (`routine`, `equipment`, `consume`, `role`) and is why this
+        // guard used to silently drop the ICE Breaker: it sets only
+        // `taming_potency`, which `category` never looks at, so it fell
+        // through to `Material` and got skipped even though `item_blurb`
+        // has "taming catalyst" to say about it. The outlet is the one
+        // shipped recipe that genuinely sets none of the three and reads
+        // fine as itself, the same as a bare currency would.
+        let def = game
+            .item_def(&recipe.result)
+            .expect("a craftable recipe's result should have a definition");
+        if def.equipment.is_none() && def.consume.is_none() && def.taming_potency.is_none() {
+            continue;
+        }
         let blurb = game.item_blurb(&recipe.result);
         assert!(
             blurb.is_some(),

@@ -183,9 +183,15 @@ is skipped with a warning logged in-game rather than crashing startup.
     // Optional; can be left out entirely (defaults to no rest capability).
     // If set, `Game::rest` (recharge/overnight rest) is only allowed while
     // the player stands within `radius` tiles of this structure — resting
-    // has no other way to happen. This is how Home works:
-    // `enables_rest: Some((radius: 7))`, which covers the whole base.
-    enables_rest: Some((radius: 7)),
+    // has no other way to happen. `cost` (optional inside the block,
+    // defaults to an empty list) is spent per rest, checked and taken after
+    // every other gate passes; an empty list means a free rest, same as
+    // before this field existed. The price sits with the structure that
+    // grants rest rather than as a single global rate, so a modded
+    // alternate rest structure can charge differently, or nothing. This is
+    // how Home works: `enables_rest: Some((radius: 7, cost: [("outlet", 1)]))`
+    // — a radius covering the whole base, priced at one Power Outlet.
+    enables_rest: Some((radius: 7, cost: [("outlet", 1)])),
 
     // Optional; can be left out entirely (defaults to a permanent
     // structure). If set, this structure automatically collapses once

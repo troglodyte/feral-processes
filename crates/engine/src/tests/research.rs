@@ -54,7 +54,7 @@ fn a_save_round_trip_preserves_unlocked_research() {
     );
 }
 
-/// Everything compilable from turn one: the two consumable starters plus
+/// Everything compilable from turn one: the three consumable starters plus
 /// the Scavenged gear tier, which declares a `craftable` with no
 /// `requires_structure`. Anything else must be gated behind research, a
 /// bench, or both — so this set is pinned rather than counted.
@@ -73,6 +73,7 @@ fn only_the_starters_and_scavenged_gear_need_no_research_or_bench() {
             "handshake_forge",
             "ice_breaker",
             "kinetic_edge",
+            "outlet",
             "packet_buffer",
             "power_cell",
             "probe_daemon",

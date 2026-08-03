@@ -284,9 +284,8 @@ pub enum Mode {
     Symlink,
     InspectDirection,
     /// The party's own map of the Stack frame they are standing in — see
-    /// `Game::frame_map`. Underground only, opened with the same `g` that
-    /// scans the ground on the surface: it is the same verb, and the two
-    /// screens never both apply.
+    /// `Game::frame_map`. Underground only, opened with `g` — a no-op on the
+    /// surface, where the two screens never both apply.
     FrameMap,
     /// The manifest — a full read-only stat sheet for the player, a program
     /// you own, or a wild one. `App::pending_manifest` is the subject.

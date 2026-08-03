@@ -108,8 +108,7 @@ change what gets stored — a save from a different build shows up as
 | `hjkl` / arrow keys | Move (bumping a rogue program starts an intrusion) |
 | `.` | Wait in place (advances one tick) |
 | `e` | Drain the first Power-restoring item in your inventory (a Power Cell, unless a mod adds another) |
-| `r` | Recharge overnight (restores Fatigue and Integrity, costs Power) — requires standing within your base, near Home (see [Structures](#structures)) |
-| `g` | Scan the sector for Core Fragments |
+| `r` | Recharge overnight (restores Fatigue and Integrity, costs Power and a Power Outlet) — requires standing within your base, near Home (see [Structures](#structures)) |
 | `c` | Open the compile menu — an ICE Breaker (3 Core Fragments), a Power Cell (2), the six Scavenged-tier gear pieces, and every other recipe whose research and/or bench you have (see [Equipment](#equipment)). Then pick a quantity: type digits and Enter, or `[F]` for 5 at once, or `[M]` for the most you can currently afford |
 | `b` | Deploy a structure |
 | `w` | Assign a compiled program to a cronjob (work a structure) |
@@ -158,7 +157,7 @@ has a facing rather than moving a token on a grid.
 Every other map key still works: inventory, party, routines, fusion, perks,
 manifest, research, save and help all open normally underground. The ones
 that reach into the zone map — deploy, cronjob, guard, demolish, upgrade,
-trade, rest, scan — refuse with a message, because while you are underground
+trade, rest — refuse with a message, because while you are underground
 your position on the zone map is pinned to the link you came in through.
 
 The symlink (`u`) is the exception: it works at any depth, because rather
@@ -237,11 +236,11 @@ frame, and each step in draws a smaller window around you at a larger size,
 down to the junction you are standing in. Against a wall the window slides
 to stay inside the frame rather than showing you the outside of it.
 
-`g` opens the same map full-screen — the same key that scans the ground on
-the surface, since the two screens never both apply. It is the corner map
-at three times the size, with a legend naming every glyph, and it is the
-one to open when the question is which wing you have not walked yet rather
-than which way you are facing. Opening it costs no time.
+`g` opens the same map full-screen — it has no meaning on the surface, so
+reusing the key here costs nothing. It is the corner map at three times the
+size, with a legend naming every glyph, and it is the one to open when the
+question is which wing you have not walked yet rather than which way you
+are facing. Opening it costs no time.
 
 Each link keeps its own map, and each frame of a stack its own. The map
 survives saving and loading — a frame regenerates from its seed, but what
@@ -379,16 +378,13 @@ resources for you over time — it's the game's Palworld-style "put a tamed
 creature to work" mechanic.
 
 1. **Gather starting materials.** You spawn with 5 Core Fragments, 3 Power
-   Cells, and 3 ICE Breakers — enough to bootstrap. Beyond that:
-   - `g` (scan) has a biome-dependent chance to find a **Core Fragment**
-     (60% Mainframe/OpenGrid, 30% NullSector, 15% StaticField, 0% in the
-     unwalkable DataVoid/BlackIce biomes). It never yields Power Cells
-     directly — compile those with `c` instead (see [Items](#items)).
+   Cells, 3 ICE Breakers, and 2 Power Outlets — enough to bootstrap and to
+   cover your first two rests. Beyond that:
    - Defeating or decompiling a **Virus** or **Construct** drops a **Core
      Fragment**.
    - Once you have a Mining Node running (see below), it's the sustainable
      source of Core Fragments — everything before that comes from starting
-     inventory, scanning, or creature loot.
+     inventory or creature loot.
 2. **Deploy a structure with `b`.** Pick one from the menu, then a direction
    to place it on an adjacent walkable tile. It's rejected if the tile isn't
    walkable, is already occupied, or you don't have enough of the required
@@ -586,7 +582,7 @@ on top of whatever you already have, at the same Perk Point cost every time:
 
 | Perk | Cost/level | Effect per level |
 | --- | --- | --- |
-| Keen Scavenger | 2 | +1 percentage point to scan (`g`)'s success chance |
+| Keen Scavenger | 2 | +1 percentage point to a mining node's chance of yielding on each gather cycle |
 | Low Power Mode | 2 | Power drains 1 percentage point slower (floor: stops draining entirely) |
 | Exploit Focus | 3 | A decompile target's remaining Integrity counts 3% less against you — worth most against a program you haven't worn down, and nothing against one already at death's door |
 | Lean Compiler | 3 | Compiling (`c`) costs 1 less of each required item (min 1 each) |
@@ -614,17 +610,19 @@ the file either — that's difficulty tuning, and it stays in
 
 | Item | Source | Used for |
 | --- | --- | --- |
-| Core Fragment | Starting inventory; scan (`g`); dropped by Virus/Construct; a Mining Node cronjob | Deploy structures (2–6 each); compile an ICE Breaker (3 each) or a Power Cell (2 each) |
+| Core Fragment | Starting inventory; dropped by Virus/Construct; a Mining Node cronjob | Deploy structures (2–6 each); compile an ICE Breaker (3 each) or a Power Cell (2 each) |
 | Power Cell | Starting inventory; compiled (`c`) from 2 Core Fragments; dropped by Scrapper/Glitch; cooked passively at a Terminal; a Power Conduit cronjob | Drain (`e`) to restore Power |
 | ICE Breaker | Starting inventory; compiled (`c`) from 3 Core Fragments; a Compiler cronjob | The taming catalyst Decompile spends — a Special (`s`) in battle, not its own key |
+| Power Outlet | Starting inventory (2); compiled (`c`) from 5 Core Fragments | Spent one per rest (`r`) — see [Structures](#structures) |
 | Portal Fragment | 35% drop from any defeated wild program; a guaranteed 3–6 cache from a boss; buyable at an iso Market (8 Credits) | Deploy a Zone Portal; pay for every equipment recipe |
 | Research Data | A Research Node cronjob | Unlock research nodes (`T`) — see [Research](#research) |
 | Credits | Selling items or programs at an iso Market — nothing else mints them | Buying at an iso Market. The only cache that survives a breach |
 
 A deliberately tight core-consumable economy: Core Fragment is the
-universal raw material — found by scanning (`g`) or harvested passively via
-a Mining Node — and Power Cells and ICE Breakers are refined from it
-(compiled with `c`, scavenged from creatures, or produced by a structure
+universal raw material — dropped by creatures, harvested passively via a
+Mining Node, or carried from the start — and Power Cells, ICE Breakers and
+Power Outlets are refined from it (compiled with `c`; Power Cells and ICE
+Breakers can also be scavenged from creatures or produced by a structure
 cronjob) for one specific purpose each. Portal Fragments and Research Data
 are the two progression currencies, spent on zones and gear and on the
 research tree respectively. Credits are money and nothing else: a trader is
@@ -1083,7 +1081,7 @@ enough of them, then walk onto it to breach into the next zone.
 
 | Structure | Cost | Unlocked by | Purpose |
 | --- | --- | --- | --- |
-| Home | 5 Core Fragments | — | Anchors your base platform (see below). `u` ("use symlink") instantly teleports you to it from anywhere on the map, for 4 Power Cells. Also lets you `r` (recharge/rest) anywhere in the base. Can't be raided — see [Base defense](#base-defense) |
+| Home | 5 Core Fragments | — | Anchors your base platform (see below). `u` ("use symlink") instantly teleports you to it from anywhere on the map, for 4 Power Cells. Also lets you `r` (recharge/rest) anywhere in the base, for one Power Outlet. Can't be raided — see [Base defense](#base-defense) |
 | Mining Node | 12 Core Fragments | — | Cronjob a compiled program to it to produce Core Fragments over time (slower and level-gated — see [Getting started](#getting-started-building-and-running-cronjobs)). Upgradeable to Mk5 |
 | Research Node | 10 Core Fragments | — | Cronjob a compiled program to it to produce Research Data over time (14 ticks a cycle, level-gated like a Mining Node) — see [Research](#research). Upgradeable to Mk5 |
 | Recharger Node | 10 Core Fragments | — | Passively refills your Power anywhere within 7 tiles — the whole base |
@@ -1118,11 +1116,10 @@ radius for a fresh one elsewhere.
 radius is flattened into base flooring, obliterating the terrain, nests and
 rogue programs that were standing there. Nothing wild ever spawns on
 platform flooring, so your base is a genuine safe haven — the only threat
-that reaches it is a raid (see [Base defense](#base-defense)). There's
-nothing to scavenge on it either: `g` always comes up empty on your own
-floor. Demolishing Home tears the platform up again and the natural terrain
-underneath comes back. The platform travels with you between zones, so a
-base founded in zone 1 is the same base you're still standing in at zone 6
+that reaches it is a raid (see [Base defense](#base-defense)). Demolishing
+Home tears the platform up again and the natural terrain underneath comes
+back. The platform travels with you between zones, so a base founded in zone
+1 is the same base you're still standing in at zone 6
 — see [Zones and portals](#zones-and-portals).
 
 **Upgrade tiers.** Structures that produce something can be upgraded with
@@ -1147,12 +1144,12 @@ Home is a **symlink target** — a third category, neither cronjob nor
 passive: press `u`, pick it from the list of deployed symlink structures,
 and pay the Power Cell cost to warp there instantly, no matter how far
 away you are. Deploy more than one and `u` lists all of them.
-Recharger Node is a **passive power source** — a fourth category: it
-refills your Power every tick you're inside its 7-tile radius, with no
-worker and no input item. Home doubles as the **rest gate**: `r` only
-works within 7 tiles of it, which is exactly the base footprint.
-Any structure can define any combination of these via its `.ron` file —
-see [Modding](#modding).
+Recharger Node is a **passive power source** — a fourth category: it refills
+your Power every tick you're inside its 7-tile radius, with no worker and no
+input item. Home doubles as the **rest gate**: `r` only works within 7 tiles
+of it, which is exactly the base footprint, and spends one Power Outlet per
+rest. Any structure can define any combination of these via its `.ron` file
+— see [Modding](#modding).
 
 ### Base defense
 
@@ -1300,9 +1297,11 @@ Rust (see [Perks](#perks)).
 
 ### Item ids
 
-The base game ships **36** items: the eleven below, plus the 25-piece gear
+The base game ships **39** items: the eleven below, the 25-piece gear
 catalog in [Equipment](#equipment) (whose ids are the snake_case form of
-their names — `arc_lance`, `singularity_matrix`, and so on).
+their names — `arc_lance`, `singularity_matrix`, and so on), and three more
+that never carried a PascalCase original to migrate from — Credits, Access
+Shard, and the Power Outlet rest now spends.
 
 Species, structure, and research files all reference items by id. The eleven
 originals predate the data-driven item model and mods named them in

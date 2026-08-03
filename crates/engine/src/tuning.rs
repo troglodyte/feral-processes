@@ -766,18 +766,10 @@ pub const FORGIVING_RESPAWN_NEED_FLOOR: f32 = 40.0;
 /// program drops.
 pub const WORK_RESOURCE_DROP: std::ops::RangeInclusive<u32> = 1..=2;
 
-/// `Game::forage`'s success chance by biome richness — see
-/// `game::turn::forage_chance`. Barren biomes (the Data Void, Black ICE, and
-/// a base's own manufactured platform floor) are a flat zero and don't get a
-/// constant: a base must never be a risk-free forage spot, or there'd be no
-/// reason to leave the platform.
-pub const FORAGE_CHANCE_RICH: f64 = 0.6;
-pub const FORAGE_CHANCE_MODERATE: f64 = 0.3;
-pub const FORAGE_CHANCE_SPARSE: f64 = 0.15;
-
 /// A mining node's per-cycle success chance is `MINING_SUCCESS_BASE` plus
 /// `MINING_SUCCESS_PER_LEVEL` per tier, capped at 1.0 — so a basic level-1
-/// node succeeds about half the time and upgrading buys reliability. See
+/// node succeeds about half the time and upgrading buys reliability. The
+/// player's `Perk::KeenScavenger` adds a third term; see
 /// `systems::mining_success_chance`.
 pub const MINING_SUCCESS_BASE: f64 = 0.4;
 pub const MINING_SUCCESS_PER_LEVEL: f64 = 0.1;
@@ -925,7 +917,15 @@ pub const STRUCTURE_REGEN_INTERVAL: u64 = 20;
 // edit. The magnitudes below stay code for the reason at the top of this
 // module: content is moddable, how hard the game is, is not.
 
-/// Bonus `Perk::KeenScavenger` adds to `Game::forage`'s success chance, per level.
+/// How much `Perk::KeenScavenger` adds to `systems::mining_success_chance`
+/// per level, on top of what the node's own level is worth (still clamped
+/// at a certainty).
+///
+/// A node is the base's income and a level-1 one yields barely half the time,
+/// so this is deliberately small: at `MINING_SUCCESS_PER_LEVEL`'s rate a
+/// single upgrade tier is worth ten levels of the perk. The perk smooths the
+/// early game, when there is nothing to spend Perk Points on and no
+/// fragments to upgrade with; it is not a substitute for upgrading.
 pub const KEEN_SCAVENGER_BONUS_PER_LEVEL: f64 = 0.01;
 
 /// `Perk::LowPowerMode`'s hunger-decay reduction, per level (the decay

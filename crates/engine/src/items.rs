@@ -55,6 +55,11 @@ pub mod ids {
     /// Rust because the door is engine content rather than a data-driven
     /// requirement; the item itself is still an ordinary `.ron` file.
     pub const ACCESS_SHARD: &str = "access_shard";
+    /// Named from Rust because the starting inventory is engine content
+    /// (see `game/lifecycle.rs`) — same reason `CORE_FRAGMENT`, `POWER_CELL`
+    /// and `ICE_BREAKER` are, on the same lines; the id itself lives in
+    /// `assets/items/outlet.ron`.
+    pub const OUTLET: &str = "outlet";
 }
 
 /// What kind of thing an item is, for grouping the inventory and a trader's

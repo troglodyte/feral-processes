@@ -209,19 +209,12 @@ pub(super) fn battle_with_a_pack_of(game: &mut Game, count: usize, hp: i32) -> V
     members
 }
 
-/// Copies the shipped `species`/`structures`/`research`/`items`/`abilities`
-/// asset dirs into a fresh scratch dir, skipping the item files named in
-/// `omit_items` and writing the `extra_*` (filename, RON body) pairs on
-/// top — a stand-in for a modded install. The caller removes the
-/// directory once its `Game` is done with it.
-pub(super) fn modded_assets_dir(
-    tag: &str,
-    omit_items: &[&str],
-    extra_items: &[(&str, &str)],
-    extra_species: &[(&str, &str)],
-    extra_research: &[(&str, &str)],
-    extra_abilities: &[(&str, &str)],
-) -> std::path::PathBuf {
+/// A fresh, uniquely-named scratch directory under the OS temp dir, wiped
+/// if a stale one from a crashed prior run is somehow still there. Shared
+/// by `modded_assets_dir` and `assets_dir_with_extra_structure` so both
+/// draw from one counter — collisions were never really possible (`tag`
+/// already disambiguates by caller) but there's no reason to run two.
+fn scratch_assets_dir(tag: &str) -> std::path::PathBuf {
     static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let dir = std::env::temp_dir().join(format!(
         "feral_processes_{tag}_{}_{}",
@@ -229,6 +222,15 @@ pub(super) fn modded_assets_dir(
         NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     let _ = std::fs::remove_dir_all(&dir);
+    dir
+}
+
+/// Copies every shipped asset file into `dir` (which must already exist),
+/// skipping the item files named in `omit_items`. The shared body of
+/// `modded_assets_dir` and `assets_dir_with_extra_structure` — both need
+/// the whole shipped set present so a scratch install still passes
+/// `Game::new`'s missing-role startup check.
+fn copy_shipped_assets(dir: &std::path::Path, omit_items: &[&str]) {
     let shipped = test_assets_dir();
     for sub in [
         "species",
@@ -249,6 +251,23 @@ pub(super) fn modded_assets_dir(
             std::fs::copy(entry.path(), dst.join(name)).unwrap();
         }
     }
+}
+
+/// Copies the shipped `species`/`structures`/`research`/`items`/`abilities`
+/// asset dirs into a fresh scratch dir, skipping the item files named in
+/// `omit_items` and writing the `extra_*` (filename, RON body) pairs on
+/// top — a stand-in for a modded install. The caller removes the
+/// directory once its `Game` is done with it.
+pub(super) fn modded_assets_dir(
+    tag: &str,
+    omit_items: &[&str],
+    extra_items: &[(&str, &str)],
+    extra_species: &[(&str, &str)],
+    extra_research: &[(&str, &str)],
+    extra_abilities: &[(&str, &str)],
+) -> std::path::PathBuf {
+    let dir = scratch_assets_dir(tag);
+    copy_shipped_assets(&dir, omit_items);
     for (name, body) in extra_items {
         std::fs::write(dir.join("items").join(name), body).unwrap();
     }
@@ -261,6 +280,22 @@ pub(super) fn modded_assets_dir(
     for (name, body) in extra_abilities {
         std::fs::write(dir.join("abilities").join(name), body).unwrap();
     }
+    dir
+}
+
+/// Like `modded_assets_dir`, but for the one existing test that needs a
+/// modded *structure* — none of `modded_assets_dir`'s five callers-so-far
+/// have needed one, and widening its signature for a single caller isn't
+/// worth the churn across its other ~20 call sites. The caller removes the
+/// directory once its `Game` is done with it.
+pub(super) fn assets_dir_with_extra_structure(
+    tag: &str,
+    name: &str,
+    body: &str,
+) -> std::path::PathBuf {
+    let dir = scratch_assets_dir(tag);
+    copy_shipped_assets(&dir, &[]);
+    std::fs::write(dir.join("structures").join(name), body).unwrap();
     dir
 }
 

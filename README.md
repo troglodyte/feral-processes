@@ -57,17 +57,15 @@ grid gives way to a **first-person corridor**, and `hjkl`/arrows stop being
 compass directions and start being forward, back, turn left, turn right.
 `<` and `>` follow whichever link is underfoot.
 
-The party's map of the frame sits in the corner of the corridor the whole
-time you are down there — `+` and `-` zoom it from the whole frame down to
-the junction you are standing in — and `g`, the same key that scans the
-ground on the surface, opens it full-screen with a legend, for when the
-question is which wing you have not walked rather than which way you are
-facing. Either
-way it shows what you have seen and nothing else: corridors walked, links
-found, and the corridors something jumped you in. Cells you have never had
-in view stay dark, and are drawn differently from rock you have seen,
-because "I have not been here" and "there is nothing here" are the two
-things worth telling apart.
+The party's map of the frame sits in the corner of the corridor the whole time
+you are down there — `+` and `-` zoom it from the whole frame down to the
+junction you are standing in — and `g` opens it full-screen with a legend, for
+when the question is which wing you have not walked rather than which way you
+are facing. Either way it shows what you have seen and nothing else: corridors
+walked, links found, and the corridors something jumped you in. Cells you have
+never had in view stay dark, and are drawn differently from rock you have seen,
+because "I have not been here" and "there is nothing here" are the two things
+worth telling apart.
 
 A link opens onto a stack of fixed length rather than an endless descent.
 How deep it runs is read off how far the walk to it was, so the same
@@ -151,8 +149,8 @@ every frame you had walked is still drawn when you come back down.
 
 There are no resource deposits to stumble onto — every workable node is
 something you build, and deploying always costs materials. You start with a
-handful of Core Fragments, Power Cells, and ICE Breakers; after that Core
-Fragments come from scanning (`g`), creature drops, and eventually a Mining
+handful of Core Fragments, Power Cells, ICE Breakers, and Power Outlets;
+after that Core Fragments come from creature drops and eventually a Mining
 Node. Build a Home first (nothing else can be deployed until it stands, and
 everything else must sit within its 15-tile platform), then assign compiled
 programs to structures as **cronjobs** — the Palworld-style "put a tamed

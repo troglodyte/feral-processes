@@ -210,6 +210,17 @@ pub(crate) fn assembly_recipe<'a>(
     Some(recipe.cost.as_slice())
 }
 
+/// What a structure puts into its *own* output buffer, or `None` for one
+/// that produces nothing. An extractor's `work.produces` and an assembler's
+/// `assembles.item` are the only two ways anything reaches an `output`, so
+/// this is the whole answer to "could this structure feed a neighbour".
+pub(crate) fn produced_item(def: &crate::structures::StructureDef) -> Option<&ItemId> {
+    if let Some(work) = &def.work {
+        return Some(&work.produces);
+    }
+    def.assembles.as_ref().map(|a| &a.item)
+}
+
 /// Moves a machine to `next`, announcing it to the base feed only when the
 /// state actually changes.
 ///

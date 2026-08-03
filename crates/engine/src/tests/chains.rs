@@ -555,3 +555,99 @@ fn deployed(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
         ))
         .id()
 }
+
+/// What the map draws its wiring links from. A link means "this neighbour
+/// makes something my recipe wants" — the property that stays true while a
+/// healthy chain drains its feeder every other tick.
+#[test]
+fn a_machine_reports_an_edge_toward_a_neighbour_that_makes_what_it_needs() {
+    let mut game = Game::new(1200, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let refinery = deployed(&mut game, "refinery", 41, 40);
+    deployed(&mut game, "mining_node", 40, 40);
+
+    assert_eq!(
+        edges_of(&mut game, refinery),
+        vec![(-1, 0)],
+        "the Mining Node to the west makes the Core Fragments a Refinery wants"
+    );
+}
+
+#[test]
+fn a_diagonal_neighbour_is_not_wired() {
+    let mut game = Game::new(1201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let refinery = deployed(&mut game, "refinery", 41, 40);
+    deployed(&mut game, "mining_node", 40, 39);
+
+    assert!(edges_of(&mut game, refinery).is_empty());
+}
+
+/// Touching is not the same as feeding. A Research Node beside a Refinery
+/// makes Research Data, which no recipe of the Refinery's wants.
+#[test]
+fn a_neighbour_making_something_the_recipe_does_not_want_is_not_wired() {
+    let mut game = Game::new(1202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let refinery = deployed(&mut game, "refinery", 41, 40);
+    deployed(&mut game, "research_node", 40, 40);
+
+    assert!(edges_of(&mut game, refinery).is_empty());
+}
+
+/// The failure a player actually hits: a Bay built against one feeder
+/// because the other did not fit. It shows one link where it needs two, so
+/// the mistake is visible on the map without opening a menu.
+#[test]
+fn a_mislaid_assembly_bay_reports_one_edge_rather_than_two() {
+    let mut game = Game::new(1203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let bay = deployed(&mut game, "assembly_bay", 42, 40);
+    deployed(&mut game, "refinery", 41, 40);
+    // One tile too far south — touching nothing.
+    deployed(&mut game, "winding_node", 42, 42);
+
+    assert_eq!(edges_of(&mut game, bay), vec![(-1, 0)]);
+
+    // Move it into place and the second link appears.
+    let mut game = Game::new(1203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let bay = deployed(&mut game, "assembly_bay", 42, 40);
+    deployed(&mut game, "refinery", 41, 40);
+    deployed(&mut game, "winding_node", 42, 41);
+
+    let mut wired = edges_of(&mut game, bay);
+    wired.sort();
+    assert_eq!(wired, vec![(-1, 0), (0, 1)]);
+}
+
+/// A Home assembles nothing and runs no job, so it has neither half of the
+/// map's machine vocabulary — no links and no status outline.
+#[test]
+fn a_home_reports_no_edges_and_no_machine_status() {
+    let mut game = Game::new(1204, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 1);
+    let home = find_home(&mut game).unwrap();
+
+    assert!(edges_of(&mut game, home).is_empty());
+    assert_eq!(game.world.get::<MachineStatus>(home).copied(), None);
+}
+
+/// The wiring the map draws and the pull the system performs read the same
+/// recipe and walk the same four tiles, so a link can never point somewhere
+/// the pull phase would refuse to take from.
+#[test]
+fn a_wired_edge_is_an_edge_the_pull_phase_actually_uses() {
+    let mut game = Game::new(1205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let refinery = staffed(&mut game, "refinery", 41, 40);
+    stocked(&mut game, "mining_node", 40, 40, ids::CORE_FRAGMENT, 100);
+
+    assert_eq!(edges_of(&mut game, refinery), vec![(-1, 0)]);
+    game.tick();
+
+    assert!(
+        input_of(&game, refinery, ids::CORE_FRAGMENT) > 0,
+        "the link points at a feeder the pull phase really drew from"
+    );
+}
+
+fn edges_of(game: &mut Game, structure: Entity) -> Vec<(i32, i32)> {
+    game.feeder_edges_by_structure()
+        .remove(&structure)
+        .unwrap_or_default()
+}

@@ -248,6 +248,8 @@ fn draw_surface_map(
             let px = (rx as f32 - 1.0 - off_x) * tile_px;
             let py = (ry as f32 - 1.0 - off_y) * tile_px;
             let mut staffed = false;
+            let mut machine_status = None;
+            let mut feeder_edges: &[(i32, i32)] = &[];
             let mut shielded = false;
             let mut critical = false;
             let mut occupied = false;
@@ -258,6 +260,8 @@ fn draw_surface_map(
                     ch = ev.glyph;
                     color = glyph_color(ev.color);
                     staffed = ev.is_structure && ev.structure_worker.is_some();
+                    machine_status = ev.machine_status;
+                    feeder_edges = &ev.feeder_edges;
                     // Structures wear their raid damage: the glyph dims as
                     // durability drops, and a nearly-destroyed one washes
                     // its tile red, so the base's condition reads at a
@@ -315,17 +319,42 @@ fn draw_surface_map(
             if rx as i32 == spawn_rx && ry as i32 == spawn_ry {
                 painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, MAGENTA);
             }
-            // A structure with a pet actively cronjob-assigned gets a
-            // yellow outline so it's visible at a glance without opening
-            // the cronjob menu to check.
-            if staffed {
-                painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, YELLOW);
-            }
             // The shield network is base-wide, not per-structure, so every
             // structure carries the same faint pulse while one is standing.
             // Drawn under the flash so a raid still reads on top of it.
             if let Some(pulse) = shield_outline.filter(|_| shielded) {
                 painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, pulse);
+            }
+            // A machine wears its state as its outline. Drawn *after* the
+            // shield pulse, which also outlines every structure: an
+            // actionable per-machine state has to win over ambient
+            // base-wide info, or a starved machine goes unnoticed inside a
+            // shielded base. A structure that runs no job has no status and
+            // keeps only the pulse.
+            //
+            // This replaces a flat yellow "someone is assigned here" —
+            // `Idle` is the same fact in a colour of its own, so nothing is
+            // lost and three more states are gained.
+            if let Some(color) = machine_status.map(machine_outline) {
+                painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, color);
+            } else if staffed {
+                painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, YELLOW);
+            }
+            // Wiring: a stub on the shared edge toward every neighbour that
+            // makes an ingredient this machine wants. A chain reads as a
+            // line across the base, and a machine missing a feeder shows a
+            // missing stub rather than needing a menu to diagnose.
+            for (dx, dy) in feeder_edges {
+                let (cx, cy) = (px + tile_px / 2.0, py + tile_px / 2.0);
+                let reach = tile_px / 2.0;
+                painter.line(
+                    cx + *dx as f32 * reach * 0.35,
+                    cy + *dy as f32 * reach * 0.35,
+                    cx + *dx as f32 * reach,
+                    cy + *dy as f32 * reach,
+                    2.0,
+                    CYAN,
+                );
             }
             if let Some(flash) = fx.tile_flash(world) {
                 painter.rect(px, py, tile_px - 1.0, tile_px - 1.0, flash);
@@ -333,6 +362,18 @@ fn draw_surface_map(
         }
     }
     painter.rect_lines(0.0, 0.0, map_w, map_h, 2.0, BORDER);
+}
+
+/// A machine's outline colour. The four states are ordered by what the
+/// player should do about them: green needs nothing, grey needs a program,
+/// yellow needs a feeder, red needs a trip home with `C`.
+fn machine_outline(status: MachineStatus) -> Color {
+    match status {
+        MachineStatus::Running => GREEN,
+        MachineStatus::Starved => YELLOW,
+        MachineStatus::Clogged => RED,
+        MachineStatus::Idle => TEXT_DIM,
+    }
 }
 
 /// One party member's line in the status column, indented under the

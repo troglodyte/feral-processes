@@ -267,10 +267,24 @@ fn draw_surface_map(
                     // its tile red, so the base's condition reads at a
                     // glance instead of only from the inspect menu.
                     (color, critical) = fx.structure_condition(ev.durability, color);
-                    // Background follows the damage-dimmed glyph colour, so a
-                    // worn structure darkens its whole tile rather than just
-                    // its glyph.
+                    // Background follows the damage-dimmed *authored* colour,
+                    // deliberately taken before the status override below.
+                    // The tile wash already means raid damage — a clogged
+                    // machine tinting its tile red too would make a
+                    // half-destroyed one and a full buffer look alike.
                     bg_source = color;
+                    // A machine's glyph is its state: the `$` of a Mining
+                    // Node reads green running, yellow starved, red clogged,
+                    // grey idle. Which structure it is stays legible from the
+                    // glyph itself, so the authored colour is only carrying
+                    // identity a machine can spare. Anything that runs no job
+                    // keeps its authored colour.
+                    //
+                    // Damage-tinted through the same call, so a battered
+                    // machine still dims rather than reading box-fresh.
+                    if let Some(status) = ev.machine_status {
+                        (color, _) = fx.structure_condition(ev.durability, machine_color(status));
+                    }
                     shielded = ev.is_structure;
                     occupied = true;
                 }
@@ -342,7 +356,7 @@ fn draw_surface_map(
             // This replaces a flat yellow "someone is assigned here" —
             // `Idle` is the same fact in a colour of its own, so nothing is
             // lost and three more states are gained.
-            if let Some(color) = machine_status.map(machine_outline) {
+            if let Some(color) = machine_status.map(machine_color) {
                 outline_open(painter, px, py, tile_px - 1.0, color, linked_edges);
             } else if staffed {
                 outline_open(painter, px, py, tile_px - 1.0, YELLOW, linked_edges);
@@ -378,10 +392,11 @@ fn outline_open(painter: &Painter, px: f32, py: f32, size: f32, color: Color, op
     }
 }
 
-/// A machine's outline colour. The four states are ordered by what the
-/// player should do about them: green needs nothing, grey needs a program,
-/// yellow needs a feeder, red needs a trip home with `C`.
-fn machine_outline(status: MachineStatus) -> Color {
+/// A machine's state colour, worn by both its glyph and its outline. The
+/// four are ordered by what the player should do about them: green needs
+/// nothing, grey needs a program, yellow needs a feeder, red needs a trip
+/// home with `C`.
+fn machine_color(status: MachineStatus) -> Color {
     match status {
         MachineStatus::Running => GREEN,
         MachineStatus::Starved => YELLOW,

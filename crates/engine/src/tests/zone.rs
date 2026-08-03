@@ -3,8 +3,8 @@
 use super::support::*;
 use crate::tuning::{
     DISTANCE_STAT_STEP_TILES, GROUP_SIZE_STEP_TILES, MAX_BUILD_DISTANCE_FROM_HOME,
-    MAX_DISTANCE_STAT_MULTIPLIER, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_DURABILITY,
-    NEST_RESPAWN_TICKS,
+    MAX_DISTANCE_STAT_MULTIPLIER, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_AGGRO_LEASH_RADIUS,
+    NEST_DURABILITY, NEST_PURSUIT_STEPS_PER_TICK, NEST_RESPAWN_TICKS,
 };
 use crate::*;
 
@@ -1244,5 +1244,244 @@ fn decompiling_a_pursuing_guardian_strips_the_marker() {
     assert!(
         game.world.get::<Pursuing>(guardian).is_none(),
         "taming a pursuing guardian should strip the Pursuing marker along with NestGuardian"
+    );
+}
+
+/// The per-tick pursuit step (`Game::nest_aggro_tick`) that wires
+/// `Pursuing` (provocation) to `pursuit_field` (routing) together — this
+/// is the half of nest aggression that actually moves a guardian and
+/// starts a fight.
+fn chebyshev(a: Position, b: Position) -> i32 {
+    (a.x - b.x).abs().max((a.y - b.y).abs())
+}
+
+#[test]
+fn a_pursuer_closes_on_the_player_each_tick() {
+    let mut game = Game::new(710, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let ppos = *game.world.get::<Position>(player).unwrap();
+
+    // A generous hand-carved lane rather than hoping procedurally
+    // generated terrain happens to be open between the two points.
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for dx in -2..=12 {
+            for dy in -2..=2 {
+                map.set_override(
+                    ppos.x + dx,
+                    ppos.y + dy,
+                    Tile {
+                        biome: Biome::OpenGrid,
+                        walkable: true,
+                    },
+                );
+            }
+        }
+    }
+    assert!(
+        game.world
+            .resource_mut::<WorldMap>()
+            .tile(ppos.x + 10, ppos.y)
+            .walkable,
+        "the lane precondition this test depends on"
+    );
+
+    let nest = spawn_bare_nest(&mut game, ppos.x + 10, ppos.y);
+    let guardian = spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 10, ppos.y);
+
+    let before = chebyshev(ppos, *game.world.get::<Position>(guardian).unwrap());
+    game.tick();
+    let after = chebyshev(ppos, *game.world.get::<Position>(guardian).unwrap());
+
+    assert_eq!(
+        before - after,
+        NEST_PURSUIT_STEPS_PER_TICK as i32,
+        "a pursuer should close on the player by exactly NEST_PURSUIT_STEPS_PER_TICK each tick"
+    );
+}
+
+#[test]
+fn a_pursuer_that_reaches_the_player_starts_a_battle() {
+    let mut game = Game::new(711, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let ppos = *game.world.get::<Position>(player).unwrap();
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for dx in -2..=4 {
+            for dy in -2..=2 {
+                map.set_override(
+                    ppos.x + dx,
+                    ppos.y + dy,
+                    Tile {
+                        biome: Biome::OpenGrid,
+                        walkable: true,
+                    },
+                );
+            }
+        }
+    }
+
+    let nest = spawn_bare_nest(&mut game, ppos.x + 2, ppos.y);
+    spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 2, ppos.y);
+
+    assert!(!game.has_active_battle());
+    game.tick();
+    assert!(
+        game.has_active_battle(),
+        "a pursuer that reaches the player should start a battle within the tick it arrives"
+    );
+}
+
+#[test]
+fn the_battle_a_pursuer_starts_includes_its_packmates() {
+    let mut game = Game::new(712, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // Both `max_group_size` and `max_enemy_groups` are 1 right at the
+    // danger origin (by design — see `Game::max_group_size`'s doc), which
+    // would truncate this fight back down to a single member regardless of
+    // how the pack was gathered. `multi_group_ground` is ground far enough
+    // out that a full `MAX_ENEMY_GROUPS` fight is allowed there.
+    let (gx, gy) = multi_group_ground(&game);
+    let player = game.player_entity();
+    *game.world.get_mut::<Position>(player).unwrap() = Position { x: gx, y: gy };
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for dx in -2..=2 {
+            for dy in -2..=2 {
+                map.set_override(
+                    gx + dx,
+                    gy + dy,
+                    Tile {
+                        biome: Biome::OpenGrid,
+                        walkable: true,
+                    },
+                );
+            }
+        }
+    }
+
+    let nest = spawn_bare_nest(&mut game, gx, gy);
+    // Two different species so a single-species group cap can't be the
+    // reason both end up in the fight — each gets its own group, and
+    // `multi_group_ground` guarantees more than one group is allowed here.
+    spawn_pursuing_guardian(&mut game, nest, "scrapper", gx + 1, gy);
+    spawn_pursuing_guardian(&mut game, nest, "wraith", gx + 1, gy + 1);
+
+    game.tick();
+
+    assert!(game.has_active_battle());
+    let total_members: usize = game
+        .battle_view()
+        .unwrap()
+        .groups
+        .iter()
+        .map(|g| g.count)
+        .sum();
+    assert!(
+        total_members > 1,
+        "the battle a pursuer starts should pull in the packmate standing beside it \
+         (gather_pack), not just the one that reached the player; found {total_members}"
+    );
+}
+
+#[test]
+fn a_pursuer_beyond_the_leash_gives_up() {
+    let mut game = Game::new(713, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let nest = spawn_bare_nest(&mut game, 200, 200);
+    let start = Position {
+        x: 200 + NEST_AGGRO_LEASH_RADIUS + 1,
+        y: 200,
+    };
+    let guardian = spawn_pursuing_guardian(&mut game, nest, "scrapper", start.x, start.y);
+
+    game.tick();
+
+    assert!(
+        game.world.get::<Pursuing>(guardian).is_none(),
+        "a pursuer past NEST_AGGRO_LEASH_RADIUS from its own nest should give up"
+    );
+    assert_eq!(
+        *game.world.get::<Position>(guardian).unwrap(),
+        start,
+        "giving up on the leash must not also have taken a step toward the player — \
+         the leash check runs before the field is even built"
+    );
+}
+
+#[test]
+fn pursuers_never_step_onto_the_base_platform() {
+    let mut game = Game::new(714, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let ppos = *game.world.get::<Position>(player).unwrap();
+
+    // Open ground across the whole area, including room either side of
+    // where the platform lands, so a detour around its edge has somewhere
+    // to go.
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for dx in -5..=30 {
+            for dy in -15..=15 {
+                map.set_override(
+                    ppos.x + dx,
+                    ppos.y + dy,
+                    Tile {
+                        biome: Biome::OpenGrid,
+                        walkable: true,
+                    },
+                );
+            }
+        }
+    }
+    // Stamped after the walkable override (so Platform wins inside the
+    // slab) but before the nest and pursuer are placed — stamp_platform
+    // despawns every Hostile and Nest standing inside it.
+    game.stamp_platform(ppos.x + 8, ppos.y);
+
+    // Directly in line with the player, on the far side of the slab: the
+    // straight route is blocked, so any progress at all has to detour
+    // around the platform's edge.
+    let nest = spawn_bare_nest(&mut game, ppos.x + 18, ppos.y);
+    let guardian = spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 18, ppos.y);
+
+    for _ in 0..40 {
+        if game.has_active_battle() {
+            break;
+        }
+        game.tick();
+        let pos = *game.world.get::<Position>(guardian).unwrap();
+        let biome = game
+            .world
+            .resource_mut::<WorldMap>()
+            .tile(pos.x, pos.y)
+            .biome;
+        assert_ne!(
+            biome,
+            Biome::Platform,
+            "a pursuer must never step onto the base platform, but stands at {pos:?}"
+        );
+    }
+}
+
+#[test]
+fn nest_aggro_tick_is_a_no_op_during_a_battle() {
+    let mut game = Game::new(715, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let ppos = *game.world.get::<Position>(player).unwrap();
+
+    // Close enough that, absent the battle guard, it would engage or at
+    // least step this very tick — so this test would actually catch a
+    // missing `has_active_battle` check rather than passing vacuously.
+    let nest = spawn_bare_nest(&mut game, ppos.x + 3, ppos.y);
+    let guardian = spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 2, ppos.y);
+    let before = *game.world.get::<Position>(guardian).unwrap();
+
+    let wild = spawn_wild_on_player_tile(&mut game);
+    insert_battle(&mut game, player, vec![wild]);
+
+    game.tick();
+
+    assert_eq!(
+        *game.world.get::<Position>(guardian).unwrap(),
+        before,
+        "nest_aggro_tick must not move a pursuer while a battle is already running"
     );
 }

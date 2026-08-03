@@ -1,6 +1,6 @@
 //! Fixtures and helpers shared by the engine's unit tests.
 
-use crate::tuning::{GROUP_SIZE_STEP_TILES, MAX_ENEMY_GROUPS};
+use crate::tuning::{GROUP_SIZE_STEP_TILES, MAX_ENEMY_GROUPS, NEST_DURABILITY};
 use crate::*;
 use std::path::Path;
 
@@ -975,4 +975,59 @@ pub(super) fn program_manifest(game: &Game, entity: Entity) -> ProgramManifest {
         ManifestSubject::Program(p) => p,
         ManifestSubject::Player(_) => panic!("expected a program, got the player"),
     }
+}
+
+/// Spawns a bare `Nest` at `(x, y)` with no guardians — for
+/// `nest_aggro_tick` tests that build their own hand-picked guardian set
+/// rather than taking whatever `Game::spawn_nest`'s RNG-picked count and
+/// placement roll. Mirrors the component set `spawn_nest` itself builds
+/// (`Position`, `Glyph`, `Durability`).
+pub(super) fn spawn_bare_nest(game: &mut Game, x: i32, y: i32) -> Entity {
+    game.world
+        .spawn((
+            Nest {
+                species: "scrapper".to_string(),
+                pending_respawns: Vec::new(),
+            },
+            Position { x, y },
+            Glyph {
+                ch: 'N',
+                color: GlyphColor::Red,
+            },
+            Durability {
+                hp: NEST_DURABILITY,
+                max_hp: NEST_DURABILITY,
+            },
+        ))
+        .id()
+}
+
+/// Spawns a `NestGuardian` of `nest` at `(x, y)`, already `Pursuing` — the
+/// state `Game::provoke_nest` would have left it in, for a test that needs
+/// a pursuer in place without walking through an actual `attack_nest` call.
+pub(super) fn spawn_pursuing_guardian(
+    game: &mut Game,
+    nest: Entity,
+    species: &str,
+    x: i32,
+    y: i32,
+) -> Entity {
+    game.world
+        .spawn((
+            Creature {
+                species: species.to_string(),
+            },
+            Hostile,
+            WanderAi::default(),
+            NestGuardian { nest },
+            Pursuing,
+            Position { x, y },
+            Stats {
+                hp: 10,
+                max_hp: 10,
+                atk: 1,
+                def: 1,
+            },
+        ))
+        .id()
 }

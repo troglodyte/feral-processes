@@ -1,10 +1,21 @@
 //! The turn loop: advancing the clock, moving, and the actions a player
 //! spends a turn on.
 
+use crate::game::pursuit::pursuit_field;
 use crate::game::spawning::SpawnEscalation;
-use crate::tuning::{RANDOM_ENCOUNTER_CHANCE, REST_TICKS};
+use crate::tuning::{
+    NEST_AGGRO_LEASH_RADIUS, NEST_PATH_SEARCH_MARGIN, NEST_PURSUIT_STEPS_PER_TICK,
+    RANDOM_ENCOUNTER_CHANCE, REST_TICKS,
+};
 use crate::world::NEIGHBOURS;
 use crate::*;
+
+/// Chebyshev distance between two map tiles — the metric every pursuit and
+/// leash check in this file uses, matching the 8-directional movement
+/// `pursuit_field` routes over.
+fn chebyshev(a: Position, b: Position) -> i32 {
+    (a.x - b.x).abs().max((a.y - b.y).abs())
+}
 
 impl Game {
     /// The player's own `Entity`. `pub(crate)`: no renderer or app-core code
@@ -96,6 +107,11 @@ impl Game {
         self.structure_regen();
         self.raid_check();
         self.nest_respawn_tick();
+        // Immediately after respawn: a guardian that just replaced a fallen
+        // one at a besieged nest is already `Pursuing` (`nest_respawn_tick`
+        // via `nest_has_pursuers`) and should get its step the same tick it
+        // appeared, not wait a full tick doing nothing.
+        self.nest_aggro_tick();
         if age_temporary {
             self.age_temporary_structures();
         }
@@ -105,6 +121,119 @@ impl Game {
         // buff, not base upkeep the player paused by staying home.
         self.tick_field_buffs();
         self.world.resource_mut::<GameClock>().tick += 1;
+    }
+
+    /// Moves every provoked nest guardian one step closer to the player and
+    /// starts a battle for the first one that arrives — the per-tick half of
+    /// nest aggression, called from `tick_inner` right after
+    /// `nest_respawn_tick`. A no-op during battle or after game over, same
+    /// as every other per-tick system here.
+    ///
+    /// Order below is load-bearing:
+    ///
+    /// 1. Leash first, before the field is ever built — a guardian too far
+    ///    (Chebyshev) from its own nest, or whose nest no longer resolves
+    ///    (`despawn_nest` should already have caught that; this is belt and
+    ///    braces), gives up on the spot. A fully-leashed swarm then costs
+    ///    one query and no search.
+    /// 2. The field is built once, centred on the *player* rather than any
+    ///    one nest — the spec says "around the nest", but one box around
+    ///    the player is the same bound with a simpler centre, and it holds
+    ///    however many nests are provoked at once. A pursuer farther from
+    ///    the player than `NEST_AGGRO_LEASH_RADIUS + NEST_PATH_SEARCH_MARGIN`
+    ///    is simply absent from the field and skips its step — same
+    ///    outcome as being enclosed, or already as close as the terrain
+    ///    allows.
+    /// 3. Adjacency is checked *before* every step, not just after: the
+    ///    player's own tile has cost 0 in the field and would win any
+    ///    downhill comparison, so a pursuer already adjacent must engage
+    ///    here rather than take one more step onto the player's tile.
+    ///
+    /// Only the first pursuer to reach the player fights this tick —
+    /// `gather_pack` pulls in anything else standing near it (including a
+    /// packmate still mid-chase), so the swarm arrives together rather than
+    /// one at a time.
+    pub(crate) fn nest_aggro_tick(&mut self) {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return;
+        }
+
+        let pursuing: Vec<(Entity, Entity, Position)> = {
+            let mut query = self
+                .world
+                .query_filtered::<(Entity, &NestGuardian, &Position), With<Pursuing>>();
+            query
+                .iter(&self.world)
+                .map(|(e, guardian, &pos)| (e, guardian.nest, pos))
+                .collect()
+        };
+        let leashed: Vec<Entity> = pursuing
+            .iter()
+            .filter(|&&(_, nest, pos)| {
+                self.world
+                    .get::<Position>(nest)
+                    .is_none_or(|&nest_pos| chebyshev(pos, nest_pos) > NEST_AGGRO_LEASH_RADIUS)
+            })
+            .map(|&(entity, ..)| entity)
+            .collect();
+        for entity in leashed {
+            self.world.entity_mut(entity).remove::<Pursuing>();
+        }
+
+        let pursuers: Vec<Entity> = {
+            let mut query = self.world.query_filtered::<Entity, With<Pursuing>>();
+            query.iter(&self.world).collect()
+        };
+        if pursuers.is_empty() {
+            return;
+        }
+
+        let player = self.player_entity();
+        let player_pos = *self.world.get::<Position>(player).unwrap();
+        let field = {
+            let mut map = self.world.resource_mut::<WorldMap>();
+            pursuit_field(
+                &mut map,
+                (player_pos.x, player_pos.y),
+                NEST_AGGRO_LEASH_RADIUS + NEST_PATH_SEARCH_MARGIN,
+            )
+        };
+
+        for pursuer in pursuers {
+            let Some(mut pos) = self.world.get::<Position>(pursuer).copied() else {
+                continue;
+            };
+            if chebyshev(pos, player_pos) <= 1 {
+                let pack = self.gather_pack(pursuer);
+                self.start_battle(pack);
+                return;
+            }
+            for _ in 0..NEST_PURSUIT_STEPS_PER_TICK {
+                let Some(&current_cost) = field.get(&(pos.x, pos.y)) else {
+                    break;
+                };
+                let next = NEIGHBOURS
+                    .iter()
+                    .map(|(dx, dy)| (pos.x + dx, pos.y + dy))
+                    .filter_map(|n| field.get(&n).map(|&cost| (n, cost)))
+                    .filter(|&(_, cost)| cost < current_cost)
+                    .min_by_key(|&(_, cost)| cost);
+                let Some((next, _)) = next else {
+                    break;
+                };
+                pos.x = next.0;
+                pos.y = next.1;
+                if chebyshev(pos, player_pos) <= 1 {
+                    break;
+                }
+            }
+            *self.world.get_mut::<Position>(pursuer).unwrap() = pos;
+            if chebyshev(pos, player_pos) <= 1 {
+                let pack = self.gather_pack(pursuer);
+                self.start_battle(pack);
+                return;
+            }
+        }
     }
 
     /// Ages every deployed `Temporary` structure by one tick, collapsing

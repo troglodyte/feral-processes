@@ -1,7 +1,7 @@
 //! A bounded cost field for chasing something across the map, routed around
-//! obstacles rather than assumed open ground. Nothing in the engine calls
-//! `pursuit_field` yet — the pursuit step that walks a guardian along it is
-//! built on top, in a later change.
+//! obstacles rather than assumed open ground. `Game::nest_aggro_tick`
+//! (`game/turn.rs`) is the one caller: it walks each provoked nest guardian
+//! downhill along the field this module builds.
 
 use std::collections::HashMap;
 

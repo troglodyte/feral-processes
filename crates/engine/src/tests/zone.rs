@@ -5,7 +5,8 @@ use crate::tuning::{
     DISTANCE_STAT_STEP_TILES, GROUP_SIZE_STEP_TILES, MAX_BUILD_DISTANCE_FROM_HOME,
     MAX_DISTANCE_STAT_MULTIPLIER, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_AGGRO_LEASH_RADIUS,
     NEST_CACHE_FRAGMENT_ZONE_BONUS, NEST_CACHE_FRAGMENTS, NEST_CACHE_WORK_RESOURCE_MULT,
-    NEST_DURABILITY, NEST_PURSUIT_STEPS_PER_TICK, NEST_RESPAWN_TICKS, WORK_RESOURCE_DROP,
+    NEST_DURABILITY, NEST_PATH_SEARCH_MARGIN, NEST_PURSUIT_STEPS_PER_TICK, NEST_RESPAWN_TICKS,
+    WORK_RESOURCE_DROP,
 };
 use crate::*;
 
@@ -1386,18 +1387,66 @@ fn the_battle_a_pursuer_starts_includes_its_packmates() {
 #[test]
 fn a_pursuer_beyond_the_leash_gives_up() {
     let mut game = Game::new(713, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let nest = spawn_bare_nest(&mut game, 200, 200);
+    let player = game.player_entity();
+    let ppos = *game.world.get::<Position>(player).unwrap();
+
+    // Both the nest and the guardian sit inside the player's search box
+    // (radius NEST_AGGRO_LEASH_RADIUS + NEST_PATH_SEARCH_MARGIN = 20), on a
+    // hand-carved lane — the point of this test is that the *leash* rule
+    // (distance from the nest) fires, not the ordinary out-of-field rule
+    // (distance from the player), so both must be within reach for the
+    // leash to be the only thing that can be stripping `Pursuing`. Before
+    // this rewrite the nest and guardian sat ~200 tiles from the player, so
+    // *every* run of this test was passing on the field-absence rule
+    // instead — a reviewer who replaced the leash filter's body with
+    // `false` still saw all 902 engine tests go green.
+    let search_box = NEST_AGGRO_LEASH_RADIUS + NEST_PATH_SEARCH_MARGIN;
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for dx in -2..=search_box {
+            for dy in -2..=2 {
+                map.set_override(
+                    ppos.x + dx,
+                    ppos.y + dy,
+                    Tile {
+                        biome: Biome::OpenGrid,
+                        walkable: true,
+                    },
+                );
+            }
+        }
+    }
+
+    let nest_pos = Position {
+        x: ppos.x + 2,
+        y: ppos.y,
+    };
+    let nest = spawn_bare_nest(&mut game, nest_pos.x, nest_pos.y);
+    // `search_box - 2` (18): past NEST_AGGRO_LEASH_RADIUS (15) from the nest
+    // two tiles east, but still inside the player's own search box —
+    // the leash must be what strips `Pursuing` here, not simply being out
+    // of the field's reach.
     let start = Position {
-        x: 200 + NEST_AGGRO_LEASH_RADIUS + 1,
-        y: 200,
+        x: ppos.x + search_box - 2,
+        y: ppos.y,
     };
     let guardian = spawn_pursuing_guardian(&mut game, nest, "scrapper", start.x, start.y);
+    assert!(
+        chebyshev(start, nest_pos) > NEST_AGGRO_LEASH_RADIUS,
+        "test premise: past the leash radius from the nest"
+    );
+    assert!(
+        chebyshev(start, ppos) <= search_box,
+        "test premise: inside the player's own search box — so a pass here can't be the \
+         ordinary out-of-field rule in disguise"
+    );
 
     game.tick();
 
     assert!(
         game.world.get::<Pursuing>(guardian).is_none(),
-        "a pursuer past NEST_AGGRO_LEASH_RADIUS from its own nest should give up"
+        "a pursuer past NEST_AGGRO_LEASH_RADIUS from its own nest should give up, even though \
+         it's still well within the player's own search box"
     );
     assert_eq!(
         *game.world.get::<Position>(guardian).unwrap(),

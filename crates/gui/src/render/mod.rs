@@ -12,6 +12,7 @@ use feral_processes_app_core::{
 };
 use feral_processes_engine::components::{GlyphColor, MachineStatus, TaskKind};
 use feral_processes_engine::items::ItemId;
+use feral_processes_engine::structures::StructureCategory;
 use feral_processes_engine::tuning::{MAX_FUSIONS, MAX_PARTY_SIZE};
 use feral_processes_engine::world::Biome;
 use feral_processes_engine::{

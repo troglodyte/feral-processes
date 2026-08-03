@@ -45,6 +45,26 @@ fn default_output_capacity() -> u32 {
     crate::tuning::DEFAULT_OUTPUT_CAPACITY
 }
 
+/// Which group a structure lists under in the build menu.
+///
+/// Derived from the fields a def declares rather than authored, exactly like
+/// `ItemDef::category` — so a modded structure groups by what it *does*
+/// instead of by where its id happens to fall in the alphabet. Variant order
+/// **is** menu order: shelter, then the things that produce, then the chain
+/// that consumes what they produce, then the rest.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum StructureCategory {
+    Home,
+    /// Produces from nothing, given a program — see `StructureDef::work`.
+    Extractor,
+    /// Consumes its neighbours' output, given a program — see
+    /// `StructureDef::assembles`.
+    Assembler,
+    Utility,
+    Trade,
+    Defence,
+}
+
 /// A structure's automated-crafting capability — see
 /// `StructureDef::assembles` and `systems::assembler_system`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -297,6 +317,34 @@ pub struct StructureDb {
     structures: HashMap<StructureId, StructureDef>,
 }
 
+impl StructureDef {
+    /// Which group this structure lists under. Checked in this order because
+    /// the first match wins and the overlaps have a right answer: a bench
+    /// that also defends is still where you go to build things, and the
+    /// Compiler produces *and* gates a recipe but is an extractor first.
+    ///
+    /// Total by construction — a structure declaring none of these is
+    /// utility, which is what a Data Cache or a Recharger Node is.
+    pub fn category(&self) -> StructureCategory {
+        if self.id == crate::HOME_STRUCTURE_ID {
+            return StructureCategory::Home;
+        }
+        if self.work.is_some() {
+            return StructureCategory::Extractor;
+        }
+        if self.assembles.is_some() {
+            return StructureCategory::Assembler;
+        }
+        if self.trade.is_some() {
+            return StructureCategory::Trade;
+        }
+        if self.raid_defense > 0 || self.repair.is_some() {
+            return StructureCategory::Defence;
+        }
+        StructureCategory::Utility
+    }
+}
+
 impl StructureDb {
     /// Loads every `*.ron` structure definition in `dir`. Malformed files
     /// are skipped (with a returned warning) rather than aborting the whole
@@ -325,33 +373,31 @@ impl StructureDb {
         self.structures.get(id)
     }
 
-    /// Every loaded structure, sorted by `id` — except `home`,
-    /// `mining_node`, `research_node` and `compiler`, which are always
-    /// pinned first in that order (the natural early-game build sequence:
-    /// shelter, then a resource, then somewhere to research what to do with
-    /// it, then somewhere to turn it into gear), with everything else
-    /// alphabetical after them. `HashMap` iteration order is randomized
-    /// per-instance (a
-    /// fresh seed each time a `StructureDb` is built, i.e. every new/loaded
-    /// game), so without this sort, the build menu's `[1]`, `[2]`, ...
-    /// numbering would shuffle unpredictably from one session to the next
-    /// even though nothing about the mod files changed — the same digit
-    /// could mean a 2-Core-Fragment Mining Node in one session and an
-    /// 8-Core-Fragment Fabricator in the next. A modded structure with none
-    /// of those three ids just sorts alphabetically among the rest, same as
-    /// before.
+    /// Every loaded structure, grouped by `StructureCategory` and
+    /// alphabetical by `name` inside each group.
+    ///
+    /// `HashMap` iteration order is randomized per-instance (a fresh seed
+    /// each time a `StructureDb` is built, i.e. every new/loaded game), so
+    /// without a sort here the build menu's `[1]`, `[2]`, ... numbering would
+    /// shuffle unpredictably from one session to the next even though nothing
+    /// about the mod files changed — the same digit could mean a
+    /// 2-Core-Fragment Mining Node in one session and an 8-Core-Fragment
+    /// Fabricator in the next.
+    ///
+    /// This used to pin `home`, `mining_node`, `research_node` and `compiler`
+    /// first by id and sort the rest alphabetically. That put a modded
+    /// structure wherever its id fell in the alphabet, which stopped being
+    /// tolerable once the production chain landed: `assembly_bay` sorted
+    /// third overall, ahead of every machine that feeds it. Grouping by what
+    /// a structure *does* puts a mod's assembler with the assemblers for
+    /// free, and costs only that the four hand-pinned ids now sort by name
+    /// within their own group.
     pub fn all(&self) -> impl Iterator<Item = &StructureDef> {
-        let priority = |id: &str| match id {
-            "home" => 0,
-            "mining_node" => 1,
-            "research_node" => 2,
-            "compiler" => 3,
-            _ => 4,
-        };
         let mut defs: Vec<&StructureDef> = self.structures.values().collect();
         defs.sort_by(|a, b| {
-            priority(&a.id)
-                .cmp(&priority(&b.id))
+            a.category()
+                .cmp(&b.category())
+                .then_with(|| a.name.cmp(&b.name))
                 .then_with(|| a.id.cmp(&b.id))
         });
         defs.into_iter()

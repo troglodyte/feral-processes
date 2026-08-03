@@ -292,7 +292,12 @@ impl Game {
                         color: species.color,
                     },
                     Durability {
-                        hp: n.durability,
+                        // Clamped rather than trusted outright: NEST_DURABILITY
+                        // is a tuning.rs constant, not part of the save format,
+                        // so lowering it must not leave an existing save's nest
+                        // loading with hp above the new max — the structure
+                        // path a little further down clamps the same way.
+                        hp: n.durability.min(NEST_DURABILITY),
                         max_hp: NEST_DURABILITY,
                     },
                 ))

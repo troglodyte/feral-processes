@@ -1288,12 +1288,14 @@ fn a_nest_survives_a_save_load_round_trip() {
     let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
     let _ = std::fs::remove_file(&path);
 
+    // By tile, not species: `Game::new`'s own habitat spawning can roll an
+    // unrelated scrapper nest on this seed, and filtering on species alone
+    // would silently grab that one instead.
     let mut query = loaded.world.query::<(&Nest, &Position, &Durability)>();
-    let (restored_nest, pos, durability) = query
+    let (restored_nest, _, durability) = query
         .iter(&loaded.world)
-        .find(|(n, _, _)| n.species == "scrapper")
+        .find(|(_, p, _)| p.x == 120 && p.y == 120)
         .expect("the nest must survive the round trip");
-    assert_eq!((pos.x, pos.y), (120, 120), "position must round-trip");
     assert_eq!(
         durability.hp, 17,
         "durability must round-trip, not reset to full"
@@ -1308,7 +1310,11 @@ fn a_nest_survives_a_save_load_round_trip() {
 /// A guardian's `NestGuardian.nest` is a raw `Entity`, which is not stable
 /// across a round trip — so this asserts the tether by the reloaded nest's
 /// `Position` instead, which is the whole reason the save format keys it
-/// by tile rather than by id.
+/// by tile rather than by id. Resolving by position also keeps the test
+/// honest about `Game::new`'s own habitat spawning, which can roll an
+/// unrelated scrapper nest (and guardians) on this seed — a raw "every
+/// guardian in the world must point at our nest" assertion would fail
+/// against that second nest's guardians for a reason unrelated to this test.
 #[test]
 fn a_guardians_tether_survives_a_save_load_round_trip() {
     let mut game = Game::new(609, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -1319,28 +1325,21 @@ fn a_guardians_tether_survives_a_save_load_round_trip() {
     let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
     let _ = std::fs::remove_file(&path);
 
-    // Compared by the reloaded nest's own entity id, which is legitimate
-    // here: both sides come from the same `loaded` world, unlike the
-    // pre-save `nest` entity id, which the whole tile-keyed save format
-    // exists because it does *not* survive the round trip.
-    let mut nest_query = loaded.world.query::<(Entity, &Nest)>();
-    let (restored_nest, _) = nest_query
-        .iter(&loaded.world)
-        .find(|(_, n)| n.species == "scrapper")
-        .expect("the nest must survive the round trip");
-
     let mut guardian_query = loaded.world.query::<&NestGuardian>();
-    let guardians: Vec<_> = guardian_query.iter(&loaded.world).collect();
+    let guardian_nests: Vec<Entity> = guardian_query.iter(&loaded.world).map(|g| g.nest).collect();
+    let mut pos_query = loaded.world.query::<&Position>();
+    let tethered_to_our_tile = guardian_nests
+        .iter()
+        .filter(|&&nest| {
+            pos_query
+                .get(&loaded.world, nest)
+                .is_ok_and(|p| p.x == 130 && p.y == 130)
+        })
+        .count();
     assert!(
-        !guardians.is_empty(),
-        "spawn_nest always spawns at least NEST_GUARDIAN_MIN guardians"
+        tethered_to_our_tile > 0,
+        "at least one reloaded guardian must resolve, via its nest's Position, back to (130, 130)"
     );
-    for guardian in &guardians {
-        assert_eq!(
-            guardian.nest, restored_nest,
-            "every reloaded guardian must resolve to the reloaded nest entity"
-        );
-    }
 }
 
 /// Provoke a nest's guardians, save, and reload — `Pursuing` must still be
@@ -1351,13 +1350,21 @@ fn live_aggro_survives_a_save_load_round_trip() {
     let mut game = Game::new(610, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let nest = game.spawn_nest("scrapper", 140, 140);
     game.attack_nest(nest);
+    // Filtered to `nest` specifically (not every `NestGuardian` in the
+    // world): `Game::new`'s habitat spawning can roll its own, unprovoked
+    // scrapper nest on this seed, and counting its guardians here would
+    // both inflate `pursuing_before` incorrectly and make it pass even if
+    // `attack_nest` provoked nothing at all.
     let pursuing_before = {
-        let mut query = game.world.query::<&NestGuardian>();
-        query.iter(&game.world).count()
+        let mut query = game.world.query::<(&NestGuardian, Option<&Pursuing>)>();
+        query
+            .iter(&game.world)
+            .filter(|(g, p)| g.nest == nest && p.is_some())
+            .count()
     };
     assert!(
         pursuing_before > 0,
-        "attack_nest should have provoked at least one guardian"
+        "attack_nest should have provoked at least one guardian of this nest"
     );
 
     let path = std::env::temp_dir().join(format!("feral_aggro_save_{}.bin", std::process::id()));
@@ -1365,14 +1372,27 @@ fn live_aggro_survives_a_save_load_round_trip() {
     let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
     let _ = std::fs::remove_file(&path);
 
-    let mut query = loaded.world.query::<(&NestGuardian, Option<&Pursuing>)>();
-    let pursuing_after = query
+    // Resolved by tile rather than the pre-save `nest` entity id, which
+    // does not survive the round trip — and, same reason as above, so an
+    // unrelated nest's (never-provoked) guardians can't be counted here.
+    let mut guardian_query = loaded.world.query::<(&NestGuardian, Option<&Pursuing>)>();
+    let guardian_nests: Vec<(Entity, bool)> = guardian_query
         .iter(&loaded.world)
-        .filter(|(_, p)| p.is_some())
+        .map(|(g, p)| (g.nest, p.is_some()))
+        .collect();
+    let mut pos_query = loaded.world.query::<&Position>();
+    let pursuing_after = guardian_nests
+        .iter()
+        .filter(|&&(nest, pursuing)| {
+            pursuing
+                && pos_query
+                    .get(&loaded.world, nest)
+                    .is_ok_and(|p| p.x == 140 && p.y == 140)
+        })
         .count();
     assert_eq!(
         pursuing_after, pursuing_before,
-        "every guardian provoked before the save must still be Pursuing after the load"
+        "every guardian of this nest provoked before the save must still be Pursuing after the load"
     );
 }
 
@@ -1460,17 +1480,31 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
     let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
     let _ = std::fs::remove_file(&path);
 
-    let mut query = loaded
-        .world
-        .query::<(&Position, &Hostile, &WanderAi, Option<&NestGuardian>)>();
+    let mut query = loaded.world.query::<(
+        &Position,
+        &Hostile,
+        &WanderAi,
+        Option<&NestGuardian>,
+        Option<&Pursuing>,
+    )>();
     let found = query
         .iter(&loaded.world)
         .find(|(pos, ..)| pos.x == spawn.x + 2 && pos.y == spawn.y);
-    let (_, _, _, guardian) = found.expect(
+    let (_, _, _, guardian, pursuing) = found.expect(
         "the creature must still load as an ordinary wild program even though its nest is missing",
     );
     assert!(
         guardian.is_none(),
         "a nest_position that resolves to nothing must not produce a NestGuardian"
+    );
+    // The saved `pursuing: true` on this creature must not survive on its
+    // own — `Pursuing` is only ever inserted alongside `NestGuardian`
+    // (`Game::load`), and a `Pursuing` creature with no `NestGuardian`
+    // would be permanently frozen: `wander_ai_system` excludes anything
+    // `Pursuing`, and the aggro tick that would otherwise drive it needs
+    // the very `NestGuardian` this creature doesn't have.
+    assert!(
+        pursuing.is_none(),
+        "pursuing must not survive when the nest_position it depended on didn't resolve"
     );
 }

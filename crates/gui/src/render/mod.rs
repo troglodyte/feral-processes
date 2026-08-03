@@ -10,13 +10,13 @@ use feral_processes_app_core::{
     App, LogFilter, MENU_SCAN_RADIUS, Mode, TradeChoice, equip_preview_tag, inventory_item_actions,
     menu_shortcut,
 };
-use feral_processes_engine::components::{GlyphColor, TaskKind};
+use feral_processes_engine::components::{GlyphColor, MachineStatus, TaskKind};
 use feral_processes_engine::items::ItemId;
 use feral_processes_engine::tuning::{MAX_FUSIONS, MAX_PARTY_SIZE};
 use feral_processes_engine::world::Biome;
 use feral_processes_engine::{
     Assignee, Entity, Game, LogEntry, MESSAGE_LOG_CAP, MessageKind, PetInfo, ProgramSaleOption,
-    ResearchState,
+    ResearchState, StructureReport,
 };
 
 mod bars;

@@ -220,9 +220,21 @@ impl Game {
         let mut report: Vec<StructureReport> = found
             .into_iter()
             .map(|(entity, kind, pos)| {
-                let def = self.world.resource::<StructureDb>().get(&kind);
-                let workable = def.is_some_and(|d| d.work.is_some());
+                let workable = self.accepts_a_program(entity);
+                let named = |map: Option<&std::collections::BTreeMap<ItemId, u32>>| {
+                    map.map(|m| {
+                        m.iter()
+                            .map(|(item, n)| (self.item_name(item).to_string(), *n))
+                            .collect()
+                    })
+                    .unwrap_or_default()
+                };
+                let stock = self.world.get::<Stock>(entity);
                 StructureReport {
+                    input: named(stock.map(|s| &s.input)),
+                    output: named(stock.map(|s| &s.output)),
+                    output_capacity: stock.map(|s| s.capacity).unwrap_or(0),
+                    status: self.world.get::<MachineStatus>(entity).copied(),
                     entity,
                     is_home: kind == HOME_STRUCTURE_ID,
                     kind,

@@ -887,3 +887,46 @@ fn the_inventory_view_comes_back_grouped_by_category() {
     assert!(cell < whip, "consumables list before weapons");
     assert!(whip < frag, "weapons list before salvage");
 }
+
+/// The player cannot play a chain they cannot see. A report row carries what
+/// is in both buffers and why the machine is or isn't producing — folded in
+/// the engine, because per `CLAUDE.md` a read-only screen's row shaping is
+/// app-core's to bound and gui's to draw, never gui's to invent.
+#[test]
+fn a_structure_report_row_carries_its_stock_and_status() {
+    let mut game = Game::new(985, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = deploy_upgradeable_node(&mut game);
+    {
+        let mut stock = game.world.get_mut::<Stock>(node).unwrap();
+        stock.input.insert(ItemId::from(ids::POWER_CELL), 2);
+        stock.output.insert(ItemId::from(ids::CORE_FRAGMENT), 6);
+    }
+
+    let report = game.structure_report();
+    let row = report
+        .iter()
+        .find(|r| r.entity == node)
+        .expect("the deployed node is on the roster");
+
+    assert_eq!(row.output, vec![("Core Fragment".to_string(), 6)]);
+    assert_eq!(row.input, vec![("Power Cell".to_string(), 2)]);
+    assert_eq!(row.output_capacity, crate::tuning::DEFAULT_OUTPUT_CAPACITY);
+    assert_eq!(
+        row.status,
+        Some(MachineStatus::Running),
+        "a work node has a state to be in"
+    );
+    assert!(row.workable, "and a program can be posted to it");
+
+    let home = find_home(&mut game).unwrap();
+    let home_row = game
+        .structure_report()
+        .into_iter()
+        .find(|r| r.entity == home)
+        .unwrap();
+    assert_eq!(
+        home_row.status, None,
+        "a Home runs no job, so it has no state to report"
+    );
+    assert!(home_row.output.is_empty());
+}

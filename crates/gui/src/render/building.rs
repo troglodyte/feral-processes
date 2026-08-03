@@ -292,10 +292,52 @@ pub(super) fn draw_structures(game: &mut Game, selected: usize, painter: &Painte
                 TEXT_DIM,
             ));
         }
+        // A stall is drawn in yellow for the same reason an idle structure
+        // is: it is a thing the player can walk over and fix.
+        if let Some(line) = stall_line(s) {
+            rows.push(colored_item_row(format!("  {line}"), false, YELLOW));
+        }
+        if let Some(line) = buffer_line("in", &s.input, None) {
+            rows.push(colored_item_row(line, false, TEXT_DIM));
+        }
+        if let Some(line) = buffer_line("out", &s.output, Some(s.output_capacity)) {
+            rows.push(colored_item_row(line, false, TEXT_DIM));
+        }
     }
     rows.push(text_row(""));
     rows.push(text_row("Up/Down to scroll, Esc to close."));
     draw_popup("Structures", PopupSize::Large, &rows, painter, m);
+}
+
+/// Why a machine is stalled, or `None` when it is running or is not a
+/// machine at all. `Idle` says nothing here — the "nobody assigned" line
+/// already above it is the same fact in better words.
+fn stall_line(s: &StructureReport) -> Option<&'static str> {
+    match s.status? {
+        MachineStatus::Starved => Some("starved — nothing is feeding it"),
+        MachineStatus::Clogged => Some("clogged — collect from it with C"),
+        MachineStatus::Running | MachineStatus::Idle => None,
+    }
+}
+
+/// One buffer as a line, or `None` when it is empty — a base of empty
+/// buffers would otherwise double the length of this screen to say nothing.
+fn buffer_line(label: &str, stock: &[(String, u32)], capacity: Option<u32>) -> Option<String> {
+    if stock.is_empty() {
+        return None;
+    }
+    let contents = stock
+        .iter()
+        .map(|(name, n)| format!("{n} {name}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    Some(match capacity {
+        Some(cap) => {
+            let used: u32 = stock.iter().map(|(_, n)| n).sum();
+            format!("  {label}: {contents}  [{used}/{cap}]")
+        }
+        None => format!("  {label}: {contents}"),
+    })
 }
 
 /// One assignee row: who it is, what it is doing, and how far into a cycle it

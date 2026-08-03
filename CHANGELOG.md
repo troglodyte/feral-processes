@@ -13,6 +13,43 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Nests fight back, and destroying one pays
+
+Bumps `SAVE_FORMAT_VERSION` 18 → 19 — existing saves need a new game.
+`CreatureSave` gains `nest_position` and `pursuing`, and a new `NestSave`
+records each nest's position, Durability and pending respawns.
+
+- **Attacking a nest now provokes every one of its guardians.** They abandon
+  their tether and path toward you around obstacles — a bounded cost field
+  built once per tick from the player's tile (the `pathfinding` crate's first
+  use in this engine) — then fold in whatever else is standing nearby the
+  moment one makes contact, into an ordinary battle. A besieged nest keeps
+  this going: a guardian that respawns while its nest already has pursuers
+  joins the chase the moment it appears, so grinding one down without
+  finishing it off no longer buys a permanent lull.
+- **A pursuer gives up 15 tiles (Chebyshev) from its own nest** and walks
+  itself home, and can never set foot on your base platform — the swarm can
+  mill at its edge but not cross it. New tuning: `NEST_AGGRO_LEASH_RADIUS`,
+  `NEST_PURSUIT_STEPS_PER_TICK` (1, exactly player speed — outrunnable in a
+  straight line, never shakeable), `NEST_PATH_SEARCH_MARGIN`.
+- **Destroying a nest now pays a cache**: a multiple of its species'
+  work-resource drop, Portal Fragments scaled by how far below your current
+  zone it sits, and three rolls of its equipment table. No XP — the
+  guardians already paid that on the way down, and a nest chipped but not
+  finished pays nothing yet.
+- **Persisted across save/load**: a nest's position, Durability and pending
+  respawns; each guardian's tether and whether it's currently pursuing.
+  Without this a reload would launder a half-destroyed nest and its cache,
+  and quietly clear whatever swarm was chasing you.
+- **Fixed: a guardian dragged outside its tether radius could freeze
+  permanently.** `wander_ai_system` refused any step that left
+  `NEST_TETHER_RADIUS`; once something could push a guardian past that
+  radius — the chase above — every neighbouring tile still counted as
+  "leaving" it, so the guardian had no legal move at all. It now refuses a
+  step only when doing so both leaves the radius and fails to close the
+  distance, so a displaced guardian makes its way home instead of standing
+  frozen.
+
 ### The zone group cap is a line, not a curve
 
 - **`ZONE_GROUP_GROWTH` (geometric, x3) becomes `ZONE_GROUP_STEP` (additive,

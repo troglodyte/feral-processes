@@ -1019,22 +1019,42 @@ Wraith, Trojan, and Worm nest in the base roster (`can_nest: true` in a
 species file).
 
 - A fresh nest comes with **2–5 guardians**, which behave like ordinary
-  hostiles except that they never wander more than 5 tiles from it.
+  hostiles except that they never wander more than 5 tiles from it — until
+  you attack it (below).
 - While the nest stands it keeps replacing them: every guardian you defeat
   or decompile is queued for respawn 10 ticks later, so grinding the
   guardians alone is an endless (if farmable) fight.
 - **Walk into the nest to attack it.** That's a plain hit for your current
   Attack against its 60 Durability — no intrusion screen, no defense on its
-  side, and no retaliation, so it's pure chip damage rather than a battle.
+  side — but it isn't a free swing: every hit provokes every surviving
+  guardian.
+- **A provoked guardian abandons its tether and comes for you**, pathing
+  around obstacles rather than blundering into them, and folding in
+  whatever else is standing nearby the moment it makes contact — you fight
+  the swarm that reaches you, not just the one that closed the distance.
+  It gives up if you put enough ground between yourself and the nest, and
+  walks itself home once it does; either way, a guardian that catches up
+  again after giving up is provoked all over by your next swing. A
+  besieged nest keeps this going — a guardian that respawns while its nest
+  is under siege joins the chase already provoked, so a nest you refuse to
+  finish off never runs out of guardians to send at you. One thing no
+  guardian will do is set foot on your base platform; the swarm can mill at
+  its edge but not cross it.
 - Destroying it frees every surviving guardian (they scatter into ordinary
   wandering) and cancels any queued respawns.
 - Raids never target a nest; its Durability is only ever spent by you, and
   it never regenerates — chip damage you deal to one is banked permanently,
   so you can walk away from a half-destroyed nest and come back to it.
+- **The hit that finishes it off pays a cache**: several kills' worth of the
+  species' own work resource, a handful of Portal Fragments (more the
+  deeper the nest's zone), and several rolls of its equipment table. No XP —
+  the guardians already paid that on the way down. A nest you chip at but
+  don't finish pays nothing yet, which is what makes the last swing matter.
 
 A nest is a deliberate risk/reward pocket: a dense cluster of one species
-worth farming for that species' loot, at the cost of being outnumbered
-somewhere you can't retreat far from.
+worth farming for that species' loot, at the cost of provoking a swarm you
+can't simply outlast at range — and the cache is the reward for actually
+finishing the fight rather than farming its guardians forever.
 
 ### Zones and portals
 

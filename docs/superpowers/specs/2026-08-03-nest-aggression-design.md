@@ -1,7 +1,8 @@
 # Nest aggression and the nest cache
 
 Date: 2026-08-03
-Status: designed, not implemented
+Status: implemented (2026-08-03) — two decisions moved during
+implementation; see the notes marked below.
 
 ## The problem
 
@@ -117,8 +118,15 @@ scattered individuals chasing different targets, which this scope rules out.
 lazily on `WorldMap::tile`, so an unbounded search that finds no route would
 generate chunks outward until it exhausted memory. The successor function
 rejects any tile outside a box of `NEST_AGGRO_LEASH_RADIUS + margin` around
-the nest, which caps both the search and the chunks it forces into
-existence.
+the **player** — not the nest, corrected below — which caps both the search
+and the chunks it forces into existence.
+
+> **Implementation note:** shipped centred on the player, not the nest as
+> the box description above once implied. One box around the player is the
+> same bound with a simpler centre, and it holds however many nests are
+> provoked in the same tick — a per-nest box would have needed one search
+> per nest instead of one for the whole swarm. See `Game::nest_aggro_tick`
+> (`game/turn.rs`).
 
 Two tiles are never successors:
 
@@ -200,10 +208,21 @@ field:
 
 - `NEST_CACHE_WORK_RESOURCE_MULT` × a `WORK_RESOURCE_DROP` roll of the
   species' `work_resource`.
-- A `NEST_CACHE_FRAGMENTS` roll of craft currency, scaled by zone, mirroring
-  the boss cache in `award_loot`.
+- A `NEST_CACHE_FRAGMENTS` roll of craft currency, scaled by zone (pinned
+  below — this was left open here and decided during implementation), in
+  the same shape as the boss cache in `award_loot` grants a flat range.
 - `NEST_CACHE_EQUIPMENT_ROLLS` passes over the species' equipment drop table
   (`equipment_drops_for`), each entry rolled at its own chance.
+
+> **Implementation note:** "scaled by zone" above was deliberately left
+> unspecified. It shipped as `NEST_CACHE_FRAGMENT_ZONE_BONUS` added to the
+> `NEST_CACHE_FRAGMENTS` roll once per zone below the nest's own zone — a
+> deeper nest, whose guardians already scale with zone and distance, stays
+> worth clearing rather than being worth a flat amount everywhere. This is
+> a separate mechanism from `BOSS_PORTAL_FRAGMENT_DROP`, which does not
+> scale by zone at all; "mirrors the boss cache" above refers only to the
+> shape (a currency grant alongside the resource and equipment rolls), not
+> the formula. See `Game::grant_nest_cache` (`game/zone.rs`).
 
 Nothing is added to `SpeciesDef`, so a modded nesting species gets a
 sensible cache for free — content stays data, and the magnitudes live in
@@ -227,6 +246,7 @@ All in `crates/engine/src/tuning.rs`, in the existing nests section.
 | `NEST_PATH_SEARCH_MARGIN` | `5` | Added to the leash radius to bound the cost-field box. |
 | `NEST_CACHE_WORK_RESOURCE_MULT` | `4` | Multiplier on the ordinary work-resource drop roll. |
 | `NEST_CACHE_FRAGMENTS` | `2..=5` | Craft currency from a destroyed nest, before zone scaling. |
+| `NEST_CACHE_FRAGMENT_ZONE_BONUS` | `1` | Added to the fragments roll per zone below the nest's own — the zone scaling left open above. |
 | `NEST_CACHE_EQUIPMENT_ROLLS` | `3` | Passes over the species' equipment drop table. |
 
 Every one of these is arithmetic-plausible and unplayed. `balance_sim.rs`

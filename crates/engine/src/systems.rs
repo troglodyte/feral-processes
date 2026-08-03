@@ -80,7 +80,15 @@ pub fn wander_ai_system(
             && let Ok(nest_pos) = nests.get(guardian.nest)
         {
             let dist = (nx - nest_pos.x).abs().max((ny - nest_pos.y).abs());
-            if dist > NEST_TETHER_RADIUS {
+            let current = (pos.x - nest_pos.x).abs().max((pos.y - nest_pos.y).abs());
+            // Refuse only a step that both leaves the tether *and* doesn't
+            // close on the nest. A guardian dragged outside its radius — by
+            // a chase, or by a test placing it there — would otherwise have
+            // no legal move at all and stand frozen for the rest of the
+            // run. `>=`, not `>`: a lateral step that holds distance
+            // constant is still refused, so a displaced guardian makes
+            // monotonic progress home rather than orbiting.
+            if dist > NEST_TETHER_RADIUS && dist >= current {
                 continue;
             }
         }

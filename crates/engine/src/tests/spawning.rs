@@ -148,6 +148,79 @@ fn guardian_never_wanders_beyond_the_nest_tether_radius() {
     }
 }
 
+/// Nothing today can drag a guardian outside its tether — this is the
+/// latent bug pursuit (built later) would otherwise make reachable. A
+/// guardian whose tether check refuses on raw distance alone has no legal
+/// move once displaced past `NEST_TETHER_RADIUS`, since every neighbouring
+/// tile is still beyond it too, and stands frozen for the rest of the run.
+#[test]
+fn a_guardian_outside_its_tether_walks_back_toward_its_nest() {
+    let mut game = Game::new(608, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    let nest_pos = Position { x: 200, y: 200 };
+    // Open ground across the whole path the guardian can walk, not just
+    // the endpoints — a DataVoid pocket anywhere along the way would give
+    // it no legal step for a reason unrelated to the tether fix.
+    for dx in -20..=20 {
+        for dy in -20..=20 {
+            game.world.resource_mut::<WorldMap>().set_override(
+                nest_pos.x + dx,
+                nest_pos.y + dy,
+                Tile {
+                    biome: Biome::OpenGrid,
+                    walkable: true,
+                },
+            );
+        }
+    }
+
+    game.spawn_nest("scrapper", nest_pos.x, nest_pos.y);
+    let nest = {
+        let mut query = game.world.query::<(Entity, &Nest, &Position)>();
+        query
+            .iter(&game.world)
+            .find(|(_, _, p)| **p == nest_pos)
+            .map(|(e, _, _)| e)
+            .expect("spawn_nest should have created a Nest at nest_pos")
+    };
+    let guardian = {
+        let mut query = game.world.query::<(Entity, &NestGuardian)>();
+        query
+            .iter(&game.world)
+            .find(|(_, g)| g.nest == nest)
+            .map(|(e, _)| e)
+            .expect("spawn_nest should have created at least one guardian")
+    };
+
+    // Well outside NEST_TETHER_RADIUS (5) — nothing today can put a
+    // guardian here, but a chase (built later) will.
+    let start = Position {
+        x: nest_pos.x + 12,
+        y: nest_pos.y,
+    };
+    *game.world.get_mut::<Position>(guardian).unwrap() = start;
+    let start_dist = (start.x - nest_pos.x)
+        .abs()
+        .max((start.y - nest_pos.y).abs());
+
+    // WanderAi's cooldown is 2-6 ticks, so this is well past enough
+    // firings for a guardian with a legal move to have taken several.
+    for _ in 0..200 {
+        game.tick();
+    }
+
+    let pos = *game.world.get::<Position>(guardian).unwrap();
+    let dist = (pos.x - nest_pos.x).abs().max((pos.y - nest_pos.y).abs());
+    // Closing *any* distance is the invariant; arriving isn't — the walk
+    // is a random ±1 step on a cooldown, so the ticks needed to fully
+    // return aren't deterministic.
+    assert!(
+        dist < start_dist,
+        "a guardian dragged outside its tether should walk back toward its nest, \
+         but stayed at distance {dist} (started at {start_dist})"
+    );
+}
+
 /// End to end, through the real round loop rather than a projection: a
 /// fresh run must be able to win the first fight it walks into. Everything
 /// else about the opening ring is machinery in service of this.

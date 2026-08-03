@@ -403,8 +403,14 @@ pub const STACK_LINKS_PER_ZONE: usize = 3;
 
 /// How far from the player's arrival point a zone's Stack links
 /// scatter. Wider than `INITIAL_SPAWN_SCATTER_TILES` so finding one is a
-/// trip rather than a glance, and so a link never lands under the base
-/// platform the player is standing on.
+/// trip rather than a glance.
+///
+/// It does *not* keep links off the base platform, though it used to claim
+/// so: `STACK_NEAREST_LINK_TILES` places the first link of every zone 5-8
+/// tiles out, against a slab of `MAX_BUILD_DISTANCE_FROM_HOME` 7. What
+/// actually holds that line is `Game::stamp_platform`, which despawns any
+/// link inside the slab, plus `spawn_surface_links` skipping
+/// `Biome::Platform` when the platform already exists.
 pub const STACK_LINK_SCATTER_TILES: i32 = 40;
 
 /// How close the *first* link of a zone is placed.

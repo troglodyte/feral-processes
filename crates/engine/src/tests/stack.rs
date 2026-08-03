@@ -754,6 +754,65 @@ fn no_entrance_opens_on_top_of_a_nest() {
     );
 }
 
+/// Not a rare collision: `STACK_NEAREST_LINK_TILES` puts a zone's first link
+/// 5-8 tiles from where the player arrives and `MAX_BUILD_DISTANCE_FROM_HOME`
+/// is 7, so a Home built near the arrival point swallows it on a large
+/// fraction of seeds. A link under the base platform is unreachable anyway —
+/// nothing can spawn on platform floor and the slab is the base's footprint —
+/// so it goes the way of the hostiles and nests standing there.
+#[test]
+fn deploying_a_home_obliterates_a_link_under_the_platform() {
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let entrances: Vec<Entity> = {
+        let mut query = game.world.query_filtered::<Entity, With<SurfaceLink>>();
+        query.iter(&game.world).collect()
+    };
+    for entrance in entrances {
+        game.world.despawn(entrance);
+    }
+    let swallowed = game
+        .world
+        .spawn((
+            SurfaceLink,
+            Position {
+                x: ppos.x + 3,
+                y: ppos.y,
+            },
+            Glyph {
+                ch: '>',
+                color: GlyphColor::Magenta,
+            },
+        ))
+        .id();
+    let spared = game
+        .world
+        .spawn((
+            SurfaceLink,
+            Position {
+                x: ppos.x + 20,
+                y: ppos.y,
+            },
+            Glyph {
+                ch: '>',
+                color: GlyphColor::Magenta,
+            },
+        ))
+        .id();
+
+    game.place_structure("home", 1, 0)
+        .expect("a fresh game can afford its first Home");
+
+    assert!(
+        game.world.get::<Position>(swallowed).is_none(),
+        "a link 2 tiles from the Home is under the slab and must be gone"
+    );
+    assert!(
+        game.world.get::<Position>(spared).is_some(),
+        "a link 19 tiles out is nowhere near the base and must survive"
+    );
+}
+
 #[test]
 fn a_structure_cannot_be_deployed_on_top_of_a_link() {
     let mut game = game();

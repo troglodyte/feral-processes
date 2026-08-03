@@ -81,3 +81,25 @@ fn update_realtime_ticks_once_a_second_only_while_playing() {
         "update_realtime shouldn't tick while paused on a non-Playing mode"
     );
 }
+
+/// `C` is the collect key, and it is bound on the map rather than being
+/// swallowed as an unknown character. Asserted through the log because
+/// app-core cannot reach the engine's `World` to look at a buffer — which
+/// is the point of the seam, not a limitation of the test.
+#[test]
+fn c_reaches_the_collect_action() {
+    let mut app = test_app(203);
+    app.handle_key(GameKey::Char('C'));
+
+    let said = app
+        .game
+        .as_ref()
+        .unwrap()
+        .message_log(200)
+        .into_iter()
+        .any(|e| e.text.contains("nothing to collect"));
+    assert!(
+        said,
+        "pressing C with nothing adjacent should reach Game::collect_adjacent"
+    );
+}

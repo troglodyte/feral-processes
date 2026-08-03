@@ -75,13 +75,34 @@ impl Game {
                 );
             }
         }
+        // Collected before `end_battle` drops `BattleState` — this is the
+        // pack that was actually in the fight, not every pursuer in the
+        // zone. Only these lose `Pursuing`; a guardian still walking in
+        // from elsewhere keeps chasing.
+        let battle_members: Vec<Entity> = self
+            .world
+            .resource::<BattleState>()
+            .groups
+            .iter()
+            .flat_map(|g| g.members.iter().copied())
+            .collect();
         let front = self.front_of_group(0);
         self.end_battle(player, front);
-        // See `Game::break_pursuer_contact`'s doc comment: without this,
-        // the `tick` below would run `nest_aggro_tick` against a pack that
-        // is still adjacent and still `Pursuing`, re-engaging the fight the
-        // player just paid an XP setback to leave.
-        self.break_pursuer_contact();
+        // A successful jack-out shakes the pack that caught you: without
+        // this, `nest_aggro_tick` (inside the `tick` below) would find the
+        // same guardians still adjacent and still `Pursuing`, and
+        // re-engage before the player's next input ever arrived — under
+        // permadeath, every attempt to leave would cost the XP setback
+        // above for nothing. `NestGuardian` is untouched, so a cleared
+        // guardian stays tethered and resumes ordinary wandering, exactly
+        // like a `despawn_nest` survivor; the nest re-provokes it the next
+        // time `attack_nest` lands a hit. A failed attempt (the branch
+        // above) shakes nobody.
+        for member in battle_members {
+            if let Ok(mut entity) = self.world.get_entity_mut(member) {
+                entity.remove::<Pursuing>();
+            }
+        }
         self.tick();
         true
     }

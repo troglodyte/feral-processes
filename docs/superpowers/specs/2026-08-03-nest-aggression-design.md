@@ -215,10 +215,43 @@ Cleared:
 - The tame path in `combat_rewards.rs`, which already removes
   `(Hostile, WanderAi, NestGuardian)` from a decompiled front-liner.
   `Pursuing` joins that tuple.
+- A successful `battle_flee`, on every entity that was actually in that
+  battle. See the Implementation note below — this reverses what this
+  spec originally said.
 
-A guardian the player fled from stays `Pursuing`: running away is not a
-reason for a swarm to calm down. This needs no rule of its own — nothing in
-the flee path touches the marker.
+> **Implementation note:** this spec originally said "a guardian the
+> player fled from stays `Pursuing`: running away is not a reason for a
+> swarm to calm down. This needs no rule of its own — nothing in the flee
+> path touches the marker." Both halves of that turned out to be false,
+> for the same reason the field-absence deviation above exists: `tick`
+> runs immediately after `end_battle`, which moves no one and — as
+> originally specified — cleared nothing, so `nest_aggro_tick` found the
+> same pack still exactly as adjacent as it had been mid-fight and
+> re-engaged before the player's next input ever arrived. A jack-out
+> against a nest guardian was mechanically impossible: every attempt paid
+> `apply_setback_xp_penalty` for nothing, and under permadeath that is a
+> death sentence, not friction.
+>
+> A movement-based fix was tried first and rejected: stepping the player
+> one tile away before the tick, on the reasoning that adjacency alone
+> would be broken. It wasn't — `NEST_PURSUIT_STEPS_PER_TICK` exactly
+> matches that one-tile distance, so the guardian's own ordinary step
+> (which fires inside that same tick, immediately after the move) closes
+> the gap straight back to adjacency regardless of which of the player's
+> eight neighbours was picked, in any open terrain. The math doesn't
+> depend on the pursuer being unusually fast — it's exactly as fast as
+> the escape, which is what the tuning already promises ("you outrun a
+> swarm in a straight line but never shake it").
+>
+> Clearing `Pursuing` on the battle's own members — collected before
+> `end_battle` drops `BattleState`, so a pursuer that was never gathered
+> into this fight keeps chasing — sidesteps that arithmetic instead of
+> fighting it: escape is guaranteed, not merely probable. `NestGuardian`
+> survives untouched, so a shaken guardian resumes ordinary tethered
+> wandering exactly like a `despawn_nest` survivor, and the nest
+> re-provokes it the next time `attack_nest` lands a hit. A failed
+> jack-out attempt shakes nobody. See `Game::battle_flee`
+> (`game/combat_teardown.rs`).
 
 ### The cache
 

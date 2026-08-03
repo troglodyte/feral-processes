@@ -2,7 +2,6 @@
 //! ending the fight.
 
 use super::support::*;
-use crate::world::NEIGHBOURS;
 use crate::*;
 
 #[test]
@@ -119,45 +118,89 @@ fn a_failed_jack_out_draws_a_parting_volley() {
     panic!("no seed in 0..60 produced a failed jack-out against a 100k-power enemy");
 }
 
-/// The other half of the same fix: walled in on every side, there is
-/// nowhere to step, so the guardian — still adjacent, still `Pursuing` —
-/// catches the player again on the very next tick. Pinning this matters as
-/// much as the escape does: without it, a silent fallback (teleporting
-/// somewhere not actually adjacent-free, say) could quietly delete the
-/// danger a real corner is supposed to represent.
+/// A successful jack-out now shakes the pack that caught you, rather than
+/// trying (and mathematically failing — see the fix's own history) to
+/// outrun it: `battle_flee`'s successful path clears `Pursuing` from every
+/// entity that was actually in the battle, before the `tick` that follows
+/// would otherwise let `nest_aggro_tick` re-engage the same, still-adjacent
+/// pack inside the same call. `NestGuardian` survives, so the guardian
+/// resumes ordinary tethered wandering exactly like a `despawn_nest`
+/// survivor — the nest re-provokes it the next time `attack_nest` lands.
 #[test]
-fn a_cornered_jack_out_is_re_caught_immediately() {
-    let mut game = Game::new(731, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+fn a_successful_jack_out_shakes_the_pack_that_caught_it() {
+    let mut game = Game::new(730, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    let ppos = *game.world.get::<Position>(player).unwrap();
-    {
-        let mut map = game.world.resource_mut::<WorldMap>();
-        for (dx, dy) in NEIGHBOURS {
-            map.set_override(
-                ppos.x + dx,
-                ppos.y + dy,
-                Tile {
-                    biome: Biome::DataVoid,
-                    walkable: false,
-                },
-            );
-        }
-    }
-    let nest = spawn_bare_nest(&mut game, ppos.x + 1, ppos.y);
-    let guardian = spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 1, ppos.y);
+    let nest = spawn_bare_nest(&mut game, 500, 500);
+    let guardian = spawn_pursuing_guardian(&mut game, nest, "scrapper", 501, 500);
     insert_battle(&mut game, player, vec![guardian]);
 
     for _ in 0..200 {
         if game.battle_flee() {
             assert!(
-                game.has_active_battle(),
-                "walled in with nowhere to step, the same adjacent pursuer should re-engage \
-                 within the same jack-out call"
+                !game.has_active_battle(),
+                "a successful jack-out must not have been immediately re-engaged"
             );
-            let after = *game.world.get::<Position>(player).unwrap();
-            assert_eq!(
-                after, ppos,
-                "cornered, the player has nowhere to go — position must not change"
+            assert!(
+                game.world.get::<Pursuing>(guardian).is_none(),
+                "the guardian that was actually in the fight should have been shaken loose"
+            );
+            assert!(
+                game.world.get::<NestGuardian>(guardian).is_some(),
+                "shaking the chase must not also untether the guardian from its nest"
+            );
+            return;
+        }
+    }
+    panic!("200 jack-out attempts all failed against a trivial pursuer");
+}
+
+/// The scoping half of the same fix: a jack-out only shakes the pack that
+/// was actually in the fight. A second guardian, pursuing but never
+/// gathered into this battle, must keep chasing — otherwise fleeing one
+/// nest's swarm would quietly call off every other chase in the zone too.
+#[test]
+fn a_successful_jack_out_does_not_shake_a_pursuer_outside_the_battle() {
+    let mut game = Game::new(732, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let ppos = *game.world.get::<Position>(player).unwrap();
+    // Open ground generous enough that neither guardian's tile can be
+    // "absent from the field" for a reason unrelated to what this test is
+    // checking — natural terrain blocking the route, say.
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for dx in -2..=12 {
+            for dy in -2..=2 {
+                map.set_override(
+                    ppos.x + dx,
+                    ppos.y + dy,
+                    Tile {
+                        biome: Biome::OpenGrid,
+                        walkable: true,
+                    },
+                );
+            }
+        }
+    }
+    let nest = spawn_bare_nest(&mut game, ppos.x + 2, ppos.y);
+    let in_battle = spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 1, ppos.y);
+    // 8 from the nest (inside the 15-tile leash) and 10 from the player
+    // (inside the 20-tile search box, but not adjacent — it must not reach
+    // the player and start a second battle within this same tick) — so if
+    // this loses `Pursuing`, that can only be this fix's own scoping, not
+    // the ordinary leash or out-of-field rules `nest_aggro_tick` already
+    // applies to every pursuer regardless of this fix.
+    let elsewhere = spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 10, ppos.y);
+    insert_battle(&mut game, player, vec![in_battle]);
+
+    for _ in 0..200 {
+        if game.battle_flee() {
+            assert!(
+                game.world.get::<Pursuing>(in_battle).is_none(),
+                "the guardian that was in the fight should have been shaken loose"
+            );
+            assert!(
+                game.world.get::<Pursuing>(elsewhere).is_some(),
+                "a guardian that was never gathered into this battle must keep chasing"
             );
             return;
         }

@@ -13,6 +13,23 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### The zone group cap is a line, not a curve
+
+- **`ZONE_GROUP_GROWTH` (geometric, x3) becomes `ZONE_GROUP_STEP` (additive,
+  +9)**, so `zone_group_cap` runs 1, 10, 19, 28, 37 instead of 1, 3, 9, 27,
+  81. Geometric growth from a base of 1 spent the whole playable range in
+  single digits — zone 2 capped every group at 3, holding surface packs and
+  Stack packs alike to three programs against a party of five whatever the
+  distance and depth curves had earned — and then ran away past zone 4 into
+  caps no encounter is designed around. Zone 1 stays solo, which
+  `in_opening_ring` and the fresh-player species checks depend on.
+- The trade is deliberate and it cuts both ways: the early zones gained
+  range, zones 4+ lost their runaway (zone 5's cap falls 81 -> 37), and the
+  hard `MAX_GROUP_SIZE` ceiling is now first reached at zone 12 rather than
+  zone 6. This is the ceiling, not the roll — `spawn_pack` still draws
+  uniformly in `1..=ceiling`, so a zone produces a wider *range* of fights
+  rather than uniformly bigger ones.
+
 ### Depth is the Stack's distance
 
 Engine-only, no save-format bump. Nothing new is persisted — depth already

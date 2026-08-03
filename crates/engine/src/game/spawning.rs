@@ -5,8 +5,7 @@ use crate::tuning::{
     BOSS_SPAWN_CHANCE, DISTANCE_STAT_STEP_BONUS, DISTANCE_STAT_STEP_TILES, GROUP_SIZE_STEP_TILES,
     INITIAL_SPAWN_SCATTER_TILES, MAX_BUILD_DISTANCE_FROM_HOME, MAX_DISTANCE_STAT_MULTIPLIER,
     MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_DURABILITY, NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN,
-    NEST_SPAWN_CHANCE, NEST_TETHER_RADIUS, PACK_GATHER_RADIUS, WILD_CREATURE_CAP,
-    ZONE_GROUP_GROWTH,
+    NEST_SPAWN_CHANCE, NEST_TETHER_RADIUS, PACK_GATHER_RADIUS, WILD_CREATURE_CAP, ZONE_GROUP_STEP,
 };
 use crate::tuning::{
     GROUP_SIZE_DISTANCE_GROWTH, GROUP_SIZE_STEP_FRAMES, MAX_GROUP_SIZE_DISTANCE_STEPS,
@@ -66,13 +65,13 @@ impl SpawnEscalation {
 }
 
 /// The zone's ceiling on one species group: zone 1 is solo, every level
-/// after multiplies by `ZONE_GROUP_GROWTH`, and `MAX_GROUP_SIZE` is the
-/// hard stop. `checked_pow` because zones are unbounded and `3^21`
-/// overflows `u32` long before the clamp would catch it.
+/// after adds `ZONE_GROUP_STEP`, and `MAX_GROUP_SIZE` is the hard stop.
+/// Saturating arithmetic because zones are unbounded — the clamp is the
+/// intent, an overflow partway to it is not.
 pub(crate) fn zone_group_cap(zone: u32) -> u32 {
-    ZONE_GROUP_GROWTH
-        .checked_pow(zone.saturating_sub(1))
-        .unwrap_or(MAX_GROUP_SIZE)
+    ZONE_GROUP_STEP
+        .saturating_mul(zone.saturating_sub(1))
+        .saturating_add(1)
         .clamp(1, MAX_GROUP_SIZE)
 }
 

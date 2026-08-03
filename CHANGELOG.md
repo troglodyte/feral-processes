@@ -26,12 +26,19 @@ records each nest's position, Durability and pending respawns.
   moment one makes contact, into an ordinary battle. A besieged nest keeps
   this going: a guardian that respawns while its nest already has pursuers
   joins the chase the moment it appears, so grinding one down without
-  finishing it off no longer buys a permanent lull.
-- **A pursuer gives up 15 tiles (Chebyshev) from its own nest** and walks
-  itself home, and can never set foot on your base platform — the swarm can
-  mill at its edge but not cross it. New tuning: `NEST_AGGRO_LEASH_RADIUS`,
-  `NEST_PURSUIT_STEPS_PER_TICK` (1, exactly player speed — outrunnable in a
-  straight line, never shakeable), `NEST_PATH_SEARCH_MARGIN`.
+  finishing it off no longer buys a permanent lull on its own — reaching
+  your own base or successfully jacking out of the fight still does (see
+  below on both).
+- **A pursuer gives up 15 tiles (Chebyshev) from its own nest, more than 20
+  from you, or once it simply has no route to you at all** — whichever it
+  hits first — and walks itself home. **Reaching your base ends the chase
+  outright, for the whole swarm at once**: no guardian will set foot on the
+  platform, and standing inside it leaves every pursuer in the zone with no
+  route to you, not just whichever one was closest, so going home disbands
+  the chase rather than merely holding it at the door. New tuning:
+  `NEST_AGGRO_LEASH_RADIUS`, `NEST_PURSUIT_STEPS_PER_TICK` (1, exactly player
+  speed — outrunnable in a straight line, never shakeable),
+  `NEST_PATH_SEARCH_MARGIN`.
 - **Destroying a nest now pays a cache**: a multiple of its species'
   work-resource drop, Portal Fragments scaled by how far below your current
   zone it sits, and three rolls of its equipment table. No XP — the
@@ -49,6 +56,21 @@ records each nest's position, Durability and pending respawns.
   step only when doing so both leaves the radius and fails to close the
   distance, so a displaced guardian makes its way home instead of standing
   frozen.
+- **Fixed: jacking out of a fight with a nest's guardians could put you
+  right back into it before you got a single input.** `battle_flee`'s
+  teardown moved no one and left every pursuer still marked, so the very
+  next tick's pursuit step saw the same pack still adjacent and started a
+  new battle on the spot — under permadeath, every attempt to leave cost the
+  same XP setback for nothing. A step-away fix was tried and rejected: with
+  `NEST_PURSUIT_STEPS_PER_TICK` exactly matching a one-tile move, the
+  guardian's own ordinary step closed the gap straight back to adjacency in
+  the same tick, on any open ground. A successful jack-out now clears
+  `Pursuing` from every guardian that was actually in that fight instead —
+  it shakes the pack rather than trying to outrun it. They aren't gone:
+  `NestGuardian` survives, so they resume ordinary tethered wandering and
+  the nest re-provokes them the next time you hit it. A guardian that
+  wasn't part of that fight keeps chasing regardless, and a failed jack-out
+  attempt shakes nobody.
 
 ### The zone group cap is a line, not a curve
 

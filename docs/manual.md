@@ -1032,14 +1032,24 @@ species file).
   around obstacles rather than blundering into them, and folding in
   whatever else is standing nearby the moment it makes contact — you fight
   the swarm that reaches you, not just the one that closed the distance.
-  It gives up if you put enough ground between yourself and the nest, and
-  walks itself home once it does; either way, a guardian that catches up
-  again after giving up is provoked all over by your next swing. A
-  besieged nest keeps this going — a guardian that respawns while its nest
-  is under siege joins the chase already provoked, so a nest you refuse to
-  finish off never runs out of guardians to send at you. One thing no
-  guardian will do is set foot on your base platform; the swarm can mill at
-  its edge but not cross it.
+  It gives up — and walks itself home — the moment any one of three things
+  is true: it's more than 15 tiles (Chebyshev) from its own nest, more than
+  20 from you, or it simply has no route to you at all; either way, a
+  guardian that catches up again after giving up is provoked all over by
+  your next swing. A besieged nest keeps this going — a guardian that
+  respawns while its nest is under siege joins the chase already provoked,
+  so a nest you refuse to finish off never runs out of guardians to send at
+  you. **Reaching your base ends the chase outright, for the whole swarm at
+  once.** No guardian will set foot on the platform, and standing inside it
+  leaves every pursuer in the zone with no route to you — not just
+  whichever one was closest — so going home disbands the chase rather than
+  just holding it at the door. **Jacking out of a fight with a nest's
+  guardians shakes that pack, too**: a successful escape calls off every
+  guardian that was actually in the fight, and they go back to ordinary
+  tethered wandering near their nest. It isn't gone for good — the nest
+  re-provokes them the next time you hit it — but it's a real way out of a
+  swarm mid-chase, not just a delay. A guardian that wasn't part of that
+  fight (still closing in from elsewhere) keeps coming regardless.
 - Destroying it frees every surviving guardian (they scatter into ordinary
   wandering) and cancels any queued respawns.
 - Raids never target a nest; its Durability is only ever spent by you, and

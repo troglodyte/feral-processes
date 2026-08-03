@@ -159,7 +159,7 @@ its step and wanders. This is a legitimate outcome, not an error.
 > not just whichever guardian happened to be closest. **This is the
 > intended rule, not a bug: the base is where a chase ends, zone-wide.**
 > See `Game::nest_aggro_tick` (`game/turn.rs`) and
-> `standing_inside_the_base_slab_clears_every_pursuer_zone_wide`
+> `standing_inside_the_base_slab_strips_pursuing_from_a_reachable_guardian`
 > (`tests/zone.rs`).
 
 ### One tick of pursuit
@@ -405,6 +405,12 @@ accident.
   swarm trivially kiteable) and the besieged-nest respawn stream, which as
   designed means a slow player never runs out of enemies.
 - **Nests near the base.** The leash is measured from the nest, so a nest
-  within 15 tiles of the base can put pursuers on the doorstep. Pursuers
-  cannot step onto the platform, so they will mill at its edge. Whether that
-  reads as a siege or as a bug is a play question.
+  within 15 tiles of the base can put pursuers on the doorstep. This part is
+  no longer open, and the answer isn't "they mill at the edge" as this
+  section once said: pursuers still can never step onto the platform
+  itself, but standing inside its interior empties the pursuit field
+  outright (see the field-absence "Implementation note" above), so
+  reaching the base disbands the *whole* chase rather than leaving a swarm
+  parked at the doorstep. What's still open is whether that makes a nest
+  within leash range of the base too easy to duck — a balance question for
+  after play, not the "siege or bug" question this used to be.

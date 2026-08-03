@@ -150,7 +150,7 @@ fn rest_fully_heals_and_restores_fatigue() {
 /// `enables_rest`'s radius to exactly `MAX_BUILD_DISTANCE_FROM_HOME`, the
 /// same radius `stamp_platform` stamps, so nearly everywhere rest works is
 /// also inside the platform's interior — where decision 4's base-disband
-/// rule (see `standing_inside_the_base_slab_clears_every_pursuer_zone_wide`
+/// rule (see `standing_inside_the_base_slab_strips_pursuing_from_a_reachable_guardian`
 /// in `tests/zone.rs`) would strip the pursuer's `Pursuing` before it ever
 /// got close. Standing exactly on the edge (Chebyshev `half` from Home)
 /// keeps rest enabled while leaving three of the player's eight neighbours

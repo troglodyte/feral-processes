@@ -1639,18 +1639,47 @@ fn nest_aggro_tick_is_a_no_op_while_underground() {
 
 /// Pins the deviation recorded in `nest_aggro_tick`'s "field-absence"
 /// branch (and the matching "Implementation note" in
-/// docs/superpowers/specs/2026-08-03-nest-aggression-design.md): reaching
-/// the base disbands a chase zone-wide, not just for whichever guardian was
-/// closest. Standing on the platform's interior makes every one of the
-/// player's own neighbours `Biome::Platform`, so the pursuit field never
-/// grows past the player's own tile — a guardian 40 tiles off reads as
-/// "absent from the field" exactly the way one merely out of leash range
-/// does, and loses `Pursuing` the same way.
+/// docs/superpowers/specs/2026-08-03-nest-aggression-design.md): standing
+/// inside the base slab empties the pursuit field outright, for *any*
+/// pursuer, not just one already too far away to matter. Standing on the
+/// platform's interior makes every one of the player's own neighbours
+/// `Biome::Platform`, so `pursuit_field`'s search can't take a single step
+/// out of the player's own tile — the same shape as
+/// `pursuit.rs::an_enclosed_origin_yields_a_field_of_just_itself`. A
+/// guardian well inside both the leash and the search box, on open ground
+/// the whole way, reads as absent from that field anyway and loses
+/// `Pursuing` — the platform is what did that, not distance, which is what
+/// the previous version of this test (guardian 40 tiles out, past the
+/// 20-tile search box on distance alone) failed to isolate. Verified: with
+/// the `stamp_platform` call below removed, this test fails; restored, it
+/// passes.
 #[test]
-fn standing_inside_the_base_slab_clears_every_pursuer_zone_wide() {
+fn standing_inside_the_base_slab_strips_pursuing_from_a_reachable_guardian() {
     let mut game = Game::new(717, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let ppos = *game.world.get::<Position>(player).unwrap();
+
+    // Open ground the whole way, so — absent the platform — this guardian
+    // would be found in the field and close on the player like any other
+    // pursuer (see `a_pursuer_closes_on_the_player_each_tick`). The
+    // platform has to be what empties the field here, not natural terrain
+    // blocking the route.
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for dx in -2..=12 {
+            for dy in -2..=2 {
+                map.set_override(
+                    ppos.x + dx,
+                    ppos.y + dy,
+                    Tile {
+                        biome: Biome::OpenGrid,
+                        walkable: true,
+                    },
+                );
+            }
+        }
+    }
+
     game.stamp_platform(ppos.x, ppos.y);
     assert_eq!(
         game.world
@@ -1661,19 +1690,20 @@ fn standing_inside_the_base_slab_clears_every_pursuer_zone_wide() {
         "test premise: the player must actually be standing inside the slab"
     );
 
-    // Far enough that this can't be mistaken for the ordinary out-of-field
-    // rule tripping on plain distance — this guardian is nowhere near
-    // either the leash radius or the player's own search box, and would
-    // keep closing normally on open ground with no platform involved.
-    let nest = spawn_bare_nest(&mut game, ppos.x + 40, ppos.y);
-    let guardian = spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 40, ppos.y);
+    // 10 tiles out: well inside both NEST_AGGRO_LEASH_RADIUS (15) and the
+    // player's own search box (20), and outside the platform's own
+    // MAX_BUILD_DISTANCE_FROM_HOME (7) footprint, so the guardian's own
+    // tile isn't Platform either — only the player's immediate
+    // neighbourhood needs to be.
+    let nest = spawn_bare_nest(&mut game, ppos.x + 10, ppos.y);
+    let guardian = spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 10, ppos.y);
 
     game.tick();
 
     assert!(
         game.world.get::<Pursuing>(guardian).is_none(),
-        "reaching the base should disband every pursuer in the zone, however far off its \
-         chase actually is"
+        "standing inside the slab should empty the pursuit field even for a guardian that \
+         would otherwise be well within reach"
     );
 }
 

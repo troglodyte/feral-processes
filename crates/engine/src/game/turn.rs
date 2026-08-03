@@ -1,6 +1,7 @@
 //! The turn loop: advancing the clock, moving, and the actions a player
 //! spends a turn on.
 
+use crate::game::spawning::SpawnEscalation;
 use crate::tuning::{RANDOM_ENCOUNTER_CHANCE, REST_TICKS};
 use crate::*;
 
@@ -283,7 +284,7 @@ impl Game {
         let Some((species, _)) = self.pick_habitat_species(tx, ty, false) else {
             return;
         };
-        let pack = self.spawn_pack(&species, false, tx, ty, 1.0, 1);
+        let pack = self.spawn_pack(&species, false, tx, ty, SpawnEscalation::surface());
         let Some(&anchor) = pack.first() else {
             return;
         };

@@ -151,12 +151,37 @@ pub const GROUP_SIZE_STEP_TILES: i32 = DISTANCE_STAT_STEP_TILES;
 pub const GROUP_SIZE_DISTANCE_GROWTH: u32 = 2;
 pub const MAX_GROUP_SIZE_DISTANCE_STEPS: u32 = 7;
 
-/// Geometric base for the group size each zone level allows: zone 1 is solo,
-/// and every level after multiplies the cap by this against `MAX_GROUP_SIZE`
-/// (1, 3, 9, 27, 81, 100). Only `battle::attackers_in_group` of a group
-/// swing per round, so a deep swarm is an attrition wall rather than a
-/// linear multiplier on incoming damage.
-pub const ZONE_GROUP_GROWTH: u32 = 3;
+/// Frames descended per escalation step in the Stack — the underground
+/// counterpart to `GROUP_SIZE_STEP_TILES`, feeding the same curve through
+/// `Game::danger_steps`.
+///
+/// One frame per step, against fifteen tiles per step on the surface,
+/// because descending *is* the commitment that walking out is: a frame is
+/// a maze to cross and a one-way door at the bottom of it, where fifteen
+/// tiles is a few turns' walk you can turn around in. The party also
+/// arrives at depth 1 already having chosen to be there, so the first frame
+/// stays at step zero — the entrance is the Stack's own opening ring.
+pub const GROUP_SIZE_STEP_FRAMES: u32 = 1;
+
+/// Extra members each zone level adds to the group-size cap: zone 1 is solo,
+/// and every level after adds this against `MAX_GROUP_SIZE`
+/// (1, 10, 19, 28, 37, ... saturating at zone 12). Only
+/// `battle::attackers_in_group` of a group swing per round, so a deep swarm
+/// is an attrition wall rather than a linear multiplier on incoming damage.
+///
+/// Additive rather than the geometric x3 this used to be, and the early
+/// zones are the reason. Geometric growth from a base of 1 spends its whole
+/// playable range in single digits — zone 2 capped every group at 3, which
+/// held Stack packs and surface packs alike to three programs against a
+/// party of five, whatever else the distance and depth curves had earned —
+/// and then runs away past zone 4 into caps of 27 and 81 that no encounter
+/// is designed around. A line opens the zones the game is actually played
+/// in and keeps the tail legible.
+///
+/// This is the *ceiling*, not the roll: `spawn_pack` still draws uniformly
+/// in `1..=ceiling`, so raising it widens the range of fights a zone can
+/// produce rather than making every fight bigger.
+pub const ZONE_GROUP_STEP: u32 = 9;
 
 /// Hard ceiling on a single species group. With `MAX_ENEMY_GROUPS` groups on
 /// the field, one intrusion tops out at four hundred programs.
@@ -1162,14 +1187,16 @@ mod tests {
         );
     }
 
-    /// The zone group cap is meant to reach `MAX_GROUP_SIZE` within the
-    /// zones the game is balanced for — `balance_sim` sweeps zones 1-5 and
-    /// documents the cap saturating at zone 6 (1, 3, 9, 27, 81, 100).
+    /// The zone group cap has to reach `MAX_GROUP_SIZE` somewhere, or the
+    /// hard ceiling is decoration. Under the old x3 growth that happened at
+    /// zone 6, inside the range `balance_sim` sweeps; a line gets there
+    /// later, which is the deliberate half of the trade — the early zones
+    /// gained their range by the tail giving up its runaway.
     #[test]
-    fn zone_group_growth_saturates_the_group_cap_in_a_reachable_zone() {
-        let zones_to_saturate = (1..=10)
-            .find(|z| ZONE_GROUP_GROWTH.pow(z - 1) >= MAX_GROUP_SIZE)
-            .expect("group growth should reach MAX_GROUP_SIZE within ten zones");
-        assert_eq!(zones_to_saturate, 6);
+    fn zone_group_step_saturates_the_group_cap_in_a_reachable_zone() {
+        let zones_to_saturate = (1..=20)
+            .find(|z| 1 + ZONE_GROUP_STEP * (z - 1) >= MAX_GROUP_SIZE)
+            .expect("group growth should reach MAX_GROUP_SIZE within twenty zones");
+        assert_eq!(zones_to_saturate, 12);
     }
 }

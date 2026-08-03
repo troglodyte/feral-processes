@@ -393,8 +393,8 @@ fn a_group_is_capped_at_the_local_group_size_and_the_rest_stay_on_the_map() {
     assert_eq!(groups.len(), 1, "one species is one group");
     assert_eq!(
         groups[0].members.len(),
-        9,
-        "zone 3 caps a group at 9 however many gathered"
+        19,
+        "zone 3 caps a group at 19 however many gathered"
     );
     let still_alive = members
         .iter()
@@ -411,7 +411,10 @@ fn a_group_is_capped_at_the_local_group_size_and_the_rest_stay_on_the_map() {
 #[test]
 fn a_mixed_swarm_fights_as_four_groups_of_a_hundred() {
     let mut game = Game::new(313, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    game.world.resource_mut::<ZoneLevel>().0 = 6;
+    // Zone 12 is where `zone_group_cap` saturates at `MAX_GROUP_SIZE` under
+    // the linear curve (1 + 9 * 11 = 100). Anything shallower is bounded by
+    // its own zone rather than by the hard ceiling this test is about.
+    game.world.resource_mut::<ZoneLevel>().0 = 12;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
     let (x, y) = (spawn.x + GROUP_SIZE_STEP_TILES * 7, spawn.y);
 
@@ -447,9 +450,9 @@ fn gather_radius_widens_with_the_local_group_size() {
         game.species_defs().into_iter().next().unwrap().id.clone()
     };
     let mut game = Game::new(312, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    game.world.resource_mut::<ZoneLevel>().0 = 5;
+    game.world.resource_mut::<ZoneLevel>().0 = 8;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    // Zone 5, fully unlocked: groups of 81, so a radius of ceil_sqrt(81) = 9.
+    // Zone 8, fully unlocked: groups of 64, so a radius of ceil_sqrt(64) = 8.
     let (ax, ay) = (spawn.x + GROUP_SIZE_STEP_TILES * 7, spawn.y);
     let hostile = |game: &mut Game, x: i32, y: i32| {
         game.world
@@ -476,7 +479,7 @@ fn gather_radius_widens_with_the_local_group_size() {
     assert_eq!(
         pack.len(),
         2,
-        "eight tiles out is inside a zone-5 swarm's radius, though it is well \
+        "eight tiles out is inside a zone-8 swarm's radius, though it is well \
          outside the PACK_GATHER_RADIUS a small pack uses"
     );
 }

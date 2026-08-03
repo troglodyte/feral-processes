@@ -892,7 +892,8 @@ fn tier_adds_to_payout_on_top_of_the_zone_bonus() {
     let mut game = Game::new(974, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.resource_mut::<ZoneLevel>().0 = 3;
 
-    let gained = run_one_full_gather_cycle_at_tier(&mut game, ids::CORE_FRAGMENT, Some(3));
+    let gained =
+        run_one_full_gather_cycle_at_tier(&mut game, "mining_node", ids::CORE_FRAGMENT, Some(3));
 
     assert_eq!(
         gained, 5,
@@ -976,6 +977,50 @@ fn a_banked_resource_never_scales_with_zone_depth() {
         gained, 1,
         "research_data has a bank_limit of 200 — scaling it would fill the bank in ~13 \
          cycles and turn the research economy into 'no room to store it' spam"
+    );
+}
+
+/// The Compiler produces a taming catalyst, not bulk salvage, and opts out
+/// of the payout curve written for salvage. Scaling it put a Mk5 in zone 5
+/// at nine ICE Breakers a cycle every 8 ticks, guaranteed — against a
+/// demand of one per decompile attempt, and with each unit worth 3 Core
+/// Fragments at the bench and 1 Credit at the Market, which is base
+/// production paying out in the one currency that survives a breach.
+#[test]
+fn a_flat_payout_node_never_scales_with_tier_or_depth() {
+    let mut game = Game::new(963, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 5;
+
+    let gained =
+        run_one_full_gather_cycle_at_tier(&mut game, "compiler", ids::ICE_BREAKER, Some(5));
+
+    assert_eq!(
+        gained, 1,
+        "a Mk5 Compiler in zone 5 pays one catalyst a cycle, not tier plus four zones' bonus"
+    );
+}
+
+/// `flat_payout` takes the upgrade tier out of the Compiler's payout, and
+/// tier feeds nothing else on it — not repair rate, which it doesn't
+/// declare. Without a `level` for tier to track, its five upgrade tiers
+/// would cost 120 Core Fragments for no effect whatsoever. Reliability is
+/// what those tiers buy now: Mk1 lands about half its cycles, Mk5 nine in
+/// ten, and the ceiling stays one catalyst per cycle either way.
+#[test]
+fn the_compilers_upgrade_tiers_buy_reliability_since_they_no_longer_buy_volume() {
+    let game = Game::new(964, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let work = game
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.id == "compiler")
+        .expect("the Compiler ships")
+        .work
+        .expect("the Compiler is a worked node");
+
+    assert!(work.flat_payout, "a catalyst node must not scale");
+    assert!(
+        work.level.is_some(),
+        "with payout flat, a fizzle roll is the only thing tier can still move"
     );
 }
 

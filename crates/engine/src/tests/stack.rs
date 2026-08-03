@@ -2305,8 +2305,8 @@ fn deeper_frames_field_tougher_programs() {
         // is carried into the spawn as an argument, not read back off the
         // locale, so this is the scaling the game applies rather than a
         // proxy for it. `is_boss` only to pin the group at one member.
-        let depth_mult = game.stack_depth_multiplier();
-        let pack = game.spawn_pack("scrapper", true, pos.x, pos.y, depth_mult, 1);
+        let esc = game.stack_escalation(game.stack_pos().map_or(1, |p| p.depth));
+        let pack = game.spawn_pack("scrapper", true, pos.x, pos.y, esc);
         game.world.get::<Stats>(pack[0]).unwrap().power()
     };
 
@@ -2420,6 +2420,33 @@ fn trace(game: &Game) -> u32 {
 
 fn set_trace(game: &mut Game, n: u32) {
     game.world.insert_resource(crate::resources::Trace(n));
+}
+
+/// Rewrites the depth of the live `Locale::Stack`, the way `set_trace`
+/// rewrites the Trace resource. A test about the depth curve wants a stated
+/// depth, not a walk down to it through however many frames the seed's stack
+/// happens to run — `frames` is widened to match so the position stays a
+/// legal one.
+fn set_depth(game: &mut Game, depth: u32) {
+    let Locale::Stack {
+        frames,
+        x,
+        y,
+        facing,
+        entrance,
+        ..
+    } = locale(game)
+    else {
+        unreachable!("not underground")
+    };
+    game.world.insert_resource(Locale::Stack {
+        depth,
+        frames: frames.max(depth),
+        x,
+        y,
+        facing,
+        entrance,
+    });
 }
 
 /// The reason Trace is a resource and not a field on the `Locale::Stack`
@@ -2886,6 +2913,119 @@ fn a_hunted_ambush_fields_more_of_the_pack_than_a_quiet_one() {
         "Hunted fielded {hunted} of the pack, Quiet fielded {quiet} — the \
          band multiplier never reached the fight"
     );
+}
+
+// ---- Depth as the Stack's distance -------------------------------------
+
+/// The surface escalates a fight by distance from the danger origin. The
+/// Stack could not: the party's `Position` is pinned to the entrance tile
+/// they walked in through, so `max_group_size` measured the *base's own
+/// doorstep* however far down they had gone, and every frame at every depth
+/// fielded a single program in a single group. Depth is what pushing out
+/// means underground, and it now feeds the same curve.
+#[test]
+fn a_deeper_frame_fields_more_of_the_pack_than_a_shallow_one() {
+    let mut game = game();
+    // Zone 4's cap is 27, so the depth curve rather than the zone clamp is
+    // what this measures — at zone 2 both depths would land on the cap of 3.
+    game.world.insert_resource(ZoneLevel(4));
+    descend(&mut game);
+
+    let pack: Vec<Entity> = (0..8)
+        .map(|_| spawn_wild_on_player_tile(&mut game))
+        .collect();
+    let fielded = |game: &Game| -> usize {
+        game.group_pack(pack.clone())
+            .iter()
+            .map(|g| g.members.len())
+            .sum()
+    };
+
+    set_depth(&mut game, 1);
+    let shallow = fielded(&game);
+    set_depth(&mut game, 4);
+    let deep = fielded(&game);
+
+    assert_eq!(shallow, 1, "the first frame is still one program");
+    assert!(
+        deep > shallow,
+        "depth 4 fielded {deep} of the pack, depth 1 fielded {shallow} — \
+         descending has to escalate the fight the way walking out does"
+    );
+}
+
+/// The same leak `a_surface_spawn_is_unscaled_while_the_party_is_hunted`
+/// guards, for the second lever that rides the party's own state. Ambient
+/// spawns and nest respawns keep rolling on every `tick` while the party is
+/// four frames down, and a depth read off the locale *inside* the spawn
+/// would size those from the party's depth — leaving oversized packs waiting
+/// at the link mouth for the climb out. Depth is a parameter for exactly the
+/// reason Trace's multiplier is.
+#[test]
+fn a_surface_spawn_is_unscaled_while_the_party_is_deep() {
+    fn surface_pack_size(depth: u32) -> usize {
+        let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.world.insert_resource(ZoneLevel(4));
+        descend(&mut game);
+        set_depth(&mut game, depth);
+
+        let (x, y) = multi_group_ground(&game);
+        let before = game.world.query::<&Creature>().iter(&game.world).count();
+        game.try_spawn_habitat_creature(x, y);
+        game.world.query::<&Creature>().iter(&game.world).count() - before
+    }
+
+    assert_eq!(
+        surface_pack_size(6),
+        surface_pack_size(1),
+        "the party's depth must not reach a spawn happening on the surface"
+    );
+}
+
+/// `group_pack` groups by *species*, and `maybe_stack_encounter` drew one
+/// species — so a Stack fight was a single group however many
+/// `max_enemy_groups` allowed. Raising the count alone would have been a
+/// no-op, the same way scaling only the spawn made `TRACE_GROUP_MULT` one.
+/// The encounter now draws a pick per group the depth has earned.
+#[test]
+fn a_deep_encounter_draws_a_pack_per_group_the_depth_allows() {
+    let mut game = game();
+    game.world.insert_resource(ZoneLevel(4));
+    descend(&mut game);
+    set_depth(&mut game, 4);
+
+    let (ex, ey) = game.stack_pos().unwrap().entrance;
+    let groups = game.max_enemy_groups(ex, ey, Some(4));
+    assert!(
+        groups > 1,
+        "depth 4 should have earned more than one group, got {groups}"
+    );
+
+    let pack = game.stack_encounter_pack();
+    assert!(
+        pack.len() >= groups,
+        "{groups} groups' worth of picks should have put at least {groups} \
+         programs on the field, got {}",
+        pack.len()
+    );
+}
+
+/// The opening ring is load-bearing — `in_opening_ring` and the fresh-player
+/// species checks both depend on a zone-1 fight being one program — and the
+/// first frame of a stack is the underground equivalent. Depth 1 must stay
+/// exactly where it was.
+#[test]
+fn the_first_frame_is_no_wider_than_it_was() {
+    let mut game = game();
+    descend(&mut game);
+    let (ex, ey) = game.stack_pos().unwrap().entrance;
+
+    assert_eq!(
+        game.max_group_size(ex, ey, Some(1)),
+        game.max_group_size(ex, ey, None),
+        "depth 1 is the entrance tile's own curve, not a step past it"
+    );
+    assert_eq!(game.max_enemy_groups(ex, ey, Some(1)), 1);
 }
 
 // ─────────────────────────────────────────────────────────────────────────

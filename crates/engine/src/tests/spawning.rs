@@ -616,7 +616,7 @@ fn a_spawn_roll_culls_enough_room_for_the_whole_group_it_places() {
     };
     *game.world.get_mut::<Position>(player).unwrap() = far;
     assert!(
-        game.max_group_size(far.x, far.y) > 1,
+        game.max_group_size(far.x, far.y, None) > 1,
         "the fixture is pointless unless a roll here places more than one"
     );
 

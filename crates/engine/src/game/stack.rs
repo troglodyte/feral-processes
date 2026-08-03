@@ -6,6 +6,7 @@
 //! exception is `enter_stack`, which pins `Position` to the entrance tile
 //! on the way in.
 
+use crate::game::spawning::SpawnEscalation;
 use crate::resources::{CurrentStack, Locale, Trace};
 use crate::stack::{self, CellKind, Dir};
 use crate::tuning::{
@@ -476,6 +477,52 @@ impl Game {
         }
     }
 
+    /// Everything an underground spawn escalates by, gathered in one place
+    /// so the two callers that conjure a pack down here — an ambush and a
+    /// lair guardian — cannot disagree about it.
+    pub(crate) fn stack_escalation(&self, depth: u32) -> SpawnEscalation {
+        SpawnEscalation {
+            stat_mult: self.stack_depth_multiplier(),
+            group_mult: self.trace_group_mult(),
+            depth: Some(depth),
+        }
+    }
+
+    /// The pack a Stack ambush fields: one species pick per group the depth
+    /// has earned (`Game::max_enemy_groups`), each rolled to its own size,
+    /// all tagged `StackSpawn` for `end_battle` to sweep.
+    ///
+    /// A pick *per group* rather than one pick scaled up, because
+    /// `group_pack` groups by **species**: a single draw is a single group
+    /// however many the curve allows, so raising the count alone would have
+    /// been the same shape of no-op that scaling only the spawn was for
+    /// `TRACE_GROUP_MULT`. Repeat picks are deliberately not filtered out —
+    /// a thin biome may offer only one species, and two draws of it making
+    /// one wider group is the honest answer rather than a reason to refuse
+    /// the second.
+    pub(crate) fn stack_encounter_pack(&mut self) -> Vec<Entity> {
+        let Some(pos) = self.stack_pos() else {
+            return Vec::new();
+        };
+        // Spawned onto the link tile itself: the party's `Position` is
+        // pinned there, and a Stack pack is resolved immediately rather
+        // than left to roam, so where on the surface it stands never matters.
+        let (ex, ey) = pos.entrance;
+        let esc = self.stack_escalation(pos.depth);
+        let groups = self.max_enemy_groups(ex, ey, esc.depth);
+        let mut pack = Vec::new();
+        for _ in 0..groups {
+            let Some((species, _)) = self.pick_habitat_species(ex, ey, false) else {
+                continue;
+            };
+            pack.extend(self.spawn_pack(&species, false, ex, ey, esc));
+        }
+        for &member in &pack {
+            self.world.entity_mut(member).insert(StackSpawn);
+        }
+        pack
+    }
+
     /// Rolls `STACK_ENCOUNTER_CHANCE` for an encounter after a step, and
     /// starts the fight if it hits.
     ///
@@ -493,9 +540,9 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
-        let Some(pos) = self.stack_pos() else {
+        if self.stack_pos().is_none() {
             return;
-        };
+        }
         let mult = self.trace_encounter_mult();
         let encountered = {
             let mut rng = self.world.resource_mut::<GameRng>();
@@ -506,21 +553,9 @@ impl Game {
             return;
         }
 
-        let (ex, ey) = pos.entrance;
-        let Some((species, _)) = self.pick_habitat_species(ex, ey, false) else {
-            return;
-        };
-        // Spawned onto the link tile itself: the party's `Position` is
-        // pinned there, and a Stack pack is resolved immediately rather
-        // than left to roam, so where on the surface it stands never matters.
-        let depth_mult = self.stack_depth_multiplier();
-        let group_mult = self.trace_group_mult();
-        let pack = self.spawn_pack(&species, false, ex, ey, depth_mult, group_mult);
+        let pack = self.stack_encounter_pack();
         if pack.is_empty() {
             return;
-        }
-        for &member in &pack {
-            self.world.entity_mut(member).insert(StackSpawn);
         }
         self.remember_fight();
         self.log("Something moves in the dark ahead.".to_string());

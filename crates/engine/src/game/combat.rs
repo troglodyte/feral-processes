@@ -36,15 +36,31 @@ impl Game {
     /// Reading the band off the resource is safe *here*, unlike inside
     /// `spawn_pack`: this is only ever reached from `start_battle`, which is
     /// the player's own fight, and Trace is zero unless they are underground.
+    /// `fight_depth` rides in on that same safety — see its doc.
     fn widest_group_size(&self, members: &[Entity]) -> usize {
+        let depth = self.fight_depth();
         let base = members
             .iter()
             .filter_map(|&e| self.world.get::<Position>(e))
-            .map(|p| self.max_group_size(p.x, p.y))
+            .map(|p| self.max_group_size(p.x, p.y, depth))
             .max()
             .unwrap_or(1);
         let cap = crate::game::spawning::zone_group_cap(self.world.resource::<ZoneLevel>().0);
         crate::game::spawning::trace_group_ceiling(base, self.trace_group_mult(), cap) as usize
+    }
+
+    /// The depth the fight being assembled is happening at, or `None` on the
+    /// surface. Every member of an underground pack stands on the entrance
+    /// tile — the party's `Position` is pinned there — so their tiles report
+    /// the base's doorstep and depth is the only thing that can say how far
+    /// down this is.
+    ///
+    /// Safe as a resource read for the same reason `trace_group_mult` is
+    /// above: both `widest_*` helpers are reached only from `group_pack`,
+    /// and that is only ever the player's own fight. Inside `spawn_pack` the
+    /// identical read would be the documented leak.
+    fn fight_depth(&self) -> Option<u32> {
+        self.stack_pos().map(|pos| pos.depth)
     }
 
     /// The widest `max_enemy_groups` among `members`' own tiles, measured
@@ -53,10 +69,11 @@ impl Game {
     /// boundary would otherwise fight under whichever tile its anchor
     /// happened to land on.
     fn widest_enemy_groups(&self, members: &[Entity]) -> usize {
+        let depth = self.fight_depth();
         members
             .iter()
             .filter_map(|&e| self.world.get::<Position>(e))
-            .map(|p| self.max_enemy_groups(p.x, p.y))
+            .map(|p| self.max_enemy_groups(p.x, p.y, depth))
             .max()
             .unwrap_or(1)
     }
@@ -80,8 +97,11 @@ impl Game {
         // Deliberately asymmetric with the ceiling below — a radius that
         // errs small leaves a member at the fringe, where a ceiling that
         // errs small leaves half the cluster.
-        let radius =
-            crate::game::spawning::swarm_radius(self.max_group_size(anchor_pos.x, anchor_pos.y));
+        let radius = crate::game::spawning::swarm_radius(self.max_group_size(
+            anchor_pos.x,
+            anchor_pos.y,
+            None,
+        ));
         let mut pack = vec![anchor];
         let mut query = self
             .world

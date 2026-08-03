@@ -431,25 +431,31 @@ pub(super) fn count_item(game: &Game, id: &str) -> u32 {
 }
 
 pub(super) fn run_one_full_gather_cycle(game: &mut Game, resource: &str) -> u32 {
-    run_one_full_gather_cycle_at_tier(game, resource, None)
+    run_one_full_gather_cycle_at_tier(game, "mining_node", resource, None)
 }
 
-/// Runs exactly one completed gather cycle against a hand-built node
-/// producing `resource` at `tier`, and returns how many units landed in
-/// the player's inventory.
+/// Runs exactly one completed gather cycle against a hand-built node of
+/// `kind` producing `resource` at `tier`, and returns how many units landed
+/// in the player's inventory.
+///
+/// `kind` is a real structure id rather than a placeholder because the
+/// payout consults that structure's `WorkDef` for `flat_payout` — a node
+/// whose kind isn't in the `StructureDb` would silently take the scaling
+/// branch.
 ///
 /// `level: None` on the node means it always yields (see
 /// `systems::mining_success_chance`), which is what keeps the payout
 /// assertions off the RNG entirely.
 pub(super) fn run_one_full_gather_cycle_at_tier(
     game: &mut Game,
+    kind: &str,
     resource: &str,
     tier: Option<u32>,
 ) -> u32 {
     let worker = spawn_tamed(game, 10, 3);
     let mut structure = game.world.spawn((
         Structure {
-            kind: "mining_node".to_string(),
+            kind: kind.to_string(),
         },
         Position { x: 3, y: 4 },
         ResourceNode {

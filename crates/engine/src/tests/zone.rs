@@ -138,27 +138,35 @@ fn distance_stat_multiplier_treats_the_whole_platform_as_distance_zero() {
     );
 }
 
+/// The cap is linear, not geometric, and that is the point of it.
+///
+/// Geometric growth from a base of 1 spends its whole early range in single
+/// digits — zone 2 capped every group at 3, so a party of five met packs of
+/// three however far out or however deep they pushed — and then runs away
+/// past zone 4, where 27 and 81 are numbers no encounter design uses. A
+/// straight line opens the early zones, which is where the game is actually
+/// played, and keeps the tail somewhere a fight can still be read.
 #[test]
-fn zone_group_cap_is_geometric_and_never_passes_max_group_size() {
+fn zone_group_cap_is_linear_and_never_passes_max_group_size() {
     use crate::game::spawning::zone_group_cap;
     assert_eq!(
         zone_group_cap(1),
         1,
         "zone 1 is solo, whatever else is true"
     );
-    assert_eq!(zone_group_cap(2), 3);
-    assert_eq!(zone_group_cap(3), 9);
-    assert_eq!(zone_group_cap(4), 27);
-    assert_eq!(zone_group_cap(5), 81);
+    assert_eq!(zone_group_cap(2), 10);
+    assert_eq!(zone_group_cap(3), 19);
+    assert_eq!(zone_group_cap(4), 28);
+    assert_eq!(zone_group_cap(5), 37);
     assert_eq!(
-        zone_group_cap(6),
+        zone_group_cap(12),
         MAX_GROUP_SIZE,
-        "3^5 is 243, so zone 6 clamps"
+        "1 + 9 * 11 is exactly 100, so zone 12 is where the clamp starts"
     );
     assert_eq!(
         zone_group_cap(99),
         MAX_GROUP_SIZE,
-        "a deep zone must clamp rather than overflow the pow"
+        "a deep zone must clamp rather than overflow the arithmetic"
     );
 }
 
@@ -170,21 +178,22 @@ fn max_group_size_also_counts_from_the_platform_edge() {
     place_home(&mut game, 0, 0);
 
     assert_eq!(
-        game.max_group_size(spawn.x + MAX_BUILD_DISTANCE_FROM_HOME, spawn.y),
+        game.max_group_size(spawn.x + MAX_BUILD_DISTANCE_FROM_HOME, spawn.y, None),
         1,
         "groups shouldn't grow inside territory that's still stat-x1.0"
     );
     // The discriminating case: without the platform offset this is a full
     // GROUP_SIZE_STEP_TILES from spawn and would already have doubled.
     assert_eq!(
-        game.max_group_size(spawn.x + GROUP_SIZE_STEP_TILES, spawn.y),
+        game.max_group_size(spawn.x + GROUP_SIZE_STEP_TILES, spawn.y, None),
         1,
         "a full step from spawn is only half a step from the platform edge"
     );
     assert_eq!(
         game.max_group_size(
             spawn.x + MAX_BUILD_DISTANCE_FROM_HOME + GROUP_SIZE_STEP_TILES,
-            spawn.y
+            spawn.y,
+            None
         ),
         2,
         "the first doubling lands one full step past the platform edge"
@@ -198,7 +207,7 @@ fn max_group_size_doubles_with_distance_and_caps_per_zone() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
     let at = |game: &Game, steps: i32| {
-        game.max_group_size(spawn.x + GROUP_SIZE_STEP_TILES * steps, spawn.y)
+        game.max_group_size(spawn.x + GROUP_SIZE_STEP_TILES * steps, spawn.y, None)
     };
 
     assert_eq!(at(&game, 0), 1, "right at spawn, groups are always solo");
@@ -208,48 +217,50 @@ fn max_group_size_doubles_with_distance_and_caps_per_zone() {
         "zone 1 is solo however far you walk — that is the whole point of zone 1"
     );
 
-    // Zone 2, not zone 1: a cap of 3 leaves the first two doublings visible,
-    // so the boundary case below is measuring the division and not the clamp.
+    // Zone 2, not zone 1: a cap of 10 leaves the first three doublings
+    // visible, so the boundary case below is measuring the division and not
+    // the clamp.
     game.world.resource_mut::<ZoneLevel>().0 = 2;
     assert_eq!(at(&game, 0), 1, "every zone starts solo at its entry point");
     assert_eq!(
-        game.max_group_size(spawn.x + GROUP_SIZE_STEP_TILES - 1, spawn.y),
+        game.max_group_size(spawn.x + GROUP_SIZE_STEP_TILES - 1, spawn.y, None),
         1,
         "one tile short of a full step is still solo — the doubling is keyed \
          to whole steps, and an off-by-one here would double a step early"
     );
     assert_eq!(at(&game, 1), 2, "one step out doubles");
+    assert_eq!(at(&game, 3), 8, "and keeps doubling while under the cap");
     assert_eq!(
-        at(&game, 2),
-        3,
-        "two steps would be 4, but zone 2 caps at 3"
+        at(&game, 4),
+        10,
+        "four steps would be 16, but zone 2 caps at 10"
     );
-    assert_eq!(at(&game, 10), 3, "and it stays capped however far out");
+    assert_eq!(at(&game, 10), 10, "and it stays capped however far out");
 
     game.world.resource_mut::<ZoneLevel>().0 = 5;
     assert_eq!(
-        at(&game, 6),
-        64,
-        "six steps is 2^6, still under zone 5's cap of 81"
+        at(&game, 5),
+        32,
+        "five steps is 2^5, still under zone 5's cap of 37"
     );
     assert_eq!(
-        at(&game, 7),
-        81,
-        "seven steps would be 128, so the zone cap binds"
+        at(&game, 6),
+        37,
+        "six steps would be 64, so the zone cap binds"
     );
 
-    game.world.resource_mut::<ZoneLevel>().0 = 6;
+    game.world.resource_mut::<ZoneLevel>().0 = 12;
     assert_eq!(
         at(&game, 7),
         MAX_GROUP_SIZE,
-        "zone 6 is where the hard ceiling is reachable"
+        "zone 12 is where the linear cap first reaches the hard ceiling"
     );
 
     // The exponent is clamped, so an absurd distance must not shift past
     // the width of the type.
     game.world.resource_mut::<ZoneLevel>().0 = 99;
     assert_eq!(
-        game.max_group_size(spawn.x + 10_000, spawn.y),
+        game.max_group_size(spawn.x + 10_000, spawn.y, None),
         MAX_GROUP_SIZE,
         "no zone or distance may push a group past MAX_GROUP_SIZE"
     );
@@ -264,12 +275,12 @@ fn max_enemy_groups_gains_one_group_per_step_out_and_stops_at_the_ceiling() {
     let mut game = Game::new(43, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
     let at = |game: &Game, steps: i32| {
-        game.max_enemy_groups(spawn.x + GROUP_SIZE_STEP_TILES * steps, spawn.y)
+        game.max_enemy_groups(spawn.x + GROUP_SIZE_STEP_TILES * steps, spawn.y, None)
     };
 
     assert_eq!(at(&game, 0), 1, "one group at the danger origin");
     assert_eq!(
-        game.max_enemy_groups(spawn.x + GROUP_SIZE_STEP_TILES - 1, spawn.y),
+        game.max_enemy_groups(spawn.x + GROUP_SIZE_STEP_TILES - 1, spawn.y, None),
         1,
         "one tile short of a full step is still a single group — an off-by-one \
          here would end the opening buffer a tile early"
@@ -291,7 +302,7 @@ fn max_enemy_groups_gains_one_group_per_step_out_and_stops_at_the_ceiling() {
     // And it counts from the platform edge, like every other danger curve.
     place_home(&mut game, 0, 0);
     assert_eq!(
-        game.max_enemy_groups(spawn.x + GROUP_SIZE_STEP_TILES, spawn.y),
+        game.max_enemy_groups(spawn.x + GROUP_SIZE_STEP_TILES, spawn.y, None),
         1,
         "a full step from spawn is only half a step from the platform edge"
     );

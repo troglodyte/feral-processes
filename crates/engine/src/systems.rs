@@ -3,9 +3,9 @@ use bevy_ecs::system::SystemParam;
 use rand::RngExt;
 
 use crate::components::{
-    Creature, Experience, FieldBuff, FieldBuffKind, Inventory, NEED_MAX, NEED_MIN, Needs, Nest,
-    NestGuardian, Perks, Player, Position, Potential, Pursuing, ResourceNode, Stats, Structure,
-    StructureTier, Tamed, Task, TaskKind, WanderAi, field_buff_power_of,
+    Creature, Experience, FieldBuff, FieldBuffKind, MachineStatus, NEED_MAX, NEED_MIN, Needs, Nest,
+    NestGuardian, Perks, Player, Position, Potential, Pursuing, ResourceNode, Stats, Stock,
+    Structure, StructureTier, Tamed, Task, TaskKind, WanderAi, field_buff_power_of,
 };
 use crate::items_db::ItemDb;
 use crate::perks::Perk;
@@ -188,12 +188,51 @@ pub(crate) fn resolve_gather_cycle(
     Some((node.resource.clone(), payout))
 }
 
+/// Moves a machine to `next`, announcing it to the base feed only when the
+/// state actually changes.
+///
+/// **Entering a state is news; staying in it is not.** A base with four
+/// stalled machines would otherwise put four lines in the pane every tick it
+/// stayed stalled, which is the fastest way to make the log useless. Shared
+/// by every producer rather than each wording its own transition check, so
+/// the "log once" property cannot hold in one system and lapse in another.
+pub(crate) fn set_machine_status(
+    status: &mut MachineStatus,
+    next: MachineStatus,
+    name: &str,
+    log: &mut MessageLog,
+) {
+    if *status == next {
+        return;
+    }
+    *status = next;
+    log.push_base(match next {
+        MachineStatus::Running => format!("The {name} resumes."),
+        MachineStatus::Starved => format!("The {name} is starved — nothing is feeding it."),
+        MachineStatus::Clogged => format!("The {name} is clogged — its output buffer is full."),
+        MachineStatus::Idle => format!("The {name} sits idle — no program is assigned."),
+    });
+}
+
+/// The producing side of a gather cycle, shared by the cronjob and
+/// player-run systems. Aliased for the same `type_complexity` reason as
+/// `CronjobWorker` below.
+type WorkedNode = (
+    &'static mut ResourceNode,
+    Option<&'static StructureTier>,
+    Option<&'static Structure>,
+    &'static mut Stock,
+    &'static mut MachineStatus,
+);
+
 /// The worker-side components `task_progress_system` reads per cronjob
 /// assignment. Aliased rather than written inline because the tuple is long
 /// enough to trip clippy's `type_complexity` lint.
+/// `Tamed` moved out to a `With` filter when the payout stopped going to
+/// `Tamed::owner` — it is a restriction on *which* workers run cronjobs, not
+/// data the loop reads.
 type CronjobWorker = (
     &'static mut Task,
-    &'static Tamed,
     &'static Creature,
     Option<&'static Potential>,
     &'static mut Experience,
@@ -214,19 +253,20 @@ pub struct CronjobLookups<'w> {
 }
 
 /// Generic job progression: any entity with a `Task` advances it once per
-/// tick against its `target`; on completion the producing node hands its
-/// payout to the worker's owner. A node that's been mined down to 0
-/// refills to its `capacity` on the next tick rather than stalling the
-/// cronjob forever. The same loop would drive future colonist-style jobs,
-/// not just base-building work.
+/// tick against its `target`; on completion the producing node deposits its
+/// payout into *its own* output buffer, not the worker owner's cargo. A node
+/// that's been mined down to 0 refills to its `capacity` on the next tick
+/// rather than stalling the cronjob forever. The same loop would drive
+/// future colonist-style jobs, not just base-building work.
+///
+/// The buffer, not the deposit pool, is what paces a node: producing against
+/// a full one is a *clog*, which costs neither the cycle nor the deposit, so
+/// work resumes the moment the player collects. This is also the only reason
+/// anything upstream in a production chain can ever back up — a node paying
+/// straight into the player's pocket is an infinite source.
 pub fn task_progress_system(
-    mut tasks: Query<CronjobWorker>,
-    mut nodes: Query<(
-        &mut ResourceNode,
-        Option<&StructureTier>,
-        Option<&Structure>,
-    )>,
-    mut inventories: Query<&mut Inventory>,
+    mut tasks: Query<CronjobWorker, With<Tamed>>,
+    mut nodes: Query<WorkedNode>,
     player: Query<(Option<&FieldBuff>, Option<&Perks>), With<Player>>,
     db: CronjobLookups,
     mut log: ResMut<MessageLog>,
@@ -253,18 +293,31 @@ pub fn task_progress_system(
             )
         })
         .unwrap_or((0, 0));
-    for (mut task, tamed, creature, potential, mut exp, mut stats) in &mut tasks {
+    for (mut task, creature, potential, mut exp, mut stats) in &mut tasks {
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
         }
-        let Ok((mut node, tier, structure)) = nodes.get_mut(task.target) else {
+        let Ok((mut node, tier, structure, mut stock, mut status)) = nodes.get_mut(task.target)
+        else {
             continue;
         };
+        let machine_name = structure
+            .and_then(|s| structure_db.get(&s.kind))
+            .map(|d| d.name.as_str())
+            .unwrap_or("machine");
         if node.amount == 0 {
             node.amount = node.capacity;
         }
         task.progress += 1;
         if task.progress < task.required {
+            continue;
+        }
+        // Held at `required` rather than reset, so a cleared clog pays out on
+        // the very next tick instead of restarting the cycle from zero — the
+        // work was done, it just had nowhere to go.
+        if stock.output_room() == 0 {
+            task.progress = task.required;
+            set_machine_status(&mut status, MachineStatus::Clogged, machine_name, &mut log);
             continue;
         }
         task.progress = 0;
@@ -280,47 +333,45 @@ pub fn task_progress_system(
             log.push_base("Your subroutine's extraction attempt fails to compile.".to_string());
             continue;
         };
-        if let Ok(mut inv) = inventories.get_mut(tamed.owner) {
-            let resource_name = item_db
-                .get(resource.as_str())
-                .map(|d| d.name.as_str())
-                .unwrap_or(resource.as_str());
-            let landed = inv.add_capped(resource.clone(), payout, &item_db);
-            if landed == 0 {
-                log.push_base(format!(
-                    "A cronjob yields {resource_name} but there's no room to store it."
-                ));
-            }
-            let level_note = if exp.level < WORK_XP_LEVEL_CAP {
-                let species_growth = species_db
-                    .get(&creature.species)
-                    .map(|s| s.growth_multiplier)
-                    .unwrap_or(crate::tuning::BASELINE_GROWTH_MULTIPLIER);
-                let individual_roll = potential
-                    .map(|p| p.growth_roll)
-                    .unwrap_or(Potential::NEUTRAL.growth_roll);
-                let growth_multiplier = species_growth * individual_roll;
-                let levels = progression::add_xp(
-                    &mut exp,
-                    &mut stats,
-                    WORK_XP_PER_CYCLE,
-                    growth_multiplier,
-                    Some(crate::tuning::CREATURE_MAX_LEVEL),
-                    xp_boost_pct,
-                );
-                if levels > 0 {
-                    format!(" It levels up to {}!", exp.level)
-                } else {
-                    String::new()
-                }
+        let resource_name = item_db
+            .get(resource.as_str())
+            .map(|d| d.name.as_str())
+            .unwrap_or(resource.as_str());
+        // Clamped rather than refused: a payout that outgrows the room left
+        // must not stall the cycle, and the node clogs on the next one
+        // anyway, which is where the player is told about it.
+        let landed = payout.min(stock.output_room());
+        *stock.output.entry(resource.clone()).or_default() += landed;
+        set_machine_status(&mut status, MachineStatus::Running, machine_name, &mut log);
+        let level_note = if exp.level < WORK_XP_LEVEL_CAP {
+            let species_growth = species_db
+                .get(&creature.species)
+                .map(|s| s.growth_multiplier)
+                .unwrap_or(crate::tuning::BASELINE_GROWTH_MULTIPLIER);
+            let individual_roll = potential
+                .map(|p| p.growth_roll)
+                .unwrap_or(Potential::NEUTRAL.growth_roll);
+            let growth_multiplier = species_growth * individual_roll;
+            let levels = progression::add_xp(
+                &mut exp,
+                &mut stats,
+                WORK_XP_PER_CYCLE,
+                growth_multiplier,
+                Some(crate::tuning::CREATURE_MAX_LEVEL),
+                xp_boost_pct,
+            );
+            if levels > 0 {
+                format!(" It levels up to {}!", exp.level)
             } else {
                 String::new()
-            };
-            log.push_base_kind(
-                MessageKind::Loot,
-                format!("Your subroutine extracted {landed} {resource_name}.{level_note}"),
-            );
-        }
+            }
+        } else {
+            String::new()
+        };
+        log.push_base_kind(
+            MessageKind::Loot,
+            format!("Your subroutine extracted {landed} {resource_name}.{level_note}"),
+        );
     }
 }
 
@@ -332,31 +383,42 @@ pub fn task_progress_system(
 /// No XP is awarded, unlike a program's cronjob: a worker levels from its
 /// job, and handing the player the same per-cycle XP would make a node an
 /// XP faucet with no risk attached to it.
+///
+/// The payout lands in the node's own buffer here too, not straight into the
+/// player's cargo — the player is standing beside the node, so it is one `C`
+/// away, and routing this path around the buffer would leave the deposit
+/// pool as the only thing pacing it. That pool is gone.
 pub fn player_gather_system(
-    mut player: Query<(&mut Task, &mut Inventory, Option<&Perks>), With<Player>>,
-    mut nodes: Query<(
-        &mut ResourceNode,
-        Option<&StructureTier>,
-        Option<&Structure>,
-    )>,
+    mut player: Query<(&mut Task, Option<&Perks>), With<Player>>,
+    mut nodes: Query<WorkedNode>,
     item_db: Res<ItemDb>,
     structure_db: Res<StructureDb>,
     zone: Res<ZoneLevel>,
     mut log: ResMut<MessageLog>,
     mut rng: ResMut<GameRng>,
 ) {
-    for (mut task, mut inv, perks) in &mut player {
+    for (mut task, perks) in &mut player {
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
         }
-        let Ok((mut node, tier, structure)) = nodes.get_mut(task.target) else {
+        let Ok((mut node, tier, structure, mut stock, mut status)) = nodes.get_mut(task.target)
+        else {
             continue;
         };
+        let machine_name = structure
+            .and_then(|s| structure_db.get(&s.kind))
+            .map(|d| d.name.as_str())
+            .unwrap_or("machine");
         if node.amount == 0 {
             node.amount = node.capacity;
         }
         task.progress += 1;
         if task.progress < task.required {
+            continue;
+        }
+        if stock.output_room() == 0 {
+            task.progress = task.required;
+            set_machine_status(&mut status, MachineStatus::Clogged, machine_name, &mut log);
             continue;
         }
         task.progress = 0;
@@ -377,13 +439,9 @@ pub fn player_gather_system(
             .get(resource.as_str())
             .map(|d| d.name.as_str())
             .unwrap_or(resource.as_str());
-        let landed = inv.add_capped(resource.clone(), payout, &item_db);
-        if landed == 0 {
-            log.push_base(format!(
-                "You pull {resource_name} loose but there's no room to store it."
-            ));
-            continue;
-        }
+        let landed = payout.min(stock.output_room());
+        *stock.output.entry(resource.clone()).or_default() += landed;
+        set_machine_status(&mut status, MachineStatus::Running, machine_name, &mut log);
         log.push_base_kind(
             MessageKind::Loot,
             format!("You extract {landed} {resource_name}."),

@@ -389,8 +389,12 @@ pub(super) fn research_data_held(game: &Game) -> u32 {
 
 /// Tames a program and puts it to work on a node producing `resource`,
 /// so a cronjob is guaranteed to be running — the assertions below are
-/// vacuous if nothing is assigned.
-pub(super) fn assign_worker_producing(game: &mut Game, resource: ItemId) {
+/// vacuous if nothing is assigned. Returns the node, since a cronjob's
+/// output lands in its own buffer rather than the player's cargo.
+///
+/// The buffer is deliberately roomy: a test about whether a cronjob runs at
+/// all should not be measuring how fast it clogs.
+pub(super) fn assign_worker_producing(game: &mut Game, resource: ItemId) -> Entity {
     let worker = spawn_tamed(game, 10, 3);
     let structure = game
         .world
@@ -405,9 +409,32 @@ pub(super) fn assign_worker_producing(game: &mut Game, resource: ItemId) {
                 capacity: 20,
                 level: None,
             },
+            Stock::new(10_000),
+            MachineStatus::default(),
         ))
         .id();
     game.assign_cronjob(worker, structure).unwrap();
+    structure
+}
+
+/// The two components `task_progress_system` needs on a node beyond
+/// `ResourceNode` itself. A node missing either is skipped by that system's
+/// query and silently produces nothing — which reads as a payout curve that
+/// moved rather than as a fixture that is short a component, so bundle them
+/// rather than leaving each fixture to remember.
+///
+/// The buffer is deliberately far past any one cycle's payout: a test about
+/// what a cycle is worth should not be measuring how fast the node clogs.
+pub(super) fn work_node_parts() -> (Stock, MachineStatus) {
+    (Stock::new(10_000), MachineStatus::default())
+}
+
+/// How many of `item` are sitting in `structure`'s output buffer.
+pub(super) fn node_output(game: &Game, structure: Entity, item: &str) -> u32 {
+    game.world
+        .get::<Stock>(structure)
+        .and_then(|s| s.output.get(&ItemId::from(item)).copied())
+        .unwrap_or(0)
 }
 
 /// Deploys a Home just off the player's current position (`dx`, `dy`
@@ -447,6 +474,10 @@ pub(super) fn run_one_full_gather_cycle(game: &mut Game, resource: &str) -> u32 
 /// `level: None` on the node means it always yields (see
 /// `systems::mining_success_chance`), which is what keeps the payout
 /// assertions off the RNG entirely.
+///
+/// Measured in the node's *own* buffer, because that is where a cycle pays
+/// out now. The buffer is sized far past any one cycle's payout so a clog
+/// can never be mistaken for a payout curve that moved.
 pub(super) fn run_one_full_gather_cycle_at_tier(
     game: &mut Game,
     kind: &str,
@@ -465,6 +496,8 @@ pub(super) fn run_one_full_gather_cycle_at_tier(
             capacity: 5,
             level: None,
         },
+        Stock::new(10_000),
+        MachineStatus::default(),
     ));
     if let Some(t) = tier {
         structure.insert(StructureTier(t));
@@ -477,9 +510,9 @@ pub(super) fn run_one_full_gather_cycle_at_tier(
         required: 1,
     });
 
-    let before = count_item(game, resource);
+    let before = node_output(game, structure, resource);
     game.tick();
-    count_item(game, resource) - before
+    node_output(game, structure, resource) - before
 }
 
 pub(super) fn find_structure_by_kind(game: &mut Game, kind: &str) -> Option<Entity> {

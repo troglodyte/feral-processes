@@ -494,6 +494,7 @@ fn a_mined_out_node_refills_instead_of_stalling_the_cronjob() {
                 capacity: 2,
                 level: None,
             },
+            work_node_parts(),
         ))
         .id();
     game.world.entity_mut(worker).insert(Task {
@@ -535,6 +536,7 @@ fn cronjob_work_grants_no_more_xp_once_the_worker_hits_the_work_level_cap() {
                 capacity: 5,
                 level: None,
             },
+            work_node_parts(),
         ))
         .id();
     game.world.entity_mut(worker).insert(Task {
@@ -581,6 +583,7 @@ fn cronjob_work_xp_is_boosted_by_a_running_xp_boost_field_buff() {
                 capacity: 5,
                 level: None,
             },
+            work_node_parts(),
         ))
         .id();
     unboosted.world.entity_mut(worker).insert(Task {
@@ -607,6 +610,7 @@ fn cronjob_work_xp_is_boosted_by_a_running_xp_boost_field_buff() {
                 capacity: 5,
                 level: None,
             },
+            work_node_parts(),
         ))
         .id();
     boosted.world.entity_mut(worker).insert(Task {
@@ -659,6 +663,7 @@ fn cronjob_work_still_grants_xp_below_the_work_level_cap() {
                 capacity: 5,
                 level: None,
             },
+            work_node_parts(),
         ))
         .id();
     game.world.entity_mut(worker).insert(Task {
@@ -1041,12 +1046,10 @@ fn working_a_node_yourself_pays_what_a_cronjob_pays() {
         .unwrap()
         .resource
         .clone();
-    let held = |game: &Game| {
-        game.world
-            .get::<Inventory>(game.player_entity())
-            .unwrap()
-            .count(&resource)
-    };
+    // Measured in the node's own buffer: a cycle the player ran deposits
+    // there too, so the deposit pool is not left as the only thing pacing
+    // the one path that bypasses it.
+    let held = |game: &Game| node_output(game, node, resource.as_str());
     let before = held(&game);
 
     game.work_structure(node)
@@ -1285,5 +1288,176 @@ fn partially_filled_buffers_survive_a_save_and_load_round_trip() {
         stock.capacity,
         crate::tuning::DEFAULT_OUTPUT_CAPACITY,
         "capacity comes back off the def, not the save"
+    );
+}
+
+/// Puts a tamed worker on a node of `kind` standing at an absolute tile,
+/// with `capacity` units of output room, and returns the node. Absolute
+/// rather than relative so a test can park it next to the player and
+/// collect from it.
+fn worked_node_at(
+    game: &mut Game,
+    kind: &str,
+    resource: &str,
+    x: i32,
+    y: i32,
+    capacity: u32,
+) -> Entity {
+    let worker = spawn_tamed(game, 10, 3);
+    let node = game
+        .world
+        .spawn((
+            Structure {
+                kind: kind.to_string(),
+            },
+            Position { x, y },
+            ResourceNode {
+                resource: ItemId::from(resource),
+                amount: 20,
+                capacity: 20,
+                level: None,
+            },
+            Stock::new(capacity),
+            MachineStatus::default(),
+        ))
+        .id();
+    game.assign_cronjob(worker, node).unwrap();
+    node
+}
+
+fn base_log_hits(game: &Game, needle: &str) -> usize {
+    game.message_log(usize::MAX)
+        .into_iter()
+        .filter(|e| e.text.contains(needle))
+        .count()
+}
+
+/// The largest felt change in the whole design: fragments stop appearing in
+/// your pocket while you are away. You come home and harvest. It is also the
+/// only thing that makes clogging real — a node that pays straight into the
+/// player is an infinite source and nothing upstream of it can ever back up.
+#[test]
+fn a_worked_node_fills_its_own_buffer_and_not_the_players_pocket() {
+    let mut game = Game::new(980, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = worked_node_at(&mut game, "mining_node", ids::CORE_FRAGMENT, 3, 4, 20);
+    let before = count_item(&game, ids::CORE_FRAGMENT);
+
+    for _ in 0..40 {
+        game.tick();
+    }
+
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT),
+        before,
+        "a cronjob no longer reaches into the player's cargo"
+    );
+    assert!(
+        game.world
+            .get::<Stock>(node)
+            .unwrap()
+            .output
+            .get(&ItemId::from(ids::CORE_FRAGMENT))
+            .copied()
+            .unwrap_or(0)
+            > 0,
+        "it deposits into its own buffer instead"
+    );
+}
+
+/// A stalled base must not flood the log pane — the whole point of tracking
+/// status is that a machine says so on the way *into* a state, not every
+/// tick it spends there.
+#[test]
+fn a_node_at_output_capacity_clogs_and_says_so_exactly_once() {
+    let mut game = Game::new(981, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = worked_node_at(&mut game, "mining_node", ids::CORE_FRAGMENT, 3, 4, 1);
+
+    for _ in 0..60 {
+        game.tick();
+    }
+
+    assert_eq!(
+        game.world.get::<MachineStatus>(node).copied(),
+        Some(MachineStatus::Clogged)
+    );
+    assert_eq!(
+        game.world.get::<Stock>(node).unwrap().output_used(),
+        1,
+        "production stops at the buffer's capacity"
+    );
+    assert_eq!(
+        base_log_hits(&game, "clogged"),
+        1,
+        "entering the state is news; staying in it is not"
+    );
+}
+
+/// The clog is not a dead end — it is a prompt. Emptying the buffer starts
+/// the node again, and that resumption is worth a line of its own.
+#[test]
+fn collecting_from_a_clogged_node_lets_it_resume() {
+    let mut game = Game::new(982, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let node = worked_node_at(
+        &mut game,
+        "mining_node",
+        ids::CORE_FRAGMENT,
+        p.x + 1,
+        p.y,
+        1,
+    );
+    let carried = count_item(&game, ids::CORE_FRAGMENT);
+
+    for _ in 0..60 {
+        game.tick();
+    }
+    assert_eq!(
+        game.world.get::<MachineStatus>(node).copied(),
+        Some(MachineStatus::Clogged),
+        "the fixture has to actually clog, or the rest of this proves nothing"
+    );
+
+    game.collect_adjacent();
+    for _ in 0..40 {
+        game.tick();
+    }
+
+    assert_eq!(
+        game.world.get::<Stock>(node).unwrap().output_used(),
+        1,
+        "it went back to work and filled the buffer again"
+    );
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT) - carried,
+        1,
+        "and the collect landed the first unit in the player's cargo"
+    );
+}
+
+/// Only the item destination moved. A worker still earns from a completed
+/// cycle, which is the other half of what a cronjob is for.
+#[test]
+fn a_worker_still_earns_xp_from_a_completed_cycle() {
+    let mut game = Game::new(983, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = worked_node_at(&mut game, "mining_node", ids::CORE_FRAGMENT, 3, 4, 20);
+    let worker = holders(&mut game, node, TaskKind::GatherResource)[0];
+    let before = {
+        let e = game.world.get::<Experience>(worker).unwrap();
+        (e.level, e.xp)
+    };
+
+    for _ in 0..40 {
+        game.tick();
+    }
+
+    // Compared as (level, xp), not xp alone: four cycles is enough to level
+    // this worker, and a level-up resets `xp` to the remainder — so a bare
+    // `xp > before` can fail on a worker that earned *more*, not less.
+    let after = game.world.get::<Experience>(worker).unwrap();
+    assert!(
+        (after.level, after.xp) > before,
+        "a completed cycle still pays the worker (level {} xp {})",
+        after.level,
+        after.xp
     );
 }

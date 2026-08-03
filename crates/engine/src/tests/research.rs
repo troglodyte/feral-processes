@@ -253,12 +253,15 @@ fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
     assert_eq!(
         sorted,
         vec![
+            "assembly_bay".to_string(),
             "data_cache".to_string(),
             "home".to_string(),
             "mining_node".to_string(),
             "portal".to_string(),
             "recharger_node".to_string(),
+            "refinery".to_string(),
             "research_node".to_string(),
+            "winding_node".to_string(),
         ],
         "exactly the structures named by no research file start available"
     );

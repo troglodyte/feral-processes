@@ -409,3 +409,149 @@ fn a_program_can_be_posted_to_an_assembler() {
         Some(machine)
     );
 }
+
+/// The shipped chain, walked end to end from real assets rather than from a
+/// fixture: two extractors feed two refiners, which feed one assembler, and
+/// the terminal item comes out. This is the test that would have caught a
+/// content slice that loaded fine and could never actually run.
+///
+/// The layout is the design's whole point — the Assembly Bay needs *both*
+/// feeders orthogonally touching it, so it wants a corner:
+///
+/// ```text
+///   $ B Y      $ mining_node   B refinery    Y assembly_bay
+///       W      W winding_node  + power_conduit
+///       +
+/// ```
+#[test]
+fn the_shipped_three_stage_chain_produces_its_terminal_item() {
+    let mut game = Game::new(1100, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    let bay = staffed(&mut game, "assembly_bay", 42, 40);
+    let refinery = staffed(&mut game, "refinery", 41, 40);
+    let winding = staffed(&mut game, "winding_node", 42, 41);
+    // The two extractors are pre-stocked rather than worked, so this test
+    // measures the chain rather than `mining_success_chance`'s roll.
+    let mine = stocked(&mut game, "mining_node", 40, 40, ids::CORE_FRAGMENT, 200);
+    let conduit = stocked(&mut game, "power_conduit", 42, 42, ids::POWER_CELL, 200);
+
+    for _ in 0..200 {
+        game.tick();
+    }
+
+    assert!(
+        output_of(&game, refinery, ids::BYTECODE_BLOCK) > 0
+            || input_of(&game, bay, ids::BYTECODE_BLOCK) > 0,
+        "stage two ran: the refinery turned fragments into blocks"
+    );
+    assert!(
+        output_of(&game, winding, ids::CHARGE_COIL) > 0
+            || input_of(&game, bay, ids::CHARGE_COIL) > 0,
+        "and the winding node turned cells into coils"
+    );
+    assert!(
+        output_of(&game, bay, ids::PATCH_ROUTINE) > 0,
+        "and the assembly bay built the terminal item out of both"
+    );
+    assert!(
+        game.world
+            .get::<Stock>(mine)
+            .unwrap()
+            .output
+            .get(&ItemId::from(ids::CORE_FRAGMENT))
+            .copied()
+            .unwrap_or(0)
+            < 200,
+        "the chain really drew from the extractors rather than conjuring input"
+    );
+    let _ = conduit;
+}
+
+/// A machine short one of its two ingredients is starved, not half-running.
+/// This is the failure the player will actually hit — a bay built against
+/// one feeder because the other did not fit.
+#[test]
+fn an_assembly_bay_with_only_one_feeder_adjacent_stays_starved() {
+    let mut game = Game::new(1101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let bay = staffed(&mut game, "assembly_bay", 42, 40);
+    stocked(&mut game, "refinery", 41, 40, ids::BYTECODE_BLOCK, 50);
+
+    for _ in 0..100 {
+        game.tick();
+    }
+
+    assert!(input_of(&game, bay, ids::BYTECODE_BLOCK) > 0, "it is fed");
+    assert_eq!(
+        output_of(&game, bay, ids::PATCH_ROUTINE),
+        0,
+        "but half a recipe builds nothing"
+    );
+    assert_eq!(status_of(&game, bay), Some(MachineStatus::Starved));
+}
+
+/// The first stage's product is what buys the last stage. Without this the
+/// two-machine line a starting roster can afford has no payoff of its own,
+/// and the spec's "the intermediate needs standalone value" goes unmet — the
+/// Market's flat sell rate cannot express it.
+#[test]
+fn the_assembly_bay_is_built_out_of_what_the_refinery_makes() {
+    let game = Game::new(1102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let cost = &game
+        .world
+        .resource::<crate::structures::StructureDb>()
+        .get("assembly_bay")
+        .expect("assembly_bay ships")
+        .build_cost;
+    assert!(
+        cost.iter()
+            .any(|(i, n)| i.as_str() == ids::BYTECODE_BLOCK && *n > 0),
+        "the Assembly Bay costs Bytecode Blocks: {cost:?}"
+    );
+}
+
+/// A staffed structure of `kind` at an absolute tile.
+fn staffed(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
+    let machine = deployed(game, kind, x, y);
+    let worker = spawn_tamed(game, 10, 3);
+    game.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: machine,
+        progress: 0,
+        required: 1,
+    });
+    machine
+}
+
+/// A structure of `kind` at an absolute tile with `qty` of `item` already in
+/// its output buffer, standing in for an extractor that has been running.
+fn stocked(game: &mut Game, kind: &str, x: i32, y: i32, item: &str, qty: u32) -> Entity {
+    let e = deployed(game, kind, x, y);
+    game.world
+        .get_mut::<Stock>(e)
+        .unwrap()
+        .output
+        .insert(ItemId::from(item), qty);
+    e
+}
+
+/// Spawns `kind` with the same components `place_structure` gives it,
+/// bypassing the Home, cost and distance rules — these tests are about what
+/// a standing chain does, not about the build rules.
+fn deployed(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
+    let capacity = game
+        .world
+        .resource::<crate::structures::StructureDb>()
+        .get(kind)
+        .unwrap_or_else(|| panic!("{kind} ships with the game"))
+        .capacity;
+    game.world
+        .spawn((
+            Structure {
+                kind: kind.to_string(),
+            },
+            Position { x, y },
+            Stock::new(capacity),
+            MachineStatus::default(),
+        ))
+        .id()
+}

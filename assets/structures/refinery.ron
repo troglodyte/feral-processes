@@ -1,0 +1,11 @@
+(
+    id: "refinery",
+    name: "Refinery",
+    description: "Assign a program here and it compiles Core Fragments from whatever is touching it into Bytecode Blocks. Put it next to a Mining Node.",
+    glyph: 'B',
+    color: Orange,
+    build_cost: [("core_fragment", 18)],
+    work: None,
+    capacity: 20,
+    assembles: Some((item: "bytecode_block", ticks_per_unit: 12)),
+)

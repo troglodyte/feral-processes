@@ -528,6 +528,7 @@ fn a_structure_that_assembles_nothing_resolves_no_recipe() {
 fn every_shipped_assembles_names_an_item_that_declares_a_recipe() {
     let game = Game::new(903, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let items = game.world.resource::<ItemDb>();
+    let mut checked = 0;
     for def in game
         .world
         .resource::<crate::structures::StructureDb>()
@@ -542,6 +543,17 @@ fn every_shipped_assembles_names_an_item_that_declares_a_recipe() {
                 def.id,
                 assembles.item
             );
+            assert!(
+                assembles.ticks_per_unit > 0,
+                "{} would produce a unit every tick",
+                def.id
+            );
+            checked += 1;
         }
     }
+    assert_eq!(
+        checked, 3,
+        "the shipped chain is Refinery, Winding Node and Assembly Bay — if that \
+         changes, change this count deliberately rather than letting the check go vacuous"
+    );
 }

@@ -193,6 +193,43 @@ mod tests {
         }
     }
 
+    /// Loading is not the bar for `chains`: it exists so that a session
+    /// testing production chains starts with one *running*, and a template
+    /// whose machines are misaligned by one tile would load perfectly and
+    /// sit there starved. So this ticks it and looks for product.
+    #[test]
+    fn the_chains_template_starts_with_a_chain_that_actually_runs() {
+        let out = std::env::temp_dir().join("feral_processes_template_chains_runs.bin");
+        generate("chains", &out).unwrap();
+        let mut game = Game::load(&out, &assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&out);
+
+        let terminal_before = game
+            .structure_report()
+            .into_iter()
+            .find(|s| s.kind == "assembly_bay")
+            .map(|s| s.output.iter().map(|(_, n)| n).sum::<u32>())
+            .expect("the template stands an Assembly Bay");
+
+        for _ in 0..400 {
+            game.wait();
+        }
+
+        let bay = game
+            .structure_report()
+            .into_iter()
+            .find(|s| s.kind == "assembly_bay")
+            .unwrap();
+        let terminal_after: u32 = bay.output.iter().map(|(_, n)| n).sum();
+        assert!(
+            terminal_after > terminal_before,
+            "the template's chain produced nothing in 400 ticks — status {:?}, in {:?}, out {:?}",
+            bay.status,
+            bay.input,
+            bay.output
+        );
+    }
+
     #[test]
     fn a_template_name_cannot_reach_outside_the_template_directory() {
         for name in ["", ".", "..", "../secrets", "sub/dir", "a\\b"] {

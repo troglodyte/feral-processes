@@ -1,0 +1,11 @@
+(
+    id: "winding_node",
+    name: "Winding Node",
+    description: "Assign a program here and it winds Power Cells from whatever is touching it into Charge Coils. Put it next to a Power Conduit.",
+    glyph: 'W',
+    color: Blue,
+    build_cost: [("core_fragment", 18)],
+    work: None,
+    capacity: 20,
+    assembles: Some((item: "charge_coil", ticks_per_unit: 12)),
+)

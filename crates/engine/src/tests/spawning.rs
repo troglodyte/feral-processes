@@ -1318,27 +1318,49 @@ fn a_nest_survives_a_save_load_round_trip() {
 #[test]
 fn a_guardians_tether_survives_a_save_load_round_trip() {
     let mut game = Game::new(609, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    game.spawn_nest("scrapper", 130, 130);
+    let nest = game.spawn_nest("scrapper", 130, 130);
+    let guardian_count_before = {
+        let mut query = game.world.query::<&NestGuardian>();
+        query.iter(&game.world).filter(|g| g.nest == nest).count()
+    };
 
     let path = std::env::temp_dir().join(format!("feral_tether_save_{}.bin", std::process::id()));
     game.save(&path).unwrap();
     let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
     let _ = std::fs::remove_file(&path);
 
-    let mut guardian_query = loaded.world.query::<&NestGuardian>();
-    let guardian_nests: Vec<Entity> = guardian_query.iter(&loaded.world).map(|g| g.nest).collect();
+    let mut guardian_query = loaded.world.query::<(&NestGuardian, Option<&Pursuing>)>();
+    let guardian_nests: Vec<(Entity, bool)> = guardian_query
+        .iter(&loaded.world)
+        .map(|(g, p)| (g.nest, p.is_some()))
+        .collect();
     let mut pos_query = loaded.world.query::<&Position>();
-    let tethered_to_our_tile = guardian_nests
+    // Every guardian tethered to our tile, paired with whether it came
+    // back `Pursuing` — collected rather than just counted, since this
+    // nest was never provoked and a calm guardian coming back aggro'd is
+    // exactly the regression this test also needs to catch.
+    let tethered_to_our_tile: Vec<bool> = guardian_nests
         .iter()
-        .filter(|&&nest| {
+        .filter_map(|&(nest, pursuing)| {
             pos_query
                 .get(&loaded.world, nest)
-                .is_ok_and(|p| p.x == 130 && p.y == 130)
+                .ok()
+                .filter(|p| p.x == 130 && p.y == 130)
+                .map(|_| pursuing)
         })
-        .count();
+        .collect();
+    assert_eq!(
+        tethered_to_our_tile.len(),
+        guardian_count_before,
+        "every guardian tethered to this nest before the save must still resolve to it \
+         after the load — a count that only checks '> 0' would pass even if the load \
+         dropped some of them"
+    );
     assert!(
-        tethered_to_our_tile > 0,
-        "at least one reloaded guardian must resolve, via its nest's Position, back to (130, 130)"
+        tethered_to_our_tile.iter().all(|&pursuing| !pursuing),
+        "a guardian saved calm must not come back Pursuing — this nest was never provoked, \
+         so if a reload aggros it anyway, an unconditional `Pursuing` insert on load would \
+         pass every other test here without this one catching it"
     );
 }
 
@@ -1499,10 +1521,14 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
     );
     // The saved `pursuing: true` on this creature must not survive on its
     // own — `Pursuing` is only ever inserted alongside `NestGuardian`
-    // (`Game::load`), and a `Pursuing` creature with no `NestGuardian`
-    // would be permanently frozen: `wander_ai_system` excludes anything
-    // `Pursuing`, and the aggro tick that would otherwise drive it needs
-    // the very `NestGuardian` this creature doesn't have.
+    // (`Game::load`). Without that guard, this would be an *unleashed*
+    // pursuer, not a frozen one: `nest_aggro_tick`'s driving pass
+    // (`game/turn.rs`) collects everything `With<Pursuing>` and moves it
+    // toward the player regardless of `NestGuardian` — only the leash
+    // check that runs before it needs the tether, to find a nest position
+    // to measure distance from. A `Pursuing` creature with no
+    // `NestGuardian` never enters that check at all, so it has no nest to
+    // wander outside of and chases the player forever.
     assert!(
         pursuing.is_none(),
         "pursuing must not survive when the nest_position it depended on didn't resolve"

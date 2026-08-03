@@ -219,6 +219,16 @@ impl Game {
     /// provocation and destruction (`Game::attack_nest`,
     /// `Game::despawn_nest`) both need to act on this specific nest rather
     /// than requerying the map for it.
+    ///
+    /// `Game::load` (`lifecycle.rs`) spawns a restored nest's entity
+    /// directly rather than calling this — it must not roll fresh guardians
+    /// or spend `GameRng` when it's reconstructing an exact recorded state
+    /// — but hand-writes the same four components below (`Nest`,
+    /// `Position`, `Glyph`, `Durability`). Nothing enforces that the two
+    /// stay in step: a component added here alone would make every
+    /// restored nest silently lack it, with no test catching it, since
+    /// every test spawns nests through this function. Keep the load path's
+    /// component list matching this one if either changes.
     pub(crate) fn spawn_nest(&mut self, species_id: &str, x: i32, y: i32) -> Entity {
         let species = self
             .world

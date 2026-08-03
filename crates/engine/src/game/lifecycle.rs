@@ -271,6 +271,10 @@ impl Game {
         // Spawned before the creature loop below so a guardian's
         // `nest_position` has a live nest to resolve to — mirrors
         // `structure_positions` further down, built for the same reason.
+        //
+        // The component set below must stay in step with `Game::spawn_nest`
+        // (`game/spawning.rs`) — see that function's doc comment, which is
+        // the other half of this note.
         let mut nest_positions: HashMap<(i32, i32), Entity> = HashMap::new();
         for n in data.nests {
             let Some(species) = game.world.resource::<SpeciesDb>().get(&n.species).cloned() else {

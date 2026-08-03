@@ -962,8 +962,10 @@ fn zone_transition_reliably_populates_the_new_zone_regardless_of_seed() {
 
 /// Nest provocation: `Game::attack_nest` marking guardians `Pursuing`, and
 /// every path that removes a guardian from the world (a destroyed nest, a
-/// tamed capture) removing the marker with it. Nothing moves a `Pursuing`
-/// guardian yet — that's Task 4's `nest_aggro_tick`.
+/// tamed capture) removing the marker with it. The tests below this point
+/// are about setting and clearing that marker in isolation; `nest_aggro_tick`
+/// — the part that actually moves a `Pursuing` guardian and starts a fight —
+/// gets its own tests further down.
 fn guardians_of(game: &mut Game, nest: Entity) -> Vec<Entity> {
     let mut query = game.world.query::<(Entity, &NestGuardian)>();
     query
@@ -1364,23 +1366,23 @@ fn the_battle_a_pursuer_starts_includes_its_packmates() {
     // Two different species so a single-species group cap can't be the
     // reason both end up in the fight — each gets its own group, and
     // `multi_group_ground` guarantees more than one group is allowed here.
-    spawn_pursuing_guardian(&mut game, nest, "scrapper", gx + 1, gy);
-    spawn_pursuing_guardian(&mut game, nest, "wraith", gx + 1, gy + 1);
+    let scrapper = spawn_pursuing_guardian(&mut game, nest, "scrapper", gx + 1, gy);
+    let wraith = spawn_pursuing_guardian(&mut game, nest, "wraith", gx + 1, gy + 1);
 
     game.tick();
 
     assert!(game.has_active_battle());
-    let total_members: usize = game
-        .battle_view()
-        .unwrap()
+    let members: Vec<Entity> = game
+        .world
+        .resource::<BattleState>()
         .groups
         .iter()
-        .map(|g| g.count)
-        .sum();
+        .flat_map(|g| g.members.iter().copied())
+        .collect();
     assert!(
-        total_members > 1,
+        members.contains(&scrapper) && members.contains(&wraith),
         "the battle a pursuer starts should pull in the packmate standing beside it \
-         (gather_pack), not just the one that reached the player; found {total_members}"
+         (gather_pack), not just the one that reached the player; found {members:?}"
     );
 }
 

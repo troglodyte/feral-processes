@@ -2,6 +2,12 @@
 //! obstacles rather than assumed open ground. `Game::nest_aggro_tick`
 //! (`game/turn.rs`) is the one caller: it walks each provoked nest guardian
 //! downhill along the field this module builds.
+//!
+//! Every edge here costs a flat `1u32` (`NEIGHBOURS`, 8-directional), so
+//! `dijkstra_all` is a breadth-first search in effect and the `pathfinding`
+//! crate isn't strictly required to produce this field. It's the dependency
+//! regardless — an explicit request, not an oversight — for a
+//! well-tested traversal over a hand-rolled flood fill.
 
 use std::collections::HashMap;
 

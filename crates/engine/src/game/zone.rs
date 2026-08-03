@@ -130,6 +130,28 @@ impl Game {
         for nest in nests {
             self.despawn_nest(nest);
         }
+        // A Stack link under the slab is unreachable — nothing spawns on
+        // platform floor and the base's own structures sit on it — so it goes
+        // the way of the hostiles above. This matters for the Home-deployment
+        // caller only: on a breach the platform is stamped before
+        // `spawn_surface_links` runs, and that skips `Biome::Platform`
+        // outright. It is not a rare collision, which is why it is worth
+        // sweeping rather than trusting placement: `STACK_NEAREST_LINK_TILES`
+        // puts a zone's first link 5-8 tiles from where the player arrives,
+        // against a slab of `MAX_BUILD_DISTANCE_FROM_HOME` 7.
+        let links: Vec<Entity> = {
+            let mut query = self
+                .world
+                .query_filtered::<(Entity, &Position), With<SurfaceLink>>();
+            query
+                .iter(&self.world)
+                .filter(|(_, p)| inside(p))
+                .map(|(e, _)| e)
+                .collect()
+        };
+        for e in links {
+            self.world.despawn(e);
+        }
 
         self.world.resource_mut::<Platform>().center = Some((cx, cy));
     }

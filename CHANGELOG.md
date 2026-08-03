@@ -40,6 +40,15 @@ index — nothing new is persisted.
 - **Two Power Outlets go into new-game starting inventory**, beside the 3
   ICE Breakers, 3 Power Cells and 5 Core Fragments, to cover getting
   established before the base earns anything of its own.
+- **Deploying a Home now obliterates any Stack link under its platform**,
+  the same way it already obliterates the hostiles and nests standing there.
+  This is not a rare collision: `STACK_NEAREST_LINK_TILES` puts a zone's
+  first link 5–8 tiles from where the player arrives, against a slab of
+  `MAX_BUILD_DISTANCE_FROM_HOME` 7, so a Home near the arrival point swallowed
+  one on a large fraction of seeds — leaving an entrance stranded inside the
+  base, on floor nothing can spawn on. Breaching was never affected: there the
+  platform is stamped before links are placed, and placement already skips
+  platform tiles.
 - **Core Fragments now drop from species a fresh player can actually beat.**
   Ranked by stat total, all three Power Cell droppers (`glitch`,
   `sub_process`, `scrapper`) sat in the gentle band the opening ring fields,

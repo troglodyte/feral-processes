@@ -1035,6 +1035,36 @@ fn destroying_a_nest_clears_pursuing() {
 #[test]
 fn a_guardian_respawned_at_a_besieged_nest_is_already_pursuing() {
     let mut game = Game::new(702, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let ppos = *game.world.get::<Position>(player).unwrap();
+
+    // Open ground the whole way, and — unlike this test before Task 4's
+    // review — the nest sits inside the player's pursuit field rather
+    // than off at an arbitrary far corner of the map. A guardian
+    // `nest_aggro_tick` can never reach gives up on the spot (see the
+    // "absent from the field" rule), which would strip the survivor's
+    // `Pursuing` within the first tick or two and defeat this test's
+    // premise long before the respawn timer ever fires.
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for dx in -2..=16 {
+            for dy in -2..=2 {
+                map.set_override(
+                    ppos.x + dx,
+                    ppos.y + dy,
+                    Tile {
+                        biome: Biome::OpenGrid,
+                        walkable: true,
+                    },
+                );
+            }
+        }
+    }
+
+    let nest_pos = Position {
+        x: ppos.x + 15,
+        y: ppos.y,
+    };
     let nest = game
         .world
         .spawn((
@@ -1042,7 +1072,7 @@ fn a_guardian_respawned_at_a_besieged_nest_is_already_pursuing() {
                 species: "scrapper".to_string(),
                 pending_respawns: vec![NEST_RESPAWN_TICKS],
             },
-            Position { x: 120, y: 120 },
+            nest_pos,
             Glyph {
                 ch: 'N',
                 color: GlyphColor::Red,
@@ -1056,25 +1086,11 @@ fn a_guardian_respawned_at_a_besieged_nest_is_already_pursuing() {
     // A guardian still standing and already marked Pursuing, as an
     // attack_nest hit would leave it — this is what makes the nest
     // "besieged" for nest_has_pursuers, independent of the respawn queue.
-    let survivor = game
-        .world
-        .spawn((
-            Creature {
-                species: "scrapper".to_string(),
-            },
-            Hostile,
-            WanderAi::default(),
-            NestGuardian { nest },
-            Pursuing,
-            Position { x: 121, y: 120 },
-            Stats {
-                hp: 10,
-                max_hp: 10,
-                atk: 1,
-                def: 1,
-            },
-        ))
-        .id();
+    // Fifteen tiles out: comfortably inside the field's reach, but far
+    // enough that ten ticks of closing (one tile each) never brings it to
+    // adjacency and starts a fight, which would only complicate what this
+    // test is actually checking.
+    let survivor = spawn_pursuing_guardian(&mut game, nest, "scrapper", nest_pos.x, nest_pos.y);
 
     for _ in 0..NEST_RESPAWN_TICKS {
         game.tick();
@@ -1129,45 +1145,22 @@ fn a_guardian_respawned_at_a_calm_nest_is_not_pursuing() {
 #[test]
 fn a_pursuing_guardian_does_not_also_wander() {
     let mut game = Game::new(704, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let nest = game
-        .world
-        .spawn((
-            Nest {
-                species: "scrapper".to_string(),
-                pending_respawns: Vec::new(),
-            },
-            Position { x: 140, y: 140 },
-            Glyph {
-                ch: 'N',
-                color: GlyphColor::Red,
-            },
-            Durability {
-                hp: NEST_DURABILITY,
-                max_hp: NEST_DURABILITY,
-            },
-        ))
-        .id();
-    let guardian = game
-        .world
-        .spawn((
-            Creature {
-                species: "scrapper".to_string(),
-            },
-            Hostile,
-            WanderAi::default(),
-            NestGuardian { nest },
-            Position { x: 141, y: 140 },
-            Stats {
-                hp: 10,
-                max_hp: 10,
-                atk: 1,
-                def: 1,
-            },
-        ))
-        .id();
+    let player = game.player_entity();
+    let nest = spawn_bare_nest(&mut game, 140, 140);
+    let guardian = spawn_pursuing_guardian(&mut game, nest, "scrapper", 141, 140);
 
-    game.provoke_nest(nest);
-    assert!(game.world.get::<Pursuing>(guardian).is_some());
+    // Freeze `nest_aggro_tick` itself with an unrelated active battle, so
+    // `Pursuing` survives genuinely across every tick below rather than by
+    // a distance trick — `nest_aggro_tick` no longer leaves a far-off
+    // guardian frozen-but-still-`Pursuing` indefinitely (see the "absent
+    // from the field" rule this task's review added: such a guardian now
+    // gives up immediately instead), so a real battle is the only thing
+    // left that can hold this state open long enough to prove
+    // `wander_ai_system`'s own `Without<Pursuing>` filter is what's
+    // keeping the guardian still, not a side effect of `nest_aggro_tick`'s
+    // own guard.
+    let wild = spawn_wild_on_player_tile(&mut game);
+    insert_battle(&mut game, player, vec![wild]);
 
     let before = *game.world.get::<Position>(guardian).unwrap();
     for _ in 0..10 {
@@ -1177,8 +1170,14 @@ fn a_pursuing_guardian_does_not_also_wander() {
 
     assert_eq!(
         before, after,
-        "nothing moves a Pursuing guardian yet — that's Task 4's nest_aggro_tick, \
-         and wander_ai_system must exclude it so the two can't double it up later"
+        "wander_ai_system must exclude a Pursuing guardian even while nest_aggro_tick is \
+         separately frozen by the battle — otherwise the two systems could double-move it \
+         once nest_aggro_tick resumes"
+    );
+    assert!(
+        game.world.get::<Pursuing>(guardian).is_some(),
+        "the guardian should still be genuinely Pursuing throughout — that's what this test \
+         is checking wander's exclusion against"
     );
 }
 
@@ -1412,14 +1411,15 @@ fn pursuers_never_step_onto_the_base_platform() {
     let mut game = Game::new(714, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let ppos = *game.world.get::<Position>(player).unwrap();
+    let half = MAX_BUILD_DISTANCE_FROM_HOME;
 
-    // Open ground across the whole area, including room either side of
-    // where the platform lands, so a detour around its edge has somewhere
-    // to go.
+    // Open ground generous enough that a detour around the platform's edge
+    // has somewhere to go, sized off `half` rather than a guessed constant
+    // so it stays correct if the build radius ever changes.
     {
         let mut map = game.world.resource_mut::<WorldMap>();
-        for dx in -5..=30 {
-            for dy in -15..=15 {
+        for dx in -(half + 4)..=(half * 2 + 10) {
+            for dy in -(half + 10)..=(half + 10) {
                 map.set_override(
                     ppos.x + dx,
                     ppos.y + dy,
@@ -1433,16 +1433,51 @@ fn pursuers_never_step_onto_the_base_platform() {
     }
     // Stamped after the walkable override (so Platform wins inside the
     // slab) but before the nest and pursuer are placed — stamp_platform
-    // despawns every Hostile and Nest standing inside it.
-    game.stamp_platform(ppos.x + 8, ppos.y);
+    // despawns every Hostile and Nest standing inside it. Sits east of the
+    // player, not on top of it: `half - 3` would have put the player's own
+    // tile inside the slab.
+    let platform_center = (ppos.x + half + 1, ppos.y);
+    game.stamp_platform(platform_center.0, platform_center.1);
 
-    // Directly in line with the player, on the far side of the slab: the
-    // straight route is blocked, so any progress at all has to detour
-    // around the platform's edge.
-    let nest = spawn_bare_nest(&mut game, ppos.x + 18, ppos.y);
-    let guardian = spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 18, ppos.y);
+    // Wall off the southern detour entirely, so the only way around the
+    // slab is north — where the nest sits — instead of leaving dijkstra a
+    // coin-flip between two equally short routes. The first version of
+    // this test left both open: the field routed the pursuer south half
+    // the time, which pulled it more than `NEST_AGGRO_LEASH_RADIUS` from a
+    // nest placed north of the slab, stripped `Pursuing`, and handed it to
+    // `wander_ai_system` — which has no Platform exclusion — long before it
+    // ever reached the player.
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for dx in -(half + 4)..=(half * 2 + 10) {
+            for dy in -(half + 10)..=-(half + 1) {
+                map.set_override(
+                    ppos.x + dx,
+                    ppos.y + dy,
+                    Tile {
+                        biome: Biome::DataVoid,
+                        walkable: false,
+                    },
+                );
+            }
+        }
+    }
 
-    for _ in 0..40 {
+    // The pursuer sits on the far side of the slab, directly in line with
+    // the player, so the straight route is blocked and reaching adjacency
+    // at all means detouring around the platform's edge — north, per the
+    // wall above. The nest sits on that forced corridor rather than at the
+    // pursuer's own tile: putting it there keeps both the start and the
+    // final adjacent-to-player position within 8 of it (against a
+    // 15-tile leash), so the leash can't be what stops the chase partway
+    // through the one detour this test leaves available.
+    let guardian_pos = (platform_center.0 + half + 1, ppos.y);
+    let nest_pos = (platform_center.0, ppos.y + half + 1);
+    let nest = spawn_bare_nest(&mut game, nest_pos.0, nest_pos.1);
+    let guardian =
+        spawn_pursuing_guardian(&mut game, nest, "scrapper", guardian_pos.0, guardian_pos.1);
+
+    for _ in 0..80 {
         if game.has_active_battle() {
             break;
         }
@@ -1459,6 +1494,13 @@ fn pursuers_never_step_onto_the_base_platform() {
             "a pursuer must never step onto the base platform, but stands at {pos:?}"
         );
     }
+
+    assert!(
+        game.has_active_battle(),
+        "the pursuer should have detoured around the platform and reached the player within \
+         80 ticks — if it never does, this test can't tell 'never stepped on Platform' apart \
+         from 'never stepped at all'"
+    );
 }
 
 #[test]
@@ -1466,6 +1508,26 @@ fn nest_aggro_tick_is_a_no_op_during_a_battle() {
     let mut game = Game::new(715, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let ppos = *game.world.get::<Position>(player).unwrap();
+
+    // A walkable lane, the same as tests 1/2/5 carve — otherwise a
+    // guardian standing on unwalkable natural terrain would already be
+    // absent from the field and wouldn't have moved even without the
+    // battle guard, and this test would pass for the wrong reason.
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for dx in -2..=4 {
+            for dy in -2..=2 {
+                map.set_override(
+                    ppos.x + dx,
+                    ppos.y + dy,
+                    Tile {
+                        biome: Biome::OpenGrid,
+                        walkable: true,
+                    },
+                );
+            }
+        }
+    }
 
     // Close enough that, absent the battle guard, it would engage or at
     // least step this very tick — so this test would actually catch a
@@ -1483,5 +1545,42 @@ fn nest_aggro_tick_is_a_no_op_during_a_battle() {
         *game.world.get::<Position>(guardian).unwrap(),
         before,
         "nest_aggro_tick must not move a pursuer while a battle is already running"
+    );
+}
+
+#[test]
+fn nest_aggro_tick_is_a_no_op_while_underground() {
+    let mut game = Game::new(716, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let ppos = *game.world.get::<Position>(player).unwrap();
+
+    // Adjacent to the surface entrance tile. `Position` stays pinned there
+    // for as long as the party is underground (see CLAUDE.md's
+    // load-bearing-seams note on `Locale::Stack`), so this pursuer would
+    // engage this very tick if `nest_aggro_tick` didn't know to leave that
+    // surface `Position` alone while the party is four frames down.
+    let nest = spawn_bare_nest(&mut game, ppos.x + 1, ppos.y);
+    let guardian = spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 1, ppos.y);
+
+    game.enter_stack(ppos.x, ppos.y);
+    assert!(
+        game.is_underground(),
+        "test premise: the party must actually be underground"
+    );
+
+    game.tick();
+
+    assert!(
+        !game.has_active_battle(),
+        "nest_aggro_tick must not fight the player's surface Position while the party is \
+         underground"
+    );
+    assert_eq!(
+        *game.world.get::<Position>(guardian).unwrap(),
+        Position {
+            x: ppos.x + 1,
+            y: ppos.y
+        },
+        "a pursuer must not move while the party is underground either"
     );
 }

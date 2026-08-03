@@ -126,8 +126,14 @@ impl Game {
     /// Moves every provoked nest guardian one step closer to the player and
     /// starts a battle for the first one that arrives — the per-tick half of
     /// nest aggression, called from `tick_inner` right after
-    /// `nest_respawn_tick`. A no-op during battle or after game over, same
-    /// as every other per-tick system here.
+    /// `nest_respawn_tick`. A no-op during battle, after game over, or while
+    /// the party is underground: `Position` stays pinned to the surface
+    /// entrance tile the whole time they're down there (see the
+    /// "load-bearing seams" note in `CLAUDE.md`), and this function is a new
+    /// reader of it — without this guard it would drag a surface fight onto
+    /// a party that is four frames down, size it off Stack-depth scaling
+    /// (`fight_depth`), and raise Trace for kills that aren't underground at
+    /// all.
     ///
     /// Order below is load-bearing:
     ///
@@ -139,22 +145,27 @@ impl Game {
     /// 2. The field is built once, centred on the *player* rather than any
     ///    one nest — the spec says "around the nest", but one box around
     ///    the player is the same bound with a simpler centre, and it holds
-    ///    however many nests are provoked at once. A pursuer farther from
-    ///    the player than `NEST_AGGRO_LEASH_RADIUS + NEST_PATH_SEARCH_MARGIN`
-    ///    is simply absent from the field and skips its step — same
-    ///    outcome as being enclosed, or already as close as the terrain
-    ///    allows.
+    ///    however many nests are provoked at once.
     /// 3. Adjacency is checked *before* every step, not just after: the
     ///    player's own tile has cost 0 in the field and would win any
     ///    downhill comparison, so a pursuer already adjacent must engage
     ///    here rather than take one more step onto the player's tile.
+    /// 4. A pursuer absent from the field (farther out than
+    ///    `NEST_AGGRO_LEASH_RADIUS + NEST_PATH_SEARCH_MARGIN`, or enclosed
+    ///    with no route to the player at all) gives up on the spot too, the
+    ///    same as failing the leash check — a guardian that can never reach
+    ///    the player is a guardian that will never stop being absent from
+    ///    the field either, and leaving `Pursuing` set would freeze it solid
+    ///    forever (`wander_ai_system` excludes anything `Pursuing`) while
+    ///    paying for a full field build on its behalf every tick from then
+    ///    on.
     ///
     /// Only the first pursuer to reach the player fights this tick —
     /// `gather_pack` pulls in anything else standing near it (including a
     /// packmate still mid-chase), so the swarm arrives together rather than
     /// one at a time.
     pub(crate) fn nest_aggro_tick(&mut self) {
-        if self.is_game_over().is_some() || self.has_active_battle() {
+        if self.is_game_over().is_some() || self.has_active_battle() || self.is_underground() {
             return;
         }
 
@@ -208,10 +219,18 @@ impl Game {
                 self.start_battle(pack);
                 return;
             }
+            if !field.contains_key(&(pos.x, pos.y)) {
+                self.world.entity_mut(pursuer).remove::<Pursuing>();
+                continue;
+            }
             for _ in 0..NEST_PURSUIT_STEPS_PER_TICK {
-                let Some(&current_cost) = field.get(&(pos.x, pos.y)) else {
-                    break;
-                };
+                // Indexing directly rather than `.get`: the `contains_key`
+                // check above guarantees the starting tile is present, and
+                // every `pos` after that came from a candidate this same
+                // `field.get` already found present — the field can't be
+                // missing a tile a pursuer is standing on partway through
+                // this loop.
+                let current_cost = field[&(pos.x, pos.y)];
                 let next = NEIGHBOURS
                     .iter()
                     .map(|(dx, dy)| (pos.x + dx, pos.y + dy))
@@ -592,6 +611,16 @@ impl Game {
                 return;
             }
             self.tick_inner(false);
+            // `nest_aggro_tick` (inside `tick_inner`) can start a battle on
+            // any of these ticks now that a provoked swarm chases through
+            // rest as it does everywhere else — a swarm catching you here
+            // has to fight the party it actually caught, not the party the
+            // heal below is about to produce. No refund: like the
+            // `is_game_over` bail above, a rest that *started* has already
+            // spent its cost.
+            if self.has_active_battle() {
+                return;
+            }
         }
         let player = self.player_entity();
         {

@@ -305,7 +305,10 @@ impl Game {
         }
 
         let clear_of_everyone = |game: &mut Self, pos: Position| -> bool {
-            game.world.resource_mut::<WorldMap>().tile(pos.x, pos.y).walkable
+            game.world
+                .resource_mut::<WorldMap>()
+                .tile(pos.x, pos.y)
+                .walkable
                 && game.find_wild_creature_at(pos.x, pos.y).is_none()
                 && game.find_nest_at(pos.x, pos.y).is_none()
                 && game.find_blocking_structure_at(pos.x, pos.y).is_none()

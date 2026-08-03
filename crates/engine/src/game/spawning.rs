@@ -243,13 +243,7 @@ impl Game {
             .unwrap_or_else(|| panic!("spawn_nest: unknown species {species_id}"));
         let nest = self
             .world
-            .spawn(nest_components(
-                &species,
-                x,
-                y,
-                NEST_DURABILITY,
-                Vec::new(),
-            ))
+            .spawn(nest_components(&species, x, y, NEST_DURABILITY, Vec::new()))
             .id();
         let guardian_count = {
             let mut rng = self.world.resource_mut::<GameRng>();

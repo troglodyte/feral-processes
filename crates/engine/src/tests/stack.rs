@@ -554,9 +554,15 @@ fn a_symlink_out_keeps_the_maps_of_the_frames_already_walked() {
     );
 }
 
+/// A Home sits at the player's own tile before they descend, so its rest
+/// radius still covers the pinned entrance `Position` once underground —
+/// otherwise `nearby_rest_structure` finds nothing regardless of gate
+/// ordering and the test cannot distinguish `require_surface` refusing the
+/// rest from there being no rest structure to spend against at all.
 #[test]
 fn resting_is_refused_underground() {
     let mut game = game();
+    spawn_rest_structure_at_player(&mut game);
     descend(&mut game);
     let player = game.player_entity();
     let outlets_before = game

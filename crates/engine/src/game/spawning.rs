@@ -215,11 +215,23 @@ impl Game {
 
     /// Spawns a `Nest` for `species_id` at `(x, y)`, plus an initial
     /// `NEST_GUARDIAN_MIN..=NEST_GUARDIAN_MAX` guardians clustered within
-    /// `NEST_TETHER_RADIUS` of it.
-    pub(crate) fn spawn_nest(&mut self, species_id: &str, x: i32, y: i32) {
-        let Some(species) = self.world.resource::<SpeciesDb>().get(species_id).cloned() else {
-            return;
-        };
+    /// `NEST_TETHER_RADIUS` of it. Returns the nest's `Entity`, which
+    /// provocation and destruction (`Game::attack_nest`,
+    /// `Game::despawn_nest`) both need to act on this specific nest rather
+    /// than requerying the map for it.
+    pub(crate) fn spawn_nest(&mut self, species_id: &str, x: i32, y: i32) -> Entity {
+        let species = self
+            .world
+            .resource::<SpeciesDb>()
+            .get(species_id)
+            .cloned()
+            // Every real caller has already resolved species_id through
+            // SpeciesDb before deciding to nest it — the `can_nest` check
+            // in `try_spawn_habitat_creature`, or a test naming a shipped
+            // species — so unlike `spawn_wild_creature`'s `Option`, an
+            // unknown id here is a caller bug, not a runtime condition to
+            // absorb quietly.
+            .unwrap_or_else(|| panic!("spawn_nest: unknown species {species_id}"));
         let nest = self
             .world
             .spawn((
@@ -245,21 +257,25 @@ impl Game {
         for _ in 0..guardian_count {
             self.spawn_nest_guardian(nest, species_id, x, y);
         }
+        nest
     }
 
     /// Spawns one `species_id` wild creature tethered to `nest`, at a
     /// random offset within `NEST_TETHER_RADIUS` of `(nest_x, nest_y)` —
     /// used both for a nest's initial guardians (`spawn_nest`) and for
-    /// respawns (`nest_respawn_tick`). Walkability isn't rechecked for the
-    /// offset tile, matching the existing looseness
-    /// `try_spawn_habitat_creature` already has for pack members.
+    /// respawns (`nest_respawn_tick`, which needs the returned entity to
+    /// mark a guardian `Pursuing` when it respawns at a besieged nest).
+    /// Walkability isn't rechecked for the offset tile, matching the
+    /// existing looseness `try_spawn_habitat_creature` already has for
+    /// pack members. `None` only if `species_id` isn't in `SpeciesDb`,
+    /// mirroring `spawn_wild_creature`'s own defensive `Option`.
     pub(crate) fn spawn_nest_guardian(
         &mut self,
         nest: Entity,
         species_id: &str,
         nest_x: i32,
         nest_y: i32,
-    ) {
+    ) -> Option<Entity> {
         let (gx, gy) = {
             let mut rng = self.world.resource_mut::<GameRng>();
             (
@@ -267,11 +283,11 @@ impl Game {
                 nest_y + rng.0.random_range(-NEST_TETHER_RADIUS..=NEST_TETHER_RADIUS),
             )
         };
-        if let Some(guardian) = self.spawn_wild_creature(species_id, gx, gy) {
-            self.world
-                .entity_mut(guardian)
-                .insert(NestGuardian { nest });
-        }
+        let guardian = self.spawn_wild_creature(species_id, gx, gy)?;
+        self.world
+            .entity_mut(guardian)
+            .insert(NestGuardian { nest });
+        Some(guardian)
     }
 
     /// Stat multiplier for a wild spawn at `(x, y)`, from how far it is

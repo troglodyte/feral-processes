@@ -292,7 +292,7 @@ impl Game {
         let nest = self.world.get::<NestGuardian>(front).map(|g| g.nest);
         self.world
             .entity_mut(front)
-            .remove::<(Hostile, WanderAi, NestGuardian)>();
+            .remove::<(Hostile, WanderAi, NestGuardian, Pursuing)>();
         // Battle-scoped state has to be cleared here rather than left to
         // `end_battle`/`clear_battle_status_effects`: `front` is about to
         // leave its group below, so if other groups are still standing the

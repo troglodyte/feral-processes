@@ -87,7 +87,15 @@ impl Game {
         };
         for (nest, species, pos, count) in ready {
             for _ in 0..count {
-                self.spawn_nest_guardian(nest, &species, pos.x, pos.y);
+                // A replacement spawned mid-siege — some other guardian of
+                // this nest still bears `Pursuing` from the player's last
+                // hit — arrives already provoked, rather than standing
+                // there calm until the next swing reaches it.
+                if let Some(guardian) = self.spawn_nest_guardian(nest, &species, pos.x, pos.y)
+                    && self.nest_has_pursuers(nest)
+                {
+                    self.world.entity_mut(guardian).insert(Pursuing);
+                }
             }
         }
     }

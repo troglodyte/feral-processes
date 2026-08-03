@@ -38,6 +38,10 @@ impl Game {
     /// despawns the nest, which implicitly cancels anything left in its
     /// `Nest::pending_respawns`.
     pub(crate) fn attack_nest(&mut self, nest: Entity) {
+        // On every hit, not just the first: a guardian that wandered
+        // outside its tether and walked home (see `wander_ai_system`)
+        // would otherwise go unprovoked by the next swing.
+        self.provoke_nest(nest);
         let player = self.player_entity();
         let label = self.entity_label(nest);
         let dmg = battle::compute_damage(self.effective_atk(player), 0, 5) as u32;
@@ -56,10 +60,11 @@ impl Game {
         }
     }
 
-    /// Despawns `nest`, first stripping `NestGuardian` from every creature
-    /// tethered to it so none is left pointing at a dead entity — they
-    /// resume ordinary wandering. Despawning implicitly cancels anything
-    /// left in `Nest::pending_respawns`.
+    /// Despawns `nest`, first stripping `NestGuardian` and `Pursuing` from
+    /// every creature tethered to it so none is left pointing at a dead
+    /// entity or chasing on its behalf — they resume ordinary wandering.
+    /// Despawning implicitly cancels anything left in
+    /// `Nest::pending_respawns`.
     pub(crate) fn despawn_nest(&mut self, nest: Entity) {
         let guardians: Vec<Entity> = {
             let mut query = self.world.query::<(Entity, &NestGuardian)>();
@@ -70,9 +75,40 @@ impl Game {
                 .collect()
         };
         for guardian in guardians {
-            self.world.entity_mut(guardian).remove::<NestGuardian>();
+            self.world
+                .entity_mut(guardian)
+                .remove::<(NestGuardian, Pursuing)>();
         }
         self.world.despawn(nest);
+    }
+
+    /// Sets `Pursuing` on every living guardian tethered to `nest` — the
+    /// whole effect of an attack landing. Collected in an inner scope
+    /// first so the query's borrow of `self.world` ends before the
+    /// `entity_mut` loop, the same shape `despawn_nest` above uses.
+    pub(crate) fn provoke_nest(&mut self, nest: Entity) {
+        let guardians: Vec<Entity> = {
+            let mut query = self.world.query::<(Entity, &NestGuardian)>();
+            query
+                .iter(&self.world)
+                .filter(|(_, g)| g.nest == nest)
+                .map(|(e, _)| e)
+                .collect()
+        };
+        for guardian in guardians {
+            self.world.entity_mut(guardian).insert(Pursuing);
+        }
+    }
+
+    /// Whether `nest` currently has at least one living guardian marked
+    /// `Pursuing` — `nest_respawn_tick` uses this so a replacement spawned
+    /// while the nest is under siege arrives already provoked, instead of
+    /// standing there calm until the player's next hit reaches it.
+    pub(crate) fn nest_has_pursuers(&mut self, nest: Entity) -> bool {
+        let mut query = self.world.query::<(&NestGuardian, Option<&Pursuing>)>();
+        query
+            .iter(&self.world)
+            .any(|(g, pursuing)| g.nest == nest && pursuing.is_some())
     }
 
     /// Stamps the base platform centered on `(cx, cy)`: every tile within

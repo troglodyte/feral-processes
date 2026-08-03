@@ -3,7 +3,8 @@
 use super::support::*;
 use crate::tuning::{
     DISTANCE_STAT_STEP_TILES, GROUP_SIZE_STEP_TILES, MAX_BUILD_DISTANCE_FROM_HOME,
-    MAX_DISTANCE_STAT_MULTIPLIER, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE,
+    MAX_DISTANCE_STAT_MULTIPLIER, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_DURABILITY,
+    NEST_RESPAWN_TICKS,
 };
 use crate::*;
 
@@ -955,4 +956,293 @@ fn zone_transition_reliably_populates_the_new_zone_regardless_of_seed() {
              creatures, found {count}"
         );
     }
+}
+
+/// Nest provocation: `Game::attack_nest` marking guardians `Pursuing`, and
+/// every path that removes a guardian from the world (a destroyed nest, a
+/// tamed capture) removing the marker with it. Nothing moves a `Pursuing`
+/// guardian yet — that's Task 4's `nest_aggro_tick`.
+fn guardians_of(game: &mut Game, nest: Entity) -> Vec<Entity> {
+    let mut query = game.world.query::<(Entity, &NestGuardian)>();
+    query
+        .iter(&game.world)
+        .filter(|(_, g)| g.nest == nest)
+        .map(|(e, _)| e)
+        .collect()
+}
+
+#[test]
+fn attacking_a_nest_provokes_only_its_own_guardians() {
+    let mut game = Game::new(700, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // Far enough apart (tether radius 5) that the two guardian clusters
+    // cannot possibly overlap — otherwise "no guardian of the other nest"
+    // could pass by accident rather than by the provocation actually being
+    // scoped to one nest.
+    let nest_a = game.spawn_nest("scrapper", 100, 100);
+    let nest_b = game.spawn_nest("scrapper", 300, 300);
+    let guardians_a = guardians_of(&mut game, nest_a);
+    let guardians_b = guardians_of(&mut game, nest_b);
+    assert!(!guardians_a.is_empty(), "nest_a should have guardians");
+    assert!(!guardians_b.is_empty(), "nest_b should have guardians");
+
+    game.attack_nest(nest_a);
+
+    for &guardian in &guardians_a {
+        assert!(
+            game.world.get::<Pursuing>(guardian).is_some(),
+            "every guardian of the attacked nest should be provoked"
+        );
+    }
+    for &guardian in &guardians_b {
+        assert!(
+            game.world.get::<Pursuing>(guardian).is_none(),
+            "a guardian of an untouched nest must not be provoked"
+        );
+    }
+}
+
+#[test]
+fn destroying_a_nest_clears_pursuing() {
+    let mut game = Game::new(701, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let nest = game.spawn_nest("scrapper", 110, 110);
+    let guardians = guardians_of(&mut game, nest);
+    assert!(!guardians.is_empty());
+
+    game.provoke_nest(nest);
+    for &guardian in &guardians {
+        assert!(game.world.get::<Pursuing>(guardian).is_some());
+    }
+
+    game.world.get_mut::<Durability>(nest).unwrap().hp = 0;
+    game.despawn_nest(nest);
+
+    assert!(
+        game.world.get::<Nest>(nest).is_none(),
+        "the nest itself should be gone"
+    );
+    for &guardian in &guardians {
+        assert!(
+            game.world.get::<Pursuing>(guardian).is_none(),
+            "a guardian of a destroyed nest must not still be marked pursuing"
+        );
+        assert!(
+            game.world.get::<NestGuardian>(guardian).is_none(),
+            "and must no longer be tethered to a dead nest"
+        );
+    }
+}
+
+#[test]
+fn a_guardian_respawned_at_a_besieged_nest_is_already_pursuing() {
+    let mut game = Game::new(702, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let nest = game
+        .world
+        .spawn((
+            Nest {
+                species: "scrapper".to_string(),
+                pending_respawns: vec![NEST_RESPAWN_TICKS],
+            },
+            Position { x: 120, y: 120 },
+            Glyph {
+                ch: 'N',
+                color: GlyphColor::Red,
+            },
+            Durability {
+                hp: NEST_DURABILITY,
+                max_hp: NEST_DURABILITY,
+            },
+        ))
+        .id();
+    // A guardian still standing and already marked Pursuing, as an
+    // attack_nest hit would leave it — this is what makes the nest
+    // "besieged" for nest_has_pursuers, independent of the respawn queue.
+    let survivor = game
+        .world
+        .spawn((
+            Creature {
+                species: "scrapper".to_string(),
+            },
+            Hostile,
+            WanderAi::default(),
+            NestGuardian { nest },
+            Pursuing,
+            Position { x: 121, y: 120 },
+            Stats {
+                hp: 10,
+                max_hp: 10,
+                atk: 1,
+                def: 1,
+            },
+        ))
+        .id();
+
+    for _ in 0..NEST_RESPAWN_TICKS {
+        game.tick();
+    }
+
+    let new_guardian = guardians_of(&mut game, nest)
+        .into_iter()
+        .find(|&e| e != survivor)
+        .expect("a replacement guardian should have spawned");
+    assert!(
+        game.world.get::<Pursuing>(new_guardian).is_some(),
+        "a guardian respawned at a besieged nest should already be pursuing"
+    );
+}
+
+#[test]
+fn a_guardian_respawned_at_a_calm_nest_is_not_pursuing() {
+    let mut game = Game::new(703, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let nest = game
+        .world
+        .spawn((
+            Nest {
+                species: "scrapper".to_string(),
+                pending_respawns: vec![NEST_RESPAWN_TICKS],
+            },
+            Position { x: 130, y: 130 },
+            Glyph {
+                ch: 'N',
+                color: GlyphColor::Red,
+            },
+            Durability {
+                hp: NEST_DURABILITY,
+                max_hp: NEST_DURABILITY,
+            },
+        ))
+        .id();
+
+    for _ in 0..NEST_RESPAWN_TICKS {
+        game.tick();
+    }
+
+    let new_guardian = guardians_of(&mut game, nest)
+        .into_iter()
+        .next()
+        .expect("a replacement guardian should have spawned");
+    assert!(
+        game.world.get::<Pursuing>(new_guardian).is_none(),
+        "a guardian respawned at a calm nest should not be pursuing"
+    );
+}
+
+#[test]
+fn a_pursuing_guardian_does_not_also_wander() {
+    let mut game = Game::new(704, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let nest = game
+        .world
+        .spawn((
+            Nest {
+                species: "scrapper".to_string(),
+                pending_respawns: Vec::new(),
+            },
+            Position { x: 140, y: 140 },
+            Glyph {
+                ch: 'N',
+                color: GlyphColor::Red,
+            },
+            Durability {
+                hp: NEST_DURABILITY,
+                max_hp: NEST_DURABILITY,
+            },
+        ))
+        .id();
+    let guardian = game
+        .world
+        .spawn((
+            Creature {
+                species: "scrapper".to_string(),
+            },
+            Hostile,
+            WanderAi::default(),
+            NestGuardian { nest },
+            Position { x: 141, y: 140 },
+            Stats {
+                hp: 10,
+                max_hp: 10,
+                atk: 1,
+                def: 1,
+            },
+        ))
+        .id();
+
+    game.provoke_nest(nest);
+    assert!(game.world.get::<Pursuing>(guardian).is_some());
+
+    let before = *game.world.get::<Position>(guardian).unwrap();
+    for _ in 0..10 {
+        game.tick();
+    }
+    let after = *game.world.get::<Position>(guardian).unwrap();
+
+    assert_eq!(
+        before, after,
+        "nothing moves a Pursuing guardian yet — that's Task 4's nest_aggro_tick, \
+         and wander_ai_system must exclude it so the two can't double it up later"
+    );
+}
+
+#[test]
+fn decompiling_a_pursuing_guardian_strips_the_marker() {
+    let mut game = Game::new(705, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let nest = game
+        .world
+        .spawn((
+            Nest {
+                species: "scrapper".to_string(),
+                pending_respawns: Vec::new(),
+            },
+            Position { x: 150, y: 150 },
+            Glyph {
+                ch: 'N',
+                color: GlyphColor::Red,
+            },
+            Durability {
+                hp: NEST_DURABILITY,
+                max_hp: NEST_DURABILITY,
+            },
+        ))
+        .id();
+    let guardian = game
+        .world
+        .spawn((
+            Creature {
+                species: "scrapper".to_string(),
+            },
+            Hostile,
+            WanderAi::default(),
+            NestGuardian { nest },
+            Pursuing,
+            Position { x: 151, y: 150 },
+            Stats {
+                hp: 1,
+                max_hp: 10,
+                atk: 1,
+                def: 1,
+            },
+        ))
+        .id();
+    insert_battle(&mut game, player, vec![guardian]);
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::ICE_BREAKER), 50);
+    game.world.get_mut::<Decompiler>(player).unwrap().skill = 50;
+
+    for _ in 0..50 {
+        if game.world.get::<Tamed>(guardian).is_some() {
+            break;
+        }
+        player_decompiles(&mut game);
+    }
+
+    assert!(
+        game.world.get::<Tamed>(guardian).is_some(),
+        "the capture roll should land within 50 attempts at this skill/potency"
+    );
+    assert!(
+        game.world.get::<Pursuing>(guardian).is_none(),
+        "taming a pursuing guardian should strip the Pursuing marker along with NestGuardian"
+    );
 }

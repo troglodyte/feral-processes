@@ -4,8 +4,8 @@ use rand::RngExt;
 
 use crate::components::{
     Creature, Experience, FieldBuff, FieldBuffKind, Inventory, NEED_MAX, NEED_MIN, Needs, Nest,
-    NestGuardian, PassiveProcessor, Perks, Player, Position, Potential, ResourceNode, Stats,
-    Structure, StructureTier, Tamed, Task, TaskKind, WanderAi, field_buff_power_of,
+    NestGuardian, PassiveProcessor, Perks, Player, Position, Potential, Pursuing, ResourceNode,
+    Stats, Structure, StructureTier, Tamed, Task, TaskKind, WanderAi, field_buff_power_of,
 };
 use crate::items_db::ItemDb;
 use crate::perks::Perk;
@@ -58,8 +58,13 @@ pub fn needs_tick_system(
     }
 }
 
+/// The per-creature state `wander_ai_system` walks. Aliased rather than
+/// written inline because the tuple is long enough to trip clippy's
+/// `type_complexity` lint — same reasoning as `CronjobWorker` below.
+type Wanderer<'w> = (&'w mut Position, &'w mut WanderAi, Option<&'w NestGuardian>);
+
 pub fn wander_ai_system(
-    mut query: Query<(&mut Position, &mut WanderAi, Option<&NestGuardian>), Without<Player>>,
+    mut query: Query<Wanderer, (Without<Player>, Without<Pursuing>)>,
     nests: Query<&Position, (With<Nest>, Without<WanderAi>)>,
     mut world: ResMut<WorldMap>,
     mut rng: ResMut<GameRng>,

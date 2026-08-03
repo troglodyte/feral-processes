@@ -750,6 +750,16 @@ pub struct NestGuardian {
     pub nest: Entity,
 }
 
+/// Marks a `NestGuardian` roused by an attack on its own nest — driven at
+/// the player instead of wandering (`systems::wander_ai_system` excludes
+/// it; the drive itself is Task 4's `nest_aggro_tick`). Deliberately no
+/// target field: the player is the only thing anything in this game
+/// pursues. And deliberately no duration: the chase ends spatially or with
+/// the nest, never on a timer — a second pursuable target or a timed chase
+/// is the signal to revisit this, not to bolt a field onto it.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Pursuing;
+
 /// Present on a structure whose `StructureDef::temporary` is set —
 /// counts down by one on every ordinary game tick (see
 /// `Game::tick_inner`) until it hits 0, at which point the structure

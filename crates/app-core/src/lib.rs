@@ -9,6 +9,8 @@
 
 mod app;
 
+pub use app::group_menu::GroupMenuRow;
+
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -323,6 +325,13 @@ pub enum Mode {
     /// Load-or-delete choice for the save picked from `Mode::LoadGame`.
     SaveAction,
     Playing,
+    /// The base menu, opened with `b`. Lists every base errand that is
+    /// currently possible and dispatches to its screen — see
+    /// `App::base_menu_rows`.
+    BaseMenu,
+    /// The party menu, opened with `p`. Same shape as `Mode::BaseMenu`, for
+    /// everything about the programs you own — see `App::party_menu_rows`.
+    PartyMenu,
     /// Picking an action for the party member in `Game::battle_active_slot`.
     /// The menu comes from `Game::battle_action_options`, so the action set
     /// lives in exactly one place and the two renderers cannot drift.
@@ -494,6 +503,8 @@ impl Mode {
             | Mode::LoadGame
             | Mode::SaveAction
             | Mode::Playing
+            | Mode::BaseMenu
+            | Mode::PartyMenu
             | Mode::Build
             | Mode::BuildDirection
             | Mode::Craft
@@ -636,6 +647,10 @@ pub struct App {
     pub quit: bool,
     pending_structure: Option<String>,
     pending_worker: Option<Entity>,
+    /// Which group menu opened the screen that is up, if one did — where
+    /// `App::close_screen` sends Esc. `None` for a screen reached straight
+    /// from the map, and cleared the moment the map is reached again.
+    menu_origin: Option<Mode>,
     /// The structure picked in `Mode::Remove`, awaiting confirmation from
     /// `Mode::RemoveConfirm` if it's the Home (see `Game::remove_structure`).
     pending_remove_structure: Option<Entity>,

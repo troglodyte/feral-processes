@@ -1,56 +1,8 @@
 //! Movement underground: the same four keys, steering a party that has a
 //! facing.
 
-use feral_processes_engine::resources::Locale;
-use feral_processes_engine::save;
-use feral_processes_engine::stack::{Dir, FrameSpec, generate};
-
 use super::support::*;
 use crate::*;
-
-/// An `App` standing on the entry cell of Stack frame 1.
-///
-/// Built by editing a save and reloading it, the same trick
-/// `app_owning_distant_programs` uses: the engine deliberately exposes no
-/// way to drop the player into the Stack from outside the crate, since on a
-/// real run that only ever happens by walking onto an entrance.
-fn app_underground(seed: u32) -> App {
-    // Counted rather than keyed on the seed alone: tests run in parallel and
-    // several share a seed, so a seed-named scratch file has two of them
-    // reading and deleting the same path.
-    static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-    let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-    let assets_dir = test_assets_dir();
-    let mut app = test_app(seed);
-    let path =
-        std::env::temp_dir().join(format!("feral_processes_appcore_stack_{seed}_{unique}.sav"));
-    let game = app.game.as_mut().unwrap();
-    game.save(&path).unwrap();
-
-    let mut data = save::load_from_file(&path).unwrap();
-    let spec = FrameSpec {
-        world_seed: data.seed,
-        entrance: data.player.position,
-        depth: 1,
-        frames: 2,
-    };
-    let entry = generate(spec).entry;
-    data.locale = Locale::Stack {
-        depth: spec.depth,
-        frames: spec.frames,
-        x: entry.0,
-        y: entry.1,
-        facing: Dir::North,
-        entrance: spec.entrance,
-    };
-    save::save_to_file(&path, &data).unwrap();
-
-    app.game = Some(Game::load(&path, &assets_dir).unwrap());
-    let _ = std::fs::remove_file(&path);
-    app.mode = Mode::Playing;
-    app
-}
 
 fn facing(app: &App) -> String {
     app.game
@@ -199,15 +151,19 @@ fn the_menu_keys_still_open_their_screens_underground() {
     // Party and inventory management is deliberately available down the
     // Stack — see `Game::require_surface`.
     for (key, expected) in [
-        (GameKey::Char('v'), Mode::Inventory),
-        (GameKey::Char('p'), Mode::Companion),
-        (GameKey::Char('m'), Mode::RoutineTarget),
+        (GameKey::Char('i'), Mode::Inventory),
+        (GameKey::Char('p'), Mode::PartyMenu),
         (GameKey::Char('?'), Mode::Help),
     ] {
         let mut app = app_underground(303);
         app.handle_key(key);
         assert_eq!(app.mode, expected, "{key:?} should still open its screen");
     }
+    // And the party menu still reaches its screens from down there — the
+    // rows are non-surface, so none of them are filtered out.
+    let mut app = app_underground(303);
+    open_via_menu(&mut app, 'p', "Install a routine");
+    assert_eq!(app.mode, Mode::RoutineTarget);
 }
 
 #[test]

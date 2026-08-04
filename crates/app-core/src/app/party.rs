@@ -10,7 +10,7 @@ impl App {
     /// changing who's on it.
     pub(crate) fn handle_companion_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let shift = match key {
@@ -68,7 +68,7 @@ impl App {
     /// distance only hid programs left working across the map.
     pub(crate) fn handle_fuse_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let Some(game) = &mut self.game else { return };
@@ -84,7 +84,7 @@ impl App {
     pub(crate) fn handle_fuse_second_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.pending_fuse_first = None;
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let Some(first) = self.pending_fuse_first else {

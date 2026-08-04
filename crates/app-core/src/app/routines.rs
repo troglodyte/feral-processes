@@ -6,7 +6,7 @@ use crate::*;
 impl App {
     pub(crate) fn handle_routine_target_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let Some(game) = &mut self.game else { return };
@@ -71,7 +71,7 @@ impl App {
 
     pub(crate) fn handle_extract_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let Some(game) = &mut self.game else { return };

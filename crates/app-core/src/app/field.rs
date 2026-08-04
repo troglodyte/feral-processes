@@ -25,7 +25,7 @@ impl App {
     /// before `Mode::BattleAlly`.
     pub(crate) fn handle_field_cast_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let Some(game) = &mut self.game else { return };

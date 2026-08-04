@@ -92,6 +92,8 @@ impl App {
             Mode::SaveAction => self.handle_save_action_key(key),
             Mode::DifficultyPick => self.handle_difficulty_key(key),
             Mode::Playing => self.handle_playing_key(key),
+            Mode::BaseMenu => self.handle_base_menu_key(key),
+            Mode::PartyMenu => self.handle_party_menu_key(key),
             Mode::Battle => self.handle_battle_key(key),
             Mode::BattleTarget => self.handle_battle_target_key(key),
             Mode::BattleItem => self.handle_battle_item_key(key),
@@ -153,6 +155,13 @@ impl App {
             && !(mode_before == Mode::Manifest && self.mode == Mode::ManifestPick)
         {
             self.menu_selected = self.opening_row();
+        }
+        // A group menu's origin only outlives the screen it opened. Landing
+        // on the map means the errand is over — completing an action drops
+        // straight here — and an origin left standing would send some later,
+        // unrelated screen's Esc back to a menu the player long since left.
+        if self.mode == Mode::Playing {
+            self.menu_origin = None;
         }
         self.maybe_autosave();
         // Last, because `maybe_autosave` is itself allowed to raise a message.

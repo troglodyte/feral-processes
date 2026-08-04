@@ -8,7 +8,7 @@ impl App {
     /// from a numbered list of grid coordinates.
     pub(crate) fn handle_inspect_direction_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let dir = match key {
@@ -48,7 +48,7 @@ impl App {
     pub(crate) fn handle_manifest_pick_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.pending_manifest = None;
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let subjects = self.manifest_subjects();

@@ -108,7 +108,7 @@ impl App {
     /// through must not vanish under the keys you scroll it with.
     pub(crate) fn handle_history_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         // Folded rows, not raw lines: repeats are condensed into one row (see
@@ -129,7 +129,7 @@ impl App {
     /// it" without becoming a fourth way to do any of that.
     pub(crate) fn handle_structures_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let rows = self

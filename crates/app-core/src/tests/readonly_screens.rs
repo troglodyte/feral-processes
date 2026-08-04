@@ -15,10 +15,14 @@ fn l_opens_the_history_and_esc_returns_to_the_map() {
 }
 
 #[test]
-fn b_opens_the_structure_roster_and_esc_returns_to_the_map() {
-    let mut app = test_app(91);
-    app.handle_key(GameKey::Char('B'));
+fn the_base_menu_opens_the_structure_roster_and_esc_backs_into_it() {
+    // A deployed structure, because the row is hidden when the roster would
+    // be empty (see `App::base_menu_rows`).
+    let mut app = app_owning_a_program_and_a_compiler(91, &[]);
+    open_via_menu(&mut app, 'b', "Structure roster");
     assert_eq!(app.mode, Mode::Structures);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::BaseMenu, "Esc walks back up one level");
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 }
@@ -96,8 +100,8 @@ fn repeated_lines_are_one_scrollable_row() {
 /// from.
 #[test]
 fn up_and_down_scroll_the_roster_without_leaving_it() {
-    let mut app = test_app(93);
-    app.handle_key(GameKey::Char('B'));
+    let mut app = app_owning_a_program_and_a_compiler(93, &[]);
+    open_via_menu(&mut app, 'b', "Structure roster");
     assert_eq!(app.menu_selected, 0, "the roster opens at its first row");
     app.handle_key(GameKey::Down);
     assert_eq!(app.mode, Mode::Structures);
@@ -110,20 +114,17 @@ fn up_and_down_scroll_the_roster_without_leaving_it() {
 /// and raids, needs and cronjobs all run off that clock.
 #[test]
 fn neither_screen_advances_the_game() {
-    let mut app = test_app(94);
+    let mut app = app_owning_a_program_and_a_compiler(94, &[]);
     let before = app.game.as_ref().unwrap().current_tick();
+    app.handle_key(GameKey::Char('L'));
+    open_via_menu(&mut app, 'b', "Structure roster");
     for key in [
-        GameKey::Char('L'),
         GameKey::Down,
         GameKey::Down,
         GameKey::Up,
         GameKey::Enter,
         GameKey::Char('1'),
         GameKey::Esc,
-        GameKey::Char('B'),
-        GameKey::Down,
-        GameKey::Enter,
-        GameKey::Char('1'),
         GameKey::Esc,
     ] {
         app.handle_key(key);
@@ -141,14 +142,14 @@ fn neither_screen_advances_the_game() {
 /// a way out either.
 #[test]
 fn enter_and_row_shortcuts_do_nothing_on_either_screen() {
-    let mut app = test_app(95);
+    let mut app = app_owning_a_program_and_a_compiler(95, &[]);
     app.handle_key(GameKey::Char('L'));
     for key in [GameKey::Enter, GameKey::Char('1'), GameKey::Char('a')] {
         app.handle_key(key);
         assert_eq!(app.mode, Mode::History, "{key:?} should do nothing here");
     }
     app.handle_key(GameKey::Esc);
-    app.handle_key(GameKey::Char('B'));
+    open_via_menu(&mut app, 'b', "Structure roster");
     for key in [GameKey::Enter, GameKey::Char('1'), GameKey::Char('a')] {
         app.handle_key(key);
         assert_eq!(app.mode, Mode::Structures, "{key:?} should do nothing here");

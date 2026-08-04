@@ -49,7 +49,7 @@ impl App {
 
     pub(crate) fn handle_build_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let Some(game) = &self.game else { return };
@@ -63,7 +63,7 @@ impl App {
     pub(crate) fn handle_build_direction_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.pending_structure = None;
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let dir = match key {
@@ -89,7 +89,7 @@ impl App {
 
     pub(crate) fn handle_cronjob_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let workers = self.nearby_programs();
@@ -102,7 +102,7 @@ impl App {
     pub(crate) fn handle_cronjob_structure_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.pending_worker = None;
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let Some(worker) = self.pending_worker else {
@@ -127,7 +127,7 @@ impl App {
     /// `Game::work_structure`).
     pub(crate) fn handle_work_structure_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let structures = self.workable_structures();
@@ -143,7 +143,7 @@ impl App {
 
     pub(crate) fn handle_guard_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let workers = self.nearby_programs();
@@ -156,7 +156,7 @@ impl App {
     pub(crate) fn handle_guard_structure_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.pending_worker = None;
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let Some(worker) = self.pending_worker else {
@@ -177,7 +177,7 @@ impl App {
 
     pub(crate) fn handle_remove_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let structures = self.nearby_structures();
@@ -200,7 +200,7 @@ impl App {
 
     pub(crate) fn handle_upgrade_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let structures = self.upgradeable_structures();
@@ -218,7 +218,7 @@ impl App {
     pub(crate) fn handle_remove_confirm_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.pending_remove_structure = None;
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let options = ['y', 'n'];
@@ -252,7 +252,7 @@ impl App {
     /// menus — and teleports the player to the picked one.
     pub(crate) fn handle_symlink_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let Some(game) = &mut self.game else { return };

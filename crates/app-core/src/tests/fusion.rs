@@ -17,7 +17,7 @@ fn the_fuse_picker_offers_owned_programs_parked_far_from_the_player() {
         "fixture should hand the player exactly two programs to fuse"
     );
 
-    app.handle_key(GameKey::Char('f'));
+    open_via_menu(&mut app, 'p', "Fuse two programs");
     assert_eq!(app.mode, Mode::Fuse, "'f' should open the fuse picker");
 
     app.handle_key(GameKey::Char('1'));

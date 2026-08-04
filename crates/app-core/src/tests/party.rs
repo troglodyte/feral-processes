@@ -18,7 +18,7 @@ fn the_angle_keys_reorder_the_party_and_the_highlight_follows_the_member() {
     let mut app = app_with_companions_in_the_party(760, 2);
     let before = roster(&mut app);
 
-    app.handle_key(GameKey::Char('p'));
+    open_via_menu(&mut app, 'p', "Companions");
     assert_eq!(app.mode, Mode::Companion);
     app.handle_key(GameKey::Down);
     assert_eq!(app.menu_selected, 1, "the second slot is highlighted");
@@ -52,7 +52,7 @@ fn the_lead_member_cannot_be_pushed_off_the_front_of_the_line() {
     let mut app = app_with_companions_in_the_party(761, 2);
     let before = roster(&mut app);
 
-    app.handle_key(GameKey::Char('p'));
+    open_via_menu(&mut app, 'p', "Companions");
     app.handle_key(GameKey::Char('<'));
 
     assert!(

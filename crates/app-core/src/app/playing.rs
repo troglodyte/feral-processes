@@ -5,68 +5,39 @@ use crate::*;
 impl App {
     pub(crate) fn handle_playing_key(&mut self, key: GameKey) {
         match key {
+            // The two group menus. Seventeen keys used to sit on this
+            // screen doing what these two now reach; see `group_menu.rs`
+            // for why none of them survive as an alias.
             GameKey::Char('b') => {
-                self.mode = Mode::Build;
+                self.mode = Mode::BaseMenu;
                 return;
             }
-            GameKey::Char('c') => {
-                self.mode = Mode::Craft;
+            GameKey::Char('p') => {
+                self.mode = Mode::PartyMenu;
                 return;
             }
-            GameKey::Char('w') => {
-                self.mode = Mode::Cronjob;
-                return;
-            }
-            GameKey::Char('W') => {
-                self.mode = Mode::WorkStructure;
-                return;
-            }
-            GameKey::Char('G') => {
-                self.mode = Mode::Guard;
-                return;
-            }
-            GameKey::Char('R') => {
-                self.mode = Mode::Remove;
-                return;
-            }
-            GameKey::Char('U') => {
-                self.mode = Mode::Upgrade;
+            // No menu of its own: the pack is a single screen, so the group
+            // key opens it directly.
+            GameKey::Char('i') => {
+                self.mode = Mode::Inventory;
                 return;
             }
             GameKey::Char('u') => {
                 self.mode = Mode::Symlink;
                 return;
             }
-            GameKey::Char('i') => {
+            // Examine, in the roguelike sense — `i` went to the pack, and
+            // perks moving into the party menu freed the key a player would
+            // guess for it anyway.
+            GameKey::Char('x') => {
                 self.mode = Mode::InspectDirection;
                 return;
             }
-            GameKey::Char('d') => {
-                self.mode = Mode::ManifestPick;
-                return;
-            }
-            GameKey::Char('v') => {
-                self.mode = Mode::Inventory;
-                return;
-            }
-            GameKey::Char('p') => {
-                self.mode = Mode::Companion;
-                return;
-            }
-            GameKey::Char('f') => {
-                self.mode = Mode::Fuse;
-                return;
-            }
-            GameKey::Char('m') => {
-                self.mode = Mode::RoutineTarget;
-                return;
-            }
+            // Flat despite belonging to the party, like `C` and `t` below:
+            // these three are pressed every few turns while walking, and a
+            // group menu is a keystroke tax on anything that frequent.
             GameKey::Char('a') => {
                 self.mode = Mode::FieldCast;
-                return;
-            }
-            GameKey::Char('M') => {
-                self.mode = Mode::Extract;
                 return;
             }
             GameKey::Char('t') => {
@@ -75,14 +46,6 @@ impl App {
                 self.trade_origin = TradeOrigin::Trader;
                 self.pending_trade_choice = None;
                 self.mode = Mode::Trade;
-                return;
-            }
-            GameKey::Char('x') => {
-                self.mode = Mode::Perks;
-                return;
-            }
-            GameKey::Char('T') => {
-                self.mode = Mode::Research;
                 return;
             }
             GameKey::Char('L') => {
@@ -94,10 +57,6 @@ impl App {
             // must not cost a turn.
             GameKey::Char('F') => {
                 self.log_filter = self.log_filter.next();
-                return;
-            }
-            GameKey::Char('B') => {
-                self.mode = Mode::Structures;
                 return;
             }
             GameKey::Char('s') => {

@@ -18,6 +18,7 @@ impl App {
             quit: false,
             pending_structure: None,
             pending_worker: None,
+            menu_origin: None,
             pending_remove_structure: None,
             pending_manifest: None,
             manifest_from_picker: false,

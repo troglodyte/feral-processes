@@ -7,7 +7,7 @@ impl App {
     /// unlocked in one visit if there are enough Perk Points.
     pub(crate) fn handle_perks_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         // Through `perk_defs` rather than `Perk::all()` so the numbering the
@@ -33,7 +33,7 @@ impl App {
     /// be taken in one visit.
     pub(crate) fn handle_research_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         // Collecting the ids through `as_ref().map` (rather than a

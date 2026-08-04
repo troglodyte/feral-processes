@@ -16,18 +16,20 @@ use crate::*;
 /// this only fails if the *menu itself* is broken, not because of which
 /// particular structure a fresh session happens to put at each digit.
 #[test]
-fn t_opens_the_research_menu_and_esc_closes_it() {
+fn the_base_menu_opens_research_and_esc_closes_it() {
     let mut app = test_app(501);
-    app.handle_key(GameKey::Char('T'));
+    open_via_menu(&mut app, 'b', "Research");
     assert!(matches!(app.mode, Mode::Research));
     app.handle_key(GameKey::Esc);
-    assert!(matches!(app.mode, Mode::Playing));
+    assert_eq!(app.mode, Mode::BaseMenu, "Esc walks back up one level");
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
 }
 
 #[test]
 fn picking_an_unaffordable_research_node_reports_why_and_stays_open() {
     let mut app = test_app(502);
-    app.handle_key(GameKey::Char('T'));
+    open_via_menu(&mut app, 'b', "Research");
     app.handle_key(GameKey::Char('1'));
     assert!(
         matches!(app.mode, Mode::Research),

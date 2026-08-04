@@ -8,7 +8,7 @@ impl App {
     /// open `Mode::InventoryItemAction` for the selected item.
     pub(crate) fn handle_inventory_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let Some(game) = &self.game else { return };

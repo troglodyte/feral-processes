@@ -56,10 +56,12 @@ fn letters_pick_no_row_in_a_menu_shorter_than_ten_rows() {
 }
 
 #[test]
-fn d_opens_the_manifest_picker_and_esc_backs_out() {
+fn the_party_menu_opens_the_manifest_picker_and_esc_backs_out() {
     let mut app = test_app(70);
-    app.handle_key(GameKey::Char('d'));
+    open_via_menu(&mut app, 'p', "Read a manifest");
     assert_eq!(app.mode, Mode::ManifestPick);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::PartyMenu, "Esc walks back up one level");
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 }
@@ -69,7 +71,7 @@ fn the_picker_always_offers_you_as_its_first_row() {
     let mut app = test_app(71);
     let player = app.game.as_ref().unwrap().player_status().position;
 
-    app.handle_key(GameKey::Char('d'));
+    open_via_menu(&mut app, 'p', "Read a manifest");
     app.handle_key(GameKey::Char('1'));
     assert_eq!(app.mode, Mode::Manifest);
     let subject = app.pending_manifest.expect("row 1 picks a subject");
@@ -87,7 +89,7 @@ fn the_picker_lists_every_owned_program_after_you() {
     let subjects = app.manifest_subjects();
     assert_eq!(subjects.len(), 3, "you plus two programs");
 
-    app.handle_key(GameKey::Char('d'));
+    open_via_menu(&mut app, 'p', "Read a manifest");
     app.handle_key(GameKey::Char('2'));
     assert_eq!(app.mode, Mode::Manifest);
     assert_eq!(app.pending_manifest, Some(subjects[1]));
@@ -97,7 +99,7 @@ fn the_picker_lists_every_owned_program_after_you() {
 fn left_and_right_cycle_the_owned_subjects_and_wrap_at_both_ends() {
     let mut app = app_owning_distant_programs(73, 2);
     let subjects = app.manifest_subjects();
-    app.handle_key(GameKey::Char('d'));
+    open_via_menu(&mut app, 'p', "Read a manifest");
     app.handle_key(GameKey::Char('1'));
     assert_eq!(app.pending_manifest, Some(subjects[0]));
 
@@ -163,7 +165,7 @@ fn cycling_does_nothing_when_the_subject_is_a_program_you_do_not_own() {
 #[test]
 fn esc_returns_to_the_picker_when_the_manifest_was_opened_from_it() {
     let mut app = app_owning_distant_programs(75, 1);
-    app.handle_key(GameKey::Char('d'));
+    open_via_menu(&mut app, 'p', "Read a manifest");
     app.handle_key(GameKey::Char('1'));
     assert_eq!(app.mode, Mode::Manifest);
 
@@ -174,18 +176,22 @@ fn esc_returns_to_the_picker_when_the_manifest_was_opened_from_it() {
         "back to the list you came from"
     );
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::Playing, "a second Esc leaves for the map");
+    assert_eq!(
+        app.mode,
+        Mode::PartyMenu,
+        "a second Esc leaves for the menu the picker was opened from"
+    );
     assert_eq!(app.pending_manifest, None);
 }
 
-/// Reached with `i` there is no list behind the sheet, so Esc goes straight
+/// Reached with `x` there is no list behind the sheet, so Esc goes straight
 /// back to the map rather than dropping the player into a picker they never
 /// opened — and which wouldn't list the wild program anyway.
 #[test]
 fn esc_leaves_for_the_map_when_the_manifest_was_opened_from_the_world() {
     let mut app = test_app(77);
     let (_, direction) = a_wild_program_and_its_direction(&mut app);
-    app.handle_key(GameKey::Char('i'));
+    app.handle_key(GameKey::Char('x'));
     app.handle_key(direction);
     assert_eq!(app.mode, Mode::Manifest);
 
@@ -200,7 +206,7 @@ fn esc_leaves_for_the_map_when_the_manifest_was_opened_from_the_world() {
 #[test]
 fn returning_to_the_picker_highlights_the_subject_you_were_reading() {
     let mut app = app_owning_distant_programs(78, 2);
-    app.handle_key(GameKey::Char('d'));
+    open_via_menu(&mut app, 'p', "Read a manifest");
     app.handle_key(GameKey::Char('1'));
     app.handle_key(GameKey::Right);
     app.handle_key(GameKey::Right);
@@ -224,7 +230,7 @@ fn inspecting_a_direction_still_lands_on_the_manifest() {
     let mut app = test_app(76);
     let (_, direction) = a_wild_program_and_its_direction(&mut app);
 
-    app.handle_key(GameKey::Char('i'));
+    app.handle_key(GameKey::Char('x'));
     assert_eq!(app.mode, Mode::InspectDirection);
     app.handle_key(direction);
     assert_eq!(app.mode, Mode::Manifest);

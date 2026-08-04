@@ -7,6 +7,7 @@ mod battle;
 mod building;
 mod crafting;
 mod field;
+pub(crate) mod group_menu;
 mod input;
 mod inspection;
 mod inventory;

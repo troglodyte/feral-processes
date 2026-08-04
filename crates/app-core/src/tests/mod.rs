@@ -6,6 +6,7 @@ mod battle;
 mod building;
 mod field;
 mod fusion;
+mod group_menus;
 mod inventory;
 mod log_filter;
 mod menus;

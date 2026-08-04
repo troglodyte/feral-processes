@@ -5,7 +5,7 @@ use crate::*;
 impl App {
     pub(crate) fn handle_craft_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.mode = Mode::Playing;
+            self.close_screen();
             return;
         }
         let Some(game) = &mut self.game else { return };

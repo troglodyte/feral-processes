@@ -37,7 +37,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     // A node is a tap, not a reserve: there's no pool to mine down, and it
     // never runs dry. What paces it is the top-level `capacity` below — the
     // node fills its own output buffer and then *clogs*, producing nothing
-    // more until the player walks over and collects (`C`). Production does
+    // more until the player walks over and collects (`c`). Production does
     // not go into the player's inventory; it goes into the structure.
     //
     // `level` (optional, defaults to `None`) makes each completed cycle a
@@ -65,9 +65,14 @@ is skipped with a warning logged in-game rather than crashing startup.
     //
     // `flat_payout` (optional, defaults to `false`) opts *this node* out of
     // the same curve, whatever it produces. Set it for a node whose output is
-    // consumed one at a time rather than in bulk — the Compiler's ICE
-    // Breakers are spent one per decompile attempt, so a Mk5 in zone 5 paying
-    // nine a cycle outruns the sink entirely. Leave it off for salvage.
+    // consumed one at a time rather than in bulk: a taming catalyst is spent
+    // one per decompile attempt, so a Mk5 in zone 5 paying nine a cycle
+    // outruns the sink entirely. Leave it off for salvage.
+    //
+    // No shipped structure sets it — the Compiler used to, and now assembles
+    // its catalysts out of Core Fragments instead. The field is here for
+    // mods, and `flat_payout_takes_a_node_off_the_tier_and_depth_curve` is
+    // what keeps it working.
     work: Some((produces: "core_fragment", ticks_per_unit: 5, level: Some(1))),
 
     // Optional; defaults to 20. How many units this structure's *output

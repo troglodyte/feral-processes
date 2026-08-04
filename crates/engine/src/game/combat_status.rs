@@ -39,13 +39,7 @@ impl Game {
         if !applied {
             return;
         }
-        if let Some(mut statuses) = self.world.get_mut::<StatusEffects>(target) {
-            statuses.active = Some(ActiveStatus {
-                kind: effect.kind,
-                remaining: effect.duration,
-                power: effect.power,
-            });
-        }
+        self.arm_status(target, effect.kind, effect.duration, effect.power);
         match effect.kind {
             StatusKind::Bleed => self.log_kind(
                 kind,
@@ -55,9 +49,39 @@ impl Game {
         }
     }
 
+    /// Arms `kind` on `entity` for `duration` rounds, overwriting whatever
+    /// condition it was carrying (see `StatusEffects` — one slot, no
+    /// stacking) and marking it as landed this round.
+    ///
+    /// The only writer of `StatusEffects::active` outside the two that
+    /// clear it (`Cleanse` and `end_battle`), which is what makes
+    /// `ActiveStatus::landed_this_round` true for every condition that has
+    /// ever been inflicted rather than for the ones whose call site
+    /// remembered. Silently does nothing on an entity with no
+    /// `StatusEffects` component — a condition needs somewhere to live, and
+    /// the caller has no better answer than the target simply not being a
+    /// combatant.
+    pub(crate) fn arm_status(
+        &mut self,
+        entity: Entity,
+        kind: StatusKind,
+        duration: u32,
+        power: i32,
+    ) {
+        if let Some(mut statuses) = self.world.get_mut::<StatusEffects>(entity) {
+            statuses.active = Some(ActiveStatus {
+                kind,
+                remaining: duration,
+                power,
+                landed_this_round: true,
+            });
+        }
+    }
+
     /// Whether `entity` currently has an active `Stun` status. Doesn't
-    /// consume it — `consume_stun` does that once a round is confirmed to
-    /// skip.
+    /// consume it — the end-of-round tick does that, and the round the stun
+    /// landed in is exempt (see `ActiveStatus::landed_this_round`), so a
+    /// stun always survives into a round the victim has yet to act in.
     pub(crate) fn is_stunned(&self, entity: Entity) -> bool {
         self.world
             .get::<StatusEffects>(entity)
@@ -68,6 +92,10 @@ impl Game {
     /// End-of-round status upkeep for one combatant: `Bleed` deals its
     /// damage, then the active effect's remaining-rounds counter ticks
     /// down, clearing it once it hits 0.
+    ///
+    /// The first call after a condition is armed does neither, and only
+    /// clears `ActiveStatus::landed_this_round` — see that field for why a
+    /// condition's own landing round must not be charged to it.
     pub(crate) fn tick_status_effects(&mut self, entity: Entity, label: &str) {
         let Some(active) = self
             .world
@@ -76,6 +104,16 @@ impl Game {
         else {
             return;
         };
+
+        if active.landed_this_round {
+            if let Some(mut statuses) = self.world.get_mut::<StatusEffects>(entity) {
+                statuses.active = Some(ActiveStatus {
+                    landed_this_round: false,
+                    ..active
+                });
+            }
+            return;
+        }
 
         if active.kind == StatusKind::Bleed {
             self.apply_damage(entity, active.power);

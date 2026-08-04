@@ -163,7 +163,7 @@ neither lever runs away with the economy.
 
 Output does not appear in your pocket. Every structure has its own **output
 buffer**, and production goes there: a node runs until its buffer is full and
-then **clogs**, producing nothing more until you come home. Press `C` to
+then **clogs**, producing nothing more until you come home. Press `c` to
 collect from every structure orthogonally touching you. Since structures block
 movement you always stand beside one, never on it — so standing in the crook
 of an L empties three buildings and a sprawled-out line costs you trips.
@@ -225,9 +225,9 @@ Stack as it does standing in the base.
 
 Every machine needs a program posted to it, assemblers included, so **roster
 capacity is what buys chain length, not fragments**. The full five-machine
-line needs five programs against a starting cap of three — a Data Cache (+2)
-is what makes it reachable, and a second one is what buys back a party to
-adventure with. A machine says so in the base log when it goes *starved*
+line needs five programs against a starting cap of three — a Data Cache (+5,
+ten fragments) covers the line and leaves a party to adventure with. A
+machine says so in the base log when it goes *starved*
 (nothing feeding it), *clogged* (output full, come collect) or *idle* (no
 program), once on the way in rather than every tick, and the base menu's *Structure
 roster* shows every
@@ -403,8 +403,8 @@ your profile, delete `profile.ron`; there is no in-game reset.
 ## Structures and base defense
 
 Structures are `.ron` files declaring any combination of roles: cronjob-
-workable (Mining Node, Research Node, Power Conduit, Compiler), assembling
-from adjacent neighbours (Refinery, Winding Node, Assembly Bay), a
+workable (Mining Node, Research Node, Power Conduit), assembling
+from adjacent neighbours (Compiler, Refinery, Winding Node, Assembly Bay), a
 symlink target you can `u` to from anywhere (Home),
 a rest gate, a power source (Recharger Node), a trading post (iso Market),
 a repairer (Patch Node), or a crafting bench that also assembles
@@ -435,7 +435,7 @@ forty copies of the same extraction. It is bounded on purpose: a finished
 intrusion keeps its results and drops its blow-by-blow, and the screen says so
 rather than implying a complete transcript.
 
-`F` filters the pane under the map, cycling All → Field → Base → All. The base
+`f` filters the pane under the map, cycling All → Field → Base → All. The base
 talks constantly — every cronjob payout, every failed extraction, every raid —
 and in six rows of pane that steadily pushes what happened to *you* off the
 top. Field shows the world you are standing in; Base shows the one running

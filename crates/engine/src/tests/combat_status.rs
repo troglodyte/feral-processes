@@ -38,6 +38,7 @@ fn stunned_player_loses_their_turn_but_wild_still_retaliates_and_stun_clears() {
         kind: StatusKind::Stun,
         remaining: 1,
         power: 0,
+        landed_this_round: false,
     });
 
     let wild_hp_before = game.world.get::<Stats>(wild).unwrap().hp;
@@ -89,6 +90,7 @@ fn bleed_status_deals_extra_damage_each_round_and_expires_after_its_duration() {
                     kind: StatusKind::Bleed,
                     remaining: 2,
                     power: 5,
+                    landed_this_round: false,
                 }),
             },
         ))
@@ -167,6 +169,7 @@ fn status_effects_are_cleared_once_the_battle_ends() {
         kind: StatusKind::Bleed,
         remaining: 5,
         power: 1,
+        landed_this_round: false,
     });
 
     // 1 HP wild creature dies to the player's first attack, ending the battle.
@@ -633,6 +636,7 @@ fn ending_a_battle_clears_every_hostiles_combat_state() {
             kind: StatusKind::Bleed,
             remaining: 3,
             power: 2,
+            landed_this_round: false,
         });
         game.world.entity_mut(e).insert(AbilityCooldowns(
             std::iter::once(("kernel_panic".to_string(), 3)).collect(),
@@ -987,4 +991,106 @@ fn arm_field_buff_inserts_the_component_on_demand_for_a_companion() {
     game.arm_field_buff(companion, routine(FieldBuffKind::Def, 3));
 
     assert_eq!(game.field_buff_power(companion, FieldBuffKind::Def), 3);
+}
+
+/// The round a condition lands in is not one of the rounds it lasts.
+///
+/// A `duration: 1` stun — which is every stun the shipped roster carries —
+/// used to be armed mid-round and then ticked away by that same round's
+/// end-of-round upkeep, so the victim only ever lost a turn when the
+/// attacker happened to out-roll it on initiative. Play read as "it shakes
+/// off the stun before it ever costs it anything".
+#[test]
+fn a_stun_that_lands_this_round_costs_the_victim_their_next_turn() {
+    let mut game = Game::new(7710, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    // Deadlock is the `duration: 1` stun, and a carrier fires its routine
+    // rather than rolling a move — so the stun lands in round 1 for certain.
+    game.world
+        .entity_mut(enemies[0])
+        .insert(Routines(vec!["deadlock".to_string()]));
+    game.world.get_mut::<Stats>(enemies[0]).unwrap().atk = 0;
+
+    player_attacks(&mut game);
+    assert!(
+        game.is_stunned(player),
+        "the carrier's Deadlock should still be on the player going into round 2"
+    );
+
+    let before = game.world.get::<Stats>(enemies[0]).unwrap().hp;
+    player_attacks(&mut game);
+    let after = game.world.get::<Stats>(enemies[0]).unwrap().hp;
+
+    assert_eq!(
+        before, after,
+        "a stunned player deals no damage — the stun cost them the round it was for"
+    );
+    assert!(
+        !game.is_stunned(player),
+        "and having cost them that round, it clears"
+    );
+}
+
+/// The same off-by-one from the other side: `memory_leak` advertises "Bleed
+/// 2 per round for 3 rounds", and its first tick used to land in the round
+/// the bleed was applied, so the roster showed one fewer round than the
+/// description promised.
+#[test]
+fn a_bleed_deals_its_damage_in_the_rounds_after_the_one_it_landed_in() {
+    let mut game = Game::new(7711, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .next()
+        .expect("at least one species");
+    let wild = game
+        .world
+        .spawn((
+            Creature {
+                species: species.id.clone(),
+            },
+            Hostile,
+            Position { x: 5, y: 5 },
+            Stats {
+                hp: 100,
+                max_hp: 100,
+                atk: 0,
+                def: 0,
+            },
+            StatusEffects::default(),
+        ))
+        .id();
+
+    game.apply_status_effect(
+        wild,
+        &species::MoveEffect {
+            kind: StatusKind::Bleed,
+            chance: 1.0,
+            duration: 2,
+            power: 5,
+        },
+        "it",
+        MessageKind::PartyDamage,
+    );
+
+    let mut hp_after_each_round = Vec::new();
+    for _ in 0..3 {
+        game.tick_status_effects(wild, "it");
+        hp_after_each_round.push(game.world.get::<Stats>(wild).unwrap().hp);
+    }
+
+    assert_eq!(
+        hp_after_each_round,
+        vec![100, 95, 90],
+        "the landing round costs nothing; the two rounds it was advertised for each bleed"
+    );
+    assert!(
+        game.world
+            .get::<StatusEffects>(wild)
+            .unwrap()
+            .active
+            .is_none(),
+        "and it clears once both of those rounds have passed"
+    );
 }

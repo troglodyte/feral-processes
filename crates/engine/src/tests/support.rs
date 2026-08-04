@@ -776,6 +776,7 @@ pub(super) fn fatigue_spent_commanding_companion(seed: u32, stunned: bool) -> f3
                 kind: StatusKind::Stun,
                 remaining: 1,
                 power: 0,
+                landed_this_round: false,
             }),
         });
     }

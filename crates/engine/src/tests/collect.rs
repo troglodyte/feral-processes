@@ -153,7 +153,7 @@ fn a_full_bank_leaves_the_remainder_in_the_buffer() {
 }
 
 /// A misfired keypress must not cost a turn — the base ticks on, and a
-/// player mashing `C` beside nothing would otherwise be spending time.
+/// player mashing `c` beside nothing would otherwise be spending time.
 #[test]
 fn collecting_with_nothing_adjacent_takes_nothing_and_costs_no_turn() {
     let mut game = Game::new(943, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

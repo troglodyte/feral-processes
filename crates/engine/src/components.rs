@@ -450,10 +450,26 @@ pub enum StatusKind {
 #[derive(Clone, Copy, Debug)]
 pub struct ActiveStatus {
     pub kind: StatusKind,
-    /// Battle rounds remaining, ticked down at the end of every round.
+    /// Battle rounds remaining, ticked down at the end of every round bar
+    /// the one it landed in — see `landed_this_round`.
     pub remaining: u32,
     /// Bleed damage dealt per round; unused for `Stun`.
     pub power: i32,
+    /// True from being armed until the first `Game::tick_status_effects`
+    /// after it, which spends itself clearing this flag and does nothing
+    /// else — the round a condition lands in is not one of the rounds it
+    /// lasts.
+    ///
+    /// Without it, end-of-round upkeep charged a round to a condition
+    /// applied moments earlier in that same round: a `duration: 1` stun
+    /// (every stun the shipped roster carries) expired before its victim's
+    /// next turn, costing them nothing unless the attacker also happened to
+    /// out-roll them on initiative, and `memory_leak`'s advertised "3
+    /// rounds" of bleed dealt its first tick instantly and showed two.
+    ///
+    /// `Game::arm_status` is the only thing that sets it, which is why that
+    /// is the only way to write `StatusEffects::active`.
+    pub landed_this_round: bool,
 }
 
 /// A creature or the player can carry at most one status condition at a

@@ -358,7 +358,7 @@ pub(super) fn draw_structures(game: &mut Game, selected: usize, painter: &Painte
 fn stall_line(s: &StructureReport) -> Option<&'static str> {
     match s.status? {
         MachineStatus::Starved => Some("starved — nothing is feeding it"),
-        MachineStatus::Clogged => Some("clogged — collect from it with C"),
+        MachineStatus::Clogged => Some("clogged — collect from it with c"),
         MachineStatus::Running | MachineStatus::Idle => None,
     }
 }

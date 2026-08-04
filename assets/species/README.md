@@ -62,12 +62,15 @@ is skipped with a warning logged in-game rather than crashing startup.
         // Optional per-move; omit `effect` entirely for a plain damage-only
         // move. If set, landing this move has a `chance` (0.0-1.0) to also
         // inflict a status condition on the target for `duration` battle
-        // rounds, on top of its direct damage. A combatant can only carry one
-        // status condition at a time — a fresh one overwrites whatever was
-        // active. `kind: Bleed` deals `power` extra damage at the end of
-        // every round it's active; `kind: Stun` causes the afflicted side to
-        // lose their next action instead (`power` is required by the schema
-        // but unused for Stun — just set it to 0).
+        // rounds, on top of its direct damage. Those rounds are the ones
+        // *after* the round it landed in — a `duration: 1` stun costs its
+        // victim the next round's action, not a round it may already have
+        // acted in. A combatant can only carry one status condition at a
+        // time — a fresh one overwrites whatever was active. `kind: Bleed`
+        // deals `power` extra damage at the end of every round it's active;
+        // `kind: Stun` causes the afflicted side to lose their next action
+        // instead (`power` is required by the schema but unused for Stun —
+        // just set it to 0).
         (name: "Corrupted Move", power: 6, effect: Some((
             kind: Bleed,       // or `Stun`
             chance: 0.4,

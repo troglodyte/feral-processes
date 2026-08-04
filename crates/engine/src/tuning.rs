@@ -539,11 +539,16 @@ pub const STACK_CORRUPTION_PATCH_CELLS: usize = 3;
 /// One, and the supply is not what limits this. Each costs the player a
 /// taming catalyst, which is cheap; what actually binds is
 /// `BASE_PET_CAPACITY`, which is **3**. Six frames of a full stack therefore
-/// offer four or five programs to a roster that holds three, so a thorough
-/// descent still refuses at the end. Whether that reads as pressure toward
-/// capacity-granting structures or as a dead mechanic is the one question
-/// phase 4 shipped without an answer to — `balance_sim` models no roster and
-/// cannot gate it.
+/// offer four or five programs to a roster that holds three, so a descent
+/// with no base standing behind it still refuses at the end.
+///
+/// Phase 4 shipped without deciding whether that read as pressure toward
+/// capacity-granting structures or as a dead mechanic. It is pressure: the
+/// Data Cache's `pet_slot_bonus` was raised to **5** so that one of them —
+/// ten Core Fragments, buildable before the first descent — absorbs a whole
+/// stack's worth of orphans. The refusal is what a player who skipped the
+/// cache meets, not what a thorough descent meets. `balance_sim` models no
+/// roster and cannot gate any of that.
 pub const STACK_ORPHANS_PER_FRAME: usize = 1;
 
 /// What one step onto corrupted substrate costs, as a fraction of the

@@ -521,7 +521,7 @@ mod tests {
     fn the_data_cache_is_the_only_structure_granting_pet_slots() {
         let db = test_db();
         let cache = db.get("data_cache").expect("data_cache.ron should load");
-        assert_eq!(cache.pet_slot_bonus, 2);
+        assert_eq!(cache.pet_slot_bonus, 5);
         for def in db.all() {
             if def.id != "data_cache" {
                 assert_eq!(

@@ -33,7 +33,7 @@ impl App {
                 self.mode = Mode::InspectDirection;
                 return;
             }
-            // Flat despite belonging to the party, like `C` and `t` below:
+            // Flat despite belonging to the party, like `c` and `t` below:
             // these three are pressed every few turns while walking, and a
             // group menu is a keystroke tax on anything that frequent.
             GameKey::Char('a') => {
@@ -54,8 +54,9 @@ impl App {
             }
             // Next to `L` because it acts on the same log, and a `return`
             // rather than a fallthrough because changing what you can see
-            // must not cost a turn.
-            GameKey::Char('F') => {
+            // must not cost a turn. History keeps the only uppercase letter
+            // left on this screen: `l` walks east.
+            GameKey::Char('f') => {
                 self.log_filter = self.log_filter.next();
                 return;
             }
@@ -143,7 +144,7 @@ impl App {
                 // Surface only, and not bound in the Stack block below: a
                 // base's buffers are something you walk up to, and the
                 // engine refuses it underground anyway.
-                GameKey::Char('C') => {
+                GameKey::Char('c') => {
                     game.collect_adjacent();
                     true
                 }

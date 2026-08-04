@@ -414,7 +414,7 @@ pub fn task_progress_system(
 /// XP faucet with no risk attached to it.
 ///
 /// The payout lands in the node's own buffer here too, not straight into the
-/// player's cargo — the player is standing beside the node, so it is one `C`
+/// player's cargo — the player is standing beside the node, so it is one `c`
 /// away, and routing this path around the buffer would leave the deposit
 /// pool as the only thing pacing it. That pool is gone.
 pub fn player_gather_system(

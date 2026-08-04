@@ -58,11 +58,15 @@ fn structure_defs_are_grouped_by_category_and_stable_across_sessions() {
         // program and adjacent feeders like any machine. They are still the
         // hand-craft bench for the rest of their gear class, which no category
         // expresses — a structure is filed by what it needs, not by every use.
+        // The Compiler moved here off the same rule when it stopped printing
+        // catalysts from nothing; it is still the routine-extraction bench,
+        // which is the same "filed by what it needs" case.
         assert_eq!(
             assemblers,
             [
                 "armory",
                 "assembly_bay",
+                "compiler",
                 "disk_press",
                 "fabricator",
                 "lathe",

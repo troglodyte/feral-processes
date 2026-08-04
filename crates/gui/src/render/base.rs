@@ -395,7 +395,7 @@ fn outline_open(painter: &Painter, px: f32, py: f32, size: f32, color: Color, op
 /// A machine's state colour, worn by both its glyph and its outline. The
 /// four are ordered by what the player should do about them: green needs
 /// nothing, grey needs a program, yellow needs a feeder, red needs a trip
-/// home with `C`.
+/// home with `c`.
 fn machine_color(status: MachineStatus) -> Color {
     match status {
         MachineStatus::Running => GREEN,
@@ -525,8 +525,8 @@ fn draw_status_panel(
     let keys = [
         "hjkl/arrows move  . wait  e drain  r recharge",
         "b base menu   p party menu   i pack",
-        "C collect  t trade  a routine  u symlink  x examine",
-        "L history  F filter  s save  q main menu  ? help  +/- zoom",
+        "c collect  t trade  a routine  u symlink  x examine",
+        "L history  f filter  s save  q main menu  ? help  +/- zoom",
     ];
     let keys_line_height = m.line_height - m.gap;
     let keys_block_h = keys.len() as f32 * keys_line_height + m.inset;

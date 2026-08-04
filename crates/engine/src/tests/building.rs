@@ -932,47 +932,55 @@ fn a_banked_resource_never_scales_with_zone_depth() {
     );
 }
 
-/// The Compiler produces a taming catalyst, not bulk salvage, and opts out
-/// of the payout curve written for salvage. Scaling it put a Mk5 in zone 5
-/// at nine ICE Breakers a cycle every 8 ticks, guaranteed — against a
-/// demand of one per decompile attempt, and with each unit worth 3 Core
-/// Fragments at the bench and 1 Credit at the Market, which is base
-/// production paying out in the one currency that survives a breach.
+/// `flat_payout` keeps a node producing something consumed one at a time —
+/// a taming catalyst, a key — off the payout curve written for bulk
+/// salvage. Scaling one put a Mk5 in zone 5 at nine units a cycle,
+/// guaranteed, against a demand of one per use.
+///
+/// Asserted against `resolve_gather_cycle` directly rather than through a
+/// deployed node, because no shipped structure sets the flag any more: the
+/// Compiler, which used to, now assembles its catalysts out of Core
+/// Fragments pulled from a neighbour instead of printing them from nothing.
+/// The field is mod-facing now, and a test routed through a real structure
+/// would have to invent shipped content to have a subject —
+/// `run_one_full_gather_cycle_at_tier` reads the flag off the `StructureDb`
+/// by kind, so a made-up id would silently take the scaling branch and pass
+/// for the wrong reason.
 #[test]
-fn a_flat_payout_node_never_scales_with_tier_or_depth() {
+fn flat_payout_takes_a_node_off_the_tier_and_depth_curve() {
     let mut game = Game::new(963, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    game.world.resource_mut::<ZoneLevel>().0 = 5;
-
-    let gained =
-        run_one_full_gather_cycle_at_tier(&mut game, "compiler", ids::ICE_BREAKER, Some(5));
+    // `level: None` always yields, which keeps this off the reliability roll
+    // entirely — what is under test is the payout, not `mining_success_chance`.
+    let node = ResourceNode {
+        resource: ItemId::from(ids::CORE_FRAGMENT),
+        level: None,
+    };
+    let tier = StructureTier(5);
+    let cycle = |game: &mut Game, flat: bool| {
+        game.world.resource_scope(|world, mut rng: Mut<GameRng>| {
+            crate::systems::resolve_gather_cycle(
+                &node,
+                Some(&tier),
+                ZoneLevel(5),
+                flat,
+                0,
+                world.resource::<ItemDb>(),
+                &mut rng,
+            )
+            .map(|(_, qty)| qty)
+            .expect("a node that always yields never fizzles")
+        })
+    };
 
     assert_eq!(
-        gained, 1,
-        "a Mk5 Compiler in zone 5 pays one catalyst a cycle, not tier plus four zones' bonus"
+        cycle(&mut game, true),
+        1,
+        "a flat-payout Mk5 in zone 5 pays one a cycle, not tier plus four zones' bonus"
     );
-}
-
-/// `flat_payout` takes the upgrade tier out of the Compiler's payout, and
-/// tier feeds nothing else on it — not repair rate, which it doesn't
-/// declare. Without a `level` for tier to track, its five upgrade tiers
-/// would cost 120 Core Fragments for no effect whatsoever. Reliability is
-/// what those tiers buy now: Mk1 lands about half its cycles, Mk5 nine in
-/// ten, and the ceiling stays one catalyst per cycle either way.
-#[test]
-fn the_compilers_upgrade_tiers_buy_reliability_since_they_no_longer_buy_volume() {
-    let game = Game::new(964, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let work = game
-        .structure_defs()
-        .into_iter()
-        .find(|d| d.id == "compiler")
-        .expect("the Compiler ships")
-        .work
-        .expect("the Compiler is a worked node");
-
-    assert!(work.flat_payout, "a catalyst node must not scale");
     assert!(
-        work.level.is_some(),
-        "with payout flat, a fizzle roll is the only thing tier can still move"
+        cycle(&mut game, false) > 1,
+        "and the ordinary curve it is opting out of really does scale, \
+         or this test would pass with the flag ignored"
     );
 }
 

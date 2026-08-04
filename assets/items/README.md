@@ -57,6 +57,14 @@ disqualifies the whole file.
     // The shipped ladder, for calibration: anything printable 1; scavenged
     // gear 3-8; standard gear 12-16; the drop-only researched pieces 20-60;
     // premium gear 80-120. Worth tracks what a base *can't* manufacture.
+    //
+    // Standard and premium armour and modules sit on that same ladder but
+    // are paid for in refined goods rather than raw fragments, so rule 1 is
+    // checked against the intermediate's value and not a fragment count.
+    // `standard_and_premium_gear_is_made_from_intermediates` holds that
+    // policy, and `scavenged_gear_stays_benchless_and_fragment_only` holds
+    // the other half — the cheap tier stays craftable with no base standing,
+    // which is what a fresh run, or one just raided flat, equips out of.
     value: Some(90),
 
     // Optional; can be left out entirely (defaults to no economy role). If

@@ -13,6 +13,34 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Armour and modules are made out of the factory
+
+Standard and premium gear was crafted at a bench out of raw Core or Portal
+Fragments, which meant the production chains and the gear economy never
+touched. Thirteen recipes — six armour, seven modules — now spend what your
+base refines instead. Weapons are deliberately untouched, and the Scavenged
+tier still compiles from raw fragments with no base standing, because that
+is what a fresh run, or one just raided flat, equips out of.
+
+The ingredient follows the stat, so a recipe reads as what the piece does:
+Logic Wafers buy Decompiler, Bytecode Blocks buy Attack and bulk, Charge
+Coils buy Defense. Armour draws off the Mining Node and modules off the Log
+Scraper, while both want Coils — so the Winding Node is now the first feeder
+with three machines pulling on it, and where you put things starts to matter.
+
+Premium gear trades roughly a fifth of its Portal Fragment price for refined
+goods, so your base does some of the work boss drops used to.
+
+The **Armory** and **Fabricator** each assemble one item on repeat — Hardened
+Shells and Trace Sniffers — while staying the hand-craft bench for every
+other recipe that names them. They take a program and want both feeders
+touching them like any machine, which also moves them into the Assembler
+group in the build menu.
+
+Item values are unchanged, so the price ladder does not move and no balance
+curve shifts. Saves are unaffected. An Armory or Fabricator standing in an
+existing base will report itself *idle* once until you post a program to it.
+
 ### A routine is knowledge plus a disk you have to build
 
 **Save format bumped to 21 — existing saves will not load.**

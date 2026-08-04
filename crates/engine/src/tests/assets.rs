@@ -224,7 +224,10 @@ fn standard_and_premium_gear_is_made_from_intermediates() {
             continue;
         }
         // No bench means the scavenged tier, which is the other test's job.
-        let Some(craftable) = def.craftable.as_ref().filter(|c| c.requires_structure.is_some())
+        let Some(craftable) = def
+            .craftable
+            .as_ref()
+            .filter(|c| c.requires_structure.is_some())
         else {
             continue;
         };
@@ -270,7 +273,10 @@ fn scavenged_gear_stays_benchless_and_fragment_only() {
         ) {
             continue;
         }
-        let Some(craftable) = def.craftable.as_ref().filter(|c| c.requires_structure.is_none())
+        let Some(craftable) = def
+            .craftable
+            .as_ref()
+            .filter(|c| c.requires_structure.is_none())
         else {
             continue;
         };

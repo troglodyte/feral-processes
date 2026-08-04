@@ -182,19 +182,36 @@ orthogonally adjacent to it — never diagonally — and builds one unit at a
 time. So a chain is a physical line across your base, and a machine with two
 ingredients needs both feeders beside it.
 
-The shipped chain is three stages deep:
+The shipped chains are three stages deep, running from three taps into four
+terminals:
 
 | stage | structure | builds | from |
 |---|---|---|---|
 | extract | Mining Node | Core Fragments | — |
 | extract | Power Conduit | Power Cells | — |
+| extract | Log Scraper | Raw Trace | — |
 | refine | Refinery | Bytecode Blocks | Core Fragments |
+| refine | Lathe | Blank Substrate | Core Fragments |
 | refine | Winding Node | Charge Coils | Power Cells |
+| refine | Transcriber | Logic Wafers | Raw Trace |
 | assemble | Assembly Bay | Patch Routines | a Block and a Coil |
+| assemble | Disk Press | Routine Disks | a Substrate and a Wafer |
+| assemble | Armory | Hardened Shells | a Block and a Coil |
+| assemble | Fabricator | Trace Sniffers | a Wafer and a Coil |
 
 A machine's recipe is not written on the machine — it runs the *item's* own
 crafting recipe, so a bench recipe and a machine recipe can never drift, and
 any craftable item you mod in is automatable for free.
+
+**Armour and modules are made out of those intermediates**, not out of raw
+fragments, and the ingredient follows the stat: Logic Wafers buy Decompiler,
+Bytecode Blocks buy Attack and bulk, Charge Coils buy Defense. The two
+classes draw on different taps — armour off the Mining Node, modules off the
+Log Scraper — while both want Coils, so the Winding Node ends up with three
+machines pulling on it and layout starts to bite. The Armory and Fabricator
+each automate one piece while staying the hand-craft bench for the rest of
+their class. Scavenged gear is deliberately left on raw fragments, so a run
+with no base standing can still equip.
 
 The base menu's *Recipes* row draws that table for whatever assets are
 actually loaded, one entry per conversion, each walked back to the raw
@@ -330,8 +347,10 @@ at 30 units and growing with each deployed Data Cache. Press `i` for the
 inventory screen, where you equip, unequip, consume, erase, and fuse items
 across three slots (Weapon, Armor, Module). There are 31 pieces of gear:
 six cheap ones behind both a research node and a bench, and 25 that declare
-their own recipe and need only a bench, spanning a Scavenged tier you can
-make from turn one up to a Premium tier paid in Portal Fragments. Gear
+their own recipe, spanning a Scavenged tier you can make from turn one out
+of raw fragments up to a Premium tier that wants Portal Fragments and
+refined goods together. Between those, armour and modules are paid for in
+what your production lines make; weapons stay on fragments. Gear
 levels double the bonus per zone level reached, and both are locked in at
 the moment you equip. Fusing feeds two copies of a piece in and gives one
 back a tier stronger — worth +10% per tier, or at least a flat point on
@@ -359,7 +378,8 @@ workable (Mining Node, Research Node, Power Conduit, Compiler), assembling
 from adjacent neighbours (Refinery, Winding Node, Assembly Bay), a
 symlink target you can `u` to from anywhere (Home),
 a rest gate, a power source (Recharger Node), a trading post (iso Market),
-a repairer (Patch Node), or a plain bench (Fabricator, Armory). Producers
+a repairer (Patch Node), or a crafting bench that also assembles
+(Fabricator, Armory). Producers
 upgrade to Mk5 from the base menu, each tier adding to the payout and raising the
 chance a cycle pays out at
 all, and upgrades ride through portals with the rest of the base. Every structure

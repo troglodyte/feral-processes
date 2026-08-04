@@ -97,6 +97,13 @@ is skipped with a warning logged in-game rather than crashing startup.
     //
     // `item` must name an item that actually declares `craftable`. One that
     // doesn't builds a machine that can never run and says nothing about it.
+    //
+    // A machine can also be a crafting bench. The Armory and Fabricator each
+    // assemble one item while every other recipe naming them stays
+    // hand-compiled — so setting this does not cost a structure its bench
+    // role. It does change its category: `category()` files a structure by
+    // `assembles` when it is set, because that is what decides whether it
+    // wants a program and feeders touching it.
     assembles: Some((item: "patch_routine", ticks_per_unit: 8)),
 
     // Optional; can be left out entirely (defaults to no regeneration).

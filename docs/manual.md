@@ -401,10 +401,12 @@ creature to work" mechanic.
    zone transition (see [Zones and portals](#zones-and-portals)), so you
    only ever need to place a Home once.
 3. **Schedule a cronjob with `w`** — pick a compiled (tamed) program, then
-   the structure to assign it to. This only works on structures with a
-   `work` recipe (Mining Node, Power Conduit, Compiler); Fabricator, Armory,
-   and Data Cache aren't assignable this way — Fabricator and Armory unlock
-   crafting instead (see below). Both pickers show status: the program picker flags
+   the structure to assign it to. This works on structures with a `work`
+   recipe (Mining Node, Power Conduit, Compiler) and on every machine that
+   assembles — the Refinery, Winding Node, Lathe and Transcriber, the
+   Assembly Bay and Disk Press, and the Fabricator and Armory, which unlock
+   crafting *and* build one item apiece (see below). The Data Cache is the
+   one structure that takes no program. Both pickers show status: the program picker flags
    `(active companion)` or `(on a cronjob: <structure>)`, and the structure
    picker flags `(assigned: <program>)`, so you can see who's already
    spoken for before reassigning them.
@@ -734,46 +736,55 @@ before you have a base worth the name.
 | Probe Daemon | Module | +1 Decompiler | 5 Core Fragments | Sprite, Glitch |
 | Handshake Forge | Module | +2 Decompiler | 8 Core Fragments | Drone, SubProcess |
 
-**Standard tier** — needs the bench, paid in Core Fragments. Where hybrids
-start: a piece that splits its budget across two stats gives up raw numbers
-for covering a weakness.
+**Standard tier** — needs the bench. Weapons are paid in Core Fragments;
+armor and modules are paid in what your factory refines, so production lines
+standing is what makes them. The ingredient follows the stat — Logic Wafers
+buy Decompiler, Bytecode Blocks buy Attack and bulk, Charge Coils buy
+Defense — so a recipe reads as what the piece does. Where hybrids start: a
+piece that splits its budget across two stats gives up raw numbers for
+covering a weakness.
 
 | Item | Slot | Base bonus | Compiled for | Drops from |
 | --- | --- | --- | --- | --- |
 | Arc Lance | Weapon | +3 Attack | 12 Core Fragments, at a Fabricator | Scrapper, Worm |
 | Recursion Blade | Weapon | +2 Attack, +1 Defense | 14 Core Fragments, at a Fabricator | Trojan, Phantom |
 | Daemon Fang | Weapon | +2 Attack, +1 Decompiler | 14 Core Fragments, at a Fabricator | Worm, Scrapper |
-| Hardened Shell | Armor | +3 Defense | 12 Core Fragments, at an Armory | Wraith, Sentinel |
-| Null Weave | Armor | +2 Defense, +1 Attack | 14 Core Fragments, at an Armory | Phantom, Trojan |
-| Static Mesh | Armor | +2 Defense, +1 Decompiler | 14 Core Fragments, at an Armory | Wraith, Worm |
-| Trace Sniffer | Module | +3 Decompiler | 13 Core Fragments, at a Fabricator | Phantom, Ghost |
-| Logic Probe | Module | +2 Decompiler, +1 Attack | 15 Core Fragments, at a Fabricator | Trojan, Scrapper |
-| Entropy Damper | Module | +2 Decompiler, +1 Defense | 15 Core Fragments, at a Fabricator | Wraith, Phantom |
-| Sync Governor | Module | +1 Attack, +1 Defense, +1 Decompiler | 16 Core Fragments, at a Fabricator | Worm, Trojan |
+| Hardened Shell | Armor | +3 Defense | 2 Bytecode Blocks + 2 Charge Coils, at an Armory *(or assembled by one)* | Wraith, Sentinel |
+| Null Weave | Armor | +2 Defense, +1 Attack | 3 Bytecode Blocks + 1 Charge Coil, at an Armory | Phantom, Trojan |
+| Static Mesh | Armor | +2 Defense, +1 Decompiler | 2 Bytecode Blocks + 1 Charge Coil + 1 Logic Wafer, at an Armory | Wraith, Worm |
+| Trace Sniffer | Module | +3 Decompiler | 3 Logic Wafers + 2 Charge Coils, at a Fabricator *(or assembled by one)* | Phantom, Ghost |
+| Logic Probe | Module | +2 Decompiler, +1 Attack | 3 Logic Wafers + 1 Charge Coil + 1 Bytecode Block, at a Fabricator | Trojan, Scrapper |
+| Entropy Damper | Module | +2 Decompiler, +1 Defense | 2 Logic Wafers + 3 Charge Coils, at a Fabricator | Wraith, Phantom |
+| Sync Governor | Module | +1 Attack, +1 Defense, +1 Decompiler | 2 Logic Wafers + 2 Charge Coils + 1 Bytecode Block, at a Fabricator | Worm, Trojan |
 
-**Premium tier** — needs the bench, paid in Portal Fragments, so it competes
-with Zone Portals and the researched six for the same currency. Drops come
-off Hard species and bosses.
+**Premium tier** — needs the bench and Portal Fragments, so it competes with
+Zone Portals and the researched six for the same currency. Armor and modules
+want refined goods on top, which buys their Portal Fragment price down a
+little: your base does some of the work boss drops used to. Drops come off
+Hard species and bosses.
 
 | Item | Slot | Base bonus | Compiled for | Drops from |
 | --- | --- | --- | --- | --- |
 | Plasma Router | Weapon | +4 Attack | 16 Portal Fragments, at a Fabricator | Construct, Virus |
 | Black ICE Pick | Weapon | +3 Attack, +2 Decompiler | 18 Portal Fragments, at a Fabricator | Cipher, Rootkit |
 | Siege Compiler | Weapon | +3 Attack, +2 Defense | 18 Portal Fragments, at a Fabricator | Construct, Sentinel |
-| Bastion Lattice | Armor | +4 Defense | 16 Portal Fragments, at an Armory | Sentinel, Rootkit |
-| Phase Carapace | Armor | +3 Defense, +2 Attack | 18 Portal Fragments, at an Armory | Ghost, Virus |
-| Wraithsteel Plate | Armor | +3 Defense, +2 Decompiler | 18 Portal Fragments, at an Armory | Ghost, Cipher |
-| Kernel Key | Module | +4 Decompiler | 16 Portal Fragments, at a Fabricator | Cipher, Virus |
-| Oracle Core | Module | +3 Decompiler, +2 Attack | 18 Portal Fragments, at a Fabricator | Overseer (boss), Rootkit |
-| Singularity Matrix | Module | +3 Attack, +3 Defense, +3 Decompiler | 24 Portal Fragments, at a Fabricator | Wintermute (boss), Overseer (boss) |
+| Bastion Lattice | Armor | +4 Defense | 12 Portal Fragments + 4 Bytecode Blocks + 2 Charge Coils, at an Armory | Sentinel, Rootkit |
+| Phase Carapace | Armor | +3 Defense, +2 Attack | 14 Portal Fragments + 5 Bytecode Blocks + 1 Charge Coil, at an Armory | Ghost, Virus |
+| Wraithsteel Plate | Armor | +3 Defense, +2 Decompiler | 14 Portal Fragments + 3 Bytecode Blocks + 1 Charge Coil + 2 Logic Wafers, at an Armory | Ghost, Cipher |
+| Kernel Key | Module | +4 Decompiler | 12 Portal Fragments + 5 Logic Wafers + 2 Charge Coils, at a Fabricator | Cipher, Virus |
+| Oracle Core | Module | +3 Decompiler, +2 Attack | 14 Portal Fragments + 4 Logic Wafers + 1 Charge Coil + 2 Bytecode Blocks, at a Fabricator | Overseer (boss), Rootkit |
+| Singularity Matrix | Module | +3 Attack, +3 Defense, +3 Decompiler | 20 Portal Fragments + 3 Logic Wafers + 3 Charge Coils + 2 Bytecode Blocks, at a Fabricator | Wintermute (boss), Overseer (boss) |
 
 The Singularity Matrix is the only piece that pays into all three stats at
 full value, and it's priced and gated to match — the two bosses are its only
 drop sources.
 
-A Fabricator or Armory runs no cronjob of its own. It just makes recipes
-appear in the compile menu while it's standing: the ones you've researched,
-plus every catalog recipe that names it. Note that the benches themselves are
+A Fabricator or Armory does two jobs. It makes recipes appear in the compile
+menu while it's standing — the ones you've researched, plus every catalog
+recipe that names it — and it takes a cronjob of its own, assembling one
+item on repeat: the Armory builds Hardened Shells, the Fabricator builds
+Trace Sniffers. Both want their two feeders touching them, so a bench you
+mean to automate wants a corner. Note that the benches themselves are
 research-gated *to build* (Weapon Fabrication, Reactive Armor), so the
 Standard and Premium tiers still sit behind research — just not behind a
 research node each.

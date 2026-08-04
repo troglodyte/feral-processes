@@ -196,6 +196,14 @@ A machine's recipe is not written on the machine — it runs the *item's* own
 crafting recipe, so a bench recipe and a machine recipe can never drift, and
 any craftable item you mod in is automatable for free.
 
+The base menu's *Recipes* row draws that table for whatever assets are
+actually loaded, one entry per conversion, each walked back to the raw
+inputs it bottoms out in — so a Patch Routine reads as the four steps it
+takes rather than as two ingredients you then have to go look up. Mods
+appear in it without anyone editing this README. It is reference data
+rather than a view of your base, so it reads the same four frames down the
+Stack as it does standing in the base.
+
 Every machine needs a program posted to it, assemblers included, so **roster
 capacity is what buys chain length, not fragments**. The full five-machine
 line needs five programs against a starting cap of three — a Data Cache (+2)

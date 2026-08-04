@@ -41,6 +41,22 @@ Stack, where your `Position` is still pinned to the entrance tile above.
 Esc from a screen a menu opened returns to that menu rather than to the map;
 finishing a job still drops you back to the map.
 
+### The base menu has a *Recipes* row
+
+A read-only list of every conversion your base can run, each walked back to
+the raw inputs it bottoms out in. A Patch Routine reads as the four steps it
+actually takes — fragments into a Refinery, cells into a Winding Node, then
+both into the Assembly Bay — rather than as two ingredients you then have to
+go look up one at a time.
+
+The list is built from the loaded assets rather than written down anywhere,
+so a modded machine appears in it for free, and the recipe shown is the same
+one the machine stages. A step with no structure beside it is one you
+compile by hand.
+
+Reference data rather than a view of your base, so unlike the rest of the
+base menu it stays available in the Stack.
+
 ### The window opens fullscreen, and the UI text is smaller
 
 Was a 1440x900 window. It now opens borderless fullscreen at whatever the

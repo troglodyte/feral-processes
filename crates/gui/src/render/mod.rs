@@ -17,7 +17,7 @@ use feral_processes_engine::tuning::{MAX_FUSIONS, MAX_PARTY_SIZE};
 use feral_processes_engine::world::Biome;
 use feral_processes_engine::{
     Assignee, Entity, EntityView, Game, LogEntry, MESSAGE_LOG_CAP, MessageKind, PetInfo,
-    ProgramSaleOption, ResearchState, StructureReport,
+    ProgramSaleOption, RecipeStep, ResearchState, StructureReport,
 };
 
 mod bars;
@@ -48,7 +48,7 @@ use building::{
     draw_build_menu, draw_remove_confirm, draw_remove_menu, draw_structure_menu, draw_structures,
     draw_symlink_menu, draw_upgrade_menu, draw_worker_menu,
 };
-use crafting::{draw_craft_menu, draw_craft_quantity};
+use crafting::{draw_craft_menu, draw_craft_quantity, draw_recipes};
 use field::{draw_field_cast, draw_field_cast_ally};
 use frame_map::{draw_frame_map, draw_map_inset};
 use group_menu::draw_group_menu;
@@ -517,6 +517,7 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         Mode::Research => draw_research_menu(game, selected, painter, m),
         Mode::History => draw_history(game, selected, painter, m),
         Mode::Structures => draw_structures(game, selected, painter, m),
+        Mode::Recipes => draw_recipes(game, selected, painter, m),
         Mode::QuitRunConfirm => draw_quit_run_confirm(selected, painter, m),
         _ => {}
     }

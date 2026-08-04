@@ -5,6 +5,7 @@
 //! it. Nothing here is reachable from outside the crate except through
 //! `Game`.
 
+pub(crate) mod achievements;
 pub(crate) mod building;
 pub(crate) mod catalog;
 pub(crate) mod collect;

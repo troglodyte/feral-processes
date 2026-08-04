@@ -392,6 +392,16 @@ pub struct RunFeats {
     pub bosses_defeated: Vec<String>,
 }
 
+/// Achievements earned since the last time anyone wrote `profile.ron`.
+///
+/// The engine decides what has been earned and app-core owns the path, so
+/// this is the handoff between them: `achievement_system` pushes, app-core
+/// drains after each tick and writes. It accumulates rather than being
+/// per-tick like `RunFeats`, because a failed or skipped drain must not lose
+/// the earn.
+#[derive(Resource, Default)]
+pub struct PendingProfileWrites(pub Vec<crate::achievements::AchievementId>);
+
 /// The single player-controlled entity. Kept as a resource (rather than
 /// re-queried with a `With<Player>` filter each time) since lookups happen
 /// on almost every action.

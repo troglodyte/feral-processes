@@ -26,6 +26,7 @@ impl Game {
     pub fn new(seed: u32, difficulty: DifficultyMode, assets_dir: &Path) -> std::io::Result<Self> {
         let AssetDbs {
             abilities: ability_db,
+            achievements: achievement_db,
             species: species_db,
             structures: structure_db,
             research: research_db,
@@ -70,6 +71,13 @@ impl Game {
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::Trace::default());
         world.insert_resource(crate::resources::RunFeats::default());
+        world.insert_resource(achievement_db);
+        // Empty on purpose in *both* constructors. What has actually been
+        // earned is installed afterwards by `install_profile`, which app-core
+        // calls on either path; paying for it is a separate call it makes on
+        // only one. See `grant_profile_rewards`.
+        world.insert_resource(crate::achievements::Profile::default());
+        world.insert_resource(crate::resources::PendingProfileWrites::default());
         world.insert_resource(ZoneSpawnPoint {
             x: start.0,
             y: start.1,
@@ -140,6 +148,10 @@ impl Game {
             )
                 .chain(),
             difficulty::death_handling_system,
+            // Unchained: it shares no mutable state with anything above it,
+            // and what it reads are counters every one of those has already
+            // finished writing for this tick.
+            crate::game::achievements::achievement_system,
         ));
         schedule
     }
@@ -148,6 +160,7 @@ impl Game {
         let data = save::load_from_file(path)?;
         let AssetDbs {
             abilities: ability_db,
+            achievements: achievement_db,
             species: species_db,
             structures: structure_db,
             research: research_db,
@@ -202,6 +215,13 @@ impl Game {
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::Trace::default());
         world.insert_resource(crate::resources::RunFeats::default());
+        world.insert_resource(achievement_db);
+        // Empty on purpose in *both* constructors. What has actually been
+        // earned is installed afterwards by `install_profile`, which app-core
+        // calls on either path; paying for it is a separate call it makes on
+        // only one. See `grant_profile_rewards`.
+        world.insert_resource(crate::achievements::Profile::default());
+        world.insert_resource(crate::resources::PendingProfileWrites::default());
         world.insert_resource(ZoneSpawnPoint {
             x: data.spawn_point.0,
             y: data.spawn_point.1,
@@ -780,6 +800,7 @@ impl Game {
 /// accumulated for the caller to push into the message log.
 struct AssetDbs {
     abilities: AbilityDb,
+    achievements: crate::achievements::AchievementDb,
     species: SpeciesDb,
     structures: StructureDb,
     research: ResearchDb,
@@ -807,6 +828,9 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     warnings.extend(item_warnings);
     let (perks, perk_warnings) = PerkDb::load_dir(&assets_dir.join("perks"))?;
     warnings.extend(perk_warnings);
+    let (achievements, achievement_warnings) =
+        crate::achievements::AchievementDb::load_dir(&assets_dir.join("achievements"))?;
+    warnings.extend(achievement_warnings);
     let missing = items.missing_roles();
     if !missing.is_empty() {
         return Err(std::io::Error::new(
@@ -833,6 +857,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     }
     Ok(AssetDbs {
         abilities,
+        achievements,
         species,
         structures,
         research,

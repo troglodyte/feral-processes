@@ -231,7 +231,7 @@ fn scratch_assets_dir(tag: &str) -> std::path::PathBuf {
 /// `modded_assets_dir` and `assets_dir_with_extra_structure` — both need
 /// the whole shipped set present so a scratch install still passes
 /// `Game::new`'s missing-role startup check.
-fn copy_shipped_assets(dir: &std::path::Path, omit_items: &[&str]) {
+pub(super) fn copy_shipped_assets(dir: &std::path::Path, omit_items: &[&str]) {
     let shipped = test_assets_dir();
     for sub in [
         "species",
@@ -240,6 +240,7 @@ fn copy_shipped_assets(dir: &std::path::Path, omit_items: &[&str]) {
         "items",
         "abilities",
         "perks",
+        "achievements",
     ] {
         let dst = dir.join(sub);
         std::fs::create_dir_all(&dst).unwrap();
@@ -575,6 +576,69 @@ pub(super) fn flee_until_clear(game: &mut Game) {
         }
     }
     panic!("200 jack-out attempts all failed — the escape roll is broken");
+}
+
+/// Dives the party from the surface to `depth` through the real descent
+/// path — an entrance under the player's feet, then one `Game::descend` per
+/// frame — teleporting only *within* a frame to stand on its way down, which
+/// is the one thing a test can't be asked to walk a maze for.
+///
+/// `Locale` is never hand-written into a different depth: `enter_frame` is
+/// the one way into a frame and a test that skipped it would be asserting
+/// against a world no player can reach.
+/// The entrance chosen is far enough from the zone's spawn point that its
+/// stack actually runs `depth` frames deep — `stack::frames_for` grows the
+/// count with distance, and the shallow stacks beside the spawn have no
+/// bottom to reach.
+pub(super) fn dive_to_depth(game: &mut Game, depth: u32) {
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let entrance = (0..500)
+        .map(|step| (pos.x + step, pos.y))
+        .find(|&(x, y)| {
+            game.frames_at((x, y)) >= depth
+                && game.world.resource_mut::<WorldMap>().tile(x, y).walkable
+        })
+        .expect("somewhere along this row there should be a stack deep enough");
+    game.enter_stack(entrance.0, entrance.1);
+    for _ in 1..depth {
+        stand_on_link_down(game);
+        game.descend();
+    }
+    let Locale::Stack { depth: reached, .. } = game.locale() else {
+        panic!("the dive should have left the party underground");
+    };
+    assert_eq!(reached, depth, "the dive did not reach the asked-for depth");
+}
+
+/// Teleports the party onto the current frame's way down, so a test about
+/// descending doesn't have to walk the maze to find it.
+fn stand_on_link_down(game: &mut Game) {
+    let down = game
+        .world
+        .resource::<CurrentStack>()
+        .0
+        .as_ref()
+        .unwrap()
+        .link_down
+        .expect("every frame a test dives through should have a way down");
+    let Locale::Stack {
+        depth,
+        frames,
+        facing,
+        entrance,
+        ..
+    } = game.locale()
+    else {
+        unreachable!("not underground")
+    };
+    game.world.insert_resource(Locale::Stack {
+        depth,
+        frames,
+        x: down.0,
+        y: down.1,
+        facing,
+        entrance,
+    });
 }
 
 /// Spawns a wild program on the player's tile and opens an intrusion on

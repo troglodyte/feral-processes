@@ -192,21 +192,10 @@ fn installed_routines_survive_a_save_load_round_trip() {
 fn a_routine_naming_a_since_removed_ability_is_dropped_on_load_with_a_warning() {
     let dir = std::env::temp_dir().join(format!("feral_ghost_routine_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    for sub in [
-        "species",
-        "structures",
-        "research",
-        "items",
-        "abilities",
-        "perks",
-    ] {
-        let dst = dir.join(sub);
-        std::fs::create_dir_all(&dst).unwrap();
-        for entry in std::fs::read_dir(test_assets_dir().join(sub)).unwrap() {
-            let entry = entry.unwrap();
-            std::fs::copy(entry.path(), dst.join(entry.file_name())).unwrap();
-        }
-    }
+    // Through the shared copier, not a local loop: this used to carry its
+    // own list of asset subdirectories, and a directory added to the real
+    // asset set failed here as a mystery `NotFound` out of `Game::new`.
+    copy_shipped_assets(&dir, &[]);
     let ghost_ability = r#"(
         id: "ghost_ability",
         name: "Ghost Ability",

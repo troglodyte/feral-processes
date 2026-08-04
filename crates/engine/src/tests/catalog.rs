@@ -53,7 +53,17 @@ fn structure_defs_are_grouped_by_category_and_stable_across_sessions() {
             .filter(|d| d.category() == StructureCategory::Assembler)
             .map(|d| d.id.as_str())
             .collect();
-        assert_eq!(assemblers, ["assembly_bay", "refinery", "winding_node"]);
+        assert_eq!(
+            assemblers,
+            [
+                "assembly_bay",
+                "disk_press",
+                "lathe",
+                "refinery",
+                "transcriber",
+                "winding_node"
+            ]
+        );
 
         orders.push(defs.into_iter().map(|d| d.id).collect::<Vec<_>>());
     }

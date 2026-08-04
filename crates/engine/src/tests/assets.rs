@@ -187,8 +187,8 @@ fn every_base_produced_item_sits_at_the_floor_price() {
         checked += 1;
     }
     assert_eq!(
-        checked, 4,
-        "expected the four producing structures; the press ceiling has to cover every one"
+        checked, 5,
+        "expected the five producing structures; the press ceiling has to cover every one"
     );
 }
 
@@ -646,8 +646,40 @@ fn every_shipped_assembles_names_an_item_that_declares_a_recipe() {
         }
     }
     assert_eq!(
-        checked, 3,
-        "the shipped chain is Refinery, Winding Node and Assembly Bay — if that \
-         changes, change this count deliberately rather than letting the check go vacuous"
+        checked, 6,
+        "the shipped chains are Refinery, Winding Node and Assembly Bay, plus the \
+         Lathe, Transcriber and Disk Press — if that changes, change this count \
+         deliberately rather than letting the check go vacuous"
     );
+}
+
+/// A machine runs the assembled item's own `craftable.cost` (see
+/// `systems::assembly_recipe`), and every shipped recipe gates hand-crafting
+/// on the machine that automates it — so a machine whose product named a
+/// *different* bench would build something its own owner could not craft by
+/// hand, which is the manual fallback the gating exists to leave open.
+#[test]
+fn every_shipped_assembler_builds_a_recipe_gated_on_itself() {
+    let game = Game::new(904, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let items = game.world.resource::<ItemDb>();
+    for def in game
+        .world
+        .resource::<crate::structures::StructureDb>()
+        .all()
+    {
+        let Some(assembles) = &def.assembles else {
+            continue;
+        };
+        let recipe = items
+            .get(assembles.item.as_str())
+            .and_then(|d| d.craftable.as_ref())
+            .unwrap_or_else(|| panic!("{} assembles an item with no recipe", def.id));
+        assert_eq!(
+            recipe.requires_structure.as_deref(),
+            Some(def.id.as_str()),
+            "{} builds {:?}, whose recipe points at a different bench",
+            def.id,
+            assembles.item
+        );
+    }
 }

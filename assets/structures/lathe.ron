@@ -1,0 +1,11 @@
+(
+    id: "lathe",
+    name: "Lathe",
+    description: "Assign a program here and it turns Core Fragments from whatever is touching it into Blank Substrate. Put it next to a Mining Node.",
+    glyph: 'L',
+    color: Brown,
+    build_cost: [("core_fragment", 18)],
+    work: None,
+    capacity: 20,
+    assembles: Some((item: "blank_substrate", ticks_per_unit: 12)),
+)

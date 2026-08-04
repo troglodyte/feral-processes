@@ -447,8 +447,9 @@ fn researching_self_execution_grants_the_player_priority_boost() {
     // The only slot at level 1 already holds decompile; free it for the
     // routine this test is actually about.
     game.uninstall_routine(game.player_entity(), 0).unwrap();
-    let item = crate::abilities::routine_item_id("priority_boost");
-    game.install_routine(game.player_entity(), &item).unwrap();
+    give_disks(&mut game, 1);
+    game.install_routine(game.player_entity(), "priority_boost")
+        .unwrap();
 
     let ids: Vec<String> = game
         .actor_abilities(game.player_entity())
@@ -459,10 +460,10 @@ fn researching_self_execution_grants_the_player_priority_boost() {
 }
 
 /// Two nodes may legitimately name the same ability — a mod branching the
-/// tree, say. Research must not then auto-install it twice; it just stacks
-/// the routine item, and installing is still a separate, deliberate act.
+/// tree, say. Knowledge is a set, so the second node teaches nothing new,
+/// and installing is still a separate, deliberate act that costs a disk.
 #[test]
-fn an_ability_granted_by_two_nodes_stacks_the_item_rather_than_double_installing() {
+fn an_ability_granted_by_two_nodes_is_learned_once() {
     const ALSO_BOOST: &str = r#"(
         id: "also_boost",
         name: "Redundant Routine",
@@ -482,17 +483,21 @@ fn an_ability_granted_by_two_nodes_stacks_the_item_rather_than_double_installing
     unlock_research_chain(&mut game, "self_exec");
     unlock_research_chain(&mut game, "also_boost");
 
-    let item = crate::abilities::routine_item_id("priority_boost");
     assert_eq!(
-        count_item(&game, item.as_str()),
-        2,
-        "each node deposits its own copy of the routine"
+        game.installable_routines()
+            .iter()
+            .filter(|r| r.ability == "priority_boost")
+            .count(),
+        1,
+        "the second node teaches nothing the first didn't"
     );
 
     // The only slot at level 1 already holds decompile; free it for the
     // routine this test is actually about.
     game.uninstall_routine(game.player_entity(), 0).unwrap();
-    game.install_routine(game.player_entity(), &item).unwrap();
+    give_disks(&mut game, 2);
+    game.install_routine(game.player_entity(), "priority_boost")
+        .unwrap();
     let ids: Vec<String> = game
         .actor_abilities(game.player_entity())
         .into_iter()
@@ -501,7 +506,12 @@ fn an_ability_granted_by_two_nodes_stacks_the_item_rather_than_double_installing
     assert_eq!(
         ids,
         vec!["priority_boost".to_string()],
-        "installing spends one copy and fills one slot, however many nodes granted it"
+        "installing fills one slot, however many nodes granted it"
+    );
+    assert_eq!(
+        game.routine_disks_held(),
+        1,
+        "one install burns exactly one disk"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -520,10 +530,9 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
     // out explicitly to make room.
     set_level(&mut game, player, 10);
     game.uninstall_routine(player, 0).unwrap();
-    let priority_boost = crate::abilities::routine_item_id("priority_boost");
-    game.install_routine(player, &priority_boost).unwrap();
-    let hot_patch_item = crate::abilities::routine_item_id("hot_patch");
-    game.install_routine(player, &hot_patch_item).unwrap();
+    give_disks(&mut game, 2);
+    game.install_routine(player, "priority_boost").unwrap();
+    game.install_routine(player, "hot_patch").unwrap();
     let enemy = spawn_wild_on_player_tile(&mut game);
     insert_battle(&mut game, player, vec![enemy]);
 
@@ -585,8 +594,8 @@ fn a_player_special_spends_the_players_fatigue_once() {
         // The only slot at level 1 already holds decompile; free it for the
         // routine this test is actually about.
         game.uninstall_routine(player, 0).unwrap();
-        let item = crate::abilities::routine_item_id("null_route");
-        game.install_routine(player, &item).unwrap();
+        give_disks(&mut game, 1);
+        game.install_routine(player, "null_route").unwrap();
         let enemy = spawn_wild_on_player_tile(&mut game);
         insert_battle(&mut game, player, vec![enemy]);
 
@@ -602,8 +611,10 @@ fn a_player_special_spends_the_players_fatigue_once() {
     let mut probe = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut probe, "kernel_privileges");
     probe.uninstall_routine(probe.player_entity(), 0).unwrap();
-    let item = crate::abilities::routine_item_id("null_route");
-    probe.install_routine(probe.player_entity(), &item).unwrap();
+    give_disks(&mut probe, 1);
+    probe
+        .install_routine(probe.player_entity(), "null_route")
+        .unwrap();
     let abilities = probe.actor_abilities(probe.player_entity());
     let index = abilities
         .iter()
@@ -638,10 +649,9 @@ fn a_save_round_trip_preserves_the_players_abilities() {
     // out explicitly to make room.
     set_level(&mut game, player, 10);
     game.uninstall_routine(player, 0).unwrap();
-    let priority_boost = crate::abilities::routine_item_id("priority_boost");
-    game.install_routine(player, &priority_boost).unwrap();
-    let hot_patch = crate::abilities::routine_item_id("hot_patch");
-    game.install_routine(player, &hot_patch).unwrap();
+    give_disks(&mut game, 2);
+    game.install_routine(player, "priority_boost").unwrap();
+    game.install_routine(player, "hot_patch").unwrap();
     let before: Vec<String> = game
         .actor_abilities(player)
         .into_iter()

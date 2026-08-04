@@ -487,22 +487,6 @@ impl Game {
         }
     }
 
-    /// Mints `ability`'s routine item into the player's cargo — where a
-    /// routine goes when it has nowhere to be installed.
-    ///
-    /// Displacing a routine used to destroy it. It is a real object with an
-    /// item of its own (`ItemDb::synthesize_routines` mints one per loaded
-    /// ability), so returning it turns a slot collision into a swap decision
-    /// the player gets to make later, rather than a loss they get to read
-    /// about.
-    pub(crate) fn return_routine_to_cargo(&mut self, ability: &str) {
-        let item = crate::abilities::routine_item_id(ability);
-        let player = self.player_entity();
-        if let Some(mut inventory) = self.world.get_mut::<Inventory>(player) {
-            inventory.add(item, 1);
-        }
-    }
-
     /// Installs the kit `entity`'s species grants at its current level,
     /// merged with whatever it was already carrying. Called once when a
     /// program comes into existence — a decompile or a fusion — never
@@ -511,7 +495,8 @@ impl Game {
     /// A wild program can spawn carrying a routine its species never grants
     /// (`Game::roll_wild_routine`); that routine is the reason the player
     /// decompiled it, so it keeps its slot and the species kit fills in
-    /// around it. Anything that doesn't fit goes to cargo.
+    /// around it. Anything that doesn't fit is lost — see
+    /// `install_unlocked_routines` for why there is nowhere for it to go.
     ///
     /// A species declaring no abilities gets `FALLBACK_ABILITY_ID` instead,
     /// which is what keeps an ability-less species commandable and keeps
@@ -555,9 +540,8 @@ impl Game {
                 let name = self.creature_label(entity);
                 let ability_name = self.ability_display_name(&id);
                 self.log(format!(
-                    "{name} has no free routine slot for {ability_name} — it goes to cargo."
+                    "{name} has no free routine slot for {ability_name} — it is lost."
                 ));
-                self.return_routine_to_cargo(&id);
                 continue;
             }
             installed.push(id);
@@ -588,10 +572,11 @@ impl Game {
     ///
     /// Only when every slot instead holds a *real* routine — installed,
     /// researched, another innate ability, or one the program was found
-    /// carrying in the field — does the unlock go to cargo instead of a
-    /// slot. Not lost: `return_routine_to_cargo` mints its routine item, so
-    /// the player can install it by hand once they free a slot. A carried
-    /// routine is never the fallback, so it is never the thing evicted.
+    /// carrying in the field — is the unlock lost outright. There is nowhere
+    /// for it to wait: a routine off a slot is knowledge the player either
+    /// has or doesn't, and an innate routine was never taught to them. A
+    /// carried routine is never the fallback, so it is never the thing
+    /// evicted.
     pub(crate) fn install_unlocked_routines(
         &mut self,
         entity: Entity,
@@ -641,17 +626,16 @@ impl Game {
                     let unlock_name = self.ability_display_name(&id);
                     self.log(format!(
                         "{name} swaps out {evicted_name} to make room for {unlock_name} — \
-                         {evicted_name} is destroyed, not returned to cargo."
+                         {evicted_name} is gone for good."
                     ));
                     installed[pos] = id;
                     self.world.entity_mut(entity).insert(Routines(installed));
                     continue;
                 }
                 self.log(format!(
-                    "{name} has no free routine slot for {} — it goes to cargo.",
+                    "{name} has no free routine slot for {} — it is lost.",
                     self.ability_display_name(&id)
                 ));
-                self.return_routine_to_cargo(&id);
                 continue;
             }
             installed.push(id);

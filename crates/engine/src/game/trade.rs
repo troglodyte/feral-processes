@@ -52,16 +52,6 @@ impl Game {
         if qty == 0 {
             return Err("Sell at least 1.".into());
         }
-        // Same reasoning as `erase_item`: a routine can be one-of-a-kind
-        // (nothing else grants decompile), so refusing to sell it for a
-        // single Credit costs the player nothing next to what losing it for
-        // good would.
-        if self.is_routine(&item) {
-            return Err(
-                "That's a routine, not scrap — install it on a program instead of selling it."
-                    .into(),
-            );
-        }
         let currency = self.trade_currency();
         if item == currency {
             let money = self.item_name(&currency);

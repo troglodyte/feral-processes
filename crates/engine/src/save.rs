@@ -230,6 +230,16 @@ pub struct SaveData {
     /// Sorted on write so the encoded bytes don't depend on `HashSet`
     /// iteration order.
     pub researched: Vec<crate::research::ResearchId>,
+    /// Which routines the player has learned — see `resources::KnownRoutines`.
+    /// Sorted on write for the reason `researched` is: the encoded bytes must
+    /// not depend on set iteration order.
+    ///
+    /// `#[serde(default)]` does nothing for bincode (see
+    /// `SAVE_FORMAT_VERSION`); it is here so an existing `dev-saves/` RON
+    /// template keeps parsing without being re-captured, exactly as `trace`
+    /// documents below.
+    #[serde(default)]
+    pub known_routines: Vec<crate::abilities::AbilityId>,
     /// Every Stack entrance standing on the zone map — see
     /// `components::SurfaceLink`. Only the tile: an entrance carries no
     /// state of its own, and which stack it opens onto is a pure function
@@ -289,7 +299,10 @@ pub struct SaveData {
 /// building real schema migration.
 /// 19 → 20: `StructureSave` gained `stock_input`/`stock_output` for the
 /// production-chain buffers (`components::Stock`).
-pub const SAVE_FORMAT_VERSION: u32 = 20;
+/// 20 → 21: `known_routines` — a routine is knowledge plus a Routine Disk
+/// rather than an item, so what the player can install is now save state
+/// instead of whatever `routine_*` items happened to be in cargo.
+pub const SAVE_FORMAT_VERSION: u32 = 21;
 
 /// Renders a save as editable RON, for the `savetool` binary.
 ///
@@ -396,6 +409,7 @@ mod tests {
             spawn_point: (0, 0),
             buyback: Vec::new(),
             researched: Vec::new(),
+            known_routines: Vec::new(),
             link_sites: Vec::new(),
             locale: crate::resources::Locale::Surface,
             stack_memory: crate::resources::StackMemory::default(),

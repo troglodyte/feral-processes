@@ -1,0 +1,11 @@
+(
+    id: "disk_press",
+    name: "Disk Press",
+    description: "Assign a program here and it presses Routine Disks out of a Blank Substrate and a Logic Wafer. It needs both feeders touching it, so it wants a corner.",
+    glyph: 'P',
+    color: Magenta,
+    build_cost: [("core_fragment", 20), ("bytecode_block", 4)],
+    work: None,
+    capacity: 10,
+    assembles: Some((item: "routine_disk", ticks_per_unit: 20)),
+)

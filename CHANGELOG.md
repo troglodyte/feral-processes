@@ -13,6 +13,22 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### A routine is knowledge plus a disk you have to build
+
+**Save format bumped to 21 — existing saves will not load.**
+
+A routine was an item, minted per ability at startup and dropped free into
+cargo by research. It is now two things: knowing it (permanent, from a
+research node or from breaking a program down at a Compiler) and a blank
+**Routine Disk** the base manufactures. Installing burns a disk; popping the
+routine back out returns nothing.
+
+Four new machines make the disks — Log Scraper → Transcriber and Mining Node
+→ Lathe, both feeding a Disk Press — behind a new **Routine Fabrication**
+node that **Self-Execution** now requires, so no node can teach a routine
+you have no way to install. Species kits still install free at spawn, and a
+new game already knows Decompile.
+
 ### Items are worth what they are worth
 
 Every item sold for exactly 1 Credit. A trader's `sell_rate` *was* the

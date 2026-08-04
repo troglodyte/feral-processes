@@ -1491,6 +1491,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         spawn_point: (spawn.x, spawn.y),
         buyback: Vec::new(),
         researched: Vec::new(),
+        known_routines: Vec::new(),
         link_sites: Vec::new(),
         locale: crate::resources::Locale::Surface,
         stack_memory: crate::resources::StackMemory::default(),

@@ -1,0 +1,6 @@
+(
+    id: "raw_trace",
+    name: "Raw Trace",
+    description: "Execution noise scraped off the Grid and spooled for reading. Worthless alone; four of them transcribe into a Logic Wafer.",
+    value: Some(1),
+)

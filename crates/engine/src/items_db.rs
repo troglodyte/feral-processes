@@ -4,7 +4,6 @@ use std::path::Path;
 use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
 
-use crate::abilities::AbilityDb;
 use crate::components::FieldBuffKind;
 use crate::items::{EquipmentSlot, EquipmentStats, ItemCategory, ItemId};
 use crate::species::SpeciesId;
@@ -105,27 +104,17 @@ pub struct ItemDef {
     /// without touching engine code.
     #[serde(default)]
     pub cache_drop: Option<f32>,
-    /// The ability a loose copy of this item installs, for a routine item.
-    /// Set only on the defs `ItemDb::synthesize_routines` mints; an authored
-    /// file leaving it `None` is an ordinary item. `#[serde(default)]` like
-    /// every other optional field.
-    #[serde(default)]
-    pub routine: Option<crate::abilities::AbilityId>,
 }
 
 impl ItemDef {
     /// Which group this item lists under. Checked in this order because the
-    /// first match wins and the orderings that overlap have a right answer:
-    /// a routine is its ability before it is its slot, and something both
-    /// wearable and drinkable belongs in the gear list a player is scanning
-    /// for gear.
+    /// first match wins and the one overlap has a right answer: something
+    /// both wearable and drinkable belongs in the gear list a player is
+    /// scanning for gear.
     ///
     /// Total by construction — an item declaring none of these fields is
     /// salvage, which is what most loot is.
     pub fn category(&self) -> ItemCategory {
-        if self.routine.is_some() {
-            return ItemCategory::Routine;
-        }
         if let Some((slot, _)) = self.equipment {
             return match slot {
                 EquipmentSlot::Weapon => ItemCategory::Weapon,
@@ -247,54 +236,6 @@ impl ItemDb {
 
     pub fn trade_currency(&self) -> Option<&ItemId> {
         self.trade_currency.as_ref()
-    }
-
-    /// Mints one item per loaded ability, so a loose routine is an ordinary
-    /// inventory item that stores, stacks and sells with no new machinery.
-    ///
-    /// Called after both databases load rather than inside `load_dir`, which
-    /// has no view of `AbilityDb`. The description is *read* from the
-    /// ability rather than copied into a second authored file, so the two
-    /// cannot drift.
-    ///
-    /// An ability whose routine id collides with an authored item is skipped
-    /// with a warning: the authored file wins, exactly as a duplicate
-    /// economy role does.
-    pub fn synthesize_routines(&mut self, abilities: &AbilityDb) -> Vec<String> {
-        let mut warnings = Vec::new();
-        for ability in abilities.all() {
-            let id = crate::abilities::routine_item_id(&ability.id);
-            if self.items.contains_key(id.as_str()) {
-                warnings.push(format!(
-                    "ability {} wants routine item {}, which an authored item already claims; \
-                     the ability will not be extractable",
-                    ability.id,
-                    id.as_str()
-                ));
-                continue;
-            }
-            self.items.insert(
-                id.0.clone(),
-                ItemDef {
-                    id,
-                    name: format!("{} Routine", ability.name),
-                    description: ability.description.clone(),
-                    routine: Some(ability.id.clone()),
-                    bank_limit: None,
-                    // Unpriced on purpose: `sell_item` refuses a routine
-                    // outright, so a routine has no price to get wrong.
-                    value: None,
-                    role: None,
-                    equipment: None,
-                    taming_potency: None,
-                    consume: None,
-                    craftable: None,
-                    droppable: None,
-                    cache_drop: None,
-                },
-            );
-        }
-        warnings
     }
 
     /// Human-readable names of any economy role with no holder — empty when
@@ -509,7 +450,7 @@ mod tests {
             equipment.len(),
             "an equippable not in the table above is unpinned"
         );
-        assert_eq!(db.all().count(), 42);
+        assert_eq!(db.all().count(), 46);
     }
 
     #[test]

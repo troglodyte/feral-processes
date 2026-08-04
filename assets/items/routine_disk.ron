@@ -1,0 +1,7 @@
+(
+    id: "routine_disk",
+    name: "Routine Disk",
+    description: "Blank, and stays blank until you write a routine you know onto it. Installing one burns it for good.",
+    value: Some(5),
+    craftable: Some((cost: [("blank_substrate", 1), ("logic_wafer", 1)], requires_structure: Some("disk_press"))),
+)

@@ -108,13 +108,6 @@ pub fn armed_cooldown(cooldown: u32, floor: u32) -> u32 {
     cooldown.max(floor) + 1
 }
 
-/// The inventory item a loose (uninstalled) copy of `ability` takes. Minted
-/// by `ItemDb::synthesize_routines` rather than authored, so a modder's new
-/// ability is extractable and installable with no second file to write.
-pub fn routine_item_id(ability: &str) -> crate::items::ItemId {
-    crate::items::ItemId(format!("routine_{ability}"))
-}
-
 /// Index into `weights` that `roll` selects, treating each weight as the
 /// width of a bucket. `roll` is expected in `0..weights.iter().sum()`.
 ///

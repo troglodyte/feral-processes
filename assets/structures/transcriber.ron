@@ -1,0 +1,11 @@
+(
+    id: "transcriber",
+    name: "Transcriber",
+    description: "Assign a program here and it transcribes Raw Trace from whatever is touching it into Logic Wafers. Put it next to a Log Scraper.",
+    glyph: 'S',
+    color: Cyan,
+    build_cost: [("core_fragment", 18)],
+    work: None,
+    capacity: 20,
+    assembles: Some((item: "logic_wafer", ticks_per_unit: 12)),
+)

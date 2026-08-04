@@ -1,9 +1,11 @@
 (
     id: "armory",
     name: "Armory",
-    description: "Compile bench for researched weapon and armor recipes — the gear won't appear in the craft menu until one is standing.",
+    description: "Compile bench for researched weapon and armor recipes — the gear won't appear in the craft menu until one is standing. Assign a program and it builds Hardened Shells out of a Bytecode Block and a Charge Coil, so it wants both feeders touching it.",
     glyph: '%',
     color: Blue,
     build_cost: [("core_fragment", 18)],
     work: None,
+    capacity: 5,
+    assembles: Some((item: "hardened_shell", ticks_per_unit: 30)),
 )

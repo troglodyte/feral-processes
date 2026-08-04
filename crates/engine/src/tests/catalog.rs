@@ -53,11 +53,18 @@ fn structure_defs_are_grouped_by_category_and_stable_across_sessions() {
             .filter(|d| d.category() == StructureCategory::Assembler)
             .map(|d| d.id.as_str())
             .collect();
+        // The Armory and Fabricator sit here because `category()` reads
+        // `assembles`, and that is the right group for them: they now want a
+        // program and adjacent feeders like any machine. They are still the
+        // hand-craft bench for the rest of their gear class, which no category
+        // expresses — a structure is filed by what it needs, not by every use.
         assert_eq!(
             assemblers,
             [
+                "armory",
                 "assembly_bay",
                 "disk_press",
+                "fabricator",
                 "lathe",
                 "refinery",
                 "transcriber",

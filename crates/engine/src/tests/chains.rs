@@ -814,10 +814,23 @@ fn chains_are_listed_shallowest_first() {
     let mut sorted = depths.clone();
     sorted.sort();
     assert_eq!(depths, sorted);
+    // Three products tie at the deepest tier now that gear is assembled, so
+    // naming one of them would pin whichever way the tie happens to break.
+    // What the screen actually promises is that everything needing a full base
+    // reads last, and the set is what is worth holding.
+    let deepest = depths
+        .last()
+        .copied()
+        .expect("the shipped assets declare chains");
+    let bottom: Vec<&str> = chains
+        .iter()
+        .filter(|c| c.steps.len() == deepest)
+        .map(|c| c.product.as_str())
+        .collect();
     assert_eq!(
-        chains.last().map(|c| c.product.as_str()),
-        Some("Patch Routine"),
-        "the deepest thing in the game sits at the bottom"
+        bottom,
+        ["Hardened Shell", "Patch Routine", "Trace Sniffer"],
+        "the deepest things in the game sit at the bottom"
     );
 }
 

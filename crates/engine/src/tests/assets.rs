@@ -192,6 +192,104 @@ fn every_base_produced_item_sits_at_the_floor_price() {
     );
 }
 
+/// Standard and premium armour and modules are made *out of* the factory, so
+/// the base is the way gear happens rather than an option beside the fragment
+/// economy. Fourteen `.ron` files agreeing with each other is not a policy —
+/// any one of them reverted to raw Core Fragments would opt that item back out
+/// in silence, and nothing else in the suite would notice.
+///
+/// "Factory-made" is derived from what structures actually `assembles`, never
+/// a list here, so a mod that adds a refiner extends this for free. Weapons
+/// are deliberately outside it: they stay on the fragment economy, and moving
+/// them is a decision to make, not a gap to fill.
+#[test]
+fn standard_and_premium_gear_is_made_from_intermediates() {
+    let game = Game::new(79, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structures = game.structure_defs();
+    let factory_made: std::collections::HashSet<&str> = structures
+        .iter()
+        .filter_map(|def| def.assembles.as_ref())
+        .map(|assembles| assembles.item.as_str())
+        .collect();
+
+    let mut checked = 0;
+    for def in game.item_defs() {
+        let Some((slot, _)) = &def.equipment else {
+            continue;
+        };
+        if !matches!(
+            slot,
+            crate::items::EquipmentSlot::Armor | crate::items::EquipmentSlot::Module
+        ) {
+            continue;
+        }
+        // No bench means the scavenged tier, which is the other test's job.
+        let Some(craftable) = def.craftable.as_ref().filter(|c| c.requires_structure.is_some())
+        else {
+            continue;
+        };
+        assert!(
+            craftable
+                .cost
+                .iter()
+                .any(|(id, _)| factory_made.contains(id.as_str())),
+            "{} is bench-gated gear whose recipe names no factory-made ingredient, so it can be built without a production line",
+            def.id.as_str()
+        );
+        checked += 1;
+    }
+    assert_eq!(
+        checked, 13,
+        "expected the six armour and seven module recipes; an item that lost its bench would drop out of this scan unnoticed"
+    );
+}
+
+/// The other side of that policy, and the one it could destroy by accident:
+/// scavenged gear stays craftable with no base standing at all. It is what a
+/// fresh run — or a run whose base was raided flat — equips out of, so an
+/// intermediate creeping into one of these recipes locks gear behind the very
+/// thing the player has just lost.
+#[test]
+fn scavenged_gear_stays_benchless_and_fragment_only() {
+    let game = Game::new(80, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structures = game.structure_defs();
+    let factory_made: std::collections::HashSet<&str> = structures
+        .iter()
+        .filter_map(|def| def.assembles.as_ref())
+        .map(|assembles| assembles.item.as_str())
+        .collect();
+
+    let mut checked = 0;
+    for def in game.item_defs() {
+        let Some((slot, _)) = &def.equipment else {
+            continue;
+        };
+        if !matches!(
+            slot,
+            crate::items::EquipmentSlot::Armor | crate::items::EquipmentSlot::Module
+        ) {
+            continue;
+        }
+        let Some(craftable) = def.craftable.as_ref().filter(|c| c.requires_structure.is_none())
+        else {
+            continue;
+        };
+        for (id, _) in &craftable.cost {
+            assert!(
+                !factory_made.contains(id.as_str()),
+                "{} is the benchless fallback but wants {}, which only a production line makes",
+                def.id.as_str(),
+                id.as_str()
+            );
+        }
+        checked += 1;
+    }
+    assert_eq!(
+        checked, 4,
+        "expected the two scavenged armour and two scavenged module recipes"
+    );
+}
+
 /// `cache_drop` is rolled once per cache for every item that declares one,
 /// so the expected haul is the *sum* across the item set, not a pick from a
 /// list — which means any one item's number is a change to what every cache
@@ -646,10 +744,11 @@ fn every_shipped_assembles_names_an_item_that_declares_a_recipe() {
         }
     }
     assert_eq!(
-        checked, 6,
+        checked, 8,
         "the shipped chains are Refinery, Winding Node and Assembly Bay, plus the \
-         Lathe, Transcriber and Disk Press — if that changes, change this count \
-         deliberately rather than letting the check go vacuous"
+         Lathe, Transcriber and Disk Press, plus the Armory and Fabricator, which \
+         assemble one gear item apiece while staying benches for the rest — if that \
+         changes, change this count deliberately rather than letting the check go vacuous"
     );
 }
 

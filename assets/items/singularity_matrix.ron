@@ -4,6 +4,6 @@
     description: "Premium module. Everything at once, and the rarest thing you can compile.",
     value: Some(120),
     equipment: Some((Module, (atk: 3, def: 3, decompiler: 3))),
-    craftable: Some((cost: [("portal_fragment", 24)], requires_structure: Some("fabricator"))),
+    craftable: Some((cost: [("portal_fragment", 20), ("logic_wafer", 3), ("charge_coil", 3), ("bytecode_block", 2)], requires_structure: Some("fabricator"))),
     droppable: Some([("wintermute", 0.15), ("overseer", 0.08)]),
 )

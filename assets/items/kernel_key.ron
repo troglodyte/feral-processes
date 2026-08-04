@@ -4,7 +4,7 @@
     description: "Premium module. Kernel access — the single biggest lift to decompile odds.",
     value: Some(80),
     equipment: Some((Module, (decompiler: 4))),
-    craftable: Some((cost: [("portal_fragment", 16)], requires_structure: Some("fabricator"))),
+    craftable: Some((cost: [("portal_fragment", 12), ("logic_wafer", 5), ("charge_coil", 2)], requires_structure: Some("fabricator"))),
     droppable: Some([("cipher", 0.08), ("virus", 0.06)]),
     cache_drop: Some(0.02),
 )

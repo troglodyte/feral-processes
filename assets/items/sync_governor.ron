@@ -4,6 +4,6 @@
     description: "Standard module. A small lift to everything rather than a lot of one thing.",
     value: Some(16),
     equipment: Some((Module, (atk: 1, def: 1, decompiler: 1))),
-    craftable: Some((cost: [("core_fragment", 16)], requires_structure: Some("fabricator"))),
+    craftable: Some((cost: [("logic_wafer", 2), ("charge_coil", 2), ("bytecode_block", 1)], requires_structure: Some("fabricator"))),
     droppable: Some([("worm", 0.07), ("trojan", 0.06)]),
 )

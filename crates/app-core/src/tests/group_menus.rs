@@ -77,6 +77,13 @@ fn underground_the_base_menu_drops_its_surface_only_rows() {
         rows.contains(&"Research"),
         "research is not surface-gated: {rows:?}"
     );
+    // The chains are a property of the loaded assets, not of anything the
+    // player's `Position` can reach — and four frames down is exactly when
+    // you want to check what the base upstairs still needs.
+    assert!(
+        rows.contains(&"Recipes"),
+        "recipes are asset data, not a scan around the party: {rows:?}"
+    );
 }
 
 /// The party menu is deliberately almost all non-surface — managing what you

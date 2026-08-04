@@ -108,6 +108,19 @@ const BASE_ROWS: &[GroupEntry] = &[
                 .is_some_and(|g| !g.research_nodes().is_empty())
         },
     },
+    GroupEntry {
+        // Not surface-only: the chains come off the loaded assets, not off a
+        // scan around the player, so this one row means the same thing four
+        // frames down as it does standing in the base.
+        label: "Recipes",
+        target: Mode::Recipes,
+        surface_only: false,
+        available: |app| {
+            app.game
+                .as_ref()
+                .is_some_and(|g| !g.recipe_chains().is_empty())
+        },
+    },
 ];
 
 const PARTY_ROWS: &[GroupEntry] = &[

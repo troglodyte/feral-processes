@@ -466,6 +466,11 @@ pub enum Mode {
     /// `Game::structure_report`. Read-only: assigning and demolishing stay
     /// on their own screens.
     Structures,
+    /// Every conversion a structure runs, expanded back to raw inputs — see
+    /// `Game::recipe_chains`. Read-only, and reference data rather than a
+    /// view of the base, so it reads the same underground as it does on the
+    /// surface.
+    Recipes,
     Help,
     GameOver,
     /// Confirming `q` from `Mode::Playing`, which abandons the run. Offers to
@@ -545,6 +550,7 @@ impl Mode {
             | Mode::Research
             | Mode::History
             | Mode::Structures
+            | Mode::Recipes
             | Mode::Help
             | Mode::FrameMap
             | Mode::GameOver

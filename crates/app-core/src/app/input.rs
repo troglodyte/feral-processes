@@ -139,6 +139,7 @@ impl App {
             Mode::Research => self.handle_research_key(key),
             Mode::History => self.handle_history_key(key),
             Mode::Structures => self.handle_structures_key(key),
+            Mode::Recipes => self.handle_recipes_key(key),
             Mode::Help => self.handle_help_key(),
             Mode::FrameMap => self.handle_frame_map_key(),
             Mode::GameOver => self.handle_game_over_key(),

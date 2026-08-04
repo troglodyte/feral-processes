@@ -140,6 +140,23 @@ impl App {
         self.scroll(key, rows);
     }
 
+    /// The recipe chains. Scrolls by *chain* rather than by drawn line: the
+    /// steps under a product are sub-rows the renderer draws unselectable,
+    /// exactly as the roster draws a structure's assignees, so app-core owns
+    /// a count it can derive without knowing the renderer's line shape.
+    pub(crate) fn handle_recipes_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.close_screen();
+            return;
+        }
+        let rows = self
+            .game
+            .as_ref()
+            .map(|g| g.recipe_chains().len())
+            .unwrap_or(0);
+        self.scroll(key, rows);
+    }
+
     /// The map closes on any key, like the help screen: it is something you
     /// glance at mid-corridor, and making the player find the right key to
     /// put it away would be friction on the one screen meant to remove some.

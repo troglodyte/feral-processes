@@ -1,6 +1,6 @@
-//! The two screens you open, read, and close: the message history and the
-//! structure roster. Neither takes an action, which is most of what these
-//! tests are checking.
+//! The three screens you open, read, and close: the message history, the
+//! structure roster and the recipe chains. None takes an action, which is
+//! most of what these tests are checking.
 
 use super::support::*;
 use crate::*;
@@ -154,4 +154,57 @@ fn enter_and_row_shortcuts_do_nothing_on_either_screen() {
         app.handle_key(key);
         assert_eq!(app.mode, Mode::Structures, "{key:?} should do nothing here");
     }
+}
+
+#[test]
+fn the_base_menu_opens_the_recipes_screen_and_esc_backs_into_it() {
+    let mut app = test_app(97);
+    open_via_menu(&mut app, 'b', "Recipes");
+    assert_eq!(app.mode, Mode::Recipes);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::BaseMenu, "Esc walks back up one level");
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+}
+
+/// Scrolling moves per *chain*, not per drawn line — the steps under a
+/// product are sub-rows the highlight skips, the same shape the roster uses.
+#[test]
+fn up_and_down_scroll_the_recipes_by_chain() {
+    let mut app = test_app(99);
+    let chains = app.game.as_ref().unwrap().recipe_chains().len();
+    assert!(chains >= 2, "the shipped assets have several chains");
+    open_via_menu(&mut app, 'b', "Recipes");
+    assert_eq!(app.menu_selected, 0, "the list opens at its first chain");
+
+    app.handle_key(GameKey::Up);
+    assert_eq!(app.mode, Mode::Recipes);
+    assert_eq!(app.menu_selected, chains - 1, "Up from the first wraps");
+    app.handle_key(GameKey::Down);
+    assert_eq!(app.menu_selected, 0);
+    assert_eq!(app.mode, Mode::Recipes, "scrolling never leaves the screen");
+}
+
+/// Read-only means read-only, same as the other two.
+#[test]
+fn the_recipes_screen_does_not_advance_the_game() {
+    let mut app = test_app(100);
+    let before = app.game.as_ref().unwrap().current_tick();
+    open_via_menu(&mut app, 'b', "Recipes");
+    for key in [
+        GameKey::Down,
+        GameKey::Enter,
+        GameKey::Char('1'),
+        GameKey::Char('a'),
+    ] {
+        app.handle_key(key);
+        assert_eq!(app.mode, Mode::Recipes, "{key:?} should do nothing here");
+    }
+    app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(
+        app.game.as_ref().unwrap().current_tick(),
+        before,
+        "reading a list must not pass game time"
+    );
 }

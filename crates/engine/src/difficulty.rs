@@ -1,6 +1,7 @@
 use bevy_ecs::prelude::*;
 
 use crate::components::{Experience, Needs, Player, Position, Stats, Structure};
+use crate::game::stack::StackLocale;
 use crate::progression;
 use crate::resources::{DifficultyMode, GameClock, GameOver, MessageLog};
 use crate::tuning::{FORGIVING_RESPAWN_HP_DIVISOR, FORGIVING_RESPAWN_NEED_FLOOR};
@@ -10,13 +11,21 @@ use crate::tuning::{FORGIVING_RESPAWN_HP_DIVISOR, FORGIVING_RESPAWN_NEED_FLOOR};
 /// Forgiving mode is a soft respawn with a penalty, warping the player to
 /// the nearest built structure if one exists (in place otherwise). Either
 /// way, a mild XP setback applies too (see `progression::apply_setback_xp_penalty`).
-pub fn death_handling_system(
+///
+/// A reboot underground surfaces the party first (see `stack::surfaced`).
+/// The warp target is a *surface* structure and `Position` is pinned to the
+/// entrance tile while `Locale::Stack` is live, so writing one without the
+/// other left the party in the maze with their way out overwritten. This is
+/// the one reset that doesn't go through `Game::clear_stack`, because a
+/// system has no `Game` — it shares that function's implementation instead.
+pub(crate) fn death_handling_system(
     mut player_query: Query<(&mut Stats, &mut Needs, &mut Position, &mut Experience), With<Player>>,
     structure_query: Query<&Position, (With<Structure>, Without<Player>)>,
     difficulty: Res<DifficultyMode>,
     clock: Res<GameClock>,
     mut game_over: ResMut<GameOver>,
     mut log: ResMut<MessageLog>,
+    mut stack_locale: StackLocale,
 ) {
     if game_over.reason.is_some() {
         return;
@@ -34,6 +43,15 @@ pub fn death_handling_system(
                 stats.hp = (stats.max_hp / FORGIVING_RESPAWN_HP_DIVISOR).max(1);
                 needs.hunger = needs.hunger.max(FORGIVING_RESPAWN_NEED_FLOOR);
                 needs.fatigue = needs.fatigue.max(FORGIVING_RESPAWN_NEED_FLOOR);
+                // Before the warp, not after: `Position` is the entrance
+                // tile until the locale drops, and the line below overwrites
+                // it. Unconditional on a structure being found — a reboot
+                // with no base still has to get you out of the Stack, back
+                // onto the entrance you walked in through.
+                if stack_locale.is_underground() {
+                    stack_locale.surface();
+                    log.push("The Stack ejects your process. You come to on open grid.");
+                }
                 let nearest = structure_query
                     .iter()
                     .min_by_key(|s_pos| (s_pos.x - pos.x).abs() + (s_pos.y - pos.y).abs());
@@ -57,9 +75,18 @@ pub fn death_handling_system(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resources::{CurrentStack, Locale, Trace};
     use crate::structures::StructureId;
 
     fn run_death_handling(world: &mut World) {
+        // Every death down here is a surface death, and `init_resource`
+        // leaves alone anything a caller set for itself. Dying underground
+        // needs a real frame to be ejected from, so it is tested against a
+        // whole `Game` instead — see
+        // `tests::stack::a_forgiving_death_underground_surfaces_the_party_at_their_base`.
+        world.init_resource::<Locale>();
+        world.init_resource::<CurrentStack>();
+        world.init_resource::<Trace>();
         let mut schedule = Schedule::default();
         schedule.add_systems(death_handling_system);
         schedule.run(world);

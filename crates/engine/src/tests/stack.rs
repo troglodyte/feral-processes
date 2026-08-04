@@ -1463,6 +1463,21 @@ fn stand_before_the_lair(game: &mut Game) -> (i32, i32) {
     lair
 }
 
+/// Enough Integrity to still be standing after however many parting volleys
+/// `flee_until_clear` has to eat.
+///
+/// A flatlined party is ejected to the surface on Forgiving
+/// (`difficulty::death_handling_system`), which would leave a test about
+/// what a *jack-out* does asserting against a frame the party is no longer
+/// in. Only the tests that flee need this; walking in and being hit once
+/// does not risk it.
+fn outlast_the_guardian(game: &mut Game) {
+    let player = game.player_entity();
+    let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+    stats.max_hp = 10_000;
+    stats.hp = 10_000;
+}
+
 /// Burns through the seal and walks into the lair, which is what rouses
 /// whatever is in it.
 fn walk_into_the_lair(game: &mut Game) -> (i32, i32) {
@@ -1523,6 +1538,7 @@ fn fleeing_the_lair_leaves_it_held() {
     let mut game = game();
     descend(&mut game);
     let lair = walk_into_the_lair(&mut game);
+    outlast_the_guardian(&mut game);
     flee_until_clear(&mut game);
 
     assert_eq!(
@@ -1549,6 +1565,7 @@ fn shoving_at_a_wall_in_a_held_lair_does_not_rouse_the_guardian_again() {
     let mut game = game();
     descend(&mut game);
     walk_into_the_lair(&mut game);
+    outlast_the_guardian(&mut game);
     flee_until_clear(&mut game);
 
     // Turning is safe here: the lair is held rather than roused, so there
@@ -3546,4 +3563,46 @@ fn an_orphan_does_not_recur_when_the_party_steps_off_and_back_on() {
     );
     assert_eq!(game.pet_count(), after_first);
     assert_eq!(ice_breakers(&game), 1);
+}
+
+/// Forgiving mode reboots you at the nearest construction. Underground,
+/// `death_handling_system` was writing that construction's tile into
+/// `Position` while `Locale::Stack` stayed live — so the party was warped
+/// home on paper and left standing in the maze, with the entrance tile
+/// `Position` had been pinned to overwritten into the bargain.
+#[test]
+fn a_forgiving_death_underground_surfaces_the_party_at_their_base() {
+    let mut game = game();
+    place_home(&mut game, 3, 0);
+    let home = *game
+        .world
+        .iter_entities()
+        .find(|e| e.contains::<Structure>())
+        .and_then(|e| e.get::<Position>())
+        .expect("place_home should have deployed one");
+    descend(&mut game);
+    game.raise_trace(4);
+
+    let player = game.player_entity();
+    game.world.get_mut::<Stats>(player).unwrap().hp = 0;
+    game.tick();
+
+    assert!(
+        !game.is_underground(),
+        "a Forgiving reboot has to leave the Stack, not just move Position while in it"
+    );
+    assert_eq!(
+        *game.world.get::<Position>(player).unwrap(),
+        home,
+        "and it lands on the construction it rebooted at"
+    );
+    assert!(
+        game.world.resource::<CurrentStack>().0.is_none(),
+        "the frame goes with the locale — clear_stack's whole point"
+    );
+    assert_eq!(
+        game.trace(),
+        0,
+        "and Trace resets, as it does on every other way out"
+    );
 }

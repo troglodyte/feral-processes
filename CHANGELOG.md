@@ -13,6 +13,17 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Dying in the Stack on Forgiving actually gets you out of it
+
+A Forgiving reboot puts you at your nearest construction. Underground, it was
+writing that construction's tile into your position while leaving you in the
+maze — so you rebooted at home on paper and came to still four frames down,
+with the entrance tile your position had been pinned to overwritten in the
+process. The only way home was to walk the frames back up.
+
+A reboot now surfaces the party first, then warps, and says so. With no base
+standing you still surface, back onto the link you walked in through.
+
 ### Stuns and bleeds now last as long as they say
 
 A status condition was being charged for the round it was applied in. End-of-

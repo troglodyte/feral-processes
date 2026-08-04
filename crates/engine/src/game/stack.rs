@@ -6,6 +6,8 @@
 //! exception is `enter_stack`, which pins `Position` to the entrance tile
 //! on the way in.
 
+use bevy_ecs::system::SystemParam;
+
 use crate::game::spawning::SpawnEscalation;
 use crate::resources::{CurrentStack, Locale, Trace};
 use crate::stack::{self, CellKind, Dir};
@@ -15,6 +17,42 @@ use crate::tuning::{
     STACK_TILES_PER_FRAME,
 };
 use crate::*;
+
+/// The three resources that together say "the party is on the surface",
+/// as a set — what leaving the Stack means, in one place.
+///
+/// `Game::clear_stack` is the door every player action goes through, but a
+/// Forgiving reboot is decided inside `difficulty::death_handling_system`,
+/// which has queries rather than a `Game` and so cannot call it. Returning
+/// the values rather than writing them is what lets both a `&mut World` and
+/// a set of `ResMut`s apply the same reset: a fourth resource added to this
+/// tuple stops both callers compiling, which is the drift this exists to
+/// prevent.
+pub(crate) fn surfaced() -> (Locale, CurrentStack, Trace) {
+    (Locale::Surface, CurrentStack(None), Trace::default())
+}
+
+/// Those same three resources as one system parameter, so a system that
+/// has to leave the Stack asks for the set rather than for three separate
+/// `ResMut`s it could take two of.
+#[derive(SystemParam)]
+pub(crate) struct StackLocale<'w> {
+    locale: ResMut<'w, Locale>,
+    current: ResMut<'w, CurrentStack>,
+    trace: ResMut<'w, Trace>,
+}
+
+impl StackLocale<'_> {
+    pub(crate) fn is_underground(&self) -> bool {
+        matches!(*self.locale, Locale::Stack { .. })
+    }
+
+    /// The system-side twin of `Game::clear_stack`, sharing its
+    /// implementation through `surfaced`.
+    pub(crate) fn surface(&mut self) {
+        (*self.locale, *self.current, *self.trace) = surfaced();
+    }
+}
 
 /// Eight-point compass heading for an offset, with north as `-y` to match
 /// `stack::Dir`.
@@ -323,9 +361,10 @@ impl Game {
     /// walk — a descent through emptied frames, at no reward — and the spec
     /// records that as accepted rather than as a hole to plug.
     pub(crate) fn clear_stack(&mut self) {
-        self.world.insert_resource(Locale::Surface);
-        self.world.insert_resource(CurrentStack(None));
-        self.world.insert_resource(Trace::default());
+        let (locale, stack, trace) = surfaced();
+        self.world.insert_resource(locale);
+        self.world.insert_resource(stack);
+        self.world.insert_resource(trace);
     }
 
     /// Climbs out through the link the party walked in through.

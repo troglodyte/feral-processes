@@ -3,9 +3,9 @@
 use crate::*;
 
 impl App {
-    /// Equipped slots are numbered 1-3 (Weapon/Armor/Module) and unequip
-    /// immediately when pressed; unequipped inventory items start at 4 and
-    /// open `Mode::InventoryItemAction` for the selected item.
+    /// Equipped slots are numbered 1-3 (Weapon/Armor/Module) and open
+    /// `Mode::EquipSwap` for that slot; unequipped inventory items start at
+    /// 4 and open `Mode::InventoryItemAction` for the selected item.
     pub(crate) fn handle_inventory_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.close_screen();
@@ -39,17 +39,76 @@ impl App {
             _ => None,
         };
         if let Some(slot) = slot {
-            let Some(game) = &mut self.game else { return };
-            match game.unequip(slot) {
-                Ok(()) => self.status_line = None,
-                Err(e) => self.status_line = Some(e),
-            }
+            self.open_equip_swap(slot);
             return;
         }
         if let Some((item, _)) = inventory.get(idx - 3) {
             self.pending_inventory_item = Some(item.clone());
             self.mode = Mode::InventoryItemAction;
         }
+    }
+
+    /// Which inventory row each equipment slot sits on, so Esc can put the
+    /// highlight back where the player left it.
+    fn slot_row(slot: EquipmentSlot) -> usize {
+        match slot {
+            EquipmentSlot::Weapon => 0,
+            EquipmentSlot::Armor => 1,
+            EquipmentSlot::Module => 2,
+        }
+    }
+
+    /// Opens the replacement picker for `slot`, unless there is nothing to
+    /// pick. An occupied slot always offers to be emptied, so the empty case
+    /// only arises for a bare slot with no gear in cargo that fits it —
+    /// where opening a picker with no rows would just be a dead end.
+    fn open_equip_swap(&mut self, slot: EquipmentSlot) {
+        let Some(game) = &self.game else { return };
+        if equip_swap_rows(game, slot).is_empty() {
+            self.status_line = Some(format!("Nothing in cargo fits your {} slot.", slot.label()));
+            return;
+        }
+        self.pending_swap_slot = Some(slot);
+        // The inventory's highlight indexes a different list from this one,
+        // and can sit well past its end.
+        self.menu_selected = 0;
+        self.mode = Mode::EquipSwap;
+    }
+
+    /// Picks a replacement for `pending_swap_slot`, or empties it.
+    ///
+    /// Both outcomes are one engine call that already handles the exchange:
+    /// `Game::equip` returns the outgoing item to cargo itself, so a swap is
+    /// never an unequip followed by an equip — which could strand the player
+    /// bare-handed if the second half were refused.
+    pub(crate) fn handle_equip_swap_key(&mut self, key: GameKey) {
+        let Some(slot) = self.pending_swap_slot else {
+            self.mode = Mode::Inventory;
+            return;
+        };
+        if key == GameKey::Esc {
+            self.pending_swap_slot = None;
+            self.menu_selected = Self::slot_row(slot);
+            self.mode = Mode::Inventory;
+            return;
+        }
+        let Some(game) = &self.game else { return };
+        let choices: Vec<SwapChoice> = equip_swap_rows(game, slot)
+            .into_iter()
+            .map(|r| r.choice)
+            .collect();
+        let Some(idx) = self.selected_index(key, choices.len()) else {
+            return;
+        };
+        let Some(game) = &mut self.game else { return };
+        let outcome = match &choices[idx] {
+            SwapChoice::Equip(item) => game.equip(item).err(),
+            SwapChoice::Unequip => game.unequip(slot).err(),
+        };
+        self.status_line = outcome;
+        self.pending_swap_slot = None;
+        self.menu_selected = Self::slot_row(slot);
+        self.mode = Mode::Inventory;
     }
 
     /// Sells one `item` to the trader in range, or asks which one.

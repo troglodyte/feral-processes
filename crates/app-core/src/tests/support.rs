@@ -390,6 +390,46 @@ pub(crate) fn app_underground(seed: u32) -> App {
     app
 }
 
+/// A game where the player wears `weapon` — an item id plus the gear level
+/// it was equipped at (see `components::EquippedItem`) — carries
+/// `inventory`, and stands `zone` sectors deep.
+///
+/// Written straight into the save rather than staged through `Game::equip`,
+/// which always stamps gear with the *current* zone level. The gap between
+/// the level your weapon remembers and the one the zone would grant it now
+/// is exactly what the swap screen's delta column reports, so there is no
+/// other way to set it up. `Stats` is deliberately left at its unequipped
+/// value: `equip_swap_rows` reads the recorded gear level and the item
+/// catalogue, never the player's current attack.
+pub(crate) fn app_wearing_weapon(
+    seed: u32,
+    weapon: Option<(&str, u32)>,
+    inventory: &[(&str, u32)],
+    zone: u32,
+) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("gear", seed);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.inventory = inventory
+        .iter()
+        .map(|(item, qty)| (ItemId::from(*item), *qty))
+        .collect();
+    if let Some((item, level)) = weapon {
+        data.player.weapon = Some(ItemId::from(item));
+        data.player.weapon_level = level;
+    }
+    data.zone = zone;
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}
+
 /// Opens a screen the way a player now has to: through its group menu.
 ///
 /// Tests that used to press one retired key go through this instead of

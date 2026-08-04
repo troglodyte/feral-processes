@@ -47,6 +47,7 @@ impl App {
             pending_party_attack: false,
             pending_special_ability: None,
             pending_inventory_item: None,
+            pending_swap_slot: None,
             pending_erase: None,
             erase_quantity_input: String::new(),
             pending_craft: None,

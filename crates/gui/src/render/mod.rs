@@ -8,10 +8,10 @@ use crate::paint::{Color, DARKGRAY, GRAY, Painter, Rect, TextRun, WHITE};
 use crate::text::{Metrics, map_cell, terrain_color, ui_metrics};
 use feral_processes_app_core::{
     App, GroupMenuRow, LogFilter, MENU_SCAN_RADIUS, Mode, TradeChoice, equip_preview_tag,
-    inventory_item_actions, menu_shortcut,
+    equip_swap_rows, inventory_item_actions, menu_shortcut, stat_summary,
 };
 use feral_processes_engine::components::{GlyphColor, MachineStatus, TaskKind};
-use feral_processes_engine::items::ItemId;
+use feral_processes_engine::items::{EquipmentSlot, ItemId};
 use feral_processes_engine::structures::StructureCategory;
 use feral_processes_engine::tuning::{MAX_FUSIONS, MAX_PARTY_SIZE};
 use feral_processes_engine::world::Biome;
@@ -53,7 +53,8 @@ use field::{draw_field_cast, draw_field_cast_ally};
 use frame_map::{draw_frame_map, draw_map_inset};
 use group_menu::draw_group_menu;
 use inventory::{
-    draw_erase_quantity, draw_inventory, draw_inventory_item_action, draw_item_describe,
+    draw_equip_swap, draw_erase_quantity, draw_inventory, draw_inventory_item_action,
+    draw_item_describe,
 };
 use manifest::{ManifestNav, draw_manifest, draw_manifest_pick};
 use meta::{
@@ -434,6 +435,7 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             draw_manifest_pick(game, &subjects, selected, painter, m)
         }
         Mode::Inventory => draw_inventory(game, selected, painter, m),
+        Mode::EquipSwap => draw_equip_swap(game, app.pending_swap_slot, selected, painter, m),
         Mode::InventoryItemAction => {
             let zone = game.player_status().zone;
             let fusion_tier = app

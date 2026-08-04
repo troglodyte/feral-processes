@@ -50,7 +50,7 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
             CYAN,
         ),
         text_row(""),
-        text_row("Equipped (number to unequip):"),
+        text_row("Equipped (number to swap or unequip):"),
         equipped_row(1, "Weapon", status.weapon.clone(), selected == 0, game),
         equipped_row(2, "Armor", status.armor.clone(), selected == 1, game),
         equipped_row(3, "Module", status.module.clone(), selected == 2, game),
@@ -95,44 +95,100 @@ fn equipped_row(
     selected: bool,
     game: &Game,
 ) -> Row {
-    match equipped.and_then(|e| game.equipment_of(&e.item).map(|(_, mods)| (e, mods))) {
-        Some((equipped, mods)) => {
-            let mods = mods
-                .scaled_for_level(equipped.level)
-                .fused_for_tier(equipped.fusion_tier);
-            let mut parts = Vec::new();
-            if mods.atk != 0 {
-                parts.push(format!("+{} ATK", mods.atk));
-            }
-            if mods.def != 0 {
-                parts.push(format!("+{} DEF", mods.def));
-            }
-            if mods.decompiler != 0 {
-                parts.push(format!("+{} DECOMP", mods.decompiler));
-            }
-            let mut notes = Vec::new();
-            if equipped.level > 1 {
-                notes.push(format!("Lv{}", equipped.level));
-            }
-            if equipped.fusion_tier > 0 {
-                notes.push(format!("T{}", equipped.fusion_tier));
-            }
-            let note = if notes.is_empty() {
-                String::new()
-            } else {
-                format!(" {}", notes.join(" "))
-            };
-            item_row(
-                format!(
-                    "[{num}] {label}: {}{note} ({})",
-                    game.item_name(&equipped.item),
-                    parts.join(" ")
-                ),
-                selected,
-            )
-        }
-        None => item_row(format!("[{num}] {label}: (empty)"), selected),
+    item_row(
+        format!("[{num}] {}", equipped_summary(label, equipped, game)),
+        selected,
+    )
+}
+
+/// `Weapon: Arc Lance Lv3 T1 (+16 ATK)`, or `Weapon: (empty)`.
+///
+/// The stat bonus goes through `stat_summary` rather than being formatted
+/// here, so the equipped panel, the inventory list's tag and the swap
+/// picker's columns cannot disagree about what an item grants.
+fn equipped_summary(
+    label: &str,
+    equipped: Option<feral_processes_engine::components::EquippedItem>,
+    game: &Game,
+) -> String {
+    let Some((equipped, base)) =
+        equipped.and_then(|e| game.equipment_of(&e.item).map(|(_, mods)| (e, mods)))
+    else {
+        return format!("{label}: (empty)");
+    };
+    let mods = base
+        .scaled_for_level(equipped.level)
+        .fused_for_tier(equipped.fusion_tier);
+    let mut notes = Vec::new();
+    if equipped.level > 1 {
+        notes.push(format!("Lv{}", equipped.level));
     }
+    if equipped.fusion_tier > 0 {
+        notes.push(format!("T{}", equipped.fusion_tier));
+    }
+    let note = if notes.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", notes.join(" "))
+    };
+    format!(
+        "{label}: {}{note} ({})",
+        game.item_name(&equipped.item),
+        stat_summary(mods)
+    )
+}
+
+/// The replacement picker for one equipment slot.
+///
+/// Rows come from `equip_swap_rows` — the same call the key handler
+/// dispatches — so the highlight and the action can't come apart. What is
+/// drawn here beyond them is only the heading and the legend the two stat
+/// columns need to be readable.
+pub(super) fn draw_equip_swap(
+    game: &mut Game,
+    slot: Option<EquipmentSlot>,
+    selected: usize,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let Some(slot) = slot else {
+        draw_popup(
+            "Gear",
+            PopupSize::Small,
+            &[text_row("No slot selected.")],
+            painter,
+            m,
+        );
+        return;
+    };
+    let status = game.player_status();
+    let worn = match slot {
+        EquipmentSlot::Weapon => status.weapon.clone(),
+        EquipmentSlot::Armor => status.armor.clone(),
+        EquipmentSlot::Module => status.module.clone(),
+    };
+    let mut rows = vec![
+        Row::TextColored(equipped_summary("Wearing", worn, game), CYAN),
+        text_row(""),
+    ];
+    for (i, row) in equip_swap_rows(game, slot).iter().enumerate() {
+        rows.push(item_row(
+            format!("[{}] {}", menu_shortcut(i), row.label),
+            i == selected,
+        ));
+    }
+    rows.push(text_row(""));
+    rows.push(text_row(
+        "Middle column is what you'd get; right column is the change",
+    ));
+    rows.push(text_row("Esc to go back; Up/Down + Enter also work"));
+    draw_popup(
+        &format!("Replace {}", slot.label()),
+        PopupSize::Large,
+        &rows,
+        painter,
+        m,
+    );
 }
 
 /// How wide the describe page lets prose run before wrapping. Deliberately

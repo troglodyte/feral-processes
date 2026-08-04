@@ -1,6 +1,6 @@
 (
     id: "leech_array",
-    name: "Leech Array",
+    name: "Leech Group",
     description: "Damage a whole group and restore a third of it to yourself",
     target: WholeEnemyGroup,
     effect: Drain(power: 6, heal_fraction: 0.3),

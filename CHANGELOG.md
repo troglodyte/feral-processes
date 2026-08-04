@@ -13,6 +13,35 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Every ability name says what it hits
+
+Forty-one abilities had forty-one unrelated names, so nothing about
+"Broadcast Storm" told you it hit the whole field while "Cascade Overflow"
+hit one group. The picker shows the name before it shows anything else, and
+that was the one thing it couldn't tell you.
+
+Names are now `<Family> <Scope>`. The scope is **Single**, **Group** or
+**Everyone** against enemies, and **Single** or **Party** on your own side.
+The family names an effect rather than a file: `Packet Shred` is plain
+damage, `Fork Bomb` is damage carrying a Bleed, `Pipeline Stall` carries a
+Stun, `Patch` heals, `Hard Lock` stuns. So the group attack that bleeds is
+Fork Bomb Group and the one that doesn't is Packet Shred Group v2.0.
+
+Where two abilities in one family share a scope and differ only in size,
+a version tag separates them — Patch Single v1.0, v2.0 and v3.0 restore 8,
+25 and 50 Integrity. A major bump is a real step up; a minor one is the
+same thing slightly bigger.
+
+Field routines keep their own names and take the suffix, so Deep Scan is
+Deep Scan Party. Creature *moves* are untouched — they have no targeting
+scope for a suffix to describe, so the Overseer still opens with Kernel
+Panic even though the ability of that name is now Packet Shred Single.
+
+**No save is affected.** Ability ids, filenames and the `routine_<id>`
+items minted from them are all unchanged; only the display string moved.
+A mod that named its abilities the old way keeps working — the loader has
+no opinion, and the two new tests only cover the shipped set.
+
 ### Armour and modules are made out of the factory
 
 Standard and premium gear was crafted at a bench out of raw Core or Portal

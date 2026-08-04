@@ -1,6 +1,6 @@
 (
     id: "deadlock",
-    name: "Deadlock",
+    name: "Hard Lock Single v1.0",
     description: "Stun one target for 1 round",
     target: OneEnemyGroupFront,
     effect: Debuff(kind: Stun, power: 0, duration: 1),

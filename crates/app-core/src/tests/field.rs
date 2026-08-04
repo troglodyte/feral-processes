@@ -26,7 +26,7 @@ fn a_whole_party_routine_casts_immediately_and_returns_to_playing() {
 
     let buffs = app.game.as_mut().unwrap().active_buffs();
     assert!(
-        buffs.iter().any(|b| b.name == "Trace Analysis"),
+        buffs.iter().any(|b| b.name == "Trace Analysis Party"),
         "the buff should now be running"
     );
 }
@@ -55,7 +55,7 @@ fn a_one_ally_routine_opens_the_ally_picker_then_casts_on_the_pick() {
 
     let buffs = app.game.as_mut().unwrap().active_buffs();
     assert!(
-        buffs.iter().any(|b| b.name == "Hardened Shell"),
+        buffs.iter().any(|b| b.name == "Hardened Shell Single"),
         "the buff should now be running on the player"
     );
 }
@@ -176,7 +176,7 @@ fn the_ally_picker_offers_only_the_player_and_the_active_party() {
 
     let buffs = app.game.as_mut().unwrap().active_buffs();
     assert!(
-        buffs.iter().any(|b| b.name == "Hardened Shell"),
+        buffs.iter().any(|b| b.name == "Hardened Shell Single"),
         "the buff should now be running on the player"
     );
 }

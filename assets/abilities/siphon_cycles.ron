@@ -1,6 +1,6 @@
 (
     id: "siphon_cycles",
-    name: "Siphon Cycles",
+    name: "Leech Single",
     description: "Damage one target and restore half of it to yourself",
     target: OneEnemyGroupFront,
     effect: Drain(power: 10, heal_fraction: 0.5),

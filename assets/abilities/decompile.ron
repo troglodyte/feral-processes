@@ -1,6 +1,6 @@
 (
     id: "decompile",
-    name: "Decompile",
+    name: "Decompile Single",
     description: "Spend a taming catalyst to break a group's front program and run it yourself.",
     target: OneEnemyGroupFront,
     effect: Decompile,

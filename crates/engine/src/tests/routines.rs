@@ -93,7 +93,7 @@ fn a_level_up_that_reaches_an_unlock_installs_it_into_a_free_slot() {
 
 /// Regression for the gap the re-review found in the C1 fix: eviction
 /// matches on ability id alone, so it fires identically whether the matched
-/// slot holds the auto-installed placeholder or a Priority Boost the player
+/// slot holds the auto-installed placeholder or a Hyperthread Single v1.0 the player
 /// chose to install by hand — and the latter used to be evicted with no log
 /// line at all, unlike the neighbouring "it is lost" branch.
 #[test]
@@ -117,8 +117,8 @@ fn evicting_a_manually_installed_priority_boost_is_logged() {
     assert!(
         game.message_log(10).iter().any(|e| {
             e.text.contains("swaps out")
-                && e.text.contains("Priority Boost")
-                && e.text.contains("Sandbox")
+                && e.text.contains("Hyperthread Single v1.0")
+                && e.text.contains("Bastion Single")
         }),
         "the eviction of a deliberately installed routine must be logged, \
          not just the auto-installed placeholder's: {:?}",

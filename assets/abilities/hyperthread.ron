@@ -1,6 +1,6 @@
 (
     id: "hyperthread",
-    name: "Hyperthread",
+    name: "Hyperthread Single v2.0",
     description: "+6 ATK to one ally for 4 rounds",
     target: OneAlly,
     effect: Buff(kind: Atk, power: 6, duration: 4),

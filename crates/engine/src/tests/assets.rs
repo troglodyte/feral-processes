@@ -404,6 +404,79 @@ fn every_shipped_ability_but_decompile_and_field_routines_has_a_cooldown() {
     }
 }
 
+/// The scope word an ability's `name` must end in, given what it targets.
+/// `OneAlly` and `OneEnemyGroupFront` share "Single" — one recipient either
+/// way, and which side it lands on is never in doubt from the picker.
+fn scope_word(target: crate::abilities::AbilityTarget) -> &'static str {
+    use crate::abilities::AbilityTarget::*;
+    match target {
+        OneAlly | OneEnemyGroupFront => "Single",
+        WholeParty => "Party",
+        WholeEnemyGroup => "Group",
+        AllEnemies => "Everyone",
+    }
+}
+
+/// Strips a trailing ` vN.N` version tag, which is how two abilities in the
+/// same family at the same scope are told apart by magnitude.
+fn without_version_tag(name: &str) -> &str {
+    let Some((base, tag)) = name.rsplit_once(' ') else {
+        return name;
+    };
+    let is_tag = tag.strip_prefix('v').is_some_and(|v| {
+        v.split_once('.')
+            .is_some_and(|(a, b)| !a.is_empty() && !b.is_empty())
+            && v.chars().all(|c| c.is_ascii_digit() || c == '.')
+    });
+    if is_tag { base } else { name }
+}
+
+/// An ability's display name is `<Family> <Scope>`, plus an optional
+/// `vN.N` when two in one family share a scope and differ only in
+/// magnitude. The suffix is the whole point: the picker shows the name
+/// before it shows anything else, so "does this hit one thing, a group, or
+/// the field" has to be readable without opening the description.
+///
+/// This is a naming *policy*, not a schema rule — `AbilityDb` loads a
+/// badly-named file happily, and a mod is free to ignore it. What the test
+/// guards is the shipped set, where a new file that skips the suffix would
+/// otherwise read as a different kind of thing from its 40 neighbours.
+#[test]
+fn every_shipped_ability_name_ends_in_the_scope_it_targets() {
+    let game = Game::new(3303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
+        let expected = scope_word(def.target);
+        let base = without_version_tag(&def.name);
+        assert!(
+            base.ends_with(expected) && base.len() > expected.len(),
+            "ability {:?} is named {:?}; targeting {:?} it should end in {:?}",
+            def.id,
+            def.name,
+            def.target,
+            expected
+        );
+    }
+}
+
+/// Two abilities sharing a display name is invisible in the picker — the
+/// player sees two identical rows and picks by luck. The version tag exists
+/// so same-family, same-scope siblings stay distinguishable; this is what
+/// makes forgetting one a failure rather than a shrug.
+#[test]
+fn no_two_shipped_abilities_share_a_display_name() {
+    let game = Game::new(3304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut seen: std::collections::HashMap<&str, &crate::abilities::AbilityId> =
+        std::collections::HashMap::new();
+    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
+        if let Some(other) = seen.insert(def.name.as_str(), &def.id) {
+            panic!(
+                "abilities {:?} and {:?} both display as {:?}",
+                other, def.id, def.name
+            );
+        }
+    }
+}
+
 const AFFINITY_SPECIES: &str = r#"(
     id: "test_healer",
     name: "Test Healer",

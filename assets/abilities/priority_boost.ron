@@ -1,6 +1,6 @@
 (
     id: "priority_boost",
-    name: "Priority Boost",
+    name: "Hyperthread Single v1.0",
     description: "+3 ATK to one ally for 3 rounds",
     target: OneAlly,
     effect: Buff(kind: Atk, power: 3, duration: 3),

@@ -204,7 +204,7 @@ fn companion_ability_label_shows_the_ability_name_or_the_fallback() {
     game.add_companion(plain).unwrap();
     let plain_ability = game.player_status().companions[0].ability.clone();
     assert_eq!(
-        plain_ability, "Priority Boost",
+        plain_ability, "Hyperthread Single v1.0",
         "a species declaring no abilities should show the fallback"
     );
 }
@@ -218,7 +218,7 @@ fn a_species_with_several_abilities_offers_each_one_in_menu_order() {
     let options = game.battle_special_options(1);
     assert_eq!(
         options.iter().map(|o| o.name.as_str()).collect::<Vec<_>>(),
-        vec!["Hot Patch", "Sandbox"],
+        vec!["Patch Single v1.0", "Bastion Single"],
         "the picker should list the species' abilities in declaration order"
     );
     assert_eq!(
@@ -244,7 +244,7 @@ fn an_ability_above_the_companions_level_is_not_offered_yet() {
         1,
         "the level-5 ability must stay hidden until it is earned"
     );
-    assert_eq!(options[0].name, "Hot Patch");
+    assert_eq!(options[0].name, "Patch Single v1.0");
 }
 
 #[test]
@@ -259,7 +259,7 @@ fn a_companion_declaring_no_abilities_still_offers_exactly_the_fallback() {
         1,
         "the fallback is resolved into the list, so the menu is never empty"
     );
-    assert_eq!(options[0].name, "Priority Boost");
+    assert_eq!(options[0].name, "Hyperthread Single v1.0");
 }
 
 #[test]

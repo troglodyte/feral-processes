@@ -533,7 +533,7 @@ fn a_hostile_single_target_routine_is_aggro_weighted_across_the_party() {
         let player_hp_before = game.world.get::<Stats>(player).unwrap().hp;
 
         let enemies = battle_with_a_pack_of(&mut game, 1, 200);
-        // Kernel Panic: OneEnemyGroupFront, flat Damage — HP loss identifies
+        // Packet Shred Single: OneEnemyGroupFront, flat Damage — HP loss identifies
         // who it landed on without depending on a `StatusEffects` component
         // the test's own companions don't carry.
         game.world

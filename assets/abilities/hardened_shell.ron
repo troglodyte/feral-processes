@@ -1,6 +1,6 @@
 (
     id: "hardened_shell",
-    name: "Hardened Shell",
+    name: "Hardened Shell Single",
     description: "+4 DEF to one ally for 90 turns",
     target: OneAlly,
     effect: FieldBuff(kind: Def, power: 4, duration: 90, power_cost: 14.0),

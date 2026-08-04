@@ -806,7 +806,7 @@ fn installing_a_researched_routine_makes_the_players_special_available() {
         .expect("the installed routine shows the Special row");
     assert_eq!(special.unavailable, None);
     assert_eq!(
-        special.detail, "Priority Boost",
+        special.detail, "Hyperthread Single v1.0",
         "one ability reads as its own name"
     );
 }

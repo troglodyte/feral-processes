@@ -1,7 +1,7 @@
 (
     id: "deep_analysis",
     name: "Deep Analysis",
-    description: "Field routines that bend the odds of a whole run rather than a single fight. Compiles Deep Scan, Trace Analysis, Ghost Protocol and Salvage Routine into cargo.",
+    description: "Field routines that bend the odds of a whole run rather than a single fight. Compiles Deep Scan Party, Trace Analysis Party, Ghost Protocol Party and Salvage Routine Party into cargo.",
     cost: 46,
     requires: ["field_ops"],
     unlocks_abilities: ["deep_scan", "trace_analysis", "ghost_protocol", "salvage_routine"],

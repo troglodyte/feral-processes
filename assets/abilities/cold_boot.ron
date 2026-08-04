@@ -1,6 +1,6 @@
 (
     id: "cold_boot",
-    name: "Cold Boot",
+    name: "Patch Single v3.0",
     description: "Restore 50 Integrity to one ally",
     target: OneAlly,
     effect: Heal(power: 50),

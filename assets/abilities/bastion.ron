@@ -1,6 +1,6 @@
 (
     id: "bastion",
-    name: "Bastion",
+    name: "Bastion Party",
     description: "+4 DEF to the whole party for 3 rounds",
     target: WholeParty,
     effect: Buff(kind: Def, power: 4, duration: 3),

@@ -1,6 +1,6 @@
 (
     id: "broadcast_storm",
-    name: "Broadcast Storm",
+    name: "Packet Shred Everyone",
     description: "Damage 25 to every hostile program on the field",
     target: AllEnemies,
     effect: Damage(power: 25),

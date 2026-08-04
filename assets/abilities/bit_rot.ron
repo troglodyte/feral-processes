@@ -1,6 +1,6 @@
 (
     id: "bit_rot",
-    name: "Bit Rot",
+    name: "Bit Rot Everyone",
     description: "Bleed the whole field for 4 rounds",
     target: AllEnemies,
     effect: Debuff(kind: Bleed, power: 2, duration: 4),

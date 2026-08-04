@@ -1,6 +1,6 @@
 (
     id: "checksum_repair",
-    name: "Checksum Repair",
+    name: "Patch Single v2.0",
     description: "Restore 25 Integrity to one ally",
     target: OneAlly,
     effect: Heal(power: 25),

@@ -1,6 +1,6 @@
 (
     id: "pipeline_stall",
-    name: "Pipeline Stall",
+    name: "Pipeline Stall Single",
     description: "Damage one target, sometimes locking it up",
     target: OneEnemyGroupFront,
     effect: Damage(power: 7, status: Some((kind: Stun, chance: 0.4, duration: 1, power: 0))),

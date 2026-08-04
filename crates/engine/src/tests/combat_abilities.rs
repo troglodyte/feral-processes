@@ -1211,7 +1211,7 @@ fn a_perked_level_ten_kernel_panic_lands_in_the_intended_band() {
 
     assert!(
         (140..=165).contains(&dealt),
-        "a perked level-10 Kernel Panic should land near 150 against 400 Integrity, got {dealt}"
+        "a perked level-10 Packet Shred Single should land near 150 against 400 Integrity, got {dealt}"
     );
 }
 

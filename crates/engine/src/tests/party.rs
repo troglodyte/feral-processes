@@ -1061,7 +1061,8 @@ fn fusing_a_program_logs_a_manually_installed_routine_as_lost() {
     assert!(
         game.message_log(10)
             .iter()
-            .any(|e| e.text.contains("Routines lost in the fusion") && e.text.contains("Sandbox")),
+            .any(|e| e.text.contains("Routines lost in the fusion")
+                && e.text.contains("Bastion Single")),
         "the loss must be logged, not silent: {:?}",
         game.message_log(10)
     );

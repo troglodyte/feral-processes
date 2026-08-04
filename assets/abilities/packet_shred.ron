@@ -1,6 +1,6 @@
 (
     id: "packet_shred",
-    name: "Packet Shred",
+    name: "Packet Shred Group v2.0",
     description: "Damage 10 to every member of one group",
     target: WholeEnemyGroup,
     effect: Damage(power: 10),

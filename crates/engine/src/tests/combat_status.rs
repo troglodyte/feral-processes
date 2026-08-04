@@ -691,7 +691,7 @@ fn a_companion_brought_to_zero_announces_its_deletion_and_its_lost_routines() {
         "the death line must survive retain_outcomes_since_battle"
     );
     assert!(
-        entry.text.contains("Priority Boost"),
+        entry.text.contains("Hyperthread Single v1.0"),
         "the line must name the routines lost with it, got: {}",
         entry.text
     );

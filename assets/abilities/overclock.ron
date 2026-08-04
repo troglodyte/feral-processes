@@ -1,6 +1,6 @@
 (
     id: "overclock",
-    name: "Overclock",
+    name: "Overclock Single",
     description: "+4 ATK to one ally for 90 turns",
     target: OneAlly,
     effect: FieldBuff(kind: Atk, power: 4, duration: 90, power_cost: 14.0),

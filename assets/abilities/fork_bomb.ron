@@ -1,6 +1,6 @@
 (
     id: "fork_bomb",
-    name: "Fork Bomb",
+    name: "Fork Bomb Group",
     description: "Damage every member of one group, sometimes leaving them bleeding",
     target: WholeEnemyGroup,
     effect: Damage(power: 15, status: Some((kind: Bleed, chance: 0.35, duration: 2, power: 2))),

@@ -1,6 +1,6 @@
 (
     id: "flush_cache",
-    name: "Flush Cache",
+    name: "Flush Cache Party",
     description: "Clear status conditions from the whole party",
     target: WholeParty,
     effect: Cleanse,

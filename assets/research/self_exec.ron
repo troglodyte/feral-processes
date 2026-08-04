@@ -1,7 +1,7 @@
 (
     id: "self_exec",
     name: "Self-Execution",
-    description: "Run a routine yourself in battle. Teaches Priority Boost — write it onto a Routine Disk to run it.",
+    description: "Run a routine yourself in battle. Teaches Hyperthread Single v1.0 — write it onto a Routine Disk to run it.",
     cost: 12,
     requires: ["routine_fabrication"],
     unlocks_abilities: ["priority_boost"],

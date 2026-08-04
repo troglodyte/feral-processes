@@ -40,7 +40,11 @@ way deleting the Currency item does.
 ```ron
 (
     id: "unique_snake_case_id",   // must be unique across all ability files
-    name: "Display Name",         // shown in the ability picker
+    // Shown in the ability picker. The shipped set follows
+    // `<Family> <Scope>` — see "Naming" below — and two tests hold it,
+    // but nothing in the loader enforces it, so a mod may name an
+    // ability whatever it likes.
+    name: "Packet Shred Group v2.0",
 
     // The one-line detail shown under the name in the picker. Authored
     // rather than computed from `effect`, so you control exactly how your
@@ -209,6 +213,44 @@ way deleting the Currency item does.
     wild_weight: 8,
 )
 ```
+
+## Naming
+
+The shipped abilities are named `<Family> <Scope>`, with an optional
+`vN.N` on the end. The scope word is the point of the scheme — the picker
+shows the name before anything else, so how wide an ability reaches should
+be readable without stopping to read the description:
+
+| `target` | scope word |
+| --- | --- |
+| `OneAlly`, `OneEnemyGroupFront` | `Single` |
+| `WholeParty` | `Party` |
+| `WholeEnemyGroup` | `Group` |
+| `AllEnemies` | `Everyone` |
+
+The **family** is everything before the scope, and it names an *effect*,
+not a file: `Packet Shred` is plain damage at any scope, `Fork Bomb` is
+damage carrying a Bleed rider, `Pipeline Stall` carries a Stun, `Patch`
+heals, `Hard Lock` stuns outright. So `kernel_panic.ron` displays as
+"Packet Shred Single" — **an ability's id and its display name are
+deliberately allowed to diverge**, because the id is frozen (see below)
+while the name is free to move.
+
+The **version tag** separates two abilities in one family that share a
+scope and differ only in magnitude — `Patch Single v1.0` / `v2.0` / `v3.0`
+restore 8, 25 and 50. A major bump is a real step up, a minor one is the
+same thing slightly bigger (`Patch Party v1.0` and `v1.1` heal 8 and 10).
+
+Two tests in `crates/engine/src/tests/assets.rs` hold this over the
+shipped set — `every_shipped_ability_name_ends_in_the_scope_it_targets`
+and `no_two_shipped_abilities_share_a_display_name`. Neither looks at
+files outside this repo, so **a mod is free to ignore the scheme**; the
+loader has no opinion about `name` beyond it being a string.
+
+**Do not rename an `id` to match a new display name.** Ids are save
+format: `PlayerSave.known_routines` stores them directly, and each one
+mints a `routine_<id>` item that may be sitting in a player's cargo.
+Renaming one orphans both.
 
 ## Magnitudes scale with level
 

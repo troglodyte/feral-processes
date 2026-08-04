@@ -131,7 +131,15 @@ pub fn run(app: App) {
                 // No windowed size is carried alongside it because there is
                 // no toggle back — a key for that is the point at which one
                 // becomes worth having.
-                mode: WindowMode::BorderlessFullscreen(MonitorSelection::Current),
+                //
+                // `Primary`, not `Current`, and not because we prefer that
+                // monitor: bevy_winit passes `None` for the current monitor
+                // on the *creation* path unconditionally, so `Current` warns
+                // on every launch and resolves to `None` anyway. Both land on
+                // winit's `Fullscreen::Borderless(None)`, documented as the
+                // current monitor, on any setup where `primary_monitor()` is
+                // itself `None` — Wayland among them.
+                mode: WindowMode::BorderlessFullscreen(MonitorSelection::Primary),
                 ..default()
             }),
             ..default()

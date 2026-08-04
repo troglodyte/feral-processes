@@ -2,6 +2,7 @@
     id: "singularity_matrix",
     name: "Singularity Matrix",
     description: "Premium module. Everything at once, and the rarest thing you can compile.",
+    value: Some(120),
     equipment: Some((Module, (atk: 3, def: 3, decompiler: 3))),
     craftable: Some((cost: [("portal_fragment", 24)], requires_structure: Some("fabricator"))),
     droppable: Some([("wintermute", 0.15), ("overseer", 0.08)]),

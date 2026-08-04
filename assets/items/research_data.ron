@@ -2,6 +2,7 @@
     id: "research_data",
     name: "Research Data",
     description: "Spent on the research tree. Banked separately, so up to 200 of it rides free of your cargo cap.",
+    value: Some(1),
     role: Some(ResearchCurrency),
     bank_limit: Some(200),
 )

@@ -929,6 +929,16 @@ pub const ITEM_FUSION_COST: u32 = 2;
 /// laundry.
 pub const MAX_FUSIONS: u32 = 3;
 
+/// What an item is worth when its `.ron` file names no `value` — the flat
+/// rate every item in the game traded at before the price ladder existed,
+/// so a mod written against the older schema keeps its old behaviour.
+///
+/// Doubles as the ladder's floor. Anything a base can print on a timer is
+/// pinned here by `every_base_produced_item_sits_at_the_floor_price`, for
+/// the reason that test documents: a `work.produces` item's value is really
+/// a Credit-per-tick rate, and the recipe ceiling below cannot see it.
+pub const DEFAULT_ITEM_VALUE: u32 = 1;
+
 /// What a trading post charges to sell the player back something they sold
 /// it, as a multiple of that trader's own `TradeDef::sell_rate` — see
 /// `Game::buy_back`. At 2 every round trip is a net loss, which is what

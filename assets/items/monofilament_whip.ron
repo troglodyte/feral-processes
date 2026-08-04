@@ -2,6 +2,7 @@
     id: "monofilament_whip",
     name: "Monofilament Whip",
     description: "Researched weapon. A filament one molecule wide, and the hardest hit at its tier.",
+    value: Some(60),
     equipment: Some((Weapon, (atk: 4))),
     droppable: Some([("wintermute", 0.6)]),
 )

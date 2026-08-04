@@ -24,8 +24,21 @@ impl Game {
         Some(trade)
     }
 
+    /// What `structure` pays per unit for `item`: the item's own
+    /// `ItemDef::value` (see `Game::item_value`) scaled by that trader's
+    /// `sell_rate`. `None` for a structure that doesn't trade.
+    ///
+    /// Public because the trade screen quotes a per-row price before the
+    /// player commits, and used to derive it from `sell_rate` alone — right
+    /// only while every item was worth the same. A renderer that works a
+    /// price out itself is one retune away from quoting a number the sale
+    /// doesn't honour.
+    pub fn sell_price(&self, structure: Entity, item: &ItemId) -> Option<u32> {
+        Some(self.item_value(item) * self.trade_options(structure)?.sell_rate)
+    }
+
     /// Sells `qty` of `item` from inventory to the trading post `structure`,
-    /// crediting the trade currency at its flat `sell_rate` per unit. The
+    /// crediting the trade currency at `sell_price` per unit. The
     /// trade currency itself can't be sold (trading it for more of the same
     /// thing is meaningless, and would be exploitable if a modded
     /// `sell_rate` was ever above 1). Build salvage *is* sellable — that is
@@ -63,7 +76,7 @@ impl Game {
             return Err(format!("You don't have any {}.", self.item_name(&item)));
         }
         let taken = have.min(qty);
-        let payout = trade.sell_rate * taken;
+        let payout = self.item_value(&item) * trade.sell_rate * taken;
         // Refuse rather than clamp: the item is already gone once `take`
         // runs, so checking room only after taking would let a refusal
         // destroy the sold item for nothing.
@@ -137,22 +150,18 @@ impl Game {
         );
     }
 
-    /// What `structure` charges per unit to sell something back: its own
-    /// `sell_rate` marked up by `BUYBACK_PRICE_MULTIPLIER`. Floored at 1 the
-    /// way `program_payout` is, so a modded `sell_rate: 0` can't hand goods
-    /// out for free.
-    fn buyback_unit_cost(&self, structure: Entity) -> Option<u32> {
-        let rate = self.trade_options(structure)?.sell_rate;
-        Some((rate * tuning::BUYBACK_PRICE_MULTIPLIER).max(1))
+    /// What `structure` charges per unit to sell `item` back: what it paid
+    /// for it, marked up by `BUYBACK_PRICE_MULTIPLIER`. Floored at 1 the way
+    /// `program_payout` is, so neither a modded `sell_rate: 0` nor a modded
+    /// `value: 0` can hand goods out for free.
+    fn buyback_unit_cost(&self, structure: Entity, item: &ItemId) -> Option<u32> {
+        Some((self.sell_price(structure, item)? * tuning::BUYBACK_PRICE_MULTIPLIER).max(1))
     }
 
     /// Everything `structure` has bought off the player and will sell back,
     /// already priced. Empty for a structure that doesn't trade or has an
     /// untouched shelf — which is every trader until the player sells to one.
     pub fn buyback_options(&self, structure: Entity) -> Vec<BuybackOption> {
-        let Some(unit_cost) = self.buyback_unit_cost(structure) else {
-            return Vec::new();
-        };
         let Some(key) = self.shelf_key(structure) else {
             return Vec::new();
         };
@@ -163,11 +172,13 @@ impl Game {
             .map(|shelf| {
                 let mut options: Vec<BuybackOption> = shelf
                     .iter()
-                    .map(|(item, qty)| BuybackOption {
-                        name: self.item_name(item).to_string(),
-                        item: item.clone(),
-                        qty: *qty,
-                        unit_cost,
+                    .filter_map(|(item, qty)| {
+                        Some(BuybackOption {
+                            name: self.item_name(item).to_string(),
+                            item: item.clone(),
+                            qty: *qty,
+                            unit_cost: self.buyback_unit_cost(structure, item)?,
+                        })
                     })
                     .collect();
                 options.sort_by_key(|o| self.category_sort_key(&o.item));
@@ -192,7 +203,7 @@ impl Game {
             return Err("Buy back at least 1.".into());
         }
         let unit_cost = self
-            .buyback_unit_cost(structure)
+            .buyback_unit_cost(structure, &item)
             .ok_or_else(|| "That structure doesn't trade.".to_string())?;
         let key = self
             .shelf_key(structure)

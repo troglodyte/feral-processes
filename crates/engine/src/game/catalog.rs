@@ -156,6 +156,23 @@ impl Game {
         (self.item_category(id), self.item_name(id).to_string())
     }
 
+    /// What one unit of `id` is worth in trade currency, before a trader's
+    /// own `sell_rate` markup. Falls back to `tuning::DEFAULT_ITEM_VALUE`
+    /// for an item priced by no file — a mod written before the field
+    /// existed, or an id the current item set doesn't define at all.
+    ///
+    /// The one place a price is decided, for the reason `category_sort_key`
+    /// is: `sell_item`, `buyback_unit_cost` and the trade screen all read
+    /// it, and a screen that quoted a price the sale then didn't honour is
+    /// worse than either number being wrong on its own.
+    pub fn item_value(&self, id: &ItemId) -> u32 {
+        self.world
+            .resource::<ItemDb>()
+            .get(id.as_str())
+            .and_then(|def| def.value)
+            .unwrap_or(tuning::DEFAULT_ITEM_VALUE)
+    }
+
     /// The item's authored description, straight out of its `.ron` file.
     ///
     /// Deliberately *not* derived the way `item_blurb` is: this is prose a

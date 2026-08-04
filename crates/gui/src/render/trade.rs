@@ -87,7 +87,7 @@ pub(super) fn draw_trade_action_menu(
                 game.item_category(item).short_label(),
                 game.item_name(item),
                 tag,
-                trade.sell_rate
+                game.sell_price(structure, item).unwrap_or(0)
             ),
             idx == selected,
         ));
@@ -214,7 +214,13 @@ pub(super) fn draw_trade_quantity_menu(
         return;
     };
     let (verb, item, unit_price) = match choice {
-        TradeChoice::Sell(item) => ("Sell", item, trade.sell_rate),
+        // Priced through the engine for the same reason the buyback row
+        // below is: `sell_rate` is only half a price now that an item
+        // carries its own value.
+        TradeChoice::Sell(item) => {
+            let price = game.sell_price(structure, &item).unwrap_or(0);
+            ("Sell", item, price)
+        }
         TradeChoice::Buy(item) => {
             let price = trade
                 .buy

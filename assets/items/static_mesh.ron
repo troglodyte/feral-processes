@@ -2,6 +2,7 @@
     id: "static_mesh",
     name: "Static Mesh",
     description: "Standard armor. Bleeds off the charge that makes a capture fail.",
+    value: Some(14),
     equipment: Some((Armor, (def: 2, decompiler: 1))),
     craftable: Some((cost: [("core_fragment", 14)], requires_structure: Some("armory"))),
     droppable: Some([("wraith", 0.08), ("worm", 0.07)]),

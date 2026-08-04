@@ -2,5 +2,6 @@
     id: "access_shard",
     name: "Access Shard",
     description: "A fragment of stolen authorization. Spends itself opening one sealed door in the Stack. Worth carrying spares — one descent can hold more than one.",
+    value: Some(12),
     cache_drop: Some(0.35),
 )

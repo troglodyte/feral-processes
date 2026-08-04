@@ -75,6 +75,13 @@ pub struct ItemDef {
     pub description: String,
     #[serde(default)]
     pub bank_limit: Option<u32>,
+    /// What one unit is worth in trade currency, before any trader's own
+    /// `TradeDef::sell_rate` multiplier. Read through `Game::item_value`,
+    /// never directly, so selling and the buyback shelf cannot disagree
+    /// about a price. `#[serde(default)]` so an older mod file still parses
+    /// — as `None`, which resolves to `tuning::DEFAULT_ITEM_VALUE`.
+    #[serde(default)]
+    pub value: Option<u32>,
     #[serde(default)]
     pub role: Option<EconomyRole>,
     #[serde(default)]
@@ -274,6 +281,9 @@ impl ItemDb {
                     description: ability.description.clone(),
                     routine: Some(ability.id.clone()),
                     bank_limit: None,
+                    // Unpriced on purpose: `sell_item` refuses a routine
+                    // outright, so a routine has no price to get wrong.
+                    value: None,
                     role: None,
                     equipment: None,
                     taming_potency: None,

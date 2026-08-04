@@ -2,5 +2,6 @@
     id: "core_fragment",
     name: "Core Fragment",
     description: "The Grid's raw salvage. Every build cost and most recipes. Zone-local: it does not survive a breach, so sell it before you go.",
+    value: Some(1),
     role: Some(Currency),
 )

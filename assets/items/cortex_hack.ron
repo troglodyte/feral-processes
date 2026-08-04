@@ -2,6 +2,7 @@
     id: "cortex_hack",
     name: "Cortex Hack",
     description: "Researched module. Speaks to a hostile program in its own dialect.",
+    value: Some(25),
     equipment: Some((Module, (decompiler: 3))),
     droppable: Some([("cipher", 0.35)]),
 )

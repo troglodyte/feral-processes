@@ -2,5 +2,6 @@
     id: "bytecode_block",
     name: "Bytecode Block",
     description: "Core Fragments compiled into something that holds its shape. The Assembly Bay is built out of these, and needs them fed to it.",
+    value: Some(4),
     craftable: Some((cost: [("core_fragment", 4)], requires_structure: Some("refinery"))),
 )

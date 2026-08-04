@@ -2,6 +2,7 @@
     id: "recursion_blade",
     name: "Recursion Blade",
     description: "Standard weapon. Trades some bite for plating that folds back over you.",
+    value: Some(14),
     equipment: Some((Weapon, (atk: 2, def: 1))),
     craftable: Some((cost: [("core_fragment", 14)], requires_structure: Some("fabricator"))),
     droppable: Some([("trojan", 0.1), ("phantom", 0.07)]),

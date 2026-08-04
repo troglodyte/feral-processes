@@ -282,8 +282,12 @@ fn program_sale_options_price_each_program_and_are_empty_for_a_non_buyer() {
     assert!(game.program_sale_options(plain).is_empty());
 }
 
+/// `sell_rate` is the trader's multiplier now rather than the price itself,
+/// so the payout is quoted through `sell_price` — see
+/// `sell_item_pays_each_item_its_own_value` for the ladder that made it two
+/// numbers instead of one.
 #[test]
-fn sell_item_pays_out_credits_at_the_structures_sell_rate() {
+fn sell_item_pays_for_the_sold_quantity_and_mints_no_salvage() {
     let mut game = Game::new(90, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let def = game
@@ -307,6 +311,9 @@ fn sell_item_pays_out_credits_at_the_structures_sell_rate() {
         .add(ItemId::from(ids::FIREWALL_PLATING), 3);
     let credits_before = credits(&game);
     let fragments_before = fragments(&game);
+    let unit_price = game
+        .sell_price(market, &ItemId::from(ids::FIREWALL_PLATING))
+        .unwrap();
 
     game.sell_item(market, ItemId::from(ids::FIREWALL_PLATING), 2)
         .unwrap();
@@ -319,13 +326,60 @@ fn sell_item_pays_out_credits_at_the_structures_sell_rate() {
         1,
         "only the sold quantity should leave the inventory"
     );
-    let sell_rate = def.trade.as_ref().unwrap().sell_rate;
-    assert_eq!(credits(&game), credits_before + sell_rate * 2);
+    assert_eq!(credits(&game), credits_before + unit_price * 2);
     assert_eq!(
         fragments(&game),
         fragments_before,
         "a trader deals in Credits and never mints build salvage"
     );
+}
+
+/// The whole point of the price ladder: what a thing is worth is a property
+/// of the thing, not of the counter it is sold over. Researched plating and
+/// raw salvage sold at the same trader must not fetch the same Credits.
+#[test]
+fn sell_item_pays_each_item_its_own_value() {
+    let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market(&mut game);
+    let plating = ItemId::from(ids::FIREWALL_PLATING);
+    let fragment = ItemId::from(ids::CORE_FRAGMENT);
+    let rate = game.trade_options(market).unwrap().sell_rate;
+
+    assert!(
+        game.item_value(&plating) > game.item_value(&fragment),
+        "researched plating has to outprice raw salvage or there is no ladder"
+    );
+
+    give(&mut game, &plating, 1);
+    let before = credits(&game);
+    game.sell_item(market, plating.clone(), 1).unwrap();
+    let plating_paid = credits(&game) - before;
+
+    let before = credits(&game);
+    give(&mut game, &fragment, 1);
+    game.sell_item(market, fragment.clone(), 1).unwrap();
+    let fragment_paid = credits(&game) - before;
+
+    assert_eq!(plating_paid, game.item_value(&plating) * rate);
+    assert_eq!(fragment_paid, game.item_value(&fragment) * rate);
+    assert!(plating_paid > fragment_paid);
+}
+
+/// The screen quotes the price the sale then honours. Split out because the
+/// renderer used to print `sell_rate` itself, which was right only while
+/// every item cost the same.
+#[test]
+fn the_quoted_sell_price_is_what_selling_actually_pays() {
+    let mut game = Game::new(92, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market(&mut game);
+    let plating = ItemId::from(ids::FIREWALL_PLATING);
+    give(&mut game, &plating, 2);
+
+    let quoted = game.sell_price(market, &plating).unwrap();
+    let before = credits(&game);
+    game.sell_item(market, plating, 2).unwrap();
+
+    assert_eq!(credits(&game) - before, quoted * 2);
 }
 
 /// The on-ramp that makes a pre-breach sell-off possible: salvage is
@@ -357,17 +411,19 @@ fn sell_item_accepts_core_fragments_and_pays_credits_for_them() {
     game.sell_item(market, ItemId::from(ids::CORE_FRAGMENT), 4)
         .unwrap();
 
-    let sell_rate = def.trade.as_ref().unwrap().sell_rate;
+    let unit_price = game
+        .sell_price(market, &ItemId::from(ids::CORE_FRAGMENT))
+        .unwrap();
     let inv = game.world.get::<Inventory>(player).unwrap();
     assert_eq!(inv.count(&ItemId::from(ids::CORE_FRAGMENT)), 0);
-    assert_eq!(inv.count(&ItemId::from(ids::CREDITS)), sell_rate * 4);
+    assert_eq!(inv.count(&ItemId::from(ids::CREDITS)), unit_price * 4);
 }
 
 /// A sale is no longer one-way: what the trader took goes on its shelf,
 /// priced at double what it paid, so walking a sale back costs a fee rather
 /// than being impossible.
 #[test]
-fn selling_stocks_the_shelf_at_double_the_sell_rate() {
+fn selling_stocks_the_shelf_at_double_what_the_trader_paid() {
     let mut game = Game::new(140, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let market = spawn_market(&mut game);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
@@ -380,12 +436,12 @@ fn selling_stocks_the_shelf_at_double_the_sell_rate() {
 
     game.sell_item(market, plating.clone(), 3).unwrap();
 
-    let rate = game.trade_options(market).unwrap().sell_rate;
+    let paid = game.sell_price(market, &plating).unwrap();
     let shelf = game.buyback_options(market);
     assert_eq!(shelf.len(), 1);
     assert_eq!(shelf[0].item, plating);
     assert_eq!(shelf[0].qty, 3, "only what the trader actually took");
-    assert_eq!(shelf[0].unit_cost, rate * 2);
+    assert_eq!(shelf[0].unit_cost, paid * 2);
 }
 
 /// Selling more than you hold sells what you hold — the shelf follows the
@@ -410,14 +466,14 @@ fn buying_back_returns_the_item_charges_double_and_empties_the_row() {
     give(&mut game, &plating, 2);
     game.sell_item(market, plating.clone(), 2).unwrap();
 
-    let rate = game.trade_options(market).unwrap().sell_rate;
-    give(&mut game, &ItemId::from(ids::CREDITS), rate * 4);
+    let paid = game.sell_price(market, &plating).unwrap();
+    give(&mut game, &ItemId::from(ids::CREDITS), paid * 4);
     let credits_before = credits(&game);
 
     game.buy_back(market, plating.clone(), 2).unwrap();
 
     assert_eq!(held(&game, &plating), 2, "the goods come home");
-    assert_eq!(credits(&game), credits_before - rate * 4);
+    assert_eq!(credits(&game), credits_before - paid * 4);
     assert!(
         game.buyback_options(market).is_empty(),
         "a bought-out row leaves no empty shelf entry behind"
@@ -469,8 +525,8 @@ fn buying_back_without_the_credits_is_refused_and_costs_nothing() {
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 1);
     game.sell_item(market, plating.clone(), 1).unwrap();
-    // The sale paid `sell_rate`; buying back costs double that, so the
-    // proceeds of a sale are never enough to undo it.
+    // Buying back costs double what the sale paid, so the proceeds of a sale
+    // are never enough to undo it whatever the item is worth.
     let credits_before = credits(&game);
 
     assert!(game.buy_back(market, plating.clone(), 1).is_err());

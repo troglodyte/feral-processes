@@ -130,6 +130,78 @@ fn every_shipped_item_and_structure_has_description_text() {
     }
 }
 
+/// Crafting must never mint Credits. Base salvage is deliberately sellable
+/// (see `Game::sell_item`), and a Mining Node with a program on it produces
+/// that salvage forever — so an item worth more than the sum of its
+/// ingredients is an unbounded Credit press, in the one currency that
+/// survives a breach. The ceiling is what makes the price ladder safe to
+/// raise; it is asserted over the real assets because it is a property of
+/// the data, not of the code that reads it.
+#[test]
+fn no_craftable_item_is_worth_more_than_its_ingredients() {
+    let game = Game::new(77, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut checked = 0;
+    for def in game.item_defs() {
+        let Some(craftable) = &def.craftable else {
+            continue;
+        };
+        let ingredients: u32 = craftable
+            .cost
+            .iter()
+            .map(|(id, qty)| game.item_value(id) * qty)
+            .sum();
+        assert!(
+            game.item_value(&def.id) <= ingredients,
+            "{} is worth {} but its recipe costs {} — crafting it to sell prints Credits",
+            def.id.as_str(),
+            game.item_value(&def.id),
+            ingredients
+        );
+        checked += 1;
+    }
+    assert!(checked > 20, "only {checked} craftable items were checked");
+}
+
+/// The other half of that press, and the one the recipe ceiling above can't
+/// see: a `work.produces` structure makes its item out of nothing on a
+/// timer, so the item's *value* is a Credit-per-tick rate. The Compiler
+/// (`flat_payout`, 8 ticks) would out-earn a Mining Node nearly fourfold if
+/// ICE Breakers were priced at their 3-Fragment recipe. Anything a base can
+/// print sits at the floor price; worth comes from what you can't print.
+#[test]
+fn every_base_produced_item_sits_at_the_floor_price() {
+    let game = Game::new(78, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut checked = 0;
+    for def in game.structure_defs() {
+        let Some(work) = &def.work else {
+            continue;
+        };
+        assert_eq!(
+            game.item_value(&work.produces),
+            tuning::DEFAULT_ITEM_VALUE,
+            "{} prints {} every {} ticks, so pricing it above the floor makes the structure a Credit press",
+            def.id,
+            work.produces.as_str(),
+            work.ticks_per_unit
+        );
+        checked += 1;
+    }
+    assert_eq!(
+        checked, 4,
+        "expected the four producing structures; the press ceiling has to cover every one"
+    );
+}
+
+/// A modded item that predates the `value` field still trades — at the flat
+/// rate every item in the game used before the ladder existed.
+#[test]
+fn an_item_with_no_authored_value_falls_back_to_the_floor_price() {
+    let game = Game::new(79, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let unpriced = ItemId::from("no_such_modded_item");
+    assert!(game.item_defs().iter().all(|d| d.id != unpriced));
+    assert_eq!(game.item_value(&unpriced), tuning::DEFAULT_ITEM_VALUE);
+}
+
 /// The twenty hunt-only routines are reachable exactly one way: off a wild
 /// carrier. A species or research file naming one would quietly restore the
 /// "just target the species" loop this set exists to break.

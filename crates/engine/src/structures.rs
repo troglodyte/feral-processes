@@ -93,14 +93,17 @@ pub struct PowerRegenDef {
     pub radius: i32,
 }
 
-/// A structure's trading post capability: sell any item here for a flat
-/// per-unit payout, and buy specific items back. Everything is priced in the
+/// A structure's trading post capability: sell any item here, and buy
+/// specific items back. Everything is priced in the
 /// `EconomyRole::TradeCurrency` item — never in the salvage the build
 /// economy runs on.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TradeDef {
-    /// Trade currency granted per unit when selling any item to this
-    /// structure — a uniform sell price, not a per-item table.
+    /// This trader's multiplier on what an item is worth — the trader's half
+    /// of a sale, where `ItemDef::value` is the item's half. At 1 the trader
+    /// pays an item's full value; at 2 it pays double. Resolved against the
+    /// item by `Game::sell_price`, which is the only thing that should read
+    /// this field.
     pub sell_rate: u32,
     /// Items purchasable here, each as `(item, cost in the trade currency)`.
     pub buy: Vec<(ItemId, u32)>,

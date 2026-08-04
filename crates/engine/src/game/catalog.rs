@@ -46,6 +46,97 @@ impl Game {
             .unwrap_or_else(|| id.as_str())
     }
 
+    /// Every conversion a structure runs, each expanded back to the raw
+    /// inputs it bottoms out in.
+    ///
+    /// The roots are `systems::produced_item`'s answer, which is already the
+    /// whole of "could this structure put something in an output buffer" —
+    /// so this cannot list a machine the base does not actually run, or miss
+    /// one it does. Each root's own step comes from `systems::assembly_recipe`
+    /// for the same reason: a machine's recipe *is* the assembled item's
+    /// recipe, so the chain on screen and the batch the machine stages are
+    /// one lookup rather than two that could drift.
+    ///
+    /// An item can legitimately appear twice with different makers — Power
+    /// Cell is a Power Conduit's whole output and is also bench-craftable
+    /// from fragments, and ICE Breaker the same with the Compiler. A root
+    /// step reports the structure; an expanded dependency reports the item's
+    /// own `requires_structure`. Both are true, and the screen shows the one
+    /// that matters where it stands.
+    ///
+    /// Shallowest chain first, then by name, so the screen opens on the taps
+    /// and reads down into what needs a base.
+    pub fn recipe_chains(&self) -> Vec<RecipeChain> {
+        let structures = self.world.resource::<StructureDb>();
+        let items = self.world.resource::<ItemDb>();
+        let mut chains: Vec<RecipeChain> = structures
+            .all()
+            .filter_map(|def| {
+                let output = crate::systems::produced_item(def)?;
+                let inputs = crate::systems::assembly_recipe(def, items).unwrap_or(&[]);
+                let mut steps = Vec::new();
+                // Seeded with the root, whose own step is appended below: a
+                // recipe that reaches back to what it makes would otherwise
+                // emit that step twice.
+                let mut seen = vec![output.clone()];
+                for (id, _) in inputs {
+                    self.expand_recipe(id, &mut seen, &mut steps);
+                }
+                steps.push(RecipeStep {
+                    inputs: self.named_costs(inputs),
+                    maker: Some(def.name.clone()),
+                    output: self.item_name(output).to_string(),
+                });
+                Some(RecipeChain {
+                    product: self.item_name(output).to_string(),
+                    steps,
+                })
+            })
+            .collect();
+        chains.sort_by(|a, b| (a.steps.len(), &a.product).cmp(&(b.steps.len(), &b.product)));
+        chains
+    }
+
+    /// Appends the steps that produce `item`, dependencies first, or nothing
+    /// at all if it is a drop rather than something made.
+    ///
+    /// `seen` is marked *before* recursing, which is what makes a mod recipe
+    /// naming itself terminate instead of taking the process down — the same
+    /// contract as a malformed `.ron` being skipped rather than panicking.
+    /// It doubles as the de-duplicator: two branches needing the same
+    /// intermediate list it once, under the first branch that reaches it.
+    fn expand_recipe(&self, item: &ItemId, seen: &mut Vec<ItemId>, out: &mut Vec<RecipeStep>) {
+        if seen.contains(item) {
+            return;
+        }
+        seen.push(item.clone());
+        let items = self.world.resource::<ItemDb>();
+        let Some(recipe) = items.get(item.as_str()).and_then(|d| d.craftable.as_ref()) else {
+            return;
+        };
+        let cost = recipe.cost.clone();
+        let maker = recipe.requires_structure.clone();
+        for (id, _) in &cost {
+            self.expand_recipe(id, seen, out);
+        }
+        out.push(RecipeStep {
+            inputs: self.named_costs(&cost),
+            maker: maker.and_then(|s| {
+                self.world
+                    .resource::<StructureDb>()
+                    .get(s.as_str())
+                    .map(|d| d.name.clone())
+            }),
+            output: self.item_name(item).to_string(),
+        });
+    }
+
+    fn named_costs(&self, cost: &[(ItemId, u32)]) -> Vec<(String, u32)> {
+        cost.iter()
+            .map(|(id, q)| (self.item_name(id).to_string(), *q))
+            .collect()
+    }
+
     /// Which group this item lists under. An id with no definition behind it
     /// sorts as salvage rather than panicking, matching `item_name`'s habit
     /// of falling back to the raw id: a list is not the place to discover a

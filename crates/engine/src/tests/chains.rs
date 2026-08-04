@@ -690,3 +690,156 @@ fn a_deployed_assembler_gets_a_machine_status_like_any_other_machine() {
         "and it has the buffers it pulls into"
     );
 }
+
+/// A modded structure that assembles a self-referential item, plus the item
+/// itself. A recipe that costs itself is what a mod typo looks like, and the
+/// chain walk has to survive it rather than recursing until the stack goes.
+const LOOP_STRUCTURE: &str = r#"(
+    id: "loop_maker",
+    name: "Loop Maker",
+    description: "A modded assembler with a cyclic recipe, for tests.",
+    glyph: 'L',
+    color: Red,
+    build_cost: [],
+    work: None,
+    capacity: 20,
+    assembles: Some((item: "loop_item", ticks_per_unit: 3)),
+)"#;
+
+const LOOP_ITEM: &str = r#"(
+    id: "loop_item",
+    name: "Loop Item",
+    description: "An item whose recipe names itself.",
+    craftable: Some((cost: [("loop_item", 1)], requires_structure: Some("loop_maker"))),
+)"#;
+
+/// The one chain in the shipped game with real depth, and the reason the
+/// screen exists: what to build, and in what order, to automate a Patch
+/// Routine.
+#[test]
+fn the_patch_routine_chain_runs_from_fragments_up_through_the_assembly_bay() {
+    let game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let chains = game.recipe_chains();
+
+    let chain = chains
+        .iter()
+        .find(|c| c.product == "Patch Routine")
+        .expect("the Assembly Bay assembles one");
+
+    let shape: Vec<(Vec<(&str, u32)>, Option<&str>, &str)> = chain
+        .steps
+        .iter()
+        .map(|s| {
+            (
+                s.inputs
+                    .iter()
+                    .map(|(n, q)| (n.as_str(), *q))
+                    .collect::<Vec<_>>(),
+                s.maker.as_deref(),
+                s.output.as_str(),
+            )
+        })
+        .collect();
+
+    assert_eq!(
+        shape,
+        vec![
+            (
+                vec![("Core Fragment", 4)],
+                Some("Refinery"),
+                "Bytecode Block"
+            ),
+            (vec![("Core Fragment", 2)], None, "Power Cell"),
+            (vec![("Power Cell", 3)], Some("Winding Node"), "Charge Coil"),
+            (
+                vec![("Bytecode Block", 1), ("Charge Coil", 1)],
+                Some("Assembly Bay"),
+                "Patch Routine"
+            ),
+        ],
+        "every dependency is listed before the step that consumes it"
+    );
+}
+
+#[test]
+fn an_extractors_chain_is_a_single_step_that_consumes_nothing() {
+    let game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let chains = game.recipe_chains();
+
+    let chain = chains
+        .iter()
+        .find(|c| c.product == "Core Fragment")
+        .expect("the Mining Node produces them");
+
+    assert_eq!(chain.steps.len(), 1, "a tap has no upstream");
+    assert!(
+        chain.steps[0].inputs.is_empty(),
+        "an extractor draws from nothing, not from a recipe"
+    );
+    assert_eq!(chain.steps[0].maker.as_deref(), Some("Mining Node"));
+}
+
+/// Power Cell is the shipped item that is craftable with no
+/// `requires_structure`, so it is what proves the bench case is reachable
+/// rather than every step naming a machine.
+#[test]
+fn a_step_the_player_compiles_by_hand_names_no_maker() {
+    let game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let chains = game.recipe_chains();
+
+    let coil = chains
+        .iter()
+        .find(|c| c.product == "Charge Coil")
+        .expect("the Winding Node assembles them");
+    let power_cell = coil
+        .steps
+        .iter()
+        .find(|s| s.output == "Power Cell")
+        .expect("the coil's recipe is priced in them");
+
+    assert_eq!(
+        power_cell.maker, None,
+        "power_cell.ron sets no requires_structure"
+    );
+}
+
+/// Shortest chains first, so the screen opens on the taps and reads down
+/// into the things that need a base to make.
+#[test]
+fn chains_are_listed_shallowest_first() {
+    let game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let chains = game.recipe_chains();
+
+    let depths: Vec<usize> = chains.iter().map(|c| c.steps.len()).collect();
+    let mut sorted = depths.clone();
+    sorted.sort();
+    assert_eq!(depths, sorted);
+    assert_eq!(
+        chains.last().map(|c| c.product.as_str()),
+        Some("Patch Routine"),
+        "the deepest thing in the game sits at the bottom"
+    );
+}
+
+/// A mod whose recipe names itself must not take the process down with it —
+/// the same contract as a malformed `.ron` being skipped rather than
+/// panicking at startup.
+#[test]
+fn a_self_referential_recipe_does_not_recurse_forever() {
+    let dir = assets_dir_with_extra_structure("recipe_cycle", "loop_maker.ron", LOOP_STRUCTURE);
+    std::fs::write(dir.join("items").join("loop_item.ron"), LOOP_ITEM).unwrap();
+    let game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+
+    let chains = game.recipe_chains();
+    let chain = chains
+        .iter()
+        .find(|c| c.product == "Loop Item")
+        .expect("the modded assembler makes one");
+
+    assert_eq!(
+        chain.steps.len(),
+        1,
+        "the cycle is cut at the repeat, leaving the machine's own step"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

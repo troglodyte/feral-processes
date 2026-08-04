@@ -525,6 +525,29 @@ pub struct CraftRecipe {
     pub cost: Vec<(ItemId, u32)>,
 }
 
+/// One conversion in a `RecipeChain`: what goes in, what runs it, what comes
+/// out. Names are resolved here rather than left as ids, because a step's
+/// maker is a *structure* and a renderer holding only item ids could not
+/// name it.
+pub struct RecipeStep {
+    /// Display name and quantity per batch. Empty for an extractor, which
+    /// draws from nothing rather than from a recipe.
+    pub inputs: Vec<(String, u32)>,
+    /// The structure that runs this step, or `None` for one the player
+    /// compiles by hand at no bench.
+    pub maker: Option<String>,
+    pub output: String,
+}
+
+/// One entry on the Recipes screen — everything that has to be made, in the
+/// order it has to be made, to end up with `product`. See
+/// `Game::recipe_chains`.
+pub struct RecipeChain {
+    pub product: String,
+    /// Deepest dependency first; `product`'s own step is always last.
+    pub steps: Vec<RecipeStep>,
+}
+
 /// One row of an entity's routine panel — a slot, filled or not.
 pub struct RoutineSlotView {
     pub index: usize,

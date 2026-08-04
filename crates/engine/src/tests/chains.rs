@@ -509,6 +509,123 @@ fn the_assembly_bay_is_built_out_of_what_the_refinery_makes() {
     );
 }
 
+/// The armour chain end to end. Same spine as the Patch Routine chain above
+/// but ending in equipment, which is what makes the base the way gear happens
+/// rather than a source of consumables beside it.
+///
+/// ```text
+///   $ B %      $ mining_node   B refinery     % armory
+///       W      W winding_node  + power_conduit
+///       +
+/// ```
+#[test]
+fn the_armoury_chain_produces_a_hardened_shell() {
+    let mut game = Game::new(1103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    let armory = staffed(&mut game, "armory", 42, 40);
+    let refinery = staffed(&mut game, "refinery", 41, 40);
+    let winding = staffed(&mut game, "winding_node", 42, 41);
+    // Pre-stocked rather than worked, so this measures the chain and not
+    // `mining_success_chance`'s roll.
+    stocked(&mut game, "mining_node", 40, 40, ids::CORE_FRAGMENT, 200);
+    stocked(&mut game, "power_conduit", 42, 42, ids::POWER_CELL, 200);
+
+    for _ in 0..300 {
+        game.tick();
+    }
+
+    assert!(
+        output_of(&game, refinery, ids::BYTECODE_BLOCK) > 0
+            || input_of(&game, armory, ids::BYTECODE_BLOCK) > 0,
+        "the refinery turned fragments into blocks"
+    );
+    assert!(
+        output_of(&game, winding, ids::CHARGE_COIL) > 0
+            || input_of(&game, armory, ids::CHARGE_COIL) > 0,
+        "and the winding node turned cells into coils"
+    );
+    assert!(
+        output_of(&game, armory, "hardened_shell") > 0,
+        "and the armoury built wearable gear out of both"
+    );
+}
+
+/// The module chain, which is the one that proves the two gear classes draw
+/// on *different* taps: this one runs off the Log Scraper's Raw Trace through
+/// the Transcriber, and never touches a Mining Node. Nothing walked that path
+/// before — the Disk Press chain shares it but has no end-to-end test.
+///
+/// ```text
+///   T S *      T log_scraper   S transcriber  * fabricator
+///       W      W winding_node  + power_conduit
+///       +
+/// ```
+#[test]
+fn the_fabricator_chain_produces_a_trace_sniffer_off_the_trace_tap() {
+    let mut game = Game::new(1104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    let fabricator = staffed(&mut game, "fabricator", 42, 40);
+    let transcriber = staffed(&mut game, "transcriber", 41, 40);
+    staffed(&mut game, "winding_node", 42, 41);
+    stocked(&mut game, "log_scraper", 40, 40, "raw_trace", 200);
+    stocked(&mut game, "power_conduit", 42, 42, ids::POWER_CELL, 200);
+
+    for _ in 0..400 {
+        game.tick();
+    }
+
+    assert!(
+        output_of(&game, transcriber, "logic_wafer") > 0
+            || input_of(&game, fabricator, "logic_wafer") > 0,
+        "the transcriber turned trace into wafers"
+    );
+    assert!(
+        output_of(&game, fabricator, "trace_sniffer") > 0,
+        "and the fabricator built a module out of wafers and coils"
+    );
+}
+
+/// Armour, modules and Patch Routines all want Charge Coils, so the Winding
+/// Node is the first shipped feeder three machines can pull on at once. With
+/// one coil to give, the `(x, y)` sort decides who eats.
+///
+/// The three are spawned in the reverse of their positions on purpose: in
+/// position order this would pass on bevy's iteration order alone, which is
+/// the exact bug the sort exists to prevent.
+///
+/// ```text
+///     %        % armory (42, 40)
+///   Y W *      Y assembly_bay (41, 41)  W winding_node (42, 41)
+///              * fabricator (43, 41)
+/// ```
+#[test]
+fn three_machines_competing_for_one_coil_resolve_in_position_order() {
+    let mut game = Game::new(1105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    let fabricator = staffed(&mut game, "fabricator", 43, 41);
+    let armory = staffed(&mut game, "armory", 42, 40);
+    let bay = staffed(&mut game, "assembly_bay", 41, 41);
+    stocked(&mut game, "winding_node", 42, 41, ids::CHARGE_COIL, 1);
+
+    game.tick();
+
+    assert_eq!(
+        input_of(&game, bay, ids::CHARGE_COIL),
+        1,
+        "the machine at the lower x is visited first and takes the only coil"
+    );
+    assert_eq!(
+        input_of(&game, armory, ids::CHARGE_COIL),
+        0,
+        "the armoury is behind it in sort order"
+    );
+    assert_eq!(
+        input_of(&game, fabricator, ids::CHARGE_COIL),
+        0,
+        "and the fabricator is behind that"
+    );
+}
+
 /// A staffed structure of `kind` at an absolute tile.
 fn staffed(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
     let machine = deployed(game, kind, x, y);

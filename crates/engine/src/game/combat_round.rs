@@ -691,13 +691,12 @@ impl Game {
                     power,
                     duration,
                 } => {
-                    if let Some(mut statuses) = self.world.get_mut::<StatusEffects>(recipient) {
-                        statuses.active = Some(ActiveStatus {
-                            kind: *kind,
-                            remaining: *duration,
-                            power: abilities::scaled_hp_power(*power, level, affinity),
-                        });
-                    }
+                    self.arm_status(
+                        recipient,
+                        *kind,
+                        *duration,
+                        abilities::scaled_hp_power(*power, level, affinity),
+                    );
                     match kind {
                         StatusKind::Bleed => self.log(format!("{name} corrupts {on}'s data!")),
                         StatusKind::Stun => self.log(format!("{name} locks up {on}!")),

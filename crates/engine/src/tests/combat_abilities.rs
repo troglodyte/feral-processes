@@ -889,6 +889,7 @@ fn cleanse_clears_an_active_status_and_is_silent_on_a_clean_target() {
         kind: StatusKind::Bleed,
         remaining: 3,
         power: 4,
+        landed_this_round: false,
     });
 
     let ability = crate::abilities::AbilityDef {

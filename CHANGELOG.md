@@ -13,6 +13,31 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Stuns and bleeds now last as long as they say
+
+A status condition was being charged for the round it was applied in. End-of-
+round upkeep ran on every round including that one, so the first tick of every
+duration was spent within moments of the condition landing.
+
+Stun was the casualty. Every stun in the game is `duration: 1` — the shipped
+species moves, Deadlock, Pipeline Stall — so a stun was armed mid-round and
+gone by the end of it. It cost the victim a turn only when the attacker also
+happened to win initiative that same round; land it on something that had
+already acted and it did nothing at all before shaking off. Hard Lock's
+advertised two rounds gave one. Bleed had the quieter half of the same bug:
+Memory Leak's "Bleed 2 per round for 3 rounds" dealt its first tick instantly
+and showed two rounds on the roster.
+
+Conditions now skip the upkeep for the round they land in, so `duration`
+counts the rounds after it. A `duration: 1` stun reliably costs its victim the
+next round's action; a three-round bleed ticks three times over the next three
+rounds. Landing a stun on something that has not yet acted still stalls it
+immediately, on top of the round it is owed — outrunning your target is
+supposed to be worth something.
+
+Both sides feel this. Wild carriers and stun-carrying species moves have been
+getting the same nothing out of their stuns, and now they don't.
+
 ### The Compiler runs on Core Fragments
 
 It used to print ICE Breakers out of nothing every 8 ticks. It now compiles

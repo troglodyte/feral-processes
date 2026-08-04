@@ -97,6 +97,12 @@ way deleting the Currency item does.
     //     Inflicts a status condition. Same `kind`/`power` rules as the
     //     rider above. A combatant carries at most one status at a time; a
     //     fresh application overwrites whatever was active.
+    //     `duration` counts the rounds *after* the one the condition landed
+    //     in, for both a `Debuff` and a `Damage` rider: `duration: 1` stuns
+    //     the victim for the following round, and a `duration: 3` bleed
+    //     ticks at the end of the next three. The round it lands in is not
+    //     charged to it — otherwise a stun would expire before a victim
+    //     that had already acted ever felt it.
     //
     //   Drain(power: 10, heal_fraction: 0.5)
     //     Damage through the same formula as `Damage`, then the *user* is

@@ -237,3 +237,134 @@ fn an_earned_line_survives_the_end_of_a_battle() {
         log.iter().map(|l| &l.text).collect::<Vec<_>>()
     );
 }
+
+/// A profile holding exactly `id`, with `rolled_stat` as recorded — the shape
+/// app-core hands `install_profile` after reading `profile.ron`.
+fn profile_of(id: &str, rolled_stat: Option<achievements::MainStat>) -> Profile {
+    let mut profile = Profile::default();
+    profile.record(achievements::Earned {
+        id: AchievementId::from(id),
+        first_tick: 1,
+        permadeath: false,
+        rolled_stat,
+    });
+    profile
+}
+
+#[test]
+fn a_profile_stat_reward_applies_at_new_game() {
+    let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.install_profile(profile_of(
+        "breach_zone_2",
+        Some(achievements::MainStat::Atk),
+    ));
+    game.grant_profile_rewards();
+
+    let player = game.player_entity();
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().atk,
+        tuning::PLAYER_BASE_STATS.atk + 1
+    );
+}
+
+#[test]
+fn an_integrity_reward_starts_the_run_at_full_hp() {
+    let mut game = Game::new(32, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.install_profile(profile_of(
+        "breach_zone_2",
+        Some(achievements::MainStat::Integrity),
+    ));
+    game.grant_profile_rewards();
+
+    let player = game.player_entity();
+    let stats = *game.world.get::<Stats>(player).unwrap();
+    assert_eq!(stats.max_hp, tuning::PLAYER_BASE_STATS.max_hp + 1);
+    assert_eq!(stats.hp, stats.max_hp, "the run must not start damaged");
+}
+
+#[test]
+fn a_perk_point_reward_applies_at_new_game() {
+    let mut game = Game::new(33, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.install_profile(profile_of("breach_zone_4", None));
+    game.grant_profile_rewards();
+
+    let player = game.player_entity();
+    assert_eq!(game.world.get::<Perks>(player).unwrap().points, 1);
+}
+
+#[test]
+fn a_starting_program_is_owned_but_not_deployed() {
+    let mut game = Game::new(34, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.install_profile(profile_of("stack_depth_8", None));
+    game.grant_profile_rewards();
+
+    assert_eq!(game.pet_count(), 1, "the program should be owned");
+    assert!(
+        game.world.resource::<resources::Party>().0.is_empty(),
+        "Party is the deployed battle line; the player deploys it themselves"
+    );
+}
+
+/// The load path in miniature. A save already has its bonuses baked into
+/// `Stats` and `Perks::points`; paying again on load would double them on
+/// every single reload.
+#[test]
+fn installing_a_profile_pays_nothing_on_its_own() {
+    let mut game = Game::new(35, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.install_profile(profile_of(
+        "breach_zone_2",
+        Some(achievements::MainStat::Atk),
+    ));
+
+    let player = game.player_entity();
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().atk,
+        tuning::PLAYER_BASE_STATS.atk,
+        "installing says what has been earned; it does not pay for it"
+    );
+}
+
+#[test]
+fn granting_twice_pays_once() {
+    let mut game = Game::new(36, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.install_profile(profile_of(
+        "breach_zone_2",
+        Some(achievements::MainStat::Atk),
+    ));
+    game.grant_profile_rewards();
+    game.grant_profile_rewards();
+
+    let player = game.player_entity();
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().atk,
+        tuning::PLAYER_BASE_STATS.atk + 1,
+        "nothing should call this twice, but the doubling would be invisible if it did"
+    );
+}
+
+#[test]
+fn a_starting_program_naming_an_unknown_species_warns_and_pays_nothing() {
+    let dir = scratch_assets_with_achievement(
+        "ghost_program",
+        r#"(
+            id: "ghost_program",
+            name: "Ghost Program",
+            description: "d",
+            trigger: ZoneReached(2),
+            reward: StartingProgram("no_such_species"),
+        )"#,
+    );
+    let mut game = Game::new(37, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+
+    game.install_profile(profile_of("ghost_program", None));
+    game.grant_profile_rewards();
+
+    assert_eq!(game.pet_count(), 0);
+    let log = game.message_log(100);
+    assert!(
+        log.iter().any(|l| l.text.contains("no_such_species")),
+        "an unknown species should say so, got {:?}",
+        log.iter().map(|l| &l.text).collect::<Vec<_>>()
+    );
+}

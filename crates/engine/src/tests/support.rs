@@ -301,6 +301,15 @@ pub(super) fn assets_dir_with_extra_structure(
     dir
 }
 
+/// A scratch install carrying one extra achievement on top of the shipped
+/// ladder, for cases that need a rung the real assets deliberately don't have.
+pub(super) fn scratch_assets_with_achievement(id: &str, body: &str) -> std::path::PathBuf {
+    let dir = scratch_assets_dir(id);
+    copy_shipped_assets(&dir, &[]);
+    std::fs::write(dir.join("achievements").join(format!("{id}.ron")), body).unwrap();
+    dir
+}
+
 /// A modded install missing `core_fragment.ron` — the item that holds
 /// the Currency economy role — so `Game::new`'s missing-role startup
 /// abort (see `ItemDb::missing_roles`) can be exercised against an

@@ -22,6 +22,12 @@ fn recognized_routines(ids: &[AbilityId], db: &AbilityDb) -> (Vec<AbilityId>, Ve
     ids.iter().cloned().partition(|id| db.get(id).is_some())
 }
 
+/// Present once `Game::grant_profile_rewards` has run. Not saved and not
+/// inserted by either constructor: it exists only so a second grant in the
+/// same session is a no-op.
+#[derive(Resource)]
+struct ProfileRewardsPaid;
+
 impl Game {
     pub fn new(seed: u32, difficulty: DifficultyMode, assets_dir: &Path) -> std::io::Result<Self> {
         let AssetDbs {
@@ -793,6 +799,141 @@ impl Game {
         } else {
             Ok(())
         }
+    }
+
+    /// Replaces the empty `Profile` both constructors leave in the world with
+    /// what has actually been earned across every run.
+    ///
+    /// **Pays nothing.** Both paths need this — `achievement_system` must not
+    /// re-earn a rung on a loaded save either — while only one path wants to
+    /// be paid. Splitting install from grant is what puts the never-on-load
+    /// rule at a single call site instead of inside a shared constructor, and
+    /// it leaves `Game::new`'s signature (667 call sites) alone.
+    pub fn install_profile(&mut self, profile: crate::achievements::Profile) {
+        self.world.insert_resource(profile);
+    }
+
+    /// Pays out the installed profile: stat points, Perk Points and a
+    /// starting program, once each, in the order the rungs were earned.
+    ///
+    /// **Called after `Game::new` and never after `Game::load`.** A save
+    /// already has its bonuses baked into `Stats` and `Perks::points`, so
+    /// paying again on load would double them on every single reload. That is
+    /// the one real trap in this feature; `installing_a_profile_pays_nothing_
+    /// on_its_own` and app-core's `loading_a_save_does_not_re_apply_rewards`
+    /// are what hold it.
+    ///
+    /// Takes no argument on purpose: it reads the installed `Profile`, so the
+    /// two calls cannot disagree about which profile is in play.
+    pub fn grant_profile_rewards(&mut self) {
+        use crate::achievements::{AchievementDb, MainStat, Profile, Reward};
+
+        // Nothing calls this twice, and the doubling would be invisible if
+        // something started to — a stat is just a number, with no record of
+        // where it came from. The marker's absence is "unpaid", so neither
+        // constructor has to remember to insert it; what it does require is
+        // that `install_profile` runs *before* this, which is the order
+        // app-core uses.
+        if self.world.contains_resource::<ProfileRewardsPaid>() {
+            return;
+        }
+        self.world.insert_resource(ProfileRewardsPaid);
+
+        let rewards: Vec<(Reward, Option<MainStat>)> = {
+            let db = self.world.resource::<AchievementDb>();
+            self.world
+                .resource::<Profile>()
+                .earned
+                .iter()
+                .filter_map(|e| db.get(&e.id).map(|def| (def.reward.clone(), e.rolled_stat)))
+                .collect()
+        };
+        if rewards.is_empty() {
+            return;
+        }
+
+        let player = self.player_entity();
+        let mut stat_points = 0;
+        let mut perk_points = 0;
+        let mut programs = Vec::new();
+        for (reward, rolled) in rewards {
+            match reward {
+                Reward::RandomMainStat(n) => {
+                    // The profile's recorded answer, never a fresh roll: the
+                    // stat was decided at earn time and written down so it
+                    // could not drift.
+                    let Some(stat) = rolled else { continue };
+                    let n = n as i32;
+                    match stat {
+                        MainStat::Atk => self.world.get_mut::<Stats>(player).unwrap().atk += n,
+                        MainStat::Def => self.world.get_mut::<Stats>(player).unwrap().def += n,
+                        MainStat::Integrity => {
+                            let mut stats = self.world.get_mut::<Stats>(player).unwrap();
+                            stats.max_hp += n;
+                            // Both halves, or the run starts damaged.
+                            stats.hp += n;
+                        }
+                        MainStat::Decompiler => {
+                            self.world.get_mut::<Decompiler>(player).unwrap().skill += n
+                        }
+                    }
+                    stat_points += n;
+                }
+                Reward::PerkPoints(n) => {
+                    self.world.get_mut::<Perks>(player).unwrap().points += n;
+                    perk_points += n;
+                }
+                Reward::StartingProgram(species_id) => match self
+                    .grant_starting_program(&species_id)
+                {
+                    Some(name) => programs.push(name),
+                    None => self.log(format!(
+                        "Profile reward skipped: no species named {species_id:?} in this install."
+                    )),
+                },
+            }
+        }
+
+        let mut parts = Vec::new();
+        if stat_points > 0 {
+            parts.push(format!("{stat_points} stat point(s)"));
+        }
+        if perk_points > 0 {
+            parts.push(format!("{perk_points} Perk Point(s)"));
+        }
+        for name in programs {
+            parts.push(name);
+        }
+        if !parts.is_empty() {
+            self.log_kind(
+                MessageKind::Outcome,
+                format!("Profile restored from your record: {}.", parts.join(", ")),
+            );
+        }
+    }
+
+    /// Spawns `species_id` at the player's tile, already owned, and returns
+    /// what to call it — or `None` if this install has no such species, which
+    /// is the cross-db check `AchievementDb::load_dir` deliberately deferred
+    /// to here.
+    ///
+    /// Follows `adopt_orphan`'s sequence, and stops where it does:
+    /// deliberately **not** pushed into `Party`. `Party` is the deployed
+    /// battle line, capped at `MAX_PARTY_SIZE` and entered through an
+    /// explicit `add_to_party` — the program arrives owned and the player
+    /// deploys it, like every other acquisition.
+    fn grant_starting_program(&mut self, species_id: &str) -> Option<String> {
+        let player = self.player_entity();
+        let at = *self.world.get::<Position>(player)?;
+        let program = self.spawn_wild_creature_scaled(species_id, at.x, at.y, 1.0)?;
+        self.world
+            .entity_mut(program)
+            .remove::<(Hostile, WanderAi)>();
+        self.world
+            .entity_mut(program)
+            .insert((Tamed { owner: player }, Experience::default()));
+        self.install_innate_routines(program);
+        Some(self.creature_label(program))
     }
 }
 

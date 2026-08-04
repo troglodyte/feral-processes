@@ -55,13 +55,13 @@ impl App {
             self.mode = Mode::RoutineTarget;
             return;
         };
-        let Some(loose) = self.game.as_ref().map(|g| g.loose_routines()) else {
+        let Some(known) = self.game.as_ref().map(|g| g.installable_routines()) else {
             return;
         };
-        if let Some(idx) = self.selected_index(key, loose.len()) {
-            let item = loose[idx].item.clone();
+        if let Some(idx) = self.selected_index(key, known.len()) {
+            let ability = known[idx].ability.clone();
             let Some(game) = &mut self.game else { return };
-            match game.install_routine(entity, &item) {
+            match game.install_routine(entity, &ability) {
                 Ok(()) => self.status_line = None,
                 Err(e) => self.status_line = Some(e),
             }

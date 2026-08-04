@@ -27,6 +27,18 @@ pub struct GameRng(pub StdRng);
 #[derive(Resource, Default)]
 pub struct Research(pub std::collections::HashSet<crate::research::ResearchId>);
 
+/// Which routines the player has learned and may install, given a blank
+/// Routine Disk to burn one onto. Written by exactly two things:
+/// `Game::unlock_research` (a node's `unlocks_abilities`) and
+/// `Game::extract_routine`. Knowledge is permanent — installing spends a
+/// disk, never the knowledge.
+///
+/// A `BTreeSet` rather than a `HashSet` for the reason `components::Stock`
+/// keys by a `BTreeMap`: the save writes this set out, and a `HashSet`'s
+/// iteration order would make the encoded bytes differ run to run.
+#[derive(Resource, Default)]
+pub struct KnownRoutines(pub BTreeSet<crate::abilities::AbilityId>);
+
 /// How many lines the log holds before dropping its oldest.
 ///
 /// Public because it is the whole of the history screen's reach: asking

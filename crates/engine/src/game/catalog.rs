@@ -20,13 +20,6 @@ impl Game {
         self.world.resource::<ItemDb>().all().cloned().collect()
     }
 
-    /// Every loaded ability definition, id-sorted (see `AbilityDb::all`).
-    /// Same test-only rationale as `item_defs`.
-    #[cfg(test)]
-    pub(crate) fn ability_defs(&self) -> Vec<AbilityDef> {
-        self.world.resource::<AbilityDb>().all().cloned().collect()
-    }
-
     /// One item definition by id, or `None` if nothing declares it. Same
     /// test-only rationale as `item_defs`.
     #[cfg(test)]

@@ -920,6 +920,32 @@ pub(super) fn give(game: &mut Game, item: &ItemId, qty: u32) {
         .add(item.clone(), qty);
 }
 
+/// Teaches the player `ability` without the research node that normally
+/// would — see `resources::KnownRoutines`. Half of what an install needs;
+/// `disks` is the other half.
+pub(super) fn teach_routine(game: &mut Game, ability: &str) {
+    game.world
+        .resource_mut::<KnownRoutines>()
+        .0
+        .insert(ability.to_string());
+}
+
+/// Puts `qty` blank Routine Disks in the player's pack, skipping the
+/// four-machine chain that manufactures them.
+pub(super) fn give_disks(game: &mut Game, qty: u32) {
+    give(game, &ItemId::from(ids::ROUTINE_DISK), qty);
+}
+
+/// Writes `ability` into `entity`'s next free slot the way the game does —
+/// teach it, hand over the disk it burns, install. Most tests want a
+/// routine sitting in a slot rather than the chain that got it there.
+pub(super) fn install_routine_for_test(game: &mut Game, entity: Entity, ability: &str) {
+    teach_routine(game, ability);
+    give_disks(game, 1);
+    game.install_routine(entity, ability)
+        .unwrap_or_else(|e| panic!("installing {ability}: {e}"));
+}
+
 /// How many of `item` the player is carrying.
 pub(super) fn held(game: &Game, item: &ItemId) -> u32 {
     game.world

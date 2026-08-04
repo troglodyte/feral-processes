@@ -95,14 +95,12 @@ fn a_level_up_that_reaches_an_unlock_installs_it_into_a_free_slot() {
 /// matches on ability id alone, so it fires identically whether the matched
 /// slot holds the auto-installed placeholder or a Priority Boost the player
 /// chose to install by hand — and the latter used to be evicted with no log
-/// line at all, unlike the neighbouring "it goes to cargo" branch.
+/// line at all, unlike the neighbouring "it is lost" branch.
 #[test]
 fn evicting_a_manually_installed_priority_boost_is_logged() {
     let (mut game, medic) = game_with_two_ability_companion();
     set_level(&mut game, medic, 4); // two slots: hot_patch, plus one free
-    let boost_item = crate::abilities::routine_item_id(crate::abilities::FALLBACK_ABILITY_ID);
-    set_inventory(&mut game, &[(boost_item.as_str(), 1)]);
-    game.install_routine(medic, &boost_item).unwrap();
+    install_routine_for_test(&mut game, medic, crate::abilities::FALLBACK_ABILITY_ID);
     assert_eq!(
         game.world.get::<Routines>(medic).unwrap().0,
         vec!["hot_patch".to_string(), "priority_boost".to_string()],
@@ -165,9 +163,7 @@ fn installed_routines_survive_a_save_load_round_trip() {
     // routine here means the save format is the only thing that can be
     // carrying it — the same shape as the player-side twin of this test.
     set_level(&mut game, pet, 4); // two slots, one free
-    let item = crate::abilities::routine_item_id("sandbox");
-    set_inventory(&mut game, &[(item.as_str(), 1)]);
-    game.install_routine(pet, &item).unwrap();
+    install_routine_for_test(&mut game, pet, "sandbox");
     let before = game.world.get::<Routines>(pet).unwrap().0.clone();
     assert_eq!(before.len(), 2, "fallback plus the foreign routine");
     let path = std::env::temp_dir().join(format!(
@@ -227,9 +223,7 @@ fn a_routine_naming_a_since_removed_ability_is_dropped_on_load_with_a_warning() 
     let mut game = Game::new(57, DifficultyMode::Forgiving, &dir).unwrap();
     let player = game.player_entity();
     set_level(&mut game, player, 10); // a free slot alongside decompile
-    let ghost_item = crate::abilities::routine_item_id("ghost_ability");
-    set_inventory(&mut game, &[(ghost_item.as_str(), 1)]);
-    game.install_routine(player, &ghost_item).unwrap();
+    install_routine_for_test(&mut game, player, "ghost_ability");
 
     let path = std::env::temp_dir().join(format!(
         "feral_ghost_routine_save_{}.bin",
@@ -261,45 +255,45 @@ fn a_routine_naming_a_since_removed_ability_is_dropped_on_load_with_a_warning() 
 
     // The freed slot must be genuinely usable, not still counted against the
     // cap by a ghost entry the panel can no longer even show.
-    let boost_item = crate::abilities::routine_item_id("priority_boost");
-    set_inventory(&mut loaded, &[(boost_item.as_str(), 1)]);
+    teach_routine(&mut loaded, "priority_boost");
+    give_disks(&mut loaded, 1);
     loaded
-        .install_routine(player, &boost_item)
+        .install_routine(player, "priority_boost")
         .expect("the slot the ghost vacated must accept a real routine");
 
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
-fn every_loaded_ability_gets_a_routine_item_carrying_its_own_text() {
-    let game = Game::new(21, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    for ability in game.ability_defs() {
-        let item = crate::abilities::routine_item_id(&ability.id);
-        let def = game
-            .item_def(&item)
-            .unwrap_or_else(|| panic!("{} should have a synthesized routine item", ability.id));
-        assert_eq!(def.routine.as_deref(), Some(ability.id.as_str()));
-        assert_eq!(
-            def.description, ability.description,
-            "a routine item reads its text from the ability, never a copy"
-        );
-        assert!(def.name.ends_with(" Routine"), "{}", def.name);
-    }
+fn a_known_routine_is_offered_with_the_abilitys_own_text() {
+    let mut game = Game::new(21, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let sandbox = ability(&game, "sandbox");
+    teach_routine(&mut game, &sandbox.id);
+    let row = game
+        .installable_routines()
+        .into_iter()
+        .find(|r| r.ability == sandbox.id)
+        .expect("a routine the player knows is offered");
+    assert_eq!(row.name, sandbox.name);
+    assert_eq!(
+        row.description, sandbox.description,
+        "the picker reads the ability's own text, never a copy of it"
+    );
 }
 
 #[test]
-fn install_then_uninstall_returns_the_same_item() {
+fn installing_burns_exactly_one_disk_and_uninstalling_returns_nothing() {
     let mut game = Game::new(22, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pet = spawn_tamed(&mut game, 10, 3);
     set_level(&mut game, pet, 4); // two slots, one of them free
-    let item = crate::abilities::routine_item_id("sandbox");
-    set_inventory(&mut game, &[(item.as_str(), 1)]);
+    teach_routine(&mut game, "sandbox");
+    give_disks(&mut game, 3);
 
-    game.install_routine(pet, &item).unwrap();
+    game.install_routine(pet, "sandbox").unwrap();
     assert_eq!(
-        count_item(&game, item.as_str()),
-        0,
-        "installing spends the item"
+        game.routine_disks_held(),
+        2,
+        "installing burns one disk and no more"
     );
     assert!(
         game.routine_view(pet)
@@ -315,33 +309,52 @@ fn install_then_uninstall_returns_the_same_item() {
         .unwrap();
     game.uninstall_routine(pet, slot).unwrap();
     assert_eq!(
-        count_item(&game, item.as_str()),
-        1,
-        "uninstalling gives it back"
+        game.routine_disks_held(),
+        2,
+        "the disk is spent for good — uninstalling hands nothing back"
+    );
+    assert!(
+        game.routine_view(pet)[slot].ability.is_none(),
+        "the slot is free again"
+    );
+    assert!(
+        game.knows_routine("sandbox"),
+        "what the player keeps is the knowledge, which they never spent"
     );
 }
 
 #[test]
-fn install_is_refused_with_no_free_slot_without_the_item_and_during_battle() {
+fn install_is_refused_unknown_diskless_slotless_and_during_battle() {
     let mut game = Game::new(23, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pet = spawn_tamed(&mut game, 10, 3); // level 1: exactly one slot, already full
-    let item = crate::abilities::routine_item_id("sandbox");
 
-    let err = game.install_routine(pet, &item).unwrap_err();
-    assert!(err.contains("don't have"), "no copy held: {err}");
+    let err = game.install_routine(pet, "sandbox").unwrap_err();
+    assert!(err.contains("don't know"), "never researched it: {err}");
 
-    set_inventory(&mut game, &[(item.as_str(), 1)]);
-    let err = game.install_routine(pet, &item).unwrap_err();
-    assert!(err.contains("no free routine slot"), "slots full: {err}");
+    teach_routine(&mut game, "sandbox");
+    let err = game.install_routine(pet, "sandbox").unwrap_err();
+    assert!(
+        err.contains("no free routine slot"),
+        "slots full is checked before the disk, so a full slot never eats one: {err}"
+    );
 
-    set_level(&mut game, pet, 4);
+    set_level(&mut game, pet, 4); // a free slot, but nothing to write onto
+    let err = game.install_routine(pet, "sandbox").unwrap_err();
+    assert!(err.contains("Routine Disk"), "no disk held: {err}");
+
+    give_disks(&mut game, 1);
     start_battle_with_a_wild_program(&mut game);
-    let err = game.install_routine(pet, &item).unwrap_err();
+    let err = game.install_routine(pet, "sandbox").unwrap_err();
     assert!(err.contains("right now"), "mid-battle: {err}");
+    assert_eq!(
+        game.routine_disks_held(),
+        1,
+        "no refusal on any path may spend the disk"
+    );
 }
 
 #[test]
-fn an_innate_routine_can_be_popped_out_and_plugged_into_another_program() {
+fn a_popped_innate_routine_replants_only_if_the_player_knows_it() {
     let (mut game, medic) = game_with_two_ability_companion();
     let popped = game.routine_view(medic)[0].ability.clone().unwrap();
     game.uninstall_routine(medic, 0).unwrap();
@@ -352,13 +365,20 @@ fn an_innate_routine_can_be_popped_out_and_plugged_into_another_program() {
 
     let host = spawn_tamed(&mut game, 10, 3);
     set_level(&mut game, host, 4);
-    let item = crate::abilities::routine_item_id(&popped);
-    game.install_routine(host, &item).unwrap();
+    give_disks(&mut game, 1);
+    let err = game.install_routine(host, &popped).unwrap_err();
+    assert!(
+        err.contains("don't know"),
+        "an innate routine popped out is gone unless the player learned it: {err}"
+    );
+
+    teach_routine(&mut game, &popped);
+    game.install_routine(host, &popped).unwrap();
     assert!(
         game.routine_view(host)
             .iter()
             .any(|s| s.ability.as_deref() == Some(popped.as_str())),
-        "a foreign species' routine should install fine"
+        "a foreign species' routine installs fine once it is known"
     );
 }
 
@@ -393,9 +413,9 @@ fn install_and_uninstall_routine_are_refused_for_a_program_you_dont_own() {
         ))
         .id();
 
-    let item = crate::abilities::routine_item_id("sandbox");
-    set_inventory(&mut game, &[(item.as_str(), 1)]);
-    let err = game.install_routine(wild, &item).unwrap_err();
+    teach_routine(&mut game, "sandbox");
+    give_disks(&mut game, 1);
+    let err = game.install_routine(wild, "sandbox").unwrap_err();
     assert!(err.contains("control"), "{err}");
 
     let err = game.uninstall_routine(wild, 0).unwrap_err();
@@ -422,27 +442,34 @@ fn extraction_needs_a_bench_built_somewhere_but_not_nearby() {
 }
 
 #[test]
-fn extracting_yields_the_picked_routine_destroys_the_program_and_loses_the_rest() {
+fn extracting_teaches_the_picked_routine_destroys_the_program_and_loses_the_rest() {
     let (mut game, medic) = game_with_two_ability_companion();
     set_level(&mut game, medic, 5); // both of its unlocks installed
     spawn_structure_at(&mut game, "compiler", 30, 30);
 
     let offered = game.extractable_routines(medic);
     assert_eq!(offered.len(), 2, "both installed routines are on offer");
-    let kept = offered[1].id.clone();
-    let lost = offered[0].id.clone();
+    assert!(
+        offered.iter().all(|r| !r.known),
+        "neither is known yet, so neither row is marked"
+    );
+    let kept = offered[1].ability.clone();
+    let lost = offered[0].ability.clone();
 
     game.extract_routine(medic, 1).unwrap();
 
-    assert_eq!(
-        count_item(&game, crate::abilities::routine_item_id(&kept).as_str()),
-        1,
-        "the picked routine lands in inventory"
+    assert!(
+        game.knows_routine(&kept),
+        "the picked routine is learned, not stocked"
+    );
+    assert!(
+        !game.knows_routine(&lost),
+        "everything else on the program is lost with it"
     );
     assert_eq!(
-        count_item(&game, crate::abilities::routine_item_id(&lost).as_str()),
+        game.routine_disks_held(),
         0,
-        "everything else on the program is lost with it"
+        "extraction teaches; it does not hand over a disk to write with"
     );
     assert!(
         game.owned_pets().iter().all(|p| p.entity != medic),
@@ -464,8 +491,31 @@ fn extraction_is_refused_for_a_program_you_dont_own_and_during_battle() {
     assert!(err.contains("right now"), "{err}");
 }
 
+/// Knowledge does not stack, so extracting a routine the player already
+/// knows would destroy a program for nothing. Refused before the despawn,
+/// not after.
 #[test]
-fn researching_a_node_grants_routine_items_rather_than_the_ability_itself() {
+fn extracting_a_routine_you_already_know_is_refused_and_the_program_survives() {
+    let mut game = Game::new(34, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    spawn_structure_at(&mut game, "compiler", 30, 30);
+    let pet = spawn_tamed(&mut game, 10, 3);
+    let installed = game.extractable_routines(pet)[0].ability.clone();
+    teach_routine(&mut game, &installed);
+
+    assert!(
+        game.extractable_routines(pet)[0].known,
+        "the picker must mark it before the player commits"
+    );
+    let err = game.extract_routine(pet, 0).unwrap_err();
+    assert!(err.contains("already know"), "{err}");
+    assert!(
+        game.world.get::<Stats>(pet).is_some(),
+        "the program must survive a refused extraction"
+    );
+}
+
+#[test]
+fn researching_a_node_teaches_the_routine_rather_than_installing_or_stocking_it() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = game
         .research_nodes()
@@ -476,10 +526,11 @@ fn researching_a_node_grants_routine_items_rather_than_the_ability_itself() {
 
     unlock_research_chain(&mut game, &node.id);
 
+    assert!(game.knows_routine(&ability), "the node teaches the routine");
     assert_eq!(
-        count_item(&game, crate::abilities::routine_item_id(&ability).as_str()),
-        1,
-        "the routine arrives as an item, not as an installed ability"
+        game.routine_disks_held(),
+        0,
+        "knowledge is not a disk — the factory is what makes those"
     );
     // Not `actor_abilities(..).is_empty()`: the player always starts with
     // decompile installed now, so the general emptiness check would fail
@@ -503,45 +554,62 @@ fn a_new_game_starts_with_decompile_installed_in_the_players_only_slot() {
     );
 }
 
-/// Regression for I4: `decompile` is one-of-a-kind and unrecoverable — no
-/// species, research node, drop, recipe or market listing grants it again.
-/// Popping it into cargo to make room must not put it next to a delete
-/// button that ends taming for the save.
+/// Regression for I4, restated for the disk model: `decompile` is
+/// one-of-a-kind — no species, research node, drop or listing grants it
+/// again. Popping it out to free the one starting slot must therefore not
+/// end taming for the save, which is why a new game already knows it.
 #[test]
-fn a_loose_routine_cannot_be_erased_or_sold() {
+fn the_player_starts_knowing_decompile_so_popping_it_out_is_recoverable() {
     let mut game = Game::new(55, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let item = crate::abilities::routine_item_id(crate::abilities::DECOMPILE_ABILITY_ID);
-    game.uninstall_routine(game.player_entity(), 0).unwrap();
-    assert_eq!(count_item(&game, item.as_str()), 1, "popped into cargo");
-
-    let err = game.erase_item(&item, 1).unwrap_err();
-    assert!(err.contains("routine"), "{err}");
-    assert_eq!(
-        count_item(&game, item.as_str()),
-        1,
-        "erase must not spend it"
+    let player = game.player_entity();
+    assert!(
+        game.knows_routine(crate::abilities::DECOMPILE_ABILITY_ID),
+        "decompile is knowledge the player starts with"
     );
 
-    let def = game
-        .structure_defs()
-        .into_iter()
-        .find(|d| d.trade.is_some())
-        .expect("a trading structure should exist");
-    let market = game
-        .world
-        .spawn((
-            Structure {
-                kind: def.id.clone(),
-            },
-            Position { x: 5, y: 5 },
-        ))
-        .id();
-    let err = game.sell_item(market, item.clone(), 1).unwrap_err();
-    assert!(err.contains("routine"), "{err}");
+    game.uninstall_routine(player, 0).unwrap();
+    give_disks(&mut game, 1);
+    game.install_routine(player, crate::abilities::DECOMPILE_ABILITY_ID)
+        .expect("decompile must be re-writable onto a fresh disk");
     assert_eq!(
-        count_item(&game, item.as_str()),
-        1,
-        "sale must not spend it"
+        game.routine_view(player)[0].ability.as_deref(),
+        Some(crate::abilities::DECOMPILE_ABILITY_ID)
+    );
+}
+
+/// The other half of the model: a `KnownRoutines` entry is world state, so
+/// it has to survive the save like `researched` does.
+#[test]
+fn known_routines_survive_a_save_load_round_trip() {
+    let mut game = Game::new(58, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    teach_routine(&mut game, "sandbox");
+    let path =
+        std::env::temp_dir().join(format!("feral_known_routines_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        loaded.knows_routine("sandbox"),
+        "a learned routine is world state, not a held item"
+    );
+    assert!(
+        loaded.knows_routine(crate::abilities::DECOMPILE_ABILITY_ID),
+        "and so is the one the run started with"
+    );
+}
+
+/// A species' kit is granted directly at spawn — the disk model prices what
+/// the *player* installs, not what a program is born running.
+#[test]
+fn innate_routines_install_at_spawn_with_no_knowledge_and_no_disk() {
+    let (game, medic) = game_with_two_ability_companion();
+    let installed = &game.world.get::<Routines>(medic).unwrap().0;
+    assert!(!installed.is_empty(), "the species kit is installed");
+    assert_eq!(game.routine_disks_held(), 0, "and it cost no disk");
+    assert!(
+        installed.iter().all(|id| !game.knows_routine(id)),
+        "nor does the player learn what their program runs"
     );
 }
 
@@ -599,12 +667,8 @@ fn a_second_decompiler_in_the_same_round_is_refused_rather_than_panicking() {
     let companion = spawn_tamed(&mut game, 50, 5);
     game.add_companion(companion).unwrap();
     set_level(&mut game, companion, 4); // two slots, one free
-    let decompile_item = crate::abilities::routine_item_id(crate::abilities::DECOMPILE_ABILITY_ID);
-    set_inventory(
-        &mut game,
-        &[(decompile_item.as_str(), 1), (ids::ICE_BREAKER, 1)],
-    );
-    game.install_routine(companion, &decompile_item).unwrap();
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 1)]);
+    install_routine_for_test(&mut game, companion, crate::abilities::DECOMPILE_ABILITY_ID);
 
     // Two members of one species, built by hand rather than through
     // `start_battle`: the pack ceiling at the player's own tile caps a
@@ -772,9 +836,9 @@ fn a_carrier_of_an_ability_less_species_is_not_given_the_fallback() {
 
 /// A level-1 program has one slot, and six shipped species grant an ability
 /// at level 1. The carried routine wins the slot; the species ability is
-/// minted into cargo rather than destroyed, so the player can swap.
+/// lost, and logged rather than silently dropped.
 #[test]
-fn a_species_ability_displaced_by_a_carried_routine_goes_to_cargo() {
+fn a_species_ability_displaced_by_a_carried_routine_is_logged_as_lost() {
     let mut game = Game::new(5503, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let species = game
         .species_defs()
@@ -798,10 +862,6 @@ fn a_species_ability_displaced_by_a_carried_routine_goes_to_cargo() {
         .insert(Routines(vec!["bastion".to_string()]));
     game.world.entity_mut(carrier).insert(Experience::default());
 
-    let player = game.player_entity();
-    let item = crate::abilities::routine_item_id(&displaced);
-    let before = game.world.get::<Inventory>(player).unwrap().count(&item);
-
     game.install_innate_routines(carrier);
 
     assert_eq!(
@@ -809,15 +869,22 @@ fn a_species_ability_displaced_by_a_carried_routine_goes_to_cargo() {
         vec!["bastion".to_string()],
         "one slot at level 1, and the carried routine takes it"
     );
-    assert_eq!(
-        game.world.get::<Inventory>(player).unwrap().count(&item),
-        before + 1,
-        "the displaced species ability lands in cargo instead of being destroyed"
+    let displaced_name = game.ability_display_name(&displaced);
+    assert!(
+        game.message_log(10)
+            .iter()
+            .any(|e| e.text.contains(&displaced_name) && e.text.contains("is lost")),
+        "the displaced species ability is lost, and the player gets to read that: {:?}",
+        game.message_log(10)
+    );
+    assert!(
+        !game.knows_routine(&displaced),
+        "a displaced routine is not a routine the player learned"
     );
 }
 
-/// A species unlock reaching a full kit used to be logged and lost. It now
-/// goes to cargo, and — critically — must never evict a carried routine.
+/// A species unlock reaching a full kit is logged and lost — and,
+/// critically, must never evict a carried routine to avoid that.
 #[test]
 fn a_level_up_unlock_never_evicts_a_carried_routine() {
     let mut game = Game::new(5504, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -853,11 +920,12 @@ fn a_level_up_unlock_never_evicts_a_carried_routine() {
             .contains(&"cold_boot".to_string()),
         "a carried routine is not the fallback placeholder and must never be evicted"
     );
-    let player = game.player_entity();
-    let item = crate::abilities::routine_item_id(&unlock.id);
-    assert_eq!(
-        game.world.get::<Inventory>(player).unwrap().count(&item),
-        1,
-        "the unlock that found no room goes to cargo"
+    let unlock_name = game.ability_display_name(&unlock.id);
+    assert!(
+        game.message_log(10)
+            .iter()
+            .any(|e| e.text.contains(&unlock_name) && e.text.contains("is lost")),
+        "the unlock that found no room is lost, and said so: {:?}",
+        game.message_log(10)
     );
 }

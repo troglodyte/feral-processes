@@ -43,7 +43,10 @@ fn picking_a_filled_slot_uninstalls_and_picking_an_empty_one_opens_the_install_l
 /// reached the status line, so there was nothing on screen to explain it.
 #[test]
 fn extracting_from_a_program_with_two_routines_salvages_the_picked_one() {
-    let mut app = app_owning_a_program_and_a_compiler(64, &[FALLBACK_ABILITY_ID, "decompile"]);
+    // Neither routine may be one the player already knows — extraction
+    // teaches, and refuses what it has nothing to teach. A new game knows
+    // decompile, so that is deliberately not one of these two.
+    let mut app = app_owning_a_program_and_a_compiler(64, &[FALLBACK_ABILITY_ID, "sandbox"]);
     open_via_menu(&mut app, 'p', "Extract a routine");
     app.handle_key(GameKey::Char('1'));
     assert_eq!(app.mode, Mode::ExtractPick);

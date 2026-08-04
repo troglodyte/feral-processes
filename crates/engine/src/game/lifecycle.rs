@@ -18,7 +18,7 @@ use crate::*;
 /// `routine_view` can't resolve: the slot renders `(empty)`, so the install
 /// picker opens over an occupied one instead of the ghost ever being
 /// uninstallable.
-fn known_routines(ids: &[AbilityId], db: &AbilityDb) -> (Vec<AbilityId>, Vec<AbilityId>) {
+fn recognized_routines(ids: &[AbilityId], db: &AbilityDb) -> (Vec<AbilityId>, Vec<AbilityId>) {
     ids.iter().cloned().partition(|id| db.get(id).is_some())
 }
 
@@ -53,6 +53,15 @@ impl Game {
         world.insert_resource(difficulty);
         world.insert_resource(Party::default());
         world.insert_resource(Research::default());
+        // Decompile is knowledge the player starts with, not something the
+        // tree teaches — nothing grants it a second time. Without this,
+        // popping it out of the one starting slot to make room would end
+        // taming for the run, since re-installing checks `KnownRoutines`
+        // like any other write. The disk it costs to put back is the
+        // ordinary price; being unable to at all is not.
+        world.insert_resource(KnownRoutines(
+            [abilities::DECOMPILE_ABILITY_ID.to_string()].into(),
+        ));
         world.insert_resource(BuybackLedger::default());
         world.insert_resource(ZoneLevel::default());
         world.insert_resource(Platform::default());
@@ -160,7 +169,7 @@ impl Game {
         // was free. Dropped here instead, once, at the only point both the
         // save data and the loaded `AbilityDb` are in hand.
         let (player_routines, dropped_player_routines) =
-            known_routines(&data.player.routines, &ability_db);
+            recognized_routines(&data.player.routines, &ability_db);
 
         let mut world = World::new();
         world.insert_resource(ability_db);
@@ -178,6 +187,7 @@ impl Game {
         world.insert_resource(data.difficulty);
         world.insert_resource(Party::default());
         world.insert_resource(Research(data.researched.into_iter().collect()));
+        world.insert_resource(KnownRoutines(data.known_routines.into_iter().collect()));
         world.insert_resource(BuybackLedger(
             data.buyback
                 .into_iter()
@@ -314,7 +324,7 @@ impl Game {
                 continue;
             };
             let (routines, dropped_routines) =
-                known_routines(&c.routines, game.world.resource::<AbilityDb>());
+                recognized_routines(&c.routines, game.world.resource::<AbilityDb>());
             if !dropped_routines.is_empty() {
                 game.log(format!(
                     "{} carried {} — no longer available, and the slot is now empty.",
@@ -727,6 +737,13 @@ impl Game {
                 ids.sort();
                 ids
             },
+            known_routines: self
+                .world
+                .resource::<KnownRoutines>()
+                .0
+                .iter()
+                .cloned()
+                .collect(),
             link_sites: {
                 let mut query = self.world.query_filtered::<&Position, With<SurfaceLink>>();
                 query.iter(&self.world).map(|p| (p.x, p.y)).collect()
@@ -784,11 +801,10 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (research, research_warnings) =
         ResearchDb::load_dir(&assets_dir.join("research"), &structures, &abilities)?;
     warnings.extend(research_warnings);
-    let (mut items, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"))?;
+    let (items, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"))?;
     warnings.extend(item_warnings);
     let (perks, perk_warnings) = PerkDb::load_dir(&assets_dir.join("perks"))?;
     warnings.extend(perk_warnings);
-    warnings.extend(items.synthesize_routines(&abilities));
     let missing = items.missing_roles();
     if !missing.is_empty() {
         return Err(std::io::Error::new(

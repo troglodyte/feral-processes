@@ -211,27 +211,6 @@ impl Game {
         if !missing.is_empty() {
             return Err(format!("Requires {} first.", missing.join(", ")));
         }
-        // Checked before anything is spent: a researched routine that can't
-        // fit in cargo would otherwise be lost outright, and there is no
-        // second chance to take a node.
-        //
-        // Aggregated per item id rather than checked ability-by-ability: if
-        // a node ever named the same routine item twice, checking each
-        // occurrence in isolation would pass two independent "room for 1"
-        // checks where the real requirement is room for 2, and the second
-        // `add` below could then overflow a bank-limited item after the
-        // first had already spent the player's Research Data with no way
-        // back. No shipped node repeats an ability, so this is mod-safety
-        // only — same rationale as the routine-slot overflow checks.
-        let mut needed: std::collections::HashMap<ItemId, u32> = std::collections::HashMap::new();
-        for ability in &def.unlocks_abilities {
-            *needed
-                .entry(abilities::routine_item_id(ability))
-                .or_insert(0) += 1;
-        }
-        for (item, qty) in &needed {
-            self.check_room(item, *qty)?;
-        }
         let player = self.player_entity();
         let research_currency = self.research_currency();
         let held = self
@@ -251,14 +230,18 @@ impl Game {
             .0
             .insert(def.id.clone());
         self.log(format!("Research complete: {}.", def.name));
+        // Knowledge, not items: what a node hands over is the ability to
+        // write this routine onto a blank disk the base has to manufacture.
         for ability in &def.unlocks_abilities {
-            let item = abilities::routine_item_id(ability);
-            let name = self.item_name(&item).to_string();
-            self.world
-                .get_mut::<Inventory>(player)
-                .unwrap()
-                .add(item, 1);
-            self.log(format!("A {name} is compiled into your cargo."));
+            let name = self.ability_display_name(ability);
+            let fresh = self
+                .world
+                .resource_mut::<KnownRoutines>()
+                .0
+                .insert(ability.clone());
+            if fresh {
+                self.log(format!("You learn the {name} routine."));
+            }
         }
         Ok(())
     }

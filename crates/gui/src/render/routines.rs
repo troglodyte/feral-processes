@@ -37,7 +37,7 @@ pub(super) fn draw_routines(
     let Some(holder) = holder else { return };
     let slots = game.routine_view(holder);
     let mut rows = vec![text_row(
-        "Pick a filled slot to pop its routine back into cargo, or an empty one to install.",
+        "Pick a filled slot to clear it — the disk is already spent — or an empty one to install.",
     )];
     for (i, s) in slots.iter().enumerate() {
         rows.push(item_row(
@@ -52,16 +52,19 @@ pub(super) fn draw_routines(
 }
 
 pub(super) fn draw_routine_install(game: &Game, selected: usize, painter: &Painter, m: &Metrics) {
-    let loose = game.loose_routines();
-    let mut rows = vec![text_row("Install which routine?")];
-    if loose.is_empty() {
+    let known = game.installable_routines();
+    let mut rows = vec![
+        text_row("Install which routine? Writing one burns a blank Routine Disk."),
+        text_row(format!("Disks: {}", game.routine_disks_held())),
+    ];
+    if known.is_empty() {
         rows.push(text_row(
-            "(no loose routines — research one, or extract one from a program)",
+            "(you know no routines — research one, or extract one from a program)",
         ));
     }
-    for (i, r) in loose.iter().enumerate() {
+    for (i, r) in known.iter().enumerate() {
         rows.push(item_row(
-            format!("[{}] {} x{}", menu_shortcut(i), r.name, r.count),
+            format!("[{}] {}", menu_shortcut(i), r.name),
             i == selected,
         ));
         rows.push(text_row(format!("    {}", r.description)));
@@ -72,7 +75,7 @@ pub(super) fn draw_routine_install(game: &Game, selected: usize, painter: &Paint
 pub(super) fn draw_extract(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
     let programs = game.owned_pets();
     let mut rows = vec![text_row(
-        "Break down which program? Extraction destroys it and salvages one routine.",
+        "Break down which program? Extraction destroys it and teaches you one of its routines.",
     )];
     if !game.can_extract_routines() {
         rows.push(text_row("(you need a Compiler standing somewhere first)"));
@@ -95,12 +98,11 @@ pub(super) fn draw_extract_pick(
 ) {
     let Some(program) = program else { return };
     let offered = game.extractable_routines(program);
-    let mut rows = vec![text_row(
-        "Salvage which routine? The rest are lost with it.",
-    )];
+    let mut rows = vec![text_row("Learn which routine? The rest are lost with it.")];
     for (i, a) in offered.iter().enumerate() {
+        let known = if a.known { " (already known)" } else { "" };
         rows.push(item_row(
-            format!("[{}] {}", menu_shortcut(i), a.name),
+            format!("[{}] {}{known}", menu_shortcut(i), a.name),
             i == selected,
         ));
         rows.push(text_row(format!("    {}", a.description)));
@@ -129,7 +131,7 @@ pub(super) fn draw_extract_confirm(
         .map(|(_, a)| a.name.as_str())
         .collect();
     let mut rows = vec![
-        text_row(format!("Salvage {} and destroy the program?", kept.name)),
+        text_row(format!("Learn {} and destroy the program?", kept.name)),
         text_row(""),
     ];
     if !lost.is_empty() {

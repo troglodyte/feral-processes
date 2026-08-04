@@ -58,6 +58,12 @@ pub mod ids {
     /// Rust because the door is engine content rather than a data-driven
     /// requirement; the item itself is still an ordinary `.ron` file.
     pub const ACCESS_SHARD: &str = "access_shard";
+    /// Burnt to install a routine the player knows — see
+    /// `Game::install_routine`. Named from Rust for the same reason
+    /// `ACCESS_SHARD` is: what installing costs is engine content, not a
+    /// data-driven requirement. The item, and the whole chain that makes it,
+    /// are still ordinary `.ron` files.
+    pub const ROUTINE_DISK: &str = "routine_disk";
     /// Named from Rust because the starting inventory is engine content
     /// (see `game/lifecycle.rs`) — same reason `CORE_FRAGMENT`, `POWER_CELL`
     /// and `ICE_BREAKER` are, on the same lines; the id itself lives in
@@ -86,7 +92,6 @@ pub enum ItemCategory {
     Weapon,
     Armor,
     Module,
-    Routine,
     Material,
     Currency,
 }
@@ -100,7 +105,6 @@ impl ItemCategory {
             ItemCategory::Weapon => "WEP",
             ItemCategory::Armor => "ARM",
             ItemCategory::Module => "MOD",
-            ItemCategory::Routine => "RTN",
             ItemCategory::Material => "MAT",
             ItemCategory::Currency => "CUR",
         }

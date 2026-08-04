@@ -569,12 +569,24 @@ pub struct RoutineHolderView {
     pub slots: usize,
 }
 
-/// One row of the install picker — a loose routine held in inventory.
-pub struct RoutineItemView {
-    pub item: ItemId,
+/// One row of the install picker — a routine the player knows. Knowing it
+/// is not enough to install it: that also costs a blank Routine Disk, which
+/// the screen reports separately through `Game::routine_disks_held`.
+pub struct KnownRoutineView {
+    pub ability: crate::abilities::AbilityId,
     pub name: String,
     pub description: String,
-    pub count: u32,
+}
+
+/// One row of the extraction picker — a routine installed on the program
+/// about to be broken down. `known` marks one the player has already
+/// learned, which `Game::extract_routine` refuses: extraction teaches a
+/// routine, and there is nothing to teach twice.
+pub struct ExtractableRoutineView {
+    pub ability: crate::abilities::AbilityId,
+    pub name: String,
+    pub description: String,
+    pub known: bool,
 }
 
 /// One row of the field-routine picker — a `FieldBuff` ability installed on

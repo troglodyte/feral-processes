@@ -5,14 +5,6 @@ use crate::components::Routines;
 use crate::*;
 
 impl Game {
-    /// Whether `item` is a loose routine rather than ordinary cargo.
-    pub fn is_routine(&self, item: &ItemId) -> bool {
-        self.world
-            .resource::<ItemDb>()
-            .get(item.as_str())
-            .is_some_and(|d| d.routine.is_some())
-    }
-
     /// `id`'s display name, falling back to the raw id if the ability set
     /// doesn't define it (a mod removed since a save referenced it). Every
     /// routine log line resolves through here so none of them read a raw
@@ -91,30 +83,39 @@ impl Game {
         holders
     }
 
-    /// Loose routines held in inventory, id-sorted so the picker's numbering
-    /// is stable between sessions.
-    pub fn loose_routines(&self) -> Vec<RoutineItemView> {
-        let db = self.world.resource::<ItemDb>();
-        let Some(inv) = self.world.get::<Inventory>(self.player_entity()) else {
-            return Vec::new();
-        };
-        let mut rows: Vec<RoutineItemView> = inv
-            .items
+    /// Whether the player has learned `ability` — by researching a node that
+    /// grants it, or by extracting it out of a program.
+    pub fn knows_routine(&self, ability: &str) -> bool {
+        self.world.resource::<KnownRoutines>().0.contains(ability)
+    }
+
+    /// Every routine the player knows, name-sorted so the install picker's
+    /// numbering is stable between sessions. Knowing one is half of an
+    /// install; the other half is `routine_disks_held`.
+    pub fn installable_routines(&self) -> Vec<KnownRoutineView> {
+        let db = self.world.resource::<AbilityDb>();
+        let mut rows: Vec<KnownRoutineView> = self
+            .world
+            .resource::<KnownRoutines>()
+            .0
             .iter()
-            .filter(|(_, count)| *count > 0)
-            .filter_map(|(item, count)| {
-                let def = db.get(item.as_str())?;
-                def.routine.as_ref()?;
-                Some(RoutineItemView {
-                    item: item.clone(),
-                    name: def.name.clone(),
-                    description: def.description.clone(),
-                    count: *count,
-                })
+            .filter_map(|id| db.get(id))
+            .map(|def| KnownRoutineView {
+                ability: def.id.clone(),
+                name: def.name.clone(),
+                description: def.description.clone(),
             })
             .collect();
-        rows.sort_by(|a, b| a.item.as_str().cmp(b.item.as_str()));
+        rows.sort_by(|a, b| a.name.cmp(&b.name));
         rows
+    }
+
+    /// Blank Routine Disks in cargo — what an install spends.
+    pub fn routine_disks_held(&self) -> u32 {
+        self.world
+            .get::<Inventory>(self.player_entity())
+            .map(|inv| inv.count(&ItemId::from(ids::ROUTINE_DISK)))
+            .unwrap_or(0)
     }
 
     /// Whether `entity` is a routine holder the player actually controls —
@@ -132,32 +133,24 @@ impl Game {
                 .is_some_and(|t| t.owner == self.player_entity())
     }
 
-    /// Spends one loose `item` and fills `entity`'s first free slot with the
-    /// routine it carries. Free and unrestricted outside battle.
-    pub fn install_routine(&mut self, entity: Entity, item: &ItemId) -> Result<(), String> {
+    /// Burns one blank Routine Disk to write `ability` into `entity`'s first
+    /// free slot. Knowing the routine is not enough — the disk is the
+    /// manufactured half, and it is gone for good.
+    ///
+    /// The disk is spent last, after every refusal has been cleared, for the
+    /// reason `use_symlink` drops the locale only once its checks have all
+    /// passed: nothing here may consume the disk on a path that then fails.
+    pub fn install_routine(&mut self, entity: Entity, ability: &str) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
         if !self.owns_routine_holder(entity) {
             return Err("You don't control that program.".into());
         }
-        let ability = self
-            .world
-            .resource::<ItemDb>()
-            .get(item.as_str())
-            .and_then(|d| d.routine.clone())
-            .ok_or_else(|| "That isn't a routine.".to_string())?;
-        let player = self.player_entity();
-        if self
-            .world
-            .get::<Inventory>(player)
-            .map(|i| i.count(item))
-            .unwrap_or(0)
-            == 0
-        {
-            return Err("You don't have that routine.".into());
+        if !self.knows_routine(ability) {
+            return Err("You don't know that routine.".into());
         }
-        let mut installed = self
+        let installed = self
             .world
             .get::<Routines>(entity)
             .map(|r| r.0.clone())
@@ -165,27 +158,30 @@ impl Game {
         if installed.len() >= self.routine_slots(entity) {
             return Err("There's no free routine slot — pop one out first.".into());
         }
+        let disk = ItemId::from(ids::ROUTINE_DISK);
+        if self.routine_disks_held() == 0 {
+            return Err(format!(
+                "You need a blank {} to write that routine onto.",
+                self.item_name(&disk)
+            ));
+        }
+        let player = self.player_entity();
         self.world
             .get_mut::<Inventory>(player)
             .unwrap()
-            .take(item.clone(), 1);
-        let ability_name = self.ability_display_name(&ability);
-        installed.push(ability);
+            .take(disk, 1);
+        let ability_name = self.ability_display_name(ability);
+        let mut installed = installed;
+        installed.push(ability.to_string());
         self.world.entity_mut(entity).insert(Routines(installed));
         let name = self.routine_holder_label(entity);
         self.log(format!("{name} now runs {ability_name}."));
         Ok(())
     }
 
-    /// Frees `slot` and returns its routine to inventory as an item.
-    ///
-    /// `check_room` is a no-op for every routine item the shipped set can
-    /// produce — `ItemDb::synthesize_routines` always mints `bank_limit:
-    /// None` — so this can't actually refuse today. It runs anyway, and
-    /// still runs *before* the slot is cleared: a modder can author their
-    /// own item with both `routine` and `bank_limit` set, and that ordering
-    /// is what keeps such an item from being eaten if the check ever does
-    /// fail (the same reasoning `sell_item` documents for its own ordering).
+    /// Frees `slot`. The disk that filled it was spent at install and is not
+    /// recoverable, so this hands back nothing — what the player keeps is the
+    /// knowledge, which they never lost.
     pub fn uninstall_routine(&mut self, entity: Entity, slot: usize) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -193,25 +189,16 @@ impl Game {
         if !self.owns_routine_holder(entity) {
             return Err("You don't control that program.".into());
         }
-        let installed = self
+        let mut installed = self
             .world
             .get::<Routines>(entity)
             .map(|r| r.0.clone())
             .ok_or_else(|| "That can't hold routines.".to_string())?;
-        let ability = installed
-            .get(slot)
-            .cloned()
-            .ok_or_else(|| "That slot is empty.".to_string())?;
-        let item = abilities::routine_item_id(&ability);
-        self.check_room(&item, 1)?;
-
-        let mut installed = installed;
+        if slot >= installed.len() {
+            return Err("That slot is empty.".to_string());
+        }
         installed.remove(slot);
         self.world.entity_mut(entity).insert(Routines(installed));
-        self.world
-            .get_mut::<Inventory>(self.player_entity())
-            .unwrap()
-            .add(item, 1);
         let name = self.routine_holder_label(entity);
         self.log(format!("{name} stops running that routine."));
         Ok(())
@@ -250,15 +237,24 @@ impl Game {
     }
 
     /// The routines installed on `creature`, in slot order — what an
-    /// extraction offers to salvage.
-    pub fn extractable_routines(&self, creature: Entity) -> Vec<AbilityDef> {
+    /// extraction offers to salvage. A row already `known` is one
+    /// `extract_routine` will refuse, so the picker can say so before the
+    /// program is on the block.
+    pub fn extractable_routines(&self, creature: Entity) -> Vec<ExtractableRoutineView> {
         let db = self.world.resource::<AbilityDb>();
+        let known = self.world.resource::<KnownRoutines>();
         self.world
             .get::<Routines>(creature)
             .map(|r| r.0.clone())
             .unwrap_or_default()
             .iter()
-            .filter_map(|id| db.get(id).cloned())
+            .filter_map(|id| db.get(id))
+            .map(|def| ExtractableRoutineView {
+                ability: def.id.clone(),
+                name: def.name.clone(),
+                description: def.description.clone(),
+                known: known.0.contains(&def.id),
+            })
             .collect()
     }
 
@@ -280,13 +276,14 @@ impl Game {
         lost
     }
 
-    /// Destroys `creature` and salvages exactly one of its routines — the
-    /// one at `index` in `extractable_routines`. Everything else installed
-    /// on it is lost with it.
+    /// Destroys `creature` and learns exactly one of its routines — the one
+    /// at `index` in `extractable_routines`. Everything else installed on it
+    /// is lost with it. What is salvaged is the *knowledge*: no disk comes
+    /// out of this, and installing it still costs one.
     ///
-    /// Room for the payout is checked before the program is despawned, for
-    /// the reason `sell_companion` documents about its own ordering — a
-    /// no-op for the shipped item set, same caveat as `uninstall_routine`'s.
+    /// A routine the player already knows is refused rather than accepted as
+    /// a no-op, checked before the program is despawned: knowledge does not
+    /// stack, so taking it twice would destroy a program for nothing.
     pub fn extract_routine(&mut self, creature: Entity, index: usize) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -308,19 +305,20 @@ impl Game {
         let ability = self
             .extractable_routines(creature)
             .get(index)
-            .map(|def| def.id.clone())
+            .map(|row| row.ability.clone())
             .ok_or_else(|| "That program has no such routine.".to_string())?;
-        let item = abilities::routine_item_id(&ability);
-        self.check_room(&item, 1)?;
+        if self.knows_routine(&ability) {
+            return Err("You already know that routine.".into());
+        }
 
         let name = self.dissolve_tamed_program(creature);
         self.world
-            .get_mut::<Inventory>(self.player_entity())
-            .unwrap()
-            .add(item, 1);
+            .resource_mut::<KnownRoutines>()
+            .0
+            .insert(ability.clone());
         let ability_name = self.ability_display_name(&ability);
         self.log(format!(
-            "You break {name} down and salvage its {ability_name} routine."
+            "You break {name} down and learn its {ability_name} routine."
         ));
         self.tick();
         Ok(())

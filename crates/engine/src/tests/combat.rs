@@ -794,8 +794,8 @@ fn installing_a_researched_routine_makes_the_players_special_available() {
     // Only one slot at level 1, and decompile already occupies it — free it
     // before installing the routine under test.
     game.uninstall_routine(player, 0).unwrap();
-    let item = crate::abilities::routine_item_id("priority_boost");
-    game.install_routine(player, &item).unwrap();
+    give_disks(&mut game, 1);
+    game.install_routine(player, "priority_boost").unwrap();
     let enemy = spawn_wild_on_player_tile(&mut game);
     insert_battle(&mut game, player, vec![enemy]);
 

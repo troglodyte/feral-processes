@@ -1037,9 +1037,7 @@ fn fusing_a_program_logs_a_manually_installed_routine_as_lost() {
     let a = spawn_tamed(&mut game, 10, 3);
     let b = spawn_tamed(&mut game, 10, 3);
     set_level(&mut game, a, 4); // two slots, one free alongside the fallback
-    let item = crate::abilities::routine_item_id("sandbox");
-    set_inventory(&mut game, &[(item.as_str(), 1)]);
-    game.install_routine(a, &item).unwrap();
+    install_routine_for_test(&mut game, a, "sandbox");
 
     assert_eq!(
         game.fusion_routine_losses(a, b)
@@ -1168,7 +1166,7 @@ fn fusion_depth_survives_a_save_load_round_trip() {
 /// routine back off a program is `extract_routine` at a bench, and that
 /// destroys the program deliberately.
 #[test]
-fn a_companion_killed_in_battle_returns_none_of_its_routines_to_inventory() {
+fn a_companion_killed_in_battle_teaches_none_of_its_routines() {
     let assets = test_assets_dir();
     let mut game = Game::new(5150, DifficultyMode::Forgiving, &assets).unwrap();
     let player = game.player_entity();
@@ -1178,26 +1176,19 @@ fn a_companion_killed_in_battle_returns_none_of_its_routines_to_inventory() {
         .insert(Routines(vec!["priority_boost".to_string()]));
     game.add_companion(companion).unwrap();
 
-    let routine_item = crate::abilities::routine_item_id("priority_boost");
-    let before = game
-        .world
-        .get::<Inventory>(player)
-        .map(|i| i.count(&routine_item))
-        .unwrap_or(0);
+    assert!(
+        !game.knows_routine("priority_boost"),
+        "the fixture must start with the routine unknown for the assert below to mean anything"
+    );
 
     let wild = spawn_wild_on_player_tile(&mut game);
     insert_battle(&mut game, player, vec![wild]);
     game.apply_damage(companion, 10);
     flee_until_clear(&mut game);
 
-    let after = game
-        .world
-        .get::<Inventory>(player)
-        .map(|i| i.count(&routine_item))
-        .unwrap_or(0);
-    assert_eq!(
-        before, after,
-        "a dead program's routines are destroyed with it, not dropped"
+    assert!(
+        !game.knows_routine("priority_boost"),
+        "a dead program's routines die with it — only extraction teaches"
     );
 }
 

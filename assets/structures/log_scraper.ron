@@ -1,0 +1,10 @@
+(
+    id: "log_scraper",
+    name: "Log Scraper",
+    description: "Assign a program here to scrape Raw Trace off the Grid's chatter. Yield is a chance per cycle that improves as the scraper is upgraded.",
+    glyph: 'T',
+    color: Cyan,
+    build_cost: [("core_fragment", 14)],
+    work: Some((produces: "raw_trace", ticks_per_unit: 10, level: Some(1))),
+    upgrade: Some((max_tier: 5, cost: [("core_fragment", 10)])),
+)

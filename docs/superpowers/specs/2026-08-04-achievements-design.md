@@ -107,12 +107,21 @@ as Stack lair guardians via `pick_lair_species`.
 
 ## Rewards pay at the start of the next run
 
-Earning logs a line and stamps the profile. The reward is applied in
-`Game::new`, which gains the profile as a parameter.
+Earning logs a line and stamps the profile. The reward is applied by
+`Game::grant_profile_rewards`, which app-core calls after a new game and not
+after a load.
 
 **Never on load.** A save already has its bonus baked into `Stats` and
 `perk_points`; re-applying on load would double it on every reload. This is the
 one real trap in the feature and gets a dedicated test.
+
+That rule is why installing and granting are two operations rather than a
+parameter on `Game::new`. `install_profile` says *what has been earned* and both
+paths need it — `achievement_system` must not re-earn on a loaded save.
+`grant_profile_rewards` says *pay for it* and only one path wants it. Splitting
+them puts the whole rule at one call site instead of inside a shared
+constructor. It also leaves `Game::new`'s signature alone, which matters more
+than it looks: it has 667 call sites, essentially all engine tests.
 
 Paying at new-game is also the only timing all three reward types share — a
 starting tamed program has no mid-run meaning — so all three behave alike
@@ -212,7 +221,7 @@ test exists instead.
 | `crates/engine/src/resources.rs` | new run resources: earned-this-run set, pending-profile-write queue, `RunFeats` |
 | `crates/engine/src/game/combat_rewards.rs` | `award_loot`'s `is_boss` branch pushes the species id into `RunFeats` |
 | `crates/engine/src/game/achievements.rs` | new — `achievement_system`, reward application |
-| `crates/engine/src/game/lifecycle.rs` | `Game::new` takes the profile and applies rewards; `Game::load` does not |
+| `crates/engine/src/game/lifecycle.rs` | `install_profile` / `grant_profile_rewards`; both constructors seed an empty `Profile` |
 | `crates/engine/src/lib.rs` | wire the db, the resource, the system into the tick |
 | `crates/app-core/src/app/lifecycle.rs` | `App::new` takes a profile path; loads on start; drains and writes after tick |
 | `crates/app-core/src/app/menus.rs` | main-menu row + key for the achievements screen |
@@ -238,7 +247,8 @@ Engine:
 - `RunFeats` is empty again after the system runs, so a second tick does not
   re-earn from the same kill.
 - The random stat is a deterministic function of the achievement id.
-- `Game::new` applies a profile's rewards; **`Game::load` does not**.
+- `grant_profile_rewards` pays; **`install_profile` alone pays nothing**, which
+  is the load path in miniature. Granting twice pays once.
 - The permadeath flag upgrades on re-earn and never downgrades.
 - The ceiling test over the real `.ron` assets.
 

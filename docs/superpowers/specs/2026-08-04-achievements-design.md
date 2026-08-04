@@ -2,9 +2,9 @@
 
 Date: 2026-08-04
 
-A meta-progression layer that survives a run. Depth milestones earned in one
-run stamp a permanent profile; the profile pays out at the start of the next
-run. Gives permadeath a reason to exist and gives breaching a reason to
+A meta-progression layer that survives a run. Depth milestones and boss kills
+earned in one run stamp a permanent profile; the profile pays out at the start
+of the next run. Gives permadeath a reason to exist and gives breaching a reason to
 continue — the two TODO lines this came from.
 
 ## Storage
@@ -59,9 +59,9 @@ AchievementDef(
 One reward per achievement is what makes the total power bounded by a finite
 authored list and therefore assertable.
 
-## Trigger evaluation — one polling system
+## Trigger evaluation — one system, two trigger shapes
 
-All three shipping triggers are **high-water marks on a monotone counter**:
+Three of the four triggers are **high-water marks on a monotone counter**:
 
 | Trigger | Read from |
 |---|---|
@@ -69,26 +69,41 @@ All three shipping triggers are **high-water marks on a monotone counter**:
 | `StackDepthReached(u32)` | `Locale::Stack { depth }` |
 | `CyclesSurvived(u64)` | `GameClock.tick` |
 
-So one `achievement_system` in the tick evaluates the whole authored list with
-`>=` comparisons and needs no call sites at all.
-
-That is the point. Hooking `enter_next_zone` and `enter_frame` separately would
-create a third of this repo's two-paths-that-must-agree pairs
+One `achievement_system` in the tick evaluates those with `>=` comparisons and
+needs no call sites at all. Hooking `enter_next_zone` and `enter_frame`
+separately would create a third of this repo's two-paths-that-must-agree pairs
 (`dissolve_tamed_program`/`fuse_companions`,
-`damage_structure`/`remove_structure`). One system, one place, and a new
-threshold trigger costs a `.ron` file and nothing else.
+`damage_structure`/`remove_structure`).
 
-The system is guarded the way `nest_aggro_tick` is: it reads the player's
-locale, so it must not confuse the surface-pinned `Position` with Stack
-coordinates. It reads `Locale` directly and never `Position`.
+The system reads `Locale` directly and never `Position`, for the reason
+`nest_aggro_tick` needs its underground guard: `Position` is pinned to the
+surface entrance tile while the party is in the Stack.
 
-### The boss rung is not in v1
+### `BossDefeated(species_id)` is a feat, not a threshold
 
-`BossDefeated` is the first **event**-shaped trigger, and no boss exists.
-Shipping a rung that can never fire is a half-finished implementation. The
-extension point is stated instead: a `BossDefeated(id)` variant, a set of fired
-flags on the run resource, and one call site at the kill. Its stat point is
-pre-budgeted in the ceiling below, so adding it later does not move the test.
+The fourth trigger is event-shaped, and the event already has exactly one
+recognition point. `award_loot`'s `species.is_boss` branch
+(`game/combat_rewards.rs`) is, per its own neighbouring comments, "the one point
+that knows it actually died rather than being fled from" — the guarantee
+`mark_lair_cleared` and `raise_trace` are both already spending. A boss-kill
+record goes there as a third consumer of it, not anywhere else.
+
+**The call site records; the system still decides.** The kill pushes the species
+id into a `RunFeats` drain queue and does nothing else — no achievement lookup,
+no reward, no profile write. `achievement_system` drains it in the same tick.
+So there is still one place that decides what has been earned, and the kill site
+cannot drift from it.
+
+`RunFeats` is a per-tick queue and deliberately **not** an accumulator and
+**not** saved. That is only sound because every authored boss trigger names a
+single species, so it is satisfied by the kill itself and the profile — which is
+written immediately — is the thing that accumulates. A future
+"kill N bosses in one run" trigger would need real run state and a save-format
+bump; it is not a small addition dressed up as one.
+
+Two bosses ship: Overseer and Wintermute, both `is_boss: true`, both reachable
+from zone 1 via `BOSS_SPAWN_CHANCE` (4% of ambient spawns) and preferentially
+as Stack lair guardians via `pick_lair_species`.
 
 ## Rewards pay at the start of the next run
 
@@ -121,7 +136,7 @@ re-earns.
 
 ## The ladder
 
-Ten rungs across three axes. Names are placeholders for the flavour pass.
+Thirteen rungs across four axes. Names are placeholders for the flavour pass.
 
 | id | Trigger | Reward |
 |---|---|---|
@@ -135,8 +150,11 @@ Ten rungs across three axes. Names are placeholders for the flavour pass.
 | `uptime_500` — Uptime | `CyclesSurvived(500)` | `RandomMainStat(1)` |
 | `uptime_2000` — Long Uptime | `CyclesSurvived(2000)` | `RandomMainStat(1)` |
 | `uptime_5000` — Persistent Process | `CyclesSurvived(5000)` | `PerkPoints(1)` |
+| `boss_first` — Root Access | `BossDefeated(any)` | `RandomMainStat(1)` |
+| `boss_overseer` — Chain of Command | `BossDefeated("overseer")` | `RandomMainStat(1)` |
+| `boss_wintermute` — Ghost in the Wire | `BossDefeated("wintermute")` | `PerkPoints(1)` |
 
-Totals: 5 stat points, 4 Perk Points, 1 starting program.
+Totals: 7 stat points, 5 Perk Points, 1 starting program.
 
 Scrapper is the starting program because `balance_sim`'s sweep already models a
 mid-grade party as three of them — it is the "better than nothing, not a head
@@ -156,13 +174,20 @@ ladder therefore carries a hard ceiling asserted over the real `.ron` files, the
 way item values already are by
 `no_craftable_item_is_worth_more_than_its_ingredients`:
 
-- at most **6** total stat points (5 used; the sixth is the boss rung's budget)
-- at most **4** total Perk Points
+- at most **8** total stat points (7 used; the eighth is budget for a third
+  boss species, so adding one does not move the test)
+- at most **5** total Perk Points
 - at most **1** `StartingProgram`
 
-A fully-cleared profile is worth roughly one extra level's worth of stats spread
-across a whole run — small enough that it flavours a new run rather than
+A fully-cleared profile is worth a bit over one extra level's worth of stats
+spread across a whole run — small enough that it flavours a new run rather than
 skipping its opening.
+
+The boss rungs are the reason this is 8/5 rather than the 6/4 the three depth
+axes alone would need. A boss is a 4% ambient roll or a Stack lair guardian, and
+both shipped ones hit far above the ordinary curve (Overseer is 200 HP / 22 ATK
+with a `growth_multiplier` of 2.0). Three rungs for two stat points and one Perk
+Point is proportionate to that; they are the hardest things on the ladder.
 
 `balance_sim` does not model the profile and will not. It simulates a run's own
 curve; the profile sits outside that curve, which is exactly why the ceiling
@@ -184,7 +209,8 @@ test exists instead.
 | File | Change |
 |---|---|
 | `crates/engine/src/achievements.rs` | new — defs, db, triggers, rewards, profile, profile IO |
-| `crates/engine/src/resources.rs` | new run resource: earned-this-run set + pending drain queue |
+| `crates/engine/src/resources.rs` | new run resources: earned-this-run set, pending-profile-write queue, `RunFeats` |
+| `crates/engine/src/game/combat_rewards.rs` | `award_loot`'s `is_boss` branch pushes the species id into `RunFeats` |
 | `crates/engine/src/game/achievements.rs` | new — `achievement_system`, reward application |
 | `crates/engine/src/game/lifecycle.rs` | `Game::new` takes the profile and applies rewards; `Game::load` does not |
 | `crates/engine/src/lib.rs` | wire the db, the resource, the system into the tick |
@@ -202,8 +228,15 @@ Engine:
 
 - `AchievementDb::load_dir` loads the shipped set; a malformed file is skipped
   with a warning, not a panic.
-- Each trigger fires at its threshold and not before.
+- Each threshold trigger fires at its threshold and not before.
 - An achievement is earned once — crossing the threshold again does not re-pay.
+- Killing a boss earns both `boss_first` and that species' own rung, in one
+  tick, from one kill.
+- **Fleeing a boss earns nothing.** The record is written where
+  `mark_lair_cleared` is, so this is the same guarantee those tests already
+  exercise — assert it rather than assume it.
+- `RunFeats` is empty again after the system runs, so a second tick does not
+  re-earn from the same kill.
 - The random stat is a deterministic function of the achievement id.
 - `Game::new` applies a profile's rewards; **`Game::load` does not**.
 - The permadeath flag upgrades on re-earn and never downgrades.
@@ -222,7 +255,11 @@ move.
 
 ## Not in scope
 
-- The boss rung and the `BossDefeated` trigger (the other TODO line).
+- Any *count* trigger evaluated within a single run ("kill N bosses in one
+  run", "breach twice in N cycles"). See `RunFeats` above — that needs saved run
+  state and a format bump, and is not the small addition it looks like.
+- A zone-terminal boss, as distinct from the ambient and lair bosses that
+  already exist. That is the other TODO line and its own design.
 - Non-depth achievement axes — collection completeness, challenge feats,
   economy landmarks. All three were considered and cut from v1.
 - Any in-run achievements screen.

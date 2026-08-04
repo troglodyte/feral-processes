@@ -16,7 +16,7 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 ### The window opens fullscreen, and the UI text is smaller
 
 Was a 1440x900 window. It now opens borderless fullscreen at whatever the
-monitor is, and body text drops from 24px to 20px at the reference height —
+monitor is, and body text drops from 24px to 18px at the reference height —
 so the extra room goes to map tiles and log rows rather than to a magnified
 UI. The text change applies at every window size, not just large ones.
 

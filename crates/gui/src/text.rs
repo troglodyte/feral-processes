@@ -38,7 +38,16 @@ const REFERENCE_HEIGHT: f32 = 900.0;
 /// than a roomier one. Lowering the base rather than capping the ramp is a
 /// deliberate choice to shrink text at *every* window size, not just tall
 /// ones. Pinned by `ui_metrics_anchors_the_ramp_at_the_reference_height`.
-const BASE_UI_FONT: f32 = 20.0;
+///
+/// This is low enough that `MIN_UI_FONT` now takes over below a ~825-tall
+/// window — the ramp is rounded before it is clamped, so the floor bites
+/// where the scaled value rounds to 16, not where it reaches it. A 720p
+/// window therefore no longer scales at all; the floor is a legibility
+/// limit and is left where it is. Lowering the base further raises the
+/// height at which the UI stops shrinking, rather than making small
+/// windows denser. Pinned by
+/// `the_font_floor_takes_over_below_a_825_tall_window`.
+const BASE_UI_FONT: f32 = 18.0;
 const MIN_UI_FONT: u16 = 16;
 const MAX_UI_FONT: u16 = 40;
 /// Preserves the 30.0 / 24.0 relationship the fixed constants had.
@@ -328,14 +337,24 @@ mod tests {
         // the point is the proportion, not the last bit.
         let m = ui_metrics(REFERENCE_HEIGHT);
         assert_eq!(m.font_size, BASE_UI_FONT as u16);
-        assert_eq!(m.font_size, 20);
-        assert_eq!(m.line_height, 25.0);
-        assert!((m.pad - 13.333).abs() < 0.01, "pad was {}", m.pad);
-        assert!((m.inset - 8.333).abs() < 0.01, "inset was {}", m.inset);
-        assert_eq!(m.gap, 5.0);
-        assert_eq!(m.title(), 24);
-        assert_eq!(m.label(), 18);
-        assert_eq!(m.small(), 16);
+        assert_eq!(m.font_size, 18);
+        assert_eq!(m.line_height, 22.5);
+        assert!((m.pad - 12.0).abs() < 0.01, "pad was {}", m.pad);
+        assert!((m.inset - 7.5).abs() < 0.01, "inset was {}", m.inset);
+        assert_eq!(m.gap, 4.5);
+        assert_eq!(m.title(), 22);
+        assert_eq!(m.label(), 16);
+        assert_eq!(m.small(), 14);
+    }
+
+    #[test]
+    fn the_font_floor_takes_over_below_a_825_tall_window() {
+        // Stated in `BASE_UI_FONT`'s doc comment, and the reason a further
+        // drop buys nothing on a small window. Straddled rather than
+        // pinned at 825 itself: that height puts the ramp exactly on 16.5,
+        // where the answer turns on a rounding tie no behaviour depends on.
+        assert_eq!(ui_metrics(824.0).font_size, MIN_UI_FONT);
+        assert!(ui_metrics(826.0).font_size > MIN_UI_FONT);
     }
 
     #[test]

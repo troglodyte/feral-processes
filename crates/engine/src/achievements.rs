@@ -206,6 +206,100 @@ fn reward_complaint(def: &AchievementDef) -> Option<String> {
     }
 }
 
+/// One rung, earned. What the profile remembers about it beyond the fact
+/// itself: when it first happened, whether it has ever been done on
+/// permadeath, and — for a `Reward::RandomMainStat` — which stat the roll
+/// landed on, so it is decided once and never rerolls.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Earned {
+    pub id: AchievementId,
+    /// `GameClock.tick` at the moment of the first earn. Not updated by a
+    /// re-earn — the record is of the first time.
+    pub first_tick: u64,
+    /// Whether this has ever been earned on permadeath. Upgrades to `true`
+    /// on a later permadeath re-earn and never downgrades; `Profile::record`
+    /// is the only thing that may write it.
+    #[serde(default)]
+    pub permadeath: bool,
+    #[serde(default)]
+    pub rolled_stat: Option<MainStat>,
+}
+
+/// Everything earned across every run, and the one thing in this game that
+/// outlives a run.
+///
+/// Deliberately **not** part of `SaveData`: a save is one run, this spans
+/// them, and keeping it out means no `SAVE_FORMAT_VERSION` bump — here or for
+/// any field added later, since `#[serde(default)]` keeps an old
+/// `profile.ron` parsing the way the `.ron` assets do and bincode cannot.
+#[derive(Resource, Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Profile {
+    #[serde(default)]
+    pub earned: Vec<Earned>,
+}
+
+impl Profile {
+    pub fn contains(&self, id: &AchievementId) -> bool {
+        self.earned.iter().any(|e| &e.id == id)
+    }
+
+    /// Records a first earn, returning `true`. On a re-earn it returns
+    /// `false` and changes nothing except to upgrade `permadeath` to true if
+    /// this earn was on permadeath — the difficulty rule lives here and
+    /// nowhere else.
+    pub fn record(&mut self, entry: Earned) -> bool {
+        if let Some(existing) = self.earned.iter_mut().find(|e| e.id == entry.id) {
+            existing.permadeath |= entry.permadeath;
+            return false;
+        }
+        self.earned.push(entry);
+        true
+    }
+
+    /// Reads `path`, with whatever went wrong alongside it. Never `Err` and
+    /// never a panic: an unreadable profile must not stop the game starting,
+    /// and the worst it can cost is the profile.
+    ///
+    /// The warning comes back rather than being swallowed because the caller
+    /// owns the log — but it is not optional to *ask* for it, which is why
+    /// this returns a pair instead of offering a quieter overload. An absent
+    /// file is not a warning: a first run has no profile.
+    pub fn load(path: &Path) -> (Self, Option<String>) {
+        let text = match std::fs::read_to_string(path) {
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (Self::default(), None),
+            Err(e) => {
+                return (
+                    Self::default(),
+                    Some(format!(
+                        "could not read {path:?}: {e}; starting from an empty profile"
+                    )),
+                );
+            }
+        };
+        match ron::from_str::<Profile>(&text) {
+            Ok(profile) => (profile, None),
+            Err(e) => (
+                Self::default(),
+                Some(format!(
+                    "could not parse {path:?}: {e}; starting from an empty profile. The file has \
+                     not been overwritten — fix it or delete it."
+                )),
+            ),
+        }
+    }
+
+    /// Writes the profile out as readable, hand-editable RON, struct names
+    /// and all. Callers write on every earn rather than at run end: a
+    /// permadeath run that ends badly must not lose what it proved.
+    pub fn save(&self, path: &Path) -> std::io::Result<()> {
+        let config = ron::ser::PrettyConfig::default().struct_names(true);
+        let text = ron::ser::to_string_pretty(self, config)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        std::fs::write(path, text)
+    }
+}
+
 /// Which main stat a `Reward::RandomMainStat` rung pays into.
 ///
 /// A pure function of the id, seeded from the id's own bytes and never from
@@ -234,6 +328,99 @@ mod tests {
         MAX_PROFILE_PERK_POINTS, MAX_PROFILE_STARTING_PROGRAMS, MAX_PROFILE_STAT_POINTS,
     };
     use std::collections::HashSet;
+
+    fn temp_profile(tag: &str) -> std::path::PathBuf {
+        let path =
+            std::env::temp_dir().join(format!("fp_profile_{tag}_{}.ron", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        path
+    }
+
+    fn earned(id: &str, permadeath: bool) -> Earned {
+        Earned {
+            id: AchievementId::from(id),
+            first_tick: 7,
+            permadeath,
+            rolled_stat: Some(MainStat::Def),
+        }
+    }
+
+    #[test]
+    fn a_profile_survives_a_round_trip_through_ron() {
+        let path = temp_profile("roundtrip");
+        let mut profile = Profile::default();
+        profile.record(Earned {
+            id: AchievementId::from("breach_zone_4"),
+            first_tick: 812,
+            permadeath: true,
+            rolled_stat: None,
+        });
+        profile.record(Earned {
+            id: AchievementId::from("breach_zone_2"),
+            first_tick: 190,
+            permadeath: false,
+            rolled_stat: Some(MainStat::Atk),
+        });
+        profile.save(&path).unwrap();
+
+        let (reloaded, warning) = Profile::load(&path);
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(warning, None);
+        assert_eq!(reloaded.earned, profile.earned);
+    }
+
+    #[test]
+    fn an_absent_profile_is_empty_not_an_error() {
+        let path = temp_profile("absent");
+        let (profile, warning) = Profile::load(&path);
+        assert!(profile.earned.is_empty());
+        assert_eq!(
+            warning, None,
+            "a first run has no profile; that is not worth telling the player about"
+        );
+    }
+
+    #[test]
+    fn a_corrupt_profile_is_empty_not_a_panic() {
+        let path = temp_profile("corrupt");
+        std::fs::write(&path, "this is not RON at all {{{").unwrap();
+        let (profile, warning) = Profile::load(&path);
+        let _ = std::fs::remove_file(&path);
+        assert!(profile.earned.is_empty());
+        assert!(warning.is_some(), "a corrupt profile should say so");
+    }
+
+    #[test]
+    fn recording_the_same_achievement_twice_earns_it_once() {
+        let mut profile = Profile::default();
+        assert!(profile.record(earned("breach_zone_2", false)));
+        assert!(!profile.record(earned("breach_zone_2", false)));
+        assert_eq!(profile.earned.len(), 1);
+        assert!(profile.contains(&AchievementId::from("breach_zone_2")));
+    }
+
+    #[test]
+    fn a_permadeath_re_earn_upgrades_the_flag_and_never_downgrades() {
+        let mut profile = Profile::default();
+        profile.record(earned("breach_zone_2", false));
+        profile.record(earned("breach_zone_2", true));
+        assert!(
+            profile.earned[0].permadeath,
+            "a permadeath re-earn should upgrade the flag"
+        );
+        assert_eq!(
+            profile.earned[0].first_tick, 7,
+            "the first earn's cycle stands"
+        );
+
+        let mut profile = Profile::default();
+        profile.record(earned("breach_zone_2", true));
+        profile.record(earned("breach_zone_2", false));
+        assert!(
+            profile.earned[0].permadeath,
+            "a forgiving re-earn must never downgrade the flag"
+        );
+    }
 
     fn achievement_assets_dir() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/achievements")

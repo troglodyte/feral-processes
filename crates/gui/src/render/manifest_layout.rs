@@ -298,7 +298,7 @@ mod tests {
     const WINDOW_HEIGHTS: [f32; 9] = [
         720.0, 768.0, 800.0, 900.0, 1000.0, 1050.0, 1080.0, 1200.0, 1440.0,
     ];
-    const WINDOW_WIDTHS: [f32; 3] = [1280.0, 1600.0, 1920.0];
+    const WINDOW_WIDTHS: [f32; 4] = [1280.0, 1600.0, 1920.0, 2560.0];
 
     fn section(title: &'static str, rows: usize, full_width: bool) -> Section {
         Section {

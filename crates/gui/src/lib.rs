@@ -67,8 +67,8 @@ const SPECIAL_KEYS: &[KeyCode] = &[
     KeyCode::Backspace,
 ];
 
-const WINDOW_WIDTH: u32 = 1440;
-const WINDOW_HEIGHT: u32 = 900;
+const WINDOW_WIDTH: u32 = 2560;
+const WINDOW_HEIGHT: u32 = 1440;
 
 const DEFAULT_VOLUME: f32 = 0.2;
 const VOLUME_STEP: f32 = 0.1;

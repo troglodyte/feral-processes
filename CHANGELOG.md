@@ -13,6 +13,14 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### The window opens at 2560x1440
+
+Was 1440x900. The window has always been resizable and everything on screen
+is either a fraction of it or clamped, so this only changes where you start:
+UI text sizes off window height and the zone map shows *more tiles* rather
+than bigger ones, so the extra room is map and log, not magnification. Zoom
+(`+`/`-`) is still the only thing that changes tile size.
+
 ### Adjacency-fed production chains
 
 **Save format 19 → 20.** Existing saves stop loading; the checked-in

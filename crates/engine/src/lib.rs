@@ -1,4 +1,5 @@
 pub mod abilities;
+pub mod achievements;
 pub mod balance_sim;
 pub mod battle;
 pub mod components;

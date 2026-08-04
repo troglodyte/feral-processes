@@ -1,0 +1,7 @@
+(
+    id: "breach_zone_2",
+    name: "First Breach",
+    description: "Push through a zone portal into sector 2. The Grid is bigger than the patch of it you woke up on.",
+    trigger: ZoneReached(2),
+    reward: RandomMainStat(1),
+)

@@ -1,0 +1,7 @@
+(
+    id: "stack_depth_8",
+    name: "Bottom Frame",
+    description: "Descend to the eighth frame. Whatever is down here was never meant to be called from anywhere.",
+    trigger: StackDepthReached(8),
+    reward: StartingProgram("scrapper"),
+)

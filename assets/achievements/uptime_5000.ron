@@ -1,0 +1,7 @@
+(
+    id: "uptime_5000",
+    name: "Persistent Process",
+    description: "Survive 5000 cycles in a single run. Nothing is going to collect you now.",
+    trigger: CyclesSurvived(5000),
+    reward: PerkPoints(1),
+)

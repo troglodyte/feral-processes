@@ -1,0 +1,7 @@
+(
+    id: "breach_zone_8",
+    name: "Far Sector",
+    description: "Reach sector 8. This far out the wild programs stopped resembling anything that was ever written on purpose.",
+    trigger: ZoneReached(8),
+    reward: PerkPoints(1),
+)

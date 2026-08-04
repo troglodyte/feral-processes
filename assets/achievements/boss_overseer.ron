@@ -1,0 +1,7 @@
+(
+    id: "boss_overseer",
+    name: "Chain of Command",
+    description: "Bring down an Overseer. It was watching the sector for something; now nothing is.",
+    trigger: BossDefeated(Some("overseer")),
+    reward: RandomMainStat(1),
+)

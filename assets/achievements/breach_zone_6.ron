@@ -1,0 +1,7 @@
+(
+    id: "breach_zone_6",
+    name: "Sector Runner",
+    description: "Reach sector 6. Six portals behind you, and no route back that anyone has mapped.",
+    trigger: ZoneReached(6),
+    reward: RandomMainStat(1),
+)

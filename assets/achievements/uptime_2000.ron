@@ -1,0 +1,7 @@
+(
+    id: "uptime_2000",
+    name: "Long Uptime",
+    description: "Survive 2000 cycles in a single run. Most processes this old have been reaped twice over.",
+    trigger: CyclesSurvived(2000),
+    reward: RandomMainStat(1),
+)

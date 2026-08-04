@@ -1,0 +1,7 @@
+(
+    id: "boss_wintermute",
+    name: "Ghost in the Wire",
+    description: "Bring down a Wintermute. It had been running unattended since before there was a Grid to run on.",
+    trigger: BossDefeated(Some("wintermute")),
+    reward: PerkPoints(1),
+)

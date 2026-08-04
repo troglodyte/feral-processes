@@ -1,0 +1,7 @@
+(
+    id: "uptime_500",
+    name: "Uptime",
+    description: "Survive 500 cycles in a single run. Long enough for the Grid to start treating you as part of the terrain.",
+    trigger: CyclesSurvived(500),
+    reward: RandomMainStat(1),
+)

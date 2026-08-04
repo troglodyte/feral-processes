@@ -1,0 +1,7 @@
+(
+    id: "stack_depth_3",
+    name: "Down the Stack",
+    description: "Descend to the third frame of the Stack. Three levels under your own base, and the base keeps running without you.",
+    trigger: StackDepthReached(3),
+    reward: RandomMainStat(1),
+)

@@ -1,0 +1,7 @@
+(
+    id: "boss_first",
+    name: "Root Access",
+    description: "Bring down a boss program. Not scattered, not fled from — finished.",
+    trigger: BossDefeated(None),
+    reward: RandomMainStat(1),
+)

@@ -1221,6 +1221,32 @@ pub const AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED: f32 = 0.15;
 /// authored value untouched, which is what leaves `decompile` spammable.
 pub const ENEMY_ROUTINE_MIN_COOLDOWN: u32 = 1;
 
+// ─────────────────────────────────────────────────────────────────────────
+// Achievement profile ceilings
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Most main-stat points a fully-cleared `assets/achievements/` ladder may
+/// hand a new run, summed across every `Reward::RandomMainStat`.
+///
+/// `balance_sim` simulates a run's own curve and deliberately does not model
+/// the cross-run profile, so this bound — asserted over the real assets by
+/// `the_full_ladder_stays_under_its_ceiling` — is the only gate on how much
+/// the profile is worth. A permanent buff with no ceiling is the shape this
+/// design has already closed off twice (the scan action, the Market's
+/// fragment listing).
+///
+/// The shipped ladder spends 7. The eighth is budget for a third boss
+/// species, so adding one does not move the test.
+pub const MAX_PROFILE_STAT_POINTS: u32 = 8;
+
+/// Most Perk Points a fully-cleared profile may hand a new run. See
+/// `MAX_PROFILE_STAT_POINTS` for why this is asserted rather than trusted.
+pub const MAX_PROFILE_PERK_POINTS: u32 = 5;
+
+/// Most `Reward::StartingProgram` rungs the ladder may carry. One: a second
+/// free companion is half a starting party rather than a flavour of one.
+pub const MAX_PROFILE_STARTING_PROGRAMS: u32 = 1;
+
 #[cfg(test)]
 mod tests {
     use super::*;

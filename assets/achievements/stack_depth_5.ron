@@ -1,0 +1,7 @@
+(
+    id: "stack_depth_5",
+    name: "Frame Diver",
+    description: "Descend to the fifth frame. The Trace is awake by now and it knows exactly how far down you are.",
+    trigger: StackDepthReached(5),
+    reward: PerkPoints(1),
+)

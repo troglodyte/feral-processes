@@ -1,0 +1,7 @@
+(
+    id: "breach_zone_4",
+    name: "Deep Cut",
+    description: "Reach sector 4. Everything out here was compiled against a harder spec than you were.",
+    trigger: ZoneReached(4),
+    reward: PerkPoints(1),
+)

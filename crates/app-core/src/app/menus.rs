@@ -9,6 +9,7 @@ impl App {
         if !self.list_saves().is_empty() {
             options.push('l');
         }
+        options.push('a');
         options.push('q');
         let idx = self
             .selected_index(key, options.len())
@@ -25,9 +26,25 @@ impl App {
                 self.status_line = None;
                 self.mode = Mode::LoadGame;
             }
+            Some('a') => {
+                self.status_line = None;
+                self.mode = Mode::Achievements;
+            }
             Some('q') => self.mode = Mode::QuitAppConfirm,
             _ => {}
         }
+    }
+
+    /// Read-only, and the one screen reachable without a run — Esc goes back
+    /// to the main menu rather than through `close_screen`, which returns to
+    /// the map or the group menu a screen was opened from.
+    pub(crate) fn handle_achievements_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.mode = Mode::MainMenu;
+            return;
+        }
+        let rows = self.achievement_rows().len();
+        self.scroll(key, rows);
     }
 
     pub(crate) fn handle_load_game_key(&mut self, key: GameKey) {

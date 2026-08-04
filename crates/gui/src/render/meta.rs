@@ -9,6 +9,7 @@ pub(super) fn draw_main_menu(app: &App, painter: &Painter, m: &Metrics) {
     if !app.list_saves().is_empty() {
         options.push("[L] Load Game".to_string());
     }
+    options.push("[A] Achievements".to_string());
     options.push("[Q] Quit".to_string());
     let mut rows = vec![
         Row::TextColored("feral-processes".to_string(), TEXT),
@@ -23,6 +24,58 @@ pub(super) fn draw_main_menu(app: &App, painter: &Painter, m: &Metrics) {
         rows.push(Row::TextColored(s.clone(), RED));
     }
     draw_popup("Main Menu", PopupSize::Large, &rows, painter, m);
+}
+
+/// Every authored rung, earned or not — the point is showing what is left.
+///
+/// Rows come from `App::achievement_rows`, which is also what app-core counts
+/// to bound the scroll. Rebuilding the list here instead would let the
+/// highlight land on a row this never draws.
+///
+/// Two `Row::Item`s per rung would break that count, so each rung is one
+/// selectable row with its description folded into the same line.
+pub(super) fn draw_achievements(app: &App, painter: &Painter, m: &Metrics) {
+    let entries = app.achievement_rows();
+    let earned = entries.iter().filter(|r| r.earned.is_some()).count();
+    let mut rows = vec![
+        text_row(format!(
+            "{earned} of {} earned. Rewards are paid at the start of your next run.",
+            entries.len()
+        )),
+        text_row(""),
+    ];
+    for (i, entry) in entries.iter().enumerate() {
+        let selected = i == app.menu_selected;
+        match &entry.earned {
+            Some(summary) => {
+                let stat = summary
+                    .rolled_stat
+                    .as_deref()
+                    .map(|s| format!(" -> {s}"))
+                    .unwrap_or_default();
+                let mode = if summary.permadeath {
+                    " [permadeath]"
+                } else {
+                    ""
+                };
+                rows.push(colored_item_row(
+                    format!(
+                        "{} - {} - cycle {}{mode}{stat}",
+                        entry.name, entry.reward, summary.tick
+                    ),
+                    selected,
+                    GREEN,
+                ));
+            }
+            None => rows.push(spent_item_row(
+                format!("{} - {} - {}", entry.name, entry.reward, entry.description),
+                selected,
+            )),
+        }
+    }
+    rows.push(text_row(""));
+    rows.push(text_row("Up/Down to scroll, Esc to close."));
+    draw_popup("Achievements", PopupSize::Large, &rows, painter, m);
 }
 
 pub(super) fn draw_load_game(app: &App, painter: &Painter, m: &Metrics) {

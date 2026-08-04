@@ -88,6 +88,7 @@ impl App {
         let mode_before = self.mode;
         match self.mode {
             Mode::MainMenu => self.handle_main_menu_key(key),
+            Mode::Achievements => self.handle_achievements_key(key),
             Mode::LoadGame => self.handle_load_game_key(key),
             Mode::SaveAction => self.handle_save_action_key(key),
             Mode::DifficultyPick => self.handle_difficulty_key(key),

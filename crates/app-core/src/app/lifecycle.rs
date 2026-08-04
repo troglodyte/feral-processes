@@ -10,6 +10,11 @@ impl App {
         profile_path: PathBuf,
     ) -> Self {
         let (profile, profile_warning) = Profile::load(&profile_path);
+        // A failed load leaves an empty ladder and an empty screen rather
+        // than refusing to start — the same warn-and-carry-on contract every
+        // asset db has. `Game::new` reports the per-file warnings itself.
+        let (achievement_db, _) =
+            AchievementDb::load_dir(&assets_dir.join("achievements")).unwrap_or_default();
         Self {
             mode: Mode::MainMenu,
             game: None,
@@ -23,6 +28,7 @@ impl App {
             history_path,
             profile_path,
             profile,
+            achievement_db,
             quit: false,
             pending_structure: None,
             pending_worker: None,
@@ -284,6 +290,15 @@ impl App {
     /// because it is reachable from the main menu where there is no run.
     pub fn profile(&self) -> &Profile {
         &self.profile
+    }
+
+    /// The achievements screen's rows — every authored rung, earned or not.
+    ///
+    /// The one source of both the row count this scrolls against and the rows
+    /// gui draws, per the read-only-screen rule: a renderer that rebuilt the
+    /// list could scroll to a row that isn't drawn.
+    pub fn achievement_rows(&self) -> Vec<AchievementRow> {
+        feral_processes_engine::achievements::report(&self.achievement_db, &self.profile)
     }
 
     /// Everything that has to happen after the world may have ticked, in one

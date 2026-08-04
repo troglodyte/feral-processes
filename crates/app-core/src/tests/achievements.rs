@@ -163,3 +163,51 @@ fn an_absent_profile_file_is_an_empty_profile_not_an_error() {
         "a first run has no profile, which is not worth a warning"
     );
 }
+
+#[test]
+fn the_screen_opens_from_the_main_menu_and_esc_returns_to_it() {
+    let mut app = app_with_profile(47, scratch_profile("screen"));
+    assert_eq!(app.mode, Mode::MainMenu);
+
+    app.handle_key(GameKey::Char('a'));
+    assert_eq!(app.mode, Mode::Achievements);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(
+        app.mode,
+        Mode::MainMenu,
+        "Esc goes back to the menu it came from"
+    );
+}
+
+/// The drift guard: app-core owns the row count and gui draws the rows, so
+/// both have to come from one call. A renderer that rebuilt the list would
+/// let the highlight land on a row that isn't drawn.
+#[test]
+fn the_screens_row_count_matches_the_report() {
+    let path = scratch_profile("rowcount");
+    seed_profile(&path);
+    let mut app = app_with_profile(48, path.clone());
+    let _ = std::fs::remove_file(&path);
+
+    let rows = app.achievement_rows();
+    assert_eq!(rows.len(), 13, "every authored rung is listed");
+    assert_eq!(
+        rows.iter().filter(|r| r.earned.is_some()).count(),
+        1,
+        "the seeded profile holds exactly one"
+    );
+
+    app.handle_key(GameKey::Char('a'));
+    for _ in 0..rows.len() + 5 {
+        app.handle_key(GameKey::Down);
+    }
+    assert_eq!(
+        app.mode,
+        Mode::Achievements,
+        "scrolling must not leave the screen"
+    );
+    assert!(
+        app.menu_selected < rows.len(),
+        "the highlight stayed inside the drawn rows"
+    );
+}

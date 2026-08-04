@@ -321,6 +321,43 @@ pub fn roll_main_stat(id: &AchievementId) -> MainStat {
     MainStat::all()[(hash % MainStat::all().len() as u64) as usize]
 }
 
+/// Every authored rung with what it pays and, where earned, what earning it
+/// looked like — in `AchievementDb::iter` order, which is stable between
+/// runs so the screen does not reshuffle.
+///
+/// A free function rather than a `Game` method because the achievements
+/// screen opens from the main menu, where there is no run: app-core holds
+/// both a db and the profile and calls this either way. It is still engine
+/// code, which is what keeps the per-row wording out of the renderer.
+pub fn report(db: &AchievementDb, profile: &Profile) -> Vec<crate::views::AchievementRow> {
+    db.iter()
+        .map(|def| crate::views::AchievementRow {
+            name: def.name.clone(),
+            description: def.description.clone(),
+            reward: reward_label(&def.reward),
+            earned: profile.earned.iter().find(|e| e.id == def.id).map(|e| {
+                crate::views::EarnedSummary {
+                    tick: e.first_tick,
+                    permadeath: e.permadeath,
+                    rolled_stat: e.rolled_stat.map(|s| s.label().to_string()),
+                }
+            }),
+        })
+        .collect()
+}
+
+/// How a reward reads on the screen. A `RandomMainStat` is deliberately
+/// unspecific here — the roll *is* predictable from the id, but which stat it
+/// landed on is the small reveal of earning it, and the earned row shows the
+/// answer through `EarnedSummary::rolled_stat`.
+fn reward_label(reward: &Reward) -> String {
+    match reward {
+        Reward::RandomMainStat(n) => format!("+{n} to one main stat"),
+        Reward::PerkPoints(n) => format!("+{n} Perk Point"),
+        Reward::StartingProgram(species) => format!("start with a {species}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -424,6 +461,52 @@ mod tests {
 
     fn achievement_assets_dir() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/achievements")
+    }
+
+    #[test]
+    fn the_report_lists_every_authored_achievement() {
+        let (db, _) = AchievementDb::load_dir(&achievement_assets_dir()).unwrap();
+        let rows = report(&db, &Profile::default());
+        assert_eq!(
+            rows.len(),
+            13,
+            "the screen lists every rung, earned or not — the point is showing what is left"
+        );
+        assert!(rows.iter().all(|r| !r.reward.is_empty()));
+    }
+
+    #[test]
+    fn an_unearned_achievement_reports_no_summary() {
+        let (db, _) = AchievementDb::load_dir(&achievement_assets_dir()).unwrap();
+        let rows = report(&db, &Profile::default());
+        assert!(rows.iter().all(|r| r.earned.is_none()));
+    }
+
+    #[test]
+    fn an_earned_achievement_reports_its_cycle_mode_and_rolled_stat() {
+        let (db, _) = AchievementDb::load_dir(&achievement_assets_dir()).unwrap();
+        let mut profile = Profile::default();
+        profile.record(Earned {
+            id: AchievementId::from("breach_zone_2"),
+            first_tick: 812,
+            permadeath: true,
+            rolled_stat: Some(MainStat::Integrity),
+        });
+
+        let rows = report(&db, &profile);
+        let row = rows
+            .iter()
+            .find(|r| r.name == "First Breach")
+            .expect("the shipped ladder has this rung");
+        let summary = row.earned.as_ref().expect("it was earned");
+        assert_eq!(summary.tick, 812);
+        assert!(summary.permadeath);
+        assert_eq!(summary.rolled_stat.as_deref(), Some("Integrity"));
+
+        assert!(
+            rows.iter().filter(|r| r.earned.is_some()).count() == 1,
+            "only the one recorded rung is earned"
+        );
     }
 
     #[test]

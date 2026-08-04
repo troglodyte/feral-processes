@@ -57,8 +57,8 @@ use inventory::{
 };
 use manifest::{ManifestNav, draw_manifest, draw_manifest_pick};
 use meta::{
-    draw_difficulty_pick, draw_game_over, draw_help, draw_load_game, draw_main_menu,
-    draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
+    draw_achievements, draw_difficulty_pick, draw_game_over, draw_help, draw_load_game,
+    draw_main_menu, draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
 };
 use party::{draw_companion_menu, draw_fuse_menu, draw_fuse_name_menu, draw_fuse_second_menu};
 use popup::{PopupSize, Row, counted_item_row, draw_popup, text_row};
@@ -250,6 +250,7 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
             draw_main_menu(app, painter, &m);
             draw_quit_app_confirm(app.menu_selected, painter, &m);
         }
+        Mode::Achievements => draw_achievements(app, painter, &m),
         Mode::LoadGame => draw_load_game(app, painter, &m),
         Mode::SaveAction => draw_save_action(app, painter, &m),
         Mode::DifficultyPick => draw_difficulty_pick(app.menu_selected, painter, &m),

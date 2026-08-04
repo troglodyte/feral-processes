@@ -754,3 +754,31 @@ pub struct ManifestPotential {
     /// `Potential::quality_label`.
     pub label: String,
 }
+
+/// One rung on the achievements screen, earned or not — the screen lists
+/// every authored achievement, because the point is showing what is left.
+///
+/// Built by `achievements::report` rather than by a `Game` method, unlike
+/// every other view here: the screen is reachable from the main menu, where
+/// there is no run and so no `Game` to ask. app-core holds the db and the
+/// profile and calls that function; both the row count it scrolls against
+/// and the rows gui draws come from the one call, which is the read-only
+/// screen rule the history and roster screens follow.
+pub struct AchievementRow {
+    pub name: String,
+    pub description: String,
+    /// What it pays, already worded for the screen.
+    pub reward: String,
+    /// `None` for a rung not yet earned.
+    pub earned: Option<EarnedSummary>,
+}
+
+/// What is known about an achievement that has been earned.
+pub struct EarnedSummary {
+    /// The cycle it was first earned on.
+    pub tick: u64,
+    /// Whether it has ever been earned on permadeath.
+    pub permadeath: bool,
+    /// Which stat the roll landed on, for a `Reward::RandomMainStat`.
+    pub rolled_stat: Option<String>,
+}

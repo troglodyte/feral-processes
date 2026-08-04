@@ -14,7 +14,7 @@ pub use app::group_menu::GroupMenuRow;
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use feral_processes_engine::achievements::Profile;
+use feral_processes_engine::achievements::{AchievementDb, Profile};
 use feral_processes_engine::battle::SpecialTargeting;
 use feral_processes_engine::battle::{
     ActionKind, BattleAction, PartyCommandKind, SpecialTarget, TargetSpec,
@@ -22,8 +22,8 @@ use feral_processes_engine::battle::{
 use feral_processes_engine::items::{EquipmentSlot, ItemId};
 use feral_processes_engine::tuning::{ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST};
 use feral_processes_engine::{
-    DifficultyMode, Entity, EntityView, Game, LogLine, MESSAGE_LOG_CAP, MessageSource,
-    ProgramSaleOption, RoutineHolderView, SlotShift,
+    AchievementRow, DifficultyMode, Entity, EntityView, Game, LogLine, MESSAGE_LOG_CAP,
+    MessageSource, ProgramSaleOption, RoutineHolderView, SlotShift,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -472,6 +472,11 @@ pub enum Mode {
     /// view of the base, so it reads the same underground as it does on the
     /// surface.
     Recipes,
+    /// The cross-run achievement profile — every authored rung, earned or
+    /// not, with what it pays. Reached from the main menu rather than from a
+    /// group menu: the profile is the one thing here that outlives a run, so
+    /// it belongs beside New Game rather than inside one.
+    Achievements,
     Help,
     GameOver,
     /// Confirming `q` from `Mode::Playing`, which abandons the run. Offers to
@@ -505,6 +510,7 @@ impl Mode {
             | Mode::BattleSpecial
             | Mode::BattleAlly => true,
             Mode::MainMenu
+            | Mode::Achievements
             | Mode::DifficultyPick
             | Mode::LoadGame
             | Mode::SaveAction
@@ -660,6 +666,10 @@ pub struct App {
     /// re-read per use because the achievements screen is reachable from the
     /// main menu, where there is no `Game` to ask.
     profile: Profile,
+    /// The authored ladder, for the same reason: the screen lists every rung
+    /// including the unearned ones, and with no run in progress the `Game`'s
+    /// copy of this db does not exist.
+    achievement_db: AchievementDb,
     pub quit: bool,
     pending_structure: Option<String>,
     pending_worker: Option<Entity>,

@@ -139,17 +139,26 @@ is skipped with a warning logged in-game rather than crashing startup.
 
     // Optional; can be left out entirely (defaults to no trading). If set,
     // this structure is a trading post: the player can "trade" (`t`) with
-    // it to sell any inventory item (except the trade currency itself) for
-    // `sell_rate` Credits per unit, or buy any item listed in `buy` for its
-    // Credit cost.
+    // it to sell any inventory item (except the trade currency itself), or
+    // buy any item listed in `buy` for its Credit cost.
     //
-    // `sell_rate` prices two things, not one. Whatever this trader buys goes
-    // onto a buyback shelf the player can purchase back at twice
-    // `sell_rate` per unit — so raising it makes selling here more
-    // rewarding *and* undoing a sale more expensive. The multiplier is an
-    // engine constant (`tuning::BUYBACK_PRICE_MULTIPLIER`), not a field
-    // here: what a trader deals in is content, how steep the economy is
-    // isn't.
+    // `sell_rate` is NOT the sale price — it is this trader's multiplier on
+    // what an item is already worth (`value` in the item schema). A sale
+    // pays `value * sell_rate` per unit, so 1 pays the going rate, 2 pays
+    // double, and a trader that lowballs everything is a single number. Set
+    // it to 1 unless this trader is meant to be better or worse than the
+    // rest.
+    //
+    // It prices two things, not one. Whatever this trader buys goes onto a
+    // buyback shelf the player can purchase back at twice what it paid — so
+    // raising `sell_rate` makes selling here more rewarding *and* undoing a
+    // sale more expensive. The multiplier is an engine constant
+    // (`tuning::BUYBACK_PRICE_MULTIPLIER`), not a field here: what a trader
+    // deals in is content, how steep the economy is isn't.
+    //
+    // `buy` costs, by contrast, are flat authored prices and ignore `value`
+    // entirely — what a trader charges for its stock is its own business,
+    // and deliberately isn't derived from what the thing is worth.
     //
     // A shelf belongs to the tile a trader stands on, not to the building,
     // so one destroyed by a raid and rebuilt on the same footprint reopens
@@ -168,7 +177,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     trade: Some((
         sell_rate: 1,
         program_sell_divisor: Some(10),
-        buy: [("ice_breaker", 4), ("power_cell", 3)],
+        buy: [("ice_breaker", 5), ("power_cell", 3)],
     )),
 
     // Optional; can be left out entirely (defaults to 30). How much damage

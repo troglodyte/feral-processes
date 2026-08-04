@@ -31,6 +31,34 @@ disqualifies the whole file.
     // Leave it out for ordinary cargo, which is never capped.
     bank_limit: Some(200),
 
+    // Optional; can be left out entirely (defaults to 1, the flat rate every
+    // item traded at before this field existed — so a mod written against
+    // the older schema keeps behaving exactly as it did). What one unit is
+    // worth in trade currency, before a trader's own `sell_rate` multiplier
+    // (see assets/structures/README.md). Selling pays it; the buyback shelf
+    // charges twice it.
+    //
+    // Two rules keep the shipped ladder from turning a base into a Credit
+    // press, and a mod that breaks either one prints money:
+    //
+    //   1. Don't price an item above the total value of its `craftable`
+    //      ingredients. Build salvage is sellable and a Mining Node produces
+    //      it forever, so a profitable recipe is an infinite Credit loop.
+    //   2. Don't price an item a structure `produces` (see the structures
+    //      schema) above the default. Such an item is made from nothing on a
+    //      timer, so its value is really a Credit-per-tick rate — rule 1
+    //      can't see that, because the recipe isn't what's being run.
+    //
+    // Both are asserted against the shipped assets by
+    // `no_craftable_item_is_worth_more_than_its_ingredients` and
+    // `every_base_produced_item_sits_at_the_floor_price`. Your own items
+    // aren't covered by those tests, so the rules are yours to keep.
+    //
+    // The shipped ladder, for calibration: anything printable 1; scavenged
+    // gear 3-8; standard gear 12-16; the drop-only researched pieces 20-60;
+    // premium gear 80-120. Worth tracks what a base *can't* manufacture.
+    value: Some(90),
+
     // Optional; can be left out entirely (defaults to no economy role). If
     // set, this item is the game's singleton anchor for that role — engine
     // logic looks up "the item with role X" rather than naming an id, so

@@ -656,8 +656,8 @@ the file either — that's difficulty tuning, and it stays in
 
 | Item | Source | Used for |
 | --- | --- | --- |
-| Core Fragment | Starting inventory; dropped by Virus/Construct; a Mining Node cronjob | Deploy structures (2–6 each); compile an ICE Breaker (3 each) or a Power Cell (2 each) |
-| Power Cell | Starting inventory; compiled (`c`) from 2 Core Fragments; dropped by Scrapper/Glitch; a Power Conduit cronjob | Drain (`e`) to restore Power |
+| Core Fragment | Starting inventory; dropped by Sprite/Drone/SubProcess/Scrapper/Worm/Virus/Construct; a Mining Node cronjob | Deploy structures (2–6 each); compile an ICE Breaker (3 each) or a Power Cell (2 each) |
+| Power Cell | Starting inventory; compiled (`c`) from 2 Core Fragments; dropped by Glitch; a Power Conduit cronjob | Drain (`e`) to restore Power |
 | ICE Breaker | Starting inventory; compiled (`c`) from 3 Core Fragments; a Compiler cronjob | The taming catalyst Decompile spends — a Special (`s`) in battle, not its own key |
 | Power Outlet | Starting inventory (2); compiled (`c`) from 5 Core Fragments | Spent one per rest (`r`) — see [Structures](#structures) |
 | Portal Fragment | 35% drop from any defeated wild program; a guaranteed 3–6 cache from a boss; a chance from a Stack cache. **Not** buyable — breaching is earned by fighting | Deploy a Zone Portal; pay for every equipment recipe |
@@ -1010,13 +1010,17 @@ just as fusable as the one standing next to you.
 
 ### Current roster
 
-| Program | Difficulty | Habitat | Works for |
+The last column is what *defeating* one drops — not what a tamed one
+produces on a cronjob, which comes from the structure it's posted to and is
+the same whichever program you assign.
+
+| Program | Difficulty | Habitat | Drops |
 | --- | --- | --- | --- |
-| Sprite (`s`) | Easy | OpenGrid, Mainframe | — |
+| Sprite (`s`) | Easy | OpenGrid, Mainframe | Core Fragments |
 | Glitch (`g`) | Easy | OpenGrid, NullSector | Power Cells |
 | Drone (`o`) | Easy | OpenGrid, Mainframe | Core Fragments |
-| SubProcess (`d`) | Easy/Medium | OpenGrid, NullSector | Power Cells |
-| Scrapper (`x`) | Medium | OpenGrid, NullSector | Power Cells |
+| SubProcess (`d`) | Easy/Medium | OpenGrid, NullSector | Core Fragments |
+| Scrapper (`x`) | Medium | OpenGrid, NullSector | Core Fragments |
 | Wraith (`w`) | Medium | StaticField | — |
 | Phantom (`p`) | Medium | Mainframe, StaticField | — |
 | Trojan (`t`) | Medium | Mainframe, OpenGrid | — |
@@ -1168,7 +1172,7 @@ enough of them, then walk onto it to breach into the next zone.
 | Zone Portal | 10 Portal Fragments *(+50% of that per zone level)* | — | Walk onto it to breach into the next zone. Consumed on use, and your fragments and cores don't survive the trip — see [Zones and portals](#zones-and-portals) |
 | Compiler | 16 Core Fragments | Automation | Cronjob a compiled program to it to produce ICE Breakers over time. Upgradeable to Mk5 |
 | Power Conduit | 14 Core Fragments | Power Grid | Cronjob a compiled program to it to produce Power Cells over time |
-| iso Market | 16 Core Fragments | Isometric Commerce | `t` ("trade") to sell inventory items or compiled programs, or buy consumables, for Core Fragments — see [Trading](#trading) |
+| iso Market | 16 Core Fragments | Isometric Commerce | `t` ("trade") to sell inventory items or compiled programs, or buy consumables, for Credits — see [Trading](#trading) |
 | Shield | 16 Core Fragments | Fortification | Passively reduces raid damage against **every** deployed structure by 4 — see [Base defense](#base-defense) |
 | Patch Node | 18 Core Fragments, 4 Power Cells | Fortification | Passively repairs **every** deployed structure, itself included, by 1 Durability per tier every 20 ticks. Upgradeable to Mk5 — see [Base defense](#base-defense) |
 | Fabricator | 18 Core Fragments | Weapon Fabrication | Not cronjob-workable — the bench for every researched weapon/module recipe, plus the 13 catalog recipes that name it (see [Equipment](#equipment)) |
@@ -1316,22 +1320,27 @@ opens the same confirmation Enter does. Selling a levelled program is
 permanent, and a single keypress is exactly the mis-hit that confirmation
 exists to catch.
 
-- **Sell** any inventory item (except Core Fragments — trading them for
-  more Core Fragments is a no-op the game refuses) for Core Fragments at
-  the market's flat sell rate (1 each, for the base iso Market) — a
-  floor value for excess loot that would otherwise just sit there.
+- **Sell** any inventory item (except Credits — trading money for more
+  money is a no-op the game refuses) for Credits. Every item carries its
+  own worth, so what you get depends on what you hand over: anything your
+  base can print on a timer — Core Fragments, Power Cells, Research Data,
+  ICE Breakers — is worth 1, scavenged gear 3-8, standard gear 12-16, the
+  researched pieces that only drop 20-60, and premium gear 80-120. Selling
+  a stockpile of salvage before a breach is still worth doing; it just
+  won't make you rich the way clearing out old gear will.
 - **Sell a compiled program** for a tenth of its power (max HP + Attack +
   Defense, rounded down, never less than 1). This is the only way to get rid
   of a program short of fusing it into another, so it's your way out of a
   full roster — standing one down with `p` frees a battle slot but not a
   roster slot. It's permanent: the program is erased, and the confirmation
   says so along with anything it was doing (a cronjob or guard post is
-  cancelled by the sale). A level-1 Glitch is worth about 4 Core Fragments;
-  a heavily levelled fusion, tens.
+  cancelled by the sale). A level-1 Glitch is worth about 4 Credits; a
+  heavily levelled fusion, tens.
 - **Buy** whatever the market lists — the base iso Market sells ICE
-  Breakers (4 Core Fragments), Power Cells (3), and **Portal Fragments**
-  (8), so a Core Fragment surplus (e.g. from a well-fed Mining Node) can
-  fund zone progression even without much combat.
+  Breakers (5 Credits) and Power Cells (3), and nothing else. **Portal
+  Fragments are deliberately not for sale**: breaching is earned by
+  fighting, and a market that sold them would run a line from base
+  production straight to zone progression.
 - A structure's trade terms are entirely data-driven (`trade` in its
   `.ron` file) — see [Modding](#modding).
 

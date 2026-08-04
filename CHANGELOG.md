@@ -13,6 +13,46 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Items are worth what they are worth
+
+Every item sold for exactly 1 Credit. A trader's `sell_rate` *was* the
+price, applied to whatever crossed the counter, so a Singularity Matrix — 24
+Portal Fragments and the rarest thing in the game — fetched the same single
+Credit as a Shiv Routine.
+
+Items now carry a `value` in their `.ron` file, and `sell_rate` becomes the
+trader's multiplier on it: what a thing is worth is a property of the thing,
+what a trader pays is a property of the trader. Printable goods sit at 1,
+scavenged gear at 3–8, standard gear at 12–16, the drop-only researched
+pieces at 20–60, and premium gear at 80–120.
+
+The ladder is bounded by two rules, both now tested against the shipped
+assets, because breaking either turns a base into a Credit press: nothing is
+worth more than the ingredients of its own recipe, and nothing a structure
+produces on a timer is worth more than the floor. The second is the one that
+isn't obvious — a Compiler makes ICE Breakers out of nothing every 8 ticks,
+so pricing them at their recipe cost would have out-earned a Mining Node
+nearly fourfold. Value comes from what a base *can't* manufacture.
+
+Modded items without a `value` keep trading at 1, exactly as before.
+
+### Power Cells stop piling up
+
+Cells arrived from three directions: the Glitch and the Scrapper both
+dropped them 2–4 at a time, and a Stack cache rolled for one at 0.4 — the
+highest chance of any item, more than double the next non-catalyst. The
+Scrapper now drops Core Fragments, leaving the Glitch as the only source
+that walks around, and the cache chance falls to 0.15.
+
+A cache's expected haul goes from 1.55 items to 1.30 — still the "a little
+over one" the modding docs promise, and now a test rather than a promise.
+
+The manual's roster table said the Sprite dropped nothing and the SubProcess
+dropped Power Cells; both actually drop Core Fragments, and had done for
+some time. Its column header also called that field "Works for", which is
+not what it does — a tamed program's output comes from the structure it is
+posted to, whichever program you assign.
+
 ### The map screen's keys are grouped behind `b`, `p` and `i`
 
 **Breaking for muscle memory.** The map bound 27 keys. Seventeen of them now

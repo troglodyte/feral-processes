@@ -404,12 +404,17 @@ game time; assigning, demolishing and upgrading each have their own row in that 
 
 ## Trading
 
-Press `t` at a nearby iso Market to sell inventory items for **Credits** at
-a flat floor rate, buy ICE Breakers or Power Cells with
-them, or sell a compiled program for a tenth of its power. Portal Fragments
-are deliberately not for sale: breaching is earned by fighting. Credits are the
-only currency a trader deals in — Core Fragments are salvage, and a trader
-buys those off you like anything else rather than paying in them.
+Press `t` at a nearby iso Market to sell inventory items for **Credits**,
+buy ICE Breakers or Power Cells with them, or sell a compiled program for a
+tenth of its power. Portal Fragments are deliberately not for sale:
+breaching is earned by fighting. Credits are the only currency a trader
+deals in — Core Fragments are salvage, and a trader buys those off you like
+anything else rather than paying in them.
+
+Every item is worth what it is worth: anything your base can print on a
+timer fetches 1, while premium gear fetches 80–120. Nothing you can
+manufacture is ever worth more than the parts, so an automated base is a
+supply line and not a mint.
 
 A finished trade leaves you on the trader's list rather than back on the
 map, since a visit is usually a run of them — the header carries your

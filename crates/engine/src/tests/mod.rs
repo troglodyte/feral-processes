@@ -5,6 +5,7 @@
 
 mod support;
 
+mod achievements;
 mod assets;
 mod building;
 mod catalog;

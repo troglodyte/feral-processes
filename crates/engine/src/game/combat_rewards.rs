@@ -103,6 +103,14 @@ impl Game {
         self.raise_trace(crate::tuning::TRACE_PER_KILL);
 
         if species.is_boss {
+            // Third consumer of the same "it actually died" guarantee. The
+            // record is all that happens here: what it earned is
+            // `achievement_system`'s to decide, in this same tick.
+            self.world
+                .resource_mut::<crate::resources::RunFeats>()
+                .bosses_defeated
+                .push(species_id.clone());
+
             let qty = {
                 let mut rng = self.world.resource_mut::<GameRng>();
                 rng.0.random_range(BOSS_PORTAL_FRAGMENT_DROP)

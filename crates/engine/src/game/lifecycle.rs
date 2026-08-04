@@ -69,6 +69,7 @@ impl Game {
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::Trace::default());
+        world.insert_resource(crate::resources::RunFeats::default());
         world.insert_resource(ZoneSpawnPoint {
             x: start.0,
             y: start.1,
@@ -200,6 +201,7 @@ impl Game {
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::Trace::default());
+        world.insert_resource(crate::resources::RunFeats::default());
         world.insert_resource(ZoneSpawnPoint {
             x: data.spawn_point.0,
             y: data.spawn_point.1,

@@ -370,6 +370,28 @@ pub struct GameOver {
     pub reason: Option<String>,
 }
 
+/// Feats this run has performed that an achievement might care about but no
+/// counter can be polled for. Today that is exactly one thing: bosses that
+/// actually died.
+///
+/// A **per-tick drain queue**, not an accumulator. `Game::award_loot` pushes
+/// a species id and does nothing else — no achievement lookup, no reward, no
+/// profile write — and `game::achievements::achievement_system` drains it in
+/// the same tick, unconditionally, earned or not. So there is still exactly
+/// one place that decides what has been earned, and the kill site cannot
+/// drift from it. Forget the drain and one kill re-earns forever.
+///
+/// **Not saved**, and that is only sound because every authored boss trigger
+/// names a single species: the trigger is satisfied by the kill itself, and
+/// the thing that accumulates is `achievements::Profile`, which is written to
+/// disk the moment a rung is earned. A "kill N bosses in one run" trigger
+/// would need real saved run state and a `SAVE_FORMAT_VERSION` bump — it is
+/// not the small addition it looks like.
+#[derive(Resource, Default)]
+pub struct RunFeats {
+    pub bosses_defeated: Vec<String>,
+}
+
 /// The single player-controlled entity. Kept as a resource (rather than
 /// re-queried with a `With<Player>` filter each time) since lookups happen
 /// on almost every action.

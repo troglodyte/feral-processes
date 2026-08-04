@@ -225,9 +225,9 @@ Stack as it does standing in the base.
 
 Every machine needs a program posted to it, assemblers included, so **roster
 capacity is what buys chain length, not fragments**. The full five-machine
-line needs five programs against a starting cap of three — a Data Cache (+2)
-is what makes it reachable, and a second one is what buys back a party to
-adventure with. A machine says so in the base log when it goes *starved*
+line needs five programs against a starting cap of three — a Data Cache (+5,
+ten fragments) covers the line and leaves a party to adventure with. A
+machine says so in the base log when it goes *starved*
 (nothing feeding it), *clogged* (output full, come collect) or *idle* (no
 program), once on the way in rather than every tick, and the base menu's *Structure
 roster* shows every

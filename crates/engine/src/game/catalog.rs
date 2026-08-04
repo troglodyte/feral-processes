@@ -311,11 +311,9 @@ impl Game {
             .collect()
     }
 
-    /// How many units of cargo the player can carry right now: the base
-    /// How many tamed programs the active battle party can hold right now:
     /// How many tamed programs the player may own in total right now:
     /// `BASE_PET_CAPACITY` plus every deployed structure's `pet_slot_bonus`
-    /// (a Data Cache adds two). Derived on each call rather than cached, so a
+    /// (a Data Cache adds five). Derived on each call rather than cached, so a
     /// cache lost to a raid shrinks the limit with no invalidation step and
     /// the save format stays unchanged.
     pub fn pet_capacity(&self) -> usize {

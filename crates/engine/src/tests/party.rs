@@ -10,17 +10,17 @@ fn pet_capacity_grows_with_each_deployed_data_cache() {
     assert_eq!(game.pet_capacity(), BASE_PET_CAPACITY);
 
     spawn_data_cache(&mut game, 1);
-    assert_eq!(game.pet_capacity(), BASE_PET_CAPACITY + 2);
+    assert_eq!(game.pet_capacity(), BASE_PET_CAPACITY + 5);
 
     spawn_data_cache(&mut game, 2);
-    assert_eq!(game.pet_capacity(), BASE_PET_CAPACITY + 4, "caches stack");
+    assert_eq!(game.pet_capacity(), BASE_PET_CAPACITY + 10, "caches stack");
 }
 
 #[test]
 fn destroying_a_data_cache_shrinks_the_pet_capacity_back() {
     let mut game = Game::new(701, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     spawn_data_cache(&mut game, 1);
-    assert_eq!(game.pet_capacity(), BASE_PET_CAPACITY + 2);
+    assert_eq!(game.pet_capacity(), BASE_PET_CAPACITY + 5);
 
     let cache = game
         .world
@@ -621,10 +621,10 @@ fn taming_is_refused_when_the_roster_is_full_and_a_data_cache_makes_room() {
         "a full roster must refuse before the catalyst is spent"
     );
 
-    // A Data Cache raises the cap to 5, so the same attempt is accepted
+    // A Data Cache raises the cap to 8, so the same attempt is accepted
     // rather than refused.
     spawn_data_cache(&mut game, 1);
-    assert_eq!(game.pet_capacity(), BASE_PET_CAPACITY + 2);
+    assert_eq!(game.pet_capacity(), BASE_PET_CAPACITY + 5);
     game.battle_set_action(
         0,
         BattleAction::Special {

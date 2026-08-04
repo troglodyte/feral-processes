@@ -16,9 +16,9 @@ recipe, and species — lives in [docs/manual.md](docs/manual.md).
 
 You need the Rust toolchain (Cargo); if you don't have it, install it with
 `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`. Then clone
-the repo and `cargo build`. The binary resolves `assets/`, `saves/`, and
-`run_history.log` relative to the checkout at build time, so the clone needs
-to stay put even if you `cargo install --path crates/launcher` to get
+the repo and `cargo build`. The binary resolves `assets/`, `saves/`,
+`run_history.log` and `profile.ron` relative to the checkout at build time,
+so the clone needs to stay put even if you `cargo install --path crates/launcher` to get
 `feral-processes` on your `PATH`.
 
 ## Playing
@@ -32,7 +32,9 @@ dying, or for a jack-out that actually gets you clear — escaping is a roll
 weighed on your party's strength against the pack's, and crossing open
 ground can get you ambushed. Each session gets its own save file under `saves/`,
 autosaving every 50 game ticks, and `L` from the main menu lists every save
-to load or delete. Press `?` in game for the complete control list.
+to load or delete. `A` from that menu opens your achievements, which are the
+one thing that outlives a run. Press `?` in game for the complete control
+list.
 
 ## The loop
 
@@ -371,6 +373,30 @@ supplies, banked Research Data, party, and entire base — structures,
 platform, upgrades, running cronjobs and all — rematerialize around the new
 entry point. The portal itself is consumed, and there is no way back down.
 
+## Achievements
+
+Achievements are the only progression that survives a run. Breaching into a
+deeper sector, reaching a Stack frame far enough down, keeping a run alive
+past a cycle count, and putting down a boss program each earn a rung; the
+thirteen shipped ones stamp `profile.ron` at the repo root **the moment they
+are earned**, so a permadeath run that ends badly still keeps what it proved.
+
+The reward is paid at the **start of your next run**: a point into one of
+Attack, Defense, Integrity or Decompiler, a Perk Point, or — for reaching the
+eighth frame — a free program, already yours and waiting to be added to your
+party. Nothing is paid when you *load* a save; those stats are already in it.
+
+A fully-cleared profile is worth 7 stat points, 5 Perk Points and one
+program: a bit over one extra level's worth spread across a whole run, enough
+to flavour a new run rather than skip its opening. That ceiling is asserted
+over the asset files, because the offline balance simulator models a single
+run's curve and cannot see the profile at all.
+
+Both difficulty modes earn. An entry records the mode it was first earned in,
+and a later permadeath re-earn upgrades that flag. `A` on the main menu lists
+every rung, earned or not — the point is showing you what is left. To wipe
+your profile, delete `profile.ron`; there is no in-game reset.
+
 ## Structures and base defense
 
 Structures are `.ron` files declaring any combination of roles: cronjob-
@@ -455,8 +481,8 @@ the sale cancels. A structure's trade terms are entirely data-driven.
 
 ## Modding
 
-Species, structures, items, abilities, and research nodes are plain `.ron`
-files under `assets/*/` — drop one in and it's picked up next run, no
+Species, structures, items, abilities, achievements and research nodes are
+plain `.ron` files under `assets/*/` — drop one in and it's picked up next run, no
 recompiling, with a malformed file skipped and warned about rather than
 crashing startup. Each of those directories has a `README.md` documenting
 its schema. A new piece of equipment or a new combat ability is a single

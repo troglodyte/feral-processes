@@ -13,6 +13,37 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Achievements that outlive the run
+
+Thirteen rungs across four axes — how deep a sector you breach into, how far
+down the Stack you get, how many cycles you survive, and which boss programs
+you put down. Earning one stamps `profile.ron` at the repo root immediately,
+not at run end: a permadeath run that ends badly still keeps what it proved.
+
+The reward is paid at the **start of the next run** — a point into one of
+Attack, Defense, Integrity or Decompiler, a Perk Point, or a free program
+already yours and waiting to be deployed. Loading a save pays nothing, since
+that save's stats already hold what the profile bought when the run began.
+
+`A` on the main menu lists every rung, earned or not, with what it pays and —
+where earned — the cycle, the mode and which stat the roll landed on.
+
+Achievements are data: `assets/achievements/*.ron`, one file per rung, so
+adding one is a file drop. What is *not* data is the ceiling — at most 8 stat
+points, 5 Perk Points and 1 starting program across the whole ladder, asserted
+over the real asset files. `balance_sim` simulates one run's curve and cannot
+see a cross-run profile, so that assertion is the only gate on how much the
+profile is worth. The shipped ladder spends 7 / 5 / 1.
+
+**No save is affected.** The profile is deliberately not part of `SaveData` —
+a save is one run and this spans them — so `SAVE_FORMAT_VERSION` stays at 21,
+and it will stay there for any field added to the profile later, since RON is
+self-describing and every field is `#[serde(default)]`.
+
+The three cycle thresholds (500 / 2000 / 5000) are arithmetic guesses. Nothing
+in the repo says how long a run actually lasts and no test can; they want
+checking against a real run.
+
 ### Every ability name says what it hits
 
 Forty-one abilities had forty-one unrelated names, so nothing about

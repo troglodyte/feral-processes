@@ -82,14 +82,14 @@ fn update_realtime_ticks_once_a_second_only_while_playing() {
     );
 }
 
-/// `C` is the collect key, and it is bound on the map rather than being
+/// `c` is the collect key, and it is bound on the map rather than being
 /// swallowed as an unknown character. Asserted through the log because
 /// app-core cannot reach the engine's `World` to look at a buffer — which
 /// is the point of the seam, not a limitation of the test.
 #[test]
 fn c_reaches_the_collect_action() {
     let mut app = test_app(203);
-    app.handle_key(GameKey::Char('C'));
+    app.handle_key(GameKey::Char('c'));
 
     let said = app
         .game

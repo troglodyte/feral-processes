@@ -37,7 +37,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     // A node is a tap, not a reserve: there's no pool to mine down, and it
     // never runs dry. What paces it is the top-level `capacity` below — the
     // node fills its own output buffer and then *clogs*, producing nothing
-    // more until the player walks over and collects (`C`). Production does
+    // more until the player walks over and collects (`c`). Production does
     // not go into the player's inventory; it goes into the structure.
     //
     // `level` (optional, defaults to `None`) makes each completed cycle a

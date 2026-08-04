@@ -34,11 +34,11 @@ fn the_pane_starts_unfiltered() {
 #[test]
 fn f_cycles_all_field_base_and_back() {
     let mut app = test_app(141);
-    app.handle_key(GameKey::Char('F'));
+    app.handle_key(GameKey::Char('f'));
     assert_eq!(app.log_filter, LogFilter::Field);
-    app.handle_key(GameKey::Char('F'));
+    app.handle_key(GameKey::Char('f'));
     assert_eq!(app.log_filter, LogFilter::Base);
-    app.handle_key(GameKey::Char('F'));
+    app.handle_key(GameKey::Char('f'));
     assert_eq!(app.log_filter, LogFilter::All);
 }
 
@@ -48,7 +48,7 @@ fn f_cycles_all_field_base_and_back() {
 fn cycling_the_filter_does_not_tick() {
     let mut app = test_app(142);
     let before = app.game.as_ref().unwrap().current_tick();
-    app.handle_key(GameKey::Char('F'));
+    app.handle_key(GameKey::Char('f'));
     assert_eq!(app.game.as_ref().unwrap().current_tick(), before);
 }
 

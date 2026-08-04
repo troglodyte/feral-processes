@@ -13,6 +13,13 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Lower-case map keys
+
+Collecting from adjacent structures is now `c` rather than `C`, and the log
+filter is `f` rather than `F`. Nothing else on the map asked for a modifier,
+and the two that did were the two you press most often while walking. `L` for
+the message history keeps its shift: `l` walks east.
+
 ### Swap gear from the slot it's in
 
 Picking one of the three equipped rows on the inventory screen (`i`) used to

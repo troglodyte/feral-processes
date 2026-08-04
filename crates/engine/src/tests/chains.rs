@@ -973,3 +973,64 @@ fn a_self_referential_recipe_does_not_recurse_forever() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The Compiler is the shipped instance of that two-machine line: it does not
+/// print catalysts from nothing any more, it compiles them out of Core
+/// Fragments pulled from whatever is touching it — a Mining Node, in
+/// practice, which is where fragments come from.
+///
+/// Written against the real assets rather than `test_assembler` because what
+/// is under test is `compiler.ron` declaring `assembles` at all. A modded
+/// fixture would keep passing with the shipped file reverted to `work`.
+///
+/// The feeder is stocked rather than mined so the assertion is about the
+/// chain and not about `mining_success_chance`'s roll.
+#[test]
+fn the_shipped_compiler_compiles_catalysts_out_of_an_adjacent_mining_node() {
+    let mut game = Game::new(1012, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let batch = game
+        .world
+        .resource::<ItemDb>()
+        .get(ids::ICE_BREAKER)
+        .and_then(|d| d.craftable.as_ref())
+        .expect("ice_breaker ships with a recipe")
+        .cost
+        .iter()
+        .find(|(i, _)| i.as_str() == ids::CORE_FRAGMENT)
+        .map(|(_, n)| *n)
+        .expect("its recipe is priced in core fragments");
+
+    let compiler = game
+        .world
+        .spawn((
+            Structure {
+                kind: "compiler".to_string(),
+            },
+            Position { x: 40, y: 40 },
+            Stock::new(20),
+            MachineStatus::default(),
+        ))
+        .id();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: compiler,
+        progress: 0,
+        required: 1,
+    });
+    let stocked = batch * 50;
+    let feeder = feeder_at(&mut game, 41, 40, stocked);
+
+    for _ in 0..20 {
+        game.tick();
+    }
+
+    assert!(
+        output_of(&game, compiler, ids::ICE_BREAKER) > 0,
+        "a staffed Compiler beside a stocked Mining Node compiles catalysts"
+    );
+    assert!(
+        output_of(&game, feeder, ids::CORE_FRAGMENT) < stocked,
+        "and pays for them out of the node's fragments rather than out of nothing"
+    );
+}

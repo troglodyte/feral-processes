@@ -1,11 +1,13 @@
 (
     id: "compiler",
     name: "Compiler",
-    description: "Assign a program here to compile ICE Breakers. Also the bench that extracts a routine out of a program you own.",
+    description: "Assign a program here and it compiles Core Fragments from whatever is touching it into ICE Breakers. Put it next to a Mining Node. Also the bench that extracts a routine out of a program you own.",
     glyph: '&',
     color: Green,
     build_cost: [("core_fragment", 16)],
-    work: Some((produces: "ice_breaker", ticks_per_unit: 8, flat_payout: true, level: Some(1))),
+    work: None,
+    capacity: 20,
+    assembles: Some((item: "ice_breaker", ticks_per_unit: 8)),
     extracts_routines: true,
     upgrade: Some((max_tier: 5, cost: [("core_fragment", 12)])),
 )

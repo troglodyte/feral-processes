@@ -13,6 +13,36 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### The Compiler runs on Core Fragments
+
+It used to print ICE Breakers out of nothing every 8 ticks. It now compiles
+them out of Core Fragments pulled from whatever is touching it — a Mining
+Node, in practice — the same way the Refinery and the Assembly Bay work. Its
+recipe is the ICE Breaker's own three-Fragment recipe, so the bench and the
+machine cannot drift apart; hand-crafting one is unchanged and still needs no
+bench at all.
+
+Two consequences worth knowing before you rebuild your base around it. A
+Compiler needs a program posted to it *and* a feeder orthogonally adjacent,
+so it can no longer be worked by hand. And a Compiler and a Refinery both
+touching one Mining Node compete for its output — the lower-left machine
+takes its share first — so a shared feeder now needs enough throughput for
+both, or a node apiece.
+
+At three Fragments per unit against a Mk1 node's one per ten ticks, the
+Compiler is a fragment sink you feed from a stockpile rather than a line that
+idles at full rate. Its `upgrade` block is retained but buys nothing: an
+assembler's rate is fixed by its definition, and tier does not touch it.
+
+### A Data Cache widens the roster by five
+
+Two slots against a base of three was not enough to matter. A full Stack
+descent offers four or five orphaned programs, and a roster of five refused
+most of them; the five-machine production line wanted every slot a run had.
+One cache — still ten Core Fragments — now takes you from three programs to
+eight, which covers a whole descent or a whole factory floor and leaves a
+party to adventure with.
+
 ### Lower-case map keys
 
 Collecting from adjacent structures is now `c` rather than `C`, and the log

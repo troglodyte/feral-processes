@@ -77,18 +77,22 @@ Mechanics that work and have exactly one piece of content each.
 
 ## One-line inconsistency
 
-Four structures are cronjob-workable (`work: Some(...)`): Compiler, Mining
-Node, Research Node, Power Conduit. **Three have an `upgrade:` block; Power
-Conduit does not.** Adding one is a single line and closes a gap players will
-feel, since upgrading is how the base economy is meant to grow.
+Three structures are cronjob-workable (`work: Some(...)`): Mining Node,
+Research Node, Power Conduit. **Two have an `upgrade:` block; Power Conduit
+does not.** Adding one is a single line and closes a gap players will feel,
+since upgrading is how the base economy is meant to grow.
 
 ## Looks easy, isn't
 
 Recorded so the next survey doesn't rediscover them as opportunities.
 
-- **Upgrading Shield / Data Cache / Recharger Node does nothing.** A tier
-  multiplies work payout and becomes `ResourceNode::level`, and those three
-  have no `work` block. `raid_defense` (read flat at `game/upkeep.rs:104`) and
+- **Upgrading Shield / Data Cache / Recharger Node / Compiler does nothing.**
+  A tier multiplies work payout and becomes `ResourceNode::level`, and those
+  four have no `work` block. The Compiler is the live one: it still ships an
+  `upgrade` block, so five tiers really can be bought for 168 Core Fragments
+  and really do buy nothing. An assembler's rate is its def's
+  `ticks_per_unit`, which tier does not touch. Deleting those two lines is
+  the fix; making tier mean something for assemblers is the feature. `raid_defense` (read flat at `game/upkeep.rs:104`) and
   `pet_slot_bonus` (read flat at `game/catalog.rs:200`) do not consult tier.
   They scale by building *more* of them — additive across every deployed
   structure — which already works.

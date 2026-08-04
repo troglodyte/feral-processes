@@ -187,8 +187,8 @@ fn every_base_produced_item_sits_at_the_floor_price() {
         checked += 1;
     }
     assert_eq!(
-        checked, 5,
-        "expected the five producing structures; the press ceiling has to cover every one"
+        checked, 4,
+        "expected the four producing structures; the press ceiling has to cover every one"
     );
 }
 
@@ -823,21 +823,30 @@ fn every_shipped_assembles_names_an_item_that_declares_a_recipe() {
         }
     }
     assert_eq!(
-        checked, 8,
+        checked, 9,
         "the shipped chains are Refinery, Winding Node and Assembly Bay, plus the \
-         Lathe, Transcriber and Disk Press, plus the Armory and Fabricator, which \
-         assemble one gear item apiece while staying benches for the rest — if that \
-         changes, change this count deliberately rather than letting the check go vacuous"
+         Lathe, Transcriber and Disk Press, plus the Compiler, plus the Armory and \
+         Fabricator, which assemble one gear item apiece while staying benches for \
+         the rest — if that changes, change this count deliberately rather than \
+         letting the check go vacuous"
     );
 }
 
 /// A machine runs the assembled item's own `craftable.cost` (see
-/// `systems::assembly_recipe`), and every shipped recipe gates hand-crafting
-/// on the machine that automates it — so a machine whose product named a
+/// `systems::assembly_recipe`), so a machine whose product named a
 /// *different* bench would build something its own owner could not craft by
-/// hand, which is the manual fallback the gating exists to leave open.
+/// hand — and hand-crafting is the manual fallback for a machine you own,
+/// not a way around building one.
+///
+/// Naming no bench at all is the other legal answer, and the Compiler is why:
+/// its product, the ICE Breaker, is one of the three consumable starters a
+/// run is expected to be able to compile from turn one. Automating a starter
+/// must not retroactively gate it. What stops that permission spreading is
+/// `only_the_starters_and_scavenged_gear_need_no_research_or_bench`, which
+/// pins the ungated set by name — so a *new* machine whose product went
+/// benchless to satisfy this test would fail that one instead.
 #[test]
-fn every_shipped_assembler_builds_a_recipe_gated_on_itself() {
+fn no_shipped_assembler_builds_another_benchs_product() {
     let game = Game::new(904, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let items = game.world.resource::<ItemDb>();
     for def in game
@@ -852,12 +861,13 @@ fn every_shipped_assembler_builds_a_recipe_gated_on_itself() {
             .get(assembles.item.as_str())
             .and_then(|d| d.craftable.as_ref())
             .unwrap_or_else(|| panic!("{} assembles an item with no recipe", def.id));
-        assert_eq!(
-            recipe.requires_structure.as_deref(),
-            Some(def.id.as_str()),
-            "{} builds {:?}, whose recipe points at a different bench",
-            def.id,
-            assembles.item
-        );
+        if let Some(other) = recipe.requires_structure.as_deref()
+            && other != def.id.as_str()
+        {
+            panic!(
+                "{} builds {:?}, whose recipe points at {other}'s bench",
+                def.id, assembles.item
+            );
+        }
     }
 }

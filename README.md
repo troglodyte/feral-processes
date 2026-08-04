@@ -403,8 +403,8 @@ your profile, delete `profile.ron`; there is no in-game reset.
 ## Structures and base defense
 
 Structures are `.ron` files declaring any combination of roles: cronjob-
-workable (Mining Node, Research Node, Power Conduit, Compiler), assembling
-from adjacent neighbours (Refinery, Winding Node, Assembly Bay), a
+workable (Mining Node, Research Node, Power Conduit), assembling
+from adjacent neighbours (Compiler, Refinery, Winding Node, Assembly Bay), a
 symlink target you can `u` to from anywhere (Home),
 a rest gate, a power source (Recharger Node), a trading post (iso Market),
 a repairer (Patch Node), or a crafting bench that also assembles

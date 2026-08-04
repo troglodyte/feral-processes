@@ -14,6 +14,7 @@ pub use app::group_menu::GroupMenuRow;
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use feral_processes_engine::achievements::Profile;
 use feral_processes_engine::battle::SpecialTargeting;
 use feral_processes_engine::battle::{
     ActionKind, BattleAction, PartyCommandKind, SpecialTarget, TargetSpec,
@@ -650,6 +651,15 @@ pub struct App {
     /// from `Mode::SaveAction`.
     pub pending_save: Option<PathBuf>,
     history_path: PathBuf,
+    /// Where `profile.ron` lives — beside `run_history.log` at the repo root,
+    /// not in `saves/`. Both are run-spanning rather than part of one run,
+    /// and `list_saves` filters on `.bin` so neither can show up in the save
+    /// picker.
+    profile_path: PathBuf,
+    /// The cross-run profile as last read or written. Held rather than
+    /// re-read per use because the achievements screen is reachable from the
+    /// main menu, where there is no `Game` to ask.
+    profile: Profile,
     pub quit: bool,
     pending_structure: Option<String>,
     pending_worker: Option<Entity>,

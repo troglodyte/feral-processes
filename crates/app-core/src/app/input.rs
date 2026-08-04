@@ -164,8 +164,8 @@ impl App {
         if self.mode == Mode::Playing {
             self.menu_origin = None;
         }
-        self.maybe_autosave();
-        // Last, because `maybe_autosave` is itself allowed to raise a message.
+        self.after_tick();
+        // Last, because `after_tick` is itself allowed to raise a message.
         if self.status_line != carried {
             self.status_age = 0.0;
         }
@@ -340,6 +340,6 @@ impl App {
         }
         self.last_realtime_tick = Instant::now();
         game.idle_tick();
-        self.maybe_autosave();
+        self.after_tick();
     }
 }

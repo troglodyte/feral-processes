@@ -18,7 +18,11 @@ fn app_with_a_save_slot(name: &str) -> App {
         "feral_processes_appcore_quit_{name}_{}.log",
         std::process::id()
     ));
-    let mut app = App::new(assets_dir, saves_dir, history_path);
+    let profile_path = std::env::temp_dir().join(format!(
+        "feral_processes_appcore_quit_{name}_{}_profile.ron",
+        std::process::id()
+    ));
+    let mut app = App::new(assets_dir, saves_dir, history_path, profile_path);
     app.start_new_game(DifficultyMode::Forgiving);
     app
 }

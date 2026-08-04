@@ -3,11 +3,17 @@
 use crate::*;
 
 impl App {
-    pub fn new(assets_dir: PathBuf, saves_dir: PathBuf, history_path: PathBuf) -> Self {
+    pub fn new(
+        assets_dir: PathBuf,
+        saves_dir: PathBuf,
+        history_path: PathBuf,
+        profile_path: PathBuf,
+    ) -> Self {
+        let (profile, profile_warning) = Profile::load(&profile_path);
         Self {
             mode: Mode::MainMenu,
             game: None,
-            status_line: None,
+            status_line: profile_warning,
             log_filter: LogFilter::default(),
             history_written: false,
             assets_dir,
@@ -15,6 +21,8 @@ impl App {
             current_save_path: None,
             pending_save: None,
             history_path,
+            profile_path,
+            profile,
             quit: false,
             pending_structure: None,
             pending_worker: None,
@@ -119,12 +127,20 @@ impl App {
             .map(|d| d.as_secs() as u32)
             .unwrap_or(1);
         match Game::new(seed, difficulty, &self.assets_dir) {
-            Ok(game) => {
+            Ok(mut game) => {
+                // Re-read rather than trusting the copy loaded at startup:
+                // an earlier run this session will have written to it.
+                let (profile, warning) = Profile::load(&self.profile_path);
+                self.profile = profile;
+                game.install_profile(self.profile.clone());
+                // The one place a profile is ever paid out. `load_game`
+                // deliberately does not do this — see the comment there.
+                game.grant_profile_rewards();
                 self.last_autosave_tick = game.current_tick();
                 self.game = Some(game);
                 self.current_save_path = Some(self.new_save_path());
                 self.history_written = false;
-                self.status_line = None;
+                self.status_line = warning;
                 self.mode = Mode::Playing;
                 // Save immediately so the new slot shows up in the load
                 // list (and survives a crash) even before the first
@@ -142,12 +158,22 @@ impl App {
     /// into the game you could have started anyway, not kill the process.
     pub fn load_game(&mut self, path: PathBuf) {
         match Game::load(&path, &self.assets_dir) {
-            Ok(game) => {
+            Ok(mut game) => {
+                let (profile, warning) = Profile::load(&self.profile_path);
+                self.profile = profile;
+                game.install_profile(self.profile.clone());
+                // `grant_profile_rewards` is deliberately NOT called here,
+                // and the omission is the whole of the never-on-load rule:
+                // this save's stats and Perk Points already hold what the
+                // profile paid when the run started, so paying again would
+                // double them on every single reload. Installing is still
+                // needed, or `achievement_system` would re-earn every rung
+                // the profile already holds.
                 self.last_autosave_tick = game.current_tick();
                 self.game = Some(game);
                 self.current_save_path = Some(path);
                 self.history_written = false;
-                self.status_line = None;
+                self.status_line = warning;
                 self.mode = Mode::Playing;
             }
             Err(e) => self.status_line = Some(format!("Failed to load game: {e}")),
@@ -250,6 +276,36 @@ impl App {
         self.last_autosave_tick = current;
         if let Err(e) = game.save(&path) {
             self.status_line = Some(format!("Autosave failed: {e}"));
+        }
+    }
+
+    /// The cross-run profile as last read from or written to disk. The
+    /// achievements screen reads this rather than the running `Game`'s copy,
+    /// because it is reachable from the main menu where there is no run.
+    pub fn profile(&self) -> &Profile {
+        &self.profile
+    }
+
+    /// Everything that has to happen after the world may have ticked, in one
+    /// place so a third tick site cannot pick up one half and miss the other.
+    pub(crate) fn after_tick(&mut self) {
+        self.flush_profile_writes();
+        self.maybe_autosave();
+    }
+
+    /// Writes `profile.ron` if this tick earned anything.
+    ///
+    /// Immediately, not at run end: a permadeath run that ends badly must not
+    /// lose what it proved. A failed write costs the profile update and
+    /// nothing else — it must never take the run down with it.
+    fn flush_profile_writes(&mut self) {
+        let Some(game) = &mut self.game else { return };
+        if game.take_pending_profile_writes().is_empty() {
+            return;
+        }
+        self.profile = game.profile().clone();
+        if let Err(e) = self.profile.save(&self.profile_path) {
+            self.status_line = Some(format!("Could not write profile: {e}"));
         }
     }
 

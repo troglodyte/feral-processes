@@ -38,7 +38,10 @@ pub(crate) fn test_app(seed: u32) -> App {
     let saves_dir = std::env::temp_dir().join(format!("feral_processes_appcore_test_{seed}_saves"));
     let history_path =
         std::env::temp_dir().join(format!("feral_processes_appcore_test_{seed}.log"));
-    let mut app = App::new(assets_dir.clone(), saves_dir, history_path);
+    let profile_path =
+        std::env::temp_dir().join(format!("feral_processes_appcore_test_{seed}_profile.ron"));
+    let _ = std::fs::remove_file(&profile_path);
+    let mut app = App::new(assets_dir.clone(), saves_dir, history_path, profile_path);
     app.game = Game::new(seed, DifficultyMode::Forgiving, &assets_dir).ok();
     app.mode = Mode::Playing;
     app

@@ -48,12 +48,16 @@ fn main() -> io::Result<()> {
         let _ = std::fs::rename(&legacy_save, saves_dir.join("save.bin"));
     }
     let history_path = repo_root.join("run_history.log");
+    // Beside the history log, not in `saves/`: both span runs rather than
+    // belonging to one, and `App::list_saves` filters on `.bin` so neither
+    // can turn up in the save picker.
+    let profile_path = repo_root.join("profile.ron");
 
     if !graphics_available() {
         eprintln!("No display detected; feral-processes needs a graphical display.");
         std::process::exit(1);
     }
-    let mut app = App::new(assets_dir, saves_dir, history_path);
+    let mut app = App::new(assets_dir, saves_dir, history_path, profile_path);
     // Generated into an expendable copy under `saves/`, never opened on the
     // `dev-saves/` source — the game autosaves, so playing the fixture
     // directly would rewrite it into a record of this session.

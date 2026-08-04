@@ -801,6 +801,25 @@ impl Game {
         }
     }
 
+    /// The profile as it currently stands, including anything earned this
+    /// run. What app-core writes to `profile.ron`.
+    pub fn profile(&self) -> &crate::achievements::Profile {
+        self.world.resource::<crate::achievements::Profile>()
+    }
+
+    /// Takes the ids earned since the last call, emptying the queue.
+    ///
+    /// The engine decides what has been earned; app-core owns the path and
+    /// does the writing. Non-empty means "the profile changed, write it".
+    pub fn take_pending_profile_writes(&mut self) -> Vec<crate::achievements::AchievementId> {
+        std::mem::take(
+            &mut self
+                .world
+                .resource_mut::<crate::resources::PendingProfileWrites>()
+                .0,
+        )
+    }
+
     /// Replaces the empty `Profile` both constructors leave in the world with
     /// what has actually been earned across every run.
     ///

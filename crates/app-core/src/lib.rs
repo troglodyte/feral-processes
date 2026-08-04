@@ -19,8 +19,8 @@ use feral_processes_engine::battle::{
 use feral_processes_engine::items::{EquipmentSlot, ItemId};
 use feral_processes_engine::tuning::{ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST};
 use feral_processes_engine::{
-    DifficultyMode, Entity, Game, LogLine, MESSAGE_LOG_CAP, MessageSource, ProgramSaleOption,
-    RoutineHolderView, SlotShift,
+    DifficultyMode, Entity, EntityView, Game, LogLine, MESSAGE_LOG_CAP, MessageSource,
+    ProgramSaleOption, RoutineHolderView, SlotShift,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the

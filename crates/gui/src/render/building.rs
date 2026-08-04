@@ -84,17 +84,13 @@ pub(super) fn draw_build_menu(game: &mut Game, selected: usize, painter: &Painte
 
 pub(super) fn draw_worker_menu(
     game: &mut Game,
+    workers: &[EntityView],
     title: &str,
     prompt: &str,
     selected: usize,
     painter: &Painter,
     m: &Metrics,
 ) {
-    let workers: Vec<_> = game
-        .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
-        .into_iter()
-        .filter(|e| e.is_tamed)
-        .collect();
     // `view_entities` doesn't carry a raw power number, only a level and
     // an HP fraction — cross-reference `owned_pets` for it, same as the
     // fuse menu does.
@@ -127,25 +123,13 @@ pub(super) fn draw_worker_menu(
 }
 
 pub(super) fn draw_structure_menu(
-    game: &mut Game,
+    structures: &[EntityView],
     title: &str,
     prompt: &str,
-    workable_only: bool,
     selected: usize,
     painter: &Painter,
     m: &Metrics,
 ) {
-    let structures: Vec<_> = game
-        .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
-        .into_iter()
-        .filter(|e| {
-            if workable_only {
-                e.can_work
-            } else {
-                e.is_structure
-            }
-        })
-        .collect();
     let mut rows = vec![text_row(format!(
         "{prompt} (Esc to cancel; Up/Down + Enter also work)"
     ))];
@@ -178,12 +162,12 @@ pub(super) fn draw_structure_menu(
     draw_popup(title, PopupSize::Large, &rows, painter, m);
 }
 
-pub(super) fn draw_remove_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
-    let structures: Vec<_> = game
-        .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
-        .into_iter()
-        .filter(|e| e.is_structure)
-        .collect();
+pub(super) fn draw_remove_menu(
+    structures: &[EntityView],
+    selected: usize,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let mut rows = vec![text_row(
         "Demolish which structure? Removing Home destroys the whole base. (Esc to cancel; Up/Down + Enter also work)",
     )];
@@ -212,12 +196,12 @@ pub(super) fn draw_remove_menu(game: &mut Game, selected: usize, painter: &Paint
     draw_popup("Demolish Structure", PopupSize::Large, &rows, painter, m);
 }
 
-pub(super) fn draw_upgrade_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
-    let structures: Vec<_> = game
-        .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
-        .into_iter()
-        .filter(|e| e.is_structure && e.tier.is_some())
-        .collect();
+pub(super) fn draw_upgrade_menu(
+    structures: &[EntityView],
+    selected: usize,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let mut rows = vec![text_row(
         "Upgrade which structure? Each tier costs more and yields more. (Esc to cancel; Up/Down + Enter also work)",
     )];

@@ -3,6 +3,50 @@
 use crate::*;
 
 impl App {
+    /// Every tamed program within `MENU_SCAN_RADIUS` — the candidates for a
+    /// cronjob or a guard posting.
+    ///
+    /// This and the three lists below exist because each was written twice:
+    /// once in the handler that picks from it, once in the renderer that
+    /// draws it. The base menu's row-availability check (see
+    /// `App::base_menu_rows`) would have been a third copy, and a menu that
+    /// offers a row leading to an empty screen is exactly the drift that
+    /// invites.
+    pub fn nearby_programs(&mut self) -> Vec<EntityView> {
+        self.scanned(|e| e.is_tamed)
+    }
+
+    /// Nearby structures that accept a posted program. The same list whether
+    /// the work is done by a program (`Mode::CronjobStructure`) or by the
+    /// player themselves (`Mode::WorkStructure`) — it is the same job either
+    /// way, see `Game::work_structure`.
+    pub fn workable_structures(&mut self) -> Vec<EntityView> {
+        self.scanned(|e| e.can_work)
+    }
+
+    /// Every nearby structure, whatever it is: a guard posts to any of them
+    /// and demolition takes any of them.
+    pub fn nearby_structures(&mut self) -> Vec<EntityView> {
+        self.scanned(|e| e.is_structure)
+    }
+
+    /// Nearby structures that declare an upgrade path. Filtered on `tier`
+    /// rather than just `is_structure`: offering an un-upgradeable structure
+    /// and then refusing it would be a worse menu than not listing it.
+    pub fn upgradeable_structures(&mut self) -> Vec<EntityView> {
+        self.scanned(|e| e.is_structure && e.tier.is_some())
+    }
+
+    fn scanned(&mut self, keep: impl Fn(&EntityView) -> bool) -> Vec<EntityView> {
+        let Some(game) = &mut self.game else {
+            return Vec::new();
+        };
+        game.view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
+            .into_iter()
+            .filter(|e| keep(e))
+            .collect()
+    }
+
     pub(crate) fn handle_build_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.mode = Mode::Playing;
@@ -48,12 +92,7 @@ impl App {
             self.mode = Mode::Playing;
             return;
         }
-        let Some(game) = &mut self.game else { return };
-        let workers: Vec<_> = game
-            .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
-            .into_iter()
-            .filter(|e| e.is_tamed)
-            .collect();
+        let workers = self.nearby_programs();
         if let Some(idx) = self.selected_index(key, workers.len()) {
             self.pending_worker = Some(workers[idx].entity);
             self.mode = Mode::CronjobStructure;
@@ -70,12 +109,7 @@ impl App {
             self.mode = Mode::Playing;
             return;
         };
-        let Some(game) = &mut self.game else { return };
-        let structures: Vec<_> = game
-            .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
-            .into_iter()
-            .filter(|e| e.can_work)
-            .collect();
+        let structures = self.workable_structures();
         if let Some(idx) = self.selected_index(key, structures.len()) {
             let Some(game) = &mut self.game else { return };
             match game.assign_cronjob(worker, structures[idx].entity) {
@@ -88,19 +122,15 @@ impl App {
     }
 
     /// Picks a nearby workable structure for the player to work themselves —
-    /// the same `can_work` list `Mode::CronjobStructure` offers, since it is
-    /// the same job either way (see `Game::work_structure`).
+    /// `App::workable_structures`, the same list `Mode::CronjobStructure`
+    /// offers, since it is the same job either way (see
+    /// `Game::work_structure`).
     pub(crate) fn handle_work_structure_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.mode = Mode::Playing;
             return;
         }
-        let Some(game) = &mut self.game else { return };
-        let structures: Vec<_> = game
-            .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
-            .into_iter()
-            .filter(|e| e.can_work)
-            .collect();
+        let structures = self.workable_structures();
         if let Some(idx) = self.selected_index(key, structures.len()) {
             let Some(game) = &mut self.game else { return };
             match game.work_structure(structures[idx].entity) {
@@ -116,12 +146,7 @@ impl App {
             self.mode = Mode::Playing;
             return;
         }
-        let Some(game) = &mut self.game else { return };
-        let workers: Vec<_> = game
-            .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
-            .into_iter()
-            .filter(|e| e.is_tamed)
-            .collect();
+        let workers = self.nearby_programs();
         if let Some(idx) = self.selected_index(key, workers.len()) {
             self.pending_worker = Some(workers[idx].entity);
             self.mode = Mode::GuardStructure;
@@ -138,12 +163,7 @@ impl App {
             self.mode = Mode::Playing;
             return;
         };
-        let Some(game) = &mut self.game else { return };
-        let structures: Vec<_> = game
-            .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
-            .into_iter()
-            .filter(|e| e.is_structure)
-            .collect();
+        let structures = self.nearby_structures();
         if let Some(idx) = self.selected_index(key, structures.len()) {
             let Some(game) = &mut self.game else { return };
             match game.assign_guard(worker, structures[idx].entity) {
@@ -160,12 +180,7 @@ impl App {
             self.mode = Mode::Playing;
             return;
         }
-        let Some(game) = &mut self.game else { return };
-        let structures: Vec<_> = game
-            .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
-            .into_iter()
-            .filter(|e| e.is_structure)
-            .collect();
+        let structures = self.nearby_structures();
         if let Some(idx) = self.selected_index(key, structures.len()) {
             let picked_entity = structures[idx].entity;
             let picked_is_home = structures[idx].is_home;
@@ -188,15 +203,7 @@ impl App {
             self.mode = Mode::Playing;
             return;
         }
-        let Some(game) = &mut self.game else { return };
-        // Filtered on `tier`, not just `is_structure`: offering an
-        // un-upgradeable structure and then refusing it would be a worse
-        // menu than not listing it.
-        let structures: Vec<_> = game
-            .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
-            .into_iter()
-            .filter(|e| e.is_structure && e.tier.is_some())
-            .collect();
+        let structures = self.upgradeable_structures();
         if let Some(idx) = self.selected_index(key, structures.len()) {
             let picked = structures[idx].entity;
             let Some(game) = &mut self.game else { return };

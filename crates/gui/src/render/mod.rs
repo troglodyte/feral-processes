@@ -16,8 +16,8 @@ use feral_processes_engine::structures::StructureCategory;
 use feral_processes_engine::tuning::{MAX_FUSIONS, MAX_PARTY_SIZE};
 use feral_processes_engine::world::Biome;
 use feral_processes_engine::{
-    Assignee, Entity, Game, LogEntry, MESSAGE_LOG_CAP, MessageKind, PetInfo, ProgramSaleOption,
-    ResearchState, StructureReport,
+    Assignee, Entity, EntityView, Game, LogEntry, MESSAGE_LOG_CAP, MessageKind, PetInfo,
+    ProgramSaleOption, ResearchState, StructureReport,
 };
 
 mod bars;
@@ -319,6 +319,18 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
     let pending_manifest = app.pending_manifest;
     let manifest_from_picker = app.manifest_from_picker;
     let pending_field_routine = app.pending_field_routine;
+    // Taken off `app` before `app.game` is borrowed below, and through the
+    // same methods the handlers pick from. A renderer holding its own copy
+    // of the filter would draw a list the handler doesn't index — which is
+    // survivable while both are unconditional, and is not once the base
+    // menu starts hiding rows.
+    let scanned = match app.mode {
+        Mode::Cronjob | Mode::Guard => app.nearby_programs(),
+        Mode::CronjobStructure | Mode::WorkStructure => app.workable_structures(),
+        Mode::GuardStructure | Mode::Remove => app.nearby_structures(),
+        Mode::Upgrade => app.upgradeable_structures(),
+        _ => Vec::new(),
+    };
     let Some(game) = &mut app.game else { return };
     match app.mode {
         Mode::Build => draw_build_menu(game, selected, painter, m),
@@ -345,6 +357,7 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         ),
         Mode::Cronjob => draw_worker_menu(
             game,
+            &scanned,
             "Assign Cronjob",
             "Assign which program to a cronjob?",
             selected,
@@ -352,25 +365,24 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             m,
         ),
         Mode::CronjobStructure => draw_structure_menu(
-            game,
+            &scanned,
             "Assign Cronjob",
             "Cronjob which structure?",
-            true,
             selected,
             painter,
             m,
         ),
         Mode::WorkStructure => draw_structure_menu(
-            game,
+            &scanned,
             "Work",
             "Work which structure yourself?",
-            true,
             selected,
             painter,
             m,
         ),
         Mode::Guard => draw_worker_menu(
             game,
+            &scanned,
             "Assign Guard",
             "Assign which program to guard duty?",
             selected,
@@ -378,17 +390,16 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             m,
         ),
         Mode::GuardStructure => draw_structure_menu(
-            game,
+            &scanned,
             "Assign Guard",
             "Guard which structure? Any structure qualifies.",
-            false,
             selected,
             painter,
             m,
         ),
-        Mode::Remove => draw_remove_menu(game, selected, painter, m),
+        Mode::Remove => draw_remove_menu(&scanned, selected, painter, m),
         Mode::RemoveConfirm => draw_remove_confirm(selected, painter, m),
-        Mode::Upgrade => draw_upgrade_menu(game, selected, painter, m),
+        Mode::Upgrade => draw_upgrade_menu(&scanned, selected, painter, m),
         Mode::Symlink => draw_symlink_menu(game, selected, painter, m),
         Mode::InspectDirection => draw_direction_prompt(
             "Inspect Direction",

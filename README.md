@@ -167,7 +167,8 @@ movement you always stand beside one, never on it — so standing in the crook
 of an L empties three buildings and a sprawled-out line costs you trips.
 Where you put things is a decision.
 
-You can also work a node yourself with `W`, which is the same job for the
+You can also work a node yourself (base menu → *Work a structure yourself*),
+which is the same job for the
 same payout — you just have to stand there and do it, and stepping away
 breaks off the cycle. It is what you fall back on before you have programs
 worth posting, not a replacement for them: a cronjob runs whether or not
@@ -201,7 +202,8 @@ line needs five programs against a starting cap of three — a Data Cache (+2)
 is what makes it reachable, and a second one is what buys back a party to
 adventure with. A machine says so in the base log when it goes *starved*
 (nothing feeding it), *clogged* (output full, come collect) or *idle* (no
-program), once on the way in rather than every tick, and `B` shows every
+program), once on the way in rather than every tick, and the base menu's *Structure
+roster* shows every
 buffer and every stall at a glance.
 
 The Assembly Bay costs Bytecode Blocks to build, so the two-machine line you
@@ -209,7 +211,7 @@ can afford at the start is what pays for the rest of it.
 
 ## Research
 
-Press `T` for the research tree. Deploy a Research Node, cronjob a program
+The base menu's *Research* row opens the research tree. Deploy a Research Node, cronjob a program
 onto it, and it banks **Research Data** separately from your carrying
 capacity, up to 200 — which is also why it's the one output that doesn't
 scale with zone depth. Nodes cost a flat amount, may require other nodes
@@ -237,7 +239,8 @@ chance so you can watch a group become worth taming. Bosses quote no chance
 
 ## Companions
 
-Press `p` for every compiled program you own, wherever it is; up to five can
+The party menu's *Companions* row lists every compiled program you own,
+wherever it is; up to five can
 be active party members. Party members fight beside you, gain half your XP,
 passively add 10% of their own Attack and Defense to yours, and install
 abilities as **routines** into level-derived slots as they level: one slot
@@ -245,8 +248,9 @@ per two companion levels, capped at six. A species' innate kit — data files
 it claims by id and unlock level, priced by cooldown and Fatigue — is
 pre-installed at tame or fuse time and topped up whenever a level-up reaches
 a later unlock, and an innate routine can be popped back out and swapped for
-a different one. Press `m` for the routine panel (install, swap, pop out)
-and `M` at a Compiler standing anywhere on the map to extract a single
+a different one. The party menu's *Install a routine* row opens the routine panel (install,
+swap, pop out), and *Extract a routine* at a Compiler standing anywhere on
+the map salvages a single
 routine out of any program you own — the program and its other routines are
 destroyed. Not every routine comes from a kit or the research tree, though:
 some exist only in the field. A wild program can spawn already carrying one
@@ -261,7 +265,7 @@ fire than the ones behind, so who leads is a decision, not the order you
 happened to tame them in. A program
 is either fighting or working a cronjob, never both. Every individual rolls
 its own stats and growth rate within ±20% of the species baseline, surfaced
-as a **Potential** tag, and tougher species grow faster per level. Press `f`
+as a **Potential** tag, and tougher species grow faster per level. The party menu's *Fuse two programs* row
 to fuse two programs into one stronger one — the result takes the
 higher-level parent's species plus half the lower one's stats, and anything
 can only be fused three times.
@@ -282,7 +286,7 @@ encounter chance, and drop rate. All ten come from research, off the same
 `self_exec` root the other player routines hang from: Field Operations
 compiles the three regeneration routines, then Adaptive Plating and Deep
 Analysis branch off it for the combat trio and the four run-wide knobs.
-Researching one drops it into cargo; installing it into a slot with `m` is
+Researching one drops it into cargo; installing it into a slot from the party menu is
 a separate act, as with any other routine.
 
 ## Affinities
@@ -314,7 +318,7 @@ raw material, Power Cells and ICE Breakers are refined from it for one
 purpose each, and Portal Fragments and Research Data are the two progression
 currencies. Credits are money — a trader is the only thing that mints them
 and the only thing that takes them. Everything you carry counts against a shared **Buffer** starting
-at 30 units and growing with each deployed Data Cache. Press `v` for the
+at 30 units and growing with each deployed Data Cache. Press `i` for the
 inventory screen, where you equip, unequip, consume, erase, and fuse items
 across three slots (Weapon, Armor, Module). There are 31 pieces of gear:
 six cheap ones behind both a research node and a bench, and 25 that declare
@@ -348,11 +352,11 @@ from adjacent neighbours (Refinery, Winding Node, Assembly Bay), a
 symlink target you can `u` to from anywhere (Home),
 a rest gate, a power source (Recharger Node), a trading post (iso Market),
 a repairer (Patch Node), or a plain bench (Fabricator, Armory). Producers
-upgrade to Mk5 with `U`, each tier adding to the payout and raising the
+upgrade to Mk5 from the base menu, each tier adding to the payout and raising the
 chance a cycle pays out at
 all, and upgrades ride through portals with the rest of the base. Every structure
 except Home has raid Durability and can be chipped away by random raids: a
-cronjob worker or a program posted to guard (`G`) fights the raid off at a
+cronjob worker or a program posted to guard fights the raid off at a
 cost to its own HP, and every deployed Shield shaves flat damage off every
 raid anywhere in the base.
 
@@ -383,12 +387,12 @@ header names the active filter and counts what it is holding back, so a raid
 landing while you are reading the other channel still says so. `L` is
 unfiltered whatever the pane is set to — the history is the complete record.
 
-`B` opens the structure roster: every structure standing in the zone, its
+The base menu's *Structure roster* opens a read-only list: every structure standing in the zone, its
 tier, tile, distance and raid Durability, and every program posted to it —
 both the cronjob worker and the guard, where the map's own labels can only
 show one. A workable structure with nobody on it is called out as idle, which
 is usually why you looked. Neither screen takes an action and neither passes
-game time; assigning, demolishing and upgrading stay on `w`, `G`, `R` and `U`.
+game time; assigning, demolishing and upgrading each have their own row in that same menu.
 
 ## Trading
 

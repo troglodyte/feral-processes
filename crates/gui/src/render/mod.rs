@@ -7,8 +7,8 @@ use crate::fx::Fx;
 use crate::paint::{Color, DARKGRAY, GRAY, Painter, Rect, TextRun, WHITE};
 use crate::text::{Metrics, map_cell, terrain_color, ui_metrics};
 use feral_processes_app_core::{
-    App, LogFilter, MENU_SCAN_RADIUS, Mode, TradeChoice, equip_preview_tag, inventory_item_actions,
-    menu_shortcut,
+    App, GroupMenuRow, LogFilter, MENU_SCAN_RADIUS, Mode, TradeChoice, equip_preview_tag,
+    inventory_item_actions, menu_shortcut,
 };
 use feral_processes_engine::components::{GlyphColor, MachineStatus, TaskKind};
 use feral_processes_engine::items::ItemId;
@@ -27,6 +27,7 @@ mod building;
 mod crafting;
 mod field;
 mod frame_map;
+mod group_menu;
 mod inventory;
 mod manifest;
 mod manifest_layout;
@@ -50,6 +51,7 @@ use building::{
 use crafting::{draw_craft_menu, draw_craft_quantity};
 use field::{draw_field_cast, draw_field_cast_ally};
 use frame_map::{draw_frame_map, draw_map_inset};
+use group_menu::draw_group_menu;
 use inventory::{
     draw_erase_quantity, draw_inventory, draw_inventory_item_action, draw_item_describe,
 };
@@ -324,6 +326,11 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
     // of the filter would draw a list the handler doesn't index — which is
     // survivable while both are unconditional, and is not once the base
     // menu starts hiding rows.
+    let group_rows = match app.mode {
+        Mode::BaseMenu => app.base_menu_rows(),
+        Mode::PartyMenu => app.party_menu_rows(),
+        _ => Vec::new(),
+    };
     let scanned = match app.mode {
         Mode::Cronjob | Mode::Guard => app.nearby_programs(),
         Mode::CronjobStructure | Mode::WorkStructure => app.workable_structures(),
@@ -333,6 +340,8 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
     };
     let Some(game) = &mut app.game else { return };
     match app.mode {
+        Mode::BaseMenu => draw_group_menu(&group_rows, "Base", selected, painter, m),
+        Mode::PartyMenu => draw_group_menu(&group_rows, "Party", selected, painter, m),
         Mode::Build => draw_build_menu(game, selected, painter, m),
         Mode::BuildDirection => draw_direction_prompt(
             "Deploy Direction",

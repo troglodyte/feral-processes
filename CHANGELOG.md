@@ -13,6 +13,34 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### The map screen's keys are grouped behind `b`, `p` and `i`
+
+**Breaking for muscle memory.** The map bound 27 keys. Seventeen of them now
+sit behind three: `b` opens a base menu (deploy, compile, cronjob, work it
+yourself, guard, upgrade, demolish, structure roster, research), `p` opens a
+party menu (companions, manifests, fuse, install and extract routines,
+perks), and `i` opens the pack directly — it is one screen, so it needs no
+menu of its own.
+
+Thirteen keys are retired outright and do nothing: `c` `w` `W` `G` `R` `U`
+`B` `T` `f` `m` `M` `d` `v`. Keeping them as aliases would have meant the
+flat surface never actually shrank, and the help screen would have had two
+systems to document. Inspect-a-direction moves from `i` to `x` — perks
+moving into the party menu freed the key a player would guess for it anyway.
+
+Collect (`C`), trade (`t`), cast a field routine (`a`) and symlink (`u`)
+stay flat despite being on-topic: they are pressed every few turns while
+walking, and a menu is a keystroke tax on anything that frequent.
+
+A menu lists only what you can do from where you stand. A row is shown when
+its screen would have at least one row of its own — so with nothing
+deployed there is no *Demolish*, and with one companion there is no *Fuse* —
+and rows whose action needs open ground disappear while you are in the
+Stack, where your `Position` is still pinned to the entrance tile above.
+
+Esc from a screen a menu opened returns to that menu rather than to the map;
+finishing a job still drops you back to the map.
+
 ### The window opens fullscreen, and the UI text is smaller
 
 Was a 1440x900 window. It now opens borderless fullscreen at whatever the

@@ -24,7 +24,7 @@ mod text;
 use bevy::ecs::system::SystemParam;
 use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
-use bevy::window::WindowResolution;
+use bevy::window::{MonitorSelection, WindowMode};
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPreUpdateSet, EguiPrimaryContextPass};
 
 use feral_processes_app_core::{App, GameKey, Mode};
@@ -66,9 +66,6 @@ const SPECIAL_KEYS: &[KeyCode] = &[
     KeyCode::Escape,
     KeyCode::Backspace,
 ];
-
-const WINDOW_WIDTH: u32 = 2560;
-const WINDOW_HEIGHT: u32 = 1440;
 
 const DEFAULT_VOLUME: f32 = 0.2;
 const VOLUME_STEP: f32 = 0.1;
@@ -127,7 +124,14 @@ pub fn run(app: App) {
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "feral-processes".to_string(),
-                resolution: WindowResolution::new(WINDOW_WIDTH, WINDOW_HEIGHT),
+                // Borderless rather than exclusive fullscreen: nothing here
+                // wants a mode switch, and every size on screen is either a
+                // fraction of the window or clamped, so the monitor's own
+                // resolution is as good a starting point as any literal.
+                // No windowed size is carried alongside it because there is
+                // no toggle back — a key for that is the point at which one
+                // becomes worth having.
+                mode: WindowMode::BorderlessFullscreen(MonitorSelection::Current),
                 ..default()
             }),
             ..default()

@@ -32,13 +32,21 @@ pub fn map_cell(zoom: u16) -> (f32, u16) {
 /// The `window_conf()` height every hardcoded size in `render.rs` was
 /// originally tuned against.
 const REFERENCE_HEIGHT: f32 = 900.0;
-const BASE_UI_FONT: f32 = 24.0;
+/// Body text at `REFERENCE_HEIGHT`. Below the 24.0 the layout was originally
+/// tuned at: the window opens fullscreen now, and on a 1440-tall display the
+/// linear ramp put body text at 38px, which reads as a magnified UI rather
+/// than a roomier one. Lowering the base rather than capping the ramp is a
+/// deliberate choice to shrink text at *every* window size, not just tall
+/// ones. Pinned by `ui_metrics_anchors_the_ramp_at_the_reference_height`.
+const BASE_UI_FONT: f32 = 20.0;
 const MIN_UI_FONT: u16 = 16;
 const MAX_UI_FONT: u16 = 40;
 /// Preserves the 30.0 / 24.0 relationship the fixed constants had.
 const LINE_HEIGHT_RATIO: f32 = 1.25;
-/// Ratios chosen to reproduce the existing literals exactly at
-/// `BASE_UI_FONT`: 16.0, 10.0 and 6.0 respectively.
+/// Ratios chosen to reproduce `render.rs`'s original literals — 16.0, 10.0
+/// and 6.0 — at the 24px font those were tuned against, which is no longer
+/// `BASE_UI_FONT`. They are what holds the *proportions* now, not those
+/// three numbers.
 const PAD_RATIO: f32 = 2.0 / 3.0;
 const INSET_RATIO: f32 = 5.0 / 12.0;
 const GAP_RATIO: f32 = 0.25;
@@ -312,19 +320,22 @@ mod tests {
     }
 
     #[test]
-    fn ui_metrics_reproduces_todays_sizes_at_the_reference_window_height() {
-        // The whole refactor rests on this: at the default window, every
-        // number must come out exactly where it is hardcoded today, so a
-        // layout shift at default size means the refactor is wrong.
+    fn ui_metrics_anchors_the_ramp_at_the_reference_height() {
+        // The ramp is linear and unclamped through here, so this one height
+        // fixes every other: a change to `BASE_UI_FONT` that wasn't meant to
+        // move the whole UI fails here first. `pad` and `inset` come off
+        // ratios that aren't exact in binary, so they're compared loosely —
+        // the point is the proportion, not the last bit.
         let m = ui_metrics(REFERENCE_HEIGHT);
-        assert_eq!(m.font_size, 24);
-        assert_eq!(m.line_height, 30.0);
-        assert_eq!(m.pad, 16.0);
-        assert_eq!(m.inset, 10.0);
-        assert_eq!(m.gap, 6.0);
-        assert_eq!(m.title(), 28);
-        assert_eq!(m.label(), 22);
-        assert_eq!(m.small(), 20);
+        assert_eq!(m.font_size, BASE_UI_FONT as u16);
+        assert_eq!(m.font_size, 20);
+        assert_eq!(m.line_height, 25.0);
+        assert!((m.pad - 13.333).abs() < 0.01, "pad was {}", m.pad);
+        assert!((m.inset - 8.333).abs() < 0.01, "inset was {}", m.inset);
+        assert_eq!(m.gap, 5.0);
+        assert_eq!(m.title(), 24);
+        assert_eq!(m.label(), 18);
+        assert_eq!(m.small(), 16);
     }
 
     #[test]

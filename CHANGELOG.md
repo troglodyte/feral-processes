@@ -13,13 +13,20 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
-### The window opens at 2560x1440
+### The window opens fullscreen, and the UI text is smaller
 
-Was 1440x900. The window has always been resizable and everything on screen
-is either a fraction of it or clamped, so this only changes where you start:
-UI text sizes off window height and the zone map shows *more tiles* rather
-than bigger ones, so the extra room is map and log, not magnification. Zoom
-(`+`/`-`) is still the only thing that changes tile size.
+Was a 1440x900 window. It now opens borderless fullscreen at whatever the
+monitor is, and body text drops from 24px to 20px at the reference height —
+so the extra room goes to map tiles and log rows rather than to a magnified
+UI. The text change applies at every window size, not just large ones.
+
+Nothing else moved: every size on screen is either a fraction of the window
+or derived from the font, and the zone map has always shown *more tiles*
+rather than bigger ones as the window grows. Zoom (`+`/`-`) remains the only
+thing that changes tile size.
+
+There is no key to leave fullscreen, and so no windowed size is carried
+alongside it.
 
 ### Adjacency-fed production chains
 

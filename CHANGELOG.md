@@ -13,6 +13,26 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Swap gear from the slot it's in
+
+Picking one of the three equipped rows on the inventory screen (`i`) used to
+unequip on the spot, so changing a weapon meant unequipping it, hunting the
+replacement down a cargo list of any length, and equipping that. It now opens
+a replacement list for that slot: every piece of gear you carry that fits it,
+best first, with the row that empties the slot last. Each row shows the bonus
+you would get and, beside it, the change from what you are wearing.
+
+A candidate is previewed at the level it *would* equip at, while the worn item
+is measured at the level it remembers. That gap is the point — gear doubles per
+zone level and locks in when you put it on, so a spare copy of the weapon
+already on your back is a genuine upgrade after a breach, and the list now says
+so out loud instead of leaving you to work it out.
+
+No engine change: `Game::equip` already returned the outgoing item to cargo
+itself, so a swap is one call rather than an unequip that could leave you
+bare-handed if the equip behind it were refused — see
+[Items and equipment](README.md#items-and-equipment).
+
 ### Achievements that outlive the run
 
 Thirteen rungs across four axes — how deep a sector you breach into, how far

@@ -19,7 +19,7 @@ use feral_processes_engine::battle::SpecialTargeting;
 use feral_processes_engine::battle::{
     ActionKind, BattleAction, PartyCommandKind, SpecialTarget, TargetSpec,
 };
-use feral_processes_engine::items::{EquipmentSlot, ItemId};
+use feral_processes_engine::items::{EquipmentSlot, EquipmentStats, ItemId};
 use feral_processes_engine::tuning::{ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST};
 use feral_processes_engine::{
     AchievementRow, DifficultyMode, Entity, EntityView, Game, LogLine, MESSAGE_LOG_CAP,
@@ -127,19 +127,147 @@ pub fn equip_preview_tag(game: &Game, item: &ItemId, zone_level: u32, fusion_tie
         .scaled_for_level(zone_level)
         .fused_for_tier(fusion_tier);
     let mut parts = vec![slot.short_label().to_string()];
-    if mods.atk != 0 {
-        parts.push(format!("+{} ATK", mods.atk));
-    }
-    if mods.def != 0 {
-        parts.push(format!("+{} DEF", mods.def));
-    }
-    if mods.decompiler != 0 {
-        parts.push(format!("+{} DECOMP", mods.decompiler));
+    let summary = stat_summary(mods);
+    if !summary.is_empty() {
+        parts.push(summary);
     }
     if fusion_tier > 0 {
         parts.push(format!("fusion T{fusion_tier}"));
     }
     format!(" ({})", parts.join(" "))
+}
+
+/// The three equipment stats as one line — `"+4 ATK"`, `"+2 ATK +1 DEF"`,
+/// empty when every stat is zero. Signed throughout, so it reads a *change*
+/// as naturally as a total: `"-2 ATK +3 DEF"`.
+///
+/// One formatter rather than three. The inventory list's equip tag, the
+/// equipped panel and the swap picker's two stat columns all print exactly
+/// this, over the same `scaled_for_level().fused_for_tier()` pair, and three
+/// copies of it is how the column that nobody re-reads drifts.
+pub fn stat_summary(mods: EquipmentStats) -> String {
+    [
+        (mods.atk, "ATK"),
+        (mods.def, "DEF"),
+        (mods.decompiler, "DECOMP"),
+    ]
+    .into_iter()
+    .filter(|(value, _)| *value != 0)
+    .map(|(value, name)| format!("{value:+} {name}"))
+    .collect::<Vec<_>>()
+    .join(" ")
+}
+
+/// What one row of the `Mode::EquipSwap` picker does when chosen.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SwapChoice {
+    /// Wear this instead, sending whatever the slot holds back to cargo.
+    Equip(ItemId),
+    /// Empty the slot. Offered only when something is actually worn.
+    Unequip,
+}
+
+/// One row of the gear-swap picker: what it does, and how it draws.
+///
+/// The handler dispatches `choice` and the renderer draws `label`, both out
+/// of one `equip_swap_rows` call — the rows depend on what is in cargo right
+/// now, so a renderer that rebuilt the list itself could put the highlight
+/// on a different row from the one that fires.
+pub struct SwapRow {
+    pub choice: SwapChoice,
+    pub label: String,
+}
+
+/// How wide the swap picker's name and stat columns are. Padding lives here
+/// rather than in the renderer because the labels do — see `SwapRow`.
+const SWAP_NAME_COLUMN: usize = 20;
+const SWAP_STATS_COLUMN: usize = 20;
+
+/// Every replacement for `slot` the player could put on right now, best
+/// first, with the row that empties the slot last.
+///
+/// Each candidate is previewed at the level it *would* equip at, since gear
+/// takes the current zone level as it goes on (`Game::equip`), while the
+/// worn item is measured at the level it actually remembers. Those two
+/// scalings differ on purpose: gear doubles per zone level
+/// (`GEAR_LEVEL_GROWTH`), so a spare copy of the weapon you are already
+/// wearing is a real upgrade after a breach, and previewing it at the worn
+/// copy's level would hide that.
+///
+/// The sort key sums the three stat deltas, which values a point of DECOMP
+/// like a point of ATK. That is a display heuristic for "probably the one
+/// you want" and not a claim about what those stats are worth, which is why
+/// it is here rather than a weighting in `tuning.rs`.
+pub fn equip_swap_rows(game: &Game, slot: EquipmentSlot) -> Vec<SwapRow> {
+    let status = game.player_status();
+    let worn = match slot {
+        EquipmentSlot::Weapon => &status.weapon,
+        EquipmentSlot::Armor => &status.armor,
+        EquipmentSlot::Module => &status.module,
+    };
+    let worn_mods = worn
+        .as_ref()
+        .and_then(|e| {
+            game.equipment_of(&e.item)
+                .map(|(_, base)| base.scaled_for_level(e.level).fused_for_tier(e.fusion_tier))
+        })
+        .unwrap_or_default();
+
+    let mut rows: Vec<(i32, String, SwapRow)> = status
+        .inventory
+        .iter()
+        .filter_map(|(item, _)| {
+            let (item_slot, base) = game.equipment_of(item)?;
+            (item_slot == slot).then_some((item, base))
+        })
+        .map(|(item, base)| {
+            let tier = game.item_fusion_tier(item);
+            let mods = base.scaled_for_level(status.zone).fused_for_tier(tier);
+            let name = game.item_name(item).to_string();
+            let stats = match tier {
+                0 => stat_summary(mods),
+                tier => format!("{} T{tier}", stat_summary(mods)),
+            };
+            (
+                delta_total(mods, worn_mods),
+                name.clone(),
+                SwapRow {
+                    choice: SwapChoice::Equip(item.clone()),
+                    label: swap_label(&name, &stats, mods, worn_mods),
+                },
+            )
+        })
+        .collect();
+    // Descending by gain, then by name so the order never shifts between two
+    // openings of the same screen.
+    rows.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+
+    let mut rows: Vec<SwapRow> = rows.into_iter().map(|(_, _, row)| row).collect();
+    if worn.is_some() {
+        rows.push(SwapRow {
+            choice: SwapChoice::Unequip,
+            label: swap_label("(Unequip)", "", EquipmentStats::default(), worn_mods),
+        });
+    }
+    rows
+}
+
+fn delta_total(mods: EquipmentStats, worn: EquipmentStats) -> i32 {
+    (mods.atk - worn.atk) + (mods.def - worn.def) + (mods.decompiler - worn.decompiler)
+}
+
+fn swap_label(name: &str, stats: &str, mods: EquipmentStats, worn: EquipmentStats) -> String {
+    let delta = stat_summary(EquipmentStats {
+        atk: mods.atk - worn.atk,
+        def: mods.def - worn.def,
+        decompiler: mods.decompiler - worn.decompiler,
+    });
+    let delta = if delta.is_empty() {
+        "no change".to_string()
+    } else {
+        delta
+    };
+    format!("{name:<SWAP_NAME_COLUMN$} {stats:<SWAP_STATS_COLUMN$} {delta}")
 }
 
 /// How many game ticks (see `Game::current_tick`) pass between autosaves —
@@ -391,6 +519,12 @@ pub enum Mode {
     /// Reached with `d` from `Mode::Playing`.
     ManifestPick,
     Inventory,
+    /// Replacements for one equipment slot, reached by picking that slot on
+    /// `Mode::Inventory`. Rows come from `equip_swap_rows`, so the picker
+    /// lists exactly what fits and shows what each swap would change. The
+    /// row that empties the slot lives in here too — unequipping is one of
+    /// the things you might want that slot to become, not a separate errand.
+    EquipSwap,
     InventoryItemAction,
     /// The authored description of `pending_inventory_item`, read out of its
     /// `.ron` file. Reached with `d` from `Mode::InventoryItemAction`, and
@@ -534,6 +668,7 @@ impl Mode {
             | Mode::Manifest
             | Mode::ManifestPick
             | Mode::Inventory
+            | Mode::EquipSwap
             | Mode::InventoryItemAction
             | Mode::ItemDescribe
             | Mode::EraseQuantity
@@ -725,6 +860,9 @@ pub struct App {
     /// from `Mode::BattleTarget` before it becomes a `BattleAction::Special`.
     pub pending_special_ability: Option<usize>,
     pub pending_inventory_item: Option<ItemId>,
+    /// The equipment slot picked on `Mode::Inventory`, awaiting a
+    /// replacement (or an unequip) from `Mode::EquipSwap`.
+    pub pending_swap_slot: Option<EquipmentSlot>,
     /// The inventory item picked for erasure, awaiting a quantity from
     /// `Mode::EraseQuantity`.
     pub pending_erase: Option<ItemId>,

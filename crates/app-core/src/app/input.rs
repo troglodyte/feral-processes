@@ -118,6 +118,7 @@ impl App {
             Mode::Manifest => self.handle_manifest_key(key),
             Mode::ManifestPick => self.handle_manifest_pick_key(key),
             Mode::Inventory => self.handle_inventory_key(key),
+            Mode::EquipSwap => self.handle_equip_swap_key(key),
             Mode::InventoryItemAction => self.handle_inventory_item_action_key(key),
             Mode::ItemDescribe => self.handle_item_describe_key(key),
             Mode::EraseQuantity => self.handle_erase_quantity_key(key),

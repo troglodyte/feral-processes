@@ -245,3 +245,205 @@ fn equip_preview_tag_keeps_showing_level_scaling_and_fusion_beside_the_slot() {
         " (WEP +9 ATK fusion T1)"
     );
 }
+
+#[test]
+fn selecting_an_equipped_slot_opens_the_swap_list_instead_of_unequipping() {
+    let mut app = app_wearing_weapon(910, Some(("overclock_core", 1)), &[("kinetic_edge", 1)], 1);
+    app.mode = Mode::Inventory;
+
+    app.handle_key(GameKey::Char('1'));
+
+    assert_eq!(app.mode, Mode::EquipSwap);
+    assert_eq!(app.pending_swap_slot, Some(EquipmentSlot::Weapon));
+    assert_eq!(
+        app.game
+            .as_ref()
+            .unwrap()
+            .player_status()
+            .weapon
+            .map(|e| e.item),
+        Some(ItemId::from("overclock_core")),
+        "opening the picker must not strip the slot on the way in"
+    );
+}
+
+#[test]
+fn picking_a_swap_row_equips_it_and_returns_to_the_inventory() {
+    let mut app = app_wearing_weapon(911, Some(("overclock_core", 1)), &[("kinetic_edge", 1)], 1);
+    app.mode = Mode::Inventory;
+    app.handle_key(GameKey::Char('1'));
+
+    let rows = equip_swap_rows(app.game.as_ref().unwrap(), EquipmentSlot::Weapon);
+    let idx = rows
+        .iter()
+        .position(|r| r.choice == SwapChoice::Equip(ItemId::from("kinetic_edge")))
+        .expect("the spare weapon should be offered");
+    app.handle_key(GameKey::Char(menu_shortcut(idx)));
+
+    let status = app.game.as_ref().unwrap().player_status();
+    assert_eq!(
+        status.weapon.map(|e| e.item),
+        Some(ItemId::from("kinetic_edge"))
+    );
+    assert!(
+        status
+            .inventory
+            .iter()
+            .any(|(i, q)| *i == ItemId::from("overclock_core") && *q == 1),
+        "the weapon that came off must land back in cargo"
+    );
+    assert_eq!(app.mode, Mode::Inventory);
+    assert_eq!(app.pending_swap_slot, None);
+}
+
+#[test]
+fn the_unequip_row_empties_the_slot() {
+    let mut app = app_wearing_weapon(912, Some(("overclock_core", 1)), &[("kinetic_edge", 1)], 1);
+    app.mode = Mode::Inventory;
+    app.handle_key(GameKey::Char('1'));
+
+    let rows = equip_swap_rows(app.game.as_ref().unwrap(), EquipmentSlot::Weapon);
+    let idx = rows
+        .iter()
+        .position(|r| r.choice == SwapChoice::Unequip)
+        .expect("an occupied slot must offer to be emptied");
+    app.handle_key(GameKey::Char(menu_shortcut(idx)));
+
+    let status = app.game.as_ref().unwrap().player_status();
+    assert!(status.weapon.is_none());
+    assert!(
+        status
+            .inventory
+            .iter()
+            .any(|(i, q)| *i == ItemId::from("overclock_core") && *q == 1)
+    );
+    assert_eq!(app.mode, Mode::Inventory);
+}
+
+#[test]
+fn the_swap_list_offers_only_gear_for_that_slot() {
+    let app = app_wearing_weapon(
+        913,
+        Some(("overclock_core", 1)),
+        &[
+            ("kinetic_edge", 1),
+            ("firewall_plating", 1),
+            ("cortex_hack", 1),
+            ("core_fragment", 4),
+        ],
+        1,
+    );
+
+    let offered: Vec<ItemId> = equip_swap_rows(app.game.as_ref().unwrap(), EquipmentSlot::Weapon)
+        .into_iter()
+        .filter_map(|r| match r.choice {
+            SwapChoice::Equip(item) => Some(item),
+            SwapChoice::Unequip => None,
+        })
+        .collect();
+
+    assert_eq!(
+        offered,
+        vec![ItemId::from("kinetic_edge")],
+        "armor, a module and a raw material all fail to fit a weapon slot"
+    );
+}
+
+#[test]
+fn swap_rows_are_sorted_best_first_with_unequip_last() {
+    let app = app_wearing_weapon(
+        914,
+        Some(("overclock_core", 1)),
+        &[
+            ("shiv_routine", 1),
+            ("monofilament_whip", 1),
+            ("kinetic_edge", 1),
+        ],
+        1,
+    );
+
+    let choices: Vec<SwapChoice> =
+        equip_swap_rows(app.game.as_ref().unwrap(), EquipmentSlot::Weapon)
+            .into_iter()
+            .map(|r| r.choice)
+            .collect();
+
+    // Worn is +3 ATK, so the deltas run whip +1, edge -1, shiv -2.
+    assert_eq!(
+        choices,
+        vec![
+            SwapChoice::Equip(ItemId::from("monofilament_whip")),
+            SwapChoice::Equip(ItemId::from("kinetic_edge")),
+            SwapChoice::Equip(ItemId::from("shiv_routine")),
+            SwapChoice::Unequip,
+        ],
+        "the upgrade should be row 1 and emptying the slot the last resort"
+    );
+}
+
+/// Gear is stamped with the zone level it was equipped at and doubles per
+/// level (`GEAR_LEVEL_GROWTH`), so a spare copy of what you already wear is
+/// a real upgrade after a breach. The delta has to compare the worn item at
+/// its *recorded* level against the candidate at the *current* zone's.
+#[test]
+fn a_spare_of_the_worn_item_reports_the_gain_from_re_equipping_it() {
+    let app = app_wearing_weapon(
+        915,
+        Some(("overclock_core", 1)),
+        &[("overclock_core", 1)],
+        3,
+    );
+
+    let rows = equip_swap_rows(app.game.as_ref().unwrap(), EquipmentSlot::Weapon);
+    let row = rows
+        .iter()
+        .find(|r| r.choice == SwapChoice::Equip(ItemId::from("overclock_core")))
+        .expect("a spare of the worn item is still a candidate");
+
+    // Base +3 ATK: worn remembers level 1, a fresh equip lands at zone 3
+    // (3 * 2 * 2 = 12), so re-equipping is worth +9.
+    assert!(
+        row.label.contains("+12 ATK"),
+        "the candidate should be previewed at the level it would equip at; got {:?}",
+        row.label
+    );
+    assert!(
+        row.label.contains("+9 ATK"),
+        "the delta should be the gain over the worn copy; got {:?}",
+        row.label
+    );
+}
+
+#[test]
+fn an_empty_slot_with_nothing_to_fill_it_stays_on_the_inventory() {
+    let mut app = app_wearing_weapon(916, None, &[("core_fragment", 4)], 1);
+    app.mode = Mode::Inventory;
+
+    app.handle_key(GameKey::Char('1'));
+
+    assert_eq!(
+        app.mode,
+        Mode::Inventory,
+        "an empty picker should not open at all"
+    );
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("Nothing in cargo fits your Weapon slot.")
+    );
+}
+
+#[test]
+fn esc_returns_from_the_swap_list_to_the_inventory() {
+    let mut app = app_wearing_weapon(917, Some(("overclock_core", 1)), &[("kinetic_edge", 1)], 1);
+    app.mode = Mode::Inventory;
+    app.handle_key(GameKey::Char('1'));
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::Inventory);
+    assert_eq!(app.pending_swap_slot, None);
+    assert_eq!(
+        app.menu_selected, 0,
+        "Esc should leave the highlight back on the slot it came from"
+    );
+}

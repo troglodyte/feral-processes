@@ -1728,10 +1728,18 @@ fn one_shot_nest(game: &mut Game, nest: Entity) {
 #[test]
 fn destroying_a_nest_grants_its_species_work_resource() {
     let mut game = Game::new(720, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    // scrapper is the can_nest species with a work_resource
-    // (assets/species/scrapper.ron: power_cell) — wraith and trojan have
-    // none, and using them would make this test vacuous.
-    let resource = ItemId::from(ids::POWER_CELL);
+    // Scrapper is the `can_nest` species carrying a `work_resource` at all —
+    // wraith and trojan have none, and using one of those would make this
+    // test vacuous. *Which* resource is read off the species file rather
+    // than named here: this test asserted `power_cell` until 2026-08-04 moved
+    // the Scrapper to Core Fragments, and the claim it exists to make is
+    // "the nest pays its species' resource", not which one that is.
+    let resource = game
+        .world
+        .resource::<SpeciesDb>()
+        .get("scrapper")
+        .and_then(|s| s.work_resource.clone())
+        .expect("the nesting species used here must carry a work_resource");
     let nest = game.spawn_nest("scrapper", 400, 400);
     let before = held(&game, &resource);
 
@@ -1741,8 +1749,9 @@ fn destroying_a_nest_grants_its_species_work_resource() {
     let minimum = NEST_CACHE_WORK_RESOURCE_MULT * WORK_RESOURCE_DROP.start();
     assert!(
         after >= before + minimum,
-        "destroying the nest should have granted at least {minimum} power_cell, went from \
-         {before} to {after}"
+        "destroying the nest should have granted at least {minimum} {}, went from \
+         {before} to {after}",
+        resource.as_str()
     );
 }
 

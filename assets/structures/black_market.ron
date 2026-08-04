@@ -16,8 +16,11 @@
         // not bought with mined salvage. Putting them back reopens the route
         // from base production straight to progression, which is the thing
         // that made settling in one zone strictly better than moving.
+        // Priced by hand rather than off `ItemDef::value`: this is what the
+        // trader charges, not what the thing is worth, and both are printable
+        // floor-price items the player can also craft. The gap is the margin.
         buy: [
-            ("ice_breaker", 4),
+            ("ice_breaker", 5),
             ("power_cell", 3),
         ],
     )),

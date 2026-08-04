@@ -192,6 +192,28 @@ fn every_base_produced_item_sits_at_the_floor_price() {
     );
 }
 
+/// `cache_drop` is rolled once per cache for every item that declares one,
+/// so the expected haul is the *sum* across the item set, not a pick from a
+/// list — which means any one item's number is a change to what every cache
+/// in the game holds. `assets/items/README.md` tells modders the shipped set
+/// "totals a little over one item per cache" and asks them to keep their own
+/// numbers low on that basis; nothing checked it, and dropping the Power
+/// Cell's 0.4 on 2026-08-04 moved the total from 1.55 to 1.30.
+#[test]
+fn a_stack_cache_holds_a_little_over_one_item_on_average() {
+    let game = Game::new(80, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let expected: f32 = game
+        .item_defs()
+        .iter()
+        .filter_map(|def| def.cache_drop)
+        .sum();
+    assert!(
+        (1.0..=1.6).contains(&expected),
+        "shipped caches now average {expected} items, which is no longer the \
+         'a little over one' the items README promises a modder"
+    );
+}
+
 /// A modded item that predates the `value` field still trades — at the flat
 /// rate every item in the game used before the ladder existed.
 #[test]

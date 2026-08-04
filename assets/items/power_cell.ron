@@ -5,5 +5,5 @@
     value: Some(1),
     craftable: Some((cost: [("core_fragment", 2)])),
     consume: Some((power: 25.0)),
-    cache_drop: Some(0.4),
+    cache_drop: Some(0.15),
 )

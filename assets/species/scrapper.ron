@@ -14,7 +14,7 @@
         (name: "Ram", power: 8),
         (name: "Shock", power: 11),
     ],
-    work_resource: Some("power_cell"),
+    work_resource: Some("core_fragment"),
     can_nest: true,
     abilities: [(id: "cascade_overflow", level: 3)],
     affinities: (damage: 1.2, heal: 0.85),

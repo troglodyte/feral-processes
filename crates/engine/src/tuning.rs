@@ -837,11 +837,16 @@ pub const FORGIVING_RESPAWN_NEED_FLOOR: f32 = 40.0;
 /// Doubled from `1..=2` on 2026-08-02, when deleting the scan action left
 /// kills as the only source of Core Fragments outside a built base. At 1..=2
 /// the first Mining Node — 12 fragments, on top of Home's 5 — was about eight
-/// kills away, and a rest cost five of them. Only seven species carry a
-/// `work_resource` at all (four Core Fragments, three Power Cells), so this
-/// lifts Power Cell drops by the same factor; that is accepted rather than
-/// split into a per-resource range, which would be new asset data for a
-/// seven-species problem.
+/// kills away, and a rest cost five of them.
+///
+/// The range is shared by every resource rather than split per item, and the
+/// cost of that is borne on the Power Cell side: doubling for Fragments
+/// doubled cells too. Rather than add a per-resource range, 2026-08-04 moved
+/// the Scrapper off `power_cell`, leaving the Glitch as the one species that
+/// drops cells — so the shared range now covers seven Core Fragment carriers
+/// and one cell carrier. Count the `.ron` files before quoting a number here;
+/// this comment claimed "four and three" for two days while the real split
+/// was six and two.
 pub const WORK_RESOURCE_DROP: std::ops::RangeInclusive<u32> = 2..=4;
 
 /// A mining node's per-cycle success chance is `MINING_SUCCESS_BASE` plus

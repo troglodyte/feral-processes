@@ -13,14 +13,6 @@ pub type StructureId = String;
 pub struct WorkDef {
     pub produces: ItemId,
     pub ticks_per_unit: u32,
-    /// How many units a worked node stores before its assigned creature has
-    /// to wait for it to refill. Once a node is mined down to 0 it
-    /// immediately refills to `capacity` and the cronjob keeps running —
-    /// nodes are an infinite (if bursty) resource, not a one-time deposit.
-    /// `#[serde(default)]` so existing structure files (including mods)
-    /// without this field get a sensible baseline.
-    #[serde(default = "default_work_capacity")]
-    pub capacity: u32,
     /// If set, a completed gather cycle isn't a guaranteed yield: it only
     /// pays out with a level-based percentage chance (see
     /// `systems::task_progress_system`), and a miss still resets the cycle.
@@ -49,17 +41,43 @@ pub struct WorkDef {
     pub flat_payout: bool,
 }
 
-fn default_work_capacity() -> u32 {
-    crate::tuning::DEFAULT_WORK_CAPACITY
+fn default_output_capacity() -> u32 {
+    crate::tuning::DEFAULT_OUTPUT_CAPACITY
 }
 
+/// Which group a structure lists under in the build menu.
+///
+/// Derived from the fields a def declares rather than authored, exactly like
+/// `ItemDef::category` — so a modded structure groups by what it *does*
+/// instead of by where its id happens to fall in the alphabet. Variant order
+/// **is** menu order: shelter, then the things that produce, then the chain
+/// that consumes what they produce, then the rest.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum StructureCategory {
+    Home,
+    /// Produces from nothing, given a program — see `StructureDef::work`.
+    Extractor,
+    /// Consumes its neighbours' output, given a program — see
+    /// `StructureDef::assembles`.
+    Assembler,
+    Utility,
+    Trade,
+    Defence,
+}
+
+/// A structure's automated-crafting capability — see
+/// `StructureDef::assembles` and `systems::assembler_system`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct PassiveProcessDef {
-    pub consumes: ItemId,
-    pub produces: ItemId,
+pub struct AssembleDef {
+    /// What this machine builds. Deliberately an *item id* and not a recipe:
+    /// the machine runs that item's own `ItemDef::craftable.cost`, so there
+    /// is exactly one recipe format in the game and a modder who adds a
+    /// craftable item gets an automatable one for free.
+    pub item: ItemId,
+    /// Ticks of progress a completed unit costs, once the machine has a full
+    /// batch of ingredients staged, room in its output, and a program
+    /// assigned.
     pub ticks_per_unit: u32,
-    /// Chebyshev distance (in tiles) the player must be within for this to run.
-    pub radius: i32,
 }
 
 /// A structure's power-regeneration capability — see
@@ -71,7 +89,7 @@ pub struct PowerRegenDef {
     /// structure that sets it.
     pub per_tick: f32,
     /// Chebyshev distance (in tiles) the player must be within for this to
-    /// run, same box-radius style as `PassiveProcessDef::radius`.
+    /// run, same box-radius style as `RestDef::radius`.
     pub radius: i32,
 }
 
@@ -168,16 +186,26 @@ pub struct StructureDef {
     /// If set, a tamed creature can be assigned to work this structure,
     /// producing `produces` every `ticks_per_unit` ticks.
     pub work: Option<WorkDef>,
-    /// If set, this structure automatically converts `consumes` into
-    /// `produces` whenever the player is standing within `radius` tiles —
-    /// no assigned worker needed, unlike `work`. `#[serde(default)]` so
-    /// existing structure files written before this field existed still
-    /// parse (defaulting to no passive processing).
+    /// How many units this structure's output buffer holds before it clogs
+    /// (see `components::Stock`). Top-level rather than inside `work`
+    /// because an assembler declares `assembles` and no `work` block at all,
+    /// and a storage building declares neither — both still need an output
+    /// size. `#[serde(default = "default_output_capacity")]` so existing
+    /// structure files (including mods) get a usable buffer rather than 0,
+    /// which would clog on the first unit produced.
+    #[serde(default = "default_output_capacity")]
+    pub capacity: u32,
+    /// If set, this structure automatically builds the named item from
+    /// ingredients pulled out of its orthogonal neighbours' output buffers,
+    /// once a program is assigned to it. Unlike `work`, which produces from
+    /// nothing, this consumes — which is what lets machines form a chain.
+    /// `#[serde(default)]` so existing structure files (including mods)
+    /// written before this field existed still parse.
     #[serde(default)]
-    pub passive_process: Option<PassiveProcessDef>,
+    pub assembles: Option<AssembleDef>,
     /// If set, this structure restores the player's Power every tick while
     /// they stand within `radius` tiles — no assigned worker and no input
-    /// item, unlike `work` and `passive_process`. `#[serde(default)]` so
+    /// item, unlike `work`. `#[serde(default)]` so
     /// existing structure files (including mods) written before this field
     /// existed still parse (defaulting to no regeneration).
     #[serde(default)]
@@ -289,6 +317,49 @@ pub struct StructureDb {
     structures: HashMap<StructureId, StructureDef>,
 }
 
+impl StructureDef {
+    /// Whether this structure runs a job a program can be posted to — an
+    /// extractor (`work`) or an assembler (`assembles`).
+    ///
+    /// Named once because three things have to agree about it and one of
+    /// them already drifted: deploy inserts `components::MachineStatus` on a
+    /// machine, `Game::accepts_a_program` decides what the cronjob menu
+    /// offers, and the map colours an outline by that status. Deploy tested
+    /// `work.is_some()` alone, so every assembler stood without a status —
+    /// which silently cost it its stall log lines, its roster state and its
+    /// outline, because every consumer treats a missing status as "not a
+    /// machine" rather than as an error.
+    pub fn runs_a_job(&self) -> bool {
+        self.work.is_some() || self.assembles.is_some()
+    }
+
+    /// Which group this structure lists under. Checked in this order because
+    /// the first match wins and the overlaps have a right answer: a bench
+    /// that also defends is still where you go to build things, and the
+    /// Compiler produces *and* gates a recipe but is an extractor first.
+    ///
+    /// Total by construction — a structure declaring none of these is
+    /// utility, which is what a Data Cache or a Recharger Node is.
+    pub fn category(&self) -> StructureCategory {
+        if self.id == crate::HOME_STRUCTURE_ID {
+            return StructureCategory::Home;
+        }
+        if self.work.is_some() {
+            return StructureCategory::Extractor;
+        }
+        if self.assembles.is_some() {
+            return StructureCategory::Assembler;
+        }
+        if self.trade.is_some() {
+            return StructureCategory::Trade;
+        }
+        if self.raid_defense > 0 || self.repair.is_some() {
+            return StructureCategory::Defence;
+        }
+        StructureCategory::Utility
+    }
+}
+
 impl StructureDb {
     /// Loads every `*.ron` structure definition in `dir`. Malformed files
     /// are skipped (with a returned warning) rather than aborting the whole
@@ -317,33 +388,31 @@ impl StructureDb {
         self.structures.get(id)
     }
 
-    /// Every loaded structure, sorted by `id` — except `home`,
-    /// `mining_node`, `research_node` and `compiler`, which are always
-    /// pinned first in that order (the natural early-game build sequence:
-    /// shelter, then a resource, then somewhere to research what to do with
-    /// it, then somewhere to turn it into gear), with everything else
-    /// alphabetical after them. `HashMap` iteration order is randomized
-    /// per-instance (a
-    /// fresh seed each time a `StructureDb` is built, i.e. every new/loaded
-    /// game), so without this sort, the build menu's `[1]`, `[2]`, ...
-    /// numbering would shuffle unpredictably from one session to the next
-    /// even though nothing about the mod files changed — the same digit
-    /// could mean a 2-Core-Fragment Mining Node in one session and an
-    /// 8-Core-Fragment Fabricator in the next. A modded structure with none
-    /// of those three ids just sorts alphabetically among the rest, same as
-    /// before.
+    /// Every loaded structure, grouped by `StructureCategory` and
+    /// alphabetical by `name` inside each group.
+    ///
+    /// `HashMap` iteration order is randomized per-instance (a fresh seed
+    /// each time a `StructureDb` is built, i.e. every new/loaded game), so
+    /// without a sort here the build menu's `[1]`, `[2]`, ... numbering would
+    /// shuffle unpredictably from one session to the next even though nothing
+    /// about the mod files changed — the same digit could mean a
+    /// 2-Core-Fragment Mining Node in one session and an 8-Core-Fragment
+    /// Fabricator in the next.
+    ///
+    /// This used to pin `home`, `mining_node`, `research_node` and `compiler`
+    /// first by id and sort the rest alphabetically. That put a modded
+    /// structure wherever its id fell in the alphabet, which stopped being
+    /// tolerable once the production chain landed: `assembly_bay` sorted
+    /// third overall, ahead of every machine that feeds it. Grouping by what
+    /// a structure *does* puts a mod's assembler with the assemblers for
+    /// free, and costs only that the four hand-pinned ids now sort by name
+    /// within their own group.
     pub fn all(&self) -> impl Iterator<Item = &StructureDef> {
-        let priority = |id: &str| match id {
-            "home" => 0,
-            "mining_node" => 1,
-            "research_node" => 2,
-            "compiler" => 3,
-            _ => 4,
-        };
         let mut defs: Vec<&StructureDef> = self.structures.values().collect();
         defs.sort_by(|a, b| {
-            priority(&a.id)
-                .cmp(&priority(&b.id))
+            a.category()
+                .cmp(&b.category())
+                .then_with(|| a.name.cmp(&b.name))
                 .then_with(|| a.id.cmp(&b.id))
         });
         defs.into_iter()
@@ -403,6 +472,36 @@ mod tests {
         )
         .expect("an older trade block must still parse");
         assert_eq!(def.trade.unwrap().program_sell_divisor, None);
+    }
+
+    /// A structure file written before `capacity` existed gets the default
+    /// output size. Defaulting to 0 instead would clog every existing mod's
+    /// machines on the first unit they produced.
+    #[test]
+    fn a_structure_def_without_capacity_gets_the_default_output_size() {
+        let def: StructureDef = ron::from_str(
+            r#"(
+                id: "old_node", name: "Old Node", glyph: '$', color: Brown,
+                build_cost: [],
+                work: None,
+            )"#,
+        )
+        .expect("a file written before `capacity` existed must still parse");
+        assert_eq!(def.capacity, crate::tuning::DEFAULT_OUTPUT_CAPACITY);
+    }
+
+    #[test]
+    fn a_structure_def_may_set_its_own_output_capacity() {
+        let def: StructureDef = ron::from_str(
+            r#"(
+                id: "big_node", name: "Big Node", glyph: '$', color: Brown,
+                build_cost: [],
+                work: None,
+                capacity: 40,
+            )"#,
+        )
+        .expect("an authored capacity must parse");
+        assert_eq!(def.capacity, 40);
     }
 
     /// The mod-compatibility guarantee: a `RestDef` written before `cost`

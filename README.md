@@ -155,15 +155,57 @@ Node. Build a Home first (nothing else can be deployed until it stands, and
 everything else must sit within its 15-tile platform), then assign compiled
 programs to structures as **cronjobs** — the Palworld-style "put a tamed
 creature to work" mechanic. Production then runs tick by tick wherever you
-are, paying out into your inventory at a rate that adds the structure's
-upgrade tier to your zone depth — so upgrading what you have is worth more
-than rushing the next portal, and neither lever runs away with the economy.
+are, at a rate that adds the structure's upgrade tier to your zone depth — so
+upgrading what you have is worth more than rushing the next portal, and
+neither lever runs away with the economy.
+
+Output does not appear in your pocket. Every structure has its own **output
+buffer**, and production goes there: a node runs until its buffer is full and
+then **clogs**, producing nothing more until you come home. Press `C` to
+collect from every structure orthogonally touching you. Since structures block
+movement you always stand beside one, never on it — so standing in the crook
+of an L empties three buildings and a sprawled-out line costs you trips.
+Where you put things is a decision.
 
 You can also work a node yourself with `W`, which is the same job for the
 same payout — you just have to stand there and do it, and stepping away
 breaks off the cycle. It is what you fall back on before you have programs
 worth posting, not a replacement for them: a cronjob runs whether or not
-you are there, and earns its worker XP besides.
+you are there, and earns its worker XP besides. It fills the same buffer.
+
+## Production chains
+
+Machines feed each other by **touching**. A structure declaring `assembles`
+pulls its ingredients out of the output buffers of the four structures
+orthogonally adjacent to it — never diagonally — and builds one unit at a
+time. So a chain is a physical line across your base, and a machine with two
+ingredients needs both feeders beside it.
+
+The shipped chain is three stages deep:
+
+| stage | structure | builds | from |
+|---|---|---|---|
+| extract | Mining Node | Core Fragments | — |
+| extract | Power Conduit | Power Cells | — |
+| refine | Refinery | Bytecode Blocks | Core Fragments |
+| refine | Winding Node | Charge Coils | Power Cells |
+| assemble | Assembly Bay | Patch Routines | a Block and a Coil |
+
+A machine's recipe is not written on the machine — it runs the *item's* own
+crafting recipe, so a bench recipe and a machine recipe can never drift, and
+any craftable item you mod in is automatable for free.
+
+Every machine needs a program posted to it, assemblers included, so **roster
+capacity is what buys chain length, not fragments**. The full five-machine
+line needs five programs against a starting cap of three — a Data Cache (+2)
+is what makes it reachable, and a second one is what buys back a party to
+adventure with. A machine says so in the base log when it goes *starved*
+(nothing feeding it), *clogged* (output full, come collect) or *idle* (no
+program), once on the way in rather than every tick, and `B` shows every
+buffer and every stall at a glance.
+
+The Assembly Bay costs Bytecode Blocks to build, so the two-machine line you
+can afford at the start is what pays for the rest of it.
 
 ## Research
 
@@ -301,8 +343,8 @@ entry point. The portal itself is consumed, and there is no way back down.
 ## Structures and base defense
 
 Structures are `.ron` files declaring any combination of roles: cronjob-
-workable (Mining Node, Research Node, Power Conduit, Compiler), passively
-processing (no shipped structure, but the schema is there for mods), a
+workable (Mining Node, Research Node, Power Conduit, Compiler), assembling
+from adjacent neighbours (Refinery, Winding Node, Assembly Bay), a
 symlink target you can `u` to from anywhere (Home),
 a rest gate, a power source (Recharger Node), a trading post (iso Market),
 a repairer (Patch Node), or a plain bench (Fabricator, Armory). Producers

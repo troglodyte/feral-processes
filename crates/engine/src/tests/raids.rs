@@ -681,10 +681,9 @@ fn a_guard_task_never_produces_resources_even_on_a_workable_node() {
             Position { x: 3, y: 4 },
             ResourceNode {
                 resource: ItemId::from(ids::CORE_FRAGMENT),
-                amount: 5,
-                capacity: 5,
                 level: None,
             },
+            work_node_parts(),
         ))
         .id();
     game.world.entity_mut(worker).insert(Task {
@@ -699,8 +698,8 @@ fn a_guard_task_never_produces_resources_even_on_a_workable_node() {
     }
 
     assert_eq!(
-        game.world.get::<ResourceNode>(structure).unwrap().amount,
-        5,
+        node_output(&game, structure, ids::CORE_FRAGMENT),
+        0,
         "a guard shouldn't advance the node's gather cycle at all"
     );
 }

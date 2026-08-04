@@ -105,6 +105,7 @@ impl Game {
             .get::<Stats>(self.player_entity())
             .unwrap()
             .power();
+        let mut linked_edges = self.linked_edges_by_structure();
 
         hits.into_iter()
             .map(|(entity, pos, glyph)| {
@@ -119,7 +120,8 @@ impl Game {
                     .is_some_and(|s| s.kind == HOME_STRUCTURE_ID);
                 let is_boss = self.is_boss_creature(entity);
                 let tier = self.world.get::<StructureTier>(entity).map(|t| t.0);
-                let can_work = self.world.get::<ResourceNode>(entity).is_some();
+                let can_work = self.accepts_a_program(entity);
+                let machine_status = self.world.get::<MachineStatus>(entity).copied();
                 let can_trade = self.trade_options(entity).is_some();
                 let structure_worker = if is_structure {
                     worker_by_structure
@@ -169,9 +171,75 @@ impl Game {
                     level,
                     durability,
                     fusions: self.fusion_count(entity),
+                    machine_status,
+                    linked_edges: linked_edges.remove(&entity).unwrap_or_default(),
                 }
             })
             .collect()
+    }
+
+    /// For each structure, the orthogonal offsets of the neighbours it is
+    /// joined to for production — the sides the map leaves un-outlined so a
+    /// chain draws as one continuous shape.
+    ///
+    /// **Symmetric, though the feeding relation is not.** A Refinery names
+    /// the Mining Node beside it; the Mining Node names nobody, because it
+    /// has no recipe to want anything. Both walls between a joined pair have
+    /// to go or the single remaining line reads as a rendering fault rather
+    /// than as a join, so every link found is recorded from both ends.
+    ///
+    /// Reads the same `assembly_recipe` and walks the same `ORTHOGONAL` as
+    /// `systems::assembler_system`'s pull phase, so a join can never be drawn
+    /// where the pull phase would refuse to take. The one deliberate
+    /// difference is documented on `EntityView::linked_edges`: this asks what
+    /// a neighbour *makes*, not what is in its buffer this instant.
+    ///
+    /// Computed for the whole base in one pass rather than per structure:
+    /// `view_entities` runs every frame, and asking each machine to re-scan
+    /// every structure in the zone would be quadratic in the size of a base
+    /// for a picture that only changes when something is built.
+    pub(crate) fn linked_edges_by_structure(&mut self) -> HashMap<Entity, Vec<(i32, i32)>> {
+        let mut query = self.world.query::<(Entity, &Position, &Structure)>();
+        let placed: Vec<(Entity, Position, StructureId)> = query
+            .iter(&self.world)
+            .map(|(e, p, s)| (e, *p, s.kind.clone()))
+            .collect();
+        let by_tile: HashMap<(i32, i32), (Entity, &StructureId)> = placed
+            .iter()
+            .map(|(e, p, k)| ((p.x, p.y), (*e, k)))
+            .collect();
+
+        let db = self.world.resource::<StructureDb>();
+        let items = self.world.resource::<ItemDb>();
+        let mut edges: HashMap<Entity, Vec<(i32, i32)>> = HashMap::new();
+        for (entity, pos, kind) in &placed {
+            let Some(recipe) = db
+                .get(kind)
+                .and_then(|def| crate::systems::assembly_recipe(def, items))
+            else {
+                continue;
+            };
+            for (dx, dy) in crate::game::collect::ORTHOGONAL {
+                let Some((neighbour, neighbour_kind)) = by_tile.get(&(pos.x + dx, pos.y + dy))
+                else {
+                    continue;
+                };
+                let feeds = db
+                    .get(neighbour_kind)
+                    .and_then(crate::systems::produced_item)
+                    .is_some_and(|made| recipe.iter().any(|(want, _)| want == made));
+                if !feeds {
+                    continue;
+                }
+                edges.entry(*entity).or_default().push((dx, dy));
+                edges.entry(*neighbour).or_default().push((-dx, -dy));
+            }
+        }
+        for dirs in edges.values_mut() {
+            dirs.sort();
+            dirs.dedup();
+        }
+        edges
     }
 
     /// Every structure in the zone and every program assigned to it, for the
@@ -220,9 +288,21 @@ impl Game {
         let mut report: Vec<StructureReport> = found
             .into_iter()
             .map(|(entity, kind, pos)| {
-                let def = self.world.resource::<StructureDb>().get(&kind);
-                let workable = def.is_some_and(|d| d.work.is_some());
+                let workable = self.accepts_a_program(entity);
+                let named = |map: Option<&std::collections::BTreeMap<ItemId, u32>>| {
+                    map.map(|m| {
+                        m.iter()
+                            .map(|(item, n)| (self.item_name(item).to_string(), *n))
+                            .collect()
+                    })
+                    .unwrap_or_default()
+                };
+                let stock = self.world.get::<Stock>(entity);
                 StructureReport {
+                    input: named(stock.map(|s| &s.input)),
+                    output: named(stock.map(|s| &s.output)),
+                    output_capacity: stock.map(|s| s.capacity).unwrap_or(0),
+                    status: self.world.get::<MachineStatus>(entity).copied(),
                     entity,
                     is_home: kind == HOME_STRUCTURE_ID,
                     kind,
@@ -455,6 +535,8 @@ impl Game {
                 is_companion: false,
                 is_hostile: false,
                 is_structure: true,
+                machine_status: None,
+                linked_edges: Vec::new(),
                 is_home: kind == HOME_STRUCTURE_ID,
                 tier: self.world.get::<StructureTier>(entity).map(|t| t.0),
                 is_boss: false,

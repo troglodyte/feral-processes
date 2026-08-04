@@ -4,7 +4,9 @@ use super::support::*;
 use crate::*;
 
 #[test]
-fn structure_defs_order_pins_home_mining_research_compiler_first_and_is_stable_across_sessions() {
+fn structure_defs_are_grouped_by_category_and_stable_across_sessions() {
+    use crate::structures::StructureCategory;
+
     // StructureDb is backed by a HashMap, whose iteration order is
     // randomized per-instance — without an explicit sort, the build
     // menu's [1], [2], ... numbering would shuffle between sessions
@@ -14,20 +16,46 @@ fn structure_defs_order_pins_home_mining_research_compiler_first_and_is_stable_a
     let mut orders = Vec::new();
     for seed in seeds {
         let game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        let ids: Vec<String> = game.structure_defs().into_iter().map(|d| d.id).collect();
+        let defs = game.structure_defs();
+
         assert_eq!(
-            &ids[..4],
-            ["home", "mining_node", "research_node", "compiler"],
-            "the four starter structures should always lead the build menu"
+            defs.first().map(|d| d.category()),
+            Some(StructureCategory::Home),
+            "Home leads the build menu — it is the one thing buildable first"
         );
-        let mut rest_sorted = ids[4..].to_vec();
-        rest_sorted.sort();
+        let categories: Vec<StructureCategory> = defs.iter().map(|d| d.category()).collect();
+        let mut grouped = categories.clone();
+        grouped.sort();
         assert_eq!(
-            ids[4..],
-            rest_sorted[..],
-            "everything after the pinned four should still be alphabetical"
+            categories, grouped,
+            "categories must appear in one contiguous run each, in variant order"
         );
-        orders.push(ids);
+
+        // Alphabetical by name *within* a group, which is what makes the
+        // ordering reproducible for a modded structure that has no pinned
+        // position of its own.
+        for window in defs.windows(2) {
+            if window[0].category() == window[1].category() {
+                assert!(
+                    window[0].name <= window[1].name,
+                    "{} should not precede {} inside their group",
+                    window[0].name,
+                    window[1].name
+                );
+            }
+        }
+
+        // The chain groups together rather than scattering by id —
+        // `assembly_bay` sorted third overall under the old id-pinned order,
+        // ahead of every machine that feeds it.
+        let assemblers: Vec<&str> = defs
+            .iter()
+            .filter(|d| d.category() == StructureCategory::Assembler)
+            .map(|d| d.id.as_str())
+            .collect();
+        assert_eq!(assemblers, ["assembly_bay", "refinery", "winding_node"]);
+
+        orders.push(defs.into_iter().map(|d| d.id).collect::<Vec<_>>());
     }
     assert!(
         orders.windows(2).all(|w| w[0] == w[1]),

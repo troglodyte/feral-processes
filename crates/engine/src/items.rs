@@ -7,7 +7,10 @@ use serde::{Deserialize, Serialize};
 /// rather than as a `ItemId("...")` tuple-struct — the RON asset files spell
 /// item references as plain quoted strings (e.g. `work_resource: Some("power_cell")`),
 /// and bincode saves encode it identically to a `String`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// `Ord` so `components::Stock` can key its buffers by item in a
+/// `BTreeMap`: iteration order there feeds the production-chain pull phase
+/// and the save encoding, both of which have to be identical run to run.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ItemId(pub String);
 
@@ -60,6 +63,13 @@ pub mod ids {
     /// and `ICE_BREAKER` are, on the same lines; the id itself lives in
     /// `assets/items/outlet.ron`.
     pub const OUTLET: &str = "outlet";
+    /// The shipped production chain, named here only so the tests that walk
+    /// it can spell it. Nothing in the engine references these: what each
+    /// machine builds is authored in `assets/structures/*.ron`, and each
+    /// recipe in the item's own file.
+    pub const BYTECODE_BLOCK: &str = "bytecode_block";
+    pub const CHARGE_COIL: &str = "charge_coil";
+    pub const PATCH_ROUTINE: &str = "patch_routine";
 }
 
 /// What kind of thing an item is, for grouping the inventory and a trader's

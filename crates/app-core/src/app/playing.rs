@@ -181,6 +181,13 @@ impl App {
                     game.use_power_source();
                     true
                 }
+                // Surface only, and not bound in the Stack block below: a
+                // base's buffers are something you walk up to, and the
+                // engine refuses it underground anyway.
+                GameKey::Char('C') => {
+                    game.collect_adjacent();
+                    true
+                }
                 GameKey::Char('r') => {
                     game.rest();
                     true

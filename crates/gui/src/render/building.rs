@@ -3,23 +3,82 @@
 use super::popup::*;
 use super::*;
 
+/// One buildable structure as the build menu needs it: everything that
+/// required a `Game` to work out, already worked out.
+pub(super) struct BuildEntry {
+    pub label: String,
+    pub description: String,
+    pub category: StructureCategory,
+}
+
+/// The heading a group opens with, or `None` for Home — a single structure
+/// under a "Shelter" banner is a heading longer than the thing it labels.
+fn category_heading(category: StructureCategory) -> Option<&'static str> {
+    match category {
+        StructureCategory::Home => None,
+        StructureCategory::Extractor => Some("── Extractors — produce on their own ──"),
+        StructureCategory::Assembler => Some("── Assemblers — fed by what they touch ──"),
+        StructureCategory::Utility => Some("── Utility ──"),
+        StructureCategory::Trade => Some("── Trade ──"),
+        StructureCategory::Defence => Some("── Defence ──"),
+    }
+}
+
+/// The build menu's rows, pure so the layout invariant below can be tested
+/// without a `Game` or a `Painter`.
+///
+/// **Every row after the first is a `Row::Item`, including the headings and
+/// the descriptions.** `popup_layout` ends the scrollable body at the *last*
+/// `Row::Item` and pins whatever follows as a footer — so a description
+/// emitted as `Row::Text` would slice the final structure's description off
+/// the bottom of the list and strand it under the scroll indicator, detached
+/// from the row it describes. `draw_structures` carries the same fix for the
+/// same reason.
+///
+/// `entries` is assumed to arrive grouped by category, which
+/// `StructureDb::all` guarantees; a heading is emitted whenever the category
+/// changes, so an ungrouped list would simply repeat headings rather than
+/// mislabel anything.
+pub(super) fn build_menu_rows(entries: &[BuildEntry], selected: usize) -> Vec<Row> {
+    let mut rows = vec![text_row("Esc to cancel; Up/Down + Enter also work")];
+    let mut current: Option<StructureCategory> = None;
+    for (i, entry) in entries.iter().enumerate() {
+        if current != Some(entry.category) {
+            current = Some(entry.category);
+            if let Some(heading) = category_heading(entry.category) {
+                rows.push(colored_item_row("", false, TEXT_DIM));
+                rows.push(colored_item_row(heading, false, TEXT_DIM));
+            }
+        }
+        rows.push(item_row(
+            format!("[{}] {}", menu_shortcut(i), entry.label),
+            i == selected,
+        ));
+        rows.push(colored_item_row(
+            format!("    {}", entry.description),
+            false,
+            TEXT_DIM,
+        ));
+    }
+    rows
+}
+
 pub(super) fn draw_build_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
     let status = game.player_status();
     let defs = game.buildable_structure_defs();
-    let descriptions: Vec<String> = defs.iter().map(|def| def.description.clone()).collect();
-    let mut rows = vec![
-        text_row("Esc to cancel; Up/Down + Enter also work"),
-        text_row(""),
-    ];
-    for (i, def) in defs.iter().enumerate() {
-        let raw_cost = game.structure_build_cost(def);
-        let cost = cost_display(game, &raw_cost, &status.inventory);
-        rows.push(item_row(
-            format!("[{}] {} - {}", menu_shortcut(i), def.name, cost.join(", ")),
-            i == selected,
-        ));
-        rows.push(text_row(format!("    {}", descriptions[i])));
-    }
+    let entries: Vec<BuildEntry> = defs
+        .iter()
+        .map(|def| {
+            let raw_cost = game.structure_build_cost(def);
+            let cost = cost_display(game, &raw_cost, &status.inventory);
+            BuildEntry {
+                label: format!("{} - {}", def.name, cost.join(", ")),
+                description: def.description.clone(),
+                category: def.category(),
+            }
+        })
+        .collect();
+    let rows = build_menu_rows(&entries, selected);
     draw_popup("Deploy", PopupSize::Large, &rows, painter, m);
 }
 
@@ -292,10 +351,52 @@ pub(super) fn draw_structures(game: &mut Game, selected: usize, painter: &Painte
                 TEXT_DIM,
             ));
         }
+        // A stall is drawn in yellow for the same reason an idle structure
+        // is: it is a thing the player can walk over and fix.
+        if let Some(line) = stall_line(s) {
+            rows.push(colored_item_row(format!("  {line}"), false, YELLOW));
+        }
+        if let Some(line) = buffer_line("in", &s.input, None) {
+            rows.push(colored_item_row(line, false, TEXT_DIM));
+        }
+        if let Some(line) = buffer_line("out", &s.output, Some(s.output_capacity)) {
+            rows.push(colored_item_row(line, false, TEXT_DIM));
+        }
     }
     rows.push(text_row(""));
     rows.push(text_row("Up/Down to scroll, Esc to close."));
     draw_popup("Structures", PopupSize::Large, &rows, painter, m);
+}
+
+/// Why a machine is stalled, or `None` when it is running or is not a
+/// machine at all. `Idle` says nothing here — the "nobody assigned" line
+/// already above it is the same fact in better words.
+fn stall_line(s: &StructureReport) -> Option<&'static str> {
+    match s.status? {
+        MachineStatus::Starved => Some("starved — nothing is feeding it"),
+        MachineStatus::Clogged => Some("clogged — collect from it with C"),
+        MachineStatus::Running | MachineStatus::Idle => None,
+    }
+}
+
+/// One buffer as a line, or `None` when it is empty — a base of empty
+/// buffers would otherwise double the length of this screen to say nothing.
+fn buffer_line(label: &str, stock: &[(String, u32)], capacity: Option<u32>) -> Option<String> {
+    if stock.is_empty() {
+        return None;
+    }
+    let contents = stock
+        .iter()
+        .map(|(name, n)| format!("{n} {name}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    Some(match capacity {
+        Some(cap) => {
+            let used: u32 = stock.iter().map(|(_, n)| n).sum();
+            format!("  {label}: {contents}  [{used}/{cap}]")
+        }
+        None => format!("  {label}: {contents}"),
+    })
 }
 
 /// One assignee row: who it is, what it is doing, and how far into a cycle it

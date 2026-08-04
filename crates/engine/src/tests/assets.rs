@@ -478,3 +478,82 @@ fn every_shipped_field_routine_can_actually_be_obtained() {
          so nothing in a real game can ever hand them over: {unreachable:?}"
     );
 }
+
+/// The "no second recipe format" property, pinned by a test: a machine's
+/// recipe *is* the named item's own `craftable.cost`, resolved through the
+/// item db. Nothing can drift from it, because there is nothing else to
+/// drift — and a modder who adds a craftable item gets an automatable one
+/// for free.
+#[test]
+fn an_assembler_runs_the_named_items_own_craftable_recipe() {
+    let game = Game::new(902, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let items = game.world.resource::<ItemDb>();
+    let authored = items
+        .get(ids::POWER_CELL)
+        .and_then(|d| d.craftable.as_ref())
+        .expect("power_cell ships with a recipe");
+
+    let def: crate::structures::StructureDef = ron::from_str(
+        r#"(
+            id: "test_assembler", name: "Test Assembler", glyph: 'A', color: Cyan,
+            build_cost: [],
+            work: None,
+            assembles: Some((item: "power_cell", ticks_per_unit: 8)),
+        )"#,
+    )
+    .expect("an assembles block must parse");
+
+    assert_eq!(
+        crate::systems::assembly_recipe(&def, items),
+        Some(authored.cost.as_slice()),
+        "the machine's recipe is the item's own, not a second copy of it"
+    );
+}
+
+/// A structure with no `assembles` has no recipe to run — the resolver must
+/// say so rather than falling back to something.
+#[test]
+fn a_structure_that_assembles_nothing_resolves_no_recipe() {
+    let game = Game::new(904, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let items = game.world.resource::<ItemDb>();
+    let db = game.world.resource::<crate::structures::StructureDb>();
+    let mining_node = db.get("mining_node").expect("mining_node ships");
+
+    assert!(crate::systems::assembly_recipe(mining_node, items).is_none());
+}
+
+/// Without this, a typo'd `assembles` ships a machine that can never run and
+/// says nothing at all. The same trap a mod falls into.
+#[test]
+fn every_shipped_assembles_names_an_item_that_declares_a_recipe() {
+    let game = Game::new(903, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let items = game.world.resource::<ItemDb>();
+    let mut checked = 0;
+    for def in game
+        .world
+        .resource::<crate::structures::StructureDb>()
+        .all()
+    {
+        if let Some(assembles) = &def.assembles {
+            assert!(
+                items
+                    .get(assembles.item.as_str())
+                    .is_some_and(|d| d.craftable.is_some()),
+                "{} assembles {:?}, which is not a craftable item",
+                def.id,
+                assembles.item
+            );
+            assert!(
+                assembles.ticks_per_unit > 0,
+                "{} would produce a unit every tick",
+                def.id
+            );
+            checked += 1;
+        }
+    }
+    assert_eq!(
+        checked, 3,
+        "the shipped chain is Refinery, Winding Node and Assembly Bay — if that \
+         changes, change this count deliberately rather than letting the check go vacuous"
+    );
+}

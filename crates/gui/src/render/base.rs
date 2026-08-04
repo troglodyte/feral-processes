@@ -248,6 +248,8 @@ fn draw_surface_map(
             let px = (rx as f32 - 1.0 - off_x) * tile_px;
             let py = (ry as f32 - 1.0 - off_y) * tile_px;
             let mut staffed = false;
+            let mut machine_status = None;
+            let mut linked_edges: &[(i32, i32)] = &[];
             let mut shielded = false;
             let mut critical = false;
             let mut occupied = false;
@@ -258,15 +260,31 @@ fn draw_surface_map(
                     ch = ev.glyph;
                     color = glyph_color(ev.color);
                     staffed = ev.is_structure && ev.structure_worker.is_some();
+                    machine_status = ev.machine_status;
+                    linked_edges = &ev.linked_edges;
                     // Structures wear their raid damage: the glyph dims as
                     // durability drops, and a nearly-destroyed one washes
                     // its tile red, so the base's condition reads at a
                     // glance instead of only from the inspect menu.
                     (color, critical) = fx.structure_condition(ev.durability, color);
-                    // Background follows the damage-dimmed glyph colour, so a
-                    // worn structure darkens its whole tile rather than just
-                    // its glyph.
+                    // Background follows the damage-dimmed *authored* colour,
+                    // deliberately taken before the status override below.
+                    // The tile wash already means raid damage — a clogged
+                    // machine tinting its tile red too would make a
+                    // half-destroyed one and a full buffer look alike.
                     bg_source = color;
+                    // A machine's glyph is its state: the `$` of a Mining
+                    // Node reads green running, yellow starved, red clogged,
+                    // grey idle. Which structure it is stays legible from the
+                    // glyph itself, so the authored colour is only carrying
+                    // identity a machine can spare. Anything that runs no job
+                    // keeps its authored colour.
+                    //
+                    // Damage-tinted through the same call, so a battered
+                    // machine still dims rather than reading box-fresh.
+                    if let Some(status) = ev.machine_status {
+                        (color, _) = fx.structure_condition(ev.durability, machine_color(status));
+                    }
                     shielded = ev.is_structure;
                     occupied = true;
                 }
@@ -315,17 +333,33 @@ fn draw_surface_map(
             if rx as i32 == spawn_rx && ry as i32 == spawn_ry {
                 painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, MAGENTA);
             }
-            // A structure with a pet actively cronjob-assigned gets a
-            // yellow outline so it's visible at a glance without opening
-            // the cronjob menu to check.
-            if staffed {
-                painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, YELLOW);
-            }
             // The shield network is base-wide, not per-structure, so every
             // structure carries the same faint pulse while one is standing.
-            // Drawn under the flash so a raid still reads on top of it.
+            // Drawn under the flash so a raid still reads on top of it, and
+            // through the same open-sided outline so it cannot paint a joined
+            // pair's shared wall back in.
             if let Some(pulse) = shield_outline.filter(|_| shielded) {
-                painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, pulse);
+                outline_open(painter, px, py, tile_px - 1.0, pulse, linked_edges);
+            }
+            // A machine wears its state as its outline, and drops the walls
+            // it shares with a machine it trades with — so a working chain
+            // draws as one continuous shape and a machine that should be
+            // joined and isn't shows a seam. Nothing is drawn *between*
+            // tiles; the join is the absence of a line.
+            //
+            // Drawn after the shield pulse, which also outlines every
+            // structure: an actionable per-machine state has to win over
+            // ambient base-wide info, or a starved machine goes unnoticed
+            // inside a shielded base. A structure that runs no job has no
+            // status and keeps only the pulse.
+            //
+            // This replaces a flat yellow "someone is assigned here" —
+            // `Idle` is the same fact in a colour of its own, so nothing is
+            // lost and three more states are gained.
+            if let Some(color) = machine_status.map(machine_color) {
+                outline_open(painter, px, py, tile_px - 1.0, color, linked_edges);
+            } else if staffed {
+                outline_open(painter, px, py, tile_px - 1.0, YELLOW, linked_edges);
             }
             if let Some(flash) = fx.tile_flash(world) {
                 painter.rect(px, py, tile_px - 1.0, tile_px - 1.0, flash);
@@ -333,6 +367,42 @@ fn draw_surface_map(
         }
     }
     painter.rect_lines(0.0, 0.0, map_w, map_h, 2.0, BORDER);
+}
+
+/// A tile outline with the sides in `open` left off — the sides this
+/// machine shares with one it is joined to.
+///
+/// `EntityView::linked_edges` is symmetric for this to work: both halves of
+/// a shared wall have to go, and dropping only the consumer's side would
+/// leave a single line between the pair that reads as a rendering fault
+/// rather than as a join.
+fn outline_open(painter: &Painter, px: f32, py: f32, size: f32, color: Color, open: &[(i32, i32)]) {
+    let closed = |d: (i32, i32)| !open.contains(&d);
+    if closed((0, -1)) {
+        painter.line(px, py, px + size, py, 2.0, color);
+    }
+    if closed((0, 1)) {
+        painter.line(px, py + size, px + size, py + size, 2.0, color);
+    }
+    if closed((-1, 0)) {
+        painter.line(px, py, px, py + size, 2.0, color);
+    }
+    if closed((1, 0)) {
+        painter.line(px + size, py, px + size, py + size, 2.0, color);
+    }
+}
+
+/// A machine's state colour, worn by both its glyph and its outline. The
+/// four are ordered by what the player should do about them: green needs
+/// nothing, grey needs a program, yellow needs a feeder, red needs a trip
+/// home with `C`.
+fn machine_color(status: MachineStatus) -> Color {
+    match status {
+        MachineStatus::Running => GREEN,
+        MachineStatus::Starved => YELLOW,
+        MachineStatus::Clogged => RED,
+        MachineStatus::Idle => TEXT_DIM,
+    }
 }
 
 /// One party member's line in the status column, indented under the
@@ -454,7 +524,7 @@ fn draw_status_panel(
     // inventory can.
     let keys = [
         "hjkl/arrows move  . wait  e drain  r recharge",
-        "c compile   b deploy   w cronjob  G guard  R demolish",
+        "c compile   b deploy   w cronjob  C collect  G guard  R demolish",
         "u symlink   i inspect   v inventory",
         "p companions  f fuse  t trade  x perks  a routine",
         "s save   q main menu   ? help   +/- zoom",

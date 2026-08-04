@@ -296,8 +296,7 @@ impl Inventory {
     /// Whether `qty` more of `item` would fit. Ordinary cargo is unbounded so
     /// always has room; a banked currency is checked against its own bank
     /// limit. Lets a caller check before committing to an action whose input
-    /// cost it can't undo — see `passive_process_system`, which must not
-    /// consume a conversion's input unless the output will actually land.
+    /// cost it can't undo.
     pub fn has_room(&self, item: &ItemId, qty: u32, db: &ItemDb) -> bool {
         match db.get(item.as_str()).and_then(|d| d.bank_limit) {
             Some(limit) => self.count(item).saturating_add(qty) <= limit,
@@ -333,14 +332,13 @@ pub struct Structure {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct StructureTier(pub u32);
 
+/// A structure that can be worked for `resource`. Carries no deposit pool:
+/// a node is not a reserve that gets mined down, it is a tap. What paces it
+/// is `Stock::capacity` — it produces until its output buffer is full and
+/// then clogs until someone collects.
 #[derive(Component)]
 pub struct ResourceNode {
     pub resource: ItemId,
-    pub amount: u32,
-    /// The stock level `amount` refills to once mined down to 0 — see
-    /// `StructureDef::work`'s `capacity` field. Nodes never run dry
-    /// permanently; a worked node just cycles between empty and full.
-    pub capacity: u32,
     /// Mirrors `WorkDef::level`. `None` means a completed gather cycle
     /// always yields, same as before this field existed. `Some(level)` gates
     /// each completion behind a level-based percentage chance instead (see
@@ -350,12 +348,69 @@ pub struct ResourceNode {
     pub level: Option<u32>,
 }
 
-/// Ticks toward a structure's next passive-processing conversion (see
-/// `StructureDef::passive_process`). Present only on structures whose
-/// definition sets that field.
-#[derive(Component, Default)]
-pub struct PassiveProcessor {
-    pub progress: u32,
+/// A structure's local buffers — the whole of a production chain's
+/// directionality.
+///
+/// Neighbours (and the player, collecting) may take from `output`. Nothing
+/// outside a machine ever touches its `input`. That asymmetry is why a chain
+/// flows one way without belts existing: a machine can only pull from what
+/// its upstream has already finished, never reach into what upstream is
+/// still working on.
+///
+/// `BTreeMap`, not `HashMap`, in both directions. Iteration order feeds the
+/// pull phase, so a `HashMap` would make two machines competing for one
+/// scarce feeder resolve differently between runs — and would make the save
+/// encoding differ run to run as well.
+///
+/// `capacity` bounds `output` *in total*, not per item: it is how much the
+/// box holds, so a machine that produces two things cannot dodge clogging by
+/// splitting its output across them. `input` has no field here — it is
+/// derived per ingredient from the recipe, at `INPUT_STOCK_BATCHES` batches,
+/// so a greedy machine cannot drain a shared feeder dry.
+#[derive(Component, Clone, Debug, Default)]
+pub struct Stock {
+    pub input: std::collections::BTreeMap<ItemId, u32>,
+    pub output: std::collections::BTreeMap<ItemId, u32>,
+    pub capacity: u32,
+}
+
+impl Stock {
+    pub fn new(capacity: u32) -> Self {
+        Self {
+            capacity,
+            ..Default::default()
+        }
+    }
+
+    /// How many units are in `output`, across every item in it.
+    pub fn output_used(&self) -> u32 {
+        self.output.values().sum()
+    }
+
+    /// Room left in `output` before it clogs.
+    pub fn output_room(&self) -> u32 {
+        self.capacity.saturating_sub(self.output_used())
+    }
+}
+
+/// Why a machine is or isn't producing. Present only on structures that
+/// actually run a job (`StructureDef::work` or `::assembles`) — absence
+/// means "not a machine", which is why a Home never reports a status it
+/// could not possibly leave.
+///
+/// Deliberately not saved. It initialises to `Running` and is corrected on
+/// the first tick, so a base that loads starved announces it once — which is
+/// information the player wants, and costs no save field.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MachineStatus {
+    #[default]
+    Running,
+    /// Input short: upstream is too slow, or isn't adjacent.
+    Starved,
+    /// Output full: downstream is too slow, or nobody has collected.
+    Clogged,
+    /// No program assigned.
+    Idle,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -496,6 +496,85 @@ mod tests {
         rows
     }
 
+    /// The real build-menu rows, for `structures` entries spread across two
+    /// categories so the heading rows are exercised too. Built through
+    /// `build_menu_rows` rather than restated here — a hand-written mirror
+    /// of the row shape would keep passing after the real one drifted.
+    fn build_menu_rows_fixture(structures: usize, selected: usize) -> Vec<Row> {
+        use super::super::building::{BuildEntry, build_menu_rows};
+        use feral_processes_engine::structures::StructureCategory;
+        let entries: Vec<BuildEntry> = (0..structures)
+            .map(|i| BuildEntry {
+                label: format!("Structure {i} - 12 Core Fragments"),
+                description: format!("What structure {i} is for."),
+                category: if i == 0 {
+                    StructureCategory::Home
+                } else if i < structures.div_ceil(2) {
+                    StructureCategory::Extractor
+                } else {
+                    StructureCategory::Assembler
+                },
+            })
+            .collect();
+        build_menu_rows(&entries, selected)
+    }
+
+    /// The body is cut at the *last* `Row::Item` and everything after it is
+    /// pinned as a footer. When the build menu's descriptions were
+    /// `Row::Text`, the final structure's description fell past that cut: it
+    /// was drawn detached at the bottom of the popup, under the scroll
+    /// indicator, while every other description sat inline under its own
+    /// structure. It read as missing.
+    ///
+    /// Nothing may follow the last item row.
+    #[test]
+    fn every_build_menu_description_stays_inside_the_scrollable_body() {
+        for window_h in WINDOW_HEIGHTS {
+            let m = ui_metrics(window_h);
+            for structures in 1..14 {
+                for selected in [0, structures - 1] {
+                    let rows = build_menu_rows_fixture(structures, selected);
+                    let l = popup_layout(window_h, 0.85, &rows, &m);
+                    assert!(
+                        l.footer.is_empty(),
+                        "at {window_h}px a {structures}-structure build menu pinned {} \
+                         row(s) as a footer — the last description is detached from \
+                         the structure it describes",
+                        l.footer.len()
+                    );
+                }
+            }
+        }
+    }
+
+    /// The selected structure has to be reachable by scrolling. Headings and
+    /// descriptions triple the body's length, so a capacity that only
+    /// counted structures would leave the last one unreachable.
+    #[test]
+    fn the_selected_build_menu_row_is_inside_the_visible_window() {
+        for window_h in WINDOW_HEIGHTS {
+            let m = ui_metrics(window_h);
+            for structures in 1..14 {
+                for selected in 0..structures {
+                    let rows = build_menu_rows_fixture(structures, selected);
+                    let l = popup_layout(window_h, 0.85, &rows, &m);
+                    let idx = l
+                        .body
+                        .iter()
+                        .position(|r| matches!(r, Row::Item { selected: true, .. }))
+                        .expect("the selected row is in the body");
+                    assert!(
+                        idx >= l.offset && idx < l.offset + l.capacity,
+                        "at {window_h}px, structure {selected} of {structures} sits at \
+                         body row {idx}, outside the window [{}, {})",
+                        l.offset,
+                        l.offset + l.capacity
+                    );
+                }
+            }
+        }
+    }
+
     /// A popup shrinks to fit its content, so a list the box has room for
     /// must never be reported as scrolling.
     ///

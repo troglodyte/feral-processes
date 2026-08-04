@@ -420,8 +420,6 @@ fn cronjob_assignment_survives_save_and_load() {
             Position { x: 3, y: 3 },
             ResourceNode {
                 resource: structure_def.work.as_ref().unwrap().produces.clone(),
-                amount: 20,
-                capacity: 20,
                 level: None,
             },
         ))
@@ -478,46 +476,6 @@ fn cronjob_assignment_survives_save_and_load() {
 }
 
 #[test]
-fn a_mined_out_node_refills_instead_of_stalling_the_cronjob() {
-    let mut game = Game::new(27, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let worker = spawn_tamed(&mut game, 10, 3);
-    let structure = game
-        .world
-        .spawn((
-            Structure {
-                kind: "mining_node".to_string(),
-            },
-            Position { x: 3, y: 4 },
-            ResourceNode {
-                resource: ItemId::from(ids::CORE_FRAGMENT),
-                amount: 1,
-                capacity: 2,
-                level: None,
-            },
-        ))
-        .id();
-    game.world.entity_mut(worker).insert(Task {
-        kind: TaskKind::GatherResource,
-        target: structure,
-        progress: 0,
-        required: 1,
-    });
-
-    // First tick mines the last unit down to 0.
-    game.tick();
-    assert_eq!(game.world.get::<ResourceNode>(structure).unwrap().amount, 0);
-
-    // The node refills to capacity on the next tick rather than
-    // leaving the assigned creature permanently idle.
-    game.tick();
-    assert_eq!(game.world.get::<ResourceNode>(structure).unwrap().amount, 1);
-    assert!(
-        game.world.get::<Task>(worker).is_some(),
-        "the cronjob should keep running once the node refills"
-    );
-}
-
-#[test]
 fn cronjob_work_grants_no_more_xp_once_the_worker_hits_the_work_level_cap() {
     let mut game = Game::new(301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let worker = spawn_tamed(&mut game, 10, 3);
@@ -531,10 +489,9 @@ fn cronjob_work_grants_no_more_xp_once_the_worker_hits_the_work_level_cap() {
             Position { x: 3, y: 4 },
             ResourceNode {
                 resource: ItemId::from(ids::CORE_FRAGMENT),
-                amount: 5,
-                capacity: 5,
                 level: None,
             },
+            work_node_parts(),
         ))
         .id();
     game.world.entity_mut(worker).insert(Task {
@@ -577,10 +534,9 @@ fn cronjob_work_xp_is_boosted_by_a_running_xp_boost_field_buff() {
             Position { x: 3, y: 4 },
             ResourceNode {
                 resource: ItemId::from(ids::CORE_FRAGMENT),
-                amount: 5,
-                capacity: 5,
                 level: None,
             },
+            work_node_parts(),
         ))
         .id();
     unboosted.world.entity_mut(worker).insert(Task {
@@ -603,10 +559,9 @@ fn cronjob_work_xp_is_boosted_by_a_running_xp_boost_field_buff() {
             Position { x: 3, y: 4 },
             ResourceNode {
                 resource: ItemId::from(ids::CORE_FRAGMENT),
-                amount: 5,
-                capacity: 5,
                 level: None,
             },
+            work_node_parts(),
         ))
         .id();
     boosted.world.entity_mut(worker).insert(Task {
@@ -655,10 +610,9 @@ fn cronjob_work_still_grants_xp_below_the_work_level_cap() {
             Position { x: 3, y: 4 },
             ResourceNode {
                 resource: ItemId::from(ids::CORE_FRAGMENT),
-                amount: 5,
-                capacity: 5,
                 level: None,
             },
+            work_node_parts(),
         ))
         .id();
     game.world.entity_mut(worker).insert(Task {
@@ -687,8 +641,6 @@ fn a_leveled_node_doesnt_always_yield_on_a_completed_cycle() {
             Position { x: 3, y: 4 },
             ResourceNode {
                 resource: ItemId::from(ids::CORE_FRAGMENT),
-                amount: 20,
-                capacity: 20,
                 level: Some(1),
             },
         ))
@@ -1041,12 +993,10 @@ fn working_a_node_yourself_pays_what_a_cronjob_pays() {
         .unwrap()
         .resource
         .clone();
-    let held = |game: &Game| {
-        game.world
-            .get::<Inventory>(game.player_entity())
-            .unwrap()
-            .count(&resource)
-    };
+    // Measured in the node's own buffer: a cycle the player ran deposits
+    // there too, so the deposit pool is not left as the only thing pacing
+    // the one path that bypasses it.
+    let held = |game: &Game| node_output(game, node, resource.as_str());
     let before = held(&game);
 
     game.work_structure(node)
@@ -1109,8 +1059,6 @@ fn workable_structure(game: &mut Game, x: i32, y: i32) -> Entity {
             Position { x, y },
             ResourceNode {
                 resource: def.work.as_ref().unwrap().produces.clone(),
-                amount: 20,
-                capacity: 20,
                 level: None,
             },
         ))
@@ -1201,5 +1149,258 @@ fn the_players_own_work_holds_the_cronjob_slot() {
     assert_eq!(
         holders(&mut game, structure, TaskKind::GatherResource).len(),
         1
+    );
+}
+
+/// Every deployed structure carries a buffer, not just the ones that
+/// produce: a collect must be able to reach any of them, and a storage
+/// building declares neither `work` nor `assembles` and still needs an
+/// output size.
+#[test]
+fn deploying_a_structure_gives_it_an_empty_stock_sized_by_its_def() {
+    let mut game = Game::new(930, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = deploy_upgradeable_node(&mut game);
+
+    let stock = game
+        .world
+        .get::<Stock>(node)
+        .expect("a deployed structure gets a Stock");
+    assert!(
+        stock.input.is_empty() && stock.output.is_empty(),
+        "a freshly deployed machine has nothing buffered"
+    );
+    assert_eq!(
+        stock.capacity,
+        crate::tuning::DEFAULT_OUTPUT_CAPACITY,
+        "mining_node.ron sets no capacity, so it takes the default"
+    );
+
+    let home = find_home(&mut game).unwrap();
+    assert!(
+        game.world.get::<Stock>(home).is_some(),
+        "a Home produces nothing but is still collectable from"
+    );
+}
+
+/// `MachineStatus` marks the things that can stall. Absent means "not a
+/// machine" — a Home has no job to be starved of, and giving it a status
+/// would put a permanently-Running row in the structure report.
+#[test]
+fn only_structures_that_run_a_job_get_a_machine_status() {
+    let mut game = Game::new(931, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = deploy_upgradeable_node(&mut game);
+    let home = find_home(&mut game).unwrap();
+
+    assert_eq!(
+        game.world.get::<MachineStatus>(node).copied(),
+        Some(MachineStatus::Running),
+        "a work node starts optimistic and is corrected on the first tick"
+    );
+    assert!(game.world.get::<MachineStatus>(home).is_none());
+}
+
+/// Stock is per-structure player state, so it has to persist. Both halves:
+/// a machine that came home mid-batch must not have its staged ingredients
+/// silently refunded, nor its finished goods silently voided.
+#[test]
+fn partially_filled_buffers_survive_a_save_and_load_round_trip() {
+    let mut game = Game::new(976, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = deploy_upgradeable_node(&mut game);
+    {
+        let mut stock = game.world.get_mut::<Stock>(node).unwrap();
+        stock.input.insert(ItemId::from(ids::CORE_FRAGMENT), 3);
+        stock.output.insert(ItemId::from(ids::POWER_CELL), 7);
+    }
+
+    let path = std::env::temp_dir().join(format!("feral_stock_save_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let restored = find_structure_by_kind(&mut loaded, "mining_node").unwrap();
+    let stock = loaded.world.get::<Stock>(restored).unwrap();
+    assert_eq!(
+        stock.input.get(&ItemId::from(ids::CORE_FRAGMENT)).copied(),
+        Some(3),
+        "staged ingredients are not refunded by saving"
+    );
+    assert_eq!(
+        stock.output.get(&ItemId::from(ids::POWER_CELL)).copied(),
+        Some(7),
+        "finished goods waiting to be collected are not voided by saving"
+    );
+    assert_eq!(
+        stock.capacity,
+        crate::tuning::DEFAULT_OUTPUT_CAPACITY,
+        "capacity comes back off the def, not the save"
+    );
+}
+
+/// Puts a tamed worker on a node of `kind` standing at an absolute tile,
+/// with `capacity` units of output room, and returns the node. Absolute
+/// rather than relative so a test can park it next to the player and
+/// collect from it.
+fn worked_node_at(
+    game: &mut Game,
+    kind: &str,
+    resource: &str,
+    x: i32,
+    y: i32,
+    capacity: u32,
+) -> Entity {
+    let worker = spawn_tamed(game, 10, 3);
+    let node = game
+        .world
+        .spawn((
+            Structure {
+                kind: kind.to_string(),
+            },
+            Position { x, y },
+            ResourceNode {
+                resource: ItemId::from(resource),
+                level: None,
+            },
+            Stock::new(capacity),
+            MachineStatus::default(),
+        ))
+        .id();
+    game.assign_cronjob(worker, node).unwrap();
+    node
+}
+
+fn base_log_hits(game: &Game, needle: &str) -> usize {
+    game.message_log(usize::MAX)
+        .into_iter()
+        .filter(|e| e.text.contains(needle))
+        .count()
+}
+
+/// The largest felt change in the whole design: fragments stop appearing in
+/// your pocket while you are away. You come home and harvest. It is also the
+/// only thing that makes clogging real — a node that pays straight into the
+/// player is an infinite source and nothing upstream of it can ever back up.
+#[test]
+fn a_worked_node_fills_its_own_buffer_and_not_the_players_pocket() {
+    let mut game = Game::new(980, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = worked_node_at(&mut game, "mining_node", ids::CORE_FRAGMENT, 3, 4, 20);
+    let before = count_item(&game, ids::CORE_FRAGMENT);
+
+    for _ in 0..40 {
+        game.tick();
+    }
+
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT),
+        before,
+        "a cronjob no longer reaches into the player's cargo"
+    );
+    assert!(
+        game.world
+            .get::<Stock>(node)
+            .unwrap()
+            .output
+            .get(&ItemId::from(ids::CORE_FRAGMENT))
+            .copied()
+            .unwrap_or(0)
+            > 0,
+        "it deposits into its own buffer instead"
+    );
+}
+
+/// A stalled base must not flood the log pane — the whole point of tracking
+/// status is that a machine says so on the way *into* a state, not every
+/// tick it spends there.
+#[test]
+fn a_node_at_output_capacity_clogs_and_says_so_exactly_once() {
+    let mut game = Game::new(981, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = worked_node_at(&mut game, "mining_node", ids::CORE_FRAGMENT, 3, 4, 1);
+
+    for _ in 0..60 {
+        game.tick();
+    }
+
+    assert_eq!(
+        game.world.get::<MachineStatus>(node).copied(),
+        Some(MachineStatus::Clogged)
+    );
+    assert_eq!(
+        game.world.get::<Stock>(node).unwrap().output_used(),
+        1,
+        "production stops at the buffer's capacity"
+    );
+    assert_eq!(
+        base_log_hits(&game, "clogged"),
+        1,
+        "entering the state is news; staying in it is not"
+    );
+}
+
+/// The clog is not a dead end — it is a prompt. Emptying the buffer starts
+/// the node again, and that resumption is worth a line of its own.
+#[test]
+fn collecting_from_a_clogged_node_lets_it_resume() {
+    let mut game = Game::new(982, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let node = worked_node_at(
+        &mut game,
+        "mining_node",
+        ids::CORE_FRAGMENT,
+        p.x + 1,
+        p.y,
+        1,
+    );
+    let carried = count_item(&game, ids::CORE_FRAGMENT);
+
+    for _ in 0..60 {
+        game.tick();
+    }
+    assert_eq!(
+        game.world.get::<MachineStatus>(node).copied(),
+        Some(MachineStatus::Clogged),
+        "the fixture has to actually clog, or the rest of this proves nothing"
+    );
+
+    game.collect_adjacent();
+    for _ in 0..40 {
+        game.tick();
+    }
+
+    assert_eq!(
+        game.world.get::<Stock>(node).unwrap().output_used(),
+        1,
+        "it went back to work and filled the buffer again"
+    );
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT) - carried,
+        1,
+        "and the collect landed the first unit in the player's cargo"
+    );
+}
+
+/// Only the item destination moved. A worker still earns from a completed
+/// cycle, which is the other half of what a cronjob is for.
+#[test]
+fn a_worker_still_earns_xp_from_a_completed_cycle() {
+    let mut game = Game::new(983, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = worked_node_at(&mut game, "mining_node", ids::CORE_FRAGMENT, 3, 4, 20);
+    let worker = holders(&mut game, node, TaskKind::GatherResource)[0];
+    let before = {
+        let e = game.world.get::<Experience>(worker).unwrap();
+        (e.level, e.xp)
+    };
+
+    for _ in 0..40 {
+        game.tick();
+    }
+
+    // Compared as (level, xp), not xp alone: four cycles is enough to level
+    // this worker, and a level-up resets `xp` to the remainder — so a bare
+    // `xp > before` can fail on a worker that earned *more*, not less.
+    let after = game.world.get::<Experience>(worker).unwrap();
+    assert!(
+        (after.level, after.xp) > before,
+        "a completed cycle still pays the worker (level {} xp {})",
+        after.level,
+        after.xp
     );
 }

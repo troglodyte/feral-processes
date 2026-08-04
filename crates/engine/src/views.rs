@@ -6,7 +6,7 @@
 
 use crate::abilities::AffinityKind;
 use crate::battle::ActionOption;
-use crate::components::{EquippedItem, GlyphColor, TaskKind};
+use crate::components::{EquippedItem, GlyphColor, MachineStatus, TaskKind};
 use crate::items::ItemId;
 use crate::perks::Perk;
 use crate::research::ResearchId;
@@ -217,6 +217,26 @@ pub struct EntityView {
     /// `MAX_FUSIONS` — see `components::FusionCount`. At `MAX_FUSIONS` it
     /// can no longer be an input to a fusion, which the fuse menus show.
     pub fusions: u32,
+    /// Why this (structure) entity is or isn't producing, or `None` for
+    /// anything that runs no job and so has no state to be in. Lets the map
+    /// colour a machine's outline by what it is doing.
+    pub machine_status: Option<MachineStatus>,
+    /// The orthogonal offsets of neighbours this (structure) entity is
+    /// joined to for production — the sides the map leaves un-outlined, so
+    /// that a chain draws as one continuous shape and a machine that should
+    /// be joined and isn't shows a seam.
+    ///
+    /// Symmetric, so both walls of a joined pair come down together; the
+    /// feeding relation underneath is directional. See
+    /// `Game::linked_edges_by_structure`.
+    ///
+    /// Deliberately a property of the *defs*, not of what is in a buffer
+    /// right now: it answers "is this feeder joined to me", not "did a unit
+    /// move this tick". A healthy chain drains its feeder within a tick or
+    /// two, so a live-transfer marker would be dark most of the time and a
+    /// correctly-built line would look identical to a broken one. A missing
+    /// join therefore always means the base is laid out wrong.
+    pub linked_edges: Vec<(i32, i32)>,
 }
 
 /// One structure on the roster screen — see `Game::structure_report`.
@@ -240,10 +260,24 @@ pub struct StructureReport {
     /// target (see `StructureDef::raidable`).
     pub durability: Option<(u32, u32)>,
     pub is_home: bool,
-    /// Whether the def declares a `work` recipe. A workable structure with no
-    /// assignees is idle and producing nothing, which is the one thing on
-    /// this screen the player can act on.
+    /// Whether a program can be posted here — an extractor or an assembler.
+    /// A workable structure with no assignees is idle and producing nothing,
+    /// which is the one thing on this screen the player can act on.
     pub workable: bool,
+    /// What is staged in this structure's input buffer and waiting in its
+    /// output buffer, as display-ready `(item name, count)` pairs.
+    ///
+    /// Names, not `ItemId`s, and folded here rather than in the renderer:
+    /// per `CLAUDE.md` a read-only screen's rows are shaped in the engine,
+    /// and resolving an id against the `ItemDb` is exactly the kind of lookup
+    /// the renderer has no business doing.
+    pub input: Vec<(String, u32)>,
+    pub output: Vec<(String, u32)>,
+    /// How much `output` holds in total before the machine clogs.
+    pub output_capacity: u32,
+    /// Why this machine is or isn't producing, or `None` for a structure
+    /// that runs no job at all and so has no state to be in.
+    pub status: Option<MachineStatus>,
     /// Every program assigned to this structure. A cronjob worker and a
     /// guard can both be on one structure at once, which is why this is a
     /// list and why `EntityView::structure_worker` could not answer it.

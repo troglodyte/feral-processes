@@ -16,7 +16,7 @@ is skipped with a warning logged in-game rather than crashing startup.
                                     //         Orange
     build_cost: [("core_fragment", 3)],  // list of (item id, quantity) pairs
     // build_cost above, and every other item reference below (work.produces,
-    // passive_process.consumes/produces, teleport_cost, trade.buy), all take
+    // teleport_cost, trade.buy), all take
     // any item id from assets/items/*.ron — see assets/items/README.md for
     // the schema, and the top-level README's "Item ids" for the full set.
 
@@ -24,19 +24,22 @@ is skipped with a warning logged in-game rather than crashing startup.
     // the shipped-assets test refuses for anything in this repo). One line
     // on what the structure does, shown in the build menu. This used to be
     // derived automatically from the capability fields below (`work`,
-    // `passive_process`, `raid_defense`, and so on); it's authored text now,
+    // `raid_defense`, and so on); it's authored text now,
     // so a modder controls exactly how their structure reads — but that also
     // means nothing checks it against those fields, so if you change a
     // structure's capabilities, update the description to match by hand.
-    description: "Converts Core Fragments into Power Cells on its own while you stand within 2 tiles. The cheapest thing you can deploy.",
+    description: "Extracts Core Fragments while a program is posted to it. The cheapest thing you can deploy.",
 
     // Omit (`None`) for a purely decorative/utility structure. Set `Some(...)`
     // to make it assignable to a tamed creature via the cronjob menu — it'll
-    // produce one unit of `produces` every `ticks_per_unit` ticks. `capacity`
-    // (optional, defaults to 5) caps how many units the node can hold before
-    // it's mined down to empty; once empty it immediately refills to
-    // `capacity` and the assigned creature keeps working — a worked node is
-    // an infinite, bursty resource, never a one-time deposit.
+    // produce one unit of `produces` every `ticks_per_unit` ticks.
+    //
+    // A node is a tap, not a reserve: there's no pool to mine down, and it
+    // never runs dry. What paces it is the top-level `capacity` below — the
+    // node fills its own output buffer and then *clogs*, producing nothing
+    // more until the player walks over and collects (`C`). Production does
+    // not go into the player's inventory; it goes into the structure.
+    //
     // `level` (optional, defaults to `None`) makes each completed cycle a
     // gamble instead of a guaranteed yield: with it set, there's only a
     // level-based percentage chance the cycle actually pays out (a level-1
@@ -65,23 +68,41 @@ is skipped with a warning logged in-game rather than crashing startup.
     // consumed one at a time rather than in bulk — the Compiler's ICE
     // Breakers are spent one per decompile attempt, so a Mk5 in zone 5 paying
     // nine a cycle outruns the sink entirely. Leave it off for salvage.
-    work: Some((produces: "core_fragment", ticks_per_unit: 5, capacity: 5, level: Some(1))),
+    work: Some((produces: "core_fragment", ticks_per_unit: 5, level: Some(1))),
 
-    // Optional; can be left out entirely (defaults to no passive processing).
-    // If set, the structure automatically converts one `consumes` into one
-    // `produces` every `ticks_per_unit` ticks whenever the player is standing
-    // within `radius` tiles of it — no assigned worker needed, unlike `work`.
-    passive_process: Some((
-        consumes: "core_fragment",
-        produces: "power_cell",
-        ticks_per_unit: 15,
-        radius: 2,
-    )),
+    // Optional; defaults to 20. How many units this structure's *output
+    // buffer* holds before it clogs and stops producing. Every deployed
+    // structure has one, whether or not it produces anything — the player
+    // collects from a structure's output buffer by standing next to it, and
+    // a neighbouring machine pulls its ingredients from the same place.
+    // Counted in total across everything in the buffer, not per item.
+    //
+    // Top-level rather than inside `work` because a structure can have an
+    // output buffer without being a work node.
+    capacity: 20,
+
+    // Optional; can be left out entirely (defaults to no assembling). If
+    // set, this structure automatically builds `item` — one unit every
+    // `ticks_per_unit` ticks — out of ingredients it pulls from the output
+    // buffers of the four structures orthogonally touching it. Diagonals
+    // feed nothing. Like `work`, it needs a program assigned to it via the
+    // cronjob menu; unlike `work`, it consumes, which is what lets machines
+    // form a chain across the base.
+    //
+    // There is no recipe here, and that's deliberate: the machine runs the
+    // named item's OWN `craftable.cost` from assets/items/*.ron. So a recipe
+    // is written once and can never drift between the crafting bench and the
+    // machine, and any craftable item you add — including one with several
+    // ingredients — is automatable for free.
+    //
+    // `item` must name an item that actually declares `craftable`. One that
+    // doesn't builds a machine that can never run and says nothing about it.
+    assembles: Some((item: "patch_routine", ticks_per_unit: 8)),
 
     // Optional; can be left out entirely (defaults to no regeneration).
     // If set, the structure restores `per_tick` Power to the player every
     // tick that they're standing within `radius` tiles of it — no assigned
-    // worker and no input item, unlike `work` and `passive_process`.
+    // worker and no input item, unlike `work`.
     // Stacks additively across every in-range structure that sets it, and
     // clamps at full Power. This is how the Recharger Node works:
     // `power_regen: Some((per_tick: 1.0, radius: 7))`, a radius chosen to

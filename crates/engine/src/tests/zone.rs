@@ -464,7 +464,11 @@ fn breaching_preserves_structure_durability_and_node_stock() {
     let mut game = Game::new(941, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let (_home, node) = build_a_base(&mut game);
     game.world.get_mut::<Durability>(node).unwrap().hp = 7;
-    game.world.get_mut::<ResourceNode>(node).unwrap().amount = 2;
+    game.world
+        .get_mut::<Stock>(node)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::CORE_FRAGMENT), 2);
 
     game.enter_next_zone();
 
@@ -474,9 +478,9 @@ fn breaching_preserves_structure_durability_and_node_stock() {
         "damage travels with the structure"
     );
     assert_eq!(
-        game.world.get::<ResourceNode>(node).unwrap().amount,
+        node_output(&game, node, ids::CORE_FRAGMENT),
         2,
-        "so does mined-down stock"
+        "so does anything still sitting in its output buffer, uncollected"
     );
 }
 

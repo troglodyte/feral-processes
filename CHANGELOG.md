@@ -13,6 +13,55 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Adjacency-fed production chains
+
+**Save format 19 → 20.** Existing saves stop loading; the checked-in
+`dev-saves/` templates are RON and survive.
+
+Machines now have local storage and feed each other by *touching*. A
+structure declaring `assembles` pulls ingredients out of the output buffers
+of the four structures orthogonally adjacent to it — never diagonally — and
+builds one unit at a time. A chain is a physical line across the base, a
+machine with two ingredients needs both feeders beside it, and a machine
+nobody visits fills up and stops.
+
+A machine's recipe is the *item's* own `craftable.cost`. There is no second
+recipe format, so a bench recipe and a machine recipe cannot drift apart, and
+any craftable item a mod adds — including a multi-ingredient one — is
+automatable for free.
+
+**Extractors deposit into their own output buffer, not your inventory.** This
+is the largest felt change: fragments stop appearing in your pocket while you
+are away, and you come home and harvest with `C`, which empties every
+structure orthogonally touching you. Structures block movement, so you always
+stand beside one rather than on it — standing in the crook of an L empties
+three buildings, a sprawled-out line costs you trips. It is also the only
+thing that makes clogging real; a node paying straight into the player is an
+infinite source and nothing upstream of it can ever back up.
+
+Three stall states, each said once on the way in rather than every tick:
+*starved* (input short), *clogged* (output full) and *idle* (no program). `B`
+shows every buffer and every stall.
+
+Every machine needs an assigned program, assemblers included, so **roster
+capacity is what buys chain length, not fragments**. The five-machine line
+needs five programs against a starting cap of three, which makes the Data
+Cache the population building.
+
+New content: Bytecode Block, Charge Coil and Patch Routine — the game's first
+multi-ingredient recipe, and the first shipped item to arm a pre-battle buff
+— produced by a new Refinery, Winding Node and Assembly Bay. The Assembly Bay
+costs Bytecode Blocks to build, so the two-machine line a starting roster can
+afford is what pays for the third stage.
+
+Removed: `passive_process` (zero shipped users, superseded entirely by
+`assembles`) and the node deposit pool — `ResourceNode::amount`/`capacity`,
+`WorkDef::capacity` and `StructureSave::resource_amount`. A node is a tap
+rather than a reserve now; the output buffer is what paces it.
+
+New `dev-saves/chains.ron` stands the whole chain staffed and running, with
+the player parked beside its Assembly Bay.
+
 ### The log pane filters by base or field
 
 `F` on the map cycles the log pane through All → Field → Base → All. The base

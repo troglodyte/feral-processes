@@ -6,33 +6,36 @@ use crate::*;
 #[test]
 fn a_cronjob_worker_fills_the_unbounded_buffer_past_the_old_cap() {
     let mut game = Game::new(708, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    assign_worker_producing(&mut game, ItemId::from(ids::CORE_FRAGMENT));
-    let before = game.inventory_used();
+    let node = assign_worker_producing(&mut game, ItemId::from(ids::CORE_FRAGMENT));
+    let before = node_output(&game, node, ids::CORE_FRAGMENT);
 
     for _ in 0..100 {
         game.tick();
     }
 
     assert!(
-        game.inventory_used() > before,
-        "a working cronjob keeps depositing cargo — the Buffer never fills up"
+        node_output(&game, node, ids::CORE_FRAGMENT) > before,
+        "a working cronjob keeps producing — its buffer is what bounds it, not the old cap"
     );
 }
 
 #[test]
 fn a_research_cronjob_banks_research_data_over_time() {
     let mut game = Game::new(709, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    assign_worker_producing(&mut game, ItemId::from(ids::RESEARCH_DATA));
-    let before = research_data_held(&game);
+    let node = assign_worker_producing(&mut game, ItemId::from(ids::RESEARCH_DATA));
+    let before = node_output(&game, node, ids::RESEARCH_DATA);
 
     for _ in 0..100 {
         game.tick();
     }
 
+    // The bank limit now bites on collection rather than on production: the
+    // node fills its own buffer regardless, and `Inventory::add_capped` is
+    // what refuses to overfill the bank when the player comes to take it.
     assert!(
-        research_data_held(&game) > before,
-        "a research cronjob must bank research over time (was {before}, now {})",
-        research_data_held(&game)
+        node_output(&game, node, ids::RESEARCH_DATA) > before,
+        "a research cronjob must keep producing over time (was {before}, now {})",
+        node_output(&game, node, ids::RESEARCH_DATA)
     );
 }
 
@@ -250,12 +253,15 @@ fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
     assert_eq!(
         sorted,
         vec![
+            "assembly_bay".to_string(),
             "data_cache".to_string(),
             "home".to_string(),
             "mining_node".to_string(),
             "portal".to_string(),
             "recharger_node".to_string(),
+            "refinery".to_string(),
             "research_node".to_string(),
+            "winding_node".to_string(),
         ],
         "exactly the structures named by no research file start available"
     );

@@ -3,10 +3,11 @@ use bevy_ecs::system::SystemParam;
 use rand::RngExt;
 
 use crate::components::{
-    Creature, Experience, FieldBuff, FieldBuffKind, Inventory, NEED_MAX, NEED_MIN, Needs, Nest,
-    NestGuardian, PassiveProcessor, Perks, Player, Position, Potential, Pursuing, ResourceNode,
-    Stats, Structure, StructureTier, Tamed, Task, TaskKind, WanderAi, field_buff_power_of,
+    Creature, Experience, FieldBuff, FieldBuffKind, MachineStatus, NEED_MAX, NEED_MIN, Needs, Nest,
+    NestGuardian, Perks, Player, Position, Potential, Pursuing, ResourceNode, Stats, Stock,
+    Structure, StructureTier, Tamed, Task, TaskKind, WanderAi, field_buff_power_of,
 };
+use crate::items::ItemId;
 use crate::items_db::ItemDb;
 use crate::perks::Perk;
 use crate::progression;
@@ -150,8 +151,12 @@ fn node_is_flat_payout(node_entity: Option<&Structure>, structure_db: &Structure
 }
 
 /// One completed gather cycle against `node`: rolls the node's reliability
-/// and, on success, spends a unit of its stock and reports what the cycle
-/// earned. `None` is a fizzle — the cycle is spent and nothing produced.
+/// and, on success, reports what the cycle earned. `None` is a fizzle — the
+/// cycle is spent and nothing produced.
+///
+/// A node has nothing to spend: it is a tap, not a reserve. What paces it is
+/// the caller's output buffer, which is why this function no longer decides
+/// whether there is anything left to give.
 ///
 /// Shared by `task_progress_system` (a program running a cronjob) and
 /// `player_gather_system` (the player working the node themselves) so the
@@ -161,7 +166,7 @@ fn node_is_flat_payout(node_entity: Option<&Structure>, structure_db: &Structure
 /// each reads `keen_scavenger_level` off the player for itself — the perk is
 /// the player's wherever the cycle is being run.
 pub(crate) fn resolve_gather_cycle(
-    node: &mut ResourceNode,
+    node: &ResourceNode,
     tier: Option<&StructureTier>,
     zone: ZoneLevel,
     flat_payout: bool,
@@ -176,7 +181,6 @@ pub(crate) fn resolve_gather_cycle(
     {
         return None;
     }
-    node.amount -= 1;
     let def = item_db.get(node.resource.as_str());
     // Read per cycle rather than baked in at deploy, so a base that travels
     // to a deeper zone immediately earns at the new rate.
@@ -188,12 +192,80 @@ pub(crate) fn resolve_gather_cycle(
     Some((node.resource.clone(), payout))
 }
 
+/// The ingredient list a machine declaring `assembles` runs, which is the
+/// assembled item's own `CraftableDef::cost` — there is no second recipe
+/// format, so a machine's recipe and the bench recipe for the same item
+/// cannot drift apart.
+///
+/// `None` for a structure that assembles nothing, and also for one naming an
+/// item that isn't craftable (a typo, or a mod whose item file was removed).
+/// Both are the same thing to a caller: nothing to run. The shipped-assets
+/// test is what stops the second case reaching a player.
+pub(crate) fn assembly_recipe<'a>(
+    def: &crate::structures::StructureDef,
+    items: &'a ItemDb,
+) -> Option<&'a [(ItemId, u32)]> {
+    let assembles = def.assembles.as_ref()?;
+    let recipe = items.get(assembles.item.as_str())?.craftable.as_ref()?;
+    Some(recipe.cost.as_slice())
+}
+
+/// What a structure puts into its *own* output buffer, or `None` for one
+/// that produces nothing. An extractor's `work.produces` and an assembler's
+/// `assembles.item` are the only two ways anything reaches an `output`, so
+/// this is the whole answer to "could this structure feed a neighbour".
+pub(crate) fn produced_item(def: &crate::structures::StructureDef) -> Option<&ItemId> {
+    if let Some(work) = &def.work {
+        return Some(&work.produces);
+    }
+    def.assembles.as_ref().map(|a| &a.item)
+}
+
+/// Moves a machine to `next`, announcing it to the base feed only when the
+/// state actually changes.
+///
+/// **Entering a state is news; staying in it is not.** A base with four
+/// stalled machines would otherwise put four lines in the pane every tick it
+/// stayed stalled, which is the fastest way to make the log useless. Shared
+/// by every producer rather than each wording its own transition check, so
+/// the "log once" property cannot hold in one system and lapse in another.
+pub(crate) fn set_machine_status(
+    status: &mut MachineStatus,
+    next: MachineStatus,
+    name: &str,
+    log: &mut MessageLog,
+) {
+    if *status == next {
+        return;
+    }
+    *status = next;
+    log.push_base(match next {
+        MachineStatus::Running => format!("The {name} resumes."),
+        MachineStatus::Starved => format!("The {name} is starved — nothing is feeding it."),
+        MachineStatus::Clogged => format!("The {name} is clogged — its output buffer is full."),
+        MachineStatus::Idle => format!("The {name} sits idle — no program is assigned."),
+    });
+}
+
+/// The producing side of a gather cycle, shared by the cronjob and
+/// player-run systems. Aliased for the same `type_complexity` reason as
+/// `CronjobWorker` below.
+type WorkedNode = (
+    &'static mut ResourceNode,
+    Option<&'static StructureTier>,
+    Option<&'static Structure>,
+    &'static mut Stock,
+    &'static mut MachineStatus,
+);
+
 /// The worker-side components `task_progress_system` reads per cronjob
 /// assignment. Aliased rather than written inline because the tuple is long
 /// enough to trip clippy's `type_complexity` lint.
+/// `Tamed` moved out to a `With` filter when the payout stopped going to
+/// `Tamed::owner` — it is a restriction on *which* workers run cronjobs, not
+/// data the loop reads.
 type CronjobWorker = (
     &'static mut Task,
-    &'static Tamed,
     &'static Creature,
     Option<&'static Potential>,
     &'static mut Experience,
@@ -214,19 +286,20 @@ pub struct CronjobLookups<'w> {
 }
 
 /// Generic job progression: any entity with a `Task` advances it once per
-/// tick against its `target`; on completion the producing node hands its
-/// payout to the worker's owner. A node that's been mined down to 0
-/// refills to its `capacity` on the next tick rather than stalling the
-/// cronjob forever. The same loop would drive future colonist-style jobs,
-/// not just base-building work.
+/// tick against its `target`; on completion the producing node deposits its
+/// payout into *its own* output buffer, not the worker owner's cargo. A node
+/// that's been mined down to 0 refills to its `capacity` on the next tick
+/// rather than stalling the cronjob forever. The same loop would drive
+/// future colonist-style jobs, not just base-building work.
+///
+/// The buffer, not the deposit pool, is what paces a node: producing against
+/// a full one is a *clog*, which costs neither the cycle nor the deposit, so
+/// work resumes the moment the player collects. This is also the only reason
+/// anything upstream in a production chain can ever back up — a node paying
+/// straight into the player's pocket is an infinite source.
 pub fn task_progress_system(
-    mut tasks: Query<CronjobWorker>,
-    mut nodes: Query<(
-        &mut ResourceNode,
-        Option<&StructureTier>,
-        Option<&Structure>,
-    )>,
-    mut inventories: Query<&mut Inventory>,
+    mut tasks: Query<CronjobWorker, With<Tamed>>,
+    mut nodes: Query<WorkedNode>,
     player: Query<(Option<&FieldBuff>, Option<&Perks>), With<Player>>,
     db: CronjobLookups,
     mut log: ResMut<MessageLog>,
@@ -253,23 +326,32 @@ pub fn task_progress_system(
             )
         })
         .unwrap_or((0, 0));
-    for (mut task, tamed, creature, potential, mut exp, mut stats) in &mut tasks {
+    for (mut task, creature, potential, mut exp, mut stats) in &mut tasks {
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
         }
-        let Ok((mut node, tier, structure)) = nodes.get_mut(task.target) else {
+        let Ok((node, tier, structure, mut stock, mut status)) = nodes.get_mut(task.target) else {
             continue;
         };
-        if node.amount == 0 {
-            node.amount = node.capacity;
-        }
+        let machine_name = structure
+            .and_then(|s| structure_db.get(&s.kind))
+            .map(|d| d.name.as_str())
+            .unwrap_or("machine");
         task.progress += 1;
         if task.progress < task.required {
             continue;
         }
+        // Held at `required` rather than reset, so a cleared clog pays out on
+        // the very next tick instead of restarting the cycle from zero — the
+        // work was done, it just had nowhere to go.
+        if stock.output_room() == 0 {
+            task.progress = task.required;
+            set_machine_status(&mut status, MachineStatus::Clogged, machine_name, &mut log);
+            continue;
+        }
         task.progress = 0;
         let Some((resource, payout)) = resolve_gather_cycle(
-            &mut node,
+            &node,
             tier,
             *zone,
             node_is_flat_payout(structure, &structure_db),
@@ -280,47 +362,45 @@ pub fn task_progress_system(
             log.push_base("Your subroutine's extraction attempt fails to compile.".to_string());
             continue;
         };
-        if let Ok(mut inv) = inventories.get_mut(tamed.owner) {
-            let resource_name = item_db
-                .get(resource.as_str())
-                .map(|d| d.name.as_str())
-                .unwrap_or(resource.as_str());
-            let landed = inv.add_capped(resource.clone(), payout, &item_db);
-            if landed == 0 {
-                log.push_base(format!(
-                    "A cronjob yields {resource_name} but there's no room to store it."
-                ));
-            }
-            let level_note = if exp.level < WORK_XP_LEVEL_CAP {
-                let species_growth = species_db
-                    .get(&creature.species)
-                    .map(|s| s.growth_multiplier)
-                    .unwrap_or(crate::tuning::BASELINE_GROWTH_MULTIPLIER);
-                let individual_roll = potential
-                    .map(|p| p.growth_roll)
-                    .unwrap_or(Potential::NEUTRAL.growth_roll);
-                let growth_multiplier = species_growth * individual_roll;
-                let levels = progression::add_xp(
-                    &mut exp,
-                    &mut stats,
-                    WORK_XP_PER_CYCLE,
-                    growth_multiplier,
-                    Some(crate::tuning::CREATURE_MAX_LEVEL),
-                    xp_boost_pct,
-                );
-                if levels > 0 {
-                    format!(" It levels up to {}!", exp.level)
-                } else {
-                    String::new()
-                }
+        let resource_name = item_db
+            .get(resource.as_str())
+            .map(|d| d.name.as_str())
+            .unwrap_or(resource.as_str());
+        // Clamped rather than refused: a payout that outgrows the room left
+        // must not stall the cycle, and the node clogs on the next one
+        // anyway, which is where the player is told about it.
+        let landed = payout.min(stock.output_room());
+        *stock.output.entry(resource.clone()).or_default() += landed;
+        set_machine_status(&mut status, MachineStatus::Running, machine_name, &mut log);
+        let level_note = if exp.level < WORK_XP_LEVEL_CAP {
+            let species_growth = species_db
+                .get(&creature.species)
+                .map(|s| s.growth_multiplier)
+                .unwrap_or(crate::tuning::BASELINE_GROWTH_MULTIPLIER);
+            let individual_roll = potential
+                .map(|p| p.growth_roll)
+                .unwrap_or(Potential::NEUTRAL.growth_roll);
+            let growth_multiplier = species_growth * individual_roll;
+            let levels = progression::add_xp(
+                &mut exp,
+                &mut stats,
+                WORK_XP_PER_CYCLE,
+                growth_multiplier,
+                Some(crate::tuning::CREATURE_MAX_LEVEL),
+                xp_boost_pct,
+            );
+            if levels > 0 {
+                format!(" It levels up to {}!", exp.level)
             } else {
                 String::new()
-            };
-            log.push_base_kind(
-                MessageKind::Loot,
-                format!("Your subroutine extracted {landed} {resource_name}.{level_note}"),
-            );
-        }
+            }
+        } else {
+            String::new()
+        };
+        log.push_base_kind(
+            MessageKind::Loot,
+            format!("Your subroutine extracted {landed} {resource_name}.{level_note}"),
+        );
     }
 }
 
@@ -332,37 +412,44 @@ pub fn task_progress_system(
 /// No XP is awarded, unlike a program's cronjob: a worker levels from its
 /// job, and handing the player the same per-cycle XP would make a node an
 /// XP faucet with no risk attached to it.
+///
+/// The payout lands in the node's own buffer here too, not straight into the
+/// player's cargo — the player is standing beside the node, so it is one `C`
+/// away, and routing this path around the buffer would leave the deposit
+/// pool as the only thing pacing it. That pool is gone.
 pub fn player_gather_system(
-    mut player: Query<(&mut Task, &mut Inventory, Option<&Perks>), With<Player>>,
-    mut nodes: Query<(
-        &mut ResourceNode,
-        Option<&StructureTier>,
-        Option<&Structure>,
-    )>,
+    mut player: Query<(&mut Task, Option<&Perks>), With<Player>>,
+    mut nodes: Query<WorkedNode>,
     item_db: Res<ItemDb>,
     structure_db: Res<StructureDb>,
     zone: Res<ZoneLevel>,
     mut log: ResMut<MessageLog>,
     mut rng: ResMut<GameRng>,
 ) {
-    for (mut task, mut inv, perks) in &mut player {
+    for (mut task, perks) in &mut player {
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
         }
-        let Ok((mut node, tier, structure)) = nodes.get_mut(task.target) else {
+        let Ok((node, tier, structure, mut stock, mut status)) = nodes.get_mut(task.target) else {
             continue;
         };
-        if node.amount == 0 {
-            node.amount = node.capacity;
-        }
+        let machine_name = structure
+            .and_then(|s| structure_db.get(&s.kind))
+            .map(|d| d.name.as_str())
+            .unwrap_or("machine");
         task.progress += 1;
         if task.progress < task.required {
+            continue;
+        }
+        if stock.output_room() == 0 {
+            task.progress = task.required;
+            set_machine_status(&mut status, MachineStatus::Clogged, machine_name, &mut log);
             continue;
         }
         task.progress = 0;
         let keen_scavenger_level = perks.map(|p| p.level(Perk::KeenScavenger)).unwrap_or(0);
         let Some((resource, payout)) = resolve_gather_cycle(
-            &mut node,
+            &node,
             tier,
             *zone,
             node_is_flat_payout(structure, &structure_db),
@@ -377,13 +464,9 @@ pub fn player_gather_system(
             .get(resource.as_str())
             .map(|d| d.name.as_str())
             .unwrap_or(resource.as_str());
-        let landed = inv.add_capped(resource.clone(), payout, &item_db);
-        if landed == 0 {
-            log.push_base(format!(
-                "You pull {resource_name} loose but there's no room to store it."
-            ));
-            continue;
-        }
+        let landed = payout.min(stock.output_room());
+        *stock.output.entry(resource.clone()).or_default() += landed;
+        set_machine_status(&mut status, MachineStatus::Running, machine_name, &mut log);
         log.push_base_kind(
             MessageKind::Loot,
             format!("You extract {landed} {resource_name}."),
@@ -391,70 +474,189 @@ pub fn player_gather_system(
     }
 }
 
-/// Proximity-based automation: a structure with a `passive_process` recipe
-/// (see `StructureDef`) converts one item into another on its own whenever
-/// the player is standing within range — no assigned worker needed. This is
-/// the passive counterpart to `task_progress_system`'s active, creature-run
-/// production.
-pub fn passive_process_system(
-    mut player: Query<(&Position, &mut Inventory), With<Player>>,
-    mut structures: Query<(&Structure, &Position, &mut PassiveProcessor)>,
+/// One tick of every assembler, in two phases: pull ingredients out of the
+/// neighbours, then work a staged batch into one unit of product.
+///
+/// **Machines are visited in `(x, y)` order.** Bevy's query iteration order is
+/// not stable, so two machines competing for one feeder's scarce output would
+/// otherwise resolve differently between runs — a flaky-test source, and a
+/// base that behaves differently after a reload.
+///
+/// Status resolves each tick to exactly one of `Idle` (no program) →
+/// `Starved` (input short) → `Clogged` (output full) → `Running`, checked in
+/// that order, and only a *change* is announced. Each stall returns before
+/// touching anything: a clogged machine in particular must not spend the
+/// batch it has no room to deliver.
+///
+/// A machine with no program assigned pulls nothing either. Otherwise an
+/// unstaffed machine would hoard from a shared feeder while producing
+/// nothing, starving the line it sits beside for no gain.
+pub fn assembler_system(
+    structures: Query<(Entity, &Structure, &Position), With<Stock>>,
+    mut stocks: Query<&mut Stock>,
+    mut statuses: Query<&mut MachineStatus>,
+    mut tasks: Query<(Entity, &mut Task)>,
     structure_db: Res<StructureDb>,
     item_db: Res<ItemDb>,
     mut log: ResMut<MessageLog>,
 ) {
-    for (player_pos, mut inventory) in &mut player {
-        let player_pos = *player_pos;
-        for (structure, pos, mut proc) in &mut structures {
-            let Some(def) = structure_db.get(&structure.kind) else {
+    let by_tile: std::collections::HashMap<(i32, i32), Entity> =
+        structures.iter().map(|(e, _, p)| ((p.x, p.y), e)).collect();
+
+    let mut machines: Vec<(Entity, (i32, i32), &crate::structures::StructureDef)> = structures
+        .iter()
+        .filter_map(|(e, s, p)| {
+            let def = structure_db.get(&s.kind)?;
+            def.assembles.as_ref()?;
+            Some((e, (p.x, p.y), def))
+        })
+        .collect();
+    machines.sort_by_key(|(_, tile, _)| *tile);
+
+    for (machine, (x, y), def) in machines {
+        let Some(recipe) = assembly_recipe(def, &item_db) else {
+            continue;
+        };
+        let announce = |statuses: &mut Query<&mut MachineStatus>,
+                        log: &mut MessageLog,
+                        next: MachineStatus| {
+            if let Ok(mut status) = statuses.get_mut(machine) {
+                set_machine_status(&mut status, next, &def.name, log);
+            }
+        };
+
+        let Some(worker) = tasks
+            .iter()
+            .find(|(_, t)| t.target == machine && matches!(t.kind, TaskKind::GatherResource))
+            .map(|(e, _)| e)
+        else {
+            announce(&mut statuses, &mut log, MachineStatus::Idle);
+            continue;
+        };
+
+        // Planned against a snapshot, then applied, because reading a
+        // neighbour's `output` and writing this machine's `input` are the
+        // same `Query<&mut Stock>`. Planned and applied *per machine* rather
+        // than for the whole base at once, so a machine earlier in the sort
+        // order really has taken its share before the next one looks.
+        let plan: Vec<(Entity, ItemId, u32)> = {
+            let Ok(mine) = stocks.get(machine) else {
                 continue;
             };
-            let Some(recipe) = &def.passive_process else {
+            let mut plan = Vec::new();
+            for (item, per_batch) in recipe {
+                let cap = per_batch * crate::tuning::INPUT_STOCK_BATCHES;
+                let mut want = cap.saturating_sub(mine.input.get(item).copied().unwrap_or(0));
+                for (dx, dy) in crate::game::collect::ORTHOGONAL {
+                    if want == 0 {
+                        break;
+                    }
+                    let Some(&feeder) = by_tile.get(&(x + dx, y + dy)) else {
+                        continue;
+                    };
+                    let available = stocks
+                        .get(feeder)
+                        .ok()
+                        .and_then(|s| s.output.get(item).copied())
+                        .unwrap_or(0);
+                    let take = want.min(available);
+                    if take == 0 {
+                        continue;
+                    }
+                    plan.push((feeder, item.clone(), take));
+                    want -= take;
+                }
+            }
+            plan
+        };
+
+        for (feeder, item, qty) in plan {
+            let taken = {
+                let Ok(mut src) = stocks.get_mut(feeder) else {
+                    continue;
+                };
+                match src.output.get_mut(&item) {
+                    Some(have) => {
+                        let taken = qty.min(*have);
+                        *have -= taken;
+                        if *have == 0 {
+                            src.output.remove(&item);
+                        }
+                        taken
+                    }
+                    None => 0,
+                }
+            };
+            if taken == 0 {
+                continue;
+            }
+            *stocks
+                .get_mut(machine)
+                .expect("planned against this machine's own stock")
+                .input
+                .entry(item)
+                .or_default() += taken;
+        }
+
+        // Phase 2: work. Every gate returns before spending anything, so a
+        // stall costs the batch nothing and clears the moment its cause does.
+        let (fed, roomy) = {
+            let Ok(stock) = stocks.get(machine) else {
                 continue;
             };
-            if (pos.x - player_pos.x).abs() > recipe.radius
-                || (pos.y - player_pos.y).abs() > recipe.radius
-            {
-                continue;
-            }
-            proc.progress += 1;
-            if proc.progress < recipe.ticks_per_unit {
-                continue;
-            }
-            proc.progress = 0;
-            // Check room before taking the input: this is a conversion, not
-            // an award, so a full bank must refuse rather than consume the
-            // input for an output that never lands. (Ordinary cargo is
-            // unbounded and always has room; only a banked output can be
-            // full.)
-            if !inventory.has_room(&recipe.produces, 1, &item_db) {
-                continue;
-            }
-            if inventory.take(recipe.consumes.clone(), 1) == 1 {
-                inventory.add(recipe.produces.clone(), 1);
-                let consumes_name = item_db
-                    .get(recipe.consumes.as_str())
-                    .map(|d| d.name.as_str())
-                    .unwrap_or(recipe.consumes.as_str());
-                let produces_name = item_db
-                    .get(recipe.produces.as_str())
-                    .map(|d| d.name.as_str())
-                    .unwrap_or(recipe.produces.as_str());
-                log.push_base_kind(
-                    MessageKind::Loot,
-                    format!(
-                        "The {} processes a {consumes_name} into a {produces_name}.",
-                        def.name
-                    ),
-                );
+            let fed = recipe
+                .iter()
+                .all(|(item, need)| stock.input.get(item).copied().unwrap_or(0) >= *need);
+            (fed, stock.output_room() > 0)
+        };
+        if !fed {
+            announce(&mut statuses, &mut log, MachineStatus::Starved);
+            continue;
+        }
+        if !roomy {
+            announce(&mut statuses, &mut log, MachineStatus::Clogged);
+            continue;
+        }
+        announce(&mut statuses, &mut log, MachineStatus::Running);
+
+        let ticks_per_unit = def
+            .assembles
+            .as_ref()
+            .map(|a| a.ticks_per_unit.max(1))
+            .unwrap_or(1);
+        let Ok((_, mut task)) = tasks.get_mut(worker) else {
+            continue;
+        };
+        task.progress += 1;
+        if task.progress < ticks_per_unit {
+            continue;
+        }
+        task.progress = 0;
+
+        let Ok(mut stock) = stocks.get_mut(machine) else {
+            continue;
+        };
+        for (item, need) in recipe {
+            match stock.input.get_mut(item) {
+                Some(have) if *have > *need => *have -= need,
+                _ => {
+                    stock.input.remove(item);
+                }
             }
         }
+        let product = def
+            .assembles
+            .as_ref()
+            .expect("filtered on `assembles` above")
+            .item
+            .clone();
+        *stock.output.entry(product).or_default() += 1;
     }
 }
 
 /// Restores the player's Power once per tick for every in-range structure
 /// whose def sets `power_regen` — no worker and no input item, unlike
-/// `task_progress_system` and `passive_process_system`.
+/// `task_progress_system`.
 ///
 /// Chained ahead of `needs_tick_system` (see `Game::build_schedule`), and
 /// that order is load-bearing: run the other way round, a player limping
@@ -496,7 +698,6 @@ pub fn power_regen_system(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::items::{ItemId, ids};
     use crate::structures::StructureDb;
     use crate::tuning::PLAYER_BASE_STATS;
     use std::sync::atomic::{AtomicU32, Ordering};
@@ -685,10 +886,7 @@ mod tests {
     #[test]
     fn power_regen_applies_at_exactly_the_radius_boundary() {
         let hunger = run_regen_once(load_test_recharger(), "test_recharger", 50.0, &[(3, 3)]);
-        assert_eq!(
-            hunger, 52.0,
-            "radius is inclusive, matching passive_process"
-        );
+        assert_eq!(hunger, 52.0, "radius is inclusive");
     }
 
     #[test]
@@ -735,21 +933,10 @@ mod tests {
         );
     }
 
-    fn test_item_db() -> ItemDb {
-        ItemDb::load_dir(
-            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/items"),
-        )
-        .unwrap()
-        .0
-    }
-
-    /// A conversion that consumes ordinary cargo and produces a *banked*
-    /// currency. The Buffer is unbounded now, so a banked output is the only
-    /// kind that can still be "full" — this is how we observe the guard that
-    /// won't consume the input unless the output will land. Written to a
-    /// scratch temp dir and loaded through `StructureDb::load_dir`, same
-    /// fixture pattern `research.rs`'s tests use, since `StructureDb`'s
-    /// fields are private outside its module.
+    /// A def that sets no `power_regen`, so the regen system has to leave the
+    /// player's Power alone. Written to a scratch temp dir and loaded through
+    /// `StructureDb::load_dir`, same fixture pattern `research.rs`'s tests
+    /// use, since `StructureDb`'s fields are private outside its module.
     fn load_test_capacitor() -> StructureDb {
         load_fixture_db(&[(
             "test_capacitor.ron",
@@ -760,58 +947,8 @@ mod tests {
                 color: Cyan,
                 build_cost: [],
                 work: None,
-                passive_process: Some((
-                    consumes: "core_fragment",
-                    produces: "research_data",
-                    ticks_per_unit: 1,
-                    radius: 5,
-                )),
             )"#,
         )])
-    }
-
-    #[test]
-    fn passive_process_does_not_consume_input_when_a_banked_output_is_full() {
-        let structure_db = load_test_capacitor();
-        let item_db = test_item_db();
-        let limit = item_db
-            .get(ids::RESEARCH_DATA)
-            .and_then(|d| d.bank_limit)
-            .expect("research_data ships with a bank limit");
-
-        let mut world = World::new();
-        world.insert_resource(structure_db);
-        world.insert_resource(item_db);
-        world.insert_resource(MessageLog::default());
-
-        let mut inventory = Inventory::default();
-        inventory.add(ItemId::from(ids::RESEARCH_DATA), limit); // bank already full
-        inventory.add(ItemId::from(ids::CORE_FRAGMENT), 10);
-        world.spawn((Player, Position { x: 0, y: 0 }, inventory));
-        world.spawn((
-            Structure {
-                kind: "test_capacitor".to_string(),
-            },
-            Position { x: 0, y: 0 },
-            PassiveProcessor::default(),
-        ));
-
-        let mut schedule = Schedule::default();
-        schedule.add_systems(passive_process_system);
-        schedule.run(&mut world);
-
-        let mut query = world.query::<&Inventory>();
-        let inv = query.iter(&world).next().unwrap();
-        assert_eq!(
-            inv.count(&ItemId::from(ids::CORE_FRAGMENT)),
-            10,
-            "the input must not be consumed when the banked output has no room"
-        );
-        assert_eq!(
-            inv.count(&ItemId::from(ids::RESEARCH_DATA)),
-            limit,
-            "the bank must not grow past its limit"
-        );
     }
 
     #[test]

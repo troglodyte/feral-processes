@@ -1,0 +1,6 @@
+(
+    id: "charge_coil",
+    name: "Charge Coil",
+    description: "Power Cells wound into a store that holds under load. Half of a Patch Routine.",
+    craftable: Some((cost: [("power_cell", 3)], requires_structure: Some("winding_node"))),
+)

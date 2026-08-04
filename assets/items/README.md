@@ -121,6 +121,15 @@ disqualifies the whole file.
     // bench is the entire unlock: an item-declared recipe needs no research
     // node of its own (though the bench itself may be research-gated to
     // build, which is what paces this).
+    //
+    // `cost` is ALSO what an automated machine runs. A structure whose
+    // `assembles` field names this item (see assets/structures/README.md)
+    // builds it from exactly this recipe — there is no second recipe format
+    // anywhere in the game, so the bench and the machine can never drift
+    // apart, and a multi-ingredient recipe you add here is automatable for
+    // free. Naming that machine as `requires_structure` is the shipped
+    // pattern: hand-crafting then reads as the manual fallback for a machine
+    // you already own, rather than a way around building it.
     craftable: Some((
         cost: [("core_fragment", 12)],
         requires_structure: Some("fabricator"),

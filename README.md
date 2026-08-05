@@ -59,6 +59,8 @@ grid gives way to a **first-person corridor**, and `hjkl`/arrows stop being
 compass directions and start being forward, back, turn left, turn right.
 `<` and `>` follow whichever link is underfoot.
 
+![The Stack's first-person corridor view, with the party's map of the frame in the corner](pics/stack.png)
+
 The party's map of the frame sits in the corner of the corridor the whole time
 you are down there — `+` and `-` zoom it from the whole frame down to the
 junction you are standing in — and `g` opens it full-screen with a legend, for

@@ -153,14 +153,14 @@ fn use_symlink_fails_without_enough_of_the_cost() {
 }
 
 #[test]
-fn find_creature_in_direction_finds_the_nearest_match_along_the_line() {
+fn find_target_in_direction_finds_the_nearest_match_along_the_line() {
     let mut game = Game::new(14, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let start = *game.world.get::<Position>(player).unwrap();
     let species = game.species_defs().into_iter().next().unwrap();
     clear_creatures_east_of_player(&mut game, start, 10);
 
-    assert!(game.find_creature_in_direction(1, 0, 10).is_none());
+    assert!(game.find_target_in_direction(1, 0, 10).is_none());
 
     let far = game
         .world
@@ -199,17 +199,17 @@ fn find_creature_in_direction_finds_the_nearest_match_along_the_line() {
         ))
         .id();
 
-    let found = game.find_creature_in_direction(1, 0, 10);
+    let found = game.find_target_in_direction(1, 0, 10);
     assert_eq!(
         found,
-        Some(near),
+        Some(InspectTarget::Creature(near)),
         "the nearer creature along the ray should win"
     );
-    assert_ne!(found, Some(far));
+    assert_ne!(found, Some(InspectTarget::Creature(far)));
 }
 
 #[test]
-fn find_creature_in_direction_respects_max_range() {
+fn find_target_in_direction_respects_max_range() {
     let mut game = Game::new(15, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let start = *game.world.get::<Position>(player).unwrap();
@@ -232,17 +232,17 @@ fn find_creature_in_direction_respects_max_range() {
     ));
 
     assert!(
-        game.find_creature_in_direction(1, 0, 5).is_none(),
+        game.find_target_in_direction(1, 0, 5).is_none(),
         "creature is out of range"
     );
     assert!(
-        game.find_creature_in_direction(1, 0, 10).is_some(),
+        game.find_target_in_direction(1, 0, 10).is_some(),
         "creature should be within range"
     );
 }
 
 #[test]
-fn find_creature_in_direction_matches_a_90_degree_cone_not_just_the_exact_row() {
+fn find_target_in_direction_matches_a_90_degree_cone_not_just_the_exact_row() {
     let mut game = Game::new(17, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let start = *game.world.get::<Position>(player).unwrap();
@@ -269,8 +269,8 @@ fn find_creature_in_direction_matches_a_90_degree_cone_not_just_the_exact_row() 
         ))
         .id();
     assert_eq!(
-        game.find_creature_in_direction(1, 0, 10),
-        Some(diagonal_ish)
+        game.find_target_in_direction(1, 0, 10),
+        Some(InspectTarget::Creature(diagonal_ish))
     );
 
     // Leans north more than east (ddy=-8, ddx=2) — outside the eastward cone.
@@ -290,8 +290,8 @@ fn find_creature_in_direction_matches_a_90_degree_cone_not_just_the_exact_row() 
         },
     ));
     assert_eq!(
-        game.find_creature_in_direction(1, 0, 10),
-        Some(diagonal_ish),
+        game.find_target_in_direction(1, 0, 10),
+        Some(InspectTarget::Creature(diagonal_ish)),
         "a creature that leans mostly north shouldn't win the eastward search"
     );
 }
@@ -929,4 +929,186 @@ fn a_structure_report_row_carries_its_stock_and_status() {
         "a Home runs no job, so it has no state to report"
     );
     assert!(home_row.output.is_empty());
+}
+
+/// A structure in the cone is a legitimate target now, so pointing at your
+/// Refinery with nothing alive between you and it finds the Refinery.
+#[test]
+fn the_inspector_finds_a_structure_when_no_creature_is_in_the_cone() {
+    let mut game = Game::new(1400, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let start = *game.world.get::<Position>(game.player_entity()).unwrap();
+    clear_creatures_east_of_player(&mut game, start, 10);
+
+    let refinery = game
+        .world
+        .spawn((
+            Structure {
+                kind: "refinery".to_string(),
+            },
+            Position {
+                x: start.x + 3,
+                y: start.y,
+            },
+        ))
+        .id();
+
+    assert_eq!(
+        game.find_target_in_direction(1, 0, 10),
+        Some(InspectTarget::Structure(refinery))
+    );
+}
+
+/// Nearest wins across *both* kinds, which is the whole reason one walk
+/// gathers them rather than two functions the caller picks between: with a
+/// creature and a structure both in the cone, neither kind gets priority.
+#[test]
+fn the_inspector_returns_whichever_of_the_two_kinds_is_nearer() {
+    let mut game = Game::new(1401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let start = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let species = game.species_defs().into_iter().next().unwrap();
+    clear_creatures_east_of_player(&mut game, start, 10);
+
+    let spawn_creature = |game: &mut Game, dx: i32| {
+        game.world
+            .spawn((
+                Creature {
+                    species: species.id.clone(),
+                },
+                Position {
+                    x: start.x + dx,
+                    y: start.y,
+                },
+                Stats {
+                    hp: 1,
+                    max_hp: 1,
+                    atk: 1,
+                    def: 1,
+                },
+            ))
+            .id()
+    };
+    let spawn_structure = |game: &mut Game, dx: i32| {
+        game.world
+            .spawn((
+                Structure {
+                    kind: "refinery".to_string(),
+                },
+                Position {
+                    x: start.x + dx,
+                    y: start.y,
+                },
+            ))
+            .id()
+    };
+
+    let near_structure = spawn_structure(&mut game, 2);
+    spawn_creature(&mut game, 6);
+    assert_eq!(
+        game.find_target_in_direction(1, 0, 10),
+        Some(InspectTarget::Structure(near_structure)),
+        "the structure is nearer, so the structure wins"
+    );
+
+    let nearer_creature = spawn_creature(&mut game, 1);
+    assert_eq!(
+        game.find_target_in_direction(1, 0, 10),
+        Some(InspectTarget::Creature(nearer_creature)),
+        "and a creature closer than it takes the target back"
+    );
+}
+
+/// `Position` is pinned to the surface entrance while the party is in the
+/// Stack, so an unguarded scan would report the base four frames overhead as
+/// lying off to your east. Creatures are deliberately still found — that is
+/// how the inspector already behaves underground, and this changes only what
+/// was newly added.
+#[test]
+fn the_inspector_offers_no_structure_while_the_party_is_underground() {
+    let mut game = Game::new(1402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let start = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let species = game.species_defs().into_iter().next().unwrap();
+    clear_creatures_east_of_player(&mut game, start, 10);
+
+    game.world.spawn((
+        Structure {
+            kind: "refinery".to_string(),
+        },
+        Position {
+            x: start.x + 2,
+            y: start.y,
+        },
+    ));
+    let creature = game
+        .world
+        .spawn((
+            Creature {
+                species: species.id.clone(),
+            },
+            Position {
+                x: start.x + 5,
+                y: start.y,
+            },
+            Stats {
+                hp: 1,
+                max_hp: 1,
+                atk: 1,
+                def: 1,
+            },
+        ))
+        .id();
+
+    game.enter_stack(start.x, start.y);
+    assert!(game.is_underground(), "the fixture really went down");
+
+    assert_eq!(
+        game.find_target_in_direction(1, 0, 10),
+        Some(InspectTarget::Creature(creature)),
+        "the nearer structure is skipped underground, so the creature behind \
+         it is what the cone finds"
+    );
+}
+
+/// The detail screen and the `B` roster must never disagree about the same
+/// machine, which is why one calls the other rather than building its own
+/// row (see `Game::structure_manifest`).
+#[test]
+fn a_structure_manifest_is_the_same_row_the_roster_shows() {
+    let mut game = Game::new(1403, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let start = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let refinery = game
+        .world
+        .spawn((
+            Structure {
+                kind: "refinery".to_string(),
+            },
+            Position {
+                x: start.x + 2,
+                y: start.y,
+            },
+        ))
+        .id();
+
+    let from_roster = game
+        .structure_report()
+        .into_iter()
+        .find(|r| r.entity == refinery)
+        .expect("the roster lists it");
+    let from_manifest = game
+        .structure_manifest(refinery)
+        .expect("and so does the inspector");
+
+    assert_eq!(from_manifest.kind, from_roster.kind);
+    assert_eq!(from_manifest.label, from_roster.label);
+    assert_eq!(from_manifest.pos, from_roster.pos);
+    assert_eq!(from_manifest.tier, from_roster.tier);
+    assert_eq!(from_manifest.workable, from_roster.workable);
+    assert_eq!(from_manifest.output_capacity, from_roster.output_capacity);
+}
+
+/// An entity that is not a structure has no row, rather than an empty one.
+#[test]
+fn a_structure_manifest_for_something_that_is_not_a_structure_is_none() {
+    let mut game = Game::new(1404, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    assert!(game.structure_manifest(player).is_none());
 }

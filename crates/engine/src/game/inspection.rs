@@ -19,40 +19,88 @@ impl Game {
         rows
     }
 
-    /// Finds the nearest creature generally toward (dx, dy) from the
-    /// player — the read-only "look in a direction" counterpart to
+    /// Finds the nearest creature *or structure* generally toward (dx, dy)
+    /// from the player — the read-only "look in a direction" counterpart to
     /// `move_player`. `(dx, dy)` is one of the four cardinal unit vectors.
-    /// A creature counts as "that way" if it's within the 90° cone
-    /// centered on the chosen direction (i.e. leans at least as much
-    /// toward that axis as away from it) and within `max_range` tiles —
-    /// a strict single-tile-wide ray would almost never line up with a
-    /// wandering creature's exact row/column, so this is deliberately
-    /// forgiving. Ignores terrain walkability (this never moves anything,
-    /// just looks), and only ever matches creatures, not structures or
-    /// the player.
-    pub fn find_creature_in_direction(
+    /// Something counts as "that way" if it's within the 90° cone centered
+    /// on the chosen direction (i.e. leans at least as much toward that axis
+    /// as away from it) and within `max_range` tiles — a strict
+    /// single-tile-wide ray would almost never line up with a wandering
+    /// creature's exact row/column, so this is deliberately forgiving.
+    /// Ignores terrain walkability (this never moves anything, just looks),
+    /// and never matches the player.
+    ///
+    /// **Both kinds are gathered in one walk, and that is what makes
+    /// "nearest wins" answerable.** Two functions and a caller choosing
+    /// between them would have to re-derive distance to compare, putting the
+    /// cone rule in two places; the returned variant is the answer this walk
+    /// already computed, so a caller never has to ask a second time what it
+    /// just found.
+    ///
+    /// **Structures are excluded underground**, and the guard lives here
+    /// rather than at the call site for the reason `require_surface` exists:
+    /// `Position` stays pinned to the surface entrance tile while the party
+    /// is in the Stack, so an unguarded scan reports the base four frames
+    /// overhead as being off to your east. Creatures are unaffected —
+    /// finding one is already how the inspector behaves down there.
+    pub fn find_target_in_direction(
         &mut self,
         dx: i32,
         dy: i32,
         max_range: i32,
-    ) -> Option<Entity> {
+    ) -> Option<InspectTarget> {
         let player = self.player_entity();
         let start = *self.world.get::<Position>(player).unwrap();
-        let mut query = self.world.query::<(Entity, &Position, &Creature)>();
-        query
+        let underground = self.is_underground();
+        let in_cone = |pos: &Position| -> Option<i32> {
+            let (ddx, ddy) = (pos.x - start.x, pos.y - start.y);
+            let leans = if dx != 0 {
+                ddx.signum() == dx && ddx.abs() >= ddy.abs()
+            } else {
+                ddy.signum() == dy && ddy.abs() >= ddx.abs()
+            };
+            let dist = ddx.abs().max(ddy.abs());
+            (leans && dist >= 1 && dist <= max_range).then_some(dist)
+        };
+
+        let mut creatures = self.world.query::<(Entity, &Position, &Creature)>();
+        let mut best: Option<(i32, InspectTarget)> = creatures
             .iter(&self.world)
             .filter_map(|(entity, pos, _)| {
-                let (ddx, ddy) = (pos.x - start.x, pos.y - start.y);
-                let in_cone = if dx != 0 {
-                    ddx.signum() == dx && ddx.abs() >= ddy.abs()
-                } else {
-                    ddy.signum() == dy && ddy.abs() >= ddx.abs()
-                };
-                let dist = ddx.abs().max(ddy.abs());
-                (in_cone && dist >= 1 && dist <= max_range).then_some((entity, dist))
+                in_cone(pos).map(|d| (d, InspectTarget::Creature(entity)))
             })
-            .min_by_key(|(_, dist)| *dist)
-            .map(|(entity, _)| entity)
+            .min_by_key(|(dist, _)| *dist);
+
+        if !underground {
+            let mut structures = self.world.query::<(Entity, &Position, &Structure)>();
+            let nearest_structure = structures
+                .iter(&self.world)
+                .filter_map(|(entity, pos, _)| {
+                    in_cone(pos).map(|d| (d, InspectTarget::Structure(entity)))
+                })
+                .min_by_key(|(dist, _)| *dist);
+            // Strictly nearer, so a creature standing *on* a structure's tile
+            // keeps the tie — it is the thing that might wander off before
+            // you look again, and the structure will still be there.
+            best = match (best, nearest_structure) {
+                (Some((cd, c)), Some((sd, s))) => Some(if sd < cd { (sd, s) } else { (cd, c) }),
+                (some, None) | (None, some) => some,
+            };
+        }
+        best.map(|(_, target)| target)
+    }
+
+    /// The `B` roster's row for one structure, for the inspector's detail
+    /// screen. Deliberately *the same call* the roster makes rather than a
+    /// second builder beside it: per `CLAUDE.md` a doc comment claiming to
+    /// mirror another formula has to be a call, and a detail screen that
+    /// disagreed with the roster about the same machine is exactly the drift
+    /// that rule exists to stop. Building every row to return one is O(n)
+    /// over a base's worth of structures, once per keypress.
+    pub fn structure_manifest(&mut self, entity: Entity) -> Option<StructureReport> {
+        self.structure_report()
+            .into_iter()
+            .find(|r| r.entity == entity)
     }
 
     /// Display label for any entity — species name for a creature,

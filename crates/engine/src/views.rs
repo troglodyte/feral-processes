@@ -682,6 +682,16 @@ pub struct ManifestView {
     pub subject: ManifestSubject,
 }
 
+/// What the inspector found in the direction you pointed — see
+/// `Game::find_target_in_direction`. The variant is the answer that walk
+/// already computed, so a caller routing to a screen never has to ask the
+/// world a second time what kind of thing it is holding.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InspectTarget {
+    Creature(Entity),
+    Structure(Entity),
+}
+
 pub enum ManifestSubject {
     Player(PlayerManifest),
     Program(ProgramManifest),

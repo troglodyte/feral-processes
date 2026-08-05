@@ -37,6 +37,7 @@ mod popup;
 mod progression;
 mod routines;
 mod stack;
+mod structure_manifest;
 mod trade;
 
 use base::{draw_history, draw_playing_base};
@@ -434,6 +435,12 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             let subjects = game.manifest_subjects();
             draw_manifest_pick(game, &subjects, selected, painter, m)
         }
+        Mode::StructureManifest => structure_manifest::draw_structure_manifest(
+            game,
+            app.pending_structure_manifest,
+            painter,
+            m,
+        ),
         Mode::Inventory => draw_inventory(game, selected, painter, m),
         Mode::EquipSwap => draw_equip_swap(game, app.pending_swap_slot, selected, painter, m),
         Mode::InventoryItemAction => {

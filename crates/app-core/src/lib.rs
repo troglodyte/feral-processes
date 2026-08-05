@@ -518,6 +518,12 @@ pub enum Mode {
     /// Picking whose manifest to read — you, or any program you own.
     /// Reached with `d` from `Mode::Playing`.
     ManifestPick,
+    /// A read-only detail sheet for one structure, opened when
+    /// `Mode::InspectDirection` finds a structure nearer than any creature.
+    /// `App::pending_structure_manifest` is the subject. Separate from `Mode::Manifest`
+    /// rather than a subject variant of it because the two share almost no
+    /// fields — a structure has no HP, level, XP or stats.
+    StructureManifest,
     Inventory,
     /// Replacements for one equipment slot, reached by picking that slot on
     /// `Mode::Inventory`. Rows come from `equip_swap_rows`, so the picker
@@ -667,6 +673,7 @@ impl Mode {
             | Mode::InspectDirection
             | Mode::Manifest
             | Mode::ManifestPick
+            | Mode::StructureManifest
             | Mode::Inventory
             | Mode::EquipSwap
             | Mode::InventoryItemAction
@@ -818,6 +825,10 @@ pub struct App {
     /// Whose stat sheet `Mode::Manifest` is showing — the player, a program
     /// you own, or the wild one `Mode::InspectDirection` just found.
     pub pending_manifest: Option<Entity>,
+    /// Which structure `Mode::StructureManifest` is showing — whatever the
+    /// inspector found in the direction you pointed. Not `pending_structure`:
+    /// that one is a structure *kind* awaiting placement in `Mode::Build`.
+    pub pending_structure_manifest: Option<Entity>,
     /// Whether `Mode::Manifest` was opened from `Mode::ManifestPick`, which
     /// is where Esc then goes back to. Reached from the map with `i` instead,
     /// there is no list to return to and Esc goes straight back to play.

@@ -1,6 +1,7 @@
 //! Aiming the inspector at a tile, and the manifest screen it opens.
 
 use crate::*;
+use feral_processes_engine::InspectTarget;
 
 impl App {
     /// Picks a direction (arrows/hjkl) and inspects the first creature the
@@ -20,18 +21,32 @@ impl App {
         };
         let Some((dx, dy)) = dir else { return };
         let Some(game) = &mut self.game else { return };
-        match game.find_creature_in_direction(dx, dy, MENU_SCAN_RADIUS) {
-            Some(entity) => {
+        match game.find_target_in_direction(dx, dy, MENU_SCAN_RADIUS) {
+            Some(InspectTarget::Creature(entity)) => {
                 self.pending_manifest = Some(entity);
                 self.manifest_from_picker = false;
                 self.status_line = None;
                 self.mode = Mode::Manifest;
+            }
+            Some(InspectTarget::Structure(entity)) => {
+                self.pending_structure_manifest = Some(entity);
+                self.status_line = None;
+                self.mode = Mode::StructureManifest;
             }
             None => {
                 self.status_line = Some("Nothing in that direction.".to_string());
                 self.mode = Mode::Playing;
             }
         }
+    }
+
+    /// The structure sheet is read-only and reached only from the map, so
+    /// there is no list to page through and no origin to return to — unlike
+    /// `Mode::Manifest`, whose ←/→ exist because it has `manifest_subjects`.
+    /// Any key leaves, the way a plain popup does.
+    pub(crate) fn handle_structure_manifest_key(&mut self, _key: GameKey) {
+        self.pending_structure_manifest = None;
+        self.close_screen();
     }
 
     /// You, then every program you own — everyone the manifest can page

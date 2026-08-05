@@ -115,6 +115,7 @@ impl App {
             Mode::Upgrade => self.handle_upgrade_key(key),
             Mode::Symlink => self.handle_symlink_key(key),
             Mode::InspectDirection => self.handle_inspect_direction_key(key),
+            Mode::StructureManifest => self.handle_structure_manifest_key(key),
             Mode::Manifest => self.handle_manifest_key(key),
             Mode::ManifestPick => self.handle_manifest_pick_key(key),
             Mode::Inventory => self.handle_inventory_key(key),

@@ -304,20 +304,10 @@ pub(super) fn draw_structures(game: &mut Game, selected: usize, painter: &Painte
         rows.push(text_row("You have deployed nothing yet."));
     }
     for (i, s) in report.iter().enumerate() {
-        let tier = s.tier.map(|t| format!(" T{t}")).unwrap_or_default();
-        let durability = s
-            .durability
-            .map(|(hp, max)| format!("  {hp}/{max} HP"))
-            .unwrap_or_default();
-        let is_idle = s.workable && s.assignees.is_empty();
-        let color = if is_idle { YELLOW } else { TEXT };
         rows.push(colored_item_row(
-            format!(
-                "{}{tier}  ({}, {})  {}d{durability}",
-                s.label, s.pos.0, s.pos.1, s.distance
-            ),
+            structure_headline(s),
             i == selected,
-            color,
+            if structure_is_idle(s) { YELLOW } else { TEXT },
         ));
         // A structure's sub-lines are `Row::Item` (never selected) rather than
         // `Row::Text` so they sit inside the popup's scrollable body:
@@ -325,31 +315,65 @@ pub(super) fn draw_structures(game: &mut Game, selected: usize, painter: &Painte
         // follows it as a footer, which would otherwise leave the final
         // structure's assignees stuck on screen while the list scrolled past
         // them.
-        if is_idle {
-            rows.push(colored_item_row("  idle — nobody assigned", false, YELLOW));
-        }
-        for a in &s.assignees {
-            rows.push(colored_item_row(
-                format!("  {}", assignee_line(a)),
-                false,
-                TEXT_DIM,
-            ));
-        }
-        // A stall is drawn in yellow for the same reason an idle structure
-        // is: it is a thing the player can walk over and fix.
-        if let Some(line) = stall_line(s) {
-            rows.push(colored_item_row(format!("  {line}"), false, YELLOW));
-        }
-        if let Some(line) = buffer_line("in", &s.input, None) {
-            rows.push(colored_item_row(line, false, TEXT_DIM));
-        }
-        if let Some(line) = buffer_line("out", &s.output, Some(s.output_capacity)) {
-            rows.push(colored_item_row(line, false, TEXT_DIM));
+        for (line, color) in structure_detail_lines(s) {
+            rows.push(colored_item_row(line, false, color));
         }
     }
     rows.push(text_row(""));
     rows.push(text_row("Up/Down to scroll, Esc to close."));
     draw_popup("Structures", PopupSize::Large, &rows, painter, m);
+}
+
+/// A workable structure with nobody posted to it — the one thing on either
+/// structure screen the player can immediately act on, which is why both
+/// colour it yellow.
+pub(super) fn structure_is_idle(s: &StructureReport) -> bool {
+    s.workable && s.assignees.is_empty()
+}
+
+/// The one-line summary of a structure: what it is, where, how far, and how
+/// battered. Shared with the inspector's single-structure sheet.
+pub(super) fn structure_headline(s: &StructureReport) -> String {
+    let tier = s.tier.map(|t| format!(" T{t}")).unwrap_or_default();
+    let durability = s
+        .durability
+        .map(|(hp, max)| format!("  {hp}/{max} HP"))
+        .unwrap_or_default();
+    format!(
+        "{}{tier}  ({}, {})  {}d{durability}",
+        s.label, s.pos.0, s.pos.1, s.distance
+    )
+}
+
+/// Everything under the headline — idleness, assignees, a stall, the two
+/// buffers — as `(text, colour)` pairs.
+///
+/// Extracted rather than written twice: the `B` roster and the inspector's
+/// sheet describe the same machine, and a detail screen that disagreed with
+/// the roster about whether something was starved is exactly the drift
+/// `CLAUDE.md` means by a mirror having to be a call. The two differ only in
+/// which `Row` kind they wrap these in — the roster needs `Row::Item` so its
+/// lines scroll, the sheet does not scroll at all.
+pub(super) fn structure_detail_lines(s: &StructureReport) -> Vec<(String, Color)> {
+    let mut lines = Vec::new();
+    if structure_is_idle(s) {
+        lines.push(("  idle — nobody assigned".to_string(), YELLOW));
+    }
+    for a in &s.assignees {
+        lines.push((format!("  {}", assignee_line(a)), TEXT_DIM));
+    }
+    // A stall is drawn in yellow for the same reason an idle structure is:
+    // it is a thing the player can walk over and fix.
+    if let Some(line) = stall_line(s) {
+        lines.push((format!("  {line}"), YELLOW));
+    }
+    if let Some(line) = buffer_line("in", &s.input, None) {
+        lines.push((line, TEXT_DIM));
+    }
+    if let Some(line) = buffer_line("out", &s.output, Some(s.output_capacity)) {
+        lines.push((line, TEXT_DIM));
+    }
+    lines
 }
 
 /// Why a machine is stalled, or `None` when it is running or is not a

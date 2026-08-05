@@ -240,6 +240,52 @@ fn inspecting_a_direction_still_lands_on_the_manifest() {
     );
 }
 
+/// A structure in the view path opens its own sheet rather than the
+/// creature manifest — the two screens share almost no fields, so they are
+/// separate modes (see `Mode::StructureManifest`).
+#[test]
+fn inspecting_toward_a_structure_opens_the_structure_sheet() {
+    let mut app = test_app(76);
+    app.game
+        .as_mut()
+        .unwrap()
+        .place_structure("home", 1, 0)
+        .expect("a fresh run can afford its Home");
+
+    app.handle_key(GameKey::Char('x'));
+    assert_eq!(app.mode, Mode::InspectDirection);
+    app.handle_key(GameKey::Right);
+    assert_eq!(
+        app.mode,
+        Mode::StructureManifest,
+        "the Home is one tile east and nothing is nearer"
+    );
+    assert!(app.pending_structure_manifest.is_some());
+    assert!(
+        app.pending_manifest.is_none(),
+        "and it did not land on the creature manifest"
+    );
+}
+
+/// The sheet is read-only and reached only from the map, so it has no list
+/// to page through — any key leaves, the way a plain popup does.
+#[test]
+fn any_key_leaves_the_structure_sheet_and_forgets_its_subject() {
+    let mut app = test_app(77);
+    app.game
+        .as_mut()
+        .unwrap()
+        .place_structure("home", 1, 0)
+        .expect("a fresh run can afford its Home");
+    app.handle_key(GameKey::Char('x'));
+    app.handle_key(GameKey::Right);
+    assert_eq!(app.mode, Mode::StructureManifest);
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+    assert!(app.pending_structure_manifest.is_none());
+}
+
 /// Uppercase is reserved for actions, so the trade screens can bind `S`
 /// and `B` to sell-one and buy-one without shadowing the rows those
 /// letters label. Lowercase keeps picking rows exactly as it did.

@@ -13,6 +13,30 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### The inspector reads structures, not just programs
+
+`x` and a direction found the nearest *creature* that way and opened its
+manifest; a Refinery standing right in front of you was invisible to it. It
+now finds the nearest creature **or structure** and opens the right sheet for
+whichever it is.
+
+Nearest wins, with no priority by kind — both are gathered in one walk, which
+is what makes that answerable at all. A creature exactly as far away as a
+structure keeps the target, since it is the one that might have wandered off
+by the time you look again.
+
+The structure sheet is the `B` roster's row for that one machine — tier,
+position, durability, who is posted to it, whether it is idle or starved, and
+what is in both buffers. It is built by calling the roster's own line
+builders, so the two screens cannot drift into disagreeing about the same
+machine. Any key closes it.
+
+**Structures are not offered while you are in the Stack.** Your `Position`
+stays pinned to the surface entrance tile down there, so an unguarded scan
+would report your base four frames overhead as lying off to your east.
+Creatures are unaffected — that is already how the inspector behaves
+underground.
+
 ### Production lines are lines again
 
 A bench took two intermediates off two separate feeder legs, so anything the

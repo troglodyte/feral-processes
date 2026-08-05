@@ -1,0 +1,14 @@
+(
+    id: "cycle_harvest",
+    name: "Leech Everyone",
+    // The lowest damage-per-Fatigue rate in the game, and deliberately so:
+    // the return is taken off every hostile on the field at once, so a
+    // rate competitive with Leech Group would make reaching wider a
+    // straight upgrade rather than a trade.
+    description: "Damage the whole field and restore a fifth of it to yourself",
+    target: AllEnemies,
+    effect: Drain(power: 4, heal_fraction: 0.2),
+    cooldown: 5,
+    fatigue_cost: 17.0,
+    wild_weight: 3,
+)

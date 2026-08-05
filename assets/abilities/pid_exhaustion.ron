@@ -1,0 +1,10 @@
+(
+    id: "pid_exhaustion",
+    name: "Fork Bomb Everyone",
+    description: "Damage the whole field, sometimes leaving targets bleeding",
+    target: AllEnemies,
+    effect: Damage(power: 8, status: Some((kind: Bleed, chance: 0.2, duration: 2, power: 2))),
+    cooldown: 5,
+    fatigue_cost: 18.0,
+    wild_weight: 3,
+)

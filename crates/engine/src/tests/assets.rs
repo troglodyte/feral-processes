@@ -368,7 +368,7 @@ fn an_item_with_no_authored_value_falls_back_to_the_floor_price() {
     assert_eq!(game.item_value(&unpriced), tuning::DEFAULT_ITEM_VALUE);
 }
 
-/// The twenty hunt-only routines are reachable exactly one way: off a wild
+/// The twenty-five hunt-only routines are reachable exactly one way: off a wild
 /// carrier. A species or research file naming one would quietly restore the
 /// "just target the species" loop this set exists to break.
 #[test]
@@ -381,7 +381,7 @@ fn no_species_or_research_file_grants_a_wild_only_ability() {
         .into_iter()
         .map(|(d, _)| d.id.clone())
         .collect();
-    assert_eq!(wild_only.len(), 20, "twenty routines are hunt-only");
+    assert_eq!(wild_only.len(), 25, "twenty-five routines are hunt-only");
 
     for species in game.species_defs() {
         for ability in &species.abilities {
@@ -514,6 +514,75 @@ fn no_two_shipped_abilities_share_a_display_name() {
                 other, def.id, def.name
             );
         }
+    }
+}
+
+/// The family an ability's display name declares — everything before the
+/// scope word, with any version tag already gone. `"Fork Bomb Group"` is
+/// `"Fork Bomb"`, and so is `"Fork Bomb Everyone"`.
+fn family(def: &crate::abilities::AbilityDef) -> String {
+    let base = without_version_tag(&def.name);
+    base.trim_end_matches(scope_word(def.target)).trim().into()
+}
+
+/// A family that reaches the whole field must also reach one group. The
+/// wide scope is the *prize* of a family, so a hole underneath it is a
+/// player meeting an effect they can never use at the scale they'd want it
+/// — and a hole is invisible in a directory listing, since the files are
+/// named for flavour rather than for the family they belong to.
+///
+/// Pipeline Stall shipped exactly that way: `bus_fault` hit everything and
+/// nothing hit one group. Deliberately vacuous on the ally-facing families
+/// — Patch, Hyperthread and Bastion top out at Party, because there is no
+/// wider ally scope for them to be missing.
+#[test]
+fn no_ability_family_reaches_everyone_without_reaching_group() {
+    use crate::abilities::AbilityTarget;
+    let game = Game::new(3305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let defs: Vec<_> = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .all()
+        .collect();
+    for def in defs.iter().filter(|d| d.target == AbilityTarget::AllEnemies) {
+        let fam = family(def);
+        assert!(
+            defs.iter()
+                .any(|d| d.target == AbilityTarget::WholeEnemyGroup && family(d) == fam),
+            "{:?} is {fam:?} at Everyone scope, but nothing in that family hits one group",
+            def.id
+        );
+    }
+}
+
+/// Reaching every hostile on the field is the top of the scope ladder, and
+/// the shipped set charges for it consistently: no `AllEnemies` routine
+/// costs under 15 Fatigue or comes off cooldown in under 4 rounds. That
+/// ladder is what every Everyone-tier magnitude was derived against, and
+/// nothing else gates it — a new file could otherwise undercut a whole
+/// family's Group tier while reaching further than it.
+#[test]
+fn every_everyone_scope_routine_pays_the_everyone_tier_price() {
+    use crate::abilities::AbilityTarget;
+    let game = Game::new(3306, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for def in game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .all()
+        .filter(|d| d.target == AbilityTarget::AllEnemies)
+    {
+        assert!(
+            def.fatigue_cost >= 15.0,
+            "{:?} reaches the whole field for {} Fatigue; the Everyone tier starts at 15",
+            def.id,
+            def.fatigue_cost
+        );
+        assert!(
+            def.cooldown >= 4,
+            "{:?} reaches the whole field on a {}-round cooldown; the Everyone tier starts at 4",
+            def.id,
+            def.cooldown
+        );
     }
 }
 

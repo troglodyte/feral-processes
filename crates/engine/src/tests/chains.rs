@@ -850,7 +850,7 @@ fn the_patch_routine_chain_runs_from_fragments_up_through_the_assembly_bay() {
             (
                 s.inputs
                     .iter()
-                    .map(|(n, q)| (n.as_str(), *q))
+                    .map(|i| (i.item.as_str(), i.qty))
                     .collect::<Vec<_>>(),
                 s.maker.as_deref(),
                 s.output.as_str(),
@@ -1032,5 +1032,138 @@ fn the_shipped_compiler_compiles_catalysts_out_of_an_adjacent_mining_node() {
     assert!(
         output_of(&game, feeder, ids::CORE_FRAGMENT) < stocked,
         "and pays for them out of the node's fragments rather than out of nothing"
+    );
+}
+
+/// A modded assembler for an item priced entirely in a drop, so the "input
+/// that nothing at all produces" case is reachable — no shipped structure
+/// assembles one of the Portal Fragment recipes.
+const ROUTER_STRUCTURE: &str = r#"(
+    id: "router_press",
+    name: "Router Press",
+    description: "A modded assembler for an item made from salvage, for tests.",
+    glyph: 'R',
+    color: Red,
+    build_cost: [],
+    work: None,
+    capacity: 20,
+    assembles: Some((item: "plasma_router", ticks_per_unit: 3)),
+)"#;
+
+/// The Recipes screen's whole job is telling the player what to build, so an
+/// ingredient that no recipe makes has to name the tap that does. Core
+/// Fragment and Raw Trace are the two the shipped game bottoms out in, and
+/// before this the screen simply started at them with no hint a Mining Node
+/// was involved.
+#[test]
+fn an_input_no_recipe_makes_names_the_tap_that_produces_it() {
+    let game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let chains = game.recipe_chains();
+
+    let disk = chains
+        .iter()
+        .find(|c| c.product == "Routine Disk")
+        .expect("the Disk Press assembles one");
+
+    let sourced: Vec<(&str, Option<&str>)> = disk
+        .steps
+        .iter()
+        .flat_map(|s| &s.inputs)
+        .map(|i| (i.item.as_str(), i.source.as_deref()))
+        .collect();
+
+    assert_eq!(
+        sourced,
+        vec![
+            ("Core Fragment", Some("Mining Node")),
+            ("Raw Trace", Some("Log Scraper")),
+            ("Blank Substrate", None),
+            ("Logic Wafer", None),
+        ],
+        "the two raw inputs name their taps; the two intermediates are made \
+         by earlier steps of this same chain and name none"
+    );
+}
+
+/// Power Cell is produced by a Power Conduit *and* craftable by hand, and the
+/// chain deliberately reports the recipe rather than the tap: the hand step is
+/// already on screen one line up, so naming the Conduit too would claim two
+/// sources for one item in a single chain. Substitution is for inputs no step
+/// of the chain produces.
+#[test]
+fn an_input_with_its_own_recipe_names_no_tap_even_when_a_structure_makes_it() {
+    let game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let chains = game.recipe_chains();
+
+    let coil = chains
+        .iter()
+        .find(|c| c.product == "Charge Coil")
+        .expect("the Winding Node assembles them");
+    let step = coil
+        .steps
+        .iter()
+        .find(|s| s.output == "Charge Coil")
+        .expect("the chain ends in its product");
+
+    assert_eq!(
+        step.inputs
+            .iter()
+            .map(|i| (i.item.as_str(), i.source.as_deref()))
+            .collect::<Vec<_>>(),
+        vec![("Power Cell", None)],
+        "a Power Conduit produces Power Cells, but the chain already shows \
+         the bench step that makes these ones"
+    );
+}
+
+/// An ingredient that is neither craftable nor produced by any structure is a
+/// drop, and the screen has nothing to offer beyond its name.
+#[test]
+fn an_input_nothing_produces_names_no_tap() {
+    let dir = assets_dir_with_extra_structure("router_press", "router_press.ron", ROUTER_STRUCTURE);
+    let game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+
+    let chains = game.recipe_chains();
+    let router = chains
+        .iter()
+        .find(|c| c.product == "Plasma Router")
+        .expect("the modded press assembles one");
+
+    assert_eq!(
+        router
+            .steps
+            .iter()
+            .flat_map(|s| &s.inputs)
+            .map(|i| (i.item.as_str(), i.source.as_deref()))
+            .collect::<Vec<_>>(),
+        vec![("Portal Fragment", None)],
+        "portal fragments are scavenged, not made"
+    );
+}
+
+/// A recipe is one batch in, one unit out, so the screen can say so. A tap
+/// cannot: `systems::node_payout` scales its yield by upgrade tier and zone
+/// depth, and quoting `x1` there would be a number the game never honours.
+#[test]
+fn a_recipe_step_yields_one_unit_and_a_tap_declines_to_say() {
+    let game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let chains = game.recipe_chains();
+
+    let disk = chains
+        .iter()
+        .find(|c| c.product == "Routine Disk")
+        .expect("the Disk Press assembles one");
+    assert!(
+        disk.steps.iter().all(|s| s.output_qty == Some(1)),
+        "every step of a crafted chain is a single-unit batch"
+    );
+
+    let fragment = chains
+        .iter()
+        .find(|c| c.product == "Core Fragment")
+        .expect("the Mining Node produces them");
+    assert_eq!(
+        fragment.steps[0].output_qty, None,
+        "a node's payout is not fixed at one"
     );
 }

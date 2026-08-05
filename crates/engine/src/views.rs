@@ -525,18 +525,37 @@ pub struct CraftRecipe {
     pub cost: Vec<(ItemId, u32)>,
 }
 
+/// One ingredient of a `RecipeStep`, and where the player is meant to get it.
+pub struct RecipeInput {
+    /// Display name, resolved for the same reason `RecipeStep`'s are.
+    pub item: String,
+    /// How many one batch consumes.
+    pub qty: u32,
+    /// The extractor that taps this, for an ingredient no recipe makes —
+    /// Core Fragment naming the Mining Node. `None` when an earlier step of
+    /// the same chain already produces it, and for a drop nothing produces at
+    /// all. See `Game::recipe_chains`.
+    pub source: Option<String>,
+}
+
 /// One conversion in a `RecipeChain`: what goes in, what runs it, what comes
 /// out. Names are resolved here rather than left as ids, because a step's
 /// maker is a *structure* and a renderer holding only item ids could not
 /// name it.
 pub struct RecipeStep {
-    /// Display name and quantity per batch. Empty for an extractor, which
-    /// draws from nothing rather than from a recipe.
-    pub inputs: Vec<(String, u32)>,
+    /// Empty for an extractor, which draws from nothing rather than from a
+    /// recipe.
+    pub inputs: Vec<RecipeInput>,
     /// The structure that runs this step, or `None` for one the player
     /// compiles by hand at no bench.
     pub maker: Option<String>,
     pub output: String,
+    /// Units one batch yields — always `Some(1)`, since a recipe is `cost`
+    /// and nothing else, and `None` for an extractor, whose payout
+    /// `systems::node_payout` scales by upgrade tier and zone depth. Carried
+    /// rather than left for a renderer to assume, so the day a recipe gains a
+    /// yield the screens follow it.
+    pub output_qty: Option<u32>,
 }
 
 /// One entry on the Recipes screen — everything that has to be made, in the

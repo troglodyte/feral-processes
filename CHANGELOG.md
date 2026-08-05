@@ -13,6 +13,34 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### The Recipes screen says which structure to build for each ingredient
+
+A chain used to start at its raw materials with no hint where they came
+from: a Routine Disk began at four Core Fragments and four Raw Trace, and
+knowing that meant a Mining Node and a Log Scraper was something you brought
+to the screen rather than something you got from it.
+
+An ingredient no recipe makes now leads with the structure that taps it, so
+a chain read top to bottom is the build order:
+
+```
+Product: Routine Disk
+  Mining Node (Core Fragment x4)      -> Lathe       -> Blank Substrate x1
+  Log Scraper (Raw Trace x4)          -> Transcriber -> Logic Wafer x1
+  Blank Substrate x1 + Logic Wafer x1 -> Disk Press  -> Routine Disk x1
+```
+
+An ingredient an earlier step of the same chain produces is named on its
+own — a Power Cell reads bare rather than naming the Power Conduit, because
+the bench step that makes those ones is already a line above it, and a chain
+claiming two sources for one item is worse than either. Ingredients nothing
+produces, like scavenged Portal Fragments, likewise stand alone.
+
+Products now carry the units one batch yields, which is what marks the
+column as an item rather than another structure. Extractors quote none:
+a node's payout scales with its upgrade tier and the zone, so there is no
+one number to print.
+
 ### Dying in the Stack on Forgiving actually gets you out of it
 
 A Forgiving reboot puts you at your nearest construction. Underground, it was

@@ -57,6 +57,13 @@ impl Game {
     /// own `requires_structure`. Both are true, and the screen shows the one
     /// that matters where it stands.
     ///
+    /// An *ingredient* names its tap only when no recipe makes it (see
+    /// `RecipeInput::source`), which is the same rule seen from the other
+    /// end: Core Fragment names the Mining Node because nothing on screen
+    /// makes one, while Power Cell names no Power Conduit because the bench
+    /// step that makes these ones is already a line of this chain. Without
+    /// that clause a chain would claim two sources for a single item.
+    ///
     /// Shallowest chain first, then by name, so the screen opens on the taps
     /// and reads down into what needs a base.
     pub fn recipe_chains(&self) -> Vec<RecipeChain> {
@@ -76,9 +83,12 @@ impl Game {
                     self.expand_recipe(id, &mut seen, &mut steps);
                 }
                 steps.push(RecipeStep {
-                    inputs: self.named_costs(inputs),
+                    inputs: self.recipe_inputs(inputs),
                     maker: Some(def.name.clone()),
                     output: self.item_name(output).to_string(),
+                    // A tap and only a tap declines to quote a yield; every
+                    // other root is an assembler running a one-unit batch.
+                    output_qty: def.work.is_none().then_some(1),
                 });
                 Some(RecipeChain {
                     product: self.item_name(output).to_string(),
@@ -113,7 +123,7 @@ impl Game {
             self.expand_recipe(id, seen, out);
         }
         out.push(RecipeStep {
-            inputs: self.named_costs(&cost),
+            inputs: self.recipe_inputs(&cost),
             maker: maker.and_then(|s| {
                 self.world
                     .resource::<StructureDb>()
@@ -121,13 +131,38 @@ impl Game {
                     .map(|d| d.name.clone())
             }),
             output: self.item_name(item).to_string(),
+            output_qty: Some(1),
         });
     }
 
-    fn named_costs(&self, cost: &[(ItemId, u32)]) -> Vec<(String, u32)> {
+    fn recipe_inputs(&self, cost: &[(ItemId, u32)]) -> Vec<RecipeInput> {
         cost.iter()
-            .map(|(id, q)| (self.item_name(id).to_string(), *q))
+            .map(|(id, q)| RecipeInput {
+                item: self.item_name(id).to_string(),
+                qty: *q,
+                source: self.tap_for(id),
+            })
             .collect()
+    }
+
+    /// The extractor to build for `item`, or `None` if a recipe makes it (so
+    /// a step of the chain already answers the question) or nothing does.
+    ///
+    /// Only `work` structures count. An assembler's product is craftable by
+    /// definition — that is what `systems::assembly_recipe` runs — so it is
+    /// excluded by the recipe check above rather than needing its own clause.
+    /// Ties break on `StructureDb::all`'s id order, which is what keeps two
+    /// modded taps on one item from naming a different one per run.
+    fn tap_for(&self, item: &ItemId) -> Option<String> {
+        let items = self.world.resource::<ItemDb>();
+        if items.get(item.as_str())?.craftable.is_some() {
+            return None;
+        }
+        self.world
+            .resource::<StructureDb>()
+            .all()
+            .find(|def| def.work.as_ref().is_some_and(|w| &w.produces == item))
+            .map(|def| def.name.clone())
     }
 
     /// Which group this item lists under. An id with no definition behind it

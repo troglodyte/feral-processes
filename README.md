@@ -218,10 +218,22 @@ with no base standing can still equip.
 The base menu's *Recipes* row draws that table for whatever assets are
 actually loaded, one entry per conversion, each walked back to the raw
 inputs it bottoms out in — so a Patch Routine reads as the four steps it
-takes rather than as two ingredients you then have to go look up. Mods
-appear in it without anyone editing this README. It is reference data
-rather than a view of your base, so it reads the same four frames down the
-Stack as it does standing in the base.
+takes rather than as two ingredients you then have to go look up. Each step
+names the structure that taps its raw ingredient, so a chain read top to
+bottom is the build order:
+
+```
+Product: Routine Disk
+  Mining Node (Core Fragment x4)      -> Lathe       -> Blank Substrate x1
+  Log Scraper (Raw Trace x4)          -> Transcriber -> Logic Wafer x1
+  Blank Substrate x1 + Logic Wafer x1 -> Disk Press  -> Routine Disk x1
+```
+
+An ingredient an earlier step already makes is named on its own, and a tap
+quotes no yield because a node's payout scales with its tier and the zone.
+Mods appear in the table without anyone editing this README. It is reference
+data rather than a view of your base, so it reads the same four frames down
+the Stack as it does standing in the base.
 
 Every machine needs a program posted to it, assemblers included, so **roster
 capacity is what buys chain length, not fragments**. The full five-machine

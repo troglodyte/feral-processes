@@ -119,7 +119,10 @@ pub(super) fn draw_recipes(game: &mut Game, selected: usize, painter: &Painter, 
             .unwrap_or(0);
         for ((inputs, maker), step) in cells.iter().zip(&chain.steps) {
             rows.push(colored_item_row(
-                format!("  {inputs:in_w$} -> {maker:maker_w$} -> {}", step.output),
+                format!(
+                    "  {inputs:in_w$} -> {maker:maker_w$} -> {}",
+                    output_text(step)
+                ),
                 false,
                 TEXT_DIM,
             ));
@@ -132,13 +135,32 @@ pub(super) fn draw_recipes(game: &mut Game, selected: usize, painter: &Painter, 
 
 /// A step's ingredient list. An extractor has none — it is a tap, and saying
 /// so beats an empty column the eye reads as a missing value.
+///
+/// An ingredient no recipe makes leads with the structure that taps it, so a
+/// chain read top to bottom is the build order: `Mining Node (Core Fragment
+/// x4) -> Lathe` is the whole answer to "what do I put down to get one".
+/// Which ingredients earn that prefix is `RecipeInput::source`'s call, not
+/// this function's.
 fn inputs_text(step: &RecipeStep) -> String {
     if step.inputs.is_empty() {
         return "(nothing)".to_string();
     }
     step.inputs
         .iter()
-        .map(|(name, qty)| format!("{name} x{qty}"))
+        .map(|i| match &i.source {
+            Some(tap) => format!("{tap} ({} x{})", i.item, i.qty),
+            None => format!("{} x{}", i.item, i.qty),
+        })
         .collect::<Vec<_>>()
         .join(" + ")
+}
+
+/// A step's product, quantified where the game will stand behind the number.
+/// The suffix is what marks the column as an item rather than another
+/// structure; a tap has no fixed yield to quote and so goes bare.
+fn output_text(step: &RecipeStep) -> String {
+    match step.output_qty {
+        Some(qty) => format!("{} x{qty}", step.output),
+        None => step.output.clone(),
+    }
 }

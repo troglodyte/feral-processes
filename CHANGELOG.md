@@ -13,6 +13,23 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Changed: the staffed mark bobs
+
+The green square saying "a program is posted here" now lifts a couple of
+pixels and settles, about once a second, so a working base reads as busy
+rather than as a field of static dots.
+
+Each tile is offset in phase from its neighbour. In lockstep the whole base
+blinks as one and looks like a screen artifact; out of step it looks like
+separate workers. The phase is keyed to the world tile rather than the
+screen, so a mark doesn't reshuffle its timing as the camera pans.
+
+The lift is upward only. The mark's rest position is held off the tile's
+bottom edge on purpose — `outline_open` draws a chained pair's shared wall
+as an absence of line, and a mark flush into that corner reads as painting
+one back in — so a down-swing would spend an inset that is load-bearing.
+Effects-off holds it still, like every other ambient animation.
+
 ### Fixed: the Compile screen quoted a price Lean Compiler had already cut
 
 A player who had bought Lean Compiler was still told an ICE Breaker needed

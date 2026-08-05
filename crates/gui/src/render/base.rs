@@ -378,7 +378,7 @@ fn draw_surface_map(
                 let size = (tile_px - 1.0) * STAFFED_MARK;
                 painter.rect(
                     px + STAFFED_MARK_INSET,
-                    py + tile_px - 1.0 - STAFFED_MARK_INSET - size,
+                    py + tile_px - 1.0 - STAFFED_MARK_INSET - size - fx.staffed_bob(world),
                     size,
                     size,
                     GREEN,

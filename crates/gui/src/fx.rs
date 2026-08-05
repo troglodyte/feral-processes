@@ -33,6 +33,14 @@ const SHIELD_PULSE_MIN: f32 = 0.06;
 const SHIELD_PULSE_MAX: f32 = 0.16;
 const SHIELD_PULSE_HZ: f64 = 0.5;
 
+/// How far the staffed mark lifts, how fast, and how far out of step each
+/// tile is from its neighbour (in turns per tile of `x + y`). The phase
+/// offset is the difference between a base that looks busy and one that
+/// looks like a single blinking screen artifact.
+const STAFFED_BOB_PX: f32 = 2.0;
+const STAFFED_BOB_HZ: f64 = 1.0;
+const STAFFED_BOB_TILE_PHASE: f64 = 0.15;
+
 /// How fast the lagging "ghost" bar drains, in HP per second.
 const GHOST_DRAIN_PER_SECOND: f32 = 60.0;
 
@@ -100,6 +108,17 @@ fn shield_pulse_alpha(time: f64) -> f32 {
     let mid = (SHIELD_PULSE_MIN + SHIELD_PULSE_MAX) / 2.0;
     let half = (SHIELD_PULSE_MAX - SHIELD_PULSE_MIN) / 2.0;
     mid + half * (time * SHIELD_PULSE_HZ * std::f64::consts::TAU).sin() as f32
+}
+
+/// How far the staffed mark sits above its rest position this frame.
+///
+/// Upward only, which is why this is a raised cosine rather than the sine
+/// `shield_pulse_alpha` uses: the mark's rest position is held off the
+/// tile's bottom edge by an inset `render/base.rs` documents as
+/// load-bearing, and a down-swing would spend it.
+fn staffed_bob_offset(time: f64, tile: (i32, i32)) -> f32 {
+    let turns = time * STAFFED_BOB_HZ + f64::from(tile.0 + tile.1) * STAFFED_BOB_TILE_PHASE;
+    STAFFED_BOB_PX * (1.0 - (turns * std::f64::consts::TAU).cos()) as f32 / 2.0
 }
 
 fn effect_duration(kind: EffectKind) -> f64 {
@@ -236,6 +255,18 @@ impl Fx {
             return None;
         }
         Some(Color::new(0.4, 0.8, 1.0, shield_pulse_alpha(self.now)))
+    }
+
+    /// How far to lift the "a program is posted here" mark this frame.
+    ///
+    /// Keyed by world tile rather than screen position so the phase belongs
+    /// to the place, and a mark doesn't shuffle its timing as the camera
+    /// pans across it.
+    pub fn staffed_bob(&self, tile: (i32, i32)) -> f32 {
+        if !self.enabled {
+            return 0.0;
+        }
+        staffed_bob_offset(self.now, tile)
     }
 
     /// One frame of the trailing "ghost" band behind an HP bar, tracked
@@ -538,5 +569,39 @@ mod tests {
                 "alpha {a} escaped the band"
             );
         }
+    }
+
+    /// The mark bobs *up* out of its rest position and never below it. Its
+    /// rest position is held off the tile's bottom edge by an inset that
+    /// `render/base.rs` documents as load-bearing, and a negative offset
+    /// would spend that inset.
+    #[test]
+    fn the_staffed_bob_only_ever_lifts_the_mark() {
+        for i in 0..400 {
+            let dy = staffed_bob_offset(i as f64 * 0.02, (i % 7, i % 5));
+            assert!(
+                (0.0..=STAFFED_BOB_PX).contains(&dy),
+                "offset {dy} escaped the band"
+            );
+        }
+    }
+
+    /// Neighbouring tiles are deliberately out of step: a base full of marks
+    /// should read as separate workers, not one synchronised pulse.
+    #[test]
+    fn adjacent_staffed_marks_bob_out_of_phase() {
+        let (a, b) = (
+            staffed_bob_offset(0.3, (4, 4)),
+            staffed_bob_offset(0.3, (5, 4)),
+        );
+        assert!((a - b).abs() > 0.1, "tiles moved in lockstep: {a} vs {b}");
+    }
+
+    #[test]
+    fn the_staffed_mark_holds_still_while_effects_are_disabled() {
+        let mut fx = Fx::new();
+        fx.begin_frame(0.3, Vec::new(), false);
+        fx.enabled = false;
+        assert_eq!(fx.staffed_bob((4, 4)), 0.0);
     }
 }

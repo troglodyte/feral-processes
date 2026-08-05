@@ -37,7 +37,7 @@ const SHIELD_PULSE_HZ: f64 = 0.5;
 /// tile is from its neighbour (in turns per tile of `x + y`). The phase
 /// offset is the difference between a base that looks busy and one that
 /// looks like a single blinking screen artifact.
-const STAFFED_BOB_PX: f32 = 2.0;
+const STAFFED_BOB_PX: f32 = 4.0;
 const STAFFED_BOB_HZ: f64 = 1.0;
 const STAFFED_BOB_TILE_PHASE: f64 = 0.15;
 

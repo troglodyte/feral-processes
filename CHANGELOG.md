@@ -15,9 +15,9 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ### Changed: the staffed mark bobs
 
-The green square saying "a program is posted here" now lifts a couple of
-pixels and settles, about once a second, so a working base reads as busy
-rather than as a field of static dots.
+The green square saying "a program is posted here" now lifts a few pixels
+and settles, about once a second, so a working base reads as busy rather
+than as a field of static dots.
 
 Each tile is offset in phase from its neighbour. In lockstep the whole base
 blinks as one and looks like a screen artifact; out of step it looks like

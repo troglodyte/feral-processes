@@ -17,7 +17,7 @@ use feral_processes_engine::tuning::{MAX_FUSIONS, MAX_PARTY_SIZE};
 use feral_processes_engine::world::Biome;
 use feral_processes_engine::{
     Assignee, Entity, EntityView, Game, LogEntry, MESSAGE_LOG_CAP, MessageKind, PetInfo,
-    ProgramSaleOption, RecipeStep, ResearchState, StructureReport,
+    ProgramSaleOption, RecipeChain, RecipeStep, ResearchState, StructureReport,
 };
 
 mod bars;

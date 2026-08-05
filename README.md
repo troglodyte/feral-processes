@@ -11,9 +11,9 @@ required; there is no text mode.
 
 This README is the overview. The full manual — every control, table, stat,
 recipe, and species — lives in [docs/manual.md](docs/manual.md).
-[docs/roster.html](docs/roster.html) charts the shipped species roster —
-open it in a browser; it reads the numbers from a copy of
-`assets/species/*.ron` and has to be regenerated when those change.
+[docs/roster.md](docs/roster.md) charts the shipped species roster; it holds a
+transcribed copy of `assets/species/*.ron` and has to be regenerated when those
+files change.
 
 ## Installing
 

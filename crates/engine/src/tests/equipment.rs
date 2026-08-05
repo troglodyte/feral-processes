@@ -1,6 +1,7 @@
 //! Equipping, unequipping, and fusing gear.
 
 use super::support::*;
+use crate::tuning::MAX_FUSIONS;
 use crate::*;
 
 #[test]
@@ -332,6 +333,47 @@ fn fuse_item_rejects_non_equipment_and_insufficient_stock() {
             .map(|(_, q)| *q),
         Some(1),
         "a failed fuse should not consume the lone copy"
+    );
+}
+
+/// Gear shares `MAX_FUSIONS` with programs. The stock assertion is the
+/// point: it pins the ceiling check *above* the `Inventory::take` rather
+/// than below it, so a refused fusion spends nothing.
+#[test]
+fn fuse_item_refuses_at_the_ceiling_without_spending_copies() {
+    let core = ItemId::from(ids::OVERCLOCK_CORE);
+    let mut game = Game::new(203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    // Each fusion nets one copy, so five leaves two in hand at tier 3 —
+    // enough that the refusal below can only be the cap, never the stock.
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(core.clone(), 5);
+    for _ in 0..MAX_FUSIONS {
+        game.fuse_item(&core).unwrap();
+    }
+    assert_eq!(game.item_fusion_tier(&core), MAX_FUSIONS);
+
+    let err = game.fuse_item(&core).unwrap_err();
+
+    assert!(
+        err.contains("can't be fused again"),
+        "a maxed item should say so, got: {err}"
+    );
+    assert_eq!(
+        game.item_fusion_tier(&core),
+        MAX_FUSIONS,
+        "a refused fusion must not raise the tier"
+    );
+    assert_eq!(
+        game.player_status()
+            .inventory
+            .iter()
+            .find(|(i, _)| *i == core)
+            .map(|(_, q)| *q),
+        Some(2),
+        "a refused fusion must not consume copies"
     );
 }
 

@@ -321,6 +321,11 @@ impl Game {
     /// rather than only on the next re-equip. Returns the confirmation line on
     /// success so the caller can surface it — unlike equipping, a fusion
     /// changes nothing else the player can see.
+    ///
+    /// Bounded by `tuning::MAX_FUSIONS`, the same ceiling a program's
+    /// lineage has — see `Game::fuse_companions`. The check sits above the
+    /// `Inventory::take` below deliberately: a refused fusion must spend
+    /// nothing, the same ordering `install_routine` and `use_symlink` keep.
     pub fn fuse_item(&mut self, item: &ItemId) -> Result<String, String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -329,6 +334,12 @@ impl Game {
             return Err(format!("{} can't be fused.", self.item_name(item)));
         };
         let name = self.item_name(item).to_string();
+        if self.item_fusion_tier(item) >= crate::tuning::MAX_FUSIONS {
+            return Err(format!(
+                "{name} has already been fused {} times — it can't be fused again.",
+                crate::tuning::MAX_FUSIONS
+            ));
+        }
         let player = self.player_entity();
 
         let worn = self

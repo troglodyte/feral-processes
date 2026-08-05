@@ -13,6 +13,33 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### A charted stat sheet for every content directory
+
+`docs/roster.md` now has six siblings, one per remaining moddable directory
+under `assets/`: items, abilities, structures, research, achievements and
+perks. Each follows the roster's shape — a transcribed table at the top of a
+`docs/*-gen.py`, ASCII charts generated from it, and prose that says what the
+numbers mean rather than restating them.
+
+What the charts surface is mostly relationships the individual files cannot
+show. The research page draws the tech tree from its own `requires` edges and
+prices each node by its whole chain, which is how the six end-of-branch nodes
+turn out to carry more in prerequisites than the dearest single node costs.
+The structures page derives the four production lines from which item feeds
+which. The abilities page reads the naming scheme back out of the display
+names — an id is flavour, a name is a spec — and finds nine families at
+three or four scopes each. The achievements page shows the ladder spending
+its Perk Point ceiling exactly, 5 of 5, so a fourteenth rung paying points
+has nowhere to go.
+
+Two of those pages document a fact this work had to check rather than assume:
+only two of the four end benches are built out of their own feeder's product,
+not four, and `each_bench_is_built_out_of_what_its_own_feeder_makes` asserts
+exactly that pair.
+
+`assets/fonts/` and `assets/sounds/` are skipped — binaries with nothing to
+chart.
+
 ### Eight pieces of content renamed out of the occult register
 
 The Grid runs on malware and systems vocabulary, and eight things had drifted

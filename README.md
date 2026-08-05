@@ -11,9 +11,23 @@ required; there is no text mode.
 
 This README is the overview. The full manual — every control, table, stat,
 recipe, and species — lives in [docs/manual.md](docs/manual.md).
-[docs/roster.md](docs/roster.md) charts the shipped species roster; it holds a
-transcribed copy of `assets/species/*.ron` and has to be regenerated when those
-files change.
+
+Beside it are seven charted stat sheets, one per content directory under
+`assets/`:
+
+| Page | Charts |
+|---|---|
+| [roster.md](docs/roster.md) | the 17 species — stats, habitats, taming and growth |
+| [items.md](docs/items.md) | the 46 items — the value ladder, gear by slot, recipes, drops |
+| [abilities.md](docs/abilities.md) | the 41 abilities — target against effect, families, what a hit costs |
+| [structures.md](docs/structures.md) | the 20 structures — build costs, the production lines, rates, upgrades |
+| [research.md](docs/research.md) | the 19-node tech tree and what it really costs to reach the ends |
+| [achievements.md](docs/achievements.md) | the 13-rung cross-run ladder and the ceiling on what it may pay |
+| [perks.md](docs/perks.md) | the 12 perks, their prices, and where each magnitude lives |
+
+Each holds a **transcribed** copy of the `.ron` files it describes, so each
+has to be regenerated when those files change: edit the table at the top of
+the matching `docs/*-gen.py` and run it from the repo root.
 
 ## Installing
 

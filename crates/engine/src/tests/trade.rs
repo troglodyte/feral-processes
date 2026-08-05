@@ -282,6 +282,36 @@ fn program_sale_options_price_each_program_and_are_empty_for_a_non_buyer() {
     assert!(game.program_sale_options(plain).is_empty());
 }
 
+/// The sale row is where a program is erased for good, so it carries the
+/// fusion depth the party and fuse screens show — a 3/3 is the one you
+/// least want to part with by accident.
+#[test]
+fn program_sale_options_carry_the_programs_fusion_depth() {
+    let mut game = Game::new(127, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market(&mut game);
+    let plain = spawn_tamed(&mut game, 60, 8);
+    let fused = spawn_tamed(&mut game, 60, 8);
+    game.world.entity_mut(fused).insert(FusionCount(2));
+
+    let options = game.program_sale_options(market);
+
+    assert_eq!(
+        options
+            .iter()
+            .find(|o| o.entity == plain)
+            .map(|o| o.fusions),
+        Some(0),
+        "a program that was never fused reads as 0, not as absent"
+    );
+    assert_eq!(
+        options
+            .iter()
+            .find(|o| o.entity == fused)
+            .map(|o| o.fusions),
+        Some(2)
+    );
+}
+
 /// `sell_rate` is the trader's multiplier now rather than the price itself,
 /// so the payout is quoted through `sell_price` — see
 /// `sell_item_pays_each_item_its_own_value` for the ladder that made it two

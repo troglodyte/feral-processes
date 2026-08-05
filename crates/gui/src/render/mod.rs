@@ -8,7 +8,7 @@ use crate::paint::{Color, DARKGRAY, GRAY, Painter, Rect, TextRun, WHITE};
 use crate::text::{Metrics, map_cell, terrain_color, ui_metrics};
 use feral_processes_app_core::{
     App, GroupMenuRow, LogFilter, MENU_SCAN_RADIUS, Mode, TradeChoice, equip_preview_tag,
-    equip_swap_rows, inventory_item_actions, menu_shortcut, stat_summary,
+    equip_swap_rows, inventory_item_actions, item_fusion_note, menu_shortcut, stat_summary,
 };
 use feral_processes_engine::components::{GlyphColor, MachineStatus, TaskKind};
 use feral_processes_engine::items::{EquipmentSlot, ItemId};
@@ -106,6 +106,41 @@ const CRITICAL_HP_DIVISOR: i32 = 3;
 /// screens.
 pub(super) fn hp_critical(hp: i32, max_hp: i32) -> bool {
     max_hp > 0 && hp * CRITICAL_HP_DIVISOR <= max_hp
+}
+
+/// What colour a menu row draws in for something that has been fused —
+/// cyan while it can still be an input to another fusion, magenta once it
+/// is at `MAX_FUSIONS` and is a finished product. `None` leaves the row's
+/// ordinary colour alone.
+///
+/// Programs and gear both call this, because both stop at the same
+/// ceiling: `components::FusionCount` for a program, `ItemFusions` for a
+/// piece of gear (see `Game::fuse_item`). One function rather than a
+/// parallel pair, so the two cannot come to mean different things.
+///
+/// `Option` rather than a defaulted colour so a caller that already has a
+/// colour rule composes with this instead of being overwritten — the party
+/// screen's CRITICAL red wins over it, since critical is a state to act on
+/// now and fusion depth is a permanent property to read at leisure.
+pub(super) fn fusion_color(fusions: u32) -> Option<Color> {
+    match fusions {
+        0 => None,
+        n if n >= MAX_FUSIONS => Some(MAGENTA),
+        _ => Some(CYAN),
+    }
+}
+
+/// How a fusion depth reads in a menu row — nothing at all for something
+/// never fused, a plain count while it still has fusions left, and an
+/// explicit "maxed" note at `MAX_FUSIONS`. Beside `fusion_color` because
+/// the two say the same thing in two channels and must agree on where the
+/// ceiling is.
+pub(super) fn fusion_tag(fusions: u32) -> String {
+    match fusions {
+        0 => String::new(),
+        n if n >= MAX_FUSIONS => format!(" (fused {n}/{MAX_FUSIONS} - maxed)"),
+        n => format!(" (fused {n}/{MAX_FUSIONS})"),
+    }
 }
 
 /// The one place a `GlyphColor` becomes a drawable `Color`. Shared by the map
@@ -558,6 +593,24 @@ mod tests {
         assert!(
             !hp_critical(0, 0),
             "a program with no max HP is a malformed fixture, not a warning"
+        );
+    }
+
+    /// Programs and gear read the same, because they share `MAX_FUSIONS` —
+    /// cyan means fused and still usable as an input, magenta means at the
+    /// ceiling. `None` rather than a default colour so a caller with a
+    /// colour rule of its own (the party screen's CRITICAL red) composes
+    /// with this instead of being overwritten by it.
+    #[test]
+    fn fusion_color_separates_a_fused_thing_from_a_maxed_one() {
+        assert_eq!(fusion_color(0), None, "an unfused row is left plain");
+        assert_eq!(fusion_color(1), Some(CYAN));
+        assert_eq!(fusion_color(MAX_FUSIONS - 1), Some(CYAN));
+        assert_eq!(fusion_color(MAX_FUSIONS), Some(MAGENTA));
+        assert_eq!(
+            fusion_color(MAX_FUSIONS + 1),
+            Some(MAGENTA),
+            "a legacy over-ceiling gear tier still reads as maxed"
         );
     }
 

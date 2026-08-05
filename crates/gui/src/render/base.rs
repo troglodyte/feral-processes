@@ -544,12 +544,14 @@ fn draw_status_panel(
         if cy > keys_y - m.line_height {
             break;
         }
+        // Not a menu row, so no `fusion_row` here — the pane's own dim is
+        // what the fusion colour replaces.
         painter.ui(
             format!("{} x{}", game.item_name(item), qty),
             x + m.inset,
             cy,
             m.font_size,
-            TEXT_DIM,
+            fusion_color(game.item_fusion_tier(item)).unwrap_or(TEXT_DIM),
         );
         cy += m.line_height;
     }

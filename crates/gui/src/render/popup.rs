@@ -76,6 +76,18 @@ pub(super) fn colored_item_row(s: impl Into<String>, selected: bool, color: Colo
     }
 }
 
+/// `item_row` for a program or a piece of gear, coloured by how many times
+/// it has been fused — see `fusion_color`. Every menu that lists either
+/// goes through here, so none of them can grow its own idea of what the
+/// colours mean. A caller with a louder rule of its own checks that first
+/// and only falls through to this (see `draw_companion_menu`'s CRITICAL).
+pub(super) fn fusion_row(s: impl Into<String>, selected: bool, fusions: u32) -> Row {
+    match fusion_color(fusions) {
+        Some(color) => colored_item_row(s, selected, color),
+        None => item_row(s, selected),
+    }
+}
+
 /// `colored_item_row` for a row standing for `repeats` identical log lines —
 /// the history screen's folded rows (see `Game::message_history`). The count
 /// is drawn dim and set apart, so it reads as an annotation rather than as
@@ -410,6 +422,27 @@ pub(super) fn wrap_text(text: &str, columns: usize) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn row_color(row: &Row) -> Option<Color> {
+        match row {
+            Row::Item { color, .. } => Some(*color),
+            _ => None,
+        }
+    }
+
+    /// Eleven menus list a program or a piece of gear, and all of them pick
+    /// their row this way rather than repeating the match — a screen that
+    /// grew its own copy is how one list ends up disagreeing with the rest
+    /// about what magenta means.
+    #[test]
+    fn fusion_row_colours_by_depth_and_leaves_an_unfused_row_plain() {
+        assert_eq!(row_color(&fusion_row("x", false, 0)), Some(TEXT));
+        assert_eq!(row_color(&fusion_row("x", false, 1)), Some(CYAN));
+        assert_eq!(
+            row_color(&fusion_row("x", false, MAX_FUSIONS)),
+            Some(MAGENTA)
+        );
+    }
 
     /// The bug this guards: `measure_ui` reports the *ink* box, which begins
     /// at the first visible glyph. Every `Row::Item` label opens with a

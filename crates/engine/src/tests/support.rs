@@ -66,6 +66,14 @@ pub(super) fn set_level(game: &mut Game, entity: Entity, level: u32) {
     }
 }
 
+/// Puts the run in zone `zone` without running a breach. Enough for the
+/// handful of tests that only care about a zone-gated *ceiling* — structure
+/// upgrade tiers, gear level — rather than about anything `enter_next_zone`
+/// does to the world. Reach for a real breach when the base moving matters.
+pub(super) fn set_zone(game: &mut Game, zone: u32) {
+    game.world.resource_mut::<ZoneLevel>().0 = zone;
+}
+
 pub(super) fn test_assets_dir() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
 }

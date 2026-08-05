@@ -756,6 +756,7 @@ fn reaching_a_recharger_node_while_drained_costs_no_integrity() {
 fn upgrading_a_node_costs_materials_and_raises_its_tier() {
     let mut game = Game::new(970, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = deploy_upgradeable_node(&mut game);
+    set_zone(&mut game, 2);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
@@ -782,6 +783,7 @@ fn upgrading_a_node_costs_materials_and_raises_its_tier() {
 fn upgrading_a_node_makes_its_extraction_more_reliable() {
     let mut game = Game::new(971, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = deploy_upgradeable_node(&mut game);
+    set_zone(&mut game, 2);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
@@ -800,6 +802,10 @@ fn upgrading_a_node_makes_its_extraction_more_reliable() {
 fn upgrading_refuses_past_max_tier_and_without_materials() {
     let mut game = Game::new(972, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = deploy_upgradeable_node(&mut game);
+    // Deep enough that the zone ceiling is out of the way: this test is about
+    // the def's own `max_tier` and about materials, both of which are checked
+    // after the zone gate.
+    set_zone(&mut game, 9);
 
     let err = game
         .upgrade_structure(node)
@@ -826,6 +832,79 @@ fn upgrading_refuses_past_max_tier_and_without_materials() {
         .upgrade_structure(node)
         .expect_err("a maxed node can't be upgraded further");
     assert!(err.contains("fully upgraded"), "unexpected error: {err}");
+}
+
+#[test]
+fn upgrading_is_refused_until_you_have_breached_to_the_matching_zone() {
+    let mut game = Game::new(978, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = deploy_upgradeable_node(&mut game);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 1000);
+
+    let err = game
+        .upgrade_structure(node)
+        .expect_err("zone 1 caps every structure at Mk1");
+    assert!(
+        err.contains("zone 2"),
+        "the refusal should name the zone that unlocks the next tier: {err}"
+    );
+    assert_eq!(
+        game.world.get::<StructureTier>(node).unwrap().0,
+        1,
+        "a refused upgrade must not charge or advance the tier"
+    );
+}
+
+#[test]
+fn breaching_raises_the_upgrade_ceiling_one_tier() {
+    let mut game = Game::new(979, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = deploy_upgradeable_node(&mut game);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 1000);
+
+    set_zone(&mut game, 2);
+    game.upgrade_structure(node).unwrap();
+    assert_eq!(game.world.get::<StructureTier>(node).unwrap().0, 2);
+
+    let err = game
+        .upgrade_structure(node)
+        .expect_err("zone 2 stops at Mk2");
+    assert!(err.contains("zone 3"), "unexpected error: {err}");
+}
+
+#[test]
+fn the_defs_max_tier_still_wins_in_a_deep_zone() {
+    let mut game = Game::new(981, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = deploy_upgradeable_node(&mut game);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 1000);
+
+    set_zone(&mut game, 9);
+    let max = game
+        .world
+        .resource::<StructureDb>()
+        .get("mining_node")
+        .unwrap()
+        .upgrade
+        .as_ref()
+        .unwrap()
+        .max_tier;
+    for _ in 1..max {
+        game.upgrade_structure(node).unwrap();
+    }
+    let err = game
+        .upgrade_structure(node)
+        .expect_err("a zone past the def's ceiling doesn't raise it");
+    assert!(
+        err.contains("fully upgraded"),
+        "a permanent ceiling reads differently from a zone one: {err}"
+    );
 }
 
 #[test]
@@ -862,6 +941,7 @@ fn a_structures_tier_survives_a_save_and_load_round_trip() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 200);
+    set_zone(&mut game, 3);
     game.upgrade_structure(node).unwrap();
     game.upgrade_structure(node).unwrap();
 

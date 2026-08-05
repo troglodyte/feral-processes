@@ -1038,6 +1038,7 @@ fn a_deployed_patch_node_upgrades_and_repairs_harder_for_it() {
     }
     game.place_structure("patch_node", 1, 1).unwrap();
     let node = find_structure_by_kind(&mut game, "patch_node").unwrap();
+    set_zone(&mut game, 2);
     let per_tier = patch_node_per_tier(&game);
 
     assert_eq!(

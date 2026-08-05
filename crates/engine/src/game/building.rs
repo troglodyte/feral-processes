@@ -1,6 +1,7 @@
 //! Placing, upgrading, and demolishing structures, and assigning programs
 //! to work them.
 
+use crate::structures::UpgradeDef;
 use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, STRUCTURE_REMOVAL_REFUND_PERCENT};
 use crate::*;
 
@@ -121,6 +122,26 @@ impl Game {
     /// Frontends are expected to warn the player about that cascade before
     /// calling this for a Home — this method itself performs the removal
     /// unconditionally, with no confirmation step of its own.
+    /// The highest tier a structure with this `upgrade` path can currently
+    /// reach. Two ceilings, and the lower wins: the def's own `max_tier`,
+    /// which is permanent, and the zone the player has breached to, which is
+    /// not — reaching zone *N* is what unlocks Mk*N*, so nothing upgrades at
+    /// all before the first breach.
+    ///
+    /// That mirrors gear, where reaching zone *N* unlocks level *N* gear
+    /// (`tuning::GEAR_LEVEL_GROWTH`, enforced in `Game::equip`), and the two
+    /// ladders line up: every shipped upgradeable structure caps at 5, the
+    /// same span `ZoneLevel::stat_multiplier`'s curve is pinned over.
+    ///
+    /// This is a function rather than a `min` inlined into
+    /// `upgrade_structure` because `Game::view_entities` needs the same
+    /// answer, to label an upgrade-menu row with the tier it cannot reach
+    /// yet. A menu that computed its own ceiling would drift from the one
+    /// that does the refusing.
+    pub(crate) fn upgrade_ceiling(&self, upgrade: &UpgradeDef) -> u32 {
+        upgrade.max_tier.min(self.world.resource::<ZoneLevel>().0)
+    }
+
     /// Advances `structure` one upgrade tier, charging its `UpgradeDef`
     /// cost scaled by the tier being reached. The new tier both multiplies
     /// the structure's work payout (see `systems::task_progress_system`)
@@ -155,6 +176,16 @@ impl Game {
             .unwrap_or(1);
         if tier >= upgrade.max_tier {
             return Err(format!("{} is already fully upgraded.", def.name));
+        }
+        // Checked after the permanent ceiling, so a maxed-out structure in a
+        // shallow zone reads as finished rather than as waiting on a breach
+        // it would never benefit from.
+        if tier >= self.upgrade_ceiling(&upgrade) {
+            return Err(format!(
+                "{} can't go past Mk{tier} until you breach to zone {}.",
+                def.name,
+                tier + 1
+            ));
         }
         let next = tier + 1;
         let cost: Vec<(ItemId, u32)> = upgrade

@@ -13,6 +13,26 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### A structure with a program posted to it wears a green corner mark
+
+"Someone is assigned here" used to be a yellow tile outline, and machines
+took that outline over when they started wearing their state on it —
+running, starved, clogged, idle. From then on a machine could never draw
+the yellow at all, so the only surviving trace of an unstaffed one was the
+grey of `Idle`: a colour meaning absence, on an axis already carrying three
+other things. A base of machines gave no reading of which ones had a
+program on them.
+
+It is now a small green square in the tile's bottom-left corner, drawn for
+every structure with a worker, machine or not. The outline says what the
+machine is doing; the mark says whether anybody is on it. The mark is held
+clear of the tile's edges on purpose — a chained pair's shared wall is
+drawn as an *absence* of line, and a square flush into the corner would
+read as painting one back in.
+
+The two channels disagree in exactly one case, correctly: a guard counts as
+assigned but runs no job, so a guarded machine draws grey and marked.
+
 ### Two routines that act on a Stack frame instead of reading it
 
 Everything the player had for a frame either read the maze — the view cone,

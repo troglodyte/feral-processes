@@ -22,6 +22,13 @@ const SHADE_JITTER: f32 = 0.08;
 /// hostile at the pane's edge goes unnoticed.
 const VIGNETTE_MIN: f32 = 0.75;
 
+/// The staffed mark's side, as a fraction of the tile, and how far it is held
+/// off the tile's edges. The inset is not cosmetic: `outline_open` drops the
+/// edges a chained pair shares, and a mark flush into the corner would read as
+/// painting one of those absent lines back in.
+const STAFFED_MARK: f32 = 0.28;
+const STAFFED_MARK_INSET: f32 = 2.0;
+
 /// A tile's own brightness multiplier, so a field of one biome reads as
 /// ground rather than as a flat colour swatch.
 ///
@@ -352,14 +359,30 @@ fn draw_surface_map(
             // ambient base-wide info, or a starved machine goes unnoticed
             // inside a shielded base. A structure that runs no job has no
             // status and keeps only the pulse.
-            //
-            // This replaces a flat yellow "someone is assigned here" —
-            // `Idle` is the same fact in a colour of its own, so nothing is
-            // lost and three more states are gained.
             if let Some(color) = machine_status.map(machine_color) {
                 outline_open(painter, px, py, tile_px - 1.0, color, linked_edges);
-            } else if staffed {
-                outline_open(painter, px, py, tile_px - 1.0, YELLOW, linked_edges);
+            }
+            // "A program is posted here", on a channel of its own rather than
+            // sharing the outline with machine state. It was a yellow outline
+            // until machines took that channel over, at which point a machine
+            // could never show it at all — leaving grey `Idle` as the only
+            // trace of an unstaffed one, a colour meaning absence on an axis
+            // that also carries three other things. Now the outline says what
+            // the machine is doing and the mark says whether anyone is on it.
+            //
+            // The two disagree on purpose for a posted guard: `structure_
+            // worker` counts any `Task` while `Idle` means specifically no
+            // `GatherResource` worker, so a guarded machine draws grey and
+            // marked, which is exactly the situation.
+            if staffed {
+                let size = (tile_px - 1.0) * STAFFED_MARK;
+                painter.rect(
+                    px + STAFFED_MARK_INSET,
+                    py + tile_px - 1.0 - STAFFED_MARK_INSET - size,
+                    size,
+                    size,
+                    GREEN,
+                );
             }
             if let Some(flash) = fx.tile_flash(world) {
                 painter.rect(px, py, tile_px - 1.0, tile_px - 1.0, flash);

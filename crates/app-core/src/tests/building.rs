@@ -18,6 +18,30 @@ fn the_upgrade_picker_opens_from_the_base_menu_and_esc_backs_into_it() {
     assert_eq!(app.mode, Mode::Playing, "and out to the map from there");
 }
 
+/// A structure the current zone caps at Mk1 is still offered, not filtered
+/// out. Hiding it would take the whole Upgrade row out of the base menu for
+/// the entirety of zone 1 — see `app/group_menu.rs`, which drops a row whose
+/// screen would be empty — and a player who has never breached would never
+/// learn that upgrading exists. The row explains itself instead, which is
+/// what `EntityView::ceiling` is carried for.
+#[test]
+fn a_structure_at_its_zone_ceiling_is_still_listed_with_the_ceiling_shown() {
+    let mut app = app_owning_a_program_and_a_compiler(232, &[]);
+
+    let listed = app.upgradeable_structures();
+    let compiler = listed
+        .iter()
+        .find(|e| e.label.contains("Compiler"))
+        .expect("a zone-capped structure must still be offered, not hidden");
+
+    assert_eq!(compiler.tier, Some(1));
+    assert_eq!(
+        compiler.ceiling,
+        Some(1),
+        "zone 1 caps the Compiler at Mk1 even though its def allows Mk5"
+    );
+}
+
 /// Home is the first entry in the build menu and declares no upgrade path,
 /// which makes it the fixture for "deployed, but nothing to upgrade".
 fn deploy_home(app: &mut App) {

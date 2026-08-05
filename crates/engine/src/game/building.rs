@@ -114,14 +114,6 @@ impl Game {
         Ok(())
     }
 
-    /// Demolishes `structure`, refunding `STRUCTURE_REMOVAL_REFUND_PERCENT`
-    /// of its current build cost. Removing the Home is a special case: it
-    /// cascades to demolish every other structure along with it (each
-    /// refunding its own share the same way), since nothing else can exist
-    /// outside a Home's `MAX_BUILD_DISTANCE_FROM_HOME` radius anyway.
-    /// Frontends are expected to warn the player about that cascade before
-    /// calling this for a Home — this method itself performs the removal
-    /// unconditionally, with no confirmation step of its own.
     /// The highest tier a structure with this `upgrade` path can currently
     /// reach. Two ceilings, and the lower wins: the def's own `max_tier`,
     /// which is permanent, and the zone the player has breached to, which is
@@ -140,6 +132,18 @@ impl Game {
     /// that does the refusing.
     pub(crate) fn upgrade_ceiling(&self, upgrade: &UpgradeDef) -> u32 {
         upgrade.max_tier.min(self.world.resource::<ZoneLevel>().0)
+    }
+
+    /// `upgrade_ceiling` for a deployed structure, paired with the def's
+    /// permanent `max_tier` and resolving the def on the way. `None` when
+    /// `entity` is not a structure, or when its def declares no upgrade
+    /// path — which pairs with `StructureTier` being absent, so
+    /// `EntityView`'s `tier`, `ceiling` and `max_tier` are `Some` together.
+    pub(crate) fn entity_upgrade_ceiling(&self, entity: Entity) -> Option<(u32, u32)> {
+        let kind = &self.world.get::<Structure>(entity)?.kind;
+        let def = self.world.resource::<StructureDb>().get(kind)?;
+        let upgrade = def.upgrade.as_ref()?;
+        Some((self.upgrade_ceiling(upgrade), upgrade.max_tier))
     }
 
     /// Advances `structure` one upgrade tier, charging its `UpgradeDef`
@@ -223,6 +227,14 @@ impl Game {
         Ok(())
     }
 
+    /// Demolishes `structure`, refunding `STRUCTURE_REMOVAL_REFUND_PERCENT`
+    /// of its current build cost. Removing the Home is a special case: it
+    /// cascades to demolish every other structure along with it (each
+    /// refunding its own share the same way), since nothing else can exist
+    /// outside a Home's `MAX_BUILD_DISTANCE_FROM_HOME` radius anyway.
+    /// Frontends are expected to warn the player about that cascade before
+    /// calling this for a Home — this method itself performs the removal
+    /// unconditionally, with no confirmation step of its own.
     pub fn remove_structure(&mut self, structure: Entity) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());

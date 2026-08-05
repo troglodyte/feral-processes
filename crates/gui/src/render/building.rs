@@ -196,6 +196,25 @@ pub(super) fn draw_remove_menu(
     draw_popup("Demolish Structure", PopupSize::Large, &rows, painter, m);
 }
 
+/// The bracketed tier tag on an upgrade-menu row.
+///
+/// A structure sitting at its ceiling is still listed rather than filtered
+/// out — see `App::upgradeable_structures` — so the row has to say why it
+/// has stopped. Whether that is temporary is exactly the difference between
+/// `ceiling` and `max_tier`: below `max_tier` the zone is what's holding it,
+/// and one more breach frees the next tier. At `max_tier` it is simply
+/// finished, and the plain tag it has always shown is right.
+fn tier_tag(s: &EntityView) -> String {
+    let tier = s.tier.unwrap_or(1);
+    match (s.ceiling, s.max_tier) {
+        (Some(ceiling), Some(max_tier)) if tier >= ceiling && ceiling < max_tier => {
+            let next = tier + 1;
+            format!("Mk{tier} — zone {next} unlocks Mk{next}")
+        }
+        _ => format!("Mk{tier}"),
+    }
+}
+
 pub(super) fn draw_upgrade_menu(
     structures: &[EntityView],
     selected: usize,
@@ -211,12 +230,12 @@ pub(super) fn draw_upgrade_menu(
     for (i, s) in structures.iter().enumerate() {
         rows.push(item_row(
             format!(
-                "[{}] {} at ({}, {}) [Mk{}]",
+                "[{}] {} at ({}, {}) [{}]",
                 menu_shortcut(i),
                 s.label,
                 s.pos.0,
                 s.pos.1,
-                s.tier.unwrap_or(1),
+                tier_tag(s),
             ),
             i == selected,
         ));
@@ -417,5 +436,54 @@ fn assignee_line(a: &Assignee) -> String {
             format!("{} — cronjob {}/{}", a.label, a.progress, a.required)
         }
         TaskKind::Guard => format!("{} — guarding", a.label),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn view(tier: u32, ceiling: u32, max_tier: u32) -> EntityView {
+        EntityView {
+            entity: Entity::PLACEHOLDER,
+            pos: (0, 0),
+            glyph: 'n',
+            color: GlyphColor::White,
+            label: "Mining Node".into(),
+            is_player: false,
+            is_tamed: false,
+            is_companion: false,
+            is_hostile: false,
+            is_structure: true,
+            is_home: false,
+            tier: Some(tier),
+            ceiling: Some(ceiling),
+            max_tier: Some(max_tier),
+            is_boss: false,
+            can_work: false,
+            can_trade: false,
+            structure_worker: None,
+            hp_fraction: None,
+            level: None,
+            durability: None,
+            fusions: 0,
+            machine_status: None,
+            linked_edges: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_tier_below_the_ceiling_reads_as_it_always_has() {
+        assert_eq!(tier_tag(&view(2, 5, 5)), "Mk2");
+    }
+
+    #[test]
+    fn a_tier_stopped_by_the_zone_says_which_zone_would_free_it() {
+        assert_eq!(tier_tag(&view(1, 1, 5)), "Mk1 — zone 2 unlocks Mk2");
+    }
+
+    #[test]
+    fn a_tier_stopped_by_the_defs_own_ceiling_says_nothing_about_zones() {
+        assert_eq!(tier_tag(&view(5, 5, 5)), "Mk5");
     }
 }

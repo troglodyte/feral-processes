@@ -168,6 +168,10 @@ impl Game {
                     .is_some_and(|s| s.kind == HOME_STRUCTURE_ID);
                 let is_boss = self.is_boss_creature(entity);
                 let tier = self.world.get::<StructureTier>(entity).map(|t| t.0);
+                let (ceiling, max_tier) = match self.entity_upgrade_ceiling(entity) {
+                    Some((c, m)) => (Some(c), Some(m)),
+                    None => (None, None),
+                };
                 let can_work = self.accepts_a_program(entity);
                 let machine_status = self.world.get::<MachineStatus>(entity).copied();
                 let can_trade = self.trade_options(entity).is_some();
@@ -211,6 +215,8 @@ impl Game {
                     is_structure,
                     is_home,
                     tier,
+                    ceiling,
+                    max_tier,
                     is_boss,
                     can_work,
                     can_trade,
@@ -572,32 +578,37 @@ impl Game {
         let db = self.world.resource::<StructureDb>();
         hits.into_iter()
             .filter(|(_, _, _, kind)| db.get(kind).is_some_and(|d| d.teleport_cost.is_some()))
-            .map(|(entity, pos, glyph, kind)| EntityView {
-                entity,
-                pos: (pos.x, pos.y),
-                glyph: glyph.ch,
-                color: glyph.color,
-                label: self.entity_label(entity),
-                is_player: false,
-                is_tamed: false,
-                is_companion: false,
-                is_hostile: false,
-                is_structure: true,
-                machine_status: None,
-                linked_edges: Vec::new(),
-                is_home: kind == HOME_STRUCTURE_ID,
-                tier: self.world.get::<StructureTier>(entity).map(|t| t.0),
-                is_boss: false,
-                can_work: false,
-                can_trade: false,
-                structure_worker: None,
-                hp_fraction: None,
-                level: None,
-                durability: self
-                    .world
-                    .get::<Durability>(entity)
-                    .map(|d| (d.hp, d.max_hp)),
-                fusions: 0,
+            .map(|(entity, pos, glyph, kind)| {
+                let bounds = self.entity_upgrade_ceiling(entity);
+                EntityView {
+                    entity,
+                    pos: (pos.x, pos.y),
+                    glyph: glyph.ch,
+                    color: glyph.color,
+                    label: self.entity_label(entity),
+                    is_player: false,
+                    is_tamed: false,
+                    is_companion: false,
+                    is_hostile: false,
+                    is_structure: true,
+                    machine_status: None,
+                    linked_edges: Vec::new(),
+                    is_home: kind == HOME_STRUCTURE_ID,
+                    tier: self.world.get::<StructureTier>(entity).map(|t| t.0),
+                    ceiling: bounds.map(|(c, _)| c),
+                    max_tier: bounds.map(|(_, m)| m),
+                    is_boss: false,
+                    can_work: false,
+                    can_trade: false,
+                    structure_worker: None,
+                    hp_fraction: None,
+                    level: None,
+                    durability: self
+                        .world
+                        .get::<Durability>(entity)
+                        .map(|d| (d.hp, d.max_hp)),
+                    fusions: 0,
+                }
             })
             .collect()
     }

@@ -201,6 +201,16 @@ pub struct EntityView {
     /// declares no upgrade path — see `StructureDef::upgrade`. Frontends
     /// use `Some` as "this is upgradeable" when listing candidates.
     pub tier: Option<u32>,
+    /// The highest tier this (structure) entity can currently reach, from
+    /// `Game::upgrade_ceiling` — `None` alongside a `None` `tier`.
+    pub ceiling: Option<u32>,
+    /// The highest tier this (structure) entity could *ever* reach, from
+    /// `StructureDef::upgrade`'s `max_tier` — `None` alongside a `None`
+    /// `tier`. Carried next to `ceiling` because the two together are what
+    /// tell a menu row why a structure has stopped climbing: `ceiling` below
+    /// `max_tier` means "breach first", `ceiling` equal to it means
+    /// "finished". Neither value alone distinguishes those.
+    pub max_tier: Option<u32>,
     pub is_boss: bool,
     pub can_work: bool,
     /// Whether this (structure) entity is a trading post (see

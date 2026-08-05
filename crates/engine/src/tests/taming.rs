@@ -279,14 +279,33 @@ fn the_shipped_ice_breaker_still_tames_for_a_player_holding_only_it() {
         stats.hp = 1;
     }
 
+    // Counted by what the inventory actually lost rather than by loop
+    // iterations: once the roll lands, `Tamed` is not visible until the
+    // battle resolves, so the calls in between are refused and rightly
+    // charge nothing. Counting iterations called those attempts and made
+    // the assertion below depend on how many turns the seed took to settle
+    // — which moves whenever anything upstream shifts `GameRng`.
+    let held = |game: &Game| {
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::ICE_BREAKER))
+    };
     let mut attempts = 0;
     for _ in 0..50 {
         if game.world.get::<Tamed>(wild).is_some() {
             break;
         }
+        let before = held(&game);
         player_decompiles(&mut game);
-        attempts += 1;
+        let spent = before - held(&game);
+        assert!(
+            spent <= 1,
+            "a single decompile attempt spent {spent} catalysts"
+        );
+        attempts += spent;
     }
+    assert!(attempts > 0, "the tame cost no catalyst at all");
 
     assert!(
         game.world.get::<Tamed>(wild).is_some(),

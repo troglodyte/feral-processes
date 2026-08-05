@@ -38,7 +38,7 @@ in the game where a permanent buff accumulates.
 | Bottom Frame | `stack_depth_8` | `StackDepthReached(8)` | `StartingProgram("scrapper")` |
 | Root Access | `boss_first` | `BossDefeated(None)` | `RandomMainStat(1)` |
 | Chain of Command | `boss_overseer` | `BossDefeated("overseer")` | `RandomMainStat(1)` |
-| ZeroDay in the Wire | `boss_wintermute` | `BossDefeated("wintermute")` | `PerkPoints(1)` |
+| Something in the Wire | `boss_wintermute` | `BossDefeated("wintermute")` | `PerkPoints(1)` |
 
 ## Progress tracks
 
@@ -47,12 +47,12 @@ read as tracks. Each is drawn on its own scale — the gaps are proportional
 within a row, never between rows.
 
 ```
-cycles survived500           2000                      5000
-              *-------------*----------------------------+
-sector breached2             4              6             8
-              *-------------+--------------*-------------+
-stack depth   3                5                         8
-              *----------------+-------------------------@
+cycles survived  500           2000                      5000
+                 *-------------*----------------------------+
+sector breached  2             4              6             8
+                 *-------------+--------------*-------------+
+stack depth      3                5                         8
+                 *----------------+-------------------------@
 
                * stat point    + perk point    @ free program
 ```
@@ -79,7 +79,7 @@ first boss a run brings down is always worth two rungs.
 |:---|:---|:---|
 | Root Access | `BossDefeated(None)` | `RandomMainStat(1)` |
 | Chain of Command | `BossDefeated("overseer")` | `RandomMainStat(1)` |
-| ZeroDay in the Wire | `BossDefeated("wintermute")` | `PerkPoints(1)` |
+| Something in the Wire | `BossDefeated("wintermute")` | `PerkPoints(1)` |
 
 Fleeing does not count — the kill is recorded at the one point in combat that
 knows the boss actually died. There is deliberately no "kill N bosses in one

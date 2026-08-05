@@ -5,7 +5,7 @@ use crate::tuning::{
     MAX_BUILD_DISTANCE_FROM_HOME, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_AGGRO_LEASH_RADIUS,
     NEST_CACHE_FRAGMENT_ZONE_BONUS, NEST_CACHE_FRAGMENTS, NEST_CACHE_WORK_RESOURCE_MULT,
     NEST_DURABILITY, NEST_PATH_SEARCH_MARGIN, NEST_PURSUIT_STEPS_PER_TICK, NEST_RESPAWN_TICKS,
-    WORK_RESOURCE_DROP,
+    NEST_TETHER_RADIUS, WORK_RESOURCE_DROP,
 };
 use crate::*;
 
@@ -933,10 +933,17 @@ fn a_guardian_respawned_at_a_besieged_nest_is_already_pursuing() {
     // "absent from the field" rule), which would strip the survivor's
     // `Pursuing` within the first tick or two and defeat this test's
     // premise long before the respawn timer ever fires.
+    // Wide enough to hold the nest's whole tether square, not just the lane
+    // between the player and it: `spawn_nest_guardian` scatters a
+    // replacement anywhere within `NEST_TETHER_RADIUS` of the nest on both
+    // axes, and one that lands on un-overridden terrain is absent from the
+    // pursuit field and has its `Pursuing` stripped the same tick it was
+    // granted. Which offset the roll produces moves with `GameRng`, so a
+    // strip sized to one seed's answer is a trap for the next.
     {
         let mut map = game.world.resource_mut::<WorldMap>();
-        for dx in -2..=16 {
-            for dy in -2..=2 {
+        for dx in -2..=(15 + NEST_TETHER_RADIUS) {
+            for dy in -NEST_TETHER_RADIUS..=NEST_TETHER_RADIUS {
                 map.set_override(
                     ppos.x + dx,
                     ppos.y + dy,

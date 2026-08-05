@@ -25,7 +25,7 @@ A = [
  ("stack_depth_8",   "Bottom Frame",     "StackDepthReached", 8,       "StartingProgram",1, "the party stands 8 frames down"),
  ("boss_first",      "Root Access",      "BossDefeated",      None,    "RandomMainStat", 1, "any boss program dies"),
  ("boss_overseer",   "Chain of Command", "BossDefeated",      "overseer",  "RandomMainStat", 1, "an Overseer dies"),
- ("boss_wintermute", "ZeroDay in the Wire","BossDefeated",      "wintermute","PerkPoints",  1, "a Wintermute dies"),
+ ("boss_wintermute", "Something in the Wire","BossDefeated",      "wintermute","PerkPoints",  1, "a Wintermute dies"),
 ]
 K = "id name trig arg reward n when".split()
 R = [dict(zip(K, r)) for r in A]

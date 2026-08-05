@@ -13,6 +13,34 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Eight pieces of content renamed out of the occult register
+
+The Grid runs on malware and systems vocabulary, and eight things had drifted
+away from it. Three species — **Ghost is now ZeroDay** (map glyph `z`),
+**Wraith is now Crawler** (`r`), **Phantom is now Proxy**, which keeps its
+`p` and whose Backdoor and Spoof moves already read that way. Three items:
+**Daemon Fang → Shim Blade**, **Probe Daemon → Probe Service**, **Wraithsteel
+Plate → Nullsteel Plate**. One routine: **Ghost Protocol Party → Stealth
+Protocol Party**. One achievement: **"Ghost in the Wire" → "Something in the
+Wire"**. ZeroDay's Haunt attack is now Fray, and its Static Wail is Static
+Burst.
+
+This renames ids and filenames, not just display names, following the
+precedent set when the Daemon species became SubProcess. **Existing saves
+lose these species, items and the routine on load** — their ids no longer
+resolve. The `dev-saves/` templates were updated in place and still work.
+
+One consequence worth recording, because it will recur: species are loaded in
+sorted-id order, so renaming three of them moved every later draw from the
+shared `GameRng` stream and changed the outcome of nine seeded tests. All
+nine turned out to be latent fragility rather than the rename breaking
+anything — a Stack ambush that now fires one step earlier and blocks a
+fixture's walk, an opening-ring census that swept nest guardians it was
+documented not to cover, a taming test counting refused attempts as charged
+ones, and a nest test whose walkable strip was narrower than the tether
+square a replacement guardian scatters across. Each was fixed at the cause,
+so the next content change does not move them again.
+
 ### Fusion reads at a glance, and gear stops at three like everything else
 
 Anything you have fused now draws in its own colour wherever a menu lists

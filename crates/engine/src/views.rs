@@ -119,6 +119,12 @@ pub struct ProgramSaleOption {
     /// so the price is explicable rather than arbitrary.
     pub power: i32,
     pub payout: u32,
+    /// How many fusions deep this program's lineage is — see
+    /// `components::FusionCount`. Carried for the same reason `activity`
+    /// is: the screen that permanently erases a program should say what it
+    /// is giving up, and a maxed fusion is the least replaceable thing on
+    /// the list.
+    pub fusions: u32,
     /// What the program is doing right now — see `Game::program_activity`.
     /// Shown on the row, so the screen that permanently erases a program
     /// says what it was in the middle of.

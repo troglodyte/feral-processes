@@ -370,7 +370,10 @@ currencies. Credits are money — a trader is the only thing that mints them
 and the only thing that takes them. Everything you carry counts against a shared **Buffer** starting
 at 30 units and growing with each deployed Data Cache. Press `i` for the
 inventory screen, where you equip, unequip, consume, erase, and fuse items
-across three slots (Weapon, Armor, Module). Picking one of those three slots
+across three slots (Weapon, Armor, Module). Fusing gear spends two copies to
+make that item type permanently stronger, and — like a program — any one item
+can only be fused three times, after which its rows read `T3/3 - maxed`.
+Picking one of those three slots
 opens a replacement list for it: everything in cargo that fits, sorted by
 what it would gain you, each row carrying both the bonus you'd get and the
 change from what you're wearing. There are 31 pieces of gear:

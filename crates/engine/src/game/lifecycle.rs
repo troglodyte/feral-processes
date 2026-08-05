@@ -282,8 +282,19 @@ impl Game {
                 Inventory {
                     items: data.player.inventory,
                 },
+                // Gear fusion was uncapped before it shared `MAX_FUSIONS`,
+                // so an older save can carry a tier above the ceiling.
+                // Only the ledger is clamped — the worn copies below keep
+                // the tier their bonus was applied at, because `Stats` is
+                // restored with that bonus already in it and unequipping
+                // must subtract exactly what was added.
                 ItemFusions {
-                    tiers: data.player.item_fusions,
+                    tiers: data
+                        .player
+                        .item_fusions
+                        .into_iter()
+                        .map(|(item, tier)| (item, tier.min(crate::tuning::MAX_FUSIONS)))
+                        .collect(),
                 },
                 StatusEffects::default(),
                 CombatBuff::default(),

@@ -79,8 +79,9 @@ pub(super) fn draw_trade_action_menu(
         // Same tag the inventory shows, so what you're about to part with
         // reads identically on both screens — fusion tier included, since
         // that's exactly what you'd want to check before selling.
-        let tag = equip_preview_tag(game, item, status.zone, game.item_fusion_tier(item));
-        rows.push(item_row(
+        let fusion_tier = game.item_fusion_tier(item);
+        let tag = equip_preview_tag(game, item, status.zone, fusion_tier);
+        rows.push(fusion_row(
             format!(
                 "[{}] {}  Sell {} x{qty}{} ({} {money} each)",
                 menu_shortcut(idx),
@@ -90,6 +91,7 @@ pub(super) fn draw_trade_action_menu(
                 game.sell_price(structure, item).unwrap_or(0)
             ),
             idx == selected,
+            fusion_tier,
         ));
         idx += 1;
     }
@@ -146,17 +148,19 @@ pub(super) fn draw_trade_action_menu(
             TEXT,
         ));
         for program in &programs {
-            rows.push(item_row(
+            rows.push(fusion_row(
                 format!(
-                    "[{}] Sell {} Lv{} — power {} → {} {money}{}",
+                    "[{}] Sell {} Lv{} — power {} → {} {money}{}{}",
                     menu_shortcut(idx),
                     program.name,
                     program.level,
                     program.power,
                     program.payout,
+                    fusion_tag(program.fusions),
                     activity_tag(&program.activity),
                 ),
                 idx == selected,
+                program.fusions,
             ));
             idx += 1;
         }

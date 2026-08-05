@@ -81,9 +81,16 @@ pub(super) fn draw_extract(game: &mut Game, selected: usize, painter: &Painter, 
         rows.push(text_row("(you need a Compiler standing somewhere first)"));
     }
     for (i, p) in programs.iter().enumerate() {
-        rows.push(item_row(
-            format!("[{}] {} Lv{}", menu_shortcut(i), p.name, p.level),
+        rows.push(fusion_row(
+            format!(
+                "[{}] {} Lv{}{}",
+                menu_shortcut(i),
+                p.name,
+                p.level,
+                fusion_tag(p.fusions)
+            ),
             i == selected,
+            p.fusions,
         ));
     }
     draw_popup("Extract", PopupSize::Large, &rows, painter, m);

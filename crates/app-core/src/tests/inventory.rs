@@ -242,8 +242,62 @@ fn equip_preview_tag_keeps_showing_level_scaling_and_fusion_beside_the_slot() {
     // tier adds ITEM_FUSION_BONUS_PER_TIER on top: 4 -> 8 -> 9.
     assert_eq!(
         equip_preview_tag(game, &ItemId::from(ids::MONOFILAMENT_WHIP), 2, 1),
-        " (WEP +9 ATK fusion T1)"
+        " (WEP +9 ATK fusion T1/3)"
     );
+}
+
+/// Gear shares `MAX_FUSIONS` with programs, so its tag names the ceiling
+/// the same way a program's `(fused 1/3)` does — and says "maxed" at it,
+/// which is the whole reason this screen is where the cap is discovered.
+#[test]
+fn equip_preview_tag_names_the_ceiling_and_calls_out_a_maxed_item() {
+    let app = test_app(903);
+    let game = app.game.as_ref().expect("test_app builds a game");
+    let whip = ItemId::from(ids::MONOFILAMENT_WHIP);
+
+    assert!(
+        !equip_preview_tag(game, &whip, 1, 0).contains("fusion"),
+        "an unfused item mentions no tier at all"
+    );
+    assert!(
+        equip_preview_tag(game, &whip, 1, MAX_FUSIONS).ends_with("fusion T3/3 - maxed)"),
+        "got: {}",
+        equip_preview_tag(game, &whip, 1, MAX_FUSIONS)
+    );
+}
+
+/// The compact note the equipped panel and the swap picker's stat column
+/// share. No "maxed" wording here: `SWAP_STATS_COLUMN` is 20 cells and
+/// `+2 ATK +1 DEF T3/3 maxed` is 24 — the row colour carries it instead.
+/// The picker's rows are built here and only drawn by the renderer, so the
+/// tier travels on the row rather than being re-derived on the far side —
+/// a renderer that recomputed it could colour a row its own label
+/// contradicts.
+#[test]
+fn a_swap_row_carries_its_items_fusion_tier() {
+    let mut app = app_wearing_weapon(913, None, &[("kinetic_edge", 3)], 1);
+    let spare = ItemId::from("kinetic_edge");
+    app.game.as_mut().unwrap().fuse_item(&spare).unwrap();
+
+    let rows = equip_swap_rows(app.game.as_ref().unwrap(), EquipmentSlot::Weapon);
+    let row = rows
+        .iter()
+        .find(|r| r.choice == SwapChoice::Equip(spare.clone()))
+        .expect("the fused spare should still be offered");
+
+    assert_eq!(row.fusion_tier, 1);
+    assert!(
+        row.label.contains("T1/3"),
+        "the stat column names the ceiling too, got: {}",
+        row.label
+    );
+}
+
+#[test]
+fn item_fusion_note_is_the_bare_fraction() {
+    assert_eq!(item_fusion_note(0), "");
+    assert_eq!(item_fusion_note(1), "T1/3");
+    assert_eq!(item_fusion_note(MAX_FUSIONS), "T3/3");
 }
 
 #[test]

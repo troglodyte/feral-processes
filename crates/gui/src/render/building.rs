@@ -105,18 +105,21 @@ pub(super) fn draw_worker_menu(
         let pet = pets.iter().find(|p| p.entity == w.entity);
         let power = pet.map(|p| format!(" PWR {}", p.power)).unwrap_or_default();
         let activity = pet.map(|p| activity_tag(&p.activity)).unwrap_or_default();
-        rows.push(item_row(
+        let fusions = pet.map(|p| p.fusions).unwrap_or(0);
+        rows.push(fusion_row(
             format!(
-                "[{}] {}{}{} at ({}, {}){}",
+                "[{}] {}{}{} at ({}, {}){}{}",
                 menu_shortcut(i),
                 w.label,
                 w.level.map(|l| format!(" Lv{l}")).unwrap_or_default(),
                 power,
                 w.pos.0,
                 w.pos.1,
+                fusion_tag(fusions),
                 activity
             ),
             i == selected,
+            fusions,
         ));
     }
     draw_popup(title, PopupSize::Large, &rows, painter, m);

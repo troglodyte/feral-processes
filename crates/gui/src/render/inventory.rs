@@ -69,7 +69,7 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
         // The engine hands this list back grouped, so the category column
         // reads as a heading for the run of rows beneath it rather than as
         // noise repeated at random.
-        rows.push(item_row(
+        rows.push(fusion_row(
             format!(
                 "[{}] {}  {} x{}{}",
                 menu_shortcut(i + 3),
@@ -79,6 +79,7 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
                 tag
             ),
             selected == i + 3,
+            fusion_tier,
         ));
     }
     rows.push(text_row(""));
@@ -95,9 +96,14 @@ fn equipped_row(
     selected: bool,
     game: &Game,
 ) -> Row {
-    item_row(
+    // The tier the worn copy was equipped at, not the ledger's current one —
+    // the same number `equipped_summary` prints beside it, so the colour and
+    // the text on this row cannot disagree.
+    let fusions = equipped.as_ref().map(|e| e.fusion_tier).unwrap_or(0);
+    fusion_row(
         format!("[{num}] {}", equipped_summary(label, equipped, game)),
         selected,
+        fusions,
     )
 }
 
@@ -124,7 +130,7 @@ fn equipped_summary(
         notes.push(format!("Lv{}", equipped.level));
     }
     if equipped.fusion_tier > 0 {
-        notes.push(format!("T{}", equipped.fusion_tier));
+        notes.push(item_fusion_note(equipped.fusion_tier));
     }
     let note = if notes.is_empty() {
         String::new()
@@ -172,9 +178,10 @@ pub(super) fn draw_equip_swap(
         text_row(""),
     ];
     for (i, row) in equip_swap_rows(game, slot).iter().enumerate() {
-        rows.push(item_row(
+        rows.push(fusion_row(
             format!("[{}] {}", menu_shortcut(i), row.label),
             i == selected,
+            row.fusion_tier,
         ));
     }
     rows.push(text_row(""));

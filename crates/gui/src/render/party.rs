@@ -47,25 +47,15 @@ pub(super) fn draw_companion_menu(
             activity,
             if critical { " - CRITICAL" } else { "" }
         );
+        // CRITICAL outranks the fusion colour: one is a state to act on
+        // this turn, the other a permanent property to read at leisure.
         rows.push(if critical {
             critical_item_row(text, i == selected)
         } else {
-            item_row(text, i == selected)
+            fusion_row(text, i == selected, p.fusions)
         });
     }
     draw_popup("Party", PopupSize::Large, &rows, painter, m);
-}
-
-/// How a program's fusion depth reads in a menu row — nothing at all for
-/// a program that's never been fused, a plain count while it still has
-/// fusions left, and an explicit "maxed" note once it's hit
-/// `MAX_FUSIONS` and can't be an input to another fusion.
-fn fusion_tag(fusions: u32) -> String {
-    match fusions {
-        0 => String::new(),
-        n if n >= MAX_FUSIONS => format!(" (fused {n}/{MAX_FUSIONS} - maxed)"),
-        n => format!(" (fused {n}/{MAX_FUSIONS})"),
-    }
 }
 
 /// Formats one fuse-candidate row with the full stat line a fusion
@@ -86,9 +76,10 @@ pub(super) fn draw_fuse_menu(game: &mut Game, selected: usize, painter: &Painter
         rows.push(text_row("(you have no compiled programs)"));
     }
     for (i, p) in candidates.iter().enumerate() {
-        rows.push(item_row(
+        rows.push(fusion_row(
             fuse_candidate_label(menu_shortcut(i), p),
             i == selected,
+            p.fusions,
         ));
     }
     draw_popup("Fuse", PopupSize::Large, &rows, painter, m);
@@ -116,9 +107,10 @@ pub(super) fn draw_fuse_second_menu(
         rows.push(text_row("(you have no other compiled programs)"));
     }
     for (i, p) in candidates.iter().enumerate() {
-        rows.push(item_row(
+        rows.push(fusion_row(
             fuse_candidate_label(menu_shortcut(i), p),
             i == selected,
+            p.fusions,
         ));
     }
     draw_popup("Fuse", PopupSize::Large, &rows, painter, m);

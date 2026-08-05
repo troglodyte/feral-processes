@@ -1,6 +1,7 @@
 //! Equipping, unequipping, and fusing gear.
 
 use super::support::*;
+use crate::tuning::MAX_FUSIONS;
 use crate::*;
 
 #[test]
@@ -335,6 +336,47 @@ fn fuse_item_rejects_non_equipment_and_insufficient_stock() {
     );
 }
 
+/// Gear shares `MAX_FUSIONS` with programs. The stock assertion is the
+/// point: it pins the ceiling check *above* the `Inventory::take` rather
+/// than below it, so a refused fusion spends nothing.
+#[test]
+fn fuse_item_refuses_at_the_ceiling_without_spending_copies() {
+    let core = ItemId::from(ids::OVERCLOCK_CORE);
+    let mut game = Game::new(203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    // Each fusion nets one copy, so five leaves two in hand at tier 3 —
+    // enough that the refusal below can only be the cap, never the stock.
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(core.clone(), 5);
+    for _ in 0..MAX_FUSIONS {
+        game.fuse_item(&core).unwrap();
+    }
+    assert_eq!(game.item_fusion_tier(&core), MAX_FUSIONS);
+
+    let err = game.fuse_item(&core).unwrap_err();
+
+    assert!(
+        err.contains("can't be fused again"),
+        "a maxed item should say so, got: {err}"
+    );
+    assert_eq!(
+        game.item_fusion_tier(&core),
+        MAX_FUSIONS,
+        "a refused fusion must not raise the tier"
+    );
+    assert_eq!(
+        game.player_status()
+            .inventory
+            .iter()
+            .find(|(i, _)| *i == core)
+            .map(|(_, q)| *q),
+        Some(2),
+        "a refused fusion must not consume copies"
+    );
+}
+
 #[test]
 fn fusing_a_worn_item_counts_it_and_upgrades_the_worn_copy_live() {
     let armor = ItemId::from(ids::ABLATIVE_PLATING);
@@ -462,6 +504,62 @@ fn item_fusion_tier_survives_save_and_load() {
     assert_eq!(
         loaded.item_fusion_tier(&ItemId::from(ids::OVERCLOCK_CORE)),
         1
+    );
+}
+
+/// Gear fusion was uncapped before `MAX_FUSIONS` applied to it, so a save
+/// can hold a tier above the ceiling. The ledger is clamped on load —
+/// but the *worn* copy is deliberately left alone, and that is what the
+/// last two assertions pin. `apply_equipment_delta` writes straight into
+/// `Stats` and the load path restores those numbers verbatim, so lowering
+/// the worn tier would make unequipping subtract a smaller bonus than was
+/// added and weld the difference into the player's base stats — an
+/// invisible buff from a change whose whole purpose is a nerf.
+#[test]
+fn loading_a_legacy_over_ceiling_tier_clamps_the_ledger_not_the_worn_copy() {
+    let assets = test_assets_dir();
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    let mut game = Game::new(204, DifficultyMode::Forgiving, &assets).unwrap();
+    let player = game.player_entity();
+    // Written directly: `fuse_item` now refuses this, which is the point.
+    game.world
+        .get_mut::<ItemFusions>(player)
+        .unwrap()
+        .tiers
+        .push((armor.clone(), MAX_FUSIONS + 2));
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(armor.clone(), 1);
+    game.equip(&armor).unwrap();
+    let def_before = game.player_status().def;
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_legacy_fusion_test_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        loaded.item_fusion_tier(&armor),
+        MAX_FUSIONS,
+        "the ledger governs future equips and fusions, so it takes the cap"
+    );
+    assert_eq!(
+        loaded
+            .world
+            .get::<Equipment>(loaded.player_entity())
+            .and_then(|e| e.get(EquipmentSlot::Armor))
+            .map(|e| e.fusion_tier),
+        Some(MAX_FUSIONS + 2),
+        "the worn copy keeps the tier its bonus was actually applied at"
+    );
+    assert_eq!(
+        loaded.player_status().def,
+        def_before,
+        "clamping must not silently restate what is already in Stats"
     );
 }
 

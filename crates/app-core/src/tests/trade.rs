@@ -167,6 +167,7 @@ fn escaping_the_program_sale_confirmation_sells_nothing() {
         level: 4,
         power: 62,
         payout: 6,
+        fusions: 0,
         activity: "in party".to_string(),
         detaches: vec!["leaves your battle party".to_string()],
     });
@@ -192,6 +193,7 @@ fn declining_the_program_sale_confirmation_sells_nothing() {
         level: 4,
         power: 62,
         payout: 6,
+        fusions: 0,
         activity: "idle".to_string(),
         detaches: Vec::new(),
     });

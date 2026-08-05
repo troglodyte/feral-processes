@@ -1,7 +1,7 @@
 # Ability catalogue
 
 Every shipped ability in feral-processes, charted from its own file in
-`assets/abilities/`. Forty-one of them.
+`assets/abilities/`. Forty-six of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
 `assets/abilities/*.ron` on 2026-08-05 and will drift the moment one of those
@@ -13,7 +13,7 @@ species grants nothing. The [research tree](research.md) teaches the rest.
 
 | | |
 |---|---|
-| abilities | 41 |
+| abilities | 46 |
 | effect shapes | 8 |
 | target shapes | 5 |
 | field routines (run outside battle) | 10 |
@@ -35,20 +35,26 @@ Patch           Single v1.0 (8), Single v2.0 (25), Single v3.0 (50), Party v1.0 
 Packet Shred    Single (16), Group v1.0 (6), Group v2.0 (10), Everyone (25)
 Hard Lock       Single v1.0 (0), Single v2.0 (0), Group (0), Everyone (0)
 Bit Rot         Single (2), Group (3), Everyone (2)
+Pipeline Stall  Single (7), Group (6), Everyone (6)
+Leech           Single (10), Group (6), Everyone (4)
+Fork Bomb       Single (9), Group (15), Everyone (8)
 Hyperthread     Single v1.0 (3), Single v2.0 (6), Party (3)
 Bastion         Single (3), Party (4)
-Pipeline Stall  Single (7), Everyone (6)
-Fork Bomb       Single (9), Group (15)
-Leech           Single (10), Group (6)
+Throttle        Group (-4), Everyone (-3)
+Etch            Group (-4), Everyone (-3)
 
-one of a kind: Ablative Layer, Coolant Flush, Decompile, Deep Scan, Etch, Flush Cache, Hardened Shell, Overclock, Repair Loop, Salvage Routine, Stealth Protocol, Throttle, Trace Analysis, Trickle Charge
+one of a kind: Ablative Layer, Coolant Flush, Decompile, Deep Scan, Flush Cache, Hardened Shell, Overclock, Repair Loop, Salvage Routine, Stealth Protocol, Trace Analysis, Trickle Charge
 ```
 
-The number in brackets is the effect's power. Read across a row and the
-scaling rule is visible: reaching wider costs magnitude, and a `v2.0` at the
-same scope is the straight upgrade. Nothing in the game names a routine after
-what it is *called* rather than what it *does* — which is why the id column
-exists at all, and why renaming an id never changes what a player reads.
+The number in brackets is the effect's power, and a `v2.0` at the same scope
+is the straight upgrade over its `v1.0`. Read across a row and reaching wider
+usually costs magnitude — Leech runs 10, 6, 4 — but read the whole block and
+two families break that on purpose: Packet Shred and Fork Bomb both peak away
+from Single, which is what marks them as the prizes of the set rather than
+ladders you climb. The honest comparison is the cost chart below, not this
+one. Nothing in the game names a routine after what it is *called* rather
+than what it *does* — which is why the id column exists at all, and why
+renaming an id never changes what a player reads.
 
 ## Who it hits against what it does
 
@@ -60,15 +66,15 @@ TARGET AGAINST EFFECT
 OneAlly                   .      .      3      3      .      4      .      .
 WholeParty                .      .      2      2      .      6      1      .
 OneEnemyGroupFront        3      3      .      .      1      .      .      1
-WholeEnemyGroup           3      2      2      .      1      .      .      .
-AllEnemies                2      2      .      .      .      .      .      .
+WholeEnemyGroup           4      2      2      .      1      .      .      .
+AllEnemies                3      2      2      .      1      .      .      .
 
-                          8      7      7      5      2     10      1      1
+                         10      7      9      5      3     10      1      1
 ```
 
 The grid is sparse on purpose. Heals and buffs point at allies, damage and
-debuffs point at enemies. The one crossing is `Buff` aimed at an enemy group —
-Etch and Throttle are buffs with **negative** power, so a sap is not a separate
+debuffs point at enemies. The one crossing is `Buff` aimed at enemies — Etch
+and Throttle are buffs with **negative** power, so a sap is not a separate
 effect shape but the same one run backwards. `Decompile` and `Cleanse` are one
 of a kind apiece: taming is an ability rather than a separate verb, and
 cleansing is the only routine that removes rather than adds.
@@ -82,7 +88,9 @@ cleansing is the only routine that removes rather than adds.
 | `fork_bomb` | Fork Bomb Group | WholeEnemyGroup | Damage | 15 | - | Bleed 35% 2r | 3 | 12 |
 | `packet_shred` | Packet Shred Group v2.0 | WholeEnemyGroup | Damage | 10 | - | - | 3 | 11 |
 | `stack_smash` | Fork Bomb Single | OneEnemyGroupFront | Damage | 9 | - | Bleed 60% 3r | 2 | 8 |
+| `pid_exhaustion` | Fork Bomb Everyone | AllEnemies | Damage | 8 | - | Bleed 20% 2r | 5 | 18 |
 | `pipeline_stall` | Pipeline Stall Single | OneEnemyGroupFront | Damage | 7 | - | Stun 40% 1r | 3 | 9 |
+| `branch_hazard` | Pipeline Stall Group | WholeEnemyGroup | Damage | 6 | - | Stun 30% 1r | 4 | 13 |
 | `bus_fault` | Pipeline Stall Everyone | AllEnemies | Damage | 6 | - | Stun 25% 1r | 5 | 18 |
 | `cascade_overflow` | Packet Shred Group v1.0 | WholeEnemyGroup | Damage | 6 | - | - | 2 | 8 |
 | `heap_corruption` | Bit Rot Group | WholeEnemyGroup | Debuff Bleed | 3 | 3 | - | 3 | 11 |
@@ -97,6 +105,8 @@ cleansing is the only routine that removes rather than adds.
 | `overclock_array` | Hyperthread Party | WholeParty | Buff Atk | 3 | 3 | - | 3 | 10 |
 | `priority_boost` | Hyperthread Single v1.0 | OneAlly | Buff Atk | 3 | 3 | - | 1 | - |
 | `sandbox` | Bastion Single | OneAlly | Buff Def | 3 | 3 | - | 1 | - |
+| `brownout` | Throttle Everyone | AllEnemies | Buff Atk | -3 | 3 | - | 5 | 16 |
+| `oxide_strip` | Etch Everyone | AllEnemies | Buff Def | -3 | 3 | - | 5 | 16 |
 | `etch` | Etch Group | WholeEnemyGroup | Buff Def | -4 | 3 | - | 3 | 10 |
 | `throttle` | Throttle Group | WholeEnemyGroup | Buff Atk | -4 | 3 | - | 3 | 10 |
 | `cold_boot` | Patch Single v3.0 | OneAlly | Heal | 50 | - | - | 5 | 15 |
@@ -106,6 +116,7 @@ cleansing is the only routine that removes rather than adds.
 | `mirror_restore` | Patch Party v1.0 | WholeParty | Heal | 8 | - | - | 2 | 10 |
 | `siphon_cycles` | Leech Single | OneEnemyGroupFront | Drain | 10 | - | - | 2 | 9 |
 | `leech_array` | Leech Group | WholeEnemyGroup | Drain | 6 | - | - | 4 | 13 |
+| `cycle_harvest` | Leech Everyone | AllEnemies | Drain | 4 | - | - | 5 | 17 |
 | `deep_scan` | Deep Scan Party | WholeParty | FieldBuff CaptureBoost | 20 | 100 | - | - | 18 |
 | `salvage_routine` | Salvage Routine Party | WholeParty | FieldBuff DropBoost | 20 | 100 | - | - | 18 |
 | `stealth_protocol` | Stealth Protocol Party | WholeParty | FieldBuff EncounterDamp | 20 | 90 | - | - | 18 |
@@ -131,6 +142,8 @@ Fork Bomb Single            9 / 8    ####################.......... 1.12
 Packet Shred Group v2.0    10 / 11   ################.............. 0.91
 Pipeline Stall Single       7 / 9    ##############................ 0.78
 Packet Shred Group v1.0     6 / 8    #############................. 0.75
+Pipeline Stall Group        6 / 13   ########...................... 0.46
+Fork Bomb Everyone          8 / 18   ########...................... 0.44
 Pipeline Stall Everyone     6 / 18   ######........................ 0.33
 ```
 
@@ -140,10 +153,13 @@ worth far less per cast than one halfway down that reaches five. Packet Shred
 Everyone leads on both counts at once, which is exactly why it is a boss
 routine and not something a player is ever taught.
 
-Within a family the rate is the honest signal. Packet Shred runs from 0.75 at
-Group v1.0 to 1.67 at Everyone, so the tiers are not merely wider — they are
-better per point as well, and the thing holding them back is what it takes to
-learn them rather than what they cost to cast.
+Within a family the rate is where reaching wider gets paid for, and it falls
+as the scope grows: Pipeline Stall runs 0.78, 0.46, 0.33 across its three
+tiers, and Fork Bomb drops from 1.25 at Group to 0.44 at Everyone. You buy
+reach with efficiency. Packet Shred is the one family that doesn't pay —
+0.75 at Group v1.0 rising to 1.67 at Everyone, better per point as well as
+wider — and the thing holding those tiers back is what it takes to learn them
+rather than what they cost to cast.
 
 Note the 5 routines that cost **nothing** — `deadlock`, `hot_patch`, `memory_leak`, `priority_boost`, `sandbox`.
 Those are the starters, the ones a species grants at level 1 and the fallback

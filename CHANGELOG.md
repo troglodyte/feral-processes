@@ -13,6 +13,40 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Five routines that fill the holes in the ability families
+
+Charting the abilities made a gap visible that a directory listing never
+could: the files are named for flavour, so nothing about `bus_fault` sitting
+in `assets/abilities/` says it is the Pipeline Stall family reaching the
+whole field with nothing between it and one target. Six families had holes
+like that. Five new routines close the wide ones:
+
+| Routine | Reaches | Does |
+|---|---|---|
+| Pipeline Stall Group | one group | 6 damage, 30% chance to lock up |
+| Fork Bomb Everyone | the field | 8 damage, 20% chance to leave bleeding |
+| Leech Everyone | the field | 4 damage, a fifth of it back to you |
+| Etch Everyone | the field | −3 DEF for 3 rounds |
+| Throttle Everyone | the field | −3 ATK for 3 rounds |
+
+Every one is hunt-only, like every routine already in its family — the way
+to get them is to meet a wild program running one and decompile it rather
+than kill it. That takes the hunt-only set from twenty to twenty-five.
+
+The magnitudes are not new judgement calls. The shipped set already charges
+a consistent price per scope — Single costs 8–10 Fatigue on a 2–3 round
+cooldown, Group 11–13 on 3–4, Everyone 15–18 on 5 — and rider chances
+already decay as the scope widens, 60% at Fork Bomb Single down to 35% at
+Group. Each new routine reads off that ladder, sits below its own family's
+Group tier on magnitude and above it on cost. Packet Shred Everyone stays
+the one routine that gets better per point as it gets wider, which is the
+whole reason it is a boss routine no player is taught.
+
+`no_ability_family_reaches_everyone_without_reaching_group` is what found
+the Pipeline Stall hole and what will find the next one, and
+`every_everyone_scope_routine_pays_the_everyone_tier_price` pins the ladder
+the magnitudes were derived against — nothing gated it before.
+
 ### A charted stat sheet for every content directory
 
 `docs/roster.md` now has six siblings, one per remaining moddable directory
@@ -27,8 +61,8 @@ prices each node by its whole chain, which is how the six end-of-branch nodes
 turn out to carry more in prerequisites than the dearest single node costs.
 The structures page derives the four production lines from which item feeds
 which. The abilities page reads the naming scheme back out of the display
-names — an id is flavour, a name is a spec — and finds nine families at
-three or four scopes each. The achievements page shows the ladder spending
+names — an id is flavour, a name is a spec — and finds eleven families at
+two to four scopes each. The achievements page shows the ladder spending
 its Perk Point ceiling exactly, 5 of 5, so a fourteenth rung paying points
 has nowhere to go.
 

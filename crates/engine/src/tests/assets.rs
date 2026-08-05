@@ -544,7 +544,10 @@ fn no_ability_family_reaches_everyone_without_reaching_group() {
         .resource::<crate::abilities::AbilityDb>()
         .all()
         .collect();
-    for def in defs.iter().filter(|d| d.target == AbilityTarget::AllEnemies) {
+    for def in defs
+        .iter()
+        .filter(|d| d.target == AbilityTarget::AllEnemies)
+    {
         let fam = family(def);
         assert!(
             defs.iter()

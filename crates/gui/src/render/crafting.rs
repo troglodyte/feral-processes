@@ -81,11 +81,6 @@ pub(super) fn draw_craft_quantity(
 /// popup body ends at the *last* Item and pins whatever follows as a footer,
 /// so a step drawn as Text would stay on screen while the list scrolled past
 /// the product it belongs to.
-///
-/// Columns are padded per chain rather than across the whole screen. A single
-/// global width would push a Mining Node's one-word line out past the longest
-/// row in the game, and the thing worth reading at a glance is one chain's
-/// arrows lining up, not every chain's.
 pub(super) fn draw_recipes(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
     let chains = game.recipe_chains();
     let mut rows = vec![
@@ -102,27 +97,8 @@ pub(super) fn draw_recipes(game: &mut Game, selected: usize, painter: &Painter, 
             i == selected,
             TEXT,
         ));
-        let cells: Vec<(String, &str)> = chain
-            .steps
-            .iter()
-            .map(|s| (inputs_text(s), s.maker.as_deref().unwrap_or("by hand")))
-            .collect();
-        let in_w = cells
-            .iter()
-            .map(|(a, _)| a.chars().count())
-            .max()
-            .unwrap_or(0);
-        let maker_w = cells
-            .iter()
-            .map(|(_, b)| b.chars().count())
-            .max()
-            .unwrap_or(0);
-        for ((inputs, maker), step) in cells.iter().zip(&chain.steps) {
-            rows.push(colored_item_row(
-                format!("  {inputs:in_w$} -> {maker:maker_w$} -> {}", step.output),
-                false,
-                TEXT_DIM,
-            ));
+        for line in chain_rows(chain) {
+            rows.push(colored_item_row(line, false, TEXT_DIM));
         }
         rows.push(colored_item_row("", false, TEXT_DIM));
     }
@@ -130,15 +106,121 @@ pub(super) fn draw_recipes(game: &mut Game, selected: usize, painter: &Painter, 
     draw_popup("Recipes", PopupSize::Large, &rows, painter, m);
 }
 
+/// One chain's step lines, arrow columns aligned.
+///
+/// Columns are padded per chain rather than across the whole screen. A single
+/// global width would push a Mining Node's one-word line out past the longest
+/// row in the game, and the thing worth reading at a glance is one chain's
+/// arrows lining up, not every chain's.
+///
+/// Split out of `draw_recipes` so the width these rows reach is measurable
+/// without a window — `draw_row` clamps a row vertically and nothing clamps
+/// it horizontally, so an over-wide row runs off the popup and takes the
+/// product of the deepest chain in the game with it. See
+/// `the_widest_recipe_row_fits_the_popup_it_is_drawn_in`.
+fn chain_rows(chain: &RecipeChain) -> Vec<String> {
+    let cells: Vec<(String, &str)> = chain
+        .steps
+        .iter()
+        .map(|s| (inputs_text(s), s.maker.as_deref().unwrap_or("by hand")))
+        .collect();
+    let in_w = cells
+        .iter()
+        .map(|(a, _)| a.chars().count())
+        .max()
+        .unwrap_or(0);
+    let maker_w = cells
+        .iter()
+        .map(|(_, b)| b.chars().count())
+        .max()
+        .unwrap_or(0);
+    cells
+        .iter()
+        .zip(&chain.steps)
+        .map(|((inputs, maker), step)| {
+            format!(
+                "  {inputs:in_w$} -> {maker:maker_w$} -> {}",
+                output_text(step)
+            )
+        })
+        .collect()
+}
+
 /// A step's ingredient list. An extractor has none — it is a tap, and saying
 /// so beats an empty column the eye reads as a missing value.
+///
+/// An ingredient no recipe makes leads with the structure that taps it, so a
+/// chain read top to bottom is the build order: `Mining Node (Core Fragment
+/// x4) -> Lathe` is the whole answer to "what do I put down to get one".
+/// Which ingredients earn that prefix is `RecipeInput::source`'s call, not
+/// this function's.
 fn inputs_text(step: &RecipeStep) -> String {
     if step.inputs.is_empty() {
         return "(nothing)".to_string();
     }
     step.inputs
         .iter()
-        .map(|(name, qty)| format!("{name} x{qty}"))
+        .map(|i| match &i.source {
+            Some(tap) => format!("{tap} ({} x{})", i.item, i.qty),
+            None => format!("{} x{}", i.item, i.qty),
+        })
         .collect::<Vec<_>>()
         .join(" + ")
+}
+
+/// A step's product, quantified where the game will stand behind the number.
+/// The suffix is what marks the column as an item rather than another
+/// structure; a tap has no fixed yield to quote and so goes bare.
+fn output_text(step: &RecipeStep) -> String {
+    match step.output_qty {
+        Some(qty) => format!("{} x{qty}", step.output),
+        None => step.output.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::paint::with_painter;
+    use crate::text::ui_metrics;
+    use feral_processes_engine::DifficultyMode;
+
+    /// `draw_row` clamps a row vertically and nothing clamps it horizontally,
+    /// so a Recipes row wider than its popup silently runs off the right edge
+    /// — taking the product column, the one thing every row exists to name.
+    ///
+    /// Measured against the real shipped assets rather than a fixture: what
+    /// sets the width is the longest ingredient list plus the longest
+    /// structure name in the game, and a fixture would go stale the first
+    /// time either moved. `with_painter`'s 1440x900 is the geometry
+    /// `ui_metrics` is calibrated against (`REFERENCE_HEIGHT`), so the font
+    /// here is the unscaled body size.
+    #[test]
+    fn the_widest_recipe_row_fits_the_popup_it_is_drawn_in() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
+
+        let widest = game
+            .recipe_chains()
+            .iter()
+            .flat_map(chain_rows)
+            // `draw_row` prefixes every `Row::Item` with two spaces of its
+            // own, which are as much of the drawn line as the text is.
+            .map(|line| format!("  {line}"))
+            .max_by_key(|line| line.chars().count())
+            .expect("the shipped assets declare chains");
+
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            let popup_w = 1440.0 * 0.88;
+            let drawn = p.measure_ui_advance(&widest, m.font_size);
+            let room = popup_w - m.pad * 2.0;
+            assert!(
+                drawn <= room,
+                "the widest Recipes row overflows its popup by {:.0}px \
+                 ({drawn:.0} drawn into {room:.0} of room):\n{widest}",
+                drawn - room
+            );
+        })
+    }
 }

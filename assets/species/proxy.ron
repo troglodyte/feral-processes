@@ -1,6 +1,6 @@
 (
-    id: "phantom",
-    name: "Phantom",
+    id: "proxy",
+    name: "Proxy",
     glyph: 'p',
     color: DarkGreen,
     base_hp: 82,

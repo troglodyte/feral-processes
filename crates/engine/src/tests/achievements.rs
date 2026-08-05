@@ -348,7 +348,7 @@ fn a_starting_program_naming_an_unknown_species_warns_and_pays_nothing() {
         "ghost_program",
         r#"(
             id: "ghost_program",
-            name: "Ghost Program",
+            name: "ZeroDay Program",
             description: "d",
             trigger: ZoneReached(2),
             reward: StartingProgram("no_such_species"),

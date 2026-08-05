@@ -712,9 +712,9 @@ discount is what the research investment buys you.
 | --- | --- | --- | --- | --- |
 | Overclock Core | Weapon | +3 Attack | 6 Portal Fragments, at a Fabricator | Scrapper, Construct, Trojan |
 | Monofilament Whip | Weapon | +4 Attack | 12 Portal Fragments, at a Fabricator | Wintermute (boss) |
-| Firewall Plating | Armor | +3 Defense | 6 Portal Fragments, at an Armory | Wraith, Sentinel |
+| Firewall Plating | Armor | +3 Defense | 6 Portal Fragments, at an Armory | Crawler, Sentinel |
 | Ablative Plating | Armor | +4 Defense | 12 Portal Fragments, at an Armory | Rootkit |
-| Neural Amplifier | Module | +2 Decompiler | 6 Portal Fragments, at a Fabricator | Virus, Phantom, Ghost, Overseer |
+| Neural Amplifier | Module | +2 Decompiler | 6 Portal Fragments, at a Fabricator | Virus, Proxy, ZeroDay, Overseer |
 | Cortex Hack | Module | +3 Decompiler | 12 Portal Fragments, at a Fabricator | Cipher |
 
 **Route 2 — the open catalog.** The other 25 declare their own recipe in
@@ -733,7 +733,7 @@ before you have a base worth the name.
 | Kinetic Edge | Weapon | +2 Attack | 7 Core Fragments | SubProcess, Glitch |
 | Scrap Ward | Armor | +1 Defense | 4 Core Fragments | Glitch, Sprite |
 | Packet Buffer | Armor | +2 Defense | 7 Core Fragments | Drone, SubProcess |
-| Probe Daemon | Module | +1 Decompiler | 5 Core Fragments | Sprite, Glitch |
+| Probe Service | Module | +1 Decompiler | 5 Core Fragments | Sprite, Glitch |
 | Handshake Forge | Module | +2 Decompiler | 8 Core Fragments | Drone, SubProcess |
 
 **Standard tier** — needs the bench. Weapons are paid in Core Fragments;
@@ -747,14 +747,14 @@ covering a weakness.
 | Item | Slot | Base bonus | Compiled for | Drops from |
 | --- | --- | --- | --- | --- |
 | Arc Lance | Weapon | +3 Attack | 12 Core Fragments, at a Fabricator | Scrapper, Worm |
-| Recursion Blade | Weapon | +2 Attack, +1 Defense | 14 Core Fragments, at a Fabricator | Trojan, Phantom |
-| Daemon Fang | Weapon | +2 Attack, +1 Decompiler | 14 Core Fragments, at a Fabricator | Worm, Scrapper |
-| Hardened Shell | Armor | +3 Defense | 2 Bytecode Blocks + 2 Charge Coils, at an Armory *(or assembled by one)* | Wraith, Sentinel |
-| Null Weave | Armor | +2 Defense, +1 Attack | 3 Bytecode Blocks + 1 Charge Coil, at an Armory | Phantom, Trojan |
-| Static Mesh | Armor | +2 Defense, +1 Decompiler | 2 Bytecode Blocks + 1 Charge Coil + 1 Logic Wafer, at an Armory | Wraith, Worm |
-| Trace Sniffer | Module | +3 Decompiler | 3 Logic Wafers + 2 Charge Coils, at a Fabricator *(or assembled by one)* | Phantom, Ghost |
+| Recursion Blade | Weapon | +2 Attack, +1 Defense | 14 Core Fragments, at a Fabricator | Trojan, Proxy |
+| Shim Blade | Weapon | +2 Attack, +1 Decompiler | 14 Core Fragments, at a Fabricator | Worm, Scrapper |
+| Hardened Shell | Armor | +3 Defense | 2 Bytecode Blocks + 2 Charge Coils, at an Armory *(or assembled by one)* | Crawler, Sentinel |
+| Null Weave | Armor | +2 Defense, +1 Attack | 3 Bytecode Blocks + 1 Charge Coil, at an Armory | Proxy, Trojan |
+| Static Mesh | Armor | +2 Defense, +1 Decompiler | 2 Bytecode Blocks + 1 Charge Coil + 1 Logic Wafer, at an Armory | Crawler, Worm |
+| Trace Sniffer | Module | +3 Decompiler | 3 Logic Wafers + 2 Charge Coils, at a Fabricator *(or assembled by one)* | Proxy, ZeroDay |
 | Logic Probe | Module | +2 Decompiler, +1 Attack | 3 Logic Wafers + 1 Charge Coil + 1 Bytecode Block, at a Fabricator | Trojan, Scrapper |
-| Entropy Damper | Module | +2 Decompiler, +1 Defense | 2 Logic Wafers + 3 Charge Coils, at a Fabricator | Wraith, Phantom |
+| Entropy Damper | Module | +2 Decompiler, +1 Defense | 2 Logic Wafers + 3 Charge Coils, at a Fabricator | Crawler, Proxy |
 | Sync Governor | Module | +1 Attack, +1 Defense, +1 Decompiler | 2 Logic Wafers + 2 Charge Coils + 1 Bytecode Block, at a Fabricator | Worm, Trojan |
 
 **Premium tier** — needs the bench and Portal Fragments, so it competes with
@@ -769,8 +769,8 @@ Hard species and bosses.
 | Black ICE Pick | Weapon | +3 Attack, +2 Decompiler | 18 Portal Fragments, at a Fabricator | Cipher, Rootkit |
 | Siege Compiler | Weapon | +3 Attack, +2 Defense | 18 Portal Fragments, at a Fabricator | Construct, Sentinel |
 | Bastion Lattice | Armor | +4 Defense | 12 Portal Fragments + 4 Bytecode Blocks + 2 Charge Coils, at an Armory | Sentinel, Rootkit |
-| Phase Carapace | Armor | +3 Defense, +2 Attack | 14 Portal Fragments + 5 Bytecode Blocks + 1 Charge Coil, at an Armory | Ghost, Virus |
-| Wraithsteel Plate | Armor | +3 Defense, +2 Decompiler | 14 Portal Fragments + 3 Bytecode Blocks + 1 Charge Coil + 2 Logic Wafers, at an Armory | Ghost, Cipher |
+| Phase Carapace | Armor | +3 Defense, +2 Attack | 14 Portal Fragments + 5 Bytecode Blocks + 1 Charge Coil, at an Armory | ZeroDay, Virus |
+| Nullsteel Plate | Armor | +3 Defense, +2 Decompiler | 14 Portal Fragments + 3 Bytecode Blocks + 1 Charge Coil + 2 Logic Wafers, at an Armory | ZeroDay, Cipher |
 | Kernel Key | Module | +4 Decompiler | 12 Portal Fragments + 5 Logic Wafers + 2 Charge Coils, at a Fabricator | Cipher, Virus |
 | Oracle Core | Module | +3 Decompiler, +2 Attack | 14 Portal Fragments + 4 Logic Wafers + 1 Charge Coil + 2 Bytecode Blocks, at a Fabricator | Overseer (boss), Rootkit |
 | Singularity Matrix | Module | +3 Attack, +3 Defense, +3 Decompiler | 20 Portal Fragments + 3 Logic Wafers + 3 Charge Coils + 2 Bytecode Blocks, at a Fabricator | Wintermute (boss), Overseer (boss) |
@@ -1032,15 +1032,15 @@ the same whichever program you assign.
 | Drone (`o`) | Easy | OpenGrid, Mainframe | Core Fragments |
 | SubProcess (`d`) | Easy/Medium | OpenGrid, NullSector | Core Fragments |
 | Scrapper (`x`) | Medium | OpenGrid, NullSector | Core Fragments |
-| Wraith (`w`) | Medium | StaticField | — |
-| Phantom (`p`) | Medium | Mainframe, StaticField | — |
+| Crawler (`w`) | Medium | StaticField | — |
+| Proxy (`p`) | Medium | Mainframe, StaticField | — |
 | Trojan (`t`) | Medium | Mainframe, OpenGrid | — |
 | Worm (`m`) | Medium | NullSector, OpenGrid | Core Fragments |
 | Virus (`v`) | Hard | NullSector, Mainframe | Core Fragments |
 | Construct (`C`) | Hard | Mainframe | Core Fragments |
 | Sentinel (`S`) | Hard | StaticField | — |
 | Rootkit (`k`) | Hard | Mainframe, NullSector | — |
-| Ghost (`h`) | Hard | StaticField, NullSector | — |
+| ZeroDay (`h`) | Hard | StaticField, NullSector | — |
 | Cipher (`c`) | Hard | Mainframe, StaticField | — |
 | Overseer (`B`) — **boss** | Very Hard | OpenGrid, Mainframe, NullSector, StaticField | — |
 | Wintermute (`W`) — **boss** | Very Hard | OpenGrid, Mainframe, NullSector, StaticField | — |
@@ -1057,11 +1057,11 @@ damage, shown bracketed on the intrusion screen (e.g. `[Bleeding (2)]`).
 **Bleeding** deals extra damage at the end of every round it's active;
 **Stunned** costs the afflicted side (you, your companion, or the wild
 program) their next action. Only one condition is active at a time — a
-fresh one overwrites whatever was there. Wraith's Freeze, Construct's
+fresh one overwrites whatever was there. Crawler's Freeze, Construct's
 Lockdown, Sentinel's Lockout, Trojan's Backdoor Access, Rootkit's Privilege
 Escalation, Cipher's Encrypt, the Overseer's Kernel Panic, and Wintermute's
-Absolute Authority can stun; Wraith's, Virus's, SubProcess's Fork Bomb,
-Worm's Replicate, Ghost's Haunt, the Overseer's Purge, and Wintermute's
+Absolute Authority can stun; Crawler's, Virus's, SubProcess's Fork Bomb,
+Worm's Replicate, ZeroDay's Fray, the Overseer's Purge, and Wintermute's
 Cascade Logic can cause bleeding.
 
 ### Bosses
@@ -1080,7 +1080,7 @@ species file (see `assets/species/README.md`).
 Some species build **nests** — an `N` on the map, in that species' color,
 surrounded by a cluster of its own kind. A wild program of a nesting
 species occasionally spawns one instead of spawning alone; Scrapper,
-Wraith, Trojan, and Worm nest in the base roster (`can_nest: true` in a
+Crawler, Trojan, and Worm nest in the base roster (`can_nest: true` in a
 species file).
 
 - A fresh nest comes with **2–5 guardians**, which behave like ordinary

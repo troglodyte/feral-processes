@@ -281,12 +281,12 @@ mod tests {
     fn a_node_unlocking_an_unknown_structure_is_skipped_with_a_warning() {
         let bad = r#"(
             id: "ghost_bench",
-            name: "Ghost Bench",
+            name: "ZeroDay Bench",
             description: "Unlocks a structure that does not exist.",
             cost: 5,
             unlocks_structures: ["not_a_structure"],
         )"#;
-        let (db, warnings) = load("ghost", &[("ghost_bench", bad)]);
+        let (db, warnings) = load("zero_day", &[("ghost_bench", bad)]);
         assert!(db.get("ghost_bench").is_none());
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("not_a_structure"));
@@ -296,7 +296,7 @@ mod tests {
     fn removing_an_invalid_node_also_removes_whatever_depended_on_it() {
         let bad = r#"(
             id: "ghost_bench",
-            name: "Ghost Bench",
+            name: "ZeroDay Bench",
             description: "Unlocks a structure that does not exist.",
             cost: 5,
             unlocks_structures: ["not_a_structure"],

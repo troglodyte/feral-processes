@@ -192,7 +192,7 @@ impl Game {
         //
         // Read *after* the gate above has had its say, deliberately: the
         // colour then means "it reached for the effect this turn", not "this
-        // move theoretically has one". Taken before the gate, a Wraith would
+        // move theoretically has one". Taken before the gate, a Crawler would
         // read as a special on every swing while the condition landed on
         // barely one in ten of them.
         let kind = if mv.effect.is_some() {

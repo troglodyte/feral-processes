@@ -421,7 +421,7 @@ fn a_mixed_swarm_fights_as_four_groups_of_a_hundred() {
     let (x, y) = (spawn.x + 500, spawn.y);
 
     let mut cluster = Vec::new();
-    for species in ["glitch", "scrapper", "drone", "sprite", "ghost"] {
+    for species in ["glitch", "scrapper", "drone", "sprite", "zero_day"] {
         for i in 0..105 {
             cluster.push(game.spawn_wild_creature(species, x, y + i % 5).unwrap());
         }

@@ -23,6 +23,27 @@ fn locale(game: &Game) -> Locale {
     game.locale()
 }
 
+/// Walking in the Stack rolls for an ambush (`Game::maybe_stack_encounter`),
+/// and an open battle refuses every later step. Tests about doors, seals and
+/// backing up are not about ambushes, so they shake one off and carry on —
+/// otherwise their fixture silently stops moving and the assertion reads as a
+/// broken door rather than an interrupted walk. Which step draws an ambush is
+/// a property of the seed and of how much `GameRng` everything before it
+/// spent, so it moves whenever content is added or an id is renamed.
+fn step_forward_clear(game: &mut Game) {
+    game.step_forward();
+    if game.has_active_battle() {
+        flee_until_clear(game);
+    }
+}
+
+fn step_back_clear(game: &mut Game) {
+    game.step_back();
+    if game.has_active_battle() {
+        flee_until_clear(game);
+    }
+}
+
 fn cell_at(game: &Game, x: i32, y: i32) -> CellKind {
     game.world
         .resource::<CurrentStack>()
@@ -213,8 +234,8 @@ fn backing_up_retreats_without_turning_round() {
         unreachable!()
     };
 
-    game.step_forward();
-    game.step_back();
+    step_forward_clear(&mut game);
+    step_back_clear(&mut game);
 
     let Locale::Stack {
         x: nx,
@@ -1483,8 +1504,8 @@ fn outlast_the_guardian(game: &mut Game) {
 fn walk_into_the_lair(game: &mut Game) -> (i32, i32) {
     let lair = stand_before_the_lair(game);
     give_shards(game, 1);
-    game.step_forward(); // through the seal
-    game.step_forward(); // into the lair
+    step_forward_clear(game); // through the seal, shaking off any ambush
+    game.step_forward(); // into the lair — this fight is the point
     lair
 }
 
@@ -1796,12 +1817,12 @@ fn a_door_once_opened_stays_open() {
     descend(&mut game);
     stand_before_the_lair(&mut game);
     give_shards(&mut game, 1);
-    game.step_forward();
+    step_forward_clear(&mut game);
     assert_eq!(shards(&game), 0);
 
-    game.step_back();
+    step_back_clear(&mut game);
     let before = locale(&game);
-    game.step_forward();
+    step_forward_clear(&mut game);
 
     assert_ne!(locale(&game), before, "the door sealed itself behind us");
     assert_eq!(shards(&game), 0, "a second shard was charged");

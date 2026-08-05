@@ -313,10 +313,19 @@ fn the_zone_one_opening_ring_only_rolls_species_a_fresh_player_can_beat() {
         }
     }
 
+    // Nest guardians are excluded because their tile is not their roll: a
+    // nest is placed by one ring-filtered pick at *its* tile and then
+    // scatters guardians across `NEST_TETHER_RADIUS`, so a worm nest rolled
+    // legitimately at distance 11 puts worms as far in as distance 6. Those
+    // guardians never went through `habitat_pools` at the tile they stand
+    // on, which is exactly the "born there" versus "stands there"
+    // distinction this test's doc draws — sweeping them in asserts the rule
+    // against creatures it was never meant to cover, and whether that fires
+    // is down to which seed happens to roll a nest near the boundary.
     let placed: Vec<(String, Position, i32)> = {
         let mut query = game
             .world
-            .query_filtered::<(&Creature, &Position), With<Hostile>>();
+            .query_filtered::<(&Creature, &Position), (With<Hostile>, Without<NestGuardian>)>();
         query
             .iter(&game.world)
             .map(|(c, p)| {

@@ -184,7 +184,7 @@ fn installed_routines_survive_a_save_load_round_trip() {
 
 /// Regression for M14: a save can name an ability id the currently loaded
 /// `AbilityDb` no longer has (the mod that added it was uninstalled). Left
-/// unfiltered, that id would survive into `Routines` as a ghost
+/// unfiltered, that id would survive into `Routines` as a zero_day
 /// `routine_view` renders `(empty)` but `installed.len()` still counts
 /// against the slot cap — a slot the panel calls free that can never
 /// actually be filled again.
@@ -198,7 +198,7 @@ fn a_routine_naming_a_since_removed_ability_is_dropped_on_load_with_a_warning() 
     copy_shipped_assets(&dir, &[]);
     let ghost_ability = r#"(
         id: "ghost_ability",
-        name: "Ghost Ability",
+        name: "ZeroDay Ability",
         description: "d",
         target: OneAlly,
         effect: Heal(power: 1),
@@ -231,7 +231,7 @@ fn a_routine_naming_a_since_removed_ability_is_dropped_on_load_with_a_warning() 
             .actor_abilities(player)
             .iter()
             .all(|a| a.id != "ghost_ability"),
-        "the ghost id must not survive the load"
+        "the zero_day id must not survive the load"
     );
     assert!(
         loaded
@@ -243,12 +243,12 @@ fn a_routine_naming_a_since_removed_ability_is_dropped_on_load_with_a_warning() 
     );
 
     // The freed slot must be genuinely usable, not still counted against the
-    // cap by a ghost entry the panel can no longer even show.
+    // cap by a zero_day entry the panel can no longer even show.
     teach_routine(&mut loaded, "priority_boost");
     give_disks(&mut loaded, 1);
     loaded
         .install_routine(player, "priority_boost")
-        .expect("the slot the ghost vacated must accept a real routine");
+        .expect("the slot the zero_day vacated must accept a real routine");
 
     let _ = std::fs::remove_dir_all(&dir);
 }

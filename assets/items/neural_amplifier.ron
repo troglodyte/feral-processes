@@ -4,5 +4,5 @@
     description: "Researched module. Amplifies the signal a decompile rides in on.",
     value: Some(20),
     equipment: Some((Module, (decompiler: 2))),
-    droppable: Some([("ghost", 0.3), ("overseer", 0.5), ("phantom", 0.3), ("virus", 0.25)]),
+    droppable: Some([("zero_day", 0.3), ("overseer", 0.5), ("proxy", 0.3), ("virus", 0.25)]),
 )

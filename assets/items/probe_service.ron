@@ -1,6 +1,6 @@
 (
-    id: "probe_daemon",
-    name: "Probe Daemon",
+    id: "probe_service",
+    name: "Probe Service",
     description: "Scavenged module. A small edge on decompile odds.",
     value: Some(5),
     equipment: Some((Module, (decompiler: 1))),

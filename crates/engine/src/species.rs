@@ -553,7 +553,7 @@ mod tests {
             .collect();
         let mut nesting = nesting;
         nesting.sort();
-        assert_eq!(nesting, vec!["scrapper", "trojan", "worm", "wraith"]);
+        assert_eq!(nesting, vec!["crawler", "scrapper", "trojan", "worm"]);
 
         // No boss should ever be nest-eligible, regardless of this flag —
         // try_spawn_habitat_creature only rolls a nest for the non-boss

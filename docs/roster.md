@@ -17,7 +17,7 @@ shows up green or red on your map. Every table below is in POW order.
 |---|---|
 | species | 17 |
 | bosses | 2 (Wintermute, Overseer) |
-| nest builders | 4 (Scrapper, Trojan, Worm, Wraith) |
+| nest builders | 4 (Scrapper, Trojan, Worm, Crawler) |
 | work yields | 8 — 7 `core_fragment`, 1 `power_cell` |
 | HP span | 36 (Glitch) to 200 (Wintermute) |
 | speed span | 6 (Construct) to 14 (Sprite); the player rolls from 11 |
@@ -33,12 +33,12 @@ shows up green or red on your map. Every table below is in POW order.
 | `k` | Rootkit | 120 | 11 | 10 | 9 | 141 | 0.75 | x1.50 |
 | `c` | Cipher | 112 | 10 | 8 | 11 | 130 | 0.80 | x1.50 |
 | `v` | Virus | 112 | 10 | 6 | 10 | 128 | 0.60 | x1.50 |
-| `h` | Ghost | 98 | 14 | 4 | 10 | 116 | 0.65 | x1.50 |
+| `z` | ZeroDay | 98 | 14 | 4 | 10 | 116 | 0.65 | x1.50 |
 | `m` | Worm | 105 | 8 | 2 | 9 | 115 | 0.40 | x1.25 |
 | `x` | Scrapper | 98 | 9 | 5 | 9 | 112 | 0.45 | x1.25 |
 | `t` | Trojan | 90 | 10 | 4 | 10 | 104 | 0.50 | x1.25 |
-| `p` | Phantom | 82 | 12 | 2 | 12 | 96 | 0.55 | x1.25 |
-| `w` | Wraith | 75 | 8 | 4 | 11 | 87 | 0.50 | x1.25 |
+| `p` | Proxy | 82 | 12 | 2 | 12 | 96 | 0.55 | x1.25 |
+| `r` | Crawler | 75 | 8 | 4 | 11 | 87 | 0.50 | x1.25 |
 | `d` | SubProcess | 54 | 5 | 3 | 12 | 62 | 0.30 | x1.00 |
 | `s` | Sprite | 48 | 4 | 2 | 14 | 54 | 0.20 | x1.00 |
 | `o` | Drone | 42 | 3 | 2 | 13 | 47 | 0.15 | x1.00 |
@@ -67,7 +67,7 @@ BASE DEF
  7 ||       |       |       |       |       |
  6 |+ - - - + - - - + - v - + - - - + - - - +
  5 ||       |       | x     |       |       |
- 4 ||       |       w   t   |   h   |       |
+ 4 ||       |       r   t   |   z   |       |
  3 |+ - - - + d - - + - - - + - - - + - - - +
  2 ||     o s       m       p       |       |
  1 ||     g |       |       |       |       |
@@ -79,7 +79,7 @@ BASE DEF
 
 Five species pile up at ATK 10-11 — Cipher, Construct, Rootkit, Virus and
 Trojan. What separates them is entirely HP and DEF, which is what the profiles
-below are for. Ghost is the roster's outlier: ATK 14 on DEF 4, the highest
+below are for. ZeroDay is the roster's outlier: ATK 14 on DEF 4, the highest
 attack outside a boss carried on almost nothing.
 
 ## Stat profiles
@@ -98,12 +98,12 @@ Construct  128  █████████████████████�
 Rootkit    120  ██████████████████████████··················
 Cipher     112  █████████████████████████···················
 Virus      112  █████████████████████████···················
-Ghost       98  ██████████████████████······················
+ZeroDay     98  ██████████████████████······················
 Worm       105  ███████████████████████·····················
 Scrapper    98  ██████████████████████······················
 Trojan      90  ████████████████████························
-Phantom     82  ██████████████████··························
-Wraith      75  ████████████████····························
+Proxy       82  ██████████████████··························
+Crawler     75  ████████████████····························
 SubProcess  54  ████████████································
 Sprite      48  ███████████·································
 Drone       42  █████████···································
@@ -120,12 +120,12 @@ Construct   11  █████████████████████�
 Rootkit     11  █████████████████████████···················
 Cipher      10  ███████████████████████·····················
 Virus       10  ███████████████████████·····················
-Ghost       14  ████████████████████████████████············
+ZeroDay     14  ████████████████████████████████············
 Worm         8  ███████████████████·························
 Scrapper     9  █████████████████████·······················
 Trojan      10  ███████████████████████·····················
-Phantom     12  ████████████████████████████················
-Wraith       8  ███████████████████·························
+Proxy       12  ████████████████████████████················
+Crawler      8  ███████████████████·························
 SubProcess   5  ████████████································
 Sprite       4  █████████···································
 Drone        3  ███████·····································
@@ -142,12 +142,12 @@ Construct    9  █████████████████████�
 Rootkit     10  ██████████████████████████··················
 Cipher       8  █████████████████████·······················
 Virus        6  ████████████████····························
-Ghost        4  ██████████··································
+ZeroDay      4  ██████████··································
 Worm         2  █████·······································
 Scrapper     5  █████████████·······························
 Trojan       4  ██████████··································
-Phantom      2  █████·······································
-Wraith       4  ██████████··································
+Proxy        2  █████·······································
+Crawler      4  ██████████··································
 SubProcess   3  ████████····································
 Sprite       2  █████·······································
 Drone        2  █████·······································
@@ -159,9 +159,9 @@ BASE SPEED
 
 14  Sprite
 13  Wintermute, Drone, Glitch
-12  Overseer, Phantom, SubProcess
-11  Cipher, Wraith   <- the player rolls from here
-10  Virus, Ghost, Trojan
+12  Overseer, Proxy, SubProcess
+11  Cipher, Crawler   <- the player rolls from here
+10  Virus, ZeroDay, Trojan
  9  Rootkit, Worm, Scrapper
  8  -
  7  Sentinel
@@ -185,8 +185,8 @@ exact position.
 ```
 GROWTH
 x2.00  |                                      B  W
-x1.50  |                        v Sh C k c
-x1.25  |              m  x tw p
+x1.50  |                        v Sz C k c
+x1.25  |              m  x tr p
 x1.00  |  og s    d
        +--------------------------------------------
         0.10            0.55               0.95
@@ -212,12 +212,12 @@ is exactly what keeps a player's base free of wild spawns.
 | `k` | Rootkit | . | # | # | . | - |
 | `c` | Cipher | . | # | . | # | - |
 | `v` | Virus | . | # | # | . | `core_fragment` |
-| `h` | Ghost | . | . | # | # | - |
+| `z` | ZeroDay | . | . | # | # | - |
 | `m` | Worm | # | . | # | . | `core_fragment` |
 | `x` | Scrapper | # | . | # | . | `core_fragment` |
 | `t` | Trojan | # | # | . | . | - |
-| `p` | Phantom | . | # | . | # | - |
-| `w` | Wraith | . | . | . | # | - |
+| `p` | Proxy | . | # | . | # | - |
+| `r` | Crawler | . | . | . | # | - |
 | `d` | SubProcess | # | . | # | . | `core_fragment` |
 | `s` | Sprite | # | # | . | . | `core_fragment` |
 | `o` | Drone | # | # | . | . | `core_fragment` |
@@ -237,12 +237,12 @@ only source of `power_cell` in the roster.
 | `k` | Rootkit | - | `deadlock`, `memory_leak L4` | drain 1.3 / buff 0.85 |
 | `c` | Cipher | - | `memory_leak`, `null_route L8` | debuff 1.35 / heal 0.85 |
 | `v` | Virus | - | - | baseline |
-| `h` | Ghost | - | - | damage 1.25 / buff 0.85 |
+| `z` | ZeroDay | - | - | damage 1.25 / buff 0.85 |
 | `m` | Worm | NEST | - | baseline |
 | `x` | Scrapper | NEST | `cascade_overflow L3` | damage 1.2 / heal 0.85 |
 | `t` | Trojan | NEST | - | baseline |
-| `p` | Phantom | - | - | baseline |
-| `w` | Wraith | NEST | - | baseline |
+| `p` | Proxy | - | - | baseline |
+| `r` | Crawler | NEST | - | baseline |
 | `d` | SubProcess | - | `hot_patch`, `redundancy_sync L7` | heal 1.4 / damage 0.8 |
 | `s` | Sprite | - | - | baseline |
 | `o` | Drone | - | - | baseline |

@@ -13,6 +13,61 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### A charted stat sheet for every content directory
+
+`docs/roster.md` now has six siblings, one per remaining moddable directory
+under `assets/`: items, abilities, structures, research, achievements and
+perks. Each follows the roster's shape — a transcribed table at the top of a
+`docs/*-gen.py`, ASCII charts generated from it, and prose that says what the
+numbers mean rather than restating them.
+
+What the charts surface is mostly relationships the individual files cannot
+show. The research page draws the tech tree from its own `requires` edges and
+prices each node by its whole chain, which is how the six end-of-branch nodes
+turn out to carry more in prerequisites than the dearest single node costs.
+The structures page derives the four production lines from which item feeds
+which. The abilities page reads the naming scheme back out of the display
+names — an id is flavour, a name is a spec — and finds nine families at
+three or four scopes each. The achievements page shows the ladder spending
+its Perk Point ceiling exactly, 5 of 5, so a fourteenth rung paying points
+has nowhere to go.
+
+Two of those pages document a fact this work had to check rather than assume:
+only two of the four end benches are built out of their own feeder's product,
+not four, and `each_bench_is_built_out_of_what_its_own_feeder_makes` asserts
+exactly that pair.
+
+`assets/fonts/` and `assets/sounds/` are skipped — binaries with nothing to
+chart.
+
+### Eight pieces of content renamed out of the occult register
+
+The Grid runs on malware and systems vocabulary, and eight things had drifted
+away from it. Three species — **Ghost is now ZeroDay** (map glyph `z`),
+**Wraith is now Crawler** (`r`), **Phantom is now Proxy**, which keeps its
+`p` and whose Backdoor and Spoof moves already read that way. Three items:
+**Daemon Fang → Shim Blade**, **Probe Daemon → Probe Service**, **Wraithsteel
+Plate → Nullsteel Plate**. One routine: **Ghost Protocol Party → Stealth
+Protocol Party**. One achievement: **"Ghost in the Wire" → "Something in the
+Wire"**. ZeroDay's Haunt attack is now Fray, and its Static Wail is Static
+Burst.
+
+This renames ids and filenames, not just display names, following the
+precedent set when the Daemon species became SubProcess. **Existing saves
+lose these species, items and the routine on load** — their ids no longer
+resolve. The `dev-saves/` templates were updated in place and still work.
+
+One consequence worth recording, because it will recur: species are loaded in
+sorted-id order, so renaming three of them moved every later draw from the
+shared `GameRng` stream and changed the outcome of nine seeded tests. All
+nine turned out to be latent fragility rather than the rename breaking
+anything — a Stack ambush that now fires one step earlier and blocks a
+fixture's walk, an opening-ring census that swept nest guardians it was
+documented not to cover, a taming test counting refused attempts as charged
+ones, and a nest test whose walkable strip was narrower than the tether
+square a replacement guardian scatters across. Each was fixed at the cause,
+so the next content change does not move them again.
+
 ### Fusion reads at a glance, and gear stops at three like everything else
 
 Anything you have fused now draws in its own colour wherever a menu lists

@@ -13,6 +13,27 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Fusion reads at a glance, and gear stops at three like everything else
+
+Anything you have fused now draws in its own colour wherever a menu lists
+it: cyan while it can still go into another fusion, magenta once it is at
+3/3 and is a finished product. That covers the party screen, both fuse
+pickers, the extract and cronjob pickers, the inventory and its equip
+picker, and both of a trader's sell lists. The battle roster and the `B`
+roster are deliberately left alone — their colours already mean HP state and
+species.
+
+Gear fusion is now capped at three, the same ceiling a program's lineage has
+always had. It was previously unbounded, which made a stack of one item type
+into an open-ended stat multiplier. Item rows name the ceiling the way a
+program's do (`fusion T2/3`, `fusion T3/3 - maxed`), and a fusion refused for
+being at the cap spends nothing.
+
+A save that already holds an item above tier 3 has that ledger entry lowered
+to 3 on load. A copy you are *wearing* keeps the bonus it was equipped with
+until you take it off — its stats are already banked, and quietly restating
+them would have left the difference welded into your base stats.
+
 ### Difficulty comes from the zone, not from how far you walked
 
 Wild programs no longer get stronger the further you are from your base.

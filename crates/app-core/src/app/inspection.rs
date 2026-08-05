@@ -50,7 +50,7 @@ impl App {
     }
 
     /// You, then every program you own — everyone the manifest can page
-    /// through with ←/→. A wild program reached via `i` is deliberately not
+    /// through with ←/→. A wild program reached via `x` is deliberately not
     /// in here: it is not yours to page to, and paging away from it would be
     /// a one-way trip.
     pub fn manifest_subjects(&mut self) -> Vec<Entity> {

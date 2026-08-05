@@ -421,7 +421,7 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         ),
         Mode::Manifest => {
             // Only advertise ←/→ when they actually do something. A wild
-            // program reached via `i` is not in the owned list, so cycling
+            // program reached via `x` is not in the owned list, so cycling
             // from it is a no-op and the footer must not claim otherwise.
             let subjects = game.manifest_subjects();
             let nav = ManifestNav {

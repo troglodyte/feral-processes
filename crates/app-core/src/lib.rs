@@ -830,7 +830,7 @@ pub struct App {
     /// that one is a structure *kind* awaiting placement in `Mode::Build`.
     pub pending_structure_manifest: Option<Entity>,
     /// Whether `Mode::Manifest` was opened from `Mode::ManifestPick`, which
-    /// is where Esc then goes back to. Reached from the map with `i` instead,
+    /// is where Esc then goes back to. Reached from the map with `x` instead,
     /// there is no list to return to and Esc goes straight back to play.
     pub manifest_from_picker: bool,
     /// Which of the log's two channels the map's pane shows. Cycled with `F`;

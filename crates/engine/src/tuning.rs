@@ -933,7 +933,7 @@ pub const GEAR_LEVEL_GROWTH: f64 = 2.0;
 
 /// Bonus `Game::fuse_item` adds to an item type's equipped stats, per
 /// fusion tier — additive, not compounding (tier 2 is +20%, not +21%).
-pub const ITEM_FUSION_BONUS_PER_TIER: f64 = 0.10;
+pub const ITEM_FUSION_BONUS_PER_TIER: f64 = 0.20;
 
 /// Floor on what one fusion tier is worth to a stat the item actually has,
 /// in flat points. Shipped equipment sits in the 1..=4 range, where

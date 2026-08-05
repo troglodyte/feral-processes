@@ -11,7 +11,24 @@ impl Game {
     /// node whose bench (`ResearchRecipe::requires_structure`) is currently
     /// deployed. Recipe data lives in `assets/{items,research}/*.ron` so a mod
     /// can add one without touching Rust.
+    ///
+    /// **The costs are the discounted ones**, not the authored `.ron`
+    /// quantities — `Perk::LeanCompiler` is applied here, at the one point
+    /// every reader of a player-facing recipe passes through. It used to be
+    /// applied in `craft_cost` alone, which meant the price a screen *quoted*
+    /// and the price `craft` *charged* came from two different places, and
+    /// the Compile screen quoted the undiscounted one. A machine's recipe is
+    /// not affected and must not be: `systems::assembly_recipe` reads
+    /// `ItemDb` directly, so a perk of the player's cannot reach into what a
+    /// structure consumes.
     pub fn craft_recipes(&self) -> Vec<CraftRecipe> {
+        let discount =
+            LEAN_COMPILER_DISCOUNT_PER_LEVEL * self.player_perk_level(Perk::LeanCompiler);
+        let charged = |cost: &[(ItemId, u32)]| -> Vec<(ItemId, u32)> {
+            cost.iter()
+                .map(|(item, qty)| (item.clone(), qty.saturating_sub(discount).max(1)))
+                .collect()
+        };
         let mut recipes: Vec<CraftRecipe> = self
             .world
             .resource::<ItemDb>()
@@ -24,7 +41,7 @@ impl Game {
                     .is_none_or(|s| self.has_structure(s));
                 bench_ready.then(|| CraftRecipe {
                     result: def.id.clone(),
-                    cost: c.cost.clone(),
+                    cost: charged(&c.cost),
                 })
             })
             .collect();
@@ -40,7 +57,7 @@ impl Game {
                 if bench_ready {
                     recipes.push(CraftRecipe {
                         result: recipe.result.clone(),
-                        cost: recipe.cost.clone(),
+                        cost: charged(&recipe.cost),
                     });
                 }
             }
@@ -59,26 +76,20 @@ impl Game {
             .any(|e| e.get::<Structure>().is_some_and(|s| s.kind == kind))
     }
 
-    /// The actual per-unit cost to compile `result` right now: its
-    /// `craft_recipes` entry, with each quantity reduced by
-    /// `LEAN_COMPILER_DISCOUNT_PER_LEVEL` for every level of
-    /// `Perk::LeanCompiler` (down to a minimum of 1 each). Empty if
-    /// `result` has no recipe.
+    /// The per-unit cost to compile `result` right now — its `craft_recipes`
+    /// entry, which already carries the `Perk::LeanCompiler` discount. Empty
+    /// if `result` has no recipe.
+    ///
+    /// A lookup rather than a second application of the discount: the two
+    /// diverged once already, and a screen quoting one while `craft` charges
+    /// the other is invisible until a player is told they need three of
+    /// something the game would have taken two of.
     pub fn craft_cost(&self, result: &ItemId) -> Vec<(ItemId, u32)> {
-        let Some(recipe) = self
-            .craft_recipes()
+        self.craft_recipes()
             .into_iter()
             .find(|r| &r.result == result)
-        else {
-            return Vec::new();
-        };
-        let discount =
-            LEAN_COMPILER_DISCOUNT_PER_LEVEL * self.player_perk_level(Perk::LeanCompiler);
-        recipe
-            .cost
-            .into_iter()
-            .map(|(item, qty)| (item, qty.saturating_sub(discount).max(1)))
-            .collect()
+            .map(|r| r.cost)
+            .unwrap_or_default()
     }
 
     /// The most whole units of `result` the player can afford to compile

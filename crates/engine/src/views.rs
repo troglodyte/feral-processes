@@ -536,6 +536,12 @@ pub struct FrameMapView {
 }
 
 /// One entry in `Game::craft_recipes` — compiling `result` consumes `cost`.
+///
+/// `cost` is what the player is actually charged, `Perk::LeanCompiler`
+/// already taken off, so a screen may quote it verbatim. The authored `.ron`
+/// quantities are not reachable from here on purpose: that is what a machine
+/// consumes (`systems::assembly_recipe`) and what the Recipes chains show,
+/// and a player's perk has no business in either.
 pub struct CraftRecipe {
     pub result: ItemId,
     pub cost: Vec<(ItemId, u32)>,

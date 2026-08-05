@@ -199,6 +199,71 @@ fn lean_compiler_discounts_craft_cost_per_level_but_never_below_one_each() {
     );
 }
 
+/// The Compile screen quotes a `CraftRecipe::cost` and `Game::craft` charges
+/// `craft_cost`, so those two agreeing is the whole of the screen not naming
+/// a price the game doesn't want. They didn't: a player holding
+/// `LeanCompiler` was quoted the undiscounted recipe — "Core Fragment (2/3)"
+/// over a compile that would have gone through at 2 — while the same screen's
+/// "Max affordable" line, which reads `craft_cost`, said 1.
+#[test]
+fn a_quoted_recipe_cost_is_the_price_actually_charged() {
+    let mut game = Game::new(113, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.get_mut::<Perks>(player).unwrap().points = 10;
+    game.unlock_perk(Perk::LeanCompiler).unwrap();
+
+    let recipes = game.craft_recipes();
+    assert!(!recipes.is_empty(), "the test assets declare recipes");
+    for recipe in recipes {
+        assert_eq!(
+            recipe.cost,
+            game.craft_cost(&recipe.result),
+            "{:?} is quoted at a different price from the one it charges",
+            recipe.result
+        );
+    }
+}
+
+/// `LeanCompiler` is the player's bench discount and stops at the player's
+/// bench. A machine runs its product's authored `craftable.cost` through
+/// `systems::assembly_recipe`, which reads `ItemDb` directly — so moving the
+/// discount into `craft_recipes` must not reach a structure's consumption or
+/// the Recipes chains that report it.
+///
+/// Compares the chains against themselves across the purchase rather than
+/// against a fixture: what is being asserted is that nothing moved, and a
+/// hardcoded quantity would go stale the first time an asset was retuned.
+#[test]
+fn lean_compiler_does_not_discount_what_a_structure_consumes() {
+    let mut game = Game::new(113, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let quantities = |g: &Game| -> Vec<Vec<u32>> {
+        g.recipe_chains()
+            .iter()
+            .map(|c| {
+                c.steps
+                    .iter()
+                    .flat_map(|s| s.inputs.iter().map(|i| i.qty))
+                    .collect()
+            })
+            .collect()
+    };
+    let before = quantities(&game);
+    assert!(
+        before.iter().any(|c| c.iter().any(|q| *q > 1)),
+        "a chain has to quote a quantity above the discount floor for this to prove anything"
+    );
+
+    let player = game.player_entity();
+    game.world.get_mut::<Perks>(player).unwrap().points = 10;
+    game.unlock_perk(Perk::LeanCompiler).unwrap();
+
+    assert_eq!(
+        before,
+        quantities(&game),
+        "buying LeanCompiler changed what a structure consumes"
+    );
+}
+
 #[test]
 fn perk_state_survives_save_and_load() {
     let assets = test_assets_dir();

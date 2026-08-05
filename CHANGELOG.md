@@ -13,6 +13,26 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Fixed: the Compile screen quoted a price Lean Compiler had already cut
+
+A player who had bought Lean Compiler was still told an ICE Breaker needed
+three Core Fragments while holding two — and the compile would have gone
+through, because `Game::craft` charges the discounted price. The same screen
+contradicted itself a line further down: "Max affordable right now" reads the
+discounted path and said 1.
+
+The discount used to be applied in `craft_cost`, which `craft` calls, while
+the screen formatted the raw recipe out of `craft_recipes`. It is now applied
+in `craft_recipes` itself, the one point every player-facing recipe passes
+through, and `craft_cost` is a lookup into it. Quoting and charging can no
+longer come from two places.
+
+Nothing a structure consumes moved. A machine runs its product's authored
+`craftable.cost` through `systems::assembly_recipe`, which reads `ItemDb`
+directly, and the Recipes chains do the same — so the player's bench perk
+stops at the player's bench, which
+`lean_compiler_does_not_discount_what_a_structure_consumes` now holds.
+
 ### A structure with a program posted to it wears a green corner mark
 
 "Someone is assigned here" used to be a yellow tile outline, and machines

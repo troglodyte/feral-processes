@@ -35,7 +35,7 @@ positionally, so this order is load-bearing: append, never reorder.
 | `KeenScavenger` | Keen Scavenger | 2 | +1pp mining success | systems::mining_success_chance |
 | `LowPowerMode` | Low Power Mode | 2 | -1pp Power drain, floor 0 | the hunger-decay multiplier |
 | `ExploitFocus` | Exploit Focus | 3 | -3pp of the target's HP penalty | taming::capture_chance |
-| `LeanCompiler` | Lean Compiler | 3 | -1 of each ingredient, floor 1 | Game::craft's recipe costs |
+| `LeanCompiler` | Lean Compiler | 3 | -1 of each ingredient, floor 1 | Game::craft_recipes' costs |
 | `Attacker` | Attacker | 2 | +1 ATK, permanent | a direct Stats write at purchase |
 | `Defender` | Defender | 2 | +1 DEF, permanent | a direct Stats write at purchase |
 | `Buffer` | Buffer | 3 | +1% max Integrity, at least +10 | a direct Stats write, plus a full heal |

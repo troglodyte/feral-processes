@@ -1,0 +1,13 @@
+(
+    id: "invalidate_line",
+    name: "Flush Cache Single",
+    // Cheaper than clearing the whole party and off cooldown a round
+    // sooner, which is the entire decision: one condition you have to
+    // clear now against everyone's at once later.
+    description: "Clear one party member's status condition",
+    target: OneAlly,
+    effect: Cleanse,
+    cooldown: 2,
+    fatigue_cost: 4.0,
+    wild_weight: 9,
+)

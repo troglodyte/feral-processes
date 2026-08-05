@@ -1,0 +1,13 @@
+(
+    id: "brownout",
+    name: "Throttle Everyone",
+    // A sap: a negative buff power subtracts wherever it lands. At this
+    // scope that also clears the Defend stance off every hostile that
+    // braced, since a combatant holds one buff at a time.
+    description: "-3 ATK to every hostile program on the field for 3 rounds",
+    target: AllEnemies,
+    effect: Buff(kind: Atk, power: -3, duration: 3),
+    cooldown: 5,
+    fatigue_cost: 16.0,
+    wild_weight: 3,
+)

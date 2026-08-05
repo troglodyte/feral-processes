@@ -12,14 +12,19 @@
 A = [
  # id                    name                          target                 effect       sub            pow  dur  status             cd  cost
  ("ablative_layer",      "Ablative Layer Single",      "OneAlly",             "FieldBuff", "Mitigation",    10,   80, "",                0, 20.0),
+ ("acid_wash",           "Etch Single",                "OneEnemyGroupFront",  "Buff",      "Def",           -5,    3, "",                2, 8.0),
  ("bastion",             "Bastion Party",              "WholeParty",          "Buff",      "Def",            4,    3, "",                3, 11.0),
  ("bit_rot",             "Bit Rot Everyone",           "AllEnemies",          "Debuff",    "Bleed",          2,    4, "",                5, 16.0),
+ ("branch_hazard",       "Pipeline Stall Group",       "WholeEnemyGroup",     "Damage",    "",               6,    0, "Stun 30% 1r",     4, 13.0),
  ("broadcast_storm",     "Packet Shred Everyone",      "AllEnemies",          "Damage",    "",              25,    0, "",                4, 15.0),
+ ("brownout",            "Throttle Everyone",          "AllEnemies",          "Buff",      "Atk",           -3,    3, "",                5, 16.0),
  ("bus_fault",           "Pipeline Stall Everyone",    "AllEnemies",          "Damage",    "",               6,    0, "Stun 25% 1r",     5, 18.0),
  ("cascade_overflow",    "Packet Shred Group v1.0",    "WholeEnemyGroup",     "Damage",    "",               6,    0, "",                2, 8.0),
  ("checksum_repair",     "Patch Single v2.0",          "OneAlly",             "Heal",      "",              25,    0, "",                3, 9.0),
+ ("clock_gate",          "Throttle Single",            "OneEnemyGroupFront",  "Buff",      "Atk",           -5,    3, "",                2, 8.0),
  ("cold_boot",           "Patch Single v3.0",          "OneAlly",             "Heal",      "",              50,    0, "",                5, 15.0),
  ("coolant_flush",       "Coolant Flush Party",        "WholeParty",          "FieldBuff", "Coolant",        1,   90, "",                0, 15.0),
+ ("cycle_harvest",       "Leech Everyone",             "AllEnemies",          "Drain",     "",               4,    0, "",                5, 17.0),
  ("deadlock",            "Hard Lock Single v1.0",      "OneEnemyGroupFront",  "Debuff",    "Stun",           0,    1, "",                2, 0),
  ("decompile",           "Decompile Single",           "OneEnemyGroupFront",  "Decompile", "",               0,    0, "",                0, 0.0),
  ("deep_scan",           "Deep Scan Party",            "WholeParty",          "FieldBuff", "CaptureBoost",   20,  100, "",                0, 18.0),
@@ -31,6 +36,7 @@ A = [
  ("heap_corruption",     "Bit Rot Group",              "WholeEnemyGroup",     "Debuff",    "Bleed",          3,    3, "",                3, 11.0),
  ("hot_patch",           "Patch Single v1.0",          "OneAlly",             "Heal",      "",               8,    0, "",                1, 0),
  ("hyperthread",         "Hyperthread Single v2.0",    "OneAlly",             "Buff",      "Atk",            6,    4, "",                3, 8.0),
+ ("invalidate_line",     "Flush Cache Single",         "OneAlly",             "Cleanse",   "",               0,    0, "",                2, 4.0),
  ("kernel_panic",        "Packet Shred Single",        "OneEnemyGroupFront",  "Damage",    "",              16,    0, "",                3, 10.0),
  ("leech_array",         "Leech Group",                "WholeEnemyGroup",     "Drain",     "",               6,    0, "",                4, 13.0),
  ("memory_leak",         "Bit Rot Single",             "OneEnemyGroupFront",  "Debuff",    "Bleed",          2,    3, "",                1, 0),
@@ -38,7 +44,9 @@ A = [
  ("null_route",          "Hard Lock Everyone",         "AllEnemies",          "Debuff",    "Stun",           0,    1, "",                5, 15.0),
  ("overclock",           "Overclock Single",           "OneAlly",             "FieldBuff", "Atk",            4,   90, "",                0, 14.0),
  ("overclock_array",     "Hyperthread Party",          "WholeParty",          "Buff",      "Atk",            3,    3, "",                3, 10.0),
+ ("oxide_strip",         "Etch Everyone",              "AllEnemies",          "Buff",      "Def",           -3,    3, "",                5, 16.0),
  ("packet_shred",        "Packet Shred Group v2.0",    "WholeEnemyGroup",     "Damage",    "",              10,    0, "",                3, 11.0),
+ ("pid_exhaustion",      "Fork Bomb Everyone",         "AllEnemies",          "Damage",    "",               8,    0, "Bleed 20% 2r",    5, 18.0),
  ("pipeline_stall",      "Pipeline Stall Single",      "OneEnemyGroupFront",  "Damage",    "",               7,    0, "Stun 40% 1r",     3, 9.0),
  ("priority_boost",      "Hyperthread Single v1.0",    "OneAlly",             "Buff",      "Atk",            3,    3, "",                1, 0),
  ("race_condition",      "Hard Lock Group",            "WholeEnemyGroup",     "Debuff",    "Stun",           0,    1, "",                4, 13.0),
@@ -148,7 +156,7 @@ def cost_chart(width=30):
 doc = f"""# Ability catalogue
 
 Every shipped ability in feral-processes, charted from its own file in
-`assets/abilities/`. Forty-one of them.
+`assets/abilities/`. Forty-nine of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
 `assets/abilities/*.ron` on 2026-08-05 and will drift the moment one of those
@@ -177,22 +185,28 @@ same word order.
 
 {families()}
 
-The number in brackets is the effect's power. Read across a row and the
-scaling rule is visible: reaching wider costs magnitude, and a `v2.0` at the
-same scope is the straight upgrade. Nothing in the game names a routine after
-what it is *called* rather than what it *does* — which is why the id column
-exists at all, and why renaming an id never changes what a player reads.
+The number in brackets is the effect's power, and a `v2.0` at the same scope
+is the straight upgrade over its `v1.0`. Read across a row and reaching wider
+usually costs magnitude — Leech runs 10, 6, 4 — but read the whole block and
+two families break that on purpose: Packet Shred and Fork Bomb both peak away
+from Single, which is what marks them as the prizes of the set rather than
+ladders you climb. The honest comparison is the cost chart below, not this
+one. Nothing in the game names a routine after what it is *called* rather
+than what it *does* — which is why the id column exists at all, and why
+renaming an id never changes what a player reads.
 
 ## Who it hits against what it does
 
 {matrix()}
 
 The grid is sparse on purpose. Heals and buffs point at allies, damage and
-debuffs point at enemies. The one crossing is `Buff` aimed at an enemy group —
-Etch and Throttle are buffs with **negative** power, so a sap is not a separate
-effect shape but the same one run backwards. `Decompile` and `Cleanse` are one
-of a kind apiece: taming is an ability rather than a separate verb, and
-cleansing is the only routine that removes rather than adds.
+debuffs point at enemies. The one crossing is `Buff` aimed at enemies — Etch
+and Throttle are buffs with **negative** power, so a sap is not a separate
+effect shape but the same one run backwards. `Decompile` is the one effect
+with a single ability to its name, because taming is an ability rather than
+a separate verb. `Cleanse` is the one that *removes* rather than adds, which
+is why it needs no power column and why it is the only ally-facing effect
+with nothing to scale.
 
 ## Everything
 
@@ -213,10 +227,13 @@ worth far less per cast than one halfway down that reaches five. Packet Shred
 Everyone leads on both counts at once, which is exactly why it is a boss
 routine and not something a player is ever taught.
 
-Within a family the rate is the honest signal. Packet Shred runs from 0.75 at
-Group v1.0 to 1.67 at Everyone, so the tiers are not merely wider — they are
-better per point as well, and the thing holding them back is what it takes to
-learn them rather than what they cost to cast.
+Within a family the rate is where reaching wider gets paid for, and it falls
+as the scope grows: Pipeline Stall runs 0.78, 0.46, 0.33 across its three
+tiers, and Fork Bomb drops from 1.25 at Group to 0.44 at Everyone. You buy
+reach with efficiency. Packet Shred is the one family that doesn't pay —
+0.75 at Group v1.0 rising to 1.67 at Everyone, better per point as well as
+wider — and the thing holding those tiers back is what it takes to learn them
+rather than what they cost to cast.
 
 Note the {len(FREE)} routines that cost **nothing** — {", ".join(f'`{r["id"]}`' for r in FREE)}.
 Those are the starters, the ones a species grants at level 1 and the fallback

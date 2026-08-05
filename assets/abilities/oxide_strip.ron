@@ -1,0 +1,10 @@
+(
+    id: "oxide_strip",
+    name: "Etch Everyone",
+    description: "-3 DEF to every hostile program on the field for 3 rounds",
+    target: AllEnemies,
+    effect: Buff(kind: Def, power: -3, duration: 3),
+    cooldown: 5,
+    fatigue_cost: 16.0,
+    wild_weight: 3,
+)

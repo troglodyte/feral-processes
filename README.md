@@ -183,11 +183,12 @@ you are there, and earns its worker XP besides. It fills the same buffer.
 Machines feed each other by **touching**. A structure declaring `assembles`
 pulls its ingredients out of the output buffers of the four structures
 orthogonally adjacent to it — never diagonally — and builds one unit at a
-time. So a chain is a physical line across your base, and a machine with two
-ingredients needs both feeders beside it.
+time. So a chain is a physical line across your base — literally a line:
+every shipped recipe takes a single ingredient, so each machine wants exactly
+one feeder touching it and a straight run of three tiles will do.
 
 The shipped chains are three stages deep, running from three taps into four
-terminals:
+terminals, one intermediate per bench:
 
 | stage | structure | builds | from |
 |---|---|---|---|
@@ -198,10 +199,10 @@ terminals:
 | refine | Lathe | Blank Substrate | Core Fragments |
 | refine | Winding Node | Charge Coils | Power Cells |
 | refine | Transcriber | Logic Wafers | Raw Trace |
-| assemble | Assembly Bay | Patch Routines | a Block and a Coil |
-| assemble | Disk Press | Routine Disks | a Substrate and a Wafer |
-| assemble | Armory | Hardened Shells | a Block and a Coil |
-| assemble | Fabricator | Trace Sniffers | a Wafer and a Coil |
+| assemble | Assembly Bay | Patch Routines | Charge Coils |
+| assemble | Disk Press | Routine Disks | Blank Substrate |
+| assemble | Armory | Hardened Shells | Bytecode Blocks |
+| assemble | Fabricator | Trace Sniffers | Logic Wafers |
 
 A machine's recipe is not written on the machine — it runs the *item's* own
 crafting recipe, so a bench recipe and a machine recipe can never drift, and
@@ -211,24 +212,25 @@ any craftable item you mod in is automatable for free.
 fragments, and the ingredient follows the stat: Logic Wafers buy Decompiler,
 Bytecode Blocks buy Attack and bulk, Charge Coils buy Defense. The two
 classes draw on different taps — armour off the Mining Node, modules off the
-Log Scraper — while both want Coils, so the Winding Node ends up with three
-machines pulling on it and layout starts to bite. The Armory and Fabricator
-each automate one piece while staying the hand-craft bench for the rest of
-their class. Scavenged gear is deliberately left on raw fragments, so a run
+Log Scraper — so which line you stand up first is which class you kit out
+first. The Armory and Fabricator each automate one piece while staying the
+hand-craft bench for the rest of their class, and those researched recipes
+still name several ingredients: it is the *automated* line that runs on one,
+because a bench you have to feed from two directions is a puzzle rather than
+a decision. Scavenged gear is deliberately left on raw fragments, so a run
 with no base standing can still equip.
 
 The base menu's *Recipes* row draws that table for whatever assets are
 actually loaded, one entry per conversion, each walked back to the raw
-inputs it bottoms out in — so a Patch Routine reads as the four steps it
-takes rather than as two ingredients you then have to go look up. Each step
+inputs it bottoms out in — so a Patch Routine reads as the three steps it
+takes rather than as an ingredient you then have to go look up. Each step
 names the structure that taps its raw ingredient, so a chain read top to
 bottom is the build order:
 
 ```
 Product: Routine Disk
-  Mining Node (Core Fragment x4)      -> Lathe       -> Blank Substrate x1
-  Log Scraper (Raw Trace x4)          -> Transcriber -> Logic Wafer x1
-  Blank Substrate x1 + Logic Wafer x1 -> Disk Press  -> Routine Disk x1
+  Mining Node (Core Fragment x4) -> Lathe      -> Blank Substrate x1
+  Blank Substrate x2             -> Disk Press -> Routine Disk x1
 ```
 
 An ingredient an earlier step already makes is named on its own, and a tap
@@ -238,17 +240,19 @@ data rather than a view of your base, so it reads the same four frames down
 the Stack as it does standing in the base.
 
 Every machine needs a program posted to it, assemblers included, so **roster
-capacity is what buys chain length, not fragments**. The full five-machine
-line needs five programs against a starting cap of three — a Data Cache (+5,
-ten fragments) covers the line and leaves a party to adventure with. A
+capacity is what buys chain length, not fragments**. A full line is three
+machines against a starting cap of three — so one line is exactly what a
+fresh roster can staff, and a second one needs a Data Cache (+5, ten
+fragments). A
 machine says so in the base log when it goes *starved*
 (nothing feeding it), *clogged* (output full, come collect) or *idle* (no
 program), once on the way in rather than every tick, and the base menu's *Structure
 roster* shows every
 buffer and every stall at a glance.
 
-The Assembly Bay costs Bytecode Blocks to build, so the two-machine line you
-can afford at the start is what pays for the rest of it.
+A bench is bought with the product of the line that runs it — the Assembly
+Bay costs Charge Coils, the Disk Press costs Blank Substrate — so the
+two-machine line you can afford at the start is what pays for the third.
 
 ## Research
 

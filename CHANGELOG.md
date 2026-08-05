@@ -13,6 +13,52 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Production lines are lines again
+
+A bench took two intermediates off two separate feeder legs, so anything the
+factory made needed **two chains stood up and a corner to put the bench in**
+before a single unit came out. Standing up a Fabricator meant a Log Scraper,
+a Transcriber, a Power Conduit *and* a Winding Node — five machines, five
+programs against a starting roster cap of three — and getting the geometry
+right on top. That is a puzzle, not a decision.
+
+Every shipped machine recipe is now **one ingredient**, and the four
+intermediates match the four benches one-to-one:
+
+```
+Mining Node   -> Refinery     -> Armory        (Hardened Shell)
+Mining Node   -> Lathe        -> Disk Press    (Routine Disk)
+Log Scraper   -> Transcriber  -> Fabricator    (Trace Sniffer)
+Power Conduit -> Winding Node -> Assembly Bay  (Patch Routine)
+```
+
+Three machines, three programs, a straight run of three tiles — so one line
+is exactly what a fresh roster can staff, and which line you build first is
+which thing you get first. The recipes:
+
+| item | was | now |
+|---|---|---|
+| Hardened Shell | 2 Blocks + 2 Coils | 3 Bytecode Blocks |
+| Routine Disk | Substrate + Wafer | 2 Blank Substrate |
+| Trace Sniffer | 3 Wafers + 2 Coils | 5 Logic Wafers |
+| Patch Routine | Block + Coil | 3 Charge Coils |
+
+The Patch Routine swapping Blocks for Coils is the one that isn't just
+arithmetic: without it the Winding Node loses every automated consumer and
+becomes dead weight. With it, no intermediate is orphaned and all four raw
+taps stay in play.
+
+**Build costs follow the same rule.** The Assembly Bay cost Bytecode Blocks
+while *running* on Charge Coils, so standing one up needed two unrelated
+lines — exactly the tangle this removes. A bench is now bought with its own
+feeder's product: the Assembly Bay costs Charge Coils, the Disk Press costs
+Blank Substrate.
+
+Researched armour and module recipes are untouched and still name several
+ingredients — those are hand-crafts at a bench, with no adjacency and no
+geometry, so they were never the un-fun part. The engine's multi-input
+support is untouched too, and mods may still ship two-ingredient assemblers.
+
 ### The Recipes screen says which structure to build for each ingredient
 
 A chain used to start at its raw materials with no hint where they came

@@ -200,16 +200,14 @@ disqualifies the whole file.
     // constants in `tuning.rs`.
     cache_drop: Some(0.08),
 
-    // Reserved for engine-synthesized items — leave this out. Every loaded
-    // ability automatically gets a "<Ability Name> Routine" item (id
-    // `routine_<ability_id>`) whose `routine` names that ability and whose
-    // description is read live from the ability's own text, so it can never
-    // drift. Authoring an item whose id collides with `routine_<ability>`
-    // is refused with a warning (the authored file wins, but the ability
-    // becomes unextractable) — don't claim that id namespace by hand.
-    routine: None,
 )
 ```
+
+There is **no per-ability item**. Routines used to be one item apiece, minted
+at load; they are knowledge now (`resources::KnownRoutines`), and what a
+player spends to write one into a slot is a blank **Routine Disk** —
+`routine_disk`, an ordinary craftable item like any other in this directory.
+See `../abilities/README.md`.
 
 The filename doesn't matter to the loader (only the `id` field does), but
 name it after the item for readability, e.g. `power_cell.ron`.

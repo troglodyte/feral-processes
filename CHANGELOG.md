@@ -13,6 +13,39 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Two routines that act on a Stack frame instead of reading it
+
+Everything the player had for a frame either read the maze — the view cone,
+the map, a breakpoint — or was inflicted by it: a fault, corrupted ground.
+Nothing let them act on its shape. Two new field routines do, reached
+through a new research node (**Address Translation**, 50 Research Data,
+after Deep Analysis) and installed like any other: a Routine Disk and one of
+your six slots.
+
+| Routine | Costs | Does |
+|---|---|---|
+| Buffer Overrun Party | 12 Fatigue | Steps through exactly one wall ahead, landing on the open cell beyond |
+| Wild Jump Party | 20 Fatigue | Moves the party to any cell of the frame you point at — and kills you if that cell is solid |
+
+Buffer Overrun is deliberately one wall thick. Any deeper and a cast from
+the frame edge cuts a diagonal across the whole maze; at one wall it opens
+the room next door and nothing further. It is refused, spending nothing, if
+the rock runs deeper than one cell or if the far side is off the frame.
+
+Wild Jump is a `goto` to an address nobody validated. Aim it with a cursor
+on the frame map: cells you have already walked are safe *because* you have
+walked them, and the unlit part of the map is exactly the risk. Nothing
+warns you beyond the map itself — that is the mechanic. Arrival hazards fire
+on a jump exactly as on a step, so jump onto a fault and you fall through
+it, and jump onto an uncleared lair and you have roused it.
+
+Both refuse a landing behind an unopened seal, and refuse landing on the
+seal itself — a refusal rather than a death, since the rule exists to keep
+"earn your way to the guardian" intact rather than to punish a misclick.
+Both are Stack-only and greyed with the reason on open grid, both raise
+Trace on success, and neither ever appears in the battle Special menu or on
+a wild program.
+
 ### Eight routines that fill the holes in the ability families
 
 Charting the abilities made a gap visible that a directory listing never

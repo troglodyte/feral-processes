@@ -36,11 +36,11 @@ fn casting_arms_the_buff_and_deducts_power() {
 
     let routines = game.field_routines();
     assert_eq!(routines.len(), 1);
-    assert_eq!(routines[0].power_cost, 5.0);
-    assert!(routines[0].needs_ally_target);
+    assert_eq!(routines[0].cost, "5 PWR");
+    assert_eq!(routines[0].second_pick, FieldCastPick::Ally);
 
     let before = player_hunger(&game);
-    game.cast_field_routine(0, Some(player))
+    game.cast_field_routine(0, FieldCastTarget::Ally(player))
         .expect("casting a field routine you can afford should succeed");
 
     // A successful cast ticks the clock (see `cast_field_routine`'s doc), so
@@ -73,7 +73,7 @@ fn a_successful_cast_ticks_the_clock_and_a_refused_one_does_not() {
     let start = game.current_tick();
 
     game.world.get_mut::<Needs>(player).unwrap().hunger = 4.0;
-    let refused = game.cast_field_routine(0, Some(player));
+    let refused = game.cast_field_routine(0, FieldCastTarget::Ally(player));
     assert!(refused.is_err(), "4.0 Power can't cover a 5.0 cost");
     assert_eq!(
         game.current_tick(),
@@ -82,7 +82,7 @@ fn a_successful_cast_ticks_the_clock_and_a_refused_one_does_not() {
     );
 
     game.world.get_mut::<Needs>(player).unwrap().hunger = 100.0;
-    game.cast_field_routine(0, Some(player))
+    game.cast_field_routine(0, FieldCastTarget::Ally(player))
         .expect("100.0 Power covers a 5.0 cost");
     assert_eq!(
         game.current_tick(),
@@ -100,11 +100,11 @@ fn insufficient_power_returns_err_and_leaves_state_untouched() {
         .insert(Routines(vec!["test_field_regen".to_string()]));
     game.world.get_mut::<Needs>(player).unwrap().hunger = 4.0;
 
-    let result = game.cast_field_routine(0, Some(player));
+    let result = game.cast_field_routine(0, FieldCastTarget::Ally(player));
 
     assert_eq!(
         result,
-        Err("Not enough Power to run Test Field Regen.".to_string())
+        Err("Can't run Test Field Regen — not enough PWR.".to_string())
     );
     assert_eq!(
         player_hunger(&game),
@@ -130,7 +130,7 @@ fn casting_during_a_battle_is_refused() {
     insert_battle(&mut game, player, vec![wild]);
     let before = player_hunger(&game);
 
-    let result = game.cast_field_routine(0, Some(player));
+    let result = game.cast_field_routine(0, FieldCastTarget::Ally(player));
 
     assert!(result.is_err(), "casting mid-battle must be refused");
     assert_eq!(player_hunger(&game), before);
@@ -151,7 +151,7 @@ fn casting_underground_succeeds() {
     let pos = *game.world.get::<Position>(player).unwrap();
     game.enter_stack(pos.x, pos.y);
 
-    let result = game.cast_field_routine(0, Some(player));
+    let result = game.cast_field_routine(0, FieldCastTarget::Ally(player));
 
     assert!(
         result.is_ok(),
@@ -184,7 +184,8 @@ fn a_higher_level_holder_casts_a_larger_magnitude() {
         .iter()
         .position(|r| r.holder == low)
         .expect("the level-1 holder's routine is listed");
-    game.cast_field_routine(low_index, Some(low)).unwrap();
+    game.cast_field_routine(low_index, FieldCastTarget::Ally(low))
+        .unwrap();
 
     game.world
         .get_mut::<Needs>(game.player_entity())
@@ -195,7 +196,8 @@ fn a_higher_level_holder_casts_a_larger_magnitude() {
         .iter()
         .position(|r| r.holder == high)
         .expect("the level-20 holder's routine is listed");
-    game.cast_field_routine(high_index, Some(high)).unwrap();
+    game.cast_field_routine(high_index, FieldCastTarget::Ally(high))
+        .unwrap();
 
     let low_power = game.world.get::<FieldBuff>(low).unwrap().active[0].power;
     let high_power = game.world.get::<FieldBuff>(high).unwrap().active[0].power;
@@ -251,7 +253,7 @@ fn a_percentage_kind_is_delivered_at_its_authored_value_regardless_of_level_or_a
         .entity_mut(player)
         .insert(Routines(vec!["test_field_mitigation".to_string()]));
 
-    game.cast_field_routine(0, None)
+    game.cast_field_routine(0, FieldCastTarget::None)
         .expect("a WholeParty target needs no picked ally");
 
     let power = game.world.get::<FieldBuff>(player).unwrap().active[0].power;
@@ -280,7 +282,7 @@ fn a_flat_kind_still_scales_for_the_same_high_level_high_affinity_holder() {
         .entity_mut(player)
         .insert(Routines(vec!["test_field_def".to_string()]));
 
-    game.cast_field_routine(0, None)
+    game.cast_field_routine(0, FieldCastTarget::None)
         .expect("a WholeParty target needs no picked ally");
 
     let power = game.world.get::<FieldBuff>(player).unwrap().active[0].power;
@@ -339,7 +341,7 @@ fn casting_on_an_owned_program_outside_the_party_is_refused() {
         .insert(Routines(vec!["test_field_regen".to_string()]));
     let before = player_hunger(&game);
 
-    let result = game.cast_field_routine(0, Some(benched));
+    let result = game.cast_field_routine(0, FieldCastTarget::Ally(benched));
 
     assert!(
         result.is_err(),
@@ -381,13 +383,13 @@ fn a_run_scoped_kind_lands_on_the_player_even_when_cast_off_a_companion() {
         .position(|r| r.holder == companion)
         .expect("the companion's routine is listed");
     assert!(
-        !routines[index].needs_ally_target,
+        routines[index].second_pick == FieldCastPick::None,
         "a Run-scoped routine needs no target picker"
     );
 
     // `target: None` — a Run-scoped kind must ignore it entirely rather
     // than requiring one.
-    game.cast_field_routine(index, None)
+    game.cast_field_routine(index, FieldCastTarget::None)
         .expect("a Run-scoped cast needs no target");
 
     assert!(
@@ -424,9 +426,9 @@ fn whole_party_arms_every_living_member_and_skips_the_dead() {
         .iter()
         .position(|r| r.holder == player)
         .expect("the player's routine is listed");
-    assert!(!routines[index].needs_ally_target);
+    assert_eq!(routines[index].second_pick, FieldCastPick::None);
 
-    game.cast_field_routine(index, None)
+    game.cast_field_routine(index, FieldCastTarget::None)
         .expect("a WholeParty cast needs no target");
 
     assert_eq!(game.world.get::<FieldBuff>(player).unwrap().active.len(), 1);
@@ -499,7 +501,8 @@ fn active_buffs_reports_a_player_buff_with_no_holder_label() {
         .entity_mut(player)
         .insert(Routines(vec!["test_field_regen".to_string()]));
 
-    game.cast_field_routine(0, Some(player)).unwrap();
+    game.cast_field_routine(0, FieldCastTarget::Ally(player))
+        .unwrap();
     let stored = game.world.get::<FieldBuff>(player).unwrap().active[0].clone();
 
     let buffs = game.active_buffs();
@@ -535,7 +538,8 @@ fn active_buffs_reports_a_companion_buff_with_its_name() {
         .iter()
         .position(|r| r.holder == companion)
         .expect("the companion's routine is listed");
-    game.cast_field_routine(index, Some(companion)).unwrap();
+    game.cast_field_routine(index, FieldCastTarget::Ally(companion))
+        .unwrap();
     let expected_label = game.creature_label(companion);
 
     let buffs = game.active_buffs();
@@ -563,7 +567,8 @@ fn active_buffs_magnitude_reflects_the_scaled_power_not_the_authored_one() {
         .iter()
         .position(|r| r.holder == holder)
         .expect("the level-20 holder's routine is listed");
-    game.cast_field_routine(index, Some(holder)).unwrap();
+    game.cast_field_routine(index, FieldCastTarget::Ally(holder))
+        .unwrap();
 
     let scaled = abilities::scaled_stat_power(2, 20, AFFINITY_NEUTRAL);
     // The authored magnitude in `FIELD_ONLY_ABILITY` is 2 — a level-20

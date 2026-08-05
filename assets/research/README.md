@@ -45,13 +45,12 @@ Core Fragments.
         requires_structure: Some("fabricator"),
     )],
 
-    // Optional; defaults to none. Ability ids this node compiles a routine
-    // item for, straight into the player's cargo, once unlocked — see
-    // assets/abilities/README.md. That's a separate act from using it: the
-    // routine still has to be installed into a player slot (`m` in game)
-    // before it does anything in battle, and it's refused up front if cargo
-    // has no room for it. Companions never gain anything from this list —
-    // their kit comes from their species file instead.
+    // Optional; defaults to none. Ability ids this node teaches the player
+    // once unlocked — see assets/abilities/README.md. What it hands over is
+    // knowledge, not an item: the routine still has to be written into a
+    // slot (`m` in game), which burns one blank Routine Disk the base has to
+    // manufacture. Companions never gain anything from this list — their kit
+    // comes from their species file instead.
     unlocks_abilities: ["hot_patch"],
 )
 ```
@@ -69,10 +68,10 @@ Core Fragments.
 - An unknown id in `unlocks_abilities` is treated more gently: that id is
   dropped with a warning and the node itself still loads, because a node's
   structures and recipes are innocent of a bad ability id.
-- Two nodes may name the same ability. Each still deposits its own routine
-  item on unlock — researching both stacks two copies in cargo rather than
-  deduplicating, so a second copy is there to install into a companion or a
-  future slot rather than being wasted.
+- Two nodes may name the same ability. Knowing a routine is a set membership,
+  so the second unlock is silently a no-op rather than a wasted purchase —
+  what limits how many copies you can install is Routine Disks, not how many
+  nodes taught you the id.
 - The ICE Breaker and Power Cell recipes are always available and are not
   defined here.
 - Nodes are listed cheapest first, ties broken by id, so the menu numbering

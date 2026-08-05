@@ -636,6 +636,19 @@ pub const TRACE_PER_CACHE: u32 = 10;
 /// costs an access shard, and a cost the player paid should register.
 pub const TRACE_PER_SEAL: u32 = 5;
 
+/// Trace for stepping through a wall with `AbilityEffect::Phase`. Priced
+/// beside a seal rather than a cache: it takes nothing out of the frame, but
+/// it does route the party around a wall the substrate put there, and a
+/// shortcut the maze did not offer should register the way a burned lock
+/// does.
+pub const TRACE_PER_PHASE: u32 = 5;
+
+/// Trace for an `AbilityEffect::Jump`. Twice a phase, because it crosses the
+/// whole frame rather than one wall — and still well under a cache, since
+/// what Trace measures is what the party *takes* and a jump takes nothing.
+/// The real cost of a wild jump is the gamble, not this.
+pub const TRACE_PER_JUMP: u32 = 10;
+
 /// Trace per hostile killed. **A fifth of a cache, and that ratio is the
 /// load-bearing part**, not the absolute value. Kills are the
 /// high-frequency source by an order of magnitude (see

@@ -19,14 +19,14 @@ tree.
 
 Neither path is how the ability *reaches* a party member, though — abilities
 are installed **routines** occupying level-derived slots (one per two
-companion levels, one per ten player levels, six at most either way), and
-every loaded ability automatically gets a `routine_<ability_id>` item minted
-for it — see `../items/README.md`. A species or research node just names
-which routine shows up pre-installed or lands in cargo; installing,
-swapping, and popping one back out is a separate act. So shipping a new
-ability means writing a single file here — the routine item exists with no
-second file — and, if you want it reachable through normal play, referencing
-its `id` from a species, a research node, or both.
+companion levels, one per ten player levels, six at most either way). What a
+research node hands over is **knowledge**, not an item: it teaches the id,
+and writing that routine into a slot burns one blank **Routine Disk**, which
+the base has to manufacture. A species file instead names what a companion
+shows up already running. So shipping a new ability means writing a single
+file here — there is no second file and no per-ability item — and, if you
+want it reachable through normal play, referencing its `id` from a species,
+a research node, or both.
 
 **Two abilities are mandatory.** `priority_boost` is the fallback every
 companion falls back on when its species declares no abilities of its own,
@@ -65,7 +65,7 @@ way deleting the Currency item does.
     // spent on a downed member would be wasted.
     target: WholeEnemyGroup,
 
-    // What it does to each recipient. Exactly one of eight:
+    // What it does to each recipient. Exactly one of ten:
     //
     //   Damage(power: 6)
     //     Direct damage through the same formula a move uses
@@ -181,7 +181,37 @@ way deleting the Currency item does.
     //     (if pointless) choice. `fatigue_cost` does *not* warn, even though
     //     it's equally unused: its own default is nonzero, so there's no way
     //     to tell "left alone" from "set on purpose" — leave it out of the
-    //     file, its value simply won't be read.
+    //     file, its value simply won't be read. (It is *not* dead on the two
+    //     movement effects below, which spend exactly that field.)
+    //
+    //   Phase
+    //     Steps the party through exactly one solid cell along their current
+    //     facing, landing on the open cell beyond. Field-only and
+    //     **Stack-only**: it reads and writes the party's frame
+    //     coordinates, so it is greyed with a reason on open grid. Carries
+    //     no fields — one wall is a rule of the mechanic, not an authored
+    //     magnitude, because two deep turns it from "open the room next
+    //     door" into a diagonal shortcut across the whole maze. Refused,
+    //     spending nothing, when the rock runs deeper than one cell, when
+    //     the far side is off the frame, or when there is nothing solid
+    //     ahead in the first place. This is what `buffer_overrun.ron` uses.
+    //
+    //   Jump
+    //     Moves the party to any cell of the frame they are standing in —
+    //     the player aims a cursor over the frame map — and kills them if
+    //     that cell turns out to be solid. Field-only and Stack-only like
+    //     `Phase`, and carries no fields: the unvalidated landing is the
+    //     whole mechanic. This is what `wild_jump.ron` uses.
+    //
+    //     Both movement effects require `target: WholeParty`; anything else
+    //     is refused at load with a warning, since they move the party as a
+    //     body and there is no mechanic to phase one companion through a
+    //     wall. Both charge `fatigue_cost` (not `power_cost`, which they do
+    //     not have), both raise Trace on success, neither ever appears in
+    //     the battle Special picker, and neither will be run by a wild
+    //     carrier. Both refuse a landing behind an unopened sealed door, and
+    //     refuse landing *on* one — a sealed door is walkable, so landing on
+    //     it would otherwise bypass the lock entirely.
     effect: Damage(power: 6),
 
     // Optional; defaults to 0 (usable every round). Battle rounds that must

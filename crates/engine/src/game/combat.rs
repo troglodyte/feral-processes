@@ -758,11 +758,12 @@ impl Game {
     /// Empty exactly when `battle_action_options` hides the Special row for
     /// this slot: see `Game::actor_abilities`.
     ///
-    /// A `FieldBuff` effect is filtered out — it's field-only and has no
-    /// battle mechanic to run — but only *after* `enumerate`, so `index`
-    /// still names its true position in `actor_abilities`. Filtering first
-    /// would renumber every row after a dropped one, and `battle_set_action`
-    /// resolves `index` straight back against the unfiltered list.
+    /// A field-only effect is filtered out — see `AbilityEffect::field_only`;
+    /// none of them has a battle mechanic to run — but only *after*
+    /// `enumerate`, so `index` still names its true position in
+    /// `actor_abilities`. Filtering first would renumber every row after a
+    /// dropped one, and `battle_set_action` resolves `index` straight back
+    /// against the unfiltered list.
     pub fn battle_special_options(&self, slot: usize) -> Vec<SpecialOption> {
         let Some(entity) = self.actor_entity(battle::Actor::Party(slot)) else {
             return Vec::new();
@@ -770,7 +771,7 @@ impl Game {
         self.actor_abilities(entity)
             .into_iter()
             .enumerate()
-            .filter(|(_, ability)| !matches!(ability.effect, AbilityEffect::FieldBuff { .. }))
+            .filter(|(_, ability)| !ability.effect.field_only())
             .map(|(index, ability)| SpecialOption {
                 index,
                 name: ability.name.clone(),

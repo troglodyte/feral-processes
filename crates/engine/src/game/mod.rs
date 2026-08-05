@@ -26,6 +26,7 @@ pub(crate) mod routines;
 pub(crate) mod spawning;
 pub(crate) mod stack;
 pub(crate) mod stack_features;
+pub(crate) mod stack_movement;
 pub(crate) mod stack_view;
 pub(crate) mod trace;
 pub(crate) mod trade;

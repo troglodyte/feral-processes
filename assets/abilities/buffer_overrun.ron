@@ -1,0 +1,8 @@
+(
+    id: "buffer_overrun",
+    name: "Buffer Overrun Party",
+    description: "Step through one wall ahead, into the cell beyond",
+    target: WholeParty,
+    effect: Phase,
+    fatigue_cost: 12.0,
+)

@@ -30,6 +30,7 @@ mod research;
 mod routines;
 mod spawning;
 mod stack;
+mod stack_movement;
 mod taming;
 mod trade;
 mod turn;

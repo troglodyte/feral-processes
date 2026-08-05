@@ -20,7 +20,7 @@ use feral_processes_engine::battle::{
     ActionKind, BattleAction, PartyCommandKind, SpecialTarget, TargetSpec,
 };
 use feral_processes_engine::items::{EquipmentSlot, EquipmentStats, ItemId};
-use feral_processes_engine::tuning::{ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST};
+use feral_processes_engine::tuning::{ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_FUSIONS};
 use feral_processes_engine::{
     AchievementRow, DifficultyMode, Entity, EntityView, Game, LogLine, MESSAGE_LOG_CAP,
     MessageSource, ProgramSaleOption, RoutineHolderView, SlotShift,
@@ -132,9 +132,32 @@ pub fn equip_preview_tag(game: &Game, item: &ItemId, zone_level: u32, fusion_tie
         parts.push(summary);
     }
     if fusion_tier > 0 {
-        parts.push(format!("fusion T{fusion_tier}"));
+        let maxed = if fusion_tier >= MAX_FUSIONS {
+            " - maxed"
+        } else {
+            ""
+        };
+        parts.push(format!("fusion {}{maxed}", item_fusion_note(fusion_tier)));
     }
     format!(" ({})", parts.join(" "))
+}
+
+/// An item's fusion depth as the compact note a column has room for —
+/// `"T2/3"`, or empty for an unfused item. Gear shares `MAX_FUSIONS` with
+/// programs (see `Game::fuse_item`), and this is the one place that
+/// ceiling is spelled into a label: the equipped panel, the swap picker's
+/// stat column and `equip_preview_tag` all read it, so a retune of the
+/// constant cannot leave three literals disagreeing.
+///
+/// Deliberately no "maxed" wording — `SWAP_STATS_COLUMN` is 20 monospace
+/// cells and `+2 ATK +1 DEF T3/3 maxed` is 24. The row colour carries that
+/// in the two column sites; `equip_preview_tag` has the room and appends it.
+pub fn item_fusion_note(tier: u32) -> String {
+    if tier == 0 {
+        String::new()
+    } else {
+        format!("T{tier}/{MAX_FUSIONS}")
+    }
 }
 
 /// The three equipment stats as one line — `"+4 ATK"`, `"+2 ATK +1 DEF"`,
@@ -176,6 +199,12 @@ pub enum SwapChoice {
 pub struct SwapRow {
     pub choice: SwapChoice,
     pub label: String,
+    /// The item's fusion depth, for the renderer's row colour. Carried
+    /// rather than re-derived on the far side: this screen's rows are built
+    /// here and only drawn there, and a renderer that looked the tier up
+    /// itself could colour a row its own label contradicts. Zero on the
+    /// unequip row, which stands for no item at all.
+    pub fusion_tier: u32,
 }
 
 /// How wide the swap picker's name and stat columns are. Padding lives here
@@ -226,7 +255,7 @@ pub fn equip_swap_rows(game: &Game, slot: EquipmentSlot) -> Vec<SwapRow> {
             let name = game.item_name(item).to_string();
             let stats = match tier {
                 0 => stat_summary(mods),
-                tier => format!("{} T{tier}", stat_summary(mods)),
+                tier => format!("{} {}", stat_summary(mods), item_fusion_note(tier)),
             };
             (
                 delta_total(mods, worn_mods),
@@ -234,6 +263,7 @@ pub fn equip_swap_rows(game: &Game, slot: EquipmentSlot) -> Vec<SwapRow> {
                 SwapRow {
                     choice: SwapChoice::Equip(item.clone()),
                     label: swap_label(&name, &stats, mods, worn_mods),
+                    fusion_tier: tier,
                 },
             )
         })
@@ -247,6 +277,7 @@ pub fn equip_swap_rows(game: &Game, slot: EquipmentSlot) -> Vec<SwapRow> {
         rows.push(SwapRow {
             choice: SwapChoice::Unequip,
             label: swap_label("(Unequip)", "", EquipmentStats::default(), worn_mods),
+            fusion_tier: 0,
         });
     }
     rows

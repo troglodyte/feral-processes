@@ -1,0 +1,10 @@
+(
+    id: "clock_gate",
+    name: "Throttle Single",
+    description: "-5 ATK to one target for 3 rounds",
+    target: OneEnemyGroupFront,
+    effect: Buff(kind: Atk, power: -5, duration: 3),
+    cooldown: 2,
+    fatigue_cost: 8.0,
+    wild_weight: 8,
+)

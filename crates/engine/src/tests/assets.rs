@@ -368,7 +368,7 @@ fn an_item_with_no_authored_value_falls_back_to_the_floor_price() {
     assert_eq!(game.item_value(&unpriced), tuning::DEFAULT_ITEM_VALUE);
 }
 
-/// The twenty-five hunt-only routines are reachable exactly one way: off a wild
+/// The twenty-eight hunt-only routines are reachable exactly one way: off a wild
 /// carrier. A species or research file naming one would quietly restore the
 /// "just target the species" loop this set exists to break.
 #[test]
@@ -381,7 +381,7 @@ fn no_species_or_research_file_grants_a_wild_only_ability() {
         .into_iter()
         .map(|(d, _)| d.id.clone())
         .collect();
-    assert_eq!(wild_only.len(), 25, "twenty-five routines are hunt-only");
+    assert_eq!(wild_only.len(), 28, "twenty-eight routines are hunt-only");
 
     for species in game.species_defs() {
         for ability in &species.abilities {
@@ -525,35 +525,53 @@ fn family(def: &crate::abilities::AbilityDef) -> String {
     base.trim_end_matches(scope_word(def.target)).trim().into()
 }
 
-/// A family that reaches the whole field must also reach one group. The
-/// wide scope is the *prize* of a family, so a hole underneath it is a
-/// player meeting an effect they can never use at the scale they'd want it
-/// — and a hole is invisible in a directory listing, since the files are
-/// named for flavour rather than for the family they belong to.
+/// How far up the scope ladder a target reaches. The two sides share the
+/// ladder rather than having one each: one recipient, one group, the field
+/// — an ally-facing family simply has nowhere to go above rung 1, since
+/// `WholeParty` already *is* everyone on your side.
+fn scope_rank(target: crate::abilities::AbilityTarget) -> usize {
+    use crate::abilities::AbilityTarget::*;
+    match target {
+        OneAlly | OneEnemyGroupFront => 0,
+        WholeParty | WholeEnemyGroup => 1,
+        AllEnemies => 2,
+    }
+}
+
+/// A family occupies a contiguous run of scopes starting at Single. A hole
+/// is invisible in a directory listing — the files are named for flavour,
+/// so nothing about `bus_fault` sitting in `assets/abilities/` says it is
+/// Pipeline Stall reaching the whole field with nothing between it and one
+/// target, which is exactly how that family shipped. What the player meets
+/// is an effect that exists only at a scale they can't always afford, or a
+/// prize with no ladder leading up to it.
 ///
-/// Pipeline Stall shipped exactly that way: `bus_fault` hit everything and
-/// nothing hit one group. Deliberately vacuous on the ally-facing families
-/// — Patch, Hyperthread and Bastion top out at Party, because there is no
-/// wider ally scope for them to be missing.
+/// Field routines are excluded rather than exempted by accident: they are
+/// cast from the map, never appear in the battle picker, and each is its
+/// own thing — Deep Scan has no Single tier because a scope ladder is not
+/// what that half of the set is organised by.
 #[test]
-fn no_ability_family_reaches_everyone_without_reaching_group() {
-    use crate::abilities::AbilityTarget;
+fn every_battle_ability_family_is_contiguous_from_single_upward() {
+    use crate::abilities::AbilityEffect;
     let game = Game::new(3305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let defs: Vec<_> = game
+    let mut scopes: std::collections::BTreeMap<String, std::collections::BTreeSet<usize>> =
+        std::collections::BTreeMap::new();
+    for def in game
         .world
         .resource::<crate::abilities::AbilityDb>()
         .all()
-        .collect();
-    for def in defs
-        .iter()
-        .filter(|d| d.target == AbilityTarget::AllEnemies)
+        .filter(|d| !matches!(d.effect, AbilityEffect::FieldBuff { .. }))
     {
-        let fam = family(def);
-        assert!(
-            defs.iter()
-                .any(|d| d.target == AbilityTarget::WholeEnemyGroup && family(d) == fam),
-            "{:?} is {fam:?} at Everyone scope, but nothing in that family hits one group",
-            def.id
+        scopes
+            .entry(family(def))
+            .or_default()
+            .insert(scope_rank(def.target));
+    }
+    for (fam, ranks) in &scopes {
+        let expected: std::collections::BTreeSet<usize> = (0..ranks.len()).collect();
+        assert_eq!(
+            ranks, &expected,
+            "{fam:?} occupies scopes {ranks:?}; a family runs from Single upward with no gaps"
         );
     }
 }

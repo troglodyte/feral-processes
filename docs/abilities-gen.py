@@ -12,6 +12,7 @@
 A = [
  # id                    name                          target                 effect       sub            pow  dur  status             cd  cost
  ("ablative_layer",      "Ablative Layer Single",      "OneAlly",             "FieldBuff", "Mitigation",    10,   80, "",                0, 20.0),
+ ("acid_wash",           "Etch Single",                "OneEnemyGroupFront",  "Buff",      "Def",           -5,    3, "",                2, 8.0),
  ("bastion",             "Bastion Party",              "WholeParty",          "Buff",      "Def",            4,    3, "",                3, 11.0),
  ("bit_rot",             "Bit Rot Everyone",           "AllEnemies",          "Debuff",    "Bleed",          2,    4, "",                5, 16.0),
  ("branch_hazard",       "Pipeline Stall Group",       "WholeEnemyGroup",     "Damage",    "",               6,    0, "Stun 30% 1r",     4, 13.0),
@@ -20,6 +21,7 @@ A = [
  ("bus_fault",           "Pipeline Stall Everyone",    "AllEnemies",          "Damage",    "",               6,    0, "Stun 25% 1r",     5, 18.0),
  ("cascade_overflow",    "Packet Shred Group v1.0",    "WholeEnemyGroup",     "Damage",    "",               6,    0, "",                2, 8.0),
  ("checksum_repair",     "Patch Single v2.0",          "OneAlly",             "Heal",      "",              25,    0, "",                3, 9.0),
+ ("clock_gate",          "Throttle Single",            "OneEnemyGroupFront",  "Buff",      "Atk",           -5,    3, "",                2, 8.0),
  ("cold_boot",           "Patch Single v3.0",          "OneAlly",             "Heal",      "",              50,    0, "",                5, 15.0),
  ("coolant_flush",       "Coolant Flush Party",        "WholeParty",          "FieldBuff", "Coolant",        1,   90, "",                0, 15.0),
  ("cycle_harvest",       "Leech Everyone",             "AllEnemies",          "Drain",     "",               4,    0, "",                5, 17.0),
@@ -34,6 +36,7 @@ A = [
  ("heap_corruption",     "Bit Rot Group",              "WholeEnemyGroup",     "Debuff",    "Bleed",          3,    3, "",                3, 11.0),
  ("hot_patch",           "Patch Single v1.0",          "OneAlly",             "Heal",      "",               8,    0, "",                1, 0),
  ("hyperthread",         "Hyperthread Single v2.0",    "OneAlly",             "Buff",      "Atk",            6,    4, "",                3, 8.0),
+ ("invalidate_line",     "Flush Cache Single",         "OneAlly",             "Cleanse",   "",               0,    0, "",                2, 4.0),
  ("kernel_panic",        "Packet Shred Single",        "OneEnemyGroupFront",  "Damage",    "",              16,    0, "",                3, 10.0),
  ("leech_array",         "Leech Group",                "WholeEnemyGroup",     "Drain",     "",               6,    0, "",                4, 13.0),
  ("memory_leak",         "Bit Rot Single",             "OneEnemyGroupFront",  "Debuff",    "Bleed",          2,    3, "",                1, 0),
@@ -153,7 +156,7 @@ def cost_chart(width=30):
 doc = f"""# Ability catalogue
 
 Every shipped ability in feral-processes, charted from its own file in
-`assets/abilities/`. Forty-six of them.
+`assets/abilities/`. Forty-nine of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
 `assets/abilities/*.ron` on 2026-08-05 and will drift the moment one of those
@@ -199,9 +202,11 @@ renaming an id never changes what a player reads.
 The grid is sparse on purpose. Heals and buffs point at allies, damage and
 debuffs point at enemies. The one crossing is `Buff` aimed at enemies — Etch
 and Throttle are buffs with **negative** power, so a sap is not a separate
-effect shape but the same one run backwards. `Decompile` and `Cleanse` are one
-of a kind apiece: taming is an ability rather than a separate verb, and
-cleansing is the only routine that removes rather than adds.
+effect shape but the same one run backwards. `Decompile` is the one effect
+with a single ability to its name, because taming is an ability rather than
+a separate verb. `Cleanse` is the one that *removes* rather than adds, which
+is why it needs no power column and why it is the only ally-facing effect
+with nothing to scale.
 
 ## Everything
 

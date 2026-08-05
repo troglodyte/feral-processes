@@ -314,13 +314,14 @@ permanently unreachable.
 
 ## The hunt-only set
 
-Twenty-five shipped abilities carry a non-zero `wild_weight` and are named by
+Twenty-eight shipped abilities carry a non-zero `wild_weight` and are named by
 no species file and no research node: `kernel_panic`, `stack_smash`,
 `pipeline_stall`, `branch_hazard`, `fork_bomb`, `pid_exhaustion`,
 `packet_shred`, `bus_fault`, `hard_lock`, `heap_corruption`,
-`race_condition`, `bit_rot`, `hyperthread`, `bastion`, `throttle`,
-`brownout`, `etch`, `oxide_strip`, `checksum_repair`, `mirror_restore`,
-`cold_boot`, `siphon_cycles`, `leech_array`, `cycle_harvest`, `flush_cache`.
+`race_condition`, `bit_rot`, `hyperthread`, `bastion`, `clock_gate`,
+`throttle`, `brownout`, `acid_wash`, `etch`, `oxide_strip`,
+`checksum_repair`, `mirror_restore`, `cold_boot`, `siphon_cycles`,
+`leech_array`, `cycle_harvest`, `invalidate_line`, `flush_cache`.
 
 The only way to get one is to find a wild program carrying it and decompile
 that program. Killing the carrier destroys the routine. Adding any of these

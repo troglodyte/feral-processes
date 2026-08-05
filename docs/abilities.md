@@ -1,7 +1,7 @@
 # Ability catalogue
 
 Every shipped ability in feral-processes, charted from its own file in
-`assets/abilities/`. Forty-six of them.
+`assets/abilities/`. Forty-nine of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
 `assets/abilities/*.ron` on 2026-08-05 and will drift the moment one of those
@@ -13,7 +13,7 @@ species grants nothing. The [research tree](research.md) teaches the rest.
 
 | | |
 |---|---|
-| abilities | 46 |
+| abilities | 49 |
 | effect shapes | 8 |
 | target shapes | 5 |
 | field routines (run outside battle) | 10 |
@@ -34,16 +34,17 @@ ABILITY FAMILIES            (display name = effect + scope + tier)
 Patch           Single v1.0 (8), Single v2.0 (25), Single v3.0 (50), Party v1.0 (8), Party v1.1 (10)
 Packet Shred    Single (16), Group v1.0 (6), Group v2.0 (10), Everyone (25)
 Hard Lock       Single v1.0 (0), Single v2.0 (0), Group (0), Everyone (0)
+Etch            Single (-5), Group (-4), Everyone (-3)
 Bit Rot         Single (2), Group (3), Everyone (2)
 Pipeline Stall  Single (7), Group (6), Everyone (6)
+Throttle        Single (-5), Group (-4), Everyone (-3)
 Leech           Single (10), Group (6), Everyone (4)
 Fork Bomb       Single (9), Group (15), Everyone (8)
 Hyperthread     Single v1.0 (3), Single v2.0 (6), Party (3)
 Bastion         Single (3), Party (4)
-Throttle        Group (-4), Everyone (-3)
-Etch            Group (-4), Everyone (-3)
+Flush Cache     Single (0), Party (0)
 
-one of a kind: Ablative Layer, Coolant Flush, Decompile, Deep Scan, Flush Cache, Hardened Shell, Overclock, Repair Loop, Salvage Routine, Stealth Protocol, Trace Analysis, Trickle Charge
+one of a kind: Ablative Layer, Coolant Flush, Decompile, Deep Scan, Hardened Shell, Overclock, Repair Loop, Salvage Routine, Stealth Protocol, Trace Analysis, Trickle Charge
 ```
 
 The number in brackets is the effect's power, and a `v2.0` at the same scope
@@ -63,21 +64,23 @@ TARGET AGAINST EFFECT
 
                       Damag  Debuf   Buff   Heal  Drain  Field  Clean  Decom
 
-OneAlly                   .      .      3      3      .      4      .      .
+OneAlly                   .      .      3      3      .      4      1      .
 WholeParty                .      .      2      2      .      6      1      .
-OneEnemyGroupFront        3      3      .      .      1      .      .      1
+OneEnemyGroupFront        3      3      2      .      1      .      .      1
 WholeEnemyGroup           4      2      2      .      1      .      .      .
 AllEnemies                3      2      2      .      1      .      .      .
 
-                         10      7      9      5      3     10      1      1
+                         10      7     11      5      3     10      2      1
 ```
 
 The grid is sparse on purpose. Heals and buffs point at allies, damage and
 debuffs point at enemies. The one crossing is `Buff` aimed at enemies — Etch
 and Throttle are buffs with **negative** power, so a sap is not a separate
-effect shape but the same one run backwards. `Decompile` and `Cleanse` are one
-of a kind apiece: taming is an ability rather than a separate verb, and
-cleansing is the only routine that removes rather than adds.
+effect shape but the same one run backwards. `Decompile` is the one effect
+with a single ability to its name, because taming is an ability rather than
+a separate verb. `Cleanse` is the one that *removes* rather than adds, which
+is why it needs no power column and why it is the only ally-facing effect
+with nothing to scale.
 
 ## Everything
 
@@ -109,6 +112,8 @@ cleansing is the only routine that removes rather than adds.
 | `oxide_strip` | Etch Everyone | AllEnemies | Buff Def | -3 | 3 | - | 5 | 16 |
 | `etch` | Etch Group | WholeEnemyGroup | Buff Def | -4 | 3 | - | 3 | 10 |
 | `throttle` | Throttle Group | WholeEnemyGroup | Buff Atk | -4 | 3 | - | 3 | 10 |
+| `acid_wash` | Etch Single | OneEnemyGroupFront | Buff Def | -5 | 3 | - | 2 | 8 |
+| `clock_gate` | Throttle Single | OneEnemyGroupFront | Buff Atk | -5 | 3 | - | 2 | 8 |
 | `cold_boot` | Patch Single v3.0 | OneAlly | Heal | 50 | - | - | 5 | 15 |
 | `checksum_repair` | Patch Single v2.0 | OneAlly | Heal | 25 | - | - | 3 | 9 |
 | `redundancy_sync` | Patch Party v1.1 | WholeParty | Heal | 10 | - | - | 3 | 12 |
@@ -128,6 +133,7 @@ cleansing is the only routine that removes rather than adds.
 | `coolant_flush` | Coolant Flush Party | WholeParty | FieldBuff Coolant | 1 | 90 | - | - | 15 |
 | `trickle_charge` | Trickle Charge Party | WholeParty | FieldBuff Trickle | 1 | 80 | - | - | 20 |
 | `flush_cache` | Flush Cache Party | WholeParty | Cleanse | 0 | - | - | 3 | 7 |
+| `invalidate_line` | Flush Cache Single | OneAlly | Cleanse | 0 | - | - | 2 | 4 |
 | `decompile` | Decompile Single | OneEnemyGroupFront | Decompile | 0 | - | - | - | - |
 
 ## What a hit costs

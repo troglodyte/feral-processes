@@ -1,7 +1,7 @@
 (
-    id: "ghost",
-    name: "Ghost",
-    glyph: 'h',
+    id: "zero_day",
+    name: "ZeroDay",
+    glyph: 'z',
     color: White,
     base_hp: 98,
     base_atk: 14,
@@ -11,8 +11,8 @@
     habitats: [StaticField, NullSector],
     base_speed: 10,
     moves: [
-        (name: "Haunt", power: 9, effect: Some((kind: Bleed, chance: 0.45, duration: 3, power: 4))),
-        (name: "Static Wail", power: 7, ranged: true),
+        (name: "Fray", power: 9, effect: Some((kind: Bleed, chance: 0.45, duration: 3, power: 4))),
+        (name: "Static Burst", power: 7, ranged: true),
     ],
     work_resource: None,
     affinities: (damage: 1.25, buff: 0.85),

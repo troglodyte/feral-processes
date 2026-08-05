@@ -223,4 +223,4 @@ is skipped with a warning logged in-game rather than crashing startup.
 ```
 
 The filename doesn't matter to the loader (only the `id` field does), but
-name it after the species for readability, e.g. `wraith.ron`.
+name it after the species for readability, e.g. `crawler.ron`.

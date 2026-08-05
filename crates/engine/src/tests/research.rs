@@ -79,7 +79,7 @@ fn only_the_starters_and_scavenged_gear_need_no_research_or_bench() {
             "outlet",
             "packet_buffer",
             "power_cell",
-            "probe_daemon",
+            "probe_service",
             "scrap_ward",
             "shiv_routine",
         ],

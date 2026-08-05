@@ -1,9 +1,9 @@
 (
-    id: "wraithsteel_plate",
-    name: "Wraithsteel Plate",
+    id: "nullsteel_plate",
+    name: "Nullsteel Plate",
     description: "Premium armor. Plating that leaves hostile ICE unsure you're there.",
     value: Some(90),
     equipment: Some((Armor, (def: 3, decompiler: 2))),
     craftable: Some((cost: [("portal_fragment", 14), ("bytecode_block", 3), ("charge_coil", 1), ("logic_wafer", 2)], requires_structure: Some("armory"))),
-    droppable: Some([("ghost", 0.06), ("cipher", 0.06)]),
+    droppable: Some([("zero_day", 0.06), ("cipher", 0.06)]),
 )

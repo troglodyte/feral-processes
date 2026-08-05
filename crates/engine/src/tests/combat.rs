@@ -844,11 +844,11 @@ fn retaliation_kinds_across_seeds(species: &str) -> Vec<MessageKind> {
 /// for its move's status effect this turn — `wild_retaliate` decides the kind
 /// *after* the `WILD_ABILITY_CHANCE` gate has had its say and cleared
 /// `mv.effect`. That ordering is the whole point: taken before the gate, a
-/// Wraith would read as a special on every single swing while the condition
+/// Crawler would read as a special on every single swing while the condition
 /// landed on barely one in ten, which is a colour that means nothing.
 ///
 /// Both species have a homogeneous moveset — Glitch's two moves are plain,
-/// Wraith's two both carry a condition — so which move the RNG rolls cannot
+/// Crawler's two both carry a condition — so which move the RNG rolls cannot
 /// affect the kind, and the gate is the only thing that can.
 #[test]
 fn an_enemy_logs_a_special_only_on_a_turn_it_reached_for_its_moves_effect() {
@@ -862,14 +862,14 @@ fn an_enemy_logs_a_special_only_on_a_turn_it_reached_for_its_moves_effect() {
         "neither Glitch move carries a condition, so no gate roll can make one special"
     );
 
-    let wraith = retaliation_kinds_across_seeds("wraith");
+    let crawler = retaliation_kinds_across_seeds("crawler");
     assert!(
-        wraith.contains(&MessageKind::EnemySpecial),
-        "a Wraith that reached for its condition has to read as a special"
+        crawler.contains(&MessageKind::EnemySpecial),
+        "a Crawler that reached for its condition has to read as a special"
     );
     assert!(
-        wraith.contains(&MessageKind::EnemyAttack),
-        "a Wraith that did *not* reach for it swings as a plain attack — if this \
+        crawler.contains(&MessageKind::EnemyAttack),
+        "a Crawler that did *not* reach for it swings as a plain attack — if this \
          never happens the kind is being decided before the WILD_ABILITY_CHANCE gate"
     );
 }

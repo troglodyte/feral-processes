@@ -5,5 +5,5 @@
     value: Some(12),
     equipment: Some((Armor, (def: 3))),
     craftable: Some((cost: [("bytecode_block", 3)], requires_structure: Some("armory"))),
-    droppable: Some([("wraith", 0.1), ("sentinel", 0.08)]),
+    droppable: Some([("crawler", 0.1), ("sentinel", 0.08)]),
 )

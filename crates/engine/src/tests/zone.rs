@@ -1251,7 +1251,7 @@ fn the_battle_a_pursuer_starts_includes_its_packmates() {
     // reason both end up in the fight — each gets its own group, and
     // `multi_group_ground` guarantees more than one group is allowed here.
     let scrapper = spawn_pursuing_guardian(&mut game, nest, "scrapper", gx + 1, gy);
-    let wraith = spawn_pursuing_guardian(&mut game, nest, "wraith", gx + 1, gy + 1);
+    let crawler = spawn_pursuing_guardian(&mut game, nest, "crawler", gx + 1, gy + 1);
 
     game.tick();
 
@@ -1264,7 +1264,7 @@ fn the_battle_a_pursuer_starts_includes_its_packmates() {
         .flat_map(|g| g.members.iter().copied())
         .collect();
     assert!(
-        members.contains(&scrapper) && members.contains(&wraith),
+        members.contains(&scrapper) && members.contains(&crawler),
         "the battle a pursuer starts should pull in the packmate standing beside it \
          (gather_pack), not just the one that reached the player; found {members:?}"
     );
@@ -1609,7 +1609,7 @@ fn one_shot_nest(game: &mut Game, nest: Entity) {
 fn destroying_a_nest_grants_its_species_work_resource() {
     let mut game = Game::new(720, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     // Scrapper is the `can_nest` species carrying a `work_resource` at all —
-    // wraith and trojan have none, and using one of those would make this
+    // crawler and trojan have none, and using one of those would make this
     // test vacuous. *Which* resource is read off the species file rather
     // than named here: this test asserted `power_cell` until 2026-08-04 moved
     // the Scrapper to Core Fragments, and the claim it exists to make is

@@ -1249,7 +1249,7 @@ fn a_hostile_routines_damage_line_logs_as_enemy_special_not_party_damage() {
     let enemies = battle_with_a_pack_of(&mut game, 1, 200);
     let kernel_panic = ability(&game, "kernel_panic");
 
-    game.use_ability(&kernel_panic, enemies[0], "Wraith", &[player]);
+    game.use_ability(&kernel_panic, enemies[0], "Crawler", &[player]);
 
     let kinds: Vec<MessageKind> = game
         .world

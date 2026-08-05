@@ -620,7 +620,7 @@ const FIELD_ROUTINE_IDS: &[&str] = &[
     "ablative_layer",
     "deep_scan",
     "trace_analysis",
-    "ghost_protocol",
+    "stealth_protocol",
     "salvage_routine",
 ];
 

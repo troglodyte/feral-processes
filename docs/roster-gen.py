@@ -13,12 +13,12 @@ S = [
  ("rootkit",     "Rootkit",    "k", 120, 11, 10,  9, .75, 1.5,  ["Mainframe","NullSector"],                         None,            0, 0, ["deadlock","memory_leak L4"],            "drain 1.3 / buff 0.85"),
  ("cipher",      "Cipher",     "c", 112, 10,  8, 11, .80, 1.5,  ["Mainframe","StaticField"],                        None,            0, 0, ["memory_leak","null_route L8"],          "debuff 1.35 / heal 0.85"),
  ("virus",       "Virus",      "v", 112, 10,  6, 10, .60, 1.5,  ["NullSector","Mainframe"],                         "core_fragment", 0, 0, [],                                       None),
- ("ghost",       "Ghost",      "h",  98, 14,  4, 10, .65, 1.5,  ["StaticField","NullSector"],                       None,            0, 0, [],                                       "damage 1.25 / buff 0.85"),
+ ("zero_day",       "ZeroDay",      "h",  98, 14,  4, 10, .65, 1.5,  ["StaticField","NullSector"],                       None,            0, 0, [],                                       "damage 1.25 / buff 0.85"),
  ("worm",        "Worm",       "m", 105,  8,  2,  9, .40, 1.25, ["NullSector","OpenGrid"],                          "core_fragment", 0, 1, [],                                       None),
  ("scrapper",    "Scrapper",   "x",  98,  9,  5,  9, .45, 1.25, ["OpenGrid","NullSector"],                          "core_fragment", 0, 1, ["cascade_overflow L3"],                  "damage 1.2 / heal 0.85"),
  ("trojan",      "Trojan",     "t",  90, 10,  4, 10, .50, 1.25, ["Mainframe","OpenGrid"],                           None,            0, 1, [],                                       None),
- ("phantom",     "Phantom",    "p",  82, 12,  2, 12, .55, 1.25, ["Mainframe","StaticField"],                        None,            0, 0, [],                                       None),
- ("wraith",      "Wraith",     "w",  75,  8,  4, 11, .50, 1.25, ["StaticField"],                                    None,            0, 1, [],                                       None),
+ ("proxy",     "Proxy",    "p",  82, 12,  2, 12, .55, 1.25, ["Mainframe","StaticField"],                        None,            0, 0, [],                                       None),
+ ("crawler",      "Crawler",     "w",  75,  8,  4, 11, .50, 1.25, ["StaticField"],                                    None,            0, 1, [],                                       None),
  ("sub_process", "SubProcess", "d",  54,  5,  3, 12, .30, 1.0,  ["OpenGrid","NullSector"],                          "core_fragment", 0, 0, ["hot_patch","redundancy_sync L7"],       "heal 1.4 / damage 0.8"),
  ("sprite",      "Sprite",     "s",  48,  4,  2, 14, .20, 1.0,  ["OpenGrid","Mainframe"],                           "core_fragment", 0, 0, [],                                       None),
  ("drone",       "Drone",      "o",  42,  3,  2, 13, .15, 1.0,  ["OpenGrid","Mainframe"],                           "core_fragment", 0, 0, [],                                       None),
@@ -115,7 +115,7 @@ shows up green or red on your map. Every table below is in POW order.
 |---|---|
 | species | 17 |
 | bosses | 2 (Wintermute, Overseer) |
-| nest builders | 4 (Scrapper, Trojan, Worm, Wraith) |
+| nest builders | 4 (Scrapper, Trojan, Worm, Crawler) |
 | work yields | 8 — 7 `core_fragment`, 1 `power_cell` |
 | HP span | 36 (Glitch) to 200 (Wintermute) |
 | speed span | 6 (Construct) to 14 (Sprite); the player rolls from 11 |
@@ -139,7 +139,7 @@ into a defended column around ATK 9-11 and a glass column out at ATK 12-14.
 
 Five species pile up at ATK 10-11 — Cipher, Construct, Rootkit, Virus and
 Trojan. What separates them is entirely HP and DEF, which is what the profiles
-below are for. Ghost is the roster's outlier: ATK 14 on DEF 4, the highest
+below are for. ZeroDay is the roster's outlier: ATK 14 on DEF 4, the highest
 attack outside a boss carried on almost nothing.
 
 ## Stat profiles

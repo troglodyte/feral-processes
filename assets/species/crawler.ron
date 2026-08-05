@@ -1,7 +1,7 @@
 (
-    id: "wraith",
-    name: "Wraith",
-    glyph: 'w',
+    id: "crawler",
+    name: "Crawler",
+    glyph: 'r',
     color: White,
     base_hp: 75,
     base_atk: 8,

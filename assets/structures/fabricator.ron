@@ -1,11 +1,11 @@
 (
     id: "fabricator",
     name: "Fabricator",
-    description: "Compile bench for researched module and utility recipes — the gear won't appear in the craft menu until one is standing. Assign a program and it builds Trace Sniffers out of a Logic Wafer and a Charge Coil, so it wants both feeders touching it.",
+    description: "Compile bench for researched module and utility recipes — the gear won't appear in the craft menu until one is standing. Assign a program and it builds Trace Sniffers out of Logic Wafers from whatever is touching it. Put it next to a Transcriber.",
     glyph: '*',
     color: White,
     build_cost: [("core_fragment", 18)],
     work: None,
-    capacity: 5,
+    capacity: 15,
     assembles: Some((item: "trace_sniffer", ticks_per_unit: 30)),
 )

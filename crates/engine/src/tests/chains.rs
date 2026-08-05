@@ -18,10 +18,40 @@ const TEST_ASSEMBLER: &str = r#"(
     assembles: Some((item: "power_cell", ticks_per_unit: 3)),
 )"#;
 
+/// A modded assembler on a *two*-ingredient recipe. No shipped machine runs
+/// one any more — every shipped `assembles` recipe is a single ingredient, so
+/// that a line is a straight line (see
+/// `every_shipped_assembler_recipe_is_a_single_ingredient`). The engine still
+/// supports multi-input machines and mods may ship them, so the starve path
+/// is exercised here rather than left uncovered.
+///
+/// The recipe is `entropy_damper`'s own — 2 Logic Wafers and 3 Charge Coils —
+/// for the same reason `TEST_ASSEMBLER` uses `power_cell`'s: an assembler
+/// runs the item's `craftable.cost`, never a recipe restated at the machine.
+const TWO_INPUT_ASSEMBLER: &str = r#"(
+    id: "two_input_assembler",
+    name: "Two Input Assembler",
+    description: "A modded two-ingredient assembler, for tests.",
+    glyph: 'D',
+    color: Magenta,
+    build_cost: [],
+    work: None,
+    capacity: 20,
+    assembles: Some((item: "entropy_damper", ticks_per_unit: 3)),
+)"#;
+
 /// A game whose asset set includes `test_assembler`. The caller drops the
 /// scratch directory; `Game` has already read everything it needs.
 fn game_with_assembler(tag: &str, seed: u32) -> Game {
     let dir = assets_dir_with_extra_structure(tag, "test_assembler.ron", TEST_ASSEMBLER);
+    let game = Game::new(seed, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    game
+}
+
+/// As above, for the two-ingredient machine.
+fn game_with_two_input_assembler(tag: &str, seed: u32) -> Game {
+    let dir = assets_dir_with_extra_structure(tag, "two_input_assembler.ron", TWO_INPUT_ASSEMBLER);
     let game = Game::new(seed, DifficultyMode::Forgiving, &dir).unwrap();
     let _ = std::fs::remove_dir_all(&dir);
     game
@@ -411,102 +441,103 @@ fn a_program_can_be_posted_to_an_assembler() {
 }
 
 /// The shipped chain, walked end to end from real assets rather than from a
-/// fixture: two extractors feed two refiners, which feed one assembler, and
-/// the terminal item comes out. This is the test that would have caught a
-/// content slice that loaded fine and could never actually run.
+/// fixture: an extractor feeds a refiner, which feeds an assembler, and the
+/// terminal item comes out. This is the test that would have caught a content
+/// slice that loaded fine and could never actually run.
 ///
-/// The layout is the design's whole point — the Assembly Bay needs *both*
-/// feeders orthogonally touching it, so it wants a corner:
+/// The layout is the design's whole point — a line is a *line*, so every
+/// machine wants exactly one feeder touching it and a straight run of three
+/// tiles will do:
 ///
 /// ```text
-///   $ B Y      $ mining_node   B refinery    Y assembly_bay
-///       W      W winding_node  + power_conduit
-///       +
+///   + W Y      + power_conduit  W winding_node  Y assembly_bay
 /// ```
 #[test]
 fn the_shipped_three_stage_chain_produces_its_terminal_item() {
     let mut game = Game::new(1100, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
 
     let bay = staffed(&mut game, "assembly_bay", 42, 40);
-    let refinery = staffed(&mut game, "refinery", 41, 40);
-    let winding = staffed(&mut game, "winding_node", 42, 41);
-    // The two extractors are pre-stocked rather than worked, so this test
-    // measures the chain rather than `mining_success_chance`'s roll.
-    let mine = stocked(&mut game, "mining_node", 40, 40, ids::CORE_FRAGMENT, 200);
-    let conduit = stocked(&mut game, "power_conduit", 42, 42, ids::POWER_CELL, 200);
+    let winding = staffed(&mut game, "winding_node", 41, 40);
+    // The extractor is pre-stocked rather than worked, so this test measures
+    // the chain rather than the production roll.
+    let conduit = stocked(&mut game, "power_conduit", 40, 40, ids::POWER_CELL, 400);
 
-    for _ in 0..200 {
+    for _ in 0..300 {
         game.tick();
     }
 
     assert!(
-        output_of(&game, refinery, ids::BYTECODE_BLOCK) > 0
-            || input_of(&game, bay, ids::BYTECODE_BLOCK) > 0,
-        "stage two ran: the refinery turned fragments into blocks"
-    );
-    assert!(
         output_of(&game, winding, ids::CHARGE_COIL) > 0
             || input_of(&game, bay, ids::CHARGE_COIL) > 0,
-        "and the winding node turned cells into coils"
+        "stage two ran: the winding node turned cells into coils"
     );
     assert!(
         output_of(&game, bay, ids::PATCH_ROUTINE) > 0,
-        "and the assembly bay built the terminal item out of both"
+        "and the assembly bay built the terminal item out of them"
     );
     assert!(
         game.world
-            .get::<Stock>(mine)
+            .get::<Stock>(conduit)
             .unwrap()
             .output
-            .get(&ItemId::from(ids::CORE_FRAGMENT))
+            .get(&ItemId::from(ids::POWER_CELL))
             .copied()
             .unwrap_or(0)
-            < 200,
-        "the chain really drew from the extractors rather than conjuring input"
+            < 400,
+        "the chain really drew from the extractor rather than conjuring input"
     );
-    let _ = conduit;
 }
 
 /// A machine short one of its two ingredients is starved, not half-running.
-/// This is the failure the player will actually hit — a bay built against
-/// one feeder because the other did not fit.
+///
+/// No shipped machine can hit this any more — flattening the chains left
+/// every shipped recipe on one ingredient. The engine still supports
+/// multi-input assemblers and a mod may ship one, so the path is walked with
+/// a modded machine rather than dropped along with the content that used it.
 #[test]
-fn an_assembly_bay_with_only_one_feeder_adjacent_stays_starved() {
-    let mut game = Game::new(1101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let bay = staffed(&mut game, "assembly_bay", 42, 40);
-    stocked(&mut game, "refinery", 41, 40, ids::BYTECODE_BLOCK, 50);
+fn a_machine_short_one_of_its_two_ingredients_stays_starved() {
+    let mut game = game_with_two_input_assembler("chain_starve", 1101);
+    let machine = staffed(&mut game, "two_input_assembler", 42, 40);
+    stocked(&mut game, "transcriber", 41, 40, "logic_wafer", 50);
 
     for _ in 0..100 {
         game.tick();
     }
 
-    assert!(input_of(&game, bay, ids::BYTECODE_BLOCK) > 0, "it is fed");
+    assert!(input_of(&game, machine, "logic_wafer") > 0, "it is fed");
     assert_eq!(
-        output_of(&game, bay, ids::PATCH_ROUTINE),
+        output_of(&game, machine, "entropy_damper"),
         0,
         "but half a recipe builds nothing"
     );
-    assert_eq!(status_of(&game, bay), Some(MachineStatus::Starved));
+    assert_eq!(status_of(&game, machine), Some(MachineStatus::Starved));
 }
 
-/// The first stage's product is what buys the last stage. Without this the
-/// two-machine line a starting roster can afford has no payoff of its own,
+/// A bench is bought with the product of the line that runs it. Without this
+/// the two-machine line a starting roster can afford has no payoff of its own,
 /// and the spec's "the intermediate needs standalone value" goes unmet — the
 /// Market's flat sell rate cannot express it.
+///
+/// It has to be the bench's *own* feeder, not merely some factory-made item:
+/// the Assembly Bay used to cost Bytecode Blocks while running on Charge
+/// Coils, which meant standing one up needed two unrelated lines — the exact
+/// tangle flattening the chains was meant to remove.
 #[test]
-fn the_assembly_bay_is_built_out_of_what_the_refinery_makes() {
+fn each_bench_is_built_out_of_what_its_own_feeder_makes() {
     let game = Game::new(1102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let cost = &game
-        .world
-        .resource::<crate::structures::StructureDb>()
-        .get("assembly_bay")
-        .expect("assembly_bay ships")
-        .build_cost;
-    assert!(
-        cost.iter()
-            .any(|(i, n)| i.as_str() == ids::BYTECODE_BLOCK && *n > 0),
-        "the Assembly Bay costs Bytecode Blocks: {cost:?}"
-    );
+    let structures = game.world.resource::<crate::structures::StructureDb>();
+
+    for (bench, feeder_product) in [
+        ("assembly_bay", ids::CHARGE_COIL),
+        ("disk_press", "blank_substrate"),
+    ] {
+        let cost = &structures.get(bench).expect("it ships").build_cost;
+        assert!(
+            cost.iter()
+                .any(|(i, n)| i.as_str() == feeder_product && *n > 0),
+            "{bench} runs on {feeder_product} but is not built out of it: {cost:?}"
+        );
+    }
 }
 
 /// The armour chain end to end. Same spine as the Patch Routine chain above
@@ -514,9 +545,7 @@ fn the_assembly_bay_is_built_out_of_what_the_refinery_makes() {
 /// rather than a source of consumables beside it.
 ///
 /// ```text
-///   $ B %      $ mining_node   B refinery     % armory
-///       W      W winding_node  + power_conduit
-///       +
+///   $ B %      $ mining_node  B refinery  % armory
 /// ```
 #[test]
 fn the_armoury_chain_produces_a_hardened_shell() {
@@ -524,13 +553,11 @@ fn the_armoury_chain_produces_a_hardened_shell() {
 
     let armory = staffed(&mut game, "armory", 42, 40);
     let refinery = staffed(&mut game, "refinery", 41, 40);
-    let winding = staffed(&mut game, "winding_node", 42, 41);
     // Pre-stocked rather than worked, so this measures the chain and not
     // `mining_success_chance`'s roll.
-    stocked(&mut game, "mining_node", 40, 40, ids::CORE_FRAGMENT, 200);
-    stocked(&mut game, "power_conduit", 42, 42, ids::POWER_CELL, 200);
+    stocked(&mut game, "mining_node", 40, 40, ids::CORE_FRAGMENT, 400);
 
-    for _ in 0..300 {
+    for _ in 0..400 {
         game.tick();
     }
 
@@ -540,25 +567,17 @@ fn the_armoury_chain_produces_a_hardened_shell() {
         "the refinery turned fragments into blocks"
     );
     assert!(
-        output_of(&game, winding, ids::CHARGE_COIL) > 0
-            || input_of(&game, armory, ids::CHARGE_COIL) > 0,
-        "and the winding node turned cells into coils"
-    );
-    assert!(
         output_of(&game, armory, "hardened_shell") > 0,
-        "and the armoury built wearable gear out of both"
+        "and the armoury built wearable gear out of them"
     );
 }
 
 /// The module chain, which is the one that proves the two gear classes draw
 /// on *different* taps: this one runs off the Log Scraper's Raw Trace through
-/// the Transcriber, and never touches a Mining Node. Nothing walked that path
-/// before — the Disk Press chain shares it but has no end-to-end test.
+/// the Transcriber, and never touches a Mining Node.
 ///
 /// ```text
-///   T S *      T log_scraper   S transcriber  * fabricator
-///       W      W winding_node  + power_conduit
-///       +
+///   T S *      T log_scraper  S transcriber  * fabricator
 /// ```
 #[test]
 fn the_fabricator_chain_produces_a_trace_sniffer_off_the_trace_tap() {
@@ -566,11 +585,9 @@ fn the_fabricator_chain_produces_a_trace_sniffer_off_the_trace_tap() {
 
     let fabricator = staffed(&mut game, "fabricator", 42, 40);
     let transcriber = staffed(&mut game, "transcriber", 41, 40);
-    staffed(&mut game, "winding_node", 42, 41);
-    stocked(&mut game, "log_scraper", 40, 40, "raw_trace", 200);
-    stocked(&mut game, "power_conduit", 42, 42, ids::POWER_CELL, 200);
+    stocked(&mut game, "log_scraper", 40, 40, "raw_trace", 600);
 
-    for _ in 0..400 {
+    for _ in 0..600 {
         game.tick();
     }
 
@@ -581,48 +598,42 @@ fn the_fabricator_chain_produces_a_trace_sniffer_off_the_trace_tap() {
     );
     assert!(
         output_of(&game, fabricator, "trace_sniffer") > 0,
-        "and the fabricator built a module out of wafers and coils"
+        "and the fabricator built a module out of them"
     );
 }
 
-/// Armour, modules and Patch Routines all want Charge Coils, so the Winding
-/// Node is the first shipped feeder three machines can pull on at once. With
-/// one coil to give, the `(x, y)` sort decides who eats.
+/// Flattening the chains gave every intermediate exactly one bench, so no
+/// shipped feeder has two *different* consumers any more — but a player may
+/// still stand two of the same bench on one feeder, which is the real
+/// contest. With one coil to give, the `(x, y)` sort decides who eats.
 ///
-/// The three are spawned in the reverse of their positions on purpose: in
+/// The two are spawned in the reverse of their positions on purpose: in
 /// position order this would pass on bevy's iteration order alone, which is
 /// the exact bug the sort exists to prevent.
 ///
 /// ```text
-///     %        % armory (42, 40)
-///   Y W *      Y assembly_bay (41, 41)  W winding_node (42, 41)
-///              * fabricator (43, 41)
+///     Y        Y assembly_bay (42, 40)
+///   Y W        Y assembly_bay (41, 41)  W winding_node (42, 41)
 /// ```
 #[test]
-fn three_machines_competing_for_one_coil_resolve_in_position_order() {
+fn two_benches_competing_for_one_coil_resolve_in_position_order() {
     let mut game = Game::new(1105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
 
-    let fabricator = staffed(&mut game, "fabricator", 43, 41);
-    let armory = staffed(&mut game, "armory", 42, 40);
-    let bay = staffed(&mut game, "assembly_bay", 41, 41);
+    let above = staffed(&mut game, "assembly_bay", 42, 40);
+    let left = staffed(&mut game, "assembly_bay", 41, 41);
     stocked(&mut game, "winding_node", 42, 41, ids::CHARGE_COIL, 1);
 
     game.tick();
 
     assert_eq!(
-        input_of(&game, bay, ids::CHARGE_COIL),
+        input_of(&game, left, ids::CHARGE_COIL),
         1,
         "the machine at the lower x is visited first and takes the only coil"
     );
     assert_eq!(
-        input_of(&game, armory, ids::CHARGE_COIL),
+        input_of(&game, above, ids::CHARGE_COIL),
         0,
-        "the armoury is behind it in sort order"
-    );
-    assert_eq!(
-        input_of(&game, fabricator, ids::CHARGE_COIL),
-        0,
-        "and the fabricator is behind that"
+        "the bay above it is behind in sort order"
     );
 }
 
@@ -717,26 +728,31 @@ fn a_neighbour_making_something_the_recipe_does_not_want_is_not_wired() {
     assert!(edges_of(&mut game, refinery).is_empty());
 }
 
-/// The failure a player actually hits: a Bay built against one feeder
-/// because the other did not fit. It shows one link where it needs two, so
-/// the mistake is visible on the map without opening a menu.
+/// The failure a player actually hits, now that a bench takes one ingredient
+/// rather than two: a Bay built against the wrong machine. A Refinery touches
+/// it and makes something real, but nothing the Bay's recipe wants — so it
+/// shows no link at all, and the mistake is visible on the map without
+/// opening a menu.
 #[test]
-fn a_mislaid_assembly_bay_reports_one_edge_rather_than_two() {
+fn a_bench_beside_the_wrong_feeder_reports_no_edge() {
     let mut game = Game::new(1203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let bay = deployed(&mut game, "assembly_bay", 42, 40);
     deployed(&mut game, "refinery", 41, 40);
-    // One tile too far south — touching nothing.
+    // The feeder it actually wants, one tile too far south — touching nothing.
     deployed(&mut game, "winding_node", 42, 42);
 
-    assert_eq!(edges_of(&mut game, bay), vec![(-1, 0)]);
+    assert!(
+        edges_of(&mut game, bay).is_empty(),
+        "a Refinery feeds an Armoury, not a Bay"
+    );
 
-    // Move it into place and the second join appears.
+    // Move it into place and the join appears.
     let mut game = Game::new(1203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let bay = deployed(&mut game, "assembly_bay", 42, 40);
     deployed(&mut game, "refinery", 41, 40);
     deployed(&mut game, "winding_node", 42, 41);
 
-    assert_eq!(edges_of(&mut game, bay), vec![(-1, 0), (0, 1)]);
+    assert_eq!(edges_of(&mut game, bay), vec![(0, 1)]);
 }
 
 /// A Home assembles nothing and runs no job, so it has neither half of the
@@ -861,15 +877,10 @@ fn the_patch_routine_chain_runs_from_fragments_up_through_the_assembly_bay() {
     assert_eq!(
         shape,
         vec![
-            (
-                vec![("Core Fragment", 4)],
-                Some("Refinery"),
-                "Bytecode Block"
-            ),
             (vec![("Core Fragment", 2)], None, "Power Cell"),
             (vec![("Power Cell", 3)], Some("Winding Node"), "Charge Coil"),
             (
-                vec![("Bytecode Block", 1), ("Charge Coil", 1)],
+                vec![("Charge Coil", 3)],
                 Some("Assembly Bay"),
                 "Patch Routine"
             ),
@@ -931,10 +942,11 @@ fn chains_are_listed_shallowest_first() {
     let mut sorted = depths.clone();
     sorted.sort();
     assert_eq!(depths, sorted);
-    // Three products tie at the deepest tier now that gear is assembled, so
-    // naming one of them would pin whichever way the tie happens to break.
-    // What the screen actually promises is that everything needing a full base
-    // reads last, and the set is what is worth holding.
+    // Flattening the chains broke the three-way tie that used to sit at the
+    // bottom: gear is two steps off its tap now, and only the Patch Routine
+    // still runs three deep, because Power Cell has a recipe of its own under
+    // the Charge Coil. One product at the bottom is a stronger statement than
+    // a set, so it is named.
     let deepest = depths
         .last()
         .copied()
@@ -946,8 +958,8 @@ fn chains_are_listed_shallowest_first() {
         .collect();
     assert_eq!(
         bottom,
-        ["Hardened Shell", "Patch Routine", "Trace Sniffer"],
-        "the deepest things in the game sit at the bottom"
+        ["Patch Routine"],
+        "the deepest thing in the game sits at the bottom"
     );
 }
 
@@ -1060,28 +1072,38 @@ fn an_input_no_recipe_makes_names_the_tap_that_produces_it() {
     let game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let chains = game.recipe_chains();
 
-    let disk = chains
-        .iter()
-        .find(|c| c.product == "Routine Disk")
-        .expect("the Disk Press assembles one");
+    let sourced = |product: &str| -> Vec<(String, Option<String>)> {
+        chains
+            .iter()
+            .find(|c| c.product == product)
+            .unwrap_or_else(|| panic!("{product} is assembled by a shipped bench"))
+            .steps
+            .iter()
+            .flat_map(|s| &s.inputs)
+            .map(|i| (i.item.clone(), i.source.clone()))
+            .collect()
+    };
 
-    let sourced: Vec<(&str, Option<&str>)> = disk
-        .steps
-        .iter()
-        .flat_map(|s| &s.inputs)
-        .map(|i| (i.item.as_str(), i.source.as_deref()))
-        .collect();
-
+    // Both taps are checked, on the two chains that now bottom out in them.
+    // Flattening split them apart — the Routine Disk used to draw on both,
+    // and asserting only there would have quietly stopped covering the Log
+    // Scraper the moment its leg moved to the Fabricator.
     assert_eq!(
-        sourced,
+        sourced("Routine Disk"),
         vec![
-            ("Core Fragment", Some("Mining Node")),
-            ("Raw Trace", Some("Log Scraper")),
-            ("Blank Substrate", None),
-            ("Logic Wafer", None),
+            ("Core Fragment".into(), Some("Mining Node".into())),
+            ("Blank Substrate".into(), None),
         ],
-        "the two raw inputs name their taps; the two intermediates are made \
-         by earlier steps of this same chain and name none"
+        "the raw input names its tap; the intermediate is made by an earlier \
+         step of this same chain and names none"
+    );
+    assert_eq!(
+        sourced("Trace Sniffer"),
+        vec![
+            ("Raw Trace".into(), Some("Log Scraper".into())),
+            ("Logic Wafer".into(), None),
+        ],
+        "and the module chain names the other tap"
     );
 }
 

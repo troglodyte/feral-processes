@@ -3,6 +3,6 @@
     name: "Patch Routine",
     description: "Run before a fight to blunt the next 120 ticks of incoming damage. The only thing your base builds that helps you in the field.",
     value: Some(7),
-    craftable: Some((cost: [("bytecode_block", 1), ("charge_coil", 1)], requires_structure: Some("assembly_bay"))),
+    craftable: Some((cost: [("charge_coil", 3)], requires_structure: Some("assembly_bay"))),
     consume: Some((prebattle_buff: Some((kind: Mitigation, power: 10, ticks: 120)))),
 )

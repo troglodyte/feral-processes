@@ -162,6 +162,46 @@ fn no_craftable_item_is_worth_more_than_its_ingredients() {
     assert!(checked > 20, "only {checked} craftable items were checked");
 }
 
+/// A production line is a straight line: raw producer → refiner → bench, each
+/// machine pulling from exactly one upstream. That is a property of the
+/// *recipes*, not of the machines — an assembler runs its product's own
+/// `craftable.cost`, so a second ingredient added to any of those four items
+/// silently turns its bench back into a corner puzzle needing two lines stood
+/// up before anything comes out. That shape is what the flatten removed.
+///
+/// The engine still supports multi-input assemblers and mods may ship them —
+/// `chains::a_machine_short_one_of_its_two_ingredients_stays_starved` walks
+/// that path. This is a statement about shipped content only.
+#[test]
+fn every_shipped_assembler_recipe_is_a_single_ingredient() {
+    let game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let items = game.item_defs();
+    let mut checked = 0;
+    for def in game.structure_defs() {
+        let Some(assembles) = &def.assembles else {
+            continue;
+        };
+        let recipe = items
+            .iter()
+            .find(|i| i.id == assembles.item)
+            .and_then(|i| i.craftable.as_ref())
+            .unwrap_or_else(|| panic!("{} assembles {} with no recipe", def.id, assembles.item));
+        assert_eq!(
+            recipe.cost.len(),
+            1,
+            "{} assembles {} out of {} ingredients — a bench on two feeders needs two lines",
+            def.id,
+            assembles.item.as_str(),
+            recipe.cost.len()
+        );
+        checked += 1;
+    }
+    assert_eq!(
+        checked, 9,
+        "expected the nine shipped assemblers; one that lost its recipe would drop out of this scan unnoticed"
+    );
+}
+
 /// The other half of that press, and the one the recipe ceiling above can't
 /// see: a `work.produces` structure makes its item out of nothing on a
 /// timer, so the item's *value* is a Credit-per-tick rate. The Compiler

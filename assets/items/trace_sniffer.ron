@@ -4,7 +4,7 @@
     description: "Standard module. Reads a target's weak points before you commit.",
     value: Some(13),
     equipment: Some((Module, (decompiler: 3))),
-    craftable: Some((cost: [("logic_wafer", 3), ("charge_coil", 2)], requires_structure: Some("fabricator"))),
+    craftable: Some((cost: [("logic_wafer", 5)], requires_structure: Some("fabricator"))),
     droppable: Some([("phantom", 0.1), ("ghost", 0.07)]),
     cache_drop: Some(0.08),
 )

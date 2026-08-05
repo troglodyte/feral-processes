@@ -1,7 +1,7 @@
 (
     id: "logic_wafer",
     name: "Logic Wafer",
-    description: "Raw Trace transcribed into something a disk can be written from. Half of a Routine Disk.",
+    description: "Raw Trace transcribed into something that can hold a circuit. What the Fabricator builds modules out of.",
     value: Some(3),
     craftable: Some((cost: [("raw_trace", 4)], requires_structure: Some("transcriber"))),
 )

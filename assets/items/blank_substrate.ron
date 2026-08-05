@@ -1,7 +1,7 @@
 (
     id: "blank_substrate",
     name: "Blank Substrate",
-    description: "Core Fragments turned down flat and true. Half of a Routine Disk.",
+    description: "Core Fragments turned down flat and true. What a Routine Disk is pressed out of.",
     value: Some(3),
     craftable: Some((cost: [("core_fragment", 4)], requires_structure: Some("lathe"))),
 )

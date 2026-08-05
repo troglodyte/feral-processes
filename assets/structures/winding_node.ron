@@ -1,7 +1,7 @@
 (
     id: "winding_node",
     name: "Winding Node",
-    description: "Assign a program here and it winds Power Cells from whatever is touching it into Charge Coils. Put it next to a Power Conduit.",
+    description: "Assign a program here and it winds Power Cells from whatever is touching it into Charge Coils. Put it next to a Power Conduit, and an Assembly Bay next to it.",
     glyph: 'W',
     color: Blue,
     build_cost: [("core_fragment", 18)],

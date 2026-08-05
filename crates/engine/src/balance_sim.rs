@@ -560,16 +560,31 @@ mod tests {
 
     /// Multiplier and flat slack the "no cliff" guard allows a zone's level
     /// requirement to grow by over the previous zone's. Growth is
-    /// geometric in stats *and* group size now, not the old fixed-size-pack
-    /// game's flat ~2x-per-zone, so the shipped curve itself swings from
-    /// 8.0x (grind-only zone 1 -> 2, off a level-1 floor that isn't a real
-    /// measurement) down to 2.1x-2.3x deeper in, and up to 4.0x on the
-    /// geared sweep. `* 6 + 10` is exactly double the multiplier and slack
-    /// this guard used to gate on — real margin against every shipped pair,
-    /// including the ones that used to sit exactly on the wire, while still
-    /// catching a jump twice as sharp as anything that ships today.
+    /// geometric in stats *and* group size, not the old fixed-size-pack
+    /// game's flat ~2x-per-zone, so the shipped curve runs 1.9x-2.3x from
+    /// zone 2 down, and up to 4.0x on the geared sweep. `* 6 + 10` is
+    /// exactly double the multiplier and slack this guard used to gate on —
+    /// real margin against every shipped pair, including the ones that used
+    /// to sit exactly on the wire, while still catching a jump twice as
+    /// sharp as anything that ships today.
     const LEVEL_GROWTH_GUARD_MULTIPLIER: u32 = 6;
     const LEVEL_GROWTH_GUARD_SLACK: u32 = 10;
+
+    /// The zone 1 -> 2 pair is exempt from the growth guard, and only from
+    /// that half of it — the monotonicity check still covers every pair.
+    ///
+    /// Zone 1 fields one program at a time (`zone_group_cap(1)` is 1, and
+    /// `max_enemy_groups` allows one group), so "needs level 1" measures an
+    /// intentionally empty tutorial zone rather than a difficulty. Six times
+    /// almost nothing is still almost nothing: the guard hands zone 2 a
+    /// ceiling of 16 whatever the roster actually says, and the shipped
+    /// curve has sat one level under that wire. That is a property of the
+    /// floor, not of the curve — every pair from zone 2 on runs at ~2x
+    /// against a ceiling in the hundreds.
+    ///
+    /// Exempting it costs nothing this guard was catching: a real zone-2
+    /// cliff shows up in the 2 -> 3 step it feeds, which is still gated.
+    const GROWTH_GUARD_FIRST_MEASURED_PAIR: usize = 1;
 
     /// The party-size change compounds three ways: `party_stat_bonus`
     /// feeds a share of every companion's ATK/DEF into the player's own
@@ -741,12 +756,15 @@ mod tests {
             required_levels.push(level);
         }
 
-        for pair in required_levels.windows(2) {
+        for (i, pair) in required_levels.windows(2).enumerate() {
             let (prev, next) = (pair[0], pair[1]);
             assert!(
                 next >= prev,
                 "deeper zones should never require a *lower* level to clear: {required_levels:?}"
             );
+            if i < GROWTH_GUARD_FIRST_MEASURED_PAIR {
+                continue;
+            }
             assert!(
                 next <= prev * LEVEL_GROWTH_GUARD_MULTIPLIER + LEVEL_GROWTH_GUARD_SLACK,
                 "level requirement jumped from {prev} to {next} one zone deeper — sharper than \

@@ -1595,3 +1595,59 @@ fn group_size_and_count_are_fixed_within_a_zone() {
         "group count should not grow with distance"
     );
 }
+
+/// A boss used to fight alone, and the gap between it and an ordinary
+/// program was the whole difficulty of the fight. Lowering its stats closes
+/// that gap from one end; an escort closes it from the other, so a boss is
+/// a harder *fight* rather than a harder single opponent.
+///
+/// Gated on the fight being able to hold a second group at all, which zone 1
+/// cannot — a boss met in the opening zone is still a lone one.
+#[test]
+fn a_boss_past_zone_one_brings_an_escort_of_another_species() {
+    use crate::game::spawning::SpawnEscalation;
+    let mut game = Game::new(909, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 3;
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+
+    let pack = game.spawn_pack(
+        "overseer",
+        true,
+        spawn.x,
+        spawn.y,
+        SpawnEscalation::surface(),
+    );
+
+    let species: Vec<String> = pack
+        .iter()
+        .filter_map(|&e| game.world.get::<Creature>(e))
+        .map(|c| c.species.clone())
+        .collect();
+    assert!(
+        species.contains(&"overseer".to_string()),
+        "the boss itself must still be in the pack, got {species:?}"
+    );
+    assert!(
+        species.iter().any(|s| s != "overseer"),
+        "a zone-3 boss should arrive with an escort of some other species, got {species:?}"
+    );
+}
+
+/// The other half of the rule above: zone 1 holds one group, so there is
+/// nowhere for an escort to stand and the opening zone's boss stays solo.
+#[test]
+fn a_zone_one_boss_still_fights_alone() {
+    use crate::game::spawning::SpawnEscalation;
+    let mut game = Game::new(909, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+
+    let pack = game.spawn_pack(
+        "overseer",
+        true,
+        spawn.x,
+        spawn.y,
+        SpawnEscalation::surface(),
+    );
+
+    assert_eq!(pack.len(), 1, "zone 1 fields one group, so the boss is it");
+}

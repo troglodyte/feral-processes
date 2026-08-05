@@ -648,20 +648,69 @@ impl Game {
         y: i32,
         esc: SpawnEscalation,
     ) -> Vec<Entity> {
-        let group_size = if is_boss {
-            1
-        } else {
-            let cap = zone_group_cap(self.world.resource::<ZoneLevel>().0);
-            let max_group =
-                trace_group_ceiling(self.max_group_size(esc.depth), esc.group_mult, cap);
-            let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_range(1..=max_group)
-        };
+        if !is_boss {
+            let size = self.roll_group_size(esc);
+            return self.spawn_group(species_id, size, x, y, esc);
+        }
+        let mut spawned = self.spawn_group(species_id, 1, x, y, esc);
+        // A boss is one group; an escort needs a second one to stand in.
+        // Zone 1 has no room for it, which is deliberate — the opening
+        // zone's boss is the one fight where "a single very large program"
+        // is still the whole encounter.
+        if self.max_enemy_groups(esc.depth) >= 2
+            && let Some(escort) = self.pick_escort_species(x, y)
+        {
+            let size = self.roll_group_size(esc);
+            let escort_pack = self.spawn_group(&escort, size, x, y, esc);
+            spawned.extend(escort_pack);
+        }
+        spawned
+    }
+
+    /// How many members one ordinary group rolls: uniform in `1..=ceiling`,
+    /// so raising the ceiling widens the range of fights a zone produces
+    /// rather than making every fight bigger.
+    fn roll_group_size(&mut self, esc: SpawnEscalation) -> u32 {
+        let cap = zone_group_cap(self.world.resource::<ZoneLevel>().0);
+        let max_group = trace_group_ceiling(self.max_group_size(esc.depth), esc.group_mult, cap);
+        let mut rng = self.world.resource_mut::<GameRng>();
+        rng.0.random_range(1..=max_group)
+    }
+
+    /// An ordinary program from `(x, y)`'s own habitat, to stand beside a
+    /// boss. `None` where the biome offers nothing but the boss itself.
+    ///
+    /// Drawn from `habitat_pools` rather than a pool of its own so the
+    /// escort obeys every rule an ordinary spawn does — including the
+    /// opening ring, though a boss cannot presently reach one. Both boss
+    /// sites hand `spawn_pack` the tile whose biome chose the boss (the
+    /// surface roll its own, `rouse_lair` the Stack entrance it read), so
+    /// this is the right pool for either.
+    fn pick_escort_species(&mut self, x: i32, y: i32) -> Option<String> {
+        let (candidates, _) = self.habitat_pools(x, y)?;
+        if candidates.is_empty() {
+            return None;
+        }
+        let mut rng = self.world.resource_mut::<GameRng>();
+        let idx = rng.0.random_range(0..candidates.len());
+        Some(candidates[idx].clone())
+    }
+
+    /// Places `size` members of one species around `(x, y)`: the first on
+    /// the tile itself, the rest scattered within `swarm_radius` of it.
+    fn spawn_group(
+        &mut self,
+        species_id: &str,
+        size: u32,
+        x: i32,
+        y: i32,
+        esc: SpawnEscalation,
+    ) -> Vec<Entity> {
         // Hoisted above the loop deliberately: it takes no RNG, so the
         // seeded sequence every spawn test depends on is untouched.
-        let radius = swarm_radius(group_size);
+        let radius = swarm_radius(size);
         let mut spawned = Vec::new();
-        for i in 0..group_size {
+        for i in 0..size {
             // The first member anchors the roll's own tile; the rest
             // cluster loosely around it (walkability isn't rechecked for
             // these — same looseness the rest of spawning already has).

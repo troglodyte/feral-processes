@@ -264,9 +264,36 @@ pub enum AbilityEffect {
         duration: u32,
         power_cost: f32,
     },
+    /// Steps the party through exactly one solid cell along their current
+    /// facing, landing on the open cell beyond — see `Game::phase_landing`.
+    ///
+    /// Carries no fields, and specifically no depth: one wall is a rule of
+    /// the mechanic rather than an authored magnitude, because a two-deep
+    /// cast from the frame edge cuts a diagonal across the whole maze. A mod
+    /// gets the routine, not a tunneller.
+    Phase,
+    /// Moves the party to any cell of the current frame the player points
+    /// at, and kills them if that cell is solid — see `Game::wild_jump`.
+    /// Carries no fields; the gamble is the whole mechanic.
+    Jump,
 }
 
 impl AbilityEffect {
+    /// Whether this effect runs outside battle only. `FieldBuff` was the
+    /// original field-only marker and the two Stack movement effects joined
+    /// it, which is why this is a predicate rather than a `matches!` at each
+    /// of the four sites that need it: `Game::field_routines` (which builds
+    /// the cast list), `Game::battle_special_options` and
+    /// `Game::wild_routine_ready` (which exclude it from both sides of a
+    /// fight), and `use_ability`'s `unreachable!` arm (which is only
+    /// unreachable *because* the other three agree with this one).
+    pub fn field_only(&self) -> bool {
+        matches!(
+            self,
+            AbilityEffect::FieldBuff { .. } | AbilityEffect::Phase | AbilityEffect::Jump
+        )
+    }
+
     /// Which affinity category this effect's magnitude falls under, or
     /// `None` for the two variants that have no magnitude to scale.
     /// `Decompile` is deliberately `None` rather than a category of its own:
@@ -280,7 +307,13 @@ impl AbilityEffect {
             AbilityEffect::Buff { .. } => Some(AffinityKind::Buff),
             AbilityEffect::Debuff { .. } => Some(AffinityKind::Debuff),
             AbilityEffect::Drain { .. } => Some(AffinityKind::Drain),
-            AbilityEffect::Cleanse | AbilityEffect::Decompile => None,
+            // The three that move nothing measurable. `Phase` and `Jump`
+            // carry no magnitude at all — how far they reach is fixed by the
+            // mechanic — so there is nothing here for an affinity to scale.
+            AbilityEffect::Cleanse
+            | AbilityEffect::Decompile
+            | AbilityEffect::Phase
+            | AbilityEffect::Jump => None,
             AbilityEffect::FieldBuff { kind, .. } => kind.affinity_kind(),
         }
     }
@@ -397,24 +430,40 @@ impl AbilityDef {
         }
     }
 
-    /// Names `cooldown` if it's set on a `FieldBuff` ability, where it does
-    /// nothing: cooldown throttles re-use within a battle, and a field
+    /// A `Phase` or `Jump` effect paired with a `target` other than
+    /// `WholeParty`. Both move the party as a body — there is no mechanic to
+    /// phase one companion through a wall and leave the rest behind — so any
+    /// other target is a stated aim the cast never honours. Refused at load
+    /// for the same reason `field_buff_target_mismatch` refuses its own
+    /// mismatches rather than quietly doing something else at cast time.
+    fn movement_target_mismatch(&self) -> Option<&'static str> {
+        if !matches!(self.effect, AbilityEffect::Phase | AbilityEffect::Jump) {
+            return None;
+        }
+        (self.target != AbilityTarget::WholeParty)
+            .then_some("effect: Phase and Jump require target: WholeParty")
+    }
+
+    /// Names `cooldown` if it's set on a **field-only** ability, where it
+    /// does nothing: cooldown throttles re-use within a battle, and a field
     /// ability runs outside one. Not a load failure — the def still loads —
     /// just something worth a modder knowing rather than silently swallowing.
     ///
-    /// `fatigue_cost` is deliberately not checked here even though it's
-    /// equally dead on this variant: its serde default
-    /// (`default_fatigue_cost`) is the nonzero flat companion-command cost,
+    /// `fatigue_cost` is deliberately not checked here. On `Phase` and
+    /// `Jump` it is the live cost of running the routine, so there would be
+    /// nothing to warn about; and on `FieldBuff`, where it genuinely is dead
+    /// (`power_cost` is that variant's own cost), its serde default
+    /// (`default_fatigue_cost`) is the nonzero flat companion-command cost —
     /// so a file that never mentions the field looks byte-for-byte identical
-    /// at this point to one that spells out the same number on purpose —
-    /// there's nothing here to distinguish "careless" from "correct", so a
-    /// warning on it would fire on every well-formed field ability just as
-    /// often as a mistaken one. `cooldown` defaults to 0, so a nonzero value
-    /// there is unambiguous authorial intent worth naming.
-    /// `assets/abilities/README.md` tells a modder directly that
-    /// `fatigue_cost` doesn't apply here instead.
-    fn field_buff_dead_fields(&self) -> Option<&'static str> {
-        if !matches!(self.effect, AbilityEffect::FieldBuff { .. }) {
+    /// at this point to one that spells out the same number on purpose.
+    /// There's nothing here to distinguish "careless" from "correct", so a
+    /// warning on it would fire on every well-formed field buff just as often
+    /// as a mistaken one. `cooldown` defaults to 0, so a nonzero value there
+    /// is unambiguous authorial intent worth naming.
+    /// `assets/abilities/README.md` tells a modder directly which fields
+    /// apply to which field-only effect instead.
+    fn field_only_dead_fields(&self) -> Option<&'static str> {
+        if !self.effect.field_only() {
             return None;
         }
         (self.cooldown != 0).then_some("cooldown")
@@ -481,8 +530,12 @@ impl AbilityDb {
                         warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
                         continue;
                     }
+                    if let Some(reason) = def.movement_target_mismatch() {
+                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
+                        continue;
+                    }
                     def.clamp_ranges();
-                    if let Some(dead) = def.field_buff_dead_fields() {
+                    if let Some(dead) = def.field_only_dead_fields() {
                         warnings.push(format!(
                             "ability file {path:?} sets {dead}, which has no effect on a field-only ability"
                         ));

@@ -180,3 +180,108 @@ fn the_ally_picker_offers_only_the_player_and_the_active_party() {
         "the buff should now be running on the player"
     );
 }
+
+/// The cell picker (`Mode::FieldCastCell`) opens only for a routine whose
+/// `FieldRoutineView::second_pick` asks for one.
+#[test]
+fn only_a_cell_routine_opens_the_cell_picker() {
+    let mut app = app_underground_with_routines(90, &["wild_jump"]);
+    app.handle_key(GameKey::Char('a'));
+    assert_eq!(app.mode, Mode::FieldCast);
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.mode, Mode::FieldCastCell);
+    assert_eq!(app.pending_field_routine, Some(0));
+    assert_eq!(
+        app.field_cursor,
+        app.game.as_ref().unwrap().stack_pos_xy(),
+        "the cursor opens on the party's own cell"
+    );
+
+    // Buffer Overrun needs no second pick and commits from the list.
+    let mut app = app_underground_with_routines(91, &["buffer_overrun"]);
+    app.handle_key(GameKey::Char('a'));
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.field_cursor, None);
+}
+
+/// An out-of-bounds coordinate is unreachable rather than lethal — the
+/// engine refuses one anyway, but the player must never be able to aim at
+/// one in the first place.
+#[test]
+fn the_cursor_clamps_to_the_frame_bounds() {
+    let mut app = app_underground_with_routines(92, &["wild_jump"]);
+    let (w, h) = app.game.as_ref().unwrap().frame_bounds().unwrap();
+    app.handle_key(GameKey::Char('a'));
+    app.handle_key(GameKey::Char('1'));
+
+    for _ in 0..(w + h + 10) {
+        app.handle_key(GameKey::Left);
+        app.handle_key(GameKey::Up);
+    }
+    assert_eq!(app.field_cursor, Some((0, 0)));
+
+    for _ in 0..(w + h + 10) {
+        app.handle_key(GameKey::Right);
+        app.handle_key(GameKey::Down);
+    }
+    assert_eq!(app.field_cursor, Some((w - 1, h - 1)));
+}
+
+/// Esc backs out spending nothing, matching every other second pick.
+#[test]
+fn esc_backs_out_of_the_cell_picker_spending_nothing() {
+    let mut app = app_underground_with_routines(93, &["wild_jump"]);
+    let before = app.game.as_ref().unwrap().stack_pos_xy();
+    app.handle_key(GameKey::Char('a'));
+    app.handle_key(GameKey::Char('1'));
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::FieldCast, "Esc steps back one screen");
+    assert_eq!(app.pending_field_routine, None);
+    assert_eq!(app.field_cursor, None);
+    assert_eq!(
+        app.game.as_ref().unwrap().stack_pos_xy(),
+        before,
+        "backing out of the picker moved the party"
+    );
+}
+
+/// Enter commits the jump the cursor is on. Aimed at the party's own cell,
+/// which is walkable and reachable by definition, so this asserts the
+/// *plumbing* rather than any of the engine's landing rules.
+#[test]
+fn enter_commits_the_jump_the_cursor_is_aimed_at() {
+    let mut app = app_underground_with_routines(94, &["wild_jump"]);
+    app.handle_key(GameKey::Char('a'));
+    app.handle_key(GameKey::Char('1'));
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(
+        app.status_line, None,
+        "the jump was refused with: {:?}",
+        app.status_line
+    );
+    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.field_cursor, None);
+    assert_eq!(app.pending_field_routine, None);
+}
+
+/// On open grid both movement routines are greyed with the reason the
+/// engine wrote, and picking one says so rather than casting.
+#[test]
+fn the_movement_routines_are_greyed_on_the_surface() {
+    let mut app = app_with_player_routines(95, &["wild_jump"], 100.0);
+    app.handle_key(GameKey::Char('a'));
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(
+        app.mode,
+        Mode::FieldCast,
+        "it must not open the cell picker"
+    );
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("Can't run Wild Jump Party — only in the Stack.")
+    );
+}

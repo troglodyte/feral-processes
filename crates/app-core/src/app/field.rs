@@ -18,11 +18,11 @@ impl App {
             .unwrap_or_default()
     }
 
-    /// Picks which installed field routine to run. A row that needs no ally
-    /// target casts on the spot; one that does hands off to
-    /// `Mode::FieldCastAlly` for who it lands on — the routine and its
-    /// target are separate choices, same split `Mode::BattleSpecial` makes
-    /// before `Mode::BattleAlly`.
+    /// Picks which installed field routine to run. A row that needs no
+    /// second pick casts on the spot; one that does hands off to whichever
+    /// picker its `FieldCastPick` names — the routine and its target are
+    /// separate choices, same split `Mode::BattleSpecial` makes before
+    /// `Mode::BattleAlly`.
     pub(crate) fn handle_field_cast_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.close_screen();
@@ -34,22 +34,84 @@ impl App {
             return;
         };
         let row = &routines[idx];
-        if !row.affordable {
-            self.status_line = Some(format!("Not enough Power to run {}.", row.name));
+        // The engine wrote the sentence, so this never has to guess which
+        // need a routine spends or whether it needs open grid — see
+        // `FieldRoutineView::unavailable`.
+        if let Some(reason) = &row.unavailable {
+            self.status_line = Some(format!("Can't run {} — {reason}.", row.name));
             return;
         }
-        if row.needs_ally_target {
-            self.pending_field_routine = Some(idx);
-            self.menu_selected = 0;
-            self.mode = Mode::FieldCastAlly;
-            return;
+        match row.second_pick {
+            FieldCastPick::Ally => {
+                self.pending_field_routine = Some(idx);
+                self.menu_selected = 0;
+                self.mode = Mode::FieldCastAlly;
+                return;
+            }
+            FieldCastPick::Cell => {
+                self.pending_field_routine = Some(idx);
+                // The cursor opens on the party's own cell, which is the one
+                // coordinate a player already knows the meaning of.
+                self.field_cursor = self.game.as_ref().and_then(|g| g.stack_pos_xy());
+                self.mode = Mode::FieldCastCell;
+                return;
+            }
+            FieldCastPick::None => {}
         }
         let Some(game) = &mut self.game else { return };
-        match game.cast_field_routine(idx, None) {
+        match game.cast_field_routine(idx, FieldCastTarget::None) {
             Ok(()) => self.status_line = None,
             Err(e) => self.status_line = Some(e),
         }
         self.mode = Mode::Playing;
+    }
+
+    /// Moves the cell cursor and commits the jump it is aimed at.
+    ///
+    /// The cursor walks with the same keys the player already walks with,
+    /// read north-up like the map it is drawn over rather than relative to
+    /// the party's facing — a cursor that rotated with the party would make
+    /// the one screen the player bets their run on the hardest to read.
+    ///
+    /// Clamped to the frame's bounds, so an out-of-bounds coordinate is
+    /// unreachable rather than lethal. Inside the grid, solid is solid.
+    pub(crate) fn handle_field_cast_cell_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.pending_field_routine = None;
+            self.field_cursor = None;
+            self.mode = Mode::FieldCast;
+            return;
+        }
+        let Some(game) = &mut self.game else { return };
+        let Some((w, h)) = game.frame_bounds() else {
+            self.mode = Mode::Playing;
+            return;
+        };
+        let Some((cx, cy)) = self.field_cursor else {
+            self.mode = Mode::FieldCast;
+            return;
+        };
+        let (dx, dy) = match key {
+            GameKey::Up | GameKey::Char('k') => (0, -1),
+            GameKey::Down | GameKey::Char('j') => (0, 1),
+            GameKey::Left | GameKey::Char('h') => (-1, 0),
+            GameKey::Right | GameKey::Char('l') => (1, 0),
+            GameKey::Enter => {
+                let Some(index) = self.pending_field_routine.take() else {
+                    self.mode = Mode::FieldCast;
+                    return;
+                };
+                self.field_cursor = None;
+                match game.cast_field_routine(index, FieldCastTarget::Cell(cx, cy)) {
+                    Ok(()) => self.status_line = None,
+                    Err(e) => self.status_line = Some(e),
+                }
+                self.mode = Mode::Playing;
+                return;
+            }
+            _ => return,
+        };
+        self.field_cursor = Some(((cx + dx).clamp(0, w - 1), (cy + dy).clamp(0, h - 1)));
     }
 
     /// Picks who the routine chosen in `Mode::FieldCast` lands on, then
@@ -72,7 +134,7 @@ impl App {
         let target = targets[idx].entity;
         self.pending_field_routine = None;
         let Some(game) = &mut self.game else { return };
-        match game.cast_field_routine(index, Some(target)) {
+        match game.cast_field_routine(index, FieldCastTarget::Ally(target)) {
             Ok(()) => self.status_line = None,
             Err(e) => self.status_line = Some(e),
         }

@@ -244,6 +244,40 @@ pub(crate) fn app_with_player_routines(seed: u32, routines: &[&str], hunger: f32
     app
 }
 
+/// An app whose player carries `routines` and is standing on depth 1 of a
+/// Stack frame, at the frame's own entry cell facing north.
+///
+/// Written into the save rather than walked to: `Game::enter_stack` is
+/// `pub(crate)` in the engine and app-core is outside that boundary, and a
+/// fixture that hunted the zone for a surface link would be a test about
+/// world generation.
+pub(crate) fn app_underground_with_routines(seed: u32, routines: &[&str]) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("field_stack", seed);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.routines = routines.iter().map(|r| r.to_string()).collect();
+    data.player.fatigue = 100.0;
+    data.locale = feral_processes_engine::resources::Locale::Stack {
+        depth: 1,
+        frames: 2,
+        // Overwritten below by the frame's own entry — the save only has to
+        // put the party *somewhere* legal for the frame to regenerate.
+        x: 1,
+        y: 1,
+        facing: feral_processes_engine::stack::Dir::North,
+        entrance: data.player.position,
+    };
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Game::load(&path, &assets_dir).ok();
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}
+
 /// Same as `app_with_player_routines`, but the player also owns one program
 /// (parked next to them) and one wild, unowned creature is nearby too — for
 /// asserting the field-cast ally picker (`Mode::FieldCastAlly`) offers the

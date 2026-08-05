@@ -1,30 +1,37 @@
-//! Casting a field routine: spending the Power an `AbilityEffect::FieldBuff`
-//! costs outside battle to arm it on whoever it lands on. See
-//! `components::FieldBuff` for the buff itself and `arm_field_buff` for how
-//! it gets installed.
+//! Casting a field routine: the abilities that run outside battle rather
+//! than being spent as a Special.
+//!
+//! Three effects reach this path — `AbilityEffect::FieldBuff`, which spends
+//! Power to arm a running buff (see `components::FieldBuff` and
+//! `arm_field_buff`), and the two Stack movement routines `Phase` and
+//! `Jump`, which spend Fatigue to move the party through a frame (see
+//! `game/stack_movement.rs`). `AbilityEffect::field_only` is the predicate
+//! that says which.
 
 use crate::components::{FieldScope, NEED_MIN};
+use crate::game::stack::StackPos;
+use crate::tuning::{TRACE_PER_JUMP, TRACE_PER_PHASE};
 use crate::*;
 
 impl Game {
-    /// Every `FieldBuff` ability installed on you or a program you own, flat
-    /// across holders. `Game::routine_holders` is the walk over "you, then
-    /// every program you own"; this narrows each holder's installed slots
-    /// down to the field-only ones and reshapes them for the picker.
+    /// Every **field-only** ability installed on you or a program you own,
+    /// flat across holders. `Game::routine_holders` is the walk over "you,
+    /// then every program you own"; this narrows each holder's installed
+    /// slots down to the field-castable ones and reshapes them for the
+    /// picker.
     ///
     /// `index` into the returned `Vec` is exactly what `cast_field_routine`
     /// takes, and this is the *only* place that list is built — a filtered
     /// view and a cast-time index can never disagree about what a position
     /// means, which is the trap `battle_special_options` fell into before it
-    /// started resolving by stable index instead of filtered position.
+    /// started resolving by stable index instead of filtered position. It is
+    /// also the only place a row's cost is decided, which is what stops the
+    /// list saying "PWR" about a routine the cast then charges in Fatigue.
     pub fn field_routines(&mut self) -> Vec<FieldRoutineView> {
         let holders = self.routine_holders();
         let player = self.player_entity();
-        let hunger = self
-            .world
-            .get::<Needs>(player)
-            .map(|n| n.hunger)
-            .unwrap_or(0.0);
+        let needs = self.world.get::<Needs>(player).copied().unwrap_or_default();
+        let underground = self.is_underground();
         let db = self.world.resource::<AbilityDb>();
         let mut rows = Vec::new();
         for holder in &holders {
@@ -33,22 +40,50 @@ impl Game {
             };
             for id in &installed.0 {
                 let Some(def) = db.get(id) else { continue };
-                let AbilityEffect::FieldBuff { power_cost, .. } = &def.effect else {
+                if !def.effect.field_only() {
                     continue;
+                }
+                let (cost, held, unit) = match &def.effect {
+                    AbilityEffect::FieldBuff { power_cost, .. } => {
+                        (*power_cost, needs.hunger, "PWR")
+                    }
+                    // Fatigue rather than a second cost field: for a routine
+                    // that never appears in battle, "what running this costs
+                    // the player" is already precisely what `fatigue_cost`
+                    // means. See the design doc on why `FieldBuff`'s own
+                    // `power_cost` is left where it is.
+                    _ => (def.fatigue_cost, needs.fatigue, "FTG"),
                 };
+                let stack_only = matches!(def.effect, AbilityEffect::Phase | AbilityEffect::Jump);
                 rows.push(FieldRoutineView {
                     ability: def.id.clone(),
                     name: def.name.clone(),
                     description: def.description.clone(),
                     holder: holder.entity,
                     holder_label: holder.name.clone(),
-                    power_cost: *power_cost,
-                    affordable: hunger >= *power_cost,
-                    // `AbilityDb::load_dir`'s field_buff_target_mismatch check
-                    // already refuses a Run-scoped FieldBuff any target but
-                    // WholeParty, so OneAlly can only appear here on a
-                    // Creature-scoped one.
-                    needs_ally_target: def.target == AbilityTarget::OneAlly,
+                    cost: format!("{cost:.0} {unit}"),
+                    // Ordered so the permanent objection is stated ahead of
+                    // the temporary one: telling a player on open grid that
+                    // they are short of Fatigue would send them to rest for
+                    // a routine that was never going to run up here.
+                    unavailable: if stack_only && !underground {
+                        Some("only in the Stack".into())
+                    } else if held < cost {
+                        Some(format!("not enough {unit}"))
+                    } else {
+                        None
+                    },
+                    second_pick: match def.effect {
+                        // `AbilityDb::load_dir`'s field_buff_target_mismatch
+                        // check already refuses a Run-scoped FieldBuff any
+                        // target but WholeParty, so OneAlly can only appear
+                        // here on a Creature-scoped one.
+                        AbilityEffect::FieldBuff { .. } if def.target == AbilityTarget::OneAlly => {
+                            FieldCastPick::Ally
+                        }
+                        AbilityEffect::Jump => FieldCastPick::Cell,
+                        _ => FieldCastPick::None,
+                    },
                 });
             }
         }
@@ -84,15 +119,22 @@ impl Game {
         entity == self.player_entity() || self.world.resource::<Party>().0.contains(&entity)
     }
 
-    /// Spends `field_routines()[index]`'s Power cost and arms its buff.
+    /// Runs `field_routines()[index]` — arming a buff, or moving the party
+    /// through a Stack frame.
     ///
     /// Refused during a battle and after game over, like any other map
-    /// action — but never by `require_surface`: casting reaches no zone-map
-    /// state, so it works underground exactly as it does on the surface.
+    /// action — but never by `require_surface`. A `FieldBuff` reaches no
+    /// zone-map state, so it works underground exactly as it does on the
+    /// surface; and the two movement routines have the *opposite* problem
+    /// from the one that guard exists for. They read and write
+    /// `Locale::Stack`'s own coordinates rather than a `Position` pinned to
+    /// the entrance tile, so what they need is the presence of that locale,
+    /// which is `Game::stack_pos` returning `None`.
     ///
-    /// Every check runs before the first write (the Power deduction), so a
-    /// refused cast leaves both Power and every `FieldBuff` untouched: no
-    /// buff armed with the cost unpaid, no cost paid with nothing armed.
+    /// Every check runs before the first write (the need deduction), so a
+    /// refused cast spends nothing and arms nothing: no buff with the cost
+    /// unpaid, no cost paid with nothing to show for it, no party moved
+    /// through a wall for free.
     ///
     /// A successful cast ticks the clock, the same as `use_item` spending a
     /// turn on a consumable that arms the identical `ActiveFieldBuff`
@@ -100,12 +142,11 @@ impl Game {
     /// one-shot, so the item path is already the costlier of the two; not
     /// ticking here would leave a strictly better option on the table for
     /// no reason anyone chose. A refused cast spends nothing and so costs
-    /// no time — the tick sits only on the success path, after the buff is
-    /// armed.
+    /// no time — the tick sits only on the success path.
     pub fn cast_field_routine(
         &mut self,
         index: usize,
-        target: Option<Entity>,
+        pick: FieldCastTarget,
     ) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -114,15 +155,12 @@ impl Game {
         let Some(view) = routines.get(index) else {
             return Err("No such routine.".into());
         };
-        let player = self.player_entity();
-        let hunger = self.world.get::<Needs>(player).unwrap().hunger;
-        if hunger < view.power_cost {
-            return Err(format!("Not enough Power to run {}.", view.name));
+        if let Some(reason) = &view.unavailable {
+            return Err(format!("Can't run {} — {reason}.", view.name));
         }
         let ability_id = view.ability.clone();
         let holder = view.holder;
         let holder_label = view.holder_label.clone();
-        let power_cost = view.power_cost;
 
         let def = self
             .world
@@ -130,14 +168,24 @@ impl Game {
             .get(&ability_id)
             .cloned()
             .expect("field_routines only lists abilities AbilityDb actually holds");
+
+        match def.effect {
+            AbilityEffect::Phase => return self.cast_phase(&def, pick),
+            AbilityEffect::Jump => return self.cast_jump(&def, pick),
+            _ => {}
+        }
+
+        let player = self.player_entity();
         let AbilityEffect::FieldBuff {
             kind,
             power,
             duration,
-            ..
+            power_cost,
         } = def.effect
         else {
-            unreachable!("field_routines only lists AbilityEffect::FieldBuff abilities");
+            unreachable!(
+                "field_routines lists only field-only effects, and the two above returned"
+            );
         };
 
         let recipients: Vec<Entity> = match kind.scope() {
@@ -149,7 +197,7 @@ impl Game {
             FieldScope::Run => vec![player],
             FieldScope::Creature => match def.target {
                 AbilityTarget::OneAlly => {
-                    let Some(target) = target else {
+                    let FieldCastTarget::Ally(target) = pick else {
                         return Err(format!("Choose who to run {} on.", def.name));
                     };
                     if !self.is_field_cast_target(target) {
@@ -212,6 +260,85 @@ impl Game {
         self.log(format!("{holder_label} runs {}.", def.name));
         self.tick();
         Ok(())
+    }
+
+    /// The Stack position both movement routines need, or the refusal for
+    /// being on open grid.
+    ///
+    /// `field_routines` already greys those rows on the surface, so a player
+    /// working the menu never reaches this — it is here because the picker
+    /// being correct is not a substitute for the engine enforcing it, the
+    /// same call `is_field_cast_target` makes about the ally list.
+    fn movement_cast_pos(&self, name: &str) -> Result<StackPos, String> {
+        self.stack_pos()
+            .ok_or_else(|| format!("{name} only runs inside the Stack."))
+    }
+
+    /// Spends `def`'s Fatigue and steps the party through one wall.
+    ///
+    /// `phase_landing` has already applied every refusal by the time
+    /// anything below runs, so the Fatigue is spent on a move that is
+    /// certain to happen. Trace is raised for the phase itself *before*
+    /// `arrive`, so the crossing reads as the consequence of the routine
+    /// rather than of whatever the party landed on top of.
+    fn cast_phase(&mut self, def: &AbilityDef, pick: FieldCastTarget) -> Result<(), String> {
+        if pick != FieldCastTarget::None {
+            return Err(format!("{} takes no target.", def.name));
+        }
+        let pos = self.movement_cast_pos(&def.name)?;
+        let landing = self.phase_landing(pos)?;
+
+        self.spend_fatigue(def.fatigue_cost);
+        self.log_kind(
+            MessageKind::Outcome,
+            "The wall goes soft for exactly as long as it takes to cross it.",
+        );
+        self.relocate_within_frame(landing);
+        self.raise_trace(TRACE_PER_PHASE);
+        self.arrive();
+        self.tick();
+        Ok(())
+    }
+
+    /// Spends `def`'s Fatigue and moves the party to the cell they pointed
+    /// at — or kills them, if that cell turns out to be solid.
+    ///
+    /// The Fatigue comes off either way: the routine ran, and what it found
+    /// at the address is not something the party gets refunded for. Trace
+    /// and `arrive` belong only to the arrival — a party that resolved
+    /// inside rock has arrived nowhere, and `die_in_the_rock` deliberately
+    /// never writes `Locale`, so there is no cell for the arrival tail to
+    /// act on.
+    fn cast_jump(&mut self, def: &AbilityDef, pick: FieldCastTarget) -> Result<(), String> {
+        let FieldCastTarget::Cell(x, y) = pick else {
+            return Err(format!("Choose where to run {} to.", def.name));
+        };
+        let pos = self.movement_cast_pos(&def.name)?;
+        self.jump_refusal(pos, (x, y))?;
+
+        self.spend_fatigue(def.fatigue_cost);
+        if self.jump_is_lethal((x, y)) {
+            self.die_in_the_rock();
+        } else {
+            self.log_kind(
+                MessageKind::Outcome,
+                "You jump to an address nobody validated. It resolves.",
+            );
+            self.relocate_within_frame((x, y));
+            self.raise_trace(TRACE_PER_JUMP);
+            self.arrive();
+        }
+        self.tick();
+        Ok(())
+    }
+
+    /// Takes `cost` off the player's Fatigue, floored at `NEED_MIN`. The
+    /// first write of either movement cast, and every refusal is already
+    /// behind it.
+    fn spend_fatigue(&mut self, cost: f32) {
+        let player = self.player_entity();
+        let mut needs = self.world.get_mut::<Needs>(player).unwrap();
+        needs.fatigue = (needs.fatigue - cost).max(NEED_MIN);
     }
 
     /// Every buff currently running on the player or a party member, for the

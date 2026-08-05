@@ -624,9 +624,41 @@ pub struct ExtractableRoutineView {
     pub known: bool,
 }
 
-/// One row of the field-routine picker — a `FieldBuff` ability installed on
+/// Which second pick a field routine needs after it has been chosen, or
+/// `None` if there is nothing left to choose.
+///
+/// The field-cast twin of `battle::SpecialTargeting`, and named the same way
+/// for the same reason: this says which *picker* opens, while
+/// `FieldCastTarget` carries what came back out of it.
+///
+/// Replaced a `needs_ally_target: bool`, which could express two answers and
+/// there are now three.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FieldCastPick {
+    /// Commits from the routine list — a `WholeParty` field buff, or either
+    /// Stack movement routine, which acts on the party where it stands.
+    None,
+    /// One party member (`App::field_ally_options`) — a `Creature`-scoped
+    /// `FieldBuff` authoring `AbilityTarget::OneAlly`.
+    Ally,
+    /// A cell of the frame the party is standing in — `AbilityEffect::Jump`.
+    Cell,
+}
+
+/// What the player picked, once they have. The payload-carrying twin of
+/// `FieldCastPick`, exactly as `battle::SpecialTarget` is to
+/// `battle::SpecialTargeting` — `Game::cast_field_routine` takes this.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FieldCastTarget {
+    None,
+    Ally(Entity),
+    Cell(i32, i32),
+}
+
+/// One row of the field-routine picker — a field-only ability installed on
 /// you or a program you own, run outside battle rather than spent as a
-/// battle Special. See `Game::field_routines`.
+/// battle Special. See `Game::field_routines` and
+/// `abilities::AbilityEffect::field_only`.
 pub struct FieldRoutineView {
     pub ability: crate::abilities::AbilityId,
     pub name: String,
@@ -635,15 +667,18 @@ pub struct FieldRoutineView {
     /// "You" for the player, the program's display name otherwise — same
     /// convention as `RoutineHolderView::name`.
     pub holder_label: String,
-    pub power_cost: f32,
-    /// Whether the player can pay `power_cost` right now.
-    pub affordable: bool,
-    /// Whether casting this routine needs a `target` — true only for a
-    /// `Creature`-scoped `FieldBuff` authoring `AbilityTarget::OneAlly`; a
-    /// `Run`-scoped routine (always `WholeParty`, see
-    /// `abilities::AbilityDef::field_buff_target_mismatch`) or a
-    /// `WholeParty` one needs no picker.
-    pub needs_ally_target: bool,
+    /// What running this costs, already formatted with its unit — e.g.
+    /// `"18 PWR"` or `"12 FTG"`. A string rather than a number because the
+    /// two field-only families spend different needs, and a renderer that
+    /// picked the noun itself would be a second place for it to be wrong.
+    /// Same call `ActiveBuffView::magnitude` already makes.
+    pub cost: String,
+    /// `Some(reason)` means render it greyed with the reason shown — same
+    /// contract as `battle::SpecialOption::unavailable`, and the same reason:
+    /// the engine that knows *why* is the one that writes the sentence.
+    pub unavailable: Option<String>,
+    /// Which picker follows this row, if any.
+    pub second_pick: FieldCastPick,
 }
 
 /// One row of the buff list — the map screen's field buffs plus, during a

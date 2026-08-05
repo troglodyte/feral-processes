@@ -395,6 +395,24 @@ impl Game {
         }
     }
 
+    /// The party's cell in the frame they are standing in, or `None` on the
+    /// surface. The public slice of `stack_pos` app-core needs to open a
+    /// cell cursor where the party is standing.
+    pub fn stack_pos_xy(&self) -> Option<(i32, i32)> {
+        self.stack_pos().map(|pos| (pos.x, pos.y))
+    }
+
+    /// The current frame's `(width, height)`, or `None` on the surface —
+    /// what a cell cursor clamps itself against, so an out-of-bounds
+    /// coordinate is unreachable rather than lethal.
+    pub fn frame_bounds(&self) -> Option<(i32, i32)> {
+        self.world
+            .resource::<CurrentStack>()
+            .0
+            .as_ref()
+            .map(|level| (level.width, level.height))
+    }
+
     /// Whether a Stack action can run at all: underground, alive, and not
     /// mid-intrusion. Mirrors the guard at the top of `move_player`.
     fn can_act_underground(&self) -> bool {
@@ -478,26 +496,46 @@ impl Game {
         self.remember_view();
         // Only a step that actually covered ground arrives anywhere —
         // shoving at a wall is not travel, the same call `move_player`
-        // makes about an ambush. All three of these are about the cell the
-        // party stepped *onto*: a lair roused on a blocked step is a second
-        // full-HP guardian conjured by a party that jacked out of the first
-        // and misjudged which way it was facing.
+        // makes about an ambush.
         if walkable {
-            // Corruption first: it is a property of arriving rather than
-            // something the cell offers, and if it kills the party the three
-            // below all refuse on their own `is_game_over` checks.
-            self.bleed_corruption();
-            self.open_cache();
-            self.rouse_lair();
-            self.trip_breakpoint();
-            // Before the encounter roll, so a party that fell rolls for an
-            // ambush in the frame they landed in rather than the one they
-            // left. Landing somewhere strange and being jumped there is the
-            // right reading of a fall.
-            self.take_fault();
-            self.maybe_stack_encounter();
+            self.arrive();
         }
         self.tick();
+    }
+
+    /// Everything arriving on a cell means, in the order it means it.
+    ///
+    /// There are three ways to arrive — a step, a phase through a wall, and
+    /// a wild jump — and the same argument `enter_frame` makes about there
+    /// being one way *into a frame* applies here to landing on a cell: they
+    /// differ in how the party got there and agree completely on what
+    /// happens next. Three copies of this tail is three places to fix an
+    /// ordering bug in, and the ordering is the whole of it:
+    ///
+    /// - **Corruption first**, because it is a property of arriving rather
+    ///   than something the cell offers, and if it kills the party the four
+    ///   below all refuse on their own `is_game_over` checks.
+    /// - **The fault before the encounter roll**, so a party that fell rolls
+    ///   for an ambush in the frame they landed in rather than the one they
+    ///   left. Landing somewhere strange and being jumped there is the right
+    ///   reading of a fall.
+    ///
+    /// Every one of these is about the cell the party is standing on *now*:
+    /// a lair roused without having arrived is a second full-HP guardian
+    /// conjured by a party that jacked out of the first.
+    ///
+    /// Deliberately does **not** call `remember_view`. Every caller does
+    /// that itself first, because a corridor the party moved into has to be
+    /// on their map even if something jumps them the moment they enter it —
+    /// and `step` calls it unconditionally, including on a blocked step,
+    /// which is a rule about facing rather than about arriving.
+    pub(crate) fn arrive(&mut self) {
+        self.bleed_corruption();
+        self.open_cache();
+        self.rouse_lair();
+        self.trip_breakpoint();
+        self.take_fault();
+        self.maybe_stack_encounter();
     }
 
     /// What Stack depth multiplies wild program stats by — `1.0` on the

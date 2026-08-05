@@ -22,8 +22,8 @@ use feral_processes_engine::battle::{
 use feral_processes_engine::items::{EquipmentSlot, EquipmentStats, ItemId};
 use feral_processes_engine::tuning::{ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_FUSIONS};
 use feral_processes_engine::{
-    AchievementRow, DifficultyMode, Entity, EntityView, Game, LogLine, MESSAGE_LOG_CAP,
-    MessageSource, ProgramSaleOption, RoutineHolderView, SlotShift,
+    AchievementRow, DifficultyMode, Entity, EntityView, FieldCastPick, FieldCastTarget, Game,
+    LogLine, MESSAGE_LOG_CAP, MessageSource, ProgramSaleOption, RoutineHolderView, SlotShift,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -607,6 +607,16 @@ pub enum Mode {
     /// since `Game::cast_field_routine` checks a target is alive but not
     /// that the player owns it.
     FieldCastAlly,
+    /// Aiming an `AbilityEffect::Jump` at a cell of the frame the party is
+    /// standing in. Entered from `Mode::FieldCast` when the chosen row's
+    /// `FieldRoutineView::second_pick` is `FieldCastPick::Cell`.
+    ///
+    /// The cursor (`App::field_cursor`) starts on the party's own cell,
+    /// walks with the same keys the map already walks with, and is clamped
+    /// to the frame's bounds — an out-of-bounds coordinate is unreachable
+    /// rather than lethal. Enter commits, Esc backs out spending nothing,
+    /// matching every other second pick.
+    FieldCastCell,
     /// Picking which program to break down for a routine. Reached with `M`
     /// from `Mode::Playing`.
     Extract,
@@ -719,6 +729,7 @@ impl Mode {
             | Mode::RoutineInstall
             | Mode::FieldCast
             | Mode::FieldCastAlly
+            | Mode::FieldCastCell
             | Mode::Extract
             | Mode::ExtractPick
             | Mode::ExtractConfirm
@@ -891,6 +902,10 @@ pub struct App {
     /// routine needing no ally casts straight from `Mode::FieldCast` and
     /// never sets this.
     pub pending_field_routine: Option<usize>,
+    /// Where the cell cursor is aimed in `Mode::FieldCastCell`, in frame
+    /// coordinates. `None` outside that mode — a routine needing no cell
+    /// never sets it, and Esc and a committed jump both clear it.
+    pub field_cursor: Option<(i32, i32)>,
     /// The action kind picked in `Mode::Battle`, awaiting an enemy group
     /// from `Mode::BattleTarget` before it becomes a `BattleAction`.
     pub pending_battle_action: Option<ActionKind>,

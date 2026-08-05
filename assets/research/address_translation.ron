@@ -1,0 +1,8 @@
+(
+    id: "address_translation",
+    name: "Address Translation",
+    description: "Write to the substrate's own page tables instead of walking around them. Teaches Buffer Overrun Party and Wild Jump Party — a step through one wall, and a jump to any address in the frame that kills you if nothing is mapped there.",
+    cost: 50,
+    requires: ["deep_analysis"],
+    unlocks_abilities: ["buffer_overrun", "wild_jump"],
+)

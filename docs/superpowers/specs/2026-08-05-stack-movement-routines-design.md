@@ -1,7 +1,25 @@
 # Stack movement routines — design
 
 **Date:** 2026-08-05
-**Status:** approved, not implemented
+**Status:** implemented 2026-08-05. Built as designed, with three details
+settled during implementation:
+
+- `FieldRoutineView`'s `power_cost: f32` + `affordable: bool` became
+  `cost: String` (already carrying its unit) + `unavailable: Option<String>`,
+  mirroring `battle::SpecialOption`. The failure this feature could actually
+  cause is a screen saying "Power" about a routine charged in Fatigue, and
+  this leaves that sentence with one author. It also deleted app-core's copy
+  of the refusal message.
+- The second-pick field is `FieldCastPick` (which picker), paired with a new
+  `FieldCastTarget` (the pick) that `cast_field_routine` now takes in place
+  of `Option<Entity>` — the same split `battle::SpecialTargeting` /
+  `battle::SpecialTarget` already makes.
+- `AbilityEffect::field_only()` is the one predicate the four sites read,
+  rather than each widening its own `matches!`.
+
+**Not playtested.** The suite is green and the numbers below
+(`TRACE_PER_PHASE` 5, `TRACE_PER_JUMP` 10, 12 and 20 Fatigue, a 50-Data
+node) are unplayed judgement calls.
 
 ## The problem
 

@@ -51,7 +51,7 @@ use building::{
 };
 use crafting::{draw_craft_menu, draw_craft_quantity, draw_recipes};
 use field::{draw_field_cast, draw_field_cast_ally};
-use frame_map::{draw_frame_map, draw_map_inset};
+use frame_map::{draw_frame_map, draw_frame_map_cursor, draw_map_inset};
 use group_menu::draw_group_menu;
 use inventory::{
     draw_equip_swap, draw_erase_quantity, draw_inventory, draw_inventory_item_action,
@@ -327,6 +327,29 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
                 draw_mode_overlay(app, painter, &m);
             }
         },
+        // Full-pane for the same reason `Mode::FrameMap` is, and doubly so:
+        // picking a cell you have never walked to means seeing the whole
+        // frame at once.
+        Mode::FieldCastCell => {
+            match (
+                app.game.as_ref().and_then(|g| g.frame_map()),
+                app.field_cursor,
+            ) {
+                (Some(view), Some(cursor)) => draw_frame_map_cursor(
+                    &view,
+                    cursor,
+                    painter,
+                    painter.screen_w(),
+                    painter.screen_h(),
+                    &m,
+                ),
+                // Surfacing mid-pick, the same fallback the map screen makes.
+                _ => {
+                    draw_playing_base(app, fx, painter, &m);
+                    draw_mode_overlay(app, painter, &m);
+                }
+            }
+        }
         _ => {
             draw_playing_base(app, fx, painter, &m);
             draw_mode_overlay(app, painter, &m);

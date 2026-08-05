@@ -425,10 +425,7 @@ fn every_shipped_ability_but_decompile_and_field_routines_has_a_cooldown() {
             assert_eq!(def.cooldown, 0, "decompile stays spammable, deliberately");
             continue;
         }
-        if matches!(
-            def.effect,
-            crate::abilities::AbilityEffect::FieldBuff { .. }
-        ) {
+        if def.effect.field_only() {
             assert_eq!(
                 def.cooldown, 0,
                 "ability {:?} is field-only, so cooldown should be left at its default",
@@ -552,7 +549,6 @@ fn scope_rank(target: crate::abilities::AbilityTarget) -> usize {
 /// what that half of the set is organised by.
 #[test]
 fn every_battle_ability_family_is_contiguous_from_single_upward() {
-    use crate::abilities::AbilityEffect;
     let game = Game::new(3305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let mut scopes: std::collections::BTreeMap<String, std::collections::BTreeSet<usize>> =
         std::collections::BTreeMap::new();
@@ -560,7 +556,7 @@ fn every_battle_ability_family_is_contiguous_from_single_upward() {
         .world
         .resource::<crate::abilities::AbilityDb>()
         .all()
-        .filter(|d| !matches!(d.effect, AbilityEffect::FieldBuff { .. }))
+        .filter(|d| !d.effect.field_only())
     {
         scopes
             .entry(family(def))
@@ -863,12 +859,7 @@ fn every_shipped_field_routine_can_actually_be_obtained() {
         .world
         .resource::<crate::abilities::AbilityDb>()
         .all()
-        .filter(|def| {
-            matches!(
-                def.effect,
-                crate::abilities::AbilityEffect::FieldBuff { .. }
-            )
-        })
+        .filter(|def| def.effect.field_only())
         .map(|def| def.id.as_str())
         .filter(|id| !granted.contains(id))
         .collect();

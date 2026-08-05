@@ -45,6 +45,12 @@ const WALKED: Color = Color::new(0.16, 0.38, 0.42, 1.0);
 /// survives being small in a way a 9px glyph does not.
 const CORRUPT: Color = Color::new(0.36, 0.14, 0.30, 1.0);
 
+/// The Wild Jump cursor's outline. Deliberately not `CYAN` — the party's own
+/// `@` is cyan, and on the one screen where "where I am" and "where I am
+/// aiming" have to stay distinguishable, sharing a colour is how a player
+/// jumps into a wall.
+const CURSOR: Color = Color::new(1.0, 1.0, 1.0, 1.0);
+
 fn tile_color(cell: FrameMapCell) -> Color {
     match cell {
         FrameMapCell::Unknown => UNKNOWN,
@@ -265,6 +271,87 @@ pub(super) fn draw_map_inset(
         return;
     }
     draw_grid(&view, painter, r.x + ox, r.y + oy, cell);
+}
+
+/// Aiming a Wild Jump: the same map, with a cursor on the cell the jump
+/// would resolve at — `Mode::FieldCastCell`.
+///
+/// The **third caller** of this file, and deliberately not a fourth copy of
+/// the glyph table: it reuses `layout`, `draw_grid`, `tile_color` and
+/// `cell_glyph` and adds only the cursor on top. This is the one screen
+/// where drift would silently misinform rather than merely look wrong — the
+/// player is about to bet their run on what it says, and an unknown cell
+/// drawn as anything but unknown is the difference between a gamble and an
+/// ambush.
+///
+/// Drawn whole rather than cropped to `App::stack_zoom`: the point of the
+/// screen is picking somewhere you have *not* been, and a window around the
+/// party hides exactly that.
+pub(super) fn draw_frame_map_cursor(
+    view: &FrameMapView,
+    cursor: (i32, i32),
+    painter: &Painter,
+    w: f32,
+    h: f32,
+    m: &Metrics,
+) {
+    painter.rect(0.0, 0.0, w, h, PANEL_BG);
+    painter.rect_lines(0.0, 0.0, w, h, 2.0, BORDER);
+
+    let heading = format!(
+        "WILD JUMP   target {},{}   {}   Enter to commit, Esc to back out",
+        cursor.0,
+        cursor.1,
+        cursor_reading(view, cursor),
+    );
+    painter.ui(
+        &heading,
+        m.inset,
+        m.inset + m.font_size as f32,
+        m.font_size,
+        CYAN,
+    );
+
+    let (ox, oy, cell) = layout(view, w, h, GRID_FILL);
+    if cell <= 0.0 {
+        return;
+    }
+    draw_grid(view, painter, ox, oy, cell);
+
+    // After the grid and its marks, so the cursor is never painted over by
+    // the cell it is sitting on.
+    let (px, py) = (ox + cursor.0 as f32 * cell, oy + cursor.1 as f32 * cell);
+    painter.rect_lines(px, py, cell, cell, 2.0, CURSOR);
+
+    let legend = "unlit = unmapped, and unmapped is the gamble — solid substrate kills you";
+    let dims = painter.measure_ui(legend, m.font_size);
+    painter.ui(
+        legend,
+        (w - dims.width) / 2.0,
+        h - m.inset,
+        m.font_size,
+        TEXT_DIM,
+    );
+}
+
+/// What the map already knows about the cell under the cursor, in a word.
+///
+/// Read straight off `FrameMapView` rather than off the frame, so it can
+/// never say more than the map is showing — the whole risk of this screen is
+/// a readout that quietly launders unknown ground into known ground.
+fn cursor_reading(view: &FrameMapView, (x, y): (i32, i32)) -> &'static str {
+    let Some(cell) = view
+        .cells
+        .get(y as usize)
+        .and_then(|row| row.get(x as usize))
+    else {
+        return "off the frame";
+    };
+    match cell {
+        FrameMapCell::Unknown => "UNMAPPED",
+        FrameMapCell::Rock => "solid — this kills you",
+        _ => "open ground",
+    }
 }
 
 pub(super) fn draw_frame_map(view: &FrameMapView, painter: &Painter, w: f32, h: f32, m: &Metrics) {
@@ -632,6 +719,46 @@ mod tests {
 
     /// The renderer must survive whatever the engine hands it, including
     /// shapes it never actually produces.
+    /// The cursor screen reads the *map*, never the frame — so a cell the
+    /// party has not seen has to come back as unmapped rather than as
+    /// whatever is really there. That is the whole warning the screen gives
+    /// before the player bets their run on it.
+    #[test]
+    fn the_cursor_readout_never_says_more_than_the_map_shows() {
+        let mut v = view(21, 21);
+        v.cells[3][4] = FrameMapCell::Unknown;
+        v.cells[3][5] = FrameMapCell::Rock;
+        v.cells[3][6] = FrameMapCell::Floor;
+        assert_eq!(cursor_reading(&v, (4, 3)), "UNMAPPED");
+        assert!(cursor_reading(&v, (5, 3)).contains("kills"));
+        assert_eq!(cursor_reading(&v, (6, 3)), "open ground");
+        assert_eq!(cursor_reading(&v, (99, 99)), "off the frame");
+        assert_eq!(cursor_reading(&v, (-1, 0)), "off the frame");
+    }
+
+    /// The cursor and the party's own mark must never share a colour: on
+    /// this screen, "where I am" and "where I am aiming" are the two things
+    /// the player is reading, and one colour for both is how someone jumps
+    /// into a wall.
+    #[test]
+    fn the_cursor_is_not_the_colour_of_the_party_mark() {
+        assert_ne!(CURSOR, mark_glyph(FrameMapMark::Party).1);
+    }
+
+    #[test]
+    fn drawing_the_cursor_screen_does_not_panic() {
+        let m = crate::text::ui_metrics(900.0);
+        let mut empty = view(0, 0);
+        empty.cells = Vec::new();
+        crate::paint::with_painter(|p| {
+            draw_frame_map_cursor(&view(21, 21), (0, 0), p, 1000.0, 640.0, &m);
+            draw_frame_map_cursor(&view(31, 11), (30, 10), p, 1000.0, 640.0, &m);
+            // A cursor off the grid entirely: clipped by the readout and
+            // drawn outside the tiles, never indexed with.
+            draw_frame_map_cursor(&empty, (99, 99), p, 800.0, 600.0, &m);
+        });
+    }
+
     #[test]
     fn drawing_a_degenerate_map_does_not_panic() {
         let m = crate::text::ui_metrics(900.0);

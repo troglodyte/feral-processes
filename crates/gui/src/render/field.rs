@@ -199,11 +199,14 @@ pub(super) fn draw_field_cast(game: &mut Game, selected: usize, painter: &Painte
         ));
     }
     for (i, r) in routines.iter().enumerate() {
+        // `cost` arrives already carrying its unit — a `FieldBuff` spends
+        // Power and a movement routine spends Fatigue, and which noun goes
+        // here is the engine's to decide, not this file's.
         let label = format!(
-            "[{}] {} — {:.0} PWR — {} ({})",
+            "[{}] {} — {} — {} ({})",
             menu_shortcut(i),
             r.name,
-            r.power_cost,
+            r.cost,
             r.description,
             r.holder_label,
         );
@@ -211,11 +214,10 @@ pub(super) fn draw_field_cast(game: &mut Game, selected: usize, painter: &Painte
         // refuses it again on commit with the reason in `App::status_line`,
         // and a row that vanished would leave the player wondering where a
         // routine they installed went — same call `draw_battle_special_menu`
-        // makes for an unaffordable Special.
-        rows.push(if r.affordable {
-            item_row(label, i == selected)
-        } else {
-            spent_item_row(format!("{label} — not enough Power"), i == selected)
+        // makes for an unavailable Special.
+        rows.push(match &r.unavailable {
+            None => item_row(label, i == selected),
+            Some(reason) => spent_item_row(format!("{label} — {reason}"), i == selected),
         });
     }
     draw_popup("Run a Routine", PopupSize::Large, &rows, painter, m);

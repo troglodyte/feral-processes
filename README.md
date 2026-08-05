@@ -46,9 +46,11 @@ an old-school "con" system scaled to your current power rather than a fixed
 per-species color, so the same program reads Green early and Red again once
 a deeper zone's stat doubling catches up to you. Programs spawn in packs
 that fight as groups, and both group size and how many groups engage at once
-scale with zone depth and distance from your base — a zone-1 fight beside
-where you materialize is a genuine one-on-one, and the deep field can throw
-four groups of a hundred at you.
+scale with the zone you have breached to and, underground, the frame you have
+descended to — a zone-1 fight is a genuine one-on-one wherever you meet it,
+and the deep field can throw four groups of a hundred at you. Where you stand
+inside a zone decides nothing: difficulty comes from the commitments you make,
+not from which direction you wandered.
 
 ## The Stack
 
@@ -384,8 +386,7 @@ to nothing.
 ## Zones and portals
 
 Every creature is tagged with the zone it spawned in, and each zone level
-doubles wild stats over the last, with another 25% per 15 tiles you wander
-past your platform edge (capping at 3×). Deploy a Zone Portal — 10 Portal
+doubles wild stats over the last. Deploy a Zone Portal — 10 Portal
 Fragments plus half that again per zone below your current one — and walk
 onto it to breach deeper. Your Portal Fragments and Core Fragments are wiped
 in the crossing, so every zone has to fund its own exit — sell what you can
@@ -527,7 +528,7 @@ The economy needs exactly one item holding each of the `Currency`,
 ## Tuning difficulty
 
 Everything the engine hardcodes about how hard the game is lives in one
-file: `crates/engine/src/tuning.rs`. Zone and distance scaling, XP curves
+file: `crates/engine/src/tuning.rs`. Zone and Stack-depth scaling, XP curves
 and level caps, the damage and capture formulas, spawn and drop rates, sweep
 pressure, need decay, perk magnitudes — each is a documented constant in a
 labelled section. Change a number, run `cargo test --workspace`, play.

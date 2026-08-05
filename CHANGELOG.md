@@ -13,6 +13,51 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Difficulty comes from the zone, not from how far you walked
+
+Wild programs no longer get stronger the further you are from your base.
+Distance from the danger origin used to scale their stats by up to 3x and
+double group size every 15 tiles, on top of the zone's own doubling. Both
+are gone. A zone now has one consistent difficulty, and the escalation you
+feel comes from the commitments you make — funding a Portal, descending a
+link — rather than from which direction you wandered.
+
+This also fixes a leak into the Stack that was never intended. Every
+underground spawn is placed at the surface tile you descended through, so
+a link out at the edge of the sector multiplied *every fight in that whole
+stack* by its own distance. Two stacks at the same depth could differ
+threefold on nothing but where their entrances happened to sit.
+
+Group size and group count still ride one shared curve, so they cannot
+disagree about how dangerous a place is; it just reads the zone on the
+surface and the frame depth in the Stack.
+
+**The zone-1 opening ring survives**, now as an explicit radius —
+`OPENING_RING_TILES`, the build radius — around your base rather than a
+band derived from the old distance curves. It travels with your base and
+still fields only programs a fresh player can actually beat.
+
+### The field hits harder and bosses hit less hard
+
+With distance gone, a zone's baseline is all it has, so the field roster's
+base stats are up 25%. The four species the opening ring draws from — Scan
+Drone, Glitch, Sprite and Sub-Process — deliberately sit it out: they are
+the only four a bare level-1 player beats solo, and raising them would
+quietly empty the ring.
+
+Bosses move the other way. At Stack depth 2 an Overseer was 2.6x an
+ordinary program's HP and 3.1x its attack, which made the gap between a
+depth-2 fight and a depth-2 lair far larger than the depth between them.
+Overseer and Wintermute now sit near 1.5x the toughest ordinary program,
+and past zone 1 a boss arrives with an escort group of an ordinary species
+from its own habitat. A boss is a harder *fight* now rather than a harder
+single opponent. Zone 1 holds one group, so the opening zone's boss is
+still met alone.
+
+The grind-only level curve moves from 1/15/33/61/117 to 1/19/40/77/149
+across zones 1-5. The shape is unchanged at roughly 2x per zone; the whole
+curve sits higher.
+
 ### Upgrade tiers are gated by the zone you have breached to
 
 A structure is deployed at Mk1 wherever you build it, and the zone you have

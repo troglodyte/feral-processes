@@ -1,7 +1,7 @@
 (
     id: "home",
     name: "Home",
-    description: "Anchors your base — everything else must be deployed within 7 tiles of it, and demolishing it cascades. Raids can't touch it, you can recharge beside it for a Power Outlet, and you can symlink home from anywhere for 4 Power Cells.",
+    description: "Anchors your base — everything else must be deployed within 7 tiles of it, and demolishing it cascades. GC Entropy Sweeps can't touch it, you can recharge beside it for a Power Outlet, and you can symlink home from anywhere for 4 Power Cells.",
     glyph: 'H',
     color: Green,
     build_cost: [("core_fragment", 5)],

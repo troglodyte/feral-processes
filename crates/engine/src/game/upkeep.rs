@@ -189,7 +189,7 @@ impl Game {
             } else {
                 self.push_effect(target, EffectKind::Deflected);
                 self.log_base(format!(
-                    "Your shield network fends off a raid on {target_label} without a scratch!"
+                    "Your shield network fends off a GC Entropy Sweep on {target_label} without a scratch!"
                 ));
             }
             return;
@@ -203,7 +203,7 @@ impl Game {
         } else {
             self.push_effect(target, EffectKind::Deflected);
             self.log_base(format!(
-                "{worker_label} fends off a raid on {target_label} without a scratch!"
+                "{worker_label} fends off a GC Entropy Sweep on {target_label} without a scratch!"
             ));
         }
         self.apply_damage(worker, RAID_DEFENDER_DAMAGE);
@@ -244,7 +244,7 @@ impl Game {
         if destroyed {
             self.log_base_kind(
                 MessageKind::Raid,
-                format!("{label} is destroyed in a raid!"),
+                format!("{label} is destroyed in a GC Entropy Sweep!"),
             );
             let workers: Vec<Entity> = {
                 let mut query = self.world.query::<(Entity, &Task)>();
@@ -262,7 +262,7 @@ impl Game {
         } else {
             self.log_base_kind(
                 MessageKind::Raid,
-                format!("{label} takes {dmg} raid damage!"),
+                format!("{label} loses {dmg} Durability to a GC Entropy Sweep!"),
             );
         }
     }

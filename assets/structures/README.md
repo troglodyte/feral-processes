@@ -193,7 +193,9 @@ is skipped with a warning logged in-game rather than crashing startup.
     )),
 
     // Optional; can be left out entirely (defaults to 30). How much damage
-    // this structure can take from raids (see `Game::raid_check`) before
+    // this structure can take from GC Entropy Sweeps — the player-facing
+    // name for what the code still calls a raid, `Game::raid_check` —
+    // before
     // being destroyed. An assigned cronjob worker/guard fights a raid off,
     // reducing the damage by its Defense stat; an unassigned structure
     // takes the raid's full damage (less any raid_defense below).
@@ -274,6 +276,12 @@ is skipped with a warning logged in-game rather than crashing startup.
     // tiers, starting at Mk1 and stopping at `max_tier`. The cost to reach
     // tier N is each quantity in `cost` multiplied by N — so with the
     // 10 Core Fragments below, Mk1->Mk2 costs 20 and Mk2->Mk3 costs 30.
+    //
+    // `max_tier` is a *permanent* ceiling, and it is not the only one: the
+    // player also cannot pass the zone they have breached to, so Mk*N*
+    // needs zone *N*. Nothing at all upgrades in zone 1. Setting
+    // `max_tier` above 5 is legal and simply means the ceiling stays the
+    // zone's for longer.
     //
     // A structure's tier does two things at once. It multiplies its `work`
     // payout (on top of the zone multiplier — see `work` above), and it

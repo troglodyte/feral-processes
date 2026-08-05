@@ -64,7 +64,7 @@ disqualifies the whole file.
     // `standard_and_premium_gear_is_made_from_intermediates` holds that
     // policy, and `scavenged_gear_stays_benchless_and_fragment_only` holds
     // the other half — the cheap tier stays craftable with no base standing,
-    // which is what a fresh run, or one just raided flat, equips out of.
+    // which is what a fresh run, or one just swept flat, equips out of.
     value: Some(90),
 
     // Optional; can be left out entirely (defaults to no economy role). If

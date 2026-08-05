@@ -1,7 +1,7 @@
 (
     id: "shield",
     name: "Shield",
-    description: "Soaks 2 damage off every raid against every structure you own, not just itself. Stacks with a second one.",
+    description: "Soaks 2 damage off every GC Entropy Sweep against every structure you own, not just itself. Stacks with a second one.",
     glyph: '^',
     color: Blue,
     build_cost: [("core_fragment", 16)],

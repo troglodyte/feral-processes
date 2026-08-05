@@ -13,6 +13,42 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Upgrade tiers are gated by the zone you have breached to
+
+A structure is deployed at Mk1 wherever you build it, and the zone you have
+reached is what unlocks the tiers above: zone 2 frees Mk2, zone 3 frees Mk3,
+up to the Mk5 every shipped producer caps at. Nothing upgrades at all in zone
+1. Tiers already paid for are unaffected and ride through portals with the
+rest of the base.
+
+Previously a Mining Node could be walked to Mk5 without ever breaching, which
+made the deepest producer in the game reachable from the opening zone. It now
+follows the rule gear already followed — reaching zone *N* is what unlocks
+level *N* gear — and the two ladders line up, both spanning 1..=5.
+
+A structure sitting at its zone ceiling is still listed in the upgrade
+picker rather than filtered out, and the row says which zone would free the
+next tier. Hiding it would have taken the whole **Upgrade a structure** row
+out of the base menu for all of zone 1, and a player who had never breached
+would never have learned that upgrading exists.
+
+This shifts the economy: Core Fragments in zone 1 now go only to building and
+recipes, with the upgrade sink opening on the first breach. Nothing gates
+that number — `balance_sim` models a run's battle curve, not its build
+economy — so it is unmeasured, and unplayed.
+
+### Raids are now GC Entropy Sweeps
+
+A rename, player-facing text only. The Grid's periodic garbage collection
+passing over anything you have left standing reads as what it is, rather than
+as bandits. `{structure} takes N raid damage` also became `{structure} loses
+N Durability to a GC Entropy Sweep` — the event is a noun phrase and does not
+survive being pushed into an adjective slot.
+
+No mechanical change. `MessageKind::Raid`, the `raid_defense` and `raidable`
+structure fields and the tuning constants keep their names, so saves load and
+existing mods parse untouched.
+
 ### The inspector reads structures, not just programs
 
 `x` and a direction found the nearest *creature* that way and opened its

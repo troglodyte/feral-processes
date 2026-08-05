@@ -28,7 +28,7 @@ fn a_structure_lost_to_a_raid_is_base_news_without_losing_its_kind() {
     let entry = game
         .message_log(20)
         .into_iter()
-        .find(|e| e.text.contains("destroyed in a raid"))
+        .find(|e| e.text.contains("destroyed in a GC Entropy Sweep"))
         .expect("a destroyed structure must announce itself");
     assert_eq!(entry.kind, MessageKind::Raid);
     assert_eq!(entry.source, MessageSource::Base);

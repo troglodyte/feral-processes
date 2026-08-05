@@ -137,8 +137,8 @@ taking.
 
 Your base does not stop while you are down there. The player's position on
 the zone map stays pinned to the link you entered by, so cronjobs keep
-paying out, needs keep decaying, and a raid can land on your Home while you
-are four frames below it. Anything that reaches into the zone map — deploying
+paying out, needs keep decaying, and a GC Entropy Sweep can land on your base
+while you are four frames below it. Anything that reaches into the zone map — deploying
 structures, trading, resting — is refused underground; managing your party,
 inventory, routines and perks is not.
 
@@ -427,19 +427,24 @@ symlink target you can `u` to from anywhere (Home),
 a rest gate, a power source (Recharger Node), a trading post (iso Market),
 a repairer (Patch Node), or a crafting bench that also assembles
 (Fabricator, Armory). Producers
-upgrade to Mk5 from the base menu, each tier adding to the payout and raising the
-chance a cycle pays out at
-all, and upgrades ride through portals with the rest of the base. Every structure
-except Home has raid Durability and can be chipped away by random raids: a
-cronjob worker or a program posted to guard fights the raid off at a
-cost to its own HP, and every deployed Shield shaves flat damage off every
-raid anywhere in the base.
+upgrade from the base menu, each tier adding to the payout and raising the
+chance a cycle pays out at all. **A structure is deployed at Mk1 wherever you
+build it, and the zone you have breached to is what unlocks the tiers above
+it** — zone 2 frees Mk2, zone 3 frees Mk3, up to the Mk5 every producer caps
+at. So nothing upgrades at all until you have breached once, the same way
+reaching zone *N* is what unlocks level *N* gear. Tiers already paid for ride
+through portals with the rest of the base. Every structure
+except Home has Durability and can be chipped away by a **GC Entropy Sweep**,
+the Grid's periodic garbage collection passing over anything you have left
+standing: a cronjob worker or a program posted to guard fights the sweep off
+at a cost to its own HP, and every deployed Shield shaves flat damage off
+every sweep anywhere in the base.
 
-Raid damage is permanent. Nothing heals on its own — a chipped structure
+Sweep damage is permanent. Nothing heals on its own — a chipped structure
 stays chipped until you build the thing that fixes it. That thing is the
 **Patch Node**, unlocked by the same Fortification research as the Shield:
 it recompiles every structure in the base, itself included, for 1 Durability
-per upgrade tier every 20 ticks, and several of them stack. Shields stop raid
+per upgrade tier every 20 ticks, and several of them stack. Shields stop sweep
 damage arriving; Patch Nodes undo what got through; until you have either,
 attrition only runs one way.
 
@@ -454,16 +459,16 @@ intrusion keeps its results and drops its blow-by-blow, and the screen says so
 rather than implying a complete transcript.
 
 `f` filters the pane under the map, cycling All → Field → Base → All. The base
-talks constantly — every cronjob payout, every failed extraction, every raid —
+talks constantly — every cronjob payout, every failed extraction, every sweep —
 and in six rows of pane that steadily pushes what happened to *you* off the
 top. Field shows the world you are standing in; Base shows the one running
 without you, and keeps running while you are four frames down the Stack. The
-header names the active filter and counts what it is holding back, so a raid
+header names the active filter and counts what it is holding back, so a sweep
 landing while you are reading the other channel still says so. `L` is
 unfiltered whatever the pane is set to — the history is the complete record.
 
 The base menu's *Structure roster* opens a read-only list: every structure standing in the zone, its
-tier, tile, distance and raid Durability, and every program posted to it —
+tier, tile, distance and Durability, and every program posted to it —
 both the cronjob worker and the guard, where the map's own labels can only
 show one. A workable structure with nobody on it is called out as idle, which
 is usually why you looked. Neither screen takes an action and neither passes
@@ -523,7 +528,7 @@ The economy needs exactly one item holding each of the `Currency`,
 
 Everything the engine hardcodes about how hard the game is lives in one
 file: `crates/engine/src/tuning.rs`. Zone and distance scaling, XP curves
-and level caps, the damage and capture formulas, spawn and drop rates, raid
+and level caps, the damage and capture formulas, spawn and drop rates, sweep
 pressure, need decay, perk magnitudes — each is a documented constant in a
 labelled section. Change a number, run `cargo test --workspace`, play.
 

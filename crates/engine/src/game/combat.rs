@@ -9,22 +9,16 @@ use crate::tuning::{
 use crate::*;
 
 impl Game {
-    /// The widest `max_group_size` among `members`' own tiles — the ceiling
-    /// a gathered cluster fights under, measured the same way in both
-    /// `gather_pack` and `group_pack`. Measured the same way, not guaranteed
-    /// equal: `gather_pack` truncates *after* measuring, so a widest member
-    /// sitting past the cut leaves `group_pack` measuring a narrower ceiling
-    /// from the survivors and holding fewer than the pack carries. Benign —
-    /// the surplus stays standing, like every other overflow here.
+    /// How many members of one species group may fight — the ceiling a
+    /// gathered cluster fights under, and the same value in `gather_pack`
+    /// and `group_pack` because it depends only on the zone and the depth.
     ///
-    /// Read from every member rather than from the cluster's anchor because
-    /// group size *doubles* every `GROUP_SIZE_STEP_TILES`: the spawn roll
-    /// sized the cluster from its own tile and scattered members up to
-    /// `swarm_radius` around it, so an anchor that drifted a few tiles
-    /// inward of a step boundary would otherwise halve the fight — a cluster
-    /// spawned at distance 90 whose anchor sits at 87 would field 32 of its
-    /// 64. A max over a set is order-independent, so this stays
-    /// deterministic under a seed without sorting anything.
+    /// It used to take the widest `max_group_size` across every member's
+    /// own tile, and had to: group size doubled every fifteen tiles, so a
+    /// cluster whose anchor had drifted inward of a step boundary would
+    /// field half its members. With zone and depth deciding it there is no
+    /// per-tile variation left to take a maximum over, which is why the
+    /// members are no longer read at all.
     ///
     /// Trace is folded in here as well as in `spawn_pack`, and it has to be
     /// both: the spawn decides how many bodies exist, this decides how many
@@ -37,14 +31,8 @@ impl Game {
     /// `spawn_pack`: this is only ever reached from `start_battle`, which is
     /// the player's own fight, and Trace is zero unless they are underground.
     /// `fight_depth` rides in on that same safety — see its doc.
-    fn widest_group_size(&self, members: &[Entity]) -> usize {
-        let depth = self.fight_depth();
-        let base = members
-            .iter()
-            .filter_map(|&e| self.world.get::<Position>(e))
-            .map(|p| self.max_group_size(p.x, p.y, depth))
-            .max()
-            .unwrap_or(1);
+    fn group_size_ceiling(&self) -> usize {
+        let base = self.max_group_size(self.fight_depth());
         let cap = crate::game::spawning::zone_group_cap(self.world.resource::<ZoneLevel>().0);
         crate::game::spawning::trace_group_ceiling(base, self.trace_group_mult(), cap) as usize
     }
@@ -56,26 +44,22 @@ impl Game {
     /// down this is.
     ///
     /// Safe as a resource read for the same reason `trace_group_mult` is
-    /// above: both `widest_*` helpers are reached only from `group_pack`,
-    /// and that is only ever the player's own fight. Inside `spawn_pack` the
+    /// above: both ceiling helpers are reached only from `group_pack`, and
+    /// that is only ever the player's own fight. Inside `spawn_pack` the
     /// identical read would be the documented leak.
     fn fight_depth(&self) -> Option<u32> {
         self.stack_pos().map(|pos| pos.depth)
     }
 
-    /// The widest `max_enemy_groups` among `members`' own tiles, measured
-    /// from every member for the same reason `widest_group_size` is: the
-    /// count rides the same distance curve, so a cluster straddling a step
-    /// boundary would otherwise fight under whichever tile its anchor
-    /// happened to land on.
-    fn widest_enemy_groups(&self, members: &[Entity]) -> usize {
-        let depth = self.fight_depth();
-        members
-            .iter()
-            .filter_map(|&e| self.world.get::<Position>(e))
-            .map(|p| self.max_enemy_groups(p.x, p.y, depth))
-            .max()
-            .unwrap_or(1)
+    /// How many distinct species groups this fight may hold.
+    ///
+    /// Both ceilings used to scan every member's tile and take the widest,
+    /// because the curves were distance-driven and a cluster could straddle
+    /// a step boundary. Zone and depth are properties of the fight rather
+    /// than of any one tile, so there is nothing left to take the maximum
+    /// over.
+    fn enemy_group_ceiling(&self) -> usize {
+        self.max_enemy_groups(self.fight_depth())
     }
 
     /// Every alive `Hostile` creature within `swarm_radius` tiles of
@@ -83,7 +67,7 @@ impl Game {
     /// roll placed together (see `try_spawn_habitat_creature`) joins the
     /// fight at once when the player bumps into any one of them. `anchor`
     /// is always first, becoming the initial front target. Truncated to
-    /// `widest_enemy_groups` groups' worth of `widest_group_size`, so how deep
+    /// `enemy_group_ceiling` groups' worth of `group_size_ceiling`, so how deep
     /// a fight this ground can produce is bounded by the same danger curve
     /// that decided how many spawned here, and never exceeds what
     /// `group_pack` can then hold. The remainder stays standing on the map
@@ -97,11 +81,7 @@ impl Game {
         // Deliberately asymmetric with the ceiling below — a radius that
         // errs small leaves a member at the fringe, where a ceiling that
         // errs small leaves half the cluster.
-        let radius = crate::game::spawning::swarm_radius(self.max_group_size(
-            anchor_pos.x,
-            anchor_pos.y,
-            None,
-        ));
+        let radius = crate::game::spawning::swarm_radius(self.max_group_size(None));
         let mut pack = vec![anchor];
         let mut query = self
             .world
@@ -117,26 +97,21 @@ impl Game {
                 pack.push(e);
             }
         }
-        pack.truncate(self.widest_group_size(&pack) * self.widest_enemy_groups(&pack));
+        pack.truncate(self.group_size_ceiling() * self.enemy_group_ceiling());
         pack
     }
 
     /// Partitions `pack` into one group per species, in first-appearance
-    /// order. A cluster spanning more than `widest_enemy_groups` species keeps
+    /// order. A cluster spanning more than `enemy_group_ceiling` species keeps
     /// only its largest groups, and each group is itself capped at
-    /// `widest_group_size` — a spawn roll places one species, so without
+    /// `group_size_ceiling` — a spawn roll places one species, so without
     /// that a single deep roll would fight as one column rather than as the
     /// groups the danger curve allows. Neither surplus is returned: both
     /// stay on the map as ordinary hostiles, met on the next bump.
     ///
-    /// Members are expected to carry a `Position`, since that ceiling is
-    /// read from the ground they stand on; a pack with none falls back to
-    /// one member per group. Worth knowing when assembling a pack by hand
-    /// rather than from `gather_pack` (see the tests' `insert_battle`) —
-    /// place the entities somewhere, or the fight comes out a single file.
     pub(crate) fn group_pack(&self, pack: Vec<Entity>) -> Vec<EnemyGroup> {
-        let cap = self.widest_group_size(&pack);
-        let max_groups = self.widest_enemy_groups(&pack);
+        let cap = self.group_size_ceiling();
+        let max_groups = self.enemy_group_ceiling();
         let mut groups: Vec<EnemyGroup> = Vec::new();
         for entity in pack {
             let Some(species) = self

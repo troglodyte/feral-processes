@@ -548,7 +548,7 @@ impl Game {
         // than left to roam, so where on the surface it stands never matters.
         let (ex, ey) = pos.entrance;
         let esc = self.stack_escalation(pos.depth);
-        let groups = self.max_enemy_groups(ex, ey, esc.depth);
+        let groups = self.max_enemy_groups(esc.depth);
         let mut pack = Vec::new();
         for _ in 0..groups {
             let Some((species, _)) = self.pick_habitat_species(ex, ey, false) else {

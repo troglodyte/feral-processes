@@ -348,7 +348,7 @@ fn a_companions_own_field_buff_affects_only_that_companions_stat() {
 fn a_back_group_with_only_melee_moves_cannot_reach_the_party() {
     let mut game = Game::new(86, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     // Scrapper, Sentinel and Construct are authored melee-only.
-    let (x, y) = multi_group_ground(&game);
+    let (x, y) = multi_group_ground(&mut game);
     let a = game.spawn_wild_creature("scrapper", x, y).unwrap();
     let b = game.spawn_wild_creature("sentinel", x, y + 1).unwrap();
     let c = game.spawn_wild_creature("construct", x, y + 2).unwrap();
@@ -375,7 +375,7 @@ fn a_back_group_with_only_melee_moves_cannot_reach_the_party() {
 #[test]
 fn a_back_group_with_a_ranged_move_still_connects() {
     let mut game = Game::new(87, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let (x, y) = multi_group_ground(&game);
+    let (x, y) = multi_group_ground(&mut game);
     let a = game.spawn_wild_creature("scrapper", x, y).unwrap();
     let b = game.spawn_wild_creature("sentinel", x, y + 1).unwrap();
     // Glitch's "Static Burst" is authored ranged.

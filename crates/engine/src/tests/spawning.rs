@@ -2,8 +2,8 @@
 
 use super::support::*;
 use crate::tuning::{
-    GROUP_SIZE_STEP_TILES, NEST_DURABILITY, NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN,
-    NEST_RESPAWN_TICKS, NEST_TETHER_RADIUS, WILD_CREATURE_CAP,
+    NEST_DURABILITY, NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN, NEST_RESPAWN_TICKS, NEST_TETHER_RADIUS,
+    OPENING_RING_TILES, WILD_CREATURE_CAP,
 };
 use crate::*;
 
@@ -243,7 +243,7 @@ fn a_fresh_run_can_win_the_first_fight_it_walks_into() {
             query
                 .iter(&game.world)
                 .map(|(e, p)| (e, (p.x - spawn.x).abs().max((p.y - spawn.y).abs())))
-                .filter(|(_, dist)| *dist < GROUP_SIZE_STEP_TILES)
+                .filter(|(_, dist)| *dist <= OPENING_RING_TILES)
                 .min_by_key(|&(_, dist)| dist)
                 .map(|(e, _)| e)
         };
@@ -306,7 +306,7 @@ fn the_zone_one_opening_ring_only_rolls_species_a_fresh_player_can_beat() {
     // Every tile of a full ring-width square, so this covers whatever
     // biomes this seed's terrain happens to lay down rather than the one
     // the spawn tile sits in.
-    let ring = GROUP_SIZE_STEP_TILES - 1;
+    let ring = OPENING_RING_TILES;
     for dx in -ring..=ring {
         for dy in -ring..=ring {
             game.try_spawn_habitat_creature(spawn.x + dx, spawn.y + dy);
@@ -331,12 +331,12 @@ fn the_zone_one_opening_ring_only_rolls_species_a_fresh_player_can_beat() {
     assert!(
         placed
             .iter()
-            .any(|(_, _, dist)| *dist < GROUP_SIZE_STEP_TILES),
+            .any(|(_, _, dist)| *dist <= OPENING_RING_TILES),
         "the sweep has to actually populate the ring, or this asserts nothing"
     );
     let stat_total = |s: &SpeciesDef| s.base_hp + s.base_atk + s.base_def;
     for (species, pos, dist) in placed {
-        if dist >= GROUP_SIZE_STEP_TILES {
+        if dist > OPENING_RING_TILES {
             continue;
         }
         let biome = game
@@ -432,7 +432,7 @@ fn a_ring_biome_with_nothing_gentle_fields_only_its_gentlest_species() {
 fn past_the_opening_ring_the_full_habitat_roster_spawns_again() {
     let mut game = Game::new(444, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    let out = spawn.x + GROUP_SIZE_STEP_TILES;
+    let out = spawn.x + OPENING_RING_TILES + 1;
     for dy in -20..=20 {
         for dx in 0..40 {
             game.try_spawn_habitat_creature(out + dx, spawn.y + dy);
@@ -679,17 +679,18 @@ fn a_spawn_roll_culls_enough_room_for_the_whole_group_it_places() {
     game.world.resource_mut::<ZoneLevel>().0 = 4;
     let species_id = game.species_defs().into_iter().next().unwrap().id;
 
-    // Put the player deep in the field, where a roll places a real group
-    // rather than a single creature.
+    // Deep enough that a roll places a real group rather than a single
+    // creature — zone, not distance, is what decides that now.
+    game.world.resource_mut::<ZoneLevel>().0 = 4;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
     let player = game.player_entity();
     let far = Position {
-        x: spawn.x + GROUP_SIZE_STEP_TILES * 7,
+        x: spawn.x,
         y: spawn.y,
     };
     *game.world.get_mut::<Position>(player).unwrap() = far;
     assert!(
-        game.max_group_size(far.x, far.y, None) > 1,
+        game.max_group_size(None) > 1,
         "the fixture is pointless unless a roll here places more than one"
     );
 
@@ -1533,5 +1534,64 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
     assert!(
         pursuing.is_none(),
         "pursuing must not survive when the nest_position it depended on didn't resolve"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Fixed zone scaling — distance is not a difficulty axis
+// ─────────────────────────────────────────────────────────────────────────
+
+/// A program's stats are a property of its zone (and, underground, its
+/// depth) — never of how far from home it happened to spawn. Walking away
+/// from the base used to multiply stats by up to `MAX_DISTANCE_STAT_MULTIPLIER`,
+/// which also leaked into the Stack: every underground spawn is placed at the
+/// entrance tile, so descending through a far-flung link scaled the whole
+/// frame.
+///
+/// Asserted exactly rather than statistically by dividing the individual
+/// roll back out — `spawn_wild_creature_scaled` is
+/// `round(base * zone_mult * depth_mult * roll)`, and zone 1 is x1.
+#[test]
+fn wild_stats_do_not_vary_with_distance_from_the_danger_origin() {
+    let mut game = Game::new(444, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let base_hp = game
+        .world
+        .resource::<SpeciesDb>()
+        .get("scrapper")
+        .unwrap()
+        .base_hp;
+
+    // Far enough out to sit past every step the old curve had.
+    let far = game
+        .spawn_wild_creature("scrapper", spawn.x + 500, spawn.y + 500)
+        .expect("scrapper should spawn on any tile");
+    let roll = game.world.get::<Potential>(far).unwrap().hp_roll;
+    let stats = *game.world.get::<Stats>(far).unwrap();
+
+    assert_eq!(
+        stats.max_hp,
+        ((base_hp as f32) * roll).round() as i32,
+        "a program 500 tiles out should be worth exactly its zone-1 stats"
+    );
+}
+
+/// Group size and group count are fixed within a zone. Both ride
+/// `danger_steps`, so this pins the pair together — the invariant that the
+/// two halves of the pack ceiling cannot disagree survives the distance
+/// axis being removed.
+#[test]
+fn group_size_and_count_are_fixed_within_a_zone() {
+    let game = Game::new(444, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    assert_eq!(
+        game.max_group_size(None),
+        game.max_group_size(None),
+        "pack size should not grow with distance"
+    );
+    assert_eq!(
+        game.max_enemy_groups(None),
+        game.max_enemy_groups(None),
+        "group count should not grow with distance"
     );
 }

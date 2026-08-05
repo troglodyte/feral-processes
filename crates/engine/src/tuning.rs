@@ -117,51 +117,53 @@ pub const WORK_XP_LEVEL_CAP: u32 = 10;
 /// neither gear nor zone depth outruns the other.
 pub const ZONE_STAT_GROWTH: i32 = 2;
 
-/// Tile distance per step of `DISTANCE_STAT_STEP_BONUS`, counted from
+/// Radius of the zone-1 newbie ring, in tiles from
 /// `Game::distance_from_danger_origin` — the base platform's edge once a
-/// Home exists, `ZoneSpawnPoint` before then. See
-/// `Game::distance_stat_multiplier`.
-pub const DISTANCE_STAT_STEP_TILES: i32 = 15;
+/// Home exists, `ZoneSpawnPoint` before then. Inside it, only species a
+/// bare level-1 player can beat are *born* (see `Game::in_opening_ring`).
+///
+/// This is the one thing distance still decides. Distance used to be a
+/// difficulty axis in its own right — scaling stats and group size as you
+/// walked out — and is not any more: a program's strength is a property of
+/// its zone, and underground of its depth. What survives is a pocket, not
+/// a curve.
+///
+/// Set to `MAX_BUILD_DISTANCE_FROM_HOME` so the ring is exactly your base
+/// and its doorstep, and travels with the base for free once a Home is
+/// placed. An explicit radius rather than "wherever the curves say a fight
+/// is one program", which is how the ring used to be spelled: with fixed
+/// zone scaling that condition is true across the whole of zone 1, so the
+/// old spelling would have silently made the entire zone a nursery.
+pub const OPENING_RING_TILES: i32 = MAX_BUILD_DISTANCE_FROM_HOME;
 
-/// Stat growth added per `DISTANCE_STAT_STEP_TILES` step away from the
-/// zone's spawn point, on top of `ZoneLevel::stat_multiplier` — a gentler,
-/// linear (not doubling) knob than zone depth, since it's optional
-/// distance covered within a zone you can always retreat from, not a
-/// one-way commitment like breaching deeper.
-pub const DISTANCE_STAT_STEP_BONUS: f32 = 0.25;
-
-/// Cap on `distance_stat_multiplier`, so wandering far enough doesn't
-/// scale stats forever within a single zone — unlike zone depth, which
-/// really is unbounded.
-pub const MAX_DISTANCE_STAT_MULTIPLIER: f32 = 3.0;
-
-/// Tile distance per doubling of a wild group's size, counted from the same
-/// origin as `DISTANCE_STAT_STEP_TILES` (the platform's edge once a Home
-/// exists) — see `Game::max_group_size`. Deliberately equal to
-/// `DISTANCE_STAT_STEP_TILES`: how many programs meet you and how hard each
-/// one hits escalate on the same footing as you push out.
-pub const GROUP_SIZE_STEP_TILES: i32 = DISTANCE_STAT_STEP_TILES;
-
-/// Geometric base for the group-size growth `GROUP_SIZE_STEP_TILES` steps
-/// unlock, and the cap on how many of those steps count. The exponent has
-/// to be clamped because the map is unbounded and a shift of 32 or more is
-/// a panic in debug; `MAX_GROUP_SIZE_DISTANCE_STEPS` is set where
-/// `GROUP_SIZE_DISTANCE_GROWTH.pow(steps)` already exceeds `MAX_GROUP_SIZE`,
-/// so the clamp is exact rather than a fudge.
+/// Geometric base for group-size growth per escalation step, and the cap on
+/// how many steps count. The exponent has to be clamped because depth is
+/// unbounded and a shift of 32 or more is a panic in debug;
+/// `MAX_GROUP_SIZE_STEPS` is set where `GROUP_SIZE_DISTANCE_GROWTH.pow(steps)`
+/// already exceeds `MAX_GROUP_SIZE`, so the clamp is exact rather than a fudge.
 pub const GROUP_SIZE_DISTANCE_GROWTH: u32 = 2;
-pub const MAX_GROUP_SIZE_DISTANCE_STEPS: u32 = 7;
+pub const MAX_GROUP_SIZE_STEPS: u32 = 7;
 
-/// Frames descended per escalation step in the Stack — the underground
-/// counterpart to `GROUP_SIZE_STEP_TILES`, feeding the same curve through
+/// Frames descended per escalation step in the Stack, feeding
 /// `Game::danger_steps`.
 ///
-/// One frame per step, against fifteen tiles per step on the surface,
-/// because descending *is* the commitment that walking out is: a frame is
-/// a maze to cross and a one-way door at the bottom of it, where fifteen
-/// tiles is a few turns' walk you can turn around in. The party also
-/// arrives at depth 1 already having chosen to be there, so the first frame
-/// stays at step zero — the entrance is the Stack's own opening ring.
+/// One frame per step, against `GROUP_SIZE_STEP_ZONES` for the surface,
+/// because a frame is a maze to cross and a one-way door at the bottom of
+/// it. The party also arrives at depth 1 already having chosen to be there,
+/// so the first frame stays at step zero — the entrance is the Stack's own
+/// opening ring.
 pub const GROUP_SIZE_STEP_FRAMES: u32 = 1;
+
+/// Zones breached per escalation step on the surface — the counterpart to
+/// `GROUP_SIZE_STEP_FRAMES`, feeding the same curve through
+/// `Game::danger_steps`.
+///
+/// One zone per step, so a zone's fights are the same shape wherever in it
+/// you stand. This replaced a fifteen-tiles-per-step distance curve: the
+/// escalation a player feels should come from the commitments they make —
+/// funding a Portal, descending a link — not from which direction they
+/// happened to wander.
+pub const GROUP_SIZE_STEP_ZONES: u32 = 1;
 
 /// Extra members each zone level adds to the group-size cap: zone 1 is solo,
 /// and every level after adds this against `MAX_GROUP_SIZE`
@@ -1268,17 +1270,17 @@ mod tests {
     }
 
     /// `Game::max_group_size` clamps its distance exponent to
-    /// `MAX_GROUP_SIZE_DISTANCE_STEPS` because the map is unbounded. That
+    /// `MAX_GROUP_SIZE_STEPS` because the map is unbounded. That
     /// clamp is only lossless while the clamped growth already exceeds
     /// `MAX_GROUP_SIZE` — raise the cap without raising the step count and
     /// distance would silently stop mattering short of it.
     #[test]
     fn clamping_the_distance_exponent_cannot_cost_group_size() {
         assert!(
-            GROUP_SIZE_DISTANCE_GROWTH.pow(MAX_GROUP_SIZE_DISTANCE_STEPS) > MAX_GROUP_SIZE,
-            "distance growth clamped at {MAX_GROUP_SIZE_DISTANCE_STEPS} steps reaches only {}, \
+            GROUP_SIZE_DISTANCE_GROWTH.pow(MAX_GROUP_SIZE_STEPS) > MAX_GROUP_SIZE,
+            "distance growth clamped at {MAX_GROUP_SIZE_STEPS} steps reaches only {}, \
              which no longer covers MAX_GROUP_SIZE ({MAX_GROUP_SIZE})",
-            GROUP_SIZE_DISTANCE_GROWTH.pow(MAX_GROUP_SIZE_DISTANCE_STEPS),
+            GROUP_SIZE_DISTANCE_GROWTH.pow(MAX_GROUP_SIZE_STEPS),
         );
     }
 

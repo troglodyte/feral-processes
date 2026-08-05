@@ -243,7 +243,7 @@ fn all_attack_needs_a_target_only_while_more_than_one_group_lives() {
     let first = species.next().unwrap();
     let second = species.next().expect("assets ship at least two species");
 
-    let (x, y) = multi_group_ground(&game);
+    let (x, y) = multi_group_ground(&mut game);
     let solo = game.spawn_wild_creature(&first, x, y).unwrap();
     insert_battle(&mut game, player, vec![solo]);
     let needs = |game: &Game| {

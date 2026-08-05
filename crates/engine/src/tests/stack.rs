@@ -2818,7 +2818,7 @@ fn a_surface_spawn_is_unscaled_while_the_party_is_hunted() {
         descend(&mut game);
         set_trace(&mut game, trace_value);
 
-        let (x, y) = multi_group_ground(&game);
+        let (x, y) = multi_group_ground(&mut game);
         let before = game.world.query::<&Creature>().iter(&game.world).count();
         game.try_spawn_habitat_creature(x, y);
         game.world.query::<&Creature>().iter(&game.world).count() - before
@@ -2859,11 +2859,15 @@ fn a_hunted_ambush_is_still_never_a_boss() {
     );
 
     assert!(walk_until_a_fight(&mut game, 400), "no fight to inspect");
+    // Scoped to `StackSpawn`: surface ambient spawns keep rolling while the
+    // party is underground (see `spawn_pack`'s doc), and those *may* roll a
+    // boss — an unscoped query is asserting about the surface, not about
+    // the ambush this test is named for.
     let bosses: Vec<String> = game
         .world
-        .query::<(&Creature, &Hostile)>()
+        .query::<(&Creature, &Hostile, &StackSpawn)>()
         .iter(&game.world)
-        .map(|(c, _)| c.species.clone())
+        .map(|(c, _, _)| c.species.clone())
         .filter(|id| {
             game.world
                 .resource::<SpeciesDb>()
@@ -2983,7 +2987,7 @@ fn a_surface_spawn_is_unscaled_while_the_party_is_deep() {
         descend(&mut game);
         set_depth(&mut game, depth);
 
-        let (x, y) = multi_group_ground(&game);
+        let (x, y) = multi_group_ground(&mut game);
         let before = game.world.query::<&Creature>().iter(&game.world).count();
         game.try_spawn_habitat_creature(x, y);
         game.world.query::<&Creature>().iter(&game.world).count() - before
@@ -3008,8 +3012,7 @@ fn a_deep_encounter_draws_a_pack_per_group_the_depth_allows() {
     descend(&mut game);
     set_depth(&mut game, 4);
 
-    let (ex, ey) = game.stack_pos().unwrap().entrance;
-    let groups = game.max_enemy_groups(ex, ey, Some(4));
+    let groups = game.max_enemy_groups(Some(4));
     assert!(
         groups > 1,
         "depth 4 should have earned more than one group, got {groups}"
@@ -3032,14 +3035,13 @@ fn a_deep_encounter_draws_a_pack_per_group_the_depth_allows() {
 fn the_first_frame_is_no_wider_than_it_was() {
     let mut game = game();
     descend(&mut game);
-    let (ex, ey) = game.stack_pos().unwrap().entrance;
 
     assert_eq!(
-        game.max_group_size(ex, ey, Some(1)),
-        game.max_group_size(ex, ey, None),
+        game.max_group_size(Some(1)),
+        game.max_group_size(None),
         "depth 1 is the entrance tile's own curve, not a step past it"
     );
-    assert_eq!(game.max_enemy_groups(ex, ey, Some(1)), 1);
+    assert_eq!(game.max_enemy_groups(Some(1)), 1);
 }
 
 // ─────────────────────────────────────────────────────────────────────────

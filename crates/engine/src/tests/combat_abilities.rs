@@ -183,7 +183,7 @@ fn an_all_enemies_ability_reaches_every_group_including_past_engagement_range() 
         .map(|s| s.id.clone())
         .collect();
     assert_eq!(species.len(), 4, "the shipped set must supply four species");
-    let (gx, gy) = multi_group_ground(&game);
+    let (gx, gy) = multi_group_ground(&mut game);
     let enemies: Vec<Entity> = species
         .iter()
         .enumerate()

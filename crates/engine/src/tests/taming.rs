@@ -312,7 +312,7 @@ fn the_shipped_ice_breaker_still_tames_for_a_player_holding_only_it() {
 fn decompiling_a_program_mid_fight_clears_its_battle_scoped_state() {
     let mut game = Game::new(9101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    let (x, y) = multi_group_ground(&game);
+    let (x, y) = multi_group_ground(&mut game);
     let front_a = game.spawn_wild_creature("glitch", x, y).unwrap();
     let front_b = game.spawn_wild_creature("scrapper", x, y + 1).unwrap();
     game.start_battle(vec![front_a, front_b]);

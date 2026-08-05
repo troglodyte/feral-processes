@@ -2,9 +2,7 @@
 //! groups, initiative order, and what happens as groups fall.
 
 use super::support::*;
-use crate::tuning::{
-    DISTANCE_STAT_STEP_TILES, GROUP_SIZE_STEP_TILES, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE,
-};
+use crate::tuning::{MAX_ENEMY_GROUPS, MAX_GROUP_SIZE};
 use crate::*;
 
 #[test]
@@ -19,16 +17,16 @@ fn gather_pack_pulls_in_nearby_hostiles_and_caps_the_pack_at_max_enemy_groups_wo
             .clone()
     };
     let mut game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    // Both halves of the ceiling ride the distance curve, and one step out
-    // is where they're small enough to bind on a fixture this size: zone 3
-    // caps a group at 9 but one step doubles the local size to 2, and the
-    // group *count* one step out is 2 of a possible `MAX_ENEMY_GROUPS`. So
-    // the ceiling here is 4, and there are deliberately more than 4
-    // hostiles in range, or the pack size would just be however many the
-    // radius happened to reach and the ceiling would go untested.
-    game.world.resource_mut::<ZoneLevel>().0 = 3;
+    // Both halves of the ceiling ride the zone curve, and zone 2 is where
+    // they're small enough to bind on a fixture this size: one step in
+    // doubles the group size to 2, and the group *count* is 2 of a possible
+    // `MAX_ENEMY_GROUPS`. So the ceiling here is 4, and there are
+    // deliberately more than 4 hostiles in range, or the pack size would
+    // just be however many the radius happened to reach and the ceiling
+    // would go untested.
+    game.world.resource_mut::<ZoneLevel>().0 = 2;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    let (ax, ay) = (spawn.x + GROUP_SIZE_STEP_TILES, spawn.y);
+    let (ax, ay) = (spawn.x + 500, spawn.y);
     let spawn_hostile = |game: &mut Game, x: i32, y: i32| {
         game.world
             .spawn((
@@ -47,8 +45,8 @@ fn gather_pack_pulls_in_nearby_hostiles_and_caps_the_pack_at_max_enemy_groups_wo
             .id()
     };
     let anchor = spawn_hostile(&mut game, ax, ay);
-    // Twelve in total, all inside the gather radius of 3 and all still one
-    // step out, so every one of them reports the same group size of 2.
+    // Twelve in total, all inside the gather radius of 3. Zone 2 sizes
+    // every one of them the same, wherever they stand.
     for i in 0..11 {
         spawn_hostile(&mut game, ax + i % 4, ay + i % 3);
     }
@@ -62,8 +60,8 @@ fn gather_pack_pulls_in_nearby_hostiles_and_caps_the_pack_at_max_enemy_groups_wo
     assert_eq!(
         pack.len(),
         4,
-        "twelve are in range, but a pack is capped at the per-group size (2 \
-         one step out in zone 3) times the group count one step out (2)"
+        "twelve are in range, but a pack is capped at zone 2's per-group \
+         size (2) times its group count (2)"
     );
 }
 
@@ -75,12 +73,12 @@ fn gather_pack_pulls_in_nearby_hostiles_and_caps_the_pack_at_max_enemy_groups_wo
 #[test]
 fn a_mixed_pack_partitions_into_one_group_per_species_in_first_appearance_order() {
     let mut game = Game::new(77, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    // Deep and far enough for groups of two: at a zone-1 spawn point every
+    // Deep enough for groups of two: at zone 1 every
     // group is capped at a single member, which would make the partition
     // order this pins unobservable.
     game.world.resource_mut::<ZoneLevel>().0 = 3;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    let (x, y) = (spawn.x + GROUP_SIZE_STEP_TILES * 7, spawn.y);
+    let (x, y) = (spawn.x + 500, spawn.y);
     let a = game.spawn_wild_creature("glitch", x, y).unwrap();
     let b = game.spawn_wild_creature("scrapper", x, y + 1).unwrap();
     let c = game.spawn_wild_creature("glitch", x, y + 2).unwrap();
@@ -102,11 +100,12 @@ fn a_mixed_pack_partitions_into_one_group_per_species_in_first_appearance_order(
 #[test]
 fn a_pack_of_more_than_four_species_engages_the_four_largest_and_leaves_the_rest() {
     let mut game = Game::new(78, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    // Deep and far enough that the per-group ceiling doesn't flatten these
-    // to one member each — the sizes below are the whole point of the test.
-    game.world.resource_mut::<ZoneLevel>().0 = 3;
+    // Zone 4: deep enough that the per-group ceiling doesn't flatten these
+    // to one member each, and that `max_enemy_groups` actually reaches
+    // `MAX_ENEMY_GROUPS` — the overflow below is the point of the test.
+    game.world.resource_mut::<ZoneLevel>().0 = 4;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    let (x, y) = (spawn.x + GROUP_SIZE_STEP_TILES * 7, spawn.y);
+    let (x, y) = (spawn.x + 500, spawn.y);
     // glitch x3, scrapper x2, virus x2, worm x2, sprite x1 -> sprite is
     // the smallest group and the one left out.
     let mut spawned = Vec::new();
@@ -198,7 +197,7 @@ fn a_faster_species_wins_initiative_far_more_often_than_a_slower_one() {
     let mut sprite_first = 0;
     for seed in 0..200u32 {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        let (x, y) = multi_group_ground(&game);
+        let (x, y) = multi_group_ground(&mut game);
         let sprite = game.spawn_wild_creature("sprite", x, y).unwrap();
         let construct = game.spawn_wild_creature("construct", x, y + 1).unwrap();
         game.start_battle(vec![sprite, construct]);
@@ -238,7 +237,7 @@ fn defeating_the_front_pack_member_continues_the_battle_against_the_next_one() {
     // with moving them out here doesn't touch what this test asserts.
     game.world.resource_mut::<ZoneLevel>().0 = 3;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    let (x, y) = (spawn.x + GROUP_SIZE_STEP_TILES * 7, spawn.y);
+    let (x, y) = (spawn.x + 500, spawn.y);
     let front = game
         .world
         .spawn((
@@ -303,7 +302,7 @@ fn defeating_the_front_pack_member_continues_the_battle_against_the_next_one() {
 #[test]
 fn wiping_the_front_group_promotes_the_group_behind_it() {
     let mut game = Game::new(79, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let (x, y) = multi_group_ground(&game);
+    let (x, y) = multi_group_ground(&mut game);
     let glitch = game.spawn_wild_creature("glitch", x, y).unwrap();
     let scrapper = game.spawn_wild_creature("scrapper", x, y + 1).unwrap();
     game.start_battle(vec![glitch, scrapper]);
@@ -334,7 +333,7 @@ fn wiping_the_front_group_promotes_the_group_behind_it() {
 fn a_stale_target_group_index_falls_back_to_the_front_group() {
     let mut game = Game::new(84, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    let (x, y) = multi_group_ground(&game);
+    let (x, y) = multi_group_ground(&mut game);
     let glitch = game.spawn_wild_creature("glitch", x, y).unwrap();
     let scrapper = game.spawn_wild_creature("scrapper", x, y + 1).unwrap();
     game.start_battle(vec![glitch, scrapper]);
@@ -381,8 +380,9 @@ fn a_group_is_capped_at_the_local_group_size_and_the_rest_stay_on_the_map() {
     let mut game = Game::new(311, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.resource_mut::<ZoneLevel>().0 = 3;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    // Far enough out that zone 3's cap of 9 is fully unlocked.
-    let (x, y) = (spawn.x + GROUP_SIZE_STEP_TILES * 7, spawn.y);
+    // Clear of the starting population, which would otherwise join the
+    // cluster. Which tile it is decides nothing about the ceiling.
+    let (x, y) = (spawn.x + 500, spawn.y);
 
     let members: Vec<Entity> = (0..30)
         .map(|i| game.spawn_wild_creature("glitch", x, y + i % 3).unwrap())
@@ -393,8 +393,10 @@ fn a_group_is_capped_at_the_local_group_size_and_the_rest_stay_on_the_map() {
     assert_eq!(groups.len(), 1, "one species is one group");
     assert_eq!(
         groups[0].members.len(),
-        19,
-        "zone 3 caps a group at 19 however many gathered"
+        4,
+        "zone 3 is two escalation steps in, so a group caps at 2^2 — the
+         doubling curve binds well below zone 3's own cap of 19, and it is
+         the lower of the two that decides"
     );
     let still_alive = members
         .iter()
@@ -416,7 +418,7 @@ fn a_mixed_swarm_fights_as_four_groups_of_a_hundred() {
     // its own zone rather than by the hard ceiling this test is about.
     game.world.resource_mut::<ZoneLevel>().0 = 12;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    let (x, y) = (spawn.x + GROUP_SIZE_STEP_TILES * 7, spawn.y);
+    let (x, y) = (spawn.x + 500, spawn.y);
 
     let mut cluster = Vec::new();
     for species in ["glitch", "scrapper", "drone", "sprite", "ghost"] {
@@ -453,7 +455,7 @@ fn gather_radius_widens_with_the_local_group_size() {
     game.world.resource_mut::<ZoneLevel>().0 = 8;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
     // Zone 8, fully unlocked: groups of 64, so a radius of ceil_sqrt(64) = 8.
-    let (ax, ay) = (spawn.x + GROUP_SIZE_STEP_TILES * 7, spawn.y);
+    let (ax, ay) = (spawn.x + 500, spawn.y);
     let hostile = |game: &mut Game, x: i32, y: i32| {
         game.world
             .spawn((
@@ -484,43 +486,6 @@ fn gather_radius_widens_with_the_local_group_size() {
     );
 }
 
-/// Group size *doubles* every `GROUP_SIZE_STEP_TILES`, so a ceiling taken
-/// from the anchor's tile alone halves a cluster whose anchor drifted one
-/// tile inward of a step boundary. That drift is ordinary scatter — members
-/// land within `PACK_GATHER_RADIUS` of the tile the spawn roll picked — so
-/// both ceilings read every gathered member's tile and take the widest.
-#[test]
-fn a_cluster_straddling_a_step_is_sized_by_its_widest_member_not_its_anchor() {
-    let mut game = Game::new(314, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    game.world.resource_mut::<ZoneLevel>().0 = 4;
-    let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    // The anchor sits one tile inside the fourth step (groups of 8); the
-    // rest of the cluster is over it (groups of 16). Zone 4 caps at 27, so
-    // it is the distance curve that binds here, not the zone.
-    let inward = spawn.x + GROUP_SIZE_STEP_TILES * 4 - 1;
-    let anchor = game.spawn_wild_creature("glitch", inward, spawn.y).unwrap();
-    for i in 0..40 {
-        game.spawn_wild_creature("glitch", inward + 1 + i % 3, spawn.y + i % 3)
-            .unwrap();
-    }
-
-    let pack = game.gather_pack(anchor);
-    let groups = game.group_pack(pack.clone());
-
-    assert_eq!(
-        pack.len(),
-        41,
-        "the whole-pack ceiling is 16 x MAX_ENEMY_GROUPS from the members \
-         over the boundary, not 8 x MAX_ENEMY_GROUPS from the anchor"
-    );
-    assert_eq!(
-        groups[0].members.len(),
-        16,
-        "the group holds what the cluster's widest tile allows, not the half \
-         its anchor's tile would"
-    );
-}
-
 /// A swarm is an attrition wall, not a linear damage multiplier: only the
 /// front `ceil(sqrt(n))` members of a group get an initiative slot.
 #[test]
@@ -528,7 +493,7 @@ fn only_the_front_ceil_sqrt_of_a_group_acts_each_round() {
     let mut game = Game::new(5, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.resource_mut::<ZoneLevel>().0 = 6;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    let (x, y) = (spawn.x + DISTANCE_STAT_STEP_TILES * 8, spawn.y);
+    let (x, y) = (spawn.x + 500, spawn.y);
 
     let members: Vec<Entity> = (0..9)
         .map(|i| game.spawn_wild_creature("glitch", x, y + i).unwrap())

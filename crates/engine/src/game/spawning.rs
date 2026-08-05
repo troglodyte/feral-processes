@@ -2,14 +2,13 @@
 //! creatures.
 
 use crate::tuning::{
-    BOSS_SPAWN_CHANCE, DISTANCE_STAT_STEP_BONUS, DISTANCE_STAT_STEP_TILES, GROUP_SIZE_STEP_TILES,
-    INITIAL_SPAWN_SCATTER_TILES, MAX_BUILD_DISTANCE_FROM_HOME, MAX_DISTANCE_STAT_MULTIPLIER,
-    MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_DURABILITY, NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN,
-    NEST_SPAWN_CHANCE, NEST_TETHER_RADIUS, PACK_GATHER_RADIUS, WILD_CREATURE_CAP, ZONE_GROUP_STEP,
+    BOSS_SPAWN_CHANCE, INITIAL_SPAWN_SCATTER_TILES, MAX_BUILD_DISTANCE_FROM_HOME, MAX_ENEMY_GROUPS,
+    MAX_GROUP_SIZE, NEST_DURABILITY, NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN, NEST_SPAWN_CHANCE,
+    NEST_TETHER_RADIUS, OPENING_RING_TILES, PACK_GATHER_RADIUS, WILD_CREATURE_CAP, ZONE_GROUP_STEP,
 };
 use crate::tuning::{
-    GROUP_SIZE_DISTANCE_GROWTH, GROUP_SIZE_STEP_FRAMES, MAX_GROUP_SIZE_DISTANCE_STEPS,
-    WILD_ROUTINE_CHANCE, WILD_SPAWN_CHANCE, WILD_SPAWN_RADIUS_TILES,
+    GROUP_SIZE_DISTANCE_GROWTH, GROUP_SIZE_STEP_FRAMES, GROUP_SIZE_STEP_ZONES,
+    MAX_GROUP_SIZE_STEPS, WILD_ROUTINE_CHANCE, WILD_SPAWN_CHANCE, WILD_SPAWN_RADIUS_TILES,
 };
 use crate::*;
 
@@ -47,14 +46,14 @@ pub(crate) struct SpawnEscalation {
     /// Multiplier on the group-size ceiling — `TRACE_GROUP_MULT`'s band
     /// value, clamped back under the zone cap by `trace_group_ceiling`.
     pub(crate) group_mult: u32,
-    /// Frames descended, or `None` on the surface. Stands in for distance
-    /// from the danger origin — see `Game::danger_steps`.
+    /// Frames descended, or `None` on the surface, where the zone decides
+    /// the same step instead — see `Game::danger_steps`.
     pub(crate) depth: Option<u32>,
 }
 
 impl SpawnEscalation {
-    /// An ordinary surface spawn: baseline stats, no Trace, no depth. The
-    /// tile's own distance is still read, by `danger_steps`.
+    /// An ordinary surface spawn: baseline stats, no Trace, no depth.
+    /// `danger_steps` reads the zone for it.
     pub(crate) fn surface() -> Self {
         Self {
             stat_mult: 1.0,
@@ -77,14 +76,12 @@ pub(crate) fn zone_group_cap(zone: u32) -> u32 {
 
 /// How far a group of `n` scatters when it spawns, and how far `gather_pack`
 /// searches from the member the player bumped — the same formula, but not
-/// the same input: spawning passes the size it actually rolled at the spawn
-/// tile, gathering passes `max_group_size` at the anchor's tile, which is a
-/// different tile and a ceiling rather than a roll. So a scattered cluster
-/// usually pulls into one fight, not always — a fringe member can be left
-/// for the next bump. That is why the *ceiling* reads every gathered member
-/// instead (see `Game::widest_group_size`): a radius that errs narrow costs
-/// a member, where a ceiling that errs narrow would cost half the cluster.
-/// `PACK_GATHER_RADIUS` stays the floor: nothing gets tighter than it was.
+/// the same input: spawning passes the size it actually rolled, gathering
+/// passes the zone's `max_group_size` ceiling. A roll is usually smaller
+/// than its ceiling, so a scattered cluster usually pulls into one fight but
+/// not always — a fringe member can be left for the next bump, which is the
+/// cheap direction to err in. `PACK_GATHER_RADIUS` stays the floor: nothing
+/// gets tighter than it was.
 pub(crate) fn swarm_radius(n: u32) -> i32 {
     PACK_GATHER_RADIUS.max(crate::battle::ceil_sqrt(n) as i32)
 }
@@ -179,12 +176,10 @@ impl Game {
         let zone_level = self.world.resource::<ZoneLevel>();
         let mult = zone_level.stat_multiplier() as f32;
         let zone = zone_level.0;
-        let dist_mult = self.distance_stat_multiplier(x, y);
         let potential = self.roll_potential();
         let routines = self.roll_wild_routine();
-        let scale = |base: i32, roll: f32| {
-            ((base as f32) * mult * dist_mult * depth_mult * roll).round() as i32
-        };
+        let scale =
+            |base: i32, roll: f32| ((base as f32) * mult * depth_mult * roll).round() as i32;
         Some(
             self.world
                 .spawn((
@@ -287,25 +282,15 @@ impl Game {
 
     /// Stat multiplier for a wild spawn at `(x, y)`, from how far it is
     /// (Chebyshev distance — matching 8-directional movement, so it's
-    /// "how many moves away") from `ZoneSpawnPoint`: `1.0` right at spawn,
-    /// growing by `DISTANCE_STAT_STEP_BONUS` every
-    /// `DISTANCE_STAT_STEP_TILES`, capped at `MAX_DISTANCE_STAT_MULTIPLIER`.
-    /// Applied multiplicatively with `ZoneLevel::stat_multiplier` in
-    /// `spawn_wild_creature` — venturing away from where you breached in
-    /// is its own escalating risk, independent of zone depth.
-    pub(crate) fn distance_stat_multiplier(&self, x: i32, y: i32) -> f32 {
-        let dist = self.distance_from_danger_origin(x, y);
-        let mult = 1.0 + (dist / DISTANCE_STAT_STEP_TILES) as f32 * DISTANCE_STAT_STEP_BONUS;
-        mult.min(MAX_DISTANCE_STAT_MULTIPLIER)
-    }
-
     /// Chebyshev distance from `(x, y)` to the edge of safe territory: the
     /// platform's edge once a Home exists, the bare `ZoneSpawnPoint` before
-    /// then. Both danger curves measure from this rather than straight from
-    /// the spawn point, so the whole base counts as distance zero instead of
-    /// sitting part-way up the first escalation step. The build radius (7)
-    /// and `DISTANCE_STAT_STEP_TILES` (15) are independent dials: shrinking
-    /// the platform pulls the first step inward, to 22 tiles from spawn.
+    /// then. Measured from there rather than straight from the spawn point,
+    /// so the whole base counts as distance zero instead of sitting
+    /// part-way out of the ring.
+    ///
+    /// `Game::in_opening_ring` is the only consumer. Distance decides
+    /// nothing else: it used to scale stats and group size, and a program's
+    /// strength is now a property of its zone and, underground, its depth.
     pub(crate) fn distance_from_danger_origin(&self, x: i32, y: i32) -> i32 {
         let spawn = self.world.resource::<ZoneSpawnPoint>();
         let dist = (x - spawn.x).abs().max((y - spawn.y).abs());
@@ -342,27 +327,34 @@ impl Game {
     /// curves take, so the two halves of the pack ceiling cannot disagree
     /// about how dangerous a place is.
     ///
-    /// On the surface that is distance from the danger origin. In the Stack
-    /// it is `depth`, because the party's `Position` is pinned to the
-    /// entrance tile they walked in through: measuring the tile would report
-    /// the base's own doorstep however far down they had gone, which is why
-    /// every frame at every depth used to field one program in one group.
-    /// Depth *replaces* distance rather than adding to it — the entrance is
-    /// not a place the party is standing, and a stack under a far-flung link
-    /// would otherwise start at that link's own escalation and climb from
-    /// there.
+    /// On the surface that is the zone; in the Stack it is `depth`. Both are
+    /// commitments the player made — funding a Portal, descending a link —
+    /// which is the whole point: this used to be distance from the danger
+    /// origin, so which direction you wandered decided how hard the game
+    /// was, and a zone had no consistent difficulty of its own.
+    ///
+    /// Depth *replaces* the zone step underground rather than adding to it.
+    /// The party's `Position` is pinned to the entrance tile they walked in
+    /// through, so there is no underground tile to read, and a stack should
+    /// escalate by how far down it goes rather than inheriting whatever its
+    /// entrance sat at.
     ///
     /// `depth` is a parameter rather than a `stack_pos()` read for the
     /// reason `spawn_pack`'s doc records: ambient surface spawns and nest
     /// respawns keep rolling every tick while the party is underground, and
     /// anything read off the party's own locale in here would size those
     /// from the party's depth.
-    fn danger_steps(&self, x: i32, y: i32, depth: Option<u32>) -> u32 {
+    fn danger_steps(&self, depth: Option<u32>) -> u32 {
         let steps = match depth {
             Some(depth) => depth.saturating_sub(1) / GROUP_SIZE_STEP_FRAMES,
-            None => (self.distance_from_danger_origin(x, y) / GROUP_SIZE_STEP_TILES).max(0) as u32,
+            None => self
+                .world
+                .resource::<ZoneLevel>()
+                .0
+                .saturating_sub(1)
+                .saturating_div(GROUP_SIZE_STEP_ZONES),
         };
-        steps.min(MAX_GROUP_SIZE_DISTANCE_STEPS)
+        steps.min(MAX_GROUP_SIZE_STEPS)
     }
 
     /// Maximum size of one wild species group at `(x, y)`: capped by the
@@ -373,10 +365,10 @@ impl Game {
     /// (`try_spawn_habitat_creature`), as the per-group ceiling on one fight
     /// (`gather_pack`/`group_pack`), and to size the room a spawn roll needs
     /// (`maybe_spawn_wild_creature`).
-    pub(crate) fn max_group_size(&self, x: i32, y: i32, depth: Option<u32>) -> u32 {
+    pub(crate) fn max_group_size(&self, depth: Option<u32>) -> u32 {
         let cap = zone_group_cap(self.world.resource::<ZoneLevel>().0);
         GROUP_SIZE_DISTANCE_GROWTH
-            .pow(self.danger_steps(x, y, depth))
+            .pow(self.danger_steps(depth))
             .min(cap)
     }
 
@@ -395,15 +387,19 @@ impl Game {
     /// `balance_sim::simulate_roster_fight` scores that as a loss against every
     /// shipped species, including the four that `beatable_by_a_fresh_player`
     /// clears one-on-one.
-    pub(crate) fn max_enemy_groups(&self, x: i32, y: i32, depth: Option<u32>) -> usize {
-        (self.danger_steps(x, y, depth) as usize + 1).min(MAX_ENEMY_GROUPS)
+    pub(crate) fn max_enemy_groups(&self, depth: Option<u32>) -> usize {
+        (self.danger_steps(depth) as usize + 1).min(MAX_ENEMY_GROUPS)
     }
 
-    /// Whether `(x, y)` is in the band a brand-new run opens in: zone 1,
-    /// close enough to the danger origin that a fight there is a single
-    /// program (one group by `max_enemy_groups`, one member by zone 1's
-    /// `zone_group_cap`). Spelled out from both curves rather than as its
-    /// own tile radius so it can't drift out of step with them.
+    /// Whether `(x, y)` is in the pocket a brand-new run opens in: zone 1,
+    /// within `OPENING_RING_TILES` of the danger origin.
+    ///
+    /// An explicit radius, and it has to be. This used to be spelled as
+    /// "both curves say a fight here is a single program", which was exact
+    /// while distance drove those curves. It no longer does — zone 1 caps
+    /// every group at one member *everywhere* — so the old spelling would
+    /// now be true across the whole zone and quietly turn all of it into a
+    /// nursery.
     ///
     /// Zone 1 only, and deliberately: past it the player has a party, and
     /// "what a bare level-1 player beats solo" would be filtering the
@@ -411,8 +407,7 @@ impl Game {
     /// toothless.
     fn in_opening_ring(&self, x: i32, y: i32) -> bool {
         self.world.resource::<ZoneLevel>().0 == 1
-            && self.max_group_size(x, y, None) == 1
-            && self.max_enemy_groups(x, y, None) == 1
+            && self.distance_from_danger_origin(x, y) <= OPENING_RING_TILES
     }
 
     /// Spawns `count` wild creatures near the player, retrying with a fresh
@@ -484,7 +479,7 @@ impl Game {
         // doesn't feed the nest's `pending_respawns` the way an actual
         // defeat does. Guardian counts are best-effort once a nest is far
         // behind the player.
-        let needed = self.max_group_size(tx, ty, None) as usize;
+        let needed = self.max_group_size(None) as usize;
         let mut hostiles: Vec<(Entity, i32)> = {
             let mut query = self
                 .world
@@ -658,7 +653,7 @@ impl Game {
         } else {
             let cap = zone_group_cap(self.world.resource::<ZoneLevel>().0);
             let max_group =
-                trace_group_ceiling(self.max_group_size(x, y, esc.depth), esc.group_mult, cap);
+                trace_group_ceiling(self.max_group_size(esc.depth), esc.group_mult, cap);
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_range(1..=max_group)
         };

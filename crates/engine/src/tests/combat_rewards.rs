@@ -1,7 +1,7 @@
 //! What a fight pays out — loot, experience, and how it spreads across the party.
 
 use super::support::*;
-use crate::tuning::{BOSS_PORTAL_FRAGMENT_DROP, DISTANCE_STAT_STEP_TILES};
+use crate::tuning::BOSS_PORTAL_FRAGMENT_DROP;
 use crate::*;
 
 #[test]
@@ -411,9 +411,9 @@ fn every_member_of_a_group_pays_its_own_xp_when_it_dies() {
     let mut game = Game::new(88, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.resource_mut::<ZoneLevel>().0 = 6;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    // Deep and far, so the per-group ceiling this fixture lives under is
-    // 100 rather than 1.
-    let (x, y) = (spawn.x + DISTANCE_STAT_STEP_TILES * 8, spawn.y);
+    // Deep, so the per-group ceiling this fixture lives under is 46 rather
+    // than 1.
+    let (x, y) = (spawn.x + 500, spawn.y);
     let player = game.player_entity();
 
     let members: Vec<Entity> = (0..5)

@@ -1,7 +1,7 @@
 //! Fixtures and helpers shared by the engine's unit tests.
 
 use crate::game::spawning;
-use crate::tuning::{GROUP_SIZE_STEP_TILES, MAX_ENEMY_GROUPS, NEST_DURABILITY};
+use crate::tuning::{MAX_ENEMY_GROUPS, NEST_DURABILITY};
 use crate::*;
 use std::path::Path;
 
@@ -37,21 +37,18 @@ pub(super) fn generic_species(game: &Game) -> SpeciesDef {
 }
 
 /// A tile far enough from the danger origin that a fight there may hold a
-/// full `MAX_ENEMY_GROUPS` groups — `Game::max_enemy_groups` allows one at
-/// the origin and gains another every `GROUP_SIZE_STEP_TILES`.
+/// full `MAX_ENEMY_GROUPS` groups — `Game::max_enemy_groups` allows one in
+/// zone 1 and gains another every zone after.
 ///
-/// Any fixture asserting about more than one enemy group has to stand its
-/// combatants out here: both halves of the pack ceiling are read from the
-/// ground the members occupy (see `Game::group_pack`), so a multi-group
-/// pack placed beside the spawn point partitions down to a single group.
-/// Stats scale with distance too, which is why fixtures that pin damage
-/// numbers set `Stats` explicitly rather than relying on species bases.
-pub(super) fn multi_group_ground(game: &Game) -> (i32, i32) {
+/// Any fixture asserting about more than one enemy group has to raise the
+/// zone: both halves of the pack ceiling come from the zone and the depth
+/// (see `Game::group_pack`), so a multi-group pack assembled in zone 1
+/// partitions down to a single group wherever it stands. Returns the spawn
+/// tile, which is as good as any — where the members are decides nothing.
+pub(super) fn multi_group_ground(game: &mut Game) -> (i32, i32) {
+    game.world.resource_mut::<ZoneLevel>().0 = MAX_ENEMY_GROUPS as u32;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    (
-        spawn.x + GROUP_SIZE_STEP_TILES * (MAX_ENEMY_GROUPS as i32 - 1),
-        spawn.y,
-    )
+    (spawn.x + 500, spawn.y)
 }
 
 /// Sets `entity`'s level directly, for tests that need a level-gated
@@ -193,7 +190,7 @@ pub(super) fn battle_with_a_pack_of(game: &mut Game, count: usize, hp: i32) -> V
         .expect("at least one species");
     game.world.resource_mut::<ZoneLevel>().0 = 3;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    let (x, y) = (spawn.x + GROUP_SIZE_STEP_TILES * 7, spawn.y);
+    let (x, y) = (spawn.x + 500, spawn.y);
     let members: Vec<Entity> = (0..count)
         .map(|i| {
             game.world

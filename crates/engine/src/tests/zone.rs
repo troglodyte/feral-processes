@@ -2,8 +2,7 @@
 
 use super::support::*;
 use crate::tuning::{
-    DISTANCE_STAT_STEP_TILES, GROUP_SIZE_STEP_TILES, MAX_BUILD_DISTANCE_FROM_HOME,
-    MAX_DISTANCE_STAT_MULTIPLIER, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_AGGRO_LEASH_RADIUS,
+    MAX_BUILD_DISTANCE_FROM_HOME, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_AGGRO_LEASH_RADIUS,
     NEST_CACHE_FRAGMENT_ZONE_BONUS, NEST_CACHE_FRAGMENTS, NEST_CACHE_WORK_RESOURCE_MULT,
     NEST_DURABILITY, NEST_PATH_SEARCH_MARGIN, NEST_PURSUIT_STEPS_PER_TICK, NEST_RESPAWN_TICKS,
     WORK_RESOURCE_DROP,
@@ -49,96 +48,21 @@ fn entering_a_zone_portal_increments_zone_and_doubles_wild_stats() {
     );
     for (species_id, max_hp, _pos) in results {
         let species = species_db.iter().find(|s| s.id == species_id).unwrap();
-        // Zone 2 doubles base stats at minimum (`ZoneLevel::stat_multiplier`);
-        // `distance_stat_multiplier` can scale it up further (capped at
-        // `MAX_DISTANCE_STAT_MULTIPLIER`) depending how far from the
-        // zone's entry point it spawned, and each spawn's individual
-        // `Potential::hp_roll` can additionally scale it within
-        // `MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL`. Checked as a range
-        // rather than an exact figure since `WanderAi` may have already
-        // moved this creature from its spawn position by the time this
-        // runs.
+        // Zone 2 doubles base stats (`ZoneLevel::stat_multiplier`) and the
+        // spawn's own `Potential::hp_roll` scales it within
+        // `MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL`. That is the whole
+        // range now — where on the map it spawned contributes nothing,
+        // which is what makes this a tight bound rather than the
+        // three-times-wider one distance scaling used to force.
         assert!(
             (max_hp as f32) >= (species.base_hp as f32) * 2.0 * MIN_INDIVIDUAL_ROLL,
             "zone 2 wild creatures should have at least doubled stats, times the roll floor"
         );
         assert!(
-            (max_hp as f32)
-                <= (species.base_hp as f32)
-                    * 2.0
-                    * MAX_DISTANCE_STAT_MULTIPLIER
-                    * MAX_INDIVIDUAL_ROLL,
-            "zone 2 wild creatures shouldn't exceed the zone doubling times the distance cap and roll ceiling"
+            (max_hp as f32) <= (species.base_hp as f32) * 2.0 * MAX_INDIVIDUAL_ROLL,
+            "zone 2 wild creatures shouldn't exceed the zone doubling times the roll ceiling"
         );
     }
-}
-
-#[test]
-fn distance_stat_multiplier_measures_from_the_zone_spawn_point_when_no_home_exists() {
-    let game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let spawn = *game.world.resource::<ZoneSpawnPoint>();
-
-    assert_eq!(
-        game.distance_stat_multiplier(spawn.x, spawn.y),
-        1.0,
-        "right at the spawn point, distance shouldn't add any scaling"
-    );
-    assert_eq!(
-        game.distance_stat_multiplier(spawn.x + DISTANCE_STAT_STEP_TILES - 1, spawn.y),
-        1.0,
-        "just short of a full step away should still read as no scaling"
-    );
-    assert!(
-        (game.distance_stat_multiplier(spawn.x + DISTANCE_STAT_STEP_TILES, spawn.y) - 1.25).abs()
-            < f32::EPSILON,
-        "one full step away should add one step of bonus"
-    );
-    assert!(
-        (game.distance_stat_multiplier(spawn.x + DISTANCE_STAT_STEP_TILES * 2, spawn.y) - 1.5)
-            .abs()
-            < f32::EPSILON,
-        "two full steps away should add two steps of bonus"
-    );
-    assert_eq!(
-        game.distance_stat_multiplier(spawn.x + 10_000, spawn.y),
-        MAX_DISTANCE_STAT_MULTIPLIER,
-        "far enough away should cap rather than grow without bound"
-    );
-}
-
-#[test]
-fn distance_stat_multiplier_treats_the_whole_platform_as_distance_zero() {
-    let mut game = Game::new(930, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    place_home(&mut game, 0, 0);
-
-    assert_eq!(
-        game.distance_stat_multiplier(spawn.x + MAX_BUILD_DISTANCE_FROM_HOME, spawn.y),
-        1.0,
-        "the platform edge is still perfectly safe territory"
-    );
-    assert_eq!(
-        game.distance_stat_multiplier(
-            spawn.x + MAX_BUILD_DISTANCE_FROM_HOME + DISTANCE_STAT_STEP_TILES - 1,
-            spawn.y
-        ),
-        1.0,
-        "one tile short of the first step past the edge is still unscaled"
-    );
-    assert!(
-        (game.distance_stat_multiplier(
-            spawn.x + MAX_BUILD_DISTANCE_FROM_HOME + DISTANCE_STAT_STEP_TILES,
-            spawn.y
-        ) - 1.25)
-            .abs()
-            < f32::EPSILON,
-        "the first step up lands one full step past the platform edge — 22 tiles from Home"
-    );
-    assert_eq!(
-        game.distance_stat_multiplier(spawn.x + 10_000, spawn.y),
-        MAX_DISTANCE_STAT_MULTIPLIER,
-        "the cap is unchanged"
-    );
 }
 
 /// The cap is linear, not geometric, and that is the point of it.
@@ -173,141 +97,97 @@ fn zone_group_cap_is_linear_and_never_passes_max_group_size() {
     );
 }
 
+/// Group size doubles per escalation step, and on the surface a step is a
+/// zone. The distance curve this replaced meant a zone had no consistent
+/// difficulty of its own — how hard a fight was depended on which way you
+/// had wandered from the spawn point.
 #[test]
-fn max_group_size_also_counts_from_the_platform_edge() {
-    let mut game = Game::new(931, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    game.world.resource_mut::<ZoneLevel>().0 = 4;
-    let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    place_home(&mut game, 0, 0);
-
-    assert_eq!(
-        game.max_group_size(spawn.x + MAX_BUILD_DISTANCE_FROM_HOME, spawn.y, None),
-        1,
-        "groups shouldn't grow inside territory that's still stat-x1.0"
-    );
-    // The discriminating case: without the platform offset this is a full
-    // GROUP_SIZE_STEP_TILES from spawn and would already have doubled.
-    assert_eq!(
-        game.max_group_size(spawn.x + GROUP_SIZE_STEP_TILES, spawn.y, None),
-        1,
-        "a full step from spawn is only half a step from the platform edge"
-    );
-    assert_eq!(
-        game.max_group_size(
-            spawn.x + MAX_BUILD_DISTANCE_FROM_HOME + GROUP_SIZE_STEP_TILES,
-            spawn.y,
-            None
-        ),
-        2,
-        "the first doubling lands one full step past the platform edge"
-    );
-}
-
-#[test]
-fn max_group_size_doubles_with_distance_and_caps_per_zone() {
-    // No Home is placed, so distances count straight from the spawn point —
-    // see the platform-edge test above for the case where one exists.
+fn max_group_size_doubles_per_zone_and_caps_per_zone() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    let at = |game: &Game, steps: i32| {
-        game.max_group_size(spawn.x + GROUP_SIZE_STEP_TILES * steps, spawn.y, None)
+    let at = |game: &mut Game, zone: u32| {
+        game.world.resource_mut::<ZoneLevel>().0 = zone;
+        game.max_group_size(None)
     };
 
-    assert_eq!(at(&game, 0), 1, "right at spawn, groups are always solo");
     assert_eq!(
-        at(&game, 10),
+        at(&mut game, 1),
         1,
-        "zone 1 is solo however far you walk — that is the whole point of zone 1"
+        "zone 1 is solo — the whole point of it"
     );
-
-    // Zone 2, not zone 1: a cap of 10 leaves the first three doublings
-    // visible, so the boundary case below is measuring the division and not
-    // the clamp.
-    game.world.resource_mut::<ZoneLevel>().0 = 2;
-    assert_eq!(at(&game, 0), 1, "every zone starts solo at its entry point");
+    assert_eq!(at(&mut game, 2), 2, "one zone in doubles");
     assert_eq!(
-        game.max_group_size(spawn.x + GROUP_SIZE_STEP_TILES - 1, spawn.y, None),
-        1,
-        "one tile short of a full step is still solo — the doubling is keyed \
-         to whole steps, and an off-by-one here would double a step early"
+        at(&mut game, 4),
+        8,
+        "and keeps doubling while under the cap"
     );
-    assert_eq!(at(&game, 1), 2, "one step out doubles");
-    assert_eq!(at(&game, 3), 8, "and keeps doubling while under the cap");
     assert_eq!(
-        at(&game, 4),
-        10,
-        "four steps would be 16, but zone 2 caps at 10"
+        at(&mut game, 5),
+        16,
+        "four steps is 2^4, still under zone 5's cap of 37"
     );
-    assert_eq!(at(&game, 10), 10, "and it stays capped however far out");
-
-    game.world.resource_mut::<ZoneLevel>().0 = 5;
     assert_eq!(
-        at(&game, 5),
+        at(&mut game, 6),
         32,
-        "five steps is 2^5, still under zone 5's cap of 37"
+        "five steps is 2^5, under zone 6's cap of 46"
     );
     assert_eq!(
-        at(&game, 6),
-        37,
-        "six steps would be 64, so the zone cap binds"
+        at(&mut game, 8),
+        64,
+        "seven steps would be 128, but the step count clamps at 7 first"
     );
-
-    game.world.resource_mut::<ZoneLevel>().0 = 12;
     assert_eq!(
-        at(&game, 7),
+        at(&mut game, 12),
         MAX_GROUP_SIZE,
         "zone 12 is where the linear cap first reaches the hard ceiling"
     );
-
-    // The exponent is clamped, so an absurd distance must not shift past
-    // the width of the type.
-    game.world.resource_mut::<ZoneLevel>().0 = 99;
     assert_eq!(
-        game.max_group_size(spawn.x + 10_000, spawn.y, None),
+        at(&mut game, 99),
         MAX_GROUP_SIZE,
-        "no zone or distance may push a group past MAX_GROUP_SIZE"
+        "no zone may push a group past MAX_GROUP_SIZE, or shift past the type"
     );
 }
 
-/// The count of groups rides the same distance curve as their size, one
-/// step per group rather than a doubling. The origin end is the part that
-/// matters: a fight at your doorstep is one program, which is what makes a
-/// zone-1 opening survivable for a player who has no companions yet.
+/// Where a fight happens inside a zone decides nothing about its size. This
+/// is the property the distance curve cost us: a base built far from the
+/// spawn point used to sit in permanently harder territory.
 #[test]
-fn max_enemy_groups_gains_one_group_per_step_out_and_stops_at_the_ceiling() {
-    let mut game = Game::new(43, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    let at = |game: &Game, steps: i32| {
-        game.max_enemy_groups(spawn.x + GROUP_SIZE_STEP_TILES * steps, spawn.y, None)
-    };
-
-    assert_eq!(at(&game, 0), 1, "one group at the danger origin");
-    assert_eq!(
-        game.max_enemy_groups(spawn.x + GROUP_SIZE_STEP_TILES - 1, spawn.y, None),
-        1,
-        "one tile short of a full step is still a single group — an off-by-one \
-         here would end the opening buffer a tile early"
-    );
-    assert_eq!(at(&game, 1), 2);
-    assert_eq!(at(&game, 2), 3);
-    assert_eq!(at(&game, 3), MAX_ENEMY_GROUPS);
-    assert_eq!(
-        at(&game, 10_000),
-        MAX_ENEMY_GROUPS,
-        "distance may not push a fight past the group ceiling"
+fn group_size_is_the_same_everywhere_in_a_zone() {
+    let mut game = Game::new(931, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 4;
+    let expected = game.max_group_size(None);
+    assert!(
+        expected > 1,
+        "zone 4 should field packs, or this asserts nothing"
     );
 
-    // Zone depth doesn't enter into it — only distance does, so the ring
-    // around a deep zone's entry point is quiet too.
-    game.world.resource_mut::<ZoneLevel>().0 = 5;
-    assert_eq!(at(&game, 0), 1, "every zone's entry point holds one group");
-
-    // And it counts from the platform edge, like every other danger curve.
     place_home(&mut game, 0, 0);
     assert_eq!(
-        game.max_enemy_groups(spawn.x + GROUP_SIZE_STEP_TILES, spawn.y, None),
-        1,
-        "a full step from spawn is only half a step from the platform edge"
+        game.max_group_size(None),
+        expected,
+        "placing a Home must not change the zone's pack size"
+    );
+}
+
+/// The count of groups rides the same curve as their size, one step per
+/// zone rather than a doubling. Zone 1 is the part that matters: a fight
+/// there is one program, which is what makes the opening survivable for a
+/// player who has no companions yet.
+#[test]
+fn max_enemy_groups_gains_one_group_per_zone_and_stops_at_the_ceiling() {
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let at = |game: &mut Game, zone: u32| {
+        game.world.resource_mut::<ZoneLevel>().0 = zone;
+        game.max_enemy_groups(None)
+    };
+
+    assert_eq!(at(&mut game, 1), 1, "one group in zone 1");
+    assert_eq!(at(&mut game, 2), 2);
+    assert_eq!(at(&mut game, 3), 3);
+    assert_eq!(at(&mut game, 4), MAX_ENEMY_GROUPS);
+    assert_eq!(
+        at(&mut game, 10_000),
+        MAX_ENEMY_GROUPS,
+        "no zone may push a fight past the group ceiling"
     );
 }
 
@@ -1347,7 +1227,7 @@ fn the_battle_a_pursuer_starts_includes_its_packmates() {
     // would truncate this fight back down to a single member regardless of
     // how the pack was gathered. `multi_group_ground` is ground far enough
     // out that a full `MAX_ENEMY_GROUPS` fight is allowed there.
-    let (gx, gy) = multi_group_ground(&game);
+    let (gx, gy) = multi_group_ground(&mut game);
     let player = game.player_entity();
     *game.world.get_mut::<Position>(player).unwrap() = Position { x: gx, y: gy };
     {

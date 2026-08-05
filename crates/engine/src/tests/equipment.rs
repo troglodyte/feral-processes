@@ -507,6 +507,62 @@ fn item_fusion_tier_survives_save_and_load() {
     );
 }
 
+/// Gear fusion was uncapped before `MAX_FUSIONS` applied to it, so a save
+/// can hold a tier above the ceiling. The ledger is clamped on load —
+/// but the *worn* copy is deliberately left alone, and that is what the
+/// last two assertions pin. `apply_equipment_delta` writes straight into
+/// `Stats` and the load path restores those numbers verbatim, so lowering
+/// the worn tier would make unequipping subtract a smaller bonus than was
+/// added and weld the difference into the player's base stats — an
+/// invisible buff from a change whose whole purpose is a nerf.
+#[test]
+fn loading_a_legacy_over_ceiling_tier_clamps_the_ledger_not_the_worn_copy() {
+    let assets = test_assets_dir();
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    let mut game = Game::new(204, DifficultyMode::Forgiving, &assets).unwrap();
+    let player = game.player_entity();
+    // Written directly: `fuse_item` now refuses this, which is the point.
+    game.world
+        .get_mut::<ItemFusions>(player)
+        .unwrap()
+        .tiers
+        .push((armor.clone(), MAX_FUSIONS + 2));
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(armor.clone(), 1);
+    game.equip(&armor).unwrap();
+    let def_before = game.player_status().def;
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_legacy_fusion_test_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        loaded.item_fusion_tier(&armor),
+        MAX_FUSIONS,
+        "the ledger governs future equips and fusions, so it takes the cap"
+    );
+    assert_eq!(
+        loaded
+            .world
+            .get::<Equipment>(loaded.player_entity())
+            .and_then(|e| e.get(EquipmentSlot::Armor))
+            .map(|e| e.fusion_tier),
+        Some(MAX_FUSIONS + 2),
+        "the worn copy keeps the tier its bonus was actually applied at"
+    );
+    assert_eq!(
+        loaded.player_status().def,
+        def_before,
+        "clamping must not silently restate what is already in Stats"
+    );
+}
+
 #[test]
 fn erase_item_removes_the_full_stack() {
     let mut game = Game::new(12, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

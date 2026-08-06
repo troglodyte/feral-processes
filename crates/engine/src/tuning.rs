@@ -569,7 +569,12 @@ pub const STACK_CORRUPTION_MIN_DAMAGE: i32 = 2;
 ///
 /// Credits rather than Core Fragments because a Stack run should pay for
 /// itself in the one currency that survives a breach — see
-/// `EconomyRole::TradeCurrency`. Fragments are what the surface is for.
+/// `EconomyRole::TradeCurrency`.
+///
+/// A cache used to also roll for a portal fragment. It no longer does: the
+/// breaching currency is `STACK_BOSS_PORTAL_FRAGMENT_DROP`'s alone, so a
+/// stack's progress toward the next zone is what the party fights the lair
+/// for and not what they find in the walls on the way to it.
 pub const STACK_CACHE_CREDITS: std::ops::RangeInclusive<u32> = 12..=30;
 
 /// What each frame of depth multiplies a cache's credit payout by,
@@ -577,13 +582,6 @@ pub const STACK_CACHE_CREDITS: std::ops::RangeInclusive<u32> = 12..=30;
 /// deeper has to pay better than it costs, or the bottom of a stack is a
 /// place with no reason to visit it.
 pub const STACK_CACHE_DEPTH_GROWTH: f32 = 1.5;
-
-/// Chance a cache also holds a portal fragment, per frame of depth (so
-/// depth 3 rolls at three times this, capped at certainty).
-///
-/// The one route besides the Market listing and boss kills that pays the
-/// breaching currency — see `market-portal-fragment-listing-is-load-bearing`.
-pub const STACK_CACHE_FRAGMENT_CHANCE: f64 = 0.12;
 
 /// Chance per step that walking a Stack corridor draws an encounter.
 ///
@@ -750,9 +748,42 @@ pub const WILD_CREATURE_CAP: usize = 2000;
 /// has at least one boss defined for it.
 pub const BOSS_SPAWN_CHANCE: f64 = 0.04;
 
-/// Range of Portal Fragments a defeated boss guarantees, replacing the
-/// flat `PORTAL_FRAGMENT_DROP_CHANCE` roll every other species gets.
-pub const BOSS_PORTAL_FRAGMENT_DROP: std::ops::RangeInclusive<u32> = 3..=6;
+/// Range of Portal Fragments a defeated boss guarantees **underground**,
+/// multiplied by the frame's depth. The one and only source of the
+/// breaching currency: ordinary kills, surface bosses, nests and Stack
+/// caches all pay something else, so a zone is breached by going down and
+/// killing the thing at the bottom of a stack, or not at all.
+///
+/// Underground a boss can only ever be a lair guardian —
+/// `Game::stack_encounter_pack` draws with `boss` false and
+/// `pick_habitat_species` honours it — so this is a lair payout even
+/// though it is spelled as a boss one. A lair's escort, past zone 1, is
+/// ordinary species and pays nothing.
+///
+/// Depth is the lever rather than the base range, per
+/// `STACK_CACHE_DEPTH_GROWTH`'s argument that the bottom of a stack has to
+/// pay better than it costs to reach. Linear rather than compounding: a
+/// stack runs at most `STACK_FRAMES_MAX` frames and each lair is one-shot
+/// (`StackMemory` remembers a cleared one), so the total a zone can pay is
+/// already bounded by `STACK_LINKS_PER_ZONE` stacks' worth of lairs.
+pub const STACK_BOSS_PORTAL_FRAGMENT_DROP: std::ops::RangeInclusive<u32> = 4..=8;
+
+/// Upper bound, per zone level, on the `ItemDef::value` of gear a defeated
+/// **surface** boss drops — see `Game::surface_boss_loot`. A surface boss
+/// pays in power rather than progression: the band walks up the shipped
+/// value ladder (scavenged 3-8 → standard 12-16 → researched 20-60 →
+/// premium 80-120, documented in `assets/items/README.md`) as zones go by,
+/// so "high-end for where you are" is literally what the pool means.
+pub const SURFACE_BOSS_LOOT_VALUE_PER_ZONE: u32 = 30;
+
+/// The bottom of that band, as a percentage of its ceiling. Keeps a boss
+/// from paying out the cheap tier it long outgrew, without pinning the
+/// pool so tightly that a gap in the value ladder empties it.
+pub const SURFACE_BOSS_LOOT_BAND_FLOOR_PERCENT: u32 = 30;
+
+/// How many items a defeated surface boss draws from that band. Drawn with
+/// replacement — a thin band repeats rather than paying less.
+pub const SURFACE_BOSS_LOOT_DROPS: u32 = 2;
 
 /// Chance a habitat spawn roll (see `Game::try_spawn_habitat_creature`)
 /// produces a Nest instead of an ordinary pack, for a species that has
@@ -800,17 +831,37 @@ pub const NEST_PATH_SEARCH_MARGIN: i32 = 5;
 /// `work_resource` at once, not a single kill's drop.
 pub const NEST_CACHE_WORK_RESOURCE_MULT: u32 = 4;
 
-/// Craft currency a destroyed nest pays (see `Game::grant_nest_cache`),
-/// before `NEST_CACHE_FRAGMENT_ZONE_BONUS`. Deliberately under
-/// `BOSS_PORTAL_FRAGMENT_DROP` (`3..=6`): a nest is sustained effort, a boss
-/// is a wall.
-pub const NEST_CACHE_FRAGMENTS: std::ops::RangeInclusive<u32> = 2..=5;
+/// Trade currency a destroyed nest pays (see `Game::grant_nest_cache`),
+/// before `NEST_CACHE_CREDIT_ZONE_BONUS`.
+///
+/// Credits rather than the craft currency it used to pay: fragments are
+/// `STACK_BOSS_PORTAL_FRAGMENT_DROP`'s alone now, and a nest is the one
+/// piece of sustained surface work that a player might do instead of
+/// descending. Paying it in the currency that survives a breach keeps it
+/// worth clearing without reopening a surface route to the next zone.
+///
+/// This is the floor under a nest, not its point — see
+/// `NEST_ORPHAN_CHANCE` for what a player actually clears one for.
+pub const NEST_CACHE_CREDITS: std::ops::RangeInclusive<u32> = 20..=40;
 
-/// Added to `NEST_CACHE_FRAGMENTS` per zone below the current one, so a
+/// Added to `NEST_CACHE_CREDITS` per zone below the current one, so a
 /// deeper nest — whose guardians already scale — stays worth clearing.
 /// Additive rather than multiplicative, matching `NODE_PAYOUT_ZONE_BONUS`;
 /// see that constant for why compounding broke the economy.
-pub const NEST_CACHE_FRAGMENT_ZONE_BONUS: u32 = 1;
+pub const NEST_CACHE_CREDIT_ZONE_BONUS: u32 = 10;
+
+/// Chance a destroyed nest leaves an orphaned program of its own species,
+/// adopted free — see `Game::grant_nest_cache`.
+///
+/// This is what a nest is *for*. Each of the three faucets that survive
+/// this game's loot pass pays exactly one thing: a Stack lair boss pays
+/// progression (`STACK_BOSS_PORTAL_FRAGMENT_DROP`), a surface boss pays
+/// power (`SURFACE_BOSS_LOOT_VALUE_PER_ZONE`), and a nest pays roster.
+///
+/// Free where `Game::adopt_orphan` charges a taming catalyst: the Stack's
+/// orphan is an opportunity walked past, a nest is a fight already paid
+/// for in durability and respawning guardians. A full roster loses it.
+pub const NEST_ORPHAN_CHANCE: f64 = 0.5;
 
 /// Passes over the nest species' equipment drop table
 /// (`Game::equipment_drops_for`), each entry rolled at its own chance on
@@ -914,12 +965,6 @@ pub const DEFAULT_OUTPUT_CAPACITY: u32 = 20;
 /// drain a feeder that several machines share.
 pub const INPUT_STOCK_BATCHES: u32 = 2;
 pub const DEFAULT_STRUCTURE_DURABILITY: u32 = 30;
-
-/// Chance a defeated wild program additionally drops a Portal Fragment,
-/// independent of its species' own `work_resource`/`equipment_drop`.
-/// Fragments are the raw material for deploying a zone-portal structure
-/// (see `StructureDef::zone_portal`).
-pub const PORTAL_FRAGMENT_DROP_CHANCE: f64 = 0.35;
 
 /// Growth factor applied to an item's base `EquipmentStats` per gear level
 /// above 1 — doubles each level (level *N* = base *

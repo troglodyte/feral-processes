@@ -208,6 +208,47 @@ impl Game {
         )
     }
 
+    /// Spawns a program of `species_id` at `(x, y)` already tamed and
+    /// already under the player — the shape a program takes when it joins
+    /// the roster without being beaten in a fight.
+    ///
+    /// Two callers, and they exist for opposite reasons: `adopt_orphan`
+    /// (`game/stack_features.rs`) takes something abandoned in a Stack dead
+    /// end, and `grant_nest_cache` (`game/zone.rs`) takes what is left
+    /// running in the wreckage of a nest. They disagree only about where
+    /// the program was, what it costs and whether it happens at all — every
+    /// step of *becoming* a companion is here, so a third route in cannot
+    /// quietly skip one. `install_innate_routines` in particular went
+    /// missing from exactly this kind of duplicate once.
+    ///
+    /// What is deliberately absent is as load-bearing as what is here, and
+    /// `adopt_orphan`'s doc comment is where the reasoning lives: no
+    /// `StackSpawn` tag (a companion that never fought would be despawned by
+    /// `end_battle`), no XP, and no `Party` push — the roster is the
+    /// destination, and which programs are fielded is a later choice.
+    ///
+    /// Neither caller checks `pet_capacity` here; both decide for themselves
+    /// what a full roster means, because one refuses the action outright and
+    /// the other has already destroyed the thing that was paying.
+    pub(crate) fn adopt_program(
+        &mut self,
+        species_id: &str,
+        x: i32,
+        y: i32,
+        stat_mult: f32,
+    ) -> Option<Entity> {
+        let player = self.player_entity();
+        let program = self.spawn_wild_creature_scaled(species_id, x, y, stat_mult)?;
+        self.world
+            .entity_mut(program)
+            .remove::<(Hostile, WanderAi)>();
+        self.world
+            .entity_mut(program)
+            .insert((Tamed { owner: player }, Experience::default()));
+        self.install_innate_routines(program);
+        Some(program)
+    }
+
     /// Spawns a `Nest` for `species_id` at `(x, y)`, plus an initial
     /// `NEST_GUARDIAN_MIN..=NEST_GUARDIAN_MAX` guardians clustered within
     /// `NEST_TETHER_RADIUS` of it. Returns the nest's `Entity`, which

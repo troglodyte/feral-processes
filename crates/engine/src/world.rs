@@ -38,6 +38,18 @@ pub enum Biome {
     Platform,
 }
 
+impl Biome {
+    /// Whether terrain of this kind can be stood on. The one definition:
+    /// `WorldMap::classify` stamps it onto every `Tile` it produces, and
+    /// anything asking the question of a biome rather than of a tile — a
+    /// census over the roster, say — asks here rather than repeating the
+    /// match. An unwalkable biome is a hole in the map, so nothing is ever
+    /// placed there: no spawn, no structure, and no Stack link.
+    pub fn walkable(self) -> bool {
+        !matches!(self, Biome::DataVoid | Biome::BlackIce)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Tile {
     pub biome: Biome,
@@ -108,8 +120,10 @@ impl WorldMap {
             Biome::OpenGrid
         };
 
-        let walkable = !matches!(biome, Biome::DataVoid | Biome::BlackIce);
-        Tile { biome, walkable }
+        Tile {
+            biome,
+            walkable: biome.walkable(),
+        }
     }
 
     fn ensure_chunk(&mut self, cx: i32, cy: i32) {

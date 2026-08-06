@@ -3,9 +3,9 @@
 //! zone.
 
 use crate::tuning::{
-    INITIAL_WILD_POPULATION, MAX_BUILD_DISTANCE_FROM_HOME, NEST_CACHE_EQUIPMENT_ROLLS,
-    NEST_CACHE_FRAGMENT_ZONE_BONUS, NEST_CACHE_FRAGMENTS, NEST_CACHE_WORK_RESOURCE_MULT,
-    STACK_LINKS_PER_ZONE, WORK_RESOURCE_DROP,
+    INITIAL_WILD_POPULATION, MAX_BUILD_DISTANCE_FROM_HOME, NEST_CACHE_CREDIT_ZONE_BONUS,
+    NEST_CACHE_CREDITS, NEST_CACHE_EQUIPMENT_ROLLS, NEST_CACHE_WORK_RESOURCE_MULT,
+    NEST_ORPHAN_CHANCE, STACK_LINKS_PER_ZONE, WORK_RESOURCE_DROP,
 };
 use crate::*;
 
@@ -119,19 +119,69 @@ impl Game {
 
         let zone_bonus = {
             let zone = self.world.resource::<ZoneLevel>().0;
-            NEST_CACHE_FRAGMENT_ZONE_BONUS * zone.saturating_sub(1)
+            NEST_CACHE_CREDIT_ZONE_BONUS * zone.saturating_sub(1)
         };
         let qty = {
             let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_range(NEST_CACHE_FRAGMENTS) + zone_bonus
+            rng.0.random_range(NEST_CACHE_CREDITS) + zone_bonus
         };
-        let landed = self.grant_loot(self.craft_currency(), qty);
+        let landed = self.grant_loot(self.trade_currency(), qty);
         if landed > 0 {
             self.log_kind(
                 MessageKind::Loot,
-                format!("The cache holds {landed} portal fragments!"),
+                format!("The cache holds {landed} credits!"),
             );
         }
+
+        self.leave_nest_orphan(nest, &species_id);
+    }
+
+    /// Rolls `NEST_ORPHAN_CHANCE` for the thing a nest is actually cleared
+    /// for: a program of the nest's **own** species, left running in the
+    /// wreckage and joining the roster free.
+    ///
+    /// Its own species rather than a habitat draw so which nest the player
+    /// walks up to is a real choice — you hunt the nest of the program you
+    /// want. Free where `Game::adopt_orphan` charges a taming catalyst,
+    /// because the Stack's orphan is an opportunity walked past and a nest
+    /// is a fight already paid for.
+    ///
+    /// A full roster loses it, and says so. The alternative — refusing to
+    /// destroy the nest at all — would make a structure's destruction
+    /// conditional on unrelated state, and by the time this runs the caller
+    /// has already committed to the `despawn_nest` on the next line.
+    ///
+    /// That ordering is also why the nest's `Position` is still readable
+    /// here: it is the last thing to read anything off the entity, and it
+    /// shares the reason `grant_nest_cache` itself runs before the despawn.
+    fn leave_nest_orphan(&mut self, nest: Entity, species_id: &str) {
+        let left_behind = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_bool(NEST_ORPHAN_CHANCE)
+        };
+        if !left_behind {
+            return;
+        }
+        let Some(at) = self.world.get::<Position>(nest).copied() else {
+            return;
+        };
+        if self.pet_count() >= self.pet_capacity() {
+            self.log_kind(
+                MessageKind::Loot,
+                "Something small was still running in the wreckage. You have no room for it.",
+            );
+            return;
+        }
+        // Scaled like any other spawn in this zone; the depth multiplier a
+        // Stack orphan carries has no meaning on the surface.
+        let Some(program) = self.adopt_program(species_id, at.x, at.y, 1.0) else {
+            return;
+        };
+        let name = self.creature_label(program);
+        self.log_kind(
+            MessageKind::Loot,
+            format!("{name} was still running in the wreckage. It comes with you."),
+        );
     }
 
     /// Despawns `nest`, first stripping `NestGuardian` and `Pursuing` from

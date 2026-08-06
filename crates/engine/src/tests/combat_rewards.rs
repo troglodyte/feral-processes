@@ -1,8 +1,50 @@
 //! What a fight pays out — loot, experience, and how it spreads across the party.
 
 use super::support::*;
-use crate::tuning::BOSS_PORTAL_FRAGMENT_DROP;
+use crate::tuning::STACK_BOSS_PORTAL_FRAGMENT_DROP;
 use crate::*;
+
+/// A bare creature of `species` on the player's tile, ready for
+/// `award_loot`. Every loot test here wants the same thing: an entity that
+/// carries a `Creature` and nothing else that could pay out on its own.
+fn corpse_of(game: &mut Game, species: &str) -> Entity {
+    game.world
+        .spawn((
+            Creature {
+                species: species.to_string(),
+            },
+            Position { x: 0, y: 0 },
+            Stats {
+                hp: 1,
+                max_hp: 1,
+                atk: 1,
+                def: 1,
+            },
+        ))
+        .id()
+}
+
+/// Puts the party `depth` frames down without generating a frame to walk.
+/// `award_loot`'s fragment branch reads the locale and its depth and
+/// nothing else — `mark_lair_cleared` finds no `CurrentStack` and no-ops,
+/// which is what a test about the payout wants.
+fn stand_in_the_stack(game: &mut Game, depth: u32) {
+    game.world.insert_resource(Locale::Stack {
+        depth,
+        frames: 6,
+        x: 1,
+        y: 1,
+        facing: crate::stack::Dir::North,
+        entrance: (0, 0),
+    });
+}
+
+fn a_boss(game: &Game) -> SpeciesDef {
+    game.species_defs()
+        .into_iter()
+        .find(|s| s.is_boss)
+        .expect("at least one boss species should exist in assets/species for this test")
+}
 
 #[test]
 fn award_loot_grants_the_species_work_resource() {
@@ -117,31 +159,13 @@ fn award_loot_grants_nothing_for_species_without_a_work_resource() {
 }
 
 #[test]
-fn defeating_a_boss_guarantees_a_cache_of_portal_fragments() {
+fn defeating_a_boss_in_the_stack_guarantees_a_cache_of_portal_fragments() {
     let mut game = Game::new(51, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    let boss = game
-        .species_defs()
-        .into_iter()
-        .find(|s| s.is_boss)
-        .expect("at least one boss species should exist in assets/species for this test");
+    let boss = a_boss(&game);
+    stand_in_the_stack(&mut game, 1);
 
-    let wild = game
-        .world
-        .spawn((
-            Creature {
-                species: boss.id.clone(),
-            },
-            Position { x: 0, y: 0 },
-            Stats {
-                hp: 1,
-                max_hp: 1,
-                atk: 1,
-                def: 1,
-            },
-        ))
-        .id();
-
+    let wild = corpse_of(&mut game, &boss.id);
     game.award_loot(wild);
 
     let qty = game
@@ -150,8 +174,163 @@ fn defeating_a_boss_guarantees_a_cache_of_portal_fragments() {
         .unwrap()
         .count(&ItemId::from(ids::PORTAL_FRAGMENT));
     assert!(
-        BOSS_PORTAL_FRAGMENT_DROP.contains(&qty),
-        "boss kill should guarantee a portal fragment cache in {BOSS_PORTAL_FRAGMENT_DROP:?}, got {qty}"
+        STACK_BOSS_PORTAL_FRAGMENT_DROP.contains(&qty),
+        "a depth-1 lair boss should pay a cache in {STACK_BOSS_PORTAL_FRAGMENT_DROP:?}, got {qty}"
+    );
+}
+
+#[test]
+fn a_deeper_lair_boss_pays_more_portal_fragments() {
+    let paid_at = |depth: u32| {
+        // Same seed either side, so both runs consume GameRng identically
+        // right up to the payout — depth multiplies the roll rather than
+        // changing how many draws are made, which makes this a comparison
+        // of one roll scaled two ways.
+        let mut game = Game::new(52, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let boss = a_boss(&game);
+        stand_in_the_stack(&mut game, depth);
+        let wild = corpse_of(&mut game, &boss.id);
+        game.award_loot(wild);
+        game.world
+            .get::<Inventory>(game.player_entity())
+            .unwrap()
+            .count(&ItemId::from(ids::PORTAL_FRAGMENT))
+    };
+
+    let shallow = paid_at(1);
+    let deep = paid_at(3);
+    assert_eq!(
+        deep,
+        shallow * 3,
+        "depth is the lever on the one faucet that pays the breaching currency, so the \
+         bottom of a stack has to be worth the walk back up (depth 1 paid {shallow}, \
+         depth 3 paid {deep})"
+    );
+}
+
+#[test]
+fn a_boss_defeated_on_the_surface_pays_no_portal_fragments() {
+    let mut game = Game::new(53, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let boss = a_boss(&game);
+    assert!(
+        !game.is_underground(),
+        "test premise: a fresh game starts on the surface"
+    );
+
+    let wild = corpse_of(&mut game, &boss.id);
+    game.award_loot(wild);
+
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::PORTAL_FRAGMENT)),
+        0,
+        "progress toward the next zone is bought underground or not at all — a surface \
+         boss pays in gear instead"
+    );
+}
+
+#[test]
+fn an_ordinary_kill_pays_no_portal_fragments() {
+    // Underground, where the payout does exist, so this measures the
+    // `is_boss` half of the gate rather than passing for free on the
+    // locale half. A lair's escort past zone 1 is exactly this case.
+    let mut game = Game::new(54, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let ordinary = game
+        .species_defs()
+        .into_iter()
+        .find(|s| !s.is_boss)
+        .expect("the shipped roster is mostly ordinary species");
+    stand_in_the_stack(&mut game, 3);
+
+    let wild = corpse_of(&mut game, &ordinary.id);
+    game.award_loot(wild);
+
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::PORTAL_FRAGMENT)),
+        0,
+        "only the thing at the bottom of a stack pays fragments; everything else it \
+         brought with it does not"
+    );
+}
+
+#[test]
+fn a_boss_defeated_on_the_surface_pays_gear_from_its_zones_band() {
+    let mut game = Game::new(55, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let boss = a_boss(&game);
+    let band = game.surface_boss_loot();
+    assert!(!band.is_empty(), "zone 1 should have a band to draw from");
+
+    let before: u32 = band.iter().map(|id| held(&game, id)).sum();
+    let wild = corpse_of(&mut game, &boss.id);
+    game.award_loot(wild);
+    let after: u32 = band.iter().map(|id| held(&game, id)).sum();
+
+    assert!(
+        after > before,
+        "a surface boss pays power where a Stack boss pays progression, and the band it \
+         draws from is {band:?}"
+    );
+}
+
+#[test]
+fn the_surface_boss_band_climbs_the_value_ladder_with_the_zone() {
+    let mut game = Game::new(56, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let value = |game: &Game, id: &ItemId| game.item_value(id);
+
+    let mut previous_best = 0;
+    for zone in 1..=5 {
+        set_zone(&mut game, zone);
+        let band = game.surface_boss_loot();
+        assert!(
+            !band.is_empty(),
+            "zone {zone}'s band selects nothing from the shipped ladder, so every boss in \
+             it would fall back to the top tier"
+        );
+        let best = band.iter().map(|id| value(&game, id)).max().unwrap();
+        assert!(
+            best >= previous_best,
+            "the band must not walk back down the ladder: zone {zone} tops out at {best} \
+             where the zone before it reached {previous_best}"
+        );
+        previous_best = best;
+    }
+    assert!(
+        previous_best >= 80,
+        "by zone 5 a boss should be paying the premium tier, not still handing out \
+         standard gear (best was {previous_best})"
+    );
+}
+
+#[test]
+fn a_zone_past_the_top_of_the_ladder_still_pays_the_best_gear_there_is() {
+    let mut game = Game::new(57, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // The ceiling climbs forever and the shipped ladder stops at 120, so
+    // far enough out the band's own floor rises past every item there is.
+    set_zone(&mut game, 40);
+
+    let band = game.surface_boss_loot();
+    assert!(
+        !band.is_empty(),
+        "a band that empties must fall back to the best gear rather than paying nothing"
+    );
+    let best_in_game = game
+        .world
+        .resource::<ItemDb>()
+        .all()
+        .filter(|d| d.equipment.is_some())
+        .map(|d| game.item_value(&d.id))
+        .max()
+        .unwrap();
+    assert!(
+        band.iter().all(|id| game.item_value(id) == best_in_game),
+        "the fallback is the top of the ladder and nothing below it, got {band:?}"
     );
 }
 

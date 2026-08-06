@@ -1301,6 +1301,23 @@ fn walking_onto_a_cache_pays_out() {
     assert!(logged(&game, "cache"));
 }
 
+#[test]
+fn a_cache_pays_credits_and_never_the_breaching_currency() {
+    let mut game = game();
+    descend(&mut game);
+    stand_before_a_cache(&mut game);
+    let fragments_before = fragments(&game);
+
+    game.step_forward();
+
+    assert_eq!(
+        fragments(&game),
+        fragments_before,
+        "a stack's progress toward the next zone is what the party fights the lair for, \
+         not what they find in the walls on the way to it"
+    );
+}
+
 /// Otherwise a cache is an infinite credit tap: step off, step back on.
 #[test]
 fn a_cache_only_pays_out_once() {

@@ -513,6 +513,48 @@ mod tests {
         );
     }
 
+    /// A Stack lair boss is the only thing in the game that pays the
+    /// breaching currency (`STACK_BOSS_PORTAL_FRAGMENT_DROP`), and
+    /// `Game::pick_lair_species` draws it from the biome of the **surface
+    /// tile the link opens in**. A walkable biome with no boss defined for
+    /// it therefore falls back to the toughest ordinary program in the
+    /// biome — which is a real fight, but `is_boss` is false, so it pays
+    /// nothing and every stack reached through that terrain is a dead end
+    /// for progression.
+    ///
+    /// Only walkable biomes are checked because `Game::spawn_surface_links`
+    /// refuses an unwalkable tile, so a link can never open in Data Void or
+    /// Black Ice. `Biome::Platform` is excluded for the opposite reason: it
+    /// is base floor with no species at all, which is the whole mechanism
+    /// behind a base being a safe haven.
+    ///
+    /// A census, not a rule — this breaks by *removing* a habitat from the
+    /// last boss that covers some terrain, which reads as a small tuning
+    /// edit right up until a run cannot leave zone 1.
+    #[test]
+    fn every_biome_a_stack_link_can_open_in_fields_a_boss() {
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
+
+        for biome in [
+            Biome::DataVoid,
+            Biome::StaticField,
+            Biome::NullSector,
+            Biome::Mainframe,
+            Biome::OpenGrid,
+            Biome::BlackIce,
+        ] {
+            if !biome.walkable() {
+                continue;
+            }
+            assert!(
+                !db.boss_habitat_matches(biome).is_empty(),
+                "{biome:?} is walkable, so a Stack link can open in it — but no shipped \
+                 boss inhabits it, which would make every stack under that terrain pay \
+                 no portal fragments at all"
+            );
+        }
+    }
+
     #[test]
     fn base_roster_growth_multiplier_rises_with_difficulty_tier() {
         let (db, warnings) =

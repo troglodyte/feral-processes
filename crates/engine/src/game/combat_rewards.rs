@@ -2,8 +2,9 @@
 //! decompiling a defeated program into a companion.
 
 use crate::tuning::{
-    BOSS_PORTAL_FRAGMENT_DROP, DECOMPILER_SKILL_PER_LEVEL, NEST_RESPAWN_TICKS, PARTY_XP_DIVISOR,
-    PERK_POINTS_PER_LEVEL, PORTAL_FRAGMENT_DROP_CHANCE,
+    DECOMPILER_SKILL_PER_LEVEL, NEST_RESPAWN_TICKS, PARTY_XP_DIVISOR, PERK_POINTS_PER_LEVEL,
+    STACK_BOSS_PORTAL_FRAGMENT_DROP, SURFACE_BOSS_LOOT_BAND_FLOOR_PERCENT, SURFACE_BOSS_LOOT_DROPS,
+    SURFACE_BOSS_LOOT_VALUE_PER_ZONE,
 };
 use crate::tuning::{DEFAULT_TAMING_DIFFICULTY, WORK_RESOURCE_DROP};
 use crate::*;
@@ -111,26 +112,108 @@ impl Game {
                 .bosses_defeated
                 .push(species_id.clone());
 
-            let qty = {
-                let mut rng = self.world.resource_mut::<GameRng>();
-                rng.0.random_range(BOSS_PORTAL_FRAGMENT_DROP)
-            };
-            let landed = self.grant_loot(self.craft_currency(), qty);
-            if landed > 0 {
-                self.log_kind(
-                    MessageKind::Loot,
-                    format!("Its crash leaves behind a cache of {landed} portal fragments!"),
-                );
-            }
-        } else {
-            let portal_fragment_roll = {
-                let mut rng = self.world.resource_mut::<GameRng>();
-                rng.0.random_bool(PORTAL_FRAGMENT_DROP_CHANCE)
-            };
-            if portal_fragment_roll && self.grant_loot(self.craft_currency(), 1) > 0 {
-                self.log_kind(MessageKind::Loot, "It leaves behind a portal fragment.");
+            match self.stack_pos() {
+                Some(pos) => self.pay_stack_boss_fragments(pos.depth),
+                None => self.pay_surface_boss_gear(),
             }
         }
+    }
+
+    /// The breaching currency, and the only place in the game that pays it
+    /// (`STACK_BOSS_PORTAL_FRAGMENT_DROP`). Reached only from `award_loot`'s
+    /// boss branch while `Locale::Stack` is live, where a boss can only be a
+    /// lair guardian — so this is what the party went down for.
+    fn pay_stack_boss_fragments(&mut self, depth: u32) {
+        let qty = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_range(STACK_BOSS_PORTAL_FRAGMENT_DROP) * depth
+        };
+        let landed = self.grant_loot(self.craft_currency(), qty);
+        if landed > 0 {
+            self.log_kind(
+                MessageKind::Loot,
+                format!("Its crash leaves behind a cache of {landed} portal fragments!"),
+            );
+        }
+    }
+
+    /// What a boss killed on the surface pays instead: gear from
+    /// `surface_boss_loot`'s zone band, on top of the species' own
+    /// `equipment_drops_for` rolls that every kill gets.
+    ///
+    /// Drawn with replacement, so a zone whose band happens to be thin pays
+    /// the same *number* of items as a rich one — a boss is a wall wherever
+    /// it is met, and the band already says how good the items are.
+    fn pay_surface_boss_gear(&mut self) {
+        let pool = self.surface_boss_loot();
+        if pool.is_empty() {
+            return;
+        }
+        for _ in 0..SURFACE_BOSS_LOOT_DROPS {
+            let item = {
+                let mut rng = self.world.resource_mut::<GameRng>();
+                pool[rng.0.random_range(0..pool.len())].clone()
+            };
+            if self.grant_loot(item.clone(), 1) > 0 {
+                self.log_kind(
+                    MessageKind::Loot,
+                    format!("Its crash spills a {}!", self.item_name(&item)),
+                );
+            }
+        }
+    }
+
+    /// The pool a defeated surface boss draws from: every equippable item
+    /// whose `ItemDef::value` sits in this zone's band, which is
+    /// `SURFACE_BOSS_LOOT_VALUE_PER_ZONE` per zone wide at the top and
+    /// `SURFACE_BOSS_LOOT_BAND_FLOOR_PERCENT` of that at the bottom.
+    ///
+    /// Derived from `value` rather than a new schema field, so a modded item
+    /// joins the pool by existing and the ladder documented in
+    /// `assets/items/README.md` is the single place a tier is declared. The
+    /// equipment filter is what keeps non-gear that happens to be worth the
+    /// same — an Access Shard is worth 12, exactly a Hardened Shell — out of
+    /// a payout that is supposed to make the party stronger.
+    ///
+    /// A band that selects nothing falls back to the best gear there is
+    /// rather than paying nothing: the ceiling climbs forever but the ladder
+    /// does not, so a deep enough run would otherwise walk off the top of it.
+    ///
+    /// Sorted by id so a seeded run consumes its draws in the same order
+    /// however the item files happen to load — the same guarantee
+    /// `equipment_drops_for` and `open_cache` make.
+    pub(crate) fn surface_boss_loot(&self) -> Vec<ItemId> {
+        let zone = self.world.resource::<ZoneLevel>().0;
+        let ceiling = SURFACE_BOSS_LOOT_VALUE_PER_ZONE.saturating_mul(zone);
+        let floor = ceiling * SURFACE_BOSS_LOOT_BAND_FLOOR_PERCENT / 100;
+
+        let gear: Vec<(ItemId, u32)> = self
+            .world
+            .resource::<ItemDb>()
+            .all()
+            .filter(|def| def.equipment.is_some())
+            .map(|def| {
+                (
+                    def.id.clone(),
+                    def.value.unwrap_or(crate::tuning::DEFAULT_ITEM_VALUE),
+                )
+            })
+            .collect();
+        let mut pool: Vec<ItemId> = gear
+            .iter()
+            .filter(|(_, value)| (floor..=ceiling).contains(value))
+            .map(|(id, _)| id.clone())
+            .collect();
+        if pool.is_empty() {
+            let best = gear.iter().map(|&(_, value)| value).max().unwrap_or(0);
+            pool = gear
+                .iter()
+                .filter(|&&(_, value)| value == best)
+                .map(|(id, _)| id.clone())
+                .collect();
+        }
+        pool.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+        pool
     }
 
     /// Awards `amount` XP to the player, growing stats and fully healing on

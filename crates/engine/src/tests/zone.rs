@@ -3,7 +3,7 @@
 use super::support::*;
 use crate::tuning::{
     MAX_BUILD_DISTANCE_FROM_HOME, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_AGGRO_LEASH_RADIUS,
-    NEST_CACHE_FRAGMENT_ZONE_BONUS, NEST_CACHE_FRAGMENTS, NEST_CACHE_WORK_RESOURCE_MULT,
+    NEST_CACHE_CREDIT_ZONE_BONUS, NEST_CACHE_CREDITS, NEST_CACHE_WORK_RESOURCE_MULT,
     NEST_DURABILITY, NEST_PATH_SEARCH_MARGIN, NEST_PURSUIT_STEPS_PER_TICK, NEST_RESPAWN_TICKS,
     NEST_TETHER_RADIUS, WORK_RESOURCE_DROP,
 };
@@ -1644,22 +1644,131 @@ fn destroying_a_nest_grants_its_species_work_resource() {
 }
 
 #[test]
-fn destroying_a_nest_grants_craft_currency() {
+fn destroying_a_nest_grants_trade_currency() {
     let mut game = Game::new(721, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let currency = game.craft_currency();
+    let currency = game.trade_currency();
     let nest = game.spawn_nest("scrapper", 410, 410);
     let before = held(&game, &currency);
 
     one_shot_nest(&mut game, nest);
 
     let after = held(&game, &currency);
-    // Zone 1 (the default here), so NEST_CACHE_FRAGMENT_ZONE_BONUS
+    // Zone 1 (the default here), so NEST_CACHE_CREDIT_ZONE_BONUS
     // contributes nothing — the floor is the bare range roll.
-    let minimum = *NEST_CACHE_FRAGMENTS.start();
+    let minimum = *NEST_CACHE_CREDITS.start();
     assert!(
         after >= before + minimum,
-        "destroying the nest should have granted at least {minimum} craft currency, went from \
+        "destroying the nest should have granted at least {minimum} trade currency, went from \
          {before} to {after}"
+    );
+}
+
+#[test]
+fn destroying_a_nest_grants_no_craft_currency() {
+    let mut game = Game::new(7211, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let currency = game.craft_currency();
+    let nest = game.spawn_nest("scrapper", 411, 411);
+    let before = held(&game, &currency);
+
+    one_shot_nest(&mut game, nest);
+
+    assert_eq!(
+        held(&game, &currency),
+        before,
+        "the breaching currency is STACK_BOSS_PORTAL_FRAGMENT_DROP's alone — a nest cleared \
+         on the surface must not advance the party toward the next zone"
+    );
+}
+
+/// Which of `seeds` left an orphan behind, and what species each one was.
+/// `NEST_ORPHAN_CHANCE` is a coin flip, so a single seed proves only its
+/// own outcome — sweeping a fixed list keeps the assertions deterministic
+/// while letting them speak about the roll rather than about one draw.
+fn nest_orphans_across(seeds: std::ops::Range<u32>, fill_roster: bool) -> Vec<Option<String>> {
+    seeds
+        .map(|seed| {
+            let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            if fill_roster {
+                while game.pet_count() < game.pet_capacity() {
+                    spawn_tamed(&mut game, 10, 1);
+                }
+            }
+            let roster = |game: &Game| -> Vec<(Entity, String)> {
+                let player = game.player_entity();
+                game.world
+                    .iter_entities()
+                    .filter(|e| e.get::<Tamed>().is_some_and(|t| t.owner == player))
+                    .filter_map(|e| e.get::<Creature>().map(|c| (e.id(), c.species.clone())))
+                    .collect()
+            };
+            let before = roster(&game);
+            let nest = game.spawn_nest("scrapper", 440, 440);
+            one_shot_nest(&mut game, nest);
+            roster(&game)
+                .into_iter()
+                .find(|(e, _)| !before.iter().any(|(seen, _)| seen == e))
+                .map(|(_, species)| species)
+        })
+        .collect()
+}
+
+#[test]
+fn destroying_a_nest_sometimes_leaves_an_orphan_of_its_own_species() {
+    let outcomes = nest_orphans_across(760..800, false);
+
+    let adopted: Vec<&String> = outcomes.iter().flatten().collect();
+    assert!(
+        !adopted.is_empty(),
+        "NEST_ORPHAN_CHANCE is what a nest is cleared for — 40 seeds paying none of them \
+         means the roll never fires"
+    );
+    assert!(
+        outcomes.iter().any(|o| o.is_none()),
+        "the orphan is chanced, not guaranteed — 40 seeds all paying one means the roll \
+         is inert and the constant is doing nothing"
+    );
+    assert!(
+        adopted.iter().all(|s| s.as_str() == "scrapper"),
+        "an orphan is of the nest's own species, so hunting the nest of the program you \
+         want is a real choice; got {adopted:?}"
+    );
+}
+
+#[test]
+fn a_full_roster_loses_the_nest_orphan() {
+    let outcomes = nest_orphans_across(760..800, true);
+
+    assert!(
+        outcomes.iter().all(|o| o.is_none()),
+        "a roster already at pet_capacity has nowhere to put an orphan, and adopt_program \
+         must not be reached at all: {outcomes:?}"
+    );
+}
+
+#[test]
+fn a_lost_nest_orphan_says_so() {
+    // The one seed of the sweep above known to roll a hit, run twice: the
+    // point is that the *same* roll reads differently to a player with room
+    // and a player without, rather than silently paying nothing.
+    let hit = (760..800)
+        .zip(nest_orphans_across(760..800, false))
+        .find_map(|(seed, outcome)| outcome.map(|_| seed))
+        .expect("the sweep above already asserts at least one seed hits");
+
+    let mut game = Game::new(hit, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    while game.pet_count() < game.pet_capacity() {
+        spawn_tamed(&mut game, 10, 1);
+    }
+    let nest = game.spawn_nest("scrapper", 440, 440);
+    one_shot_nest(&mut game, nest);
+
+    assert!(
+        game.message_log(20)
+            .into_iter()
+            .any(|e| e.text.contains("no room")),
+        "a full roster must be told what it just lost, not left to notice nothing arrived: \
+         {:?}",
+        game.message_log(20)
     );
 }
 
@@ -1695,7 +1804,7 @@ fn a_deeper_zone_pays_a_larger_nest_cache() {
     let currency_gained_at = |zone: u32| {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         game.world.resource_mut::<ZoneLevel>().0 = zone;
-        let currency = game.craft_currency();
+        let currency = game.trade_currency();
         let nest = game.spawn_nest("scrapper", 430, 430);
         let before = held(&game, &currency);
         one_shot_nest(&mut game, nest);
@@ -1704,10 +1813,10 @@ fn a_deeper_zone_pays_a_larger_nest_cache() {
 
     let zone_1 = currency_gained_at(1);
     let zone_4 = currency_gained_at(4);
-    let minimum_gap = 3 * NEST_CACHE_FRAGMENT_ZONE_BONUS;
+    let minimum_gap = 3 * NEST_CACHE_CREDIT_ZONE_BONUS;
     assert!(
         zone_4 >= zone_1 + minimum_gap,
-        "a nest cleared at zone 4 should pay at least {minimum_gap} more craft currency than \
+        "a nest cleared at zone 4 should pay at least {minimum_gap} more trade currency than \
          the same nest at zone 1 (zone_1={zone_1}, zone_4={zone_4})"
     );
 }

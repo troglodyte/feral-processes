@@ -16,9 +16,8 @@ use super::stack::StackPos;
 use crate::resources::{CurrentStack, FrameMemory, StackMemory};
 use crate::stack::CellKind;
 use crate::tuning::{
-    STACK_CACHE_CREDITS, STACK_CACHE_DEPTH_GROWTH, STACK_CACHE_FRAGMENT_CHANCE,
-    STACK_CORRUPTION_HP_PERCENT, STACK_CORRUPTION_MIN_DAMAGE, TRACE_PER_BREAKPOINT,
-    TRACE_PER_CACHE, TRACE_PER_SEAL,
+    STACK_CACHE_CREDITS, STACK_CACHE_DEPTH_GROWTH, STACK_CORRUPTION_HP_PERCENT,
+    STACK_CORRUPTION_MIN_DAMAGE, TRACE_PER_BREAKPOINT, TRACE_PER_CACHE, TRACE_PER_SEAL,
 };
 use crate::*;
 
@@ -80,18 +79,6 @@ impl Game {
             self.log_kind(
                 MessageKind::Loot,
                 format!("{landed} credits, skimmed off some long-dead process."),
-            );
-        }
-
-        let fragment_roll = {
-            let chance = (STACK_CACHE_FRAGMENT_CHANCE * pos.depth as f64).min(1.0);
-            let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_bool(chance)
-        };
-        if fragment_roll && self.grant_loot(self.craft_currency(), 1) > 0 {
-            self.log_kind(
-                MessageKind::Loot,
-                "A portal fragment, wedged in the casing.",
             );
         }
 
@@ -373,16 +360,9 @@ impl Game {
             .take(catalyst, 1);
         let depth_mult = self.stack_depth_multiplier();
         let (ex, ey) = pos.entrance;
-        let Some(program) = self.spawn_wild_creature_scaled(&species, ex, ey, depth_mult) else {
+        let Some(program) = self.adopt_program(&species, ex, ey, depth_mult) else {
             return Err("The process is too far gone to reach.".into());
         };
-        self.world
-            .entity_mut(program)
-            .remove::<(Hostile, WanderAi)>();
-        self.world
-            .entity_mut(program)
-            .insert((Tamed { owner: player }, Experience::default()));
-        self.install_innate_routines(program);
         self.frame_memory_mut(pos).adopted.insert(cell);
 
         let name = self.creature_label(program);

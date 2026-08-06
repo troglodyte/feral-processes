@@ -29,6 +29,19 @@ first, separated by a rule.
 
 ## Unreleased
 
+## 0.3.1
+
+### Added: two content surfaces for mods
+
+- `assets/crash_logs/` — a new content directory, one `.ron` file per
+  entry, with the lines pooled and ordered by id. See
+  `assets/crash_logs/README.md`.
+- `taunts` on species files — optional cosmetic lines a program says in a
+  fight. `#[serde(default)]`, so every existing species file and every mod
+  keeps parsing untouched. See `assets/species/README.md`.
+
+No save-format change, so this is a patch: existing saves load unchanged.
+
 ## 0.3.0
 
 ### Breaking: save format 23 → 24

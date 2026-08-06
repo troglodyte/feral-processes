@@ -488,9 +488,13 @@ pub(super) fn run_one_full_gather_cycle(game: &mut Game, resource: &str) -> u32 
 /// `systems::mining_success_chance`), which is what keeps the payout
 /// assertions off the RNG entirely.
 ///
-/// Measured in the node's *own* buffer, because that is where a cycle pays
-/// out now. The buffer is sized far past any one cycle's payout so a clog
-/// can never be mistaken for a payout curve that moved.
+/// Measured across *both* places a cycle can pay into — the node's own
+/// buffer for ordinary salvage, and the player's bank for a banked resource
+/// (see `systems::deliver_payout`) — so this helper keeps answering the one
+/// question it is for, "how much did a cycle pay", whichever kind of
+/// resource the caller asked about. The buffer is sized far past any one
+/// cycle's payout so a clog can never be mistaken for a payout curve that
+/// moved.
 pub(super) fn run_one_full_gather_cycle_at_tier(
     game: &mut Game,
     kind: &str,
@@ -521,9 +525,11 @@ pub(super) fn run_one_full_gather_cycle_at_tier(
         required: 1,
     });
 
-    let before = node_output(game, structure, resource);
+    let item = ItemId::from(resource);
+    let paid = |game: &Game| node_output(game, structure, resource) + held(game, &item);
+    let before = paid(game);
     game.tick();
-    node_output(game, structure, resource) - before
+    paid(game) - before
 }
 
 pub(super) fn find_structure_by_kind(game: &mut Game, kind: &str) -> Option<Entity> {

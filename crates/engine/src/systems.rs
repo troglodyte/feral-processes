@@ -3,9 +3,9 @@ use bevy_ecs::system::SystemParam;
 use rand::RngExt;
 
 use crate::components::{
-    Creature, Experience, FieldBuff, FieldBuffKind, MachineStatus, NEED_MAX, NEED_MIN, Needs, Nest,
-    NestGuardian, Perks, Player, Position, Potential, Pursuing, ResourceNode, Stats, Stock,
-    Structure, StructureTier, Tamed, Task, TaskKind, WanderAi, field_buff_power_of,
+    Creature, Experience, FieldBuff, FieldBuffKind, Inventory, MachineStatus, NEED_MAX, NEED_MIN,
+    Needs, Nest, NestGuardian, Perks, Player, Position, Potential, Pursuing, ResourceNode, Stats,
+    Stock, Structure, StructureTier, Tamed, Task, TaskKind, WanderAi, field_buff_power_of,
 };
 use crate::items::ItemId;
 use crate::items_db::ItemDb;
@@ -112,8 +112,10 @@ pub fn wander_ai_system(
 ///
 /// Shared with `crate::balance_sim` so its base-economy projections and the
 /// real payout cannot drift. Banked resources bypass this entirely for a
-/// flat 1 (see `task_progress_system`): their bank limit is the pacing
-/// mechanism, and a scaling payout would just overflow it every few cycles.
+/// flat 1 (see `resolve_gather_cycle`). Nothing paces them — a bank has no
+/// ceiling and never clogs — so what keeps a flat 1 honest is demand: the
+/// research tree is a fixed ladder whose deepest node costs 45, and a payout
+/// doubling per zone would collapse it rather than accelerate it.
 pub(crate) fn node_payout(tier: u32, zone: ZoneLevel) -> u32 {
     tier + NODE_PAYOUT_ZONE_BONUS * zone.0.saturating_sub(1)
 }
@@ -192,6 +194,52 @@ pub(crate) fn resolve_gather_cycle(
     Some((node.resource.clone(), payout))
 }
 
+/// Where a resolved payout lands, and the whole of the difference between a
+/// banked resource and ordinary salvage. Returns the units that landed.
+///
+/// Ordinary salvage fills the machine's *own* output buffer, clamped to the
+/// room left: a payout that outgrows the room must not stall the cycle, and
+/// the node clogs on the next one anyway, which is where the player is told
+/// about it. A banked item goes straight to the player's bank instead —
+/// there is no ceiling on a bank, so it always lands in full.
+///
+/// Shared by `task_progress_system` and `player_gather_system` rather than
+/// written out in each, because a banked item reaching an `output` even once
+/// would put it in a chain's reach and back on the collect key. That is also
+/// why `produced_item` can still claim to be the whole answer to "could this
+/// structure feed a neighbour": a bank is not a buffer, so nothing can pull
+/// from it.
+///
+/// `bank` is `None` only when no `Player` exists, which no live game reaches;
+/// a banked payout then lands nowhere rather than falling back to the buffer,
+/// since the buffer is exactly where it must never be.
+///
+/// Both callers still announce the cycle to the base feed afterwards, and a
+/// banked resource is deliberately no exception. That line is the *only*
+/// signal the player gets that a banked resource is accruing — it has no
+/// inventory row and its total lives one keypress away on the research
+/// screen — so silencing it would read as the node having stopped.
+pub(crate) fn deliver_payout(
+    resource: &ItemId,
+    payout: u32,
+    stock: &mut Stock,
+    items: &ItemDb,
+    bank: Option<&mut Inventory>,
+) -> u32 {
+    if items.get(resource.as_str()).is_some_and(|d| d.banked) {
+        return match bank {
+            Some(inventory) => {
+                inventory.add(resource.clone(), payout);
+                payout
+            }
+            None => 0,
+        };
+    }
+    let landed = payout.min(stock.output_room());
+    *stock.output.entry(resource.clone()).or_default() += landed;
+    landed
+}
+
 /// The ingredient list a machine declaring `assembles` runs, which is the
 /// assembled item's own `CraftableDef::cost` — there is no second recipe
 /// format, so a machine's recipe and the bench recipe for the same item
@@ -214,6 +262,10 @@ pub(crate) fn assembly_recipe<'a>(
 /// that produces nothing. An extractor's `work.produces` and an assembler's
 /// `assembles.item` are the only two ways anything reaches an `output`, so
 /// this is the whole answer to "could this structure feed a neighbour".
+///
+/// One narrowing: a structure producing a banked item reaches no `output` at
+/// all (see `deliver_payout`), so it can feed nobody. A bank is not a buffer,
+/// and nothing can pull from it.
 pub(crate) fn produced_item(def: &crate::structures::StructureDef) -> Option<&ItemId> {
     if let Some(work) = &def.work {
         return Some(&work.produces);
@@ -297,10 +349,23 @@ pub struct CronjobLookups<'w> {
 /// work resumes the moment the player collects. This is also the only reason
 /// anything upstream in a production chain can ever back up — a node paying
 /// straight into the player's pocket is an infinite source.
+///
+/// A banked resource (`ItemDef::banked`, see `deliver_payout`) is exactly
+/// that infinite source, deliberately: it skips the buffer, so it never
+/// clogs and nothing paces it. It is bounded by demand rather than by
+/// storage — the research tree is a finite ladder, and once every node is
+/// bought, more of it buys nothing. Don't reach for this shape for anything
+/// a player spends forever.
+/// What `task_progress_system` reads off the player: the two run-wide
+/// modifiers its workers earn by, plus the bank a banked payout lands in.
+/// Aliased for the same reason `Wanderer` is — the tuple trips clippy's
+/// `type_complexity` lint written inline.
+type CronjobPlayer<'w> = (Option<&'w FieldBuff>, Option<&'w Perks>, &'w mut Inventory);
+
 pub fn task_progress_system(
     mut tasks: Query<CronjobWorker, With<Tamed>>,
     mut nodes: Query<WorkedNode>,
-    player: Query<(Option<&FieldBuff>, Option<&Perks>), With<Player>>,
+    mut player: Query<CronjobPlayer, With<Player>>,
     db: CronjobLookups,
     mut log: ResMut<MessageLog>,
     mut rng: ResMut<GameRng>,
@@ -315,17 +380,19 @@ pub fn task_progress_system(
     // `FieldScope::Run`, so every worker's cronjob XP rides the same running
     // buff, and `KeenScavenger` is a perk only the player can buy. Read once,
     // outside the loop, since neither can vary per worker.
-    let (xp_boost_pct, keen_scavenger_level) = player
-        .iter()
-        .next()
-        .map(|(buff, perks)| {
-            (
-                buff.map(|b| field_buff_power_of(b, FieldBuffKind::XpBoost))
-                    .unwrap_or(0),
-                perks.map(|p| p.level(Perk::KeenScavenger)).unwrap_or(0),
-            )
-        })
-        .unwrap_or((0, 0));
+    //
+    // The bank comes out of the same single pass and is held across the loop
+    // rather than re-fetched per worker: it is one entity's `Inventory`, and
+    // nothing else in this loop touches it.
+    let (xp_boost_pct, keen_scavenger_level, mut bank) = match player.iter_mut().next() {
+        Some((buff, perks, inventory)) => (
+            buff.map(|b| field_buff_power_of(b, FieldBuffKind::XpBoost))
+                .unwrap_or(0),
+            perks.map(|p| p.level(Perk::KeenScavenger)).unwrap_or(0),
+            Some(inventory),
+        ),
+        None => (0, 0, None),
+    };
     for (mut task, creature, potential, mut exp, mut stats) in &mut tasks {
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
@@ -366,11 +433,7 @@ pub fn task_progress_system(
             .get(resource.as_str())
             .map(|d| d.name.as_str())
             .unwrap_or(resource.as_str());
-        // Clamped rather than refused: a payout that outgrows the room left
-        // must not stall the cycle, and the node clogs on the next one
-        // anyway, which is where the player is told about it.
-        let landed = payout.min(stock.output_room());
-        *stock.output.entry(resource.clone()).or_default() += landed;
+        let landed = deliver_payout(&resource, payout, &mut stock, &item_db, bank.as_deref_mut());
         set_machine_status(&mut status, MachineStatus::Running, machine_name, &mut log);
         let level_note = if exp.level < WORK_XP_LEVEL_CAP {
             let species_growth = species_db
@@ -418,7 +481,7 @@ pub fn task_progress_system(
 /// away, and routing this path around the buffer would leave the deposit
 /// pool as the only thing pacing it. That pool is gone.
 pub fn player_gather_system(
-    mut player: Query<(&mut Task, Option<&Perks>), With<Player>>,
+    mut player: Query<(&mut Task, Option<&Perks>, &mut Inventory), With<Player>>,
     mut nodes: Query<WorkedNode>,
     item_db: Res<ItemDb>,
     structure_db: Res<StructureDb>,
@@ -426,7 +489,7 @@ pub fn player_gather_system(
     mut log: ResMut<MessageLog>,
     mut rng: ResMut<GameRng>,
 ) {
-    for (mut task, perks) in &mut player {
+    for (mut task, perks, mut inventory) in &mut player {
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
         }
@@ -464,8 +527,13 @@ pub fn player_gather_system(
             .get(resource.as_str())
             .map(|d| d.name.as_str())
             .unwrap_or(resource.as_str());
-        let landed = payout.min(stock.output_room());
-        *stock.output.entry(resource.clone()).or_default() += landed;
+        let landed = deliver_payout(
+            &resource,
+            payout,
+            &mut stock,
+            &item_db,
+            Some(&mut inventory),
+        );
         set_machine_status(&mut status, MachineStatus::Running, machine_name, &mut log);
         log.push_base_kind(
             MessageKind::Loot,

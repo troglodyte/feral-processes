@@ -8,6 +8,7 @@ fn a_cronjob_worker_fills_the_unbounded_buffer_past_the_old_cap() {
     let mut game = Game::new(708, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = assign_worker_producing(&mut game, ItemId::from(ids::CORE_FRAGMENT));
     let before = node_output(&game, node, ids::CORE_FRAGMENT);
+    let carried = held(&game, &ItemId::from(ids::CORE_FRAGMENT));
 
     for _ in 0..100 {
         game.tick();
@@ -17,25 +18,102 @@ fn a_cronjob_worker_fills_the_unbounded_buffer_past_the_old_cap() {
         node_output(&game, node, ids::CORE_FRAGMENT) > before,
         "a working cronjob keeps producing — its buffer is what bounds it, not the old cap"
     );
+    // The contrast that makes the banked tests below mean something: ordinary
+    // salvage still has to be walked over to and collected.
+    assert_eq!(
+        held(&game, &ItemId::from(ids::CORE_FRAGMENT)),
+        carried,
+        "unbanked salvage must stay in the buffer, not reach the player's cargo"
+    );
 }
 
+/// Where a banked payout lands, and the whole of what `ItemDef::banked`
+/// buys. A unit that reached the node's buffer would be back on the collect
+/// key and inside a neighbouring machine's pull range.
 #[test]
-fn a_research_cronjob_banks_research_data_over_time() {
+fn a_research_cronjob_banks_straight_to_the_player() {
     let mut game = Game::new(709, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = assign_worker_producing(&mut game, ItemId::from(ids::RESEARCH_DATA));
-    let before = node_output(&game, node, ids::RESEARCH_DATA);
+    let before = research_data_held(&game);
 
     for _ in 0..100 {
         game.tick();
     }
 
-    // The bank limit now bites on collection rather than on production: the
-    // node fills its own buffer regardless, and `Inventory::add_capped` is
-    // what refuses to overfill the bank when the player comes to take it.
     assert!(
-        node_output(&game, node, ids::RESEARCH_DATA) > before,
-        "a research cronjob must keep producing over time (was {before}, now {})",
-        node_output(&game, node, ids::RESEARCH_DATA)
+        research_data_held(&game) > before,
+        "a research cronjob must bank over time (was {before}, now {})",
+        research_data_held(&game)
+    );
+    assert_eq!(
+        node_output(&game, node, ids::RESEARCH_DATA),
+        0,
+        "a banked resource must never reach the node's own output buffer"
+    );
+}
+
+/// The player working the node by hand delivers by the same rule. The two
+/// paths share `deliver_payout` precisely so this cannot drift — a test
+/// covering only the cronjob would not notice a second copy.
+#[test]
+fn the_player_working_a_research_node_banks_it_too() {
+    let mut game = Game::new(710, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // Spawned bare rather than through `assign_worker_producing`: a posted
+    // program would run the cronjob path on the same node and leave the test
+    // unable to say which path did the banking.
+    let node = game
+        .world
+        .spawn((
+            Structure {
+                kind: "test_node".to_string(),
+            },
+            Position { x: 3, y: 4 },
+            ResourceNode {
+                resource: ItemId::from(ids::RESEARCH_DATA),
+                level: None,
+            },
+            work_node_parts(),
+        ))
+        .id();
+    let before = research_data_held(&game);
+
+    game.work_structure(node).expect("the node can be worked");
+    for _ in 0..100 {
+        game.tick();
+    }
+
+    assert!(
+        research_data_held(&game) > before,
+        "working a research node by hand must bank it (was {before}, now {})",
+        research_data_held(&game)
+    );
+    assert_eq!(
+        node_output(&game, node, ids::RESEARCH_DATA),
+        0,
+        "the player-gather path must not fill the buffer either"
+    );
+}
+
+/// The base keeps running while the party is four frames down, and banking
+/// touches `Inventory` rather than `Position`, so research accrues the whole
+/// time. Pinned because a later refactor reaching for the player's tile
+/// would break it silently — that tile is the surface entrance, not where
+/// the party is standing.
+#[test]
+fn research_banks_while_the_party_is_underground() {
+    let mut game = Game::new(711, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assign_worker_producing(&mut game, ItemId::from(ids::RESEARCH_DATA));
+    dive_to_depth(&mut game, 2);
+    let before = research_data_held(&game);
+
+    for _ in 0..100 {
+        game.tick();
+    }
+
+    assert!(
+        research_data_held(&game) > before,
+        "the base banks research while the party is in the Stack (was {before}, now {})",
+        research_data_held(&game)
     );
 }
 

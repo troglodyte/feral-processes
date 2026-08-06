@@ -31,9 +31,12 @@ disqualifies the whole file.
     //   - it never counts against the cargo the player is shown;
     //   - it never scales with the zone payout curve, unlike ordinary salvage
     //     from a work node;
-    //   - a structure that produces it delivers it straight to the player
-    //     instead of filling its own output buffer, so it is never collected
-    //     by hand and can never feed a neighbouring machine in a chain;
+    //   - a work node that produces it (`work.produces`) delivers it straight
+    //     to the player instead of filling its own output buffer, so it is
+    //     never collected by hand and can never feed a neighbouring machine.
+    //     An `assembles` machine is NOT yet wired this way — a banked item as
+    //     an assembler's product still fills that machine's buffer and still
+    //     has to be collected;
     //   - it is not listed in the inventory and cannot be bought or sold.
     //
     // Research Data is the only shipped item that sets it. There is no

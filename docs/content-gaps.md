@@ -65,9 +65,15 @@ Mechanics that work and have exactly one piece of content each.
   currently has no progression axis of its own.
 - **Bosses.** `is_boss` (`species.rs:204`) is on 2 of 17 species (Overseer,
   Wintermute). It buys exclusion from the normal per-tile habitat roll, rare
-  spawning in its place, and a guaranteed Portal Fragment cache instead of the
-  flat drop roll. Stats are authored in the file — there is no engine-side
+  spawning in its place, and — depending on which side of the ground it dies
+  on — either the game's only Portal Fragment payout or a draw from the
+  zone's gear band. Stats are authored in the file — there is no engine-side
   boss multiplier — so one boss per biome is 4 files.
+
+  Two species covering four walkable biomes is thinner than it reads, because
+  a biome with no boss makes every Stack under it pay nothing at all. That is
+  a census, not a convention: `every_biome_a_stack_link_can_open_in_fields_a_boss`
+  fails if a habitat edit uncovers one.
 - **Symlink targets.** `teleport_cost` (`structures.rs:152`) is on `home.ron`
   alone. A cheap one-way waypoint needs no Rust.
 - **Traders.** `trade` (`structures.rs:168`) is on `black_market.ron` alone. A

@@ -45,8 +45,16 @@ something with a price. Core Fragments are the opposite case — a currency that
 
 The bands are a design statement, not an observation: worth comes from what a
 base **cannot** manufacture. That is why the printable end is worth 1-2 and
-the premium end is gated behind `portal_fragment`, the currency you only get
-by fighting.
+the premium end is gated behind `portal_fragment`, which comes off exactly one
+thing in the game: the guardian in a Stack lair, at `4..=8` per frame of
+depth. Nothing on the surface pays it.
+
+That makes the top of the ladder reachable two ways, and they are the two
+kinds of boss. Craft it, spending fragments carried up out of a stack — or
+take it off a boss killed on the surface, which pays gear instead of
+fragments, drawn from a band of this ladder that climbs with the zone. A
+zone-1 surface boss hands out the standard and researched tiers; by zone 4 it
+is dropping the premium end whole.
 
 Two bounds hold it in place, and the second is the one that is not obvious. A
 craftable worth more than its ingredients is an infinite Credit loop — that
@@ -191,3 +199,4 @@ until this page is regenerated -- edit the table at the top of
 [`docs/items-gen.py`](items-gen.py) and run `python3 docs/items-gen.py` from
 the repo root. The schema is documented in
 [`assets/items/README.md`](../assets/items/README.md).
+

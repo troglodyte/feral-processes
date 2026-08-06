@@ -1,7 +1,7 @@
 (
     id: "portal_fragment",
     name: "Portal Fragment",
-    description: "Opens a Zone Portal. Bosses drop caches of it; ordinary kills drop the odd one.",
+    description: "Opens a Zone Portal. Nothing on the surface carries it — only the guardian at the bottom of a Stack, and the deeper the frame the larger the cache.",
     value: Some(5),
     role: Some(CraftCurrency),
 )

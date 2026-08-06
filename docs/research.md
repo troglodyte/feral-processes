@@ -133,8 +133,10 @@ sharper divide than depth.
 A **routine** node hands you the knowledge outright: unlock it and the
 routines are yours to install, no materials involved. A **recipe** node hands
 you the right to *build* something, and every one of the six is priced in
-`portal_fragment` — the item you get by fighting, and the same one that
-pays for a breach.
+`portal_fragment` — the item a Stack lair guardian drops and nothing else
+in the game does, and the same one that pays for a breach. So the recipe half
+of the tree is priced in descents: every node on it competes directly with
+the portal you are saving for.
 
 | Recipe node | Builds | At | `portal_fragment` |
 |:---|:---|:---|---:|
@@ -158,3 +160,4 @@ this page is regenerated -- edit the table at the top of
 [`docs/research-gen.py`](research-gen.py) and run
 `python3 docs/research-gen.py` from the repo root. The schema is documented in
 [`assets/research/README.md`](../assets/research/README.md).
+

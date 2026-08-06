@@ -141,9 +141,11 @@ something else: eight frames down pays a tamed Scrapper, which is the single
 
 The three tracks are also not equally long in play. Cycles pass on their own —
 500 is a slow afternoon and 5000 is only patience. Sector 8 needs seven
-breaches, each one earned by fighting for Portal Fragments. Frame 8 of the
-Stack is the shortest track on the page and by some distance the hardest,
-because depth scales what lives down there and the Trace is counting.
+breaches, each one paid for in Portal Fragments — which only a Stack lair
+guardian drops, so the Sector track runs through the Frame track whether or
+not a player set out to climb both. Frame 8 of the Stack is the shortest
+track on the page and by some distance the hardest, because depth scales what
+lives down there and the Trace is counting.
 
 ## Bosses
 

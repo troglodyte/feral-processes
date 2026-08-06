@@ -71,6 +71,17 @@ disqualifies the whole file.
     // gear 3-8; standard gear 12-16; the drop-only researched pieces 20-60;
     // premium gear 80-120. Worth tracks what a base *can't* manufacture.
     //
+    // That ladder is load-bearing beyond trade. A boss defeated on the
+    // *surface* pays gear drawn from a band of it that climbs with the zone
+    // — see `Game::surface_boss_loot` and the `SURFACE_BOSS_LOOT_*` values
+    // in `crates/engine/src/tuning.rs`. So `value` on an equippable item
+    // says two things at once: what a trader pays for it, and which zone a
+    // boss starts handing it out in. An item priced off the ladder still
+    // trades sensibly and still drops, but it drops at the wrong point in
+    // the run. Only items with `equipment` set are eligible, which is why
+    // the Access Shard's value of 12 doesn't put it in a zone-1 boss's
+    // pool alongside the Hardened Shell.
+    //
     // Standard and premium armour and modules sit on that same ladder but
     // are paid for in refined goods rather than raw fragments, so rule 1 is
     // checked against the intermediate's value and not a fragment count.

@@ -183,8 +183,10 @@ sharper divide than depth.
 A **routine** node hands you the knowledge outright: unlock it and the
 routines are yours to install, no materials involved. A **recipe** node hands
 you the right to *build* something, and every one of the six is priced in
-`{RECIPE_CURRENCY}` — the item you get by fighting, and the same one that
-pays for a breach.
+`{RECIPE_CURRENCY}` — the item a Stack lair guardian drops and nothing else
+in the game does, and the same one that pays for a breach. So the recipe half
+of the tree is priced in descents: every node on it competes directly with
+the portal you are saving for.
 
 {table(["Recipe node", "Builds", "At", f"`{RECIPE_CURRENCY}`"],
        [[r["name"], f'`{r["unlocks"][1][0]}`', r["unlocks"][1][1], r["unlocks"][1][2]]

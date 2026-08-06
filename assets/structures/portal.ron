@@ -1,7 +1,7 @@
 (
     id: "portal",
     name: "Zone Portal",
-    description: "Breaches into the next zone. Deeper zones cost more Portal Fragments to open, and no fragment survives the trip — only Credits cross.",
+    description: "Breaches into the next zone. Deeper zones cost more Portal Fragments to open, and fragments come out of the Stack alone. No fragment survives the trip — only Credits cross.",
     glyph: 'O',
     color: Magenta,
     build_cost: [("portal_fragment", 10)],

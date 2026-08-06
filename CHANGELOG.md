@@ -13,6 +13,35 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Changed: the way to the next zone runs through the Stack
+
+Portal Fragments now come from one place — the guardian in a Stack lair —
+and the payout is `4..=8` per frame of depth, so the bottom of a stack is
+worth the walk back up. Three faucets closed to make that true: the flat
+35% roll every kill used to carry, the cache in a Stack wall, and the
+surface boss. You breach by going down, or you don't breach.
+
+Each of the three fights that survive now pays exactly one kind of thing:
+
+- **A Stack lair boss pays progression** — fragments, and nothing else pays
+  them.
+- **A surface boss pays power** — high-end gear instead of fragments, drawn
+  from a band of the item value ladder that climbs with the zone. A zone-1
+  boss hands out standard and researched pieces; by zone 4 it is dropping
+  the premium tier. The band is derived from the `value` and `equipment`
+  fields items already have rather than a new one, so a modded item joins
+  the pool by existing — see `assets/items/README.md`.
+- **A nest pays roster** — Credits as a floor, and a coin flip on an
+  orphaned program of the nest's own species, which joins you free. Clear
+  the nest of the program you want. A full roster loses it and says so.
+
+Nests no longer pay fragments at all, which is the same rule from the other
+side: sustained surface work is worth doing, but it is not a route to the
+next sector.
+
+Saves load unchanged. Existing runs keep whatever fragments they had
+banked.
+
 ### Breaking: field buffs can fire on a cadence — save format 21 → 22
 
 `FieldBuff` abilities take an optional `interval` in their `.ron`: how many

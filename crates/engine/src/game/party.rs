@@ -207,8 +207,13 @@ impl Game {
                 .collect()
         };
         let slot_of = |entity: &Entity| party.iter().position(|p| p == entity);
-        // Stable, so non-members keep the order the query produced them in.
-        owned.sort_by_key(|e| slot_of(e).unwrap_or(usize::MAX));
+        // The party leads, in slot order, because that order is mechanical:
+        // the front slot draws the most fire (see `battle::slot_aggro_weight`)
+        // and the companion screen exists to arrange it. Behind them the name
+        // decides, since bevy's query order is not stable and the four other
+        // screens reading this list — fuse, extract, routines, manifest — have
+        // no slot to show and were getting no order at all.
+        owned.sort_by_key(|e| (slot_of(e).unwrap_or(usize::MAX), self.creature_label(*e)));
         owned
             .into_iter()
             .filter_map(|entity| {

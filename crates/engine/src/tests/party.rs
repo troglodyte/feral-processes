@@ -276,6 +276,33 @@ fn owned_pets_lists_the_party_first_in_slot_order() {
     assert_eq!(order, vec![second, first, bystander]);
 }
 
+/// Slot order is mechanical — the companion screen's `<`/`>` move a member
+/// along the battle line and the number beside it is the whole point of that
+/// screen — so the party keeps it. Everything *behind* the party has no slot
+/// to show and used to arrive in bevy query order, which is to say in no
+/// order at all, across the fuse, extract, routines and manifest pickers that
+/// read the same list.
+#[test]
+fn owned_pets_sorts_everything_behind_the_party_by_name() {
+    let mut game = Game::new(32, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let member = spawn_tamed(&mut game, 9, 2);
+    let zeta = spawn_tamed(&mut game, 9, 2);
+    let alpha = spawn_tamed(&mut game, 9, 2);
+    for (entity, name) in [(member, "Middle"), (zeta, "Zeta"), (alpha, "Alpha")] {
+        game.world
+            .entity_mut(entity)
+            .insert(CustomName(name.to_string()));
+    }
+    game.add_companion(member).unwrap();
+
+    let names: Vec<String> = game.owned_pets().into_iter().map(|p| p.name).collect();
+    assert_eq!(
+        names,
+        vec!["Middle", "Alpha", "Zeta"],
+        "the party member leads on its slot, the rest sort by name"
+    );
+}
+
 #[test]
 fn owned_pets_reports_every_owned_creature_regardless_of_location_or_job() {
     let mut game = Game::new(34, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

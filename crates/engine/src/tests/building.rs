@@ -281,6 +281,43 @@ fn deploying_without_the_materials_logs_the_shortfall() {
     );
 }
 
+/// Every menu that lists what is standing nearby indexes this scan, so its
+/// order *is* their order. Bevy's query iteration is not stable, which left
+/// those menus reshuffling between openings — a list you cannot learn the
+/// shape of. Name first, then position, so two Mining Nodes still resolve to
+/// a fixed order rather than swapping rows.
+#[test]
+fn the_nearby_scan_lists_entities_by_name_then_position() {
+    let mut game = Game::new(305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "armor_bench");
+    place_home(&mut game, 0, 1);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 200);
+    game.place_structure("armory", 1, 0).unwrap();
+    game.place_structure("mining_node", 2, 0).unwrap();
+    game.place_structure("mining_node", -2, 0).unwrap();
+
+    let listed: Vec<(String, (i32, i32))> = game
+        .view_entities(10, 10)
+        .into_iter()
+        .filter(|e| e.is_structure)
+        .map(|e| (e.label, e.pos))
+        .collect();
+    let mut expected = listed.clone();
+    expected.sort();
+    assert_eq!(
+        listed, expected,
+        "the scan must arrive sorted, not merely be sortable"
+    );
+    assert!(
+        listed.iter().filter(|(l, _)| l == "Mining Node").count() == 2,
+        "the fixture needs two of one kind for the position tiebreak to mean anything: {listed:?}"
+    );
+}
+
 #[test]
 fn remove_structure_refunds_a_percentage_of_its_build_cost() {
     let mut game = Game::new(303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

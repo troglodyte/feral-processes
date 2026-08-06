@@ -103,6 +103,19 @@ impl Game {
             .find(|r| r.entity == entity)
     }
 
+    /// Puts a scan's results in the order every menu built from one shows
+    /// them: by name, then by position.
+    ///
+    /// Both scans need it and neither may differ from the other, since the
+    /// cronjob picker and the symlink picker are lists of the same base. The
+    /// position tiebreak is not cosmetic — bevy's query iteration order is
+    /// not stable, so two Mining Nodes with nothing else to separate them
+    /// would otherwise swap rows between openings of the same menu, and a
+    /// list nobody can learn the shape of is worse than an unsorted one.
+    fn sort_by_label(views: &mut [EntityView]) {
+        views.sort_by(|a, b| (&a.label, a.pos).cmp(&(&b.label, b.pos)));
+    }
+
     /// Display label for any entity — species name for a creature,
     /// structure name for a structure, `"You"` otherwise. Shared by
     /// `view_entities` for both an entity's own label and cross-references
@@ -155,7 +168,8 @@ impl Game {
             .power();
         let mut linked_edges = self.linked_edges_by_structure();
 
-        hits.into_iter()
+        let mut views: Vec<EntityView> = hits
+            .into_iter()
             .map(|(entity, pos, glyph)| {
                 let is_player = self.world.get::<Player>(entity).is_some();
                 let is_tamed = self.world.get::<Tamed>(entity).is_some();
@@ -229,7 +243,9 @@ impl Game {
                     linked_edges: linked_edges.remove(&entity).unwrap_or_default(),
                 }
             })
-            .collect()
+            .collect();
+        Self::sort_by_label(&mut views);
+        views
     }
 
     /// For each structure, the orthogonal offsets of the neighbours it is
@@ -576,7 +592,8 @@ impl Game {
             .collect();
 
         let db = self.world.resource::<StructureDb>();
-        hits.into_iter()
+        let mut views: Vec<EntityView> = hits
+            .into_iter()
             .filter(|(_, _, _, kind)| db.get(kind).is_some_and(|d| d.teleport_cost.is_some()))
             .map(|(entity, pos, glyph, kind)| {
                 let bounds = self.entity_upgrade_ceiling(entity);
@@ -610,7 +627,9 @@ impl Game {
                     fusions: 0,
                 }
             })
-            .collect()
+            .collect();
+        Self::sort_by_label(&mut views);
+        views
     }
 
     /// The item cost to symlink to `target`, if it's a symlink-capable

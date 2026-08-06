@@ -341,3 +341,44 @@ fn o_reaches_adopt_orphan_underground() {
         "'t' is the trader list even underground — the adopt key cannot be it"
     );
 }
+
+/// `Z` reaches `Game::listen` and counts as an action. Named by nothing on
+/// screen — see `crates/engine/EASTER_EGGS.md` — so this test and the
+/// surface half below are the only record that the key is bound at all.
+#[test]
+fn shift_z_listens_underground_and_costs_a_turn() {
+    let mut app = app_underground(505);
+    let before = app.game.as_ref().unwrap().current_tick();
+
+    app.handle_key(GameKey::Char('Z'));
+
+    assert_eq!(app.mode, Mode::Playing, "'Z' must not open a screen");
+    let game = app.game.as_ref().unwrap();
+    assert!(
+        game.current_tick() > before,
+        "listening should have advanced the world"
+    );
+    assert!(
+        game.message_log(4)
+            .iter()
+            .any(|line| line.text.starts_with("You go still")),
+        "the reading never reached the log"
+    );
+}
+
+/// On open grid the same key is nothing at all: the engine refuses, so no
+/// turn is spent and the surface handler has nothing to say about it.
+#[test]
+fn shift_z_on_the_surface_does_nothing() {
+    let mut app = test_app(505);
+    let before = app.game.as_ref().unwrap().current_tick();
+
+    app.handle_key(GameKey::Char('Z'));
+
+    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(
+        app.game.as_ref().unwrap().current_tick(),
+        before,
+        "listening above ground spent a turn"
+    );
+}

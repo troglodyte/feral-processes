@@ -1,0 +1,257 @@
+//! `Z` in the Stack — listening for what the frame still has in it.
+//!
+//! The key is deliberately named by nothing on screen; see
+//! `crates/engine/EASTER_EGGS.md`.
+
+use super::support::*;
+use crate::resources::{CurrentStack, Locale, Trace};
+use crate::stack::{CellKind, Dir, Frame};
+use crate::tuning::TRACE_PER_LISTEN;
+use crate::*;
+
+fn game() -> Game {
+    Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
+}
+
+/// Drops the party into depth 1 through an entrance on the tile they are
+/// standing on, which is what walking onto a link does.
+fn descend(game: &mut Game) {
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    game.enter_stack(pos.x, pos.y);
+}
+
+fn trace_of(game: &Game) -> u32 {
+    game.world.resource::<Trace>().0
+}
+
+fn frame(game: &Game) -> Frame {
+    game.world.resource::<CurrentStack>().0.clone().unwrap()
+}
+
+fn every_cell(level: &Frame) -> impl Iterator<Item = (i32, i32)> + use<> {
+    let (w, h) = (level.width, level.height);
+    (0..h).flat_map(move |y| (0..w).map(move |x| (x, y)))
+}
+
+/// Puts the party on `cell` facing `facing` without walking there. Caches
+/// and orphans sit in dead ends, so reaching one honestly would mean
+/// solving the maze first — `tests/stack.rs` teleports for the same reason.
+fn stand_at(game: &mut Game, cell: (i32, i32), facing: Dir) {
+    let Locale::Stack {
+        depth,
+        frames,
+        entrance,
+        ..
+    } = game.locale()
+    else {
+        unreachable!("not underground")
+    };
+    game.world.insert_resource(Locale::Stack {
+        depth,
+        frames,
+        x: cell.0,
+        y: cell.1,
+        facing,
+        entrance,
+    });
+}
+
+/// Every cell of the current frame that `Game::listen` should count as
+/// unspent. Spelled out here rather than reached for in the engine on
+/// purpose: a fixture that shared the production predicate could not catch
+/// the production predicate drifting.
+fn unspent(game: &Game) -> Vec<(i32, i32)> {
+    let pos = game.stack_pos().expect("not underground");
+    let level = frame(game);
+    every_cell(&level)
+        .filter(|&cell| match level.cell(cell.0, cell.1) {
+            CellKind::Cache => game.cache_unopened(pos, cell),
+            CellKind::SealedDoor => !game.seal_open(pos, cell),
+            CellKind::Orphan => game.orphan_present(pos, cell),
+            CellKind::Lair => !game.lair_cleared(pos),
+            _ => false,
+        })
+        .collect()
+}
+
+/// Marks everything in the frame spent, so listening has nothing left to
+/// find. A frame holds three caches and often an orphan, so emptying the
+/// one cache a test walked to is not enough to buy silence.
+fn spend_everything(game: &mut Game) {
+    let pos = game.stack_pos().expect("not underground");
+    let level = frame(game);
+    for cell in unspent(game) {
+        let memory = game.frame_memory_mut(pos);
+        match level.cell(cell.0, cell.1) {
+            CellKind::Cache => {
+                memory.looted.insert(cell);
+            }
+            CellKind::SealedDoor => {
+                memory.opened.insert(cell);
+            }
+            CellKind::Orphan => {
+                memory.adopted.insert(cell);
+            }
+            CellKind::Lair => memory.cleared = true,
+            _ => {}
+        }
+    }
+}
+
+/// The frame's first cache, and the single open cell beside it. A cache
+/// sits in a dead end, so that neighbour is the only place it can be heard
+/// from one step away — and `dir` points from the mouth at the cache.
+fn a_cache_and_its_mouth(game: &Game) -> ((i32, i32), (i32, i32), Dir) {
+    let level = frame(game);
+    let cache = every_cell(&level)
+        .find(|&(x, y)| level.cell(x, y) == CellKind::Cache)
+        .expect("every frame hides at least one cache");
+    let (mouth, dir) = [Dir::North, Dir::East, Dir::South, Dir::West]
+        .into_iter()
+        .find_map(|dir| {
+            let (dx, dy) = dir.delta();
+            let neighbour = (cache.0 + dx, cache.1 + dy);
+            // The neighbour lies `dir` from the cache, so looking back at
+            // the cache from there means facing the opposite way.
+            level
+                .walkable(neighbour.0, neighbour.1)
+                .then_some((neighbour, dir.turn_left().turn_left()))
+        })
+        .expect("a dead end has exactly one way in");
+    (cache, mouth, dir)
+}
+
+/// Listens and returns the reading. Found by taking the lines pushed by
+/// this call rather than the last line in the log, because `raise_trace`
+/// can log a band crossing after the reading.
+fn listen(game: &mut Game) -> String {
+    let before = game.message_log(usize::MAX).len();
+    game.listen()
+        .expect("listening underground should be allowed");
+    let after = game.message_log(usize::MAX);
+    after
+        .get(before)
+        .expect("listening should have logged a reading")
+        .text
+        .clone()
+}
+
+#[test]
+fn listening_names_the_direction_and_distance_of_an_unopened_cache() {
+    let mut game = game();
+    descend(&mut game);
+    let (cache, mouth, dir) = a_cache_and_its_mouth(&game);
+    assert_eq!(
+        unspent(&game)
+            .into_iter()
+            .filter(|&c| manhattan(c, mouth) <= 1)
+            .collect::<Vec<_>>(),
+        vec![cache],
+        "the fixture wants the cache to be the only thing one step from the mouth"
+    );
+    stand_at(&mut game, mouth, dir);
+    let before = game.current_tick();
+
+    let reading = listen(&mut game);
+
+    assert!(
+        reading.contains("ahead"),
+        "listening at a cache mouth pointed somewhere else: {reading}"
+    );
+    assert!(
+        reading.contains("1 step"),
+        "the reading should carry the Manhattan distance: {reading}"
+    );
+    assert!(
+        game.current_tick() > before,
+        "listening should have cost a turn"
+    );
+}
+
+fn manhattan(a: (i32, i32), b: (i32, i32)) -> i32 {
+    (a.0 - b.0).abs() + (a.1 - b.1).abs()
+}
+
+#[test]
+fn the_same_cache_reads_as_a_different_bearing_from_each_facing() {
+    let mut game = game();
+    descend(&mut game);
+    let (_, mouth, dir) = a_cache_and_its_mouth(&game);
+
+    // A bearing off the party's own facing, not off compass north: turning
+    // in place moves the cache around you. Each of the four is asserted by
+    // name, because two facings merely *differing* would still pass with
+    // the rotation's sign inverted.
+    for (facing, expected) in [
+        (dir, "ahead"),
+        (dir.turn_left(), "to your right"),
+        (dir.turn_right(), "to your left"),
+        (dir.turn_left().turn_left(), "behind"),
+    ] {
+        stand_at(&mut game, mouth, facing);
+        let reading = listen(&mut game);
+        assert!(
+            reading.contains(expected),
+            "facing {facing:?} the cache should read {expected}: {reading}"
+        );
+    }
+}
+
+#[test]
+fn a_swept_frame_reports_silence() {
+    let mut game = game();
+    descend(&mut game);
+    let (_, mouth, dir) = a_cache_and_its_mouth(&game);
+    stand_at(&mut game, mouth, dir);
+    spend_everything(&mut game);
+
+    let reading = listen(&mut game);
+
+    assert!(
+        !reading.contains("ahead") && !reading.contains("behind") && !reading.contains("to your"),
+        "a swept frame should have no bearing left to give: {reading}"
+    );
+    assert!(
+        unspent(&game).is_empty(),
+        "the fixture failed to spend the frame"
+    );
+}
+
+#[test]
+fn the_trace_charge_lands_whether_or_not_anything_is_heard() {
+    let mut game = game();
+    descend(&mut game);
+    let (_, mouth, dir) = a_cache_and_its_mouth(&game);
+    stand_at(&mut game, mouth, dir);
+
+    let before = trace_of(&game);
+    listen(&mut game);
+    assert_eq!(
+        trace_of(&game) - before,
+        TRACE_PER_LISTEN,
+        "listening with something to hear should charge Trace"
+    );
+
+    spend_everything(&mut game);
+    let before = trace_of(&game);
+    listen(&mut game);
+    assert_eq!(
+        trace_of(&game) - before,
+        TRACE_PER_LISTEN,
+        "a frame with nothing left in it still charges — the silence is what the turn bought"
+    );
+}
+
+#[test]
+fn listening_on_the_surface_is_refused_and_costs_nothing() {
+    let mut game = game();
+    let tick = game.current_tick();
+
+    assert!(
+        game.listen().is_err(),
+        "there is nothing to listen to on open grid"
+    );
+
+    assert_eq!(trace_of(&game), 0, "a refusal raised Trace");
+    assert_eq!(game.current_tick(), tick, "a refusal spent a turn");
+}

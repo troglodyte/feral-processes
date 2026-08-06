@@ -224,6 +224,20 @@ impl App {
                         false
                     }
                 },
+                // Undocumented on purpose — see `crates/engine/EASTER_EGGS.md`.
+                // Uppercase, so it can never collide with the row shortcuts,
+                // and `Z` specifically because every other capital here is a
+                // shift-slip of a key the player presses constantly: `K J H L`
+                // are movement, `S` is saving, `Q` is quitting, and a fumbled
+                // step that quietly spent a turn and raised Trace would be a
+                // bug the player could not diagnose.
+                GameKey::Char('Z') => match game.listen() {
+                    Ok(()) => true,
+                    Err(reason) => {
+                        refusal = Some(reason);
+                        false
+                    }
+                },
                 _ => false,
             }
         };

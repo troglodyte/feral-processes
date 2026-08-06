@@ -23,6 +23,7 @@ mod equipment;
 mod field;
 mod hauling;
 mod inspection;
+mod listen;
 mod message_log;
 mod party;
 mod perks;

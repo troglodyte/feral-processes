@@ -649,6 +649,13 @@ pub const TRACE_PER_CACHE: u32 = 10;
 /// costs an access shard, and a cost the player paid should register.
 pub const TRACE_PER_SEAL: u32 = 5;
 
+/// Trace for stopping to listen (`Game::listen`). Under a seal's 5, since
+/// listening takes nothing out of the frame, and well under a cache's 10 —
+/// but never free, because a frame swept clean reporting silence is the
+/// information the turn bought. Free-when-empty would make listening a
+/// zero-risk sweep to run on every tile.
+pub const TRACE_PER_LISTEN: u32 = 3;
+
 /// Trace for stepping through a wall with `AbilityEffect::Phase`. Priced
 /// beside a seal rather than a cache: it takes nothing out of the frame, but
 /// it does route the party around a wall the substrate put there, and a

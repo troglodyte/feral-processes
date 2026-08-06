@@ -4,8 +4,8 @@
 //! the ECS `World`.
 
 use crate::fx::Fx;
-use crate::paint::{Color, DARKGRAY, GRAY, Painter, Rect, TextRun, WHITE};
-use crate::text::{Metrics, map_cell, terrain_color, ui_metrics};
+use crate::paint::{Color, GRAY, Painter, Rect, TextRun, WHITE};
+use crate::text::{Metrics, map_cell, ui_metrics};
 use feral_processes_app_core::{
     App, GroupMenuRow, LogFilter, MENU_SCAN_RADIUS, Mode, TradeChoice, equip_preview_tag,
     equip_swap_rows, inventory_item_actions, item_fusion_note, menu_shortcut, stat_summary,
@@ -14,7 +14,7 @@ use feral_processes_engine::components::{GlyphColor, MachineStatus, TaskKind};
 use feral_processes_engine::items::{EquipmentSlot, ItemId};
 use feral_processes_engine::structures::StructureCategory;
 use feral_processes_engine::tuning::{MAX_FUSIONS, MAX_PARTY_SIZE};
-use feral_processes_engine::world::Biome;
+use feral_processes_engine::world::{Biome, Tile};
 use feral_processes_engine::{
     Assignee, Entity, EntityView, Game, LogEntry, MESSAGE_LOG_CAP, MessageKind, PetInfo,
     ProgramSaleOption, RecipeChain, RecipeStep, ResearchState, StructureReport,

@@ -1,15 +1,14 @@
-//! Text sizing and terrain color math for the graphics frontend.
+//! Text sizing for the graphics frontend.
 //!
 //! Split out of `render.rs` for the same reason `fx.rs` was: this is pure
 //! and worth unit-testing, while the drawing that consumes it can't be
 //! tested at all without a window. Holds the map-glyph and UI-text sizing
-//! rules and `terrain_color`; the faces themselves belong to `Painter`.
+//! rules; the faces themselves belong to `Painter`.
 //!
 //! Two independent sizing rules live here. Map glyphs are sized by zoom
 //! alone, in strict integer multiples of the pixel font's native cell.
 //! UI text is sized continuously from the window height. They never mix.
 
-use crate::paint::Color;
 use feral_processes_app_core::{MAX_ZOOM, MIN_ZOOM};
 
 /// unscii-16's native cell height. Map glyphs are only ever drawn at
@@ -110,176 +109,9 @@ pub fn ui_metrics(window_height: f32) -> Metrics {
     }
 }
 
-/// Terrain keeps a quarter of its hue and the rest goes to grey, leaving
-/// entity glyphs the only saturated thing on the map.
-///
-/// Brightness can't be the discriminator: `fx::structure_condition` dims a
-/// damaged structure toward a floor of `MIN_TINT`, and `GlyphColor::DarkGreen`
-/// is already `(0.0, 0.4, 0.0)`, so a damaged one sits near 0.11 luminance.
-/// Terrain would have to be nearly black to stay reliably dimmer than that.
-/// Saturation has no equivalent failure case.
-const TERRAIN_SATURATION: f32 = 0.25;
-const TERRAIN_BRIGHTNESS: f32 = 0.70;
-
-/// Pushes a biome's glyph color back toward grey so entities read out of
-/// the terrain without needing a faked bold weight.
-pub fn terrain_color(c: Color) -> Color {
-    let luminance = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
-    let toward_grey = |channel: f32| {
-        (luminance + (channel - luminance) * TERRAIN_SATURATION) * TERRAIN_BRIGHTNESS
-    };
-    Color::new(toward_grey(c.r), toward_grey(c.g), toward_grey(c.b), c.a)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Representative sample colors for testing `terrain_color`: a
-    /// saturated primary, a near-black `DarkGreen`, and a brown, so the
-    /// assertions cover a spread of hues and luminances rather than one
-    /// convenient case. `DarkGreen` in particular is the dark extreme —
-    /// see the discussion on `terrain_color` of why brightness alone can't
-    /// do this job.
-    const SAMPLE_COLORS: [Color; 8] = [
-        Color::new(0.3, 0.55, 0.95, 1.0),  // BLUE
-        Color::new(0.9, 0.25, 0.25, 1.0),  // RED
-        Color::new(0.25, 0.85, 0.85, 1.0), // CYAN
-        Color::new(0.35, 0.85, 0.4, 1.0),  // GREEN
-        Color::new(0.95, 0.55, 0.15, 1.0), // ORANGE
-        Color::new(0.8, 0.35, 0.85, 1.0),  // MAGENTA
-        Color::new(0.0, 0.4, 0.0, 1.0),    // DarkGreen — the dark extreme
-        Color::new(0.55, 0.27, 0.07, 1.0), // Brown
-    ];
-
-    fn luminance(c: Color) -> f32 {
-        0.299 * c.r + 0.587 * c.g + 0.114 * c.b
-    }
-
-    /// Chroma: how far apart the channels are, standing in for saturation.
-    fn spread(c: Color) -> f32 {
-        c.r.max(c.g).max(c.b) - c.r.min(c.g).min(c.b)
-    }
-
-    #[test]
-    fn terrain_color_desaturates_every_palette_color() {
-        for c in SAMPLE_COLORS {
-            assert!(
-                spread(terrain_color(c)) < spread(c),
-                "{c:?} came back no less saturated than it went in"
-            );
-        }
-    }
-
-    #[test]
-    fn terrain_color_shrinks_saturation_by_exactly_the_configured_factor() {
-        // Desaturating and dimming are both affine on each channel, so the
-        // channel spread scales by exactly the product of the two factors.
-        for c in SAMPLE_COLORS {
-            let expected = spread(c) * TERRAIN_SATURATION * TERRAIN_BRIGHTNESS;
-            assert!(
-                (spread(terrain_color(c)) - expected).abs() < 1e-5,
-                "{c:?}: expected spread {expected}, got {}",
-                spread(terrain_color(c))
-            );
-        }
-    }
-
-    #[test]
-    fn terrain_color_dims_luminance_by_exactly_the_brightness_factor() {
-        // Luminance-weighted desaturation is luminance-preserving, so the
-        // only thing left acting on luminance is the brightness factor.
-        for c in SAMPLE_COLORS {
-            let expected = luminance(c) * TERRAIN_BRIGHTNESS;
-            assert!(
-                (luminance(terrain_color(c)) - expected).abs() < 1e-5,
-                "{c:?}: expected luminance {expected}, got {}",
-                luminance(terrain_color(c))
-            );
-        }
-    }
-
-    #[test]
-    fn terrain_color_leaves_a_grey_input_grey() {
-        let grey = Color::new(0.5, 0.5, 0.5, 1.0);
-        let out = terrain_color(grey);
-        assert!(
-            (out.r - out.g).abs() < 1e-6 && (out.g - out.b).abs() < 1e-6,
-            "grey picked up a color cast: {out:?}"
-        );
-    }
-
-    #[test]
-    fn terrain_color_preserves_alpha() {
-        for c in SAMPLE_COLORS {
-            assert_eq!(terrain_color(c).a, c.a);
-        }
-    }
-
-    #[test]
-    fn terrain_color_preserves_channel_ordering() {
-        // The exact-factor tests (saturation and brightness) are invariant to a
-        // sign inversion in the lerp: if the desaturation formula were written
-        // as (luminance - channel) instead of (channel - luminance), the function
-        // would invert hue rather than desaturate, but both of those tests would
-        // still pass because they only look at magnitude. This test closes that
-        // hole by checking that which channel is largest (and smallest) stays the same.
-        for c in SAMPLE_COLORS {
-            if spread(c) < 1e-6 {
-                continue; // Grey samples have no meaningful channel order.
-            }
-
-            let in_vals = [c.r, c.g, c.b];
-            let out = terrain_color(c);
-            let out_vals = [out.r, out.g, out.b];
-
-            // Which channel index holds the max value in input?
-            let max_idx_in = in_vals
-                .iter()
-                .enumerate()
-                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-                .unwrap()
-                .0;
-            // Which channel index holds the min value in input?
-            let min_idx_in = in_vals
-                .iter()
-                .enumerate()
-                .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-                .unwrap()
-                .0;
-
-            // Which channel index holds the max value in output?
-            let max_idx_out = out_vals
-                .iter()
-                .enumerate()
-                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-                .unwrap()
-                .0;
-            // Which channel index holds the min value in output?
-            let min_idx_out = out_vals
-                .iter()
-                .enumerate()
-                .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-                .unwrap()
-                .0;
-
-            let channel_names = ["R", "G", "B"];
-            assert!(
-                max_idx_in == max_idx_out && min_idx_in == min_idx_out,
-                "{c:?} ({:.3}, {:.3}, {:.3}) → ({:.3}, {:.3}, {:.3}): {} was max, now {}; {} was min, now {}",
-                c.r,
-                c.g,
-                c.b,
-                out.r,
-                out.g,
-                out.b,
-                channel_names[max_idx_in],
-                channel_names[max_idx_out],
-                channel_names[min_idx_in],
-                channel_names[min_idx_out]
-            );
-        }
-    }
 
     #[test]
     fn every_zoom_step_gets_its_own_tile_size() {

@@ -520,6 +520,11 @@ impl Game {
                     name: name.clone(),
                     power: buff.power,
                     remaining: buff.ticks,
+                    // A consumable's buff has no cadence of its own to
+                    // author — `ItemEffect::prebattle_buff` carries no
+                    // `interval` — so it ticks every turn, as every field
+                    // buff did before routines gained one.
+                    interval: crate::abilities::every_turn(),
                     source: BuffSource::Consumable,
                 },
             );

@@ -647,6 +647,7 @@ fn cronjob_work_xp_is_boosted_by_a_running_xp_boost_field_buff() {
             name: "Test XP Boost".to_string(),
             power: 40,
             remaining: 10,
+            interval: 1,
             source: BuffSource::Routine,
         }],
     });

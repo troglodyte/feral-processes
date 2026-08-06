@@ -863,6 +863,7 @@ fn consumable(kind: FieldBuffKind, power: i32) -> ActiveFieldBuff {
         name: "test item".to_string(),
         power,
         remaining: 10,
+        interval: 1,
         source: BuffSource::Consumable,
     }
 }
@@ -873,6 +874,7 @@ fn routine(kind: FieldBuffKind, power: i32) -> ActiveFieldBuff {
         name: "test routine".to_string(),
         power,
         remaining: 10,
+        interval: 1,
         source: BuffSource::Routine,
     }
 }

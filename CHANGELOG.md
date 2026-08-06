@@ -13,6 +13,46 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Breaking: field buffs can fire on a cadence — save format 21 → 22
+
+`FieldBuff` abilities take an optional `interval` in their `.ron`: how many
+turns pass between firings, defaulting to 1 (every turn, which is what they
+all did before). It means something only to the three over-time kinds —
+`Regen`, `Coolant`, `Trickle` — since the rest have no per-tick effect to
+space out. See `assets/abilities/README.md`.
+
+Repair Loop Single is the first ability to use it: **+2 Integrity every 4th
+turn for 300 turns**, where it was +2 every turn for 100. Slightly more total
+healing over three times the window, so it reads as a long convalescence
+rather than a burst.
+
+A running buff carries its own cadence, which is a new field on saved state
+— every existing save stops loading. The checked-in `dev-saves/` templates
+are field-named RON and survive.
+
+### Added: entity menus show the icon of what they list
+
+Every picker that lists a program or a structure — party, fuse, extract,
+cronjob, guard, work, demolish, upgrade, symlink, routines, field cast,
+manifest — now draws that entity's map glyph in its map colour beside the
+row. The glyph's colour is independent of the row's, which on those screens
+already means fusion tier, CRITICAL Integrity or idleness.
+
+Those menus also arrive in a fixed order now: alphabetically, then by
+position. They were being drawn in ECS iteration order, which is not stable,
+so the same menu could list the same base differently between openings. The
+party keeps slot order, since arranging the battle line is what that screen
+is for.
+
+### Added: deploying tells you what you're short of
+
+A deploy refused for want of materials now says so in the base log, naming
+every shortfall at once with what it needs and what you hold — the refusal
+used to live only in the status line, which clears itself after four seconds.
+
+The Deploy Direction screen also names the structure you're about to place,
+with its description and its cost, instead of being an unlabelled compass.
+
 ### Changed: Attacker and Defender pay 3 a level
 
 Both perks now grant +3 permanent Attack or Defense per level instead of +1,

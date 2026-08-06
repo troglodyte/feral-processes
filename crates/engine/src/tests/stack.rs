@@ -3277,6 +3277,7 @@ fn corruption_goes_through_apply_damage_and_so_mitigation_blunts_it() {
             name: "test".to_string(),
             power: 50,
             remaining: 99,
+            interval: 1,
             source: BuffSource::Consumable,
         }],
     });

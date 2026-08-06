@@ -254,6 +254,7 @@ fn test_field_buff(kind: FieldBuffKind, power: i32) -> ActiveFieldBuff {
         name: "Test Field Buff".to_string(),
         power,
         remaining: 5,
+        interval: 1,
         source: BuffSource::Routine,
     }
 }

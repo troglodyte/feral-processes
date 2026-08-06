@@ -226,6 +226,7 @@ fn a_running_capture_boost_field_buff_raises_the_quoted_decompile_odds() {
             name: "Test Capture Boost".to_string(),
             power: 30,
             remaining: 10,
+            interval: 1,
             source: BuffSource::Routine,
         }],
     });

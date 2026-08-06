@@ -600,6 +600,7 @@ fn breaching_keeps_a_running_field_buff() {
             name: "Overclock Protocol".to_string(),
             power: 20,
             remaining: 9,
+            interval: 1,
             source: BuffSource::Consumable,
         },
     );

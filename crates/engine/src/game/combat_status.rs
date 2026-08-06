@@ -266,9 +266,16 @@ impl Game {
             let Some(field_buff) = self.world.get::<FieldBuff>(entity) else {
                 continue;
             };
+            // A buff with an `interval` fires only on the turns its cadence
+            // lands on — see `ActiveFieldBuff::interval` for why the phase
+            // comes off `remaining` rather than a counter of its own. The
+            // `max(1)` is not defensive tidiness: `interval` reaches here
+            // from a `.ron` a mod wrote, and a zero would panic the game on
+            // the modulus.
             let ticking: Vec<(FieldBuffKind, i32)> = field_buff
                 .active
                 .iter()
+                .filter(|b| b.remaining % b.interval.max(1) == 0)
                 .map(|b| (b.kind, b.power))
                 .collect();
             for (kind, power) in ticking {

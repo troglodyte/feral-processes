@@ -140,6 +140,16 @@ way deleting the Currency item does.
     //     battle rounds, and keeps ticking through any battle that follows
     //     until it runs out.
     //
+    //     `interval` (optional, defaults to 1) is how many turns pass between
+    //     firings — `interval: 4` on a `duration: 300` Regen heals 75 times
+    //     over 300 turns rather than 300 times. It only means anything to the
+    //     three over-time kinds below (Regen, Coolant, Trickle); the rest are
+    //     read on demand and have no per-tick effect to space out. Make the
+    //     duration a multiple of the interval: the cadence is phased off the
+    //     turns remaining, so a duration that divides evenly fires on the
+    //     first turn and every interval-th turn after, and one that doesn't
+    //     simply starts its cadence later.
+    //
     //     `kind` is one of ten, split into two scopes that gate `target`:
     //
     //       Creature-scoped (`target: OneAlly` or `WholeParty` only —

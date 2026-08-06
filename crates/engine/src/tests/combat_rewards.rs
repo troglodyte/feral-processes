@@ -174,6 +174,7 @@ fn a_running_drop_boost_field_buff_scales_every_equipment_drop_chance() {
             name: "Test Drop Boost".to_string(),
             power: 50,
             remaining: 10,
+            interval: 1,
             source: BuffSource::Routine,
         }],
     });
@@ -229,6 +230,7 @@ fn a_running_xp_boost_field_buff_raises_player_xp_gain() {
             name: "Test XP Boost".to_string(),
             power: 50,
             remaining: 10,
+            interval: 1,
             source: BuffSource::Routine,
         }],
     });

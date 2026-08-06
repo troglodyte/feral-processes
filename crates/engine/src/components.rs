@@ -589,11 +589,23 @@ impl FieldBuffKind {
     /// `Regen`, matching the abbreviation the battle roster header already
     /// uses for Integrity (`render/battle.rs`) — Power and Fatigue have no
     /// established short form there, so `PWR`/`FTG` are new.
-    pub fn magnitude_label(self, power: i32) -> String {
+    ///
+    /// `interval` only reaches the three over-time tags, and only shows when
+    /// it is not 1: `HP+2/4t` reads as "2 every four turns", where the
+    /// `/t` the other two keep already reads as "per turn". The flat and rate
+    /// kinds have no per-tick effect at all (see `apply_field_buff_tick`), so
+    /// a cadence on one of them would be describing something that does not
+    /// happen.
+    pub fn magnitude_label(self, power: i32, interval: u32) -> String {
+        let every = if interval > 1 {
+            interval.to_string()
+        } else {
+            String::new()
+        };
         match self {
-            FieldBuffKind::Regen => format!("HP+{power}/t"),
-            FieldBuffKind::Coolant => format!("FTG+{power}/t"),
-            FieldBuffKind::Trickle => format!("PWR+{power}/t"),
+            FieldBuffKind::Regen => format!("HP+{power}/{every}t"),
+            FieldBuffKind::Coolant => format!("FTG+{power}/{every}t"),
+            FieldBuffKind::Trickle => format!("PWR+{power}/{every}t"),
             FieldBuffKind::Def => format!("DEF+{power}"),
             FieldBuffKind::Atk => format!("ATK+{power}"),
             FieldBuffKind::Mitigation => format!("DMG-{power}%"),
@@ -617,6 +629,18 @@ pub struct ActiveFieldBuff {
     /// Ticks remaining. Turns (`Game::tick_inner`), not battle rounds like
     /// `ActiveBuff::remaining` — a field buff outlives any one battle.
     pub remaining: u32,
+    /// Turns between firings — see `AbilityEffect::FieldBuff::interval`, which
+    /// is where the authored value comes from. Carried on the running buff
+    /// rather than looked up from the def it came from, because `name` is a
+    /// display string and there is nothing here to look a def up *by*.
+    ///
+    /// The cadence is phased off `remaining`: a buff fires whenever
+    /// `remaining % interval == 0`. That costs no second counter and no
+    /// second save field, at the price of the phase depending on the
+    /// duration — a duration that is a multiple of its interval, as every
+    /// shipped one is, fires on the first tick and every interval-th after.
+    #[serde(default = "crate::abilities::every_turn")]
+    pub interval: u32,
     pub source: BuffSource,
 }
 

@@ -262,6 +262,18 @@ pub enum AbilityEffect {
         kind: FieldBuffKind,
         power: i32,
         duration: u32,
+        /// How many turns pass between firings. `1` — the default, and what
+        /// every buff did before this existed — means every turn. Only the
+        /// three over-time kinds (`Regen`, `Coolant`, `Trickle`) have a
+        /// per-tick effect for it to space out; the rest are read on demand
+        /// and ignore it.
+        ///
+        /// A separate knob from `power` because they are not
+        /// interchangeable: halving the rate by doubling the interval leaves
+        /// the same total across the duration but changes what the routine
+        /// is *for*, and `power` is what affinity scaling multiplies.
+        #[serde(default = "every_turn")]
+        interval: u32,
         power_cost: f32,
     },
     /// Steps the party through exactly one solid cell along their current
@@ -353,6 +365,14 @@ pub struct AbilityDef {
 
 fn default_fatigue_cost() -> f32 {
     crate::tuning::COMPANION_COMMAND_FATIGUE_COST
+}
+
+/// `AbilityEffect::FieldBuff::interval`'s default, and the only value that
+/// existed before it did — a buff with no authored cadence fires every turn.
+/// Never `0`: the cadence is a modulus, and a mod shipping `interval: 0`
+/// would divide by it.
+pub(crate) fn every_turn() -> u32 {
+    1
 }
 
 impl AbilityDef {

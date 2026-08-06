@@ -302,7 +302,9 @@ pub struct SaveData {
 /// 20 → 21: `known_routines` — a routine is knowledge plus a Routine Disk
 /// rather than an item, so what the player can install is now save state
 /// instead of whatever `routine_*` items happened to be in cargo.
-pub const SAVE_FORMAT_VERSION: u32 = 21;
+/// 21 → 22: `ActiveFieldBuff` gained `interval`, so a running buff carries
+/// the cadence it fires on rather than firing every turn.
+pub const SAVE_FORMAT_VERSION: u32 = 22;
 
 /// Renders a save as editable RON, for the `savetool` binary.
 ///

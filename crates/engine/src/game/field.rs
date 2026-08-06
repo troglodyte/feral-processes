@@ -180,6 +180,7 @@ impl Game {
             kind,
             power,
             duration,
+            interval,
             power_cost,
         } = def.effect
         else {
@@ -253,6 +254,7 @@ impl Game {
                     name: def.name.clone(),
                     power: magnitude,
                     remaining: duration,
+                    interval,
                     source: BuffSource::Routine,
                 },
             );
@@ -369,7 +371,7 @@ impl Game {
                 for buff in field.active.clone() {
                     views.push(ActiveBuffView {
                         name: buff.name,
-                        magnitude: buff.kind.magnitude_label(buff.power),
+                        magnitude: buff.kind.magnitude_label(buff.power, buff.interval),
                         remaining: buff.remaining,
                         holder_label: holder_label.clone(),
                     });
@@ -388,7 +390,9 @@ impl Game {
                 };
                 views.push(ActiveBuffView {
                     name: name.to_string(),
-                    magnitude: kind.magnitude_label(active.power),
+                    // A combat buff has no cadence — it is a flat stat while it
+                    // lasts — so it asks for the every-turn tag.
+                    magnitude: kind.magnitude_label(active.power, 1),
                     remaining: active.remaining,
                     holder_label,
                 });

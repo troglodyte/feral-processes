@@ -545,6 +545,7 @@ fn tick_field_buffs_decrements_and_expires_after_the_exact_tick_count() {
             name: "Test Shield".to_string(),
             power: 2,
             remaining: 5,
+            interval: 1,
             source: BuffSource::Routine,
         },
     );
@@ -580,6 +581,7 @@ fn tick_field_buffs_logs_the_armed_name_not_the_kind_on_expiry() {
             name: "Snare Protocol".to_string(),
             power: 10,
             remaining: 1,
+            interval: 1,
             source: BuffSource::Consumable,
         },
     );
@@ -605,6 +607,7 @@ fn tick_field_buffs_ages_buffs_on_party_members_too() {
             name: "Overclock".to_string(),
             power: 3,
             remaining: 2,
+            interval: 1,
             source: BuffSource::Routine,
         },
     );
@@ -639,6 +642,7 @@ fn rest_ages_field_buffs_but_not_temporary_structures() {
             name: "Heat Sink".to_string(),
             power: 1,
             remaining: REST_TICKS + 5,
+            interval: 1,
             source: BuffSource::Routine,
         },
     );
@@ -696,6 +700,7 @@ fn tick_field_buffs_regen_heals_the_carrier_and_caps_at_max_hp() {
             name: "Nanite Patch".to_string(),
             power: 4,
             remaining: 5,
+            interval: 1,
             source: BuffSource::Routine,
         },
     );
@@ -718,6 +723,54 @@ fn tick_field_buffs_regen_heals_the_carrier_and_caps_at_max_hp() {
     );
 }
 
+/// A long trickle heals on a cadence rather than every turn — `interval` is
+/// the whole difference between "+2 for 300 turns" and "+2 every fourth turn
+/// for 300". The cadence is phased off `remaining`, so a duration that is a
+/// multiple of its interval (as every shipped one is) fires on the first tick
+/// and every interval-th tick after.
+#[test]
+fn an_interval_makes_a_field_buff_fire_on_a_cadence_not_every_tick() {
+    let mut game = Game::new(612, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let max_hp = game.world.get::<Stats>(player).unwrap().max_hp;
+    let start = max_hp - 40;
+    game.world.get_mut::<Stats>(player).unwrap().hp = start;
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Regen,
+            name: "Repair Loop Single".to_string(),
+            power: 2,
+            remaining: 8,
+            interval: 4,
+            source: BuffSource::Routine,
+        },
+    );
+
+    game.tick_field_buffs();
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().hp,
+        start + 2,
+        "the first tick is on the cadence, so it heals"
+    );
+    for _ in 0..3 {
+        game.tick_field_buffs();
+    }
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().hp,
+        start + 2,
+        "the three turns after it are not, and must heal nothing"
+    );
+    for _ in 0..4 {
+        game.tick_field_buffs();
+    }
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().hp,
+        start + 4,
+        "eight turns at one heal every fourth is two heals, not eight"
+    );
+}
+
 #[test]
 fn tick_field_buffs_regen_heals_a_companion_not_the_player() {
     let mut game = Game::new(611, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -732,6 +785,7 @@ fn tick_field_buffs_regen_heals_a_companion_not_the_player() {
             name: "Self Repair".to_string(),
             power: 3,
             remaining: 5,
+            interval: 1,
             source: BuffSource::Routine,
         },
     );
@@ -768,6 +822,7 @@ fn tick_field_buffs_regen_does_not_revive_a_dead_companion() {
             name: "Self Repair".to_string(),
             power: 5,
             remaining: 10,
+            interval: 1,
             source: BuffSource::Routine,
         },
     );
@@ -811,6 +866,7 @@ fn a_full_tick_applies_coolant_and_trickle_on_top_of_that_ticks_decay() {
             name: "Heat Sink".to_string(),
             power: 15,
             remaining: 5,
+            interval: 1,
             source: BuffSource::Routine,
         },
     );
@@ -821,6 +877,7 @@ fn a_full_tick_applies_coolant_and_trickle_on_top_of_that_ticks_decay() {
             name: "Power Tap".to_string(),
             power: 15,
             remaining: 5,
+            interval: 1,
             source: BuffSource::Routine,
         },
     );
@@ -865,6 +922,7 @@ fn tick_field_buffs_applies_a_buffs_last_tick_before_it_expires() {
             name: "Last Gasp".to_string(),
             power: 3,
             remaining: 1,
+            interval: 1,
             source: BuffSource::Routine,
         },
     );
@@ -904,6 +962,7 @@ fn field_buffs_survive_a_save_load_round_trip() {
             name: "Snare Protocol".to_string(),
             power: 15,
             remaining: 7,
+            interval: 1,
             source: BuffSource::Consumable,
         },
     );
@@ -914,6 +973,7 @@ fn field_buffs_survive_a_save_load_round_trip() {
             name: "Overclock".to_string(),
             power: 4,
             remaining: 3,
+            interval: 1,
             source: BuffSource::Routine,
         },
     );
@@ -1077,6 +1137,7 @@ fn a_prebattle_buff_armed_on_the_map_is_live_at_the_next_intrusion() {
             name: "Test Stim".to_string(),
             power: 5,
             remaining: 5,
+            interval: 1,
             source: BuffSource::Consumable,
         },
     );

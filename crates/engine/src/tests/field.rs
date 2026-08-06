@@ -516,7 +516,7 @@ fn active_buffs_reports_a_player_buff_with_no_holder_label() {
     assert_eq!(buffs[0].remaining, stored.remaining);
     assert_eq!(
         buffs[0].magnitude,
-        FieldBuffKind::Regen.magnitude_label(stored.power)
+        FieldBuffKind::Regen.magnitude_label(stored.power, stored.interval)
     );
 }
 
@@ -581,7 +581,7 @@ fn active_buffs_magnitude_reflects_the_scaled_power_not_the_authored_one() {
     assert_eq!(buffs.len(), 1);
     assert_eq!(
         buffs[0].magnitude,
-        FieldBuffKind::Regen.magnitude_label(scaled)
+        FieldBuffKind::Regen.magnitude_label(scaled, 1)
     );
 }
 

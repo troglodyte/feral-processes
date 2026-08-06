@@ -14,6 +14,8 @@ first, separated by a rule.
 
 ## Unreleased
 
+## 0.3.0
+
 ### Breaking: save format 23 → 24
 
 `CreatureSave` gained a field, so existing `.bin` saves stop loading.

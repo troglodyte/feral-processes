@@ -22,6 +22,10 @@ impl App {
             self.shift_party_slot(shift);
             return;
         }
+        if key == GameKey::Char('W') {
+            self.toggle_wield();
+            return;
+        }
         let Some(game) = &mut self.game else { return };
         let candidates = game.owned_pets();
         if let Some(idx) = self.selected_index(key, candidates.len()) {
@@ -37,6 +41,32 @@ impl App {
                 }
             }
         }
+    }
+
+    /// Takes the highlighted program in hand as a weapon, or puts it down if
+    /// it is the one already there.
+    ///
+    /// Handled before `selected_index` the way `<` and `>` are, and bound to
+    /// an uppercase key on purpose: uppercase reaches app-core as a distinct
+    /// key and is already used that way elsewhere, so it can never collide
+    /// with `menu_shortcut`'s digits-then-lowercase scheme however large the
+    /// roster grows.
+    ///
+    /// **Nothing on the screen names this key.** That omission is the whole
+    /// feature — see `render::party`'s `COMPANION_HELP`, which a gui test
+    /// holds to it.
+    fn toggle_wield(&mut self) {
+        let row = self.menu_selected;
+        let Some(game) = &mut self.game else { return };
+        let Some(pet) = game.owned_pets().get(row).map(|p| (p.entity, p.wielded)) else {
+            return;
+        };
+        let result = if pet.1 {
+            game.unwield_program()
+        } else {
+            game.wield_program(pet.0)
+        };
+        self.status_line = result.err();
     }
 
     /// Shifts the highlighted program one slot along the battle line, and

@@ -3,6 +3,23 @@
 use super::popup::*;
 use super::*;
 
+/// The two help lines above the roster.
+///
+/// **They deliberately say nothing about wielding a program as a weapon.**
+/// That command is an easter egg: it is reachable, it changes the run, and
+/// nothing in the game's text points at it. Extracted into a const so
+/// `the_companion_screen_never_advertises_the_hidden_key` can read them —
+/// a later helpful edit then fails a test rather than quietly spoiling it.
+fn companion_help() -> [String; 2] {
+    [
+        format!(
+            "Pick a program to add to your party (max {MAX_PARTY_SIZE}) - select a party member's own number to stand it down."
+        ),
+        "< and > move the highlighted member along the battle line; the front slot draws the most fire."
+            .to_string(),
+    ]
+}
+
 pub(super) fn draw_companion_menu(
     game: &mut Game,
     selected: usize,
@@ -10,14 +27,7 @@ pub(super) fn draw_companion_menu(
     m: &Metrics,
 ) {
     let pets = game.owned_pets();
-    let mut rows = vec![
-        text_row(format!(
-            "Pick a program to add to your party (max {MAX_PARTY_SIZE}) - select a party member's own number to stand it down."
-        )),
-        text_row(
-            "< and > move the highlighted member along the battle line; the front slot draws the most fire.",
-        ),
-    ];
+    let mut rows: Vec<_> = companion_help().into_iter().map(text_row).collect();
     if pets.is_empty() {
         rows.push(text_row("(you don't have any compiled programs yet)"));
     }
@@ -33,9 +43,12 @@ pub(super) fn draw_companion_menu(
             .map(|q| format!(" [{q}]"))
             .unwrap_or_default();
         let fused = fusion_tag(p.fusions);
+        // No row colour of its own: `fusion_row` already loses to CRITICAL
+        // below, and a third meaning on that axis makes all three unreadable.
+        let wielded = if p.wielded { " (WEP)" } else { "" };
         let critical = hp_critical(p.hp, p.max_hp);
         let text = format!(
-            "[{}] {slot}{} Lv{} - HP {}/{}  PWR {}{}{}{}{}",
+            "[{}] {slot}{} Lv{} - HP {}/{}  PWR {}{}{}{}{}{}",
             menu_shortcut(i),
             p.name,
             p.level,
@@ -44,6 +57,7 @@ pub(super) fn draw_companion_menu(
             p.power,
             quality,
             fused,
+            wielded,
             activity,
             if critical { " - CRITICAL" } else { "" }
         );
@@ -182,4 +196,28 @@ pub(super) fn draw_fuse_name_menu(
     ));
     rows.push(text_row("Esc to go back and re-pick the second program"));
     draw_popup("Fuse", PopupSize::Small, &rows, painter, m);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The easter-egg census. Wielding a program as your weapon is
+    /// deliberately undocumented in-game, and the help lines above the
+    /// roster are the one place a well-meaning edit would give it away.
+    #[test]
+    fn the_companion_screen_never_advertises_the_hidden_key() {
+        for line in companion_help() {
+            let lower = line.to_lowercase();
+            assert!(
+                !lower.contains("weapon"),
+                "the help must not name what the key does: {line:?}"
+            );
+            assert!(!lower.contains("wield"), "nor the verb for it: {line:?}");
+            assert!(
+                !line.contains('W'),
+                "nor press the key in front of the player: {line:?}"
+            );
+        }
+    }
 }

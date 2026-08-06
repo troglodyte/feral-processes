@@ -14,4 +14,9 @@
         (name: "Static Burst", power: 6, ranged: true),
     ],
     work_resource: Some("power_cell"),
+    taunts: [
+        "flickers through four wrong colours and settles on none of them.",
+        "shorts out for a whole second, which on its timescale is a long insult.",
+        "renders the pack twice, badly, and discards both.",
+    ],
 )

@@ -862,3 +862,39 @@ fn a_full_party_is_asked_slot_by_slot_and_only_then_resolves() {
         app.handle_key(GameKey::Char('a'));
     }
 }
+
+/// `T` says something and nothing else: it must not commit an action for
+/// the slot being asked, and must not resolve the round. Named by nothing
+/// on screen — see `crates/engine/EASTER_EGGS.md`.
+#[test]
+fn shift_t_taunts_without_spending_the_slots_action() {
+    let mut app = battling_app();
+    let (slot, round, logged) = {
+        let game = app.game.as_ref().unwrap();
+        (
+            game.battle_active_slot(),
+            game.battle_view().unwrap().round,
+            game.message_log(usize::MAX).len(),
+        )
+    };
+
+    app.handle_key(GameKey::Char('T'));
+
+    assert_eq!(app.mode, Mode::Battle, "'T' must not open a picker");
+    let game = app.game.as_ref().unwrap();
+    assert_eq!(
+        game.battle_active_slot(),
+        slot,
+        "taunting committed the slot's action"
+    );
+    assert_eq!(
+        game.battle_view().unwrap().round,
+        round,
+        "taunting resolved the round"
+    );
+    assert_eq!(
+        game.message_log(usize::MAX).len(),
+        logged + 1,
+        "the taunt should log exactly one line"
+    );
+}

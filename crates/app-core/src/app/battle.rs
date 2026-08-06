@@ -31,6 +31,22 @@ impl App {
         }
         let GameKey::Char(raw) = key else { return };
 
+        // Undocumented on purpose — see `crates/engine/EASTER_EGGS.md`.
+        // Intercepted here, ahead of everything, and matched on the raw char
+        // rather than the folded one, exactly as `W` rides ahead of
+        // `selected_index` on the companion screen. Both stages below were
+        // checked rather than assumed to be free: party commands are
+        // `A`/`D`/`j` and per-slot actions are `a`/`d`/`s`/`u`, so neither
+        // `T` nor the `t` the case-folding retry would look for hits
+        // anything. The refusal is unreachable — this handler only runs in
+        // `Mode::Battle` — so there is nothing to put on the status line.
+        if raw == 'T' {
+            if let Some(game) = &mut self.game {
+                let _ = game.taunt();
+            }
+            return;
+        }
+
         // Party-wide commands are matched on the raw char first, so uppercase
         // `A`/`D` stay distinct from the lowercase per-slot Attack/Defend. The
         // lowercase retry is what lets a shifted `J` still jack out; `a`/`d`

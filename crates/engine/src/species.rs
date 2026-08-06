@@ -230,6 +230,13 @@ pub struct SpeciesDef {
     /// neutral.
     #[serde(default)]
     pub affinities: Affinities,
+    /// Lines a tamed member of this species says when goaded into speech.
+    /// Purely cosmetic — nothing reads them but the log. A species with
+    /// none falls back to a generic engine-side line, so authoring them is
+    /// optional in a way `moves` is not. `#[serde(default)]` so existing
+    /// species files (including mods) without this field keep parsing.
+    #[serde(default)]
+    pub taunts: Vec<String>,
     /// Whether this species can spawn as a Nest — a stationary,
     /// destructible object that keeps 2-5 guardians of this species
     /// tethered around it and respawns any that are killed/tamed, until

@@ -14,4 +14,9 @@
         (name: "Pulse", power: 8),
     ],
     work_resource: Some("core_fragment"),
+    taunts: [
+        "pings the pack on every open port at once.",
+        "strobes a pattern at them that resolves, briefly, into a number.",
+        "brightens hard enough to wash the whole corridor out.",
+    ],
 )

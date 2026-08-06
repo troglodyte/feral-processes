@@ -219,6 +219,22 @@ is skipped with a warning logged in-game rather than crashing startup.
     // it — it never attacks back). Never applies to a boss species,
     // regardless of this flag.
     can_nest: false,
+
+    // Optional; can be left out entirely (defaults to empty). Cosmetic
+    // lines a tamed member of this species says in a fight. Nothing reads
+    // them but the message log — they change no stat, cost no turn and
+    // resolve no round.
+    //
+    // Written as a *verb phrase* rather than as speech, because the line is
+    // logged with the program's name in front of it: "Drone 2 circles once,
+    // unimpressed." Start it lowercase and end it with a full stop.
+    //
+    // A species with none still speaks — the engine has a generic set it
+    // falls back to — so leaving this out costs nothing. Give it two or
+    // more and they cycle in order.
+    taunts: [
+        "circles once, unimpressed, and pings them again.",
+    ],
 )
 ```
 

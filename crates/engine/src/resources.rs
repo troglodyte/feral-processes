@@ -590,6 +590,24 @@ pub enum Locale {
 #[derive(Resource, Clone, Copy, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Trace(pub u32);
 
+/// How many times the party has been goaded into speech (`Game::taunt`),
+/// which is what picks the next line so repeated presses cycle rather than
+/// repeat.
+///
+/// **A counter and not a `GameRng` draw**, deliberately: a cosmetic key a
+/// player might press twenty times in a fight is the worst possible place
+/// to advance the shared stream, since every later roll in the run would
+/// shift with it.
+///
+/// **Not saved, and not inserted by either constructor** — `Game::taunt`
+/// defaults it in place, the way `ProfileRewardsPaid` exists only once
+/// something has happened. A resource is persisted by being an explicit
+/// field in `save.rs`, so leaving it out of that struct is the whole of
+/// what keeps it transient, and there is nothing here for a
+/// `SAVE_FORMAT_VERSION` bump to be about.
+#[derive(Resource, Clone, Copy, Default, Debug)]
+pub struct TauntCount(pub u32);
+
 /// The four named readings of `Trace`, and the only form the player ever
 /// sees it in — a threat readout rather than a progress bar, since a visible
 /// integer invites playing to the threshold instead of to the risk.

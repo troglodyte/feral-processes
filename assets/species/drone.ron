@@ -14,4 +14,9 @@
         (name: "Recon Ping", power: 3, ranged: true),
     ],
     work_resource: Some("core_fragment"),
+    taunts: [
+        "buzzes one flat tone at the pack and holds it there.",
+        "circles once, unimpressed, and pings them again.",
+        "drops to hover height and waits, rotors idling.",
+    ],
 )

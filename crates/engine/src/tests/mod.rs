@@ -34,6 +34,7 @@ mod spawning;
 mod stack;
 mod stack_movement;
 mod taming;
+mod taunt;
 mod trade;
 mod turn;
 mod wielded;

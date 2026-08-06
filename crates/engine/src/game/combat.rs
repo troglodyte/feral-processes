@@ -693,6 +693,30 @@ impl Game {
             .collect()
     }
 
+    /// The routines a program wielded as a weapon could actually fire —
+    /// what `party_member_attacks`'s proc rolls from. One predicate, so the
+    /// roll and any screen that wants to preview it cannot disagree.
+    ///
+    /// `actor_abilities` minus two exclusions. A field-only effect has
+    /// nothing to resolve against a battle recipient, and that is the
+    /// existing `AbilityEffect::field_only` rather than a fourth spelling of
+    /// its three variants. `Decompile` is excluded because a free capture
+    /// roll on every attack would spend an ICE Breaker the player never
+    /// authorised, undercutting taming as something earned by fighting — and
+    /// it is resolved by group index rather than by recipient, so it would
+    /// not survive the `use_ability` path anyway.
+    ///
+    /// May be empty, and that is a legitimate outcome rather than an error:
+    /// every tamed program has innate routines, but nothing guarantees any
+    /// of them are battle-legal. Such a program simply never procs.
+    pub(crate) fn wieldable_routines(&self, entity: Entity) -> Vec<AbilityDef> {
+        self.actor_abilities(entity)
+            .into_iter()
+            .filter(|d| !d.effect.field_only())
+            .filter(|d| !matches!(d.effect, AbilityEffect::Decompile))
+            .collect()
+    }
+
     /// Consumable items the player is actually holding — the pool
     /// `BattleAction::UseItem` draws from, and what the in-battle item
     /// picker lists. The map's inventory screen is a different flow: there

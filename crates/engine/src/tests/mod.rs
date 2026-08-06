@@ -34,4 +34,5 @@ mod stack_movement;
 mod taming;
 mod trade;
 mod turn;
+mod wielded;
 mod zone;

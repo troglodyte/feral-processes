@@ -1481,6 +1481,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             xp_to_next: 20,
             cronjob: None,
             party_slot: None,
+            wielded: false,
             zone: 1,
             custom_name: None,
             hp_roll: 1.0,

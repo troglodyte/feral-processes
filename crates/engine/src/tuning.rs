@@ -302,6 +302,21 @@ pub const LOW_POWER_MIN_ATTACK_MULTIPLIER: f32 = 0.5;
 /// is the smaller standing bonus on top.
 pub const PARTY_PASSIVE_STAT_DIVISOR: i32 = 10;
 
+/// Divisor on the wielded program's ATK and DEF when totalling the bonus it
+/// lends the player (see `Game::wielded_stat_bonus`), floored at 1 per stat.
+///
+/// Deliberately independent of `PARTY_PASSIVE_STAT_DIVISOR` and starting
+/// equal to it. Do not re-express this in terms of that constant: the party
+/// buff is a candidate for removal and this must not move with it.
+pub const WIELDED_PROGRAM_STAT_DIVISOR: i32 = 10;
+
+/// Chance that a player strike also fires one of the wielded program's
+/// installed routines (see `Game::proc_wielded_routine`). The proc costs
+/// nothing — no fatigue, no cooldown — so this rate is the whole of its
+/// price. Unguarded by any test: `balance_sim` models no abilities at all,
+/// so neither this nor the magnitudes it fires can move a curve.
+pub const WIELDED_ROUTINE_PROC_CHANCE: f64 = 0.25;
+
 /// Chance that a *successful* jack-out still costs the player a parting
 /// counter-strike. Whether the escape happens at all is a separate roll —
 /// see `battle::jack_out_chance`.

@@ -439,6 +439,23 @@ pub struct BattleState {
 #[derive(Resource, Default, Clone)]
 pub struct Party(pub Vec<Entity>);
 
+/// The tamed program currently equipped as the player's weapon, if any.
+///
+/// Deliberately not a field on `components::Equipment`: that slot holds an
+/// `EquippedItem` — an `ItemId` plus the level and fusion tier captured at
+/// equip time — and an entity is none of those things. The bonus it lends
+/// is computed live by `Game::wielded_stat_bonus` rather than baked into
+/// the player's `Stats`, because a program can be sold, extracted, fused
+/// away or killed, and a bonus welded in by an equip that can never be
+/// matched by an unequip is permanent free stats with no record of where
+/// they came from.
+///
+/// Read through `Game::wielded_program`, never directly: that accessor
+/// drops an entity that no longer exists, which is what makes every
+/// destruction path correct without knowing this feature exists.
+#[derive(Resource, Default, Clone)]
+pub struct WieldedProgram(pub Option<Entity>);
+
 /// Which way along the battle line `Game::move_party_member` shifts a
 /// member — toward the player (`Forward`, drawing more fire) or away from
 /// them.

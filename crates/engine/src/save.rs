@@ -76,6 +76,13 @@ pub struct CreatureSave {
     /// Supersedes the old `is_companion` flag, which `party_slot.is_some()`
     /// now says.
     pub party_slot: Option<u32>,
+    /// Whether this program is the one equipped as the player's weapon (see
+    /// `resources::WieldedProgram`). Written per creature rather than as a
+    /// player-side entity id for the same reason `party_slot` is: entity ids
+    /// are not stable across a save/load round trip. At most one creature in
+    /// a file may set it, and `Game::load` takes the first and ignores any
+    /// others rather than trusting the file.
+    pub wielded: bool,
     /// Which zone sector this creature was originally spawned in (see
     /// `components::ZonePortal`).
     pub zone: u32,
@@ -304,7 +311,9 @@ pub struct SaveData {
 /// instead of whatever `routine_*` items happened to be in cargo.
 /// 21 → 22: `ActiveFieldBuff` gained `interval`, so a running buff carries
 /// the cadence it fires on rather than firing every turn.
-pub const SAVE_FORMAT_VERSION: u32 = 22;
+/// 22 → 23: `CreatureSave` gained `wielded`, for the tamed program equipped
+/// as the player's weapon (`resources::WieldedProgram`).
+pub const SAVE_FORMAT_VERSION: u32 = 23;
 
 /// Renders a save as editable RON, for the `savetool` binary.
 ///

@@ -59,6 +59,7 @@ impl Game {
         world.insert_resource(GameOver::default());
         world.insert_resource(difficulty);
         world.insert_resource(Party::default());
+        world.insert_resource(WieldedProgram::default());
         world.insert_resource(Research::default());
         // Decompile is knowledge the player starts with, not something the
         // tree teaches — nothing grants it a second time. Without this,
@@ -206,6 +207,7 @@ impl Game {
         world.insert_resource(GameOver::default());
         world.insert_resource(data.difficulty);
         world.insert_resource(Party::default());
+        world.insert_resource(WieldedProgram::default());
         world.insert_resource(Research(data.researched.into_iter().collect()));
         world.insert_resource(KnownRoutines(data.known_routines.into_iter().collect()));
         world.insert_resource(BuybackLedger(
@@ -358,6 +360,10 @@ impl Game {
         // back in whatever order they were written, which is no longer the
         // roster order, and roster order is now mechanically meaningful.
         let mut party_slots: Vec<(u32, Entity)> = Vec::new();
+        // At most one creature may claim the weapon hand. Taken defensively
+        // — the first wins and any others are ignored — rather than trusting
+        // the file, the same way `party_slots` is truncated below.
+        let mut wielded: Option<Entity> = None;
         for c in data.creatures {
             let Some(species) = game.world.resource::<SpeciesDb>().get(&c.species).cloned() else {
                 continue;
@@ -422,6 +428,9 @@ impl Game {
                         xp_to_next: c.xp_to_next,
                     },
                 ));
+                if c.wielded && wielded.is_none() {
+                    wielded = Some(creature_id);
+                }
                 if let Some(slot) = party_slot {
                     party_slots.push((slot, creature_id));
                 } else if let Some(cronjob) = c.cronjob {
@@ -448,6 +457,10 @@ impl Game {
         let mut party: Vec<Entity> = party_slots.into_iter().map(|(_, e)| e).collect();
         party.truncate(MAX_PARTY_SIZE);
         game.world.insert_resource(Party(party));
+        // Unlike `BuybackLedger` and `StackMemory`, this is not zone-local:
+        // the program travels with you across a breach exactly as the party
+        // does, so `enter_next_zone` must not wipe it.
+        game.world.insert_resource(WieldedProgram(wielded));
 
         let mut structure_positions: HashMap<(i32, i32), Entity> = HashMap::new();
         for s in data.structures {
@@ -576,6 +589,7 @@ impl Game {
             .unwrap_or_default();
 
         let party_entities = self.world.resource::<Party>().0.clone();
+        let wielded = self.wielded_program();
         let mut creatures = Vec::new();
         let mut creature_query = self.world.query::<(
             Entity,
@@ -650,6 +664,7 @@ impl Game {
                     .iter()
                     .position(|&e| e == entity)
                     .map(|i| i as u32),
+                wielded: wielded == Some(entity),
                 zone: spawn_zone.map(|z| z.0).unwrap_or(1),
                 custom_name: custom_name.map(|c| c.0.clone()),
                 hp_roll: potential.hp_roll,

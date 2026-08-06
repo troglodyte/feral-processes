@@ -3,7 +3,8 @@
 
 use crate::tuning::{
     DEFAULT_TAMING_DIFFICULTY, ENGAGED_GROUPS, FRONT_SLOTS, NEST_RESPAWN_TICKS,
-    PARTY_PASSIVE_STAT_DIVISOR, PLAYER_STRIKE_POWER,
+    PARTY_PASSIVE_STAT_DIVISOR, PLAYER_STRIKE_POWER, WIELDED_PROGRAM_STAT_DIVISOR,
+    WIELDED_ROUTINE_PROC_CHANCE,
 };
 use crate::*;
 
@@ -193,6 +194,13 @@ impl Game {
     /// has no `Creature` component and so no moveset, and keeps the flat
     /// strike they always had; a companion rolls from its species moves the
     /// way `wild_retaliate` does. Returns whether that ended the battle.
+    ///
+    /// Two orderings in the tail are load-bearing. The wielded-program proc
+    /// comes *after* the front's death is resolved, so a routine can never
+    /// land on a corpse and never fires at all once `finish_group_member`
+    /// has ended the battle. And it comes before the return, so its own
+    /// kills are reaped inside `proc_wielded_routine` the way
+    /// `resolve_one_action`'s `Special` arm reaps its own.
     pub(crate) fn party_member_attacks(
         &mut self,
         slot: usize,
@@ -230,10 +238,71 @@ impl Game {
             );
         }
 
-        if !self.creature_alive(front) {
-            return self.finish_group_member(group, player);
+        if !self.creature_alive(front) && self.finish_group_member(group, player) {
+            return true;
+        }
+        if slot == 0 {
+            return self.proc_wielded_routine(group, player);
         }
         false
+    }
+
+    /// Rolls the wielded program's chance to fire one of its own routines on
+    /// top of the player's strike, and resolves it. Returns whether that
+    /// ended the battle.
+    ///
+    /// **The actor is the program, not the player.** `use_ability` reads
+    /// `ability_user_level`, `ability_affinity` and `effective_atk` off
+    /// whoever it is handed, so passing the program is what makes *which*
+    /// program you wield decide what a proc is worth — the whole point of
+    /// the feature. A tamed program carries no `Hostile`, so
+    /// `ability_recipients` takes the friendly branch for free.
+    ///
+    /// Costs nothing: no fatigue, no cooldown armed. The program is not in
+    /// the battle line and has no `AbilityCooldowns` tick of its own to hang
+    /// one off, and inventing bookkeeping for a non-combatant buys nothing
+    /// at this rate. Nothing happens to the program either — no damage, no
+    /// XP, no status. It is a weapon, not a combatant.
+    fn proc_wielded_routine(&mut self, group: usize, player: Entity) -> bool {
+        let Some(program) = self.wielded_program() else {
+            return false;
+        };
+        // Both resolved before the roll, so a program with nothing legal to
+        // fire consumes no `GameRng` and can't shift every later draw in the
+        // run just by being held.
+        let routines = self.wieldable_routines(program);
+        if routines.is_empty() {
+            return false;
+        }
+        // The strike may have just emptied the group it targeted.
+        let Some(group) = self.retarget(group) else {
+            return false;
+        };
+        let Some(ability) = ({
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0
+                .random_bool(WIELDED_ROUTINE_PROC_CHANCE)
+                .then(|| rng.0.random_range(0..routines.len()))
+        })
+        .map(|i| routines[i].clone()) else {
+            return false;
+        };
+        // A proc opens no picker, so its target is synthesized from the
+        // attack that triggered it. `OneAlly` resolves to the player rather
+        // than a companion deliberately: it is *your* weapon, and slot 0 is
+        // the one ally guaranteed to exist.
+        let target = match ability.target {
+            AbilityTarget::OneEnemyGroupFront | AbilityTarget::WholeEnemyGroup => {
+                battle::SpecialTarget::EnemyGroup { group }
+            }
+            AbilityTarget::OneAlly => battle::SpecialTarget::Ally { slot: 0 },
+            AbilityTarget::WholeParty => battle::SpecialTarget::WholeParty,
+            AbilityTarget::AllEnemies => battle::SpecialTarget::AllEnemies,
+        };
+        let name = self.creature_label(program);
+        let recipients = self.ability_recipients(program, ability.target, &target);
+        self.use_ability(&ability, program, &name, &recipients);
+        self.reap_dead_members(player)
     }
 
     /// A uniformly-random move from `entity`'s species moveset, or `None`
@@ -803,7 +872,8 @@ impl Game {
         if entity != self.player_entity() {
             return base + bonus + field_bonus;
         }
-        let total = base + bonus + field_bonus + self.party_stat_bonus().0;
+        let total =
+            base + bonus + field_bonus + self.party_stat_bonus().0 + self.wielded_stat_bonus().0;
         let hunger = self
             .world
             .get::<Needs>(entity)
@@ -836,7 +906,7 @@ impl Game {
         if entity != self.player_entity() {
             return base + bonus + field_bonus;
         }
-        base + bonus + field_bonus + self.party_stat_bonus().1
+        base + bonus + field_bonus + self.party_stat_bonus().1 + self.wielded_stat_bonus().1
     }
 
     /// Standing `(atk, def)` bonus the player gets just for having programs
@@ -846,6 +916,45 @@ impl Game {
     /// baked into the player's own `Stats` on add/remove, so it stays
     /// correct automatically as a companion levels up, is fused, or dies —
     /// no separate bookkeeping to keep in sync.
+    /// The program currently wielded as the player's weapon, if it still
+    /// exists.
+    ///
+    /// The existence check is the whole point. A program can be sold,
+    /// extracted, fused away or killed, and each of those despawns it —
+    /// so `resources::WieldedProgram` is allowed to hold a stale entity and
+    /// this drops it, using `Stats` as the repo's idiom for "this entity is
+    /// gone". Neither `dissolve_tamed_program` nor `fuse_companions` has to
+    /// know this feature exists, and a third destruction path added later
+    /// inherits the same immunity. Do not "tidy this up" into an explicit
+    /// clear at each of those sites — the omission is the design.
+    pub(crate) fn wielded_program(&self) -> Option<Entity> {
+        self.world
+            .get_resource::<WieldedProgram>()
+            .and_then(|w| w.0)
+            .filter(|&e| self.world.get::<Stats>(e).is_some())
+    }
+
+    /// Standing `(atk, def)` bonus the player gets for wielding a program,
+    /// or `(0, 0)` when none is wielded. A share of the program's own
+    /// current ATK and DEF, floored at 1 each.
+    ///
+    /// A second, independent knob from `party_stat_bonus` rather than a call
+    /// into it: the party buff is a candidate for removal, and this must
+    /// survive that. Computed live from the program's current `Stats` for
+    /// the reason that function's doc gives — it stays correct as the
+    /// program levels, is fused, or dies, with no bookkeeping to sync.
+    pub(crate) fn wielded_stat_bonus(&self) -> (i32, i32) {
+        self.wielded_program()
+            .and_then(|e| self.world.get::<Stats>(e))
+            .map(|s| {
+                (
+                    (s.atk / WIELDED_PROGRAM_STAT_DIVISOR).max(1),
+                    (s.def / WIELDED_PROGRAM_STAT_DIVISOR).max(1),
+                )
+            })
+            .unwrap_or((0, 0))
+    }
+
     pub(crate) fn party_stat_bonus(&self) -> (i32, i32) {
         self.world
             .resource::<Party>()

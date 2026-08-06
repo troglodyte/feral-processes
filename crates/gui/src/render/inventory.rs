@@ -51,7 +51,15 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
         ),
         text_row(""),
         text_row("Equipped (number to swap or unequip):"),
-        equipped_row(1, "Weapon", status.weapon.clone(), selected == 0, game),
+        // A wielded program and a worn weapon are mutually exclusive, so the
+        // weapon line renders one or the other and never both.
+        match &status.wielded {
+            Some(w) => text_row(format!(
+                "[1] Weapon: {} Lv{} (+{} ATK, +{} DEF)",
+                w.name, w.level, w.bonus.0, w.bonus.1
+            )),
+            None => equipped_row(1, "Weapon", status.weapon.clone(), selected == 0, game),
+        },
         equipped_row(2, "Armor", status.armor.clone(), selected == 1, game),
         equipped_row(3, "Module", status.module.clone(), selected == 2, game),
         text_row(""),

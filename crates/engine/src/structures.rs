@@ -198,6 +198,15 @@ pub struct StructureDef {
     /// which would clog on the first unit produced.
     #[serde(default = "default_output_capacity")]
     pub capacity: u32,
+    /// Whether a posted program may empty a clogged machine's buffer into
+    /// this structure — see `game::hauling`. A flag rather than "has a
+    /// `Stock` and runs no job", because *every* deployed structure has a
+    /// `Stock`: that rule would make a Home, a Shield and a Data Cache all
+    /// depots. `#[serde(default)]` so existing structure files (including
+    /// mods) written before this field existed still parse, as something a
+    /// hauler ignores.
+    #[serde(default)]
+    pub stores: bool,
     /// If set, this structure automatically builds the named item from
     /// ingredients pulled out of its orthogonal neighbours' output buffers,
     /// once a program is assigned to it. Unlike `work`, which produces from

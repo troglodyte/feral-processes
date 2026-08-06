@@ -8,7 +8,7 @@ use crate::components::{
     ResourceNode, Stats, Stock, Structure, StructureTier, Tamed, Task, TaskKind, WanderAi,
     field_buff_power_of,
 };
-use crate::game::hauling::take_haul_load;
+use crate::game::hauling::at_station;
 use crate::items::ItemId;
 use crate::items_db::ItemDb;
 use crate::perks::Perk;
@@ -297,6 +297,7 @@ pub(crate) fn set_machine_status(
         MachineStatus::Running => format!("The {name} resumes."),
         MachineStatus::Starved => format!("The {name} is starved — nothing is feeding it."),
         MachineStatus::Clogged => format!("The {name} is clogged — its output buffer is full."),
+        MachineStatus::Unstaffed => format!("The {name} has no one at it — its program is away."),
         MachineStatus::Idle => format!("The {name} sits idle — no program is assigned."),
     });
 }
@@ -310,6 +311,7 @@ type WorkedNode = (
     Option<&'static Structure>,
     &'static mut Stock,
     &'static mut MachineStatus,
+    &'static Position,
 );
 
 /// The worker-side components `task_progress_system` reads per cronjob
@@ -319,12 +321,12 @@ type WorkedNode = (
 /// `Tamed::owner` — it is a restriction on *which* workers run cronjobs, not
 /// data the loop reads.
 type CronjobWorker = (
-    Entity,
     &'static mut Task,
     &'static Creature,
     Option<&'static Potential>,
     &'static mut Experience,
     &'static mut Stats,
+    &'static Position,
     Option<&'static Carrying>,
 );
 
@@ -373,7 +375,6 @@ pub fn task_progress_system(
     db: CronjobLookups,
     mut log: ResMut<MessageLog>,
     mut rng: ResMut<GameRng>,
-    mut commands: Commands,
 ) {
     let CronjobLookups {
         species: species_db,
@@ -398,17 +399,33 @@ pub fn task_progress_system(
         ),
         None => (0, 0, None),
     };
-    for (worker, mut task, creature, potential, mut exp, mut stats, carrying) in &mut tasks {
+    for (mut task, creature, potential, mut exp, mut stats, worker_pos, carrying) in &mut tasks {
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
         }
-        let Ok((node, tier, structure, mut stock, mut status)) = nodes.get_mut(task.target) else {
+        let Ok((node, tier, structure, mut stock, mut status, node_pos)) =
+            nodes.get_mut(task.target)
+        else {
             continue;
         };
         let machine_name = structure
             .and_then(|s| structure_db.get(&s.kind))
             .map(|d| d.name.as_str())
             .unwrap_or("machine");
+        // The walk is only a cost because of this gate: a worker en route to
+        // its post, off delivering, or standing at its machine still holding
+        // a load produces nothing. `carrying` covers the arrival tick
+        // specifically — a worker that produced there would refill the room
+        // its own load needs and be left holding the remainder forever.
+        if !at_station(*worker_pos, *node_pos) || carrying.is_some() {
+            set_machine_status(
+                &mut status,
+                MachineStatus::Unstaffed,
+                machine_name,
+                &mut log,
+            );
+            continue;
+        }
         task.progress += 1;
         if task.progress < task.required {
             continue;
@@ -419,15 +436,6 @@ pub fn task_progress_system(
         if stock.output_room() == 0 {
             task.progress = task.required;
             set_machine_status(&mut status, MachineStatus::Clogged, machine_name, &mut log);
-            // A clog is where hauling starts: the cycle is already lost, so
-            // the walk costs nothing that wasn't lost anyway. A worker
-            // already holding a load is on its way somewhere and must not
-            // pick up a second.
-            if carrying.is_none()
-                && let Some(load) = take_haul_load(&mut stock)
-            {
-                commands.entity(worker).insert(load);
-            }
             continue;
         }
         task.progress = 0;
@@ -507,7 +515,11 @@ pub fn player_gather_system(
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
         }
-        let Ok((node, tier, structure, mut stock, mut status)) = nodes.get_mut(task.target) else {
+        // The node's `Position` goes unread here: `move_player` drops this
+        // task the moment the player steps away, so a player still holding
+        // one is standing beside the node by construction.
+        let Ok((node, tier, structure, mut stock, mut status, _)) = nodes.get_mut(task.target)
+        else {
             continue;
         };
         let machine_name = structure

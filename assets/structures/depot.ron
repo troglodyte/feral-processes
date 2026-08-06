@@ -1,0 +1,11 @@
+(
+    id: "depot",
+    name: "Depot",
+    description: "Holds what your programs bring in, so a clogged machine has somewhere to empty into. Collect from it with c.",
+    glyph: 'D',
+    color: Cyan,
+    build_cost: [("core_fragment", 12)],
+    work: None,
+    capacity: 100,
+    stores: true,
+)

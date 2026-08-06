@@ -398,6 +398,15 @@ pub enum MachineStatus {
     Starved,
     /// Output full: downstream is too slow, or nobody has collected.
     Clogged,
+    /// A program is posted but is not standing at the machine — walking to
+    /// its post, carrying a load to a depot, or unable to reach the machine
+    /// at all. Distinct from `Idle`, which means nobody is posted.
+    ///
+    /// Wins over both `Clogged` and `Running` whenever the worker is off its
+    /// tile: after shedding a load the machine is no longer full, and
+    /// without the precedence the pane would claim it is running while
+    /// nothing produces.
+    Unstaffed,
     /// No program assigned.
     Idle,
 }

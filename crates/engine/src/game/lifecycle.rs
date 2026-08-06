@@ -148,10 +148,15 @@ impl Game {
             // write `Task::progress` (for different targets, but bevy can
             // only see the conflict, not the disjointness), and an
             // arbitrary-but-fixed order is not the same as a stated one.
+            // `haul_step_system` joins the same chain for the same reason,
+            // one component along — it writes `Stock` too — and runs last
+            // because a load is taken off a machine the tick *after* that
+            // machine reports itself clogged.
             (
                 systems::task_progress_system,
                 systems::player_gather_system,
                 systems::assembler_system,
+                crate::game::hauling::haul_step_system,
             )
                 .chain(),
             difficulty::death_handling_system,

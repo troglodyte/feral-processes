@@ -1425,6 +1425,7 @@ fn worked_node_at(
         ))
         .id();
     game.assign_cronjob(worker, node).unwrap();
+    park_at_post(game, worker, node);
     node
 }
 

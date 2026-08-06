@@ -370,6 +370,7 @@ fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
         vec![
             "assembly_bay".to_string(),
             "data_cache".to_string(),
+            "depot".to_string(),
             "home".to_string(),
             "mining_node".to_string(),
             "portal".to_string(),

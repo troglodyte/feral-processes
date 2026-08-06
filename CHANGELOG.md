@@ -9,6 +9,21 @@ means one thing above all: **a save-format bump**, where existing saves stop
 loading (see `save::SAVE_FORMAT_VERSION`). Every crate in the workspace
 shares one version, set in the root `Cargo.toml`.
 
+At `1.x` and beyond the same definition of "breaking" moves up a level: a
+save-format bump takes the **major**, new content or a new feature takes the
+**minor**, and a fix or a balance retune takes the **patch**. The rule that
+survives the boundary is the one that matters — what counts as breaking is
+decided by what happens to a player's save, not by what happens to a type
+signature.
+
+**A release is cut per change that lands on `main`, not per batch.** A
+feature or fix merged to `main` bumps the version, gets its own section
+below, and is tagged; commits on a branch stay unversioned until they land.
+This is a correction, adopted after `0.3.0` — everything from `v0.2.0` to
+`v0.3.0` accumulated in a single `Unreleased` section over 2,200 lines long,
+which is a changelog nobody can read and a version number that says nothing
+about what is installed.
+
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 

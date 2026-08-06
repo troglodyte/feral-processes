@@ -13,17 +13,24 @@ use std::collections::HashMap;
 
 use pathfinding::directed::dijkstra::dijkstra_all;
 
-use crate::world::{Biome, NEIGHBOURS, WorldMap};
+use crate::world::{Biome, NEIGHBOURS, Tile, WorldMap};
 
 /// Chebyshev step counts from `origin` to every tile reachable within
-/// `radius`, routed around unwalkable terrain. `origin` itself is present
-/// with cost 0. A tile absent from the map is unreachable, off-limits (the
-/// base platform), or outside the box — callers must not try to tell those
-/// apart, since none of them is a tile a pursuer should step onto.
-pub(crate) fn pursuit_field(
+/// `radius`, routed around unwalkable terrain and around whatever else
+/// `step_allowed` refuses. `origin` itself is present with cost 0. A tile
+/// absent from the result is unreachable, refused, or outside the box —
+/// callers must not try to tell those apart, since none of them is a tile
+/// the walker should step onto.
+///
+/// The step rule is a parameter because the two callers genuinely disagree
+/// about one tile set: `pursuit_field` below refuses the base slab, and a
+/// hauling program has to cross it. A third caller widens this predicate
+/// rather than copying the walk.
+pub(crate) fn walk_field(
     map: &mut WorldMap,
     origin: (i32, i32),
     radius: i32,
+    step_allowed: impl Fn(&Tile) -> bool,
 ) -> HashMap<(i32, i32), u32> {
     // `WorldMap::tile` takes `&mut self` — it generates chunks lazily — so
     // the successor closure has to hold the map mutably. `dijkstra_all`
@@ -39,15 +46,9 @@ pub(crate) fn pursuit_field(
                 // lazily-generated, effectively infinite map would keep
                 // walking `WorldMap::tile` outward, generating chunks with
                 // nothing to stop it.
-                (nx - origin.0).abs() <= radius && (ny - origin.1).abs() <= radius && {
-                    let tile = map.tile(nx, ny);
-                    // The base slab stays the one safe ground, as
-                    // `maybe_ambush` and `stamp_platform` already
-                    // establish. A leash measured from the nest can't
-                    // guarantee this alone — a nest can stand within
-                    // leash range of the base.
-                    tile.walkable && tile.biome != Biome::Platform
-                }
+                (nx - origin.0).abs() <= radius
+                    && (ny - origin.1).abs() <= radius
+                    && step_allowed(&map.tile(nx, ny))
             })
             // Movement is Chebyshev: all eight directions, diagonals
             // included, cost the same single step.
@@ -63,10 +64,24 @@ pub(crate) fn pursuit_field(
     field
 }
 
+/// `walk_field` for a nest guardian: everything walkable except the base
+/// slab. The slab stays the one safe ground, as `maybe_ambush` and
+/// `stamp_platform` already establish, and a leash measured from the nest
+/// can't guarantee that alone — a nest can stand within leash range of the
+/// base.
+pub(crate) fn pursuit_field(
+    map: &mut WorldMap,
+    origin: (i32, i32),
+    radius: i32,
+) -> HashMap<(i32, i32), u32> {
+    walk_field(map, origin, radius, |tile| {
+        tile.walkable && tile.biome != Biome::Platform
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::world::Tile;
 
     fn floor() -> Tile {
         Tile {
@@ -80,6 +95,39 @@ mod tests {
             biome: Biome::DataVoid,
             walkable: false,
         }
+    }
+
+    fn platform() -> Tile {
+        Tile {
+            biome: Biome::Platform,
+            walkable: true,
+        }
+    }
+
+    /// The whole reason `walk_field` takes a step rule: two callers disagree
+    /// about the base slab, and only one of them may cross it.
+    #[test]
+    fn walk_field_crosses_a_platform_that_pursuit_field_refuses() {
+        let mut map = WorldMap::new(7);
+        for x in -2..=2 {
+            for y in -2..=2 {
+                map.set_override(x, y, floor());
+            }
+        }
+        map.set_override(1, 0, platform());
+
+        let pursued = pursuit_field(&mut map, (0, 0), 2);
+        assert!(
+            !pursued.contains_key(&(1, 0)),
+            "pursuit must still refuse the base slab"
+        );
+
+        let walked = walk_field(&mut map, (0, 0), 2, |t| t.walkable);
+        assert_eq!(
+            walked.get(&(1, 0)),
+            Some(&1),
+            "a hauler must be able to cross the base slab"
+        );
     }
 
     /// A greedy chase — always step to the neighbour that most reduces raw

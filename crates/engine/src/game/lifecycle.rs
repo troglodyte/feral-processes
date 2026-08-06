@@ -148,10 +148,15 @@ impl Game {
             // write `Task::progress` (for different targets, but bevy can
             // only see the conflict, not the disjointness), and an
             // arbitrary-but-fixed order is not the same as a stated one.
+            // `haul_step_system` joins the same chain for the same reason,
+            // one component along — it writes `Stock` too — and runs last
+            // because a load is taken off a machine the tick *after* that
+            // machine reports itself clogged.
             (
                 systems::task_progress_system,
                 systems::player_gather_system,
                 systems::assembler_system,
+                crate::game::hauling::haul_step_system,
             )
                 .chain(),
             difficulty::death_handling_system,
@@ -431,6 +436,11 @@ impl Game {
                 if c.wielded && wielded.is_none() {
                     wielded = Some(creature_id);
                 }
+                // Unlike a cronjob target, a load names no entity, so it
+                // needs none of the deferred `pending_cronjobs` treatment.
+                if let Some((item, qty)) = c.carrying.clone() {
+                    entity.insert(Carrying { item, qty });
+                }
                 if let Some(slot) = party_slot {
                     party_slots.push((slot, creature_id));
                 } else if let Some(cronjob) = c.cronjob {
@@ -605,8 +615,11 @@ impl Game {
             Option<&FusionCount>,
             Option<&Routines>,
             Option<&FieldBuff>,
-            Option<&NestGuardian>,
-            Option<&Pursuing>,
+            // Nested because bevy's query tuples top out at 15 elements and
+            // this one is full. Grouped by what they describe — where the
+            // creature belongs and what it is holding — rather than split
+            // wherever the count happened to run out.
+            (Option<&NestGuardian>, Option<&Pursuing>, Option<&Carrying>),
         )>();
         for (
             entity,
@@ -622,8 +635,7 @@ impl Game {
             fusions,
             routines,
             field_buff,
-            nest_guardian,
-            pursuing,
+            (nest_guardian, pursuing, carrying),
         ) in creature_query.iter(&self.world)
         {
             let potential = potential.copied().unwrap_or(Potential::NEUTRAL);
@@ -676,6 +688,7 @@ impl Game {
                 field_buffs: field_buff.map(|f| f.active.clone()).unwrap_or_default(),
                 nest_position,
                 pursuing: pursuing.is_some(),
+                carrying: carrying.map(|c| (c.item.clone(), c.qty)),
             });
         }
 

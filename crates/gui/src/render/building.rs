@@ -472,6 +472,7 @@ fn stall_line(s: &StructureReport) -> Option<&'static str> {
     match s.status? {
         MachineStatus::Starved => Some("starved — nothing is feeding it"),
         MachineStatus::Clogged => Some("clogged — collect from it with c"),
+        MachineStatus::Unstaffed => Some("no one at it — its program is away"),
         MachineStatus::Running | MachineStatus::Idle => None,
     }
 }

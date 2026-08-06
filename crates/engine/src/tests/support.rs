@@ -439,6 +439,21 @@ pub(super) fn work_node_parts() -> (Stock, MachineStatus) {
     (Stock::new(10_000), MachineStatus::default())
 }
 
+/// Stands `worker` on the tile east of `structure` — a post it can work
+/// from.
+///
+/// A posted program produces nothing until it is orthogonally adjacent to
+/// its machine (`task_progress_system`'s `Unstaffed` gate), and it gets
+/// there by walking, which takes ticks a fixture usually doesn't want to
+/// spend. Any test measuring what a cronjob *produces* rather than how a
+/// program gets to work should start it here.
+pub(super) fn park_at_post(game: &mut Game, worker: Entity, structure: Entity) {
+    let target = *game.world.get::<Position>(structure).unwrap();
+    let mut pos = game.world.get_mut::<Position>(worker).unwrap();
+    pos.x = target.x + 1;
+    pos.y = target.y;
+}
+
 /// How many of `item` are sitting in `structure`'s output buffer.
 pub(super) fn node_output(game: &Game, structure: Entity, item: &str) -> u32 {
     game.world

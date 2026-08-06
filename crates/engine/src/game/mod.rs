@@ -18,6 +18,7 @@ pub(crate) mod combat_status;
 pub(crate) mod combat_teardown;
 pub(crate) mod crafting;
 pub(crate) mod field;
+pub(crate) mod hauling;
 pub(crate) mod inspection;
 pub(crate) mod lifecycle;
 pub(crate) mod party;

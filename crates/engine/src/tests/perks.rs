@@ -508,6 +508,7 @@ fn keen_scavenger_reaches_the_roll_a_cronjob_worker_runs() {
     let node = deploy_upgradeable_node(&mut game);
     let worker = spawn_tamed(&mut game, 10, 3);
     game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
     buy_enough_keen_scavenger_to_cap_a_level_1_node(&mut game);
 
     for _ in 0..60 {

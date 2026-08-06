@@ -88,6 +88,22 @@ is skipped with a warning logged in-game rather than crashing startup.
     // output buffer without being a work node.
     capacity: 20,
 
+    // Optional; defaults to false. Marks this structure as a depot: somewhere
+    // a posted program may empty a clogged machine's buffer into. When a
+    // machine fills up, its own program takes five units out of it, walks to
+    // the nearest structure with this set that has room, drops them there,
+    // and walks back — so a base with a depot keeps producing while you are
+    // away instead of stopping at the first full buffer.
+    //
+    // A flag rather than "has an output buffer and runs no job", because
+    // every deployed structure has an output buffer — that rule would make a
+    // Home and a Data Cache depots too. A depot never enters the cronjob
+    // menu: it is delivered to, not worked.
+    //
+    // The `capacity` above is what makes one worth building; the shipped
+    // Depot holds 100, five machines' worth of full buffers.
+    stores: true,
+
     // Optional; can be left out entirely (defaults to no assembling). If
     // set, this structure automatically builds `item` — one unit every
     // `ticks_per_unit` ticks — out of ingredients it pulls from the output

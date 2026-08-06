@@ -21,6 +21,7 @@ mod combat_targeting;
 mod crafting;
 mod equipment;
 mod field;
+mod hauling;
 mod inspection;
 mod message_log;
 mod party;

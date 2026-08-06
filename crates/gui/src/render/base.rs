@@ -124,6 +124,15 @@ const RIM_LEVEL: f32 = 0.95;
 /// a substrate the world is printed on rather than as content.
 const GRID_LEVEL: f32 = 0.10;
 
+/// What an impassable biome's pattern drops to. Seen on screen, DataVoid and
+/// BlackIce at the full `PATTERN_LEVEL` dominated the pane — a wall of amber
+/// rings and red shards louder than the ground the player actually walks on,
+/// and louder than the entities standing on it. They are terrain the player
+/// can never interact with, so they belong in the background: the rim already
+/// says "you cannot cross here", and the pattern only has to say which of the
+/// two it is.
+const VOID_PATTERN_LEVEL: f32 = 0.30;
+
 /// How many tiles beyond the visible pane `draw_surface_map` fetches. One for
 /// the camera to slide in from, one so that tile has neighbours to compare
 /// biomes against. See the call site for why both are needed.
@@ -146,7 +155,14 @@ fn at_level(c: Color, level: f32) -> Color {
 /// ground the way a `_ => {}` arm would let it. This is the trap
 /// `render/stack.rs`'s `floor_mark` was fixed for, and it is the same trap.
 fn draw_biome(painter: &Painter, biome: Biome, r: Rect, tint: Color, world: (i32, i32)) {
-    let ink = at_level(tint, PATTERN_LEVEL);
+    let ink = at_level(
+        tint,
+        if biome.walkable() {
+            PATTERN_LEVEL
+        } else {
+            VOID_PATTERN_LEVEL
+        },
+    );
     let h = tile_hash(world);
     match biome {
         Biome::Mainframe => draw_traces(painter, r, ink, h),
@@ -154,7 +170,7 @@ fn draw_biome(painter: &Painter, biome: Biome, r: Rect, tint: Color, world: (i32
         Biome::NullSector => draw_broken_grid(painter, r, ink, h),
         Biome::StaticField => draw_speckle(painter, r, ink, h),
         Biome::Platform => draw_slab(painter, r, ink),
-        Biome::DataVoid => draw_depth(painter, r, tint),
+        Biome::DataVoid => draw_depth(painter, r, ink),
         Biome::BlackIce => draw_shards(painter, r, ink, h),
     }
 }
@@ -227,22 +243,13 @@ fn draw_slab(painter: &Painter, r: Rect, ink: Color) {
 /// reads as depth rather than as flat colour. No grid and no ink —
 /// everything else on the map is printed on a substrate, and the point of
 /// this one is that the substrate has ended.
-fn draw_depth(painter: &Painter, r: Rect, tint: Color) {
-    for step in 1..=3 {
-        let f = step as f32 / 4.0;
-        let i = r.w * 0.14 * step as f32;
-        painter.rect_lines(
-            r.x + i,
-            r.y + i,
-            r.w - 2.0 * i,
-            r.h - 2.0 * i,
-            1.0,
-            at_level(
-                tint,
-                GROUND_LEVEL + (PATTERN_LEVEL - GROUND_LEVEL) * (1.0 - f),
-            ),
-        );
-    }
+fn draw_depth(painter: &Painter, r: Rect, ink: Color) {
+    // One ring, not a nest of them. Three read as a target stamped on every
+    // tile, which made a lake of DataVoid look tiled rather than deep — the
+    // opposite of the point. A single inset ring gives the tile an inner
+    // shadow and lets the expanse stay an expanse.
+    let i = r.w * 0.22;
+    painter.rect_lines(r.x + i, r.y + i, r.w - 2.0 * i, r.h - 2.0 * i, 1.0, ink);
 }
 
 /// The four edges of one tile: a bright rim wherever the walkable world ends,
@@ -516,6 +523,15 @@ fn draw_surface_map(
             // same view it did before the camera existed.
             let px = (rx as f32 - RINGS as f32 - off_x) * tile_px;
             let py = (ry as f32 - RINGS as f32 - off_y) * tile_px;
+            // The fetched rings exist to be *read* — by the camera slide and
+            // by `draw_tile_edges` — not to be drawn. Nothing clips this pane,
+            // and the log panel below it is drawn at 0.95 alpha, so a row
+            // sitting past the bottom edge shows through it as a band of
+            // terrain behind the text. Culling here rather than shrinking the
+            // grid keeps every visible tile's neighbours in hand.
+            if px >= map_w || py >= map_h || px + tile_px <= 0.0 || py + tile_px <= 0.0 {
+                continue;
+            }
             let mut staffed = false;
             let mut machine_status = None;
             let mut linked_edges: &[(i32, i32)] = &[];

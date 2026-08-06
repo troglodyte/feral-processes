@@ -416,6 +416,55 @@ fn using_an_item_in_battle_spends_it_and_costs_the_round() {
     );
 }
 
+/// `T` in the item picker throws the highlighted row instead of falling
+/// through to the row shortcuts, and commits no `UseItem` for the slot.
+/// Named by nothing on screen — see `crates/engine/EASTER_EGGS.md`.
+#[test]
+fn shift_t_in_the_item_picker_throws_rather_than_picking_a_row() {
+    let mut app = battling_app();
+    let target = app.game.as_ref().unwrap().battle_usable_items()[0].clone();
+    let held = |app: &App| -> u32 {
+        app.game
+            .as_ref()
+            .unwrap()
+            .player_status()
+            .inventory
+            .iter()
+            .find(|(id, _)| *id == target)
+            .map(|(_, n)| *n)
+            .unwrap_or(0)
+    };
+    let before = held(&app);
+    let slot = app.game.as_ref().unwrap().battle_active_slot();
+    let round = app.game.as_ref().unwrap().battle_view().unwrap().round;
+
+    app.handle_key(GameKey::Char('u'));
+    assert_eq!(app.mode, Mode::BattleItem);
+    app.handle_key(GameKey::Char('T'));
+
+    assert_eq!(held(&app), before - 1, "the highlighted row was not thrown");
+    let game = app.game.as_ref().unwrap();
+    assert_eq!(
+        game.battle_active_slot(),
+        slot,
+        "throwing committed the slot's action"
+    );
+    assert_eq!(
+        game.battle_view().unwrap().round,
+        round,
+        "throwing resolved the round"
+    );
+    assert_eq!(
+        app.mode,
+        Mode::Battle,
+        "the picker should close back onto the roster, as Esc does"
+    );
+    assert!(
+        app.pending_battle_action.is_none(),
+        "a pending UseItem left dangling would strand the next picker"
+    );
+}
+
 /// A solo player is a one-slot party, so choosing an untargeted action
 /// completes the round immediately and drops straight back into planning.
 /// No narration page in between: the battle screen's log pane already

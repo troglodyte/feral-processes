@@ -351,6 +351,28 @@ impl App {
             return;
         };
         let items = game.battle_usable_items();
+
+        // Undocumented on purpose — see `crates/engine/EASTER_EGGS.md`.
+        // Ahead of `selected_index`, which is where an uppercase key has to
+        // go: that function rejects every non-lowercase char precisely so a
+        // screen action can own the uppercase space, however long the list
+        // grows. Sharing the letter with the roster's taunt is intended —
+        // the two handlers can never both fire, and one letter meaning "do
+        // the reckless thing" on both battle screens is easier to remember
+        // than two.
+        if key == GameKey::Char('T') {
+            let thrown = items.get(self.menu_selected.min(items.len().saturating_sub(1)));
+            let thrown = thrown.cloned();
+            self.pending_battle_action = None;
+            self.mode = Mode::Battle;
+            if let (Some(item), Some(game)) = (thrown, self.game.as_mut())
+                && let Err(reason) = game.throw_item(&item)
+            {
+                self.status_line = Some(reason);
+            }
+            return;
+        }
+
         let Some(idx) = self.selected_index(key, items.len()) else {
             return;
         };

@@ -317,6 +317,20 @@ pub const WIELDED_PROGRAM_STAT_DIVISOR: i32 = 10;
 /// so neither this nor the magnitudes it fires can move a curve.
 pub const WIELDED_ROUTINE_PROC_CHANCE: f64 = 0.25;
 
+/// Damage a consumable does when thrown at the wild group rather than used
+/// (`Game::throw_item`).
+///
+/// One point, and meant to stay a ruinous rate. The throw costs no round —
+/// it cannot, since an `ActionKind` would have to appear in
+/// `battle_action_options`, which both renderers build the prompt from —
+/// so this is free damage, and the only thing keeping it from being worth
+/// doing is how bad the exchange is. The consumables are finite and cost
+/// Credits; a point apiece is a joke, not a strategy.
+///
+/// Never lethal regardless of this number: `throw_item` clamps so the
+/// target keeps at least 1 HP. See its doc comment for why.
+pub const THROWN_ITEM_DAMAGE: i32 = 1;
+
 /// Chance that a *successful* jack-out still costs the player a parting
 /// counter-strike. Whether the escape happens at all is a separate roll —
 /// see `battle::jack_out_chance`.

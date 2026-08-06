@@ -255,7 +255,9 @@ impl Game {
                     .collect()
             };
             for w in workers {
-                self.world.entity_mut(w).remove::<Task>();
+                // See `remove_structure`: the load has to go with the task,
+                // and this is the second of the two destruction paths.
+                self.world.entity_mut(w).remove::<(Task, Carrying)>();
             }
             self.announce_lost_shelf(structure);
             self.world.despawn(structure);

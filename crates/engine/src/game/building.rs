@@ -316,7 +316,11 @@ impl Game {
                     .collect()
             };
             for worker in workers {
-                self.world.entity_mut(worker).remove::<Task>();
+                // `Carrying` goes with the `Task`: a worker whose machine is
+                // gone has nowhere to put its load down and would hold it for
+                // the rest of the run. `damage_structure` carries the same
+                // pair for the same reason.
+                self.world.entity_mut(worker).remove::<(Task, Carrying)>();
             }
             self.announce_lost_shelf(target);
             self.world.despawn(target);

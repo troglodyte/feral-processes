@@ -48,6 +48,13 @@ fn capacity_of(game: &Game, structure: Entity) -> u32 {
     game.world.get::<Stock>(structure).unwrap().capacity
 }
 
+/// Fills `structure`'s output to the brim, so the next completed cycle finds
+/// nowhere to put its payout.
+fn fill_to_capacity(game: &mut Game, structure: Entity, item: &str) {
+    let cap = capacity_of(game, structure);
+    fill_output(game, structure, item, cap);
+}
+
 /// Ticks until `done`, or `limit` ticks, whichever comes first. Every wait
 /// in this module is bounded — a loop that never ends reads as a hang rather
 /// than a failure.
@@ -301,4 +308,120 @@ fn with_no_depot_a_clogged_machine_just_stays_clogged() {
     );
     let now = *game.world.get::<Position>(worker).unwrap();
     assert_eq!((post.x, post.y), (now.x, now.y), "and nobody goes anywhere");
+}
+
+/// The depot fills up *while the worker is walking to it*, which is the only
+/// way to reach the return path: a depot with no room is not a destination in
+/// the first place, so filling it beforehand would just stop the errand
+/// starting.
+#[test]
+fn a_load_with_nowhere_to_land_goes_back_and_re_clogs_the_machine() {
+    let mut game = base(8);
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    let depot = deploy(&mut game, "depot", 4, 0);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+
+    let node_cap = capacity_of(&game, node);
+    fill_output(&mut game, node, ids::CORE_FRAGMENT, node_cap);
+
+    tick_until(&mut game, 200, |g| {
+        g.world.get::<Carrying>(worker).is_some()
+    });
+    assert!(game.world.get::<Carrying>(worker).is_some(), "precondition");
+
+    // Brim-full with something a Mining Node never makes, so the only reason
+    // the load cannot land is room.
+    fill_to_capacity(&mut game, depot, ids::POWER_CELL);
+
+    tick_until(&mut game, 300, |g| {
+        g.world.get::<Carrying>(worker).is_none()
+    });
+
+    assert!(
+        game.world.get::<Carrying>(worker).is_none(),
+        "the load must go back into the machine rather than ride forever"
+    );
+    assert_eq!(
+        node_output(&game, node, ids::CORE_FRAGMENT),
+        node_cap,
+        "the base stalls loudly instead of the goods vanishing"
+    );
+}
+
+#[test]
+fn demolishing_a_machine_takes_its_workers_load_with_it() {
+    let mut game = base(9);
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    deploy(&mut game, "depot", 6, 0);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+
+    tick_until(&mut game, 200, |g| {
+        g.world.get::<Carrying>(worker).is_some()
+    });
+    assert!(game.world.get::<Carrying>(worker).is_some(), "precondition");
+
+    game.remove_structure(node).unwrap();
+
+    assert!(game.world.get::<Task>(worker).is_none());
+    assert!(
+        game.world.get::<Carrying>(worker).is_none(),
+        "a worker whose task is gone must not keep a load with nowhere to put it"
+    );
+}
+
+#[test]
+fn a_sweep_that_destroys_a_machine_takes_its_workers_load_too() {
+    let mut game = base(14);
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    deploy(&mut game, "depot", 6, 0);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+
+    tick_until(&mut game, 200, |g| {
+        g.world.get::<Carrying>(worker).is_some()
+    });
+    assert!(game.world.get::<Carrying>(worker).is_some(), "precondition");
+
+    let hp = game.world.get::<Durability>(node).unwrap().hp;
+    game.damage_structure(node, hp, "Mining Node");
+
+    assert!(
+        game.world.get::<Carrying>(worker).is_none(),
+        "the raid path clears a load exactly as demolition does — two paths, \
+         one obligation"
+    );
+}
+
+#[test]
+fn a_depot_demolished_mid_walk_re_targets_the_next_one() {
+    let mut game = base(12);
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    let near = deploy(&mut game, "depot", 3, 0);
+    let far = deploy(&mut game, "depot", 6, 0);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+
+    tick_until(&mut game, 200, |g| {
+        g.world.get::<Carrying>(worker).is_some()
+    });
+    assert!(game.world.get::<Carrying>(worker).is_some(), "precondition");
+
+    game.remove_structure(near).unwrap();
+
+    tick_until(&mut game, 400, |g| {
+        node_output(g, far, ids::CORE_FRAGMENT) > 0
+    });
+    assert!(
+        node_output(&game, far, ids::CORE_FRAGMENT) > 0,
+        "a worker whose depot vanished mid-walk delivers to the next nearest"
+    );
 }

@@ -153,20 +153,35 @@ fn unstaffed_wins_over_running() {
 /// deployed in the *opposite* order to their positions. Deployed in position
 /// order this would pass on iteration order alone, which is the bug the
 /// distance sort and the tie-break exist to prevent.
+///
+/// End to end rather than against `nearest_depot` alone: the pure function
+/// takes a slice a caller already ordered, so testing it in isolation could
+/// not catch the system handing it an unordered one.
 #[test]
 fn a_worker_delivers_to_the_nearer_of_two_depots() {
     let mut game = base(4);
-    let far = deploy(&mut game, "depot", 6, 0);
-    let near = deploy(&mut game, "depot", 2, 0);
+    let node = deploy(&mut game, "mining_node", 0, 1);
+    let far = deploy(&mut game, "depot", 5, 1);
+    let near = deploy(&mut game, "depot", 2, 1);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
 
-    let depots = vec![
-        (far, *game.world.get::<Position>(far).unwrap()),
-        (near, *game.world.get::<Position>(near).unwrap()),
-    ];
-    let from = *game.world.get::<Position>(near).unwrap();
+    tick_until(&mut game, 300, |g| {
+        node_output(g, near, ids::CORE_FRAGMENT) > 0 || node_output(g, far, ids::CORE_FRAGMENT) > 0
+    });
 
-    let (chosen, _) = game::hauling::nearest_depot(&depots, from).unwrap();
-    assert_eq!(chosen, near);
+    assert_eq!(
+        node_output(&game, near, ids::CORE_FRAGMENT),
+        tuning::HAUL_CARRY_CAPACITY,
+        "the load belongs in the nearer depot"
+    );
+    assert_eq!(
+        node_output(&game, far, ids::CORE_FRAGMENT),
+        0,
+        "and nothing should have reached the far one"
+    );
 }
 
 #[test]

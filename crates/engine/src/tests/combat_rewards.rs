@@ -260,6 +260,33 @@ fn an_ordinary_kill_pays_no_portal_fragments() {
     );
 }
 
+/// The rule is universal, not an opening-zone gate: a run eight sectors
+/// deep still buys its next portal underground. Swept rather than asserted
+/// once because a zone-scaled payout is the obvious thing for a later
+/// retune to reach for, and reintroducing one on the *surface* branch would
+/// quietly restore the grind-to-breach route this change closed.
+#[test]
+fn no_zone_lets_a_surface_boss_pay_the_breaching_currency() {
+    let mut game = Game::new(58, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let boss = a_boss(&game);
+    let player = game.player_entity();
+
+    for zone in 1..=8 {
+        set_zone(&mut game, zone);
+        let wild = corpse_of(&mut game, &boss.id);
+        game.award_loot(wild);
+        assert_eq!(
+            game.world
+                .get::<Inventory>(player)
+                .unwrap()
+                .count(&ItemId::from(ids::PORTAL_FRAGMENT)),
+            0,
+            "a boss killed on the surface in zone {zone} paid the breaching currency — \
+             every zone is breached out of the Stack, not just the first"
+        );
+    }
+}
+
 #[test]
 fn a_boss_defeated_on_the_surface_pays_gear_from_its_zones_band() {
     let mut game = Game::new(55, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

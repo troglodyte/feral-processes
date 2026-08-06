@@ -9,7 +9,8 @@ means one thing above all: **a save-format bump**, where existing saves stop
 loading (see `save::SAVE_FORMAT_VERSION`). Every crate in the workspace
 shares one version, set in the root `Cargo.toml`.
 
-Dated entries below `0.2.0` predate versioning and are kept as written.
+Entries below `0.2.0` predate versioning and are kept as written, newest
+first, separated by a rule.
 
 ## Unreleased
 
@@ -2188,7 +2189,7 @@ templates are unaffected; they are field-named RON and keep parsing.
   (Field routines, added later, ignore `cooldown` entirely: a field-only
   ability never reaches the Special picker, so there's nothing to throttle.)
 
-## 0.2.0 — 2026-07-24
+## 0.2.0
 
 ### Breaking
 
@@ -2249,7 +2250,7 @@ templates are unaffected; they are field-named RON and keep parsing.
   as intermittently-failing tests, never as a wrong-looking game, but it
   made any seeded test unreliable.
 
-## 2026-07-24
+## Before versioning
 
 - **Your base travels between zones**: breaching used to despawn every
   structure you'd deployed, which made staying anywhere long enough to
@@ -2304,7 +2305,7 @@ templates are unaffected; they are field-named RON and keep parsing.
 - **Save format bumped to v9.** Saves written by earlier versions no longer
   load.
 
-## 2026-07-23
+---
 
 - **Home can no longer be raided**: raids used to pick from every deployed
   structure, Home included, so a bad roll could destroy the one structure
@@ -2362,7 +2363,7 @@ templates are unaffected; they are field-named RON and keep parsing.
   shares the level-12 cap. The backdated entries above cover the same
   ground from the release-notes side.
 
-## 2026-07-22
+---
 
 - **Items are now data-driven**: every item (Core Fragment, Power Cell, ICE
   Breaker, Overclock Core, Firewall Plating, Neural Amplifier, Portal
@@ -2389,7 +2390,7 @@ templates are unaffected; they are field-named RON and keep parsing.
   mechanic changed — the 11 shipped items behave exactly as before — see
   [Items](README.md#items).
 
-## 2026-07-21
+---
 
 - **A research tree now gates most of the base**: press `T` to spend
   **Research Data** on a tree of 12 nodes. Research Data comes from a new
@@ -2439,7 +2440,7 @@ templates are unaffected; they are field-named RON and keep parsing.
   guardian this way, and it won't queue a respawn for it; walk back and
   the usual kill/tame/respawn cycle rebuilds the nest as normal.
 
-## 2026-07-20
+---
 
 - **Recharger Node is now a permanent structure**: it no longer collapses
   after 20 ticks — like every other structure, it just needs to be built
@@ -2551,7 +2552,7 @@ templates are unaffected; they are field-named RON and keep parsing.
   alive retaliates each round, and defeating or taming the leader just
   brings the next one forward — see [The loop](README.md#the-loop).
 
-## 2026-07-19
+---
 
 - **Cronjob work now caps out at level 10**: a worker stops earning XP from
   structure work once it hits level 10 — resources keep coming, but further

@@ -239,3 +239,273 @@ fn fusing_away_the_wielded_program_ends_the_wield() {
         "the second destruction path is covered by the same omission"
     );
 }
+
+/// Installs exactly `ids` into `entity`'s routine slots, replacing whatever
+/// `install_innate_routines` put there — the proc rolls uniformly over the
+/// whole kit, so a test asserting *which* routine fired needs a kit of one.
+fn install_only(game: &mut Game, entity: Entity, ids: &[&str]) {
+    game.world
+        .entity_mut(entity)
+        .insert(Routines(ids.iter().map(|id| id.to_string()).collect()));
+}
+
+/// Resolves one round per `GameRng` seed until `found` reports a hit,
+/// rebuilding the world each time so the run is identical apart from the
+/// stream. Deterministic — the same seed always wins — and self-healing:
+/// pinning one magic seed instead would break silently the next time
+/// anything upstream of the proc changes how much `GameRng` it consumes.
+fn first_seed_where(
+    mut build: impl FnMut(u64) -> Game,
+    mut found: impl FnMut(&Game) -> bool,
+) -> Game {
+    for seed in 0..64u64 {
+        let mut game = build(seed);
+        player_attacks(&mut game);
+        if found(&game) {
+            return game;
+        }
+    }
+    panic!("no seed in 0..64 produced the outcome under test");
+}
+
+/// Every line the log currently holds, for tests reading a specific one out.
+fn log_text(game: &Game) -> Vec<String> {
+    game.world
+        .resource::<MessageLog>()
+        .lines
+        .iter()
+        .map(|e| e.text.clone())
+        .collect()
+}
+
+/// The damage figure out of the one line matching `needle`, or `None`.
+fn damage_in(game: &Game, needle: &str) -> Option<i32> {
+    log_text(game)
+        .iter()
+        .find(|l| l.contains(needle))
+        .and_then(|l| {
+            let rest = l.split(" for ").nth(1)?;
+            rest.split(' ').next()?.parse().ok()
+        })
+}
+
+#[test]
+fn no_wieldable_routine_is_field_only_or_decompile() {
+    let mut game = Game::new(9112, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let every: Vec<String> = game
+        .world
+        .resource::<AbilityDb>()
+        .all()
+        .map(|d| d.id.clone())
+        .collect();
+    let program = spawn_tamed(&mut game, 40, 20);
+    game.world
+        .entity_mut(program)
+        .insert(Routines(every.clone()));
+
+    let wieldable = game.wieldable_routines(program);
+
+    assert!(
+        !wieldable.is_empty(),
+        "the shipped set must leave something a weapon can fire"
+    );
+    for def in &wieldable {
+        assert!(
+            !def.effect.field_only(),
+            "{} is field-only and has no battle recipient",
+            def.id
+        );
+        assert!(
+            !matches!(def.effect, AbilityEffect::Decompile),
+            "{} would spend an ICE Breaker the player never authorised",
+            def.id
+        );
+    }
+    assert!(
+        wieldable.len() < every.len(),
+        "the shipped set contains at least one excluded routine, or this census proves nothing"
+    );
+}
+
+/// The wielded program, named so its proc line is unmistakable in a log
+/// that also carries the player's own strike and the enemy's reply.
+const BLADE: &str = "Blade";
+
+/// A player wielding a one-routine `BLADE` against a single wild program
+/// too tough to die to the strike, with `GameRng` reset to `rng_seed` so
+/// the proc roll is the only thing that varies between runs.
+fn armed_battle(seed: u32, rng_seed: u64, routine: &str, enemy_hp: i32) -> Game {
+    armed_battle_with_companions(seed, rng_seed, routine, enemy_hp, 0)
+}
+
+/// `armed_battle` with `companions` programs standing in the battle line
+/// beside the player — they must join before the fight starts, since
+/// `add_companion` refuses mid-battle.
+fn armed_battle_with_companions(
+    seed: u32,
+    rng_seed: u64,
+    routine: &str,
+    enemy_hp: i32,
+    companions: usize,
+) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let program = spawn_tamed(&mut game, 60, 90);
+    install_only(&mut game, program, &[routine]);
+    game.world
+        .entity_mut(program)
+        .insert(CustomName(BLADE.to_string()));
+    game.wield_program(program).unwrap();
+    for _ in 0..companions {
+        let companion = spawn_tamed(&mut game, 60, 20);
+        install_only(&mut game, companion, &[]);
+        game.add_companion(companion).unwrap();
+    }
+    let wild = spawn_wild_on_player_tile(&mut game);
+    {
+        let mut stats = game.world.get_mut::<Stats>(wild).unwrap();
+        stats.hp = enemy_hp;
+        stats.max_hp = enemy_hp.max(stats.max_hp);
+    }
+    insert_battle(&mut game, player, vec![wild]);
+    game.world
+        .insert_resource(GameRng(rand::SeedableRng::seed_from_u64(rng_seed)));
+    game
+}
+
+fn front_enemy(game: &Game) -> Entity {
+    game.world
+        .resource::<BattleState>()
+        .groups
+        .first()
+        .expect("the fight is still running")
+        .members[0]
+}
+
+#[test]
+fn a_proc_scales_off_the_wielded_programs_stats() {
+    // The program is deliberately stronger and higher-level than the player,
+    // so a proc scaled off the wrong actor lands on a visibly wrong number.
+    let game = first_seed_where(
+        |rng_seed| {
+            let mut game = armed_battle(9113, rng_seed, "kernel_panic", 9999);
+            let program = game.wielded_program().unwrap();
+            set_level(&mut game, program, 8);
+            game
+        },
+        |g| damage_in(g, "Blade hits").is_some(),
+    );
+
+    let program = game.wielded_program().unwrap();
+    let ability = ability(&game, "kernel_panic");
+    let AbilityEffect::Damage { power, .. } = ability.effect else {
+        panic!("kernel_panic is a Damage ability");
+    };
+    let expected = battle::compute_damage(
+        game.world.get::<Stats>(program).unwrap().atk,
+        game.world.get::<Stats>(front_enemy(&game)).unwrap().def,
+        abilities::scaled_hp_power(
+            power,
+            game.ability_user_level(program),
+            game.ability_affinity(program, &ability.effect),
+        ),
+    );
+
+    assert!(
+        game.world.get::<Experience>(program).unwrap().level
+            > game
+                .world
+                .get::<Experience>(game.player_entity())
+                .unwrap()
+                .level,
+        "the two levels have to differ or this asserts nothing"
+    );
+    assert_eq!(
+        damage_in(&game, "Blade hits"),
+        Some(expected),
+        "the proc's level, affinity and ATK all come off the program in your hand"
+    );
+}
+
+#[test]
+fn a_proc_lands_on_top_of_the_strike() {
+    let game = first_seed_where(
+        |rng_seed| armed_battle(9114, rng_seed, "kernel_panic", 9999),
+        |g| damage_in(g, "Blade hits").is_some(),
+    );
+
+    let strike = damage_in(&game, "data strike").expect("the player still strikes");
+    let proc = damage_in(&game, "Blade hits").unwrap();
+
+    assert_eq!(
+        9999 - game.world.get::<Stats>(front_enemy(&game)).unwrap().hp,
+        strike + proc,
+        "the routine lands on top of the attack, not instead of it"
+    );
+}
+
+#[test]
+fn no_proc_fires_when_the_strike_ended_the_battle() {
+    // One enemy on one HP: the strike always kills, so the fight is over
+    // before the proc could roll however the stream happens to fall.
+    for rng_seed in 0..64u64 {
+        let mut game = armed_battle(9115, rng_seed, "kernel_panic", 1);
+
+        player_attacks(&mut game);
+
+        assert!(
+            damage_in(&game, "Blade hits").is_none(),
+            "a routine must never resolve after the fight is already won (seed {rng_seed})"
+        );
+    }
+}
+
+#[test]
+fn a_companion_attack_never_procs() {
+    for rng_seed in 0..64u64 {
+        let mut game = armed_battle_with_companions(9116, rng_seed, "kernel_panic", 9999, 1);
+
+        player_attacks(&mut game);
+
+        assert!(
+            log_text(&game)
+                .iter()
+                .filter(|l| l.contains("Blade hits"))
+                .count()
+                <= 1,
+            "two attackers, at most one proc — only slot 0 carries the weapon (seed {rng_seed})"
+        );
+    }
+}
+
+#[test]
+fn nothing_procs_when_no_program_is_wielded() {
+    for rng_seed in 0..64u64 {
+        let mut game = Game::new(9117, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let wild = spawn_wild_on_player_tile(&mut game);
+        {
+            let mut stats = game.world.get_mut::<Stats>(wild).unwrap();
+            stats.hp = 9999;
+            stats.max_hp = 9999;
+        }
+        insert_battle(&mut game, player, vec![wild]);
+        game.world
+            .insert_resource(GameRng(rand::SeedableRng::seed_from_u64(rng_seed)));
+
+        player_attacks(&mut game);
+
+        // At most one, not exactly one: a wild move can stun the player out
+        // of its own turn. Two would be the strike plus a leaked proc.
+        assert!(
+            game.world
+                .resource::<MessageLog>()
+                .lines
+                .iter()
+                .filter(|e| e.kind == MessageKind::PartyDamage)
+                .count()
+                <= 1,
+            "an empty weapon hand adds nothing to the player's side of the round (seed {rng_seed})"
+        );
+    }
+}

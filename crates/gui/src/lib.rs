@@ -24,7 +24,7 @@ mod text;
 use bevy::ecs::system::SystemParam;
 use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
-use bevy::window::{MonitorSelection, WindowMode};
+use bevy::window::{PrimaryWindow, WindowMode};
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPreUpdateSet, EguiPrimaryContextPass};
 
 use feral_processes_app_core::{App, GameKey, Mode};
@@ -124,22 +124,13 @@ pub fn run(app: App) {
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "feral-processes".to_string(),
-                // Borderless rather than exclusive fullscreen: nothing here
-                // wants a mode switch, and every size on screen is either a
-                // fraction of the window or clamped, so the monitor's own
-                // resolution is as good a starting point as any literal.
-                // No windowed size is carried alongside it because there is
-                // no toggle back — a key for that is the point at which one
-                // becomes worth having.
-                //
-                // `Primary`, not `Current`, and not because we prefer that
-                // monitor: bevy_winit passes `None` for the current monitor
-                // on the *creation* path unconditionally, so `Current` warns
-                // on every launch and resolves to `None` anyway. Both land on
-                // winit's `Fullscreen::Borderless(None)`, documented as the
-                // current monitor, on any setup where `primary_monitor()` is
-                // itself `None` — Wayland among them.
-                mode: WindowMode::BorderlessFullscreen(MonitorSelection::Primary),
+                // Windowed and maximized rather than borderless fullscreen:
+                // the window keeps its decorations so it can be dragged and
+                // resized, and starts filling the screen anyway. Every size
+                // on screen is either a fraction of the window or clamped, so
+                // no resolution literal is needed and none is carried — the
+                // monitor decides the starting size via `maximize_window`.
+                mode: WindowMode::Windowed,
                 ..default()
             }),
             ..default()
@@ -155,7 +146,7 @@ pub fn run(app: App) {
             text_gate: TextGate::new(),
             last_mode,
         })
-        .add_systems(Startup, setup)
+        .add_systems(Startup, (setup, maximize_window))
         .add_systems(EguiPrimaryContextPass, frame);
     add_font_install(&mut bevy_app);
     bevy_app.run();
@@ -193,6 +184,17 @@ fn install_fonts_once(mut contexts: EguiContexts, mut installed: Local<bool>) {
         paint::install_fonts(ctx);
         *installed = true;
     }
+}
+
+/// Asks the OS to maximize the window on the first frame.
+///
+/// There is no `maximized` field on `Window` to set at creation — bevy_winit
+/// only applies a request queued through `set_maximized`, in `Last`. The
+/// winit window is created before the first `App::update`, so a `Startup`
+/// system is early enough for the request to be taken the same frame; a
+/// resolution literal here instead would be a guess at the monitor's size.
+fn maximize_window(mut window: Single<&mut Window, With<PrimaryWindow>>) {
+    window.set_maximized(true);
 }
 
 fn setup(mut commands: Commands, mut sources: ResMut<Assets<AudioSource>>) {

@@ -13,6 +13,26 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Changed: Research Data is banked, not carried
+
+Research Data is no longer something you pick up. A Research Node delivers
+it straight to you the moment a cycle completes, so there is no walking over
+to the node and no collect key; it has no inventory row; and no trader will
+touch it. The only place it appears is the research screen, which is the
+only place it does anything.
+
+It was already half-abstract — it never counted against your cargo — and the
+rest of it behaving like a crate of salvage was the part that never made
+sense. Two things that were true and are no longer: it had a 200 ceiling,
+which is gone entirely, and it could be sold for 1 Credit apiece, which made
+a Research Node a slow money printer.
+
+For mods, `bank_limit` on an item is replaced by `banked: true`. Everything
+above follows from that one flag, so a mod's own banked currency behaves the
+same way without asking for it — see `assets/items/README.md`. One gap worth
+knowing: an `assembles` machine producing a banked item still fills its own
+buffer and still has to be collected. Existing saves are unaffected.
+
 ### Changed: the staffed mark bobs
 
 The green square saying "a program is posted here" now lifts a few pixels

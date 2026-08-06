@@ -57,11 +57,15 @@ pub struct PlayerStatus {
     pub decompiler: i32,
     pub hunger: f32,
     pub fatigue: f32,
+    /// The player's cargo, and the one list every "what does the player
+    /// have" screen reads. Banked items (`ItemDef::banked`) are **not** in
+    /// it: a bank is not something carried and not something a trader
+    /// deals in, so it is neither an inventory row nor a sell row. Ask
+    /// `Game::banked` for one by name — the research screen does.
     pub inventory: Vec<(ItemId, u32)>,
     /// Units of ordinary cargo currently carried. The Buffer is unbounded, so
-    /// this is just how much is stored; it excludes banked currency (see
-    /// `ItemId::bank_limit`), so it will not match the sum of `inventory`
-    /// when Research Data is held.
+    /// this is just how much is stored. It matches the sum of `inventory`,
+    /// since both now exclude banked items.
     pub inventory_used: u32,
     /// How many tamed programs the player owns in total right now, and the
     /// cap on that total (see `Game::pet_count`/`Game::pet_capacity`) — party

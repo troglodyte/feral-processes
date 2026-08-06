@@ -277,6 +277,31 @@ impl Game {
             .is_some_and(|d| d.consume.is_some())
     }
 
+    /// Whether `id` is a pool rather than cargo — see `ItemDef::banked` and
+    /// `assets/items/README.md` for everything that follows from it.
+    pub fn is_banked(&self, id: &ItemId) -> bool {
+        self.world
+            .resource::<ItemDb>()
+            .get(id.as_str())
+            .is_some_and(|d| d.banked)
+    }
+
+    /// How much of a banked item the player holds. The counterpart to
+    /// `PlayerStatus::inventory` deliberately not listing it: hiding the row
+    /// everywhere would otherwise hide the number from the one screen that
+    /// needs it, so a caller that genuinely wants a bank asks for it by name.
+    ///
+    /// Answers for any item, banked or not, rather than refusing — the
+    /// distinction that matters to a caller is *which* item it is asking
+    /// about, and a `None` here would only push an `unwrap` into the
+    /// renderer.
+    pub fn banked(&self, item: &ItemId) -> u32 {
+        self.world
+            .get::<Inventory>(self.player_entity())
+            .map(|inv| inv.count(item))
+            .unwrap_or(0)
+    }
+
     pub fn currency(&self) -> ItemId {
         self.world
             .resource::<ItemDb>()

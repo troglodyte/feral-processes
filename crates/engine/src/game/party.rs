@@ -32,7 +32,20 @@ impl Game {
         // that component's order is persisted through `PlayerSave`, so
         // sorting it would rewrite save contents and overwrite pickup order
         // to change what is only ever a display concern.
-        let mut inventory = inv.items.clone();
+        //
+        // Banked items are filtered out here rather than at each screen,
+        // because this one list is what every consumer of "what does the
+        // player have" reads — the inventory screen, the base panel,
+        // `cost_display`'s have/need columns, and the trade screen's sell
+        // rows. A bank is not cargo and is not a good, so it belongs in
+        // none of them; the one screen that wants the number asks for it
+        // by name through `Game::banked`.
+        let mut inventory: Vec<(ItemId, u32)> = inv
+            .items
+            .iter()
+            .filter(|(item, _)| !db.get(item.as_str()).is_some_and(|d| d.banked))
+            .cloned()
+            .collect();
         inventory.sort_by_key(|(item, _)| self.category_sort_key(item));
         PlayerStatus {
             position: (pos.x, pos.y),

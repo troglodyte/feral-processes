@@ -501,3 +501,25 @@ fn esc_returns_from_the_swap_list_to_the_inventory() {
         "Esc should leave the highlight back on the slot it came from"
     );
 }
+
+/// Same rule on the screen that lists what the player is carrying. Three
+/// equipment slot rows come first, so row 3 is the first item — and it must
+/// be the salvage, not the bank.
+#[test]
+fn the_inventory_screen_lists_no_row_for_a_banked_item() {
+    let app = app_at_a_trading_post(925, &[(ids::RESEARCH_DATA, 40), (ids::CORE_FRAGMENT, 5)]);
+    let listed = app.game.as_ref().unwrap().player_status().inventory;
+
+    assert!(
+        !listed
+            .iter()
+            .any(|(item, _)| item.as_str() == ids::RESEARCH_DATA),
+        "a bank must not be an inventory row: {listed:?}"
+    );
+    assert!(
+        listed
+            .iter()
+            .any(|(item, _)| item.as_str() == ids::CORE_FRAGMENT),
+        "ordinary cargo is untouched: {listed:?}"
+    );
+}

@@ -430,3 +430,33 @@ fn capital_s_with_two_traders_in_range_asks_which_one() {
     );
     assert_eq!(held(&app, ids::CORE_FRAGMENT), 5, "nothing sold yet");
 }
+
+/// The sell list needs no filter of its own for this: it is built from
+/// `PlayerStatus::inventory`, which omits banked items, and that is the
+/// whole reason the filter lives in the engine rather than on each screen.
+/// Asserted through the row *indexing* rather than by inspecting the list,
+/// because a banked row that survived would not merely be visible — it
+/// would shift every row after it, selling the item below the one the
+/// player is looking at.
+#[test]
+fn the_sell_list_hides_a_banked_item() {
+    let mut app = app_at_a_trading_post(
+        924,
+        &[
+            (ids::CREDITS, 4),
+            (ids::RESEARCH_DATA, 40),
+            (ids::CORE_FRAGMENT, 5),
+        ],
+    );
+    open_the_trading_post(&mut app);
+
+    app.handle_key(GameKey::Char('1'));
+
+    assert_eq!(app.mode, Mode::TradeQuantity);
+    assert!(
+        matches!(&app.pending_trade_choice, Some(TradeChoice::Sell(item))
+            if item.as_str() == ids::CORE_FRAGMENT),
+        "the first sell row must be the salvage — Research Data is banked and \
+         Credits are the currency, so neither is a sell row"
+    );
+}

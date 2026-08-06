@@ -57,6 +57,15 @@ impl Game {
             let money = self.item_name(&currency);
             return Err(format!("{money} aren't worth trading for more {money}."));
         }
+        // A bank is not a good. No menu can currently reach this — the sell
+        // list is built from `PlayerStatus::inventory`, which omits banked
+        // items — but that filter is a *consequence* of this rule, not a
+        // substitute for it: `sell_item` is public API, and a caller naming
+        // an `ItemId` directly would otherwise turn a Research Node into a
+        // slow Credit press.
+        if self.is_banked(&item) {
+            return Err(format!("{} can't be traded.", self.item_name(&item)));
+        }
         let trade = self
             .trade_options(structure)
             .ok_or_else(|| "That structure doesn't trade.".to_string())?;

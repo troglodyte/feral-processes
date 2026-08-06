@@ -27,6 +27,43 @@ fn a_cronjob_worker_fills_the_unbounded_buffer_past_the_old_cap() {
     );
 }
 
+/// `PlayerStatus::inventory` is the one list every "what does the player
+/// have" screen reads — the inventory screen, the base panel, the
+/// have/need columns on the craft and build screens, and the trade
+/// screen's sell rows. Filtering here is what makes a bank invisible in
+/// all of them at once, so this asserts the filter *and* that it takes
+/// nothing else with it.
+#[test]
+fn a_banked_item_is_not_an_inventory_row() {
+    let mut game = Game::new(712, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    grant_research_data(&mut game, 40);
+
+    let listed = game.player_status().inventory;
+
+    assert!(
+        !listed
+            .iter()
+            .any(|(item, _)| *item == ItemId::from(ids::RESEARCH_DATA)),
+        "a bank is not cargo and must not be listed: {listed:?}"
+    );
+    assert!(
+        listed
+            .iter()
+            .any(|(item, _)| *item == ItemId::from(ids::CORE_FRAGMENT)),
+        "ordinary cargo must be untouched by that filter: {listed:?}"
+    );
+}
+
+/// Hiding the row everywhere would otherwise hide the number from the one
+/// screen that spends it, so the research screen asks for it by name.
+#[test]
+fn the_bank_is_still_readable_by_name() {
+    let mut game = Game::new(713, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    grant_research_data(&mut game, 40);
+
+    assert_eq!(game.banked(&ItemId::from(ids::RESEARCH_DATA)), 40);
+}
+
 /// Where a banked payout lands, and the whole of what `ItemDef::banked`
 /// buys. A unit that reached the node's buffer would be back on the collect
 /// key and inside a neighbouring machine's pull range.

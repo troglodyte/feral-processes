@@ -888,3 +888,31 @@ fn buy_item_fails_without_enough_credits_or_for_an_unlisted_item() {
         "an item not on the buy list shouldn't be purchasable"
     );
 }
+
+/// A bank is not a good. The sell menu can't reach this today — its rows
+/// come from `PlayerStatus::inventory`, which omits banked items — but that
+/// filter is a consequence of this rule rather than a substitute for it, and
+/// `sell_item` is public API. Ungated, a Research Node is a slow Credit
+/// press: it produces forever, on a timer, out of nothing.
+#[test]
+fn a_banked_item_cannot_be_sold() {
+    let mut game = Game::new(128, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market(&mut game);
+    grant_research_data(&mut game, 40);
+    let before = credits(&game);
+
+    let refusal = game
+        .sell_item(market, ItemId::from(ids::RESEARCH_DATA), 10)
+        .expect_err("a banked item must not be sellable");
+
+    assert!(
+        refusal.contains("can't be traded"),
+        "the refusal should say why: {refusal:?}"
+    );
+    assert_eq!(
+        research_data_held(&game),
+        40,
+        "a refused sale must leave the bank untouched"
+    );
+    assert_eq!(credits(&game), before, "and must pay nothing");
+}

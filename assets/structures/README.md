@@ -58,10 +58,12 @@ is skipped with a warning logged in-game rather than crashing startup.
     //
     // There are two exceptions, and they're independent of each other.
     //
-    // A `produces` item that declares a `bank_limit` (see
+    // A `produces` item that declares `banked` (see
     // `assets/items/README.md`) — Research Data, for instance — always pays
-    // exactly one unit per cycle, because its cap is what paces it and a
-    // scaling payout would just overflow it.
+    // exactly one unit per cycle. Nothing paces a bank, since it has no
+    // ceiling and never clogs, so what keeps a flat 1 honest is demand:
+    // the research tree is a fixed ladder, and a payout that doubled per
+    // zone would collapse it rather than accelerate it.
     //
     // `flat_payout` (optional, defaults to `false`) opts *this node* out of
     // the same curve, whatever it produces. Set it for a node whose output is

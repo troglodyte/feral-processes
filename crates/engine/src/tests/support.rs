@@ -393,13 +393,10 @@ pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
     }
 }
 
+/// Reads the bank directly rather than through `PlayerStatus::inventory`,
+/// which deliberately omits banked items — see `Game::banked`.
 pub(super) fn research_data_held(game: &Game) -> u32 {
-    game.player_status()
-        .inventory
-        .iter()
-        .find(|(item, _)| *item == ItemId::from(ids::RESEARCH_DATA))
-        .map(|(_, n)| *n)
-        .unwrap_or(0)
+    game.banked(&ItemId::from(ids::RESEARCH_DATA))
 }
 
 /// Tames a program and puts it to work on a node producing `resource`,

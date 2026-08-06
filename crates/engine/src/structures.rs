@@ -30,7 +30,7 @@ pub struct WorkDef {
     /// producing something consumed *one at a time* — a taming catalyst, a
     /// key — instead outruns its own sink within a zone or two.
     ///
-    /// Banked items (`ItemDef::bank_limit`) already bypass the curve for
+    /// Banked items (`ItemDef::banked`) already bypass the curve for
     /// their own reason, so the two conditions are ORed rather than merged:
     /// one is a property of the item, this is a property of how the node
     /// produces it. The same item mined by a bulk node still scales.

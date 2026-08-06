@@ -41,13 +41,7 @@ pub(super) fn draw_perks_menu(game: &mut Game, selected: usize, painter: &Painte
 
 pub(super) fn draw_research_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
     let research_currency = game.research_currency();
-    let held = game
-        .player_status()
-        .inventory
-        .iter()
-        .find(|(item, _)| *item == research_currency)
-        .map(|(_, n)| *n)
-        .unwrap_or(0);
+    let held = game.banked(&research_currency);
     let nodes = game.research_nodes();
     let mut rows = vec![
         Row::TextColored(format!("Research Data: {held}"), CYAN),

@@ -29,6 +29,8 @@ first, separated by a rule.
 
 ## Unreleased
 
+## 0.3.2
+
 ### Changed: the base floor is dark grey
 
 - `Biome::Platform`, the floor the player lays under a base, goes from deep

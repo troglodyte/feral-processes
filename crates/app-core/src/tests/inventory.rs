@@ -239,10 +239,10 @@ fn equip_preview_tag_keeps_showing_level_scaling_and_fusion_beside_the_slot() {
     let game = app.game.as_ref().expect("test_app builds a game");
 
     // Zone 2 doubles the base bonus (GEAR_LEVEL_GROWTH), and one fusion
-    // tier adds ITEM_FUSION_BONUS_PER_TIER on top: 4 -> 8 -> 9.
+    // tier adds ITEM_FUSION_BONUS_PER_TIER on top: 4 -> 8 -> 10.
     assert_eq!(
         equip_preview_tag(game, &ItemId::from(ids::MONOFILAMENT_WHIP), 2, 1),
-        " (WEP +9 ATK fusion T1/3)"
+        " (WEP +10 ATK fusion T1/3)"
     );
 }
 

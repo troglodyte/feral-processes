@@ -303,6 +303,13 @@ impl Game {
     /// three dialogs — each of which called a guard "on a cronjob", since the
     /// field they read was `Task.target` with the kind thrown away.
     pub fn program_activity(&self, creature: Entity) -> String {
+        // Ahead of the party check: the two are mutually exclusive today
+        // (`wield_program` stands a member down, `add_companion` disarms),
+        // but stating the order keeps them from both being reported if that
+        // ever stops holding.
+        if self.wielded_program() == Some(creature) {
+            return "equipped as weapon".to_string();
+        }
         if self.world.resource::<Party>().0.contains(&creature) {
             return "in party".to_string();
         }
@@ -323,6 +330,9 @@ impl Game {
     /// know what a `Task` kind means.
     pub(crate) fn sale_detachments(&self, creature: Entity) -> Vec<String> {
         let mut out = Vec::new();
+        if self.wielded_program() == Some(creature) {
+            out.push("stops being your weapon".to_string());
+        }
         if self.world.resource::<Party>().0.contains(&creature) {
             out.push("leaves your battle party".to_string());
         }

@@ -77,6 +77,11 @@ pub struct PlayerStatus {
     pub xp: u32,
     pub xp_to_next: u32,
     pub weapon: Option<EquippedItem>,
+    /// The tamed program equipped as the player's weapon, if any (see
+    /// `resources::WieldedProgram`). Always `None` when `weapon` is `Some`
+    /// and vice versa — the two are mutually exclusive, so the weapon line
+    /// renders one or the other and never both.
+    pub wielded: Option<WieldedView>,
     pub armor: Option<EquippedItem>,
     pub module: Option<EquippedItem>,
     /// The player's active battle party (see `resources::Party`), in
@@ -140,6 +145,15 @@ pub struct ProgramSaleOption {
     pub detaches: Vec<String>,
 }
 
+/// The program on the player's weapon line, for the equipped panel. The
+/// bonus is `Game::wielded_stat_bonus`'s live figure rather than anything
+/// stored, so the panel moves as the program levels or is fused.
+pub struct WieldedView {
+    pub name: String,
+    pub level: u32,
+    pub bonus: (i32, i32),
+}
+
 pub struct PetInfo {
     pub entity: Entity,
     /// The same glyph and colour this program is drawn with on the map, so a
@@ -174,6 +188,9 @@ pub struct PetInfo {
     /// — see `components::FusionCount`. At `MAX_FUSIONS` it can no longer
     /// be fused.
     pub fusions: u32,
+    /// Whether this is the program equipped as the player's weapon (see
+    /// `resources::WieldedProgram`). At most one row in a list carries it.
+    pub wielded: bool,
 }
 
 /// Snapshot of the player's active companion, shown in the status panel

@@ -65,6 +65,15 @@ impl Game {
             xp: exp.xp,
             xp_to_next: exp.xp_to_next,
             weapon: equipment.weapon,
+            wielded: self.wielded_program().map(|e| WieldedView {
+                name: self.creature_label(e),
+                level: self
+                    .world
+                    .get::<Experience>(e)
+                    .map(|x| x.level)
+                    .unwrap_or(1),
+                bonus: self.wielded_stat_bonus(),
+            }),
             armor: equipment.armor,
             module: equipment.module,
             companions: self.party_info(),
@@ -239,6 +248,7 @@ impl Game {
                     activity: self.program_activity(entity),
                     quality: self.potential_quality_label(entity),
                     fusions: self.fusion_count(entity),
+                    wielded: self.wielded_program() == Some(entity),
                 })
             })
             .collect()

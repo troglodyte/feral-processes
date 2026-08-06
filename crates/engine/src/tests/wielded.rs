@@ -509,3 +509,67 @@ fn nothing_procs_when_no_program_is_wielded() {
         );
     }
 }
+
+#[test]
+fn program_activity_names_the_wielded_program() {
+    let mut game = Game::new(9118, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 40, 20);
+    assert_eq!(game.program_activity(program), "idle");
+
+    game.wield_program(program).unwrap();
+
+    assert_eq!(game.program_activity(program), "equipped as weapon");
+}
+
+#[test]
+fn selling_your_weapon_warns_you_first() {
+    let mut game = Game::new(9119, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 40, 20);
+    game.wield_program(program).unwrap();
+
+    assert!(
+        game.sale_detachments(program)
+            .iter()
+            .any(|d| d.contains("weapon")),
+        "selling the thing in your hand warns you the way selling a member does"
+    );
+}
+
+#[test]
+fn pet_info_flags_the_wielded_program() {
+    let mut game = Game::new(9120, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 40, 20);
+    let _other = spawn_tamed(&mut game, 30, 10);
+    game.wield_program(program).unwrap();
+
+    let rows = game.owned_pets();
+
+    assert_eq!(
+        rows.iter().filter(|p| p.wielded).count(),
+        1,
+        "exactly one row carries the tag"
+    );
+    assert!(rows.iter().find(|p| p.entity == program).unwrap().wielded);
+}
+
+#[test]
+fn player_status_shows_the_wielded_program_in_place_of_a_weapon() {
+    let mut game = Game::new(9121, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
+    game.equip(&ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
+    let program = spawn_tamed(&mut game, 40, 60);
+    set_level(&mut game, program, 4);
+    game.wield_program(program).unwrap();
+
+    let status = game.player_status();
+
+    assert_eq!(status.weapon, None, "the two are mutually exclusive");
+    let wielded = status.wielded.expect("the weapon line names the program");
+    assert_eq!(wielded.name, game.creature_label(program));
+    assert_eq!(wielded.level, 4);
+    assert_eq!(wielded.bonus, game.wielded_stat_bonus());
+}

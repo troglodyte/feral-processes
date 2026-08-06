@@ -97,10 +97,22 @@ a reload is a flaky test waiting to happen.
 The only stored state. Present on a worker exactly while it holds a load.
 Everything else is derived:
 
-- destination = nearest depot if `Carrying` is present, else `Task.target`'s
-  tile
-- "at post" = standing on the destination
-- "in transit" = not standing on it
+- destination = nearest depot if `Carrying` is present, else `Task.target`
+- "at post" = orthogonally adjacent to the destination structure
+- "in transit" = not adjacent to it
+
+Adjacency rather than co-location because a structure's tile is unwalkable —
+the player already always collects from *beside* a machine rather than on it.
+The predicate is `collect::ORTHOGONAL`, the constant already named once as
+the game's one reach rule, so a worker's arrival and a player's collect ask
+the same question. Movement itself stays 8-directional; only arrival is
+orthogonal.
+
+The pathing destination is therefore a specific *tile* — the walkable
+orthogonal neighbour nearest the worker, ties by `(x, y)` — not "get within
+one". "Descend the field until cost ≤ 1" would let a worker park on a
+diagonal at cost 1, never satisfy the orthogonal predicate, and spin there
+forever.
 
 A `HaulState` enum with `ToPost`/`AtPost`/`ToDepot`/`Returning` was
 considered and rejected: three of its four variants must be hand-synced with
@@ -179,7 +191,9 @@ One `.ron` in `assets/structures/`. No Rust content, per the moddability
 rule.
 
 - `work: None`, `assembles: None`, `pet_slot_bonus: 0`
-- `output_capacity: 100` — five machines' worth of full buffers
+- `capacity: 100` — five machines' worth of full buffers. (The `.ron` field
+  is `capacity`; `output_capacity` is only the name of the serde default
+  function behind it.)
 - `build_cost: [("core_fragment", 12)]`, just above the Data Cache's 10, so
   it is an early build but not the first one
 

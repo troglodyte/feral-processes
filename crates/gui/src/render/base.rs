@@ -97,12 +97,17 @@ fn biome_tint(biome: Biome) -> Color {
         // brightness rather than hue, since hue is already spoken for by the
         // rule above.
         //
-        // Platform is the exception, held apart by hue and by being much the
-        // darkest of the five. It is the only biome the player lays, so it
-        // covers whole screens wherever a base stands — and at a bright cyan
-        // it drowned the base it exists to be a backdrop for. Deep navy is
-        // still unmistakably cool, so the passability rule is untouched.
-        Biome::Platform => Color::new(0.10, 0.18, 0.50, 1.0),
+        // Platform is the exception, and the only achromatic tint in the set.
+        // It is the only biome the player lays, so it covers whole screens
+        // wherever a base stands — first at a bright cyan and then at a deep
+        // navy, both of which put a colour behind the one screen where a
+        // dozen glyphs and machine-status outlines have to read at once. Dark
+        // grey has no hue to compete with them at all. That is safe for the
+        // passability rule because the rule is red-dominance, not blueness:
+        // neutral grey is not red-dominant, so it still reads as ground —
+        // which is what `every_biomes_tint_says_whether_it_can_be_walked_on`
+        // pins down.
+        Biome::Platform => Color::new(0.32, 0.32, 0.32, 1.0),
         Biome::Mainframe => Color::new(0.25, 0.85, 0.85, 1.0),
         Biome::StaticField => Color::new(0.70, 0.92, 0.95, 1.0),
         Biome::OpenGrid => Color::new(0.35, 0.85, 0.60, 1.0),

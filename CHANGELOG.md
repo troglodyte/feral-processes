@@ -29,6 +29,18 @@ first, separated by a rule.
 
 ## Unreleased
 
+### Changed: the base floor is dark grey
+
+- `Biome::Platform`, the floor the player lays under a base, goes from deep
+  navy to a neutral dark grey — the only achromatic terrain tint in the game.
+  It is the only biome that covers whole screens, and the base is the one place
+  a dozen glyphs and machine-status outlines have to read at once, so the floor
+  now carries no hue to compete with them. The map's passability rule is
+  unaffected: it turns on red-dominance, and grey is not red-dominant.
+- The intermediate step is unrecorded above: this floor was bright cyan through
+  `0.3.0` and was darkened to deep navy during `0.3.1` without a changelog
+  entry. Noted here so the trail from cyan to grey is not missing a link.
+
 ## 0.3.1
 
 ### Added: two content surfaces for mods

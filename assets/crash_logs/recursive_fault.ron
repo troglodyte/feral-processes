@@ -1,0 +1,7 @@
+(
+    id: "recursive_fault",
+    lines: [
+        "The same fault logged all the way down, each line a little more corrupt than the last.",
+        "A routine that called itself until there was no floor left underneath it.",
+    ],
+)

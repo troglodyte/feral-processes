@@ -246,6 +246,7 @@ pub(super) fn copy_shipped_assets(dir: &std::path::Path, omit_items: &[&str]) {
         "abilities",
         "perks",
         "achievements",
+        "crash_logs",
     ] {
         let dst = dir.join(sub);
         std::fs::create_dir_all(&dst).unwrap();

@@ -10,6 +10,7 @@
 //! first-person sense returns, and turning in place moves the answer.
 
 use super::stack::StackPos;
+use crate::crash_logs::CrashLogDb;
 use crate::resources::CurrentStack;
 use crate::stack::CellKind;
 use crate::tuning::TRACE_PER_LISTEN;
@@ -49,7 +50,16 @@ impl Game {
     }
 
     /// What listening from `pos` says.
+    ///
+    /// Rotten ground gets the first word. Standing on a fault or on
+    /// corruption reads *that place's* crash log rather than pointing at
+    /// anything, which is why neither cell appears in `nearest_unspent`:
+    /// they are not features to be spent, they are the ones with something
+    /// to say.
     fn reading(&self, pos: StackPos) -> String {
+        if let Some(line) = self.crash_log(pos) {
+            return line;
+        }
         let Some(target) = self.nearest_unspent(pos) else {
             return "You go still and listen. Nothing left in this frame but the hum.".into();
         };
@@ -60,6 +70,24 @@ impl Game {
         let bearing = relative_bearing(pos, target);
         let plural = if steps == 1 { "" } else { "s" };
         format!("You go still and listen. Something unspent {bearing}, {steps} step{plural} off.")
+    }
+
+    /// The crash log of the cell the party is standing on, or `None` if it
+    /// is not rotten — or if no crash logs are loaded at all, which is a
+    /// mod's prerogative and falls back to the bearing rather than to
+    /// nothing.
+    fn crash_log(&self, pos: StackPos) -> Option<String> {
+        if !matches!(
+            self.cell_underfoot(),
+            Some(CellKind::Fault | CellKind::Corruption)
+        ) {
+            return None;
+        }
+        let zone = self.world.resource::<ZoneLevel>().0;
+        self.world
+            .resource::<CrashLogDb>()
+            .line_for(zone, pos.depth, (pos.x, pos.y))
+            .map(str::to_string)
     }
 
     /// The nearest cell of the frame holding something the party has not

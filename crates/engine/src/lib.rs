@@ -3,6 +3,7 @@ pub mod achievements;
 pub mod balance_sim;
 pub mod battle;
 pub mod components;
+pub mod crash_logs;
 pub mod difficulty;
 mod game;
 pub mod items;

@@ -573,3 +573,42 @@ fn player_status_shows_the_wielded_program_in_place_of_a_weapon() {
     assert_eq!(wielded.level, 4);
     assert_eq!(wielded.bonus, game.wielded_stat_bonus());
 }
+
+#[test]
+fn a_wielded_program_survives_a_save_and_load() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(9122, DifficultyMode::Forgiving, &assets).unwrap();
+    let player = game.player_entity();
+    let program = spawn_tamed(&mut game, 40, 60);
+    game.world
+        .entity_mut(program)
+        .insert(CustomName(BLADE.to_string()));
+    let _decoy = spawn_tamed(&mut game, 30, 10);
+    game.wield_program(program).unwrap();
+    let armed_atk = game.effective_atk(player);
+    let bonus = game.wielded_stat_bonus();
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_wielded_test_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    // Entity ids are not stable across the round trip, so the program is
+    // identified by the name it was given.
+    let restored = loaded
+        .wielded_program()
+        .expect("the weapon comes back in hand");
+    // `contains` rather than equality: a restored creature carries a
+    // `ZonePortal`, so its label picks up the zone tag the hand-spawned
+    // fixture never had.
+    assert!(loaded.creature_label(restored).contains(BLADE));
+    assert_eq!(loaded.wielded_stat_bonus(), bonus);
+    assert_eq!(
+        loaded.effective_atk(loaded.player_entity()),
+        armed_atk,
+        "and the bonus is back in the player's attack"
+    );
+}

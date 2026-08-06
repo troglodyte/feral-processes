@@ -19,6 +19,7 @@ mod combat_specials;
 mod combat_status;
 mod combat_targeting;
 mod crafting;
+mod easter_eggs;
 mod equipment;
 mod field;
 mod hauling;

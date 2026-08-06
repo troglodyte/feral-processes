@@ -184,46 +184,86 @@ pub(super) fn draw_quit_app_confirm(selected: usize, painter: &Painter, m: &Metr
     draw_popup("Quit", PopupSize::Large, &rows, painter, m);
 }
 
+/// Every row of the help screen, in order.
+///
+/// Split out from `draw_help` so the easter-egg census below can read what
+/// this screen actually says. `draw_help` is the *only* screen in the game
+/// that lists key bindings — everything else a player reads about battle
+/// keys comes from `Game::battle_action_options` and
+/// `Game::battle_party_commands`, which are engine data with their own
+/// guard.
+pub(super) const HELP_ROWS: &[&str] = &[
+    "hjkl/arrows move   . wait   e drain   r recharge",
+    "",
+    "b base menu       deploy, compile, cronjobs, work it yourself,",
+    "                  guard, upgrade, demolish, roster, research",
+    "p party menu      companions, manifests, fuse, install and",
+    "                  extract routines, perks",
+    "i pack            your inventory",
+    "",
+    "A menu lists only what you can actually do from where you",
+    "stand — a row you can't see leads to an empty screen.",
+    "Esc backs out one level; finishing a job returns to the map.",
+    "",
+    "c collect from adjacent structures   t trade   a routine",
+    "u symlink   x examine a direction",
+    "L history   f filter the log (all/field/base)",
+    "s save   q main menu (confirms first)",
+    "+/- zoom   [/] volume   \\ visual effects",
+    "",
+    "Every numbered menu also takes Up/Down + Enter, on top of",
+    "typing a row's own number/letter directly.",
+    "",
+    "On the companions screen, < and > move the highlighted member",
+    "along the battle line — the front slot draws the most fire.",
+    "",
+    "Trading:          S sell one, B buy one from the highlighted row",
+    "                  (no quantity page). S works in your pack too.",
+    "",
+    "In the Stack:     hjkl/arrows  forward, back, turn left, turn right",
+    "                  > descend   < climb / leave the link",
+    "                  o adopt an orphaned process (costs a catalyst)",
+    "                  g map — only what you have seen",
+    "                  +/- zoom the corner map, whole frame to close in",
+    "",
+    "In an intrusion:  a attack   d defend   s special",
+    "                  u use item   j jack out",
+    "                  A all attack   D all defend (shift = the whole party)",
+    "",
+    "Press any key to close",
+];
+
 pub(super) fn draw_help(painter: &Painter, m: &Metrics) {
-    let rows = vec![
-        text_row("hjkl/arrows move   . wait   e drain   r recharge"),
-        text_row(""),
-        text_row("b base menu       deploy, compile, cronjobs, work it yourself,"),
-        text_row("                  guard, upgrade, demolish, roster, research"),
-        text_row("p party menu      companions, manifests, fuse, install and"),
-        text_row("                  extract routines, perks"),
-        text_row("i pack            your inventory"),
-        text_row(""),
-        text_row("A menu lists only what you can actually do from where you"),
-        text_row("stand — a row you can't see leads to an empty screen."),
-        text_row("Esc backs out one level; finishing a job returns to the map."),
-        text_row(""),
-        text_row("c collect from adjacent structures   t trade   a routine"),
-        text_row("u symlink   x examine a direction"),
-        text_row("L history   f filter the log (all/field/base)"),
-        text_row("s save   q main menu (confirms first)"),
-        text_row("+/- zoom   [/] volume   \\ visual effects"),
-        text_row(""),
-        text_row("Every numbered menu also takes Up/Down + Enter, on top of"),
-        text_row("typing a row's own number/letter directly."),
-        text_row(""),
-        text_row("On the companions screen, < and > move the highlighted member"),
-        text_row("along the battle line — the front slot draws the most fire."),
-        text_row(""),
-        text_row("Trading:          S sell one, B buy one from the highlighted row"),
-        text_row("                  (no quantity page). S works in your pack too."),
-        text_row(""),
-        text_row("In the Stack:     hjkl/arrows  forward, back, turn left, turn right"),
-        text_row("                  > descend   < climb / leave the link"),
-        text_row("                  o adopt an orphaned process (costs a catalyst)"),
-        text_row("                  g map — only what you have seen"),
-        text_row("                  +/- zoom the corner map, whole frame to close in"),
-        text_row(""),
-        text_row("In an intrusion:  a attack   d defend   s special"),
-        text_row("                  u use item   j jack out"),
-        text_row("                  A all attack   D all defend (shift = the whole party)"),
-        text_row(""),
-        text_row("Press any key to close"),
-    ];
+    let rows: Vec<Row> = HELP_ROWS.iter().map(|line| text_row(*line)).collect();
     draw_popup("Help", PopupSize::Large, &rows, painter, m);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The easter-egg census, gui half. `draw_help` is the one screen in
+    /// the game that lists key bindings, so it is the one place a
+    /// well-meaning edit would give the hidden keys away — and the person
+    /// making that edit has no way to know they are breaking a feature.
+    /// `crates/engine/EASTER_EGGS.md` is the note that tells them; this is
+    /// what catches them if they never read it.
+    ///
+    /// Asserted on whitespace-delimited **tokens**, never on substrings.
+    /// `key name` is the binding idiom this screen uses (`s save`,
+    /// `L history`, `A all attack`), so a token match catches a real
+    /// documentation of a key while staying satisfiable: the rows are full
+    /// of these letters inside ordinary words, and of the lowercase `t`
+    /// that legitimately binds trade.
+    #[test]
+    fn the_help_screen_never_names_a_hidden_key() {
+        for row in HELP_ROWS {
+            for token in row.split_whitespace() {
+                assert!(
+                    !matches!(token, "W" | "T" | "Z"),
+                    "the help screen names a hidden key: {row:?}"
+                );
+            }
+        }
+    }
 }

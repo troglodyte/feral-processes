@@ -363,6 +363,25 @@ impl Stock {
     }
 }
 
+/// A load a posted program is physically carrying to a depot.
+///
+/// The *only* stored hauling state, and deliberately so. Where the worker is
+/// headed (the nearest depot while carrying, its own machine otherwise) and
+/// whether it has arrived (`game::hauling::at_station`) are both derived
+/// from `Position`, so there is one source of truth and no state field that
+/// can desync into a worker standing at its machine insisting it is still
+/// walking.
+///
+/// One `(item, qty)` pair rather than a map because
+/// `tuning::HAUL_CARRY_CAPACITY` bounds a trip: `Stock::output` is a
+/// `BTreeMap` and may hold several item ids, so an uncapped drain would have
+/// had to carry all of them, and the save with it.
+#[derive(Component, Clone, Debug)]
+pub struct Carrying {
+    pub item: ItemId,
+    pub qty: u32,
+}
+
 /// Why a machine is or isn't producing. Present only on structures that
 /// actually run a job (`StructureDef::work` or `::assembles`) — absence
 /// means "not a machine", which is why a Home never reports a status it

@@ -974,6 +974,23 @@ pub const FUSION_LESSER_STAT_DIVISOR: i32 = 2;
 /// how long a base runs unattended.
 pub const DEFAULT_OUTPUT_CAPACITY: u32 = 20;
 
+/// How many units a posted program carries to a depot in one trip.
+///
+/// The cap is what makes `components::Carrying` a single `(item, qty)` pair
+/// rather than a map — an uncapped drain of a `BTreeMap` output would have to
+/// carry every id in it. It is also what leaves a buffer behind for a
+/// downstream neighbour to keep pulling from across the round trip: at 5
+/// against a default buffer of 20, a clog sheds a quarter and leaves the rest.
+pub const HAUL_CARRY_CAPACITY: u32 = 5;
+
+/// How far a hauling program's cost field reaches, centred on the tile it is
+/// walking to. Twice `MAX_BUILD_DISTANCE_FROM_HOME`, because two structures
+/// in one base can sit at opposite corners of that box and a worker may be
+/// standing just outside it. Bounding the search is what stops a walk toward
+/// something unreachable generating chunks forever on a lazily-generated
+/// infinite map — the same reason `pursuit_field` bounds its successors.
+pub const HAUL_WALK_RADIUS: i32 = MAX_BUILD_DISTANCE_FROM_HOME * 2;
+
 /// How many full batches of each ingredient a machine will pull into its
 /// input before refusing more. Two, so a machine always has the next batch
 /// staged while working the current one, but a greedy machine still cannot

@@ -3,10 +3,12 @@ use bevy_ecs::system::SystemParam;
 use rand::RngExt;
 
 use crate::components::{
-    Creature, Experience, FieldBuff, FieldBuffKind, Inventory, MachineStatus, NEED_MAX, NEED_MIN,
-    Needs, Nest, NestGuardian, Perks, Player, Position, Potential, Pursuing, ResourceNode, Stats,
-    Stock, Structure, StructureTier, Tamed, Task, TaskKind, WanderAi, field_buff_power_of,
+    Carrying, Creature, Experience, FieldBuff, FieldBuffKind, Inventory, MachineStatus, NEED_MAX,
+    NEED_MIN, Needs, Nest, NestGuardian, Perks, Player, Position, Potential, Pursuing,
+    ResourceNode, Stats, Stock, Structure, StructureTier, Tamed, Task, TaskKind, WanderAi,
+    field_buff_power_of,
 };
+use crate::game::hauling::take_haul_load;
 use crate::items::ItemId;
 use crate::items_db::ItemDb;
 use crate::perks::Perk;
@@ -317,11 +319,13 @@ type WorkedNode = (
 /// `Tamed::owner` — it is a restriction on *which* workers run cronjobs, not
 /// data the loop reads.
 type CronjobWorker = (
+    Entity,
     &'static mut Task,
     &'static Creature,
     Option<&'static Potential>,
     &'static mut Experience,
     &'static mut Stats,
+    Option<&'static Carrying>,
 );
 
 /// The read-only lookups `task_progress_system` needs, bundled so bevy's
@@ -369,6 +373,7 @@ pub fn task_progress_system(
     db: CronjobLookups,
     mut log: ResMut<MessageLog>,
     mut rng: ResMut<GameRng>,
+    mut commands: Commands,
 ) {
     let CronjobLookups {
         species: species_db,
@@ -393,7 +398,7 @@ pub fn task_progress_system(
         ),
         None => (0, 0, None),
     };
-    for (mut task, creature, potential, mut exp, mut stats) in &mut tasks {
+    for (worker, mut task, creature, potential, mut exp, mut stats, carrying) in &mut tasks {
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
         }
@@ -414,6 +419,15 @@ pub fn task_progress_system(
         if stock.output_room() == 0 {
             task.progress = task.required;
             set_machine_status(&mut status, MachineStatus::Clogged, machine_name, &mut log);
+            // A clog is where hauling starts: the cycle is already lost, so
+            // the walk costs nothing that wasn't lost anyway. A worker
+            // already holding a load is on its way somewhere and must not
+            // pick up a second.
+            if carrying.is_none()
+                && let Some(load) = take_haul_load(&mut stock)
+            {
+                commands.entity(worker).insert(load);
+            }
             continue;
         }
         task.progress = 0;

@@ -36,8 +36,8 @@ positionally, so this order is load-bearing: append, never reorder.
 | `LowPowerMode` | Low Power Mode | 2 | -1pp Power drain, floor 0 | the hunger-decay multiplier |
 | `ExploitFocus` | Exploit Focus | 3 | -3pp of the target's HP penalty | taming::capture_chance |
 | `LeanCompiler` | Lean Compiler | 3 | -1 of each ingredient, floor 1 | Game::craft_recipes' costs |
-| `Attacker` | Attacker | 2 | +1 ATK, permanent | a direct Stats write at purchase |
-| `Defender` | Defender | 2 | +1 DEF, permanent | a direct Stats write at purchase |
+| `Attacker` | Attacker | 2 | +3 ATK, permanent | a direct Stats write at purchase |
+| `Defender` | Defender | 2 | +3 DEF, permanent | a direct Stats write at purchase |
 | `Buffer` | Buffer | 3 | +1% max Integrity, at least +10 | a direct Stats write, plus a full heal |
 | `DamageAffinity` | Payload Tuning | 2 | +15% Damage magnitude | the player's own casts only |
 | `HealAffinity` | Field Medic | 2 | +5% Heal magnitude | the player's own casts only |
@@ -76,8 +76,8 @@ commit to.
 | Low Power Mode | `LOW_POWER_MODE_REDUCTION_PER_LEVEL = 0.01` |
 | Exploit Focus | `EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL = 0.03` |
 | Lean Compiler | `LEAN_COMPILER_DISCOUNT_PER_LEVEL = 1` |
-| Attacker | `ATTACKER_BONUS_PER_LEVEL = 1` |
-| Defender | `DEFENDER_BONUS_PER_LEVEL = 1` |
+| Attacker | `ATTACKER_BONUS_PER_LEVEL = 3` |
+| Defender | `DEFENDER_BONUS_PER_LEVEL = 3` |
 | Buffer | `BUFFER_BONUS_PERCENT_PER_LEVEL = 0.01` |
 | Payload Tuning | `AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED` |
 | Field Medic | `AFFINITY_PERK_BONUS_PER_LEVEL` |
@@ -111,11 +111,18 @@ Corruption Vector  +5%/lvl   ########################################  20 lvl / 
 ```
 
 Payload Tuning and Siphon Protocol run at three times the rate of the other
-three, which looks like a mistake and is not. Damage and Drain skip the
-level-scaling every other category gets from `abilities::ability_power_scale`,
-so at the shared rate they would be a strictly worse purchase than plain
-`Attacker` — the higher rate is what buys them back to parity, and the cost of
-reaching the clamp sooner.
+three, which looks like a mistake and is not. At the shared rate, 0.05 of an
+authored `power` 10 is +0.5 damage per perk level, against the flat +3 that
+`Attacker` buys for the same two points on *every* attack — strictly worse,
+and only on one category. The higher rate is what makes them worth buying, and
+the cost is reaching the clamp sooner.
+
+That comparison is not fixed, either, which is the other half of why the rates
+differ. An affinity multiplies a magnitude that already grows with player
+level, so 0.15 starts behind `Attacker`'s flat +3, passes it around player
+level 3 and keeps widening; +3 is +3 for the rest of the run. A flat perk that
+never stops paying a little, against a scaling one that pays little at first
+and then hits a ceiling.
 
 The clamp is `AFFINITY_MAX`, the same ceiling a species file is held to at
 load. Perk *levels* are uncapped, so without it a long enough run would let

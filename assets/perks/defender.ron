@@ -1,6 +1,6 @@
 (
     id: Defender,
     name: "Defender",
-    description: "Harder shell. +1 permanent Defense per level, applied the moment you buy it.",
+    description: "Harder shell. +3 permanent Defense per level, applied the moment you buy it.",
     cost: 2,
 )

@@ -30,10 +30,11 @@ Debuff, Drain), in `crates/engine/src/tuning.rs` — but not all by the same
 rate. Field Medic (`Heal`), Overclocker (`Buff`) and Corruption Vector
 (`Debuff`) use `AFFINITY_PERK_BONUS_PER_LEVEL`; Payload Tuning (`Damage`) and
 Siphon Protocol (`Drain`) use the higher `AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED`
-instead, because those two categories skip the level-scaling every other
-category gets from `abilities::ability_power_scale` (see that constant's
-doc) — the higher rate is what keeps them from being a strictly worse
-purchase than the `Attacker` perk. `AffinityKind::perk_bonus_per_level`
+instead, because at the shared rate those two would be a strictly worse
+purchase than the flat `Attacker` perk, which pays on every attack rather
+than on one category (see that constant's doc for the arithmetic, including
+where the two cross over as player level rises).
+`AffinityKind::perk_bonus_per_level`
 picks the right one, so a perk's category decides its rate rather than a
 match at each of the five call sites. The result is clamped at
 `AFFINITY_MAX`, the same ceiling a species file is clamped to at load — perk

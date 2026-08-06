@@ -13,6 +13,19 @@ Dated entries below `0.2.0` predate versioning and are kept as written.
 
 ## Unreleased
 
+### Changed: Attacker and Defender pay 3 a level
+
+Both perks now grant +3 permanent Attack or Defense per level instead of +1,
+for the same 2 Perk Points. They were the two flattest purchases in the
+catalogue and, at 1 a level against a Perk Point earned per player level,
+buying either read as doing nothing.
+
+This moves them past the Payload Tuning and Siphon Protocol affinity perks
+for the opening levels of a run — those multiply a magnitude that grows with
+level, so they still overtake a flat +3 from around player level 3 and keep
+widening. Their own rate is unchanged; what changed is that the flat perk is
+now the better early buy rather than the worse one.
+
 ### Changed: Research Data is banked, not carried
 
 Research Data is no longer something you pick up. A Research Node delivers

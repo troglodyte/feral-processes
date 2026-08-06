@@ -1075,10 +1075,10 @@ pub const EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL: f32 = 0.03;
 pub const LEAN_COMPILER_DISCOUNT_PER_LEVEL: u32 = 1;
 
 /// Permanent ATK `Perk::Attacker` adds to the player's `Stats`, per level.
-pub const ATTACKER_BONUS_PER_LEVEL: i32 = 1;
+pub const ATTACKER_BONUS_PER_LEVEL: i32 = 3;
 
 /// Permanent DEF `Perk::Defender` adds to the player's `Stats`, per level.
-pub const DEFENDER_BONUS_PER_LEVEL: i32 = 1;
+pub const DEFENDER_BONUS_PER_LEVEL: i32 = 3;
 
 /// Percentage of current max Integrity `Perk::Buffer` adds to the
 /// player's `Stats`, per level.
@@ -1221,16 +1221,21 @@ pub const AFFINITY_PERK_BONUS_PER_LEVEL: f32 = 0.05;
 /// At the shared 0.05 rate, Payload Tuning and Siphon Protocol were
 /// strictly worse value than the `Attacker` perk for every shipped
 /// Damage/Drain ability except `broadcast_storm`: `compute_damage` gives
-/// Attacker +1 flat damage per level for 2 Perk Points on *every* attack,
-/// while 0.05/level of authored `power` 10 (`packet_shred`, `siphon_cycles`)
-/// is only +0.5 damage per level for the same 2 points, and only on that
-/// one category. 0.15 makes the level-for-level comparison favor the
-/// affinity perk instead (1.5 damage per level against Attacker's 1), at
-/// the cost of reaching `AFFINITY_MAX` sooner — 7 levels / 14 Perk Points,
-/// instead of 20 levels / 40 — after which further levels buy nothing more
-/// from this perk specifically. That tradeoff (better per-point value early,
-/// a hard ceiling Attacker doesn't have) was the owner's call, not a
-/// balance-formula default.
+/// Attacker `ATTACKER_BONUS_PER_LEVEL` flat damage per level for 2 Perk
+/// Points on *every* attack, while 0.05/level of authored `power` 10
+/// (`packet_shred`, `siphon_cycles`) is only +0.5 damage per level for the
+/// same 2 points, and only on that one category. 0.15 is what closed that
+/// gap. It no longer closes it at level 1 — `ATTACKER_BONUS_PER_LEVEL` rose
+/// to 3 on 2026-08-05, against 0.15 of an unscaled `power` 10's +1.5 — but
+/// the comparison is not level-independent and never was: the affinity term
+/// multiplies a magnitude that grows at `ABILITY_HP_SCALE_PER_LEVEL`, so it
+/// overtakes the flat perk from around player level 3 and keeps widening,
+/// while Attacker's 3 is 3 forever. The cost of the higher rate is reaching
+/// `AFFINITY_MAX` sooner — 7 levels / 14 Perk Points, instead of 20 levels /
+/// 40 — after which further levels buy nothing more from this perk
+/// specifically. That tradeoff (worse than Attacker for the first few player
+/// levels, better and unboundedly so after, against a ceiling Attacker
+/// doesn't have) was the owner's call, not a balance-formula default.
 pub const AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED: f32 = 0.15;
 
 /// Floor on the cooldown a hostile arms after spending a routine.

@@ -277,4 +277,43 @@ retune of either will not fail a test — the same position
 
 ## Open
 
-`0.25` for the proc chance is a guess. It wants playing, not deriving.
+`0.25` for the proc chance was a guess. It still wants playing, but it has
+since been bounded against the real roster and the real formulas rather
+than left cold — and **the worry stated above is inverted.**
+
+Wielding is never better than fielding the *same* program. Measured on a
+Scrapper against a 12-DEF target, expected damage per round at `p = 0.25`:
+
+| | zone 1 Lv3 | zone 2 Lv6 | zone 4 Lv9 | zone 6 Lv12 |
+| --- | --- | --- | --- | --- |
+| Fielded (own attack + party passive) | 9 | 22 | 86 | 330 |
+| Wielded, innate kit | 4.0 | 9.8 | 32.3 | 111.5 |
+| Wielded, a hunted routine | 9.5 | 18.3 | 43.8 | 126 |
+| Overclock Core worn instead | +3 | +6 | +24 | +96 |
+
+So wielding runs at 34–44% of fielding all the way up. Nobody trades a
+party slot for it, and the "so much better nobody would field" failure is
+not reachable at this rate.
+
+**The real comparison is against your weapon, not against a party slot**,
+because the feature's niche is a program that cannot fit in a party capped
+at `MAX_PARTY_SIZE`. There it beats a worn Overclock Core by roughly 1.3x
+on an innate kit and 3x carrying a hunted routine, at every band — a
+consistent, modest edge that tracks the curve rather than diverging from
+it. That is why `0.25` is being left where it is.
+
+Two roster facts make *which* program you wield matter more than the rate:
+
+- Only five shipped species declare a kit at all, and only Scrapper's
+  innate is damage. The heavy damage routines — `kernel_panic` 16,
+  `broadcast_storm` 25, `fork_bomb` 15 — are the hunt-only set, reachable
+  only by decompiling a wild carrier. Wielding a program that carries one
+  is the payoff the feature is really for.
+- Every other program still procs, because `priority_boost` is the
+  universal fallback and is `OneAlly` — which the proc's synthesized
+  targeting resolves to the player. A generic program in hand is a
+  recurring +3 ATK self-buff, not a dud.
+
+What is still unmeasured and genuinely needs a person: whether a 25% proc
+*reads* as a thing that happened, and whether `(WEP)` is legible on the
+row.

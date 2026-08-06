@@ -19,6 +19,21 @@ first, separated by a rule.
 `CreatureSave` gained a field, so existing `.bin` saves stop loading.
 Templates under `dev-saves/` are RON and were updated in place.
 
+### Changed: the zone map is terrain now, not a wall of characters
+
+Ground used to be a character per tile — `#` for Mainframe, `~` for the Data
+Void, `^` for Black Ice — in seven different colours. It is drawn instead:
+circuit traces, drifting specks, a lit slab under your base, shards over the
+ice. Entities keep their glyphs, so the things that move read as things that
+move rather than competing with the floor.
+
+Colour now answers one question and pattern answers the other. Every biome
+you can walk on is cool cyan-teal; the two you cannot — the Data Void and
+Black Ice — are hot amber. They were previously just two more colours in a
+palette of seven, which meant the map never actually told you where the
+ground stopped. It does now: the walkable tile beside a hole lights the edge
+it shares with it, so every impassable region is ringed like a shoreline.
+
 ### Added: your base has people in it now
 
 A program posted to a machine used to be a name on a screen, frozen on the

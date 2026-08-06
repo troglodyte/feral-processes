@@ -153,20 +153,24 @@ pub(super) fn draw_worker_menu(
         let power = pet.map(|p| format!(" PWR {}", p.power)).unwrap_or_default();
         let activity = pet.map(|p| activity_tag(&p.activity)).unwrap_or_default();
         let fusions = pet.map(|p| p.fusions).unwrap_or(0);
-        rows.push(fusion_row(
-            format!(
-                "[{}] {}{}{} at ({}, {}){}{}",
-                menu_shortcut(i),
-                w.label,
-                w.level.map(|l| format!(" Lv{l}")).unwrap_or_default(),
-                power,
-                w.pos.0,
-                w.pos.1,
-                fusion_tag(fusions),
-                activity
+        rows.push(with_icon(
+            fusion_row(
+                format!(
+                    "[{}] {}{}{} at ({}, {}){}{}",
+                    menu_shortcut(i),
+                    w.label,
+                    w.level.map(|l| format!(" Lv{l}")).unwrap_or_default(),
+                    power,
+                    w.pos.0,
+                    w.pos.1,
+                    fusion_tag(fusions),
+                    activity
+                ),
+                i == selected,
+                fusions,
             ),
-            i == selected,
-            fusions,
+            w.glyph,
+            glyph_color(w.color),
         ));
     }
     draw_popup(title, PopupSize::Large, &rows, painter, m);
@@ -196,17 +200,21 @@ pub(super) fn draw_structure_menu(
             .durability
             .map(|(hp, max)| format!(" [HP {hp}/{max}]"))
             .unwrap_or_default();
-        rows.push(item_row(
-            format!(
-                "[{}] {} at ({}, {}){}{}",
-                menu_shortcut(i),
-                s.label,
-                s.pos.0,
-                s.pos.1,
-                durability,
-                assigned
+        rows.push(with_icon(
+            item_row(
+                format!(
+                    "[{}] {} at ({}, {}){}{}",
+                    menu_shortcut(i),
+                    s.label,
+                    s.pos.0,
+                    s.pos.1,
+                    durability,
+                    assigned
+                ),
+                i == selected,
             ),
-            i == selected,
+            s.glyph,
+            glyph_color(s.color),
         ));
     }
     draw_popup(title, PopupSize::Large, &rows, painter, m);
@@ -230,17 +238,21 @@ pub(super) fn draw_remove_menu(
             .map(|(hp, max)| format!(" [HP {hp}/{max}]"))
             .unwrap_or_default();
         let home_tag = if s.is_home { " (Home)" } else { "" };
-        rows.push(item_row(
-            format!(
-                "[{}] {} at ({}, {}){}{}",
-                menu_shortcut(i),
-                s.label,
-                s.pos.0,
-                s.pos.1,
-                durability,
-                home_tag
+        rows.push(with_icon(
+            item_row(
+                format!(
+                    "[{}] {} at ({}, {}){}{}",
+                    menu_shortcut(i),
+                    s.label,
+                    s.pos.0,
+                    s.pos.1,
+                    durability,
+                    home_tag
+                ),
+                i == selected,
             ),
-            i == selected,
+            s.glyph,
+            glyph_color(s.color),
         ));
     }
     draw_popup("Demolish Structure", PopupSize::Large, &rows, painter, m);
@@ -278,16 +290,20 @@ pub(super) fn draw_upgrade_menu(
         rows.push(text_row("(no upgradeable structures nearby)"));
     }
     for (i, s) in structures.iter().enumerate() {
-        rows.push(item_row(
-            format!(
-                "[{}] {} at ({}, {}) [{}]",
-                menu_shortcut(i),
-                s.label,
-                s.pos.0,
-                s.pos.1,
-                tier_tag(s),
+        rows.push(with_icon(
+            item_row(
+                format!(
+                    "[{}] {} at ({}, {}) [{}]",
+                    menu_shortcut(i),
+                    s.label,
+                    s.pos.0,
+                    s.pos.1,
+                    tier_tag(s),
+                ),
+                i == selected,
             ),
-            i == selected,
+            s.glyph,
+            glyph_color(s.color),
         ));
     }
     draw_popup("Upgrade Structure", PopupSize::Large, &rows, painter, m);
@@ -326,17 +342,21 @@ pub(super) fn draw_symlink_menu(game: &mut Game, selected: usize, painter: &Pain
             .durability
             .map(|(hp, max)| format!(" [HP {hp}/{max}]"))
             .unwrap_or_default();
-        rows.push(item_row(
-            format!(
-                "[{}] {} at ({}, {}){} - {}",
-                menu_shortcut(i),
-                t.label,
-                t.pos.0,
-                t.pos.1,
-                durability,
-                cost.join(", ")
+        rows.push(with_icon(
+            item_row(
+                format!(
+                    "[{}] {} at ({}, {}){} - {}",
+                    menu_shortcut(i),
+                    t.label,
+                    t.pos.0,
+                    t.pos.1,
+                    durability,
+                    cost.join(", ")
+                ),
+                i == selected,
             ),
-            i == selected,
+            t.glyph,
+            glyph_color(t.color),
         ));
     }
     draw_popup("Symlink", PopupSize::Large, &rows, painter, m);

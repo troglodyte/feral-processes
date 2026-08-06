@@ -142,6 +142,14 @@ pub struct ProgramSaleOption {
 
 pub struct PetInfo {
     pub entity: Entity,
+    /// The same glyph and colour this program is drawn with on the map, so a
+    /// menu row can carry its icon rather than making the player match a name
+    /// to a letter. `EntityView` already carries the pair for the same reason;
+    /// the two lists overlap (see `draw_worker_menu`), and a program that
+    /// looked like one thing on one screen and another elsewhere would be
+    /// worse than no icon at all.
+    pub glyph: char,
+    pub color: GlyphColor,
     pub name: String,
     pub level: u32,
     pub hp: i32,
@@ -607,6 +615,11 @@ pub struct RoutineSlotView {
 /// One row of the "whose routines?" picker — you and every program you own.
 pub struct RoutineHolderView {
     pub entity: Entity,
+    /// The map glyph and colour, for the same reason `PetInfo` carries them:
+    /// these lists put the player and their programs side by side, and a name
+    /// is the slower half of telling them apart.
+    pub glyph: char,
+    pub color: GlyphColor,
     /// "You" for the player, the program's display name otherwise.
     pub name: String,
     pub level: u32,

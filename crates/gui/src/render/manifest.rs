@@ -506,7 +506,9 @@ pub(super) fn draw_manifest_pick(
 ) {
     let mut rows = vec![text_row("Read whose manifest?")];
     for (i, &entity) in subjects.iter().enumerate() {
-        let label = match game.manifest(entity) {
+        let view = game.manifest(entity);
+        let icon = view.as_ref().map(|v| (v.glyph, glyph_color(v.color)));
+        let label = match view {
             Some(v) => match &v.subject {
                 ManifestSubject::Player(_) => format!("You - Lv{}", v.level.unwrap_or(1)),
                 ManifestSubject::Program(p) => format!(
@@ -524,10 +526,14 @@ pub(super) fn draw_manifest_pick(
             },
             None => "(gone)".to_string(),
         };
-        rows.push(creature_row(
-            format!("[{}] {label}", menu_shortcut(i)),
-            i == selected,
-        ));
+        let row = creature_row(format!("[{}] {label}", menu_shortcut(i)), i == selected);
+        // A despawned subject has no glyph left to draw, and its row already
+        // says "(gone)" — the slot stays reserved so the list keeps its
+        // column.
+        rows.push(match icon {
+            Some((glyph, color)) => with_icon(row, glyph, color),
+            None => with_icon(row, ' ', TEXT),
+        });
     }
     rows.push(text_row(""));
     rows.push(text_row("Esc to cancel"));

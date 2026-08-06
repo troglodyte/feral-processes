@@ -218,8 +218,11 @@ impl Game {
                     .get::<Experience>(entity)
                     .map(|e| e.level)
                     .unwrap_or(1);
+                let glyph = self.world.get::<Glyph>(entity);
                 Some(PetInfo {
                     entity,
+                    glyph: glyph.map(|g| g.ch).unwrap_or('?'),
+                    color: glyph.map(|g| g.color).unwrap_or(GlyphColor::White),
                     name: self.creature_label(entity),
                     level,
                     hp: stats.hp,

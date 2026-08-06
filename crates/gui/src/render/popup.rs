@@ -20,7 +20,48 @@ pub(super) enum Row {
         /// A trailing annotation drawn dim, set apart from the row's own text
         /// — the history screen's repeat count. See `counted_item_row`.
         suffix: Option<String>,
+        /// The map glyph of whatever this row stands for, in its own colour.
+        /// Set by `with_icon` rather than by the seven row constructors, so
+        /// only the lists that name an entity pay for it.
+        ///
+        /// Its colour is deliberately a *second* axis from the row's `color`:
+        /// that one already means fusion tier, CRITICAL HP or idleness
+        /// depending on the screen, and the icon has to keep meaning what it
+        /// means on the map or it isn't the same icon.
+        icon: Option<(char, Color)>,
     },
+}
+
+/// What an icon occupies in a row's label: the glyph itself plus the gap
+/// before the text. Held as a string of spaces because `draw_row` reserves the
+/// slot inside the label and paints the glyph over it — see there.
+const ICON_SLOT: &str = "   ";
+
+/// Gives an `Item` row the icon of the thing it stands for. A combinator
+/// rather than a parameter on all seven row constructors: most rows are not
+/// an entity, and threading `None` through every caller would be the cost of
+/// the field paid by the screens that don't use it.
+pub(super) fn with_icon(row: Row, glyph: char, color: Color) -> Row {
+    match row {
+        Row::Item {
+            text,
+            selected,
+            bold,
+            color: text_color,
+            suffix,
+            ..
+        } => Row::Item {
+            text,
+            selected,
+            bold,
+            color: text_color,
+            suffix,
+            icon: Some((glyph, color)),
+        },
+        // Nothing calls this on a Text row; returning it unchanged is a
+        // cheaper answer than a panic for a case the type can't rule out.
+        other => other,
+    }
 }
 
 pub(super) fn text_row(s: impl Into<String>) -> Row {
@@ -34,6 +75,7 @@ pub(super) fn item_row(s: impl Into<String>, selected: bool) -> Row {
         bold: false,
         color: TEXT,
         suffix: None,
+        icon: None,
     }
 }
 
@@ -47,6 +89,7 @@ pub(super) fn spent_item_row(s: impl Into<String>, selected: bool) -> Row {
         bold: false,
         color: TEXT_DIM,
         suffix: None,
+        icon: None,
     }
 }
 
@@ -60,6 +103,7 @@ pub(super) fn critical_item_row(s: impl Into<String>, selected: bool) -> Row {
         bold: false,
         color: RED,
         suffix: None,
+        icon: None,
     }
 }
 
@@ -73,6 +117,7 @@ pub(super) fn colored_item_row(s: impl Into<String>, selected: bool, color: Colo
         bold: false,
         color,
         suffix: None,
+        icon: None,
     }
 }
 
@@ -104,6 +149,7 @@ pub(super) fn counted_item_row(
         bold: false,
         color,
         suffix: (repeats > 1).then(|| format!("×{repeats}")),
+        icon: None,
     }
 }
 
@@ -115,6 +161,7 @@ pub(super) fn creature_row(s: impl Into<String>, selected: bool) -> Row {
         bold: true,
         color: TEXT,
         suffix: None,
+        icon: None,
     }
 }
 
@@ -323,6 +370,20 @@ fn suffix_x(label: &str, row_x: f32, painter: &Painter, m: &Metrics) -> f32 {
     row_x + m.pad + painter.measure_ui_advance(label, m.font_size) + m.inset
 }
 
+/// The whole of what `draw_row` hands to the painter for an `Item`: the
+/// selection caret, the icon's reserved slot, then the row's own text.
+///
+/// Split out for the same reason `suffix_x` was — the slot is the one thing
+/// keeping `suffix_x` honest on an icon row, and a test can say so where a
+/// comment can only claim it. A row with no icon reserves nothing, so the
+/// screens that never had an icon are drawn exactly where they always were.
+fn row_label(prefix: &str, icon: Option<(char, Color)>, text: &str) -> String {
+    match icon {
+        Some(_) => format!("{prefix}{ICON_SLOT}{text}"),
+        None => format!("{prefix}{text}"),
+    }
+}
+
 pub(super) fn draw_row(
     row: &Row,
     x: f32,
@@ -348,6 +409,7 @@ pub(super) fn draw_row(
             bold,
             color,
             suffix,
+            icon,
         } => {
             if *selected {
                 // Anchored to the same `m.pad` the row text uses, so the
@@ -363,7 +425,13 @@ pub(super) fn draw_row(
                 );
             }
             let prefix = if *selected { "> " } else { "  " };
-            let label = format!("{prefix}{s}");
+            // The icon's slot is spaces inside the label, with the glyph drawn
+            // over it afterwards in its own colour. Reserving it this way
+            // rather than measuring segments and summing them keeps every
+            // row's text starting at the same x — the UI face is monospace, so
+            // a space and a glyph take the same advance — and leaves
+            // `suffix_x` measuring one string, as it already documents.
+            let label = row_label(prefix, *icon, s);
             if *selected && *bold {
                 painter.ui_bold(&label, x + m.pad, cy, m.font_size, *color);
             } else {
@@ -379,6 +447,15 @@ pub(super) fn draw_row(
             // always opens with a two-space prefix, which has no ink, so the
             // ink box would report a width that starts two characters into
             // the row and drop the suffix on top of the row's own tail.
+            if let Some((glyph, glyph_color)) = icon {
+                painter.ui(
+                    glyph.to_string(),
+                    x + m.pad + painter.measure_ui_advance(prefix, m.font_size),
+                    cy,
+                    m.font_size,
+                    *glyph_color,
+                );
+            }
             if let Some(suffix) = suffix {
                 painter.ui(
                     suffix,
@@ -467,6 +544,47 @@ mod tests {
                 "the suffix must start past the row text, not inside it"
             );
         })
+    }
+
+    /// The icon is painted *over* a slot reserved inside the label rather than
+    /// pushing the text along, so everything downstream that measures the row
+    /// — `suffix_x`, chiefly — sees the space the glyph occupies. Measuring
+    /// the un-slotted text and drawing the glyph before it would have put the
+    /// icon on top of the selection caret and the suffix two characters early.
+    #[test]
+    fn an_icon_reserves_its_slot_inside_the_row_label() {
+        let plain = row_label("  ", None, "Drone Lv3");
+        let iconed = row_label("  ", Some(('o', TEXT)), "Drone Lv3");
+        assert_eq!(plain, "  Drone Lv3");
+        assert_eq!(
+            iconed.len(),
+            plain.len() + ICON_SLOT.len(),
+            "the slot is reserved, not merely implied: {iconed:?}"
+        );
+        assert!(
+            iconed.ends_with("Drone Lv3") && iconed.starts_with("  "),
+            "the caret still leads and the text still trails: {iconed:?}"
+        );
+    }
+
+    /// The icon's colour is a second axis. A party row's own colour already
+    /// means fusion tier or CRITICAL HP, and the icon has to keep meaning what
+    /// it means on the map, so neither may overwrite the other.
+    #[test]
+    fn an_icon_leaves_the_rows_own_colour_and_selection_alone() {
+        let row = with_icon(critical_item_row("Glitch Lv2", true), 'o', GREEN);
+        let Row::Item {
+            selected,
+            color,
+            icon,
+            ..
+        } = row
+        else {
+            panic!("with_icon must return the Item it was given");
+        };
+        assert!(selected);
+        assert_eq!(color, RED, "CRITICAL still owns the row text");
+        assert_eq!(icon, Some(('o', GREEN)), "the glyph still owns its colour");
     }
 
     #[test]

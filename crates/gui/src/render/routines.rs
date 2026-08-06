@@ -12,16 +12,20 @@ pub(super) fn draw_routine_target(
     let holders = game.routine_holders();
     let mut rows = vec![text_row("Whose routines?")];
     for (i, h) in holders.iter().enumerate() {
-        rows.push(item_row(
-            format!(
-                "[{}] {} Lv{} - {}/{} slots",
-                menu_shortcut(i),
-                h.name,
-                h.level,
-                h.filled,
-                h.slots
+        rows.push(with_icon(
+            item_row(
+                format!(
+                    "[{}] {} Lv{} - {}/{} slots",
+                    menu_shortcut(i),
+                    h.name,
+                    h.level,
+                    h.filled,
+                    h.slots
+                ),
+                i == selected,
             ),
-            i == selected,
+            h.glyph,
+            glyph_color(h.color),
         ));
     }
     draw_popup("Routines", PopupSize::Large, &rows, painter, m);
@@ -81,16 +85,20 @@ pub(super) fn draw_extract(game: &mut Game, selected: usize, painter: &Painter, 
         rows.push(text_row("(you need a Compiler standing somewhere first)"));
     }
     for (i, p) in programs.iter().enumerate() {
-        rows.push(fusion_row(
-            format!(
-                "[{}] {} Lv{}{}",
-                menu_shortcut(i),
-                p.name,
-                p.level,
-                fusion_tag(p.fusions)
+        rows.push(with_icon(
+            fusion_row(
+                format!(
+                    "[{}] {} Lv{}{}",
+                    menu_shortcut(i),
+                    p.name,
+                    p.level,
+                    fusion_tag(p.fusions)
+                ),
+                i == selected,
+                p.fusions,
             ),
-            i == selected,
-            p.fusions,
+            p.glyph,
+            glyph_color(p.color),
         ));
     }
     draw_popup("Extract", PopupSize::Large, &rows, painter, m);

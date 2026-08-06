@@ -49,11 +49,15 @@ pub(super) fn draw_companion_menu(
         );
         // CRITICAL outranks the fusion colour: one is a state to act on
         // this turn, the other a permanent property to read at leisure.
-        rows.push(if critical {
-            critical_item_row(text, i == selected)
-        } else {
-            fusion_row(text, i == selected, p.fusions)
-        });
+        rows.push(with_icon(
+            if critical {
+                critical_item_row(text, i == selected)
+            } else {
+                fusion_row(text, i == selected, p.fusions)
+            },
+            p.glyph,
+            glyph_color(p.color),
+        ));
     }
     draw_popup("Party", PopupSize::Large, &rows, painter, m);
 }
@@ -76,10 +80,14 @@ pub(super) fn draw_fuse_menu(game: &mut Game, selected: usize, painter: &Painter
         rows.push(text_row("(you have no compiled programs)"));
     }
     for (i, p) in candidates.iter().enumerate() {
-        rows.push(fusion_row(
-            fuse_candidate_label(menu_shortcut(i), p),
-            i == selected,
-            p.fusions,
+        rows.push(with_icon(
+            fusion_row(
+                fuse_candidate_label(menu_shortcut(i), p),
+                i == selected,
+                p.fusions,
+            ),
+            p.glyph,
+            glyph_color(p.color),
         ));
     }
     draw_popup("Fuse", PopupSize::Large, &rows, painter, m);
@@ -107,10 +115,14 @@ pub(super) fn draw_fuse_second_menu(
         rows.push(text_row("(you have no other compiled programs)"));
     }
     for (i, p) in candidates.iter().enumerate() {
-        rows.push(fusion_row(
-            fuse_candidate_label(menu_shortcut(i), p),
-            i == selected,
-            p.fusions,
+        rows.push(with_icon(
+            fusion_row(
+                fuse_candidate_label(menu_shortcut(i), p),
+                i == selected,
+                p.fusions,
+            ),
+            p.glyph,
+            glyph_color(p.color),
         ));
     }
     draw_popup("Fuse", PopupSize::Large, &rows, painter, m);

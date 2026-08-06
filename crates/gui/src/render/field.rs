@@ -46,6 +46,7 @@ pub(super) fn buff_rows(buffs: &[ActiveBuffView]) -> Vec<Row> {
                 bold: false,
                 color: TEXT,
                 suffix: Some(format!("{}t", b.remaining)),
+                icon: None,
             }
         })
         .collect()
@@ -244,9 +245,13 @@ pub(super) fn draw_field_cast_ally(
     };
     let mut rows = vec![text_row(format!("Run {} on whom?", routine.name))];
     for (i, h) in game.field_cast_targets().into_iter().enumerate() {
-        rows.push(item_row(
-            format!("[{}] {} Lv{}", menu_shortcut(i), h.name, h.level),
-            i == selected,
+        rows.push(with_icon(
+            item_row(
+                format!("[{}] {} Lv{}", menu_shortcut(i), h.name, h.level),
+                i == selected,
+            ),
+            h.glyph,
+            glyph_color(h.color),
         ));
     }
     draw_popup("Run a Routine", PopupSize::Large, &rows, painter, m);

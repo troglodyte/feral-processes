@@ -60,8 +60,11 @@ impl Game {
             .get::<Experience>(entity)
             .map(|e| e.level)
             .unwrap_or(1);
+        let glyph = self.world.get::<Glyph>(entity);
         RoutineHolderView {
             entity,
+            glyph: glyph.map(|g| g.ch).unwrap_or('?'),
+            color: glyph.map(|g| g.color).unwrap_or(GlyphColor::White),
             name,
             level,
             filled: self

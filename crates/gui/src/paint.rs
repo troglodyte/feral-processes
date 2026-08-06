@@ -27,9 +27,9 @@ use bevy_egui::egui;
 /// Straight RGBA, each channel 0.0–1.0, non-premultiplied.
 ///
 /// A local type rather than the backend's own so the palette in
-/// `render/mod.rs` and the colour math in `text.rs` and `fx.rs` survive a
-/// backend swap untouched — those are the parts with real reasoning in them
-/// (see `terrain_color` and `structure_condition`).
+/// `render/mod.rs` and the colour math in `render/base.rs` and `fx.rs`
+/// survive a backend swap untouched — those are the parts with real
+/// reasoning in them (see `biome_tint` and `structure_condition`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Color {
     pub r: f32,
@@ -49,7 +49,6 @@ impl Color {
 /// greys and white the map's biome and glyph tables reach for.
 pub const WHITE: Color = Color::new(1.0, 1.0, 1.0, 1.0);
 pub const GRAY: Color = Color::new(0.51, 0.51, 0.51, 1.0);
-pub const DARKGRAY: Color = Color::new(0.31, 0.31, 0.31, 1.0);
 
 /// An axis-aligned box in screen pixels.
 #[derive(Clone, Copy, Debug, PartialEq)]

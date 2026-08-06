@@ -38,13 +38,25 @@ const STAFFED_MARK_INSET: f32 = 2.0;
 /// different constants because a symmetric hash bands the map along its
 /// diagonal, which reads as a pattern instead of as texture.
 fn tile_shade(world: (i32, i32)) -> f32 {
+    let t = (tile_hash(world) & 0xFFFF) as f32 / 65535.0;
+    1.0 - SHADE_JITTER + 2.0 * SHADE_JITTER * t
+}
+
+/// The one hash keyed on a world coordinate, shared by `tile_shade` and by
+/// every biome pattern that varies from tile to tile.
+///
+/// Hashed from the world coordinate, never the screen cell: the camera
+/// slides continuously across tiles, and anything tied to screen position
+/// would crawl over the terrain as it went. The two axes are mixed with
+/// different constants because a symmetric hash bands the map along its
+/// diagonal, which reads as a pattern instead of as texture.
+fn tile_hash(world: (i32, i32)) -> u32 {
     let mut h =
         (world.0 as u32).wrapping_mul(0x9E37_79B9) ^ (world.1 as u32).wrapping_mul(0x85EB_CA6B);
     h ^= h >> 15;
     h = h.wrapping_mul(0x2545_F491);
     h ^= h >> 13;
-    let t = (h & 0xFFFF) as f32 / 65535.0;
-    1.0 - SHADE_JITTER + 2.0 * SHADE_JITTER * t
+    h
 }
 
 /// Radial dimming toward the edge of the map pane, given a tile's offset from
@@ -62,16 +74,269 @@ fn vignette(dx: f32, dy: f32, half_w_px: f32, half_h_px: f32) -> f32 {
     1.0 - (1.0 - VIGNETTE_MIN) * r * r
 }
 
-fn biome_style(biome: Biome) -> (char, Color) {
+/// A biome's colour, and with it the map's one colour rule: **hue answers
+/// "can I cross this", pattern answers "what is it".** The five walkable
+/// biomes share a cool cyan-teal family and the two that are holes in the
+/// map — see `Biome::walkable` — go hot amber. Which is why this returns a
+/// colour rather than drawing one: `every_biomes_tint_says_whether_it_can_be
+/// _walked_on` can only assert that rule against a value, and a biome tinted
+/// into the wrong family tells the player they may walk into the void.
+///
+/// Exhaustive on purpose, the same call `render/stack.rs`'s `floor_mark`
+/// makes: a new `Biome` must not compile until someone has decided which
+/// side of that rule it falls on.
+fn biome_tint(biome: Biome) -> Color {
     match biome {
-        Biome::DataVoid => ('~', BLUE),
-        Biome::BlackIce => ('^', RED),
-        Biome::Mainframe => ('#', CYAN),
-        Biome::OpenGrid => ('.', GREEN),
-        Biome::NullSector => (':', GRAY),
-        Biome::StaticField => ('%', WHITE),
-        Biome::Platform => ('_', DARKGRAY),
+        // Hot: the edge of the world. Nothing is ever placed on these, so
+        // they never share a tile with the red durability wash
+        // `Fx::structure_condition` paints — but they do sit next to it, so
+        // they stay dark ground while that stays a bright wash under a glyph.
+        Biome::DataVoid => Color::new(0.95, 0.60, 0.15, 1.0),
+        Biome::BlackIce => Color::new(0.95, 0.32, 0.18, 1.0),
+        // Cool: ground. Spread across brightness rather than hue, since hue
+        // is already spoken for by the rule above.
+        Biome::Platform => Color::new(0.30, 0.80, 0.95, 1.0),
+        Biome::Mainframe => Color::new(0.25, 0.85, 0.85, 1.0),
+        Biome::StaticField => Color::new(0.70, 0.92, 0.95, 1.0),
+        Biome::OpenGrid => Color::new(0.35, 0.85, 0.60, 1.0),
+        Biome::NullSector => Color::new(0.20, 0.50, 0.52, 1.0),
     }
+}
+
+/// Whether the edge these two biomes share is the edge of the walkable
+/// world. This is the whole of what makes the map read as terrain rather
+/// than as a colour field: the rim is drawn where it returns true and
+/// nowhere else, so a shoreline appears around every hole in the map
+/// without anything having to know which biomes are holes.
+fn rim(a: Biome, b: Biome) -> bool {
+    a.walkable() != b.walkable()
+}
+
+/// How bright a biome's pattern is against its own ground fill, and how
+/// bright the rim along the edge of the walkable world is against both.
+/// The ground stays at `GROUND_LEVEL` so terrain never competes with the
+/// entity glyphs standing on it — the whole point of keeping glyphs for
+/// actors is that they win.
+const GROUND_LEVEL: f32 = 0.18;
+const PATTERN_LEVEL: f32 = 0.55;
+const RIM_LEVEL: f32 = 0.95;
+/// The faint lit line between adjacent walkable tiles. Dim enough to read as
+/// a substrate the world is printed on rather than as content.
+const GRID_LEVEL: f32 = 0.10;
+
+/// What an impassable biome's pattern drops to. Seen on screen, DataVoid and
+/// BlackIce at the full `PATTERN_LEVEL` dominated the pane — a wall of amber
+/// rings and red shards louder than the ground the player actually walks on,
+/// and louder than the entities standing on it. They are terrain the player
+/// can never interact with, so they belong in the background: the rim already
+/// says "you cannot cross here", and the pattern only has to say which of the
+/// two it is.
+const VOID_PATTERN_LEVEL: f32 = 0.30;
+
+/// How many tiles beyond the visible pane `draw_surface_map` fetches. One for
+/// the camera to slide in from, one so that tile has neighbours to compare
+/// biomes against. See the call site for why both are needed.
+const RINGS: i32 = 2;
+
+/// `c` scaled toward black by `level`, alpha untouched. Every terrain colour
+/// on the map is this function applied to `biome_tint`, which is what keeps
+/// ground, pattern and rim reading as three depths of one material instead
+/// of three colours that happen to sit together.
+fn at_level(c: Color, level: f32) -> Color {
+    Color::new(c.r * level, c.g * level, c.b * level, c.a)
+}
+
+/// The geometry that says which biome this is, drawn inside the tile at
+/// `(px, py)`. Pattern carries identity because hue is already spoken for by
+/// passability — see `biome_tint`.
+///
+/// Exhaustive for the same reason `biome_tint` is: a new `Biome` should stop
+/// the build until someone has drawn it, rather than shipping as bare
+/// ground the way a `_ => {}` arm would let it. This is the trap
+/// `render/stack.rs`'s `floor_mark` was fixed for, and it is the same trap.
+fn draw_biome(painter: &Painter, biome: Biome, r: Rect, tint: Color, world: (i32, i32)) {
+    let ink = at_level(
+        tint,
+        if biome.walkable() {
+            PATTERN_LEVEL
+        } else {
+            VOID_PATTERN_LEVEL
+        },
+    );
+    let h = tile_hash(world);
+    match biome {
+        Biome::Mainframe => draw_traces(painter, r, ink, h),
+        Biome::OpenGrid => draw_dot(painter, r, ink),
+        Biome::NullSector => draw_broken_grid(painter, r, ink, h),
+        Biome::StaticField => draw_speckle(painter, r, ink, h),
+        Biome::Platform => draw_slab(painter, r, ink),
+        Biome::DataVoid => draw_depth(painter, r, ink),
+        Biome::BlackIce => draw_shards(painter, r, ink, h),
+    }
+}
+
+/// Mainframe: a circuit trace entering the tile and terminating in a pad.
+/// Which side it enters from is hashed, so a field of Mainframe reads as
+/// routed board rather than as one motif stamped in a grid.
+fn draw_traces(painter: &Painter, r: Rect, ink: Color, h: u32) {
+    let (cx, cy) = (r.x + r.w / 2.0, r.y + r.h / 2.0);
+    let t = (r.w * 0.09).max(1.0);
+    let (ex, ey) = match h % 4 {
+        0 => (r.x, cy),
+        1 => (r.x + r.w, cy),
+        2 => (cx, r.y),
+        _ => (cx, r.y + r.h),
+    };
+    painter.line(ex, ey, cx, cy, t, ink);
+    let pad = r.w * 0.18;
+    painter.rect(cx - pad / 2.0, cy - pad / 2.0, pad, pad, ink);
+}
+
+/// OpenGrid: a single centred node. The sparsest pattern in the set, because
+/// this is the biome the player crosses most and it should read as open.
+fn draw_dot(painter: &Painter, r: Rect, ink: Color) {
+    let d = (r.w * 0.14).max(1.0);
+    painter.rect(r.x + (r.w - d) / 2.0, r.y + (r.h - d) / 2.0, d, d, ink);
+}
+
+/// NullSector: the grid, but with pieces missing. Two dashes out of a
+/// possible four, hashed — dead substrate rather than live board.
+fn draw_broken_grid(painter: &Painter, r: Rect, ink: Color, h: u32) {
+    let t = (r.w * 0.07).max(1.0);
+    let len = r.w * 0.3;
+    let (cx, cy) = (r.x + r.w / 2.0, r.y + r.h / 2.0);
+    if h & 1 == 0 {
+        painter.line(r.x, cy, r.x + len, cy, t, ink);
+    }
+    if h & 2 == 0 {
+        painter.line(r.x + r.w - len, cy, r.x + r.w, cy, t, ink);
+    }
+    if h & 4 == 0 {
+        painter.line(cx, r.y, cx, r.y + len, t, ink);
+    }
+}
+
+/// StaticField: three specks at hashed offsets. Noise, so it wants no
+/// structure at all — the only pattern in the set with nothing aligned to
+/// the tile's centre or edges.
+fn draw_speckle(painter: &Painter, r: Rect, ink: Color, h: u32) {
+    let d = (r.w * 0.09).max(1.0);
+    for i in 0..3 {
+        let hx = h.rotate_left(i * 7);
+        let fx = (hx & 0xFF) as f32 / 255.0;
+        let fy = ((hx >> 8) & 0xFF) as f32 / 255.0;
+        let x = r.x + d + fx * (r.w - 2.0 * d);
+        let y = r.y + d + fy * (r.h - 2.0 * d);
+        painter.rect(x, y, d, d, ink);
+    }
+}
+
+/// Platform: a solid lit slab, inset so the base's floor reads as laid over
+/// the terrain rather than as more terrain. The brightest ground on the map,
+/// which is the point — this is the one biome the player made.
+fn draw_slab(painter: &Painter, r: Rect, ink: Color) {
+    let i = r.w * 0.12;
+    painter.rect(r.x + i, r.y + i, r.w - 2.0 * i, r.h - 2.0 * i, ink);
+}
+
+/// DataVoid: concentric rings falling away to black, so a hole in the map
+/// reads as depth rather than as flat colour. No grid and no ink —
+/// everything else on the map is printed on a substrate, and the point of
+/// this one is that the substrate has ended.
+fn draw_depth(painter: &Painter, r: Rect, ink: Color) {
+    // One ring, not a nest of them. Three read as a target stamped on every
+    // tile, which made a lake of DataVoid look tiled rather than deep — the
+    // opposite of the point. A single inset ring gives the tile an inner
+    // shadow and lets the expanse stay an expanse.
+    let i = r.w * 0.22;
+    painter.rect_lines(r.x + i, r.y + i, r.w - 2.0 * i, r.h - 2.0 * i, 1.0, ink);
+}
+
+/// The four edges of one tile: a bright rim wherever the walkable world ends,
+/// and a faint grid line wherever two walkable tiles simply meet.
+///
+/// The rim is drawn by the *walkable* tile only, never by the void beside it.
+/// That is what makes it a shoreline rather than an outline — the lit edge
+/// belongs to the ground it bounds, so a lake of DataVoid is ringed once, from
+/// the outside, instead of twice with the two halves fighting over the same
+/// pixels. It is also why this can run per tile with no memory of what it drew
+/// before: `rim` is symmetric, and the walkable-side rule is what breaks the tie.
+///
+/// Neighbours come from the fetched grid rather than the engine, which is the
+/// whole reason edge-awareness costs nothing here: `view_tiles` already hands
+/// back `RINGS` tiles more than the pane shows in every direction, so every
+/// tile that can be drawn has all four of its neighbours in hand. An absent
+/// neighbour therefore means the outermost fetched ring, which is off-pane —
+/// it draws nothing rather than guessing.
+fn draw_tile_edges(
+    painter: &Painter,
+    tiles: &[Vec<Tile>],
+    rx: usize,
+    ry: usize,
+    cell: Rect,
+    tint: Color,
+    vig: f32,
+) {
+    let here = tiles[ry][rx].biome;
+    let neighbour = |dx: i32, dy: i32| -> Option<Biome> {
+        let nx = usize::try_from(rx as i32 + dx).ok()?;
+        let ny = usize::try_from(ry as i32 + dy).ok()?;
+        Some(tiles.get(ny)?.get(nx)?.biome)
+    };
+    // Each edge as (neighbour offset, the two endpoints of the shared side).
+    let edges = [
+        ((0, -1), (cell.x, cell.y), (cell.x + cell.w, cell.y)),
+        (
+            (0, 1),
+            (cell.x, cell.y + cell.h),
+            (cell.x + cell.w, cell.y + cell.h),
+        ),
+        ((-1, 0), (cell.x, cell.y), (cell.x, cell.y + cell.h)),
+        (
+            (1, 0),
+            (cell.x + cell.w, cell.y),
+            (cell.x + cell.w, cell.y + cell.h),
+        ),
+    ];
+    for ((dx, dy), (x1, y1), (x2, y2)) in edges {
+        let Some(there) = neighbour(dx, dy) else {
+            continue;
+        };
+        if rim(here, there) {
+            if !here.walkable() {
+                continue;
+            }
+            let t = (cell.w * 0.10).max(1.5);
+            // The halo goes down first and wider, so the rim sits in its own
+            // bloom rather than beside it. This is the map's only glow: the
+            // edge of the world is the one thing worth spending it on.
+            painter.line(x1, y1, x2, y2, t * 2.5, at_level(tint, 0.20 * vig));
+            painter.line(x1, y1, x2, y2, t, at_level(tint, RIM_LEVEL * vig));
+        } else if here.walkable() && (dx + dy) > 0 {
+            // Right and bottom only — an edge is shared, and both owners
+            // drawing it would double the alpha on every interior line while
+            // the pane's outer edges stayed single.
+            painter.line(x1, y1, x2, y2, 1.0, at_level(tint, GRID_LEVEL * vig));
+        }
+    }
+}
+
+/// BlackIce: an upward shard. The one pattern built from `poly` rather than
+/// rects and lines, because a jagged silhouette is the read — this is the
+/// biome that kills you, and it should not look machined like the rest.
+fn draw_shards(painter: &Painter, r: Rect, ink: Color, h: u32) {
+    let lean = ((h & 0xFF) as f32 / 255.0 - 0.5) * r.w * 0.3;
+    let base = r.y + r.h * 0.82;
+    let apex = r.y + r.h * 0.18;
+    let cx = r.x + r.w / 2.0;
+    painter.poly(
+        &[
+            (cx + lean, apex),
+            (r.x + r.w * 0.82, base),
+            (r.x + r.w * 0.18, base),
+        ],
+        ink,
+    );
 }
 
 /// The world grid, status panel, and message feed — the base layer shown
@@ -221,14 +486,17 @@ fn draw_surface_map(
     glyph_px: u16,
     status: &feral_processes_engine::PlayerStatus,
 ) {
-    // One ring wider than the pane can show, so the camera's sub-tile offset
-    // has a tile to slide in from instead of a blank trailing edge. Every
+    // Two rings wider than the pane can show. The first is the tile the
+    // camera's sub-tile offset slides in from, without which the trailing
+    // edge goes blank; the second exists so *that* tile has neighbours of its
+    // own to compare biomes with, since a tile cannot know whether it sits on
+    // the edge of the walkable world without seeing what is beside it. Every
     // grid-to-world conversion below goes through `hw`/`hh` for that reason —
-    // the ring shifts the whole grid by one cell.
+    // the rings shift the whole grid by two cells.
     let half_w = ((map_w / tile_px) / 2.0).max(1.0) as i32;
     let half_h = ((map_h / tile_px) / 2.0).max(1.0) as i32;
-    let hw = half_w + 1;
-    let hh = half_h + 1;
+    let hw = half_w + RINGS;
+    let hh = half_h + RINGS;
 
     let (off_x, off_y) = fx.camera_offset(status.position, painter.delta());
     let tiles = game.view_tiles(hw, hh);
@@ -243,17 +511,27 @@ fn draw_surface_map(
     painter.rect(0.0, 0.0, map_w, map_h, Color::new(0.03, 0.03, 0.05, 1.0));
     for (ry, row) in tiles.iter().enumerate() {
         for (rx, tile) in row.iter().enumerate() {
-            let (mut ch, biome_color) = biome_style(tile.biome);
-            let mut color = terrain_color(biome_color);
-            // Background starts from the full-saturation biome color, not
-            // `color` — unlike the entity branch below, terrain's tile
-            // background is deliberately not desaturated, so bare ground
-            // keeps its biome identity instead of the whole map going grey.
+            let biome_color = biome_tint(tile.biome);
+            // Terrain no longer carries a glyph — the biome is drawn as
+            // geometry — so this stays `None` unless something is standing
+            // here. That is the whole division of labour on this map:
+            // terrain is shapes, actors are glyphs.
+            let mut ch = None;
+            let mut color = biome_color;
             let mut bg_source = biome_color;
-            // The extra ring costs a tile of leading offset, so the pane
-            // frames the same view it did before the camera existed.
-            let px = (rx as f32 - 1.0 - off_x) * tile_px;
-            let py = (ry as f32 - 1.0 - off_y) * tile_px;
+            // The extra rings cost a leading offset, so the pane frames the
+            // same view it did before the camera existed.
+            let px = (rx as f32 - RINGS as f32 - off_x) * tile_px;
+            let py = (ry as f32 - RINGS as f32 - off_y) * tile_px;
+            // The fetched rings exist to be *read* — by the camera slide and
+            // by `draw_tile_edges` — not to be drawn. Nothing clips this pane,
+            // and the log panel below it is drawn at 0.95 alpha, so a row
+            // sitting past the bottom edge shows through it as a band of
+            // terrain behind the text. Culling here rather than shrinking the
+            // grid keeps every visible tile's neighbours in hand.
+            if px >= map_w || py >= map_h || px + tile_px <= 0.0 || py + tile_px <= 0.0 {
+                continue;
+            }
             let mut staffed = false;
             let mut machine_status = None;
             let mut linked_edges: &[(i32, i32)] = &[];
@@ -264,7 +542,7 @@ fn draw_surface_map(
                 let erx = ev.pos.0 - status.position.0 + hw;
                 let ery = ev.pos.1 - status.position.1 + hh;
                 if erx == rx as i32 && ery == ry as i32 {
-                    ch = ev.glyph;
+                    ch = Some(ev.glyph);
                     color = glyph_color(ev.color);
                     staffed = ev.is_structure && ev.structure_worker.is_some();
                     machine_status = ev.machine_status;
@@ -311,25 +589,31 @@ fn draw_surface_map(
                 map_h / 2.0,
             );
             let dim = shade * vig;
-            let mut bg = Color::new(
-                bg_source.r * 0.18 * dim,
-                bg_source.g * 0.18 * dim,
-                bg_source.b * 0.18 * dim,
-                1.0,
-            );
+            let mut bg = at_level(bg_source, GROUND_LEVEL * dim);
             if critical {
-                bg = Color::new((bg.r + 0.18).min(1.0), bg.g, bg.b, bg.a);
+                bg = Color::new((bg.r + GROUND_LEVEL).min(1.0), bg.g, bg.b, bg.a);
             }
-            painter.rect(px, py, tile_px - 1.0, tile_px - 1.0, bg);
+            let cell = Rect::new(px, py, tile_px - 1.0, tile_px - 1.0);
+            painter.rect(cell.x, cell.y, cell.w, cell.h, bg);
+            // Bare ground only, for the same reason the shade jitter above is:
+            // where something is standing, the tile is carrying that thing's
+            // damage-dimmed colour, and a biome pattern drawn through it would
+            // muddy the durability read.
+            if !occupied {
+                draw_biome(painter, tile.biome, cell, at_level(biome_color, dim), world);
+                draw_tile_edges(painter, &tiles, rx, ry, cell, biome_color, vig);
+            }
             // The glyph takes the vignette but not the shade: depth should
             // apply to everything on the map evenly, while per-tile jitter is
             // a property of the ground, not of what stands on it.
             let color = Color::new(color.r * vig, color.g * vig, color.b * vig, color.a);
-            let glyph = ch.to_string();
-            let dims = painter.measure_map(&glyph, glyph_px);
-            let tx = px + (tile_px - dims.width) / 2.0;
-            let ty = py + (tile_px + dims.height) / 2.0;
-            painter.map(&glyph, tx, ty, glyph_px, color);
+            if let Some(ch) = ch {
+                let glyph = ch.to_string();
+                let dims = painter.measure_map(&glyph, glyph_px);
+                let tx = px + (tile_px - dims.width) / 2.0;
+                let ty = py + (tile_px + dims.height) / 2.0;
+                painter.map(&glyph, tx, ty, glyph_px, color);
+            }
             // Marks where the player materialized on breaching into this
             // zone (see `Game::zone_spawn_point`) — an outline rather than
             // replacing the glyph, so whatever's actually standing there
@@ -590,6 +874,65 @@ fn draw_status_panel(
 mod tests {
     use super::*;
     use feral_processes_engine::MessageSource;
+
+    /// Every `Biome` variant, listed the way `species.rs`'s own biome census
+    /// lists them. A new variant missing from here makes the tint census
+    /// below pass vacuously, which is the failure mode that census exists to
+    /// prevent — but `biome_tint`'s match is exhaustive, so a new biome
+    /// cannot reach a test run without someone having already been sent to
+    /// this file by the compiler.
+    const ALL_BIOMES: [Biome; 7] = [
+        Biome::DataVoid,
+        Biome::StaticField,
+        Biome::NullSector,
+        Biome::Mainframe,
+        Biome::OpenGrid,
+        Biome::BlackIce,
+        Biome::Platform,
+    ];
+
+    /// Whether a tint reads as hostile: red dominant over both other
+    /// channels. The map's whole colour rule is that hue answers "can I
+    /// cross this", so this is the question the census below asks.
+    fn reads_as_hostile(c: Color) -> bool {
+        c.r > c.g && c.r > c.b
+    }
+
+    /// The palette's one load-bearing promise: hue tells the player whether
+    /// terrain can be walked on, and pattern tells them which biome it is.
+    /// A biome tinted into the wrong family is worse than a drawing bug —
+    /// it tells the player they can walk into the void.
+    #[test]
+    fn every_biomes_tint_says_whether_it_can_be_walked_on() {
+        for biome in ALL_BIOMES {
+            assert_eq!(
+                reads_as_hostile(biome_tint(biome)),
+                !biome.walkable(),
+                "{biome:?} is walkable={} but its tint {:?} reads the other way — \
+                 hue is the map's only signal for passability",
+                biome.walkable(),
+                biome_tint(biome),
+            );
+        }
+    }
+
+    /// The rim is the edge of the world: it is drawn exactly where
+    /// passability changes, so it cannot appear inside walkable ground or
+    /// inside the void. Symmetric because an edge is shared by two tiles and
+    /// must not depend on which one is asking.
+    #[test]
+    fn a_rim_marks_only_the_boundary_between_walkable_and_not() {
+        for a in ALL_BIOMES {
+            for b in ALL_BIOMES {
+                assert_eq!(
+                    rim(a, b),
+                    a.walkable() != b.walkable(),
+                    "rim({a:?}, {b:?}) disagrees with their walkability"
+                );
+                assert_eq!(rim(a, b), rim(b, a), "rim is not symmetric for {a:?}/{b:?}");
+            }
+        }
+    }
 
     /// The header is the only place the filter key is advertised, so it draws
     /// under `All` too — a filter you can only discover from the help popup is

@@ -46,8 +46,8 @@ use battle::{
     draw_battle_target_menu,
 };
 use building::{
-    draw_build_menu, draw_remove_confirm, draw_remove_menu, draw_structure_menu, draw_structures,
-    draw_symlink_menu, draw_upgrade_menu, draw_worker_menu,
+    draw_build_direction, draw_build_menu, draw_remove_confirm, draw_remove_menu,
+    draw_structure_menu, draw_structures, draw_symlink_menu, draw_upgrade_menu, draw_worker_menu,
 };
 use crafting::{draw_craft_menu, draw_craft_quantity, draw_recipes};
 use field::{draw_field_cast, draw_field_cast_ally};
@@ -382,6 +382,7 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
     let pending_manifest = app.pending_manifest;
     let manifest_from_picker = app.manifest_from_picker;
     let pending_field_routine = app.pending_field_routine;
+    let pending_structure = app.pending_structure.clone();
     // Taken off `app` before `app.game` is borrowed below, and through the
     // same methods the handlers pick from. A renderer holding its own copy
     // of the filter would draw a list the handler doesn't index — which is
@@ -404,12 +405,9 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         Mode::BaseMenu => draw_group_menu(&group_rows, "Base", selected, painter, m),
         Mode::PartyMenu => draw_group_menu(&group_rows, "Party", selected, painter, m),
         Mode::Build => draw_build_menu(game, selected, painter, m),
-        Mode::BuildDirection => draw_direction_prompt(
-            "Deploy Direction",
-            "Choose a direction to deploy (arrows/hjkl), Esc to cancel",
-            painter,
-            m,
-        ),
+        Mode::BuildDirection => {
+            draw_build_direction(game, pending_structure.as_deref(), painter, m)
+        }
         Mode::Craft => draw_craft_menu(game, selected, painter, m),
         Mode::CraftQuantity => draw_craft_quantity(
             game,

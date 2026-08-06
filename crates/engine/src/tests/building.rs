@@ -248,6 +248,39 @@ fn place_structure_rejects_building_beyond_max_distance_from_home() {
         .expect("building back within range of Home should succeed");
 }
 
+/// A refusal for want of materials is the one build refusal the player has to
+/// go and *do* something about, so it goes in the base log rather than living
+/// only in the status line, which ages out after `STATUS_LINE_SECONDS` while
+/// they are looking at the map. It names the shortfall for the same reason:
+/// "not enough" without a number sends them back to the build menu to work
+/// out what they were short of.
+#[test]
+fn deploying_without_the_materials_logs_the_shortfall() {
+    let mut game = Game::new(304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "armor_bench");
+    place_home(&mut game, -1, 0);
+
+    let held = count_item(&game, ids::CORE_FRAGMENT);
+    let err = game
+        .place_structure("armory", 1, 0)
+        .expect_err("an Armory costs far more than the starting kit holds");
+    assert!(err.contains("Not enough"), "unexpected error: {err}");
+
+    let last = game.message_log(1);
+    assert_eq!(
+        last[0].source,
+        MessageSource::Base,
+        "a build refusal is base news, not field news"
+    );
+    assert!(
+        last[0].text.contains("Armory")
+            && last[0].text.contains("18 Core Fragment")
+            && last[0].text.contains(&format!("have {held}")),
+        "the log line should name what was being deployed and how short it fell: {}",
+        last[0].text
+    );
+}
+
 #[test]
 fn remove_structure_refunds_a_percentage_of_its_build_cost() {
     let mut game = Game::new(303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

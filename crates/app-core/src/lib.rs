@@ -855,7 +855,10 @@ pub struct App {
     /// copy of this db does not exist.
     achievement_db: AchievementDb,
     pub quit: bool,
-    pending_structure: Option<String>,
+    /// Which structure *kind* `Mode::BuildDirection` is about to place. Public
+    /// because that screen names it: the build menu's row is off screen by
+    /// then, so a renderer without this can only draw an anonymous compass.
+    pub pending_structure: Option<String>,
     pending_worker: Option<Entity>,
     /// Which group menu opened the screen that is up, if one did — where
     /// `App::close_screen` sends Esc. `None` for a screen reached straight

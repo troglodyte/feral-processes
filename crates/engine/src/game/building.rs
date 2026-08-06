@@ -57,13 +57,30 @@ impl Game {
             return Err("Something is already deployed there.".into());
         }
         let build_cost = self.structure_build_cost(&def);
-        {
+        // Every shortfall at once, and each with its numbers: the build menu
+        // is off screen by the time this fires, so one item per attempt would
+        // make finding out what a structure needs a matter of walking back and
+        // forth. Logged as well as returned because the status line carrying
+        // the refusal ages out in `STATUS_LINE_SECONDS`, and this is the one
+        // build refusal that leaves the player an errand.
+        let short: Vec<String> = {
             let inv = self.world.get::<Inventory>(player).unwrap();
-            for (item, qty) in &build_cost {
-                if inv.count(item) < *qty {
-                    return Err(format!("Not enough {}.", self.item_name(item)));
-                }
-            }
+            build_cost
+                .iter()
+                .filter(|(item, qty)| inv.count(item) < *qty)
+                .map(|(item, qty)| {
+                    format!("{qty} {} (have {})", self.item_name(item), inv.count(item))
+                })
+                .collect()
+        };
+        if !short.is_empty() {
+            let msg = format!(
+                "Not enough materials to deploy the {} — needs {}.",
+                def.name,
+                short.join(", ")
+            );
+            self.log_base(msg.clone());
+            return Err(msg);
         }
         {
             let mut inv = self.world.get_mut::<Inventory>(player).unwrap();

@@ -82,6 +82,53 @@ pub(super) fn draw_build_menu(game: &mut Game, selected: usize, painter: &Painte
     draw_popup("Deploy", PopupSize::Large, &rows, painter, m);
 }
 
+/// The deploy prompt's rows: what is about to be placed, before the compass
+/// that places it.
+///
+/// All `Row::Text` — nothing here is pickable, the direction keys are — so
+/// `popup_layout` pins the lot and none of it scrolls, which is what a prompt
+/// this short wants.
+pub(super) fn build_direction_rows(name: &str, description: &str, cost: &[String]) -> Vec<Row> {
+    vec![
+        Row::TextColored(name.to_string(), YELLOW),
+        Row::TextColored(description.to_string(), TEXT_DIM),
+        text_row(""),
+        text_row(format!("Costs {}", cost.join(", "))),
+        text_row(""),
+        text_row(DIRECTION_PROMPT),
+    ]
+}
+
+const DIRECTION_PROMPT: &str = "Choose a direction to deploy (arrows/hjkl), Esc to cancel";
+
+/// The compass the build menu hands off to. Drawn `Large` rather than `Small`
+/// like the other direction prompts because it carries a structure's
+/// description, which is the same text the build menu needed the wider box
+/// for.
+pub(super) fn draw_build_direction(
+    game: &mut Game,
+    pending: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    // Picked out of the same list `handle_build_key` indexed, so the screen
+    // cannot describe a structure the handler wouldn't deploy.
+    let def = pending.and_then(|id| {
+        game.buildable_structure_defs()
+            .into_iter()
+            .find(|d| d.id == id)
+    });
+    let rows = match def {
+        Some(def) => {
+            let status = game.player_status();
+            let cost = cost_display(game, &game.structure_build_cost(&def), &status.inventory);
+            build_direction_rows(&def.name, &def.description, &cost)
+        }
+        None => vec![text_row(DIRECTION_PROMPT)],
+    };
+    draw_popup("Deploy Direction", PopupSize::Large, &rows, painter, m);
+}
+
 pub(super) fn draw_worker_menu(
     game: &mut Game,
     workers: &[EntityView],
@@ -473,6 +520,37 @@ mod tests {
             machine_status: None,
             linked_edges: Vec::new(),
         }
+    }
+
+    fn row_text(row: &Row) -> &str {
+        match row {
+            Row::Text(t) | Row::TextColored(t, _) => t,
+            Row::Item { text, .. } => text,
+        }
+    }
+
+    /// The deploy prompt used to be a bare compass, which meant the one screen
+    /// where a structure is actually placed was also the one that never said
+    /// what was being placed. Both halves matter: the identity, and the keys
+    /// that act on it.
+    #[test]
+    fn the_deploy_prompt_names_what_is_being_placed_and_still_says_how() {
+        let rows = build_direction_rows(
+            "Mining Node",
+            "Extracts Core Fragments on a timer.",
+            &["Core Fragment (5/12)".to_string()],
+        );
+        let text: Vec<&str> = rows.iter().map(row_text).collect();
+        assert!(text.contains(&"Mining Node"), "{text:?}");
+        assert!(
+            text.contains(&"Extracts Core Fragments on a timer."),
+            "{text:?}"
+        );
+        assert!(
+            text.iter().any(|t| t.contains("Core Fragment (5/12)")),
+            "the cost carries the have/need figures the refusal would otherwise be the first news of: {text:?}"
+        );
+        assert!(text.contains(&DIRECTION_PROMPT), "{text:?}");
     }
 
     #[test]

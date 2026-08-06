@@ -14,6 +14,30 @@ first, separated by a rule.
 
 ## Unreleased
 
+### Breaking: save format 23 → 24
+
+`CreatureSave` gained a field, so existing `.bin` saves stop loading.
+Templates under `dev-saves/` are RON and were updated in place.
+
+### Added: your base has people in it now
+
+A program posted to a machine used to be a name on a screen, frozen on the
+tile you caught it on. It now stands at its machine, and when that machine's
+output buffer fills it carries a load to the nearest Depot and walks back.
+You can watch it happen.
+
+Two consequences. A machine no longer stops dead when it fills — it sheds
+five units at a time and keeps going, so how long your base runs unattended
+is a question about where you put the Depot rather than a fixed number. And
+a program takes a moment to reach its post when you assign it: it walks
+there, and produces nothing until it arrives. A machine whose program is
+away says so.
+
+The Depot itself holds a hundred units and costs twelve Core Fragments. You
+collect from it the way you collect from anything else — stand next to it.
+Build a second one across a sprawled base and half your programs' walks get
+shorter. Build none and nothing changes at all.
+
 ### Breaking: save format 22 → 23
 
 `CreatureSave` gained a field, so existing `.bin` saves stop loading.

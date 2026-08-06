@@ -1,10 +1,10 @@
 # Structures
 
 Every shipped structure in feral-processes, charted from its own file in
-`assets/structures/`. Twenty of them.
+`assets/structures/`. 21 of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/structures/*.ron` on 2026-08-05 and will drift the moment one of those
+`assets/structures/*.ron` on 2026-08-06 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
 Everything below must be deployed within 7 tiles of a Home, and demolishing
@@ -14,10 +14,10 @@ that automate a base, not the base itself.
 
 | | |
 |---|---|
-| structures | 20 |
+| structures | 21 |
 | producers (make something from nothing, on a timer) | 4 |
 | assemblers (consume a neighbour's output) | 9 |
-| utility | 7 |
+| utility | 8 |
 | upgradeable | 5, all to Mk5 |
 | built from something other than salvage | 4 — Disk Press, Assembly Bay, Patch Node, Zone Portal |
 
@@ -41,6 +41,7 @@ that automate a base, not the base itself.
 | `Y` | Assembly Bay | 20 `core_fragment`, 4 `charge_coil` | 10 | `patch_routine` |
 | `$` | iso Market | 16 `core_fragment` | - | buys and sells, 1 Credit a unit |
 | `=` | Data Cache | 10 `core_fragment` | - | +5 roster slots while standing |
+| `D` | Depot | 12 `core_fragment` | 100 | programs empty full machines into it |
 | `^` | Shield | 16 `core_fragment` | - | -2 sweep damage, base-wide |
 | `/` | Patch Node | 18 `core_fragment`, 4 `power_cell` | - | +1 Durability per tier / 20 ticks |
 | `z` | Recharger Node | 10 `core_fragment` | - | +1 Power a tick within 7 tiles |

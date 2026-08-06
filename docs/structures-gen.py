@@ -29,6 +29,7 @@ S = [
  ("assembly_bay",   "Assembly Bay",   "Y", "Magenta",[("core_fragment", 20), ("charge_coil", 4)],"assembler","patch_routine",                   20,   10, "winding_node",None),
  ("market",         "iso Market",     "$", "Yellow", [("core_fragment", 16)],                   "utility",  "buys and sells, 1 Credit a unit", None, None, None,          None),
  ("data_cache",     "Data Cache",     "=", "Gray",   [("core_fragment", 10)],                   "utility",  "+5 roster slots while standing",  None, None, None,          None),
+ ("depot",          "Depot",          "D", "Cyan",   [("core_fragment", 12)],                   "utility",  "programs empty full machines into it",None, 100, None,        None),
  ("shield",         "Shield",         "^", "Blue",   [("core_fragment", 16)],                   "utility",  "-2 sweep damage, base-wide",      None, None, None,          None),
  ("patch_node",     "Patch Node",     "/", "Green",  [("core_fragment", 18), ("power_cell", 4)],"utility",  "+1 Durability per tier / 20 ticks",None, None, None,         12),
  ("recharger_node", "Recharger Node", "z", "Orange", [("core_fragment", 10)],                   "utility",  "+1 Power a tick within 7 tiles",  None, None, None,          None),
@@ -106,10 +107,10 @@ def rate_chart(width=34):
 doc = f"""# Structures
 
 Every shipped structure in feral-processes, charted from its own file in
-`assets/structures/`. Twenty of them.
+`assets/structures/`. {len(R)} of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/structures/*.ron` on 2026-08-05 and will drift the moment one of those
+`assets/structures/*.ron` on 2026-08-06 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
 Everything below must be deployed within 7 tiles of a Home, and demolishing

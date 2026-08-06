@@ -347,7 +347,10 @@ impl Game {
         if self.wielded_program() == Some(creature) {
             return Err("You're already wielding that program.".into());
         }
-        self.remove_companion(creature);
+        // The unequip comes first because it is the last thing here that can
+        // still fail — `slot_occupant_with_mods` refuses a worn item that has
+        // dropped out of the item set. Standing the program down before it
+        // would leave a refused wield having emptied a party slot for nothing.
         let displaced = self
             .world
             .get::<Equipment>(player)
@@ -355,6 +358,7 @@ impl Game {
         if displaced {
             self.unequip(EquipmentSlot::Weapon)?;
         }
+        self.remove_companion(creature);
         self.world.insert_resource(WieldedProgram(Some(creature)));
         let name = self.creature_label(creature);
         self.log(format!(

@@ -165,6 +165,35 @@ fn a_wield_refused_in_battle_changes_nothing() {
     assert_eq!(game.wielded_program(), None);
 }
 
+/// The narrow refusal the wield ordering exists for: `unequip` is the last
+/// step that can still fail, and it fails on a worn item whose `ItemDef` has
+/// gone (a mod removed it between sessions). Standing the program down first
+/// would empty a party slot for a wield that never happened.
+#[test]
+fn a_wield_refused_by_an_unequippable_weapon_leaves_the_party_alone() {
+    let mut game = Game::new(9123, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Equipment>(player)
+        .unwrap()
+        .weapon
+        .replace(EquippedItem {
+            item: ItemId::from("an_item_this_asset_set_has_never_heard_of"),
+            level: 1,
+            fusion_tier: 0,
+        });
+    let program = spawn_tamed(&mut game, 40, 20);
+    game.add_companion(program).unwrap();
+
+    assert!(game.wield_program(program).is_err());
+
+    assert!(
+        game.world.resource::<Party>().0.contains(&program),
+        "the party slot survives a wield that could not complete"
+    );
+    assert_eq!(game.wielded_program(), None);
+}
+
 #[test]
 fn wielding_costs_one_turn_whether_or_not_it_displaces_a_weapon() {
     let mut bare = Game::new(9108, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

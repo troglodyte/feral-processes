@@ -425,3 +425,39 @@ fn a_depot_demolished_mid_walk_re_targets_the_next_one() {
         "a worker whose depot vanished mid-walk delivers to the next nearest"
     );
 }
+
+#[test]
+fn a_carried_load_survives_a_save_and_load() {
+    let mut game = base(10);
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    deploy(&mut game, "depot", 6, 0);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+
+    tick_until(&mut game, 200, |g| {
+        g.world.get::<Carrying>(worker).is_some()
+    });
+    let before = game
+        .world
+        .get::<Carrying>(worker)
+        .cloned()
+        .expect("precondition");
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_hauling_test_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let mut q = loaded.world.query::<(&Carrying, &Task)>();
+    let (carrying, _) = q
+        .iter(&loaded.world)
+        .next()
+        .expect("the load must come back with the worker");
+    assert_eq!(carrying.item, before.item);
+    assert_eq!(carrying.qty, before.qty);
+}

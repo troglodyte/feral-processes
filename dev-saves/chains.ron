@@ -110,6 +110,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "sub_process",
@@ -143,6 +144,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "sub_process",
@@ -176,6 +178,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "sub_process",
@@ -209,6 +212,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "sub_process",
@@ -242,6 +246,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "sub_process",
@@ -275,6 +280,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "construct",
@@ -308,6 +314,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "drone",
@@ -341,6 +348,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "rootkit",
@@ -375,6 +383,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "overseer",
@@ -408,6 +417,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "sentinel",
@@ -440,6 +450,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "cipher",
@@ -473,6 +484,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "crawler",
@@ -504,6 +516,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "scrapper",
@@ -532,6 +545,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "zero_day",
@@ -558,6 +572,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "trojan",
@@ -584,6 +599,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "worm",
@@ -610,6 +626,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "worm",
@@ -636,6 +653,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "sub_process",
@@ -662,6 +680,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "virus",
@@ -688,6 +707,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "rootkit",
@@ -714,6 +734,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "wintermute",
@@ -740,6 +761,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "glitch",
@@ -766,6 +788,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "rootkit",
@@ -792,6 +815,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "trojan",
@@ -818,6 +842,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "drone",
@@ -844,6 +869,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "glitch",
@@ -870,6 +896,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "glitch",
@@ -898,6 +925,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
         (
             species: "sub_process",
@@ -924,6 +952,7 @@
             field_buffs: [],
             nest_position: None,
             pursuing: false,
+            carrying: None,
         ),
     ],
     structures: [

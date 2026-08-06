@@ -133,6 +133,17 @@ pub struct CreatureSave {
     /// This is a shape change to `CreatureSave`, so it required bumping
     /// `SAVE_FORMAT_VERSION` — see that constant's docs.
     pub pursuing: bool,
+    /// A load this program is carrying to a depot (`components::Carrying`).
+    /// Only meaningful when `tamed` is true, and only a working program can
+    /// hold one.
+    ///
+    /// The *destination* is deliberately absent: which depot is the nearest
+    /// one with room is re-derived from position on the tick after the load,
+    /// which is the whole reason the live feature stores no state but this.
+    ///
+    /// This is a shape change to `CreatureSave`, so it required bumping
+    /// `SAVE_FORMAT_VERSION` — see that constant's docs.
+    pub carrying: Option<(ItemId, u32)>,
 }
 
 /// A nest's state on disk: its species, position, remaining `Durability`,
@@ -313,7 +324,9 @@ pub struct SaveData {
 /// the cadence it fires on rather than firing every turn.
 /// 22 → 23: `CreatureSave` gained `wielded`, for the tamed program equipped
 /// as the player's weapon (`resources::WieldedProgram`).
-pub const SAVE_FORMAT_VERSION: u32 = 23;
+/// 23 → 24: `CreatureSave` gained `carrying`, for a program mid-delivery to
+/// a depot (`components::Carrying`).
+pub const SAVE_FORMAT_VERSION: u32 = 24;
 
 /// Renders a save as editable RON, for the `savetool` binary.
 ///

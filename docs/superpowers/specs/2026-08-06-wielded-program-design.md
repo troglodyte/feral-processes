@@ -1,7 +1,7 @@
 # Wielding a program as your weapon
 
 **Date:** 2026-08-06
-**Status:** designed, not built
+**Status:** built, 2026-08-06
 
 A hidden command on the companion screen equips one of your tamed programs
 into the weapon slot. Wielding it lends you a passive ATK/DEF bonus and gives

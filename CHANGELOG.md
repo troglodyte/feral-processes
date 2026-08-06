@@ -14,6 +14,23 @@ first, separated by a rule.
 
 ## Unreleased
 
+### Breaking: save format 22 → 23
+
+`CreatureSave` gained a field, so existing `.bin` saves stop loading.
+Templates under `dev-saves/` are RON and were updated in place.
+
+### Added: a program can be more than a companion
+
+There is something you can do with a tamed program besides fielding it or
+putting it to work. It is not written down anywhere, and it is not going
+to be — but a program used that way lends you its strength directly, and
+sometimes acts on its own while you fight. Which program you pick decides
+what that is worth.
+
+It costs you the program's other roles while it lasts: it will not stand
+in the battle line at the same time, and it takes the place of whatever
+you were carrying. Both come back the moment you stop.
+
 ### Changed: the way to the next zone runs through the Stack
 
 Portal Fragments now come from one place — the guardian in a Stack lair —

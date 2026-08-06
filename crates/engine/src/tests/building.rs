@@ -1007,8 +1007,9 @@ fn a_banked_resource_never_scales_with_zone_depth() {
 
     assert_eq!(
         gained, 1,
-        "research_data has a bank_limit of 200 — scaling it would fill the bank in ~13 \
-         cycles and turn the research economy into 'no room to store it' spam"
+        "the research tree is a fixed ladder — cortex, its deepest node, costs 45 — so a \
+         payout that doubled per zone would collapse the whole tree in a handful of \
+         cycles rather than accelerate it"
     );
 }
 

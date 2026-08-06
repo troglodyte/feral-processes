@@ -687,31 +687,16 @@ impl Game {
     }
 
     /// Awards unsolicited income — battle loot, a Stack cache, a demolished
-    /// structure's refund — clamped to whatever room is left, returning how
-    /// many units landed.
-    /// Income clamps rather than refusing so a full buffer can never stall
-    /// a battle from resolving or a cronjob worker from running; the loss
-    /// is logged so it is never silent.
+    /// structure's refund — returning how many units landed. The Buffer is
+    /// unbounded and Research Data has no cap of its own, so this always
+    /// lands `qty` in full; callers still read the return, since it's the
+    /// same value they'd otherwise have to pass through by hand.
     pub(crate) fn grant_loot(&mut self, item: ItemId, qty: u32) -> u32 {
         let player = self.player_entity();
-        let added = self
-            .world
-            .resource_scope(|world, db: bevy_ecs::prelude::Mut<ItemDb>| {
-                world
-                    .get_mut::<Inventory>(player)
-                    .unwrap()
-                    .add_capped(item.clone(), qty, &db)
-            });
-        if added < qty {
-            let lost = qty - added;
-            let label = if self.bank_limit_of(&item).is_some() {
-                "Research bank"
-            } else {
-                "Buffer"
-            };
-            let name = self.item_name(&item).to_string();
-            self.log(format!("{label} full — {lost} {name} lost."));
-        }
-        added
+        self.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(item, qty);
+        qty
     }
 }

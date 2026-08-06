@@ -48,10 +48,9 @@ pub(super) fn draw_research_menu(game: &mut Game, selected: usize, painter: &Pai
         .find(|(item, _)| *item == research_currency)
         .map(|(_, n)| *n)
         .unwrap_or(0);
-    let bank_limit = game.bank_limit_of(&research_currency).unwrap_or(0);
     let nodes = game.research_nodes();
     let mut rows = vec![
-        Row::TextColored(format!("Research Data: {held}/{bank_limit}"), CYAN),
+        Row::TextColored(format!("Research Data: {held}"), CYAN),
         text_row(""),
     ];
     for (i, node) in nodes.iter().enumerate() {

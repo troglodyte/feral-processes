@@ -141,33 +141,6 @@ fn a_program_too_weak_to_price_still_sells_for_one_credit() {
     assert_eq!(credits(&game), before + 1, "3 power still pays 1, not 0");
 }
 
-/// `sell_companion` checks room for the payout before despawning, the
-/// same ordering `sell_item` documents. That guard cannot currently fire:
-/// `check_room` only refuses a bank-limited item, and the only shipped
-/// item with a `bank_limit` is Research Data, not the trade currency.
-///
-/// It stays anyway, because which item is currency and whether it is
-/// banked are both `assets/items/` data — a mod can make this reachable
-/// without touching Rust. This test pins the assumption that makes the
-/// guard currently inert, so that if a future change banks the currency
-/// it fails here and points at the ordering rather than surfacing as
-/// programs vanishing for no payment.
-#[test]
-fn the_trade_currency_is_unbanked_so_a_payout_can_always_land() {
-    let game = Game::new(122, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let currency = game.currency();
-    assert_eq!(
-        game.world
-            .resource::<ItemDb>()
-            .get(currency.as_str())
-            .and_then(|d| d.bank_limit),
-        None,
-        "if the currency gains a bank_limit, re-check sell_companion's \
-         check_room-before-despawn ordering — a refusal after the despawn \
-         would destroy the program for nothing"
-    );
-}
-
 /// Whatever the reason, a refused sale must leave the program alive.
 #[test]
 fn a_refused_sale_never_destroys_the_program() {

@@ -67,10 +67,6 @@ impl Game {
         }
         let taken = have.min(qty);
         let payout = self.item_value(&item) * trade.sell_rate * taken;
-        // Refuse rather than clamp: the item is already gone once `take`
-        // runs, so checking room only after taking would let a refusal
-        // destroy the sold item for nothing.
-        self.check_room(&currency, payout)?;
         let name = self.item_name(&item).to_string();
         let money = self.item_name(&currency).to_string();
         {
@@ -182,8 +178,7 @@ impl Game {
     ///
     /// Separate from `buy_item` rather than folded into it: that list is an
     /// infinite catalogue priced per item, this shelf is finite and drains as
-    /// it's bought. Both share the ordering `sell_item` documents — Credits
-    /// and cargo room are checked before anything moves.
+    /// it's bought.
     pub fn buy_back(&mut self, structure: Entity, item: ItemId, qty: u32) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -223,7 +218,6 @@ impl Game {
         {
             return Err(format!("Not enough {money} (need {total_cost})."));
         }
-        self.check_room(&item, qty)?;
         {
             let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
             inv.take(currency, total_cost);
@@ -362,11 +356,6 @@ impl Game {
     /// Whatever the program was doing is cancelled: a party slot, a cronjob,
     /// a guard post. Each is logged, so a structure that stops producing
     /// says so rather than going quiet.
-    ///
-    /// The payout is checked for room *before* the program is destroyed, for
-    /// the reason `sell_item` documents about its own ordering: the currency
-    /// can be bank-limited, and discovering that after despawning would eat
-    /// the program for nothing.
     pub fn sell_companion(&mut self, structure: Entity, creature: Entity) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -387,7 +376,6 @@ impl Game {
             .program_payout(structure, creature)
             .ok_or_else(|| "That program can't be appraised.".to_string())?;
         let currency = self.trade_currency();
-        self.check_room(&currency, payout)?;
 
         let name = self.dissolve_tamed_program(creature);
         let money = self.item_name(&currency).to_string();
@@ -431,7 +419,6 @@ impl Game {
         {
             return Err(format!("Not enough {money} (need {total_cost})."));
         }
-        self.check_room(&item, qty)?;
         let name = self.item_name(&item).to_string();
         {
             let mut inv = self.world.get_mut::<Inventory>(player).unwrap();

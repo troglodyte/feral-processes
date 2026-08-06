@@ -24,12 +24,22 @@ disqualifies the whole file.
     // to match by hand.
     description: "Restores 25 Power. The staple of staying on the Grid.",
 
-    // Optional; can be left out entirely (defaults to no bank limit). The
-    // ordinary Buffer (cargo) is unbounded; setting this makes an item a
-    // banked currency instead, capped only by this ceiling — Research Data
-    // does this so its own stockpile has a hard limit separate from cargo.
-    // Leave it out for ordinary cargo, which is never capped.
-    bank_limit: Some(200),
+    // Optional; can be left out entirely (defaults to false, ordinary cargo).
+    // A banked item is a pool rather than something the player carries, and
+    // that one flag carries every consequence:
+    //
+    //   - it never counts against the cargo the player is shown;
+    //   - it never scales with the zone payout curve, unlike ordinary salvage
+    //     from a work node;
+    //   - a structure that produces it delivers it straight to the player
+    //     instead of filling its own output buffer, so it is never collected
+    //     by hand and can never feed a neighbouring machine in a chain;
+    //   - it is not listed in the inventory and cannot be bought or sold.
+    //
+    // Research Data is the only shipped item that sets it. There is no
+    // ceiling on a bank — leave the item out of `craftable` costs and
+    // structure `build_cost`s, since a banked item can't be an ingredient.
+    banked: true,
 
     // Optional; can be left out entirely (defaults to 1, the flat rate every
     // item traded at before this field existed — so a mod written against

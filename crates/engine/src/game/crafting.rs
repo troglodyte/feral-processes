@@ -135,7 +135,6 @@ impl Game {
                 }
             }
         }
-        self.check_room(result, quantity)?;
         {
             let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
             for (item, qty) in &cost {
@@ -291,7 +290,6 @@ impl Game {
         let Some((equipped, base_mods)) = self.slot_occupant_with_mods(player, slot)? else {
             return Err(format!("Nothing equipped in your {} slot.", slot.label()));
         };
-        self.check_room(&equipped.item, 1)?;
         {
             let mut equipment = self.world.get_mut::<Equipment>(player).unwrap();
             *equipment.slot_mut(slot) = None;

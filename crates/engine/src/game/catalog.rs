@@ -277,10 +277,6 @@ impl Game {
             .is_some_and(|d| d.consume.is_some())
     }
 
-    pub fn bank_limit_of(&self, id: &ItemId) -> Option<u32> {
-        self.world.resource::<ItemDb>().get(id.as_str())?.bank_limit
-    }
-
     pub fn currency(&self) -> ItemId {
         self.world
             .resource::<ItemDb>()
@@ -384,28 +380,6 @@ impl Game {
             .get::<Inventory>(self.player_entity())
             .map(|inv| inv.cargo_used(db))
             .unwrap_or(0)
-    }
-
-    /// `Ok(())` if `qty` more of `item` would fit. Ordinary cargo (the
-    /// Buffer) is unbounded, so this only ever refuses a banked currency (an
-    /// item with `ItemDef::bank_limit`, e.g. Research Data) that would exceed
-    /// its own separate cap. Used by the paths where the player pays an input
-    /// cost — compiling, buying, unequipping — since letting a bank overflow
-    /// would destroy value the player already spent.
-    pub(crate) fn check_room(&self, item: &ItemId, qty: u32) -> Result<(), String> {
-        let db = self.world.resource::<ItemDb>();
-        let Some(limit) = db.get(item.as_str()).and_then(|d| d.bank_limit) else {
-            return Ok(());
-        };
-        let used = self
-            .world
-            .get::<Inventory>(self.player_entity())
-            .unwrap()
-            .count(item);
-        if used.saturating_add(qty) > limit {
-            return Err(format!("Research bank full ({used}/{limit})."));
-        }
-        Ok(())
     }
 
     /// The actual item cost to deploy `def` right now: `def.build_cost`

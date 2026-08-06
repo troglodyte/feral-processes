@@ -72,8 +72,11 @@ pub struct ItemDef {
     /// the shipped-assets test refuses for anything in this repo.
     #[serde(default)]
     pub description: String,
+    /// Marks this item as banked currency rather than ordinary cargo — see
+    /// `Inventory::cargo_used`. `#[serde(default)]` so an existing mod file
+    /// without the field still parses, as ordinary cargo.
     #[serde(default)]
-    pub bank_limit: Option<u32>,
+    pub banked: bool,
     /// What one unit is worth in trade currency, before any trader's own
     /// `TradeDef::sell_rate` multiplier. Read through `Game::item_value`,
     /// never directly, so selling and the buyback shelf cannot disagree
@@ -384,7 +387,7 @@ mod tests {
             &ItemId::from("portal_fragment")
         );
         assert_eq!(db.trade_currency().unwrap(), &ItemId::from("credits"));
-        assert_eq!(db.get("research_data").unwrap().bank_limit, Some(200));
+        assert!(db.get("research_data").unwrap().banked);
         assert_eq!(db.get("ice_breaker").unwrap().taming_potency, Some(0.4));
         assert_eq!(db.get("power_cell").unwrap().consume.unwrap().power, 25.0);
 
@@ -393,7 +396,7 @@ mod tests {
         // widen the buffer the player is supposed to be squeezed by.
         let banked: Vec<&str> = db
             .all()
-            .filter(|d| d.bank_limit.is_some())
+            .filter(|d| d.banked)
             .map(|d| d.id.as_str())
             .collect();
         assert_eq!(banked, ["research_data"], "only Research Data is banked");

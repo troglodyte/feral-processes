@@ -184,7 +184,7 @@ pub(crate) fn resolve_gather_cycle(
     let def = item_db.get(node.resource.as_str());
     // Read per cycle rather than baked in at deploy, so a base that travels
     // to a deeper zone immediately earns at the new rate.
-    let payout = if flat_payout || def.and_then(|d| d.bank_limit).is_some() {
+    let payout = if flat_payout || def.is_some_and(|d| d.banked) {
         1
     } else {
         node_payout(tier.map(|t| t.0).unwrap_or(1), zone)

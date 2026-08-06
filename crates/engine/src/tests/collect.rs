@@ -110,48 +110,6 @@ fn collecting_leaves_a_neighbours_input_untouched() {
     );
 }
 
-/// What doesn't fit stays in the buffer rather than being voided — the
-/// player can come back for it once they have made room.
-#[test]
-fn a_full_bank_leaves_the_remainder_in_the_buffer() {
-    let mut game = Game::new(942, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let limit = game
-        .world
-        .resource::<ItemDb>()
-        .get(ids::RESEARCH_DATA)
-        .and_then(|d| d.bank_limit)
-        .expect("research_data ships with a bank limit");
-    give(&mut game, &ItemId::from(ids::RESEARCH_DATA), limit - 1);
-
-    let p = player_tile(&game);
-    let node = stocked_structure(
-        &mut game,
-        "research_node",
-        p.x + 1,
-        p.y,
-        &[(ids::RESEARCH_DATA, 5)],
-    );
-
-    let taken = game.collect_adjacent();
-
-    assert_eq!(
-        held(&game, &ItemId::from(ids::RESEARCH_DATA)),
-        limit,
-        "the bank fills to its limit and no further"
-    );
-    assert_eq!(taken, vec![(ItemId::from(ids::RESEARCH_DATA), 1)]);
-    assert_eq!(
-        game.world
-            .get::<Stock>(node)
-            .unwrap()
-            .output
-            .get(&ItemId::from(ids::RESEARCH_DATA))
-            .copied(),
-        Some(4),
-        "the four that didn't fit are still there to come back for"
-    );
-}
-
 /// A misfired keypress must not cost a turn — the base ticks on, and a
 /// player mashing `c` beside nothing would otherwise be spending time.
 #[test]

@@ -264,44 +264,14 @@ impl Inventory {
     }
 
     /// Total units of ordinary cargo held. Banked currencies (an item with
-    /// `ItemDef::bank_limit` set) are excluded — this is just how full the
+    /// `ItemDef::banked` set) are excluded — this is just how full the
     /// (unbounded) Buffer is, shown to the player.
     pub fn cargo_used(&self, db: &ItemDb) -> u32 {
         self.items
             .iter()
-            .filter(|(item, _)| db.get(item.as_str()).and_then(|d| d.bank_limit).is_none())
+            .filter(|(item, _)| !db.get(item.as_str()).is_some_and(|d| d.banked))
             .map(|(_, qty)| *qty)
             .sum()
-    }
-
-    /// Adds as much of `qty` as fits and returns how many units actually
-    /// landed, so a caller can log the shortfall. Ordinary cargo is unbounded
-    /// and always lands in full; only a banked currency is measured against
-    /// its own ceiling.
-    ///
-    /// Holding more than a bank's ceiling is legal (a save predating the cap,
-    /// or a bank structure destroyed while full) — this only refuses to make
-    /// it worse, hence the saturating subtraction.
-    pub fn add_capped(&mut self, item: ItemId, qty: u32, db: &ItemDb) -> u32 {
-        let added = match db.get(item.as_str()).and_then(|d| d.bank_limit) {
-            Some(limit) => qty.min(limit.saturating_sub(self.count(&item))),
-            None => qty,
-        };
-        if added > 0 {
-            self.add(item, added);
-        }
-        added
-    }
-
-    /// Whether `qty` more of `item` would fit. Ordinary cargo is unbounded so
-    /// always has room; a banked currency is checked against its own bank
-    /// limit. Lets a caller check before committing to an action whose input
-    /// cost it can't undo.
-    pub fn has_room(&self, item: &ItemId, qty: u32, db: &ItemDb) -> bool {
-        match db.get(item.as_str()).and_then(|d| d.bank_limit) {
-            Some(limit) => self.count(item).saturating_add(qty) <= limit,
-            None => true,
-        }
     }
 
     /// Removes up to `qty` of `item`, returning how many were actually
@@ -941,12 +911,6 @@ mod inventory_tests {
             .0
     }
 
-    fn research_data_bank_limit(db: &ItemDb) -> u32 {
-        db.get(ids::RESEARCH_DATA)
-            .and_then(|d| d.bank_limit)
-            .expect("research_data ships with a bank limit")
-    }
-
     #[test]
     fn cargo_used_ignores_banked_currency() {
         let db = item_db();
@@ -958,57 +922,6 @@ mod inventory_tests {
             inv.cargo_used(&db),
             8,
             "Research Data is banked, not carried"
-        );
-    }
-
-    #[test]
-    fn add_capped_never_caps_ordinary_cargo() {
-        let db = item_db();
-        let mut inv = Inventory::default();
-        inv.add(ItemId::from(ids::CORE_FRAGMENT), 200);
-        let added = inv.add_capped(ItemId::from(ids::POWER_CELL), 5, &db);
-        assert_eq!(
-            added, 5,
-            "the Buffer is unbounded — cargo always lands in full"
-        );
-        assert_eq!(inv.count(&ItemId::from(ids::POWER_CELL)), 5);
-    }
-
-    #[test]
-    fn add_capped_measures_banked_currency_against_its_own_limit() {
-        let db = item_db();
-        let mut inv = Inventory::default();
-        inv.add(ItemId::from(ids::CORE_FRAGMENT), 200);
-        let added = inv.add_capped(ItemId::from(ids::RESEARCH_DATA), 50, &db);
-        assert_eq!(added, 50, "cargo has no bearing on banked research income");
-        assert_eq!(inv.count(&ItemId::from(ids::RESEARCH_DATA)), 50);
-    }
-
-    #[test]
-    fn add_capped_clamps_research_data_at_its_bank_limit() {
-        let db = item_db();
-        let limit = research_data_bank_limit(&db);
-        let mut inv = Inventory::default();
-        inv.add(ItemId::from(ids::RESEARCH_DATA), limit - 2);
-        assert_eq!(inv.add_capped(ItemId::from(ids::RESEARCH_DATA), 10, &db), 2);
-        assert_eq!(inv.count(&ItemId::from(ids::RESEARCH_DATA)), limit);
-        assert_eq!(inv.add_capped(ItemId::from(ids::RESEARCH_DATA), 1, &db), 0);
-    }
-
-    #[test]
-    fn has_room_is_unbounded_for_cargo_but_bounded_for_banked() {
-        let db = item_db();
-        let limit = research_data_bank_limit(&db);
-        let mut inv = Inventory::default();
-        inv.add(ItemId::from(ids::CORE_FRAGMENT), 10_000);
-        assert!(
-            inv.has_room(&ItemId::from(ids::POWER_CELL), 9_999, &db),
-            "ordinary cargo is unbounded"
-        );
-        inv.add(ItemId::from(ids::RESEARCH_DATA), limit);
-        assert!(
-            !inv.has_room(&ItemId::from(ids::RESEARCH_DATA), 1, &db),
-            "a full bank has no room"
         );
     }
 }

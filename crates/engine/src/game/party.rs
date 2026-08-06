@@ -290,10 +290,86 @@ impl Game {
                 "Your party is full ({MAX_PARTY_SIZE} max) — stand one down first."
             ));
         }
+        // The other door of the wield/party exclusion — see
+        // `wield_program`, which stands a member down for the same reason.
+        // Last, after every refusal above, so a party that turns out to be
+        // full doesn't disarm the player on the way to saying so.
+        if self.wielded_program() == Some(creature) {
+            self.world.insert_resource(WieldedProgram(None));
+            let name = self.creature_label(creature);
+            self.log(format!("You lower {name} and it takes its own footing."));
+        }
         self.world.entity_mut(creature).remove::<Task>();
         self.world.resource_mut::<Party>().0.push(creature);
         let name = self.creature_label(creature);
         self.log(format!("{name} falls in alongside you."));
+        Ok(())
+    }
+
+    /// Equips `creature`, a tamed program you own, as your weapon (see
+    /// `resources::WieldedProgram`). It lends you a standing ATK/DEF share
+    /// (`wielded_stat_bonus`) and gives each of your strikes a chance to
+    /// fire one of its installed routines. It is unharmed by this and gains
+    /// nothing from it: a weapon, not a combatant.
+    ///
+    /// Mutually exclusive with both party membership and a worn weapon
+    /// item, and the ordering is the whole of the safety here — the same
+    /// argument `use_symlink` makes about `clear_stack`. Every refusal
+    /// resolves before any state moves, so a rejected wield can neither
+    /// strand a program between roles nor destroy the gear it displaced.
+    ///
+    /// Costs one turn, like `equip`. Step 4 calls `unequip`, which ticks on
+    /// its own, so the tick below is conditional: one player action is one
+    /// tick whether or not a weapon was displaced.
+    pub fn wield_program(&mut self, creature: Entity) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        let player = self.player_entity();
+        let owner = self
+            .world
+            .get::<Tamed>(creature)
+            .ok_or_else(|| "That program isn't compiled under your control.".to_string())?
+            .owner;
+        if owner != player {
+            return Err("You don't control that program.".into());
+        }
+        if self.wielded_program() == Some(creature) {
+            return Err("You're already wielding that program.".into());
+        }
+        self.remove_companion(creature);
+        let displaced = self
+            .world
+            .get::<Equipment>(player)
+            .is_some_and(|e| e.weapon.is_some());
+        if displaced {
+            self.unequip(EquipmentSlot::Weapon)?;
+        }
+        self.world.insert_resource(WieldedProgram(Some(creature)));
+        let name = self.creature_label(creature);
+        self.log(format!(
+            "You take {name} in hand and level it like a blade."
+        ));
+        if !displaced {
+            self.tick();
+        }
+        Ok(())
+    }
+
+    /// Puts the wielded program down, ending its bonus and its procs. It
+    /// stays a tamed program you own and can be re-wielded or added to the
+    /// party. Costs one turn, matching `unequip`.
+    pub fn unwield_program(&mut self) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        let creature = self
+            .wielded_program()
+            .ok_or_else(|| "You aren't wielding a program.".to_string())?;
+        self.world.insert_resource(WieldedProgram(None));
+        let name = self.creature_label(creature);
+        self.log(format!("You lower {name} and it takes its own footing."));
+        self.tick();
         Ok(())
     }
 

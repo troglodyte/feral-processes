@@ -76,8 +76,8 @@ fn vignette(dx: f32, dy: f32, half_w_px: f32, half_h_px: f32) -> f32 {
 
 /// A biome's colour, and with it the map's one colour rule: **hue answers
 /// "can I cross this", pattern answers "what is it".** The five walkable
-/// biomes share a cool cyan-teal family and the two that are holes in the
-/// map — see `Biome::walkable` — go hot amber. Which is why this returns a
+/// biomes stay in a cool family and the two that are holes in the map — see
+/// `Biome::walkable` — go hot amber. Which is why this returns a
 /// colour rather than drawing one: `every_biomes_tint_says_whether_it_can_be
 /// _walked_on` can only assert that rule against a value, and a biome tinted
 /// into the wrong family tells the player they may walk into the void.
@@ -93,9 +93,16 @@ fn biome_tint(biome: Biome) -> Color {
         // they stay dark ground while that stays a bright wash under a glyph.
         Biome::DataVoid => Color::new(0.95, 0.60, 0.15, 1.0),
         Biome::BlackIce => Color::new(0.95, 0.32, 0.18, 1.0),
-        // Cool: ground. Spread across brightness rather than hue, since hue
-        // is already spoken for by the rule above.
-        Biome::Platform => Color::new(0.30, 0.80, 0.95, 1.0),
+        // Cool: ground. The four the world generates are spread across
+        // brightness rather than hue, since hue is already spoken for by the
+        // rule above.
+        //
+        // Platform is the exception, held apart by hue and by being much the
+        // darkest of the five. It is the only biome the player lays, so it
+        // covers whole screens wherever a base stands — and at a bright cyan
+        // it drowned the base it exists to be a backdrop for. Deep navy is
+        // still unmistakably cool, so the passability rule is untouched.
+        Biome::Platform => Color::new(0.10, 0.18, 0.50, 1.0),
         Biome::Mainframe => Color::new(0.25, 0.85, 0.85, 1.0),
         Biome::StaticField => Color::new(0.70, 0.92, 0.95, 1.0),
         Biome::OpenGrid => Color::new(0.35, 0.85, 0.60, 1.0),
@@ -231,9 +238,12 @@ fn draw_speckle(painter: &Painter, r: Rect, ink: Color, h: u32) {
     }
 }
 
-/// Platform: a solid lit slab, inset so the base's floor reads as laid over
-/// the terrain rather than as more terrain. The brightest ground on the map,
-/// which is the point — this is the one biome the player made.
+/// Platform: a solid slab, inset so the base's floor reads as laid over the
+/// terrain rather than as more terrain. Deliberately the *darkest* ground on
+/// the map: the base is the one place the player has a dozen glyphs and
+/// machine-status outlines to read at once, and the floor's whole job there
+/// is to stay out from under them. What says "the player made this" is the
+/// slab's shape — the only unbroken fill in the set — not its brightness.
 fn draw_slab(painter: &Painter, r: Rect, ink: Color) {
     let i = r.w * 0.12;
     painter.rect(r.x + i, r.y + i, r.w - 2.0 * i, r.h - 2.0 * i, ink);

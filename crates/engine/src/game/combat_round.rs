@@ -3,7 +3,7 @@
 
 use crate::tuning::{
     DEFAULT_TAMING_DIFFICULTY, ENGAGED_GROUPS, FRONT_SLOTS, NEST_RESPAWN_TICKS,
-    PARTY_PASSIVE_STAT_DIVISOR, PLAYER_STRIKE_POWER,
+    PARTY_PASSIVE_STAT_DIVISOR, PLAYER_STRIKE_POWER, WIELDED_PROGRAM_STAT_DIVISOR,
 };
 use crate::*;
 
@@ -803,7 +803,8 @@ impl Game {
         if entity != self.player_entity() {
             return base + bonus + field_bonus;
         }
-        let total = base + bonus + field_bonus + self.party_stat_bonus().0;
+        let total =
+            base + bonus + field_bonus + self.party_stat_bonus().0 + self.wielded_stat_bonus().0;
         let hunger = self
             .world
             .get::<Needs>(entity)
@@ -836,7 +837,7 @@ impl Game {
         if entity != self.player_entity() {
             return base + bonus + field_bonus;
         }
-        base + bonus + field_bonus + self.party_stat_bonus().1
+        base + bonus + field_bonus + self.party_stat_bonus().1 + self.wielded_stat_bonus().1
     }
 
     /// Standing `(atk, def)` bonus the player gets just for having programs
@@ -846,6 +847,45 @@ impl Game {
     /// baked into the player's own `Stats` on add/remove, so it stays
     /// correct automatically as a companion levels up, is fused, or dies —
     /// no separate bookkeeping to keep in sync.
+    /// The program currently wielded as the player's weapon, if it still
+    /// exists.
+    ///
+    /// The existence check is the whole point. A program can be sold,
+    /// extracted, fused away or killed, and each of those despawns it —
+    /// so `resources::WieldedProgram` is allowed to hold a stale entity and
+    /// this drops it, using `Stats` as the repo's idiom for "this entity is
+    /// gone". Neither `dissolve_tamed_program` nor `fuse_companions` has to
+    /// know this feature exists, and a third destruction path added later
+    /// inherits the same immunity. Do not "tidy this up" into an explicit
+    /// clear at each of those sites — the omission is the design.
+    pub(crate) fn wielded_program(&self) -> Option<Entity> {
+        self.world
+            .get_resource::<WieldedProgram>()
+            .and_then(|w| w.0)
+            .filter(|&e| self.world.get::<Stats>(e).is_some())
+    }
+
+    /// Standing `(atk, def)` bonus the player gets for wielding a program,
+    /// or `(0, 0)` when none is wielded. A share of the program's own
+    /// current ATK and DEF, floored at 1 each.
+    ///
+    /// A second, independent knob from `party_stat_bonus` rather than a call
+    /// into it: the party buff is a candidate for removal, and this must
+    /// survive that. Computed live from the program's current `Stats` for
+    /// the reason that function's doc gives — it stays correct as the
+    /// program levels, is fused, or dies, with no bookkeeping to sync.
+    pub(crate) fn wielded_stat_bonus(&self) -> (i32, i32) {
+        self.wielded_program()
+            .and_then(|e| self.world.get::<Stats>(e))
+            .map(|s| {
+                (
+                    (s.atk / WIELDED_PROGRAM_STAT_DIVISOR).max(1),
+                    (s.def / WIELDED_PROGRAM_STAT_DIVISOR).max(1),
+                )
+            })
+            .unwrap_or((0, 0))
+    }
+
     pub(crate) fn party_stat_bonus(&self) -> (i32, i32) {
         self.world
             .resource::<Party>()

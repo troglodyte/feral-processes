@@ -59,6 +59,7 @@ impl Game {
         world.insert_resource(GameOver::default());
         world.insert_resource(difficulty);
         world.insert_resource(Party::default());
+        world.insert_resource(WieldedProgram::default());
         world.insert_resource(Research::default());
         // Decompile is knowledge the player starts with, not something the
         // tree teaches — nothing grants it a second time. Without this,
@@ -206,6 +207,7 @@ impl Game {
         world.insert_resource(GameOver::default());
         world.insert_resource(data.difficulty);
         world.insert_resource(Party::default());
+        world.insert_resource(WieldedProgram::default());
         world.insert_resource(Research(data.researched.into_iter().collect()));
         world.insert_resource(KnownRoutines(data.known_routines.into_iter().collect()));
         world.insert_resource(BuybackLedger(

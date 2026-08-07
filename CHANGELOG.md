@@ -29,6 +29,46 @@ first, separated by a rule.
 
 ## Unreleased
 
+## 0.4.1
+
+### The battle arena: run a real fight without playing to it
+
+Tuning a fight used to mean one of two things — start the game and grind to
+where the fight lives, or reach for `balance_sim`, which answers instantly
+and answers a different question (no RNG, no initiative, no abilities, no
+items, no status effects). The arena is the third option: the real fight, on
+demand, repeatable, with the composition chosen rather than rolled.
+
+- A scenario is a RON file in `dev-arenas/`. It names who is fighting — a
+  fresh player with an authored loadout, a save, or a `dev-saves/` template —
+  and who they are fighting, then how many seeded reps to run.
+- `cargo run --bin arena -- dev-arenas/opening-fight.ron`. At `reps: 1` it
+  prints the transcript round by round in the game's own wording; above 1 it
+  prints win rate, mean and median rounds, mean HP left, companions downed,
+  and **the seeds of the losses** — pin one and that fight replays alone.
+  Either way it writes a structured report for working with later.
+- Opponents are spawned for real, so the zone multiplier, the potential roll
+  and wild routines all apply. The composition is honoured verbatim past
+  what that zone could really field, because "what if zone 1 threw nine at
+  me" is a legitimate question — with a warning naming the ask, the ceiling
+  and the zone, never a silent cap.
+- Three scenarios ship: the fight the game opens on, a geared zone-3 party
+  against a full group, and a template player against a boss.
+- Its blind spot is stated rather than hidden: the party plays the game's
+  own All-Attack, which fires no companion Specials, so an arena number is a
+  floor on the party's output. `dev-arenas/README.md` says so too.
+
+Nothing the arena does is written back to a save, which is what lets it
+point at a real one without risk. It is a measuring instrument, not an
+assertion — `balance_sim` remains the balance regression gate.
+
+### Fixed
+
+- A test fixture could set a companion to a level play cannot reach, and
+  gave it no stat growth for the levels it did set. `set_level` now awards XP
+  through `progression::add_xp`, so the growth lands and `CREATURE_MAX_LEVEL`
+  binds.
+
 ## 0.4.0
 
 ### Breaking: gear fuses per physical copy, not per item type

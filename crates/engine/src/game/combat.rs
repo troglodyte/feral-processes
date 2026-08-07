@@ -145,7 +145,20 @@ impl Game {
         groups
     }
 
+    /// The pack the player bumped into, capped and partitioned into groups
+    /// by `group_pack` before the fight opens around it. **The only path
+    /// that caps a pack** — `begin_battle`'s other caller, `arena`, wants
+    /// the composition it authored rather than the one this zone could
+    /// roll, and a third caller that does want capping calls `group_pack`
+    /// itself.
     pub(crate) fn start_battle(&mut self, pack: Vec<Entity>) {
+        let groups = self.group_pack(pack);
+        self.begin_battle(groups);
+    }
+
+    /// Opens a battle around `groups` verbatim. Called by `start_battle`,
+    /// which caps its pack first, and by `arena`, which does not.
+    pub(crate) fn begin_battle(&mut self, groups: Vec<EnemyGroup>) {
         let player = self.player_entity();
         // Neither `CombatBuff` nor `FieldBuff` is touched here — a
         // companion's Rally/Shield left active going into a fight lives in
@@ -153,7 +166,6 @@ impl Game {
         // `use_item`'s `prebattle_buff`), and both must carry into the
         // fight they were armed for. `clear_battle_status_effects` is what
         // clears `CombatBuff` once the fight ends; `FieldBuff` outlives it.
-        let groups = self.group_pack(pack);
         let name = groups
             .first()
             .and_then(|g| self.world.resource::<SpeciesDb>().get(&g.species))

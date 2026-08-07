@@ -511,3 +511,40 @@ fn only_the_front_ceil_sqrt_of_a_group_acts_each_round() {
         "a group of nine should swing three at a time, not nine"
     );
 }
+
+/// `begin_battle` is the seam the arena fights through: it takes groups
+/// already built and opens the battle around them verbatim. `start_battle`
+/// is the only path that caps a pack, so a group handed straight to
+/// `begin_battle` keeps every member the caller put in it — here six, at a
+/// zone whose `group_size_ceiling` is one.
+#[test]
+fn begin_battle_opens_a_battle_around_pre_built_groups_without_capping_them() {
+    let mut game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = spawn_wild_on_player_tile(&mut game);
+    let species_id = game.world.get::<Creature>(species).unwrap().species.clone();
+
+    let mut members = vec![species];
+    members.extend((0..5).map(|_| spawn_wild_on_player_tile(&mut game)));
+    let groups = vec![
+        EnemyGroup {
+            species: species_id.clone(),
+            members: members[..3].to_vec(),
+        },
+        EnemyGroup {
+            species: species_id,
+            members: members[3..].to_vec(),
+        },
+    ];
+
+    game.begin_battle(groups);
+
+    let state = game.world.resource::<BattleState>();
+    assert_eq!(state.groups.len(), 2, "both groups should be kept");
+    assert_eq!(state.groups[0].members.len(), 3);
+    assert_eq!(state.groups[1].members.len(), 3);
+    assert!(game.has_active_battle());
+    assert!(
+        !game.battle_log().is_empty(),
+        "the intercept line should still open the pane"
+    );
+}

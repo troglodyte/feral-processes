@@ -2,10 +2,12 @@
 
 use std::path::Path;
 
-use super::scenario::{PlayerSource, Scenario};
+use super::scenario::{OpponentSpec, PlayerSource, Scenario};
 use super::{set_level, spawn_companion};
+use crate::battle::EnemyGroup;
 use crate::items::ItemId;
 use crate::items_db::ItemDb;
+use crate::tuning::{MAX_ENEMY_GROUPS, MAX_GROUP_SIZE};
 use crate::*;
 
 /// The player the scenario describes, standing ready.
@@ -56,6 +58,85 @@ pub(crate) fn build_player(scenario: &Scenario, assets_dir: &Path) -> Result<Gam
     }
 }
 
+/// The opponents the scenario names, spawned for real, plus any warnings
+/// for the caller to print.
+///
+/// Every member goes through `spawn_wild_creature_scaled` on the player's
+/// own tile, so the zone multiplier, the potential roll, wild routines and
+/// the `Hostile`/`WanderAi`/`StatusEffects` bundle all apply exactly as a
+/// map spawn's would. `depth_mult` is 1.0: Stack depth is not a scenario
+/// knob, and every arena fight is a surface fight.
+///
+/// **One group per entry, never merged by species.** Order is the
+/// formation — `ENGAGED_GROUPS` is 2, so two entries naming the same
+/// species is how you place the same program both in reach and out of it,
+/// and merging them would silently delete that lever.
+///
+/// The ceilings a real fight is capped at are *warned* about rather than
+/// applied: explicit authoring is the point of a tester and "what if zone 1
+/// threw nine at me" is a legitimate question. `MAX_ENEMY_GROUPS` and
+/// `MAX_GROUP_SIZE` are the exception and hard-error, because past those
+/// the fight is not one the game can represent at all.
+pub(crate) fn build_opponents(
+    game: &mut Game,
+    opponents: &[OpponentSpec],
+) -> Result<(Vec<EnemyGroup>, Vec<String>), String> {
+    if opponents.len() > MAX_ENEMY_GROUPS {
+        return Err(format!(
+            "{} opponent entries, but a battle holds at most MAX_ENEMY_GROUPS ({MAX_ENEMY_GROUPS})",
+            opponents.len()
+        ));
+    }
+    for row in opponents {
+        if row.count == 0 {
+            return Err(format!("`{}` has a count of 0", row.species));
+        }
+        if row.count > MAX_GROUP_SIZE {
+            return Err(format!(
+                "`{}` asks for {}, but a group holds at most MAX_GROUP_SIZE ({MAX_GROUP_SIZE})",
+                row.species, row.count
+            ));
+        }
+    }
+
+    let zone = game.world.resource::<ZoneLevel>().0;
+    let size_ceiling = game.group_size_ceiling();
+    let group_ceiling = game.enemy_group_ceiling();
+    let mut warnings = Vec::new();
+    if opponents.len() > group_ceiling {
+        warnings.push(format!(
+            "{} groups asked for; zone {zone} would field at most {group_ceiling}",
+            opponents.len()
+        ));
+    }
+
+    let pos = *game
+        .world
+        .get::<Position>(game.player_entity())
+        .ok_or_else(|| "the player has no position to spawn around".to_string())?;
+    let mut groups = Vec::with_capacity(opponents.len());
+    for row in opponents {
+        if row.count as usize > size_ceiling {
+            warnings.push(format!(
+                "`{}` x{} asked for; zone {zone} would field at most {size_ceiling}",
+                row.species, row.count
+            ));
+        }
+        let mut members = Vec::with_capacity(row.count as usize);
+        for _ in 0..row.count {
+            let member = game
+                .spawn_wild_creature_scaled(&row.species, pos.x, pos.y, 1.0)
+                .ok_or_else(|| format!("unknown opponent species `{}`", row.species))?;
+            members.push(member);
+        }
+        groups.push(EnemyGroup {
+            species: row.species.clone(),
+            members,
+        });
+    }
+    Ok((groups, warnings))
+}
+
 /// A scenario is authored, not scavenged: a typo should stop the run rather
 /// than quietly leave the player one item short of what was measured.
 fn known_item(game: &Game, item: &ItemId) -> Result<(), String> {
@@ -68,7 +149,7 @@ fn known_item(game: &Game, item: &ItemId) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::arena::scenario::{CompanionSpec, EquipSpec, InventorySpec, OpponentSpec};
+    use crate::arena::scenario::{CompanionSpec, EquipSpec, InventorySpec};
     use crate::tests::support::test_assets_dir;
 
     fn scenario(player: PlayerSource) -> Scenario {
@@ -193,6 +274,109 @@ mod tests {
             .err()
             .expect("should refuse");
         assert!(err.contains("not_a_program"), "{err}");
+    }
+
+    fn arena(zone: u32) -> Game {
+        build_player(&fresh(1, zone), &test_assets_dir()).unwrap()
+    }
+
+    fn against(counts: &[(&str, u32)]) -> Vec<OpponentSpec> {
+        counts
+            .iter()
+            .map(|(species, count)| OpponentSpec {
+                species: (*species).into(),
+                count: *count,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_group_is_built_at_the_size_asked_for_past_the_zones_ceiling() {
+        let mut game = arena(1);
+        assert_eq!(
+            game.group_size_ceiling(),
+            1,
+            "zone 1 fields one program; without that this asserts nothing"
+        );
+
+        let (groups, _) = build_opponents(&mut game, &against(&[("glitch", 9)])).unwrap();
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(
+            groups[0].members.len(),
+            9,
+            "the truncation `group_pack` would apply must not happen here"
+        );
+    }
+
+    #[test]
+    fn exceeding_the_zones_ceiling_warns_with_the_ask_the_ceiling_and_the_zone() {
+        let mut game = arena(1);
+        let (_, warnings) = build_opponents(&mut game, &against(&[("glitch", 9)])).unwrap();
+
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        let w = &warnings[0];
+        assert!(w.contains('9'), "the ask: {w}");
+        assert!(w.contains('1'), "the ceiling and the zone: {w}");
+        assert!(w.contains("glitch"), "which entry: {w}");
+    }
+
+    #[test]
+    fn a_composition_inside_the_zones_ceilings_warns_about_nothing() {
+        let mut game = arena(1);
+        let (_, warnings) = build_opponents(&mut game, &against(&[("glitch", 1)])).unwrap();
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    #[test]
+    fn two_entries_naming_one_species_stay_two_groups() {
+        let mut game = arena(3);
+        let (groups, _) =
+            build_opponents(&mut game, &against(&[("glitch", 1), ("glitch", 1)])).unwrap();
+
+        // Merging them would delete the one lever `ENGAGED_GROUPS` gives a
+        // scenario: the same program, one in melee reach and one behind it.
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].species, "glitch");
+        assert_eq!(groups[1].species, "glitch");
+        assert_ne!(groups[0].members[0], groups[1].members[0]);
+    }
+
+    #[test]
+    fn an_unknown_opponent_species_is_an_err_naming_it() {
+        let mut game = arena(1);
+        let err = build_opponents(&mut game, &against(&[("not_a_program", 1)])).unwrap_err();
+        assert!(err.contains("not_a_program"), "{err}");
+    }
+
+    #[test]
+    fn more_entries_than_max_enemy_groups_is_an_err() {
+        let mut game = arena(6);
+        let rows = against(&[
+            ("glitch", 1),
+            ("glitch", 1),
+            ("glitch", 1),
+            ("glitch", 1),
+            ("glitch", 1),
+        ]);
+        assert!(rows.len() > MAX_ENEMY_GROUPS);
+        let err = build_opponents(&mut game, &rows).unwrap_err();
+        assert!(err.contains("MAX_ENEMY_GROUPS"), "{err}");
+    }
+
+    #[test]
+    fn an_entry_with_a_count_of_zero_is_an_err() {
+        let mut game = arena(1);
+        let err = build_opponents(&mut game, &against(&[("glitch", 0)])).unwrap_err();
+        assert!(err.contains("glitch"), "{err}");
+    }
+
+    #[test]
+    fn an_entry_past_max_group_size_is_an_err() {
+        let mut game = arena(6);
+        let err =
+            build_opponents(&mut game, &against(&[("glitch", MAX_GROUP_SIZE + 1)])).unwrap_err();
+        assert!(err.contains("MAX_GROUP_SIZE"), "{err}");
     }
 
     #[test]

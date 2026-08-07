@@ -31,7 +31,12 @@ impl Game {
     /// `spawn_pack`: this is only ever reached from `start_battle`, which is
     /// the player's own fight, and Trace is zero unless they are underground.
     /// `fight_depth` rides in on that same safety — see its doc.
-    fn group_size_ceiling(&self) -> usize {
+    ///
+    /// `pub(crate)` only so `arena` can *warn* that a scenario exceeds it —
+    /// the arena builds its groups at the size asked for and this decides
+    /// nothing there. Widening it further would make a zone's fight ceiling
+    /// look like a public question; it is not.
+    pub(crate) fn group_size_ceiling(&self) -> usize {
         let base = self.max_group_size(self.fight_depth());
         let cap = crate::game::spawning::zone_group_cap(self.world.resource::<ZoneLevel>().0);
         crate::game::spawning::trace_group_ceiling(base, self.trace_group_mult(), cap) as usize
@@ -58,7 +63,10 @@ impl Game {
     /// a step boundary. Zone and depth are properties of the fight rather
     /// than of any one tile, so there is nothing left to take the maximum
     /// over.
-    fn enemy_group_ceiling(&self) -> usize {
+    ///
+    /// `pub(crate)` for `arena`'s warning, on the same terms as
+    /// `group_size_ceiling` above.
+    pub(crate) fn enemy_group_ceiling(&self) -> usize {
         self.max_enemy_groups(self.fight_depth())
     }
 

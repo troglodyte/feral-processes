@@ -3,7 +3,7 @@
 //! These live under `src/` rather than `tests/` because they reach past
 //! `Game`'s public API into components and resources to build fixtures.
 
-mod support;
+pub(crate) mod support;
 
 mod achievements;
 mod assets;

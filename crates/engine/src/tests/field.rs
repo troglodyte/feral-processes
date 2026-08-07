@@ -4,7 +4,7 @@
 use super::support::*;
 use crate::components::{FieldBuff, FieldBuffKind, Needs, Perks, Routines};
 use crate::resources::Party;
-use crate::tuning::{AFFINITY_MAX, AFFINITY_NEUTRAL};
+use crate::tuning::{AFFINITY_MAX, AFFINITY_NEUTRAL, CREATURE_MAX_LEVEL};
 use crate::*;
 
 fn game_with_field_ability() -> Game {
@@ -167,7 +167,10 @@ fn a_higher_level_holder_casts_a_larger_magnitude() {
     let high = spawn_tamed(&mut game, 10, 3);
     game.add_companion(low).unwrap();
     game.add_companion(high).unwrap();
-    set_level(&mut game, high, 20);
+    // `CREATURE_MAX_LEVEL` rather than an arbitrary 20: a companion cannot
+    // level past it in play, so a fixture that did would be scaling a cast
+    // nobody can ever make.
+    set_level(&mut game, high, CREATURE_MAX_LEVEL);
     game.world
         .entity_mut(low)
         .insert(Routines(vec!["test_field_regen".to_string()]));
@@ -195,7 +198,7 @@ fn a_higher_level_holder_casts_a_larger_magnitude() {
     let high_index = routines
         .iter()
         .position(|r| r.holder == high)
-        .expect("the level-20 holder's routine is listed");
+        .expect("the top-level holder's routine is listed");
     game.cast_field_routine(high_index, FieldCastTarget::Ally(high))
         .unwrap();
 
@@ -207,11 +210,11 @@ fn a_higher_level_holder_casts_a_larger_magnitude() {
     );
     assert_eq!(
         high_power,
-        abilities::scaled_stat_power(2, 20, AFFINITY_NEUTRAL)
+        abilities::scaled_stat_power(2, CREATURE_MAX_LEVEL, AFFINITY_NEUTRAL)
     );
     assert!(
         high_power > low_power,
-        "a level-20 holder's cast should outscale a level-1 holder's: \
+        "a top-level holder's cast should outscale a level-1 holder's: \
          {high_power} vs {low_power}"
     );
 }
@@ -553,7 +556,7 @@ fn active_buffs_magnitude_reflects_the_scaled_power_not_the_authored_one() {
     let mut game = game_with_field_ability();
     let holder = spawn_tamed(&mut game, 10, 3);
     game.add_companion(holder).unwrap();
-    set_level(&mut game, holder, 20);
+    set_level(&mut game, holder, CREATURE_MAX_LEVEL);
     game.world
         .entity_mut(holder)
         .insert(Routines(vec!["test_field_regen".to_string()]));
@@ -566,12 +569,12 @@ fn active_buffs_magnitude_reflects_the_scaled_power_not_the_authored_one() {
     let index = routines
         .iter()
         .position(|r| r.holder == holder)
-        .expect("the level-20 holder's routine is listed");
+        .expect("the top-level holder's routine is listed");
     game.cast_field_routine(index, FieldCastTarget::Ally(holder))
         .unwrap();
 
-    let scaled = abilities::scaled_stat_power(2, 20, AFFINITY_NEUTRAL);
-    // The authored magnitude in `FIELD_ONLY_ABILITY` is 2 — a level-20
+    let scaled = abilities::scaled_stat_power(2, CREATURE_MAX_LEVEL, AFFINITY_NEUTRAL);
+    // The authored magnitude in `FIELD_ONLY_ABILITY` is 2 — a top-level
     // holder's cast must scale well past that, so asserting against the
     // scaled value (rather than "2") actually exercises the distinction.
     assert_ne!(scaled, 2);

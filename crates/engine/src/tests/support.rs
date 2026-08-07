@@ -55,13 +55,7 @@ pub(super) fn multi_group_ground(game: &mut Game) -> (i32, i32) {
 /// ability unlocked without grinding XP into it. Installs whatever species
 /// unlocks that jump reaches, exactly as a real level-up would — otherwise
 /// a test that raises a level would see a kit the game never leaves behind.
-pub(super) fn set_level(game: &mut Game, entity: Entity, level: u32) {
-    let before = game.world.get::<Experience>(entity).unwrap().level;
-    game.world.get_mut::<Experience>(entity).unwrap().level = level;
-    if level > before {
-        game.install_unlocked_routines(entity, before, level);
-    }
-}
+pub(super) use crate::arena::set_level;
 
 /// Puts the run in zone `zone` without running a breach. Enough for the
 /// handful of tests that only care about a zone-gated *ceiling* — structure
@@ -71,7 +65,7 @@ pub(super) fn set_zone(game: &mut Game, zone: u32) {
     game.world.resource_mut::<ZoneLevel>().0 = zone;
 }
 
-pub(super) fn test_assets_dir() -> std::path::PathBuf {
+pub(crate) fn test_assets_dir() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
 }
 

@@ -1173,10 +1173,10 @@ pub const EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL: f32 = 0.03;
 pub const LEAN_COMPILER_DISCOUNT_PER_LEVEL: u32 = 1;
 
 /// Permanent ATK `Perk::Attacker` adds to the player's `Stats`, per level.
-pub const ATTACKER_BONUS_PER_LEVEL: i32 = 3;
+pub const ATTACKER_BONUS_PER_LEVEL: i32 = 2;
 
 /// Permanent DEF `Perk::Defender` adds to the player's `Stats`, per level.
-pub const DEFENDER_BONUS_PER_LEVEL: i32 = 3;
+pub const DEFENDER_BONUS_PER_LEVEL: i32 = 2;
 
 /// Percentage of current max Integrity `Perk::Buffer` adds to the
 /// player's `Stats`, per level.

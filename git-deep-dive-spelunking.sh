@@ -1,1 +1,0 @@
-../utils-folder/scripts/git-deep-dive-spelunking.sh

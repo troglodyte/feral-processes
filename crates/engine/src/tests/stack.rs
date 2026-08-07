@@ -1259,7 +1259,7 @@ fn credits(game: &Game) -> u32 {
         .unwrap()
         .items
         .iter()
-        .find(|(item, _)| *item == id)
+        .find(|(i, _)| *i == id)
         .map(|&(_, qty)| qty)
         .unwrap_or(0)
 }

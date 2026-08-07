@@ -37,14 +37,26 @@ impl Game {
         Some(self.item_value(item) * self.trade_options(structure)?.sell_rate)
     }
 
-    /// Sells `qty` of `item` from inventory to the trading post `structure`,
-    /// crediting the trade currency at `sell_price` per unit. The
-    /// trade currency itself can't be sold (trading it for more of the same
-    /// thing is meaningless, and would be exploitable if a modded
+    /// Sells `qty` copies of `item` at fusion `tier` to the trading post
+    /// `structure`, crediting the trade currency at `sell_price` per unit.
+    /// The trade currency itself can't be sold (trading it for more of the
+    /// same thing is meaningless, and would be exploitable if a modded
     /// `sell_rate` was ever above 1). Build salvage *is* sellable — that is
     /// the on-ramp that lets a player convert a doomed zone-local stockpile
     /// into Credits before breaching.
-    pub fn sell_item(&mut self, structure: Entity, item: ItemId, qty: u32) -> Result<(), String> {
+    ///
+    /// A fused copy fetches the same unit price as an ordinary one, so
+    /// `Game::item_value` is untouched and `ItemDef::value`'s second meaning
+    /// — the boss-loot bands `surface_boss_loot` derives from it — is not
+    /// disturbed. What the tier decides is which store the copy leaves and
+    /// what the shelf gets back.
+    pub fn sell_item(
+        &mut self,
+        structure: Entity,
+        item: ItemId,
+        tier: u32,
+        qty: u32,
+    ) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
@@ -70,7 +82,7 @@ impl Game {
             .trade_options(structure)
             .ok_or_else(|| "That structure doesn't trade.".to_string())?;
         let player = self.player_entity();
-        let have = self.world.get::<Inventory>(player).unwrap().count(&item);
+        let have = self.count_copies(&item, tier);
         if have == 0 {
             return Err(format!("You don't have any {}.", self.item_name(&item)));
         }
@@ -78,12 +90,12 @@ impl Game {
         let payout = self.item_value(&item) * trade.sell_rate * taken;
         let name = self.item_name(&item).to_string();
         let money = self.item_name(&currency).to_string();
-        {
-            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
-            inv.take(item.clone(), taken);
-            inv.add(currency, payout);
-        }
-        self.stock_shelf(structure, &item, taken);
+        self.take_copies(&item, tier, taken);
+        self.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(currency, payout);
+        self.stock_shelf(structure, &item, tier, taken);
         self.log(format!("You sell {taken} {name} for {payout} {money}."));
         self.tick();
         Ok(())
@@ -99,9 +111,9 @@ impl Game {
         Some((kind, (pos.x, pos.y)))
     }
 
-    /// Adds `qty` of `item` to `structure`'s shelf, merging into the existing
-    /// row if there is one.
-    fn stock_shelf(&mut self, structure: Entity, item: &ItemId, qty: u32) {
+    /// Adds `qty` of `item` at fusion `tier` to `structure`'s shelf, merging
+    /// into the existing row if there is one.
+    fn stock_shelf(&mut self, structure: Entity, item: &ItemId, tier: u32, qty: u32) {
         let Some(key) = self.shelf_key(structure) else {
             return;
         };
@@ -112,9 +124,9 @@ impl Game {
             .0
             .entry(key)
             .or_default();
-        match shelf.iter_mut().find(|(i, _)| i == item) {
-            Some((_, held)) => *held += qty,
-            None => shelf.push((item.clone(), qty)),
+        match shelf.iter_mut().find(|(i, t, _)| i == item && *t == tier) {
+            Some((_, _, held)) => *held += qty,
+            None => shelf.push((item.clone(), tier, qty)),
         }
     }
 
@@ -131,9 +143,15 @@ impl Game {
         if shelf.is_empty() {
             return;
         }
+        // The tier is named because a shelved fused copy is worth many base
+        // copies of work — losing "2 Ablative Plating" and losing "2
+        // Ablative Plating T2" are different sentences to the player.
         let manifest = shelf
             .iter()
-            .map(|row| format!("{} {}", row.qty, row.name))
+            .map(|row| match row.tier {
+                0 => format!("{} {}", row.qty, row.name),
+                tier => format!("{} {} T{tier}", row.qty, row.name),
+            })
             .collect::<Vec<_>>()
             .join(", ");
         let label = self.entity_label(structure);
@@ -167,16 +185,17 @@ impl Game {
             .map(|shelf| {
                 let mut options: Vec<BuybackOption> = shelf
                     .iter()
-                    .filter_map(|(item, qty)| {
+                    .filter_map(|(item, tier, qty)| {
                         Some(BuybackOption {
                             name: self.item_name(item).to_string(),
                             item: item.clone(),
+                            tier: *tier,
                             qty: *qty,
                             unit_cost: self.buyback_unit_cost(structure, item)?,
                         })
                     })
                     .collect();
-                options.sort_by_key(|o| self.category_sort_key(&o.item));
+                options.sort_by_key(|o| (self.category_sort_key(&o.item), o.tier));
                 options
             })
             .unwrap_or_default()
@@ -188,7 +207,13 @@ impl Game {
     /// Separate from `buy_item` rather than folded into it: that list is an
     /// infinite catalogue priced per item, this shelf is finite and drains as
     /// it's bought.
-    pub fn buy_back(&mut self, structure: Entity, item: ItemId, qty: u32) -> Result<(), String> {
+    pub fn buy_back(
+        &mut self,
+        structure: Entity,
+        item: ItemId,
+        tier: u32,
+        qty: u32,
+    ) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
@@ -207,8 +232,8 @@ impl Game {
             .resource::<BuybackLedger>()
             .0
             .get(&key)
-            .and_then(|shelf| shelf.iter().find(|(i, _)| *i == item))
-            .map(|(_, held)| *held)
+            .and_then(|shelf| shelf.iter().find(|(i, t, _)| *i == item && *t == tier))
+            .map(|(_, _, held)| *held)
             .unwrap_or(0);
         let name = self.item_name(&item).to_string();
         if shelved < qty {
@@ -227,18 +252,18 @@ impl Game {
         {
             return Err(format!("Not enough {money} (need {total_cost})."));
         }
-        {
-            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
-            inv.take(currency, total_cost);
-            inv.add(item.clone(), qty);
-        }
+        self.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .take(currency, total_cost);
+        self.add_copies(&item, tier, qty);
         {
             let mut ledger = self.world.resource_mut::<BuybackLedger>();
             if let Some(shelf) = ledger.0.get_mut(&key) {
-                if let Some(row) = shelf.iter_mut().find(|(i, _)| *i == item) {
-                    row.1 -= qty;
+                if let Some(row) = shelf.iter_mut().find(|(i, t, _)| *i == item && *t == tier) {
+                    row.2 -= qty;
                 }
-                shelf.retain(|(_, held)| *held > 0);
+                shelf.retain(|(_, _, held)| *held > 0);
                 if shelf.is_empty() {
                     ledger.0.remove(&key);
                 }

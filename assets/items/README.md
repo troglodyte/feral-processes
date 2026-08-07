@@ -115,8 +115,10 @@ disqualifies the whole file.
     // set, this item can be worn in the given slot — one of `Weapon`,
     // `Armor`, `Module` — granting the paired stat bonus while equipped.
     // Stats are `atk`, `def`, `decompiler`, each optionally omitted (they
-    // default to 0), and scale up with the wearer's gear level and any
-    // fusion tier — see `EquipmentStats::scaled_for_level`/`fused_for_tier`.
+    // default to 0), and scale up with the wearer's gear level and with the
+    // fusion tier of the *individual copy* worn — see
+    // `EquipmentStats::scaled_for_level`/`fused_for_tier` and
+    // `components::FusedGear`. Only equippable items can be fused.
     equipment: Some((Weapon, (atk: 4))),
 
     // Optional; can be left out entirely (defaults to not a catalyst). If

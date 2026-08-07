@@ -500,8 +500,13 @@ pub struct Platform {
 /// `BTreeMap` rather than `HashMap` so save bytes don't depend on hash
 /// order; the inner `Vec` stays in insertion order, which is player-driven
 /// and gives the trade screen a stable row order.
+///
+/// A shelf row is `(item, fusion tier, qty)`. The tier is not decoration:
+/// a shelf keyed on the item alone would hand a mis-sold T3 back as an
+/// ordinary copy and silently delete eight base copies of work — see
+/// `components::FusedGear`.
 #[derive(Resource, Default, Clone)]
-pub struct BuybackLedger(pub BTreeMap<ShelfKey, Vec<(ItemId, u32)>>);
+pub struct BuybackLedger(pub BTreeMap<ShelfKey, Vec<(ItemId, u32, u32)>>);
 
 /// Which shelf: the trader's kind and the tile it stands on — see
 /// `BuybackLedger` for why those two and not an `Entity`.

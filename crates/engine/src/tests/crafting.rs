@@ -191,3 +191,56 @@ fn every_compilable_item_either_has_a_blurb_or_declares_nothing_blurb_worthy() {
         );
     }
 }
+
+/// A modded recipe priced in a fusable item, so the one thing keeping
+/// fused gear out of the production chain can actually be walked.
+const PLATING_RECIPE: &str = r#"(
+    id: "plating_probe",
+    name: "Plating Probe",
+    description: "A test recipe priced in armour.",
+    value: Some(1),
+    craftable: Some((cost: [("ablative_plating", 2)])),
+)"#;
+
+/// `Inventory` is by definition the tier-0 store, and every recipe reads it
+/// — so a fused copy is not an ingredient, however many base copies went
+/// into it. No shipped recipe is priced in equipment, so the path is walked
+/// with a modded item rather than left unasserted; the machine half needs no
+/// test of its own, since `Stock` is the only thing an assembler pulls from
+/// and nothing in the game puts a player's copy into one.
+#[test]
+fn a_fused_copy_is_not_a_recipe_ingredient() {
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    let probe = ItemId::from("plating_probe");
+    let dir = modded_assets_dir(
+        "fused_recipe",
+        &[],
+        &[("plating_probe.ron", PLATING_RECIPE)],
+        &[],
+        &[],
+        &[],
+    );
+    let mut game = Game::new(21, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(armor.clone(), 2);
+
+    assert_eq!(game.max_craftable(&probe), 1, "two spares buy one probe");
+
+    game.fuse_item(&armor, 0).unwrap();
+
+    assert_eq!(
+        game.max_craftable(&probe),
+        0,
+        "the copies went into a fused one, which no recipe can reach"
+    );
+    assert!(game.craft(&probe, 1).is_err());
+    assert_eq!(
+        held_at(&game, &armor, 1),
+        1,
+        "and the refusal left the fused copy alone"
+    );
+}

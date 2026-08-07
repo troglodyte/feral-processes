@@ -160,8 +160,8 @@ pub struct Tamed {
 /// retroactively change if the player breaches deeper afterward; re-equip
 /// (or unequip/re-equip) to pick up a newly unlocked level.
 ///
-/// `fusion_tier` is likewise captured at equip time — see `ItemFusions` and
-/// `items::EquipmentStats::fused_for_tier`.
+/// `fusion_tier` is the tier of the individual copy that went on — see
+/// `FusedGear` and `items::EquipmentStats::fused_for_tier`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EquippedItem {
     pub item: ItemId,
@@ -215,33 +215,77 @@ pub struct Inventory {
 #[derive(Component, Default, Clone)]
 pub struct Routines(pub Vec<AbilityId>);
 
-/// Player-only: how many times each equippable `ItemId` has been fused
-/// (see `Game::fuse_item`) — every fusion consumes 2 copies of an item
-/// from `Inventory` and permanently adds `crate::tuning::ITEM_FUSION_BONUS_PER_TIER`
-/// to that item type's equipped bonus (see
-/// `items::EquipmentStats::fused_for_tier`). Tracked per `ItemId` rather
-/// than per physical item, since inventory stacks aren't individually
-/// distinguishable.
+/// Player-only: the gear the player has fused, one row per `(item, tier)`
+/// — see `Game::fuse_item`. A fusion produces one stronger *physical copy*
+/// (consuming `crate::tuning::ITEM_FUSION_COST` copies at the tier below
+/// it), so a fused copy lives here while its ordinary spares stay in
+/// `Inventory`.
+///
+/// **`Inventory` is by definition the tier-0 store**, and that is the seam
+/// that keeps this out of the production chain entirely: recipes, `Stock`,
+/// `assembler_system`, hauling and banking read `Inventory` and therefore
+/// cannot encounter a fused copy, so none of them needs a tier rule. Tier
+/// here is always >= 1.
+///
+/// Keyed by value rather than by position. Two copies of the same item at
+/// the same tier are genuinely interchangeable, so an index would identify
+/// nothing the pair does not — and it would be the positional-index trap
+/// `BattleState::planned` documents, for no gain.
+///
+/// `EquippedItem::fusion_tier` is the same fact for a copy that is worn
+/// rather than carried; this ledger agrees with it rather than shadowing
+/// it, which is what the per-`ItemId` predecessor got wrong.
 #[derive(Component, Default, Clone)]
-pub struct ItemFusions {
-    pub tiers: Vec<(ItemId, u32)>,
+pub struct FusedGear {
+    pub copies: Vec<(ItemId, u32, u32)>,
 }
 
-impl ItemFusions {
-    pub fn tier(&self, item: &ItemId) -> u32 {
-        self.tiers
+impl FusedGear {
+    pub fn add(&mut self, item: ItemId, tier: u32, qty: u32) {
+        // Saturating for the reason `Inventory::add` is.
+        if let Some(row) = self
+            .copies
+            .iter_mut()
+            .find(|(i, t, _)| *i == item && *t == tier)
+        {
+            row.2 = row.2.saturating_add(qty);
+        } else {
+            self.copies.push((item, tier, qty));
+        }
+    }
+
+    pub fn count(&self, item: &ItemId, tier: u32) -> u32 {
+        self.copies
             .iter()
-            .find(|(i, _)| i == item)
-            .map(|(_, t)| *t)
+            .find(|(i, t, _)| i == item && *t == tier)
+            .map(|(_, _, q)| *q)
             .unwrap_or(0)
     }
 
-    pub fn increment(&mut self, item: ItemId) {
-        if let Some(slot) = self.tiers.iter_mut().find(|(i, _)| *i == item) {
-            slot.1 += 1;
-        } else {
-            self.tiers.push((item, 1));
+    /// Removes up to `qty` copies of `item` at `tier`, returning how many
+    /// were actually removed. Drops the row at zero for the reason
+    /// `Inventory::take` does — every screen lists these rows.
+    pub fn take(&mut self, item: &ItemId, tier: u32, qty: u32) -> u32 {
+        let Some(pos) = self
+            .copies
+            .iter()
+            .position(|(i, t, _)| i == item && *t == tier)
+        else {
+            return 0;
+        };
+        let taken = self.copies[pos].2.min(qty);
+        self.copies[pos].2 -= taken;
+        if self.copies[pos].2 == 0 {
+            self.copies.remove(pos);
         }
+        taken
+    }
+
+    /// Every fused copy held, for the cargo total. Fused gear is carried
+    /// like anything else, so it counts against the Buffer figure the
+    /// player reads.
+    pub fn total(&self) -> u32 {
+        self.copies.iter().map(|(_, _, qty)| *qty).sum()
     }
 }
 

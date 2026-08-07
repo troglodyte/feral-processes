@@ -1044,12 +1044,9 @@ pub(super) fn install_routine_for_test(game: &mut Game, entity: Entity, ability:
         .unwrap_or_else(|e| panic!("installing {ability}: {e}"));
 }
 
-/// How many of `item` the player is carrying.
+/// How many *ordinary* (unfused) copies of `item` the player is carrying.
 pub(super) fn held(game: &Game, item: &ItemId) -> u32 {
-    game.world
-        .get::<Inventory>(game.player_entity())
-        .unwrap()
-        .count(item)
+    held_at(game, item, 0)
 }
 
 pub(super) fn fragments(game: &Game) -> u32 {
@@ -1185,4 +1182,26 @@ pub(super) fn spawn_pursuing_guardian(
             },
         ))
         .id()
+}
+
+/// How many copies of `item` at fusion `tier` the player is carrying —
+/// `Inventory` at tier 0, `FusedGear` above it, the same split
+/// `Game::count_copies` makes.
+///
+/// Reads the stores rather than `PlayerStatus::inventory` on purpose: that
+/// list omits banked items, so a view-based helper would report 0 for
+/// Research Data and read as a payout bug.
+pub(super) fn held_at(game: &Game, item: &ItemId, tier: u32) -> u32 {
+    let player = game.player_entity();
+    if tier == 0 {
+        game.world
+            .get::<Inventory>(player)
+            .map(|inv| inv.count(item))
+            .unwrap_or(0)
+    } else {
+        game.world
+            .get::<FusedGear>(player)
+            .map(|f| f.count(item, tier))
+            .unwrap_or(0)
+    }
 }

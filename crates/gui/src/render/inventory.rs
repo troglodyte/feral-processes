@@ -5,18 +5,18 @@ use super::*;
 
 pub(super) fn draw_erase_quantity(
     game: &mut Game,
-    item: Option<ItemId>,
+    pending: Option<(ItemId, u32)>,
     quantity_input: &str,
     painter: &Painter,
     m: &Metrics,
 ) {
-    let Some(item) = item else { return };
+    let Some((item, tier)) = pending else { return };
     let status = game.player_status();
     let held = status
         .inventory
         .iter()
-        .find(|(i, _)| *i == item)
-        .map(|(_, q)| *q)
+        .find(|r| r.item == item && r.tier == tier)
+        .map(|r| r.qty)
         .unwrap_or(0);
     let shown = if quantity_input.is_empty() {
         "1".to_string()
@@ -24,7 +24,14 @@ pub(super) fn draw_erase_quantity(
         quantity_input.to_string()
     };
     let rows = vec![
-        text_row(format!("Erase how many {}?", game.item_name(&item))),
+        text_row(format!(
+            "Erase how many {}{}?",
+            game.item_name(&item),
+            match tier {
+                0 => String::new(),
+                tier => format!(" {}", item_fusion_note(tier)),
+            }
+        )),
         text_row(""),
         text_row(format!("Quantity: {shown}")),
         text_row(""),
@@ -71,23 +78,23 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
     if status.inventory.is_empty() {
         rows.push(text_row("(empty)"));
     }
-    for (i, (item, qty)) in status.inventory.iter().enumerate() {
-        let fusion_tier = game.item_fusion_tier(item);
-        let tag = equip_preview_tag(game, item, status.zone, fusion_tier);
+    for (i, row) in status.inventory.iter().enumerate() {
+        let tag = equip_preview_tag(game, &row.item, status.zone, row.tier);
         // The engine hands this list back grouped, so the category column
         // reads as a heading for the run of rows beneath it rather than as
-        // noise repeated at random.
+        // noise repeated at random. A fused copy is its own row beside its
+        // ordinary spares, which is the whole point of the screen.
         rows.push(fusion_row(
             format!(
                 "[{}] {}  {} x{}{}",
                 menu_shortcut(i + 3),
-                game.item_category(item).short_label(),
-                game.item_name(item),
-                qty,
+                game.item_category(&row.item).short_label(),
+                game.item_name(&row.item),
+                row.qty,
                 tag
             ),
             selected == i + 3,
-            fusion_tier,
+            row.tier,
         ));
     }
     rows.push(text_row(""));

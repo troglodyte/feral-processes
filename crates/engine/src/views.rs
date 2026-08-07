@@ -46,6 +46,22 @@ pub enum ResearchState {
     },
 }
 
+/// One stack of cargo the player is carrying: `qty` copies of `item`, all
+/// at fusion `tier`. Tier 0 is the ordinary stack (`components::Inventory`);
+/// anything above it is a fused copy (`components::FusedGear`).
+///
+/// A struct rather than the `(ItemId, u32)` pair this replaced, because
+/// every consumer now has to say which of two numbers it means. Changing
+/// the type instead of adding a parallel list of fused rows is the point:
+/// a screen or handler that summed across tiers would be silently wrong,
+/// and the compiler is what stops that.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InventoryRow {
+    pub item: ItemId,
+    pub tier: u32,
+    pub qty: u32,
+}
+
 pub struct PlayerStatus {
     pub position: (i32, i32),
     pub hp: i32,
@@ -62,7 +78,11 @@ pub struct PlayerStatus {
     /// it: a bank is not something carried and not something a trader
     /// deals in, so it is neither an inventory row nor a sell row. Ask
     /// `Game::banked` for one by name — the research screen does.
-    pub inventory: Vec<(ItemId, u32)>,
+    ///
+    /// One row per `(item, tier)`: a fused copy and its ordinary spares are
+    /// separate rows, because they are separate physical things — see
+    /// `components::FusedGear`.
+    pub inventory: Vec<InventoryRow>,
     /// Units of ordinary cargo currently carried. The Buffer is unbounded, so
     /// this is just how much is stored. It matches the sum of `inventory`,
     /// since both now exclude banked items.
@@ -106,6 +126,10 @@ pub struct PlayerStatus {
 pub struct BuybackOption {
     pub item: ItemId,
     pub name: String,
+    /// The fusion tier of the copies on this row. A shelf keeps what was
+    /// sold to it, so buying a T2 back returns a T2 — see
+    /// `resources::BuybackLedger`.
+    pub tier: u32,
     /// How many are on the shelf — the shelf is a record of the player's own
     /// sales, so this is a hard cap on what `Game::buy_back` will hand over.
     pub qty: u32,

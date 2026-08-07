@@ -163,8 +163,8 @@ is skipped with a warning logged in-game rather than crashing startup.
     // fresh build.
     // Breaching also clears the player's Currency and CraftCurrency items
     // (the two economy roles in assets/items/*.ron): each zone funds its own
-    // exit. ResearchCurrency is banked progress and is kept, as are gear,
-    // supplies and fusion tiers.
+    // exit. ResearchCurrency is banked progress and is kept, as are gear
+    // (fused copies included) and supplies.
     zone_portal: true,
 
     // Optional; can be left out entirely (defaults to no trading). If set,

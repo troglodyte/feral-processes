@@ -116,7 +116,7 @@ impl Game {
                         (ItemId::from(ids::OUTLET), 2),
                     ],
                 },
-                ItemFusions::default(),
+                FusedGear::default(),
                 StatusEffects::default(),
                 CombatBuff::default(),
                 FieldBuff::default(),
@@ -294,18 +294,23 @@ impl Game {
                     items: data.player.inventory,
                 },
                 // Gear fusion was uncapped before it shared `MAX_FUSIONS`,
-                // so an older save can carry a tier above the ceiling.
-                // Only the ledger is clamped — the worn copies below keep
-                // the tier their bonus was applied at, because `Stats` is
-                // restored with that bonus already in it and unequipping
-                // must subtract exactly what was added.
-                ItemFusions {
-                    tiers: data
-                        .player
-                        .item_fusions
-                        .into_iter()
-                        .map(|(item, tier)| (item, tier.min(crate::tuning::MAX_FUSIONS)))
-                        .collect(),
+                // so an older save can carry a copy above the ceiling.
+                // Only the carried copies are clamped — the worn copies
+                // above keep the tier their bonus was applied at, because
+                // `Stats` is restored with that bonus already in it and
+                // unequipping must subtract exactly what was added.
+                //
+                // Clamping can collapse two rows onto one tier, so this
+                // goes through `add` rather than building the `Vec`
+                // directly: `FusedGear` holds one row per `(item, tier)`,
+                // and a duplicate row would make `count` under-report and
+                // strand the copies in the row it didn't find.
+                {
+                    let mut fused = FusedGear::default();
+                    for (item, tier, qty) in data.player.fused_gear {
+                        fused.add(item, tier.min(crate::tuning::MAX_FUSIONS), qty);
+                    }
+                    fused
                 },
                 StatusEffects::default(),
                 CombatBuff::default(),
@@ -585,10 +590,10 @@ impl Game {
         let decompiler = self.world.get::<Decompiler>(player).unwrap().skill;
         let equipment = self.world.get::<Equipment>(player).unwrap().clone();
         let inventory = self.world.get::<Inventory>(player).unwrap().items.clone();
-        let item_fusions = self
+        let fused_gear = self
             .world
-            .get::<ItemFusions>(player)
-            .map(|f| f.tiers.clone())
+            .get::<FusedGear>(player)
+            .map(|f| f.copies.clone())
             .unwrap_or_default();
         let perks = self.world.get::<Perks>(player).cloned().unwrap_or_default();
         let routines = self
@@ -775,7 +780,7 @@ impl Game {
                     .as_ref()
                     .map(|e| e.fusion_tier)
                     .unwrap_or(0),
-                item_fusions,
+                fused_gear,
                 perk_points: perks.points,
                 unlocked_perks: perks.unlocked,
                 routines,

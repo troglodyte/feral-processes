@@ -184,8 +184,10 @@ pub fn stat_summary(mods: EquipmentStats) -> String {
 /// What one row of the `Mode::EquipSwap` picker does when chosen.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SwapChoice {
-    /// Wear this instead, sending whatever the slot holds back to cargo.
-    Equip(ItemId),
+    /// Wear this copy instead, sending whatever the slot holds back to
+    /// cargo. The `u32` is the copy's fusion tier: two rows can name the
+    /// same item and differ only in it.
+    Equip(ItemId, u32),
     /// Empty the slot. Offered only when something is actually worn.
     Unequip,
 }
@@ -213,7 +215,9 @@ const SWAP_NAME_COLUMN: usize = 20;
 const SWAP_STATS_COLUMN: usize = 20;
 
 /// Every replacement for `slot` the player could put on right now, best
-/// first, with the row that empties the slot last.
+/// first, with the row that empties the slot last. One row per *copy*: a
+/// fused Arc Lance and a plain one are two different pieces of gear and
+/// each gets its own row, priced at its own tier.
 ///
 /// Each candidate is previewed at the level it *would* equip at, since gear
 /// takes the current zone level as it goes on (`Game::equip`), while the
@@ -245,14 +249,14 @@ pub fn equip_swap_rows(game: &Game, slot: EquipmentSlot) -> Vec<SwapRow> {
     let mut rows: Vec<(i32, String, SwapRow)> = status
         .inventory
         .iter()
-        .filter_map(|(item, _)| {
-            let (item_slot, base) = game.equipment_of(item)?;
-            (item_slot == slot).then_some((item, base))
+        .filter_map(|row| {
+            let (item_slot, base) = game.equipment_of(&row.item)?;
+            (item_slot == slot).then_some((row, base))
         })
-        .map(|(item, base)| {
-            let tier = game.item_fusion_tier(item);
+        .map(|(row, base)| {
+            let tier = row.tier;
             let mods = base.scaled_for_level(status.zone).fused_for_tier(tier);
-            let name = game.item_name(item).to_string();
+            let name = game.item_name(&row.item).to_string();
             let stats = match tier {
                 0 => stat_summary(mods),
                 tier => format!("{} {}", stat_summary(mods), item_fusion_note(tier)),
@@ -261,7 +265,7 @@ pub fn equip_swap_rows(game: &Game, slot: EquipmentSlot) -> Vec<SwapRow> {
                 delta_total(mods, worn_mods),
                 name.clone(),
                 SwapRow {
-                    choice: SwapChoice::Equip(item.clone()),
+                    choice: SwapChoice::Equip(row.item.clone(), tier),
                     label: swap_label(&name, &stats, mods, worn_mods),
                     fusion_tier: tier,
                 },
@@ -768,13 +772,18 @@ pub enum TradeOrigin {
 /// A line item picked in `Mode::TradeAction`, awaiting a quantity from
 /// `Mode::TradeQuantity` before `Game::sell_item`/`Game::buy_item`/
 /// `Game::buy_back` is actually called.
+/// The `u32` beside a sold or bought-back item is its fusion tier — the
+/// player may hold several copies of one item at different tiers, and which
+/// one they picked is not recoverable from the id (see
+/// `components::FusedGear`). `Buy` carries none because a trader's stock is
+/// always ordinary.
 #[derive(Clone)]
 pub enum TradeChoice {
-    Sell(ItemId),
+    Sell(ItemId, u32),
     Buy(ItemId),
     /// Something the player sold this trader, offered back at a markup —
     /// see `Game::buyback_options`.
-    BuyBack(ItemId),
+    BuyBack(ItemId, u32),
 }
 
 pub const MIN_ZOOM: u16 = 1;
@@ -919,13 +928,16 @@ pub struct App {
     /// The ability index picked in `Mode::BattleSpecial`, awaiting a group
     /// from `Mode::BattleTarget` before it becomes a `BattleAction::Special`.
     pub pending_special_ability: Option<usize>,
-    pub pending_inventory_item: Option<ItemId>,
+    /// The cargo row picked on `Mode::Inventory`, as `(item, fusion tier)`
+    /// — a fused copy and its ordinary spares are separate rows and every
+    /// action on one has to say which it meant.
+    pub pending_inventory_item: Option<(ItemId, u32)>,
     /// The equipment slot picked on `Mode::Inventory`, awaiting a
     /// replacement (or an unequip) from `Mode::EquipSwap`.
     pub pending_swap_slot: Option<EquipmentSlot>,
     /// The inventory item picked for erasure, awaiting a quantity from
     /// `Mode::EraseQuantity`.
-    pub pending_erase: Option<ItemId>,
+    pub pending_erase: Option<(ItemId, u32)>,
     /// Digits typed so far on the erase-quantity page.
     pub erase_quantity_input: String,
     /// The recipe result picked in `Mode::Craft`, awaiting a quantity from

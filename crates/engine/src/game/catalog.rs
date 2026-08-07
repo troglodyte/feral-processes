@@ -398,13 +398,23 @@ impl Game {
             .count()
     }
 
-    /// Units of cargo currently carried, excluding banked currency.
+    /// Units of cargo currently carried, excluding banked currency. Fused
+    /// copies count: they are carried, and this figure has to keep matching
+    /// the sum of `PlayerStatus::inventory`, which lists both stores.
     pub fn inventory_used(&self) -> u32 {
+        let player = self.player_entity();
         let db = self.world.resource::<ItemDb>();
-        self.world
-            .get::<Inventory>(self.player_entity())
+        let carried = self
+            .world
+            .get::<Inventory>(player)
             .map(|inv| inv.cargo_used(db))
-            .unwrap_or(0)
+            .unwrap_or(0);
+        let fused = self
+            .world
+            .get::<FusedGear>(player)
+            .map(|f| f.total())
+            .unwrap_or(0);
+        carried + fused
     }
 
     /// The actual item cost to deploy `def` right now: `def.build_cost`

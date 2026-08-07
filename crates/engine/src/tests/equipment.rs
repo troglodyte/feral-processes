@@ -14,7 +14,7 @@ fn equip_grants_stat_bonus_and_removes_item_from_inventory() {
         .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
     let atk_before = game.player_status().atk;
 
-    game.equip(&ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
+    game.equip(&ItemId::from(ids::OVERCLOCK_CORE), 0).unwrap();
 
     let status = game.player_status();
     assert_eq!(
@@ -34,7 +34,7 @@ fn equip_grants_stat_bonus_and_removes_item_from_inventory() {
         status
             .inventory
             .iter()
-            .all(|(i, _)| *i != ItemId::from(ids::OVERCLOCK_CORE)),
+            .all(|r| r.item != ItemId::from(ids::OVERCLOCK_CORE)),
         "equipped item should leave the inventory stack"
     );
 }
@@ -50,7 +50,7 @@ fn equipping_gear_in_a_deeper_zone_scales_its_bonus_100_percent_per_level() {
         .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
     let atk_before = game.player_status().atk;
 
-    game.equip(&ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
+    game.equip(&ItemId::from(ids::OVERCLOCK_CORE), 0).unwrap();
 
     let status = game.player_status();
     // Base +3 ATK, scaled 2x per level above 1: level 3 = 3 * 2^2 = 12.
@@ -86,12 +86,12 @@ fn equipping_the_same_slot_again_swaps_without_double_counting_the_bonus() {
         .add(ItemId::from(ids::OVERCLOCK_CORE), 2);
     let atk_before = game.player_status().atk;
 
-    game.equip(&ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
+    game.equip(&ItemId::from(ids::OVERCLOCK_CORE), 0).unwrap();
     assert_eq!(game.player_status().atk, atk_before + 3);
 
     // Equipping into an already-occupied slot swaps the old item back
     // to inventory and must not stack the bonus a second time.
-    game.equip(&ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
+    game.equip(&ItemId::from(ids::OVERCLOCK_CORE), 0).unwrap();
     let status = game.player_status();
     assert_eq!(
         status.atk,
@@ -102,8 +102,8 @@ fn equipping_the_same_slot_again_swaps_without_double_counting_the_bonus() {
         status
             .inventory
             .iter()
-            .find(|(i, _)| *i == ItemId::from(ids::OVERCLOCK_CORE))
-            .map(|(_, q)| *q),
+            .find(|r| r.item == ItemId::from(ids::OVERCLOCK_CORE))
+            .map(|r| r.qty),
         Some(1),
         "the swapped-out copy should return to inventory"
     );
@@ -118,7 +118,7 @@ fn unequip_removes_bonus_and_returns_item_to_inventory() {
         .unwrap()
         .add(ItemId::from(ids::FIREWALL_PLATING), 1);
     let def_before = game.player_status().def;
-    game.equip(&ItemId::from(ids::FIREWALL_PLATING)).unwrap();
+    game.equip(&ItemId::from(ids::FIREWALL_PLATING), 0).unwrap();
     assert_eq!(game.player_status().def, def_before + 3);
 
     game.unequip(EquipmentSlot::Armor).unwrap();
@@ -130,8 +130,8 @@ fn unequip_removes_bonus_and_returns_item_to_inventory() {
         status
             .inventory
             .iter()
-            .find(|(i, _)| *i == ItemId::from(ids::FIREWALL_PLATING))
-            .map(|(_, q)| *q),
+            .find(|r| r.item == ItemId::from(ids::FIREWALL_PLATING))
+            .map(|r| r.qty),
         Some(1)
     );
 }
@@ -217,7 +217,7 @@ fn equipping_over_a_slot_holding_an_item_with_no_itemdb_entry_errors_instead_of_
     };
     let decompiler_before = game.world.get::<Decompiler>(player).map(|d| d.skill);
 
-    let result = game.equip(&ItemId::from(ids::OVERCLOCK_CORE));
+    let result = game.equip(&ItemId::from(ids::OVERCLOCK_CORE), 0);
 
     assert!(
         result.is_err(),
@@ -246,31 +246,72 @@ fn equipping_over_a_slot_holding_an_item_with_no_itemdb_entry_errors_instead_of_
     );
 }
 
+/// The reported bug, and the reason this feature exists. Fusing used to
+/// upgrade the item *type* — the ledger was keyed by `ItemId` — so every
+/// spare and every copy picked up afterwards equipped at the fused tier.
+/// It reads as a display bug in the inventory screen and is not one.
 #[test]
-fn fuse_item_consumes_two_copies_and_raises_the_fusion_tier() {
+fn fusing_leaves_the_spares_ordinary() {
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
     let mut game = Game::new(200, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     game.world
         .get_mut::<Inventory>(player)
         .unwrap()
-        .add(ItemId::from(ids::OVERCLOCK_CORE), 3);
+        .add(armor.clone(), 6);
 
-    game.fuse_item(&ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
+    game.fuse_item(&armor, 0).unwrap();
 
-    assert_eq!(game.item_fusion_tier(&ItemId::from(ids::OVERCLOCK_CORE)), 1);
+    assert_eq!(held_at(&game, &armor, 1), 1, "one stronger copy comes out");
     assert_eq!(
-        game.player_status()
-            .inventory
-            .iter()
-            .find(|(i, _)| *i == ItemId::from(ids::OVERCLOCK_CORE))
-            .map(|(_, q)| *q),
-        Some(2),
-        "a fusion takes two copies and hands one back, so the net cost is one"
+        held_at(&game, &armor, 0),
+        4,
+        "the spares stay ordinary — they are not what was fused"
+    );
+}
+
+/// The ladder's real price in base copies: 2 for a T1, 4 for a T2, 8 for a
+/// T3, because each rung is two copies of the rung below. The last
+/// assertion pins the ceiling as the refusal, with the stock still in hand.
+#[test]
+fn the_fusion_ladder_doubles_its_cost_at_every_rung() {
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    let mut game = Game::new(2001, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(armor.clone(), 8);
+
+    for tier in 0..MAX_FUSIONS {
+        while held_at(&game, &armor, tier) >= crate::tuning::ITEM_FUSION_COST {
+            game.fuse_item(&armor, tier).unwrap();
+        }
+    }
+
+    assert_eq!(
+        held_at(&game, &armor, MAX_FUSIONS),
+        1,
+        "eight base copies buy exactly one T{MAX_FUSIONS}"
+    );
+    for tier in 0..MAX_FUSIONS {
+        assert_eq!(
+            held_at(&game, &armor, tier),
+            0,
+            "nothing left over at T{tier}"
+        );
+    }
+
+    let err = game.fuse_item(&armor, MAX_FUSIONS).unwrap_err();
+    assert!(
+        err.contains("can't be fused again"),
+        "a maxed copy should say so, got: {err}"
     );
 }
 
 #[test]
 fn fuse_item_bonus_scales_the_equipped_stat_bonus() {
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
     let mut game = Game::new(201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     // Ablative Plating's base is +4 def. At this magnitude the percentage
@@ -280,10 +321,10 @@ fn fuse_item_bonus_scales_the_equipped_stat_bonus() {
     game.world
         .get_mut::<Inventory>(player)
         .unwrap()
-        .add(ItemId::from(ids::ABLATIVE_PLATING), 6);
+        .add(armor.clone(), 6);
 
     let def_before = game.player_status().def;
-    game.equip(&ItemId::from(ids::ABLATIVE_PLATING)).unwrap();
+    game.equip(&armor, 0).unwrap();
     assert_eq!(
         game.player_status().def,
         def_before + 4,
@@ -291,16 +332,13 @@ fn fuse_item_bonus_scales_the_equipped_stat_bonus() {
     );
     game.unequip(EquipmentSlot::Armor).unwrap();
 
-    game.fuse_item(&ItemId::from(ids::ABLATIVE_PLATING))
-        .unwrap();
-    game.fuse_item(&ItemId::from(ids::ABLATIVE_PLATING))
-        .unwrap();
-    assert_eq!(
-        game.item_fusion_tier(&ItemId::from(ids::ABLATIVE_PLATING)),
-        2
-    );
+    // Four base copies for one T2: two T1s, then those two.
+    game.fuse_item(&armor, 0).unwrap();
+    game.fuse_item(&armor, 0).unwrap();
+    game.fuse_item(&armor, 1).unwrap();
+    assert_eq!(held_at(&game, &armor, 2), 1);
 
-    game.equip(&ItemId::from(ids::ABLATIVE_PLATING)).unwrap();
+    game.equip(&armor, 2).unwrap();
     assert_eq!(
         game.player_status().def,
         def_before + 6,
@@ -313,7 +351,8 @@ fn fuse_item_rejects_non_equipment_and_insufficient_stock() {
     let mut game = Game::new(202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     assert!(
-        game.fuse_item(&ItemId::from(ids::CORE_FRAGMENT)).is_err(),
+        game.fuse_item(&ItemId::from(ids::CORE_FRAGMENT), 0)
+            .is_err(),
         "plain resources aren't equipment and can't be fused"
     );
 
@@ -322,59 +361,41 @@ fn fuse_item_rejects_non_equipment_and_insufficient_stock() {
         .unwrap()
         .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
     assert!(
-        game.fuse_item(&ItemId::from(ids::OVERCLOCK_CORE)).is_err(),
+        game.fuse_item(&ItemId::from(ids::OVERCLOCK_CORE), 0)
+            .is_err(),
         "fusing needs 2 copies, only 1 is available"
     );
     assert_eq!(
-        game.player_status()
-            .inventory
-            .iter()
-            .find(|(i, _)| *i == ItemId::from(ids::OVERCLOCK_CORE))
-            .map(|(_, q)| *q),
-        Some(1),
+        held_at(&game, &ItemId::from(ids::OVERCLOCK_CORE), 0),
+        1,
         "a failed fuse should not consume the lone copy"
     );
 }
 
-/// Gear shares `MAX_FUSIONS` with programs. The stock assertion is the
-/// point: it pins the ceiling check *above* the `Inventory::take` rather
-/// than below it, so a refused fusion spends nothing.
+/// Both refusals sit above the first `take_copies`, so neither store is
+/// touched — the ordering `install_routine` and `use_symlink` also keep.
 #[test]
-fn fuse_item_refuses_at_the_ceiling_without_spending_copies() {
+fn a_refused_fusion_spends_nothing_from_either_store() {
     let core = ItemId::from(ids::OVERCLOCK_CORE);
     let mut game = Game::new(203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    // Each fusion nets one copy, so five leaves two in hand at tier 3 —
-    // enough that the refusal below can only be the cap, never the stock.
     game.world
         .get_mut::<Inventory>(player)
         .unwrap()
-        .add(core.clone(), 5);
-    for _ in 0..MAX_FUSIONS {
-        game.fuse_item(&core).unwrap();
-    }
-    assert_eq!(game.item_fusion_tier(&core), MAX_FUSIONS);
+        .add(core.clone(), 3);
+    game.world
+        .get_mut::<FusedGear>(player)
+        .unwrap()
+        .add(core.clone(), MAX_FUSIONS, 2);
 
-    let err = game.fuse_item(&core).unwrap_err();
+    // Refused by the ceiling, with the stock for it plainly in hand.
+    let err = game.fuse_item(&core, MAX_FUSIONS).unwrap_err();
+    assert!(err.contains("can't be fused again"), "got: {err}");
+    // Refused by the stock, one rung down where there is none.
+    assert!(game.fuse_item(&core, MAX_FUSIONS - 1).is_err());
 
-    assert!(
-        err.contains("can't be fused again"),
-        "a maxed item should say so, got: {err}"
-    );
-    assert_eq!(
-        game.item_fusion_tier(&core),
-        MAX_FUSIONS,
-        "a refused fusion must not raise the tier"
-    );
-    assert_eq!(
-        game.player_status()
-            .inventory
-            .iter()
-            .find(|(i, _)| *i == core)
-            .map(|(_, q)| *q),
-        Some(2),
-        "a refused fusion must not consume copies"
-    );
+    assert_eq!(held_at(&game, &core, MAX_FUSIONS), 2);
+    assert_eq!(held_at(&game, &core, 0), 3);
 }
 
 #[test]
@@ -382,51 +403,72 @@ fn fusing_a_worn_item_counts_it_and_upgrades_the_worn_copy_live() {
     let armor = ItemId::from(ids::ABLATIVE_PLATING);
     let mut game = Game::new(704, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    // One copy to wear, two spares.
+    // One copy to wear, three spares.
     game.world
         .get_mut::<Inventory>(player)
         .unwrap()
-        .add(armor.clone(), 3);
+        .add(armor.clone(), 4);
     let base_def = game.player_status().def;
 
-    game.equip(&armor).unwrap();
+    game.equip(&armor, 0).unwrap();
     assert_eq!(
         game.player_status().def,
         base_def + 4,
         "Ablative Plating's base is +4 def while worn, unfused"
     );
-
-    let held = |g: &Game| {
-        g.player_status()
-            .inventory
-            .iter()
-            .find(|(i, _)| *i == armor)
-            .map(|(_, q)| *q)
-            .unwrap_or(0)
-    };
-    assert_eq!(held(&game), 2, "equipping consumed one of the three copies");
-
-    // The worn copy counts as one of the two a fusion needs, so a single
-    // spare is enough.
-    game.fuse_item(&armor).unwrap();
-    assert_eq!(game.item_fusion_tier(&armor), 1);
     assert_eq!(
-        held(&game),
-        1,
-        "only one spare consumed — the worn copy counted for the other"
+        held_at(&game, &armor, 0),
+        3,
+        "equipping consumed one of the four copies"
     );
 
-    // Second fuse reaches tier 2. The percentage alone would give
-    // 4 * 1.2 = 4.8 -> 5, but the per-tier floor is worth more at this
-    // magnitude, so the stat lands at 4 + 2 = 6.
-    game.fuse_item(&armor).unwrap();
-    assert_eq!(game.item_fusion_tier(&armor), 2);
-    assert_eq!(held(&game), 0);
+    // The worn copy counts as one of the two a fusion needs, so a single
+    // spare is enough — and it is the worn copy that comes out stronger.
+    game.fuse_item(&armor, 0).unwrap();
+    assert_eq!(
+        held_at(&game, &armor, 0),
+        2,
+        "only one spare consumed — the worn copy counted for the other"
+    );
+    assert_eq!(
+        game.player_status().armor.map(|e| e.fusion_tier),
+        Some(1),
+        "the worn copy is the survivor"
+    );
+
+    // The worn copy is a T1 now, so the next rung needs a T1 spare —
+    // which the two remaining ordinary copies make.
+    game.fuse_item(&armor, 0).unwrap();
+    assert_eq!(held_at(&game, &armor, 1), 1);
+    game.fuse_item(&armor, 1).unwrap();
+    assert_eq!(held_at(&game, &armor, 1), 0);
     assert_eq!(
         game.player_status().def,
         base_def + 6,
         "the worn copy picks up the new tier live, without a re-equip"
     );
+}
+
+/// A worn copy pays for a fusion of its *own* tier and no other. Without
+/// the tier half of that match, wearing an ordinary copy would discount
+/// every rung of the ladder above it.
+#[test]
+fn a_worn_copy_at_another_tier_does_not_pay_for_the_fusion() {
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    let mut game = Game::new(7041, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(armor.clone(), 1);
+    game.world
+        .get_mut::<FusedGear>(player)
+        .unwrap()
+        .add(armor.clone(), 1, 1);
+    game.equip(&armor, 0).unwrap();
+
+    let err = game.fuse_item(&armor, 1).unwrap_err();
+    assert_eq!(err, "Need 2 Ablative Plating to fuse (have 1).");
 }
 
 #[test]
@@ -438,12 +480,12 @@ fn fusing_a_worn_item_still_needs_one_spare() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(armor.clone(), 1);
-    game.equip(&armor).unwrap(); // now zero spares held
-    let err = game.fuse_item(&armor).unwrap_err();
+    game.equip(&armor, 0).unwrap(); // now zero spares held
+    let err = game.fuse_item(&armor, 0).unwrap_err();
     assert_eq!(err, "Need 1 Ablative Plating to fuse (have 0).");
     assert_eq!(
-        game.item_fusion_tier(&armor),
-        0,
+        game.player_status().armor.map(|e| e.fusion_tier),
+        Some(0),
         "a refused fuse changes nothing"
     );
 }
@@ -459,10 +501,10 @@ fn fusing_needs_two_spares_when_a_different_item_is_worn() {
         inv.add(worn.clone(), 1);
         inv.add(target.clone(), 1);
     }
-    game.equip(&worn).unwrap(); // Firewall Plating occupies the Armor slot
+    game.equip(&worn, 0).unwrap(); // Firewall Plating occupies the Armor slot
     // The worn armor is a different item, so it can't count toward fusing
     // Ablative Plating — that still needs two spares.
-    let err = game.fuse_item(&target).unwrap_err();
+    let err = game.fuse_item(&target, 0).unwrap_err();
     assert_eq!(err, "Need 2 Ablative Plating to fuse (have 1).");
 }
 
@@ -475,23 +517,58 @@ fn a_successful_fuse_returns_its_confirmation_line() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(core.clone(), 2);
-    let msg = game.fuse_item(&core).unwrap();
+    let msg = game.fuse_item(&core, 0).unwrap();
     assert!(
         msg.contains("fuse") && msg.contains('%'),
         "a fuse must hand back a confirmation to surface, got: {msg}"
     );
 }
 
+/// Unequipping puts the copy back where its tier belongs. Returning a
+/// fused copy to `Inventory` would launder it into the tier-0 store the
+/// production chain reads, which is the one thing `FusedGear` exists to
+/// prevent.
 #[test]
-fn item_fusion_tier_survives_save_and_load() {
+fn unequipping_a_fused_copy_returns_it_to_the_fused_store() {
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    let mut game = Game::new(7071, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world
+        .get_mut::<FusedGear>(player)
+        .unwrap()
+        .add(armor.clone(), 2, 1);
+
+    game.equip(&armor, 2).unwrap();
+    game.unequip(EquipmentSlot::Armor).unwrap();
+
+    assert_eq!(
+        held_at(&game, &armor, 2),
+        1,
+        "the copy comes back at its tier"
+    );
+    assert_eq!(
+        held_at(&game, &armor, 0),
+        0,
+        "and not into the ordinary stack"
+    );
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().count(&armor),
+        0,
+        "a fused copy must never reach the store recipes read"
+    );
+}
+
+#[test]
+fn a_fused_copy_survives_save_and_load() {
     let assets = test_assets_dir();
+    let core = ItemId::from(ids::OVERCLOCK_CORE);
     let mut game = Game::new(203, DifficultyMode::Forgiving, &assets).unwrap();
     let player = game.player_entity();
     game.world
         .get_mut::<Inventory>(player)
         .unwrap()
-        .add(ItemId::from(ids::OVERCLOCK_CORE), 2);
-    game.fuse_item(&ItemId::from(ids::OVERCLOCK_CORE)).unwrap();
+        .add(core.clone(), 3);
+    game.fuse_item(&core, 0).unwrap();
 
     let path = std::env::temp_dir().join(format!(
         "feral_processes_fusion_test_{}.bin",
@@ -501,14 +578,12 @@ fn item_fusion_tier_survives_save_and_load() {
     let loaded = Game::load(&path, &assets).unwrap();
     let _ = std::fs::remove_file(&path);
 
-    assert_eq!(
-        loaded.item_fusion_tier(&ItemId::from(ids::OVERCLOCK_CORE)),
-        1
-    );
+    assert_eq!(held_at(&loaded, &core, 1), 1);
+    assert_eq!(held_at(&loaded, &core, 0), 1);
 }
 
 /// Gear fusion was uncapped before `MAX_FUSIONS` applied to it, so a save
-/// can hold a tier above the ceiling. The ledger is clamped on load —
+/// can hold a copy above the ceiling. Carried copies are clamped on load —
 /// but the *worn* copy is deliberately left alone, and that is what the
 /// last two assertions pin. `apply_equipment_delta` writes straight into
 /// `Stats` and the load path restores those numbers verbatim, so lowering
@@ -519,19 +594,15 @@ fn item_fusion_tier_survives_save_and_load() {
 fn loading_a_legacy_over_ceiling_tier_clamps_the_ledger_not_the_worn_copy() {
     let assets = test_assets_dir();
     let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    let legacy = MAX_FUSIONS + 2;
     let mut game = Game::new(204, DifficultyMode::Forgiving, &assets).unwrap();
     let player = game.player_entity();
     // Written directly: `fuse_item` now refuses this, which is the point.
     game.world
-        .get_mut::<ItemFusions>(player)
+        .get_mut::<FusedGear>(player)
         .unwrap()
-        .tiers
-        .push((armor.clone(), MAX_FUSIONS + 2));
-    game.world
-        .get_mut::<Inventory>(player)
-        .unwrap()
-        .add(armor.clone(), 1);
-    game.equip(&armor).unwrap();
+        .add(armor.clone(), legacy, 2);
+    game.equip(&armor, legacy).unwrap();
     let def_before = game.player_status().def;
 
     let path = std::env::temp_dir().join(format!(
@@ -543,17 +614,18 @@ fn loading_a_legacy_over_ceiling_tier_clamps_the_ledger_not_the_worn_copy() {
     let _ = std::fs::remove_file(&path);
 
     assert_eq!(
-        loaded.item_fusion_tier(&armor),
-        MAX_FUSIONS,
-        "the ledger governs future equips and fusions, so it takes the cap"
+        held_at(&loaded, &armor, MAX_FUSIONS),
+        1,
+        "the carried copy governs future equips and fusions, so it takes the cap"
     );
+    assert_eq!(held_at(&loaded, &armor, legacy), 0);
     assert_eq!(
         loaded
             .world
             .get::<Equipment>(loaded.player_entity())
             .and_then(|e| e.get(EquipmentSlot::Armor))
             .map(|e| e.fusion_tier),
-        Some(MAX_FUSIONS + 2),
+        Some(legacy),
         "the worn copy keeps the tier its bonus was actually applied at"
     );
     assert_eq!(
@@ -572,17 +644,17 @@ fn erase_item_removes_the_full_stack() {
         .unwrap()
         .add(ItemId::from(ids::NEURAL_AMPLIFIER), 3);
 
-    game.erase_item(&ItemId::from(ids::NEURAL_AMPLIFIER), 3)
+    game.erase_item(&ItemId::from(ids::NEURAL_AMPLIFIER), 0, 3)
         .unwrap();
     assert!(
         game.player_status()
             .inventory
             .iter()
-            .all(|(i, _)| *i != ItemId::from(ids::NEURAL_AMPLIFIER))
+            .all(|r| r.item != ItemId::from(ids::NEURAL_AMPLIFIER))
     );
 
     assert!(
-        game.erase_item(&ItemId::from(ids::NEURAL_AMPLIFIER), 1)
+        game.erase_item(&ItemId::from(ids::NEURAL_AMPLIFIER), 0, 1)
             .is_err(),
         "erasing from an empty stack should error"
     );
@@ -596,7 +668,7 @@ fn equipped_gear_and_its_bonus_survive_save_and_load() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::NEURAL_AMPLIFIER), 1);
-    game.equip(&ItemId::from(ids::NEURAL_AMPLIFIER)).unwrap();
+    game.equip(&ItemId::from(ids::NEURAL_AMPLIFIER), 0).unwrap();
     let decompiler_after_equip = game.player_status().decompiler;
 
     let path = std::env::temp_dir().join(format!(
@@ -633,18 +705,14 @@ fn fusing_from_inventory_alone_still_leaves_you_holding_one_copy() {
         .unwrap()
         .add(armor.clone(), crate::tuning::ITEM_FUSION_COST);
 
-    game.fuse_item(&armor).unwrap();
+    game.fuse_item(&armor, 0).unwrap();
 
     assert_eq!(
-        game.player_status()
-            .inventory
-            .iter()
-            .find(|(i, _)| *i == armor)
-            .map(|(_, q)| *q),
-        Some(1),
+        held_at(&game, &armor, 1),
+        1,
         "a fusion yields one stronger copy; it must not consume the result too"
     );
-    assert_eq!(game.item_fusion_tier(&armor), 1);
+    assert_eq!(held_at(&game, &armor, 0), 0);
 }
 
 #[test]
@@ -658,18 +726,19 @@ fn fusing_costs_the_same_whether_or_not_a_copy_is_worn() {
             .unwrap()
             .add(armor.clone(), 4);
         if wear {
-            game.equip(&armor).unwrap();
+            game.equip(&armor, 0).unwrap();
         }
-        game.fuse_item(&armor).unwrap();
-        let in_cargo = game
+        game.fuse_item(&armor, 0).unwrap();
+        // Every tier, because a fusion moves a copy between the two stores.
+        // Equipping moves one out of cargo entirely, so count it back in to
+        // compare total copies owned rather than cargo alone.
+        let in_cargo: u32 = game
             .player_status()
             .inventory
             .iter()
-            .find(|(i, _)| *i == armor)
-            .map(|(_, q)| *q)
-            .unwrap_or(0);
-        // Equipping moves a copy out of cargo, so count it back in to
-        // compare total copies owned rather than cargo alone.
+            .filter(|r| r.item == armor)
+            .map(|r| r.qty)
+            .sum();
         in_cargo + u32::from(wear)
     };
 

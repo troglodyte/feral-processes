@@ -554,9 +554,9 @@ fn breaching_keeps_everything_that_is_not_spendable_currency() {
         inv.add(ItemId::from(ids::POWER_CELL), 4);
     }
     game.world
-        .get_mut::<ItemFusions>(player)
+        .get_mut::<FusedGear>(player)
         .unwrap()
-        .increment(ItemId::from(ids::ICE_BREAKER));
+        .add(ItemId::from(ids::ABLATIVE_PLATING), 1, 1);
 
     game.enter_next_zone();
 
@@ -577,11 +577,11 @@ fn breaching_keeps_everything_that_is_not_spendable_currency() {
     );
     assert_eq!(
         game.world
-            .get::<ItemFusions>(player)
+            .get::<FusedGear>(player)
             .unwrap()
-            .tier(&ItemId::from(ids::ICE_BREAKER)),
+            .count(&ItemId::from(ids::ABLATIVE_PLATING), 1),
         1,
-        "fusion progress is not currency"
+        "a fused copy is gear, not currency"
     );
 }
 

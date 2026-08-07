@@ -1464,7 +1464,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             module_fusion_tier: 0,
             perk_points: 0,
             unlocked_perks: Vec::new(),
-            item_fusions: Vec::new(),
+            fused_gear: Vec::new(),
             routines: Vec::new(),
             field_buffs: Vec::new(),
         },

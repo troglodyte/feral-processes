@@ -559,7 +559,7 @@ fn manifest_lists_every_equipped_item_with_the_bonus_it_is_actually_granting() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(item.clone(), 1);
-    game.equip(&item).expect("equipping a held item works");
+    game.equip(&item, 0).expect("equipping a held item works");
 
     let view = game.manifest(player).unwrap();
     let ManifestSubject::Player(p) = view.subject else {
@@ -862,7 +862,7 @@ fn the_inventory_view_comes_back_grouped_by_category() {
     let inventory = game.player_status().inventory;
     let categories: Vec<ItemCategory> = inventory
         .iter()
-        .map(|(item, _)| game.item_category(item))
+        .map(|r| game.item_category(&r.item))
         .collect();
     let mut sorted = categories.clone();
     sorted.sort();
@@ -874,15 +874,15 @@ fn the_inventory_view_comes_back_grouped_by_category() {
     // And the grouping is the documented one, not merely *some* order.
     let whip = inventory
         .iter()
-        .position(|(i, _)| i.as_str() == ids::MONOFILAMENT_WHIP)
+        .position(|r| r.item.as_str() == ids::MONOFILAMENT_WHIP)
         .unwrap();
     let cell = inventory
         .iter()
-        .position(|(i, _)| i.as_str() == ids::POWER_CELL)
+        .position(|r| r.item.as_str() == ids::POWER_CELL)
         .unwrap();
     let frag = inventory
         .iter()
-        .position(|(i, _)| i.as_str() == ids::CORE_FRAGMENT)
+        .position(|r| r.item.as_str() == ids::CORE_FRAGMENT)
         .unwrap();
     assert!(cell < whip, "consumables list before weapons");
     assert!(whip < frag, "weapons list before salvage");

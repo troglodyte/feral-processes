@@ -16,8 +16,8 @@ use feral_processes_engine::structures::StructureCategory;
 use feral_processes_engine::tuning::{MAX_FUSIONS, MAX_PARTY_SIZE};
 use feral_processes_engine::world::{Biome, Tile};
 use feral_processes_engine::{
-    Assignee, Entity, EntityView, Game, LogEntry, MESSAGE_LOG_CAP, MessageKind, PetInfo,
-    ProgramSaleOption, RecipeChain, RecipeStep, ResearchState, StructureReport,
+    Assignee, Entity, EntityView, Game, InventoryRow, LogEntry, MESSAGE_LOG_CAP, MessageKind,
+    PetInfo, ProgramSaleOption, RecipeChain, RecipeStep, ResearchState, StructureReport,
 };
 
 mod bars;
@@ -114,8 +114,9 @@ pub(super) fn hp_critical(hp: i32, max_hp: i32) -> bool {
 /// ordinary colour alone.
 ///
 /// Programs and gear both call this, because both stop at the same
-/// ceiling: `components::FusionCount` for a program, `ItemFusions` for a
-/// piece of gear (see `Game::fuse_item`). One function rather than a
+/// ceiling: `components::FusionCount` for a program, `FusedGear` (or a
+/// worn copy's `EquippedItem::fusion_tier`) for a piece of gear — see
+/// `Game::fuse_item`. One function rather than a
 /// parallel pair, so the two cannot come to mean different things.
 ///
 /// `Option` rather than a defaulted colour so a caller that already has a
@@ -362,19 +363,32 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
     }
 }
 
-/// Formats a `(item, quantity)` cost list, tagged `(have/need)` — same
-/// convention as `ui.rs::cost_display`.
-fn cost_display(game: &Game, cost: &[(ItemId, u32)], inventory: &[(ItemId, u32)]) -> Vec<String> {
+/// Formats a `(item, quantity)` cost list, tagged `(have/need)`.
+///
+/// Counts the tier-0 row alone. A fused copy is not an ingredient — every
+/// recipe reads `components::Inventory`, which is the tier-0 store — so
+/// summing across tiers here would promise material the compile then
+/// refuses to spend.
+fn cost_display(game: &Game, cost: &[(ItemId, u32)], inventory: &[InventoryRow]) -> Vec<String> {
     cost.iter()
         .map(|(item, qty)| {
             let have = inventory
                 .iter()
-                .find(|(i, _)| i == item)
-                .map(|(_, q)| *q)
+                .find(|row| &row.item == item && row.tier == 0)
+                .map(|row| row.qty)
                 .unwrap_or(0);
             format!("{} ({have}/{qty})", game.item_name(item))
         })
         .collect()
+}
+
+/// The cargo row `Mode::InventoryItemAction` and `Mode::ItemDescribe` are
+/// about, as the `(item, tier)` pair both their screens take.
+fn split_pending_item(pending: &Option<(ItemId, u32)>) -> (Option<ItemId>, u32) {
+    match pending {
+        Some((item, tier)) => (Some(item.clone()), *tier),
+        None => (None, 0),
+    }
 }
 
 fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
@@ -383,6 +397,7 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
     let manifest_from_picker = app.manifest_from_picker;
     let pending_field_routine = app.pending_field_routine;
     let pending_structure = app.pending_structure.clone();
+    let pending_item = app.pending_inventory_item.clone();
     // Taken off `app` before `app.game` is borrowed below, and through the
     // same methods the handlers pick from. A renderer holding its own copy
     // of the filter would draw a list the handler doesn't index — which is
@@ -501,36 +516,13 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         Mode::EquipSwap => draw_equip_swap(game, app.pending_swap_slot, selected, painter, m),
         Mode::InventoryItemAction => {
             let zone = game.player_status().zone;
-            let fusion_tier = app
-                .pending_inventory_item
-                .as_ref()
-                .map(|item| game.item_fusion_tier(item))
-                .unwrap_or(0);
-            draw_inventory_item_action(
-                game,
-                app.pending_inventory_item.clone(),
-                zone,
-                fusion_tier,
-                selected,
-                painter,
-                m,
-            )
+            let (item, fusion_tier) = split_pending_item(&pending_item);
+            draw_inventory_item_action(game, item, zone, fusion_tier, selected, painter, m)
         }
         Mode::ItemDescribe => {
             let zone = game.player_status().zone;
-            let fusion_tier = app
-                .pending_inventory_item
-                .as_ref()
-                .map(|item| game.item_fusion_tier(item))
-                .unwrap_or(0);
-            draw_item_describe(
-                game,
-                app.pending_inventory_item.clone(),
-                zone,
-                fusion_tier,
-                painter,
-                m,
-            )
+            let (item, fusion_tier) = split_pending_item(&pending_item);
+            draw_item_describe(game, item, zone, fusion_tier, painter, m)
         }
         Mode::Companion => draw_companion_menu(game, selected, painter, m),
         Mode::Fuse => draw_fuse_menu(game, selected, painter, m),

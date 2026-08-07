@@ -40,9 +40,10 @@ pub struct PlayerSave {
     /// Which perks have been bought, and at what level (see
     /// `components::Perks::level`) — one entry per level bought.
     pub unlocked_perks: Vec<Perk>,
-    /// How many times each item type has been fused — see
-    /// `components::ItemFusions`.
-    pub item_fusions: Vec<(ItemId, u32)>,
+    /// Every fused copy of gear the player is carrying, as
+    /// `(item, tier, qty)` — see `components::FusedGear`. Unfused copies
+    /// are in `inventory`, which is the tier-0 store.
+    pub fused_gear: Vec<(ItemId, u32, u32)>,
     /// The abilities installed in the player's routine slots, in menu order
     /// — see `components::Routines`.
     pub routines: Vec<crate::abilities::AbilityId>,
@@ -215,7 +216,7 @@ pub struct StructureSave {
 pub type BuybackShelfSave = (
     crate::structures::StructureId,
     (i32, i32),
-    Vec<(ItemId, u32)>,
+    Vec<(ItemId, u32, u32)>,
 );
 
 /// Only the world seed and the sparse tile overlay are persisted; unmodified
@@ -326,7 +327,7 @@ pub struct SaveData {
 /// as the player's weapon (`resources::WieldedProgram`).
 /// 23 → 24: `CreatureSave` gained `carrying`, for a program mid-delivery to
 /// a depot (`components::Carrying`).
-pub const SAVE_FORMAT_VERSION: u32 = 24;
+pub const SAVE_FORMAT_VERSION: u32 = 25;
 
 /// Renders a save as editable RON, for the `savetool` binary.
 ///
@@ -419,7 +420,7 @@ mod tests {
                 module: None,
                 module_level: 1,
                 module_fusion_tier: 0,
-                item_fusions: Vec::new(),
+                fused_gear: Vec::new(),
                 perk_points: 0,
                 unlocked_perks: Vec::new(),
                 routines: Vec::new(),

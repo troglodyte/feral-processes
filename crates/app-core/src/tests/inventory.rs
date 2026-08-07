@@ -15,11 +15,11 @@ fn erasing_asks_for_a_quantity_and_removes_exactly_that_many() {
         .player_status()
         .inventory
         .iter()
-        .find(|(i, _)| *i == ItemId::from(ids::CORE_FRAGMENT))
-        .map(|(_, q)| *q)
+        .find(|r| r.item == ItemId::from(ids::CORE_FRAGMENT))
+        .map(|r| r.qty)
         .unwrap();
 
-    app.pending_inventory_item = Some(ItemId::from(ids::CORE_FRAGMENT));
+    app.pending_inventory_item = Some((ItemId::from(ids::CORE_FRAGMENT), 0));
     app.mode = Mode::InventoryItemAction;
     app.handle_key(GameKey::Char('x'));
     assert_eq!(
@@ -38,8 +38,8 @@ fn erasing_asks_for_a_quantity_and_removes_exactly_that_many() {
         .player_status()
         .inventory
         .iter()
-        .find(|(i, _)| *i == ItemId::from(ids::CORE_FRAGMENT))
-        .map(|(_, q)| *q)
+        .find(|r| r.item == ItemId::from(ids::CORE_FRAGMENT))
+        .map(|r| r.qty)
         .unwrap();
     assert_eq!(after, before - 3);
     assert_eq!(app.mode, Mode::Inventory);
@@ -48,7 +48,7 @@ fn erasing_asks_for_a_quantity_and_removes_exactly_that_many() {
 #[test]
 fn erase_all_dumps_the_whole_stack() {
     let mut app = test_app(901);
-    app.pending_inventory_item = Some(ItemId::from(ids::CORE_FRAGMENT));
+    app.pending_inventory_item = Some((ItemId::from(ids::CORE_FRAGMENT), 0));
     app.mode = Mode::InventoryItemAction;
     app.handle_key(GameKey::Char('x'));
     app.handle_key(GameKey::Char('a'));
@@ -60,8 +60,8 @@ fn erase_all_dumps_the_whole_stack() {
         .player_status()
         .inventory
         .iter()
-        .find(|(i, _)| *i == ItemId::from(ids::CORE_FRAGMENT))
-        .map(|(_, q)| *q);
+        .find(|r| r.item == ItemId::from(ids::CORE_FRAGMENT))
+        .map(|r| r.qty);
     assert_eq!(held, None, "[A] should clear the stack entirely");
 }
 
@@ -69,7 +69,7 @@ fn erase_all_dumps_the_whole_stack() {
 fn escaping_the_erase_prompt_erases_nothing() {
     let mut app = test_app(902);
     let before = app.game.as_ref().unwrap().player_status().inventory;
-    app.pending_inventory_item = Some(ItemId::from(ids::CORE_FRAGMENT));
+    app.pending_inventory_item = Some((ItemId::from(ids::CORE_FRAGMENT), 0));
     app.mode = Mode::InventoryItemAction;
     app.handle_key(GameKey::Char('x'));
     app.handle_key(GameKey::Esc);
@@ -121,14 +121,14 @@ fn a_plain_resource_offers_only_describe_and_erase() {
 #[test]
 fn describe_opens_a_page_and_esc_returns_to_the_action_list() {
     let mut app = test_app(906);
-    app.pending_inventory_item = Some(ItemId::from(ids::CORE_FRAGMENT));
+    app.pending_inventory_item = Some((ItemId::from(ids::CORE_FRAGMENT), 0));
     app.mode = Mode::InventoryItemAction;
 
     app.handle_key(GameKey::Char('d'));
     assert_eq!(app.mode, Mode::ItemDescribe);
     assert_eq!(
         app.pending_inventory_item,
-        Some(ItemId::from(ids::CORE_FRAGMENT)),
+        Some((ItemId::from(ids::CORE_FRAGMENT), 0)),
         "the page needs to still know which item it is describing"
     );
 
@@ -159,7 +159,7 @@ fn the_describe_page_reads_the_authored_ron_description() {
 #[test]
 fn fusing_without_enough_copies_explains_why_instead_of_ignoring_the_key() {
     let mut app = test_app(903);
-    app.pending_inventory_item = Some(ItemId::from(ids::OVERCLOCK_CORE));
+    app.pending_inventory_item = Some((ItemId::from(ids::OVERCLOCK_CORE), 0));
     app.mode = Mode::InventoryItemAction;
     app.handle_key(GameKey::Char('u'));
 
@@ -277,12 +277,12 @@ fn equip_preview_tag_names_the_ceiling_and_calls_out_a_maxed_item() {
 fn a_swap_row_carries_its_items_fusion_tier() {
     let mut app = app_wearing_weapon(913, None, &[("kinetic_edge", 3)], 1);
     let spare = ItemId::from("kinetic_edge");
-    app.game.as_mut().unwrap().fuse_item(&spare).unwrap();
+    app.game.as_mut().unwrap().fuse_item(&spare, 0).unwrap();
 
     let rows = equip_swap_rows(app.game.as_ref().unwrap(), EquipmentSlot::Weapon);
     let row = rows
         .iter()
-        .find(|r| r.choice == SwapChoice::Equip(spare.clone()))
+        .find(|r| r.choice == SwapChoice::Equip(spare.clone(), 1))
         .expect("the fused spare should still be offered");
 
     assert_eq!(row.fusion_tier, 1);
@@ -330,7 +330,7 @@ fn picking_a_swap_row_equips_it_and_returns_to_the_inventory() {
     let rows = equip_swap_rows(app.game.as_ref().unwrap(), EquipmentSlot::Weapon);
     let idx = rows
         .iter()
-        .position(|r| r.choice == SwapChoice::Equip(ItemId::from("kinetic_edge")))
+        .position(|r| r.choice == SwapChoice::Equip(ItemId::from("kinetic_edge"), 0))
         .expect("the spare weapon should be offered");
     app.handle_key(GameKey::Char(menu_shortcut(idx)));
 
@@ -343,7 +343,7 @@ fn picking_a_swap_row_equips_it_and_returns_to_the_inventory() {
         status
             .inventory
             .iter()
-            .any(|(i, q)| *i == ItemId::from("overclock_core") && *q == 1),
+            .any(|r| r.item == ItemId::from("overclock_core") && r.qty == 1),
         "the weapon that came off must land back in cargo"
     );
     assert_eq!(app.mode, Mode::Inventory);
@@ -369,7 +369,7 @@ fn the_unequip_row_empties_the_slot() {
         status
             .inventory
             .iter()
-            .any(|(i, q)| *i == ItemId::from("overclock_core") && *q == 1)
+            .any(|r| r.item == ItemId::from("overclock_core") && r.qty == 1)
     );
     assert_eq!(app.mode, Mode::Inventory);
 }
@@ -391,7 +391,7 @@ fn the_swap_list_offers_only_gear_for_that_slot() {
     let offered: Vec<ItemId> = equip_swap_rows(app.game.as_ref().unwrap(), EquipmentSlot::Weapon)
         .into_iter()
         .filter_map(|r| match r.choice {
-            SwapChoice::Equip(item) => Some(item),
+            SwapChoice::Equip(item, _) => Some(item),
             SwapChoice::Unequip => None,
         })
         .collect();
@@ -426,9 +426,9 @@ fn swap_rows_are_sorted_best_first_with_unequip_last() {
     assert_eq!(
         choices,
         vec![
-            SwapChoice::Equip(ItemId::from("monofilament_whip")),
-            SwapChoice::Equip(ItemId::from("kinetic_edge")),
-            SwapChoice::Equip(ItemId::from("shiv_routine")),
+            SwapChoice::Equip(ItemId::from("monofilament_whip"), 0),
+            SwapChoice::Equip(ItemId::from("kinetic_edge"), 0),
+            SwapChoice::Equip(ItemId::from("shiv_routine"), 0),
             SwapChoice::Unequip,
         ],
         "the upgrade should be row 1 and emptying the slot the last resort"
@@ -451,7 +451,7 @@ fn a_spare_of_the_worn_item_reports_the_gain_from_re_equipping_it() {
     let rows = equip_swap_rows(app.game.as_ref().unwrap(), EquipmentSlot::Weapon);
     let row = rows
         .iter()
-        .find(|r| r.choice == SwapChoice::Equip(ItemId::from("overclock_core")))
+        .find(|r| r.choice == SwapChoice::Equip(ItemId::from("overclock_core"), 0))
         .expect("a spare of the worn item is still a candidate");
 
     // Base +3 ATK: worn remembers level 1, a fresh equip lands at zone 3
@@ -511,15 +511,70 @@ fn the_inventory_screen_lists_no_row_for_a_banked_item() {
     let listed = app.game.as_ref().unwrap().player_status().inventory;
 
     assert!(
-        !listed
-            .iter()
-            .any(|(item, _)| item.as_str() == ids::RESEARCH_DATA),
+        !listed.iter().any(|r| r.item.as_str() == ids::RESEARCH_DATA),
         "a bank must not be an inventory row: {listed:?}"
     );
     assert!(
-        listed
-            .iter()
-            .any(|(item, _)| item.as_str() == ids::CORE_FRAGMENT),
+        listed.iter().any(|r| r.item.as_str() == ids::CORE_FRAGMENT),
         "ordinary cargo is untouched: {listed:?}"
+    );
+}
+
+/// The reported bug, at the screen it was reported on. Fusing used to
+/// upgrade the item *type*, so the whole stack redrew as fused; the fix is
+/// one row per `(item, tier)`, which is exactly what the player asked to
+/// see. This walks the fusion through `Mode::InventoryItemAction` rather
+/// than calling the engine, because the row the handler acts on is picked
+/// out of the same list the renderer draws.
+#[test]
+fn fusing_from_the_inventory_screen_splits_the_stack_into_two_rows() {
+    let spare = ItemId::from("kinetic_edge");
+    let mut app = app_wearing_weapon(9130, None, &[("kinetic_edge", 6)], 1);
+    app.mode = Mode::Inventory;
+    // Three equipment slot rows come before the pack, and the pack holds
+    // only the one item.
+    app.menu_selected = 3;
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::InventoryItemAction);
+    app.handle_key(GameKey::Char('u'));
+
+    let rows: Vec<(u32, u32)> = app
+        .game
+        .as_ref()
+        .unwrap()
+        .player_status()
+        .inventory
+        .iter()
+        .filter(|r| r.item == spare)
+        .map(|r| (r.tier, r.qty))
+        .collect();
+
+    assert_eq!(
+        rows,
+        vec![(0, 4), (1, 1)],
+        "one fused copy and four ordinary spares, listed apart"
+    );
+}
+
+/// Two copies of one item at different tiers are two different pieces of
+/// gear, so the picker offers each on its own row at its own bonus.
+#[test]
+fn the_swap_picker_lists_a_fused_copy_beside_its_spares() {
+    let spare = ItemId::from("kinetic_edge");
+    let mut app = app_wearing_weapon(9131, None, &[("kinetic_edge", 4)], 1);
+    app.game.as_mut().unwrap().fuse_item(&spare, 0).unwrap();
+
+    let tiers: Vec<u32> = equip_swap_rows(app.game.as_ref().unwrap(), EquipmentSlot::Weapon)
+        .into_iter()
+        .filter_map(|r| match r.choice {
+            SwapChoice::Equip(item, tier) if item == spare => Some(tier),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(
+        tiers,
+        vec![1, 0],
+        "the fused copy is the better row and sorts first"
     );
 }

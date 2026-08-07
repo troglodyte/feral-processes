@@ -154,6 +154,63 @@ impl Game {
         Ok(())
     }
 
+    /// How many copies of `item` at fusion `tier` the player is carrying.
+    ///
+    /// The one place the split between the two cargo stores is decided:
+    /// `Inventory` holds tier 0 and `FusedGear` everything above it (see
+    /// that component). `count_copies`/`take_copies`/`add_copies` are the
+    /// only three callers that know the rule, so an action naming a tier
+    /// never has to pick a store itself — and no new action can pick the
+    /// wrong one.
+    pub(crate) fn count_copies(&self, item: &ItemId, tier: u32) -> u32 {
+        let player = self.player_entity();
+        if tier == 0 {
+            self.world
+                .get::<Inventory>(player)
+                .map(|inv| inv.count(item))
+                .unwrap_or(0)
+        } else {
+            self.world
+                .get::<FusedGear>(player)
+                .map(|f| f.count(item, tier))
+                .unwrap_or(0)
+        }
+    }
+
+    /// Removes up to `qty` copies of `item` at `tier`, returning how many
+    /// were taken — see `count_copies`.
+    pub(crate) fn take_copies(&mut self, item: &ItemId, tier: u32, qty: u32) -> u32 {
+        let player = self.player_entity();
+        if tier == 0 {
+            self.world
+                .get_mut::<Inventory>(player)
+                .unwrap()
+                .take(item.clone(), qty)
+        } else {
+            self.world
+                .get_mut::<FusedGear>(player)
+                .unwrap()
+                .take(item, tier, qty)
+        }
+    }
+
+    /// Puts `qty` copies of `item` at `tier` into cargo — see
+    /// `count_copies`.
+    pub(crate) fn add_copies(&mut self, item: &ItemId, tier: u32, qty: u32) {
+        let player = self.player_entity();
+        if tier == 0 {
+            self.world
+                .get_mut::<Inventory>(player)
+                .unwrap()
+                .add(item.clone(), qty);
+        } else {
+            self.world
+                .get_mut::<FusedGear>(player)
+                .unwrap()
+                .add(item.clone(), tier, qty);
+        }
+    }
+
     /// Adds (`sign` = 1) or removes (`sign` = -1) an equipped item's stat
     /// bonus from the player's `Stats`/`Decompiler`. Shared by `equip` and
     /// `unequip` so the two stay symmetric.
@@ -201,12 +258,17 @@ impl Game {
         Ok(Some((equipped, base_mods)))
     }
 
-    /// Equips `item` from inventory into its slot, swapping out (and
-    /// returning to inventory) whatever was there before. The bonus applied
-    /// is scaled for the current `resources::ZoneLevel` — see
-    /// `items::EquipmentStats::scaled_for_level` — so gear equipped after
-    /// breaching deeper is stronger than the same item equipped earlier.
-    pub fn equip(&mut self, item: &ItemId) -> Result<(), String> {
+    /// Equips the copy of `item` at fusion `tier` from cargo into its slot,
+    /// swapping out (and returning to cargo, at its own tier) whatever was
+    /// there before. The bonus applied is scaled for the current
+    /// `resources::ZoneLevel` — see `items::EquipmentStats::scaled_for_level`
+    /// — so gear equipped after breaching deeper is stronger than the same
+    /// item equipped earlier.
+    ///
+    /// The tier is a parameter rather than looked up, because the player
+    /// may hold several copies of one item at different tiers and only they
+    /// know which one they meant — see `components::FusedGear`.
+    pub fn equip(&mut self, item: &ItemId, tier: u32) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
@@ -216,22 +278,13 @@ impl Game {
         let player = self.player_entity();
         // The outgoing item's bonus must resolve before anything moves: a
         // refusal after the swap would leave it in neither Equipment nor
-        // Inventory, destroying it.
+        // cargo, destroying it.
         let outgoing = self.slot_occupant_with_mods(player, slot)?;
-        let taken = self
-            .world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .take(item.clone(), 1);
-        if taken == 0 {
+        if self.take_copies(item, tier, 1) == 0 {
             return Err(format!("You don't have a {}.", self.item_name(item)));
         }
         let level = self.world.resource::<ZoneLevel>().0;
-        let fusion_tier = self
-            .world
-            .get::<ItemFusions>(player)
-            .map(|f| f.tier(item))
-            .unwrap_or(0);
+        let fusion_tier = tier;
 
         {
             let mut equipment = self.world.get_mut::<Equipment>(player).unwrap();
@@ -249,10 +302,7 @@ impl Game {
                     .fused_for_tier(old.fusion_tier),
                 -1,
             );
-            self.world
-                .get_mut::<Inventory>(player)
-                .unwrap()
-                .add(old.item, 1);
+            self.add_copies(&old.item, old.fusion_tier, 1);
         }
         self.apply_equipment_delta(
             player,
@@ -278,7 +328,10 @@ impl Game {
         Ok(())
     }
 
-    /// Unequips whatever's in `slot`, returning it to inventory.
+    /// Unequips whatever's in `slot`, returning it to cargo — to
+    /// `FusedGear` if the worn copy was fused, to `Inventory` if it wasn't.
+    /// The copy keeps the tier it went on with, so gear does not launder
+    /// its fusion through a slot in either direction.
     pub fn unequip(&mut self, slot: EquipmentSlot) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -301,41 +354,38 @@ impl Game {
                 .fused_for_tier(equipped.fusion_tier),
             -1,
         );
-        self.world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .add(equipped.item.clone(), 1);
+        self.add_copies(&equipped.item, equipped.fusion_tier, 1);
         self.log(format!("You unequip {}.", self.item_name(&equipped.item)));
         self.tick();
         Ok(())
     }
 
-    /// How many times `item` has been fused so far — see `fuse_item`.
-    pub fn item_fusion_tier(&self, item: &ItemId) -> u32 {
-        self.world
-            .get::<ItemFusions>(self.player_entity())
-            .map(|f| f.tier(item))
-            .unwrap_or(0)
-    }
-
-    /// Consumes `crate::tuning::ITEM_FUSION_COST` copies of `item` to permanently
-    /// boost that item type's equipped bonus by another
-    /// `crate::tuning::ITEM_FUSION_BONUS_PER_TIER` (see `ItemFusions`,
+    /// Consumes `crate::tuning::ITEM_FUSION_COST` copies of `item` at
+    /// fusion `tier` and yields **one physical copy** at `tier + 1`, whose
+    /// equipped bonus is another `crate::tuning::ITEM_FUSION_BONUS_PER_TIER`
+    /// stronger (see `components::FusedGear`,
     /// `EquipmentStats::fused_for_tier`) — a sink for extra copies of gear.
     /// Only equippable items qualify.
     ///
-    /// A copy currently worn in the item's slot counts as one of those
-    /// copies, so wearing it plus a single spare is enough to fuse; that worn
-    /// copy stays equipped and picks up the new tier's bonus immediately
-    /// rather than only on the next re-equip. Returns the confirmation line on
-    /// success so the caller can surface it — unlike equipping, a fusion
-    /// changes nothing else the player can see.
+    /// The ingredients come from whichever store holds that tier
+    /// (`count_copies`), so climbing the ladder costs 2 base copies for a
+    /// T1, 4 for a T2 and 8 for a T3. Spares are untouched: they stay
+    /// ordinary, which is the whole of this feature.
+    ///
+    /// A copy currently worn in the item's slot *at that same tier* counts
+    /// as one of the two, so wearing it plus a single spare is enough; that
+    /// worn copy is the survivor, stays equipped, and picks up the new
+    /// tier's bonus immediately rather than only on the next re-equip.
+    /// Returns the confirmation line on success so the caller can surface
+    /// it — unlike equipping, a fusion changes nothing else the player can
+    /// see.
     ///
     /// Bounded by `tuning::MAX_FUSIONS`, the same ceiling a program's
-    /// lineage has — see `Game::fuse_companions`. The check sits above the
-    /// `Inventory::take` below deliberately: a refused fusion must spend
-    /// nothing, the same ordering `install_routine` and `use_symlink` keep.
-    pub fn fuse_item(&mut self, item: &ItemId) -> Result<String, String> {
+    /// lineage has — see `Game::fuse_companions`. Both refusals sit above
+    /// the first `take_copies` deliberately: a refused fusion must spend
+    /// nothing from either store, the same ordering `install_routine` and
+    /// `use_symlink` keep.
+    pub fn fuse_item(&mut self, item: &ItemId, tier: u32) -> Result<String, String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
@@ -343,7 +393,8 @@ impl Game {
             return Err(format!("{} can't be fused.", self.item_name(item)));
         };
         let name = self.item_name(item).to_string();
-        if self.item_fusion_tier(item) >= crate::tuning::MAX_FUSIONS {
+        let fused_tier = tier + 1;
+        if fused_tier > crate::tuning::MAX_FUSIONS {
             return Err(format!(
                 "{name} has already been fused {} times — it can't be fused again.",
                 crate::tuning::MAX_FUSIONS
@@ -351,46 +402,27 @@ impl Game {
         }
         let player = self.player_entity();
 
+        // Matched on tier as well as item: wearing an ordinary copy must not
+        // pay for a fusion of two T1s, and vice versa.
         let worn = self
             .world
             .get::<Equipment>(player)
             .and_then(|e| e.get(slot))
-            .filter(|eq| &eq.item == item);
-        let from_inventory = crate::tuning::ITEM_FUSION_COST - u32::from(worn.is_some());
+            .filter(|eq| &eq.item == item && eq.fusion_tier == tier);
+        let from_cargo = crate::tuning::ITEM_FUSION_COST - u32::from(worn.is_some());
 
-        let taken = self
-            .world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .take(item.clone(), from_inventory);
-        if taken < from_inventory {
-            self.world
-                .get_mut::<Inventory>(player)
-                .unwrap()
-                .add(item.clone(), taken);
-            return Err(format!(
-                "Need {from_inventory} {name} to fuse (have {taken})."
-            ));
+        let have = self.count_copies(item, tier);
+        if have < from_cargo {
+            return Err(format!("Need {from_cargo} {name} to fuse (have {have})."));
         }
+        self.take_copies(item, tier, from_cargo);
 
         // A fusion yields one stronger copy, so only the *other* one is
-        // spent. When a copy is worn it is the survivor and never left
-        // cargo; otherwise the survivor goes back. Without this the two
-        // paths charged different amounts for the same act — wearing one
-        // cost a single copy, fusing straight from cargo cost both and left
-        // the player holding nothing.
+        // spent. When a copy is worn it is the survivor and never leaves the
+        // slot; otherwise the survivor is promoted into the tier above.
         if worn.is_none() {
-            self.world
-                .get_mut::<Inventory>(player)
-                .unwrap()
-                .add(item.clone(), 1);
+            self.add_copies(item, fused_tier, 1);
         }
-
-        let tier = {
-            let mut fusions = self.world.get_mut::<ItemFusions>(player).unwrap();
-            fusions.increment(item.clone());
-            fusions.tier(item)
-        };
 
         // Swap the worn copy's equip-time bonus for the new tier's so the
         // boost is felt at once, not only after an unequip/re-equip.
@@ -409,37 +441,35 @@ impl Game {
                 .slot_mut(slot)
                 .as_mut()
             {
-                eq.fusion_tier = tier;
+                eq.fusion_tier = fused_tier;
             }
             self.apply_equipment_delta(
                 player,
-                base_mods.scaled_for_level(worn.level).fused_for_tier(tier),
+                base_mods
+                    .scaled_for_level(worn.level)
+                    .fused_for_tier(fused_tier),
                 1,
             );
         }
 
         let msg = format!(
-            "You fuse {} {name} into a tier {tier} bonus ({}% stronger equipped).",
+            "You fuse {} {name} into a tier {fused_tier} bonus ({}% stronger equipped).",
             crate::tuning::ITEM_FUSION_COST,
-            (tier as f64 * crate::tuning::ITEM_FUSION_BONUS_PER_TIER * 100.0).round() as i32
+            (fused_tier as f64 * crate::tuning::ITEM_FUSION_BONUS_PER_TIER * 100.0).round() as i32
         );
         self.log(msg.clone());
         self.tick();
         Ok(msg)
     }
 
-    /// Permanently removes `qty` of `item` from inventory. Only ever acts on
-    /// unequipped inventory stock; an equipped item must be unequipped first.
-    pub fn erase_item(&mut self, item: &ItemId, qty: u32) -> Result<(), String> {
+    /// Permanently removes `qty` copies of `item` at fusion `tier` from
+    /// cargo. Only ever acts on unequipped stock; an equipped item must be
+    /// unequipped first.
+    pub fn erase_item(&mut self, item: &ItemId, tier: u32, qty: u32) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        let player = self.player_entity();
-        let taken = self
-            .world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .take(item.clone(), qty);
+        let taken = self.take_copies(item, tier, qty);
         if taken == 0 {
             return Err(format!("You don't have any {}.", self.item_name(item)));
         }

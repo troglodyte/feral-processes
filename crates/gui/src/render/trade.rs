@@ -57,8 +57,8 @@ pub(super) fn draw_trade_action_menu(
     // covers the log pane the payout is announced in.
     let purse = inventory
         .iter()
-        .find(|(item, _)| *item == currency)
-        .map(|(_, qty)| *qty)
+        .find(|row| row.item == currency)
+        .map(|row| row.qty)
         .unwrap_or(0);
     // One line, not two with a spacer: everything above the first
     // `Row::Item` is pinned header (see `draw_popup`), so it costs the
@@ -69,29 +69,30 @@ pub(super) fn draw_trade_action_menu(
     ];
     let sellable: Vec<_> = inventory
         .iter()
-        .filter(|(item, _)| *item != currency)
+        .filter(|row| row.item != currency)
         .collect();
     if sellable.is_empty() {
         rows.push(text_row("(nothing to sell)"));
     }
     let mut idx = 0;
-    for (item, qty) in &sellable {
+    for row in &sellable {
         // Same tag the inventory shows, so what you're about to part with
         // reads identically on both screens — fusion tier included, since
-        // that's exactly what you'd want to check before selling.
-        let fusion_tier = game.item_fusion_tier(item);
-        let tag = equip_preview_tag(game, item, status.zone, fusion_tier);
+        // that's exactly what you'd want to check before selling. A fused
+        // copy is its own row here for the same reason it is there.
+        let tag = equip_preview_tag(game, &row.item, status.zone, row.tier);
         rows.push(fusion_row(
             format!(
-                "[{}] {}  Sell {} x{qty}{} ({} {money} each)",
+                "[{}] {}  Sell {} x{}{} ({} {money} each)",
                 menu_shortcut(idx),
-                game.item_category(item).short_label(),
-                game.item_name(item),
+                game.item_category(&row.item).short_label(),
+                game.item_name(&row.item),
+                row.qty,
                 tag,
-                game.sell_price(structure, item).unwrap_or(0)
+                game.sell_price(structure, &row.item).unwrap_or(0)
             ),
             idx == selected,
-            fusion_tier,
+            row.tier,
         ));
         idx += 1;
     }
@@ -221,7 +222,7 @@ pub(super) fn draw_trade_quantity_menu(
         // Priced through the engine for the same reason the buyback row
         // below is: `sell_rate` is only half a price now that an item
         // carries its own value.
-        TradeChoice::Sell(item) => {
+        TradeChoice::Sell(item, _) => {
             let price = game.sell_price(structure, &item).unwrap_or(0);
             ("Sell", item, price)
         }
@@ -236,11 +237,11 @@ pub(super) fn draw_trade_quantity_menu(
         }
         // Priced from the shelf row rather than from `sell_rate` here, so
         // this screen can't drift from the markup the engine charges.
-        TradeChoice::BuyBack(item) => {
+        TradeChoice::BuyBack(item, tier) => {
             let price = game
                 .buyback_options(structure)
                 .iter()
-                .find(|row| row.item == item)
+                .find(|row| row.item == item && row.tier == tier)
                 .map(|row| row.unit_cost)
                 .unwrap_or(0);
             ("Buy back", item, price)

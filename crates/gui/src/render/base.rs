@@ -863,18 +863,24 @@ fn draw_status_panel(
         cy += m.line_height;
     }
 
-    for (item, qty) in &status.inventory {
+    for row in &status.inventory {
         if cy > keys_y - m.line_height {
             break;
         }
         // Not a menu row, so no `fusion_row` here — the pane's own dim is
-        // what the fusion colour replaces.
+        // what the fusion colour replaces. The tier is spelled out beside
+        // it because this pane has no room for the equip tag the inventory
+        // screen carries, and colour alone doesn't say how deep.
+        let tier = match row.tier {
+            0 => String::new(),
+            tier => format!(" {}", item_fusion_note(tier)),
+        };
         painter.ui(
-            format!("{} x{}", game.item_name(item), qty),
+            format!("{}{tier} x{}", game.item_name(&row.item), row.qty),
             x + m.inset,
             cy,
             m.font_size,
-            fusion_color(game.item_fusion_tier(item)).unwrap_or(TEXT_DIM),
+            fusion_color(row.tier).unwrap_or(TEXT_DIM),
         );
         cy += m.line_height;
     }

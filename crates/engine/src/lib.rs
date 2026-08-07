@@ -42,7 +42,7 @@ use battle::{
 use components::{
     AbilityCooldowns, ActiveBuff, ActiveFieldBuff, ActiveStatus, BuffKind, BuffSource, Carrying,
     CombatBuff, Creature, CustomName, Decompiler, Durability, Equipment, EquippedItem, Experience,
-    FieldBuff, FieldBuffKind, FusionCount, Glyph, GlyphColor, Hostile, Inventory, ItemFusions,
+    FieldBuff, FieldBuffKind, FusedGear, FusionCount, Glyph, GlyphColor, Hostile, Inventory,
     MachineStatus, NEED_MAX, Needs, Nest, NestGuardian, Perks, Player, Position, Potential,
     Pursuing, ResourceNode, Routines, StackSpawn, Stats, StatusEffects, StatusKind, Stock,
     Structure, StructureTier, SurfaceLink, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,

@@ -40,13 +40,34 @@ impl Game {
         // rows. A bank is not cargo and is not a good, so it belongs in
         // none of them; the one screen that wants the number asks for it
         // by name through `Game::banked`.
-        let mut inventory: Vec<(ItemId, u32)> = inv
+        //
+        // The two stores are merged here rather than handed out separately:
+        // a fused copy is cargo like any other, and every screen that lists
+        // "what does the player have" wants both. Tier is the tiebreak
+        // inside a category so an item's fused rows sit beside its plain
+        // one instead of drifting apart as categories are re-sorted.
+        let fused = self.world.get::<FusedGear>(player);
+        let mut inventory: Vec<InventoryRow> = inv
             .items
             .iter()
             .filter(|(item, _)| !db.get(item.as_str()).is_some_and(|d| d.banked))
-            .cloned()
+            .map(|(item, qty)| InventoryRow {
+                item: item.clone(),
+                tier: 0,
+                qty: *qty,
+            })
+            .chain(
+                fused
+                    .into_iter()
+                    .flat_map(|f| f.copies.iter())
+                    .map(|(item, tier, qty)| InventoryRow {
+                        item: item.clone(),
+                        tier: *tier,
+                        qty: *qty,
+                    }),
+            )
             .collect();
-        inventory.sort_by_key(|(item, _)| self.category_sort_key(item));
+        inventory.sort_by_key(|row| (self.category_sort_key(&row.item), row.tier));
         PlayerStatus {
             position: (pos.x, pos.y),
             hp: stats.hp,
@@ -58,7 +79,7 @@ impl Game {
             hunger: needs.hunger,
             fatigue: needs.fatigue,
             inventory,
-            inventory_used: inv.cargo_used(db),
+            inventory_used: self.inventory_used(),
             pet_count,
             pet_capacity,
             level: exp.level,

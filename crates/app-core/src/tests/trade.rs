@@ -20,8 +20,8 @@ fn held(app: &App, item: &str) -> u32 {
         .player_status()
         .inventory
         .iter()
-        .find(|(i, _)| i.as_str() == item)
-        .map(|(_, qty)| *qty)
+        .find(|r| r.item.as_str() == item)
+        .map(|r| r.qty)
         .unwrap_or(0)
 }
 
@@ -57,7 +57,7 @@ fn sell_is_offered_from_the_inventory_only_with_a_trading_post_in_range() {
 #[test]
 fn selling_from_the_inventory_lands_back_in_the_inventory() {
     let mut app = app_at_a_trading_post(923, &[(ids::CORE_FRAGMENT, 5)]);
-    app.pending_inventory_item = Some(ItemId::from(ids::CORE_FRAGMENT));
+    app.pending_inventory_item = Some((ItemId::from(ids::CORE_FRAGMENT), 0));
     app.mode = Mode::InventoryItemAction;
 
     app.handle_key(GameKey::Char('s'));
@@ -125,7 +125,7 @@ fn the_sell_list_hides_credits_and_offers_the_salvage() {
 
     assert_eq!(app.mode, Mode::TradeQuantity);
     assert!(
-        matches!(&app.pending_trade_choice, Some(TradeChoice::Sell(item))
+        matches!(&app.pending_trade_choice, Some(TradeChoice::Sell(item, _))
             if item.as_str() == ids::CORE_FRAGMENT),
         "the first sell row is the salvage, not the money"
     );
@@ -282,7 +282,7 @@ fn capital_b_buys_one_unit_from_the_highlighted_row() {
         .buy;
     let offered = buy
         .iter()
-        .position(|(item, _)| item.as_str() == ids::POWER_CELL)
+        .position(|(i, _)| i.as_str() == ids::POWER_CELL)
         .expect("the Black Market stocks Power Cells");
     // One sell row: Credits are filtered out of the sell list, leaving the
     // Power Cells.
@@ -394,7 +394,7 @@ fn capital_s_on_the_currency_is_refused_by_the_engine() {
     let inventory = app.game.as_ref().unwrap().player_status().inventory;
     let row = inventory
         .iter()
-        .position(|(item, _)| item.as_str() == ids::CREDITS)
+        .position(|r| r.item.as_str() == ids::CREDITS)
         .expect("the pack was stocked with Credits");
     // Three equipment slot rows come before the pack.
     app.menu_selected = 3 + row;
@@ -424,7 +424,7 @@ fn capital_s_with_two_traders_in_range_asks_which_one() {
 
     assert_eq!(app.mode, Mode::Trade, "the trader picker opens");
     assert!(
-        matches!(&app.pending_trade_choice, Some(TradeChoice::Sell(item))
+        matches!(&app.pending_trade_choice, Some(TradeChoice::Sell(item, _))
             if item.as_str() == ids::CORE_FRAGMENT),
         "the item is already decided; only the shop is in question"
     );
@@ -454,7 +454,7 @@ fn the_sell_list_hides_a_banked_item() {
 
     assert_eq!(app.mode, Mode::TradeQuantity);
     assert!(
-        matches!(&app.pending_trade_choice, Some(TradeChoice::Sell(item))
+        matches!(&app.pending_trade_choice, Some(TradeChoice::Sell(item, _))
             if item.as_str() == ids::CORE_FRAGMENT),
         "the first sell row must be the salvage — Research Data is banked and \
          Credits are the currency, so neither is a sell row"

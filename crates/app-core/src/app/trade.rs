@@ -94,12 +94,12 @@ impl App {
         // one the player is looking at. Salvage is ordinary goods to a
         // trader; Credits are what it won't buy (see `Game::sell_item`).
         let currency = game.trade_currency();
-        let sell_items: Vec<ItemId> = game
+        let sell_rows: Vec<(ItemId, u32)> = game
             .player_status()
             .inventory
             .iter()
-            .map(|(item, _)| item.clone())
-            .filter(|item| *item != currency)
+            .map(|row| (row.item.clone(), row.tier))
+            .filter(|(item, _)| *item != currency)
             .collect();
         let buy_items: Vec<ItemId> = trade.buy.iter().map(|(item, _)| item.clone()).collect();
         // Empty until the player sells this trader something, so the screen
@@ -108,7 +108,7 @@ impl App {
         // Programs come last, and are empty for a trader that deals in items
         // only — so this screen is unchanged at such a trader.
         let programs = game.program_sale_options(structure);
-        let total = sell_items.len() + buy_items.len() + buybacks.len() + programs.len();
+        let total = sell_rows.len() + buy_items.len() + buybacks.len() + programs.len();
 
         // One unit off the highlighted row, no quantity page — a visit is
         // normally a run of trades, so the four-screen round trip is paid
@@ -119,20 +119,26 @@ impl App {
             let selling = dir == 'S';
             let row = trade_row(
                 self.menu_selected.min(total.saturating_sub(1)),
-                sell_items.len(),
+                sell_rows.len(),
                 buy_items.len(),
                 buybacks.len(),
                 programs.len(),
             );
             match row {
                 Some(TradeRow::Sell(i)) if selling => {
-                    self.execute_trade(structure, TradeChoice::Sell(sell_items[i].clone()), 1)
+                    let (item, tier) = sell_rows[i].clone();
+                    self.execute_trade(structure, TradeChoice::Sell(item, tier), 1)
                 }
                 Some(TradeRow::Buy(i)) if !selling => {
                     self.execute_trade(structure, TradeChoice::Buy(buy_items[i].clone()), 1)
                 }
                 Some(TradeRow::BuyBack(i)) if !selling => {
-                    self.execute_trade(structure, TradeChoice::BuyBack(buybacks[i].item.clone()), 1)
+                    let row = &buybacks[i];
+                    self.execute_trade(
+                        structure,
+                        TradeChoice::BuyBack(row.item.clone(), row.tier),
+                        1,
+                    )
                 }
                 // Deliberately not a quick sale. Selling a levelled program
                 // is permanent and a quick key is exactly a mis-hit, so this
@@ -163,14 +169,19 @@ impl App {
         if let Some(idx) = self.selected_index(key, total) {
             let choice = match trade_row(
                 idx,
-                sell_items.len(),
+                sell_rows.len(),
                 buy_items.len(),
                 buybacks.len(),
                 programs.len(),
             ) {
-                Some(TradeRow::Sell(i)) => TradeChoice::Sell(sell_items[i].clone()),
+                Some(TradeRow::Sell(i)) => {
+                    let (item, tier) = sell_rows[i].clone();
+                    TradeChoice::Sell(item, tier)
+                }
                 Some(TradeRow::Buy(i)) => TradeChoice::Buy(buy_items[i].clone()),
-                Some(TradeRow::BuyBack(i)) => TradeChoice::BuyBack(buybacks[i].item.clone()),
+                Some(TradeRow::BuyBack(i)) => {
+                    TradeChoice::BuyBack(buybacks[i].item.clone(), buybacks[i].tier)
+                }
                 Some(TradeRow::Program(i)) => {
                     // A program needs no quantity — there is exactly one of it
                     // — so it skips the quantity page and goes to confirmation.
@@ -197,9 +208,9 @@ impl App {
     pub(crate) fn execute_trade(&mut self, structure: Entity, choice: TradeChoice, qty: u32) {
         let Some(game) = &mut self.game else { return };
         let result = match choice {
-            TradeChoice::Sell(item) => game.sell_item(structure, item, qty),
+            TradeChoice::Sell(item, tier) => game.sell_item(structure, item, tier, qty),
             TradeChoice::Buy(item) => game.buy_item(structure, item, qty),
-            TradeChoice::BuyBack(item) => game.buy_back(structure, item, qty),
+            TradeChoice::BuyBack(item, tier) => game.buy_back(structure, item, tier, qty),
         };
         match result {
             Ok(()) => self.status_line = None,

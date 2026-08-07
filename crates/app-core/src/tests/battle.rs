@@ -388,8 +388,8 @@ fn using_an_item_in_battle_spends_it_and_costs_the_round() {
             .player_status()
             .inventory
             .iter()
-            .find(|(id, _)| *id == target)
-            .map(|(_, n)| *n)
+            .find(|r| r.item == target)
+            .map(|r| r.qty)
             .unwrap_or(0)
     };
     let before = held(&app);
@@ -430,8 +430,8 @@ fn shift_t_in_the_item_picker_throws_rather_than_picking_a_row() {
             .player_status()
             .inventory
             .iter()
-            .find(|(id, _)| *id == target)
-            .map(|(_, n)| *n)
+            .find(|r| r.item == target)
+            .map(|r| r.qty)
             .unwrap_or(0)
     };
     let before = held(&app);

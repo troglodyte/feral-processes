@@ -1,0 +1,13 @@
+// A real save rather than an authored one — `extraction` is a mid-run world
+// from `dev-saves/`, brought across whole: level, stats, gear and its fusion
+// tiers, party, perks and zone. The scenario names only who to fight, which
+// is the "what would happen if I hit this right now" question.
+//
+// A save or template player takes no `equip`, `inventory` or `party`; those
+// are `Fresh`-only, and naming one here is an error rather than a no-op.
+(
+    player: Template("extraction"),
+    opponents: [(species: "overseer", count: 1)],
+    reps: 20,
+    seed: 3,
+)

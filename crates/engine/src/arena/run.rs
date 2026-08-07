@@ -49,6 +49,8 @@ pub(crate) fn run_rep(game: &mut Game, groups: Vec<EnemyGroup>, seed: u64) -> Re
 
     let mut transcript = Vec::new();
     let mut rounds = 0;
+    let mut hp_fraction = hp_fraction_of(game, player);
+    let mut level = level_of(game, player);
     while rounds < ROUND_CAP {
         // Not the player's HP: a Forgiving defeat is rebooted inside the
         // round that lands it, so by the time this could look the player is
@@ -71,6 +73,16 @@ pub(crate) fn run_rep(game: &mut Game, groups: Vec<EnemyGroup>, seed: u64) -> Re
         }
         game.battle_resolve_round();
         rounds += 1;
+        // A level-up full-heals (`progression::add_xp`), and the kill that
+        // ends a fight is usually the one that grants it — so a reading
+        // taken after that round says the fight cost nothing. Skipping the
+        // sample keeps the last honest one, which is worth a round of
+        // damage in accuracy against being off by the whole fight.
+        let now = level_of(game, player);
+        if now == level {
+            hp_fraction = hp_fraction_of(game, player);
+        }
+        level = now;
         // After every round, never at the end: `end_battle` calls
         // `retain_outcomes_since_battle`, which deletes the blow-by-blow and
         // keeps only Outcome/Loot/LevelUp/Raid. `MESSAGE_LOG_CAP` is the
@@ -82,24 +94,15 @@ pub(crate) fn run_rep(game: &mut Game, groups: Vec<EnemyGroup>, seed: u64) -> Re
     // A stalemate leaves the pack standing, so it records as a loss with
     // `rounds == ROUND_CAP` — which is what says which it was.
     let won = opponents.iter().all(|&e| !alive(game, e));
-    let (hp, max_hp) = game
-        .world
-        .get::<Stats>(player)
-        .map(|s| (s.hp, s.max_hp))
-        .unwrap_or((0, 1));
     RepRecord {
         seed,
         won,
         rounds,
         // Zero on a loss, matching `balance_sim`, and not merely a
         // convention: a Forgiving defeat reboots the player to a fraction of
-        // max HP inside the losing round, so the number standing here
-        // afterwards measures the reboot rather than the fight.
-        player_hp_fraction: if won {
-            (hp as f32 / max_hp.max(1) as f32).clamp(0.0, 1.0)
-        } else {
-            0.0
-        },
+        // max HP inside the losing round, so anything read afterwards
+        // measures the reboot rather than the fight.
+        player_hp_fraction: if won { hp_fraction } else { 0.0 },
         companions_downed: party.iter().filter(|&&e| !alive(game, e)).count() as u32,
         transcript,
     }
@@ -107,6 +110,20 @@ pub(crate) fn run_rep(game: &mut Game, groups: Vec<EnemyGroup>, seed: u64) -> Re
 
 fn alive(game: &Game, entity: Entity) -> bool {
     game.world.get::<Stats>(entity).is_some_and(|s| s.hp > 0)
+}
+
+fn hp_fraction_of(game: &Game, entity: Entity) -> f32 {
+    game.world
+        .get::<Stats>(entity)
+        .map(|s| (s.hp as f32 / s.max_hp.max(1) as f32).clamp(0.0, 1.0))
+        .unwrap_or(0.0)
+}
+
+fn level_of(game: &Game, entity: Entity) -> u32 {
+    game.world
+        .get::<Experience>(entity)
+        .map(|e| e.level)
+        .unwrap_or(1)
 }
 
 #[cfg(test)]
@@ -178,6 +195,28 @@ mod tests {
                 .any(|line| line.contains("── round 1 ──")),
             "round narration is dropped by `retain_outcomes_since_battle`: {:?}",
             record.transcript
+        );
+    }
+
+    /// The killing blow usually grants the level that heals the player back
+    /// to full, so a fraction read after the fight reports a hard-won win as
+    /// costing nothing at all.
+    #[test]
+    fn a_level_up_on_the_killing_blow_does_not_report_the_fight_as_free() {
+        let s = scenario(1, 1, &[], &[("sub_process", 1)]);
+        let record = fight(&s, 1);
+        assert!(record.won, "{record:?}");
+        assert!(
+            record
+                .transcript
+                .iter()
+                .any(|l| l.contains("reach level") || l.contains("XP")),
+            "the fixture must actually level up: {:?}",
+            record.transcript
+        );
+        assert!(
+            record.player_hp_fraction < 1.0,
+            "eight rounds of damage read back as untouched: {record:?}"
         );
     }
 

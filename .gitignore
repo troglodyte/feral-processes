@@ -8,6 +8,9 @@
 /saves/
 /run_history.log
 /profile.ron
+# The arena's default report path — a measurement, not source. Scenarios in
+# `dev-arenas/` are checked in; what one run of them said is not.
+/arena-report.ron
 
 # Editor/IDE
 .vscode/

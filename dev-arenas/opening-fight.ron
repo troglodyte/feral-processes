@@ -1,0 +1,9 @@
+// The fight the game actually opens on: a fresh player, nothing equipped,
+// one program from the opening ring. If this stops being winnable most of
+// the time, the first five minutes of the game have changed.
+(
+    player: Fresh(level: 1, zone: 1),
+    opponents: [(species: "sub_process", count: 1)],
+    reps: 50,
+    seed: 1,
+)

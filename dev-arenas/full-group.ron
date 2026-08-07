@@ -1,0 +1,20 @@
+// The progression sweep's scenario, run for real rather than projected: a
+// geared mid-run party against a full zone-3 group. `balance_sim` answers
+// this one too, but with no RNG, no initiative, no items and no status
+// effects — the gap between the two numbers is what the arena is for.
+(
+    player: Fresh(level: 20, zone: 3),
+    equip: [
+        (item: "plasma_router", tier: 0),
+        (item: "bastion_lattice", tier: 0),
+        (item: "singularity_matrix", tier: 0),
+    ],
+    party: [
+        (species: "scrapper", level: 12),
+        (species: "scrapper", level: 12),
+        (species: "scrapper", level: 12),
+    ],
+    opponents: [(species: "rootkit", count: 4)],
+    reps: 50,
+    seed: 7,
+)

@@ -220,6 +220,25 @@ A `Fresh` scenario, showing the fields only it accepts:
 )
 ```
 
+### What `opponents` controls, and what it does not
+
+The list is species and count, and both are honoured verbatim (that is what
+the cap bypass above buys). Two properties of it are not obvious from the
+syntax and belong in `dev-arenas/README.md` as well:
+
+- **Order is formation.** `ENGAGED_GROUPS` is 2, so only the first two
+  entries are in melee range. A third or fourth group acts only if its
+  species has a ranged move, and sits inert otherwise. Reordering the list is
+  therefore a tuning lever, not a cosmetic choice. `MAX_ENEMY_GROUPS` is 4
+  and `MAX_GROUP_SIZE` is 100; past those the fight is not one the game can
+  represent at all, so they are a hard error rather than a warning.
+- **There is no per-enemy level.** A wild spawn carries no `Experience` —
+  `spawn_wild_on_player_tile`'s own comment records that a wild pack member
+  has neither `Tamed` nor `Experience`. How hard one hits comes from
+  `ZoneLevel::stat_multiplier` and its potential roll, so the zone is the
+  strength dial and `count` is the volume dial. A scenario that wants a
+  tougher individual raises the zone or names a tougher species.
+
 Rules, following the ones the asset loaders already follow:
 
 - Every field is `#[serde(default)]`, so a scenario written today keeps

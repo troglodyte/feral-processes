@@ -15,6 +15,7 @@
 //! is a floor on the party's output, the same gap `balance_sim` has.
 
 mod scenario;
+mod setup;
 
 pub use scenario::{CompanionSpec, EquipSpec, InventorySpec, OpponentSpec, PlayerSource, Scenario};
 

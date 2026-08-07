@@ -14,6 +14,8 @@
 //! game's own All-Attack, which fires no companion Specials. An arena number
 //! is a floor on the party's output, the same gap `balance_sim` has.
 
+mod report;
+mod run;
 mod scenario;
 mod setup;
 

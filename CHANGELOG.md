@@ -29,6 +29,8 @@ first, separated by a rule.
 
 ## Unreleased
 
+## 0.3.4
+
 ### Changed: the base floor is darker again
 
 - `Biome::Platform` drops to roughly two-thirds of the `0.3.3` navy. Same

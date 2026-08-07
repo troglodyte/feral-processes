@@ -29,6 +29,12 @@ first, separated by a rule.
 
 ## Unreleased
 
+### Changed: the base floor is darker again
+
+- `Biome::Platform` drops to roughly two-thirds of the `0.3.3` navy. Same
+  colour, less of it — the floor sits further under the glyphs and
+  machine-status outlines it is a backdrop for.
+
 ## 0.3.3
 
 ### Changed: the base floor is dark navy, not grey

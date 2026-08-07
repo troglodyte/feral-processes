@@ -104,8 +104,11 @@ fn biome_tint(biome: Biome) -> Color {
         // bright cyan this used to be, it drowned them. Dark navy is what that
         // brightness problem actually needed: still unmistakably cool, so the
         // hue rule above is untouched, but dark enough to sit under a full
-        // base.
-        Biome::Platform => Color::new(0.10, 0.18, 0.50, 1.0),
+        // base. Taken down a second time after being seen on screen — the
+        // number that reads as "dark navy" in this table is brighter than the
+        // one that reads as dark navy behind a base, because everything else
+        // on that screen is competing with it.
+        Biome::Platform => Color::new(0.06, 0.11, 0.32, 1.0),
         Biome::Mainframe => Color::new(0.25, 0.85, 0.85, 1.0),
         Biome::StaticField => Color::new(0.70, 0.92, 0.95, 1.0),
         Biome::OpenGrid => Color::new(0.35, 0.85, 0.60, 1.0),

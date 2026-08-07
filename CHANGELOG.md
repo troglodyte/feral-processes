@@ -29,6 +29,29 @@ first, separated by a rule.
 
 ## Unreleased
 
+## 0.4.0
+
+### Breaking: gear fuses per physical copy, not per item type
+
+Existing saves will not load (`SAVE_FORMAT_VERSION` 24 -> 25). There is no
+migration path — see that constant's docs.
+
+- Fusing gear used to upgrade the item *type*, so every spare and every copy
+  picked up afterwards equipped at the fused tier. It read as a display bug
+  in the inventory screen and was an accurate report of the model. A fusion
+  now consumes two copies at one tier and yields **one** stronger copy at the
+  tier above; spares stay ordinary, the way a fused program already worked.
+- The ladder's price in base copies rises accordingly: 2 for a T1, 4 for a
+  T2, 8 for a T3. A T3 used to cost 6 and upgrade the whole stack.
+- The inventory, trade and gear-swap screens list one row per `(item, tier)`,
+  so `Arc Lance T1/3 x1` and `Arc Lance x3` are two rows. A worn copy still
+  counts as one of the two a fusion needs and picks up the new tier live.
+- A trader's buyback shelf remembers the tier it took, so buying back a
+  mis-sold T3 returns a T3 rather than an ordinary copy. Unit prices are
+  unchanged at every tier.
+- Fused copies are not recipe or machine input, and never were: every recipe
+  reads the ordinary cargo stack, which is now by definition the unfused one.
+
 ## 0.3.4
 
 ### Changed: the base floor is darker again

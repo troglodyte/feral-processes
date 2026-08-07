@@ -29,6 +29,8 @@ first, separated by a rule.
 
 ## Unreleased
 
+## 0.3.3
+
 ### Changed: the base floor is dark navy, not grey
 
 - `Biome::Platform` goes back to the dark navy of `0.3.1`. The grey shipped in

@@ -29,6 +29,13 @@ first, separated by a rule.
 
 ## Unreleased
 
+### Changed: the base floor is dark navy, not grey
+
+- `Biome::Platform` goes back to the dark navy of `0.3.1`. The grey shipped in
+  `0.3.2` was the right darkness but the wrong colour, which only became
+  answerable once the floor had been seen on screen — `0.3.2` was cut against a
+  build nobody had actually looked at.
+
 ## 0.3.2
 
 ### Changed: the base floor is dark grey

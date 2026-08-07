@@ -19,7 +19,10 @@ mod run;
 mod scenario;
 mod setup;
 
+pub use report::{RepRecord, Report, Summary};
 pub use scenario::{CompanionSpec, EquipSpec, InventorySpec, OpponentSpec, PlayerSource, Scenario};
+
+use std::path::Path;
 
 use crate::progression;
 use crate::tuning::{BASELINE_GROWTH_MULTIPLIER, CREATURE_MAX_LEVEL};
@@ -97,6 +100,32 @@ pub(crate) fn spawn_companion(game: &mut Game, species: &str, level: u32) -> Opt
     Some(program)
 }
 
+/// Runs `scenario` and reports what happened. The engine's whole public
+/// arena surface.
+///
+/// **A fresh `Game` per rep.** One carried over would bring the last
+/// fight's dead companions, spent items and XP with it, so rep 2 would
+/// measure a different party from rep 1 — and the drift would compound.
+/// Warnings are taken from the first rep only: they are identical every
+/// rep, and fifty copies of the same line is noise.
+pub fn run(scenario: &Scenario, assets_dir: &Path) -> Result<Report, String> {
+    let mut warnings = Vec::new();
+    let mut reps = Vec::with_capacity(scenario.reps as usize);
+    for rep in 0..scenario.reps {
+        let mut game = setup::build_player(scenario, assets_dir)?;
+        let (groups, rep_warnings) = setup::build_opponents(&mut game, &scenario.opponents)?;
+        if rep == 0 {
+            warnings = rep_warnings;
+        }
+        reps.push(run::run_rep(&mut game, groups, scenario.seed + rep as u64));
+    }
+    Ok(Report {
+        scenario: scenario.clone(),
+        warnings,
+        reps,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,5 +172,72 @@ mod tests {
     fn an_unknown_species_spawns_no_companion() {
         let mut game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         assert!(spawn_companion(&mut game, "not_a_program", 3).is_none());
+    }
+
+    fn a_scenario(reps: u32, seed: u64, party: &[(&str, u32)]) -> Scenario {
+        Scenario {
+            player: PlayerSource::Fresh { level: 6, zone: 2 },
+            party: party
+                .iter()
+                .map(|(species, level)| CompanionSpec {
+                    species: (*species).into(),
+                    level: *level,
+                })
+                .collect(),
+            opponents: vec![OpponentSpec {
+                species: "sub_process".into(),
+                count: 3,
+            }],
+            reps,
+            seed,
+            ..Scenario::default()
+        }
+    }
+
+    #[test]
+    fn each_rep_runs_at_its_own_seed_counted_up_from_the_scenarios() {
+        let report = run(&a_scenario(3, 40, &[("glitch", 4)]), &test_assets_dir()).unwrap();
+        let seeds: Vec<u64> = report.reps.iter().map(|r| r.seed).collect();
+        assert_eq!(seeds, vec![40, 41, 42]);
+    }
+
+    #[test]
+    fn the_same_scenario_run_twice_reports_the_same_thing() {
+        // The property the whole tool rests on: without it a tuning
+        // comparison measures noise.
+        let s = a_scenario(3, 40, &[("glitch", 4)]);
+        let a = run(&s, &test_assets_dir()).unwrap();
+        let b = run(&s, &test_assets_dir()).unwrap();
+        assert_eq!(a.reps, b.reps);
+    }
+
+    #[test]
+    fn a_party_wiped_in_one_rep_is_whole_again_in_the_next() {
+        // Asserting on rep 2's transcript rather than on its `won` flag: a
+        // shared `Game` would field a corpse, and a lopsided enough fight
+        // would still be won without the companion ever swinging.
+        let s = Scenario {
+            player: PlayerSource::Fresh { level: 1, zone: 4 },
+            party: vec![CompanionSpec {
+                species: "glitch".into(),
+                level: 1,
+            }],
+            opponents: vec![OpponentSpec {
+                species: "sub_process".into(),
+                count: 6,
+            }],
+            reps: 2,
+            seed: 11,
+            ..Scenario::default()
+        };
+        let report = run(&s, &test_assets_dir()).unwrap();
+
+        let swung = |rep: &RepRecord| rep.transcript.iter().any(|l| l.contains("Glitch"));
+        assert!(swung(&report.reps[0]), "{:?}", report.reps[0].transcript);
+        assert!(
+            swung(&report.reps[1]),
+            "rep 2 fielded no companion — the `Game` was carried over: {:?}",
+            report.reps[1].transcript
+        );
     }
 }

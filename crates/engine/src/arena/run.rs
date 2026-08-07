@@ -31,6 +31,14 @@ pub(crate) fn run_rep(game: &mut Game, groups: Vec<EnemyGroup>, seed: u64) -> Re
     game.world
         .insert_resource(GameRng(StdRng::seed_from_u64(seed)));
 
+    // The report is the blow-by-blow, so the prune that keeps a map pane
+    // readable has nothing to do here — and it deletes the lines outright
+    // from inside `battle_resolve_round`, so the round that ends the fight
+    // cannot be read back afterwards.
+    game.world
+        .resource_mut::<MessageLog>()
+        .keep_battle_narration = true;
+
     let player = game.player_entity();
     let party: Vec<Entity> = game.world.resource::<Party>().0.clone();
     // Won means the pack is wiped, so the opponents are what has to be

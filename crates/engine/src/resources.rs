@@ -118,6 +118,16 @@ pub struct MessageMark(u64);
 #[derive(Resource, Default)]
 pub struct MessageLog {
     pub lines: Vec<LogLine>,
+    /// Suppresses `retain_outcomes_since_battle` entirely. Set only by
+    /// `arena`, and only because the prune exists to keep a *map pane*
+    /// readable — an arena run has no pane and no player scrolling it, and
+    /// the blow-by-blow the prune drops is the whole point of a report.
+    ///
+    /// It has to be a flag rather than the arena reading the log more
+    /// carefully: the prune deletes the lines outright, and it runs inside
+    /// `battle_resolve_round`, so the round that ends a fight is
+    /// unreachable from outside no matter when the caller looks.
+    pub(crate) keep_battle_narration: bool,
     /// Lines ever pushed, including those since dropped. Marks are minted
     /// from this, and `pushed - dropped == lines.len()` is the invariant
     /// that converts a mark back into an index — every mutation of `lines`
@@ -230,6 +240,9 @@ impl MessageLog {
     /// log directly, so a raid alert can arrive inside a battle's range
     /// without being any part of that battle.
     pub fn retain_outcomes_since_battle(&mut self) {
+        if self.keep_battle_narration {
+            return;
+        }
         let Some(start) = self.index_of(self.battle_start) else {
             return;
         };

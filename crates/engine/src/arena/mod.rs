@@ -131,12 +131,18 @@ pub struct Staged {
 /// mutate a scenario they do not own.
 pub fn stage(scenario: &Scenario, assets_dir: &Path, seed: u64) -> Result<Staged, String> {
     let mut game = setup::build_player(scenario, assets_dir)?;
-    let (groups, warnings) = setup::build_opponents(&mut game, &scenario.opponents)?;
 
     // Per fight, not per run: twenty reps are then a sample rather than
     // twenty copies, and any one of them replays alone from its own seed.
+    //
+    // Before the opponents, not after: the composition is part of what a rep
+    // samples. An authored one still rolls a `Potential` per member, and a
+    // rolled one *is* the sample — a seed installed afterwards would draw
+    // both from `Game::new(0)`'s stream and hand every rep the same pack.
     game.world
         .insert_resource(GameRng(StdRng::seed_from_u64(seed)));
+
+    let (groups, warnings) = setup::build_opponents(&mut game, &scenario.opponents)?;
 
     // The arena's output is the blow-by-blow, so the prune that keeps a map
     // pane readable has nothing to do here — and it deletes the lines
@@ -296,6 +302,30 @@ mod tests {
         let report = run(&s, &test_assets_dir()).unwrap();
 
         assert_eq!(report.reps[0], test_fight(&s, 40));
+    }
+
+    #[test]
+    fn the_seed_varies_the_opponents_it_spawns() {
+        // The composition is part of what a rep samples, not a constant it
+        // repeats: `spawn_wild_creature_scaled` rolls a `Potential` per
+        // member, and a seed installed after the spawn leaves every rep
+        // fielding the same six programs.
+        let s = Scenario {
+            player: PlayerSource::Fresh { level: 6, zone: 4 },
+            opponents: vec![OpponentSpec {
+                species: "sub_process".into(),
+                count: 6,
+            }],
+            ..Scenario::default()
+        };
+        let hp = |seed: u64| {
+            let staged = stage(&s, &test_assets_dir(), seed).unwrap();
+            let mut game = staged.game;
+            let mut query = game.world.query_filtered::<&Stats, With<Hostile>>();
+            query.iter(&game.world).map(|s| s.max_hp).sum::<i32>()
+        };
+
+        assert_ne!(hp(1), hp(999));
     }
 
     #[test]

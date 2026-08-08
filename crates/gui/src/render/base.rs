@@ -519,14 +519,15 @@ fn draw_surface_map(
     let entities: Vec<_> = game
         .view_entities(hw, hh)
         .into_iter()
-        // Tamed programs are hidden unless the sim is actually keeping their
-        // `Position` honest, which for exactly one kind it is: a posted
-        // worker, walked to its post and on to a depot by `haul_step_system`.
-        // A guard, an idle program and a party member each keep whatever
-        // tile they were standing on when they took the job and are never
-        // moved again, so drawing them would scatter frozen glyphs around
-        // the base claiming to be somewhere they aren't.
-        .filter(|e| !e.is_tamed || e.is_posted_worker)
+        // A tamed program is drawn only while it is out on an errand. At its
+        // post it sits under its machine's own glyph, so a base at rest
+        // reads as buildings and motion is the only thing that draws the
+        // eye — a worker appearing *is* the news that it has left to
+        // deliver. Everything else tamed stays hidden for a harder reason:
+        // nothing ever walks a guard, an idle program or a party member, so
+        // each keeps whatever tile it was standing on when it took the job
+        // and drawing it would claim it is somewhere it isn't.
+        .filter(|e| !e.is_tamed || e.worker_away_from_post)
         .collect();
     let spawn_point = game.zone_spawn_point();
     let shield_outline = fx.shield_outline(game.raid_defense_active());
@@ -581,9 +582,9 @@ fn draw_surface_map(
                     actor = Some(ev);
                 }
                 if if ev.is_structure {
-                    ev.structure_guard
+                    ev.structure_attended
                 } else {
-                    ev.is_posted_worker
+                    ev.worker_away_from_post
                 } {
                     mark = Some(ev.entity);
                 }
@@ -714,19 +715,20 @@ fn draw_surface_map(
             // that also carries three other things. Now the outline says what
             // the machine is doing and the mark says whether anyone is on it.
             //
-            // The mark rides the *program* wherever it is, which is what
-            // makes a haul trip legible: the worker steps off its machine
-            // with the mark still bobbing over it, so it reads as away on an
-            // errand rather than as having quit. The machine says the same
-            // thing on its own channel meanwhile — `task_progress_system`
-            // sets `Unstaffed`, "its program is away."
+            // One sentence covers where it goes: **on the program when the
+            // program is drawn, and on the structure when it isn't.** So a
+            // machine wears it while its worker stands at its post, the
+            // worker takes it along the moment it leaves to deliver, and a
+            // guard — which is never drawn — leaves it on the structure for
+            // good. Exactly one mark per posted program at every instant,
+            // which `a_worked_machine_and_its_worker_never_both_wear_the_
+            // mark` holds from the engine side.
             //
-            // A structure wears the mark only for a posted *guard*, which is
-            // the one assignee that is never drawn (nothing ever walks a
-            // guard to its post, so its `Position` is wherever it happened to
-            // be standing). The rule is one sentence: the mark goes on the
-            // program when the program is visible, and on the structure when
-            // it isn't.
+            // The machine is not left silent while its worker is out: it
+            // goes `Unstaffed` on the outline channel, "its program is
+            // away." And with no depot built there is no errand at all, so
+            // nothing ever leaves and nothing is ever drawn — see
+            // `with_no_depot_a_clogged_machine_just_stays_clogged`.
             if let Some(marked) = mark {
                 let size = (tile_px - 1.0) * STAFFED_MARK;
                 painter.rect(

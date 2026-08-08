@@ -1113,13 +1113,16 @@ fn a_structure_manifest_for_something_that_is_not_a_structure_is_none() {
     assert!(game.structure_manifest(player).is_none());
 }
 
-/// The map draws a posted worker because the sim keeps its `Position`
-/// honest — `haul_step_system` walks it to its post and on to a depot. A
-/// guard, an idle program and a party member all keep whatever tile they
-/// happened to be standing on when they took the job, so the flag has to
-/// pick out the one kind of tamed program that is really where it says.
+/// A posted worker is drawn only while it is *away* from its machine —
+/// walking in to take the job, carrying a load to a depot, or coming back.
+/// At its post it sits under the machine's own glyph, so the base reads as
+/// buildings at rest and motion is the only thing that draws the eye.
+///
+/// Nothing else tamed is ever drawn. Nothing walks a guard to its post, and
+/// an idle program and a party member are never moved at all, so each keeps
+/// whatever tile it was standing on when it took the job.
 #[test]
-fn only_a_cronjob_worker_reads_as_a_posted_worker() {
+fn a_worker_is_only_away_from_its_post_while_it_is_actually_away() {
     let mut game = Game::new(1405, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     place_home(&mut game, -1, 0);
     game.world
@@ -1134,29 +1137,41 @@ fn only_a_cronjob_worker_reads_as_a_posted_worker() {
         .expect("the node was just deployed")
         .entity;
 
-    let worker = spawn_tamed_on_map(&mut game, 2, 2);
-    let guard = spawn_tamed_on_map(&mut game, 2, 3);
-    let idle = spawn_tamed_on_map(&mut game, 2, 4);
+    let worker = spawn_tamed_on_map(&mut game, 6, 6);
+    let guard = spawn_tamed_on_map(&mut game, 6, 7);
+    let idle = spawn_tamed_on_map(&mut game, 6, 8);
     game.assign_cronjob(worker, node).unwrap();
     game.assign_guard(guard, node).unwrap();
 
-    let posted = |game: &mut Game, e: Entity| {
+    let away = |game: &mut Game, e: Entity| {
         game.view_entities(40, 40)
             .into_iter()
             .find(|v| v.entity == e)
-            .map(|v| v.is_posted_worker)
+            .map(|v| v.worker_away_from_post)
     };
 
-    assert_eq!(posted(&mut game, worker), Some(true));
-    assert_eq!(posted(&mut game, guard), Some(false));
-    assert_eq!(posted(&mut game, idle), Some(false));
+    assert_eq!(
+        away(&mut game, worker),
+        Some(true),
+        "spawned across the base and not yet walked in, so it is on its way"
+    );
+    park_at_post(&mut game, worker, node);
+    assert_eq!(
+        away(&mut game, worker),
+        Some(false),
+        "standing at its post, it hides under the machine"
+    );
+
+    assert_eq!(away(&mut game, guard), Some(false));
+    assert_eq!(away(&mut game, idle), Some(false));
 }
 
-/// The bobbing mark moves onto the program itself, so a structure only
-/// keeps one when its posted program is invisible — a guard. A worked
-/// machine's mark is now the worker standing beside it.
+/// The mark is on the program when the program is drawn and on the structure
+/// when it isn't — one sentence covering a guard, a worker at its post and a
+/// worker mid-errand alike. So a machine wears the mark exactly while its
+/// program is standing at it.
 #[test]
-fn a_structure_flags_a_guard_but_not_its_worker() {
+fn a_structure_is_attended_only_while_its_program_is_standing_at_it() {
     let mut game = Game::new(1406, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     place_home(&mut game, -1, 0);
     game.world
@@ -1173,22 +1188,71 @@ fn a_structure_flags_a_guard_but_not_its_worker() {
         .collect();
     let (worked, guarded) = (nodes[0], nodes[1]);
 
-    let worker = spawn_tamed_on_map(&mut game, 2, 2);
-    let guard = spawn_tamed_on_map(&mut game, 2, 3);
+    let worker = spawn_tamed_on_map(&mut game, 6, 6);
+    let guard = spawn_tamed_on_map(&mut game, 6, 7);
     game.assign_cronjob(worker, worked).unwrap();
     game.assign_guard(guard, guarded).unwrap();
 
-    let flagged = |game: &mut Game, e: Entity| {
+    let attended = |game: &mut Game, e: Entity| {
         game.view_entities(40, 40)
             .into_iter()
             .find(|v| v.entity == e)
-            .map(|v| v.structure_guard)
+            .map(|v| v.structure_attended)
     };
 
-    assert_eq!(flagged(&mut game, guarded), Some(true));
     assert_eq!(
-        flagged(&mut game, worked),
-        Some(false),
-        "a worked machine's mark rides the worker, not the machine"
+        attended(&mut game, guarded),
+        Some(true),
+        "a guard is never drawn, so its structure carries the mark for it"
     );
+    assert_eq!(
+        attended(&mut game, worked),
+        Some(false),
+        "its worker is still walking in, and is wearing the mark itself"
+    );
+
+    park_at_post(&mut game, worker, worked);
+    assert_eq!(attended(&mut game, worked), Some(true));
+}
+
+/// Exactly one mark per posted program at all times: it never doubles while
+/// the worker stands on its machine, and never vanishes while it is away.
+/// The two flags are the two halves of that, so they are asserted together.
+#[test]
+fn a_worked_machine_and_its_worker_never_both_wear_the_mark() {
+    let mut game = Game::new(1407, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, -1, 0);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 12);
+    game.place_structure("mining_node", 1, 0).unwrap();
+    let node = game
+        .structure_report()
+        .into_iter()
+        .find(|s| s.kind == "mining_node")
+        .expect("the node was just deployed")
+        .entity;
+    let worker = spawn_tamed_on_map(&mut game, 6, 6);
+    game.assign_cronjob(worker, node).unwrap();
+
+    for step in 0..12 {
+        let views = game.view_entities(40, 40);
+        let machine = views
+            .iter()
+            .find(|v| v.entity == node)
+            .expect("the node is standing")
+            .structure_attended;
+        let program = views
+            .iter()
+            .find(|v| v.entity == worker)
+            .expect("the worker exists")
+            .worker_away_from_post;
+        assert!(
+            machine != program,
+            "step {step}: machine {machine}, worker away {program} — the mark \
+             either doubled or went missing"
+        );
+        game.tick();
+    }
 }

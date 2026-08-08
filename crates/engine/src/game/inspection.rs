@@ -1,6 +1,7 @@
 //! Looking at the world without changing it: the tile and entity views the
 //! renderer draws, plus inspect and symlink targeting.
 
+use crate::game::hauling::at_station;
 use crate::tuning::{DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX, DIFFICULTY_TOUGH_MAX, MAX_FUSIONS};
 use crate::*;
 use std::collections::HashSet;
@@ -161,15 +162,37 @@ impl Game {
                 .map(|(worker, task)| (task.target, worker))
                 .collect()
         };
+        // Structures with a posted program standing at them right now.
+        //
         // Separate from the map above, which is keyed by target and so
         // collapses a machine's worker and its guard into whichever the
-        // query reached last. `structure_guard` has to survive that pairing.
-        let guarded: HashSet<Entity> = {
-            let mut tasks = self.world.query::<&Task>();
-            tasks
+        // query reached last — a machine whose worker has stepped out is
+        // still attended by its guard, and has to survive that pairing.
+        let attended: HashSet<Entity> = {
+            let mut tasks = self.world.query::<(Entity, &Task)>();
+            let posted: Vec<(Entity, Entity, TaskKind)> = tasks
                 .iter(&self.world)
-                .filter(|task| task.kind == TaskKind::Guard)
-                .map(|task| task.target)
+                .map(|(holder, task)| (holder, task.target, task.kind))
+                .collect();
+            posted
+                .into_iter()
+                .filter(|&(holder, target, kind)| match kind {
+                    // Nothing ever walks a guard to what it guards, so it is
+                    // standing wherever it was when assigned — and is never
+                    // drawn, which makes "at its post" the only useful
+                    // answer for it.
+                    TaskKind::Guard => true,
+                    TaskKind::GatherResource => {
+                        match (
+                            self.world.get::<Position>(holder),
+                            self.world.get::<Position>(target),
+                        ) {
+                            (Some(w), Some(s)) => at_station(*w, *s),
+                            _ => false,
+                        }
+                    }
+                })
+                .map(|(_, target, _)| target)
                 .collect()
         };
 
@@ -208,12 +231,15 @@ impl Game {
                 } else {
                     None
                 };
-                let is_posted_worker = is_tamed
-                    && self
-                        .world
-                        .get::<Task>(entity)
-                        .is_some_and(|t| t.kind == TaskKind::GatherResource);
-                let structure_guard = is_structure && guarded.contains(&entity);
+                let worker_away_from_post = is_tamed
+                    && self.world.get::<Task>(entity).is_some_and(|t| {
+                        t.kind == TaskKind::GatherResource
+                            && self
+                                .world
+                                .get::<Position>(t.target)
+                                .is_some_and(|s| !at_station(pos, *s))
+                    });
+                let structure_attended = is_structure && attended.contains(&entity);
                 let stats = self.world.get::<Stats>(entity);
                 let hp_fraction = stats.map(|s| s.hp_fraction());
                 // Hostile wild programs are recolored by difficulty relative
@@ -253,8 +279,8 @@ impl Game {
                     can_work,
                     can_trade,
                     structure_worker,
-                    is_posted_worker,
-                    structure_guard,
+                    worker_away_from_post,
+                    structure_attended,
                     hp_fraction,
                     level,
                     durability,
@@ -638,8 +664,8 @@ impl Game {
                     can_work: false,
                     can_trade: false,
                     structure_worker: None,
-                    is_posted_worker: false,
-                    structure_guard: false,
+                    worker_away_from_post: false,
+                    structure_attended: false,
                     hp_fraction: None,
                     level: None,
                     durability: self

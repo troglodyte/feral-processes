@@ -450,20 +450,20 @@ fn neither_routine_lands_behind_an_unopened_seal_or_on_one() {
         let refused = cast(&mut game, JUMP, FieldCastTarget::Cell(cell.0, cell.1));
         assert!(
             refused.is_err(),
-            "a jump reached {cell:?} without burning a seal"
+            "a jump reached {cell:?} without forcing a seal"
         );
     }
 }
 
 #[test]
-fn a_burned_seal_stops_excluding_the_wing_behind_it() {
+fn a_forced_seal_stops_excluding_the_wing_behind_it() {
     let mut game = underground();
     let (seal, lair) = bottom_frame_with_a_seal(&mut game);
     let pos = game.stack_pos().unwrap();
     game.frame_memory_mut(pos).opened.insert(seal);
 
     cast(&mut game, JUMP, FieldCastTarget::Cell(lair.0, lair.1))
-        .expect("the wing is the party's once the seal has been paid for");
+        .expect("the wing is the party's once the seal has been forced");
     assert_eq!(at(&game), lair);
 }
 

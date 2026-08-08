@@ -12,7 +12,7 @@
 I = [
  # id                    name                        val  role        slot      stats                    recipe                                               bench          drops                              cache pot
  ("ablative_plating",    "Ablative Plating",          25, "",         "Armor",  "def+4",                 "",                                                  "",            "rootkit 30%",                     0, 0),
- ("access_shard",        "Access Shard",              12, "",         "",       "",                      "",                                                  "",            "",                                0.35, 0),
+ ("access_shard",        "Access Shard",              12, "",         "",       "",                      "",                                                  "",            "",                                0, 0),
  ("arc_lance",           "Arc Lance",                 12, "",         "Weapon", "atk+3",                 "12 core_fragment",                                  "fabricator",  "scrapper 10%;worm 8%",            0, 0),
  ("bastion_lattice",     "Bastion Lattice",           80, "",         "Armor",  "def+4",                 "12 portal_fragment+4 bytecode_block+2 charge_coil", "armory",      "sentinel 8%;rootkit 6%",          0, 0),
  ("black_ice_pick",      "Black ICE Pick",            90, "",         "Weapon", "atk+3 decompiler+2",    "18 portal_fragment",                                "fabricator",  "cipher 7%;rootkit 6%",            0, 0),

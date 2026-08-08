@@ -27,6 +27,29 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.5.8
+
+### The lair has no key
+
+Reaching the guardian at the bottom of a stack meant carrying an Access
+Shard, and shards came out of caches. So a descent could end at the door
+you came for, with nothing to do about it but climb back out and hope the
+next run's caches were kinder — a gate that decided whether the deepest
+fight in the game happened at all, on a dice roll made three frames higher
+up.
+
+A sealed door is now a barrier rather than a lock. You shoulder it open by
+walking into it, it stays open behind you, and what it costs is the noise:
+the same Trace it always raised, now the whole of the price. Everything
+else about it holds — it still walls the lair off, you still cannot see
+past it, and phasing or jumping into the wing behind it is still refused,
+because the lair is entered through its door.
+
+The Access Shard itself is dormant rather than gone. Nothing asks for one
+any more and caches have stopped stocking them, which makes a cache's haul
+slightly thinner than it was; the shard keeps its name and its price, and
+what it is for instead is an open question.
+
 ## 0.5.7
 
 ### A debug port might not give you the frame

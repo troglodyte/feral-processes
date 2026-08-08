@@ -1516,11 +1516,10 @@ fn outlast_the_guardian(game: &mut Game) {
     stats.hp = 10_000;
 }
 
-/// Burns through the seal and walks into the lair, which is what rouses
+/// Shoves through the seal and walks into the lair, which is what rouses
 /// whatever is in it.
 fn walk_into_the_lair(game: &mut Game) -> (i32, i32) {
     let lair = stand_before_the_lair(game);
-    give_shards(game, 1);
     step_forward_clear(game); // through the seal, shaking off any ambush
     game.step_forward(); // into the lair — this fight is the point
     lair
@@ -1740,26 +1739,6 @@ fn the_same_stack_always_fields_the_same_guardian() {
     assert_eq!(first, name_of_guardian());
 }
 
-fn shards(game: &Game) -> u32 {
-    game.world
-        .get::<Inventory>(game.player_entity())
-        .unwrap()
-        .items
-        .iter()
-        .find(|(item, _)| item.as_str() == ids::ACCESS_SHARD)
-        .map(|&(_, qty)| qty)
-        .unwrap_or(0)
-}
-
-fn give_shards(game: &mut Game, qty: u32) {
-    let player = game.player_entity();
-    game.world
-        .get_mut::<Inventory>(player)
-        .unwrap()
-        .items
-        .push((ItemId::from(ids::ACCESS_SHARD), qty));
-}
-
 /// The party has to get through a sealed door to reach the guardian, so
 /// `stand_before_the_lair` puts them on one. Returns its cell.
 fn a_seal_before_the_lair(game: &Game, lair: (i32, i32)) -> (i32, i32) {
@@ -1796,53 +1775,56 @@ fn the_lair_is_sealed_off_behind_doors() {
     );
 }
 
+/// The seal is a barrier to be shoved through, not a lock to be paid off:
+/// nothing in the party's pack has any bearing on whether it gives.
 #[test]
-fn a_sealed_door_refuses_a_party_with_no_shard() {
-    let mut game = game();
-    descend(&mut game);
-    stand_before_the_lair(&mut game);
-    let before = locale(&game);
-
-    game.step_forward();
-
-    assert_eq!(locale(&game), before, "walked through a sealed door");
-    assert!(logged(&game, "authorization"));
-}
-
-#[test]
-fn an_access_shard_opens_a_sealed_door_and_is_spent() {
+fn a_sealed_door_opens_for_a_party_carrying_nothing() {
     let mut game = game();
     descend(&mut game);
     let lair = stand_before_the_lair(&mut game);
     let seal = a_seal_before_the_lair(&game, lair);
-    give_shards(&mut game, 2);
+    let carried = game
+        .world
+        .get::<Inventory>(game.player_entity())
+        .unwrap()
+        .items
+        .clone();
 
     game.step_forward();
 
     let Locale::Stack { x, y, .. } = locale(&game) else {
         unreachable!()
     };
-    assert_eq!((x, y), seal, "the shard should have let the party through");
-    assert_eq!(shards(&game), 1, "opening a door should spend one shard");
+    assert_eq!((x, y), seal, "the seal refused a party that had nothing");
+    assert_eq!(
+        game.world
+            .get::<Inventory>(game.player_entity())
+            .unwrap()
+            .items,
+        carried,
+        "forcing a seal should cost the party no item at all"
+    );
 }
 
-/// A vault that charged again on the way out would be a tax on having gone
-/// in — and could strand a party that spent its last shard getting there.
+/// The record of an opened seal outlives the step that opened it, because
+/// both Stack views read it: a seal that re-shut behind the party would
+/// redraw the way back out as a wall.
 #[test]
 fn a_door_once_opened_stays_open() {
     let mut game = game();
     descend(&mut game);
-    stand_before_the_lair(&mut game);
-    give_shards(&mut game, 1);
+    let lair = stand_before_the_lair(&mut game);
+    let seal = a_seal_before_the_lair(&game, lair);
     step_forward_clear(&mut game);
-    assert_eq!(shards(&game), 0);
+    let pos = game.stack_pos().unwrap();
+    assert!(game.seal_open(pos, seal), "the seal was not recorded open");
 
     step_back_clear(&mut game);
     let before = locale(&game);
     step_forward_clear(&mut game);
 
     assert_ne!(locale(&game), before, "the door sealed itself behind us");
-    assert_eq!(shards(&game), 0, "a second shard was charged");
+    assert!(game.seal_open(pos, seal));
 }
 
 #[test]
@@ -1852,7 +1834,6 @@ fn an_opened_door_stays_open_across_a_save_and_load() {
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
     game.enter_stack(pos.x, pos.y);
     stand_before_the_lair(&mut game);
-    give_shards(&mut game, 1);
     game.step_forward();
     game.step_back();
 
@@ -2611,34 +2592,19 @@ fn cracking_a_cache_raises_trace() {
 }
 
 #[test]
-fn burning_a_seal_raises_trace() {
+fn forcing_a_seal_raises_trace() {
     use crate::tuning::TRACE_PER_SEAL;
     let mut game = game();
     descend(&mut game);
     stand_before_the_lair(&mut game);
-    give_shards(&mut game, 2);
 
     game.step_forward();
     assert_eq!(trace(&game), TRACE_PER_SEAL);
 
-    // An already-open seal is not a second theft.
+    // A door already standing open makes no second noise.
     game.step_back();
     game.step_forward();
-    assert_eq!(trace(&game), TRACE_PER_SEAL, "the seal was already burned");
-}
-
-/// A seal that refuses the party took nothing from them, so it costs
-/// nothing in Trace either.
-#[test]
-fn a_refused_seal_raises_no_trace() {
-    let mut game = game();
-    descend(&mut game);
-    stand_before_the_lair(&mut game);
-    assert_eq!(shards(&game), 0, "this test needs an empty pack");
-
-    game.step_forward();
-
-    assert_eq!(trace(&game), 0);
+    assert_eq!(trace(&game), TRACE_PER_SEAL, "the seal was already forced");
 }
 
 #[test]

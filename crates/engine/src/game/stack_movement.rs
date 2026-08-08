@@ -61,16 +61,16 @@ impl Game {
     /// an unopened seal, or one **on** an unopened `SealedDoor`.
     ///
     /// The second is not redundant. A sealed door is `walkable()` — the
-    /// generator has to see through it — and `Game::step` only consults
-    /// `pass_seal` when the cell being *stepped into* is sealed. Landing on
-    /// the door itself would therefore put the party past the lock with the
-    /// next ordinary step into the wing never checking it: landing *on* the
-    /// door is the bypass, not landing past it.
+    /// generator has to see through it — and `Game::step` only calls
+    /// `force_seal` when the cell being *stepped into* is sealed. Landing on
+    /// the door itself would therefore put the party past a seal that was
+    /// never forced, with the next ordinary step into the wing never
+    /// touching it: landing *on* the door is the bypass, not landing past
+    /// it.
     ///
-    /// A refusal rather than a death. The rule exists to keep the access
-    /// shard economy and "earn your way to the guardian" intact, not to
-    /// punish a misclick, and an accident that costs nothing beats one that
-    /// costs a run.
+    /// A refusal rather than a death. The rule exists to keep "the lair is
+    /// entered through its door" intact, not to punish a misclick, and an
+    /// accident that costs nothing beats one that costs a run.
     ///
     /// The unreachable set is a flood fill, so in principle it also catches
     /// a walkable cell sealed off by plain rock — but `stack::generate`
@@ -80,13 +80,13 @@ impl Game {
         if self.cell_is_shut_seal(pos, cell) {
             return Err("That's the seal itself. It doesn't want you standing in it.".into());
         }
-        if !self.reachable_without_burning_a_seal(pos).contains(&cell) {
-            return Err("Sealed off. Whatever is back there wants authorization first.".into());
+        if !self.reachable_without_forcing_a_seal(pos).contains(&cell) {
+            return Err("Sealed off. Whatever is back there is reached through the door.".into());
         }
         Ok(())
     }
 
-    /// Whether `cell` holds a `SealedDoor` that has not been burned open —
+    /// Whether `cell` holds a `SealedDoor` that has not been forced open —
     /// the frame's own layout crossed with `FrameMemory::opened`, which is
     /// the same pairing `frame_map_revealed` draws a seal from.
     fn cell_is_shut_seal(&self, pos: StackPos, cell: (i32, i32)) -> bool {
@@ -98,14 +98,14 @@ impl Game {
             && !self.seal_open(pos, cell)
     }
 
-    /// Every cell the party could have walked to without burning a seal: a
+    /// Every cell the party could have walked to without forcing a seal: a
     /// flood fill from the frame's entry over walkable cells, with an
     /// unopened `SealedDoor` treated as blocking.
     ///
     /// Reads `FrameMemory::opened` through `seal_open`, so a seal the player
-    /// has already paid for stops excluding anything behind it — the wing is
-    /// theirs from then on, exactly as it is on foot.
-    fn reachable_without_burning_a_seal(&self, pos: StackPos) -> HashSet<(i32, i32)> {
+    /// has already shouldered open stops excluding anything behind it — the wing
+    /// is theirs from then on, exactly as it is on foot.
+    fn reachable_without_forcing_a_seal(&self, pos: StackPos) -> HashSet<(i32, i32)> {
         let mut seen = HashSet::new();
         let Some(level) = self.world.resource::<CurrentStack>().0.as_ref() else {
             return seen;

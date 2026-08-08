@@ -88,6 +88,11 @@ pub(super) fn draw_arena_result(
         None => text_row("No fight yet."),
     }];
     body.push(text_row(format!("seed {seed}")));
+    // Under the seed, because the two together are what identifies the
+    // fight: a rolled encounter rolls a fresh composition per seed.
+    if let Some(line) = record.and_then(composition_line) {
+        body.push(text_row(line));
+    }
     // Shown rather than applied — `build_opponents` builds whatever was
     // asked for, and this line is what keeps that honest.
     for warning in warnings {
@@ -102,6 +107,22 @@ pub(super) fn draw_arena_result(
         "[R]efight this seed  [N]ext seed  Up/Down scroll  Esc back",
     ));
     draw_popup("Arena Result", PopupSize::Large, &body, painter, m);
+}
+
+/// What was fielded, or `None` for a fight that was never staged. Split out
+/// alongside `summary_line` so a test can read it without a window.
+fn composition_line(r: &RepRecord) -> Option<String> {
+    if r.composition.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "fought {}",
+        r.composition
+            .iter()
+            .map(|(species, count)| format!("{species} x{count}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    ))
 }
 
 /// Won or lost, and what it took. Split out so a test can read it without a
@@ -130,6 +151,7 @@ mod tests {
             rounds: 12,
             player_hp_fraction: 0.4,
             companions_downed: 1,
+            composition: Vec::new(),
             transcript: vec!["── round 1 ──".to_string()],
         }
     }
@@ -158,6 +180,25 @@ mod tests {
                 &m,
             );
         });
+    }
+
+    /// A rolled encounter fields something different every rep, so what was
+    /// fought has to be on the screen that reports the fight.
+    #[test]
+    fn the_result_screen_names_the_composition() {
+        let mut r = record(true);
+        r.composition = vec![("glitch".to_string(), 3)];
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            draw_arena_result(Some(&r), &[], 7, &r.transcript, 0, p, &m);
+        });
+        let line = composition_line(&r).expect("a fought composition draws a line");
+        assert!(line.contains("glitch"), "{line}");
+        assert!(line.contains('3'), "{line}");
+        assert!(
+            composition_line(&record(true)).is_none(),
+            "an empty composition draws no line at all"
+        );
     }
 
     #[test]

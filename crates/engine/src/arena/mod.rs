@@ -158,11 +158,10 @@ pub fn stage(scenario: &Scenario, assets_dir: &Path, seed: u64) -> Result<Staged
         .resource_mut::<MessageLog>()
         .keep_battle_narration = true;
 
-    // Noted before the fight, because `BattleState` is gone by the time the
-    // answer is wanted.
-    let opponents: Vec<Entity> = groups.iter().flat_map(|g| g.members.clone()).collect();
+    // Noted before the fight, because `BattleState` owns the groups from
+    // here on and is gone again by the time the answer is wanted.
+    let watch = Watch::new(&game, seed, &groups);
     game.begin_battle(groups);
-    let watch = Watch::new(&game, seed, opponents);
 
     Ok(Staged {
         game,

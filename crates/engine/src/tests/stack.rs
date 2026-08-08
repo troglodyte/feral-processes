@@ -3136,53 +3136,160 @@ fn player_hp(game: &Game) -> i32 {
     game.world.get::<Stats>(game.player_entity()).unwrap().hp
 }
 
-/// The payout: the whole frame, walls included, in one step. Asserted as
-/// *every* in-bounds cell rather than every walkable one — a map drawn from
-/// floors alone is a floor plan floating in nothing.
-#[test]
-fn jacking_into_a_breakpoint_maps_the_entire_frame() {
-    let mut game = game();
-    descend(&mut game);
-    let port = stand_facing(&mut game, CellKind::Breakpoint).expect("every frame exposes a port");
-    game.step_forward();
-
+/// What the party has mapped of the frame they are standing in.
+fn seen_cells(game: &Game) -> std::collections::BTreeSet<(i32, i32)> {
     let Locale::Stack {
         depth, entrance, ..
-    } = locale(&game)
+    } = locale(game)
     else {
-        unreachable!()
+        unreachable!("not underground")
     };
-    let (w, h) = {
-        let level = game.world.resource::<CurrentStack>().0.as_ref().unwrap();
-        (level.width, level.height)
-    };
-    let seen = &game
-        .world
+    game.world
         .resource::<crate::resources::StackMemory>()
         .0
         .get(&(entrance, depth))
         .expect("standing in a frame it has a memory of")
-        .seen;
+        .seen
+        .clone()
+}
+
+fn frame_dims(game: &Game) -> (i32, i32) {
+    let level = game.world.resource::<CurrentStack>().0.as_ref().unwrap();
+    (level.width, level.height)
+}
+
+struct Jack {
+    game: Game,
+    port: (i32, i32),
+    trace_before: u32,
+    seed: u64,
+}
+
+/// The same walk onto the same port with the port already burnt out, so what
+/// the jack-in itself showed the party is the difference between the two
+/// seen sets. Without this control a test can only measure the reveal
+/// against the radius it was drawn from, which is true however small the
+/// reveal is — including not happening at all.
+fn walk_onto_a_spent_port(seed: u64) -> Game {
+    let mut game = game();
+    descend(&mut game);
+    let port = stand_facing(&mut game, CellKind::Breakpoint).expect("every frame exposes a port");
+    let pos = game.stack_pos().expect("underground");
+    game.frame_memory_mut(pos).jacked.insert(port);
+    game.world
+        .insert_resource(GameRng(rand::SeedableRng::seed_from_u64(seed)));
+    game.step_forward();
+    game
+}
+
+/// A jack-in is a `GameRng` roll, so a test that wants one outcome searches
+/// seeds for it rather than naming a seed that any change upstream of the
+/// roll would shift. Returns the game standing on the spent port.
+fn jack_in(succeeds: bool) -> Jack {
+    for seed in 0..64u64 {
+        let mut game = game();
+        descend(&mut game);
+        let port =
+            stand_facing(&mut game, CellKind::Breakpoint).expect("every frame exposes a port");
+        game.world
+            .insert_resource(GameRng(rand::SeedableRng::seed_from_u64(seed)));
+        let trace_before = trace_of(&game);
+        game.step_forward();
+        let (w, h) = frame_dims(&game);
+        if (seen_cells(&game).len() == (w * h) as usize) == succeeds {
+            return Jack {
+                game,
+                port,
+                trace_before,
+                seed,
+            };
+        }
+    }
+    panic!("no seed under 64 produced a jack-in that succeeded: {succeeds}");
+}
+
+/// The payout: the whole frame, walls included, in one step. Asserted as
+/// *every* in-bounds cell rather than every walkable one — a map drawn from
+/// floors alone is a floor plan floating in nothing.
+#[test]
+fn a_jack_in_that_takes_maps_the_entire_frame() {
+    let game = jack_in(true).game;
+    let (w, h) = frame_dims(&game);
+    let seen = seen_cells(&game);
     for y in 0..h {
         for x in 0..w {
             assert!(seen.contains(&(x, y)), "({x}, {y}) went unmapped");
         }
     }
     assert_eq!(seen.len(), (w * h) as usize);
-    let _ = port;
 }
 
+/// The consolation: a failed jack shows the party something the walk did not
+/// — measured against `walk_onto_a_spent_port`, since the reveal cannot be
+/// checked against the radius it was drawn from — and nothing outside the
+/// patch around them.
 #[test]
-fn jacking_into_a_breakpoint_is_the_loudest_thing_the_party_can_do() {
-    let mut game = game();
-    descend(&mut game);
-    stand_facing(&mut game, CellKind::Breakpoint).unwrap();
-    let before = trace_of(&game);
+fn a_jack_in_that_fails_maps_the_patch_around_the_party_and_no_more() {
+    let Jack {
+        game, port, seed, ..
+    } = jack_in(false);
+    let walked = seen_cells(&walk_onto_a_spent_port(seed));
+    let seen = seen_cells(&game);
+    let r = crate::tuning::STACK_BREAKPOINT_PARTIAL_RADIUS;
+
+    let handed_over: Vec<(i32, i32)> = seen.difference(&walked).copied().collect();
+    assert!(
+        !handed_over.is_empty(),
+        "a failed jack showed the party nothing the walk to the port hadn't"
+    );
+    for cell in &handed_over {
+        assert!(
+            (cell.0 - port.0).abs() <= r && (cell.1 - port.1).abs() <= r,
+            "{cell:?} is outside the patch — a failed jack reached further \
+             than the substrate the party is standing in"
+        );
+    }
+    let (w, h) = frame_dims(&game);
+    assert!(
+        seen.len() < (w * h) as usize,
+        "a failed jack handed over the whole frame"
+    );
+}
+
+/// One try. A port that could be jacked again until it took would make the
+/// roll a delay rather than a risk.
+#[test]
+fn a_jack_in_that_fails_still_burns_the_port() {
+    let Jack { mut game, port, .. } = jack_in(false);
+    let after_first = trace_of(&game);
+    assert_ne!(
+        game.frame_map().unwrap().cells[port.1 as usize][port.0 as usize],
+        crate::views::FrameMapCell::Breakpoint,
+        "the spent port is still advertised on the map"
+    );
+
+    // Off and back on, through the same real step path.
+    game.step_back();
     game.step_forward();
     assert_eq!(
-        trace_of(&game) - before,
-        crate::tuning::TRACE_PER_BREAKPOINT
+        trace_of(&game),
+        after_first,
+        "the port paid out a second time — the jacked record is not holding"
     );
+}
+
+/// Trace is the price of jacking in, not of what it gave you: the substrate
+/// heard you either way.
+#[test]
+fn jacking_into_a_breakpoint_is_the_loudest_thing_the_party_can_do() {
+    for succeeds in [true, false] {
+        let jack = jack_in(succeeds);
+        assert_eq!(
+            trace_of(&jack.game) - jack.trace_before,
+            crate::tuning::TRACE_PER_BREAKPOINT,
+            "a jack-in that succeeded: {succeeds} charged the wrong Trace"
+        );
+    }
 }
 
 /// The spent-ness half. Without `FrameMemory::jacked` the port refills the

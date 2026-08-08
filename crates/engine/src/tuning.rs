@@ -549,6 +549,26 @@ pub const STACK_DOORS_PER_FRAME: usize = 4;
 /// anyway, so raising this is a one-line change if playtest disagrees.
 pub const STACK_BREAKPOINTS_PER_FRAME: usize = 1;
 
+/// The odds a jack-in resolves the whole frame — see `Game::trip_breakpoint`.
+///
+/// A port used to be a guaranteed map for a walk and 25 Trace, which made
+/// the only decision it asked "is the walk shorter than mapping on foot".
+/// At 0.6 it asks a better one: the Trace is spent the moment you jack in
+/// and the map is what you might get for it. There is exactly one port per
+/// frame (above) and a spent one stays spent whichever way the roll went, so
+/// this is one try per frame and not a slot machine.
+pub const STACK_BREAKPOINT_CHANCE: f64 = 0.6;
+
+/// How far around the party a failed jack-in resolves, in cells, as a square
+/// — see `Game::trip_breakpoint`.
+///
+/// The consolation, so it is deliberately much less than the walk it would
+/// have saved: 7x7 of a 21x21 frame, and centred on the party rather than
+/// aimed anywhere useful. It is worth taking anyway because it sees *through*
+/// walls, which the view cone never does — a failed jack tells you which way
+/// the junction you are standing on actually goes.
+pub const STACK_BREAKPOINT_PARTIAL_RADIUS: i32 = 3;
+
 /// How many faults a Stack frame drops through — see `stack::place_faults`.
 ///
 /// Never generated on the bottom frame, which has nothing below it, so the

@@ -57,7 +57,13 @@ fn main() -> io::Result<()> {
         eprintln!("No display detected; feral-processes needs a graphical display.");
         std::process::exit(1);
     }
-    let mut app = App::new(assets_dir, saves_dir, history_path, profile_path);
+    let mut app = App::new(
+        assets_dir,
+        saves_dir,
+        history_path,
+        profile_path,
+        repo_root.join("dev-arenas"),
+    );
     // Unconditionally, not behind `FERAL_DEV_ARENA`: the gate decides
     // whether the arena is *visible*, and a launcher that installed only
     // when gated would make one flag mean two things.

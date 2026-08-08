@@ -1021,6 +1021,12 @@ pub struct App {
     /// reset whenever ticking is paused (any mode but `Playing`) so resuming
     /// play doesn't immediately fire a burst of catch-up ticks.
     last_realtime_tick: Instant,
+    /// Where `Mode::ArenaLoad` reads scenarios from and `Mode::ArenaSave`
+    /// writes them to. A constructor parameter beside `saves_dir` rather
+    /// than something derived here: `App` takes its paths from the
+    /// launcher and resolves none itself, which is what keeps app-core
+    /// testable against a temp directory.
+    arenas_dir: PathBuf,
     /// The live arena visit, if the dev arena is open. Its presence is what
     /// makes the session inert on disk — see `App::in_arena`.
     arena: Option<ArenaSession>,
@@ -1031,6 +1037,8 @@ pub struct App {
     /// Where a row picked in `Mode::ArenaPick` is going — see
     /// `ArenaPickKind`. `None` outside that mode.
     pending_arena_pick: Option<ArenaPickKind>,
+    /// Characters typed so far on `Mode::ArenaSave`'s filename page.
+    pub arena_save_input: String,
     /// The launcher's template library, injected because `dev_template`
     /// lives in a crate app-core cannot see. `None` for any frontend that
     /// does not install it, which simply does not offer the `Template`

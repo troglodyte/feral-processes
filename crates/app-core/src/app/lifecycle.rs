@@ -8,6 +8,7 @@ impl App {
         saves_dir: PathBuf,
         history_path: PathBuf,
         profile_path: PathBuf,
+        arenas_dir: PathBuf,
     ) -> Self {
         let (profile, profile_warning) = Profile::load(&profile_path);
         // A failed load leaves an empty ladder and an empty screen rather
@@ -67,8 +68,10 @@ impl App {
             reveal: BattleReveal::default(),
             status_age: 0.0,
             last_realtime_tick: Instant::now(),
+            arenas_dir,
             arena: None,
             pending_arena_pick: None,
+            arena_save_input: String::new(),
             arena_enabled: crate::app::arena::dev_arena_enabled(),
             dev_templates: None,
         }

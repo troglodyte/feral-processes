@@ -648,6 +648,154 @@ fn a_picked_companion_and_item_land_at_their_defaults() {
     assert_eq!(s.inventory[0].qty, 1);
 }
 
+/// An open builder whose `dev-arenas/` is a scratch copy of the shipped
+/// one, so a save in a test cannot rewrite a checked-in fixture.
+fn app_with_scratch_arenas(seed: u32) -> App {
+    static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!("feral_processes_arenas_{seed}_{unique}"));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let shipped = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../dev-arenas");
+    for entry in std::fs::read_dir(&shipped).unwrap().flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|e| e == "ron") {
+            std::fs::copy(&path, dir.join(path.file_name().unwrap())).unwrap();
+        }
+    }
+
+    let mut app = App::new(
+        test_assets_dir(),
+        std::env::temp_dir().join(format!("feral_processes_arenas_saves_{seed}_{unique}")),
+        std::env::temp_dir().join(format!("feral_processes_arenas_{seed}_{unique}.log")),
+        std::env::temp_dir().join(format!(
+            "feral_processes_arenas_{seed}_{unique}_profile.ron"
+        )),
+        dir,
+    );
+    app.arena_enabled = true;
+    app.handle_key(GameKey::Char('r'));
+    app
+}
+
+fn arenas_dir(app: &App) -> PathBuf {
+    app.arenas_dir.clone()
+}
+
+/// Loads the scenario whose name is `name` through the real picker.
+fn load_scenario(app: &mut App, name: &str) {
+    app.handle_key(GameKey::Char('l'));
+    assert_eq!(app.mode, Mode::ArenaLoad);
+    let rows = app.arena_load_rows();
+    let idx = rows
+        .iter()
+        .position(|r| r == name)
+        .unwrap_or_else(|| panic!("{name} is not listed: {rows:?}"));
+    app.menu_selected = idx;
+    app.handle_key(GameKey::Enter);
+}
+
+/// Saves the open scenario under `name` through the real filename screen.
+fn save_scenario(app: &mut App, name: &str) {
+    app.handle_key(GameKey::Char('s'));
+    assert_eq!(app.mode, Mode::ArenaSave);
+    for c in name.chars() {
+        app.handle_key(GameKey::Char(c));
+    }
+    app.handle_key(GameKey::Enter);
+}
+
+#[test]
+fn a_shipped_scenario_round_trips_through_the_builder() {
+    // What makes the two tools one library rather than two: the struct the
+    // screen edits is the struct the `.ron` holds and the bin runs.
+    let mut app = app_with_scratch_arenas(50);
+
+    load_scenario(&mut app, "opening-fight");
+    assert_eq!(app.mode, Mode::ArenaBuilder, "{:?}", app.status_line);
+    let loaded = app.arena.as_ref().unwrap().scenario.clone();
+    save_scenario(&mut app, "round-trip");
+
+    assert_eq!(app.mode, Mode::ArenaBuilder, "{:?}", app.status_line);
+    let written = Scenario::load(&arenas_dir(&app).join("round-trip.ron")).unwrap();
+    assert_eq!(loaded, written);
+}
+
+#[test]
+fn a_loaded_template_scenario_keeps_saying_template() {
+    // The trap `start_arena_fight`'s clone avoids: resolving the template
+    // into the session's own scenario would rewrite the author's file into
+    // a path under `saves/`.
+    let mut app = app_with_scratch_arenas(51);
+    load_scenario(&mut app, "geared-vs-boss");
+    assert!(matches!(
+        app.arena.as_ref().unwrap().scenario.player,
+        PlayerSource::Template(_)
+    ));
+
+    save_scenario(&mut app, "still-a-template");
+
+    let written = Scenario::load(&arenas_dir(&app).join("still-a-template.ron")).unwrap();
+    assert!(
+        matches!(written.player, PlayerSource::Template(_)),
+        "{:?}",
+        written.player
+    );
+}
+
+#[test]
+fn a_malformed_scenario_stays_on_the_picker_with_the_reason() {
+    let mut app = app_with_scratch_arenas(52);
+    std::fs::write(arenas_dir(&app).join("broken.ron"), "( opponents: [ ").unwrap();
+
+    app.handle_key(GameKey::Char('l'));
+    let rows = app.arena_load_rows();
+    app.menu_selected = rows.iter().position(|r| r == "broken").unwrap();
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(
+        app.mode,
+        Mode::ArenaLoad,
+        "a bad file must not close the picker"
+    );
+    let status = app.status_line.clone().unwrap_or_default();
+    assert!(status.contains("broken"), "{status}");
+}
+
+#[test]
+fn saving_over_an_existing_name_overwrites_it() {
+    let mut app = app_with_scratch_arenas(53);
+    load_scenario(&mut app, "opening-fight");
+    save_scenario(&mut app, "twice");
+
+    highlight(&mut app, ArenaRowKind::Opponent(0));
+    app.handle_key(GameKey::Right);
+    let edited = app.arena.as_ref().unwrap().scenario.clone();
+    save_scenario(&mut app, "twice");
+
+    let written = Scenario::load(&arenas_dir(&app).join("twice.ron")).unwrap();
+    assert_eq!(
+        written, edited,
+        "the first version survived the second save"
+    );
+}
+
+#[test]
+fn a_filename_that_is_a_path_is_refused() {
+    let mut app = app_with_scratch_arenas(54);
+    load_scenario(&mut app, "opening-fight");
+
+    save_scenario(&mut app, "../escaped");
+
+    assert_eq!(
+        app.mode,
+        Mode::ArenaSave,
+        "the screen must hold the mistake"
+    );
+    assert!(app.status_line.is_some());
+    assert!(!arenas_dir(&app).join("../escaped.ron").exists());
+}
+
 #[test]
 fn dev_templates_install_whether_or_not_the_gate_is_open() {
     // The launcher installs unconditionally: the gate decides visibility,

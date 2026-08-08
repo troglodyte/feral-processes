@@ -388,6 +388,15 @@ impl App {
                 self.remove_arena_row();
                 return;
             }
+            GameKey::Char('l') => {
+                self.mode = Mode::ArenaLoad;
+                return;
+            }
+            GameKey::Char('s') => {
+                self.arena_save_input.clear();
+                self.mode = Mode::ArenaSave;
+                return;
+            }
             GameKey::Enter if self.open_arena_picker() => return,
             _ => {}
         }
@@ -626,15 +635,98 @@ impl App {
         self.mode = Mode::ArenaBuilder;
     }
 
+    /// Every `*.ron` in the arenas directory, by name, alphabetically. A
+    /// missing directory reads as nothing to offer rather than an error —
+    /// the same contract `App::list_saves` makes.
+    ///
+    /// The one source of both the row count this scrolls against and the
+    /// rows gui draws.
+    pub fn arena_load_rows(&self) -> Vec<String> {
+        let Ok(entries) = std::fs::read_dir(&self.arenas_dir) else {
+            return Vec::new();
+        };
+        let mut names: Vec<String> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|ext| ext == "ron"))
+            .filter_map(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
+            .collect();
+        names.sort();
+        names
+    }
+
     pub(crate) fn handle_arena_load_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.mode = Mode::ArenaBuilder;
+            return;
+        }
+        let rows = self.arena_load_rows();
+        let Some(idx) = self.selected_index(key, rows.len()) else {
+            return;
+        };
+        let path = self.arenas_dir.join(format!("{}.ron", rows[idx]));
+        match Scenario::load(&path) {
+            Ok(scenario) => {
+                if let Some(session) = &mut self.arena {
+                    session.seed = scenario.seed;
+                    session.scenario = scenario;
+                    session.outcome = None;
+                    session.watch = None;
+                    session.warnings.clear();
+                }
+                self.status_line = None;
+                self.mode = Mode::ArenaBuilder;
+            }
+            // `Scenario::load` already names the file it choked on, so this
+            // stays on the picker rather than dropping the author back on a
+            // builder that did not change.
+            Err(e) => self.status_line = Some(e),
         }
     }
 
+    /// Typing a filename for the open scenario. The text-input idiom
+    /// `Mode::FuseName` uses, plus the one rule a filename needs that a
+    /// program's name does not: it must be a name, never a path.
     pub(crate) fn handle_arena_save_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.mode = Mode::ArenaBuilder;
+        match key {
+            GameKey::Esc => {
+                self.arena_save_input.clear();
+                self.status_line = None;
+                self.mode = Mode::ArenaBuilder;
+            }
+            GameKey::Backspace => {
+                self.arena_save_input.pop();
+            }
+            GameKey::Char(c) if !c.is_control() => self.arena_save_input.push(c),
+            GameKey::Enter => self.save_arena_scenario(),
+            _ => {}
+        }
+    }
+
+    fn save_arena_scenario(&mut self) {
+        let name = self.arena_save_input.clone();
+        // The same rule `dev_template::source` applies, for the same
+        // reason: there is no legitimate scenario whose name needs a
+        // separator, and rejecting them is what keeps a filename inside
+        // the directory it was typed for.
+        if name.is_empty()
+            || name == "."
+            || name == ".."
+            || name.contains('/')
+            || name.contains('\\')
+        {
+            self.status_line = Some(format!("`{name}` is not a scenario name"));
+            return;
+        }
+        let Some(session) = &self.arena else { return };
+        let path = self.arenas_dir.join(format!("{name}.ron"));
+        match session.scenario.save(&path) {
+            Ok(()) => {
+                self.arena_save_input.clear();
+                self.status_line = Some(format!("Wrote {}", path.display()));
+                self.mode = Mode::ArenaBuilder;
+            }
+            Err(e) => self.status_line = Some(e),
         }
     }
 

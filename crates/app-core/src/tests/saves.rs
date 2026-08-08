@@ -19,7 +19,13 @@ fn starting_a_new_game_creates_a_listed_save_that_can_be_loaded_and_deleted() {
         "feral_processes_appcore_test_savelist_{}_profile.ron",
         std::process::id()
     ));
-    let mut app = App::new(assets_dir, saves_dir.clone(), history_path, profile_path);
+    let mut app = App::new(
+        assets_dir,
+        saves_dir.clone(),
+        history_path,
+        profile_path,
+        super::support::arenas_dir(),
+    );
 
     app.start_new_game(DifficultyMode::Forgiving);
     assert!(

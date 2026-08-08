@@ -257,6 +257,111 @@ fn a_failed_jack_out_still_counts_its_round() {
 }
 
 #[test]
+fn refighting_keeps_the_seed() {
+    let mut app = app_fighting(20, scenario(20, 1, &[("sprite", 1)], 3));
+    fight_to_the_end(&mut app);
+
+    press(&mut app, GameKey::Char('r'));
+
+    assert_eq!(app.mode, Mode::Battle);
+    assert_eq!(app.arena.as_ref().unwrap().seed, 3);
+}
+
+#[test]
+fn the_next_seed_key_advances_by_one() {
+    // The manual version of a rep: `arena::run` runs rep *n* at
+    // `scenario.seed + n`, so `[N]` has to be the same increment or a loss
+    // seed found here would not replay in the headless run.
+    let mut app = app_fighting(21, scenario(20, 1, &[("sprite", 1)], 3));
+    fight_to_the_end(&mut app);
+
+    press(&mut app, GameKey::Char('n'));
+
+    assert_eq!(app.mode, Mode::Battle);
+    assert_eq!(app.arena.as_ref().unwrap().seed, 4);
+    assert_eq!(
+        app.arena.as_ref().unwrap().scenario.seed,
+        3,
+        "the file the author is building must not be rewritten by a reseed"
+    );
+}
+
+#[test]
+fn esc_from_the_result_returns_to_the_builder_with_the_scenario_intact() {
+    let built = scenario(20, 1, &[("sprite", 1)], 3);
+    let mut app = app_fighting(22, built.clone());
+    fight_to_the_end(&mut app);
+
+    press(&mut app, GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::ArenaBuilder);
+    assert_eq!(app.arena.as_ref().unwrap().scenario, built);
+}
+
+#[test]
+fn a_refight_starts_from_a_whole_party() {
+    // The regression `arena::run` already guards with a fresh `Game` per
+    // rep. Asserted on behaviour — a transcript line naming the companion —
+    // rather than on a count, since a lopsided fight can be won without it
+    // ever swinging.
+    let mut built = scenario(1, 4, &[("sub_process", 6)], 11);
+    built.party = vec![feral_processes_engine::arena::CompanionSpec {
+        species: "glitch".into(),
+        level: 1,
+    }];
+    let mut app = app_fighting(23, built);
+
+    fight_to_the_end(&mut app);
+    let first = app.arena.as_ref().unwrap().outcome.clone().unwrap();
+    press(&mut app, GameKey::Char('r'));
+    fight_to_the_end(&mut app);
+    let second = app.arena.as_ref().unwrap().outcome.clone().unwrap();
+
+    let swung = |r: &feral_processes_engine::arena::RepRecord| {
+        r.transcript.iter().any(|l| l.contains("Glitch"))
+    };
+    assert!(swung(&first), "{:?}", first.transcript);
+    assert!(
+        swung(&second),
+        "the refight fielded no companion — the `Game` was carried over: {:?}",
+        second.transcript
+    );
+}
+
+#[test]
+fn jacking_out_records_a_loss() {
+    // Matching the headless path, where a fled fight leaves the pack
+    // standing and `Watch::finish` reads the opponents. An abandon that
+    // counted as neither would be a third notion of an outcome.
+    for scenario_seed in 0..10 {
+        let mut app = app_fighting(24, scenario(20, 1, &[("sprite", 1)], scenario_seed));
+
+        press(&mut app, GameKey::Char('j'));
+
+        if app.mode == Mode::ArenaResult {
+            let record = app.arena.as_ref().unwrap().outcome.as_ref().unwrap();
+            assert!(!record.won, "a fled fight is not a win: {record:?}");
+            return;
+        }
+    }
+    panic!("no seed under 10 escaped, so this asserts nothing");
+}
+
+#[test]
+fn the_staging_warnings_survive_the_fight() {
+    // The result screen is where they are read, and nothing is ever capped
+    // — so a warning cleared when the battle opened would leave the tool
+    // silently answering a question nobody asked.
+    let mut app = app_fighting(25, scenario(1, 1, &[("glitch", 9)], 1));
+    assert!(!app.arena.as_ref().unwrap().warnings.is_empty());
+
+    fight_to_the_end(&mut app);
+
+    assert_eq!(app.mode, Mode::ArenaResult);
+    assert!(!app.arena.as_ref().unwrap().warnings.is_empty());
+}
+
+#[test]
 fn dev_templates_install_whether_or_not_the_gate_is_open() {
     // The launcher installs unconditionally: the gate decides visibility,
     // and installing only when gated would make one flag mean two things.

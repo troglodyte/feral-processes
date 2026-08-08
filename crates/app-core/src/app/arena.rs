@@ -212,9 +212,49 @@ impl App {
         }
     }
 
+    /// What the fight cost, and the two ways to run it again.
+    ///
+    /// `[N]` is the manual version of `reps`: `arena::run` runs rep *n* at
+    /// `scenario.seed + n`, so the same increment here is what lets a loss
+    /// found by hand be replayed by the headless bin. It moves the
+    /// session's seed and never `scenario.seed`, which is where the *next*
+    /// visit starts and what a save writes out.
+    ///
+    /// Both refights go back through `start_arena_fight`, so there is one
+    /// staging path and a refight starts from a whole party rather than
+    /// from this fight's corpses.
     pub(crate) fn handle_arena_result_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.mode = Mode::ArenaBuilder;
+        match key {
+            GameKey::Esc => {
+                self.mode = Mode::ArenaBuilder;
+                return;
+            }
+            GameKey::Char('r') => {
+                self.start_arena_fight();
+                return;
+            }
+            GameKey::Char('n') => {
+                if let Some(session) = &mut self.arena {
+                    session.seed = session.seed.wrapping_add(1);
+                }
+                self.start_arena_fight();
+                return;
+            }
+            _ => {}
         }
+        // Everything else scrolls the transcript, which is the screen.
+        let rows = self.arena_transcript().len();
+        self.scroll(key, rows);
+    }
+
+    /// The round-by-round narration the `Watch` collected, empty until a
+    /// fight has finished. The one source of both the row count this
+    /// scrolls against and the rows gui draws.
+    pub fn arena_transcript(&self) -> &[String] {
+        self.arena
+            .as_ref()
+            .and_then(|s| s.outcome.as_ref())
+            .map(|r| r.transcript.as_slice())
+            .unwrap_or_default()
     }
 }

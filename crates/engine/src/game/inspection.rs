@@ -3,6 +3,7 @@
 
 use crate::tuning::{DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX, DIFFICULTY_TOUGH_MAX, MAX_FUSIONS};
 use crate::*;
+use std::collections::HashSet;
 
 impl Game {
     pub fn view_tiles(&mut self, half_w: i32, half_h: i32) -> Vec<Vec<Tile>> {
@@ -160,6 +161,17 @@ impl Game {
                 .map(|(worker, task)| (task.target, worker))
                 .collect()
         };
+        // Separate from the map above, which is keyed by target and so
+        // collapses a machine's worker and its guard into whichever the
+        // query reached last. `structure_guard` has to survive that pairing.
+        let guarded: HashSet<Entity> = {
+            let mut tasks = self.world.query::<&Task>();
+            tasks
+                .iter(&self.world)
+                .filter(|task| task.kind == TaskKind::Guard)
+                .map(|task| task.target)
+                .collect()
+        };
 
         let player_power = self
             .world
@@ -196,6 +208,12 @@ impl Game {
                 } else {
                     None
                 };
+                let is_posted_worker = is_tamed
+                    && self
+                        .world
+                        .get::<Task>(entity)
+                        .is_some_and(|t| t.kind == TaskKind::GatherResource);
+                let structure_guard = is_structure && guarded.contains(&entity);
                 let stats = self.world.get::<Stats>(entity);
                 let hp_fraction = stats.map(|s| s.hp_fraction());
                 // Hostile wild programs are recolored by difficulty relative
@@ -235,6 +253,8 @@ impl Game {
                     can_work,
                     can_trade,
                     structure_worker,
+                    is_posted_worker,
+                    structure_guard,
                     hp_fraction,
                     level,
                     durability,
@@ -618,6 +638,8 @@ impl Game {
                     can_work: false,
                     can_trade: false,
                     structure_worker: None,
+                    is_posted_worker: false,
+                    structure_guard: false,
                     hp_fraction: None,
                     level: None,
                     durability: self

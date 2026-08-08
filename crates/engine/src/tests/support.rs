@@ -715,6 +715,25 @@ pub(super) fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
     entity
 }
 
+/// `spawn_tamed` at a chosen tile and carrying a `Glyph`, so `view_entities`
+/// can see it.
+///
+/// That query is `(Entity, &Position, &Glyph)`, and `spawn_tamed` grants no
+/// glyph — a program spawned by it is invisible to every map-facing view,
+/// which reads as the view filtering it out rather than as the fixture
+/// being short a component.
+pub(super) fn spawn_tamed_on_map(game: &mut Game, x: i32, y: i32) -> Entity {
+    let entity = spawn_tamed(game, 10, 3);
+    game.world.entity_mut(entity).insert(Glyph {
+        ch: 'd',
+        color: GlyphColor::Cyan,
+    });
+    let mut pos = game.world.get_mut::<Position>(entity).unwrap();
+    pos.x = x;
+    pos.y = y;
+    entity
+}
+
 /// Spawns a minimal wild (untamed, `Hostile`) `Creature` on the
 /// player's own tile, suitable to pass straight into `start_battle` —
 /// mirrors `spawn_tamed`'s pattern but without `Tamed`/`Experience`,

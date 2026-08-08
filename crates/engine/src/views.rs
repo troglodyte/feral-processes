@@ -278,6 +278,25 @@ pub struct EntityView {
     /// If this is a structure, the label of the (tamed) entity currently
     /// working it via cronjob, if any.
     pub structure_worker: Option<String>,
+    /// Whether this (tamed) entity holds a `TaskKind::GatherResource` post.
+    ///
+    /// The one kind of tamed program whose `Position` the sim keeps honest:
+    /// `haul_step_system` walks it to its post and on to a depot, so it is
+    /// really standing where this view says. A guard, an idle program and a
+    /// party member all keep whatever tile they were on when they took the
+    /// job and are never moved again — which is why the map draws this one
+    /// and hides the rest, rather than filtering on `is_tamed`.
+    pub is_posted_worker: bool,
+    /// If this is a structure, whether a program is posted here as a *guard*
+    /// specifically.
+    ///
+    /// The residue of moving the "someone is on this job" mark onto the
+    /// program itself: a worker carries its own now, and a guard cannot,
+    /// because a guard is not drawn. So a structure shows the mark exactly
+    /// when its posted program is invisible. Distinct from
+    /// `structure_worker`, which counts any `Task` and so cannot tell the
+    /// two apart.
+    pub structure_guard: bool,
     pub hp_fraction: Option<f32>,
     pub level: Option<u32>,
     /// If this is a structure, its current/max raid `Durability`.

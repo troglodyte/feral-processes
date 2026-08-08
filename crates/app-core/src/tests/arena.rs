@@ -2,6 +2,7 @@
 //! fight a scenario.
 
 use feral_processes_engine::arena::{OpponentSpec, PlayerSource, Scenario};
+use feral_processes_engine::tuning::MAX_GROUP_SIZE;
 
 use super::support::{test_app, test_assets_dir};
 use crate::*;
@@ -359,6 +360,186 @@ fn the_staging_warnings_survive_the_fight() {
 
     assert_eq!(app.mode, Mode::ArenaResult);
     assert!(!app.arena.as_ref().unwrap().warnings.is_empty());
+}
+
+/// An open builder holding `scenario`, with nothing fought yet.
+fn app_building(seed: u32, scenario: Scenario) -> App {
+    let mut app = app_with_arena(seed);
+    app.handle_key(GameKey::Char('r'));
+    let session = app.arena.as_mut().unwrap();
+    session.seed = scenario.seed;
+    session.scenario = scenario;
+    app
+}
+
+fn row_kinds(app: &App) -> Vec<ArenaRowKind> {
+    app.arena_builder_rows()
+        .into_iter()
+        .map(|r| r.kind)
+        .collect()
+}
+
+/// Puts the highlight on the row of `kind`, the way Down would.
+fn highlight(app: &mut App, kind: ArenaRowKind) {
+    app.menu_selected = row_kinds(app)
+        .iter()
+        .position(|k| *k == kind)
+        .unwrap_or_else(|| panic!("{kind:?} is not a row right now: {:?}", row_kinds(app)));
+}
+
+#[test]
+fn a_save_player_hides_the_loadout_rows() {
+    // The engine treats an authored loadout beside a save as an *error*
+    // rather than ignoring it, so the rows have to be gone, not inert.
+    let mut app = app_building(
+        30,
+        Scenario {
+            player: PlayerSource::Save("saves/whatever.bin".into()),
+            ..scenario(1, 1, &[("glitch", 1)], 0)
+        },
+    );
+
+    let kinds = row_kinds(&app);
+
+    for hidden in [
+        ArenaRowKind::PlayerLevel,
+        ArenaRowKind::PlayerZone,
+        ArenaRowKind::AddEquip,
+        ArenaRowKind::AddInventory,
+        ArenaRowKind::AddParty,
+    ] {
+        assert!(!kinds.contains(&hidden), "{hidden:?} survived: {kinds:?}");
+    }
+    // And they come back when the source does.
+    highlight(&mut app, ArenaRowKind::PlayerSource);
+    app.handle_key(GameKey::Right);
+    assert!(row_kinds(&app).contains(&ArenaRowKind::PlayerLevel));
+}
+
+#[test]
+fn the_row_under_the_highlight_is_the_row_that_changes() {
+    // The bug hidden rows cause: with a save source the row *after* the
+    // player source is the first opponent, not the player's level.
+    let mut app = app_building(
+        31,
+        Scenario {
+            player: PlayerSource::Save("saves/whatever.bin".into()),
+            ..scenario(1, 1, &[("glitch", 2)], 0)
+        },
+    );
+    app.menu_selected = 1;
+    assert_eq!(row_kinds(&app)[1], ArenaRowKind::Opponent(0));
+
+    app.handle_key(GameKey::Right);
+
+    let s = &app.arena.as_ref().unwrap().scenario;
+    assert_eq!(
+        s.opponents[0].count, 3,
+        "the label's row is not the one that moved"
+    );
+}
+
+#[test]
+fn right_on_an_opponent_row_raises_its_count() {
+    let mut app = app_building(32, scenario(1, 1, &[("glitch", 2)], 0));
+    highlight(&mut app, ArenaRowKind::Opponent(0));
+
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Left);
+
+    assert_eq!(app.arena.as_ref().unwrap().scenario.opponents[0].count, 3);
+}
+
+#[test]
+fn an_opponent_count_stops_at_max_group_size() {
+    // Past it `build_opponents` hard-errors rather than warning, so a
+    // builder that let you author it would produce an unfightable scenario.
+    let mut app = app_building(33, scenario(1, 1, &[("glitch", MAX_GROUP_SIZE)], 0));
+    highlight(&mut app, ArenaRowKind::Opponent(0));
+
+    app.handle_key(GameKey::Right);
+
+    assert_eq!(
+        app.arena.as_ref().unwrap().scenario.opponents[0].count,
+        MAX_GROUP_SIZE
+    );
+}
+
+#[test]
+fn a_count_never_drops_to_zero() {
+    let mut app = app_building(34, scenario(1, 1, &[("glitch", 1)], 0));
+    highlight(&mut app, ArenaRowKind::Opponent(0));
+
+    app.handle_key(GameKey::Left);
+
+    assert_eq!(
+        app.arena.as_ref().unwrap().scenario.opponents[0].count,
+        1,
+        "`build_opponents` refuses a count of 0 outright"
+    );
+}
+
+#[test]
+fn backspace_removes_the_highlighted_party_row() {
+    let mut built = scenario(1, 1, &[("glitch", 1)], 0);
+    built.party = ["glitch", "sprite"]
+        .into_iter()
+        .map(|species| feral_processes_engine::arena::CompanionSpec {
+            species: species.into(),
+            level: 1,
+        })
+        .collect();
+    let mut app = app_building(35, built);
+    highlight(&mut app, ArenaRowKind::Party(0));
+
+    app.handle_key(GameKey::Backspace);
+
+    let party = &app.arena.as_ref().unwrap().scenario.party;
+    assert_eq!(party.len(), 1);
+    assert_eq!(party[0].species, "sprite");
+}
+
+#[test]
+fn a_composition_past_the_zone_ceiling_is_still_authorable() {
+    // Warning rather than capping is the point of the tool: "what if zone 1
+    // threw nine at me" is the question it exists to answer.
+    let mut app = app_building(36, scenario(1, 1, &[("glitch", 8)], 0));
+    highlight(&mut app, ArenaRowKind::Opponent(0));
+
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Char('f'));
+
+    assert_eq!(app.mode, Mode::Battle);
+    assert_eq!(app.arena.as_ref().unwrap().scenario.opponents[0].count, 9);
+    assert!(
+        !app.arena.as_ref().unwrap().warnings.is_empty(),
+        "nine at zone 1 must be built and warned about"
+    );
+}
+
+#[test]
+fn switching_off_a_fresh_player_clears_the_loadout_it_authored() {
+    // A save or template brings its whole run across, and `Scenario`'s own
+    // validation refuses a loadout beside one — so a hidden row left in the
+    // struct would write a file that will not load back.
+    let mut built = scenario(5, 1, &[("glitch", 1)], 0);
+    built.party = vec![feral_processes_engine::arena::CompanionSpec {
+        species: "glitch".into(),
+        level: 1,
+    }];
+    let mut app = app_building(37, built);
+    app.install_dev_templates(DevTemplates {
+        names: vec!["extraction".to_string()],
+        resolve: |_| Err("not in this test".to_string()),
+    });
+    highlight(&mut app, ArenaRowKind::PlayerSource);
+
+    app.handle_key(GameKey::Right);
+
+    let s = &app.arena.as_ref().unwrap().scenario;
+    assert_eq!(s.player, PlayerSource::Template("extraction".into()));
+    assert!(s.party.is_empty(), "the authored party survived the switch");
 }
 
 #[test]

@@ -9,7 +9,7 @@
 
 mod app;
 
-pub use app::arena::DevTemplates;
+pub use app::arena::{ArenaRow, ArenaRowKind, DevTemplates};
 pub use app::group_menu::GroupMenuRow;
 
 use app::arena::ArenaSession;

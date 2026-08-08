@@ -16,8 +16,9 @@ use super::stack::StackPos;
 use crate::resources::{CurrentStack, FrameMemory, StackMemory};
 use crate::stack::CellKind;
 use crate::tuning::{
-    STACK_CACHE_CREDITS, STACK_CACHE_DEPTH_GROWTH, STACK_CORRUPTION_HP_PERCENT,
-    STACK_CORRUPTION_MIN_DAMAGE, TRACE_PER_BREAKPOINT, TRACE_PER_CACHE, TRACE_PER_SEAL,
+    STACK_BREAKPOINT_CHANCE, STACK_BREAKPOINT_PARTIAL_RADIUS, STACK_CACHE_CREDITS,
+    STACK_CACHE_DEPTH_GROWTH, STACK_CORRUPTION_HP_PERCENT, STACK_CORRUPTION_MIN_DAMAGE,
+    TRACE_PER_BREAKPOINT, TRACE_PER_CACHE, TRACE_PER_SEAL,
 };
 use crate::*;
 
@@ -259,11 +260,23 @@ impl Game {
     /// Jacks into the breakpoint the party is standing on, if there is one
     /// and it has not already been used.
     ///
-    /// Marks **every** in-bounds cell of the frame seen, walls included, so
-    /// the map draws as a complete frame rather than as a floor plan
-    /// floating in nothing. That is the whole payout — and
-    /// `TRACE_PER_BREAKPOINT` is the loudest single thing the party can do,
-    /// since handing yourself the map means announcing where you are.
+    /// Marks the cells it resolves seen, walls included, so the map draws as
+    /// a frame rather than as a floor plan floating in nothing.
+    ///
+    /// The jack is a roll (`STACK_BREAKPOINT_CHANCE`): it takes the whole
+    /// frame, or it half-resolves and hands over
+    /// `STACK_BREAKPOINT_PARTIAL_RADIUS` of substrate around the party. The
+    /// port is burnt either way — the `jacked` record goes in **before** the
+    /// roll, so there is no ordering in which a failed jack leaves something
+    /// to try again. `TRACE_PER_BREAKPOINT` is charged either way too, on the
+    /// same argument: the loudest thing the party can do is announcing
+    /// themselves to the substrate, and that happens when they jack in rather
+    /// than when it works.
+    ///
+    /// Rolled off `GameRng` rather than off `FrameSpec::rng_seed` like the
+    /// frame's own shape: what a place *is* has to survive a save/load, but
+    /// this is a property of the moment you jacked in, exactly as an orphan's
+    /// species and its stats divide.
     ///
     /// Ordered like `open_cache`: the line saying what happened, then the
     /// Trace raise, so a band crossing reads as the consequence rather than
@@ -279,17 +292,36 @@ impl Game {
         }
         self.frame_memory_mut(pos).jacked.insert((pos.x, pos.y));
 
+        let resolved = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_bool(STACK_BREAKPOINT_CHANCE)
+        };
+
         let Some(level) = self.world.resource::<CurrentStack>().0.as_ref() else {
             return;
         };
-        let every_cell: Vec<(i32, i32)> = (0..level.height)
-            .flat_map(|y| (0..level.width).map(move |x| (x, y)))
-            .collect();
-        self.frame_memory_mut(pos).seen.extend(every_cell);
+        let (width, height) = (level.width, level.height);
+        let r = STACK_BREAKPOINT_PARTIAL_RADIUS;
+        let cells: Vec<(i32, i32)> = if resolved {
+            (0..height)
+                .flat_map(|y| (0..width).map(move |x| (x, y)))
+                .collect()
+        } else {
+            (pos.y - r..=pos.y + r)
+                .flat_map(|y| (pos.x - r..=pos.x + r).map(move |x| (x, y)))
+                .filter(|&(x, y)| x >= 0 && y >= 0 && x < width && y < height)
+                .collect()
+        };
+        self.frame_memory_mut(pos).seen.extend(cells);
 
         self.log_kind(
             MessageKind::Outcome,
-            "You jack into the port. The frame resolves around you, whole.",
+            if resolved {
+                "You jack into the port. The frame resolves around you, whole."
+            } else {
+                "You jack into the port. It stutters, spits, and gives up \
+                 nothing but the substrate you are standing in."
+            },
         );
         self.raise_trace(TRACE_PER_BREAKPOINT);
     }

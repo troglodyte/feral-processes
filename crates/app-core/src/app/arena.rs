@@ -9,7 +9,7 @@
 //! parallel builder type, so a knob added to the schema cannot exist in one
 //! tool and not the other.
 
-use feral_processes_engine::arena::{RepRecord, Scenario, Watch};
+use feral_processes_engine::arena::{self, PlayerSource, RepRecord, Scenario, Watch};
 
 use crate::*;
 
@@ -20,9 +20,6 @@ use crate::*;
 /// `Option` is what makes the session inert on disk — see `App::in_arena`.
 pub(crate) struct ArenaSession {
     pub(crate) scenario: Scenario,
-    /// The `.ron` it was loaded from or last saved to. `None` for a
-    /// scenario that has only ever existed on this screen.
-    pub(crate) path: Option<PathBuf>,
     /// The seed of the current or next fight. Separate from
     /// `scenario.seed`, which is where the *next visit* would start:
     /// reseeding on the result screen is the manual version of a rep, and
@@ -42,7 +39,6 @@ impl ArenaSession {
         Self {
             seed: scenario.seed,
             scenario,
-            path: None,
             watch: None,
             outcome: None,
             warnings: Vec::new(),
@@ -86,6 +82,93 @@ impl App {
         self.arena_enabled
     }
 
+    /// Whether an arena session is live — the one predicate every "an arena
+    /// fight must not do this" rule reads. A named predicate rather than
+    /// three ad-hoc `arena.is_some()` checks, because what has to stay true
+    /// is a list and only a name makes the list checkable.
+    pub(crate) fn in_arena(&self) -> bool {
+        self.arena.is_some()
+    }
+
+    /// Stages `session.scenario` at `session.seed` and opens `Mode::Battle`
+    /// — the real battle UI, entire, which is how a companion Special ever
+    /// fires in a measured fight. A staging error stays on the builder with
+    /// the reason in the status line.
+    pub(crate) fn start_arena_fight(&mut self) {
+        let Some(session) = &self.arena else { return };
+        let seed = session.seed;
+        // A **clone**: a `Template` source is resolved to the save it
+        // generates only for the fight. The session's own scenario keeps
+        // saying `Template(name)`, or saving it back out would rewrite the
+        // author's file into a path under `saves/`.
+        let mut scenario = session.scenario.clone();
+        if let PlayerSource::Template(name) = &scenario.player {
+            let Some(templates) = &self.dev_templates else {
+                self.status_line = Some(format!(
+                    "template `{name}` needs the launcher's template library"
+                ));
+                return;
+            };
+            match (templates.resolve)(name) {
+                Ok(path) => scenario.player = PlayerSource::Save(path),
+                Err(e) => {
+                    self.status_line = Some(e);
+                    return;
+                }
+            }
+        }
+
+        match arena::stage(&scenario, &self.assets_dir, seed) {
+            Ok(staged) => {
+                if let Some(session) = &mut self.arena {
+                    session.warnings = staged.warnings;
+                    session.watch = Some(staged.watch);
+                    session.outcome = None;
+                }
+                // Shown, never applied: nothing about the composition is
+                // capped, and showing the ask is what makes that honest.
+                self.status_line = self
+                    .arena
+                    .as_ref()
+                    .filter(|s| !s.warnings.is_empty())
+                    .map(|s| format!("warning: {}", s.warnings.join(" · ")));
+                self.game = Some(staged.game);
+                self.restart_reveal();
+                self.mode = Mode::Battle;
+            }
+            Err(e) => self.status_line = Some(e),
+        }
+    }
+
+    /// Feeds the round just resolved to the session's `Watch`. Called from
+    /// `settle_after_round`, so every action that can end a battle reports
+    /// through one hook rather than each remembering to.
+    pub(crate) fn observe_arena_round(&mut self) {
+        let App { arena, game, .. } = self;
+        if let (Some(session), Some(game)) = (arena.as_mut(), game.as_ref())
+            && let Some(watch) = &mut session.watch
+        {
+            watch.observe(game);
+        }
+    }
+
+    /// Closes the fight and opens the result screen. Reached both from
+    /// `settle_after_round` and from `check_game_over`, since a Permadeath
+    /// player brought in on a `Save` source can end the run mid-round.
+    pub(crate) fn finish_arena_fight(&mut self) {
+        let App { arena, game, .. } = self;
+        if let (Some(session), Some(game)) = (arena.as_mut(), game.as_ref())
+            && let Some(watch) = &session.watch
+        {
+            session.outcome = Some(watch.finish(game));
+        }
+        // The result screen is not a log pane, and its transcript is
+        // scrolled rather than paced — so release the narration rather than
+        // spending the player's first key on skipping it.
+        self.finish_reveal();
+        self.mode = Mode::ArenaResult;
+    }
+
     pub(crate) fn open_arena(&mut self) {
         self.status_line = None;
         self.arena = Some(ArenaSession::new());
@@ -101,8 +184,13 @@ impl App {
     }
 
     pub(crate) fn handle_arena_builder_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.leave_arena();
+        match key {
+            GameKey::Esc => self.leave_arena(),
+            // Its own key rather than Enter, which the rows need for
+            // "edit this one" — one key that meant both editing and
+            // fighting would be ambiguous on every row.
+            GameKey::Char('f') => self.start_arena_fight(),
+            _ => {}
         }
     }
 

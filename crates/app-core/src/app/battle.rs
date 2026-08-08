@@ -122,9 +122,12 @@ impl App {
                 let Some(game) = &mut self.game else { return };
                 let escaped = game.battle_flee();
                 let still_active = game.has_active_battle();
-                if !still_active {
-                    self.settle_after_round(still_active);
-                }
+                // Unconditionally: a *refused* flee still resolves a round
+                // (`battle_flee` retaliates, bumps `round` and ticks), so
+                // the tail has to see it. Harmless while the battle is
+                // live — the mode is already `Mode::Battle` and the reveal
+                // restart is guarded on the fight being over.
+                self.settle_after_round(still_active);
                 // A pinned attempt is not an escape: what the player hears
                 // is the volley it drew, not the jack-out that didn't
                 // happen. The engine logs why, so there's nothing to add to
@@ -420,7 +423,16 @@ impl App {
     /// A battle that just ended has had its log pruned to results by the
     /// engine, so the reveal restarts and those results scroll into the map's
     /// log pane rather than appearing whole.
+    ///
+    /// It is also the one hook an arena fight is read through: the round is
+    /// handed to the session's `Watch` here, so the played fight and the
+    /// headless one share the same answer to what a fight cost.
     fn settle_after_round(&mut self, still_active: bool) {
+        self.observe_arena_round();
+        if !still_active && self.in_arena() {
+            self.finish_arena_fight();
+            return;
+        }
         self.mode = if still_active {
             Mode::Battle
         } else {

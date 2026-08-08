@@ -884,22 +884,27 @@ mod tests {
     /// explosion. This is what that buys.
     #[test]
     fn a_bursts_sparks_are_spread_around_the_tile_rather_than_clustered() {
-        let count = DESTROYED_SPARKS;
-        let spacing = std::f32::consts::TAU / count as f32;
-        for index in 0..count {
-            let angle = spark_angle((3, -7), index, count);
-            let spoke = index as f32 / count as f32 * std::f32::consts::TAU;
+        // Both throwing kinds, because the jitter is shared and the counts
+        // are not: the thinner burst has the wider spacing to stay inside,
+        // so raising one count without the other is what would break this.
+        for kind in [EffectKind::Hit, EffectKind::Destroyed] {
+            let count = spark_burst(kind).0;
+            let spacing = std::f32::consts::TAU / count as f32;
+            for index in 0..count {
+                let angle = spark_angle((3, -7), index, count);
+                let spoke = index as f32 / count as f32 * std::f32::consts::TAU;
+                assert!(
+                    (angle - spoke).abs() <= SPARK_ANGLE_JITTER / 2.0,
+                    "{kind:?} spark {index} swung {} off its spoke",
+                    angle - spoke
+                );
+            }
             assert!(
-                (angle - spoke).abs() <= SPARK_ANGLE_JITTER / 2.0,
-                "spark {index} swung {} off its spoke",
-                angle - spoke
+                SPARK_ANGLE_JITTER < spacing,
+                "{kind:?} jitter {SPARK_ANGLE_JITTER} is wider than its {spacing} \
+                 spacing, so sparks can cross into each other's spokes and cluster"
             );
         }
-        assert!(
-            SPARK_ANGLE_JITTER < spacing,
-            "jitter {SPARK_ANGLE_JITTER} is wider than the {spacing} spacing, so \
-             sparks can cross into each other's spokes and cluster"
-        );
     }
 
     /// A sweep hits several structures at once. If the scatter were keyed

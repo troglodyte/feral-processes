@@ -73,6 +73,7 @@ impl App {
             pending_arena_pick: None,
             arena_save_input: String::new(),
             arena_enabled: crate::app::arena::dev_arena_enabled(),
+            dev_console: crate::app::dev_console::dev_console_enabled(),
             dev_templates: None,
         }
     }

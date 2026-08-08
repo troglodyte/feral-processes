@@ -7,6 +7,7 @@ pub(crate) mod arena;
 mod battle;
 mod building;
 mod crafting;
+pub(crate) mod dev_console;
 mod field;
 pub(crate) mod group_menu;
 mod input;

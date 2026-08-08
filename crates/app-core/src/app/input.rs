@@ -101,6 +101,7 @@ impl App {
             Mode::BattleSpecial => self.handle_battle_special_key(key),
             Mode::BattleAlly => self.handle_battle_ally_key(key),
             Mode::Build => self.handle_build_key(key),
+            Mode::DevConsole => self.handle_dev_console_key(key),
             Mode::BuildDirection => self.handle_build_direction_key(key),
             Mode::Craft => self.handle_craft_key(key),
             Mode::CraftQuantity => self.handle_craft_quantity_key(key),

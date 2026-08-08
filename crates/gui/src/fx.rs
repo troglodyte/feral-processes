@@ -72,6 +72,37 @@ const FLOAT_RISE_PX: f32 = 24.0;
 
 const LOG_FLASH_SECONDS: f64 = 0.35;
 
+// --- Raid spark burst -------------------------------------------------
+//
+// The knobs for the debris a raided structure throws. A burst borrows its
+// colour and its lifetime from the tile flash underneath it
+// (`effect_color` / `effect_duration`), so it cannot outlive or clash with
+// the flash it belongs to — only how *much* is thrown and how far is set
+// here. `Deflected` throws nothing: the shield network absorbing a sweep is
+// not something coming apart.
+
+/// A structure coming down: the loud one, and the only burst that reaches
+/// past its own tile.
+const DESTROYED_SPARKS: u32 = 12;
+const DESTROYED_SPARK_REACH: f32 = 1.4;
+/// A structure merely taking a hit. Kept inside its own tile and thin
+/// enough that a sweep chewing through a large base doesn't fill the pane.
+const HIT_SPARKS: u32 = 5;
+const HIT_SPARK_REACH: f32 = 0.6;
+/// How long each spark's streak is drawn, in tiles, and how thick.
+const SPARK_STREAK_TILES: f32 = 0.18;
+const SPARK_THICKNESS: f32 = 1.5;
+/// How far a spark may swing off its evenly-spaced spoke, in radians.
+///
+/// Bounded at under a full spoke's width on purpose: sparks are spread
+/// evenly and then jittered, rather than aimed at random angles, so a burst
+/// can never happen to throw everything one way and read as a leak instead
+/// of an explosion.
+const SPARK_ANGLE_JITTER: f32 = 0.45;
+/// Slowest a jittered spark may fly, as a fraction of the full reach. Under
+/// 1.0 so the debris arrives ragged rather than as an expanding ring.
+const SPARK_MIN_SPEED: f32 = 0.55;
+
 // Local copies of the palette `render.rs` draws with, rather than
 // macroquad's harsher primaries.
 const FLASH_RED: Color = Color::new(0.9, 0.25, 0.25, 1.0);
@@ -145,6 +176,49 @@ fn stranded_blink_alpha(time: f64) -> f32 {
     } else {
         STRANDED_BLINK_MIN
     }
+}
+
+/// How many sparks a burst throws and how far they reach, in tiles.
+fn spark_burst(kind: EffectKind) -> (u32, f32) {
+    match kind {
+        EffectKind::Hit => (HIT_SPARKS, HIT_SPARK_REACH),
+        EffectKind::Destroyed => (DESTROYED_SPARKS, DESTROYED_SPARK_REACH),
+        EffectKind::Deflected => (0, 0.0),
+    }
+}
+
+/// Fraction of its reach a spark has covered at `t`, where `t` runs 0..1
+/// across the burst's lifetime. Decelerating, so debris reads as thrown
+/// rather than as an expanding ring.
+fn spark_spread(t: f32) -> f32 {
+    1.0 - (1.0 - t) * (1.0 - t)
+}
+
+/// A stable pseudo-random draw in 0..1 for one spark of one burst.
+///
+/// Deliberately a function of the tile and the spark index and *nothing
+/// else* — there is no time argument, which is what stops a spark being
+/// re-rolled every frame and strobing instead of flying.
+fn spark_scatter(pos: (i32, i32), index: u32) -> f32 {
+    let mut h = (pos.0 as u32)
+        .wrapping_mul(0x9E37_79B9)
+        ^ (pos.1 as u32).wrapping_mul(0x85EB_CA6B)
+        ^ index.wrapping_mul(0xC2B2_AE35);
+    h ^= h >> 15;
+    h = h.wrapping_mul(0x2545_F491);
+    h ^= h >> 13;
+    (h >> 8) as f32 / (1u32 << 24) as f32
+}
+
+/// The direction spark `index` of `count` flies, in radians: an evenly
+/// spaced spoke, jittered off it by less than half the spacing.
+fn spark_angle(pos: (i32, i32), index: u32, count: u32) -> f32 {
+    let spoke = index as f32 / count as f32 * std::f32::consts::TAU;
+    spoke + (spark_scatter(pos, index) - 0.5) * SPARK_ANGLE_JITTER
+}
+
+fn spark_alpha(t: f32) -> f32 {
+    (1.0 - t).clamp(0.0, 1.0)
 }
 
 fn effect_duration(kind: EffectKind) -> f64 {
@@ -680,6 +754,99 @@ mod tests {
         );
         assert_eq!(stranded_blink_alpha(0.0), 1.0);
         assert_eq!(stranded_blink_alpha(dwell * 1.5), STRANDED_BLINK_MIN);
+    }
+
+    #[test]
+    fn a_destroyed_burst_throws_more_sparks_and_further_than_a_hit() {
+        let (destroyed, d_reach) = spark_burst(EffectKind::Destroyed);
+        let (hit, h_reach) = spark_burst(EffectKind::Hit);
+        assert!(destroyed > hit, "{destroyed} vs {hit}");
+        assert!(d_reach > h_reach, "{d_reach} vs {h_reach}");
+    }
+
+    /// A hit lands on every damaging blow of a sweep, so its debris has to
+    /// stay on the tile that took it. Only a structure actually coming down
+    /// is allowed to throw wreckage over its neighbours.
+    #[test]
+    fn only_a_destroyed_burst_reaches_past_its_own_tile() {
+        assert!(spark_burst(EffectKind::Hit).1 < 1.0);
+        assert!(spark_burst(EffectKind::Destroyed).1 > 1.0);
+    }
+
+    /// The shield network absorbing a sweep changes no state at all, which
+    /// is why it has a flash — but nothing came apart, so nothing is thrown.
+    #[test]
+    fn a_deflected_sweep_throws_no_sparks() {
+        assert_eq!(spark_burst(EffectKind::Deflected).0, 0);
+    }
+
+    #[test]
+    fn a_spark_starts_at_the_tile_and_is_at_full_reach_when_it_dies() {
+        assert_eq!(spark_spread(0.0), 0.0);
+        assert!((spark_spread(1.0) - 1.0).abs() < 1e-6, "{}", spark_spread(1.0));
+    }
+
+    /// Debris flung outward slows as it goes. Flying at a constant rate
+    /// reads as an expanding ring rather than as something thrown.
+    #[test]
+    fn sparks_decelerate_rather_than_flying_at_a_constant_rate() {
+        let first_half = spark_spread(0.5) - spark_spread(0.0);
+        let second_half = spark_spread(1.0) - spark_spread(0.5);
+        assert!(
+            first_half > second_half,
+            "covered {first_half} then {second_half} — that is constant or accelerating"
+        );
+    }
+
+    #[test]
+    fn a_spark_never_flies_back_toward_the_tile() {
+        let mut previous = 0.0;
+        for i in 0..=100 {
+            let spread = spark_spread(i as f32 / 100.0);
+            assert!(spread >= previous, "went backwards at t={i}: {spread}");
+            previous = spread;
+        }
+    }
+
+    /// Sparks are spread evenly and *then* jittered, so a burst can never
+    /// happen to throw everything one way and read as a leak rather than an
+    /// explosion. This is what that buys.
+    #[test]
+    fn a_bursts_sparks_are_spread_around_the_tile_rather_than_clustered() {
+        let count = DESTROYED_SPARKS;
+        let spacing = std::f32::consts::TAU / count as f32;
+        for index in 0..count {
+            let angle = spark_angle((3, -7), index, count);
+            let spoke = index as f32 / count as f32 * std::f32::consts::TAU;
+            assert!(
+                (angle - spoke).abs() <= SPARK_ANGLE_JITTER / 2.0,
+                "spark {index} swung {} off its spoke",
+                angle - spoke
+            );
+        }
+        assert!(
+            SPARK_ANGLE_JITTER < spacing,
+            "jitter {SPARK_ANGLE_JITTER} is wider than the {spacing} spacing, so \
+             sparks can cross into each other's spokes and cluster"
+        );
+    }
+
+    /// A sweep hits several structures at once. If the scatter were keyed
+    /// only on the spark index, every burst in that raid would be the same
+    /// shape and the base would look stamped rather than wrecked.
+    #[test]
+    fn two_tiles_bursting_at_once_do_not_scatter_identically() {
+        let count = DESTROYED_SPARKS;
+        let differs = (0..count)
+            .any(|i| spark_angle((0, 0), i, count) != spark_angle((1, 0), i, count));
+        assert!(differs, "adjacent bursts threw debris in identical directions");
+    }
+
+    #[test]
+    fn spark_alpha_is_full_at_the_start_and_out_at_the_end() {
+        assert_eq!(spark_alpha(0.0), 1.0);
+        assert_eq!(spark_alpha(1.0), 0.0);
+        assert!(spark_alpha(0.5) > 0.0 && spark_alpha(0.5) < 1.0);
     }
 
     #[test]

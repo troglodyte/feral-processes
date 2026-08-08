@@ -3,8 +3,19 @@
 use crate::*;
 
 impl App {
-    /// Every tamed program within `MENU_SCAN_RADIUS` — the candidates for a
-    /// cronjob or a guard posting.
+    /// Every tamed program the player owns — the candidates for a cronjob or
+    /// a guard posting.
+    ///
+    /// The whole roster rather than what is within `MENU_SCAN_RADIUS`, for
+    /// the reason `handle_fuse_key` draws from `owned_pets`: a companion's
+    /// `Position` is the tile it was captured on and is never written again,
+    /// so a distance filter hides programs by where they were beaten. It hid
+    /// them from the *row* too — `base_menu_rows` drops a row whose screen
+    /// would be empty, so a player whose only program was tamed 40 tiles ago
+    /// lost the Cronjob row entirely and never learned posting exists.
+    /// Neither `assign_cronjob` (which now starts the program from the
+    /// player's own tile) nor `assign_guard` asks anything about where the
+    /// program is standing.
     ///
     /// This and the three lists below exist because each was written twice:
     /// once in the handler that picks from it, once in the renderer that
@@ -13,7 +24,10 @@ impl App {
     /// offers a row leading to an empty screen is exactly the drift that
     /// invites.
     pub fn nearby_programs(&mut self) -> Vec<EntityView> {
-        self.scanned(|e| e.is_tamed)
+        let Some(game) = &mut self.game else {
+            return Vec::new();
+        };
+        game.owned_program_views()
     }
 
     /// Nearby structures that accept a posted program. The same list whether

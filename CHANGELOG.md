@@ -29,6 +29,36 @@ first, separated by a rule.
 
 ## Unreleased
 
+## 0.5.5
+
+### A posted program starts from where you are
+
+Posting a program to a structure could produce a cronjob that never ran. The
+machine sat yellow, its working animation never played, and the log said
+nothing beyond "Cronjob scheduled." — the program was standing somewhere it
+could not walk back from, and never took a step for the rest of the run.
+
+A program's position on the map is set when you beat it and never changes
+again: it does not trail after you as you walk, which is why your companions
+are not drawn on the map at all. So a program tamed far from home was still,
+as far as the sim was concerned, standing out in the wild — and a machine
+more than fourteen tiles from that spot was unreachable, whatever the
+program's actual whereabouts.
+
+A program now sets off from your own tile, because that is where you have
+been carrying it. One consequence is worth knowing: the walk to a post is
+bought by posting from a distance. Post while stood at the machine and the
+program is already at its station; post from across the base and you will
+watch it walk in. A structure too far away for the walk is now refused
+outright, with a message, instead of accepting a cronjob that could never
+start.
+
+The cronjob and guard pickers were filtering the same stale positions, so a
+program tamed more than forty tiles out was missing from both lists — and
+because the base menu hides a row whose screen would be empty, a player whose
+only program was tamed that far away lost the Cronjob row entirely. Both
+pickers now offer every program you own, wherever you caught it.
+
 ## 0.5.4
 
 ### Structures throw sparks when a sweep hits them

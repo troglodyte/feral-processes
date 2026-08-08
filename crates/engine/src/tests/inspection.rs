@@ -1140,6 +1140,9 @@ fn a_worker_is_only_away_from_its_post_while_it_is_actually_away() {
     let worker = spawn_tamed_on_map(&mut game, 6, 6);
     let guard = spawn_tamed_on_map(&mut game, 6, 7);
     let idle = spawn_tamed_on_map(&mut game, 6, 8);
+    // Posted from across the base, which is what leaves the worker with a
+    // walk to make: `assign_cronjob` starts it from the player's tile.
+    stand_player_at(&mut game, 6, 6);
     game.assign_cronjob(worker, node).unwrap();
     game.assign_guard(guard, node).unwrap();
 
@@ -1190,6 +1193,7 @@ fn a_structure_is_attended_only_while_its_program_is_standing_at_it() {
 
     let worker = spawn_tamed_on_map(&mut game, 6, 6);
     let guard = spawn_tamed_on_map(&mut game, 6, 7);
+    stand_player_at(&mut game, 6, 6);
     game.assign_cronjob(worker, worked).unwrap();
     game.assign_guard(guard, guarded).unwrap();
 

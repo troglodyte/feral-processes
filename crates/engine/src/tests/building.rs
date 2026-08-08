@@ -1,7 +1,7 @@
 //! Placing, removing, upgrading, and describing structures, and the base platform they sit on.
 
 use super::support::*;
-use crate::tuning::MAX_BUILD_DISTANCE_FROM_HOME;
+use crate::tuning::{HAUL_WALK_RADIUS, MAX_BUILD_DISTANCE_FROM_HOME};
 use crate::*;
 
 #[test]
@@ -1380,6 +1380,7 @@ fn a_second_cronjob_on_one_structure_displaces_the_first() {
     let structure = workable_structure(&mut game, 3, 4);
     let first = spawn_tamed(&mut game, 10, 3);
     let second = spawn_tamed(&mut game, 10, 3);
+    stand_player_at_post(&mut game, structure);
 
     game.assign_cronjob(first, structure).unwrap();
     game.assign_cronjob(second, structure).unwrap();
@@ -1426,6 +1427,68 @@ fn a_second_guard_on_one_structure_displaces_the_first() {
 
     assert!(game.world.get::<Task>(first).is_none());
     assert_eq!(holders(&mut game, structure, TaskKind::Guard).len(), 1);
+}
+
+/// A posted program sets off from the player's tile, not from the tile it
+/// was beaten on.
+///
+/// A tamed program's `Position` is written once, at capture, and never
+/// again — `views.rs` says so and `render/base.rs` refuses to draw a
+/// companion because of it. So the stale tile can be anywhere the player has
+/// ever fought, and a walk measured from it strands a worker outside
+/// `HAUL_WALK_RADIUS` of its own machine: `haul_step_system` finds it absent
+/// from the field, steps nowhere this tick and every tick after, and the
+/// cronjob produces nothing for the rest of the run while looking scheduled.
+#[test]
+fn a_posted_program_starts_from_the_player() {
+    let mut game = Game::new(45, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structure = workable_structure(&mut game, 3, 4);
+    // Where the player is standing when they post it: at the machine's east
+    // station tile, so the assignment turns on nothing but the two positions.
+    let player_pos = Position { x: 4, y: 4 };
+    *game
+        .world
+        .get_mut::<Position>(game.player_entity())
+        .unwrap() = player_pos;
+    // Tamed far enough out that the old rule would have refused it outright,
+    // and far enough that it could never have walked in.
+    let worker = spawn_tamed_on_map(&mut game, 3, 4 + HAUL_WALK_RADIUS + 5);
+
+    game.assign_cronjob(worker, structure)
+        .expect("a program you are carrying can be posted wherever you are standing");
+
+    assert_eq!(
+        game.world.get::<Position>(worker).copied(),
+        Some(player_pos),
+        "the program should be standing where the player posted it from"
+    );
+}
+
+/// The refusal survives, but it is now about where *the player* is: the
+/// program starts from their tile, so a structure they cannot reach is one
+/// the program cannot reach either.
+#[test]
+fn posting_to_a_structure_the_player_cannot_reach_is_refused() {
+    let mut game = Game::new(46, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structure = workable_structure(&mut game, 3, 4);
+    let worker = spawn_tamed_on_map(&mut game, 3, 3);
+    *game
+        .world
+        .get_mut::<Position>(game.player_entity())
+        .unwrap() = Position {
+        x: 3,
+        y: 4 + HAUL_WALK_RADIUS + 5,
+    };
+
+    let err = game
+        .assign_cronjob(worker, structure)
+        .expect_err("a post the program could never walk to must not be accepted");
+
+    assert!(err.contains("too far away"), "unexpected refusal: {err}");
+    assert!(
+        game.world.get::<Task>(worker).is_none(),
+        "a refused cronjob must leave no Task behind"
+    );
 }
 
 #[test]
@@ -1563,8 +1626,8 @@ fn worked_node_at(
             MachineStatus::default(),
         ))
         .id();
+    stand_player_at_post(game, node);
     game.assign_cronjob(worker, node).unwrap();
-    park_at_post(game, worker, node);
     node
 }
 

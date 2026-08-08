@@ -1,6 +1,7 @@
 //! Placing, upgrading, and demolishing structures, and assigning programs
 //! to work them.
 
+use crate::game::hauling;
 use crate::structures::UpgradeDef;
 use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, STRUCTURE_REMOVAL_REFUND_PERCENT};
 use crate::*;
@@ -473,6 +474,39 @@ impl Game {
         }
         if !self.accepts_a_program(structure) {
             return Err("That structure can't be worked.".into());
+        }
+        // The program sets off from wherever *you* are standing, because that
+        // is where it has been all along. A tamed program's `Position` is the
+        // tile it was beaten on and is never written again — `views.rs`
+        // states it, and `render/base.rs` refuses to draw a companion for
+        // exactly that reason. Posting is the moment the tile starts meaning
+        // something (`haul_step_system` walks it from here on), so it is also
+        // the moment to make it true. Measuring the walk from the stale tile
+        // instead would strand a program tamed further out than
+        // `HAUL_WALK_RADIUS`, which is the bug this replaced.
+        let from = *self
+            .world
+            .get::<Position>(self.player_entity())
+            .ok_or_else(|| "You aren't anywhere you can post a program from.".to_string())?;
+        let structure_pos = *self
+            .world
+            .get::<Position>(structure)
+            .ok_or_else(|| "That structure isn't anywhere you can post to.".to_string())?;
+        // Checked before anything is spent, for the reason `install_routine`
+        // checks knowledge before taking the disk: accepting a post the
+        // program can never walk to would stand a companion down and displace
+        // the structure's current worker to pay for a cronjob that produces
+        // nothing.
+        let mut map = self.world.resource_mut::<WorldMap>();
+        if !hauling::can_reach_post(&mut map, from, structure_pos) {
+            return Err(
+                "That structure is too far away to post a program to — get closer \
+                 to it first."
+                    .into(),
+            );
+        }
+        if let Some(mut pos) = self.world.get_mut::<Position>(worker) {
+            *pos = from;
         }
         let ticks = self.work_ticks_for(structure);
         if self.world.resource::<Party>().0.contains(&worker) {

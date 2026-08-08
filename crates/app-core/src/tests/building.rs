@@ -183,3 +183,32 @@ fn working_a_structure_yourself_opens_the_same_structure_list() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::BaseMenu, "Esc backs into the base menu");
 }
+
+/// A companion's `Position` is the tile it was captured on and is never
+/// written again, so the posting picker must offer the whole roster rather
+/// than a window onto the map. It used to scan `MENU_SCAN_RADIUS`, which hid
+/// every program tamed further out than that — and because `base_menu_rows`
+/// drops a row whose first screen would be empty, a player whose only
+/// program was tamed that far away lost the Cronjob row with it.
+#[test]
+fn the_posting_picker_offers_programs_parked_far_from_the_player() {
+    // The fixture parks both of these beyond `MENU_SCAN_RADIUS`.
+    let mut app = app_owning_distant_programs(741, 2);
+    let roster = app.game.as_mut().unwrap().owned_pets().len();
+    assert!(
+        roster >= 2,
+        "fixture should hand the player at least the two distant programs"
+    );
+
+    let offered = app.nearby_programs();
+
+    assert_eq!(
+        offered.len(),
+        roster,
+        "the picker must offer every program the player owns, wherever it was tamed"
+    );
+    assert!(
+        offered.iter().all(|v| v.is_tamed),
+        "and still list only tamed programs"
+    );
+}

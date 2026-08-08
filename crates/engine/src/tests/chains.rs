@@ -430,6 +430,10 @@ fn a_program_can_be_posted_to_an_assembler() {
     let mut game = game_with_assembler("chain_assign", 1012);
     let machine = assembler_at(&mut game, 40, 40, false);
     let worker = spawn_tamed(&mut game, 10, 3);
+    // A program is posted from wherever the player stands, and the machine
+    // is 37 tiles from the spawn point — this test is about whether an
+    // assembler is assignable at all, not about the walk to it.
+    stand_player_at_post(&mut game, machine);
 
     game.assign_cronjob(worker, machine)
         .expect("an assembler takes a program like any other machine");

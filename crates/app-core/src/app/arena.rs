@@ -13,12 +13,13 @@ use std::path::Path;
 
 use feral_processes_engine::abilities::AbilityDb;
 use feral_processes_engine::arena::{
-    self, CompanionSpec, EquipSpec, InventorySpec, OpponentSpec, PlayerSource, RepRecord, Scenario,
-    Watch,
+    self, CompanionSpec, Encounter, EquipSpec, InventorySpec, OpponentSpec, PlayerSource,
+    RepRecord, Scenario, Watch,
 };
 use feral_processes_engine::items_db::ItemDb;
 use feral_processes_engine::species::SpeciesDb;
 use feral_processes_engine::tuning::{CREATURE_MAX_LEVEL, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE};
+use feral_processes_engine::world::Biome;
 
 use crate::*;
 
@@ -38,6 +39,11 @@ pub(crate) struct ArenaCatalog {
     /// `ItemDef::equipment` directly: there is no `Game` here to ask
     /// `is_equippable`.
     items: Vec<(String, bool)>,
+    /// Every biome a roll could actually field something on. Derived from
+    /// the roster rather than listed, so the picker cannot offer a biome
+    /// `arena::encounter::roll` would refuse — and so a mod adding the first
+    /// StaticField resident gets it offered for free.
+    biomes: Vec<Biome>,
 }
 
 impl ArenaCatalog {
@@ -54,7 +60,22 @@ impl ArenaCatalog {
             .map(|d| (d.id.as_str().to_string(), d.equipment.is_some()))
             .collect();
         items.sort();
-        Self { species, items }
+        // The two clauses `Game::habitat_pools` early-returns on, and
+        // nothing else: an unwalkable biome is a hole in the map, and a
+        // biome with no resident fields nothing to fight. Sorted by `{:?}`
+        // for a stable picker order, since `Biome` has no other ordering.
+        let mut biomes: Vec<Biome> = species_db
+            .all()
+            .flat_map(|d| d.habitats.iter().copied())
+            .filter(|b| b.walkable())
+            .collect();
+        biomes.sort_by_key(|b| format!("{b:?}"));
+        biomes.dedup();
+        Self {
+            species,
+            items,
+            biomes,
+        }
     }
 }
 
@@ -67,6 +88,9 @@ pub(crate) enum ArenaPickKind {
     OpponentSpecies(Option<usize>),
     EquipItem(Option<usize>),
     InventoryItem(Option<usize>),
+    /// The odd one out: there is exactly one encounter, so it always
+    /// replaces and never appends.
+    EncounterBiome,
 }
 
 /// One row of the builder: what it draws as, and what it edits.
@@ -89,6 +113,9 @@ pub enum ArenaRowKind {
     AddInventory,
     Party(usize),
     AddParty,
+    Encounter,
+    EncounterBiome,
+    EncounterDepth,
     Opponent(usize),
     AddOpponent,
     Reps,
@@ -146,6 +173,17 @@ pub struct DevTemplates {
 /// both sides, so holding a key down cannot wrap a count to zero.
 fn step(value: u32, delta: i32, min: u32, max: u32) -> u32 {
     value.saturating_add_signed(delta).clamp(min, max)
+}
+
+/// How the encounter row reads. `Authored` is the absence of one, which is
+/// what makes the row a three-state cycle rather than a toggle beside a
+/// separate on-off.
+fn encounter_label(encounter: &Option<Encounter>) -> &'static str {
+    match encounter {
+        None => "Authored",
+        Some(Encounter::Field { .. }) => "Field",
+        Some(Encounter::Stack { .. }) => "Stack",
+    }
 }
 
 /// How a player source reads on the builder's first row. Also the identity
@@ -335,20 +373,43 @@ impl App {
             rows.push(row("  + field a program".into(), ArenaRowKind::AddParty));
         }
 
-        for (i, o) in s.opponents.iter().enumerate() {
-            rows.push(row(
-                format!("Against: {} x{}", o.species, o.count),
-                ArenaRowKind::Opponent(i),
-            ));
-        }
-        // Hidden at the ceiling rather than offered and refused:
-        // `build_opponents` hard-errors past `MAX_ENEMY_GROUPS`, so a fifth
-        // group is not a composition the game can represent at all.
-        if s.opponents.len() < MAX_ENEMY_GROUPS {
-            rows.push(row(
-                "+ add an opponent group".into(),
-                ArenaRowKind::AddOpponent,
-            ));
+        rows.push(row(
+            format!("Encounter: {}", encounter_label(&s.encounter)),
+            ArenaRowKind::Encounter,
+        ));
+        match &s.encounter {
+            Some(Encounter::Field { biome }) => rows.push(row(
+                format!("  Biome: {biome:?}"),
+                ArenaRowKind::EncounterBiome,
+            )),
+            Some(Encounter::Stack { biome, depth }) => {
+                rows.push(row(
+                    format!("  Biome: {biome:?}"),
+                    ArenaRowKind::EncounterBiome,
+                ));
+                rows.push(row(
+                    format!("  Depth: {depth}"),
+                    ArenaRowKind::EncounterDepth,
+                ));
+            }
+            None => {
+                for (i, o) in s.opponents.iter().enumerate() {
+                    rows.push(row(
+                        format!("Against: {} x{}", o.species, o.count),
+                        ArenaRowKind::Opponent(i),
+                    ));
+                }
+                // Hidden at the ceiling rather than offered and refused:
+                // `build_opponents` hard-errors past `MAX_ENEMY_GROUPS`, so a
+                // fifth group is not a composition the game can represent at
+                // all.
+                if s.opponents.len() < MAX_ENEMY_GROUPS {
+                    rows.push(row(
+                        "+ add an opponent group".into(),
+                        ArenaRowKind::AddOpponent,
+                    ));
+                }
+            }
         }
         rows.push(row(format!("Reps: {}", s.reps), ArenaRowKind::Reps));
         rows.push(row(format!("Seed: {}", s.seed), ArenaRowKind::Seed));
@@ -420,6 +481,7 @@ impl App {
             ArenaRowKind::AddEquip => ArenaPickKind::EquipItem(None),
             ArenaRowKind::Inventory(i) => ArenaPickKind::InventoryItem(Some(i)),
             ArenaRowKind::AddInventory => ArenaPickKind::InventoryItem(None),
+            ArenaRowKind::EncounterBiome => ArenaPickKind::EncounterBiome,
             _ => return false,
         };
         self.pending_arena_pick = Some(pick);
@@ -455,6 +517,14 @@ impl App {
                 .iter()
                 .map(|(id, _)| id.clone())
                 .collect(),
+            // `{:?}` rather than a display name, on the same terms as the id
+            // lists above: it is the string the `.ron` will hold.
+            ArenaPickKind::EncounterBiome => session
+                .catalog
+                .biomes
+                .iter()
+                .map(|b| format!("{b:?}"))
+                .collect(),
         }
     }
 
@@ -470,6 +540,10 @@ impl App {
         };
         if kind == ArenaRowKind::PlayerSource {
             self.cycle_arena_player_source(delta);
+            return;
+        }
+        if kind == ArenaRowKind::Encounter {
+            self.cycle_arena_encounter(delta);
             return;
         }
         let Some(session) = &mut self.arena else {
@@ -505,6 +579,11 @@ impl App {
             ArenaRowKind::Opponent(i) => {
                 if let Some(o) = s.opponents.get_mut(i) {
                     o.count = step(o.count, delta, 1, MAX_GROUP_SIZE);
+                }
+            }
+            ArenaRowKind::EncounterDepth => {
+                if let Some(Encounter::Stack { depth, .. }) = &mut s.encounter {
+                    *depth = step(*depth, delta, 1, u32::MAX);
                 }
             }
             ArenaRowKind::Reps => s.reps = step(s.reps, delta, 1, u32::MAX),
@@ -547,6 +626,58 @@ impl App {
             session.scenario.equip.clear();
             session.scenario.inventory.clear();
             session.scenario.party.clear();
+        }
+    }
+
+    /// Cycles `Authored → Field → Stack → Authored`.
+    ///
+    /// Both directions clear what has just gone off screen, for the reason
+    /// `cycle_arena_player_source` does: `Scenario::validate` refuses a file
+    /// holding an encounter beside opponents, and refuses one holding
+    /// neither — so every state this can reach has to be one `save` accepts.
+    /// Returning to `Authored` therefore seeds a row, the same one the
+    /// picker would append.
+    fn cycle_arena_encounter(&mut self, delta: i32) {
+        let first_biome = self
+            .arena
+            .as_ref()
+            .and_then(|s| s.catalog.biomes.first().copied());
+        let first_species = self
+            .arena
+            .as_ref()
+            .and_then(|s| s.catalog.species.first().cloned());
+        let Some(session) = &mut self.arena else {
+            return;
+        };
+        let s = &mut session.scenario;
+        let here = match &s.encounter {
+            None => 0,
+            Some(Encounter::Field { .. }) => 1,
+            Some(Encounter::Stack { .. }) => 2,
+        };
+        // A biome already chosen survives the Field/Stack step: only the
+        // depth is new, and re-picking the biome to change frame is the
+        // dial-losing bug the picker's replace rule exists to avoid.
+        let biome = match &s.encounter {
+            Some(Encounter::Field { biome }) | Some(Encounter::Stack { biome, .. }) => Some(*biome),
+            None => first_biome,
+        };
+        let Some(biome) = biome else {
+            // No biome anything lives on: an empty roster, and nothing to
+            // roll on. The row then simply does not move.
+            return;
+        };
+        s.encounter = match (here + delta).rem_euclid(3) {
+            1 => Some(Encounter::Field { biome }),
+            2 => Some(Encounter::Stack { biome, depth: 1 }),
+            _ => None,
+        };
+        if s.encounter.is_some() {
+            s.opponents.clear();
+        } else if s.opponents.is_empty()
+            && let Some(species) = first_species
+        {
+            s.opponents.push(OpponentSpec { species, count: 1 });
         }
     }
 
@@ -596,6 +727,12 @@ impl App {
             return;
         };
         let id = rows[idx].clone();
+        // By position rather than by parsing the label back: the rows *are*
+        // the catalogue, and a biome is an enum with no `FromStr`.
+        let biome = self
+            .arena
+            .as_ref()
+            .and_then(|s| s.catalog.biomes.get(idx).copied());
         let Some(pick) = self.pending_arena_pick.take() else {
             return;
         };
@@ -630,6 +767,17 @@ impl App {
                     item: ItemId::from(id.as_str()),
                     qty: 1,
                 }),
+                // The depth beside it survives, the same rule the counts,
+                // quantities, levels and tiers above already follow.
+                ArenaPickKind::EncounterBiome => {
+                    if let (Some(picked), Some(encounter)) = (biome, s.encounter.as_mut()) {
+                        match encounter {
+                            Encounter::Field { biome } | Encounter::Stack { biome, .. } => {
+                                *biome = picked
+                            }
+                        }
+                    }
+                }
             }
         }
         self.mode = Mode::ArenaBuilder;

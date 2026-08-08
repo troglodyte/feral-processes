@@ -1,8 +1,9 @@
 //! The dev arena: the gate, the session, and the screens that edit and
 //! fight a scenario.
 
-use feral_processes_engine::arena::{OpponentSpec, PlayerSource, Scenario};
+use feral_processes_engine::arena::{Encounter, OpponentSpec, PlayerSource, Scenario};
 use feral_processes_engine::tuning::MAX_GROUP_SIZE;
+use feral_processes_engine::world::Biome;
 
 use super::support::{test_app, test_assets_dir};
 use crate::*;
@@ -426,8 +427,8 @@ fn a_save_player_hides_the_loadout_rows() {
 
 #[test]
 fn the_row_under_the_highlight_is_the_row_that_changes() {
-    // The bug hidden rows cause: with a save source the row *after* the
-    // player source is the first opponent, not the player's level.
+    // The bug hidden rows cause: with a save source the third row is the
+    // first opponent, not the player's level — five rows have gone.
     let mut app = app_building(
         31,
         Scenario {
@@ -435,8 +436,8 @@ fn the_row_under_the_highlight_is_the_row_that_changes() {
             ..scenario(1, 1, &[("glitch", 2)], 0)
         },
     );
-    app.menu_selected = 1;
-    assert_eq!(row_kinds(&app)[1], ArenaRowKind::Opponent(0));
+    app.menu_selected = 2;
+    assert_eq!(row_kinds(&app)[2], ArenaRowKind::Opponent(0));
 
     app.handle_key(GameKey::Right);
 
@@ -856,4 +857,127 @@ fn dev_templates_install_whether_or_not_the_gate_is_open() {
         resolve: |_| Ok(test_assets_dir()),
     });
     assert!(app.dev_templates.is_some());
+}
+
+fn row_labels(app: &App) -> Vec<String> {
+    app.arena_builder_rows()
+        .into_iter()
+        .map(|r| r.label)
+        .collect()
+}
+
+/// Steps the `Encounter:` row `n` times to the right.
+fn cycle_encounter(app: &mut App, n: usize) {
+    highlight(app, ArenaRowKind::Encounter);
+    for _ in 0..n {
+        app.handle_key(GameKey::Right);
+    }
+}
+
+#[test]
+fn cycling_to_a_rolled_encounter_hides_the_opponent_rows() {
+    // `Scenario::validate` refuses a file holding both, so the rows have to
+    // be gone rather than inert — the same rule the loadout rows follow.
+    let mut app = app_building(60, scenario(1, 1, &[("glitch", 1)], 0));
+
+    cycle_encounter(&mut app, 1);
+
+    let kinds = row_kinds(&app);
+    assert!(
+        !kinds.iter().any(|k| matches!(k, ArenaRowKind::Opponent(_))),
+        "{kinds:?}"
+    );
+    assert!(!kinds.contains(&ArenaRowKind::AddOpponent), "{kinds:?}");
+    assert!(
+        !row_labels(&app).iter().any(|l| l.starts_with("Against:")),
+        "{:?}",
+        row_labels(&app)
+    );
+    assert!(app.arena.as_ref().unwrap().scenario.opponents.is_empty());
+}
+
+#[test]
+fn cycling_back_to_authored_restores_an_opponent_row() {
+    // Every state the cycle can reach has to be one `save` will accept.
+    let mut app = app_building(61, scenario(1, 1, &[("glitch", 1)], 0));
+
+    cycle_encounter(&mut app, 3);
+
+    let s = &app.arena.as_ref().unwrap().scenario;
+    assert!(s.encounter.is_none());
+    assert_eq!(s.opponents.len(), 1);
+    assert!(row_kinds(&app).contains(&ArenaRowKind::AddOpponent));
+}
+
+#[test]
+fn a_stack_encounter_shows_a_depth_row_and_a_field_one_does_not() {
+    let mut app = app_building(62, scenario(1, 1, &[("glitch", 1)], 0));
+
+    cycle_encounter(&mut app, 1);
+    let field = row_kinds(&app);
+    assert!(field.contains(&ArenaRowKind::EncounterBiome), "{field:?}");
+    assert!(!field.contains(&ArenaRowKind::EncounterDepth), "{field:?}");
+
+    cycle_encounter(&mut app, 1);
+    let stack = row_kinds(&app);
+    assert!(stack.contains(&ArenaRowKind::EncounterDepth), "{stack:?}");
+
+    highlight(&mut app, ArenaRowKind::EncounterDepth);
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Left);
+    app.handle_key(GameKey::Left);
+    assert_eq!(
+        app.arena.as_ref().unwrap().scenario.encounter,
+        Some(Encounter::Stack {
+            biome: Biome::Mainframe,
+            depth: 1,
+        }),
+        "depth floors at 1, and the biome beside it is untouched"
+    );
+}
+
+#[test]
+fn the_biome_picker_offers_only_biomes_something_lives_in() {
+    // Read off the live species db rather than hardcoded, so the two
+    // clauses `habitat_pools` early-returns on are the two clauses here.
+    let mut app = app_building(63, scenario(1, 1, &[("glitch", 1)], 0));
+    cycle_encounter(&mut app, 1);
+
+    open_pick(&mut app, ArenaRowKind::EncounterBiome);
+
+    let rows = app.arena_pick_rows();
+    assert!(rows.contains(&"OpenGrid".to_string()), "{rows:?}");
+    assert!(
+        !rows.contains(&"Platform".to_string()),
+        "no species lives on a base slab: {rows:?}"
+    );
+    for unwalkable in ["DataVoid", "BlackIce"] {
+        assert!(
+            !rows.contains(&unwalkable.to_string()),
+            "{unwalkable} is a hole in the map: {rows:?}"
+        );
+    }
+}
+
+#[test]
+fn picking_a_biome_replaces_the_encounters_biome_and_keeps_its_depth() {
+    // The depth beside it is the tuning dial, the same rule the counts and
+    // levels already follow.
+    let mut app = app_building(64, scenario(1, 1, &[("glitch", 1)], 0));
+    cycle_encounter(&mut app, 2);
+    highlight(&mut app, ArenaRowKind::EncounterDepth);
+    for _ in 0..4 {
+        app.handle_key(GameKey::Right);
+    }
+
+    open_pick(&mut app, ArenaRowKind::EncounterBiome);
+    pick(&mut app, "NullSector");
+
+    assert_eq!(
+        app.arena.as_ref().unwrap().scenario.encounter,
+        Some(Encounter::Stack {
+            biome: Biome::NullSector,
+            depth: 5,
+        })
+    );
 }

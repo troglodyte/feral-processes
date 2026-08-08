@@ -441,6 +441,32 @@ fn a_forced_sweep_with_nothing_standing_is_a_no_op() {
     assert!(game.take_effects().is_empty());
 }
 
+/// The encounter trigger skips the spawn roll and nothing else, so what it
+/// places is drawn from the real habitat rules — biome pool, opening ring,
+/// cull and all.
+///
+/// Forced ten times rather than once because the landing tile is drawn from
+/// the seeded stream and may be unwalkable; the seed makes this
+/// deterministic, and the repeats keep it from turning on one unlucky tile.
+#[test]
+fn a_forced_encounter_spawns_without_waiting_for_the_roll() {
+    let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let count = |g: &mut Game| {
+        let mut q = g.world.query_filtered::<Entity, With<Hostile>>();
+        q.iter(&g.world).count()
+    };
+    let before = count(&mut game);
+
+    for _ in 0..10 {
+        game.dev_force_encounter();
+    }
+
+    assert!(
+        count(&mut game) > before,
+        "ten forced encounters placed nothing"
+    );
+}
+
 /// Destroying from the console has to go through the real destruction path,
 /// not just despawn the entity — a posted program left holding a `Task`
 /// pointing at a structure that no longer exists is precisely the state

@@ -492,7 +492,6 @@ impl Game {
     }
 
     pub(crate) fn maybe_spawn_wild_creature(&mut self) {
-        let player_pos = *self.world.get::<Position>(self.player_entity()).unwrap();
         let damp_pct = self.field_buff_power(self.player_entity(), FieldBuffKind::EncounterDamp);
         // Roll first: culling is wasted work if nothing was going to spawn.
         let roll = {
@@ -502,6 +501,27 @@ impl Game {
         if !roll {
             return;
         }
+        self.spawn_wild_nearby();
+    }
+
+    /// Places a wild spawn near the player now, skipping the roll — the dev
+    /// console's encounter trigger.
+    ///
+    /// Calls the same body the ambient spawn does, so the console cannot
+    /// disagree with the game about habitat pools, the opening ring or the
+    /// cull. Reachable only through the `FERAL_DEV_CONSOLE` gate.
+    #[doc(hidden)]
+    pub fn dev_force_encounter(&mut self) {
+        self.spawn_wild_nearby();
+    }
+
+    /// Everything a wild spawn *is*, once it has been decided one happens.
+    ///
+    /// `player_pos` is read here rather than before the roll so the split
+    /// costs no RNG draw: the roll does not use it, and the draw order after
+    /// it is untouched.
+    fn spawn_wild_nearby(&mut self) {
+        let player_pos = *self.world.get::<Position>(self.player_entity()).unwrap();
         let (dx, dy) = {
             let mut rng = self.world.resource_mut::<GameRng>();
             (

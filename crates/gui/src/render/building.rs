@@ -534,6 +534,8 @@ mod tests {
             can_work: false,
             can_trade: false,
             structure_worker: None,
+            is_posted_worker: false,
+            structure_guard: false,
             hp_fraction: None,
             level: None,
             durability: None,

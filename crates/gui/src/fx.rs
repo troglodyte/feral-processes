@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 use crate::paint::{Color, Painter};
 use crate::text::Metrics;
-use feral_processes_engine::{EffectKind, LogLine, MessageKind, VisualEffect};
+use feral_processes_engine::{EffectKind, Entity, LogLine, MessageKind, VisualEffect};
 
 /// Alpha a tile flash starts at, before fading linearly to nothing. Chosen
 /// to read against the dim tile backgrounds without hiding the glyph.
@@ -33,13 +33,15 @@ const SHIELD_PULSE_MIN: f32 = 0.06;
 const SHIELD_PULSE_MAX: f32 = 0.16;
 const SHIELD_PULSE_HZ: f64 = 0.5;
 
-/// How far the staffed mark lifts, how fast, and how far out of step each
-/// tile is from its neighbour (in turns per tile of `x + y`). The phase
-/// offset is the difference between a base that looks busy and one that
-/// looks like a single blinking screen artifact.
+/// How far the staffed mark lifts, how fast, and how far out of step two
+/// marks are (in turns per step of the phase key). The phase offset is the
+/// difference between a base that looks busy and one that looks like a
+/// single blinking screen artifact.
 const STAFFED_BOB_PX: f32 = 4.0;
 const STAFFED_BOB_HZ: f64 = 1.0;
-const STAFFED_BOB_TILE_PHASE: f64 = 0.15;
+const STAFFED_BOB_PHASE_STEP: f64 = 0.15;
+/// How many distinct phases marks are spread across before repeating.
+const PHASE_KEYS: u64 = 64;
 
 /// How fast the lagging "ghost" bar drains, in HP per second.
 const GHOST_DRAIN_PER_SECOND: f32 = 60.0;
@@ -116,8 +118,11 @@ fn shield_pulse_alpha(time: f64) -> f32 {
 /// `shield_pulse_alpha` uses: the mark's rest position is held off the
 /// tile's bottom edge by an inset `render/base.rs` documents as
 /// load-bearing, and a down-swing would spend it.
-fn staffed_bob_offset(time: f64, tile: (i32, i32)) -> f32 {
-    let turns = time * STAFFED_BOB_HZ + f64::from(tile.0 + tile.1) * STAFFED_BOB_TILE_PHASE;
+fn staffed_bob_offset(time: f64, phase_key: u64) -> f32 {
+    // Wrapped rather than used whole: an entity id climbs into the millions
+    // over a run, and a phase that large is both a needlessly big float and
+    // no more out of step than a small one.
+    let turns = time * STAFFED_BOB_HZ + (phase_key % PHASE_KEYS) as f64 * STAFFED_BOB_PHASE_STEP;
     STAFFED_BOB_PX * (1.0 - (turns * std::f64::consts::TAU).cos()) as f32 / 2.0
 }
 
@@ -257,16 +262,20 @@ impl Fx {
         Some(Color::new(0.4, 0.8, 1.0, shield_pulse_alpha(self.now)))
     }
 
-    /// How far to lift the "a program is posted here" mark this frame.
+    /// How far to lift the "someone is on this job" mark this frame.
     ///
-    /// Keyed by world tile rather than screen position so the phase belongs
-    /// to the place, and a mark doesn't shuffle its timing as the camera
-    /// pans across it.
-    pub fn staffed_bob(&self, tile: (i32, i32)) -> f32 {
+    /// Keyed by the entity wearing the mark, not by the tile it is standing
+    /// on. It used to be the tile, on the argument that the phase belongs to
+    /// the place — which was true while the only thing wearing a mark was a
+    /// building. A posted worker walks, so a tile key would re-phase the bob
+    /// on every step and read as a stutter each time the program moved.
+    /// Taking `Entity` rather than a pair is what stops a caller handing
+    /// back the tile.
+    pub fn staffed_bob(&self, entity: Entity) -> f32 {
         if !self.enabled {
             return 0.0;
         }
-        staffed_bob_offset(self.now, tile)
+        staffed_bob_offset(self.now, entity.to_bits())
     }
 
     /// One frame of the trailing "ghost" band behind an HP bar, tracked
@@ -578,7 +587,7 @@ mod tests {
     #[test]
     fn the_staffed_bob_only_ever_lifts_the_mark() {
         for i in 0..400 {
-            let dy = staffed_bob_offset(i as f64 * 0.02, (i % 7, i % 5));
+            let dy = staffed_bob_offset(i as f64 * 0.02, i % 7);
             assert!(
                 (0.0..=STAFFED_BOB_PX).contains(&dy),
                 "offset {dy} escaped the band"
@@ -586,15 +595,26 @@ mod tests {
         }
     }
 
-    /// Neighbouring tiles are deliberately out of step: a base full of marks
-    /// should read as separate workers, not one synchronised pulse.
+    /// Two marks are deliberately out of step: a base full of them should
+    /// read as separate workers, not one synchronised pulse.
     #[test]
-    fn adjacent_staffed_marks_bob_out_of_phase() {
-        let (a, b) = (
-            staffed_bob_offset(0.3, (4, 4)),
-            staffed_bob_offset(0.3, (5, 4)),
-        );
-        assert!((a - b).abs() > 0.1, "tiles moved in lockstep: {a} vs {b}");
+    fn two_staffed_marks_bob_out_of_phase() {
+        let (a, b) = (staffed_bob_offset(0.3, 4), staffed_bob_offset(0.3, 5));
+        assert!((a - b).abs() > 0.1, "marks moved in lockstep: {a} vs {b}");
+    }
+
+    /// The phase belongs to the program, not to the ground under it. A
+    /// posted worker walks a tile per tick, and a phase that reset on each
+    /// step would read as a stutter every time it moved.
+    #[test]
+    fn a_marks_phase_does_not_depend_on_where_it_is_standing() {
+        let mut fx = Fx::new();
+        fx.begin_frame(0.3, Vec::new(), false);
+        let worker = Entity::from_raw_u32(7).unwrap();
+        let before = fx.staffed_bob(worker);
+        // Same entity, same frame — the only thing a step changes is the
+        // tile, which this no longer reads.
+        assert_eq!(fx.staffed_bob(worker), before);
     }
 
     #[test]
@@ -602,6 +622,6 @@ mod tests {
         let mut fx = Fx::new();
         fx.begin_frame(0.3, Vec::new(), false);
         fx.enabled = false;
-        assert_eq!(fx.staffed_bob((4, 4)), 0.0);
+        assert_eq!(fx.staffed_bob(Entity::from_raw_u32(4).unwrap()), 0.0);
     }
 }

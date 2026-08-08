@@ -519,7 +519,14 @@ fn draw_surface_map(
     let entities: Vec<_> = game
         .view_entities(hw, hh)
         .into_iter()
-        .filter(|e| !e.is_tamed)
+        // Tamed programs are hidden unless the sim is actually keeping their
+        // `Position` honest, which for exactly one kind it is: a posted
+        // worker, walked to its post and on to a depot by `haul_step_system`.
+        // A guard, an idle program and a party member each keep whatever
+        // tile they were standing on when they took the job and are never
+        // moved again, so drawing them would scatter frozen glyphs around
+        // the base claiming to be somewhere they aren't.
+        .filter(|e| !e.is_tamed || e.is_posted_worker)
         .collect();
     let spawn_point = game.zone_spawn_point();
     let shield_outline = fx.shield_outline(game.raid_defense_active());
@@ -548,47 +555,84 @@ fn draw_surface_map(
             if px >= map_w || py >= map_h || px + tile_px <= 0.0 || py + tile_px <= 0.0 {
                 continue;
             }
-            let mut staffed = false;
             let mut machine_status = None;
             let mut linked_edges: &[(i32, i32)] = &[];
             let mut shielded = false;
             let mut critical = false;
-            let mut occupied = false;
+            // A structure and an actor genuinely share a tile now that
+            // posted workers are drawn: `place_structure` never makes its
+            // tile unwalkable, and a hauling program's route to a depot
+            // crosses the base slab. So the two are gathered separately
+            // rather than last-one-wins, which resolved by
+            // `view_entities` iteration order and would have flickered a
+            // worker in and out of existence as it walked over a machine.
+            let mut structure: Option<&EntityView> = None;
+            let mut actor: Option<&EntityView> = None;
+            let mut mark: Option<Entity> = None;
             for ev in &entities {
                 let erx = ev.pos.0 - status.position.0 + hw;
                 let ery = ev.pos.1 - status.position.1 + hh;
-                if erx == rx as i32 && ery == ry as i32 {
-                    ch = Some(ev.glyph);
-                    color = glyph_color(ev.color);
-                    staffed = ev.is_structure && ev.structure_worker.is_some();
-                    machine_status = ev.machine_status;
-                    linked_edges = &ev.linked_edges;
-                    // Structures wear their raid damage: the glyph dims as
-                    // durability drops, and a nearly-destroyed one washes
-                    // its tile red, so the base's condition reads at a
-                    // glance instead of only from the inspect menu.
-                    (color, critical) = fx.structure_condition(ev.durability, color);
-                    // Background follows the damage-dimmed *authored* colour,
-                    // deliberately taken before the status override below.
-                    // The tile wash already means raid damage — a clogged
-                    // machine tinting its tile red too would make a
-                    // half-destroyed one and a full buffer look alike.
-                    bg_source = color;
-                    // A machine's glyph is its state: the `$` of a Mining
-                    // Node reads green running, yellow starved, red clogged,
-                    // grey idle. Which structure it is stays legible from the
-                    // glyph itself, so the authored colour is only carrying
-                    // identity a machine can spare. Anything that runs no job
-                    // keeps its authored colour.
-                    //
-                    // Damage-tinted through the same call, so a battered
-                    // machine still dims rather than reading box-fresh.
-                    if let Some(status) = ev.machine_status {
-                        (color, _) = fx.structure_condition(ev.durability, machine_color(status));
-                    }
-                    shielded = ev.is_structure;
-                    occupied = true;
+                if erx != rx as i32 || ery != ry as i32 {
+                    continue;
                 }
+                if ev.is_structure {
+                    structure = Some(ev);
+                } else if !matches!(actor, Some(a) if a.is_player) {
+                    actor = Some(ev);
+                }
+                if if ev.is_structure {
+                    ev.structure_guard
+                } else {
+                    ev.is_posted_worker
+                } {
+                    mark = Some(ev.entity);
+                }
+            }
+            let occupied = structure.is_some() || actor.is_some();
+            if let Some(ev) = structure {
+                machine_status = ev.machine_status;
+                linked_edges = &ev.linked_edges;
+                shielded = true;
+                ch = Some(ev.glyph);
+                // Structures wear their raid damage: the glyph dims as
+                // durability drops, and a nearly-destroyed one washes
+                // its tile red, so the base's condition reads at a
+                // glance instead of only from the inspect menu.
+                let dimmed;
+                (dimmed, critical) = fx.structure_condition(ev.durability, glyph_color(ev.color));
+                // Background follows the damage-dimmed *authored* colour,
+                // deliberately taken before the status override below.
+                // The tile wash already means raid damage — a clogged
+                // machine tinting its tile red too would make a
+                // half-destroyed one and a full buffer look alike. Taken
+                // from the structure even when someone is standing on it:
+                // the wash is the building's condition, not the walker's.
+                bg_source = dimmed;
+                // A machine's glyph is its state: the `$` of a Mining
+                // Node reads green running, yellow starved, red clogged,
+                // grey idle. Which structure it is stays legible from the
+                // glyph itself, so the authored colour is only carrying
+                // identity a machine can spare. Anything that runs no job
+                // keeps its authored colour.
+                //
+                // Damage-tinted through the same call, so a battered
+                // machine still dims rather than reading box-fresh.
+                color = match ev.machine_status {
+                    Some(status) => {
+                        fx.structure_condition(ev.durability, machine_color(status))
+                            .0
+                    }
+                    None => dimmed,
+                };
+            }
+            // An actor takes the tile's glyph off a structure and never the
+            // other way round. The machine keeps every channel it has —
+            // status outline, chain links, shield, damage wash — and gives
+            // up only the glyph, which is the one thing that cannot show two
+            // things at once.
+            if let Some(ev) = actor {
+                ch = Some(ev.glyph);
+                color = glyph_color(ev.color);
             }
             let world = (
                 status.position.0 + rx as i32 - hw,
@@ -662,7 +706,7 @@ fn draw_surface_map(
             if let Some(color) = machine_status.map(machine_color) {
                 outline_open(painter, px, py, tile_px - 1.0, color, linked_edges);
             }
-            // "A program is posted here", on a channel of its own rather than
+            // "Someone is on this job", on a channel of its own rather than
             // sharing the outline with machine state. It was a yellow outline
             // until machines took that channel over, at which point a machine
             // could never show it at all — leaving grey `Idle` as the only
@@ -670,15 +714,24 @@ fn draw_surface_map(
             // that also carries three other things. Now the outline says what
             // the machine is doing and the mark says whether anyone is on it.
             //
-            // The two disagree on purpose for a posted guard: `structure_
-            // worker` counts any `Task` while `Idle` means specifically no
-            // `GatherResource` worker, so a guarded machine draws grey and
-            // marked, which is exactly the situation.
-            if staffed {
+            // The mark rides the *program* wherever it is, which is what
+            // makes a haul trip legible: the worker steps off its machine
+            // with the mark still bobbing over it, so it reads as away on an
+            // errand rather than as having quit. The machine says the same
+            // thing on its own channel meanwhile — `task_progress_system`
+            // sets `Unstaffed`, "its program is away."
+            //
+            // A structure wears the mark only for a posted *guard*, which is
+            // the one assignee that is never drawn (nothing ever walks a
+            // guard to its post, so its `Position` is wherever it happened to
+            // be standing). The rule is one sentence: the mark goes on the
+            // program when the program is visible, and on the structure when
+            // it isn't.
+            if let Some(marked) = mark {
                 let size = (tile_px - 1.0) * STAFFED_MARK;
                 painter.rect(
                     px + STAFFED_MARK_INSET,
-                    py + tile_px - 1.0 - STAFFED_MARK_INSET - size - fx.staffed_bob(world),
+                    py + tile_px - 1.0 - STAFFED_MARK_INSET - size - fx.staffed_bob(marked),
                     size,
                     size,
                     GREEN,

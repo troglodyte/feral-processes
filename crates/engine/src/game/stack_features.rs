@@ -73,7 +73,7 @@ impl Game {
         self.log_kind(MessageKind::Loot, "A cache, still sealed. You crack it.");
         // After the line that says what was taken, so a band crossing reads
         // as the consequence of cracking the cache rather than as something
-        // that happened first. `pass_seal` orders these the same way.
+        // that happened first. `force_seal` orders these the same way.
         self.raise_trace(TRACE_PER_CACHE);
         let landed = self.grant_loot(self.trade_currency(), credits);
         if landed > 0 {
@@ -108,13 +108,14 @@ impl Game {
         }
     }
 
-    /// Whether the party may walk into `cell`, opening a sealed door on the
-    /// way if they are carrying something that opens it.
+    /// Shoulders a sealed door on `cell` open as the party walks into it.
     ///
-    /// Spends the shard rather than keeping it, and records the door as open
-    /// so the way back out is free — a one-way vault that charged you again
-    /// on the return trip would be a tax on having gone in.
-    pub(crate) fn pass_seal(&mut self, pos: StackPos, cell: (i32, i32)) -> bool {
+    /// Nothing is spent — the seal is a barrier, not a lock, and the cost of
+    /// forcing it is the noise (`TRACE_PER_SEAL`) rather than an item. What
+    /// it does record is that this door now stands open, so the way back out
+    /// is drawn as a way out: a seal that re-shut behind the party would
+    /// redraw their own route as a wall.
+    pub(crate) fn force_seal(&mut self, pos: StackPos, cell: (i32, i32)) {
         let already_open = self
             .world
             .resource::<StackMemory>()
@@ -122,27 +123,15 @@ impl Game {
             .get(&(pos.entrance, pos.depth))
             .is_some_and(|m| m.opened.contains(&cell));
         if already_open {
-            return true;
+            return;
         }
 
-        let shard = ItemId::from(ids::ACCESS_SHARD);
-        let player = self.player_entity();
-        let spent = self
-            .world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .take(shard, 1);
-        if spent == 0 {
-            self.log("Sealed. The lock wants authorization you don't have.".to_string());
-            return false;
-        }
         self.frame_memory_mut(pos).opened.insert(cell);
         self.log_kind(
             MessageKind::Outcome,
-            "You burn an access shard. The seal releases.",
+            "You put your shoulder to the seal. It gives, loudly.",
         );
         self.raise_trace(TRACE_PER_SEAL);
-        true
     }
 
     /// Starts the boss fight if the party has just walked into an uncleared
@@ -216,7 +205,7 @@ impl Game {
             .map(|s| (s.id.clone(), false))
     }
 
-    /// Whether the sealed door on `cell` has already been burned open.
+    /// Whether the sealed door on `cell` has already been forced open.
     pub(crate) fn seal_open(&self, pos: StackPos, cell: (i32, i32)) -> bool {
         self.world
             .resource::<StackMemory>()

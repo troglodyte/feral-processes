@@ -199,4 +199,3 @@ until this page is regenerated -- edit the table at the top of
 [`docs/items-gen.py`](items-gen.py) and run `python3 docs/items-gen.py` from
 the repo root. The schema is documented in
 [`assets/items/README.md`](../assets/items/README.md).
-

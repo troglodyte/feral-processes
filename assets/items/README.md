@@ -218,8 +218,8 @@ disqualifies the whole file.
     // expected haul is the *sum* across the whole item set rather than a
     // pick from a list — adding a mod item with `cache_drop` makes caches
     // richer overall, it does not dilute what is already in them. Keep the
-    // numbers low for that reason: the shipped set totals a little over one
-    // item per cache.
+    // numbers low for that reason: the shipped set totals about one item
+    // per cache.
     //
     // Currencies are handled separately and are not declared here — every
     // cache pays depth-scaled Credits and rolls for a Portal Fragment, from

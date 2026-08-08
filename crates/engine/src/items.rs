@@ -54,9 +54,10 @@ pub mod ids {
     pub const MONOFILAMENT_WHIP: &str = "monofilament_whip";
     pub const ABLATIVE_PLATING: &str = "ablative_plating";
     pub const CORTEX_HACK: &str = "cortex_hack";
-    /// Spent opening a sealed Stack door — see `Game::unseal`. Named from
-    /// Rust because the door is engine content rather than a data-driven
-    /// requirement; the item itself is still an ordinary `.ron` file.
+    /// Dormant. It was what a sealed Stack door cost until the seal became
+    /// something the party simply shoulders open (`Game::force_seal`), and
+    /// nothing spends one now — the id is kept, and the item still ships,
+    /// against deciding what it is for instead.
     pub const ACCESS_SHARD: &str = "access_shard";
     /// Burnt to install a routine the player knows — see
     /// `Game::install_routine`. Named from Rust for the same reason

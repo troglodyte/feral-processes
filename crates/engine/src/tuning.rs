@@ -687,9 +687,10 @@ pub const STACK_DEPTH_STAT_GROWTH: f32 = 1.35;
 /// meter and the reward rise together.
 pub const TRACE_PER_CACHE: u32 = 10;
 
-/// Trace for burning a seal. Near-negligible in practice — a stack holds
-/// two, both on the bottom frame walling off the lair — but burning one
-/// costs an access shard, and a cost the player paid should register.
+/// Trace for forcing a seal. Near-negligible in practice — a stack holds
+/// two, both on the bottom frame walling off the lair — but shouldering one
+/// open is the loudest thing that happens on the way to the guardian, and
+/// since nothing else is spent doing it, the noise is the whole cost.
 pub const TRACE_PER_SEAL: u32 = 5;
 
 /// Trace for stopping to listen (`Game::listen`). Under a seal's 5, since

@@ -110,15 +110,18 @@ pub enum CellKind {
     /// reason it exists: a corridor that ends in a door reads as a decision
     /// rather than as more corridor.
     Door,
-    /// A door that will not open without an `ids::ACCESS_SHARD`. Seals the
-    /// lair off from the rest of the bottom frame, so the guardian is
-    /// something you have to earn your way to rather than stumble into.
+    /// A door heavy enough that it has to be shouldered open. Seals the lair
+    /// off from the rest of the bottom frame, so the guardian is something
+    /// you push your way into rather than stumble across.
+    ///
+    /// Costs nothing but noise (`TRACE_PER_SEAL`) — it is a barrier rather
+    /// than a lock, and there is no key.
     ///
     /// Walkable as far as the frame is concerned — connectivity, dead-end
     /// detection and placing the way down all have to see through it, or the
-    /// generator would treat a whole sealed wing as unreachable. Whether the
-    /// party may actually pass is `Game::step`'s business, and whether this
-    /// one has already been opened lives in `FrameMemory::opened`.
+    /// generator would treat a whole sealed wing as unreachable. Forcing one
+    /// is `Game::step`'s business, and whether this one already stands open
+    /// lives in `FrameMemory::opened`.
     SealedDoor,
     /// An exposed debug port. Walking onto one maps the whole frame at a
     /// stroke — and tells the stack exactly where you are, which is the

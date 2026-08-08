@@ -484,10 +484,13 @@ impl Game {
             .map(|level| level.cell(nx, ny))
             .unwrap_or(CellKind::Rock);
 
-        // A sealed door is walkable as far as the frame is concerned — the
-        // generator has to see through it — so the lock is checked here.
-        let walkable =
-            target.walkable() && (target != CellKind::SealedDoor || self.pass_seal(pos, (nx, ny)));
+        let walkable = target.walkable();
+        // A sealed door opens by being walked into, and the record of that
+        // has to be written before `remember_view` below draws the frame
+        // with the party standing in the doorway.
+        if walkable && target == CellKind::SealedDoor {
+            self.force_seal(pos, (nx, ny));
+        }
 
         if walkable && let Locale::Stack { x, y, .. } = &mut *self.world.resource_mut::<Locale>() {
             *x = nx;

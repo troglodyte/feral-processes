@@ -153,12 +153,11 @@ impl Game {
                             .entity_mut(entity)
                             .insert(AbilityCooldowns(cooldowns));
                     }
-                    // Directing a companion's ability still costs the player
-                    // fatigue, as commanding one always did — the action
-                    // moved into the round loop, the price didn't go away.
-                    if let Some(mut needs) = self.world.get_mut::<Needs>(player) {
-                        needs.fatigue = (needs.fatigue - ability.fatigue_cost).max(0.0);
-                    }
+                    // Nothing else is charged: the cooldown above is the whole
+                    // price of a Special, whoever runs it. Directing a
+                    // companion used to come out of the player's Fatigue,
+                    // which rationed the party's own kit against a pool only
+                    // the player had.
 
                     // Decompile needs the *group index*, not the recipient
                     // entity: a successful capture drops the target out of

@@ -192,11 +192,12 @@ pub struct SpecialOption {
     /// `Some(reason)` means render it greyed with the reason shown — same
     /// contract as `ActionOption::unavailable`.
     pub unavailable: Option<String>,
-    /// The player's Fatigue this costs to order, whoever runs it. Carried so
-    /// the picker can price a routine next to the Fatigue the roster shows,
-    /// rather than leaving `unavailable`'s "not enough Fatigue" to quote a
-    /// number nothing on screen names.
-    pub fatigue_cost: f32,
+    /// Battle rounds this locks itself away for once spent — the whole price
+    /// of a Special, since neither side pays a need for one. Carried so the
+    /// picker can say what a ready routine will cost before it is spent,
+    /// rather than only reporting it through `unavailable` once it is too
+    /// late to choose differently. 0 means no cooldown at all.
+    pub cooldown: u32,
 }
 
 /// One row of the ally picker — who a party-facing Special lands on. Same

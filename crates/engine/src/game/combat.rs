@@ -757,8 +757,13 @@ impl Game {
     }
 
     /// Why `entity` can't spend `ability` right now, or `None` if it can.
-    /// Both reasons are refused in `battle_set_action` too, so a greyed row
+    /// Every reason is refused in `battle_set_action` too, so a greyed row
     /// can never be planned and silently waste the member's round.
+    ///
+    /// A need is deliberately not among them: a Special is priced in its
+    /// cooldown alone, so an exhausted player is never barred from ordering
+    /// one. `AbilityDef::fatigue_cost` is read only by the two Stack field
+    /// routines, which refuse themselves in `Game::field_routines`.
     pub(crate) fn ability_unavailable(
         &self,
         entity: Entity,
@@ -782,14 +787,6 @@ impl Game {
             if self.pet_count() >= self.pet_capacity() {
                 return Some("roster is full".to_string());
             }
-        }
-        let fatigue = self
-            .world
-            .get::<Needs>(self.player_entity())
-            .map(|n| n.fatigue)
-            .unwrap_or(0.0);
-        if fatigue < ability.fatigue_cost {
-            return Some("not enough Fatigue".to_string());
         }
         None
     }
@@ -823,7 +820,7 @@ impl Game {
                 targeting: ability.target.targeting(),
                 sweeps_party: ability.target == AbilityTarget::WholeParty,
                 unavailable: self.ability_unavailable(entity, &ability),
-                fatigue_cost: ability.fatigue_cost,
+                cooldown: ability.cooldown,
             })
             .collect()
     }

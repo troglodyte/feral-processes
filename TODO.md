@@ -1,5 +1,4 @@
 # Todos
-[x] change map so it looks less like planet rpg map
 [ ] some ambiguity|routines for examining entities
 [ ] examine entities in stacks? (boss?)
 [ ] environment effects
@@ -9,7 +8,7 @@
 [ ] easter eggs (hidden commands & effects)
 [ ] remove 'move abilities' and use routines
     [ ] use entity as a weapon
-[x] factories have chests that programs can empty out full structures into
-    [x] see them moving around on the map
 [ ] save binaries so people don't have to compile the game
-
+[ ] show damage in line with messages on enemy, like bards tale attack sequence
+# Bugs
+[ ] entities do not draw from players stamina for specials, make all specials on cooldown, even players.

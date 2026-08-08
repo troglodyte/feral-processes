@@ -452,24 +452,28 @@ pub(super) fn draw_battle_special_menu(app: &mut App, painter: &Painter, m: &Met
     draw_popup("Pick a special", PopupSize::Large, &rows, painter, m);
 }
 
-/// One row of that picker: the routine, what it costs the player's Fatigue to
-/// order, what it does, and — greyed — why it can't be run right now.
+/// One row of that picker: the routine, how many rounds spending it locks it
+/// away for, what it does, and — greyed — why it can't be run right now.
 ///
-/// The price is shown because the engine's refusal for an unaffordable
-/// routine ("not enough Fatigue") names a number the player otherwise
-/// couldn't compare against anything; the Fatigue it is measured against is
-/// the FATIGUE column of the roster this popup sits over.
+/// The cooldown is shown because it is the entire price of a Special — no
+/// need is charged for one — so without it a player choosing between two
+/// ready routines has nothing to weigh them by. It reads as `2 rd` rather
+/// than repeating the refusal's "2 more rounds": one is what the routine
+/// will cost, the other what it is still costing.
 fn special_row(index: usize, option: &SpecialOption) -> String {
     let reason = option
         .unavailable
         .as_deref()
         .map(|r| format!(" ({r})"))
         .unwrap_or_default();
+    let price = match option.cooldown {
+        0 => String::new(),
+        rounds => format!("{rounds} rd — "),
+    };
     format!(
-        "[{}] {} — {:.0} FTG — {}{reason}",
+        "[{}] {} — {price}{}{reason}",
         index + 1,
         option.name,
-        option.fatigue_cost,
         option.detail,
     )
 }
@@ -808,7 +812,7 @@ mod tests {
     /// number the engine's refusal is talking about.
     #[test]
     fn a_special_row_prices_the_routine_and_carries_its_refusal() {
-        fn option(unavailable: Option<&str>) -> SpecialOption {
+        fn option(cooldown: u32, unavailable: Option<&str>) -> SpecialOption {
             SpecialOption {
                 index: 0,
                 name: "Cascade Overflow".to_string(),
@@ -816,17 +820,24 @@ mod tests {
                 targeting: feral_processes_engine::battle::SpecialTargeting::Enemy,
                 sweeps_party: false,
                 unavailable: unavailable.map(str::to_string),
-                fatigue_cost: 8.0,
+                cooldown,
             }
         }
 
         assert_eq!(
-            special_row(0, &option(None)),
-            "[1] Cascade Overflow — 8 FTG — Damage a whole group"
+            special_row(0, &option(2, None)),
+            "[1] Cascade Overflow — 2 rd — Damage a whole group"
         );
         assert_eq!(
-            special_row(2, &option(Some("not enough Fatigue"))),
-            "[3] Cascade Overflow — 8 FTG — Damage a whole group (not enough Fatigue)"
+            special_row(2, &option(2, Some("2 more rounds"))),
+            "[3] Cascade Overflow — 2 rd — Damage a whole group (2 more rounds)"
+        );
+        // Decompile is the one battle routine that arms nothing, and a
+        // price of zero is worse than no price at all — it reads as a
+        // number the player should be weighing.
+        assert_eq!(
+            special_row(0, &option(0, None)),
+            "[1] Cascade Overflow — Damage a whole group"
         );
     }
 

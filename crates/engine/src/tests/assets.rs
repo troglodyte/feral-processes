@@ -407,8 +407,10 @@ fn no_species_or_research_file_grants_a_wild_only_ability() {
 
 /// A cooldown is measured in battle rounds (`Game::wild_retaliate` ticks it
 /// down once per round a hostile carrier could have fired again), so it only
-/// means something for an ability that can enter a battle. A cooldown of 0
-/// there means a hostile carrier fires the routine every single round.
+/// means something for an ability that can enter a battle — but there it is
+/// now the *whole* price of a Special, on both sides. A battle ability with a
+/// cooldown of 0 is completely unthrottled: a hostile carrier fires it every
+/// single round, and the party side pays nothing else for it either.
 ///
 /// Two kinds of ability never enter a battle at all, so a cooldown on either
 /// would just be inert: `decompile`, the player's capture mechanism, which
@@ -435,7 +437,8 @@ fn every_shipped_ability_but_decompile_and_field_routines_has_a_cooldown() {
         }
         assert!(
             def.cooldown >= 1,
-            "ability {:?} has no cooldown, so a wild carrier would fire it every round",
+            "ability {:?} has no cooldown, so nothing throttles it at all — a wild \
+             carrier would fire it every round and the party could spam it",
             def.id
         );
     }

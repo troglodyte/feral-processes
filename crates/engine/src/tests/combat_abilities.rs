@@ -8,7 +8,7 @@ use crate::*;
 use super::support::*;
 use crate::tuning::{
     AFFINITY_MAX, AFFINITY_NEUTRAL, AFFINITY_PERK_BONUS_PER_LEVEL,
-    AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED, COMPANION_COMMAND_FATIGUE_COST,
+    AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED,
 };
 
 #[test]
@@ -337,8 +337,16 @@ fn cooldowns_do_not_survive_the_battle_that_set_them() {
     );
 }
 
+/// The bug this closes: a companion's routine came out of *your* Fatigue,
+/// so the party's own kit was rationed against a pool only the player had.
+/// A Special is now priced in its cooldown alone, whoever runs it.
+///
+/// `cascade_overflow` still declares `fatigue_cost: 8.0` — the field is live
+/// only on the two field routines now, and a battle ability's value is
+/// simply never read. This asserts that directly rather than trusting the
+/// files to be tidy.
 #[test]
-fn a_costly_ability_charges_its_own_fatigue_not_the_flat_command_cost() {
+fn a_companions_special_charges_the_player_no_fatigue() {
     let (mut game, sweeper) = game_with_a_sweeper();
     let player = game.player_entity();
     battle_with_a_pack_of(&mut game, 2, 500);
@@ -347,58 +355,59 @@ fn a_costly_ability_charges_its_own_fatigue_not_the_flat_command_cost() {
     companion_uses_special(
         &mut game,
         sweeper,
-        0, // cascade_overflow declares fatigue_cost 8.0
+        0,
         battle::SpecialTarget::EnemyGroup { group: 0 },
     );
     let spent = before - game.world.get::<Needs>(player).unwrap().fatigue;
 
     assert!(
-        spent > COMPANION_COMMAND_FATIGUE_COST,
-        "cascade_overflow's 8.0 must cost more than the flat 5.0 default, spent {spent}"
+        spent <= 0.0,
+        "a commanded routine must take nothing off the player; the round's own \
+         regen is the only movement allowed, spent {spent}"
     );
 }
 
 #[test]
-fn an_ability_costing_more_fatigue_than_you_have_is_unavailable() {
+fn a_player_out_of_fatigue_can_still_command_a_routine() {
     let (mut game, sweeper) = game_with_a_sweeper();
     let player = game.player_entity();
     battle_with_a_pack_of(&mut game, 2, 500);
-    game.world.get_mut::<Needs>(player).unwrap().fatigue = 1.0;
+    game.world.get_mut::<Needs>(player).unwrap().fatigue = 0.0;
 
     let options = game.battle_special_options(1);
-    assert!(
-        options[1].unavailable.is_some(),
-        "broadcast_storm costs 15.0 Fatigue and must be refused at 1.0"
+    assert_eq!(
+        options[1].unavailable, None,
+        "an empty Fatigue pool no longer refuses anything in battle"
     );
     let _ = sweeper;
 }
 
-/// The refusal above quotes a price the picker never printed, so a player
-/// who couldn't afford a routine had no way to find out what it wanted. The
-/// cost travels on the option for the same reason the reason does: neither
-/// renderer gets to author it.
+/// The cooldown is the only price a Special has, so the picker has to name
+/// it: a player choosing between two ready routines otherwise can't tell the
+/// one they can repeat next round from the one that locks itself away for
+/// five. It travels on the option for the same reason the reason does —
+/// neither renderer gets to author it.
 #[test]
-fn a_special_option_carries_the_fatigue_it_would_spend() {
+fn a_special_option_carries_the_cooldown_it_would_arm() {
     let (mut game, _) = game_with_a_sweeper();
     battle_with_a_pack_of(&mut game, 2, 500);
 
     let options = game.battle_special_options(1);
     assert_eq!(
-        options[0].fatigue_cost, 8.0,
-        "cascade_overflow declares fatigue_cost 8.0"
+        options[0].cooldown, 2,
+        "cascade_overflow declares cooldown 2"
     );
     assert_eq!(
-        options[1].fatigue_cost, 15.0,
-        "broadcast_storm declares fatigue_cost 15.0"
+        options[1].cooldown, 4,
+        "broadcast_storm declares cooldown 4"
     );
 }
 
-/// Fatigue prices every routine the player side runs and refuses the ones
-/// they can't afford, and the battle screen was the one place it wasn't
-/// shown. It rides on the party slot rather than on the view as a whole
-/// because the roster shows it as a per-member column — and only the player
-/// has `Needs`, so a companion's cell is honestly empty rather than a second
-/// copy of the player's number.
+/// Fatigue no longer prices anything in battle, but it is still a need the
+/// roster shows and still what the Stack's field routines spend. It rides on
+/// the party slot because the roster shows it as a per-member column — and
+/// only the player has `Needs`, so a companion's cell is honestly empty
+/// rather than a second copy of the player's number.
 #[test]
 fn the_battle_view_carries_the_players_fatigue_and_no_one_elses() {
     let (mut game, sweeper) = game_with_a_sweeper();
@@ -410,7 +419,7 @@ fn the_battle_view_carries_the_players_fatigue_and_no_one_elses() {
     assert_eq!(
         view.party[0].fatigue,
         Some(62.0),
-        "slot 0 is the player, whose Fatigue is what every routine spends"
+        "slot 0 is the player, the only party member with a need to show"
     );
     assert_eq!(
         view.party[1].entity, sweeper,
@@ -578,15 +587,16 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
     );
 }
 
-/// Commanding an ability spends the *player's* Fatigue, which is what keeps
-/// a top-tier routine a budget decision rather than a free extra action.
+/// "Even players": the player's own installed routine is priced in its
+/// cooldown too, and spends no Fatigue — `null_route` is the deepest
+/// researched routine in the shipped tree and still charges nothing.
 ///
-/// Measured against a control round rather than against the raw cost: a
-/// round of any kind hands back a little Fatigue on its own (`tick_needs`
-/// regen), so the ability's price is the difference between a Special round
-/// and a Defend one.
+/// Measured against a control round rather than against zero: a round of any
+/// kind hands back a little Fatigue on its own (`tick_needs` regen), so what
+/// the ability costs is the difference between a Special round and a Defend
+/// one, and that difference must be nothing.
 #[test]
-fn a_player_special_spends_the_players_fatigue_once() {
+fn a_player_special_spends_no_fatigue() {
     fn round_cost(action: BattleAction) -> f32 {
         let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         unlock_research_chain(&mut game, "kernel_privileges");
@@ -620,10 +630,10 @@ fn a_player_special_spends_the_players_fatigue_once() {
         .iter()
         .position(|a| a.id == "null_route")
         .expect("kernel_privileges grants null_route");
-    let cost = abilities[index].fatigue_cost;
     assert!(
-        cost > 0.0,
-        "null_route is the first researched routine that costs Fatigue"
+        abilities[index].fatigue_cost > 0.0,
+        "null_route still declares a fatigue_cost — the point is that nothing \
+         in battle reads it"
     );
 
     let idle = round_cost(BattleAction::Defend);
@@ -632,7 +642,10 @@ fn a_player_special_spends_the_players_fatigue_once() {
         target: battle::SpecialTarget::AllEnemies,
     });
 
-    assert_eq!(special - idle, cost, "charged exactly once, and to you");
+    assert_eq!(
+        special, idle,
+        "running your own routine must cost exactly what bracing costs"
+    );
 }
 
 /// The player's installed routines are carried in `data.player.routines`,

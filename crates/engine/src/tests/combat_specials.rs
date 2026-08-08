@@ -1,7 +1,6 @@
 //! Companion special abilities: the menus that offer them and the buffs they apply.
 
 use super::support::*;
-use crate::tuning::COMPANION_COMMAND_FATIGUE_COST;
 use crate::*;
 
 #[test]
@@ -54,20 +53,22 @@ fn a_companions_special_rallies_the_player_instead_of_attacking() {
     );
 }
 
+/// A companion acting costs the player nothing at all — the routine's own
+/// cooldown is the whole price of a Special.
+///
+/// Measured against a stunned companion, which is commanded and then does
+/// not act: both paths advance the clock by one tick (a resolved round always
+/// ticks at the end), so both take the same small natural fatigue regen back
+/// regardless. Comparing the two deltas isolates whatever the *acting* costs
+/// from that shared regen, and the answer must now be nothing.
 #[test]
-fn commanding_a_companion_in_battle_costs_more_fatigue_than_a_stunned_one() {
-    // Both paths advance the clock by one tick (a resolved round always
-    // ticks at the end), so both take the same small natural fatigue regen
-    // back regardless — comparing the two deltas rather than asserting an
-    // absolute number isolates just the companion-command cost from that
-    // shared per-tick regen.
+fn commanding_a_companion_in_battle_costs_no_fatigue() {
     let active = fatigue_spent_commanding_companion(84, false);
     let stunned = fatigue_spent_commanding_companion(85, true);
     assert!(
-        (active - stunned - COMPANION_COMMAND_FATIGUE_COST).abs() < 0.001,
-        "commanding an active companion should cost exactly {COMPANION_COMMAND_FATIGUE_COST} \
-         more fatigue than commanding a stunned one, which doesn't actually act: \
-         active spent {active}, stunned spent {stunned}"
+        (active - stunned).abs() < 0.001,
+        "a companion acting must cost the player exactly what a stunned one \
+         costs, which is nothing: active spent {active}, stunned spent {stunned}"
     );
 }
 

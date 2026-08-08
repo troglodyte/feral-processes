@@ -14,6 +14,7 @@
 //! game's own All-Attack, which fires no companion Specials. An arena number
 //! is a floor on the party's output, the same gap `balance_sim` has.
 
+mod encounter;
 mod report;
 mod run;
 mod scenario;
@@ -142,7 +143,12 @@ pub fn stage(scenario: &Scenario, assets_dir: &Path, seed: u64) -> Result<Staged
     game.world
         .insert_resource(GameRng(StdRng::seed_from_u64(seed)));
 
-    let (groups, warnings) = setup::build_opponents(&mut game, &scenario.opponents)?;
+    let (groups, warnings) = match &scenario.encounter {
+        // A rolled encounter warns about nothing: nothing was asked for past
+        // a ceiling, because nothing was asked for.
+        Some(encounter) => (encounter::roll(&mut game, encounter)?, Vec::new()),
+        None => setup::build_opponents(&mut game, &scenario.opponents)?,
+    };
 
     // The arena's output is the blow-by-blow, so the prune that keeps a map
     // pane readable has nothing to do here — and it deletes the lines
@@ -326,6 +332,69 @@ mod tests {
         };
 
         assert_ne!(hp(1), hp(999));
+    }
+
+    fn a_rolled_scenario(reps: u32, seed: u64) -> Scenario {
+        Scenario {
+            player: PlayerSource::Fresh { level: 10, zone: 3 },
+            encounter: Some(Encounter::Stack {
+                biome: crate::world::Biome::OpenGrid,
+                depth: 3,
+            }),
+            reps,
+            seed,
+            ..Scenario::default()
+        }
+    }
+
+    #[test]
+    fn staging_a_rolled_encounter_opens_a_fight_with_no_warnings() {
+        let staged = stage(&a_rolled_scenario(1, 4), &test_assets_dir(), 4).unwrap();
+
+        assert!(staged.game.has_active_battle());
+        assert_eq!(staged.watch.rounds(), 0);
+        assert!(staged.warnings.is_empty(), "{:?}", staged.warnings);
+    }
+
+    #[test]
+    fn staging_then_running_a_rolled_encounter_matches_at_the_same_seed() {
+        // The same property `staging_then_running_matches_run_at_the_same_
+        // seed` asserts for an authored fight, and it matters more here: the
+        // played half and the measured half must roll the *same pack*, not
+        // merely the same battle.
+        let s = a_rolled_scenario(1, 40);
+        let report = run(&s, &test_assets_dir()).unwrap();
+
+        assert_eq!(report.reps[0], test_fight(&s, 40));
+    }
+
+    #[test]
+    fn a_lost_stack_fight_is_not_reported_as_a_win() {
+        // `Watch` reads "won" off the opponents, and `end_battle` despawns
+        // whatever still carries `StackSpawn` — so a swept pack and a wiped
+        // one look identical from outside, and a flattened level-1 player
+        // read back as having cleared a depth-6 ambush.
+        let s = Scenario {
+            player: PlayerSource::Fresh { level: 1, zone: 6 },
+            encounter: Some(Encounter::Stack {
+                biome: crate::world::Biome::NullSector,
+                depth: 6,
+            }),
+            reps: 5,
+            seed: 1,
+            ..Scenario::default()
+        };
+        let report = run(&s, &test_assets_dir()).unwrap();
+
+        assert!(
+            report.reps.iter().all(|r| !r.won),
+            "a bare level-1 player cleared a depth-6 pack: {:?}",
+            report
+                .reps
+                .iter()
+                .map(|r| (r.seed, r.won))
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]

@@ -29,6 +29,59 @@ first, separated by a rule.
 
 ## Unreleased
 
+## 0.5.4
+
+### Structures throw sparks when a sweep hits them
+
+A GC Entropy Sweep used to be a coloured wash over a tile and a line in the
+log. Damage and destruction now throw debris: streaks flung outward from the
+tile, decelerating and fading, twenty of them when a structure comes down and
+fourteen when one merely takes a hit.
+
+The two bursts are shaped differently on purpose. A structure coming down
+throws wreckage over its neighbours — 3.2 tiles, over 0.7 seconds. A hit stays
+inside its own tile, and that bound is not decoration: a sweep lands a hit on
+every structure it damages, so debris that crossed tile edges would turn a
+raid on a large base into a solid sheet rather than a series of impacts. With
+reach spoken for, a hit's weight comes from its count and its lifetime.
+
+Each spark's trail is tied to how fast it is actually travelling, so a burst
+opens with long streaks and settles into short ones. A fixed length reads as a
+ring of dashes sliding outward rather than as something thrown.
+
+Nothing about this is engine state. The sparks are derived from the flash
+records the renderer already kept, so they share a flash's colour, lifetime
+and retirement for free, and the scatter is a hash of tile and spark index
+with no time term — which is what structurally prevents a burst re-rolling its
+own shape every frame.
+
+### A dev console, behind `FERAL_DEV_CONSOLE`
+
+Provoking a sweep in play means waiting on a 1.2%-per-tick roll, and wearing a
+single structure down to nothing takes hundreds of them. That cost is why
+visual work ships unplayed, so there is now a keypad for it: `` ` `` on the map
+opens five rows — force a sweep, damage the nearest structure, destroy it,
+spawn a wild encounter, or burn 25 cycles.
+
+Gated by an environment variable, like `FERAL_DEV_ARENA` and
+`FERAL_DEV_REVEAL` before it, and unreachable in a build a player runs.
+
+Every row calls the same code the game calls. `raid_check` and
+`maybe_spawn_wild_creature` were split into a roll and a body, and the console
+fires the body — so what it puts on screen is evidence about the game rather
+than about the console. The damage row takes a percentage of maximum
+Durability and is held one short of lethal, because the point of it is to be
+pressed repeatedly at the thing you are watching.
+
+### The base slab's corners, on saves that predate them
+
+`0.5.3` chamfered the base platform, and a save written before it kept its
+square slab — the cut is applied when the floor is stamped, and loading
+restores a zone map verbatim. No migration is needed and none was added:
+breaching re-stamps the slab at the new spawn point through the same
+predicate, so a legacy base is repaired by the next zone. That is now pinned
+by a test, since it is the reason not to write the migration.
+
 ## 0.5.3
 
 ### The base slab has its corners cut

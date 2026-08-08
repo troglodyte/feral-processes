@@ -3,6 +3,7 @@
 mod support;
 
 mod achievements;
+mod arena;
 mod battle;
 mod building;
 mod field;

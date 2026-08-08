@@ -67,6 +67,9 @@ impl App {
             reveal: BattleReveal::default(),
             status_age: 0.0,
             last_realtime_tick: Instant::now(),
+            arena: None,
+            arena_enabled: crate::app::arena::dev_arena_enabled(),
+            dev_templates: None,
         }
     }
 

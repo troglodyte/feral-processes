@@ -29,6 +29,7 @@ pub const DEV_CONSOLE_TICKS: u32 = 25;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum DevAction {
     Sweep,
+    DamageStructure,
     DestroyStructure,
     Encounter,
     AdvanceTicks,
@@ -50,6 +51,13 @@ const DEV_ROWS: &[DevConsoleRow] = &[
     DevConsoleRow {
         label: "Trigger GC Entropy Sweep",
         action: DevAction::Sweep,
+    },
+    // Above its destroying sibling because it is the one that can be held
+    // down: a structure survives every press, so this is the row for
+    // watching the damage effect rather than catching it once.
+    DevConsoleRow {
+        label: "Damage nearest structure",
+        action: DevAction::DamageStructure,
     },
     DevConsoleRow {
         label: "Destroy nearest structure",
@@ -124,6 +132,7 @@ impl App {
         };
         match action {
             DevAction::Sweep => game.dev_force_raid(),
+            DevAction::DamageStructure => game.dev_damage_structure(),
             DevAction::DestroyStructure => game.dev_destroy_structure(),
             DevAction::Encounter => game.dev_force_encounter(),
             DevAction::AdvanceTicks => {

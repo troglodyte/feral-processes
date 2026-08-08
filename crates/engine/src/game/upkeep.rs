@@ -6,6 +6,17 @@ use crate::tuning::{
 };
 use crate::*;
 
+/// How much of a structure's *maximum* Durability one forced hit takes.
+///
+/// A percentage rather than a flat figure so the row behaves the same on a
+/// Home as on a Mining Node, and so repeated presses converge on 1 HP rather
+/// than eventually destroying the thing being watched — see
+/// `repeated_forced_hits_never_destroy_the_structure`.
+///
+/// Deliberately not in `tuning.rs`: that file is how hard the game is, and
+/// nothing a player can reach reads this.
+pub(crate) const DEV_HIT_DAMAGE_PERCENT: u32 = 25;
+
 impl Game {
     /// Repairs damaged structures — every `STRUCTURE_REGEN_INTERVAL` ticks,
     /// every structure below max `Durability` recovers whatever the base's
@@ -170,22 +181,7 @@ impl Game {
     /// of ticks: sweeps pick a random target and do `RAID_DAMAGE` at a time.
     #[doc(hidden)]
     pub fn dev_destroy_structure(&mut self) {
-        let Some(at) = self.world.get::<Position>(self.player_entity()).copied() else {
-            return;
-        };
-        let mut targets: Vec<(Entity, i32)> = {
-            let mut query = self
-                .world
-                .query_filtered::<(Entity, &Position), (With<Durability>, Without<Nest>)>();
-            query
-                .iter(&self.world)
-                .map(|(e, p)| (e, (p.x - at.x).abs() + (p.y - at.y).abs()))
-                .collect()
-        };
-        // By distance, then by id, so a tie resolves the same way every
-        // press rather than on bevy's query iteration order.
-        targets.sort_by_key(|(e, d)| (*d, e.to_bits()));
-        let Some((target, _)) = targets.first().copied() else {
+        let Some(target) = self.nearest_damageable_structure() else {
             return;
         };
         let label = self.entity_label(target);
@@ -195,6 +191,51 @@ impl Game {
             .map(|d| d.hp)
             .unwrap_or(0);
         self.damage_structure(target, hp, &label);
+    }
+
+    /// Wounds the structure nearest the player without destroying it, which
+    /// is the only way to reach the `EffectKind::Hit` branch on demand —
+    /// `dev_destroy_structure` deals full `Durability` and so always lands
+    /// on `Destroyed`.
+    #[doc(hidden)]
+    pub fn dev_damage_structure(&mut self) {
+        let Some(target) = self.nearest_damageable_structure() else {
+            return;
+        };
+        let Some(durability) = self.world.get::<Durability>(target).copied() else {
+            return;
+        };
+        // Held one short of lethal rather than clamped after the fact: the
+        // row exists to be pressed repeatedly at the thing you are watching,
+        // and a press that destroyed it would end the very effect it is
+        // there to show.
+        let dmg = (durability.max_hp * DEV_HIT_DAMAGE_PERCENT / 100)
+            .max(1)
+            .min(durability.hp.saturating_sub(1));
+        let label = self.entity_label(target);
+        self.damage_structure(target, dmg, &label);
+    }
+
+    /// The structure a dev trigger acts on: nearest to the player, ties
+    /// broken by id so a press resolves the same way every time rather than
+    /// on bevy's query iteration order.
+    ///
+    /// `Without<Nest>` because a nest carries `Durability` too and is not
+    /// part of the base — a trigger meant for a machine must not quietly
+    /// pick the wildlife.
+    fn nearest_damageable_structure(&mut self) -> Option<Entity> {
+        let at = self.world.get::<Position>(self.player_entity()).copied()?;
+        let mut targets: Vec<(Entity, i32)> = {
+            let mut query = self
+                .world
+                .query_filtered::<(Entity, &Position), (With<Durability>, Without<Nest>)>();
+            query
+                .iter(&self.world)
+                .map(|(e, p)| (e, (p.x - at.x).abs() + (p.y - at.y).abs()))
+                .collect()
+        };
+        targets.sort_by_key(|(e, d)| (*d, e.to_bits()));
+        targets.first().map(|(e, _)| *e)
     }
 
     pub(crate) fn raid_check(&mut self) {

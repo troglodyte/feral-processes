@@ -97,7 +97,10 @@ const DESTROYED_SPARK_REACH: f32 = 3.2;
 /// however loud the rest of this gets — a sweep lands one of these on every
 /// structure it damages, and neighbours' debris overlapping would turn a
 /// raid on a large base into a solid sheet.
-const HIT_SPARKS: u32 = 9;
+/// With the reach pinned under a tile, the count and the lifetime are where
+/// a hit's drama has to come from — fourteen sparks inside one tile read as
+/// a structure spitting debris where five read as a smudge.
+const HIT_SPARKS: u32 = 14;
 const HIT_SPARK_REACH: f32 = 0.95;
 /// How long a spark's streak is drawn at full speed, in tiles, and how
 /// thick. The drawn length is this scaled by `spark_streak`.

@@ -1,6 +1,7 @@
 //! Raids against the base — damage, shields, guards, effects, and regeneration.
 
 use super::support::*;
+use crate::game::upkeep::DEV_HIT_DAMAGE_PERCENT;
 use crate::tuning::{NEST_DURABILITY, RAID_DAMAGE, RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_INTERVAL};
 use crate::*;
 
@@ -420,6 +421,70 @@ fn a_forced_sweep_hits_a_structure_without_waiting_for_the_roll() {
         "a forced sweep should resolve exactly one raid"
     );
     assert_eq!(effects[0].pos, (5, 5));
+}
+
+/// The surviving-hit burst is unreachable from the console without this.
+/// `dev_destroy_structure` deals full `Durability`, so it always takes the
+/// `Destroyed` branch — every press showed the wreckage effect and none
+/// could ever show the damage one.
+#[test]
+fn a_forced_hit_leaves_the_structure_standing_and_throws_a_hit_effect() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let target = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+            Durability { hp: 30, max_hp: 30 },
+        ))
+        .id();
+
+    game.dev_damage_structure();
+
+    let hp = game.world.get::<Durability>(target).map(|d| d.hp);
+    assert_eq!(
+        hp,
+        Some(30 - (30 * DEV_HIT_DAMAGE_PERCENT / 100)),
+        "a forced hit should wound the structure, not flatten it"
+    );
+    let effects = game.take_effects();
+    assert_eq!(effects.len(), 1);
+    assert_eq!(effects[0].kind, EffectKind::Hit);
+    assert_eq!(effects[0].pos, (5, 5));
+}
+
+/// Pressed repeatedly, which is what anyone watching an effect actually
+/// does. Percentage damage on a survivor can never reach 0, so the row
+/// keeps throwing hits rather than eventually destroying the thing being
+/// watched — and a structure already at 1 HP still has to register.
+#[test]
+fn repeated_forced_hits_never_destroy_the_structure() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let target = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+            Durability { hp: 30, max_hp: 30 },
+        ))
+        .id();
+
+    for press in 0..40 {
+        game.dev_damage_structure();
+        let hp = game
+            .world
+            .get::<Durability>(target)
+            .unwrap_or_else(|| panic!("destroyed on press {press}"))
+            .hp;
+        assert!(hp >= 1, "press {press} left it at {hp}");
+        let effects = game.take_effects();
+        assert_eq!(effects.len(), 1, "press {press} threw no effect");
+        assert_eq!(effects[0].kind, EffectKind::Hit, "press {press}");
+    }
 }
 
 /// A base with nothing raidable standing must not panic or half-fire — the

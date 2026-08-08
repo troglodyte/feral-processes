@@ -80,6 +80,23 @@ fn every_console_row_has_a_label_and_the_selection_stays_in_range() {
     }
 }
 
+/// Rows are dispatched by their `action`, so two rows sharing one is a row
+/// that silently cannot be reached — the copy-paste mistake this table
+/// invites, and invisible on screen because both labels still draw.
+#[test]
+fn no_two_console_rows_fire_the_same_action() {
+    let rows = App::dev_console_rows();
+    for (i, row) in rows.iter().enumerate() {
+        for other in &rows[i + 1..] {
+            assert_ne!(
+                row.action, other.action,
+                "'{}' and '{}' both fire {:?}",
+                row.label, other.label, row.action
+            );
+        }
+    }
+}
+
 /// The one trigger whose effect app-core can see for itself: needs decay
 /// every tick, so burning cycles has to move them.
 #[test]

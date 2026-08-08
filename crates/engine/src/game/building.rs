@@ -32,9 +32,7 @@ impl Game {
 
         if structure_id != HOME_STRUCTURE_ID {
             let home = self.home_position().expect("checked above: a Home exists");
-            if (x - home.x).abs() > MAX_BUILD_DISTANCE_FROM_HOME
-                || (y - home.y).abs() > MAX_BUILD_DISTANCE_FROM_HOME
-            {
+            if !Platform::covers(x - home.x, y - home.y) {
                 return Err(format!(
                     "Too far from Home — structures must be built within {MAX_BUILD_DISTANCE_FROM_HOME} tiles of it."
                 ));

@@ -14,8 +14,8 @@ fn placing_a_home_stamps_a_walkable_platform_across_the_build_radius() {
     let mut map = game.world.resource_mut::<WorldMap>();
     for (dx, dy) in [
         (0, 0),
-        (MAX_BUILD_DISTANCE_FROM_HOME, MAX_BUILD_DISTANCE_FROM_HOME),
-        (-MAX_BUILD_DISTANCE_FROM_HOME, MAX_BUILD_DISTANCE_FROM_HOME),
+        (MAX_BUILD_DISTANCE_FROM_HOME, 0),
+        (0, -MAX_BUILD_DISTANCE_FROM_HOME),
     ] {
         let tile = map.tile(hx + dx, hy + dy);
         assert_eq!(
@@ -30,6 +30,70 @@ fn placing_a_home_stamps_a_walkable_platform_across_the_build_radius() {
         Biome::Platform,
         "one tile past the build radius should still be natural terrain"
     );
+}
+
+/// The slab is a chamfered box, not the square it was until the corners were
+/// cut: `PLATFORM_CORNER_CUT` diagonal steps come off each of the four, so
+/// the corner tile and the two beside it are natural terrain. Checked at all
+/// four corners because `Platform::covers` works in absolute values and a
+/// sign error would round three of them and leave one square.
+#[test]
+fn the_base_slab_has_its_corners_cut() {
+    let mut game = Game::new(925, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    place_home(&mut game, 0, 1);
+    let (hx, hy) = (ppos.x, ppos.y + 1);
+    let r = MAX_BUILD_DISTANCE_FROM_HOME;
+
+    let mut map = game.world.resource_mut::<WorldMap>();
+    for (sx, sy) in [(1, 1), (1, -1), (-1, 1), (-1, -1)] {
+        for (dx, dy) in [(r, r), (r - 1, r), (r, r - 1)] {
+            let (dx, dy) = (dx * sx, dy * sy);
+            assert_ne!(
+                map.tile(hx + dx, hy + dy).biome,
+                Biome::Platform,
+                "({dx}, {dy}) is inside the cut corner and should be natural terrain"
+            );
+        }
+        // The tiles the cut stops at, so a deeper chamfer can't pass by
+        // asserting only on what was removed.
+        for (dx, dy) in [(r - 2, r), (r - 1, r - 1), (r, r - 2)] {
+            let (dx, dy) = (dx * sx, dy * sy);
+            assert_eq!(
+                map.tile(hx + dx, hy + dy).biome,
+                Biome::Platform,
+                "({dx}, {dy}) is the first tile past the cut and should be platform floor"
+            );
+        }
+    }
+}
+
+/// The cut is footprint, not paint: `place_structure` measures against the
+/// same `Platform::covers`, so a tile with no floor under it has nothing
+/// standing on it either. Without this the build box stays square and a
+/// machine can hang off the rounded corner onto wild ground.
+#[test]
+fn a_cut_corner_is_not_buildable() {
+    let mut game = Game::new(926, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "armor_bench");
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 40);
+    place_home(&mut game, 0, 0);
+    let r = MAX_BUILD_DISTANCE_FROM_HOME;
+
+    let err = game
+        .place_structure("armory", r, r)
+        .expect_err("the corner tile is off the slab and shouldn't be buildable");
+    assert!(err.contains("Too far from Home"), "unexpected error: {err}");
+
+    // Diagonally in by one, which is the first tile the chamfer leaves —
+    // and the assertion that stops the cut being fixed by shrinking the
+    // whole build box.
+    game.place_structure("armory", r - 1, r - 1)
+        .expect("the tile just inside the cut is slab and should be buildable");
 }
 
 #[test]

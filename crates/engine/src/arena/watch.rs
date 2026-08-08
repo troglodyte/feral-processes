@@ -7,6 +7,7 @@
 //! rather than off the player.
 
 use super::report::RepRecord;
+use crate::battle::EnemyGroup;
 use crate::*;
 
 /// Attached to a staged fight, fed one call per resolved round.
@@ -15,6 +16,7 @@ pub struct Watch {
     player: Entity,
     party: Vec<Entity>,
     opponents: Vec<Entity>,
+    composition: Vec<(String, u32)>,
     level: u32,
     hp_fraction: f32,
     rounds: u32,
@@ -24,13 +26,23 @@ pub struct Watch {
 impl Watch {
     /// `pub(crate)` so only `stage` may build one — a `Watch` holding
     /// entities from a different fight would report on a fight nobody had.
-    pub(crate) fn new(game: &Game, seed: u64, opponents: Vec<Entity>) -> Self {
+    ///
+    /// Takes the groups rather than a flattened member list so that who the
+    /// opponents are and what the composition was cannot disagree. Built
+    /// before `begin_battle` for the same reason the member list was noted
+    /// there: `BattleState` owns the groups afterwards. Nothing read here is
+    /// touched by opening the battle.
+    pub(crate) fn new(game: &Game, seed: u64, groups: &[EnemyGroup]) -> Self {
         let player = game.player_entity();
         Self {
             seed,
             player,
             party: game.world.resource::<Party>().0.clone(),
-            opponents,
+            opponents: groups.iter().flat_map(|g| g.members.clone()).collect(),
+            composition: groups
+                .iter()
+                .map(|g| (g.species.clone(), g.members.len() as u32))
+                .collect(),
             level: level_of(game, player),
             hp_fraction: hp_fraction_of(game, player),
             rounds: 0,
@@ -78,6 +90,7 @@ impl Watch {
             // afterwards measures the reboot rather than the fight.
             player_hp_fraction: if won { self.hp_fraction } else { 0.0 },
             companions_downed: self.party.iter().filter(|&&e| !alive(game, e)).count() as u32,
+            composition: self.composition.clone(),
             transcript: self.transcript.clone(),
         }
     }
@@ -150,6 +163,20 @@ mod tests {
                 .any(|line| line.contains("── round 1 ──")),
             "round narration is dropped by `retain_outcomes_since_battle`: {:?}",
             record.transcript
+        );
+    }
+
+    /// With a rolled encounter every rep fights something different and the
+    /// transcript names only the front group, so without this the report
+    /// cannot be read at all.
+    #[test]
+    fn a_rep_records_what_it_fought() {
+        let s = scenario(20, 4, &[], &[("glitch", 2), ("sprite", 1)]);
+        let record = test_fight(&s, 5);
+        assert_eq!(
+            record.composition,
+            vec![("glitch".to_string(), 2), ("sprite".to_string(), 1)],
+            "in formation order, as staged"
         );
     }
 

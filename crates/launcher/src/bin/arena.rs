@@ -106,6 +106,19 @@ fn print_result(report: &Report) {
             println!("{line}");
         }
         println!();
+        // Above the outcome, and only here: a rolled encounter fields a
+        // fresh composition per rep, and the aggregate below is a
+        // distribution the individual packs would only clutter.
+        if !rep.composition.is_empty() {
+            println!(
+                "fought          {}",
+                rep.composition
+                    .iter()
+                    .map(|(species, count)| format!("{species} x{count}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
         println!(
             "{} in {} rounds, {:.0}% HP left, {} companions down (seed {})",
             if rep.won { "WON" } else { "LOST" },

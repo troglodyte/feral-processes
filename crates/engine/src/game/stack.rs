@@ -342,7 +342,11 @@ impl Game {
 
     /// Arrives on the frame's entry cell — walking in from the surface, and
     /// every descent by link after it.
-    fn descend_to(&mut self, depth: u32, frames: u32, entrance: (i32, i32)) {
+    ///
+    /// `pub(crate)` for `arena::encounter`, which descends for real rather
+    /// than faking a locale: it is the second caller, not a second way in.
+    /// Both still go through `enter_frame`.
+    pub(crate) fn descend_to(&mut self, depth: u32, frames: u32, entrance: (i32, i32)) {
         self.enter_frame(depth, frames, entrance, |level| level.entry);
     }
 

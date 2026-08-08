@@ -16,6 +16,11 @@ pub struct RepRecord {
     pub rounds: u32,
     pub player_hp_fraction: f32,
     pub companions_downed: u32,
+    /// What this rep actually fought — one entry per group, in formation
+    /// order, `(species id, member count)`. A rolled encounter fields
+    /// something different every rep and the transcript names only the front
+    /// group, so without this a rolled report cannot be read at all.
+    pub composition: Vec<(String, u32)>,
     pub transcript: Vec<String>,
 }
 
@@ -94,6 +99,7 @@ mod tests {
             rounds,
             player_hp_fraction: hp,
             companions_downed: downed,
+            composition: Vec::new(),
             transcript: Vec::new(),
         }
     }

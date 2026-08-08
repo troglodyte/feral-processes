@@ -29,6 +29,54 @@ first, separated by a rule.
 
 ## Unreleased
 
+## 0.5.1
+
+### Rolled encounters: fight what the zone would actually throw
+
+The arena could only ever answer half the tuning question. `opponents`
+names a composition — "what if zone 1 threw nine at me" — which is a fair
+question and one the game itself would never ask. The other half is what the
+game *does* throw, and finding that out meant playing to the fight.
+
+- A scenario may now name a **context** instead of a composition:
+  `encounter: Some(Field(biome: OpenGrid))` or
+  `encounter: Some(Stack(biome: Mainframe, depth: 5))`. Staging then runs
+  the game's own spawn machinery for that context and fights whatever comes
+  out. Mutually exclusive with `opponents` — one scenario asks one question.
+- The zone comes from the player row rather than the encounter, because
+  `ZoneLevel` is one resource driving both gear and enemy scaling and a
+  second zone would be two answers to one question. The biome is on the
+  encounter, because it alone decides the species pool.
+- A `Stack` encounter **descends for real**, through the same
+  `Game::enter_frame` play uses, so the depth multiplier, the group curve
+  and Trace all apply. Depth is not a stat multiplier bolted on — depth 5
+  fields four groups where depth 1 fields one.
+- `reps` gains a meaning it did not have: a rolled encounter rolls its own
+  pack, so fifty reps **sample the distribution** a context fields rather
+  than repeating one composition. Every rep therefore records the
+  composition it fought — the bin prints it, the result screen draws it, and
+  the report carries it.
+- A rolled pack is capped by the zone's own ceilings, unlike an authored
+  one, because it *is* the game's own fight. It warns about nothing:
+  nothing was asked for past a ceiling, because nothing was asked for.
+- On the arena screen, an `Encounter:` row cycles Authored / Field / Stack,
+  with a biome picker and a depth. The biome list is built from the loaded
+  roster — walkable, and lived in by something — so the picker cannot offer
+  a biome the roll would refuse, and a mod adding the first StaticField
+  resident gets it offered for free.
+
+Three limits are stated in `dev-arenas/README.md` rather than left to be
+found: zone 1's field roll is the opening ring and so cannot reach that
+zone's ungentled roster, a field roll is one habitat spawn roll and so
+fields one species group, and a Stack roll is an ambush and never a boss.
+
+### Fixed
+
+- Arena opponents were spawned before the rep's seed was installed, so every
+  rep fielded the same potential rolls and only the battle varied with the
+  seed. The seed now covers the composition and the fight together. A loss
+  seed pinned from an older report no longer replays the same fight.
+
 ## 0.5.0
 
 ### The interactive arena: play the fight you were only measuring

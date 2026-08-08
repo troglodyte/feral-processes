@@ -1,8 +1,9 @@
 //! A scenario-driven harness that runs real battles offline.
 //!
-//! Pick the opponents and, on a fresh player, the items; run N seeded reps;
-//! keep the round-by-round transcript. Difficulty can then be tuned by
-//! measurement rather than by playing to the fight.
+//! Pick the opponents — or a context to roll them from — and, on a fresh
+//! player, the items; run N seeded reps; keep the round-by-round transcript.
+//! Difficulty can then be tuned by measurement rather than by playing to the
+//! fight.
 //!
 //! This is inside the engine crate deliberately. `start_battle`,
 //! `spawn_wild_creature_scaled` and the `world` field are all reachable from
@@ -14,6 +15,7 @@
 //! game's own All-Attack, which fires no companion Specials. An arena number
 //! is a floor on the party's output, the same gap `balance_sim` has.
 
+mod encounter;
 mod report;
 mod run;
 mod scenario;
@@ -21,7 +23,9 @@ mod setup;
 mod watch;
 
 pub use report::{RepRecord, Report, Summary};
-pub use scenario::{CompanionSpec, EquipSpec, InventorySpec, OpponentSpec, PlayerSource, Scenario};
+pub use scenario::{
+    CompanionSpec, Encounter, EquipSpec, InventorySpec, OpponentSpec, PlayerSource, Scenario,
+};
 pub use watch::Watch;
 
 use std::path::Path;
@@ -129,12 +133,23 @@ pub struct Staged {
 /// mutate a scenario they do not own.
 pub fn stage(scenario: &Scenario, assets_dir: &Path, seed: u64) -> Result<Staged, String> {
     let mut game = setup::build_player(scenario, assets_dir)?;
-    let (groups, warnings) = setup::build_opponents(&mut game, &scenario.opponents)?;
 
     // Per fight, not per run: twenty reps are then a sample rather than
     // twenty copies, and any one of them replays alone from its own seed.
+    //
+    // Before the opponents, not after: the composition is part of what a rep
+    // samples. An authored one still rolls a `Potential` per member, and a
+    // rolled one *is* the sample — a seed installed afterwards would draw
+    // both from `Game::new(0)`'s stream and hand every rep the same pack.
     game.world
         .insert_resource(GameRng(StdRng::seed_from_u64(seed)));
+
+    let (groups, warnings) = match &scenario.encounter {
+        // A rolled encounter warns about nothing: nothing was asked for past
+        // a ceiling, because nothing was asked for.
+        Some(encounter) => (encounter::roll(&mut game, encounter)?, Vec::new()),
+        None => setup::build_opponents(&mut game, &scenario.opponents)?,
+    };
 
     // The arena's output is the blow-by-blow, so the prune that keeps a map
     // pane readable has nothing to do here — and it deletes the lines
@@ -144,11 +159,10 @@ pub fn stage(scenario: &Scenario, assets_dir: &Path, seed: u64) -> Result<Staged
         .resource_mut::<MessageLog>()
         .keep_battle_narration = true;
 
-    // Noted before the fight, because `BattleState` is gone by the time the
-    // answer is wanted.
-    let opponents: Vec<Entity> = groups.iter().flat_map(|g| g.members.clone()).collect();
+    // Noted before the fight, because `BattleState` owns the groups from
+    // here on and is gone again by the time the answer is wanted.
+    let watch = Watch::new(&game, seed, &groups);
     game.begin_battle(groups);
-    let watch = Watch::new(&game, seed, opponents);
 
     Ok(Staged {
         game,
@@ -294,6 +308,93 @@ mod tests {
         let report = run(&s, &test_assets_dir()).unwrap();
 
         assert_eq!(report.reps[0], test_fight(&s, 40));
+    }
+
+    #[test]
+    fn the_seed_varies_the_opponents_it_spawns() {
+        // The composition is part of what a rep samples, not a constant it
+        // repeats: `spawn_wild_creature_scaled` rolls a `Potential` per
+        // member, and a seed installed after the spawn leaves every rep
+        // fielding the same six programs.
+        let s = Scenario {
+            player: PlayerSource::Fresh { level: 6, zone: 4 },
+            opponents: vec![OpponentSpec {
+                species: "sub_process".into(),
+                count: 6,
+            }],
+            ..Scenario::default()
+        };
+        let hp = |seed: u64| {
+            let staged = stage(&s, &test_assets_dir(), seed).unwrap();
+            let mut game = staged.game;
+            let mut query = game.world.query_filtered::<&Stats, With<Hostile>>();
+            query.iter(&game.world).map(|s| s.max_hp).sum::<i32>()
+        };
+
+        assert_ne!(hp(1), hp(999));
+    }
+
+    fn a_rolled_scenario(reps: u32, seed: u64) -> Scenario {
+        Scenario {
+            player: PlayerSource::Fresh { level: 10, zone: 3 },
+            encounter: Some(Encounter::Stack {
+                biome: crate::world::Biome::OpenGrid,
+                depth: 3,
+            }),
+            reps,
+            seed,
+            ..Scenario::default()
+        }
+    }
+
+    #[test]
+    fn staging_a_rolled_encounter_opens_a_fight_with_no_warnings() {
+        let staged = stage(&a_rolled_scenario(1, 4), &test_assets_dir(), 4).unwrap();
+
+        assert!(staged.game.has_active_battle());
+        assert_eq!(staged.watch.rounds(), 0);
+        assert!(staged.warnings.is_empty(), "{:?}", staged.warnings);
+    }
+
+    #[test]
+    fn staging_then_running_a_rolled_encounter_matches_at_the_same_seed() {
+        // The same property `staging_then_running_matches_run_at_the_same_
+        // seed` asserts for an authored fight, and it matters more here: the
+        // played half and the measured half must roll the *same pack*, not
+        // merely the same battle.
+        let s = a_rolled_scenario(1, 40);
+        let report = run(&s, &test_assets_dir()).unwrap();
+
+        assert_eq!(report.reps[0], test_fight(&s, 40));
+    }
+
+    #[test]
+    fn a_lost_stack_fight_is_not_reported_as_a_win() {
+        // `Watch` reads "won" off the opponents, and `end_battle` despawns
+        // whatever still carries `StackSpawn` — so a swept pack and a wiped
+        // one look identical from outside, and a flattened level-1 player
+        // read back as having cleared a depth-6 ambush.
+        let s = Scenario {
+            player: PlayerSource::Fresh { level: 1, zone: 6 },
+            encounter: Some(Encounter::Stack {
+                biome: crate::world::Biome::NullSector,
+                depth: 6,
+            }),
+            reps: 5,
+            seed: 1,
+            ..Scenario::default()
+        };
+        let report = run(&s, &test_assets_dir()).unwrap();
+
+        assert!(
+            report.reps.iter().all(|r| !r.won),
+            "a bare level-1 player cleared a depth-6 pack: {:?}",
+            report
+                .reps
+                .iter()
+                .map(|r| (r.seed, r.won))
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]

@@ -27,7 +27,7 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
-## Unreleased
+## 0.5.6
 
 ### Doors you can see coming
 

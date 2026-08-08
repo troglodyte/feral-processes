@@ -1,10 +1,10 @@
 # Ability catalogue
 
 Every shipped ability in feral-processes, charted from its own file in
-`assets/abilities/`. Forty-nine of them.
+`assets/abilities/`. 51 of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/abilities/*.ron` on 2026-08-05 and will drift the moment one of those
+`assets/abilities/*.ron` on 2026-08-08 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
 A species grants abilities by naming their ids with a level to unlock each at;
@@ -13,11 +13,11 @@ species grants nothing. The [research tree](research.md) teaches the rest.
 
 | | |
 |---|---|
-| abilities | 49 |
-| effect shapes | 8 |
+| abilities | 51 |
+| effect shapes | 10 |
 | target shapes | 5 |
-| field routines (run outside battle) | 10 |
-| cost nothing | 5 |
+| field routines (run outside battle) | 12 |
+| of those, Stack-only movement | 2 |
 
 ## The naming scheme
 
@@ -44,7 +44,7 @@ Hyperthread     Single v1.0 (3), Single v2.0 (6), Party (3)
 Bastion         Single (3), Party (4)
 Flush Cache     Single (0), Party (0)
 
-one of a kind: Ablative Layer, Coolant Flush, Decompile, Deep Scan, Hardened Shell, Overclock, Repair Loop, Salvage Routine, Stealth Protocol, Trace Analysis, Trickle Charge
+one of a kind: Ablative Layer, Buffer Overrun, Coolant Flush, Decompile, Deep Scan, Hardened Shell, Overclock, Repair Loop, Salvage Routine, Stealth Protocol, Trace Analysis, Trickle Charge, Wild Jump
 ```
 
 The number in brackets is the effect's power, and a `v2.0` at the same scope
@@ -62,15 +62,15 @@ renaming an id never changes what a player reads.
 ```
 TARGET AGAINST EFFECT
 
-                      Damag  Debuf   Buff   Heal  Drain  Field  Clean  Decom
+                      Damag  Debuf   Buff   Heal  Drain  Field  Clean  Decom  Phase   Jump
 
-OneAlly                   .      .      3      3      .      4      1      .
-WholeParty                .      .      2      2      .      6      1      .
-OneEnemyGroupFront        3      3      2      .      1      .      .      1
-WholeEnemyGroup           4      2      2      .      1      .      .      .
-AllEnemies                3      2      2      .      1      .      .      .
+OneAlly                   .      .      3      3      .      4      1      .      .      .
+WholeParty                .      .      2      2      .      6      1      .      1      1
+OneEnemyGroupFront        3      3      2      .      1      .      .      1      .      .
+WholeEnemyGroup           4      2      2      .      1      .      .      .      .      .
+AllEnemies                3      2      2      .      1      .      .      .      .      .
 
-                         10      7     11      5      3     10      2      1
+                         10      7     11      5      3     10      2      1      1      1
 ```
 
 The grid is sparse on purpose. Heals and buffs point at allies, damage and
@@ -84,94 +84,106 @@ with nothing to scale.
 
 ## Everything
 
-| Ability | Name | Target | Effect | Pow | Dur | Rider | CD | Cost |
-|:---|:---|:---|:---|---:|---:|:---|---:|---:|
-| `broadcast_storm` | Packet Shred Everyone | AllEnemies | Damage | 25 | - | - | 4 | 15 |
-| `kernel_panic` | Packet Shred Single | OneEnemyGroupFront | Damage | 16 | - | - | 3 | 10 |
-| `fork_bomb` | Fork Bomb Group | WholeEnemyGroup | Damage | 15 | - | Bleed 35% 2r | 3 | 12 |
-| `packet_shred` | Packet Shred Group v2.0 | WholeEnemyGroup | Damage | 10 | - | - | 3 | 11 |
-| `stack_smash` | Fork Bomb Single | OneEnemyGroupFront | Damage | 9 | - | Bleed 60% 3r | 2 | 8 |
-| `pid_exhaustion` | Fork Bomb Everyone | AllEnemies | Damage | 8 | - | Bleed 20% 2r | 5 | 18 |
-| `pipeline_stall` | Pipeline Stall Single | OneEnemyGroupFront | Damage | 7 | - | Stun 40% 1r | 3 | 9 |
-| `branch_hazard` | Pipeline Stall Group | WholeEnemyGroup | Damage | 6 | - | Stun 30% 1r | 4 | 13 |
-| `bus_fault` | Pipeline Stall Everyone | AllEnemies | Damage | 6 | - | Stun 25% 1r | 5 | 18 |
-| `cascade_overflow` | Packet Shred Group v1.0 | WholeEnemyGroup | Damage | 6 | - | - | 2 | 8 |
-| `heap_corruption` | Bit Rot Group | WholeEnemyGroup | Debuff Bleed | 3 | 3 | - | 3 | 11 |
-| `bit_rot` | Bit Rot Everyone | AllEnemies | Debuff Bleed | 2 | 4 | - | 5 | 16 |
-| `memory_leak` | Bit Rot Single | OneEnemyGroupFront | Debuff Bleed | 2 | 3 | - | 1 | - |
-| `deadlock` | Hard Lock Single v1.0 | OneEnemyGroupFront | Debuff Stun | 0 | 1 | - | 2 | - |
-| `hard_lock` | Hard Lock Single v2.0 | OneEnemyGroupFront | Debuff Stun | 0 | 2 | - | 4 | 10 |
-| `null_route` | Hard Lock Everyone | AllEnemies | Debuff Stun | 0 | 1 | - | 5 | 15 |
-| `race_condition` | Hard Lock Group | WholeEnemyGroup | Debuff Stun | 0 | 1 | - | 4 | 13 |
-| `hyperthread` | Hyperthread Single v2.0 | OneAlly | Buff Atk | 6 | 4 | - | 3 | 8 |
-| `bastion` | Bastion Party | WholeParty | Buff Def | 4 | 3 | - | 3 | 11 |
-| `overclock_array` | Hyperthread Party | WholeParty | Buff Atk | 3 | 3 | - | 3 | 10 |
-| `priority_boost` | Hyperthread Single v1.0 | OneAlly | Buff Atk | 3 | 3 | - | 1 | - |
-| `sandbox` | Bastion Single | OneAlly | Buff Def | 3 | 3 | - | 1 | - |
-| `brownout` | Throttle Everyone | AllEnemies | Buff Atk | -3 | 3 | - | 5 | 16 |
-| `oxide_strip` | Etch Everyone | AllEnemies | Buff Def | -3 | 3 | - | 5 | 16 |
-| `etch` | Etch Group | WholeEnemyGroup | Buff Def | -4 | 3 | - | 3 | 10 |
-| `throttle` | Throttle Group | WholeEnemyGroup | Buff Atk | -4 | 3 | - | 3 | 10 |
-| `acid_wash` | Etch Single | OneEnemyGroupFront | Buff Def | -5 | 3 | - | 2 | 8 |
-| `clock_gate` | Throttle Single | OneEnemyGroupFront | Buff Atk | -5 | 3 | - | 2 | 8 |
-| `cold_boot` | Patch Single v3.0 | OneAlly | Heal | 50 | - | - | 5 | 15 |
-| `checksum_repair` | Patch Single v2.0 | OneAlly | Heal | 25 | - | - | 3 | 9 |
-| `redundancy_sync` | Patch Party v1.1 | WholeParty | Heal | 10 | - | - | 3 | 12 |
-| `hot_patch` | Patch Single v1.0 | OneAlly | Heal | 8 | - | - | 1 | - |
-| `mirror_restore` | Patch Party v1.0 | WholeParty | Heal | 8 | - | - | 2 | 10 |
-| `siphon_cycles` | Leech Single | OneEnemyGroupFront | Drain | 10 | - | - | 2 | 9 |
-| `leech_array` | Leech Group | WholeEnemyGroup | Drain | 6 | - | - | 4 | 13 |
-| `cycle_harvest` | Leech Everyone | AllEnemies | Drain | 4 | - | - | 5 | 17 |
-| `deep_scan` | Deep Scan Party | WholeParty | FieldBuff CaptureBoost | 20 | 100 | - | - | 18 |
-| `salvage_routine` | Salvage Routine Party | WholeParty | FieldBuff DropBoost | 20 | 100 | - | - | 18 |
-| `stealth_protocol` | Stealth Protocol Party | WholeParty | FieldBuff EncounterDamp | 20 | 90 | - | - | 18 |
-| `trace_analysis` | Trace Analysis Party | WholeParty | FieldBuff XpBoost | 20 | 100 | - | - | 18 |
-| `ablative_layer` | Ablative Layer Single | OneAlly | FieldBuff Mitigation | 10 | 80 | - | - | 20 |
-| `hardened_shell` | Hardened Shell Single | OneAlly | FieldBuff Def | 4 | 90 | - | - | 14 |
-| `overclock` | Overclock Single | OneAlly | FieldBuff Atk | 4 | 90 | - | - | 14 |
-| `repair_loop` | Repair Loop Single | OneAlly | FieldBuff Regen | 2 | 100 | - | - | 18 |
-| `coolant_flush` | Coolant Flush Party | WholeParty | FieldBuff Coolant | 1 | 90 | - | - | 15 |
-| `trickle_charge` | Trickle Charge Party | WholeParty | FieldBuff Trickle | 1 | 80 | - | - | 20 |
-| `flush_cache` | Flush Cache Party | WholeParty | Cleanse | 0 | - | - | 3 | 7 |
-| `invalidate_line` | Flush Cache Single | OneAlly | Cleanse | 0 | - | - | 2 | 4 |
-| `decompile` | Decompile Single | OneEnemyGroupFront | Decompile | 0 | - | - | - | - |
+| Ability | Name | Target | Effect | Pow | Dur | Rider | CD |
+|:---|:---|:---|:---|---:|---:|:---|---:|
+| `broadcast_storm` | Packet Shred Everyone | AllEnemies | Damage | 25 | - | - | 4 |
+| `kernel_panic` | Packet Shred Single | OneEnemyGroupFront | Damage | 16 | - | - | 3 |
+| `fork_bomb` | Fork Bomb Group | WholeEnemyGroup | Damage | 15 | - | Bleed 35% 2r | 3 |
+| `packet_shred` | Packet Shred Group v2.0 | WholeEnemyGroup | Damage | 10 | - | - | 3 |
+| `stack_smash` | Fork Bomb Single | OneEnemyGroupFront | Damage | 9 | - | Bleed 60% 3r | 2 |
+| `pid_exhaustion` | Fork Bomb Everyone | AllEnemies | Damage | 8 | - | Bleed 20% 2r | 5 |
+| `pipeline_stall` | Pipeline Stall Single | OneEnemyGroupFront | Damage | 7 | - | Stun 40% 1r | 3 |
+| `branch_hazard` | Pipeline Stall Group | WholeEnemyGroup | Damage | 6 | - | Stun 30% 1r | 4 |
+| `bus_fault` | Pipeline Stall Everyone | AllEnemies | Damage | 6 | - | Stun 25% 1r | 5 |
+| `cascade_overflow` | Packet Shred Group v1.0 | WholeEnemyGroup | Damage | 6 | - | - | 2 |
+| `heap_corruption` | Bit Rot Group | WholeEnemyGroup | Debuff Bleed | 3 | 3 | - | 3 |
+| `bit_rot` | Bit Rot Everyone | AllEnemies | Debuff Bleed | 2 | 4 | - | 5 |
+| `memory_leak` | Bit Rot Single | OneEnemyGroupFront | Debuff Bleed | 2 | 3 | - | 1 |
+| `deadlock` | Hard Lock Single v1.0 | OneEnemyGroupFront | Debuff Stun | 0 | 1 | - | 2 |
+| `hard_lock` | Hard Lock Single v2.0 | OneEnemyGroupFront | Debuff Stun | 0 | 2 | - | 4 |
+| `null_route` | Hard Lock Everyone | AllEnemies | Debuff Stun | 0 | 1 | - | 5 |
+| `race_condition` | Hard Lock Group | WholeEnemyGroup | Debuff Stun | 0 | 1 | - | 4 |
+| `hyperthread` | Hyperthread Single v2.0 | OneAlly | Buff Atk | 6 | 4 | - | 3 |
+| `bastion` | Bastion Party | WholeParty | Buff Def | 4 | 3 | - | 3 |
+| `overclock_array` | Hyperthread Party | WholeParty | Buff Atk | 3 | 3 | - | 3 |
+| `priority_boost` | Hyperthread Single v1.0 | OneAlly | Buff Atk | 3 | 3 | - | 1 |
+| `sandbox` | Bastion Single | OneAlly | Buff Def | 3 | 3 | - | 1 |
+| `brownout` | Throttle Everyone | AllEnemies | Buff Atk | -3 | 3 | - | 5 |
+| `oxide_strip` | Etch Everyone | AllEnemies | Buff Def | -3 | 3 | - | 5 |
+| `etch` | Etch Group | WholeEnemyGroup | Buff Def | -4 | 3 | - | 3 |
+| `throttle` | Throttle Group | WholeEnemyGroup | Buff Atk | -4 | 3 | - | 3 |
+| `acid_wash` | Etch Single | OneEnemyGroupFront | Buff Def | -5 | 3 | - | 2 |
+| `clock_gate` | Throttle Single | OneEnemyGroupFront | Buff Atk | -5 | 3 | - | 2 |
+| `cold_boot` | Patch Single v3.0 | OneAlly | Heal | 50 | - | - | 5 |
+| `checksum_repair` | Patch Single v2.0 | OneAlly | Heal | 25 | - | - | 3 |
+| `redundancy_sync` | Patch Party v1.1 | WholeParty | Heal | 10 | - | - | 3 |
+| `hot_patch` | Patch Single v1.0 | OneAlly | Heal | 8 | - | - | 1 |
+| `mirror_restore` | Patch Party v1.0 | WholeParty | Heal | 8 | - | - | 2 |
+| `siphon_cycles` | Leech Single | OneEnemyGroupFront | Drain | 10 | - | - | 2 |
+| `leech_array` | Leech Group | WholeEnemyGroup | Drain | 6 | - | - | 4 |
+| `cycle_harvest` | Leech Everyone | AllEnemies | Drain | 4 | - | - | 5 |
+| `deep_scan` | Deep Scan Party | WholeParty | FieldBuff CaptureBoost | 20 | 100 | - | - |
+| `salvage_routine` | Salvage Routine Party | WholeParty | FieldBuff DropBoost | 20 | 100 | - | - |
+| `stealth_protocol` | Stealth Protocol Party | WholeParty | FieldBuff EncounterDamp | 20 | 90 | - | - |
+| `trace_analysis` | Trace Analysis Party | WholeParty | FieldBuff XpBoost | 20 | 100 | - | - |
+| `ablative_layer` | Ablative Layer Single | OneAlly | FieldBuff Mitigation | 10 | 80 | - | - |
+| `hardened_shell` | Hardened Shell Single | OneAlly | FieldBuff Def | 4 | 90 | - | - |
+| `overclock` | Overclock Single | OneAlly | FieldBuff Atk | 4 | 90 | - | - |
+| `repair_loop` | Repair Loop Single | OneAlly | FieldBuff Regen | 2 | 100 | - | - |
+| `coolant_flush` | Coolant Flush Party | WholeParty | FieldBuff Coolant | 1 | 90 | - | - |
+| `trickle_charge` | Trickle Charge Party | WholeParty | FieldBuff Trickle | 1 | 80 | - | - |
+| `flush_cache` | Flush Cache Party | WholeParty | Cleanse | 0 | - | - | 3 |
+| `invalidate_line` | Flush Cache Single | OneAlly | Cleanse | 0 | - | - | 2 |
+| `decompile` | Decompile Single | OneEnemyGroupFront | Decompile | 0 | - | - | - |
+| `buffer_overrun` | Buffer Overrun Party | WholeParty | Phase | 0 | - | - | - |
+| `wild_jump` | Wild Jump Party | WholeParty | Jump | 0 | - | - | - |
+
+There is no cost column, because for everything above the CD *is* the cost:
+a battle routine charges no need at all, from the player, a companion or a
+wild carrier. The routines that do spend something are the field ones, in
+their own two tables further down.
 
 ## What a hit costs
 
 ```
-DAMAGE PER POINT OF FATIGUE
+DAMAGE PER ROUND OF COOLDOWN
 
-Packet Shred Everyone      25 / 15   ############################## 1.67
-Packet Shred Single        16 / 10   #############################. 1.60
-Fork Bomb Group            15 / 12   ######################........ 1.25
-Fork Bomb Single            9 / 8    ####################.......... 1.12
-Packet Shred Group v2.0    10 / 11   ################.............. 0.91
-Pipeline Stall Single       7 / 9    ##############................ 0.78
-Packet Shred Group v1.0     6 / 8    #############................. 0.75
-Pipeline Stall Group        6 / 13   ########...................... 0.46
-Fork Bomb Everyone          8 / 18   ########...................... 0.44
-Pipeline Stall Everyone     6 / 18   ######........................ 0.33
+Packet Shred Everyone      25 / 4    ############################## 6.25
+Packet Shred Single        16 / 3    ##########################.... 5.33
+Fork Bomb Group            15 / 3    ########################...... 5.00
+Fork Bomb Single            9 / 2    ######################........ 4.50
+Packet Shred Group v2.0    10 / 3    ################.............. 3.33
+Packet Shred Group v1.0     6 / 2    ##############................ 3.00
+Pipeline Stall Single       7 / 3    ###########................... 2.33
+Fork Bomb Everyone          8 / 5    ########...................... 1.60
+Pipeline Stall Group        6 / 4    #######....................... 1.50
+Pipeline Stall Everyone     6 / 5    ######........................ 1.20
 ```
 
-Read this one carefully, because it measures power per point and **not** total
+Read this one carefully, because it measures power per round and **not** total
 damage dealt: a routine at the top of the chart that reaches one program is
 worth far less per cast than one halfway down that reaches five. Packet Shred
 Everyone leads on both counts at once, which is exactly why it is a boss
 routine and not something a player is ever taught.
 
 Within a family the rate is where reaching wider gets paid for, and it falls
-as the scope grows: Pipeline Stall runs 0.78, 0.46, 0.33 across its three
-tiers, and Fork Bomb drops from 1.25 at Group to 0.44 at Everyone. You buy
-reach with efficiency. Packet Shred is the one family that doesn't pay —
-0.75 at Group v1.0 rising to 1.67 at Everyone, better per point as well as
-wider — and the thing holding those tiers back is what it takes to learn them
-rather than what they cost to cast.
+as the scope grows: Pipeline Stall runs 2.33, 1.50, 1.20 across its three
+tiers, and Fork Bomb drops from 5.00 at Group to 1.60 at Everyone. You buy
+reach with efficiency. Packet Shred is the one family that doesn't pay,
+rising from 3.00 at Group v1.0 to 6.25 at Everyone — better per round as well
+as wider — and the thing holding those tiers back is what it takes to learn
+them rather than what they cost to cast.
 
-Note the 5 routines that cost **nothing** — `deadlock`, `hot_patch`, `memory_leak`, `priority_boost`, `sandbox`.
-Those are the starters, the ones a species grants at level 1 and the fallback
-every companion has. A free routine is deliberately the weakest tier of its
-family, so the opening move of a fight is always available and never the best
-one.
+Nothing here is *cheap*, because nothing here is bought. Every one of these
+was priced in the player's Fatigue as well until 2026-08-08, including the
+ones a companion ran; a routine now costs only the rounds it spends locked
+away, so the question a player is answering has changed from "can I afford
+this" to "is this the round to spend it". What marks out the starters a
+species grants at level 1 is the bottom of the cooldown ladder: every routine
+in the set that recharges in a single round — `hot_patch`, `memory_leak`,
+`priority_boost`, `sandbox` — is one of them, with `deadlock` a round behind.
+Each is still deliberately the weakest tier of its family, so the opening move
+of a fight is always available and never the best one.
 
 ## Field routines
 
@@ -195,13 +207,30 @@ turns of walking around rather than rounds of combat.
 4 of them are not buffs in any combat sense — CaptureBoost, XpBoost,
 DropBoost and EncounterDamp change the odds of a whole run rather than the
 outcome of a fight, which is what Deep Analysis is buying at the far end of
-the research tree. The other five are ordinary stat and regeneration work,
-just measured in turns.
+the research tree. The other 6 are ordinary stat and regeneration work, just
+measured in turns.
 
 Installing one is the one place a known routine meets an item, and the item is
 spent **last**: the game checks battle, ownership, knowledge and a free slot
 before it looks for the disk. Uninstalling returns nothing, which is the whole
 point — a slot is a commitment.
+
+## Movement routines
+
+The other 2 run outside battle too, and are the only routines in the game
+that still spend **Fatigue** — every other use of that meter went away when
+Specials moved onto cooldowns. Both are Stack-only: they read and write the
+party's frame coordinates, so they grey out with a reason on the open grid.
+
+| Routine | Effect | Fatigue | What it does |
+|:---|:---|---:|:---|
+| Buffer Overrun Party | Phase | 12 | steps the party through one solid cell they are facing |
+| Wild Jump Party | Jump | 20 | moves the party to any cell of the frame, and kills them if it is solid |
+
+Wild Jump is the more expensive of the two because the landing is unvalidated
+— that is the whole mechanic, not a missing check. Buffer Overrun refuses and
+spends nothing when the rock runs deeper than one cell, when the far side is
+off the frame, or when there is nothing solid ahead at all.
 
 ---
 

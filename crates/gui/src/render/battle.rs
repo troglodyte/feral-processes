@@ -841,9 +841,9 @@ mod tests {
         );
     }
 
-    /// Fatigue is one pool, the player's, spent by every routine whoever it
-    /// was ordered for. A companion's cell holds a dash rather than a copy of
-    /// that number, which would read as a pool of its own.
+    /// Fatigue is one pool and it is the player's — a companion's cell holds
+    /// a dash rather than a copy of that number, which would read as a pool
+    /// of its own.
     #[test]
     fn a_companions_fatigue_cell_is_a_dash() {
         assert_eq!(fatigue_cell(None), "—");

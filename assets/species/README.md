@@ -123,8 +123,8 @@ is skipped with a warning logged in-game rather than crashing startup.
     //
     // Abilities themselves are data: each entry names an `id` from
     // `assets/abilities/`, whose README documents what an ability can do
-    // (single- and multi-target damage, debuffs, heals and buffs, plus
-    // cooldowns and Fatigue costs). Nothing about an ability is defined
+    // (single- and multi-target damage, debuffs, heals and buffs, and the
+    // cooldown that is the whole price of one). Nothing about an ability is defined
     // here — only which ones this species grants, and when.
     //
     // `level` is optional and defaults to 1, meaning the ability installs

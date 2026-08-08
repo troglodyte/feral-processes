@@ -184,9 +184,10 @@ way deleting the Currency item does.
     //     to the Creature/Run scope above — author `power` as points for the
     //     first five, percentage points for the rest, regardless of scope.
     //
-    //     `cooldown` and `fatigue_cost` are both dead on this variant —
-    //     neither battle-round throttling nor commanding a battle action
-    //     applies outside one. A nonzero `cooldown` logs a warning naming the
+    //     `cooldown` and `fatigue_cost` are both dead on this variant — a
+    //     field buff runs outside battle, so battle-round throttling doesn't
+    //     apply, and `power_cost` above is its own price. A nonzero
+    //     `cooldown` logs a warning naming the
     //     file, since its default is 0 and any other value is a deliberate
     //     (if pointless) choice. `fatigue_cost` does *not* warn, even though
     //     it's equally unused: its own default is nonzero, so there's no way
@@ -228,19 +229,30 @@ way deleting the Currency item does.
     // pass before the same combatant can spend this ability again. While it
     // is cooling the picker shows the row greyed with the rounds remaining,
     // and planning it is refused rather than silently wasting the round.
+    // When it's ready the picker prices the row with it — "2 rd" — because
+    // this is the *whole* cost of a Special: running one charges no need,
+    // for a companion, for the player, or for a wild carrier.
+    //
+    // So a battle ability leaving this at 0 is completely unthrottled, and
+    // the shipped set gives every one of them a cooldown between 1 and 5.
+    // The single exception is `decompile`, which is deliberately free — it
+    // already spends an ICE Breaker per attempt.
     //
     // Cooldowns are scoped to a single intrusion: they are cleared when the
     // battle ends and are never saved.
     cooldown: 2,
 
-    // Optional; defaults to 5.0, the flat cost commanding a companion has
-    // always charged. Player Fatigue spent to command this ability — note
-    // it comes off *your* Fatigue even when a companion is the one acting,
-    // because it models you issuing the command. An ability you can't afford
-    // is greyed in the picker and refused, same as one on cooldown.
+    // Optional; defaults to 5.0. Player Fatigue spent to run this routine —
+    // and read *only* by the two field effects, `Phase` and `Jump`, below.
     //
-    // This is Fatigue, not Power: Power is the other need, and abilities
-    // don't touch it.
+    // Nothing in a battle reads it. It priced every Special until
+    // 2026-08-08, including a companion's, which rationed the party's whole
+    // kit against a pool only the player had; cooldowns do that job now.
+    // Setting it on a battle ability is harmless and inert, which is why
+    // most of the shipped ones still carry the number they used to charge.
+    //
+    // This is Fatigue, not Power: Power is the other need, and it is what
+    // `FieldBuff`'s own `power_cost` spends.
     fatigue_cost: 8.0,
 
     // Optional; defaults to 0. How likely this ability is to be found

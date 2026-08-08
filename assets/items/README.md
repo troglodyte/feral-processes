@@ -144,8 +144,8 @@ disqualifies the whole file.
     // battle. All fields inside are optional (default 0/None) so one item
     // can restore several resources and/or arm a field buff:
     //   power  — restores this much Power
-    //   fatigue — restores this much Fatigue (the pool battle abilities
-    //             are paid out of; it also regenerates on its own)
+    //   fatigue — restores this much Fatigue (what the Stack's two movement
+    //             routines are paid out of; it also regenerates on its own)
     //   heal   — restores this much HP
     //   prebattle_buff — arms a buff that keeps running on the map, through
     //     any battle that follows, and through a save — unlike a buff a

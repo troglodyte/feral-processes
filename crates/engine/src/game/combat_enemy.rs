@@ -102,8 +102,6 @@ impl Game {
                 .entity_mut(wild)
                 .insert(AbilityCooldowns(cooldowns));
 
-            // Fatigue is not charged: `fatigue_cost` models the *player*
-            // issuing a command, and a wild program commands itself.
             let name = self.creature_label(wild);
             self.log_kind(
                 MessageKind::EnemySpecial,

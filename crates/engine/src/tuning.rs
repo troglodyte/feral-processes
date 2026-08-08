@@ -276,10 +276,19 @@ pub const WILD_ABILITY_CHANCE: f64 = 0.2;
 /// DEF granted for the round by the Defend action.
 pub const DEFEND_DEF_BONUS: i32 = 6;
 
-/// Fatigue the player spends each time they command a companion in battle
-/// (see `BattleAction::Special`) — the rally/special-ability
-/// bonus isn't free, whichever kind the companion has.
-pub const COMPANION_COMMAND_FATIGUE_COST: f32 = 5.0;
+/// `AbilityDef::fatigue_cost`'s serde default — what a routine charges when
+/// its file doesn't say.
+///
+/// It reaches only the two field-routine effects, `Phase` and `Jump`, since
+/// nothing in battle charges a need at all: a Special is priced in its
+/// cooldown. Both shipped movement routines author their own cost, so this
+/// covers a mod that omits it rather than anything in the game.
+///
+/// It was the flat price of commanding a companion in battle until
+/// 2026-08-08, which is why it is 5.0 and not some rounder field-routine
+/// number — the two shipped movement costs (12.0 and 20.0) are what that
+/// mechanic is actually tuned around.
+pub const DEFAULT_ROUTINE_FATIGUE_COST: f32 = 5.0;
 
 /// Below this Power ("Power" is the player-facing label for `Needs.hunger`)
 /// threshold, the player's own attacks start losing effectiveness — see
@@ -917,13 +926,16 @@ pub const REST_TICKS: u32 = 40;
 /// (surfaced as "Power") drains and is the only thing that can starve you,
 /// so it alone paces a session.
 ///
-/// Fatigue *refills*, because it is the pool battle abilities are paid for
-/// out of (`AbilityDef::fatigue_cost`) rather than a survival need. It used
-/// to drain too, which left it unrecoverable underground: the only full
-/// restore is `Game::rest`, and that refuses anywhere but inside the base.
+/// Fatigue *refills*, because it is a pool spent on demand rather than a
+/// survival need. It used to drain too, which left it unrecoverable
+/// underground: the only full restore is `Game::rest`, and that refuses
+/// anywhere but inside the base.
 ///
-/// At this rate a 5.0-cost ability is worth ~62 ticks of walking. That
-/// number is arithmetic, not playtested.
+/// What it buys is now only the Stack's two field routines (`Phase` and
+/// `Jump`, the sole readers of `AbilityDef::fatigue_cost`) — battle
+/// Specials stopped charging it on 2026-08-08 and are throttled by their
+/// cooldowns instead. At this rate `wild_jump`'s 20.0 is worth ~250 ticks of
+/// walking. That number is arithmetic, not playtested.
 pub const HUNGER_DECAY_PER_TICK: f32 = 0.15;
 pub const FATIGUE_REGEN_PER_TICK: f32 = 0.08;
 

@@ -342,12 +342,16 @@ pub struct AbilityDef {
     pub target: AbilityTarget,
     pub effect: AbilityEffect,
     /// Battle rounds before this ability can be used again by the same
-    /// combatant. `#[serde(default)]` — 0 means usable every round.
+    /// combatant, and the whole price of a Special — nothing in a battle
+    /// charges a need. `#[serde(default)]` — 0 means usable every round,
+    /// which for a battle effect means entirely unthrottled.
     #[serde(default)]
     pub cooldown: u32,
-    /// Player Fatigue spent commanding this ability. `#[serde(default)]` to
-    /// the flat cost commanding a companion has always charged, so an
-    /// ability omitting it behaves as before.
+    /// Player Fatigue spent running this routine — read by the two field
+    /// effects, `Phase` and `Jump`, and by nothing else. A battle Special is
+    /// priced in `cooldown` alone, so a value here is inert on every other
+    /// effect and the 36 shipped battle abilities that still carry one are
+    /// simply not read.
     #[serde(default = "default_fatigue_cost")]
     pub fatigue_cost: f32,
     /// How likely this ability is to be found already installed on a wild
@@ -364,7 +368,7 @@ pub struct AbilityDef {
 }
 
 fn default_fatigue_cost() -> f32 {
-    crate::tuning::COMPANION_COMMAND_FATIGUE_COST
+    crate::tuning::DEFAULT_ROUTINE_FATIGUE_COST
 }
 
 /// `AbilityEffect::FieldBuff::interval`'s default, and the only value that
@@ -469,17 +473,19 @@ impl AbilityDef {
     /// ability runs outside one. Not a load failure — the def still loads —
     /// just something worth a modder knowing rather than silently swallowing.
     ///
-    /// `fatigue_cost` is deliberately not checked here. On `Phase` and
-    /// `Jump` it is the live cost of running the routine, so there would be
-    /// nothing to warn about; and on `FieldBuff`, where it genuinely is dead
-    /// (`power_cost` is that variant's own cost), its serde default
-    /// (`default_fatigue_cost`) is the nonzero flat companion-command cost —
-    /// so a file that never mentions the field looks byte-for-byte identical
-    /// at this point to one that spells out the same number on purpose.
-    /// There's nothing here to distinguish "careless" from "correct", so a
-    /// warning on it would fire on every well-formed field buff just as often
-    /// as a mistaken one. `cooldown` defaults to 0, so a nonzero value there
-    /// is unambiguous authorial intent worth naming.
+    /// `fatigue_cost` is deliberately not checked here, or anywhere. On
+    /// `Phase` and `Jump` it is the live cost of running the routine, so
+    /// there would be nothing to warn about; everywhere else — `FieldBuff`,
+    /// which has `power_cost` of its own, and every battle effect, which is
+    /// priced in `cooldown` — it is dead, and unwarnable for the same
+    /// reason in both cases. Its serde default
+    /// (`tuning::DEFAULT_ROUTINE_FATIGUE_COST`) is nonzero, so a file that
+    /// never mentions the field looks byte-for-byte identical at this point
+    /// to one that spells out the same number on purpose. There's nothing
+    /// here to distinguish "careless" from "correct", so a warning on it
+    /// would fire on well-formed files as often as mistaken ones.
+    /// `cooldown` defaults to 0, so a nonzero value there is unambiguous
+    /// authorial intent worth naming.
     /// `assets/abilities/README.md` tells a modder directly which fields
     /// apply to which field-only effect instead.
     fn field_only_dead_fields(&self) -> Option<&'static str> {
@@ -632,8 +638,9 @@ mod tests {
         assert_eq!(def.cooldown, 0, "cooldown defaults to none");
         assert_eq!(
             def.fatigue_cost,
-            crate::tuning::COMPANION_COMMAND_FATIGUE_COST,
-            "an ability declaring no cost charges what commanding always did"
+            crate::tuning::DEFAULT_ROUTINE_FATIGUE_COST,
+            "an ability declaring no cost falls back to the flat default — \
+             which only a field routine ever reads"
         );
         assert!(warnings.is_empty(), "a valid def warns about nothing");
     }
@@ -642,7 +649,7 @@ mod tests {
     /// in `Game::attempt_decompile`, which only runs for a
     /// `SpecialTarget::EnemyGroup` — the shape only `OneEnemyGroupFront` and
     /// `WholeEnemyGroup` targeting produces. Pairing it with anything else
-    /// would arm the cooldown and spend Fatigue and then silently waste the
+    /// would arm the cooldown and then silently waste the
     /// round, so it must be refused at load time instead.
     #[test]
     fn a_decompile_effect_paired_with_a_non_group_target_is_skipped() {

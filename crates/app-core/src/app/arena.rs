@@ -775,4 +775,26 @@ impl App {
             .map(|r| r.transcript.as_slice())
             .unwrap_or_default()
     }
+
+    /// What the last fight cost, for the result screen. `None` before one
+    /// has finished.
+    pub fn arena_outcome(&self) -> Option<&RepRecord> {
+        self.arena.as_ref().and_then(|s| s.outcome.as_ref())
+    }
+
+    /// What staging said the composition asks for past the zone's ceilings.
+    /// Drawn on the result screen as well as raised when the fight opens:
+    /// nothing is ever capped, and showing the ask is the only thing that
+    /// makes that honest.
+    pub fn arena_warnings(&self) -> &[String] {
+        self.arena
+            .as_ref()
+            .map(|s| s.warnings.as_slice())
+            .unwrap_or_default()
+    }
+
+    /// The seed the current or next fight runs at.
+    pub fn arena_seed(&self) -> u64 {
+        self.arena.as_ref().map(|s| s.seed).unwrap_or(0)
+    }
 }

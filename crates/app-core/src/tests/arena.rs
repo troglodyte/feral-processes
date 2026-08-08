@@ -64,13 +64,21 @@ fn rounds_seen(app: &App) -> u32 {
 }
 
 /// Plays the fight out with the party's own All-Attack until it lands
-/// somewhere that is not the battle screen.
+/// somewhere that is no longer a battle screen. More than one opponent
+/// group sends that command through the target picker first, so this
+/// answers that too rather than leaving the fight parked on it.
 fn fight_to_the_end(app: &mut App) {
     for _ in 0..500 {
-        if app.mode != Mode::Battle {
+        if !app.mode.is_battle() {
             return;
         }
-        press(app, GameKey::Char('A'));
+        press(
+            app,
+            match app.mode {
+                Mode::Battle => GameKey::Char('A'),
+                _ => GameKey::Enter,
+            },
+        );
     }
     panic!("the fixture never resolved: mode {:?}", app.mode);
 }
@@ -794,6 +802,48 @@ fn a_filename_that_is_a_path_is_refused() {
     );
     assert!(app.status_line.is_some());
     assert!(!arenas_dir(&app).join("../escaped.ron").exists());
+}
+
+#[test]
+fn the_whole_loop_walks_from_a_shipped_scenario_to_a_new_one() {
+    // The tool's stated purpose end to end, through the real keys: load a
+    // measured fight, play it, reseed, adjust the composition by feel, and
+    // write the result back out for the headless bin to run fifty times.
+    let mut app = app_with_scratch_arenas(60);
+
+    load_scenario(&mut app, "opening-fight");
+    press(&mut app, GameKey::Char('f'));
+    fight_to_the_end(&mut app);
+    assert_eq!(app.mode, Mode::ArenaResult);
+
+    press(&mut app, GameKey::Char('n'));
+    assert_eq!(app.arena.as_ref().unwrap().seed, 2);
+    fight_to_the_end(&mut app);
+    press(&mut app, GameKey::Esc);
+    assert_eq!(app.mode, Mode::ArenaBuilder);
+
+    open_pick(&mut app, ArenaRowKind::AddOpponent);
+    pick(&mut app, "glitch");
+    open_pick(&mut app, ArenaRowKind::AddParty);
+    pick(&mut app, "sprite");
+    open_pick(&mut app, ArenaRowKind::AddEquip);
+    let weapon = app.arena_pick_rows()[0].clone();
+    pick(&mut app, &weapon);
+
+    press(&mut app, GameKey::Char('f'));
+    assert_eq!(app.mode, Mode::Battle, "{:?}", app.status_line);
+    fight_to_the_end(&mut app);
+    press(&mut app, GameKey::Esc);
+    save_scenario(&mut app, "built-by-feel");
+
+    // The far side of the loop: what the screen wrote is what the bin runs.
+    let written = Scenario::load(&arenas_dir(&app).join("built-by-feel.ron")).unwrap();
+    assert_eq!(written.opponents.len(), 2);
+    assert_eq!(written.party.len(), 1);
+    assert_eq!(written.equip.len(), 1);
+    let report =
+        feral_processes_engine::arena::run(&written, &test_assets_dir()).expect("the bin's path");
+    assert_eq!(report.reps.len(), written.reps as usize);
 }
 
 #[test]

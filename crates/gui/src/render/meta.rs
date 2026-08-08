@@ -5,12 +5,7 @@ use super::popup::*;
 use super::*;
 
 pub(super) fn draw_main_menu(app: &App, painter: &Painter, m: &Metrics) {
-    let mut options = vec!["[N] New Game".to_string()];
-    if !app.list_saves().is_empty() {
-        options.push("[L] Load Game".to_string());
-    }
-    options.push("[A] Achievements".to_string());
-    options.push("[Q] Quit".to_string());
+    let options = main_menu_options(!app.list_saves().is_empty(), app.arena_enabled());
     let mut rows = vec![
         Row::TextColored("feral-processes".to_string(), TEXT),
         Row::TextColored("// jack into the Grid".to_string(), CYAN),
@@ -24,6 +19,25 @@ pub(super) fn draw_main_menu(app: &App, painter: &Painter, m: &Metrics) {
         rows.push(Row::TextColored(s.clone(), RED));
     }
     draw_popup("Main Menu", PopupSize::Large, &rows, painter, m);
+}
+
+/// The main menu's rows, in the order `App::handle_main_menu_key` builds
+/// its key list. Both clauses are conditional there and both are here — a
+/// row drawn that the handler does not offer opens the screen below it.
+///
+/// The Arena row is a dev switch (`FERAL_DEV_ARENA`), so an ordinary player
+/// never sees it and a release build costs nothing for it.
+fn main_menu_options(has_saves: bool, arena: bool) -> Vec<String> {
+    let mut options = vec!["[N] New Game".to_string()];
+    if has_saves {
+        options.push("[L] Load Game".to_string());
+    }
+    options.push("[A] Achievements".to_string());
+    if arena {
+        options.push("[R] Arena".to_string());
+    }
+    options.push("[Q] Quit".to_string());
+    options
 }
 
 /// Every authored rung, earned or not — the point is showing what is left.
@@ -255,6 +269,20 @@ mod tests {
     /// documentation of a key while staying satisfiable: the rows are full
     /// of these letters inside ordinary words, and of the lowercase `t`
     /// that legitimately binds trade.
+    #[test]
+    fn the_main_menu_shows_arena_only_when_enabled() {
+        let named = |opts: &[String]| opts.iter().any(|o| o.contains("Arena"));
+        assert!(!named(&main_menu_options(true, false)));
+        assert!(!named(&main_menu_options(false, false)));
+        assert!(named(&main_menu_options(false, true)));
+        // And it sits between Achievements and Quit, which is where
+        // `handle_main_menu_key` puts the `r` in its own list.
+        let opts = main_menu_options(true, true);
+        let at = |s: &str| opts.iter().position(|o| o.contains(s)).unwrap();
+        assert!(at("Achievements") < at("Arena"));
+        assert!(at("Arena") < at("Quit"));
+    }
+
     #[test]
     fn the_help_screen_never_names_a_hidden_key() {
         for row in HELP_ROWS {

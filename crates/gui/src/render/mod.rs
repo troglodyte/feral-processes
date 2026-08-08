@@ -7,7 +7,7 @@ use crate::fx::Fx;
 use crate::paint::{Color, GRAY, Painter, Rect, TextRun, WHITE};
 use crate::text::{Metrics, map_cell, ui_metrics};
 use feral_processes_app_core::{
-    App, GroupMenuRow, LogFilter, MENU_SCAN_RADIUS, Mode, TradeChoice, equip_preview_tag,
+    App, ArenaRow, GroupMenuRow, LogFilter, MENU_SCAN_RADIUS, Mode, TradeChoice, equip_preview_tag,
     equip_swap_rows, inventory_item_actions, item_fusion_note, menu_shortcut, stat_summary,
 };
 use feral_processes_engine::components::{GlyphColor, MachineStatus, TaskKind};
@@ -20,6 +20,7 @@ use feral_processes_engine::{
     PetInfo, ProgramSaleOption, RecipeChain, RecipeStep, ResearchState, StructureReport,
 };
 
+mod arena;
 mod bars;
 mod base;
 mod battle;
@@ -40,6 +41,9 @@ mod stack;
 mod structure_manifest;
 mod trade;
 
+use arena::{
+    draw_arena_builder, draw_arena_load, draw_arena_pick, draw_arena_result, draw_arena_save,
+};
 use base::{draw_history, draw_playing_base};
 use battle::{
     draw_battle, draw_battle_ally_menu, draw_battle_item_menu, draw_battle_special_menu,
@@ -351,6 +355,27 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
                 }
             }
         }
+        // Their own arms rather than `draw_mode_overlay`'s, because the
+        // arena hangs off the main menu: `app.game` is `None` on every one
+        // of these, and the map underneath a mode overlay needs a run.
+        Mode::ArenaBuilder => {
+            draw_arena_builder(&app.arena_builder_rows(), app.menu_selected, painter, &m)
+        }
+        Mode::ArenaSave => {
+            draw_arena_builder(&app.arena_builder_rows(), app.menu_selected, painter, &m);
+            draw_arena_save(&app.arena_save_input, painter, &m);
+        }
+        Mode::ArenaPick => draw_arena_pick(&app.arena_pick_rows(), app.menu_selected, painter, &m),
+        Mode::ArenaLoad => draw_arena_load(&app.arena_load_rows(), app.menu_selected, painter, &m),
+        Mode::ArenaResult => draw_arena_result(
+            app.arena_outcome(),
+            app.arena_warnings(),
+            app.arena_seed(),
+            app.arena_transcript(),
+            app.menu_selected,
+            painter,
+            &m,
+        ),
         _ => {
             draw_playing_base(app, fx, painter, &m);
             draw_mode_overlay(app, painter, &m);

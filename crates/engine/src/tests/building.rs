@@ -1,7 +1,7 @@
 //! Placing, removing, upgrading, and describing structures, and the base platform they sit on.
 
 use super::support::*;
-use crate::tuning::MAX_BUILD_DISTANCE_FROM_HOME;
+use crate::tuning::{HAUL_WALK_RADIUS, MAX_BUILD_DISTANCE_FROM_HOME};
 use crate::*;
 
 #[test]
@@ -1426,6 +1426,29 @@ fn a_second_guard_on_one_structure_displaces_the_first() {
 
     assert!(game.world.get::<Task>(first).is_none());
     assert_eq!(holders(&mut game, structure, TaskKind::Guard).len(), 1);
+}
+
+/// A program tamed further out than a worker can walk never arrives at its
+/// post. `haul_step_system` builds its field from the machine's station tile
+/// with a radius of `HAUL_WALK_RADIUS`, finds the worker outside it, and
+/// steps nowhere — this tick and every tick after. The cronjob was accepted,
+/// produces nothing for the rest of the run, and says so only by leaving the
+/// machine yellow. Refused at assignment instead, before anything is spent.
+#[test]
+fn posting_a_program_too_far_to_walk_is_refused() {
+    let mut game = Game::new(45, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structure = workable_structure(&mut game, 3, 4);
+    let worker = spawn_tamed_on_map(&mut game, 3, 4 + HAUL_WALK_RADIUS + 5);
+
+    let err = game
+        .assign_cronjob(worker, structure)
+        .expect_err("a program that cannot walk to the post must not be posted to it");
+
+    assert!(err.contains("too far"), "unexpected refusal: {err}");
+    assert!(
+        game.world.get::<Task>(worker).is_none(),
+        "a refused cronjob must leave no Task behind"
+    );
 }
 
 #[test]

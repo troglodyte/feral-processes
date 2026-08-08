@@ -94,6 +94,40 @@ pub(crate) fn station_tile(
         .min_by_key(|p| (chebyshev(*p, from), p.x, p.y))
 }
 
+/// A route to a post: the walk field, and the worker's own cost in it.
+/// Aliased for the same `type_complexity` reason `Hauler` below is.
+type PostRoute = (HashMap<(i32, i32), u32>, u32);
+
+/// The walk field a worker at `from` follows to reach `structure`, paired
+/// with `from`'s own cost in it — or `None` when there is no route within
+/// `HAUL_WALK_RADIUS`, because the structure is walled in or the worker was
+/// tamed further away than a base is wide.
+///
+/// One function rather than a distance check beside the walk: `assign_cronjob`
+/// refuses exactly what `haul_step_system` cannot deliver, so a posting the
+/// menu accepts is a posting that arrives. Returning `from`'s cost with the
+/// field is what makes "the worker is in it" a fact the caller is handed
+/// rather than one it has to re-establish.
+fn post_field(map: &mut WorldMap, from: Position, structure: Position) -> Option<PostRoute> {
+    let station = station_tile(map, structure, from)?;
+    let field = walk_field(map, (station.x, station.y), HAUL_WALK_RADIUS, |t| {
+        t.walkable
+    });
+    let here = *field.get(&(from.x, from.y))?;
+    Some((field, here))
+}
+
+/// Whether a worker standing at `from` could ever reach a post at
+/// `structure`. See `post_field` for why this is the same question the
+/// walker asks.
+///
+/// `at_station` first, in the order `haul_step_system` asks it: a worker
+/// already on one of the four tiles it works from never walks, so it never
+/// builds a field and cannot be refused for lacking a route through one.
+pub(crate) fn can_reach_post(map: &mut WorldMap, from: Position, structure: Position) -> bool {
+    at_station(from, structure) || post_field(map, from, structure).is_some()
+}
+
 /// Moves as much of `load` into `stock`'s output as fits, and reports how
 /// much landed. Never past `capacity` — an over-capacity write would make
 /// that field a suggestion, and a full depot is a decided failure mode
@@ -219,17 +253,11 @@ pub(crate) fn haul_step_system(
             continue;
         }
 
-        let Some(station) = station_tile(&mut map, dest_pos, worker_pos) else {
-            continue;
-        };
-        let field = walk_field(&mut map, (station.x, station.y), HAUL_WALK_RADIUS, |t| {
-            t.walkable
-        });
-        // Absent from the field means no route within the radius — the
-        // machine is walled in, or the worker was tamed further away than a
-        // base is wide. It stands still and its machine reports `Unstaffed`,
-        // which is the visible failure the spec asks for.
-        let Some(&here) = field.get(&(worker_pos.x, worker_pos.y)) else {
+        // No field means no route within the radius. `assign_cronjob` refuses
+        // that case up front, so what is left here is a route lost after the
+        // posting — a depot demolished behind a wall, or terrain that changed.
+        // The worker stands still and its machine reports `Unstaffed`.
+        let Some((field, here)) = post_field(&mut map, worker_pos, dest_pos) else {
             continue;
         };
         let step = NEIGHBOURS

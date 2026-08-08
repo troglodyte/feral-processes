@@ -1,6 +1,7 @@
 //! Placing, upgrading, and demolishing structures, and assigning programs
 //! to work them.
 
+use crate::game::hauling;
 use crate::structures::UpgradeDef;
 use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, STRUCTURE_REMOVAL_REFUND_PERCENT};
 use crate::*;
@@ -473,6 +474,26 @@ impl Game {
         }
         if !self.accepts_a_program(structure) {
             return Err("That structure can't be worked.".into());
+        }
+        // Before anything is spent, for the reason `install_routine` checks
+        // knowledge before taking the disk: a worker that cannot walk to the
+        // post never produces, and accepting the job would stand a companion
+        // down and displace the structure's current worker to pay for it.
+        let worker_pos = *self
+            .world
+            .get::<Position>(worker)
+            .ok_or_else(|| "That program isn't anywhere you can post it.".to_string())?;
+        let structure_pos = *self
+            .world
+            .get::<Position>(structure)
+            .ok_or_else(|| "That structure isn't anywhere you can post to.".to_string())?;
+        let mut map = self.world.resource_mut::<WorldMap>();
+        if !hauling::can_reach_post(&mut map, worker_pos, structure_pos) {
+            return Err(
+                "That program is too far away to reach that structure — bring it back \
+                 to your base first."
+                    .into(),
+            );
         }
         let ticks = self.work_ticks_for(structure);
         if self.world.resource::<Party>().0.contains(&worker) {

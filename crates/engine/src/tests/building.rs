@@ -68,6 +68,81 @@ fn the_base_slab_has_its_corners_cut() {
     }
 }
 
+/// A save written before the corners were cut keeps its square slab, because
+/// the cut happens when the floor is *stamped* and `Game::load` restores a
+/// zone map verbatim. Breaching is what repairs it: `enter_next_zone` stamps
+/// a fresh slab at the new spawn point through the same `Platform::covers`,
+/// onto a newly generated map whose override overlay is empty.
+///
+/// This is why a legacy square base needs no migration, and the claim is
+/// worth pinning: the alternative on offer was a `savetool` pass rewriting
+/// every existing save.
+#[test]
+fn breaching_recuts_the_corners_of_a_legacy_square_slab() {
+    let mut game = Game::new(927, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 0);
+    let home = game.home_position().expect("the Home was just placed");
+    let r = MAX_BUILD_DISTANCE_FROM_HOME;
+    let corners = |cx: i32, cy: i32| {
+        let mut out = Vec::new();
+        for (sx, sy) in [(1, 1), (1, -1), (-1, 1), (-1, -1)] {
+            for (dx, dy) in [(r, r), (r - 1, r), (r, r - 1)] {
+                out.push((cx + dx * sx, cy + dy * sy));
+            }
+        }
+        out
+    };
+
+    // The legacy state: floor painted over the twelve tiles the cut removes.
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for (x, y) in corners(home.x, home.y) {
+            map.set_override(
+                x,
+                y,
+                Tile {
+                    biome: Biome::Platform,
+                    walkable: true,
+                },
+            );
+        }
+    }
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for (x, y) in corners(home.x, home.y) {
+            assert_eq!(
+                map.tile(x, y).biome,
+                Biome::Platform,
+                "({x}, {y}) should be square legacy floor before the breach"
+            );
+        }
+    }
+
+    game.enter_next_zone();
+
+    let moved = game
+        .home_position()
+        .expect("the base travels rather than being despawned");
+    let mut map = game.world.resource_mut::<WorldMap>();
+    // The positive half, and not belt-and-braces: a fresh zone map carries no
+    // overrides at all, so the corner assertions below would pass just as
+    // happily if the breach had stamped no slab whatsoever.
+    for (dx, dy) in [(0, 0), (r, 0), (0, -r), (r - 2, r), (r - 1, r - 1)] {
+        assert_eq!(
+            map.tile(moved.x + dx, moved.y + dy).biome,
+            Biome::Platform,
+            "({dx}, {dy}) from the travelled Home should be freshly stamped floor"
+        );
+    }
+    for (x, y) in corners(moved.x, moved.y) {
+        assert_ne!(
+            map.tile(x, y).biome,
+            Biome::Platform,
+            "({x}, {y}) is a cut corner and the breach should have left it natural"
+        );
+    }
+}
+
 /// The cut is footprint, not paint: `place_structure` measures against the
 /// same `Platform::covers`, so a tile with no floor under it has nothing
 /// standing on it either. Without this the build box stays square and a

@@ -7,8 +7,9 @@ use crate::fx::Fx;
 use crate::paint::{Color, GRAY, Painter, Rect, TextRun, WHITE};
 use crate::text::{Metrics, map_cell, ui_metrics};
 use feral_processes_app_core::{
-    App, ArenaRow, GroupMenuRow, LogFilter, MENU_SCAN_RADIUS, Mode, TradeChoice, equip_preview_tag,
-    equip_swap_rows, inventory_item_actions, item_fusion_note, menu_shortcut, stat_summary,
+    App, ArenaRow, DevConsoleRow, GroupMenuRow, LogFilter, MENU_SCAN_RADIUS, Mode, TradeChoice,
+    equip_preview_tag, equip_swap_rows, inventory_item_actions, item_fusion_note, menu_shortcut,
+    stat_summary,
 };
 use feral_processes_engine::components::{GlyphColor, MachineStatus, TaskKind};
 use feral_processes_engine::items::{EquipmentSlot, ItemId};
@@ -56,7 +57,7 @@ use building::{
 use crafting::{draw_craft_menu, draw_craft_quantity, draw_recipes};
 use field::{draw_field_cast, draw_field_cast_ally};
 use frame_map::{draw_frame_map, draw_frame_map_cursor, draw_map_inset};
-use group_menu::draw_group_menu;
+use group_menu::{draw_dev_console, draw_group_menu};
 use inventory::{
     draw_equip_swap, draw_erase_quantity, draw_inventory, draw_inventory_item_action,
     draw_item_describe,
@@ -444,6 +445,7 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
     match app.mode {
         Mode::BaseMenu => draw_group_menu(&group_rows, "Base", selected, painter, m),
         Mode::PartyMenu => draw_group_menu(&group_rows, "Party", selected, painter, m),
+        Mode::DevConsole => draw_dev_console(App::dev_console_rows(), selected, painter, m),
         Mode::Build => draw_build_menu(game, selected, painter, m),
         Mode::BuildDirection => {
             draw_build_direction(game, pending_structure.as_deref(), painter, m)

@@ -1,5 +1,6 @@
 //! The map screen — movement, and the keys that open every other mode.
 
+use crate::DEV_CONSOLE_KEY;
 use crate::*;
 
 impl App {
@@ -8,6 +9,12 @@ impl App {
             // The two group menus. Seventeen keys used to sit on this
             // screen doing what these two now reach; see `group_menu.rs`
             // for why none of them survive as an alias.
+            // Dev-only, and inert unless FERAL_DEV_CONSOLE opened the gate.
+            GameKey::Char(c) if c == DEV_CONSOLE_KEY && self.dev_console_enabled() => {
+                self.mode = Mode::DevConsole;
+                self.menu_selected = 0;
+                return;
+            }
             GameKey::Char('b') => {
                 self.mode = Mode::BaseMenu;
                 return;
@@ -256,7 +263,7 @@ impl App {
     /// The battle transition especially: Phase 2 puts random encounters
     /// underground, and a second copy of this is exactly the kind of thing
     /// that gets updated on one side only.
-    fn after_world_action(&mut self, acted: bool, is_move_key: bool) {
+    pub(crate) fn after_world_action(&mut self, acted: bool, is_move_key: bool) {
         if !acted {
             return;
         }

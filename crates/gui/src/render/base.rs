@@ -543,10 +543,17 @@ fn draw_surface_map(
             let mut ch = None;
             let mut color = biome_color;
             let mut bg_source = biome_color;
-            // The extra rings cost a leading offset, so the pane frames the
-            // same view it did before the camera existed.
-            let px = (rx as f32 - RINGS as f32 - off_x) * tile_px;
-            let py = (ry as f32 - RINGS as f32 - off_y) * tile_px;
+            let world = (
+                status.position.0 + rx as i32 - hw,
+                status.position.1 + ry as i32 - hh,
+            );
+            let (px, py) = tile_origin_px(
+                world,
+                status.position,
+                (half_w, half_h),
+                (off_x, off_y),
+                tile_px,
+            );
             // The fetched rings exist to be *read* — by the camera slide and
             // by `draw_tile_edges` — not to be drawn. Nothing clips this pane,
             // and the log panel below it is drawn at 0.95 alpha, so a row
@@ -637,10 +644,6 @@ fn draw_surface_map(
                 ch = Some(ev.glyph);
                 color = glyph_color(ev.color);
             }
-            let world = (
-                status.position.0 + rx as i32 - hw,
-                status.position.1 + ry as i32 - hh,
-            );
             // Bare ground only. Where something is standing, the background
             // carries the damage-dimmed glyph colour, and jittering that
             // would muddy a structure's durability read.
@@ -763,7 +766,39 @@ fn draw_surface_map(
             }
         }
     }
+    // After every tile so debris lands on top of the base rather than under
+    // it, and before the border so a spark from a structure at the pane's
+    // edge cannot draw over the frame.
+    fx.draw_bursts(painter, tile_px, |world| {
+        tile_origin_px(
+            world,
+            status.position,
+            (half_w, half_h),
+            (off_x, off_y),
+            tile_px,
+        )
+    });
     painter.rect_lines(0.0, 0.0, map_w, map_h, 2.0, BORDER);
+}
+
+/// Where a world tile's top-left corner falls in the map pane.
+///
+/// The tile loop walks grid indices and the spark pass walks world tiles,
+/// and both have to land on the same pixel. `half` is the pane's half-extent
+/// *without* the extra rings — the rings are fetched to be read, not drawn,
+/// so they cost a leading offset that keeps the pane framing the same view
+/// it did before the camera existed.
+fn tile_origin_px(
+    world: (i32, i32),
+    player: (i32, i32),
+    half: (i32, i32),
+    off: (f32, f32),
+    tile_px: f32,
+) -> (f32, f32) {
+    (
+        ((world.0 - player.0 + half.0) as f32 - off.0) * tile_px,
+        ((world.1 - player.1 + half.1) as f32 - off.1) * tile_px,
+    )
 }
 
 /// A tile outline with the sides in `open` left off — the sides this

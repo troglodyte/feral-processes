@@ -10,6 +10,7 @@
 mod app;
 
 pub use app::arena::{ArenaRow, ArenaRowKind, DevTemplates};
+pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
 pub use app::group_menu::GroupMenuRow;
 
 use app::arena::{ArenaPickKind, ArenaSession};
@@ -523,6 +524,9 @@ pub enum Mode {
     BattleAlly,
     Build,
     BuildDirection,
+    /// The dev keypad, opened with `DEV_CONSOLE_KEY` when
+    /// `FERAL_DEV_CONSOLE` is set. Never reachable in a player's build.
+    DevConsole,
     Craft,
     CraftQuantity,
     Cronjob,
@@ -722,6 +726,8 @@ impl Mode {
             | Mode::Playing
             | Mode::BaseMenu
             | Mode::PartyMenu
+            // Opened from the map only, so it never layers over a fight.
+            | Mode::DevConsole
             | Mode::Build
             | Mode::BuildDirection
             | Mode::Craft
@@ -1034,6 +1040,7 @@ pub struct App {
     /// once, in `App::new`, so the parallel test suite can open the gate on
     /// a field rather than in a process-global environment.
     arena_enabled: bool,
+    dev_console: bool,
     /// Where a row picked in `Mode::ArenaPick` is going — see
     /// `ArenaPickKind`. `None` outside that mode.
     pending_arena_pick: Option<ArenaPickKind>,

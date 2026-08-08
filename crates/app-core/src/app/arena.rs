@@ -210,7 +210,7 @@ fn player_source_label(source: &PlayerSource) -> String {
 /// Read once, in `App::new`, into a field — so a test can open the gate
 /// without touching an environment the parallel suite shares.
 pub(crate) fn dev_arena_enabled() -> bool {
-    std::env::var_os("FERAL_DEV_ARENA").is_some_and(|v| !v.is_empty() && v != "0")
+    super::dev_console::dev_flag("FERAL_DEV_ARENA")
 }
 
 impl App {

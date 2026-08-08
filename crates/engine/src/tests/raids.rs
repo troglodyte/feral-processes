@@ -1,6 +1,7 @@
 //! Raids against the base — damage, shields, guards, effects, and regeneration.
 
 use super::support::*;
+use crate::game::upkeep::DEV_HIT_DAMAGE_PERCENT;
 use crate::tuning::{NEST_DURABILITY, RAID_DAMAGE, RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_INTERVAL};
 use crate::*;
 
@@ -394,6 +395,182 @@ fn damaging_a_structure_queues_a_hit_effect_at_its_position() {
     assert_eq!(effects.len(), 1, "one hit should queue one effect");
     assert_eq!(effects[0].kind, EffectKind::Hit);
     assert_eq!(effects[0].pos, (5, 5));
+}
+
+/// The dev console fires the sweep the game fires, not a lookalike. If it
+/// reimplemented the body, what it puts on screen would be evidence about
+/// the console rather than about the game — which is the copy-instead-of-a-
+/// call trap `balance_sim.rs` fell into four times.
+#[test]
+fn a_forced_sweep_hits_a_structure_without_waiting_for_the_roll() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.spawn((
+        Structure {
+            kind: "mining_node".to_string(),
+        },
+        Position { x: 5, y: 5 },
+        Durability { hp: 30, max_hp: 30 },
+    ));
+
+    game.dev_force_raid();
+
+    let effects = game.take_effects();
+    assert_eq!(
+        effects.len(),
+        1,
+        "a forced sweep should resolve exactly one raid"
+    );
+    assert_eq!(effects[0].pos, (5, 5));
+}
+
+/// The surviving-hit burst is unreachable from the console without this.
+/// `dev_destroy_structure` deals full `Durability`, so it always takes the
+/// `Destroyed` branch — every press showed the wreckage effect and none
+/// could ever show the damage one.
+#[test]
+fn a_forced_hit_leaves_the_structure_standing_and_throws_a_hit_effect() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let target = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+            Durability { hp: 30, max_hp: 30 },
+        ))
+        .id();
+
+    game.dev_damage_structure();
+
+    let hp = game.world.get::<Durability>(target).map(|d| d.hp);
+    assert_eq!(
+        hp,
+        Some(30 - (30 * DEV_HIT_DAMAGE_PERCENT / 100)),
+        "a forced hit should wound the structure, not flatten it"
+    );
+    let effects = game.take_effects();
+    assert_eq!(effects.len(), 1);
+    assert_eq!(effects[0].kind, EffectKind::Hit);
+    assert_eq!(effects[0].pos, (5, 5));
+}
+
+/// Pressed repeatedly, which is what anyone watching an effect actually
+/// does. Percentage damage on a survivor can never reach 0, so the row
+/// keeps throwing hits rather than eventually destroying the thing being
+/// watched — and a structure already at 1 HP still has to register.
+#[test]
+fn repeated_forced_hits_never_destroy_the_structure() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let target = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+            Durability { hp: 30, max_hp: 30 },
+        ))
+        .id();
+
+    for press in 0..40 {
+        game.dev_damage_structure();
+        let hp = game
+            .world
+            .get::<Durability>(target)
+            .unwrap_or_else(|| panic!("destroyed on press {press}"))
+            .hp;
+        assert!(hp >= 1, "press {press} left it at {hp}");
+        let effects = game.take_effects();
+        assert_eq!(effects.len(), 1, "press {press} threw no effect");
+        assert_eq!(effects[0].kind, EffectKind::Hit, "press {press}");
+    }
+}
+
+/// A base with nothing raidable standing must not panic or half-fire — the
+/// console is pressed at arbitrary moments, including before anything is
+/// built.
+#[test]
+fn a_forced_sweep_with_nothing_standing_is_a_no_op() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structures: Vec<_> = {
+        let mut q = game.world.query_filtered::<Entity, With<Durability>>();
+        q.iter(&game.world).collect()
+    };
+    for e in structures {
+        game.world.despawn(e);
+    }
+
+    game.dev_force_raid();
+
+    assert!(game.take_effects().is_empty());
+}
+
+/// The encounter trigger skips the spawn roll and nothing else, so what it
+/// places is drawn from the real habitat rules — biome pool, opening ring,
+/// cull and all.
+///
+/// Forced ten times rather than once because the landing tile is drawn from
+/// the seeded stream and may be unwalkable; the seed makes this
+/// deterministic, and the repeats keep it from turning on one unlucky tile.
+#[test]
+fn a_forced_encounter_spawns_without_waiting_for_the_roll() {
+    let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let count = |g: &mut Game| {
+        let mut q = g.world.query_filtered::<Entity, With<Hostile>>();
+        q.iter(&g.world).count()
+    };
+    let before = count(&mut game);
+
+    for _ in 0..10 {
+        game.dev_force_encounter();
+    }
+
+    assert!(
+        count(&mut game) > before,
+        "ten forced encounters placed nothing"
+    );
+}
+
+/// Destroying from the console has to go through the real destruction path,
+/// not just despawn the entity — a posted program left holding a `Task`
+/// pointing at a structure that no longer exists is precisely the state
+/// `damage_structure` exists to prevent.
+#[test]
+fn a_forced_destruction_clears_the_posted_workers_task() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position {
+                x: player_pos.x + 1,
+                y: player_pos.y,
+            },
+            Durability { hp: 30, max_hp: 30 },
+        ))
+        .id();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: structure,
+        progress: 0,
+        required: 10,
+    });
+
+    game.dev_destroy_structure();
+
+    assert!(
+        game.world.get::<Durability>(structure).is_none(),
+        "the structure should be gone"
+    );
+    assert!(
+        game.world.get::<Task>(worker).is_none(),
+        "the worker's Task must be cleared, which only the real path does"
+    );
 }
 
 #[test]

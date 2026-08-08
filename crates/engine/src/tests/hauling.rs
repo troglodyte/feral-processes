@@ -241,7 +241,11 @@ fn a_posted_program_walks_to_its_machine_before_producing() {
     let node = deploy(&mut game, "mining_node", 1, 0);
     let node_pos = *game.world.get::<Position>(node).unwrap();
     let worker = spawn_tamed(&mut game, 10, 3);
-    move_to(&mut game, worker, node_pos.x + 5, node_pos.y);
+    // The distance is the *player's*: a posted program sets off from
+    // wherever you were standing when you posted it, so posting from five
+    // tiles out is what buys the walk.
+    let player = game.player_entity();
+    move_to(&mut game, player, node_pos.x + 5, node_pos.y);
     game.assign_cronjob(worker, node).unwrap();
 
     let start = *game.world.get::<Position>(worker).unwrap();

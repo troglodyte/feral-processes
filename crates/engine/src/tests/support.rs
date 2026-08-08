@@ -418,6 +418,7 @@ pub(super) fn assign_worker_producing(game: &mut Game, resource: ItemId) -> Enti
             MachineStatus::default(),
         ))
         .id();
+    stand_player_at_post(game, structure);
     game.assign_cronjob(worker, structure).unwrap();
     structure
 }
@@ -434,8 +435,33 @@ pub(super) fn work_node_parts() -> (Stock, MachineStatus) {
     (Stock::new(10_000), MachineStatus::default())
 }
 
+/// Stands the player on `(x, y)`.
+///
+/// `assign_cronjob` starts a posted program from the player's tile, so this
+/// is how a fixture decides whether a new cronjob has a walk to make: stand
+/// away from the machine and the worker walks in, stand at it and the worker
+/// is already at its post. It is the player's position that carries that
+/// distance now, not the worker's.
+pub(super) fn stand_player_at(game: &mut Game, x: i32, y: i32) {
+    let player = game.player_entity();
+    let mut pos = game.world.get_mut::<Position>(player).unwrap();
+    pos.x = x;
+    pos.y = y;
+}
+
+/// Stands the player at the post east of `structure`, so a cronjob assigned
+/// next starts its program already at the machine.
+pub(super) fn stand_player_at_post(game: &mut Game, structure: Entity) {
+    let target = *game.world.get::<Position>(structure).unwrap();
+    stand_player_at(game, target.x + 1, target.y);
+}
+
 /// Stands `worker` on the tile east of `structure` — a post it can work
 /// from.
+///
+/// Only meaningful *after* `assign_cronjob`, which starts a program from the
+/// player's tile and would overwrite this — use `stand_player_at_post`
+/// before an assignment and this one after.
 ///
 /// A posted program produces nothing until it is orthogonally adjacent to
 /// its machine (`task_progress_system`'s `Unstaffed` gate), and it gets

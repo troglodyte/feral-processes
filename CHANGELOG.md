@@ -27,6 +27,26 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.5.7
+
+### A debug port might not give you the frame
+
+Jacking into a breakpoint handed over the whole frame's map, every time, for
+a walk and the loudest Trace raise in the game. The only question it asked
+was whether the walk was shorter than mapping the frame on foot, and the
+answer was always yes.
+
+A jack-in now takes six times in ten. When it fails the port stutters and
+resolves only the substrate you are standing in — a small patch around you,
+but one that reads *through* walls, which the view down a corridor never
+does, so a failed jack still tells you which way the junction you are on
+actually goes.
+
+Either way it is one try: the port burns out on the attempt, and the Trace
+is charged for jacking in rather than for what came back. There is one port
+per frame, so this is a decision about a walk you can see the length of, not
+a lever to pull until it pays.
+
 ## 0.5.6
 
 ### Doors you can see coming

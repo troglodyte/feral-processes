@@ -196,6 +196,22 @@ impl Game {
                 .collect()
         };
 
+        // Whether anywhere in the base can still take a load. Base-wide, and
+        // rebuilt per call for the reason `haul_step_system` rebuilds its own
+        // depot list every tick: a demolished or newly-filled depot has to
+        // stop counting without anything having to notice it changed.
+        let anywhere_to_unload = {
+            let mut stores = self.world.query::<(&Structure, &Stock)>();
+            let rooms: Vec<(StructureId, u32)> = stores
+                .iter(&self.world)
+                .map(|(s, stock)| (s.kind.clone(), stock.output_room()))
+                .collect();
+            let db = self.world.resource::<StructureDb>();
+            rooms
+                .iter()
+                .any(|(kind, room)| *room > 0 && db.get(kind).is_some_and(|d| d.stores))
+        };
+
         let player_power = self
             .world
             .get::<Stats>(self.player_entity())
@@ -240,6 +256,12 @@ impl Game {
                                 .is_some_and(|s| !at_station(pos, *s))
                     });
                 let structure_attended = is_structure && attended.contains(&entity);
+                let output_stranded = is_structure
+                    && !anywhere_to_unload
+                    && self
+                        .world
+                        .get::<Stock>(entity)
+                        .is_some_and(|s| s.output_room() == 0);
                 let stats = self.world.get::<Stats>(entity);
                 let hp_fraction = stats.map(|s| s.hp_fraction());
                 // Hostile wild programs are recolored by difficulty relative
@@ -281,6 +303,7 @@ impl Game {
                     structure_worker,
                     worker_away_from_post,
                     structure_attended,
+                    output_stranded,
                     hp_fraction,
                     level,
                     durability,
@@ -666,6 +689,7 @@ impl Game {
                     structure_worker: None,
                     worker_away_from_post: false,
                     structure_attended: false,
+                    output_stranded: false,
                     hp_fraction: None,
                     level: None,
                     durability: self

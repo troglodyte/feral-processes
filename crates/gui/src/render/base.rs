@@ -569,7 +569,9 @@ fn draw_surface_map(
             // worker in and out of existence as it walked over a machine.
             let mut structure: Option<&EntityView> = None;
             let mut actor: Option<&EntityView> = None;
-            let mut mark: Option<Entity> = None;
+            // The entity wearing the mark, and whether its work has hit the
+            // dead end below.
+            let mut mark: Option<(Entity, bool)> = None;
             for ev in &entities {
                 let erx = ev.pos.0 - status.position.0 + hw;
                 let ery = ev.pos.1 - status.position.1 + hh;
@@ -586,7 +588,7 @@ fn draw_surface_map(
                 } else {
                     ev.worker_away_from_post
                 } {
-                    mark = Some(ev.entity);
+                    mark = Some((ev.entity, ev.output_stranded));
                 }
             }
             let occupied = structure.is_some() || actor.is_some();
@@ -729,14 +731,24 @@ fn draw_surface_map(
             // away." And with no depot built there is no errand at all, so
             // nothing ever leaves and nothing is ever drawn — see
             // `with_no_depot_a_clogged_machine_just_stays_clogged`.
-            if let Some(marked) = mark {
+            //
+            // A machine that is full with nowhere to send its output is the
+            // one case where the mark stops moving: its worker will never
+            // leave, so a bob would promise motion that is never coming. It
+            // blinks in place instead — see `Fx::stranded_blink`.
+            if let Some((marked, stranded)) = mark {
                 let size = (tile_px - 1.0) * STAFFED_MARK;
+                let (lift, alpha) = if stranded {
+                    (0.0, fx.stranded_blink())
+                } else {
+                    (fx.staffed_bob(marked), 1.0)
+                };
                 painter.rect(
                     px + STAFFED_MARK_INSET,
-                    py + tile_px - 1.0 - STAFFED_MARK_INSET - size - fx.staffed_bob(marked),
+                    py + tile_px - 1.0 - STAFFED_MARK_INSET - size - lift,
                     size,
                     size,
-                    GREEN,
+                    Color { a: alpha, ..GREEN },
                 );
             }
             if let Some(flash) = fx.tile_flash(world) {

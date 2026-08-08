@@ -301,6 +301,21 @@ pub struct EntityView {
     /// structure when it isn't. Distinct from `structure_worker`, which
     /// counts any `Task` wherever its holder happens to be.
     pub structure_attended: bool,
+    /// If this is a structure, whether its output buffer is full while
+    /// nothing in the base can take a load — no depot built, or every depot
+    /// already full.
+    ///
+    /// The dead end a base can sit in indefinitely: `haul_step_system`
+    /// starts an errand only when a depot with room exists, so the worker
+    /// never leaves and the machine never drains. Deliberately *not* a sixth
+    /// `MachineStatus` — that enum is one machine's own state, and this is a
+    /// fact about every depot at once, so folding it in would stop the enum
+    /// meaning one thing and force a precedence call against all five
+    /// existing variants.
+    ///
+    /// Keyed on room rather than on a depot existing, because a depot that
+    /// has filled up is no better than no depot.
+    pub output_stranded: bool,
     pub hp_fraction: Option<f32>,
     pub level: Option<u32>,
     /// If this is a structure, its current/max raid `Durability`.

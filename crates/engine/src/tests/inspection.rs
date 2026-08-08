@@ -1256,3 +1256,73 @@ fn a_worked_machine_and_its_worker_never_both_wear_the_mark() {
         game.tick();
     }
 }
+
+/// A machine whose output is full while nothing in the base can take a load
+/// is at a dead end: its worker will never leave, so the mark that would
+/// have walked away stays put. The flag is what lets a frontend say so.
+///
+/// Deliberately not a sixth `MachineStatus`: that enum is one machine's own
+/// state, and "there is nowhere left to put this" is a fact about every
+/// depot at once.
+#[test]
+fn a_full_machine_with_nowhere_to_unload_reads_as_stranded() {
+    let mut game = Game::new(1408, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, -1, 0);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 48);
+    game.place_structure("mining_node", 1, 0).unwrap();
+    let node = game
+        .structure_report()
+        .into_iter()
+        .find(|s| s.kind == "mining_node")
+        .expect("the node was just deployed")
+        .entity;
+
+    let stranded = |game: &mut Game, e: Entity| {
+        game.view_entities(40, 40)
+            .into_iter()
+            .find(|v| v.entity == e)
+            .map(|v| v.output_stranded)
+    };
+
+    assert_eq!(
+        stranded(&mut game, node),
+        Some(false),
+        "an empty buffer is not stranded, whatever else is true"
+    );
+
+    let mut stock = game.world.get_mut::<Stock>(node).unwrap();
+    let capacity = stock.capacity;
+    stock
+        .output
+        .insert(ItemId::from(ids::CORE_FRAGMENT), capacity);
+    assert_eq!(
+        stranded(&mut game, node),
+        Some(true),
+        "full, and no depot has been built at all"
+    );
+
+    game.place_structure("depot", 1, 2).unwrap();
+    assert_eq!(
+        stranded(&mut game, node),
+        Some(false),
+        "a depot with room is somewhere to put it, so the dead end is over"
+    );
+
+    // Fill the depot too: a depot with no room is no better than no depot,
+    // which is the case a "has a depot been built" check would miss.
+    let depot = game
+        .structure_report()
+        .into_iter()
+        .find(|s| s.kind == "depot")
+        .expect("the depot was just deployed")
+        .entity;
+    let mut stock = game.world.get_mut::<Stock>(depot).unwrap();
+    let capacity = stock.capacity;
+    stock
+        .output
+        .insert(ItemId::from(ids::CORE_FRAGMENT), capacity);
+    assert_eq!(stranded(&mut game, node), Some(true));
+}

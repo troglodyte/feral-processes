@@ -43,6 +43,16 @@ const STAFFED_BOB_PHASE_STEP: f64 = 0.15;
 /// How many distinct phases marks are spread across before repeating.
 const PHASE_KEYS: u64 = 64;
 
+/// How slowly a stranded machine's mark blinks, and how far down it dims.
+///
+/// The floor is deliberately not zero. A mark that vanished outright would,
+/// for half of every cycle, say "nobody is posted here" — the exact reading
+/// the mark was introduced to stop grey `Idle` giving. Dimming to a fifth
+/// reads as a warning light while still answering "someone is on this job"
+/// at every instant.
+const STRANDED_BLINK_HZ: f64 = 0.5;
+const STRANDED_BLINK_MIN: f32 = 0.2;
+
 /// How fast the lagging "ghost" bar drains, in HP per second.
 const GHOST_DRAIN_PER_SECOND: f32 = 60.0;
 
@@ -124,6 +134,17 @@ fn staffed_bob_offset(time: f64, phase_key: u64) -> f32 {
     // no more out of step than a small one.
     let turns = time * STAFFED_BOB_HZ + (phase_key % PHASE_KEYS) as f64 * STAFFED_BOB_PHASE_STEP;
     STAFFED_BOB_PX * (1.0 - (turns * std::f64::consts::TAU).cos()) as f32 / 2.0
+}
+
+/// Alpha for a stranded machine's mark: a slow square wave rather than the
+/// sine `shield_pulse_alpha` uses, because this is an alarm and has to read
+/// as switching rather than as breathing.
+fn stranded_blink_alpha(time: f64) -> f32 {
+    if (time * STRANDED_BLINK_HZ).fract() < 0.5 {
+        1.0
+    } else {
+        STRANDED_BLINK_MIN
+    }
 }
 
 fn effect_duration(kind: EffectKind) -> f64 {
@@ -276,6 +297,20 @@ impl Fx {
             return 0.0;
         }
         staffed_bob_offset(self.now, entity.to_bits())
+    }
+
+    /// Alpha for a mark whose machine is full with nowhere to unload.
+    ///
+    /// Deliberately *not* phase-keyed the way `staffed_bob` is: two stranded
+    /// machines are one condition — the base has run out of storage — and
+    /// blinking them together says so, where staggering them would read as
+    /// two unrelated problems. Working marks are the opposite case, which is
+    /// why only they are spread out.
+    pub fn stranded_blink(&self) -> f32 {
+        if !self.enabled {
+            return 1.0;
+        }
+        stranded_blink_alpha(self.now)
     }
 
     /// One frame of the trailing "ghost" band behind an HP bar, tracked
@@ -615,6 +650,36 @@ mod tests {
         // Same entity, same frame — the only thing a step changes is the
         // tile, which this no longer reads.
         assert_eq!(fx.staffed_bob(worker), before);
+    }
+
+    /// A stranded mark dims but never disappears. Gone for half of every
+    /// cycle would say "nobody is posted here" — the reading the mark exists
+    /// to prevent — and the machine is in fact still staffed, just stuck.
+    #[test]
+    fn a_stranded_mark_dims_but_never_goes_out() {
+        let mut seen_bright = false;
+        let mut seen_dim = false;
+        for i in 0..400 {
+            let a = stranded_blink_alpha(i as f64 * 0.02);
+            assert!(a >= STRANDED_BLINK_MIN, "the mark went out entirely: {a}");
+            assert!(a <= 1.0);
+            seen_bright |= a == 1.0;
+            seen_dim |= a < 1.0;
+        }
+        assert!(seen_bright && seen_dim, "it never blinked at all");
+    }
+
+    /// Slow enough to read as an alarm rather than a flicker: a full cycle
+    /// takes seconds, so the mark holds each state long enough to be seen.
+    #[test]
+    fn the_stranded_blink_holds_each_state_for_about_a_second() {
+        let dwell = 0.5 / STRANDED_BLINK_HZ;
+        assert!(
+            dwell >= 0.75,
+            "each half of the cycle lasts {dwell}s, which reads as a flicker"
+        );
+        assert_eq!(stranded_blink_alpha(0.0), 1.0);
+        assert_eq!(stranded_blink_alpha(dwell * 1.5), STRANDED_BLINK_MIN);
     }
 
     #[test]

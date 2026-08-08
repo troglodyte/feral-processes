@@ -536,6 +536,7 @@ mod tests {
             structure_worker: None,
             worker_away_from_post: false,
             structure_attended: false,
+            output_stranded: false,
             hp_fraction: None,
             level: None,
             durability: None,

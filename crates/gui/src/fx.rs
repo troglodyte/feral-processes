@@ -19,9 +19,14 @@ use feral_processes_engine::{EffectKind, Entity, LogLine, MessageKind, VisualEff
 /// Alpha a tile flash starts at, before fading linearly to nothing. Chosen
 /// to read against the dim tile backgrounds without hiding the glyph.
 pub const PEAK_FLASH_ALPHA: f32 = 0.55;
-pub const HIT_FLASH_SECONDS: f64 = 0.25;
+pub const HIT_FLASH_SECONDS: f64 = 0.30;
 /// Longer than a hit — a structure vanishing from the map is worth a beat.
-pub const DESTROYED_FLASH_SECONDS: f64 = 0.40;
+///
+/// This is the spark burst's lifetime too, since the debris is derived from
+/// the flash record rather than kept separately, so it is also how long the
+/// wreckage has to cover `DESTROYED_SPARK_REACH`. Shortening it does not
+/// make the burst snappier, it makes it faster and harder to see.
+pub const DESTROYED_FLASH_SECONDS: f64 = 0.70;
 
 /// How far a damaged structure's glyph is allowed to dim toward grey. Below
 /// this it stops reading as a structure at all.
@@ -83,31 +88,45 @@ const LOG_FLASH_SECONDS: f64 = 0.35;
 
 /// A structure coming down: the loud one, and the only burst that reaches
 /// past its own tile.
-const DESTROYED_SPARKS: u32 = 12;
-const DESTROYED_SPARK_REACH: f32 = 1.8;
+const DESTROYED_SPARKS: u32 = 20;
+const DESTROYED_SPARK_REACH: f32 = 3.2;
 /// A structure merely taking a hit. Kept inside its own tile and thin
 /// enough that a sweep chewing through a large base doesn't fill the pane.
-const HIT_SPARKS: u32 = 5;
-const HIT_SPARK_REACH: f32 = 0.85;
-/// How long each spark's streak is drawn, in tiles, and how thick.
+///
+/// The reach is what enforces "inside its own tile", so it stays under 1.0
+/// however loud the rest of this gets — a sweep lands one of these on every
+/// structure it damages, and neighbours' debris overlapping would turn a
+/// raid on a large base into a solid sheet.
+const HIT_SPARKS: u32 = 9;
+const HIT_SPARK_REACH: f32 = 0.95;
+/// How long a spark's streak is drawn at full speed, in tiles, and how
+/// thick. The drawn length is this scaled by `spark_streak`.
 ///
 /// A tile is `BASE_TILE_PX` (20px) at zoom 1, so these are small absolute
-/// numbers — 0.35 of a tile is a 7px streak. The first pass at this was
-/// half the size and could not be seen at all against the tile wash
+/// numbers — 0.7 of a tile is a 14px streak. The first pass at this was a
+/// quarter the size and could not be seen at all against the tile wash
 /// underneath it, which is the trap: reach and streak read as generous
 /// fractions while being a handful of pixels.
-const SPARK_STREAK_TILES: f32 = 0.35;
-const SPARK_THICKNESS: f32 = 2.5;
+const SPARK_STREAK_TILES: f32 = 0.7;
+const SPARK_THICKNESS: f32 = 3.0;
 /// How far a spark may swing off its evenly-spaced spoke, in radians.
 ///
 /// Bounded at under a full spoke's width on purpose: sparks are spread
 /// evenly and then jittered, rather than aimed at random angles, so a burst
 /// can never happen to throw everything one way and read as a leak instead
 /// of an explosion.
-const SPARK_ANGLE_JITTER: f32 = 0.45;
+///
+/// This is coupled to `DESTROYED_SPARKS` and falls as that rises: twenty
+/// spokes are 0.31 radians apart, so the swing has to fit inside that. The
+/// raggedness a bigger burst loses here it more than gets back from the
+/// speed spread below, which a dense burst shows off far better than a
+/// sparse one.
+const SPARK_ANGLE_JITTER: f32 = 0.28;
 /// Slowest a jittered spark may fly, as a fraction of the full reach. Under
-/// 1.0 so the debris arrives ragged rather than as an expanding ring.
-const SPARK_MIN_SPEED: f32 = 0.55;
+/// 1.0 so the debris arrives ragged rather than as an expanding ring, and
+/// well under it so the burst spans a real range of distances — this is
+/// what stops twenty evenly-spread sparks reading as a starburst decal.
+const SPARK_MIN_SPEED: f32 = 0.35;
 /// Keeps a spark's speed draw independent of its angle draw.
 const SPARK_SPEED_SALT: u32 = 0x5BF0_3635;
 
@@ -231,6 +250,16 @@ fn spark_angle(pos: (i32, i32), index: u32, count: u32) -> f32 {
 /// a visible twist to it rather than a scatter.
 fn spark_speed(pos: (i32, i32), index: u32) -> f32 {
     SPARK_MIN_SPEED + (1.0 - SPARK_MIN_SPEED) * spark_scatter(pos, index ^ SPARK_SPEED_SALT)
+}
+
+/// How long spark `index`'s trail is drawn at `t`, in tiles.
+///
+/// Proportional to how fast the spark is actually moving, which is both its
+/// own speed draw and the deceleration `spark_spread` applies to the whole
+/// burst. A fixed length instead reads as a ring of dashes sliding outward;
+/// this opens with long streaks and settles into short ones.
+fn spark_streak(pos: (i32, i32), index: u32, t: f32) -> f32 {
+    SPARK_STREAK_TILES * spark_speed(pos, index) * (1.0 - t).clamp(0.0, 1.0)
 }
 
 fn spark_alpha(t: f32) -> f32 {
@@ -390,7 +419,7 @@ impl Fx {
                 // back from the head rather than drawn ahead of it — a
                 // streak that led would poke out of the tile before the
                 // spark had travelled anywhere.
-                let tail = (head - SPARK_STREAK_TILES * tile_px).max(0.0);
+                let tail = (head - spark_streak(flash.pos, index, t) * tile_px).max(0.0);
                 painter.line(
                     cx + dx * tail,
                     cy + dy * tail,
@@ -947,6 +976,43 @@ mod tests {
         assert!(
             fastest - slowest > 0.1,
             "the whole burst flew at one speed: {slowest}..{fastest}"
+        );
+    }
+
+    /// A trail of fixed length reads as a ring of dashes sliding outward.
+    /// Tying it to how fast the spark is actually travelling is what makes a
+    /// burst open with long streaks and settle into short ones — `spark_spread`
+    /// decelerates, so the two have to move together.
+    #[test]
+    fn a_sparks_streak_shortens_as_it_slows() {
+        let (pos, index) = ((4, 2), 3);
+        let opening = spark_streak(pos, index, 0.0);
+        let middle = spark_streak(pos, index, 0.5);
+        let dying = spark_streak(pos, index, 1.0);
+        assert!(opening > middle, "opening {opening}, middle {middle}");
+        assert!(middle > dying, "middle {middle}, dying {dying}");
+        assert_eq!(dying, 0.0, "a stopped spark still had a trail");
+    }
+
+    /// Sampled at one instant, so this is about the sparks differing from
+    /// each other rather than about the fade above: the burst's own speed
+    /// spread has to reach the trails, or every streak is the same length
+    /// and the raggedness `spark_speed` buys is thrown away.
+    #[test]
+    fn a_faster_spark_drags_a_longer_streak() {
+        let pos = (2, 5);
+        let (slow, fast) = (0..DESTROYED_SPARKS).fold((0, 0), |(slow, fast), i| {
+            let s = spark_speed(pos, i);
+            (
+                if s < spark_speed(pos, slow) { i } else { slow },
+                if s > spark_speed(pos, fast) { i } else { fast },
+            )
+        });
+        assert!(
+            spark_streak(pos, fast, 0.3) > spark_streak(pos, slow, 0.3),
+            "spark {fast} at speed {} trailed no further than {slow} at {}",
+            spark_speed(pos, fast),
+            spark_speed(pos, slow)
         );
     }
 

@@ -7,7 +7,8 @@ Every shipped structure in feral-processes, charted from its own file in
 `assets/structures/*.ron` on 2026-08-06 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
-Everything below must be deployed within 7 tiles of a Home, and demolishing
+Everything below must be deployed on the base slab — within 7 tiles of a Home,
+minus the chamfer taken off each of the slab's four corners — and demolishing
 the Home cascades to the rest. A structure named by no research file is
 buildable from turn one; the [research tree](research.md) gates the machines
 that automate a base, not the base itself.

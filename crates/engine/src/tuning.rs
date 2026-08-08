@@ -1117,6 +1117,17 @@ pub const RAID_DEFENDER_DAMAGE: i32 = 6;
 /// rather than sprawling across the map.
 pub const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 7;
 
+/// How deep each of the base slab's four corners is chamfered, in diagonal
+/// steps — the slab is the box above with `Platform::covers` trimming a
+/// triangle off each corner, so at 2 the corner tile and the two beside it
+/// are natural terrain and the base reads as rounded rather than as a
+/// stamped square.
+///
+/// This is footprint, not decoration: `place_structure` measures against
+/// the same predicate, so a cut tile is unbuildable and a raised value
+/// takes buildable ground away. 0 restores the square.
+pub const PLATFORM_CORNER_CUT: i32 = 2;
+
 /// How often (in ticks) the base's repairers restore `Durability` to
 /// damaged structures — see `Game::structure_regen`.
 ///

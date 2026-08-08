@@ -7,6 +7,7 @@ use crate::battle::{BattleAction, EnemyGroup};
 use crate::items::ItemId;
 use crate::stack::{Dir, Frame};
 use crate::structures::StructureId;
+use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, PLATFORM_CORNER_CUT};
 
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum DifficultyMode {
@@ -493,6 +494,24 @@ pub enum SlotShift {
 #[derive(Resource, Default, Clone, Copy)]
 pub struct Platform {
     pub center: Option<(i32, i32)>,
+}
+
+impl Platform {
+    /// Whether a tile `(dx, dy)` from the Home is part of the slab: the
+    /// build box with `PLATFORM_CORNER_CUT` diagonal steps trimmed off each
+    /// corner.
+    ///
+    /// The one statement of the base's footprint, and deliberately a
+    /// function of the offset rather than of the resource — `stamp_platform`
+    /// lays the floor, `clear_platform` takes it up, and `place_structure`
+    /// decides what may stand on it, and a shape one of the three disagreed
+    /// about would put a machine on wild ground at a cut corner or leave
+    /// orphan floor behind a demolished Home.
+    pub(crate) fn covers(dx: i32, dy: i32) -> bool {
+        dx.abs() <= MAX_BUILD_DISTANCE_FROM_HOME
+            && dy.abs() <= MAX_BUILD_DISTANCE_FROM_HOME
+            && dx.abs() + dy.abs() <= 2 * MAX_BUILD_DISTANCE_FROM_HOME - PLATFORM_CORNER_CUT
+    }
 }
 
 /// What each trading post has bought off the player and will sell back to

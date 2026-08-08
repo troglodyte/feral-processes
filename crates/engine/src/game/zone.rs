@@ -235,16 +235,18 @@ impl Game {
             .any(|(g, pursuing)| g.nest == nest && pursuing.is_some())
     }
 
-    /// Stamps the base platform centered on `(cx, cy)`: every tile within
-    /// `MAX_BUILD_DISTANCE_FROM_HOME` (Chebyshev) becomes walkable
-    /// `Biome::Platform`, and every hostile and nest standing inside is
-    /// obliterated. Deploying a Home and breaching into a new zone are the
-    /// only callers.
+    /// Stamps the base platform centered on `(cx, cy)`: every tile
+    /// `Platform::covers` claims becomes walkable `Biome::Platform`, and
+    /// every hostile and nest standing inside is obliterated. Deploying a
+    /// Home and breaching into a new zone are the only callers.
     pub(crate) fn stamp_platform(&mut self, cx: i32, cy: i32) {
         {
             let mut map = self.world.resource_mut::<WorldMap>();
             for dy in -MAX_BUILD_DISTANCE_FROM_HOME..=MAX_BUILD_DISTANCE_FROM_HOME {
                 for dx in -MAX_BUILD_DISTANCE_FROM_HOME..=MAX_BUILD_DISTANCE_FROM_HOME {
+                    if !Platform::covers(dx, dy) {
+                        continue;
+                    }
                     map.set_override(
                         cx + dx,
                         cy + dy,
@@ -257,10 +259,7 @@ impl Game {
             }
         }
 
-        let inside = |p: &Position| {
-            (p.x - cx).abs() <= MAX_BUILD_DISTANCE_FROM_HOME
-                && (p.y - cy).abs() <= MAX_BUILD_DISTANCE_FROM_HOME
-        };
+        let inside = |p: &Position| Platform::covers(p.x - cx, p.y - cy);
         let hostiles: Vec<Entity> = {
             let mut query = self
                 .world
@@ -319,6 +318,12 @@ impl Game {
     /// Removes the platform slab, restoring natural terrain underneath.
     /// Called when the Home is demolished — the slab is defined as
     /// "centered on the current Home", so no Home means no slab.
+    ///
+    /// Sweeps the whole build box rather than `Platform::covers`'s cut
+    /// shape, which is the one place the two deliberately disagree: nothing
+    /// else overrides terrain near a base, so clearing a tile that was never
+    /// stamped costs nothing, while a save written before the corners were
+    /// cut still has floor there and would otherwise keep it forever.
     pub(crate) fn clear_platform(&mut self) {
         let Some((cx, cy)) = self.world.resource::<Platform>().center else {
             return;

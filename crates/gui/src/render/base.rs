@@ -82,7 +82,7 @@ fn vignette(dx: f32, dy: f32, half_w_px: f32, half_h_px: f32) -> f32 {
 /// _walked_on` can only assert that rule against a value, and a biome tinted
 /// into the wrong family tells the player they may walk into the void.
 ///
-/// Exhaustive on purpose, the same call `render/stack.rs`'s `floor_mark`
+/// Exhaustive on purpose, the same call `render/stack.rs`'s `cell_mark`
 /// makes: a new `Biome` must not compile until someone has decided which
 /// side of that rule it falls on.
 fn biome_tint(biome: Biome) -> Color {
@@ -166,7 +166,7 @@ fn at_level(c: Color, level: f32) -> Color {
 /// Exhaustive for the same reason `biome_tint` is: a new `Biome` should stop
 /// the build until someone has drawn it, rather than shipping as bare
 /// ground the way a `_ => {}` arm would let it. This is the trap
-/// `render/stack.rs`'s `floor_mark` was fixed for, and it is the same trap.
+/// `render/stack.rs`'s `cell_mark` was fixed for, and it is the same trap.
 fn draw_biome(painter: &Painter, biome: Biome, r: Rect, tint: Color, world: (i32, i32)) {
     let ink = at_level(
         tint,

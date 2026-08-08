@@ -25,6 +25,17 @@ const SHRINK: f32 = 0.58;
 const NEAR_SHADE: f32 = 1.0;
 const FOG: f32 = 0.62;
 
+/// The fog the cell marks fade under, which is deliberately gentler than
+/// the one the geometry fades under.
+///
+/// `FOG` is a depth cue: it exists so the corridor reads as receding rather
+/// than as concentric rectangles, and dimming a surface to a quarter of
+/// itself four cells out is the whole point. A mark is the opposite kind of
+/// thing — it is there to be spotted from the far end of the view, and the
+/// same curve applied to it puts the thing you are meant to notice at 24%
+/// brightness against geometry that is also near-black.
+const MARK_FOG: f32 = 0.85;
+
 /// Fraction of the pane's half-height the corridor occupies at depth 0.
 /// Below 1.0 so floor and ceiling are visible bands rather than meeting the
 /// pane edge exactly.
@@ -52,6 +63,12 @@ fn slice(depth: usize, w: f32, h: f32) -> (f32, f32, f32, f32) {
 /// How bright a surface `depth` cells away is drawn.
 fn shade(depth: usize) -> f32 {
     NEAR_SHADE * FOG.powi(depth as i32)
+}
+
+/// How bright the mark on a cell `depth` cells away is drawn — see
+/// `MARK_FOG` for why this is not `shade`.
+fn mark_shade(depth: usize) -> f32 {
+    NEAR_SHADE * MARK_FOG.powi(depth as i32)
 }
 
 fn dim(color: Color, factor: f32) -> Color {
@@ -107,37 +124,47 @@ pub(super) fn draw_stack(view: &StackView, painter: &Painter, w: f32, h: f32, m:
         let (fl, ft, fr, fb) = slice(depth + 1, w, h);
         let s = shade(depth);
 
-        if draws_as_face(depth, row[middle]) {
+        let face = draws_as_face(depth, row[middle]);
+        if face {
             // The corridor is blocked here: this cell's face toward us fills
             // the whole slice. Anything beyond it was drawn already and is
             // now covered, which is exactly right.
             painter.rect(nl, nt, nr - nl, nb - nt, dim(face_color(row[middle]), s));
-            continue;
+        } else {
+            // An open cell: floor and ceiling recede from this slice to the
+            // next.
+            painter.poly(&[(nl, nb), (nr, nb), (fr, fb), (fl, fb)], dim(FLOOR, s));
+            painter.poly(&[(nl, nt), (nr, nt), (fr, ft), (fl, ft)], dim(CEILING, s));
+
+            if middle > 0 && solid(row[middle - 1]) {
+                painter.poly(&[(nl, nt), (fl, ft), (fl, fb), (nl, nb)], dim(WALL, s));
+            }
+            if middle + 1 < row.len() && solid(row[middle + 1]) {
+                painter.poly(&[(nr, nt), (fr, ft), (fr, fb), (nr, nb)], dim(WALL, s));
+            }
         }
 
-        // An open cell: floor and ceiling recede from this slice to the next.
-        painter.poly(&[(nl, nb), (nr, nb), (fr, fb), (fl, fb)], dim(FLOOR, s));
-        painter.poly(&[(nl, nt), (nr, nt), (fr, ft), (fl, ft)], dim(CEILING, s));
-
-        if middle > 0 && solid(row[middle - 1]) {
-            painter.poly(&[(nl, nt), (fl, ft), (fl, fb), (nl, nb)], dim(WALL, s));
-        }
-        if middle + 1 < row.len() && solid(row[middle + 1]) {
-            painter.poly(&[(nr, nt), (fr, ft), (fr, fb), (nr, nb)], dim(WALL, s));
-        }
-
-        // Links read as a marker on the floor of the cell they're in rather
-        // than as geometry — the party needs to spot them down a corridor,
-        // and a subtle change in floor shape would not carry that far.
-        if let Some((mark, color)) = floor_mark(row[middle]) {
+        // Anything worth noticing reads as a glyph rather than as geometry or
+        // as a shade — the party needs to spot it down a corridor, and
+        // neither a subtle change in floor shape nor one in wall colour
+        // carries that far. Drawn last so the surface it names is under it.
+        if let Some((mark, color)) = cell_mark(row[middle]) {
             let glyph = mark.to_string();
             let dims = painter.measure_map(&glyph, m.font_size * 2);
+            // A face fills its slice, so its mark goes in the middle of it;
+            // an open cell's lies on the floor at the far end of it. That is
+            // the only thing the two placements disagree about.
+            let (cx, baseline) = if face {
+                ((nl + nr) / 2.0, (nt + nb) / 2.0 + dims.height / 2.0)
+            } else {
+                ((fl + fr) / 2.0, fb - (fb - ft) * 0.15)
+            };
             painter.map(
                 &glyph,
-                (fl + fr) / 2.0 - dims.width / 2.0,
-                fb - (fb - ft) * 0.15,
+                cx - dims.width / 2.0,
+                baseline,
                 m.font_size * 2,
-                dim(color, s),
+                dim(color, mark_shade(depth)),
             );
         }
     }
@@ -168,13 +195,15 @@ pub(super) fn draw_stack(view: &StackView, painter: &Painter, w: f32, h: f32, m:
     }
 }
 
-/// The glyph laid on the floor of a cell, and the colour to draw it in.
+/// The glyph a cell is marked with, and the colour to draw it in. Where it
+/// lands is the caller's business: on the floor of an open cell, in the
+/// middle of the face of one that fills its slice.
 ///
 /// Carries its own colour rather than being painted a single yellow by the
 /// caller, because phase 3's three kinds are not all the same kind of news:
 /// a fault and a breakpoint are places to go, corruption is a place not to.
 /// The four original marks keep the yellow they have always had.
-fn floor_mark(cell: StackCellView) -> Option<(char, Color)> {
+fn cell_mark(cell: StackCellView) -> Option<(char, Color)> {
     match cell {
         StackCellView::LinkDown => Some(('>', YELLOW)),
         StackCellView::LinkUp => Some(('<', YELLOW)),
@@ -188,8 +217,14 @@ fn floor_mark(cell: StackCellView) -> Option<(char, Color)> {
         StackCellView::Fault => Some(('v', ORANGE)),
         StackCellView::Corruption => Some(('~', MAGENTA)),
         StackCellView::Orphan => Some(('o', GREEN)),
+        // The two that are drawn as a face rather than as corridor, and the
+        // reason this table is no longer only about floors: `face_color`
+        // alone left a door indistinguishable from the rock it is set into
+        // once the fog had been through both. Same `+` the map uses, and the
+        // same split between an open door and a sealed one.
+        StackCellView::Door => Some(('+', ORANGE)),
+        StackCellView::SealedDoor => Some(('+', RED)),
         StackCellView::Rock | StackCellView::Floor => None,
-        StackCellView::Door | StackCellView::SealedDoor => None,
     }
 }
 
@@ -261,16 +296,16 @@ mod tests {
     #[test]
     fn plain_corridor_gets_no_marker() {
         assert_eq!(
-            floor_mark(StackCellView::LinkDown).map(|(c, _)| c),
+            cell_mark(StackCellView::LinkDown).map(|(c, _)| c),
             Some('>')
         );
-        assert_eq!(floor_mark(StackCellView::LinkUp).map(|(c, _)| c), Some('<'));
-        assert_eq!(floor_mark(StackCellView::Floor), None);
-        assert_eq!(floor_mark(StackCellView::Rock), None);
+        assert_eq!(cell_mark(StackCellView::LinkUp).map(|(c, _)| c), Some('<'));
+        assert_eq!(cell_mark(StackCellView::Floor), None);
+        assert_eq!(cell_mark(StackCellView::Rock), None);
     }
 
     /// Every cell kind that is not plain corridor has to be visible from
-    /// down a corridor. The trap this guards is specific: `floor_mark` used
+    /// down a corridor. The trap this guards is specific: `cell_mark` used
     /// to end in `_ => None`, so a new `StackCellView` variant compiled
     /// perfectly and drew as bare floor — the party would have walked into
     /// corruption with nothing on screen to warn them. The match is now
@@ -283,7 +318,7 @@ mod tests {
             StackCellView::Corruption,
         ] {
             assert!(
-                floor_mark(cell).is_some(),
+                cell_mark(cell).is_some(),
                 "{cell:?} draws as bare corridor — invisible until stepped on"
             );
         }
@@ -351,6 +386,40 @@ mod tests {
                 draw_stack(case, p, 1000.0, 640.0, &m);
             }
         });
+    }
+
+    /// A door's only cue used to be the colour of its face, and a colour is
+    /// exactly what the fog eats: measured, a door three cells off drew as
+    /// rgb(33, 26, 11) against rock's rgb(13, 38, 38) — two near-black
+    /// blobs. The player learned a corridor ended in a door by walking into
+    /// it. A door now carries the same `+` the map marks it with, so what
+    /// says "door" is a shape rather than a shade.
+    #[test]
+    fn a_door_carries_the_maps_glyph_onto_its_face() {
+        assert_eq!(cell_mark(StackCellView::Door), Some(('+', ORANGE)));
+        assert_eq!(cell_mark(StackCellView::SealedDoor), Some(('+', RED)));
+    }
+
+    /// Marks are the informational layer and the fog is a depth cue for
+    /// geometry, so they fade on their own gentler curve — otherwise the
+    /// glyph that exists to be spotted down a corridor is dimmed to 24% of
+    /// itself at the far end of the one it is spotted from.
+    #[test]
+    fn a_mark_fades_more_slowly_than_the_surface_it_sits_on() {
+        let mut last = f32::MAX;
+        for depth in 0..6 {
+            let s = mark_shade(depth);
+            assert!(s <= last, "depth {depth} marks brighten with distance");
+            assert!(
+                s >= shade(depth),
+                "depth {depth} marks fade faster than the geometry"
+            );
+            last = s;
+        }
+        assert!(
+            mark_shade(3) > shade(3) * 2.0,
+            "the far end of the view is where the fog was eating the marks"
+        );
     }
 
     /// A renderer must survive whatever the engine hands it, including the

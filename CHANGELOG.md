@@ -27,7 +27,21 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
-## Unreleased
+## 0.5.6
+
+### Doors you can see coming
+
+A door at the end of a Stack corridor was invisible until you were standing
+in front of it. Doors are drawn as a face filling the passage, in their own
+colour, and that colour was all that separated one from the rock beside it —
+so the fog that makes the corridor recede also took the only thing saying
+"door". Three cells out, both were near-black.
+
+A door now carries the same orange `+` the frame map marks it with, and a
+sealed one the same red, painted in the middle of its face. The marks that
+were already there — links, caches, lairs, faults, corruption, orphans —
+fade more slowly with distance than the walls do, so the layer that exists
+to be spotted down a corridor stays legible at the far end of the view.
 
 ## 0.5.5
 

@@ -84,14 +84,20 @@ const LOG_FLASH_SECONDS: f64 = 0.35;
 /// A structure coming down: the loud one, and the only burst that reaches
 /// past its own tile.
 const DESTROYED_SPARKS: u32 = 12;
-const DESTROYED_SPARK_REACH: f32 = 1.4;
+const DESTROYED_SPARK_REACH: f32 = 1.8;
 /// A structure merely taking a hit. Kept inside its own tile and thin
 /// enough that a sweep chewing through a large base doesn't fill the pane.
 const HIT_SPARKS: u32 = 5;
-const HIT_SPARK_REACH: f32 = 0.6;
+const HIT_SPARK_REACH: f32 = 0.85;
 /// How long each spark's streak is drawn, in tiles, and how thick.
-const SPARK_STREAK_TILES: f32 = 0.18;
-const SPARK_THICKNESS: f32 = 1.5;
+///
+/// A tile is `BASE_TILE_PX` (20px) at zoom 1, so these are small absolute
+/// numbers — 0.35 of a tile is a 7px streak. The first pass at this was
+/// half the size and could not be seen at all against the tile wash
+/// underneath it, which is the trap: reach and streak read as generous
+/// fractions while being a handful of pixels.
+const SPARK_STREAK_TILES: f32 = 0.35;
+const SPARK_THICKNESS: f32 = 2.5;
 /// How far a spark may swing off its evenly-spaced spoke, in radians.
 ///
 /// Bounded at under a full spoke's width on purpose: sparks are spread

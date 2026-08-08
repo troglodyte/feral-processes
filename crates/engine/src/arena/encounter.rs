@@ -52,10 +52,12 @@ pub(crate) fn roll(game: &mut Game, encounter: &Encounter) -> Result<Vec<EnemyGr
             None => Vec::new(),
         },
         // A real descent, through the one way into a frame. The party is
-        // genuinely underground for the fight, so the depth multiplier,
-        // Trace and a boss's Portal Fragment all apply as they do in play.
-        // `frames` is what the link would say, raised only as far as the
-        // depth being asked for needs.
+        // genuinely underground for the fight, so the depth multiplier and
+        // Trace apply as they do in play — and, as in play, an ambush is
+        // never a boss: `stack_encounter_pack` passes `allow_boss: false`,
+        // so a lair guardian is not reachable from here at all. `frames` is
+        // what the link would say, raised only as far as the depth asked
+        // for needs.
         Encounter::Stack { depth, .. } => {
             let frames = game.frames_at((x, y)).max(*depth);
             game.descend_to(*depth, frames, (x, y));

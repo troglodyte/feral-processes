@@ -24,9 +24,15 @@ every ordinary run — nothing about the feature is reachable and none of it is
 loaded.
 
 The builder edits a scenario row by row: Up/Down move, Left/Right adjust the
-number under the highlight, Enter opens a picker for a species or an item,
-Backspace removes a row. `[L]` loads a scenario from this directory, `[S]`
-writes one back to it, and `[F]` fights.
+number under the highlight, Enter opens a picker for a species, an item or a
+biome, Backspace removes a row. `[L]` loads a scenario from this directory,
+`[S]` writes one back to it, and `[F]` fights.
+
+The `Encounter:` row cycles `Authored → Field → Stack` with Left/Right. On
+`Authored` the `Against:` rows are the fight. On either of the others they
+disappear — a file cannot hold both — and a `Biome:` row takes their place,
+with a `Depth:` row beside it for `Stack`. Cycling back to `Authored` puts an
+opponent row back, so every state the row can reach is one `[S]` will write.
 
 A fight opens the real battle screen. **Specials fire, items are spent,
 targets are chosen** — that is the whole point, and it is what the bin cannot
@@ -45,15 +51,16 @@ fight against a Permadeath save lands on the result screen rather than on
 Game Over.
 
 At `reps: 1` it prints the transcript round by round in the game's own
-wording, then the outcome. Above 1 it prints the aggregate: win rate, mean
+wording, then what was fought, then the outcome. Above 1 it prints the
+aggregate: win rate, mean
 and median rounds, mean player HP left, mean companions downed, and **the
 seeds of the losses** — pin one of those as `seed` with `reps: 1` and that
 fight replays alone.
 
 Either way it writes a structured report (default `arena-report.ron`, or
 `--out`) holding every rep's seed, outcome, rounds, HP fraction, companions
-downed and full transcript. Warnings go to stderr, so piping stdout to a
-file keeps the data clean.
+downed, composition and full transcript. Warnings go to stderr, so piping
+stdout to a file keeps the data clean.
 
 Nothing either half does is written back to a save. Both load state and
 throw it away, which is what lets a scenario point at a real save without
@@ -92,7 +99,8 @@ run rather than quietly changing the fight.
 | `equip` | `[]` | `Fresh` only. Gear to wear |
 | `inventory` | `[]` | `Fresh` only. Items in cargo |
 | `party` | `[]` | `Fresh` only. Companions to field |
-| `opponents` | — | Required, and must be non-empty |
+| `opponents` | — | The fight, authored. Required unless `encounter` is set |
+| `encounter` | `None` | A context to roll instead of authoring one |
 | `reps` | `1` | How many times to run it |
 | `seed` | `0` | Rep *n* runs at `seed + n` |
 
@@ -107,8 +115,9 @@ run rather than quietly changing the fight.
 
 A save or a template brings its **entire** run across: level, stats,
 equipment *and its fusion tiers*, party, perks, zone, Power and Fatigue. The
-scenario then names only the opponents, which is the "what would happen if I
-hit this pack right now" question. `equip`, `inventory` and `party` are
+scenario then names only the fight — the opponents, or the context to roll
+one from — which is the "what would happen if I hit this pack right now"
+question. `equip`, `inventory` and `party` are
 therefore an **error** on a save or template rather than being ignored —
 `Fresh` is where you pick items.
 
@@ -148,7 +157,8 @@ Two properties are not obvious from the syntax:
   how hard one hits comes from the zone's stat multiplier and its potential
   roll. **The zone is the strength dial and `count` is the volume dial.** A
   scenario wanting a tougher individual raises the zone or names a tougher
-  species.
+  species. A rolled `encounter` has the same two dials plus one: the zone,
+  and underground the depth, which raises stats and the group curve together.
 
 The list is honoured verbatim, past what that zone could really field — "what
 if zone 1 threw nine at me" is a legitimate tuning question, and explicit
@@ -156,6 +166,69 @@ authoring is the point of a tester. Exceeding the zone's ceiling prints a
 warning naming the ask, the ceiling and the zone; it never silently caps.
 `MAX_ENEMY_GROUPS` (4) and `MAX_GROUP_SIZE` (100) are the exception and are
 a hard error, because past those the fight is not one the game can represent.
+
+### `encounter`
+
+The other half of the tuning question. `opponents` asks "what if zone 1 threw
+nine at me" — something the game itself would never do. `encounter` asks what
+the game *actually* throws, by running its own spawn machinery for a named
+context and fighting whatever comes out.
+
+```ron
+(
+  player: Fresh(level: 12, zone: 5),
+  encounter: Some(Stack(biome: Mainframe, depth: 5)),
+  reps: 50,
+)
+
+encounter: Some(Field(biome: OpenGrid)),   // the surface, same zone
+```
+
+**Mutually exclusive with `opponents`** — one scenario asks one question, and
+a file holding both is an error naming both.
+
+**The zone is not in here.** It comes from the player row: `Fresh(zone: N)`,
+or whatever a save or template brought with it. `ZoneLevel` is one resource
+driving both gear scaling and enemy scaling, so a second zone here would be
+two answers to one question. The biome *is* here, because it alone decides
+the species pool and the arena's player stands on whatever tile the world
+generator dropped them on.
+
+`reps` changes meaning: a rolled encounter rolls its own pack, so fifty reps
+**sample the distribution** that context fields rather than repeating one
+composition fifty times. That is why every rep records what it fought — see
+the `fought` line at `reps: 1`, and the `composition` field of every rep in
+the report.
+
+A `Stack` encounter descends for real, so the party is genuinely underground
+and the depth stat multiplier and Trace apply as they do in play. Depth also
+moves the group curve — one group on the first frame down, widening with
+every frame — so depth 5 is not depth 1 scaled up. It is an *ambush*, never a
+boss: a lair guardian is a different question from "what would I meet walking
+a frame", and it is not reachable from here. A `Field` roll can field a boss,
+because the surface roll can.
+
+Three limits of this design, stated rather than left to be found:
+
+- **Zone 1 field is the opening ring.** The arena's player stands at the
+  danger origin, so zone 1 gentles the pool to what a fresh player can beat
+  and clears bosses out of it. That is the honest answer to "what does zone 1
+  throw at a new run" — and it means zone 1's *ungentled* roster is not
+  reachable from here. Raise the zone for that.
+- **A field roll is one habitat spawn roll**, so an ordinary one fields a
+  single species group. In play, walking into a cluster can pull an adjacent
+  second one into the same fight; reproducing that needs a populated zone.
+  The Stack path has no such gap — `stack_encounter_pack` *is* the game's
+  multi-group rule and it is called rather than reimplemented.
+- **A biome nothing lives in cannot be picked.** The builder offers only
+  biomes that are walkable and have at least one resident, which are the two
+  clauses the spawn code itself gives up on. `Platform` is absent because no
+  species lives on a base slab — that absence is the whole mechanism behind a
+  base being a safe haven.
+
+Unlike an authored composition, a rolled pack **is** capped by the zone's own
+ceilings, because it is the game's own fight. It therefore warns about
+nothing: nothing was asked for past a ceiling, because nothing was asked for.
 
 ## The shipped scenarios
 

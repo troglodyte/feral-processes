@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 
 use crate::items::ItemId;
 use crate::species::SpeciesId;
+use crate::world::Biome;
 
 /// A fight, authored rather than rolled.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -29,6 +30,9 @@ pub struct Scenario {
     /// Order is formation: `ENGAGED_GROUPS` is 2, so entries past the second
     /// are out of melee reach.
     pub opponents: Vec<OpponentSpec>,
+    /// A context to roll, instead of naming `opponents`. Mutually exclusive
+    /// with them — one scenario asks one question.
+    pub encounter: Option<Encounter>,
     pub reps: u32,
     pub seed: u64,
 }
@@ -43,10 +47,28 @@ impl Default for Scenario {
             inventory: Vec::new(),
             party: Vec::new(),
             opponents: Vec::new(),
+            encounter: None,
             reps: 1,
             seed: 0,
         }
     }
+}
+
+/// Where a fight is being had, for a scenario that wants the game's own roll
+/// rather than an authored composition.
+///
+/// The zone is deliberately absent: it comes from the player row, and
+/// `ZoneLevel` is one resource driving both gear scaling and enemy scaling —
+/// a second zone on the same screen would be two answers to one question.
+/// The biome is here because it alone decides the species pool, and the
+/// arena's player stands on whatever tile `Game::new` dropped them on.
+///
+/// `depth` takes no serde default: a Stack encounter with no depth is a typo,
+/// the same argument this file's header makes about an unnamed species id.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum Encounter {
+    Field { biome: Biome },
+    Stack { biome: Biome, depth: u32 },
 }
 
 /// Where the player under test comes from.
@@ -150,7 +172,14 @@ impl Scenario {
     /// are deliberately *not* checked here — those need the databases, and
     /// so are `setup`'s job.
     fn validate(&self) -> Result<(), String> {
-        if self.opponents.is_empty() {
+        if self.encounter.is_some() && !self.opponents.is_empty() {
+            return Err(
+                "`encounter` and `opponents` are mutually exclusive — a rolled context \
+                 fields its own composition"
+                    .into(),
+            );
+        }
+        if self.encounter.is_none() && self.opponents.is_empty() {
             return Err("`opponents` is empty — a scenario with nobody to fight is a typo".into());
         }
         if !matches!(self.player, PlayerSource::Fresh { .. }) {
@@ -307,5 +336,68 @@ mod tests {
     fn a_scenario_with_no_opponents_is_an_err() {
         let err = Scenario::from_ron("( opponents: [] )").unwrap_err();
         assert!(err.contains("opponents"), "{err}");
+    }
+
+    #[test]
+    fn a_rolled_field_encounter_parses() {
+        let s = Scenario::from_ron(
+            r#"(
+                player: Fresh(level: 3, zone: 1),
+                encounter: Some(Field(biome: Mainframe)),
+            )"#,
+        )
+        .unwrap();
+        assert_eq!(
+            s.encounter,
+            Some(Encounter::Field {
+                biome: Biome::Mainframe
+            })
+        );
+        assert!(s.opponents.is_empty());
+    }
+
+    #[test]
+    fn a_rolled_stack_encounter_carries_its_depth() {
+        let s = Scenario::from_ron(
+            r#"(
+                encounter: Some(Stack(biome: OpenGrid, depth: 5)),
+                reps: 50,
+            )"#,
+        )
+        .unwrap();
+        let path = std::env::temp_dir().join("feral_processes_scenario_rolled_round_trip.ron");
+
+        s.save(&path).unwrap();
+        let back = Scenario::load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(
+            back.encounter,
+            Some(Encounter::Stack {
+                biome: Biome::OpenGrid,
+                depth: 5,
+            })
+        );
+        assert_eq!(s, back);
+    }
+
+    #[test]
+    fn an_encounter_beside_opponents_is_an_err_naming_both() {
+        let err = Scenario::from_ron(
+            r#"(
+                encounter: Some(Field(biome: Mainframe)),
+                opponents: [(species: "glitch", count: 1)],
+            )"#,
+        )
+        .unwrap_err();
+        assert!(err.contains("encounter"), "{err}");
+        assert!(err.contains("opponents"), "{err}");
+    }
+
+    #[test]
+    fn a_scenario_without_an_encounter_still_needs_opponents() {
+        let err = Scenario::from_ron("( opponents: [] )").unwrap_err();
+        assert!(err.contains("opponents"), "{err}");
+        assert!(Scenario::default().encounter.is_none());
     }
 }

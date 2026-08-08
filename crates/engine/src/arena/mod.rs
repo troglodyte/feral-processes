@@ -21,7 +21,9 @@ mod setup;
 mod watch;
 
 pub use report::{RepRecord, Report, Summary};
-pub use scenario::{CompanionSpec, EquipSpec, InventorySpec, OpponentSpec, PlayerSource, Scenario};
+pub use scenario::{
+    CompanionSpec, Encounter, EquipSpec, InventorySpec, OpponentSpec, PlayerSource, Scenario,
+};
 pub use watch::Watch;
 
 use std::path::Path;

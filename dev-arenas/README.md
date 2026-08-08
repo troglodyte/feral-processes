@@ -1,13 +1,48 @@
 # dev-arenas
 
-Battle scenarios for the arena — a harness that runs real fights offline, so
-difficulty can be tuned by measurement rather than by playing to the fight.
+Battle scenarios for the arena, which has two halves. The `arena` bin runs a
+fight offline and **measures** it, so difficulty can be tuned by measurement
+rather than by playing to the fight. The game's own arena screen **plays**
+the same scenario, in the whole battle interface, so the half a measurement
+cannot reach gets a person pressing the keys.
+
+Both read and write the same file, so a fight found by feel is measured
+without retyping and a loss seed from a report is watched by hand.
 
 ```sh
 cargo run --bin arena -- dev-arenas/opening-fight.ron
 cargo run --bin arena -- dev-arenas/full-group.ron --out report.ron
 cargo run --bin arena -- templates          # what `player: Template(..)` may name
+
+FERAL_DEV_ARENA=1 cargo run                 # ...then [R] Arena on the main menu
 ```
+
+## Playing one
+
+`FERAL_DEV_ARENA=1` puts an **Arena** row on the main menu. Unset — which is
+every ordinary run — nothing about the feature is reachable and none of it is
+loaded.
+
+The builder edits a scenario row by row: Up/Down move, Left/Right adjust the
+number under the highlight, Enter opens a picker for a species or an item,
+Backspace removes a row. `[L]` loads a scenario from this directory, `[S]`
+writes one back to it, and `[F]` fights.
+
+A fight opens the real battle screen. **Specials fire, items are spent,
+targets are chosen** — that is the whole point, and it is what the bin cannot
+do. The result screen then reports won/lost, rounds, HP left, companions
+down and the seed, over the round-by-round transcript, with `[R]` to refight
+the same seed and `[N]` to step to the next one. `[N]` is the manual version
+of `reps`: it is the same `seed + n` the bin walks, so a fight watched here
+replays there.
+
+The loop the two halves make: build by feel on the screen, save, run the file
+for a win rate, pin a loss seed, and watch that one by hand.
+
+An arena session **touches no disk** — no save, no `profile.ron`, no
+`run_history.log`. A rung earned in an arena fight is not earned, and a lost
+fight against a Permadeath save lands on the result screen rather than on
+Game Over.
 
 At `reps: 1` it prints the transcript round by round in the game's own
 wording, then the outcome. Above 1 it prints the aggregate: win rate, mean
@@ -20,18 +55,28 @@ Either way it writes a structured report (default `arena-report.ron`, or
 downed and full transcript. Warnings go to stderr, so piping stdout to a
 file keeps the data clean.
 
-Nothing the arena does is written back to a save. It loads state and throws
-it away, which is what lets it point at a real save without risk.
+Nothing either half does is written back to a save. Both load state and
+throw it away, which is what lets a scenario point at a real save without
+risk.
 
-## What it does not measure
+## What the `arena` bin does not measure
+
+This section is about the headless half specifically; it is the reason the
+played half exists.
 
 **The party plays the game's own All-Attack** — `[A]` — every round. That is
 a real in-game command rather than a policy engine written for the tester,
 so the arena cannot drift from the game by inventing decisions the game
 never makes. It also means **no companion Specials ever fire**, so ability
-magnitudes stay unmeasured and an arena number is a *floor* on the party's
-output. This is the same gap `balance_sim` has, and it is stated here so a
-reader of a report knows what it measured.
+magnitudes stay unmeasured and a number from the bin is a *floor* on the
+party's output. This is the same gap `balance_sim` has, and it is stated
+here so a reader of a report knows what it measured.
+
+Playing the same scenario on the arena screen is what closes it — and it
+closes it by having a person press the keys rather than by writing a second
+policy that could drift. What the screen gives up in exchange is the sample:
+it always fights once, which is why `reps` is preserved and editable there
+but only ever acted on by the bin.
 
 ## Schema
 
@@ -123,4 +168,6 @@ a hard error, because past those the fight is not one the game can represent.
   the worked example of the template path.
 
 These are meant to be kept and re-run after a `tuning.rs` edit, not to
-demonstrate syntax. Add one whenever you find a fight worth watching twice.
+demonstrate syntax. Add one whenever you find a fight worth watching twice —
+by hand here, or with `[S]` from the arena screen, which writes the same
+format and overwrites a file of that name deliberately.

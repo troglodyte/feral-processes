@@ -153,6 +153,19 @@ pub fn generate(name: &str, out: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// The template `name` as a save on disk, generated into its working copy.
+///
+/// The one thing a frontend needs from this module that `generate` does not
+/// already give it: where the copy goes. Both consumers — the `arena` bin
+/// and the game's arena screen — need exactly this and nothing more, so
+/// they share it rather than each pairing `working_copy` with `generate`
+/// and each deciding whether to append `known()` to the failure.
+pub fn resolve(name: &str) -> Result<PathBuf, String> {
+    let path = working_copy(name);
+    generate(name, &path).map_err(|e| format!("{e}\n{}", known()))?;
+    Ok(path)
+}
+
 /// Records an existing save as the template `name`, overwriting one of that
 /// name if it exists. The save is read through `load_from_file`, so a `.bin`
 /// from an older format is refused here rather than being frozen into a
@@ -228,6 +241,23 @@ mod tests {
             bay.input,
             bay.output
         );
+    }
+
+    #[test]
+    fn resolving_an_unknown_template_names_it_and_lists_the_known_ones() {
+        let err = resolve("not_a_template").unwrap_err();
+        assert!(err.contains("not_a_template"), "{err}");
+        assert!(
+            err.contains(&list()[0]),
+            "the known names are missing: {err}"
+        );
+    }
+
+    #[test]
+    fn resolving_a_template_generates_its_working_copy() {
+        let path = resolve("extraction").unwrap();
+        assert_eq!(path, working_copy("extraction"));
+        assert!(path.is_file(), "{} was not written", path.display());
     }
 
     #[test]

@@ -1,11 +1,8 @@
-//! One rep: reseed, fight, keep what was said.
-
-use rand::SeedableRng;
-use rand::rngs::StdRng;
+//! One rep: play a staged fight out on its own.
 
 use super::report::RepRecord;
-use crate::battle::{BattleAction, EnemyGroup};
-use crate::resources::GameRng;
+use super::watch::Watch;
+use crate::battle::BattleAction;
 use crate::*;
 
 /// A fight that has not resolved in this many rounds is a stalemate, and is
@@ -15,7 +12,7 @@ use crate::*;
 /// reason.
 const ROUND_CAP: u32 = 2000;
 
-/// Runs `groups` against the party in `game`, at `seed`.
+/// Plays the staged fight in `game` out to its end, auto-attacking.
 ///
 /// The party plays the game's own All-Attack — `battle_plan_remaining`
 /// followed by `battle_resolve_round`, which is what `App::plan_every_slot`
@@ -25,33 +22,8 @@ const ROUND_CAP: u32 = 2000;
 ///
 /// `game` is consumed for one fight and must not be reused: it comes out
 /// carrying this fight's dead companions, spent items and XP.
-pub(crate) fn run_rep(game: &mut Game, groups: Vec<EnemyGroup>, seed: u64) -> RepRecord {
-    // Per rep, not per run: twenty reps are then a sample rather than
-    // twenty copies, and any one of them replays alone from its own seed.
-    game.world
-        .insert_resource(GameRng(StdRng::seed_from_u64(seed)));
-
-    // The report is the blow-by-blow, so the prune that keeps a map pane
-    // readable has nothing to do here — and it deletes the lines outright
-    // from inside `battle_resolve_round`, so the round that ends the fight
-    // cannot be read back afterwards.
-    game.world
-        .resource_mut::<MessageLog>()
-        .keep_battle_narration = true;
-
-    let player = game.player_entity();
-    let party: Vec<Entity> = game.world.resource::<Party>().0.clone();
-    // Won means the pack is wiped, so the opponents are what has to be
-    // counted afterwards — and they have to be noted now, because
-    // `BattleState` is gone by the time the answer is wanted.
-    let opponents: Vec<Entity> = groups.iter().flat_map(|g| g.members.clone()).collect();
-    game.begin_battle(groups);
-
-    let mut transcript = Vec::new();
-    let mut rounds = 0;
-    let mut hp_fraction = hp_fraction_of(game, player);
-    let mut level = level_of(game, player);
-    while rounds < ROUND_CAP {
+pub(crate) fn run_rep(game: &mut Game, watch: &mut Watch) -> RepRecord {
+    while watch.rounds() < ROUND_CAP {
         // Not the player's HP: a Forgiving defeat is rebooted inside the
         // round that lands it, so by the time this could look the player is
         // alive again. `is_game_over` is the Permadeath half — a save
@@ -72,65 +44,20 @@ pub(crate) fn run_rep(game: &mut Game, groups: Vec<EnemyGroup>, seed: u64) -> Re
             break;
         }
         game.battle_resolve_round();
-        rounds += 1;
-        // A level-up full-heals (`progression::add_xp`), and the kill that
-        // ends a fight is usually the one that grants it — so a reading
-        // taken after that round says the fight cost nothing. Skipping the
-        // sample keeps the last honest one, which is worth a round of
-        // damage in accuracy against being off by the whole fight.
-        let now = level_of(game, player);
-        if now == level {
-            hp_fraction = hp_fraction_of(game, player);
-        }
-        level = now;
-        // After every round, never at the end: `end_battle` calls
-        // `retain_outcomes_since_battle`, which deletes the blow-by-blow and
-        // keeps only Outcome/Loot/LevelUp/Raid. `MESSAGE_LOG_CAP` is the
-        // second reason — a long fight drops lines off the front before it
-        // finishes.
-        transcript.extend(game.battle_log().into_iter().map(|line| line.text));
+        watch.observe(game);
     }
 
-    // A stalemate leaves the pack standing, so it records as a loss with
-    // `rounds == ROUND_CAP` — which is what says which it was.
-    let won = opponents.iter().all(|&e| !alive(game, e));
-    RepRecord {
-        seed,
-        won,
-        rounds,
-        // Zero on a loss, matching `balance_sim`, and not merely a
-        // convention: a Forgiving defeat reboots the player to a fraction of
-        // max HP inside the losing round, so anything read afterwards
-        // measures the reboot rather than the fight.
-        player_hp_fraction: if won { hp_fraction } else { 0.0 },
-        companions_downed: party.iter().filter(|&&e| !alive(game, e)).count() as u32,
-        transcript,
-    }
-}
-
-fn alive(game: &Game, entity: Entity) -> bool {
-    game.world.get::<Stats>(entity).is_some_and(|s| s.hp > 0)
-}
-
-fn hp_fraction_of(game: &Game, entity: Entity) -> f32 {
-    game.world
-        .get::<Stats>(entity)
-        .map(|s| (s.hp as f32 / s.max_hp.max(1) as f32).clamp(0.0, 1.0))
-        .unwrap_or(0.0)
-}
-
-fn level_of(game: &Game, entity: Entity) -> u32 {
-    game.world
-        .get::<Experience>(entity)
-        .map(|e| e.level)
-        .unwrap_or(1)
+    // A stalemate leaves the pack standing, so `finish` records it as a loss
+    // with `rounds == ROUND_CAP` — which is what says which it was.
+    watch.finish(game)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::arena::scenario::{CompanionSpec, OpponentSpec, PlayerSource, Scenario};
-    use crate::arena::setup::{build_opponents, build_player};
+    use crate::arena::setup::build_player;
+    use crate::arena::test_fight as fight;
     use crate::tests::support::test_assets_dir;
 
     fn scenario(level: u32, zone: u32, party: &[(&str, u32)], against: &[(&str, u32)]) -> Scenario {
@@ -154,12 +81,6 @@ mod tests {
         }
     }
 
-    fn fight(s: &Scenario, seed: u64) -> RepRecord {
-        let mut game = build_player(s, &test_assets_dir()).unwrap();
-        let (groups, _) = build_opponents(&mut game, &s.opponents).unwrap();
-        run_rep(&mut game, groups, seed)
-    }
-
     #[test]
     fn the_same_seed_replays_the_same_fight() {
         let s = scenario(6, 2, &[("glitch", 4)], &[("sub_process", 3)]);
@@ -173,50 +94,6 @@ mod tests {
             fight(&s, 1).transcript,
             fight(&s, 999).transcript,
             "the per-rep reseed should be doing something"
-        );
-    }
-
-    /// The regression this whole module exists for. `end_battle` prunes the
-    /// log to Outcome/Loot/LevelUp/Raid, so an implementation that read the
-    /// log once the fight was over passes every other test here and returns
-    /// nothing but results.
-    #[test]
-    fn a_won_fights_transcript_survives_end_battle() {
-        let s = scenario(20, 1, &[("glitch", 8)], &[("sprite", 1)]);
-        let record = fight(&s, 3);
-        assert!(
-            record.won,
-            "the fixture is meant to be a walkover: {record:?}"
-        );
-        assert!(
-            record
-                .transcript
-                .iter()
-                .any(|line| line.contains("── round 1 ──")),
-            "round narration is dropped by `retain_outcomes_since_battle`: {:?}",
-            record.transcript
-        );
-    }
-
-    /// The killing blow usually grants the level that heals the player back
-    /// to full, so a fraction read after the fight reports a hard-won win as
-    /// costing nothing at all.
-    #[test]
-    fn a_level_up_on_the_killing_blow_does_not_report_the_fight_as_free() {
-        let s = scenario(1, 1, &[], &[("sub_process", 1)]);
-        let record = fight(&s, 1);
-        assert!(record.won, "{record:?}");
-        assert!(
-            record
-                .transcript
-                .iter()
-                .any(|l| l.contains("reach level") || l.contains("XP")),
-            "the fixture must actually level up: {:?}",
-            record.transcript
-        );
-        assert!(
-            record.player_hp_fraction < 1.0,
-            "eight rounds of damage read back as untouched: {record:?}"
         );
     }
 

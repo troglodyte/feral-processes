@@ -10,6 +10,9 @@ impl App {
             options.push('l');
         }
         options.push('a');
+        if self.arena_enabled {
+            options.push('r');
+        }
         options.push('q');
         let idx = self
             .selected_index(key, options.len())
@@ -30,6 +33,7 @@ impl App {
                 self.status_line = None;
                 self.mode = Mode::Achievements;
             }
+            Some('r') => self.open_arena(),
             Some('q') => self.mode = Mode::QuitAppConfirm,
             _ => {}
         }

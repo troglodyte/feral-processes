@@ -29,6 +29,57 @@ first, separated by a rule.
 
 ## Unreleased
 
+## 0.5.0
+
+### The interactive arena: play the fight you were only measuring
+
+`0.4.1` shipped a harness that runs a real fight offline and reports what it
+cost. What it could not do was let anyone *watch* one. The party plays the
+game's own All-Attack every round — deliberately, so the tester cannot
+invent decisions the game never makes — but that means **no companion
+Special ever fires**, and an arena number is a floor on the party's output
+rather than a measurement of it. The second gap was authoring: a scenario is
+a `.ron` file, so "what if it had one more of those, and I were wearing the
+other weapon" meant editing text, saving, and re-running.
+
+Both close here. `FERAL_DEV_ARENA=1` puts an **Arena** row on the main menu.
+Behind it is the same `Scenario` the `arena` bin runs — not a parallel
+builder type, so a knob added to the schema cannot exist in one tool and not
+the other — edited row by row, and fought in the **whole battle interface**.
+Specials fire, items are spent, targets are chosen, jacking out is on the
+table, because a person is pressing the keys.
+
+- **The builder.** Up/Down move, Left/Right adjust the number under the
+  highlight, Enter opens a picker of species or items drawn from the asset
+  directories, Backspace removes a row. The loadout rows disappear when the
+  player source is not `Fresh`, because the engine treats an authored
+  loadout beside a save as an error rather than ignoring it.
+- **The result screen.** Won or lost, rounds, HP left, companions down, the
+  seed, the staging warnings, and the scrollable round-by-round transcript.
+  `[R]` refights the same seed and `[N]` steps to the next — the same
+  `seed + n` the bin's reps walk, so a fight watched here replays there.
+- **Round trips with the bin.** `[L]` loads a scenario from `dev-arenas/`
+  and `[S]` writes one back, so a fight built by feel is measured fifty
+  times without retyping, and a loss seed from a report is watched by hand.
+- **Nothing is capped, and nothing is silent.** A composition past what the
+  zone could really field is built as asked and warned about — on the status
+  line as the fight opens, and again on the result screen. "What if zone 1
+  threw nine at me" is the question the tool exists to answer.
+
+Unset, the flag makes none of this reachable and none of it loaded. An arena
+session also touches no disk at all: no save, no `profile.ron` — a rung
+earned in a tester's fight would otherwise be paid out to every future new
+game — and no `run_history.log`, so a lost fight against a Permadeath save
+lands on the result screen rather than on Game Over.
+
+Under it, the engine's staging and outcome-reading were split out of the
+headless loop (`arena::stage`, `arena::Watch`), so the played fight and the
+measured one are one code path and cannot disagree about the RNG stream or
+about what a fight cost. Both shipped scenarios produce byte-identical
+reports across that refactor.
+
+No save-format change.
+
 ## 0.4.1
 
 ### The battle arena: run a real fight without playing to it

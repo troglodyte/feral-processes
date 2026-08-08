@@ -126,6 +126,26 @@ impl Scenario {
         Ok(scenario)
     }
 
+    /// Writes this scenario to `path`, **overwriting whatever is there**.
+    ///
+    /// Overwriting is the behaviour rather than a hazard, following
+    /// `dev_template::generate`: a scenario file exists so the same fight
+    /// comes back, and a save that preserved the last version would leave
+    /// the author guessing which copy the bin is about to run.
+    ///
+    /// Validated on the way out, so a file this writes is one `load` will
+    /// take back — the round trip is what makes the two tools one library.
+    pub fn save(&self, path: &Path) -> Result<(), String> {
+        self.validate()?;
+        let text = self.to_ron()?;
+        std::fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))
+    }
+
+    pub fn to_ron(&self) -> Result<String, String> {
+        ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default())
+            .map_err(|e| e.to_string())
+    }
+
     /// Everything checkable without a loaded `Game`. Species and item ids
     /// are deliberately *not* checked here — those need the databases, and
     /// so are `setup`'s job.
@@ -249,6 +269,38 @@ mod tests {
         )
         .unwrap_err();
         assert!(tmpl.contains("party"), "{tmpl}");
+    }
+
+    #[test]
+    fn a_written_scenario_reads_back_as_itself() {
+        // The property that makes the builder and the bin one library
+        // rather than two: what the screen writes, `Scenario::load` takes.
+        let s = Scenario::from_ron(
+            r#"(
+                player: Template("extraction"),
+                opponents: [(species: "sub_process", count: 9), (species: "glitch", count: 2)],
+                reps: 50,
+                seed: 7,
+            )"#,
+        )
+        .unwrap();
+        let path = std::env::temp_dir().join("feral_processes_scenario_round_trip.ron");
+
+        s.save(&path).unwrap();
+        let back = Scenario::load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(s, back);
+    }
+
+    #[test]
+    fn a_scenario_with_no_opponents_is_not_written() {
+        // Validated on the way out as well as in, or the screen could
+        // produce a file only it can open.
+        let path = std::env::temp_dir().join("feral_processes_scenario_invalid.ron");
+        let err = Scenario::default().save(&path).unwrap_err();
+        assert!(err.contains("opponents"), "{err}");
+        assert!(!path.exists(), "an invalid scenario reached disk");
     }
 
     #[test]

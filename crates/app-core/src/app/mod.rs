@@ -3,6 +3,7 @@
 //! `App` itself stays in `lib.rs` — it is the state the renderer reads
 //! to draw a frame, and these modules only add inherent methods to it.
 
+pub(crate) mod arena;
 mod battle;
 mod building;
 mod crafting;

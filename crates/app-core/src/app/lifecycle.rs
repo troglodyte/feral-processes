@@ -8,6 +8,7 @@ impl App {
         saves_dir: PathBuf,
         history_path: PathBuf,
         profile_path: PathBuf,
+        arenas_dir: PathBuf,
     ) -> Self {
         let (profile, profile_warning) = Profile::load(&profile_path);
         // A failed load leaves an empty ladder and an empty screen rather
@@ -67,6 +68,12 @@ impl App {
             reveal: BattleReveal::default(),
             status_age: 0.0,
             last_realtime_tick: Instant::now(),
+            arenas_dir,
+            arena: None,
+            pending_arena_pick: None,
+            arena_save_input: String::new(),
+            arena_enabled: crate::app::arena::dev_arena_enabled(),
+            dev_templates: None,
         }
     }
 
@@ -306,7 +313,17 @@ impl App {
 
     /// Everything that has to happen after the world may have ticked, in one
     /// place so a third tick site cannot pick up one half and miss the other.
+    ///
+    /// **An arena session returns before any of it.** Both callees write to
+    /// disk, and an arena fight is not a run: an autosave would need a slot
+    /// this session deliberately has none of, and a rung earned here would
+    /// land in the real `profile.ron` and then be paid out to every future
+    /// new game by `grant_profile_rewards`. One guard covers both precisely
+    /// because this function is the one place they happen.
     pub(crate) fn after_tick(&mut self) {
+        if self.in_arena() {
+            return;
+        }
         self.flush_profile_writes();
         self.maybe_autosave();
     }
@@ -327,6 +344,15 @@ impl App {
         }
     }
 
+    /// Guarded separately from `after_tick` rather than folded into it,
+    /// because it is not a post-tick concern and is not called from there:
+    /// its three callers are the battle tail, the trade screen and the map,
+    /// each asking whether the run has just ended.
+    ///
+    /// An arena fight can reach it — a `Save` player source carries its own
+    /// difficulty in, so a lost fight against a Permadeath save *is* a
+    /// game over — and what must not follow is a `run_history.log` entry
+    /// for a fight that was never a run.
     pub(crate) fn check_game_over(&mut self) {
         let over = self
             .game
@@ -334,6 +360,10 @@ impl App {
             .map(|g| g.is_game_over().is_some())
             .unwrap_or(false);
         if !over {
+            return;
+        }
+        if self.in_arena() {
+            self.finish_arena_fight();
             return;
         }
         if !self.history_written {

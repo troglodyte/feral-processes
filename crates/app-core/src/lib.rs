@@ -9,7 +9,10 @@
 
 mod app;
 
+pub use app::arena::{ArenaRow, ArenaRowKind, DevTemplates};
 pub use app::group_menu::GroupMenuRow;
+
+use app::arena::{ArenaPickKind, ArenaSession};
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -673,6 +676,23 @@ pub enum Mode {
     /// Confirming `q` from `Mode::MainMenu`, which ends the process. Nothing
     /// is in memory to lose here; the key simply sits between `n` and `l`.
     QuitAppConfirm,
+    /// The dev arena's scenario editor, and the screen the whole family
+    /// returns to. Reached from the main menu when `FERAL_DEV_ARENA` is set;
+    /// Esc drops the session. Rows come from `App::arena_builder_rows`.
+    ArenaBuilder,
+    /// Picking a `dev-arenas/*.ron` to load into the builder.
+    ArenaLoad,
+    /// Typing a filename to write the built scenario out under — the same
+    /// text-entry idiom `Mode::FuseName` uses.
+    ArenaSave,
+    /// One picker, four targets: a party species, an opponent species, an
+    /// item to equip or an item for cargo. Which is `App::pending_arena_pick`,
+    /// following `Mode::ManifestPick` rather than being four near-identical
+    /// modes with four near-identical handlers to keep in step.
+    ArenaPick,
+    /// What the fight cost — see `arena::Watch`. `[R]` refights the same
+    /// seed, `[N]` the next one, Esc returns to the builder.
+    ArenaResult,
 }
 
 impl Mode {
@@ -750,7 +770,14 @@ impl Mode {
             | Mode::FrameMap
             | Mode::GameOver
             | Mode::QuitRunConfirm
-            | Mode::QuitAppConfirm => false,
+            | Mode::QuitAppConfirm
+            // The arena's own screens are not battle screens; the fight it
+            // stages runs in `Mode::Battle` like any other.
+            | Mode::ArenaBuilder
+            | Mode::ArenaLoad
+            | Mode::ArenaSave
+            | Mode::ArenaPick
+            | Mode::ArenaResult => false,
         }
     }
 }
@@ -994,6 +1021,29 @@ pub struct App {
     /// reset whenever ticking is paused (any mode but `Playing`) so resuming
     /// play doesn't immediately fire a burst of catch-up ticks.
     last_realtime_tick: Instant,
+    /// Where `Mode::ArenaLoad` reads scenarios from and `Mode::ArenaSave`
+    /// writes them to. A constructor parameter beside `saves_dir` rather
+    /// than something derived here: `App` takes its paths from the
+    /// launcher and resolves none itself, which is what keeps app-core
+    /// testable against a temp directory.
+    arenas_dir: PathBuf,
+    /// The live arena visit, if the dev arena is open. Its presence is what
+    /// makes the session inert on disk — see `App::in_arena`.
+    arena: Option<ArenaSession>,
+    /// Whether `FERAL_DEV_ARENA` was set when this `App` was built. Read
+    /// once, in `App::new`, so the parallel test suite can open the gate on
+    /// a field rather than in a process-global environment.
+    arena_enabled: bool,
+    /// Where a row picked in `Mode::ArenaPick` is going — see
+    /// `ArenaPickKind`. `None` outside that mode.
+    pending_arena_pick: Option<ArenaPickKind>,
+    /// Characters typed so far on `Mode::ArenaSave`'s filename page.
+    pub arena_save_input: String,
+    /// The launcher's template library, injected because `dev_template`
+    /// lives in a crate app-core cannot see. `None` for any frontend that
+    /// does not install it, which simply does not offer the `Template`
+    /// player source.
+    dev_templates: Option<DevTemplates>,
 }
 
 /// One entry in the `Mode::LoadGame` list — a save file found in the saves

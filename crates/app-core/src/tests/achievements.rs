@@ -23,7 +23,13 @@ fn app_with_profile(seed: u32, profile_path: PathBuf) -> App {
         std::env::temp_dir().join(format!("feral_processes_appcore_profile_{seed}_saves"));
     let history_path =
         std::env::temp_dir().join(format!("feral_processes_appcore_profile_{seed}.log"));
-    App::new(assets_dir, saves_dir, history_path, profile_path)
+    App::new(
+        assets_dir,
+        saves_dir,
+        history_path,
+        profile_path,
+        super::support::arenas_dir(),
+    )
 }
 
 /// A profile holding one stat rung with a known roll, written to `path` — the

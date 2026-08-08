@@ -149,6 +149,11 @@ impl App {
             Mode::GameOver => self.handle_game_over_key(),
             Mode::QuitRunConfirm => self.handle_quit_run_confirm_key(key),
             Mode::QuitAppConfirm => self.handle_quit_app_confirm_key(key),
+            Mode::ArenaBuilder => self.handle_arena_builder_key(key),
+            Mode::ArenaLoad => self.handle_arena_load_key(key),
+            Mode::ArenaSave => self.handle_arena_save_key(key),
+            Mode::ArenaPick => self.handle_arena_pick_key(key),
+            Mode::ArenaResult => self.handle_arena_result_key(key),
         }
         // Every menu's arrow-key highlight (see `selected_index`) starts
         // fresh at the top of its list, rather than carrying over whatever

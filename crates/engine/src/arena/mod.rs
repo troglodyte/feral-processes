@@ -18,13 +18,19 @@ mod report;
 mod run;
 mod scenario;
 mod setup;
+mod watch;
 
 pub use report::{RepRecord, Report, Summary};
 pub use scenario::{CompanionSpec, EquipSpec, InventorySpec, OpponentSpec, PlayerSource, Scenario};
+pub use watch::Watch;
 
 use std::path::Path;
 
+use rand::SeedableRng;
+use rand::rngs::StdRng;
+
 use crate::progression;
+use crate::resources::GameRng;
 use crate::tuning::{BASELINE_GROWTH_MULTIPLIER, CREATURE_MAX_LEVEL};
 use crate::*;
 
@@ -100,6 +106,57 @@ pub(crate) fn spawn_companion(game: &mut Game, species: &str, level: u32) -> Opt
     Some(program)
 }
 
+/// A fight set up and open, with nobody having acted yet.
+pub struct Staged {
+    pub game: Game,
+    pub watch: Watch,
+    /// What the composition asks for past the zone's ceilings. Shown, never
+    /// applied — explicit authoring is the point of a tester.
+    pub warnings: Vec<String>,
+}
+
+/// Everything between "here is a scenario" and "the first round may be
+/// planned".
+///
+/// The one way into an arena fight, whether a person or `run_rep` is going
+/// to press the keys. Both halves therefore agree about the RNG stream, the
+/// log's retention and who counts as an opponent without either knowing the
+/// other exists.
+///
+/// `seed` is a parameter rather than `scenario.seed`, because rep *n* runs
+/// at `scenario.seed + n` and the result screen's next-seed key is the same
+/// increment — a `stage` that read the field would force both callers to
+/// mutate a scenario they do not own.
+pub fn stage(scenario: &Scenario, assets_dir: &Path, seed: u64) -> Result<Staged, String> {
+    let mut game = setup::build_player(scenario, assets_dir)?;
+    let (groups, warnings) = setup::build_opponents(&mut game, &scenario.opponents)?;
+
+    // Per fight, not per run: twenty reps are then a sample rather than
+    // twenty copies, and any one of them replays alone from its own seed.
+    game.world
+        .insert_resource(GameRng(StdRng::seed_from_u64(seed)));
+
+    // The arena's output is the blow-by-blow, so the prune that keeps a map
+    // pane readable has nothing to do here — and it deletes the lines
+    // outright from inside `battle_resolve_round`, so the round that ends
+    // the fight cannot be read back afterwards.
+    game.world
+        .resource_mut::<MessageLog>()
+        .keep_battle_narration = true;
+
+    // Noted before the fight, because `BattleState` is gone by the time the
+    // answer is wanted.
+    let opponents: Vec<Entity> = groups.iter().flat_map(|g| g.members.clone()).collect();
+    game.begin_battle(groups);
+    let watch = Watch::new(&game, seed, opponents);
+
+    Ok(Staged {
+        game,
+        watch,
+        warnings,
+    })
+}
+
 /// Runs `scenario` and reports what happened. The engine's whole public
 /// arena surface.
 ///
@@ -112,18 +169,26 @@ pub fn run(scenario: &Scenario, assets_dir: &Path) -> Result<Report, String> {
     let mut warnings = Vec::new();
     let mut reps = Vec::with_capacity(scenario.reps as usize);
     for rep in 0..scenario.reps {
-        let mut game = setup::build_player(scenario, assets_dir)?;
-        let (groups, rep_warnings) = setup::build_opponents(&mut game, &scenario.opponents)?;
+        let mut staged = stage(scenario, assets_dir, scenario.seed + rep as u64)?;
         if rep == 0 {
-            warnings = rep_warnings;
+            warnings = staged.warnings.clone();
         }
-        reps.push(run::run_rep(&mut game, groups, scenario.seed + rep as u64));
+        reps.push(run::run_rep(&mut staged.game, &mut staged.watch));
     }
     Ok(Report {
         scenario: scenario.clone(),
         warnings,
         reps,
     })
+}
+
+/// One staged fight, auto-played — the shared fixture for the tests of both
+/// halves of the split. Two copies of it would be two answers to "what does
+/// the headless path do", which is the thing the split has to preserve.
+#[cfg(test)]
+pub(crate) fn test_fight(scenario: &Scenario, seed: u64) -> RepRecord {
+    let mut staged = stage(scenario, &crate::tests::support::test_assets_dir(), seed).unwrap();
+    run::run_rep(&mut staged.game, &mut staged.watch)
 }
 
 #[cfg(test)]
@@ -209,6 +274,46 @@ mod tests {
         let a = run(&s, &test_assets_dir()).unwrap();
         let b = run(&s, &test_assets_dir()).unwrap();
         assert_eq!(a.reps, b.reps);
+    }
+
+    #[test]
+    fn staging_leaves_the_fight_open_with_nobody_having_acted() {
+        let s = a_scenario(1, 5, &[("glitch", 3)]);
+        let staged = stage(&s, &test_assets_dir(), 5).unwrap();
+
+        assert!(staged.game.has_active_battle());
+        assert_eq!(staged.watch.rounds(), 0);
+    }
+
+    #[test]
+    fn staging_then_running_matches_run_at_the_same_seed() {
+        // The property the whole split rests on: the played fight and the
+        // measured one are one code path, so a divergence here means `stage`
+        // reordered something the RNG stream sees.
+        let s = a_scenario(1, 40, &[("glitch", 4)]);
+        let report = run(&s, &test_assets_dir()).unwrap();
+
+        assert_eq!(report.reps[0], test_fight(&s, 40));
+    }
+
+    #[test]
+    fn staging_reports_the_composition_warnings() {
+        let s = Scenario {
+            player: PlayerSource::Fresh { level: 1, zone: 1 },
+            opponents: vec![OpponentSpec {
+                species: "glitch".into(),
+                count: 9,
+            }],
+            ..Scenario::default()
+        };
+
+        let staged = stage(&s, &test_assets_dir(), 0).unwrap();
+
+        assert_eq!(staged.warnings.len(), 1, "{:?}", staged.warnings);
+        let w = &staged.warnings[0];
+        assert!(w.contains('9'), "the ask: {w}");
+        assert!(w.contains('1'), "the ceiling and the zone: {w}");
+        assert!(w.contains("glitch"), "which entry: {w}");
     }
 
     #[test]

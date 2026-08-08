@@ -85,13 +85,16 @@ fn run(scenario_path: &Path, out: &Path) -> Result<(), String> {
 
 /// The one thing this bin can do that `arena::run` cannot: turn a template
 /// name into a save on disk. `dev_template` lives here, not in the engine.
+///
+/// Rewriting the `Scenario` stays here rather than in `dev_template`:
+/// mutating a scenario is this bin's business, and the game's arena screen
+/// deliberately does *not* do it — a saved scenario must keep saying
+/// `Template(name)` rather than a path into `saves/`.
 fn resolve_template(scenario: &mut Scenario) -> Result<(), String> {
     let PlayerSource::Template(name) = &scenario.player else {
         return Ok(());
     };
-    let path = dev_template::working_copy(name);
-    dev_template::generate(name, &path).map_err(|e| format!("{e}\n{}", dev_template::known()))?;
-    scenario.player = PlayerSource::Save(path);
+    scenario.player = PlayerSource::Save(dev_template::resolve(name)?);
     Ok(())
 }
 

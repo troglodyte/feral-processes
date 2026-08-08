@@ -10,7 +10,7 @@
 use std::io;
 
 use feral_processes::dev_template;
-use feral_processes_app_core::App;
+use feral_processes_app_core::{App, DevTemplates};
 
 const USAGE: &str = "\
 usage:
@@ -57,7 +57,20 @@ fn main() -> io::Result<()> {
         eprintln!("No display detected; feral-processes needs a graphical display.");
         std::process::exit(1);
     }
-    let mut app = App::new(assets_dir, saves_dir, history_path, profile_path);
+    let mut app = App::new(
+        assets_dir,
+        saves_dir,
+        history_path,
+        profile_path,
+        repo_root.join("dev-arenas"),
+    );
+    // Unconditionally, not behind `FERAL_DEV_ARENA`: the gate decides
+    // whether the arena is *visible*, and a launcher that installed only
+    // when gated would make one flag mean two things.
+    app.install_dev_templates(DevTemplates {
+        names: dev_template::list(),
+        resolve: dev_template::resolve,
+    });
     // Generated into an expendable copy under `saves/`, never opened on the
     // `dev-saves/` source — the game autosaves, so playing the fixture
     // directly would rewrite it into a record of this session.

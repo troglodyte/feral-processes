@@ -738,17 +738,24 @@ fn draw_surface_map(
             // blinks in place instead — see `Fx::stranded_blink`.
             if let Some((marked, stranded)) = mark {
                 let size = (tile_px - 1.0) * STAFFED_MARK;
-                let (lift, alpha) = if stranded {
-                    (0.0, fx.stranded_blink())
+                // Orange as well as still: colour and motion say the same
+                // thing at once, so a stranded machine is legible from a
+                // paused screenshot and not only from watching it. It is
+                // deliberately not the `RED` a clogged outline already
+                // wears — being full is the machine's own problem and
+                // recoverable by collecting, while this is the base having
+                // nowhere left to put anything.
+                let (lift, alpha, base) = if stranded {
+                    (0.0, fx.stranded_blink(), ORANGE)
                 } else {
-                    (fx.staffed_bob(marked), 1.0)
+                    (fx.staffed_bob(marked), 1.0, GREEN)
                 };
                 painter.rect(
                     px + STAFFED_MARK_INSET,
                     py + tile_px - 1.0 - STAFFED_MARK_INSET - size - lift,
                     size,
                     size,
-                    Color { a: alpha, ..GREEN },
+                    Color { a: alpha, ..base },
                 );
             }
             if let Some(flash) = fx.tile_flash(world) {

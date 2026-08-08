@@ -154,7 +154,34 @@ impl Game {
             })
             .map(|(e, p, g)| (e, *p, *g))
             .collect();
+        self.build_views(hits)
+    }
 
+    /// Every tamed program the player owns, wherever it happens to be
+    /// standing — the roster, not a window onto the map.
+    ///
+    /// A companion's `Position` is the tile it was beaten on and is never
+    /// written again (see `worker_away_from_post` below), so a distance
+    /// filter over it hides programs by where they were *captured* rather
+    /// than by where they are. `owned_pets` made this move already, for the
+    /// fusion picker; the posting menus need the same list, and neither
+    /// `assign_cronjob` nor `assign_guard` has a distance requirement on the
+    /// program to justify one. Shares `build_views` with `view_entities`
+    /// rather than repeating it: the two differ only in which entities they
+    /// select, exactly as `pursuit_field` differs from `walk_field`.
+    pub fn owned_program_views(&mut self) -> Vec<EntityView> {
+        let player = self.player_entity();
+        let mut query = self.world.query::<(Entity, &Position, &Glyph, &Tamed)>();
+        let hits: Vec<(Entity, Position, Glyph)> = query
+            .iter(&self.world)
+            .filter(|(_, _, _, t)| t.owner == player)
+            .map(|(e, p, g, _)| (e, *p, *g))
+            .collect();
+        self.build_views(hits)
+    }
+
+    /// The `EntityView` for each of `hits`, whatever selected them.
+    fn build_views(&mut self, hits: Vec<(Entity, Position, Glyph)>) -> Vec<EntityView> {
         let worker_by_structure: HashMap<Entity, Entity> = {
             let mut tasks = self.world.query::<(Entity, &Task)>();
             tasks

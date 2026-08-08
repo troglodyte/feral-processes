@@ -102,6 +102,8 @@ const SPARK_ANGLE_JITTER: f32 = 0.45;
 /// Slowest a jittered spark may fly, as a fraction of the full reach. Under
 /// 1.0 so the debris arrives ragged rather than as an expanding ring.
 const SPARK_MIN_SPEED: f32 = 0.55;
+/// Keeps a spark's speed draw independent of its angle draw.
+const SPARK_SPEED_SALT: u32 = 0x5BF0_3635;
 
 // Local copies of the palette `render.rs` draws with, rather than
 // macroquad's harsher primaries.
@@ -200,8 +202,7 @@ fn spark_spread(t: f32) -> f32 {
 /// else* — there is no time argument, which is what stops a spark being
 /// re-rolled every frame and strobing instead of flying.
 fn spark_scatter(pos: (i32, i32), index: u32) -> f32 {
-    let mut h = (pos.0 as u32)
-        .wrapping_mul(0x9E37_79B9)
+    let mut h = (pos.0 as u32).wrapping_mul(0x9E37_79B9)
         ^ (pos.1 as u32).wrapping_mul(0x85EB_CA6B)
         ^ index.wrapping_mul(0xC2B2_AE35);
     h ^= h >> 15;
@@ -215,6 +216,15 @@ fn spark_scatter(pos: (i32, i32), index: u32) -> f32 {
 fn spark_angle(pos: (i32, i32), index: u32, count: u32) -> f32 {
     let spoke = index as f32 / count as f32 * std::f32::consts::TAU;
     spoke + (spark_scatter(pos, index) - 0.5) * SPARK_ANGLE_JITTER
+}
+
+/// How fast spark `index` flies, as a fraction of its burst's full reach.
+///
+/// Salted off the draw `spark_angle` makes, or the two would correlate and
+/// every spark jittered clockwise would also be the fast one — a burst with
+/// a visible twist to it rather than a scatter.
+fn spark_speed(pos: (i32, i32), index: u32) -> f32 {
+    SPARK_MIN_SPEED + (1.0 - SPARK_MIN_SPEED) * spark_scatter(pos, index ^ SPARK_SPEED_SALT)
 }
 
 fn spark_alpha(t: f32) -> f32 {
@@ -328,6 +338,63 @@ impl Fx {
         }
         let c = effect_color(flash.kind);
         Some(Color::new(c.r, c.g, c.b, alpha))
+    }
+
+    /// Draws the debris every live burst is currently throwing.
+    ///
+    /// The sparks are derived from the same `TileFlash` records the tile
+    /// wash is drawn from rather than stored beside them, so a burst shares
+    /// its colour, its lifetime and its retirement with the flash under it
+    /// and the two cannot drift apart.
+    ///
+    /// Overlapping bursts all draw, unlike `tile_flash`, which takes only
+    /// the newest. A structure destroyed by the blow that damaged it should
+    /// throw both the hit's spatter and the destruction's wreckage — two
+    /// washes on one tile would merely muddy each other, but two lots of
+    /// debris just read as more debris.
+    ///
+    /// `to_px` maps a world tile to its top-left corner in the pane, since
+    /// sparks cross tile boundaries and so cannot be drawn from inside the
+    /// caller's tile loop.
+    pub fn draw_bursts(
+        &self,
+        painter: &Painter,
+        tile_px: f32,
+        to_px: impl Fn((i32, i32)) -> (f32, f32),
+    ) {
+        for flash in &self.flashes {
+            let (count, reach) = spark_burst(flash.kind);
+            if count == 0 {
+                continue;
+            }
+            let t = ((self.now - flash.start) / effect_duration(flash.kind)) as f32;
+            if !(0.0..1.0).contains(&t) {
+                continue;
+            }
+            let base = effect_color(flash.kind);
+            let color = Color::new(base.r, base.g, base.b, spark_alpha(t));
+            let (ox, oy) = to_px(flash.pos);
+            let (cx, cy) = (ox + tile_px / 2.0, oy + tile_px / 2.0);
+            let spread = spark_spread(t);
+            for index in 0..count {
+                let angle = spark_angle(flash.pos, index, count);
+                let (dx, dy) = (angle.cos(), angle.sin());
+                let head = spread * spark_speed(flash.pos, index) * reach * tile_px;
+                // The streak is the spark's own trail, so it is measured
+                // back from the head rather than drawn ahead of it — a
+                // streak that led would poke out of the tile before the
+                // spark had travelled anywhere.
+                let tail = (head - SPARK_STREAK_TILES * tile_px).max(0.0);
+                painter.line(
+                    cx + dx * tail,
+                    cy + dy * tail,
+                    cx + dx * head,
+                    cy + dy * head,
+                    SPARK_THICKNESS,
+                    color,
+                );
+            }
+        }
     }
 
     /// Dims a structure's glyph by how worn down it is, and reports whether
@@ -783,7 +850,11 @@ mod tests {
     #[test]
     fn a_spark_starts_at_the_tile_and_is_at_full_reach_when_it_dies() {
         assert_eq!(spark_spread(0.0), 0.0);
-        assert!((spark_spread(1.0) - 1.0).abs() < 1e-6, "{}", spark_spread(1.0));
+        assert!(
+            (spark_spread(1.0) - 1.0).abs() < 1e-6,
+            "{}",
+            spark_spread(1.0)
+        );
     }
 
     /// Debris flung outward slows as it goes. Flying at a constant rate
@@ -837,9 +908,35 @@ mod tests {
     #[test]
     fn two_tiles_bursting_at_once_do_not_scatter_identically() {
         let count = DESTROYED_SPARKS;
-        let differs = (0..count)
-            .any(|i| spark_angle((0, 0), i, count) != spark_angle((1, 0), i, count));
-        assert!(differs, "adjacent bursts threw debris in identical directions");
+        let differs =
+            (0..count).any(|i| spark_angle((0, 0), i, count) != spark_angle((1, 0), i, count));
+        assert!(
+            differs,
+            "adjacent bursts threw debris in identical directions"
+        );
+    }
+
+    /// Even spokes fix the *directions*, which alone would put every spark
+    /// the same distance out at every instant — an expanding ring wearing a
+    /// starburst's clothes. Varying the speeds is what makes the debris
+    /// ragged.
+    #[test]
+    fn sparks_fly_at_a_range_of_speeds_rather_than_as_one_ring() {
+        let speeds: Vec<f32> = (0..DESTROYED_SPARKS)
+            .map(|i| spark_speed((2, 5), i))
+            .collect();
+        for s in &speeds {
+            assert!(
+                (SPARK_MIN_SPEED..=1.0).contains(s),
+                "speed {s} escaped the band"
+            );
+        }
+        let slowest = speeds.iter().copied().fold(f32::MAX, f32::min);
+        let fastest = speeds.iter().copied().fold(f32::MIN, f32::max);
+        assert!(
+            fastest - slowest > 0.1,
+            "the whole burst flew at one speed: {slowest}..{fastest}"
+        );
     }
 
     #[test]

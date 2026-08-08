@@ -12,4 +12,4 @@
 [ ] show damage in line with messages on enemy, like bards tale attack sequence
 # Bugs
 [x] entities do not draw from players stamina for specials, make all specials on cooldown, even players.
-[ ] doors do not render in the distance in the stack, i don't see the walls changing color until i'm directly next to it
+[x] doors do not render in the distance in the stack, i don't see the walls changing color until i'm directly next to it

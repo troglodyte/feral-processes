@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 use crate::paint::{Color, Painter};
 use crate::text::Metrics;
-use feral_processes_engine::{EffectKind, LogLine, MessageKind, VisualEffect};
+use feral_processes_engine::{EffectKind, Entity, LogLine, MessageKind, VisualEffect};
 
 /// Alpha a tile flash starts at, before fading linearly to nothing. Chosen
 /// to read against the dim tile backgrounds without hiding the glyph.
@@ -33,13 +33,25 @@ const SHIELD_PULSE_MIN: f32 = 0.06;
 const SHIELD_PULSE_MAX: f32 = 0.16;
 const SHIELD_PULSE_HZ: f64 = 0.5;
 
-/// How far the staffed mark lifts, how fast, and how far out of step each
-/// tile is from its neighbour (in turns per tile of `x + y`). The phase
-/// offset is the difference between a base that looks busy and one that
-/// looks like a single blinking screen artifact.
+/// How far the staffed mark lifts, how fast, and how far out of step two
+/// marks are (in turns per step of the phase key). The phase offset is the
+/// difference between a base that looks busy and one that looks like a
+/// single blinking screen artifact.
 const STAFFED_BOB_PX: f32 = 4.0;
 const STAFFED_BOB_HZ: f64 = 1.0;
-const STAFFED_BOB_TILE_PHASE: f64 = 0.15;
+const STAFFED_BOB_PHASE_STEP: f64 = 0.15;
+/// How many distinct phases marks are spread across before repeating.
+const PHASE_KEYS: u64 = 64;
+
+/// How slowly a stranded machine's mark blinks, and how far down it dims.
+///
+/// The floor is deliberately not zero. A mark that vanished outright would,
+/// for half of every cycle, say "nobody is posted here" — the exact reading
+/// the mark was introduced to stop grey `Idle` giving. Dimming to a fifth
+/// reads as a warning light while still answering "someone is on this job"
+/// at every instant.
+const STRANDED_BLINK_HZ: f64 = 0.5;
+const STRANDED_BLINK_MIN: f32 = 0.2;
 
 /// How fast the lagging "ghost" bar drains, in HP per second.
 const GHOST_DRAIN_PER_SECOND: f32 = 60.0;
@@ -116,9 +128,23 @@ fn shield_pulse_alpha(time: f64) -> f32 {
 /// `shield_pulse_alpha` uses: the mark's rest position is held off the
 /// tile's bottom edge by an inset `render/base.rs` documents as
 /// load-bearing, and a down-swing would spend it.
-fn staffed_bob_offset(time: f64, tile: (i32, i32)) -> f32 {
-    let turns = time * STAFFED_BOB_HZ + f64::from(tile.0 + tile.1) * STAFFED_BOB_TILE_PHASE;
+fn staffed_bob_offset(time: f64, phase_key: u64) -> f32 {
+    // Wrapped rather than used whole: an entity id climbs into the millions
+    // over a run, and a phase that large is both a needlessly big float and
+    // no more out of step than a small one.
+    let turns = time * STAFFED_BOB_HZ + (phase_key % PHASE_KEYS) as f64 * STAFFED_BOB_PHASE_STEP;
     STAFFED_BOB_PX * (1.0 - (turns * std::f64::consts::TAU).cos()) as f32 / 2.0
+}
+
+/// Alpha for a stranded machine's mark: a slow square wave rather than the
+/// sine `shield_pulse_alpha` uses, because this is an alarm and has to read
+/// as switching rather than as breathing.
+fn stranded_blink_alpha(time: f64) -> f32 {
+    if (time * STRANDED_BLINK_HZ).fract() < 0.5 {
+        1.0
+    } else {
+        STRANDED_BLINK_MIN
+    }
 }
 
 fn effect_duration(kind: EffectKind) -> f64 {
@@ -257,16 +283,34 @@ impl Fx {
         Some(Color::new(0.4, 0.8, 1.0, shield_pulse_alpha(self.now)))
     }
 
-    /// How far to lift the "a program is posted here" mark this frame.
+    /// How far to lift the "someone is on this job" mark this frame.
     ///
-    /// Keyed by world tile rather than screen position so the phase belongs
-    /// to the place, and a mark doesn't shuffle its timing as the camera
-    /// pans across it.
-    pub fn staffed_bob(&self, tile: (i32, i32)) -> f32 {
+    /// Keyed by the entity wearing the mark, not by the tile it is standing
+    /// on. It used to be the tile, on the argument that the phase belongs to
+    /// the place — which was true while the only thing wearing a mark was a
+    /// building. A posted worker walks, so a tile key would re-phase the bob
+    /// on every step and read as a stutter each time the program moved.
+    /// Taking `Entity` rather than a pair is what stops a caller handing
+    /// back the tile.
+    pub fn staffed_bob(&self, entity: Entity) -> f32 {
         if !self.enabled {
             return 0.0;
         }
-        staffed_bob_offset(self.now, tile)
+        staffed_bob_offset(self.now, entity.to_bits())
+    }
+
+    /// Alpha for a mark whose machine is full with nowhere to unload.
+    ///
+    /// Deliberately *not* phase-keyed the way `staffed_bob` is: two stranded
+    /// machines are one condition — the base has run out of storage — and
+    /// blinking them together says so, where staggering them would read as
+    /// two unrelated problems. Working marks are the opposite case, which is
+    /// why only they are spread out.
+    pub fn stranded_blink(&self) -> f32 {
+        if !self.enabled {
+            return 1.0;
+        }
+        stranded_blink_alpha(self.now)
     }
 
     /// One frame of the trailing "ghost" band behind an HP bar, tracked
@@ -578,7 +622,7 @@ mod tests {
     #[test]
     fn the_staffed_bob_only_ever_lifts_the_mark() {
         for i in 0..400 {
-            let dy = staffed_bob_offset(i as f64 * 0.02, (i % 7, i % 5));
+            let dy = staffed_bob_offset(i as f64 * 0.02, i % 7);
             assert!(
                 (0.0..=STAFFED_BOB_PX).contains(&dy),
                 "offset {dy} escaped the band"
@@ -586,15 +630,56 @@ mod tests {
         }
     }
 
-    /// Neighbouring tiles are deliberately out of step: a base full of marks
-    /// should read as separate workers, not one synchronised pulse.
+    /// Two marks are deliberately out of step: a base full of them should
+    /// read as separate workers, not one synchronised pulse.
     #[test]
-    fn adjacent_staffed_marks_bob_out_of_phase() {
-        let (a, b) = (
-            staffed_bob_offset(0.3, (4, 4)),
-            staffed_bob_offset(0.3, (5, 4)),
+    fn two_staffed_marks_bob_out_of_phase() {
+        let (a, b) = (staffed_bob_offset(0.3, 4), staffed_bob_offset(0.3, 5));
+        assert!((a - b).abs() > 0.1, "marks moved in lockstep: {a} vs {b}");
+    }
+
+    /// The phase belongs to the program, not to the ground under it. A
+    /// posted worker walks a tile per tick, and a phase that reset on each
+    /// step would read as a stutter every time it moved.
+    #[test]
+    fn a_marks_phase_does_not_depend_on_where_it_is_standing() {
+        let mut fx = Fx::new();
+        fx.begin_frame(0.3, Vec::new(), false);
+        let worker = Entity::from_raw_u32(7).unwrap();
+        let before = fx.staffed_bob(worker);
+        // Same entity, same frame — the only thing a step changes is the
+        // tile, which this no longer reads.
+        assert_eq!(fx.staffed_bob(worker), before);
+    }
+
+    /// A stranded mark dims but never disappears. Gone for half of every
+    /// cycle would say "nobody is posted here" — the reading the mark exists
+    /// to prevent — and the machine is in fact still staffed, just stuck.
+    #[test]
+    fn a_stranded_mark_dims_but_never_goes_out() {
+        let mut seen_bright = false;
+        let mut seen_dim = false;
+        for i in 0..400 {
+            let a = stranded_blink_alpha(i as f64 * 0.02);
+            assert!(a >= STRANDED_BLINK_MIN, "the mark went out entirely: {a}");
+            assert!(a <= 1.0);
+            seen_bright |= a == 1.0;
+            seen_dim |= a < 1.0;
+        }
+        assert!(seen_bright && seen_dim, "it never blinked at all");
+    }
+
+    /// Slow enough to read as an alarm rather than a flicker: a full cycle
+    /// takes seconds, so the mark holds each state long enough to be seen.
+    #[test]
+    fn the_stranded_blink_holds_each_state_for_about_a_second() {
+        let dwell = 0.5 / STRANDED_BLINK_HZ;
+        assert!(
+            dwell >= 0.75,
+            "each half of the cycle lasts {dwell}s, which reads as a flicker"
         );
-        assert!((a - b).abs() > 0.1, "tiles moved in lockstep: {a} vs {b}");
+        assert_eq!(stranded_blink_alpha(0.0), 1.0);
+        assert_eq!(stranded_blink_alpha(dwell * 1.5), STRANDED_BLINK_MIN);
     }
 
     #[test]
@@ -602,6 +687,6 @@ mod tests {
         let mut fx = Fx::new();
         fx.begin_frame(0.3, Vec::new(), false);
         fx.enabled = false;
-        assert_eq!(fx.staffed_bob((4, 4)), 0.0);
+        assert_eq!(fx.staffed_bob(Entity::from_raw_u32(4).unwrap()), 0.0);
     }
 }

@@ -1112,3 +1112,217 @@ fn a_structure_manifest_for_something_that_is_not_a_structure_is_none() {
     let player = game.player_entity();
     assert!(game.structure_manifest(player).is_none());
 }
+
+/// A posted worker is drawn only while it is *away* from its machine —
+/// walking in to take the job, carrying a load to a depot, or coming back.
+/// At its post it sits under the machine's own glyph, so the base reads as
+/// buildings at rest and motion is the only thing that draws the eye.
+///
+/// Nothing else tamed is ever drawn. Nothing walks a guard to its post, and
+/// an idle program and a party member are never moved at all, so each keeps
+/// whatever tile it was standing on when it took the job.
+#[test]
+fn a_worker_is_only_away_from_its_post_while_it_is_actually_away() {
+    let mut game = Game::new(1405, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, -1, 0);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 12);
+    game.place_structure("mining_node", 1, 0).unwrap();
+    let node = game
+        .structure_report()
+        .into_iter()
+        .find(|s| s.kind == "mining_node")
+        .expect("the node was just deployed")
+        .entity;
+
+    let worker = spawn_tamed_on_map(&mut game, 6, 6);
+    let guard = spawn_tamed_on_map(&mut game, 6, 7);
+    let idle = spawn_tamed_on_map(&mut game, 6, 8);
+    game.assign_cronjob(worker, node).unwrap();
+    game.assign_guard(guard, node).unwrap();
+
+    let away = |game: &mut Game, e: Entity| {
+        game.view_entities(40, 40)
+            .into_iter()
+            .find(|v| v.entity == e)
+            .map(|v| v.worker_away_from_post)
+    };
+
+    assert_eq!(
+        away(&mut game, worker),
+        Some(true),
+        "spawned across the base and not yet walked in, so it is on its way"
+    );
+    park_at_post(&mut game, worker, node);
+    assert_eq!(
+        away(&mut game, worker),
+        Some(false),
+        "standing at its post, it hides under the machine"
+    );
+
+    assert_eq!(away(&mut game, guard), Some(false));
+    assert_eq!(away(&mut game, idle), Some(false));
+}
+
+/// The mark is on the program when the program is drawn and on the structure
+/// when it isn't — one sentence covering a guard, a worker at its post and a
+/// worker mid-errand alike. So a machine wears the mark exactly while its
+/// program is standing at it.
+#[test]
+fn a_structure_is_attended_only_while_its_program_is_standing_at_it() {
+    let mut game = Game::new(1406, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, -1, 0);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 24);
+    game.place_structure("mining_node", 1, 0).unwrap();
+    game.place_structure("mining_node", 3, 0).unwrap();
+    let nodes: Vec<Entity> = game
+        .structure_report()
+        .into_iter()
+        .filter(|s| s.kind == "mining_node")
+        .map(|s| s.entity)
+        .collect();
+    let (worked, guarded) = (nodes[0], nodes[1]);
+
+    let worker = spawn_tamed_on_map(&mut game, 6, 6);
+    let guard = spawn_tamed_on_map(&mut game, 6, 7);
+    game.assign_cronjob(worker, worked).unwrap();
+    game.assign_guard(guard, guarded).unwrap();
+
+    let attended = |game: &mut Game, e: Entity| {
+        game.view_entities(40, 40)
+            .into_iter()
+            .find(|v| v.entity == e)
+            .map(|v| v.structure_attended)
+    };
+
+    assert_eq!(
+        attended(&mut game, guarded),
+        Some(true),
+        "a guard is never drawn, so its structure carries the mark for it"
+    );
+    assert_eq!(
+        attended(&mut game, worked),
+        Some(false),
+        "its worker is still walking in, and is wearing the mark itself"
+    );
+
+    park_at_post(&mut game, worker, worked);
+    assert_eq!(attended(&mut game, worked), Some(true));
+}
+
+/// Exactly one mark per posted program at all times: it never doubles while
+/// the worker stands on its machine, and never vanishes while it is away.
+/// The two flags are the two halves of that, so they are asserted together.
+#[test]
+fn a_worked_machine_and_its_worker_never_both_wear_the_mark() {
+    let mut game = Game::new(1407, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, -1, 0);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 12);
+    game.place_structure("mining_node", 1, 0).unwrap();
+    let node = game
+        .structure_report()
+        .into_iter()
+        .find(|s| s.kind == "mining_node")
+        .expect("the node was just deployed")
+        .entity;
+    let worker = spawn_tamed_on_map(&mut game, 6, 6);
+    game.assign_cronjob(worker, node).unwrap();
+
+    for step in 0..12 {
+        let views = game.view_entities(40, 40);
+        let machine = views
+            .iter()
+            .find(|v| v.entity == node)
+            .expect("the node is standing")
+            .structure_attended;
+        let program = views
+            .iter()
+            .find(|v| v.entity == worker)
+            .expect("the worker exists")
+            .worker_away_from_post;
+        assert!(
+            machine != program,
+            "step {step}: machine {machine}, worker away {program} — the mark \
+             either doubled or went missing"
+        );
+        game.tick();
+    }
+}
+
+/// A machine whose output is full while nothing in the base can take a load
+/// is at a dead end: its worker will never leave, so the mark that would
+/// have walked away stays put. The flag is what lets a frontend say so.
+///
+/// Deliberately not a sixth `MachineStatus`: that enum is one machine's own
+/// state, and "there is nowhere left to put this" is a fact about every
+/// depot at once.
+#[test]
+fn a_full_machine_with_nowhere_to_unload_reads_as_stranded() {
+    let mut game = Game::new(1408, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, -1, 0);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 48);
+    game.place_structure("mining_node", 1, 0).unwrap();
+    let node = game
+        .structure_report()
+        .into_iter()
+        .find(|s| s.kind == "mining_node")
+        .expect("the node was just deployed")
+        .entity;
+
+    let stranded = |game: &mut Game, e: Entity| {
+        game.view_entities(40, 40)
+            .into_iter()
+            .find(|v| v.entity == e)
+            .map(|v| v.output_stranded)
+    };
+
+    assert_eq!(
+        stranded(&mut game, node),
+        Some(false),
+        "an empty buffer is not stranded, whatever else is true"
+    );
+
+    let mut stock = game.world.get_mut::<Stock>(node).unwrap();
+    let capacity = stock.capacity;
+    stock
+        .output
+        .insert(ItemId::from(ids::CORE_FRAGMENT), capacity);
+    assert_eq!(
+        stranded(&mut game, node),
+        Some(true),
+        "full, and no depot has been built at all"
+    );
+
+    game.place_structure("depot", 1, 2).unwrap();
+    assert_eq!(
+        stranded(&mut game, node),
+        Some(false),
+        "a depot with room is somewhere to put it, so the dead end is over"
+    );
+
+    // Fill the depot too: a depot with no room is no better than no depot,
+    // which is the case a "has a depot been built" check would miss.
+    let depot = game
+        .structure_report()
+        .into_iter()
+        .find(|s| s.kind == "depot")
+        .expect("the depot was just deployed")
+        .entity;
+    let mut stock = game.world.get_mut::<Stock>(depot).unwrap();
+    let capacity = stock.capacity;
+    stock
+        .output
+        .insert(ItemId::from(ids::CORE_FRAGMENT), capacity);
+    assert_eq!(stranded(&mut game, node), Some(true));
+}

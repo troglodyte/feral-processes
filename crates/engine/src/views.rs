@@ -278,6 +278,44 @@ pub struct EntityView {
     /// If this is a structure, the label of the (tamed) entity currently
     /// working it via cronjob, if any.
     pub structure_worker: Option<String>,
+    /// Whether this (tamed) entity holds a `TaskKind::GatherResource` post
+    /// and is not currently standing at it — walking in to take the job,
+    /// carrying a load to a depot, or on its way back.
+    ///
+    /// The one tamed program a frontend may draw, and only while this is
+    /// true. Two reasons it is this narrow. A worker is the only tamed
+    /// program whose `Position` the sim keeps honest at all —
+    /// `haul_step_system` walks it, while a guard, an idle program and a
+    /// party member each keep whatever tile they were on when they took the
+    /// job and are never moved again. And at its post it belongs *under* its
+    /// machine's glyph: a base at rest should read as buildings, with motion
+    /// the only thing that draws the eye.
+    pub worker_away_from_post: bool,
+    /// If this is a structure, whether a posted program is standing at it
+    /// right now — a guard (which never moves, so always) or a worker that
+    /// has not stepped off on an errand.
+    ///
+    /// The other half of `worker_away_from_post`, and the two are exclusive
+    /// per posted program: a frontend that marks "someone is on this job"
+    /// draws the mark on the program when the program is drawn, and on the
+    /// structure when it isn't. Distinct from `structure_worker`, which
+    /// counts any `Task` wherever its holder happens to be.
+    pub structure_attended: bool,
+    /// If this is a structure, whether its output buffer is full while
+    /// nothing in the base can take a load — no depot built, or every depot
+    /// already full.
+    ///
+    /// The dead end a base can sit in indefinitely: `haul_step_system`
+    /// starts an errand only when a depot with room exists, so the worker
+    /// never leaves and the machine never drains. Deliberately *not* a sixth
+    /// `MachineStatus` — that enum is one machine's own state, and this is a
+    /// fact about every depot at once, so folding it in would stop the enum
+    /// meaning one thing and force a precedence call against all five
+    /// existing variants.
+    ///
+    /// Keyed on room rather than on a depot existing, because a depot that
+    /// has filled up is no better than no depot.
+    pub output_stranded: bool,
     pub hp_fraction: Option<f32>,
     pub level: Option<u32>,
     /// If this is a structure, its current/max raid `Durability`.

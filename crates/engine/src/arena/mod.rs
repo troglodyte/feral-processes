@@ -1,8 +1,9 @@
 //! A scenario-driven harness that runs real battles offline.
 //!
-//! Pick the opponents and, on a fresh player, the items; run N seeded reps;
-//! keep the round-by-round transcript. Difficulty can then be tuned by
-//! measurement rather than by playing to the fight.
+//! Pick the opponents — or a context to roll them from — and, on a fresh
+//! player, the items; run N seeded reps; keep the round-by-round transcript.
+//! Difficulty can then be tuned by measurement rather than by playing to the
+//! fight.
 //!
 //! This is inside the engine crate deliberately. `start_battle`,
 //! `spawn_wild_creature_scaled` and the `world` field are all reachable from

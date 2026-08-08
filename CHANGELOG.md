@@ -29,6 +29,42 @@ first, separated by a rule.
 
 ## Unreleased
 
+## 0.5.2
+
+### Watch a program carry a load to the depot
+
+Hauling has been simulated since depots landed and was never once visible.
+A posted program walked to its machine, took a clogged buffer's output to
+the nearest depot with room, put it down and walked back — every step of it
+pathfound, saved, and drawn nowhere, because the map filtered every tamed
+program off the screen. The base was a still life with numbers changing in
+it.
+
+- A posted worker is now **drawn while it is out on an errand**, and only
+  then. At its post it sits under its machine's own glyph, so a base at rest
+  still reads as buildings and motion is the one thing that draws the eye —
+  a program appearing *is* the news that it has left to deliver.
+- The bobbing mark goes **with it**. One sentence decides where the mark
+  lives: on the program when the program is drawn, and on the structure when
+  it isn't. So a machine wears it at rest exactly as before, the worker
+  takes it along on the trip, and a guard — which is never drawn, since
+  nothing walks one to its post — leaves it on the structure for good.
+  Exactly one mark per posted program at every instant.
+- A machine that is **full with nowhere to send its output** is a dead end:
+  no errand starts unless a depot has room, so the worker never leaves and
+  the buffer never drains. Its mark stops bobbing, turns orange and blinks
+  slowly. Keyed on a depot having *room* rather than on one existing — a
+  depot that has filled up is no better than none.
+- Nothing tamed but a working program is ever drawn. Nothing walks a guard,
+  an idle program or a party member, so each keeps whatever tile it was
+  standing on when it took the job, and drawing it would put a glyph
+  somewhere the program isn't.
+
+No simulation changed. `at_station` and the `collect::ORTHOGONAL` list it
+shares with the player's own collect are untouched — a worker still stands
+beside its machine, it simply isn't drawn there. With no depot built there
+is still no errand, so on a depot-less base nothing is ever drawn at all.
+
 ## 0.5.1
 
 ### Rolled encounters: fight what the zone would actually throw

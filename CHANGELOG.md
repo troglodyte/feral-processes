@@ -29,6 +29,34 @@ first, separated by a rule.
 
 ## Unreleased
 
+## 0.5.3
+
+### The base slab has its corners cut
+
+The platform stamped around a Home was a flat 15x15 square, and it read as
+one — a box the game had put down, rather than something the player had
+built. Its four corners are now chamfered: each loses the corner tile and
+the two beside it.
+
+- The cut is **footprint, not paint**. `Platform::covers` is the one
+  statement of the shape, and the build check measures against the same
+  predicate — so a tile with no floor under it has nothing standing on it
+  either, and a machine cannot hang off a rounded corner onto wild ground.
+  A build refused there reads "Too far from Home".
+- It costs **12 of 225 buildable tiles**, and the depth is one constant.
+  `tuning::PLATFORM_CORNER_CUT` is the chamfer in diagonal steps; `0`
+  restores the square exactly.
+- Taking the slab up still sweeps the whole build box rather than the cut
+  shape, which is the one place the two deliberately disagree. Nothing else
+  overrides terrain near a base, so clearing a tile that was never stamped
+  costs nothing — while a save written before today still has floor at its
+  corners and would otherwise keep it forever once the Home came down.
+- The renderer needed no change at all. The slab is drawn from
+  `Biome::Platform`, so a cut corner draws as the terrain it reverted to.
+
+An existing save keeps its square slab until the next breach re-stamps one,
+since the shape lives in the saved tile overrides rather than in the seed.
+
 ## 0.5.2
 
 ### Watch a program carry a load to the depot

@@ -396,6 +396,92 @@ fn damaging_a_structure_queues_a_hit_effect_at_its_position() {
     assert_eq!(effects[0].pos, (5, 5));
 }
 
+/// The dev console fires the sweep the game fires, not a lookalike. If it
+/// reimplemented the body, what it puts on screen would be evidence about
+/// the console rather than about the game — which is the copy-instead-of-a-
+/// call trap `balance_sim.rs` fell into four times.
+#[test]
+fn a_forced_sweep_hits_a_structure_without_waiting_for_the_roll() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.spawn((
+        Structure {
+            kind: "mining_node".to_string(),
+        },
+        Position { x: 5, y: 5 },
+        Durability { hp: 30, max_hp: 30 },
+    ));
+
+    game.dev_force_raid();
+
+    let effects = game.take_effects();
+    assert_eq!(
+        effects.len(),
+        1,
+        "a forced sweep should resolve exactly one raid"
+    );
+    assert_eq!(effects[0].pos, (5, 5));
+}
+
+/// A base with nothing raidable standing must not panic or half-fire — the
+/// console is pressed at arbitrary moments, including before anything is
+/// built.
+#[test]
+fn a_forced_sweep_with_nothing_standing_is_a_no_op() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structures: Vec<_> = {
+        let mut q = game.world.query_filtered::<Entity, With<Durability>>();
+        q.iter(&game.world).collect()
+    };
+    for e in structures {
+        game.world.despawn(e);
+    }
+
+    game.dev_force_raid();
+
+    assert!(game.take_effects().is_empty());
+}
+
+/// Destroying from the console has to go through the real destruction path,
+/// not just despawn the entity — a posted program left holding a `Task`
+/// pointing at a structure that no longer exists is precisely the state
+/// `damage_structure` exists to prevent.
+#[test]
+fn a_forced_destruction_clears_the_posted_workers_task() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position {
+                x: player_pos.x + 1,
+                y: player_pos.y,
+            },
+            Durability { hp: 30, max_hp: 30 },
+        ))
+        .id();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: structure,
+        progress: 0,
+        required: 10,
+    });
+
+    game.dev_destroy_structure();
+
+    assert!(
+        game.world.get::<Durability>(structure).is_none(),
+        "the structure should be gone"
+    );
+    assert!(
+        game.world.get::<Task>(worker).is_none(),
+        "the worker's Task must be cleared, which only the real path does"
+    );
+}
+
 #[test]
 fn destroying_a_structure_queues_a_destroyed_effect() {
     let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

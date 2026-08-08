@@ -150,6 +150,53 @@ impl Game {
             .sum()
     }
 
+    /// Fires a GC Entropy Sweep now, skipping the per-tick roll — the dev
+    /// console's trigger.
+    ///
+    /// Calls `run_raid` rather than carrying its own copy of the body, so
+    /// what the console puts on screen is evidence about the sweep a player
+    /// actually meets. Gated by `FERAL_DEV_CONSOLE` at the app-core layer,
+    /// which is the only thing that reaches it.
+    #[doc(hidden)]
+    pub fn dev_force_raid(&mut self) {
+        self.run_raid();
+    }
+
+    /// Destroys the structure nearest the player outright, through the same
+    /// `damage_structure` a sweep uses so every consequence of a building
+    /// coming down still happens.
+    ///
+    /// Exists because wearing one structure to zero in play takes hundreds
+    /// of ticks: sweeps pick a random target and do `RAID_DAMAGE` at a time.
+    #[doc(hidden)]
+    pub fn dev_destroy_structure(&mut self) {
+        let Some(at) = self.world.get::<Position>(self.player_entity()).copied() else {
+            return;
+        };
+        let mut targets: Vec<(Entity, i32)> = {
+            let mut query = self
+                .world
+                .query_filtered::<(Entity, &Position), (With<Durability>, Without<Nest>)>();
+            query
+                .iter(&self.world)
+                .map(|(e, p)| (e, (p.x - at.x).abs() + (p.y - at.y).abs()))
+                .collect()
+        };
+        // By distance, then by id, so a tie resolves the same way every
+        // press rather than on bevy's query iteration order.
+        targets.sort_by_key(|(e, d)| (*d, e.to_bits()));
+        let Some((target, _)) = targets.first().copied() else {
+            return;
+        };
+        let label = self.entity_label(target);
+        let hp = self
+            .world
+            .get::<Durability>(target)
+            .map(|d| d.hp)
+            .unwrap_or(0);
+        self.damage_structure(target, hp, &label);
+    }
+
     pub(crate) fn raid_check(&mut self) {
         let roll = {
             let mut rng = self.world.resource_mut::<GameRng>();
@@ -158,6 +205,15 @@ impl Game {
         if !roll {
             return;
         }
+        self.run_raid();
+    }
+
+    /// Everything a sweep *is*, once it has been decided that one happens.
+    ///
+    /// Split from the roll so the dev console can fire the real thing. The
+    /// roll stays in `raid_check` because that is the only caller that
+    /// should be making the decision.
+    fn run_raid(&mut self) {
         let targets: Vec<Entity> = {
             let mut query = self
                 .world

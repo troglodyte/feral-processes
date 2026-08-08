@@ -68,6 +68,7 @@ impl App {
             status_age: 0.0,
             last_realtime_tick: Instant::now(),
             arena: None,
+            pending_arena_pick: None,
             arena_enabled: crate::app::arena::dev_arena_enabled(),
             dev_templates: None,
         }

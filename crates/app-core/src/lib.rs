@@ -12,7 +12,7 @@ mod app;
 pub use app::arena::{ArenaRow, ArenaRowKind, DevTemplates};
 pub use app::group_menu::GroupMenuRow;
 
-use app::arena::ArenaSession;
+use app::arena::{ArenaPickKind, ArenaSession};
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -1028,6 +1028,9 @@ pub struct App {
     /// once, in `App::new`, so the parallel test suite can open the gate on
     /// a field rather than in a process-global environment.
     arena_enabled: bool,
+    /// Where a row picked in `Mode::ArenaPick` is going — see
+    /// `ArenaPickKind`. `None` outside that mode.
+    pending_arena_pick: Option<ArenaPickKind>,
     /// The launcher's template library, injected because `dev_template`
     /// lives in a crate app-core cannot see. `None` for any frontend that
     /// does not install it, which simply does not offer the `Template`

@@ -9,10 +9,65 @@
 //! parallel builder type, so a knob added to the schema cannot exist in one
 //! tool and not the other.
 
-use feral_processes_engine::arena::{self, PlayerSource, RepRecord, Scenario, Watch};
+use std::path::Path;
+
+use feral_processes_engine::abilities::AbilityDb;
+use feral_processes_engine::arena::{
+    self, CompanionSpec, EquipSpec, InventorySpec, OpponentSpec, PlayerSource, RepRecord, Scenario,
+    Watch,
+};
+use feral_processes_engine::items_db::ItemDb;
+use feral_processes_engine::species::SpeciesDb;
 use feral_processes_engine::tuning::{CREATURE_MAX_LEVEL, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE};
 
 use crate::*;
+
+/// What the pickers choose from.
+///
+/// Loaded when the arena screen opens rather than in `App::new`, for two
+/// reasons: the screen is reachable from the main menu where there is no
+/// `Game` to ask for `species_defs()`, and a normal run must not pay for a
+/// dev tool. It dies with the session.
+///
+/// Both dbs skip a malformed file with a warning rather than panicking —
+/// the same warn-and-carry-on contract `App::new` already uses for
+/// `AchievementDb` — so a missing directory reads as an empty picker.
+pub(crate) struct ArenaCatalog {
+    species: Vec<String>,
+    /// Every item id, and whether it may be worn. Read off
+    /// `ItemDef::equipment` directly: there is no `Game` here to ask
+    /// `is_equippable`.
+    items: Vec<(String, bool)>,
+}
+
+impl ArenaCatalog {
+    fn load(assets_dir: &Path) -> Self {
+        let (abilities, _) = AbilityDb::load_dir(&assets_dir.join("abilities")).unwrap_or_default();
+        let (species_db, _) =
+            SpeciesDb::load_dir(&assets_dir.join("species"), &abilities).unwrap_or_default();
+        let (item_db, _) = ItemDb::load_dir(&assets_dir.join("items")).unwrap_or_default();
+
+        let mut species: Vec<String> = species_db.all().map(|d| d.id.to_string()).collect();
+        species.sort();
+        let mut items: Vec<(String, bool)> = item_db
+            .all()
+            .map(|d| (d.id.as_str().to_string(), d.equipment.is_some()))
+            .collect();
+        items.sort();
+        Self { species, items }
+    }
+}
+
+/// Where a picked id goes. `Some(index)` replaces an existing row's id,
+/// `None` appends a new one — one mode with four targets rather than four
+/// near-identical handlers to keep in step, following `Mode::ManifestPick`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ArenaPickKind {
+    PartySpecies(Option<usize>),
+    OpponentSpecies(Option<usize>),
+    EquipItem(Option<usize>),
+    InventoryItem(Option<usize>),
+}
 
 /// One row of the builder: what it draws as, and what it edits.
 pub struct ArenaRow {
@@ -58,10 +113,11 @@ pub(crate) struct ArenaSession {
     /// Kept for the result screen — nothing is ever capped, and showing the
     /// ask is the only thing that makes that honest.
     pub(crate) warnings: Vec<String>,
+    catalog: ArenaCatalog,
 }
 
 impl ArenaSession {
-    fn new() -> Self {
+    fn new(assets_dir: &Path) -> Self {
         let scenario = Scenario::default();
         Self {
             seed: scenario.seed,
@@ -69,6 +125,7 @@ impl ArenaSession {
             watch: None,
             outcome: None,
             warnings: Vec::new(),
+            catalog: ArenaCatalog::load(assets_dir),
         }
     }
 }
@@ -220,7 +277,7 @@ impl App {
 
     pub(crate) fn open_arena(&mut self) {
         self.status_line = None;
-        self.arena = Some(ArenaSession::new());
+        self.arena = Some(ArenaSession::new(&self.assets_dir));
         self.mode = Mode::ArenaBuilder;
     }
 
@@ -331,10 +388,65 @@ impl App {
                 self.remove_arena_row();
                 return;
             }
+            GameKey::Enter if self.open_arena_picker() => return,
             _ => {}
         }
         let rows = self.arena_builder_rows().len();
         self.scroll(key, rows);
+    }
+
+    /// Enter on a spec row or an `Add …`: opens the picker aimed at it.
+    /// `false` for a row with no id to choose, which falls through to
+    /// Up/Down so Enter is never a dead key on the wrong row.
+    fn open_arena_picker(&mut self) -> bool {
+        let Some(kind) = self.arena_highlighted() else {
+            return false;
+        };
+        let pick = match kind {
+            ArenaRowKind::Party(i) => ArenaPickKind::PartySpecies(Some(i)),
+            ArenaRowKind::AddParty => ArenaPickKind::PartySpecies(None),
+            ArenaRowKind::Opponent(i) => ArenaPickKind::OpponentSpecies(Some(i)),
+            ArenaRowKind::AddOpponent => ArenaPickKind::OpponentSpecies(None),
+            ArenaRowKind::Equip(i) => ArenaPickKind::EquipItem(Some(i)),
+            ArenaRowKind::AddEquip => ArenaPickKind::EquipItem(None),
+            ArenaRowKind::Inventory(i) => ArenaPickKind::InventoryItem(Some(i)),
+            ArenaRowKind::AddInventory => ArenaPickKind::InventoryItem(None),
+            _ => return false,
+        };
+        self.pending_arena_pick = Some(pick);
+        self.mode = Mode::ArenaPick;
+        true
+    }
+
+    /// The picker's rows — species or items, depending on what opened it.
+    ///
+    /// Ids rather than display names, deliberately: this is a dev tool and
+    /// an id is what the `.ron` will hold, so what you picked and what the
+    /// file says are the same string.
+    pub fn arena_pick_rows(&self) -> Vec<String> {
+        let (Some(session), Some(pick)) = (&self.arena, self.pending_arena_pick) else {
+            return Vec::new();
+        };
+        match pick {
+            ArenaPickKind::PartySpecies(_) | ArenaPickKind::OpponentSpecies(_) => {
+                session.catalog.species.clone()
+            }
+            // Filtered by what the target can hold. There is no `Game` here
+            // to ask `is_equippable`, so the catalogue carries the answer.
+            ArenaPickKind::EquipItem(_) => session
+                .catalog
+                .items
+                .iter()
+                .filter(|(_, equippable)| *equippable)
+                .map(|(id, _)| id.clone())
+                .collect(),
+            ArenaPickKind::InventoryItem(_) => session
+                .catalog
+                .items
+                .iter()
+                .map(|(id, _)| id.clone())
+                .collect(),
+        }
     }
 
     /// Nudges the number on the highlighted row, or cycles the player
@@ -459,10 +571,59 @@ impl App {
         }
     }
 
+    /// One picker, four targets. Esc adds nothing and goes back.
+    ///
+    /// A row *replaces* an existing id rather than rebuilding the spec —
+    /// the count, quantity, level or tier beside it is the tuning dial, and
+    /// losing it on an id change is the bug this shape exists to avoid.
     pub(crate) fn handle_arena_pick_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
+            self.pending_arena_pick = None;
             self.mode = Mode::ArenaBuilder;
+            return;
         }
+        let rows = self.arena_pick_rows();
+        let Some(idx) = self.selected_index(key, rows.len()) else {
+            return;
+        };
+        let id = rows[idx].clone();
+        let Some(pick) = self.pending_arena_pick.take() else {
+            return;
+        };
+        if let Some(session) = &mut self.arena {
+            let s = &mut session.scenario;
+            match pick {
+                ArenaPickKind::PartySpecies(Some(i)) if i < s.party.len() => {
+                    s.party[i].species = id
+                }
+                ArenaPickKind::PartySpecies(_) => s.party.push(CompanionSpec {
+                    species: id,
+                    level: 1,
+                }),
+                ArenaPickKind::OpponentSpecies(Some(i)) if i < s.opponents.len() => {
+                    s.opponents[i].species = id
+                }
+                ArenaPickKind::OpponentSpecies(_) => s.opponents.push(OpponentSpec {
+                    species: id,
+                    count: 1,
+                }),
+                ArenaPickKind::EquipItem(Some(i)) if i < s.equip.len() => {
+                    s.equip[i].item = ItemId::from(id.as_str())
+                }
+                ArenaPickKind::EquipItem(_) => s.equip.push(EquipSpec {
+                    item: ItemId::from(id.as_str()),
+                    tier: 0,
+                }),
+                ArenaPickKind::InventoryItem(Some(i)) if i < s.inventory.len() => {
+                    s.inventory[i].item = ItemId::from(id.as_str())
+                }
+                ArenaPickKind::InventoryItem(_) => s.inventory.push(InventorySpec {
+                    item: ItemId::from(id.as_str()),
+                    qty: 1,
+                }),
+            }
+        }
+        self.mode = Mode::ArenaBuilder;
     }
 
     pub(crate) fn handle_arena_load_key(&mut self, key: GameKey) {

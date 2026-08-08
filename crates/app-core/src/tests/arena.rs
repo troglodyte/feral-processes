@@ -542,6 +542,112 @@ fn switching_off_a_fresh_player_clears_the_loadout_it_authored() {
     assert!(s.party.is_empty(), "the authored party survived the switch");
 }
 
+/// Opens the picker by putting the highlight on `kind` and pressing Enter.
+fn open_pick(app: &mut App, kind: ArenaRowKind) {
+    highlight(app, kind);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::ArenaPick, "{kind:?} did not open a picker");
+}
+
+/// Picks the row whose label starts with `id`.
+fn pick(app: &mut App, id: &str) {
+    let rows = app.arena_pick_rows();
+    let idx = rows
+        .iter()
+        .position(|r| r.starts_with(id))
+        .unwrap_or_else(|| panic!("{id} is not offered: {rows:?}"));
+    app.menu_selected = idx;
+    app.handle_key(GameKey::Enter);
+}
+
+#[test]
+fn the_picker_lists_species_without_a_running_game() {
+    // The whole reason the catalogue exists: the screen hangs off the main
+    // menu, where there is no `Game` to ask for `species_defs()`.
+    let mut app = app_building(40, scenario(1, 1, &[("glitch", 1)], 0));
+    assert!(app.game.is_none());
+
+    open_pick(&mut app, ArenaRowKind::AddOpponent);
+
+    assert!(!app.arena_pick_rows().is_empty());
+}
+
+#[test]
+fn picking_a_species_appends_an_opponent_row() {
+    let mut app = app_building(41, scenario(1, 1, &[("glitch", 1)], 0));
+    open_pick(&mut app, ArenaRowKind::AddOpponent);
+
+    pick(&mut app, "sprite");
+
+    assert_eq!(app.mode, Mode::ArenaBuilder);
+    let opponents = &app.arena.as_ref().unwrap().scenario.opponents;
+    assert_eq!(opponents.len(), 2);
+    assert_eq!(opponents[1].species, "sprite");
+    assert_eq!(opponents[1].count, 1, "a new group starts at one");
+}
+
+#[test]
+fn picking_into_an_existing_row_replaces_its_id_and_keeps_its_count() {
+    // The count is the tuning dial; losing it on an id change is the bug.
+    let mut app = app_building(42, scenario(1, 1, &[("glitch", 5)], 0));
+    open_pick(&mut app, ArenaRowKind::Opponent(0));
+
+    pick(&mut app, "sprite");
+
+    let opponents = &app.arena.as_ref().unwrap().scenario.opponents;
+    assert_eq!(opponents.len(), 1, "an edit is not an append");
+    assert_eq!(opponents[0].species, "sprite");
+    assert_eq!(opponents[0].count, 5);
+}
+
+#[test]
+fn the_equip_picker_offers_only_equippable_items() {
+    let mut app = app_building(43, scenario(1, 1, &[("glitch", 1)], 0));
+
+    open_pick(&mut app, ArenaRowKind::AddEquip);
+    let worn = app.arena_pick_rows();
+    app.handle_key(GameKey::Esc);
+    open_pick(&mut app, ArenaRowKind::AddInventory);
+    let cargo = app.arena_pick_rows();
+
+    assert!(!worn.is_empty());
+    assert!(
+        worn.len() < cargo.len(),
+        "the equip picker offered every item in the catalogue"
+    );
+    assert!(
+        worn.iter().all(|row| cargo.contains(row)),
+        "the equip picker offered something cargo would not hold"
+    );
+}
+
+#[test]
+fn esc_from_the_picker_returns_to_the_builder_adding_nothing() {
+    let mut app = app_building(44, scenario(1, 1, &[("glitch", 1)], 0));
+    open_pick(&mut app, ArenaRowKind::AddParty);
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::ArenaBuilder);
+    assert!(app.arena.as_ref().unwrap().scenario.party.is_empty());
+}
+
+#[test]
+fn a_picked_companion_and_item_land_at_their_defaults() {
+    let mut app = app_building(45, scenario(1, 1, &[("glitch", 1)], 0));
+
+    open_pick(&mut app, ArenaRowKind::AddParty);
+    pick(&mut app, "sprite");
+    open_pick(&mut app, ArenaRowKind::AddInventory);
+    let first = app.arena_pick_rows()[0].clone();
+    pick(&mut app, &first);
+
+    let s = &app.arena.as_ref().unwrap().scenario;
+    assert_eq!(s.party[0].species, "sprite");
+    assert_eq!(s.party[0].level, 1);
+    assert_eq!(s.inventory[0].qty, 1);
+}
+
 #[test]
 fn dev_templates_install_whether_or_not_the_gate_is_open() {
     // The launcher installs unconditionally: the gate decides visibility,

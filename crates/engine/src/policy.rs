@@ -6,6 +6,8 @@
 //! here is pure, so it is unit-testable on its own and the code that reads
 //! the world can trust it.
 
+use std::path::Path;
+
 pub const FEATURE_COUNT: usize = 19;
 
 /// One term of the score a candidate `(move, target)` pair gets.
@@ -164,6 +166,44 @@ impl PolicyWeights {
             .into_iter()
             .map(|k| self.0[k as usize] * f.0[k as usize])
             .sum()
+    }
+}
+
+/// The on-disk shape of `assets/policies/enemy_battle.ron` — see that
+/// directory's README. Name-keyed rather than positional so that adding a
+/// feature degrades an existing file to "that name is absent, so zero"
+/// rather than silently re-reading its numbers against new meanings.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct PolicyFile {
+    features: Vec<(String, f32)>,
+}
+
+/// Reads the trained weights, if any are installed.
+///
+/// Unlike every other asset DB this takes a **file**, not a directory: a
+/// policy is a singleton, and `std::fs::read_dir` on a missing directory is
+/// an `Err` where a missing policy is an ordinary, silent, valid state —
+/// the game plays exactly as it did before this feature existed. A
+/// malformed or non-finite-weighted file is skipped with a warning instead,
+/// the same shape as `PerkDb::load_dir`.
+pub fn load_file(path: &Path) -> std::io::Result<(Option<PolicyWeights>, Vec<String>)> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok((None, Vec::new())),
+        Err(e) => return Err(e),
+    };
+    let skipped = |e: String| {
+        Ok((
+            None,
+            vec![format!("skipped invalid policy file {path:?}: {e}")],
+        ))
+    };
+    match ron::from_str::<PolicyFile>(&text) {
+        Ok(file) => match PolicyWeights::from_pairs(&file.features) {
+            Ok((weights, warnings)) => Ok((Some(weights), warnings)),
+            Err(e) => skipped(e),
+        },
+        Err(e) => skipped(e.to_string()),
     }
 }
 

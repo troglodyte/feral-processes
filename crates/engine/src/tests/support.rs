@@ -254,10 +254,15 @@ impl Drop for ScratchAssets {
 
 /// A fresh, uniquely-named scratch directory under the OS temp dir, wiped
 /// if a stale one from a crashed prior run is somehow still there. Shared
-/// by `modded_assets_dir` and `assets_dir_with_extra_structure` so both
+/// by `modded_assets_dir`, `assets_dir_with_extra_structure` and the policy
+/// tests (which want a scratch *path* and no assets at all) so they all
 /// draw from one counter — collisions were never really possible (`tag`
 /// already disambiguates by caller) but there's no reason to run two.
-fn scratch_assets_dir(tag: &str) -> ScratchAssets {
+///
+/// The directory is deliberately not created: a caller that wants one calls
+/// `copy_shipped_assets` or `create_dir_all` itself, and a caller testing an
+/// absent file wants the path to stay absent.
+pub(super) fn scratch_assets_dir(tag: &str) -> ScratchAssets {
     static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let dir = std::env::temp_dir().join(format!(
         "feral_processes_{tag}_{}_{}",
@@ -284,6 +289,10 @@ pub(super) fn copy_shipped_assets(dir: &std::path::Path, omit_items: &[&str]) {
         "perks",
         "achievements",
         "crash_logs",
+        // The trained enemy policy comes along too, or a modded install
+        // would quietly fight under the uniform baseline while the shipped
+        // one fought under the weights — a difference no test would name.
+        "policies",
     ] {
         let dst = dir.join(sub);
         std::fs::create_dir_all(&dst).unwrap();

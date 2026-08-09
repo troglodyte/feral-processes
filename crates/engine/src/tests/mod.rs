@@ -28,6 +28,7 @@ mod listen;
 mod message_log;
 mod party;
 mod perks;
+mod policy;
 mod raids;
 mod research;
 mod routines;

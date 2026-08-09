@@ -765,3 +765,15 @@ pub struct ZoneSpawnPoint {
     pub x: i32,
     pub y: i32,
 }
+
+/// The trained enemy battle policy, if `assets/policies/enemy_battle.ron`
+/// is installed. `None` is an ordinary state, not a failure: it is what
+/// every save and every mod that ships no policy plays with, and it means
+/// the uniform move roll and slot-weighted target roll the game had before
+/// this existed.
+///
+/// Not saved. Weights are an asset, like a species file — a run picks up
+/// whatever is installed when it loads, so retraining reaches saves in
+/// flight without a `SAVE_FORMAT_VERSION` bump.
+#[derive(Resource, Default)]
+pub struct EnemyPolicy(pub Option<crate::policy::PolicyWeights>);

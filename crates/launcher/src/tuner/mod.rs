@@ -20,4 +20,5 @@
 //! a whole run so candidates are compared on identical fights, which invites
 //! overfitting to those seeds; that is what the held-out set exists to catch.
 
+pub mod roster;
 pub mod score;

@@ -52,6 +52,22 @@ const ROOM_ATTEMPTS: usize = 400;
 /// where the layout makes up the density its rooms cannot.
 const EXTRA_ROOM_LINKS: usize = 5;
 
+/// The `Chambers` layout's four halls, and the width of the corridors
+/// joining them.
+///
+/// Six is what the density band allows once the corridors are paid for, and
+/// it is also the smallest hall that still reads as one: the first-person
+/// view reaches four cells, so a six-wide room is the point at which the far
+/// wall stops being part of the same glance as the near one.
+///
+/// The corridors are three wide because a one-cell hole between two halls is
+/// a doorway, and this is the layout you cross without looking for one. It
+/// is also the width the halls' overlap always affords — quadrants are nine
+/// cells across and hold a six-cell hall, so two neighbouring halls share at
+/// least three rows however they jitter.
+const HALL_SIZE: i32 = 6;
+const CHAMBER_GAP_WIDTH: i32 = 3;
+
 /// Which way the party is facing. North is `-y`, matching the top-down
 /// renderer's convention that increasing `y` draws further down the screen.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -345,10 +361,7 @@ pub fn generate(spec: FrameSpec) -> Frame {
             braid(&mut level, &mut rng);
         }
         FrameLayout::Rooms => carve_rooms(&mut level, &mut rng),
-        FrameLayout::Chambers => {
-            carve_maze(&mut level, &mut rng);
-            braid(&mut level, &mut rng);
-        }
+        FrameLayout::Chambers => carve_chambers(&mut level, &mut rng),
     }
 
     // The far cell earns its place either way: the way down on a frame that
@@ -741,6 +754,85 @@ fn carve_rooms(level: &mut Frame, rng: &mut StdRng) {
     level.entry = rooms[0].centre();
 }
 
+/// Joins two halls with a corridor as wide as the layout's gaps.
+///
+/// Straight, never an L: the halls sit in quadrants, so any two neighbours
+/// are either side by side or stacked, and always share at least
+/// `CHAMBER_GAP_WIDTH` rows or columns to run the corridor along.
+fn join_halls(level: &mut Frame, a: Room, b: Room, rng: &mut StdRng) {
+    let w = CHAMBER_GAP_WIDTH;
+    if a.x + a.w <= b.x || b.x + b.w <= a.x {
+        let lo = a.y.max(b.y);
+        let hi = ((a.y + a.h).min(b.y + b.h) - w).max(lo);
+        let y = rng.random_range(lo..=hi);
+        let (from, to) = if a.x < b.x {
+            (a.x + a.w - 1, b.x)
+        } else {
+            (b.x + b.w - 1, a.x)
+        };
+        for d in 0..w {
+            carve_line(level, (from, y + d), (to, y + d));
+        }
+    } else {
+        let lo = a.x.max(b.x);
+        let hi = ((a.x + a.w).min(b.x + b.w) - w).max(lo);
+        let x = rng.random_range(lo..=hi);
+        let (from, to) = if a.y < b.y {
+            (a.y + a.h - 1, b.y)
+        } else {
+            (b.y + b.h - 1, a.y)
+        };
+        for d in 0..w {
+            carve_line(level, (x + d, from), (x + d, to));
+        }
+    }
+}
+
+/// Four open halls, one per quadrant, joined in a ring by wide corridors.
+///
+/// A ring rather than a tree: four joins for four halls is exactly one loop,
+/// so there are always two ways round to anywhere. That is the whole
+/// difference between this and four big rooms.
+///
+/// The halls are left clear rather than dressed with pillars. Pillars were
+/// the obvious way to spend the density this layout would otherwise run over
+/// budget on, but they take it out of the one thing the layout is for: a
+/// hall broken up by standing rock is a room with an awkward shape, and
+/// `the_chambers_layout_carves_halls` stops passing. The density comes out
+/// of `HALL_SIZE` instead, where it costs nothing that matters.
+fn carve_chambers(level: &mut Frame, rng: &mut StdRng) {
+    let (split_x, split_y) = (level.width / 2, level.height / 2);
+    let quadrants = [
+        (1, 1, split_x - 1, split_y - 1),
+        (split_x + 1, 1, level.width - 2, split_y - 1),
+        (1, split_y + 1, split_x - 1, level.height - 2),
+        (split_x + 1, split_y + 1, level.width - 2, level.height - 2),
+    ];
+
+    let mut halls = Vec::new();
+    for (x0, y0, x1, y1) in quadrants {
+        let (w, h) = (HALL_SIZE.min(x1 - x0 + 1), HALL_SIZE.min(y1 - y0 + 1));
+        let hall = Room {
+            x: x0 + rng.random_range(0..=x1 - x0 + 1 - w),
+            y: y0 + rng.random_range(0..=y1 - y0 + 1 - h),
+            w,
+            h,
+        };
+        for y in hall.y..hall.y + hall.h {
+            for x in hall.x..hall.x + hall.w {
+                level.set(x, y, CellKind::Floor);
+            }
+        }
+        halls.push(hall);
+    }
+
+    for (a, b) in [(0, 1), (1, 3), (3, 2), (2, 0)] {
+        join_halls(level, halls[a], halls[b], rng);
+    }
+
+    level.entry = halls[rng.random_range(0..halls.len())].centre();
+}
+
 /// How many plain-floor dead ends the frame currently holds — the site type
 /// `place_caches` and `place_orphan` compete for.
 fn plain_dead_ends(level: &Frame) -> usize {
@@ -1119,6 +1211,20 @@ mod tests {
                      outside the 150-230 every layout shares"
                 );
             }
+        }
+    }
+
+    /// A chamber is a hall — open enough that crossing it is a straight
+    /// walk rather than a route. Six cells square is past anything the
+    /// rooms carver reaches often and flatly impossible in the maze, whose
+    /// even-even cells are always rock.
+    #[test]
+    fn the_chambers_layout_carves_halls() {
+        for level in frames_of(FrameLayout::Chambers) {
+            assert!(
+                has_open_block(&level, 6),
+                "a Chambers frame carved nothing bigger than a room"
+            );
         }
     }
 

@@ -197,18 +197,26 @@ fn face_a_wall(game: &mut Game) {
 
 /// Faces the party down a direction they can actually walk, so a movement
 /// assertion isn't silently testing a wall.
+///
+/// The way up is deliberately not "a direction they can walk". A caller
+/// wants the party to keep exploring this frame, and stepping onto `LinkUp`
+/// ends the trip — which barely came up while the entry was the maze
+/// lattice's corner and the party wandered away from it, and comes up
+/// constantly now that a `Rooms` or `Chambers` entry sits in the middle of
+/// an open space the party circles.
 fn face_an_open_way(game: &mut Game) -> Dir {
     for _ in 0..4 {
         let Locale::Stack { x, y, facing, .. } = locale(game) else {
             panic!("not underground");
         };
         let (dx, dy) = facing.delta();
-        if cell_at(game, x + dx, y + dy).walkable() {
+        let ahead = cell_at(game, x + dx, y + dy);
+        if ahead.walkable() && ahead != CellKind::LinkUp {
             return facing;
         }
         game.turn_right();
     }
-    panic!("the entry cell is walled in on all four sides");
+    panic!("no way on that doesn't leave the frame");
 }
 
 #[test]
@@ -1164,13 +1172,13 @@ fn the_map_survives_a_save_and_load() {
 /// Two links are two stacks, so they are two maps. Sharing one would
 /// pre-reveal a frame the party has never set foot in.
 ///
-/// Asserted as isolation in both directions. It used to be "the fresh frame
-/// shows less than the walked one", which was a proxy for the real claim and
-/// depended on `walk_corridors` actually covering ground — it does in a
-/// maze, and barely does in a `FrameLayout::Rooms` frame, where turning
-/// right only when blocked just orbits the entry room. The second half is
-/// the half that would have caught a shared map anyway: coming back has to
-/// find the first frame's walk still on it.
+/// Asserted on arrival rather than after a walk, and in both directions.
+/// The old shape walked twenty steps and compared explored fractions, which
+/// was a proxy for the claim and a lottery on what the walk hit — twenty
+/// steps through the open layouts finds a Breakpoint that reveals the whole
+/// frame, a Fault that drops the party a level, or a fight that reboots them
+/// to the surface, none of which this test is about. Arriving reveals the
+/// view cone, which is all the map either half needs.
 #[test]
 fn each_link_keeps_its_own_map() {
     let mut game = game();
@@ -1178,14 +1186,13 @@ fn each_link_keeps_its_own_map() {
     assert!(tiles.len() >= 2);
 
     game.enter_stack(tiles[0].0, tiles[0].1);
-    walk_corridors(&mut game, 20);
-    let walked = map(&game).cells.clone();
+    let first = map(&game).cells.clone();
     game.ascend();
 
     game.enter_stack(tiles[1].0, tiles[1].1);
     assert_ne!(
         map(&game).cells,
-        walked,
+        first,
         "the second link opened onto the first one's map"
     );
     game.ascend();
@@ -1193,7 +1200,7 @@ fn each_link_keeps_its_own_map() {
     game.enter_stack(tiles[0].0, tiles[0].1);
     assert_eq!(
         map(&game).cells,
-        walked,
+        first,
         "the first link's map was lost to the second"
     );
 }

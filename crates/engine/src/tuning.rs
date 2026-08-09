@@ -273,6 +273,27 @@ pub const PLAYER_STRIKE_POWER: i32 = 5;
 /// lands on roughly 6-10% of wild attacks.
 pub const WILD_ABILITY_CHANCE: f64 = 0.2;
 
+/// How sharply a wild program acts on the trained battle policy — the
+/// softmax temperature `Game::choose_wild_action` samples its
+/// `(move, target)` pair at.
+///
+/// 1.0 is the trained distribution as-is. Below 1.0 sharpens it, and 0 (or
+/// less) is argmax — always the best-scoring pair, which reads as an enemy
+/// that never makes a mistake. A large value flattens it back towards the
+/// uniform move roll and slot-weighted target roll the game had before
+/// policies existed, so raising this is how a policy that trained too well
+/// gets dialled back without retraining.
+///
+/// This is the **only** shipping control over how hard the learned enemy
+/// plays, and it is deliberately not backed by `balance_sim`: that gate is
+/// RNG-free and models no abilities, so a policy that makes real fights
+/// substantially harder moves none of its curves. The arena
+/// (`dev-arenas/`, `FERAL_DEV_ARENA=1`) is the instrument here.
+///
+/// Inert with no `assets/policies/enemy_battle.ron` installed: with no
+/// weights there is nothing to sample and the baseline rolls run instead.
+pub const ENEMY_POLICY_TEMPERATURE: f32 = 1.0;
+
 /// DEF granted for the round by the Defend action.
 pub const DEFEND_DEF_BONUS: i32 = 6;
 

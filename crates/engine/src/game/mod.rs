@@ -12,6 +12,7 @@ pub(crate) mod collect;
 pub(crate) mod combat;
 pub(crate) mod combat_damage;
 pub(crate) mod combat_enemy;
+pub(crate) mod combat_policy;
 pub(crate) mod combat_rewards;
 pub(crate) mod combat_round;
 pub(crate) mod combat_status;

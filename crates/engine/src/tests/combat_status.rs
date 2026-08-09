@@ -1013,6 +1013,14 @@ fn a_stun_that_lands_this_round_costs_the_victim_their_next_turn() {
         .entity_mut(enemies[0])
         .insert(Routines(vec!["deadlock".to_string()]));
     game.world.get_mut::<Stats>(enemies[0]).unwrap().atk = 0;
+    // Round 2 it acts on a *move*, its routine having gone on cooldown, and
+    // `battle_with_a_pack_of`'s default species is a Cipher — whose Encrypt
+    // carries a `duration: 1` Stun of its own. A fresh stun landing there is
+    // a legitimate event that says nothing about whether the first one
+    // cleared, so the pack is a Scrapper instead: two moves, no effects.
+    // Left as a Cipher this passed on `WILD_ABILITY_CHANCE` x that move's
+    // own 0.35 missing, which is a 93% coin flip and not a mechanic.
+    game.world.get_mut::<Creature>(enemies[0]).unwrap().species = "scrapper".to_string();
 
     player_attacks(&mut game);
     assert!(

@@ -10,6 +10,7 @@ mod game;
 pub mod items;
 pub mod items_db;
 pub mod perks;
+pub mod policy;
 pub mod progression;
 pub mod research;
 pub mod resources;

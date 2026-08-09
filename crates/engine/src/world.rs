@@ -56,6 +56,31 @@ pub struct Tile {
     pub walkable: bool,
 }
 
+impl Tile {
+    /// Whether a hostile may stand here: walkable, and not the base slab.
+    ///
+    /// `walkable` alone is not the rule, and the slab is why. It is the one
+    /// safe ground in the game, established in three places already —
+    /// `Game::maybe_ambush` refuses to roll while the player stands on it,
+    /// `Game::stamp_platform` purges whatever is standing there when the
+    /// floor is laid, and `pursuit_field` keeps a provoked swarm off it.
+    ///
+    /// `wander_ai_system` is the fourth reader and was the one that quietly
+    /// disagreed: it checked `walkable` alone, so an ordinary wild program
+    /// could stroll onto a base that a *pursuing* guardian was forbidden to
+    /// enter. That went unnoticed because `stamp_platform` purges the slab
+    /// as it is laid and the wild population was small enough that few
+    /// programs ever stood next to one — raising the population is what made
+    /// a program adjacent to the edge, and therefore one wander step from
+    /// the inside, the common case rather than the rare one.
+    ///
+    /// One predicate rather than four copies of `walkable && biome !=
+    /// Platform`, because the copy that drifts is the one nobody runs.
+    pub(crate) fn open_to_hostiles(&self) -> bool {
+        self.walkable && self.biome != Biome::Platform
+    }
+}
+
 struct Chunk {
     tiles: Vec<Tile>,
 }

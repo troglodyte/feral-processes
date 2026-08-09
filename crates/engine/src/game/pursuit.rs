@@ -13,7 +13,7 @@ use std::collections::HashMap;
 
 use pathfinding::directed::dijkstra::dijkstra_all;
 
-use crate::world::{Biome, NEIGHBOURS, Tile, WorldMap};
+use crate::world::{NEIGHBOURS, Tile, WorldMap};
 
 /// Chebyshev step counts from `origin` to every tile reachable within
 /// `radius`, routed around unwalkable terrain and around whatever else
@@ -74,14 +74,15 @@ pub(crate) fn pursuit_field(
     origin: (i32, i32),
     radius: i32,
 ) -> HashMap<(i32, i32), u32> {
-    walk_field(map, origin, radius, |tile| {
-        tile.walkable && tile.biome != Biome::Platform
-    })
+    walk_field(map, origin, radius, Tile::open_to_hostiles)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Only the fixtures below name a biome now that `pursuit_field` refuses
+    // the slab through `Tile::open_to_hostiles` rather than spelling it out.
+    use crate::world::Biome;
 
     fn floor() -> Tile {
         Tile {

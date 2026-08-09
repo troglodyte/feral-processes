@@ -1,21 +1,16 @@
-# Where this got to — 2026-08-08
+# Where this got to — updated 2026-08-09
 
 Handoff notes for the roster-tuner work. Read `README.md` first for what the
 tool *is*; this is what happened and what to do next.
 
 ## State
 
-Three worktrees, all rebased onto `main` (which moved to 0.5.9 mid-session):
+`roster-tuner` is unmerged and rebased onto `main`. `fixture-cleanup` landed
+and is gone; `main` is at `0.5.10`. Nothing has been pushed, and `assets/`
+has never been written to.
 
-| worktree | branch | state |
-|---|---|---|
-| `feral-processes` | `main` | untouched by this work |
-| `feral-processes-tuner` | `roster-tuner` | 7 commits, 1709 workspace tests green |
-| `feral-processes-fixtures` | `fixture-cleanup` | 1 commit, 1212 engine tests green |
-
-Nothing merged, nothing pushed, `assets/` never written to. Both branches
-were left rebased and green, so they should merge forward cleanly unless
-`main` has moved again.
+Check the branch is still current rather than trusting this line — `git log`
+answers it and this file cannot.
 
 ## The headline finding: depth 5 is not a roster problem
 
@@ -93,37 +88,59 @@ The `full-group` row is its own finding: a geared zone-3 party clears a full
 enemy group having taken **about 1% damage**. Surface content at that point
 is trivial and depth 5 is a wall. A cliff, not a curve.
 
-## Known defect in the tuner: the objective is side-blind
+## Side-blindness — FIXED 2026-08-09
 
-**Fix this before acting on another proposal.**
-
-A target says "this fight should be won 75% of the time". It does not say
+A target says "this fight should be won 75% of the time". It did not say
 whether to get there by buffing the enemy or nerfing the party. The first
 real run did both: it raised `rootkit` (the opponent in `full-group.ron`)
 *and* dropped `scrapper.base_def` from 5 to **0**, its bound floor — and
 Scrappers are the *party* in that scenario. A stat lowered to satisfy one
 fight applies to that species everywhere in the game.
 
-Options, unchosen: per-role bounds, excluding any species named in a
-scenario's `party` from movement, or a penalty term for moving a species the
-player fields. The first is the most general and the third is the least
-surprising.
+Fixed by freezing every species the player fields. `sides::player_fielded`
+derives that set from each target scenario's `party` list, and
+`Workspace::baseline` leaves those species out of the candidate **entirely**
+rather than filtering them later — so `perturb` cannot pick one, `apply`
+cannot write one, and `summary` cannot list one. A second search operator
+added later inherits all three for free, which a filter inside `perturb`
+would not have given.
+
+Two things worth knowing before extending it:
+
+- **A save-backed target is refused, not silently unprotected.**
+  `Scenario::party` is a `Fresh`-only field, so a `Save` or `Template`
+  player brings a roster this code cannot see, and an empty party would be
+  indistinguishable from "this fight has no companions". All three shipped
+  targets are `Fresh`, so nothing is blocked today.
+- **This does not make the objective two-sided.** Every species in the game
+  can be tamed, so a scenario's `party` is only which ones that fight
+  happens to field. The real fix is coverage: field a species on *both*
+  sides of some pair of targets and lowering it costs a fight elsewhere.
+
+The regression is pinned by three tests, verified by removing the freeze and
+watching them fail: `a_frozen_species_never_enters_the_candidate`,
+`freezing_every_species_leaves_an_empty_candidate`, and
+`the_search_never_proposes_a_change_to_a_species_the_player_fields`. A
+fourth, asserting the *written* proposal was byte-identical, was written and
+**deleted** — it passed with the freeze removed, because a short search
+never happened to pick `scrapper` and patching writes identical values back
+idempotently. Don't re-add that shape; it reads as coverage and is not.
 
 ## Suggested order tomorrow
 
 1. **Decide the depth-scaling question** above. It is the biggest live
    balance problem in the game and everything else here is downstream of it.
    No code needed to decide — the arithmetic is all in this file.
-2. **Fix the side-blindness** if the tuner is going to be used again.
-3. **Land `fixture-cleanup`.** It is a real bug on `main` (see below) and is
-   done and green.
+   *Deferred by the user on 2026-08-09; still open.*
+2. ~~Fix the side-blindness~~ — done, see above.
+3. ~~Land `fixture-cleanup`~~ — merged and released as `0.5.10`.
 4. **Phase B (burn / learned enemy tactics)** is still gated on the same
    thing it was gated on at the start: enemies carry at most one routine
    (`roll_wild_routine`, `game/spawning.rs:108`), so there is no per-turn
    decision for a policy to learn. Giving enemies real choices is a
    game-design change with no ML in it, and it has to come first.
 
-## The /tmp inode leak (separate, fixed on a branch)
+## The /tmp inode leak (separate; landed in 0.5.10)
 
 A build died mid-session with `No space left on device` on a tmpfs that was
 15% full — it was **inodes**, not bytes: 1,048,576 of 1,048,576 used.
@@ -131,10 +148,14 @@ A build died mid-session with `No space left on device` on a tmpfs that was
 `scratch_assets_dir` (`crates/engine/src/tests/support.rs`) copies the whole
 shipped asset set (~190 files) per test and left cleanup to the caller, so a
 test that panics on a failed assert leaked the lot, and a helper returning a
-bare `Game` had no way to clean up at all. Measured: **53 leaked installs
-per suite run**, 5,437 found on the machine.
+bare `Game` had no way to clean up at all. Fixed with an RAII guard,
+`ScratchAssets`, whose `Drop` is best-effort so a failed removal cannot
+panic during unwinding and bury the assertion that actually failed.
 
-`fixture-cleanup` fixes it with an RAII guard — 53/run becomes 0/run,
-verified by reverting the change, re-running and counting. **Until that
-lands, every engine suite run on `main` leaks 53 directories.** Clear with
-`rm -rf /tmp/feral_*` if a build starts failing for no visible reason.
+Measured over a full workspace run, before and after: **62 directories and
+10,741 inodes become 9 and 34** — about 97 runs to exhaustion, becoming
+about 30,000. The earlier "53/run becomes 0/run" figure counted only the
+engine's asset installs and was right about those; the residual 9 come from
+app-core's save fixtures and the arena's, which are different helpers and
+were left alone. Clear with `rm -rf /tmp/feral_*` if a build ever starts
+failing for no visible reason.

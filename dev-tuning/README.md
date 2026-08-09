@@ -40,6 +40,14 @@ Every field needs a `Bound`. An unbounded search proposes a 4000-HP drone
 that satisfies one target by breaking something no target happened to
 measure, so a missing bound is an error rather than an implicit free rein.
 
+It may not move a species the player *fields*. Any species named in a
+target scenario's `party` is left out of the candidate entirely, so the
+search cannot reach it and the report lists it under Frozen — see the
+two-sided note below. A scenario whose player comes from a `Save` or a
+`Template` is refused for the same reason: `party` is a `Fresh`-only field,
+so that save's companions would be invisible here and nerfable exactly as
+before.
+
 ## What rejects a candidate outright
 
 Not everything is a preference the score can trade against. A roster where
@@ -61,14 +69,23 @@ Set targets knowing that, and play a proposal before applying it —
 `FERAL_DEV_ARENA=1 cargo run`, `[R]`, `[L]` the scenario. A converged tuner
 run is not evidence of play.
 
-**The objective does not know which side you meant.** A target says "this
-fight should be won 75% of the time"; it does not say whether to get there
-by buffing the enemy or by nerfing the party. The first real run did both —
-it raised `rootkit` (the opponent in `full-group.ron`) *and* dropped
+**The freeze is narrow, because the roster is two-sided.** A target says
+"this fight should be won 75% of the time"; it does not say whether to get
+there by buffing the enemy or by nerfing the party. The first real run did
+both — it raised `rootkit` (the opponent in `full-group.ron`) *and* dropped
 `scrapper.base_def` to its floor, and Scrappers are the party in that
 scenario. A stat lowered to satisfy one fight applies to that species
-everywhere in the game. Read the Fields-moved list with that in mind; it is
-exactly the kind of thing the human-review step exists to catch.
+everywhere in the game.
+
+Every species the player fields in any target is now held at its shipped
+numbers and listed in the report's Frozen section. That set is *derived*
+from each scenario's `party`, not configured, so it cannot drift out of step
+with the fights it protects. What it does not do is make the objective
+two-sided: every species in this game can be tamed, so a scenario's `party`
+is only which ones that authored fight happens to field. The fix that would
+is coverage — put a species on *both* sides of some pair of targets and
+lowering it costs a fight elsewhere, so the search self-corrects with no
+frozen set at all.
 
 ## Current state
 

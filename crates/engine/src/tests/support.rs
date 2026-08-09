@@ -209,12 +209,55 @@ pub(super) fn battle_with_a_pack_of(game: &mut Game, count: usize, hp: i32) -> V
     members
 }
 
+/// A scratch asset install that deletes itself when it goes out of scope.
+///
+/// Cleanup **must** be a guard rather than a `remove_dir_all` at the end of
+/// each test. Every one of these holds a full copy of the shipped assets —
+/// eight directories, ~190 files — so a test that panics on a failed assert
+/// leaks the lot, and a helper that returns only its `Game` had no way to
+/// clean up at all. Between them those two shapes put 5,437 stale installs
+/// in `/tmp` and exhausted the filesystem's *inode* table (the tmpfs was
+/// only 15% full by bytes), which fails builds and tests across the whole
+/// machine with an error naming none of this.
+///
+/// Dropping it is safe as early as the `Game` is built: `Game` holds a
+/// `World` and a `Schedule` and does not retain the assets path, so a
+/// helper returning a bare `Game` can let its guard fall at the end of the
+/// function. Keep the binding alive only where the *path* is used again,
+/// which is what a second `Game::new` or a `Game::load` against the same
+/// install needs.
+pub(super) struct ScratchAssets(std::path::PathBuf);
+
+impl std::ops::Deref for ScratchAssets {
+    type Target = std::path::Path;
+
+    fn deref(&self) -> &std::path::Path {
+        &self.0
+    }
+}
+
+impl AsRef<std::path::Path> for ScratchAssets {
+    fn as_ref(&self) -> &std::path::Path {
+        &self.0
+    }
+}
+
+impl Drop for ScratchAssets {
+    fn drop(&mut self) {
+        // Best-effort: a test asserting on a failed install may have left
+        // the directory in a state `remove_dir_all` dislikes, and turning
+        // that into a second panic during unwinding would abort the process
+        // and bury the assertion that actually failed.
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 /// A fresh, uniquely-named scratch directory under the OS temp dir, wiped
 /// if a stale one from a crashed prior run is somehow still there. Shared
 /// by `modded_assets_dir` and `assets_dir_with_extra_structure` so both
 /// draw from one counter — collisions were never really possible (`tag`
 /// already disambiguates by caller) but there's no reason to run two.
-fn scratch_assets_dir(tag: &str) -> std::path::PathBuf {
+fn scratch_assets_dir(tag: &str) -> ScratchAssets {
     static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let dir = std::env::temp_dir().join(format!(
         "feral_processes_{tag}_{}_{}",
@@ -222,7 +265,7 @@ fn scratch_assets_dir(tag: &str) -> std::path::PathBuf {
         NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     let _ = std::fs::remove_dir_all(&dir);
-    dir
+    ScratchAssets(dir)
 }
 
 /// Copies every shipped asset file into `dir` (which must already exist),
@@ -267,7 +310,7 @@ pub(super) fn modded_assets_dir(
     extra_species: &[(&str, &str)],
     extra_research: &[(&str, &str)],
     extra_abilities: &[(&str, &str)],
-) -> std::path::PathBuf {
+) -> ScratchAssets {
     let dir = scratch_assets_dir(tag);
     copy_shipped_assets(&dir, omit_items);
     for (name, body) in extra_items {
@@ -290,11 +333,7 @@ pub(super) fn modded_assets_dir(
 /// have needed one, and widening its signature for a single caller isn't
 /// worth the churn across its other ~20 call sites. The caller removes the
 /// directory once its `Game` is done with it.
-pub(super) fn assets_dir_with_extra_structure(
-    tag: &str,
-    name: &str,
-    body: &str,
-) -> std::path::PathBuf {
+pub(super) fn assets_dir_with_extra_structure(tag: &str, name: &str, body: &str) -> ScratchAssets {
     let dir = scratch_assets_dir(tag);
     copy_shipped_assets(&dir, &[]);
     std::fs::write(dir.join("structures").join(name), body).unwrap();
@@ -303,7 +342,7 @@ pub(super) fn assets_dir_with_extra_structure(
 
 /// A scratch install carrying one extra achievement on top of the shipped
 /// ladder, for cases that need a rung the real assets deliberately don't have.
-pub(super) fn scratch_assets_with_achievement(id: &str, body: &str) -> std::path::PathBuf {
+pub(super) fn scratch_assets_with_achievement(id: &str, body: &str) -> ScratchAssets {
     let dir = scratch_assets_dir(id);
     copy_shipped_assets(&dir, &[]);
     std::fs::write(dir.join("achievements").join(format!("{id}.ron")), body).unwrap();
@@ -314,7 +353,7 @@ pub(super) fn scratch_assets_with_achievement(id: &str, body: &str) -> std::path
 /// the Currency economy role — so `Game::new`'s missing-role startup
 /// abort (see `ItemDb::missing_roles`) can be exercised against an
 /// otherwise-valid item set.
-pub(super) fn assets_dir_missing_currency_item() -> std::path::PathBuf {
+pub(super) fn assets_dir_missing_currency_item() -> ScratchAssets {
     modded_assets_dir(
         "missing_currency",
         &["core_fragment.ron"],

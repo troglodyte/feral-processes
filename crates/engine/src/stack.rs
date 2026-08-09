@@ -87,6 +87,42 @@ impl Dir {
 /// than an ad-hoc list so a given seed always produces the same frame.
 const DIRS: [Dir; 4] = [Dir::North, Dir::East, Dir::South, Dir::West];
 
+/// Which shape a frame is carved in.
+///
+/// Rolled per frame off `FrameSpec::rng_seed`, which is why it needs no
+/// save field and no second seeding scheme: the layout is a property of the
+/// spec, so it survives a save/load exactly the way the maze itself does.
+///
+/// Dispatched by an exhaustive `match` in `generate` rather than through a
+/// trait or a table of function pointers, for the reason `render/stack.rs`'s
+/// `cell_mark` is exhaustive: a fourth variant must fail to compile until
+/// someone decides how it carves, and a wildcard or a lookup would let one
+/// be added and silently never dispatched.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FrameLayout {
+    /// The original: a perfect maze, braided back open.
+    Maze,
+    /// Rectangular rooms joined by corridors, with extra corridors added
+    /// between rooms that the spanning tree left unjoined.
+    Rooms,
+    /// A few large open chambers separated by short wall runs with wide
+    /// gaps punched through them.
+    Chambers,
+}
+
+impl FrameLayout {
+    /// The frame's layout, and deliberately the generator's *first* draw —
+    /// so the layouts do not each carve from a stream position that depends
+    /// on which one was chosen.
+    fn roll(rng: &mut StdRng) -> Self {
+        match rng.random_range(0..3) {
+            0 => FrameLayout::Maze,
+            1 => FrameLayout::Rooms,
+            _ => FrameLayout::Chambers,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CellKind {
     /// Solid. Not walkable, and what every out-of-bounds read returns.
@@ -233,6 +269,9 @@ pub struct Frame {
     /// `None` on the bottom frame of a stack — the point of a stack having
     /// a bottom is that there is nowhere further to go.
     pub link_down: Option<(i32, i32)>,
+    /// Which shape this frame was carved in. Rolled from the spec, so it is
+    /// regenerated rather than saved.
+    pub layout: FrameLayout,
 }
 
 impl Frame {
@@ -266,6 +305,7 @@ impl Frame {
 /// inside solid rock.
 pub fn generate(spec: FrameSpec) -> Frame {
     let mut rng = StdRng::seed_from_u64(spec.rng_seed());
+    let layout = FrameLayout::roll(&mut rng);
 
     let mut level = Frame {
         width: FRAME_SIZE,
@@ -273,10 +313,15 @@ pub fn generate(spec: FrameSpec) -> Frame {
         cells: vec![CellKind::Rock; (FRAME_SIZE * FRAME_SIZE) as usize],
         entry: (1, 1),
         link_down: None,
+        layout,
     };
 
-    carve_maze(&mut level, &mut rng);
-    braid(&mut level, &mut rng);
+    match layout {
+        FrameLayout::Maze | FrameLayout::Rooms | FrameLayout::Chambers => {
+            carve_maze(&mut level, &mut rng);
+            braid(&mut level, &mut rng);
+        }
+    }
 
     // The far cell earns its place either way: the way down on a frame that
     // has one, and on the bottom frame the lair — the deepest room of the
@@ -295,6 +340,10 @@ pub fn generate(spec: FrameSpec) -> Frame {
     if spec.is_bottom() {
         seal_the_lair(&mut level, far);
     }
+    // Before every pass that reads the frame's shape, so all of them see the
+    // same frame the player will walk. After the seal, so a spur cannot open
+    // inside the lair's enclosure.
+    guarantee_loot_stubs(&mut level, &mut rng);
     place_doors(&mut level, &mut rng);
     // Phase 3's three, between the doors and the caches. Each takes its own
     // kind of site — a junction, then open floor — and none takes a dead
@@ -531,6 +580,107 @@ fn place_orphan(level: &mut Frame, rng: &mut StdRng) {
     }
 }
 
+/// How many plain-floor dead ends the frame currently holds — the site type
+/// `place_caches` and `place_orphan` compete for.
+fn plain_dead_ends(level: &Frame) -> usize {
+    let mut count = 0;
+    for y in 1..level.height - 1 {
+        for x in 1..level.width - 1 {
+            if level.cell(x, y) == CellKind::Floor && is_dead_end(level, x, y) {
+                count += 1;
+            }
+        }
+    }
+    count
+}
+
+/// Every rock cell a spur could open from, shuffled.
+///
+/// A candidate has exactly one walkable neighbour, so carving it makes a
+/// dead end rather than a shortcut. That neighbour has to be plain `Floor`,
+/// which keeps a spur off the lair, either link and a sealed door — and it
+/// must not itself be a dead end, or carving would merely move one and the
+/// loop below would never terminate.
+fn stub_sites(level: &Frame, rng: &mut StdRng) -> Vec<(i32, i32)> {
+    let mut sites = Vec::new();
+    for y in 1..level.height - 1 {
+        for x in 1..level.width - 1 {
+            if level.cell(x, y) != CellKind::Rock {
+                continue;
+            }
+            let mut open = DIRS.into_iter().filter_map(|dir| {
+                let (dx, dy) = dir.delta();
+                level.walkable(x + dx, y + dy).then_some((x + dx, y + dy))
+            });
+            let Some(neighbour) = open.next() else {
+                continue;
+            };
+            if open.next().is_some() {
+                continue;
+            }
+            if level.cell(neighbour.0, neighbour.1) == CellKind::Floor
+                && !is_dead_end(level, neighbour.0, neighbour.1)
+            {
+                sites.push((x, y));
+            }
+        }
+    }
+    for i in (1..sites.len()).rev() {
+        sites.swap(i, rng.random_range(0..=i));
+    }
+    sites
+}
+
+/// Pushes a freshly carved spur one cell further where there is room.
+///
+/// Two cells reads as a side passage rather than as an alcove, and hands
+/// `place_doors` a corridor site into the bargain — a door on the neck of a
+/// spur is exactly the "this ends in a decision" the kind exists for.
+fn extend_stub(level: &mut Frame, neck: (i32, i32), rng: &mut StdRng) {
+    let mut order = DIRS;
+    for i in (1..order.len()).rev() {
+        order.swap(i, rng.random_range(0..=i));
+    }
+    for dir in order {
+        let (dx, dy) = dir.delta();
+        let (nx, ny) = (neck.0 + dx, neck.1 + dy);
+        if nx <= 0 || ny <= 0 || nx >= level.width - 1 || ny >= level.height - 1 {
+            continue;
+        }
+        if level.cell(nx, ny) != CellKind::Rock || exits(level, nx, ny) != 1 {
+            continue;
+        }
+        level.set(nx, ny, CellKind::Floor);
+        return;
+    }
+}
+
+/// Carves spurs until the frame holds enough plain-floor dead ends for
+/// `place_caches` and `place_orphan` to both fill.
+///
+/// One site rule across all three layouts, and that is the whole reason the
+/// feature passes below need no layout awareness at all: rooms and chambers
+/// have almost no dead ends of their own, and even the maze came up short of
+/// the four they want about one frame in four. Without this, a frame quietly
+/// ships two caches instead of three and reads as a payout curve that moved.
+///
+/// Runs after `seal_the_lair` so a spur cannot open inside the sealed
+/// region. Nothing between here and `place_caches` consumes a dead end —
+/// doors want two opposite exits, breakpoints want three, faults and
+/// corruption exclude dead ends outright — so what this carves is what
+/// those two passes get. A frame with nowhere left to carve places fewer,
+/// which is the same graceful shortfall `.take()` already gives them.
+fn guarantee_loot_stubs(level: &mut Frame, rng: &mut StdRng) {
+    let wanted = STACK_CACHES_PER_FRAME + STACK_ORPHANS_PER_FRAME;
+    while plain_dead_ends(level) < wanted {
+        let Some(&(x, y)) = stub_sites(level, rng).first() else {
+            return;
+        };
+        level.set(x, y, CellKind::Floor);
+        extend_stub(level, (x, y), rng);
+    }
+}
+
 /// Recursive-backtracker maze carver. Cells sit on odd coordinates; carving
 /// to a neighbour two cells away also clears the wall between them, so the
 /// result is a perfect maze — fully connected, with exactly one route
@@ -736,6 +886,23 @@ mod tests {
         }
     }
 
+    /// Every frame carving the same shape is the complaint this change
+    /// exists to answer. A stack the party walks down has to offer more than
+    /// one kind of place, so all three layouts must turn up over a sweep.
+    #[test]
+    fn every_layout_turns_up_across_a_sweep_of_frames() {
+        let mut seen: Vec<FrameLayout> = Vec::new();
+        for world_seed in 0..60 {
+            for depth in 1..=5 {
+                let layout = generate(spec(world_seed, depth)).layout;
+                if !seen.contains(&layout) {
+                    seen.push(layout);
+                }
+            }
+        }
+        assert_eq!(seen.len(), 3, "only {seen:?} ever generated");
+    }
+
     #[test]
     fn the_same_spec_yields_an_identical_frame() {
         let a = generate(spec(1234, 3));
@@ -842,6 +1009,7 @@ mod tests {
             cells: vec![CellKind::Rock; (FRAME_SIZE * FRAME_SIZE) as usize],
             entry: (1, 1),
             link_down: None,
+            layout: FrameLayout::Maze,
         };
         carve_maze(&mut level, &mut rng);
         let before = dead_ends(&level);
@@ -989,41 +1157,34 @@ mod tests {
         }
     }
 
-    /// The count is a ceiling, not a promise, and the gap is wide enough to
-    /// be worth pinning rather than waving at. `place_orphan` runs after
-    /// `place_caches` and wants the same site type, so a frame needs
-    /// `STACK_CACHES_PER_FRAME + STACK_ORPHANS_PER_FRAME` plain-floor dead
-    /// ends to field one — and measured over this sample, **about three
-    /// frames in four do**. A count test asserting one per frame would be
-    /// asserting something the generator has never done.
-    ///
-    /// The floor is deliberately well under the measured rate: this exists
-    /// to catch a generator change that quietly stops placing orphans at
-    /// all, not to freeze the braid's exact output.
+    /// The full set is a promise now, not a ceiling, and `guarantee_loot_stubs`
+    /// is what makes it one. `place_caches` and `place_orphan` both want plain-
+    /// floor dead ends; the rooms and chambers layouts have almost none of
+    /// their own, and the maze itself ran short of the four they need about
+    /// one frame in four. A frame silently shipping two caches instead of
+    /// three reads as a payout curve that moved rather than as a generator
+    /// that came up short, which is why this sweeps rather than sampling.
     #[test]
-    fn most_frames_place_an_orphan_and_none_places_two() {
-        let mut placed = 0;
-        let mut frames = 0;
-        for world_seed in 0..100 {
+    fn every_frame_fields_a_full_set_of_caches_and_an_orphan() {
+        for world_seed in 0..80 {
             for depth in 1..=6 {
                 let level = generate(FrameSpec {
                     frames: 6,
                     ..spec(world_seed, depth)
                 });
-                let orphans = cells_of(&level, CellKind::Orphan).len();
-                assert!(
-                    orphans <= STACK_ORPHANS_PER_FRAME,
-                    "seed {world_seed} depth {depth} placed {orphans} orphans"
+                let layout = level.layout;
+                assert_eq!(
+                    cells_of(&level, CellKind::Cache).len(),
+                    STACK_CACHES_PER_FRAME,
+                    "seed {world_seed} depth {depth} ({layout:?}) is short a cache"
                 );
-                placed += orphans;
-                frames += 1;
+                assert_eq!(
+                    cells_of(&level, CellKind::Orphan).len(),
+                    STACK_ORPHANS_PER_FRAME,
+                    "seed {world_seed} depth {depth} ({layout:?}) left no orphan"
+                );
             }
         }
-        assert!(
-            placed * 10 >= frames * 6,
-            "only {placed} of {frames} frames left an orphan running — the \
-             dead ends the caches leave have dried up"
-        );
     }
 
     /// The claim `place_orphan` running last rests on, and the one a count

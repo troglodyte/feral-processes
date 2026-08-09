@@ -207,6 +207,23 @@ pub fn load_file(path: &Path) -> std::io::Result<(Option<PolicyWeights>, Vec<Str
     }
 }
 
+/// Writes a trained weight vector where `load_file` will find it.
+///
+/// Every feature is named, including the zeroes: a file listing all
+/// nineteen is legible as "this is what was learned", where one listing the
+/// six that happened to come out large reads as an incomplete file.
+pub fn write_file(path: &Path, w: &PolicyWeights) -> std::io::Result<()> {
+    let file = PolicyFile {
+        features: w.to_pairs(),
+    };
+    let text = ron::ser::to_string_pretty(&file, ron::ser::PrettyConfig::default())
+        .map_err(std::io::Error::other)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, text)
+}
+
 /// Picks an index into `scores`, softmax-weighted at `temperature`.
 ///
 /// The maximum score is subtracted before `exp`, so a weight the trainer
@@ -357,6 +374,29 @@ mod tests {
                 "index {i} took {share} of {DRAWS} draws at a high temperature"
             );
         }
+    }
+
+    /// The trainer writes and the game reads, so the two have to agree —
+    /// and a name-keyed file makes that a real risk rather than a formality.
+    #[test]
+    fn written_weights_load_back_identically() {
+        let (written, _) = PolicyWeights::from_pairs(&[
+            ("target_hp_frac".into(), -1.84),
+            ("would_kill".into(), 2.31),
+            ("bleed_x_not_bleeding".into(), -0.07),
+        ])
+        .unwrap();
+
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_policy_roundtrip_{}.ron",
+            std::process::id()
+        ));
+        write_file(&path, &written).unwrap();
+        let (read_back, warnings) = load_file(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(read_back.unwrap().to_pairs(), written.to_pairs());
     }
 
     #[test]

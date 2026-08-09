@@ -28,6 +28,10 @@ path = "src/bin/savetool.rs"
 name = "arena"
 path = "src/bin/arena.rs"
 
+[[bin]]
+name = "train"
+path = "src/bin/train.rs"
+
 [dependencies]
 feral-processes-app-core = { workspace = true }
 feral-processes-engine = { workspace = true }
@@ -37,3 +41,4 @@ feral-processes-gui = { workspace = true }
 # of randomness. `rand_distr` is deliberately not here for the one Gaussian
 # it would provide; `cem::standard_normal` is three lines of Box-Muller.
 rand = "0.10.2"
+ron = "0.12.2"

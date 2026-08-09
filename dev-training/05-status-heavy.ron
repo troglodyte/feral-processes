@@ -1,0 +1,18 @@
+// Every opponent carries a status effect: Crawler stuns, Worm bleeds,
+// Cipher stuns. This is where the three interaction features earn their
+// place, or fail to — a policy that stuns an already-stunned target is
+// throwing the round away and this is the scenario that says so.
+(
+    player: Fresh(level: 12, zone: 3),
+    party: [
+        (species: "scrapper", level: 8),
+        (species: "sentinel", level: 8),
+    ],
+    opponents: [
+        (species: "crawler", count: 2),
+        (species: "worm", count: 1),
+        (species: "cipher", count: 1),
+    ],
+    reps: 200,
+    seed: 105,
+)

@@ -1,0 +1,9 @@
+// Two programs against a level-6 player with one companion: the smallest
+// composition where "who do I hit" is a real question.
+(
+    player: Fresh(level: 6, zone: 1),
+    party: [(species: "scrapper", level: 4)],
+    opponents: [(species: "glitch", count: 2)],
+    reps: 200,
+    seed: 102,
+)

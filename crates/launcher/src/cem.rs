@@ -39,6 +39,14 @@ pub struct CemProgress {
 /// `iterations * population` times. A non-finite fitness sorts to the back
 /// of its generation rather than poisoning the elite set.
 ///
+/// **A generation is evaluated across threads**, because the real objective
+/// is a few hundred arena fights per candidate and forty candidates a
+/// generation. It costs nothing in reproducibility: candidates are
+/// independent, results are collected back in population order, and
+/// generations are separated by a join. What it does require is that
+/// `fitness` be `Sync` and deterministic — the caller's seeds decide that,
+/// not this file.
+///
 /// The whole run is reproducible from `rng`.
 pub fn optimise<F, R>(
     cfg: &CemConfig,
@@ -47,7 +55,7 @@ pub fn optimise<F, R>(
     mut on_progress: impl FnMut(CemProgress),
 ) -> Vec<f32>
 where
-    F: Fn(&[f32]) -> f32,
+    F: Fn(&[f32]) -> f32 + Sync,
     R: rand::Rng,
 {
     let mut mean = vec![0.0f32; cfg.dims];
@@ -64,10 +72,8 @@ where
             })
             .collect();
 
-        let mut scored: Vec<(f32, &Vec<f32>)> = population
-            .iter()
-            .map(|c| (finite_or_worst(fitness(c)), c))
-            .collect();
+        let fitnesses = evaluate(&population, &fitness);
+        let mut scored: Vec<(f32, &Vec<f32>)> = fitnesses.into_iter().zip(&population).collect();
         scored.sort_by(|a, b| b.0.total_cmp(&a.0));
 
         let elite = &scored[..elite_count.min(scored.len())];
@@ -91,6 +97,37 @@ where
     mean
 }
 
+/// Scores a whole generation, spread over the machine's cores and collected
+/// back in population order so the sort below sees the same sequence a
+/// serial run would.
+fn evaluate<F>(population: &[Vec<f32>], fitness: &F) -> Vec<f32>
+where
+    F: Fn(&[f32]) -> f32 + Sync,
+{
+    let workers = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+        .min(population.len().max(1));
+    let chunk = population.len().div_ceil(workers.max(1));
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = population
+            .chunks(chunk.max(1))
+            .map(|slice| {
+                scope.spawn(move || {
+                    slice
+                        .iter()
+                        .map(|c| finite_or_worst(fitness(c)))
+                        .collect::<Vec<f32>>()
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|h| h.join().expect("a fitness evaluation panicked"))
+            .collect()
+    })
+}
+
 fn finite_or_worst(f: f32) -> f32 {
     if f.is_finite() { f } else { f32::NEG_INFINITY }
 }
@@ -109,7 +146,7 @@ mod tests {
     use super::*;
     use rand::SeedableRng;
     use rand::rngs::StdRng;
-    use std::cell::RefCell;
+    use std::sync::Mutex;
 
     fn config(dims: usize) -> CemConfig {
         CemConfig {
@@ -162,7 +199,11 @@ mod tests {
     #[test]
     fn the_std_floor_keeps_the_search_alive() {
         let final_spread = |std_floor: f32| {
-            let seen = RefCell::new(Vec::new());
+            // A `Mutex` rather than a `RefCell`: a generation is scored
+            // across threads. Order within a generation is therefore not
+            // fixed, which is fine — this measures the *spread* of the last
+            // one, and a join separates it from the generation before.
+            let seen = Mutex::new(Vec::new());
             let cfg = CemConfig {
                 std_floor,
                 iterations: 12,
@@ -180,12 +221,12 @@ mod tests {
                 &cfg,
                 &mut rng,
                 |x| {
-                    seen.borrow_mut().push(x[0]);
+                    seen.lock().unwrap().push(x[0]);
                     -x[0] * x[0]
                 },
                 |_| {},
             );
-            let all = seen.into_inner();
+            let all = seen.into_inner().unwrap();
             let last: Vec<f32> = all[all.len() - cfg.population..].to_vec();
             let m = last.iter().sum::<f32>() / last.len() as f32;
             (last.iter().map(|v| (v - m) * (v - m)).sum::<f32>() / last.len() as f32).sqrt()

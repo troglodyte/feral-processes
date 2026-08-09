@@ -1,0 +1,14 @@
+// A zone-3 party of four against a full front group. The composition the
+// balance sweep models, so a policy that wins here is winning against the
+// party the game is actually tuned around.
+(
+    player: Fresh(level: 12, zone: 3),
+    party: [
+        (species: "scrapper", level: 8),
+        (species: "sentinel", level: 8),
+        (species: "sprite", level: 8),
+    ],
+    opponents: [(species: "virus", count: 3)],
+    reps: 200,
+    seed: 103,
+)

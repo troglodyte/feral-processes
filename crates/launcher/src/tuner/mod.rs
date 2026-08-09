@@ -27,3 +27,4 @@ pub mod roster;
 pub mod run;
 pub mod score;
 pub mod search;
+pub mod sides;

@@ -17,7 +17,7 @@
 use super::roster::Candidate;
 use super::score::Target;
 use feral_processes_engine::arena::{self, Scenario, Summary};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 /// A scratch asset install a candidate roster is written into.
@@ -79,9 +79,19 @@ impl Workspace {
 
     /// The shipped value of every movable field, per species — the point
     /// the search starts from.
-    pub fn baseline(&self) -> Candidate {
+    ///
+    /// Species in `frozen` are left out of the candidate entirely rather
+    /// than being filtered later. That is what makes the freeze structural:
+    /// a species the candidate does not carry cannot be chosen by `perturb`,
+    /// cannot be written by `apply`, and cannot be listed by `summary`, so a
+    /// second search operator added later cannot forget to honour it. See
+    /// `sides::player_fielded` for what goes in the set and why.
+    pub fn baseline(&self, frozen: &BTreeSet<String>) -> Candidate {
         let mut species = BTreeMap::new();
         for (id, (_, text)) in &self.pristine {
+            if frozen.contains(id) {
+                continue;
+            }
             species.insert(id.clone(), super::roster::read_fields(text));
         }
         Candidate { species }
@@ -199,15 +209,43 @@ mod tests {
     #[test]
     fn the_baseline_reads_the_shipped_numbers() {
         let ws = Workspace::new(&assets()).unwrap();
-        let base = ws.baseline();
+        let base = ws.baseline(&BTreeSet::new());
         let drone = base.species.get("drone").expect("drone is shipped");
         assert!(drone.iter().any(|(f, _)| *f == Field::BaseHp));
     }
 
     #[test]
+    fn a_frozen_species_never_enters_the_candidate() {
+        // Structural rather than a check the search has to remember: a
+        // species that is not in the candidate cannot be picked by
+        // `perturb`, cannot be written by `apply`, and cannot appear in the
+        // report. A second search operator added later inherits all three
+        // for free.
+        let mut frozen = BTreeSet::new();
+        frozen.insert("scrapper".to_string());
+
+        let ws = Workspace::new(&assets()).unwrap();
+        let base = ws.baseline(&frozen);
+        assert!(!base.species.contains_key("scrapper"));
+        assert!(
+            base.species.contains_key("drone"),
+            "freezing one species must not empty the roster"
+        );
+    }
+
+    #[test]
+    fn freezing_every_species_leaves_an_empty_candidate() {
+        // `run` turns this into an error rather than letting the search
+        // spend its whole iteration budget re-evaluating one roster.
+        let ws = Workspace::new(&assets()).unwrap();
+        let all: BTreeSet<String> = ws.baseline(&BTreeSet::new()).species.into_keys().collect();
+        assert!(ws.baseline(&all).species.is_empty());
+    }
+
+    #[test]
     fn applying_a_candidate_changes_what_the_engine_reads() {
         let ws = Workspace::new(&assets()).unwrap();
-        let mut candidate = ws.baseline();
+        let mut candidate = ws.baseline(&BTreeSet::new());
         candidate
             .species
             .insert("drone".into(), vec![(Field::BaseHp, 137.0)]);
@@ -229,7 +267,7 @@ mod tests {
         // which happens to be harmless for a replace but is exactly how an
         // insert-path field would be written twice.
         let ws = Workspace::new(&assets()).unwrap();
-        let mut candidate = ws.baseline();
+        let mut candidate = ws.baseline(&BTreeSet::new());
         for hp in [200.0, 55.0] {
             candidate
                 .species

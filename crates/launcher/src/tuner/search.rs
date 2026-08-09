@@ -265,6 +265,24 @@ mod tests {
     }
 
     #[test]
+    fn perturbation_never_introduces_a_species_the_candidate_does_not_carry() {
+        // This is what makes leaving a frozen species out of the candidate
+        // *sufficient* rather than merely tidy. `eval::Workspace::baseline`
+        // drops the species the player fields; if `perturb` could add a key
+        // back, that omission would buy nothing and the freeze would be a
+        // comment rather than a mechanism.
+        let mut rng = StdRng::seed_from_u64(17);
+        let objective = objective(1);
+        let mut candidate = baseline();
+        let carried: Vec<String> = candidate.species.keys().cloned().collect();
+        for _ in 0..1000 {
+            candidate = perturb(&candidate, &objective, &mut rng);
+            let keys: Vec<String> = candidate.species.keys().cloned().collect();
+            assert_eq!(keys, carried, "perturb changed which species are movable");
+        }
+    }
+
+    #[test]
     fn perturbation_can_reach_a_field_the_shipped_file_omits() {
         // `growth_multiplier` is `#[serde(default)]` and most species omit
         // it. If the search could only move fields already written, those

@@ -6,7 +6,8 @@
 
 use super::objective::Objective;
 use super::roster::Candidate;
-use super::{constraints, eval, score, search};
+use super::{constraints, eval, score, search, sides};
+use std::collections::BTreeSet;
 use std::path::Path;
 
 pub struct Proposal {
@@ -22,6 +23,11 @@ pub struct Proposal {
     pub holdout_after: Vec<f32>,
     pub holdout_error_before: f32,
     pub holdout_error_after: f32,
+    /// Species held at their shipped numbers because the player fields them
+    /// in one of the targets. Carried so the report can say what was *not*
+    /// searched — a proposal that leaves a species alone and a proposal that
+    /// was never allowed to touch it read identically otherwise.
+    pub frozen: BTreeSet<String>,
 }
 
 impl Proposal {
@@ -49,7 +55,21 @@ pub fn run(
     log: &mut dyn FnMut(&str),
 ) -> Result<Proposal, String> {
     let workspace = eval::Workspace::new(assets_dir)?;
-    let baseline = workspace.baseline();
+    let frozen = sides::player_fielded(&objective.targets)?;
+    let baseline = workspace.baseline(&frozen);
+    if baseline.species.is_empty() {
+        return Err(format!(
+            "every species in the roster is fielded by the player in some target, so \
+             there is nothing left for the search to move ({} frozen)",
+            frozen.len()
+        ));
+    }
+    if !frozen.is_empty() {
+        log(&format!(
+            "frozen (the player fields these): {}",
+            frozen.iter().cloned().collect::<Vec<_>>().join(", ")
+        ));
+    }
 
     let mut evaluated = 0u32;
     let outcome = {
@@ -103,6 +123,7 @@ pub fn run(
         holdout_after: after.iter().map(|s| s.win_rate).collect(),
         holdout_error_before: score::total_error(&objective.targets, &before)?,
         holdout_error_after: score::total_error(&objective.targets, &after)?,
+        frozen,
         outcome,
     })
 }
@@ -196,6 +217,25 @@ fn report(objective: &Objective, proposal: &Proposal) -> String {
         "\n## Fields moved\n\n```\n{}```\n",
         proposal.candidate.summary(&proposal.baseline)
     );
+
+    if !proposal.frozen.is_empty() {
+        let _ = writeln!(
+            out,
+            "## Frozen\n\n\
+             The player fields these in one of the targets, so the search was not \
+             allowed to move them. A target says a fight should be won *N*% of the \
+             time; it does not say whether to get there by weakening the opponent or \
+             the party, and a stat lowered to satisfy one fight applies to that \
+             species everywhere in the game.\n\n\
+             {}\n",
+            proposal
+                .frozen
+                .iter()
+                .map(|s| format!("- `{s}`"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+    }
     let _ = writeln!(
         out,
         "## What this did not measure\n\n\
@@ -206,4 +246,105 @@ fn report(objective: &Objective, proposal: &Proposal) -> String {
          cargo run`, `[R]`, `[L]` the scenario."
     );
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tuner::score::Target;
+
+    fn repo(rel: &str) -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(rel)
+    }
+
+    /// The smallest objective that still fields a party: one target, one
+    /// fight per seed, few iterations. This runs real battles, so every
+    /// number here is chosen to keep it a test rather than a tuning run.
+    fn tiny_objective() -> Objective {
+        use crate::tuner::objective::Bound;
+        use crate::tuner::roster::Field;
+        Objective {
+            seeds: 1,
+            holdout_seeds: 1,
+            iterations: 3,
+            search_seed: 5,
+            targets: vec![Target {
+                scenario: repo("dev-arenas/full-group.ron")
+                    .to_string_lossy()
+                    .into_owned(),
+                reps: 1,
+                want_win_rate: 0.75,
+                want_hp_left: 0.45,
+                weight: 1.0,
+            }],
+            bounds: Field::ALL
+                .iter()
+                .map(|f| Bound {
+                    field: f.key().into(),
+                    min: 0.0,
+                    max: 100.0,
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn the_search_never_proposes_a_change_to_a_species_the_player_fields() {
+        // The regression this whole module exists for. `full-group.ron`
+        // fields three Scrappers against four rootkits, and the first real
+        // tuner run satisfied its win-rate target partly by dropping
+        // `scrapper.base_def` from 5 to its bound floor of 0 — a nerf to a
+        // companion the player tames and keeps, applied everywhere in the
+        // game, to move one authored fight.
+        let assets = repo("assets");
+        let objective = tiny_objective();
+        let proposal = run(&assets, &objective, &mut |_| {}).expect("tuner run");
+
+        assert!(
+            proposal.frozen.contains("scrapper"),
+            "scrapper is the party in this scenario; frozen was {:?}",
+            proposal.frozen
+        );
+        assert!(
+            !proposal.candidate.species.contains_key("scrapper"),
+            "a frozen species must not be in the candidate at all"
+        );
+        assert!(
+            proposal.candidate.species.contains_key("rootkit"),
+            "the opponent must still be movable, or the freeze froze the fight"
+        );
+    }
+
+    #[test]
+    fn the_report_says_which_species_were_never_searched() {
+        // A species the search left alone and a species the search was
+        // forbidden to touch produce the same empty diff, and the person
+        // reading the proposal has to be able to tell them apart — the
+        // second is the tool declining to answer a question.
+        let objective = tiny_objective();
+        let proposal = run(&repo("assets"), &objective, &mut |_| {}).expect("tuner run");
+        let text = report(&objective, &proposal);
+
+        let frozen_section = text
+            .split_once("## Frozen")
+            .expect("a run with a fielded party must report a Frozen section")
+            .1;
+        assert!(
+            frozen_section.contains("scrapper"),
+            "Frozen section did not name scrapper:\n{frozen_section}"
+        );
+        assert!(
+            !text
+                .split_once("## Frozen")
+                .unwrap()
+                .0
+                .split_once("## Fields moved")
+                .expect("report has a Fields moved section")
+                .1
+                .contains("scrapper"),
+            "a frozen species must not appear as a field that moved:\n{text}"
+        );
+    }
 }

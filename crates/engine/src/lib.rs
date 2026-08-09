@@ -20,6 +20,7 @@ pub mod stack;
 pub mod structures;
 pub mod systems;
 pub mod taming;
+pub mod telemetry;
 pub mod tuning;
 pub mod views;
 pub mod world;

@@ -152,20 +152,71 @@ fn walk_corridors(game: &mut Game, steps: usize) {
     }
 }
 
+/// Stands the party on a walkable cell with solid rock dead ahead.
+///
+/// The entry cell used to be guaranteed to border a wall, back when every
+/// frame was a maze and the entry was the lattice corner at (1, 1). A
+/// `FrameLayout::Rooms` entry is a room's centre with four open neighbours,
+/// so a test about shoving at rock now has to go and find some. Every layout
+/// is walled in, so a wall-adjacent cell always exists.
+fn face_a_wall(game: &mut Game) {
+    let level = game
+        .world
+        .resource::<CurrentStack>()
+        .0
+        .as_ref()
+        .unwrap()
+        .clone();
+    let spot = (0..level.height)
+        .flat_map(|y| (0..level.width).map(move |x| (x, y)))
+        .flat_map(|(x, y)| [Dir::North, Dir::East, Dir::South, Dir::West].map(|dir| ((x, y), dir)))
+        .find(|&((x, y), dir)| {
+            let (dx, dy) = dir.delta();
+            level.cell(x, y) == CellKind::Floor && !level.walkable(x + dx, y + dy)
+        });
+    let ((x, y), facing) = spot.expect("every frame is walled in");
+
+    let Locale::Stack {
+        depth,
+        frames,
+        entrance,
+        ..
+    } = locale(game)
+    else {
+        unreachable!("not underground")
+    };
+    game.world.insert_resource(Locale::Stack {
+        depth,
+        frames,
+        entrance,
+        x,
+        y,
+        facing,
+    });
+}
+
 /// Faces the party down a direction they can actually walk, so a movement
 /// assertion isn't silently testing a wall.
+///
+/// The way up is deliberately not "a direction they can walk". A caller
+/// wants the party to keep exploring this frame, and stepping onto `LinkUp`
+/// ends the trip — which barely came up while the entry was the maze
+/// lattice's corner and the party wandered away from it, and comes up
+/// constantly now that a `Rooms` or `Chambers` entry sits in the middle of
+/// an open space the party circles.
 fn face_an_open_way(game: &mut Game) -> Dir {
     for _ in 0..4 {
         let Locale::Stack { x, y, facing, .. } = locale(game) else {
             panic!("not underground");
         };
         let (dx, dy) = facing.delta();
-        if cell_at(game, x + dx, y + dy).walkable() {
+        let ahead = cell_at(game, x + dx, y + dy);
+        if ahead.walkable() && ahead != CellKind::LinkUp {
             return facing;
         }
         game.turn_right();
     }
-    panic!("the entry cell is walled in on all four sides");
+    panic!("no way on that doesn't leave the frame");
 }
 
 #[test]
@@ -255,28 +306,15 @@ fn stepping_into_rock_does_not_move_the_party() {
     let mut game = game();
     descend(&mut game);
 
-    // Turn until a wall is dead ahead, then shove at it.
-    let mut faced_a_wall = false;
-    for _ in 0..4 {
-        let Locale::Stack { x, y, facing, .. } = locale(&game) else {
-            unreachable!()
-        };
-        let (dx, dy) = facing.delta();
-        if !cell_at(&game, x + dx, y + dy).walkable() {
-            game.step_forward();
-            let Locale::Stack { x: nx, y: ny, .. } = locale(&game) else {
-                unreachable!()
-            };
-            assert_eq!((nx, ny), (x, y), "walked into solid rock");
-            faced_a_wall = true;
-            break;
-        }
-        game.turn_right();
-    }
-    assert!(
-        faced_a_wall,
-        "the entry cell should border at least one wall"
-    );
+    face_a_wall(&mut game);
+    let Locale::Stack { x, y, .. } = locale(&game) else {
+        unreachable!()
+    };
+    game.step_forward();
+    let Locale::Stack { x: nx, y: ny, .. } = locale(&game) else {
+        unreachable!()
+    };
+    assert_eq!((nx, ny), (x, y), "walked into solid rock");
 }
 
 #[test]
@@ -654,7 +692,9 @@ fn the_view_cone_is_rotated_so_straight_ahead_is_always_the_middle_column() {
 fn the_view_reads_solid_rock_past_the_edge_of_the_frame() {
     let mut game = game();
     descend(&mut game);
-    // The entry sits at (1, 1) facing north — one step off the top edge.
+    // Stood against a wall rather than at the entry: a Rooms frame arrives
+    // the party in the middle of a room, with nothing solid in reach.
+    face_a_wall(&mut game);
     let view = game.stack_view().unwrap();
     let middle = crate::game::stack_view::STACK_VIEW_HALF_WIDTH;
     assert_eq!(view.cells[1][middle], StackCellView::Rock);
@@ -1129,8 +1169,81 @@ fn the_map_survives_a_save_and_load() {
     assert!((before.explored - after.explored).abs() < f32::EPSILON);
 }
 
+/// A frame is regenerated from its spec rather than saved, so a change to
+/// the generator moves the walls under a save made mid-dive — which is
+/// exactly what adding `FrameLayout` did to every save in existence.
+///
+/// Landing in rock is not a cosmetic problem. Rock is the one `CellKind`
+/// that is both unwalkable and sight-blocking, so the party cannot step out
+/// of it, the first-person view fills with wall and the map truncates to
+/// their own row: the occluder trap, reached by loading rather than by
+/// walking. The load path puts them on the frame's entry instead, which is
+/// the one cell every layout guarantees.
+#[test]
+fn a_save_whose_cell_no_longer_exists_lands_on_the_entry() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    game.enter_stack(pos.x, pos.y);
+
+    let Locale::Stack {
+        depth,
+        frames,
+        entrance,
+        facing,
+        ..
+    } = locale(&game)
+    else {
+        unreachable!("not underground")
+    };
+    let level = game
+        .world
+        .resource::<CurrentStack>()
+        .0
+        .as_ref()
+        .unwrap()
+        .clone();
+    let rock = (0..level.height)
+        .flat_map(|y| (0..level.width).map(move |x| (x, y)))
+        .find(|&(x, y)| level.cell(x, y) == CellKind::Rock && x > 0 && y > 0)
+        .expect("every frame has rock in it");
+    game.world.insert_resource(Locale::Stack {
+        depth,
+        frames,
+        entrance,
+        facing,
+        x: rock.0,
+        y: rock.1,
+    });
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_stack_rock_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let Locale::Stack { x, y, .. } = locale(&loaded) else {
+        panic!("the load surfaced the party instead of placing them")
+    };
+    assert_eq!(
+        (x, y),
+        level.entry,
+        "a save pointing into rock loaded the party into it"
+    );
+}
+
 /// Two links are two stacks, so they are two maps. Sharing one would
 /// pre-reveal a frame the party has never set foot in.
+///
+/// Asserted on arrival rather than after a walk, and in both directions.
+/// The old shape walked twenty steps and compared explored fractions, which
+/// was a proxy for the claim and a lottery on what the walk hit — twenty
+/// steps through the open layouts finds a Breakpoint that reveals the whole
+/// frame, a Fault that drops the party a level, or a fight that reboots them
+/// to the surface, none of which this test is about. Arriving reveals the
+/// view cone, which is all the map either half needs.
 #[test]
 fn each_link_keeps_its_own_map() {
     let mut game = game();
@@ -1138,14 +1251,22 @@ fn each_link_keeps_its_own_map() {
     assert!(tiles.len() >= 2);
 
     game.enter_stack(tiles[0].0, tiles[0].1);
-    walk_corridors(&mut game, 20);
-    let walked = map(&game).explored;
+    let first = map(&game).cells.clone();
     game.ascend();
 
     game.enter_stack(tiles[1].0, tiles[1].1);
-    assert!(
-        map(&game).explored < walked,
+    assert_ne!(
+        map(&game).cells,
+        first,
         "the second link opened onto the first one's map"
+    );
+    game.ascend();
+
+    game.enter_stack(tiles[0].0, tiles[0].1);
+    assert_eq!(
+        map(&game).cells,
+        first,
+        "the first link's map was lost to the second"
     );
 }
 
@@ -2258,16 +2379,7 @@ fn shoving_at_a_wall_cannot_draw_an_encounter() {
     descend(&mut game);
     // Face a wall and grind at it. A blocked step is not travel, so it must
     // never roll for a fight, however many times it is repeated.
-    for _ in 0..4 {
-        let Locale::Stack { x, y, facing, .. } = locale(&game) else {
-            unreachable!()
-        };
-        let (dx, dy) = facing.delta();
-        if !cell_at(&game, x + dx, y + dy).walkable() {
-            break;
-        }
-        game.turn_right();
-    }
+    face_a_wall(&mut game);
     for _ in 0..500 {
         game.step_forward();
         assert!(
@@ -2697,7 +2809,19 @@ fn staying_inside_a_band_logs_nothing() {
 ///
 /// Left unasserted, a later change to frame size or cache count moves that
 /// ratio and silently turns the meter into something else, with the whole
-/// suite still green. Ranges rather than equalities because the generator
+/// suite still green.
+///
+/// The band was 190-220, measured when the maze was the only carver. Three
+/// layouts widen it to the 150-230 they share — see
+/// `stack::tests::every_layout_fills_the_frame_to_about_the_same_extent`,
+/// which holds the same numbers from the generator's side. Note what the
+/// widening does *not* say: cell count is a proxy for step count, and a
+/// looping layout is crossed in fewer steps than a maze of the same size,
+/// so the fights-per-cache ratio moves somewhat however tightly this is
+/// pinned. This catches a carver that halves the frame; it cannot catch a
+/// carver that merely makes it quicker to walk.
+///
+/// Ranges rather than equalities because the generator
 /// legitimately varies per depth.
 #[test]
 fn a_frames_shape_still_matches_what_trace_was_tuned_against() {
@@ -2720,8 +2844,8 @@ fn a_frames_shape_still_matches_what_trace_was_tuned_against() {
             .count();
 
         assert!(
-            (190..=220).contains(&walkable),
-            "depth {depth}: {walkable} walkable cells, outside the 190-220 \
+            (150..=230).contains(&walkable),
+            "depth {depth}: {walkable} walkable cells, outside the 150-230 \
              the encounter-to-cache ratio was measured against"
         );
         assert!(

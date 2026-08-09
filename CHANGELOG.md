@@ -27,6 +27,41 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.5.9
+
+### The Stack is not all maze any more
+
+Every frame was carved by the same maze generator, and the way down sat on
+the single furthest cell from where you came in. Between them that made one
+kind of trip: pick a direction, weave the whole map, find the opposite
+corner. Doing it again three frames later was the same trip with different
+walls.
+
+A frame now rolls one of three shapes. The maze is still one of them,
+unchanged. **Rooms** is rectangles joined by corridors, with more corridors
+than it takes to connect them, so a wrong turn is usually a loop rather
+than a walk back. **Chambers** is four open halls joined in a ring by
+passages three cells wide — the one you cross without looking for a door.
+Which you get is a property of the stack and the depth, so a particular
+hole in the ground always opens onto the same thing, and climbing down a
+level changes it.
+
+The way down moved too, and on its own it is half of what made a frame feel
+long. It is drawn from the far half of the frame now rather than from the
+one cell furthest away: still a real walk, still never just around the
+corner, but not the opposite corner every single time.
+
+Caches and the orphaned program still live at the end of side passages —
+which rooms and halls do not naturally have, so the generator now carves
+them on purpose. That closed an old gap on the way past: the maze itself
+ran short of them about one frame in four and quietly shipped two caches
+instead of three.
+
+A save made underground still loads. A frame is rebuilt from the world seed
+rather than stored, so the walls around a saved party have genuinely moved —
+if yours were standing where a wall now is, they come back at the way up
+instead.
+
 ## 0.5.8
 
 ### The lair has no key

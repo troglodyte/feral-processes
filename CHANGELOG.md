@@ -27,6 +27,40 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.5.12
+
+### The sector is populated everywhere, not just where you have been standing
+
+Wild programs gathered around wherever you spent your time. A base you had
+been working at for a while would be ringed by them — sixty-five inside a
+single screen on one save — while the ground an hour's walk out held almost
+nothing. Travel far enough and the sector read as abandoned.
+
+Both halves of that were one fault. Programs spawned near you and nothing
+ever removed them, so the population was a record of where you had stood
+rather than a property of the place. Resting is forty ticks in one spot,
+and every machine you tend is more, so your base collected them at a rate
+nothing else in the sector could match. Meanwhile the far ground had never
+been seeded at all — a new sector's opening population was scattered within
+a few steps of where you arrived — and walking costs a turn a tile, which
+is faster than programs appear. You were outrunning them.
+
+There is now a density the sector is held at: roughly a screenful of wild
+programs around wherever you are. A new sector is seeded to that across the
+whole area you might travel, out as far as its Stack links, and the ongoing
+spawning tops it back up rather than adding without limit. Standing still
+no longer accumulates a crowd, and arriving somewhere new no longer means
+arriving somewhere empty.
+
+### Wild programs stay off your base platform
+
+The platform is meant to be the one safe ground, and three separate rules
+in the game already said so — you cannot be ambushed on it, anything
+standing there is cleared when you lay the floor, and a nest's swarm will
+not chase you onto it. An ordinary wandering program was never told, and
+could simply walk in. It took a crowded sector to make it common enough to
+notice, which is why it surfaces now.
+
 ## 0.5.11
 
 ### Rooms in the Stack stop being corridors with the sides missing

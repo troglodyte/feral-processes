@@ -290,3 +290,183 @@ fn a_back_group_still_only_uses_ranged_moves() {
         "the existing idle line should still be what happens: {last}"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Moddability, and the Defend guard.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// The moddability claim walked rather than assumed: one weight vector
+/// scores a species with a moveset no shipped one has. Seven moves is more
+/// than any shipped species carries, so nothing about the scoring pass can
+/// be quietly sized to the real assets.
+#[test]
+fn a_modded_species_with_more_moves_still_scores() {
+    let body = r#"(
+    id: "sevenfold",
+    name: "Sevenfold",
+    glyph: 's',
+    color: Magenta,
+    base_hp: 90,
+    base_atk: 11,
+    base_def: 4,
+    taming_difficulty: 0.5,
+    habitats: [OpenGrid],
+    moves: [
+        (name: "One", power: 3),
+        (name: "Two", power: 6, ranged: true),
+        (name: "Three", power: 9, effect: Some((kind: Stun, chance: 0.3, duration: 1, power: 0))),
+        (name: "Four", power: 12, effect: Some((kind: Bleed, chance: 0.4, duration: 2, power: 3))),
+        (name: "Five", power: 15, ranged: true),
+        (name: "Six", power: 18),
+        (name: "Seven", power: 21, ranged: true),
+    ],
+    work_resource: None,
+)"#;
+    let dir = modded_assets_dir(
+        "policy_seven",
+        &[],
+        &[],
+        &[("sevenfold.ron", body)],
+        &[],
+        &[],
+    );
+    let mut game = Game::new(31, DifficultyMode::Forgiving, &dir).unwrap();
+    let player = game.player_entity();
+    let companion = spawn_tamed(&mut game, 40, 3);
+    game.add_companion(companion).unwrap();
+    let pos = *game.world.get::<Position>(player).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "sevenfold", pos.x, pos.y);
+    insert_battle(&mut game, player, vec![wild]);
+    install(
+        &mut game,
+        weights(&[
+            ("move_power_rel", 2.5),
+            ("would_kill", 2.0),
+            ("target_hp_frac", -1.0),
+        ]),
+    );
+
+    let mut names = std::collections::HashSet::new();
+    for _ in 0..600 {
+        let (mv, target) = game
+            .choose_wild_action(wild, 0, player)
+            .expect("seven moves all reach from the front group");
+        assert!(target == player || target == companion);
+        names.insert(mv.name);
+    }
+    assert!(
+        names.len() > 1,
+        "a strong move_power_rel should still leave the weaker moves reachable, \
+         not collapse to one: {names:?}"
+    );
+    assert!(
+        names.contains("Seven"),
+        "the biggest move should be among those chosen: {names:?}"
+    );
+}
+
+/// The degenerate end of the same claim, and both zero-denominator guards
+/// in one file: a species with a single move of power 0 and no Attack at
+/// all. `move_power_rel` divides by the species' best power and
+/// `target_def_rel` divides by the attacker's ATK, and both are zero here.
+#[test]
+fn a_modded_species_with_one_move_scores() {
+    let body = r#"(
+    id: "inert",
+    name: "Inert",
+    glyph: 'i',
+    color: White,
+    base_hp: 40,
+    base_atk: 0,
+    base_def: 0,
+    taming_difficulty: 0.5,
+    habitats: [OpenGrid],
+    moves: [
+        (name: "Nudge", power: 0),
+    ],
+    work_resource: None,
+)"#;
+    let dir = modded_assets_dir("policy_inert", &[], &[], &[("inert.ron", body)], &[], &[]);
+    let mut game = Game::new(32, DifficultyMode::Forgiving, &dir).unwrap();
+    let player = game.player_entity();
+    let companion = spawn_tamed(&mut game, 40, 3);
+    game.add_companion(companion).unwrap();
+    // DEF 0 against ATK 0 is the other zero denominator, and the two have
+    // to be exercised together: `0 / 0` is the only combination that
+    // produces a NaN rather than an infinity the clamp absorbs.
+    game.world.get_mut::<Stats>(companion).unwrap().def = 0;
+    let pos = *game.world.get::<Position>(player).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "inert", pos.x, pos.y);
+    game.world.get_mut::<Stats>(wild).unwrap().atk = 0;
+    insert_battle(&mut game, player, vec![wild]);
+    install(
+        &mut game,
+        weights(&[("move_power_rel", 3.0), ("target_def_rel", -3.0)]),
+    );
+
+    // Two targets, and the assertion is that *both* get picked. A missing
+    // guard does not panic — `0.0 / 0.0` is NaN, NaN poisons the score, and
+    // `sample_scored` quietly falls back to argmax, which would hand every
+    // single swing to the same entity forever. Asserting that one call
+    // returns *something* would pass either way; this does not.
+    let mut seen = std::collections::HashSet::new();
+    for _ in 0..400 {
+        let (mv, target) = game
+            .choose_wild_action(wild, 0, player)
+            .expect("one move is still a move");
+        assert_eq!(mv.name, "Nudge");
+        seen.insert(target);
+    }
+    assert_eq!(
+        seen.len(),
+        2,
+        "both targets share a slot weight, so both must come up — one alone \
+         means the scores went non-finite and sampling degenerated to argmax"
+    );
+}
+
+/// The Defend census. Bracing buys `DEFEND_AGGRO_WEIGHT` on top of the slot
+/// weight, and that has to survive the learned term multiplying it —
+/// otherwise a designed player action quietly stops doing what its
+/// description promises.
+///
+/// `balance_sim` cannot cover this: its own docs say it passes
+/// `defending: false` throughout and models no Defend actions at all. The
+/// weights here are hand-authored and plausible rather than trained, which
+/// is the strongest form available until a trained file ships — at which
+/// point this is re-pointed at that file.
+#[test]
+fn bracing_draws_more_fire_under_hand_authored_weights() {
+    let plausible = || {
+        weights(&[
+            ("target_hp_frac", -1.8),
+            ("would_kill", 2.3),
+            ("est_damage_frac", 1.0),
+            ("move_power_rel", 0.6),
+            // Negative on purpose: a policy that shies away from hard
+            // targets is the shape most likely to cancel the brace, so it
+            // is the shape worth guarding against.
+            ("target_def_rel", -0.5),
+        ])
+    };
+
+    let share_of_first_companion = |bracing: bool| {
+        let (mut game, wild, members) = battle_against_scrapper(64, &[(60, 60), (60, 60)]);
+        if bracing {
+            game.begin_defend(members[0]);
+            assert!(game.is_defending(members[0]));
+        }
+        install(&mut game, plausible());
+        const DRAWS: usize = 4_000;
+        let counts = target_counts(&mut game, wild, DRAWS);
+        *counts.get(&members[0]).unwrap_or(&0) as f32 / DRAWS as f32
+    };
+
+    let braced = share_of_first_companion(true);
+    let exposed = share_of_first_companion(false);
+    assert!(
+        braced > exposed + 0.05,
+        "bracing drew {braced:.2} of the fire against {exposed:.2} not bracing — \
+         Defend has to keep pulling aggro under a learned policy"
+    );
+}

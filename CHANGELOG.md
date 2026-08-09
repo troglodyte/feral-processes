@@ -27,6 +27,60 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.5.13
+
+### Wild programs have learned to fight
+
+Which move a wild program swings and who it swings at used to be two
+uniform rolls. They are now one decision, scored against a policy trained
+offline over 1.9 million arena fights and shipped as
+`assets/policies/enemy_battle.ron`. Across the eight training scenarios the
+other side's win rate goes from 32% to 61%.
+
+What changed at the table: they finish what they started. A companion at a
+sliver of health is the one that gets hit, a kill that is available gets
+taken, and the move chosen is the one that does the most to *that* target
+rather than whichever came up. In a group fight this is a different
+opponent. One-on-one it is much the same, because there was never a choice
+to make there.
+
+The trained file is legible on purpose — it is a list of named weights, and
+`assets/policies/README.md` reads the shipped one out loud. Delete the file
+and the game plays exactly as it did before; that is a supported way to
+play, not a broken install. A mod can ship its own, and a species with a
+moveset nobody trained against is scored by the same weights, because the
+policy reasons about what a move *is* rather than about which move it is.
+
+### Bracing is a stronger draw
+
+`DEFEND_AGGRO_WEIGHT` is raised from 4 to 7, and the reason is the feature
+above. Defend's pull was tuned against an opponent picking at random, and
+it does not survive one that thinks: reducing incoming damage is what
+bracing does, so anything choosing by damage has a reason to hit somebody
+else instead. At the old value bracing was quietly *counterproductive*
+against a trained program. It now does what its description says again.
+
+Two rounds of training were thrown away establishing that. Left to
+themselves the weights learned to kill the player and ignore the party
+entirely, and — when that was forbidden — to walk past whoever braced by
+reading their Defence instead. Both routes are now closed off, a test
+fails if either reopens, and
+`docs/superpowers/reports/2026-08-09-enemy-policy-training.md` has the
+whole account, including the mechanic this turned up that has *not* been
+fixed: every species prices its status-effect move below its plain one, so
+a program that thinks about damage will never use one.
+
+### For anyone poking at the internals
+
+- `train` is a third launcher binary, alongside `savetool` and `arena`. It
+  runs a cross-entropy search over the arena harness; `dev-training/` holds
+  the eight scenarios it learns from, and `dev-arenas/` is held back as the
+  test set and never trained on.
+- `tuning::ENEMY_POLICY_TEMPERATURE` is the one dial. Raise it to blunt the
+  policy without retraining; 0 makes it play its best move every time.
+- No save-format change. Weights are an asset, so retraining reaches a run
+  already in progress.
+
 ## 0.5.12
 
 ### The sector is populated everywhere, not just where you have been standing

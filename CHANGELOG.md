@@ -27,6 +27,47 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.5.14
+
+### Damage lands when the log says it does
+
+A round used to resolve all at once. Every HP bar dropped to its
+end-of-round value before the first line of narration was legible, so the
+text was reporting a fight the screen had already finished — you read
+"You unleash a data strike for 12 damage" against a bar that had absorbed
+that hit and the three after it a second ago.
+
+The roster now steps with the narration. A bar holds still until its own
+line lands, then drops; a pack of three keeps reading as three until the
+line announcing the kill, and only then does the next one step into the
+front rank. Group letters, status tags, decompile odds and the planned
+action all move at the same pace, so the whole roster is a picture of the
+moment being described rather than of the moment after.
+
+Nothing about the fight itself changed — the same round resolves in the
+same order with the same outcome. What changed is that you can watch it.
+The damage flashes and floating numbers came along for free: they were
+already reading the difference between one frame's HP and the next, so
+they now fire one hit at a time without having been touched.
+
+### A fight ends on its own screen instead of dumping you on the map
+
+Winning used to close the battle screen on the spot and leave the loot and
+XP sliding past in the map's log pane, which is where a fight's results
+were least likely to be read. The screen now stays up: same rosters, same
+pane, with the results arriving at the same pace as the fight's narration
+and the action bar replaced by `[any key] continue`.
+
+It holds for every ending — a win, a jack-out, or a defeat you were
+rebooted from. A key pressed while the results are still arriving releases
+them rather than dismissing, so loot cannot be skipped past unseen. A run
+that actually ended still goes straight to the game-over screen.
+
+On a win the hostile pane empties out, header and all, because by then
+there is genuinely nothing left in it. Jack out instead and the pack is
+still listed, which is a better look at what you ran from than the map
+ever gave you.
+
 ## 0.5.13
 
 ### Wild programs have learned to fight

@@ -138,9 +138,13 @@ fn an_all_zero_policy_reproduces_the_uniform_baseline() {
     let share = |zeroed: bool| {
         let (mut game, wild, members) = battle_against_scrapper(77, &party);
         let player = game.player_entity();
-        if zeroed {
-            install(&mut game, policy::PolicyWeights::default());
-        }
+        // Set explicitly in *both* arms. `test_assets_dir()` is the real
+        // `assets/`, so once trained weights ship the "baseline" arm would
+        // otherwise be the shipped policy measured against an all-zero one
+        // — a different question, which this test would then answer while
+        // still reading as the equivalence guard it is named for.
+        game.world
+            .insert_resource(EnemyPolicy(zeroed.then(policy::PolicyWeights::default)));
         let mut counts = std::collections::HashMap::new();
         for _ in 0..DRAWS {
             let (mv, target) = game

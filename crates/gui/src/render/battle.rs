@@ -189,10 +189,13 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
     // the function.
     let revealed = app.revealed_battle_log();
     let revealing = app.is_revealing();
-    let Some(game) = &mut app.game else { return };
-    let Some(view) = game.battle_view() else {
+    // `App::battle_view`, not `Game::battle_view`: the roster steps with the
+    // narration, so a bar drops as the line describing the hit lands rather
+    // than a second before the player can read any of it.
+    let Some(view) = app.battle_view() else {
         return;
     };
+    let Some(game) = &mut app.game else { return };
     // A field buff cast before the fight keeps ticking through it (see
     // `Game::active_buffs`), so the panel has to survive the transition
     // from the map screen rather than being a `Mode::Playing`-only readout.
@@ -501,6 +504,9 @@ pub(super) fn draw_battle_target_menu(app: &mut App, painter: &Painter, m: &Metr
     let selected = app.menu_selected;
     let title = app.battle_target_title();
     let Some(game) = &mut app.game else { return };
+    // Deliberately the live view, unlike `draw_battle` above: these letters
+    // are what `battle_target_key` resolves against `BattleState::groups`,
+    // so a rewound row here would offer a target that no longer exists.
     let Some(view) = game.battle_view() else {
         return;
     };

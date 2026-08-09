@@ -259,6 +259,21 @@ impl App {
         self.revealed_count() < game.battle_log().len()
     }
 
+    /// The battle screen's roster, stepped to what the narration has
+    /// actually shown — see `Game::battle_view_at`.
+    ///
+    /// **A renderer draws this one, never `Game::battle_view`.** The two
+    /// disagree for the second or two a round takes to scroll in, and the
+    /// live one is right for exactly one caller: `battle_target_key`, which
+    /// maps a typed group letter onto `BattleState::groups` and would
+    /// otherwise resolve a letter against a group that has already died.
+    /// That stays safe because `handle_key` skips rather than acting while
+    /// `is_revealing` holds, which is what
+    /// `a_key_pressed_mid_reveal_skips_instead_of_acting` pins.
+    pub fn battle_view(&self) -> Option<BattleView> {
+        self.game.as_ref()?.battle_view_at(self.revealed_count())
+    }
+
     /// The battle pane's lines: this battle's narration, truncated to what
     /// has been revealed. The pane draws the tail of this once it overflows,
     /// which is what makes lines scroll up as new ones arrive.

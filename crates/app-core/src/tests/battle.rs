@@ -654,6 +654,46 @@ fn ending_a_battle_restarts_the_reveal_for_the_results() {
     );
 }
 
+/// The roster the screen draws steps with the narration rather than
+/// snapping to the end of the round — `App::battle_view` is the seam that
+/// hands the engine the revealed-line count, and a renderer reading
+/// `Game::battle_view` directly would bypass it.
+///
+/// Defending is what makes the fixture work: the player deals no damage,
+/// so however many rounds this takes the fight stays live, and the only
+/// thing that can move a bar is the enemy's own swing.
+#[test]
+fn the_roster_the_screen_draws_steps_with_the_reveal() {
+    let mut app = battling_app();
+
+    for _ in 0..40 {
+        let before = app.battle_view().expect("still in the fight").party[0].hp;
+        app.handle_key(GameKey::Char('d'));
+        let Some(live) = app.game.as_ref().and_then(|g| g.battle_view()) else {
+            break;
+        };
+        if live.party[0].hp >= before {
+            // The swing missed, was absorbed, or the player levelled and
+            // healed — nothing to observe this round.
+            app.finish_reveal();
+            continue;
+        }
+        assert_eq!(
+            app.battle_view().expect("still in the fight").party[0].hp,
+            before,
+            "the bar dropped before the line describing the hit was on screen"
+        );
+        app.finish_reveal();
+        assert_eq!(
+            app.battle_view().expect("still in the fight").party[0].hp,
+            live.party[0].hp,
+            "the bar never caught up to the engine once the reveal finished"
+        );
+        return;
+    }
+    panic!("forty defended rounds landed no enemy damage — encounter setup changed");
+}
+
 /// A refusal is drawn over the action bar, so leaving it up hides the menu
 /// the player needs in order to press a different key.
 #[test]

@@ -37,6 +37,12 @@ impl Game {
         // the frames pacing that narration are scoped to the same range.
         self.world.resource_mut::<MessageLog>().open_round();
         self.world.resource_mut::<BattleTimeline>().0.clear();
+        // A frame at zero lines, before the header goes out. `App::
+        // revealed_count` reports zero for the whole gap between a round
+        // resolving and the next frame the frontend draws, so without this
+        // the roster would fall back to live rows and flash the finished
+        // round for one frame before starting to scroll.
+        self.snapshot_roster();
         self.log_kind(MessageKind::Round, format!("── round {round} ──"));
         let player = self.world.resource::<BattleState>().player;
         let plan = self.world.resource::<BattleState>().planned.clone();

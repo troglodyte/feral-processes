@@ -61,6 +61,20 @@ fn the_opening_line_of_a_round_shows_the_roster_untouched() {
     );
 }
 
+/// A frontend reports zero revealed lines for the whole gap between a
+/// round resolving and the next frame it draws (see `App::revealed_count`).
+/// Falling back to live rows there would flash the finished round on screen
+/// for one frame before the narration started scrolling.
+#[test]
+fn no_revealed_lines_shows_the_roster_as_the_round_opened() {
+    let (mut game, _) = a_fight_that_survives_a_round();
+
+    player_attacks(&mut game);
+
+    let view = game.battle_view_at(0).expect("the battle is still live");
+    assert_eq!(view.groups[0].front_hp, 500);
+}
+
 #[test]
 fn the_last_line_of_a_round_shows_the_live_roster() {
     let (mut game, _) = a_fight_that_survives_a_round();

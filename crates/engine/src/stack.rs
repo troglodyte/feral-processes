@@ -29,6 +29,29 @@ const FRAME_SIZE: i32 = 21;
 /// this is the shape of generated content, not a difficulty knob.
 const BRAID_PERCENT: u32 = 50;
 
+/// Rooms are placed by rejection sampling until they cover this much of the
+/// frame — an area target rather than a count, because the frame has to hold
+/// about as much *place* as a maze does. Encounters roll per step against a
+/// fixed three caches, so a layout with half the walkable cells would
+/// quietly halve the fights per cache. See
+/// `every_layout_fills_the_frame_to_about_the_same_extent`.
+///
+/// Rejection sampling rather than a BSP split: a BSP leaf holds exactly one
+/// room, so the rooms come out evenly spread and the frame reads as a grid.
+/// Sampling clusters them, which is what makes one frame sit differently
+/// from the next.
+///
+/// Inline rather than in `tuning.rs` for the reason `BRAID_PERCENT` is —
+/// this is the shape of generated content, not a difficulty knob.
+const ROOM_AREA_TARGET: i32 = 165;
+const ROOM_ATTEMPTS: usize = 400;
+
+/// Corridors carved between rooms the spanning tree already joined. These
+/// are the loops: a spanning tree alone is a perfect maze with bigger cells,
+/// and walking one is the weave this layout exists to stop. They are also
+/// where the layout makes up the density its rooms cannot.
+const EXTRA_ROOM_LINKS: usize = 5;
+
 /// Which way the party is facing. North is `-y`, matching the top-down
 /// renderer's convention that increasing `y` draws further down the screen.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -317,7 +340,12 @@ pub fn generate(spec: FrameSpec) -> Frame {
     };
 
     match layout {
-        FrameLayout::Maze | FrameLayout::Rooms | FrameLayout::Chambers => {
+        FrameLayout::Maze => {
+            carve_maze(&mut level, &mut rng);
+            braid(&mut level, &mut rng);
+        }
+        FrameLayout::Rooms => carve_rooms(&mut level, &mut rng),
+        FrameLayout::Chambers => {
             carve_maze(&mut level, &mut rng);
             braid(&mut level, &mut rng);
         }
@@ -578,6 +606,139 @@ fn place_orphan(level: &mut Frame, rng: &mut StdRng) {
     for &(x, y) in ends.iter().take(STACK_ORPHANS_PER_FRAME) {
         level.set(x, y, CellKind::Orphan);
     }
+}
+
+/// A rectangle of floor, in frame coordinates.
+#[derive(Clone, Copy)]
+struct Room {
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+}
+
+impl Room {
+    fn centre(self) -> (i32, i32) {
+        (self.x + self.w / 2, self.y + self.h / 2)
+    }
+
+    /// Whether the two rooms would meet with no wall between them. Grown by
+    /// a cell on every side, so two rooms always have at least one rock cell
+    /// separating them — a corridor has to be carved to join them, which is
+    /// what keeps the layout from collapsing into one open blob.
+    fn touches(self, other: Room) -> bool {
+        self.x <= other.x + other.w
+            && other.x <= self.x + self.w
+            && self.y <= other.y + other.h
+            && other.y <= self.y + self.h
+    }
+}
+
+fn manhattan(a: (i32, i32), b: (i32, i32)) -> i32 {
+    (a.0 - b.0).abs() + (a.1 - b.1).abs()
+}
+
+/// Carves a straight run of floor. One of the two axes must not change —
+/// `carve_corridor` is what guarantees that by splitting every route into
+/// two legs.
+fn carve_line(level: &mut Frame, from: (i32, i32), to: (i32, i32)) {
+    let (dx, dy) = ((to.0 - from.0).signum(), (to.1 - from.1).signum());
+    let (mut x, mut y) = from;
+    loop {
+        level.set(x, y, CellKind::Floor);
+        if (x, y) == to {
+            return;
+        }
+        x += dx;
+        y += dy;
+    }
+}
+
+/// Joins two points with an L, turning either at the start or at the end.
+/// Which one is a coin flip, so a frame's corridors don't all elbow the
+/// same way.
+fn carve_corridor(level: &mut Frame, from: (i32, i32), to: (i32, i32), rng: &mut StdRng) {
+    let elbow = if rng.random_range(0..2) == 0 {
+        (to.0, from.1)
+    } else {
+        (from.0, to.1)
+    };
+    carve_line(level, from, elbow);
+    carve_line(level, elbow, to);
+}
+
+/// Rectangular rooms joined by corridors, with extra corridors on top.
+///
+/// The spanning tree is what makes `every_walkable_cell_is_reachable_from_
+/// the_entry` hold without a repair pass: every room is joined to one
+/// already joined, so the frame is connected by construction rather than by
+/// inspection afterwards.
+fn carve_rooms(level: &mut Frame, rng: &mut StdRng) {
+    let mut rooms: Vec<Room> = Vec::new();
+    let mut area = 0;
+    for _ in 0..ROOM_ATTEMPTS {
+        if area >= ROOM_AREA_TARGET {
+            break;
+        }
+        let (w, h) = (rng.random_range(3..=7), rng.random_range(3..=7));
+        let room = Room {
+            x: rng.random_range(1..=level.width - 1 - w),
+            y: rng.random_range(1..=level.height - 1 - h),
+            w,
+            h,
+        };
+        if rooms.iter().any(|&other| room.touches(other)) {
+            continue;
+        }
+        area += w * h;
+        rooms.push(room);
+    }
+
+    for room in &rooms {
+        for y in room.y..room.y + room.h {
+            for x in room.x..room.x + room.w {
+                level.set(x, y, CellKind::Floor);
+            }
+        }
+    }
+
+    // Prim over room centres, joining the closest loose room to the tree
+    // each pass. Ties break to the first found in a fixed scan, so the
+    // result is a function of the seed and not of iteration order.
+    let mut joined = vec![0usize];
+    let mut loose: Vec<usize> = (1..rooms.len()).collect();
+    while !loose.is_empty() {
+        let mut best = (0usize, 0usize, i32::MAX);
+        for (slot, &l) in loose.iter().enumerate() {
+            for &j in &joined {
+                let d = manhattan(rooms[l].centre(), rooms[j].centre());
+                if d < best.2 {
+                    best = (slot, j, d);
+                }
+            }
+        }
+        let l = loose.remove(best.0);
+        carve_corridor(level, rooms[l].centre(), rooms[best.1].centre(), rng);
+        joined.push(l);
+    }
+
+    // A seed whose rooms packed badly makes the shortfall up in corridors
+    // rather than in attempts geometry was never going to satisfy. Each
+    // extra link nets roughly a dozen cells, and buys another loop with
+    // them — which is the one place this layout can spend area well.
+    let extra = EXTRA_ROOM_LINKS + ((ROOM_AREA_TARGET - area).max(0) / 12) as usize;
+    for _ in 0..extra {
+        if rooms.len() < 2 {
+            break;
+        }
+        let a = rng.random_range(0..rooms.len());
+        let b = rng.random_range(0..rooms.len());
+        if a != b {
+            carve_corridor(level, rooms[a].centre(), rooms[b].centre(), rng);
+        }
+    }
+
+    level.entry = rooms[0].centre();
 }
 
 /// How many plain-floor dead ends the frame currently holds — the site type
@@ -883,6 +1044,81 @@ mod tests {
             entrance: (0, 0),
             depth,
             frames: 9,
+        }
+    }
+
+    /// Every frame of one layout, over a sweep wide enough to field a good
+    /// number of each. Depth stays clear of the bottom so shape tests are
+    /// not also testing the lair's seal.
+    fn frames_of(layout: FrameLayout) -> Vec<Frame> {
+        let mut out = Vec::new();
+        for world_seed in 0..90 {
+            for depth in 1..=5 {
+                let level = generate(spec(world_seed, depth));
+                if level.layout == layout {
+                    out.push(level);
+                }
+            }
+        }
+        assert!(!out.is_empty(), "the sweep produced no {layout:?} frames");
+        out
+    }
+
+    /// Whether the frame holds a `size` x `size` block of walkable cells.
+    fn has_open_block(level: &Frame, size: i32) -> bool {
+        (0..=level.height - size).any(|y| {
+            (0..=level.width - size)
+                .any(|x| (0..size).all(|dy| (0..size).all(|dx| level.walkable(x + dx, y + dy))))
+        })
+    }
+
+    /// A room is the one thing the maze carver can never make. It touches
+    /// only odd cells and the single wall between two of them, so a cell at
+    /// even-even coordinates is always rock and a 3x3 block of open floor is
+    /// unreachable no matter how generously the braid runs. Finding one is
+    /// therefore proof the rooms carver ran, rather than proof the braid had
+    /// a good day.
+    #[test]
+    fn the_rooms_layout_carves_rooms_the_maze_never_could() {
+        for level in frames_of(FrameLayout::Rooms) {
+            assert!(has_open_block(&level, 3), "a Rooms frame carved no room");
+        }
+        for level in frames_of(FrameLayout::Maze) {
+            assert!(
+                !has_open_block(&level, 3),
+                "the maze opened a 3x3 block — this test no longer proves \
+                 anything about the rooms carver"
+            );
+        }
+    }
+
+    /// The shape changed and the amount of place did not, and holding those
+    /// two apart is the whole reconciliation this change rests on.
+    ///
+    /// The complaint the layouts answer is the *weave* — how far you walk
+    /// between two points. It is not that there is too much frame. But
+    /// encounters roll per step against a fixed `STACK_CACHES_PER_FRAME`, so
+    /// a layout carving half the walkable cells of a maze would quietly
+    /// double the loot per fight without anyone editing `tuning.rs`. Every
+    /// layout therefore has to fill the frame to roughly the same extent.
+    ///
+    /// The band is wide because it spans three generators — measured, the
+    /// maze runs 201-210, chambers 200-211 and rooms 153-225, the last being
+    /// looser because rejection sampling has cramped seeds. It is here to
+    /// catch a carver that halves or doubles the frame, not to freeze any of
+    /// their exact output. `a_frames_shape_still_matches_what_trace_was_
+    /// tuned_against` holds the same band from the balance side.
+    #[test]
+    fn every_layout_fills_the_frame_to_about_the_same_extent() {
+        for layout in [FrameLayout::Maze, FrameLayout::Rooms, FrameLayout::Chambers] {
+            for level in frames_of(layout) {
+                let walkable = floors(&level).len();
+                assert!(
+                    (150..=230).contains(&walkable),
+                    "a {layout:?} frame carved {walkable} walkable cells, \
+                     outside the 150-230 every layout shares"
+                );
+            }
         }
     }
 

@@ -38,6 +38,7 @@ mod stack;
 mod stack_movement;
 mod taming;
 mod taunt;
+mod telemetry;
 mod throw;
 mod trade;
 mod turn;

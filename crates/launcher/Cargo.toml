@@ -5,12 +5,13 @@ edition.workspace = true
 # `savetool` and `arena` are this crate's other bins, so a bare `cargo run`
 # would be ambiguous without this. The game is what you run; the tool is asked for by
 # name. Set here rather than as a workspace `default-members` because that
-# would also narrow a bare `cargo test` to this crate, which has no tests —
-# the suite would report green having run nothing.
+# would also narrow a bare `cargo test` to the launcher, running its dev-tool
+# tests and none of the engine's — the suite would report green having run
+# almost nothing.
 default-run = "feral-processes"
 
-# Exists only to share `dev_template` between the two bins and give it
-# somewhere unit-testable to live. See `src/lib.rs`.
+# Exists only to share `dev_template` and `tuner` between the bins and give
+# them somewhere unit-testable to live. See `src/lib.rs`.
 [lib]
 name = "feral_processes"
 path = "src/lib.rs"
@@ -31,3 +32,9 @@ path = "src/bin/arena.rs"
 feral-processes-app-core = { workspace = true }
 feral-processes-engine = { workspace = true }
 feral-processes-gui = { workspace = true }
+# `tuner` reads its objective as RON and perturbs a roster from a seeded
+# stream, the same way the engine reads assets and rolls. Versions match the
+# engine's so the two halves of a scenario cannot parse differently.
+rand = "0.10.2"
+ron = "0.12.2"
+serde = { version = "1.0.228", features = ["derive"] }

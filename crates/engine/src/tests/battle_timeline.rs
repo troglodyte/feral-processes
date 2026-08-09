@@ -141,10 +141,11 @@ fn a_group_keeps_its_dead_front_member_until_the_line_announcing_it() {
 }
 
 /// `end_battle` removes `BattleState`, so `battle_view` goes `None` the
-/// instant a fight ends — but the results page still has to say what the
-/// fight cost. That roster is captured on the way out.
+/// instant a fight ends — but the battle screen stays up while its results
+/// scroll in, and still has to say what the fight cost. That roster is
+/// captured on the way out.
 #[test]
-fn the_party_roster_outlives_the_fight_for_the_results_page() {
+fn the_roster_outlives_the_fight_so_the_screen_can_stay_up() {
     let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let wild = spawn_wild_on_player_tile(&mut game);
@@ -161,13 +162,22 @@ fn the_party_roster_outlives_the_fight_for_the_results_page() {
         game.battle_view().is_none(),
         "the live view should be gone with the battle"
     );
-    let closing = game.battle_result_party();
+    let closing = game.battle_result_view().expect("a fight has been fought");
     assert_eq!(
-        closing.len(),
+        closing.party.len(),
         1,
         "the player should be on the closing roster"
     );
-    assert_eq!(closing[0].name, "You");
+    assert_eq!(closing.party[0].name, "You");
+    assert!(
+        closing.groups.is_empty(),
+        "a win empties the last group before `end_battle` runs, and the \
+         hostile pane clearing is what winning looks like"
+    );
+    assert!(
+        closing.active_slot.is_none() && closing.options.is_empty(),
+        "nothing is choosing anything once the fight is over"
+    );
 }
 
 /// Captured at the *top* of `end_battle`, before `dissolve_tamed_program`
@@ -191,13 +201,13 @@ fn a_companion_that_died_is_still_on_the_closing_roster() {
         !game.has_active_battle(),
         "the fixture did not end the fight"
     );
-    let closing = game.battle_result_party();
+    let closing = game.battle_result_view().expect("a fight has been fought");
     assert_eq!(
-        closing.len(),
+        closing.party.len(),
         2,
         "the fallen companion was dropped before the roster was captured"
     );
-    assert_eq!(closing[1].hp, 0);
+    assert_eq!(closing.party[1].hp, 0);
     assert!(
         game.world.get::<Stats>(companion).is_none(),
         "the companion should still have been dissolved — this asserts the \

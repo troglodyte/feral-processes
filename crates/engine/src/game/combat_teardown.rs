@@ -184,10 +184,12 @@ impl Game {
         // winning the fight is the one thing the results page most needs to
         // report. A copy, not a live read — the entities are gone by the
         // time anything draws it.
-        let closing = self
-            .battle_rows()
-            .map(|(_, party)| party)
-            .unwrap_or_default();
+        let closing = self.battle_rows().map(|(groups, party)| ClosingRoster {
+            groups,
+            party,
+            round: self.world.resource::<BattleState>().round,
+            player_decompiler: self.player_decompiler_bonuses().skill,
+        });
         self.world.resource_mut::<BattleTimeline>().closing = closing;
         self.clear_battle_status_effects(player, wild);
         let dead: Vec<Entity> = self

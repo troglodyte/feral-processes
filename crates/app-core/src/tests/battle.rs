@@ -711,7 +711,7 @@ fn app_with_a_finished_fight() -> App {
 }
 
 #[test]
-fn a_finished_fight_lands_on_the_results_page_rather_than_the_map() {
+fn a_finished_fight_holds_the_battle_screen_rather_than_dropping_to_the_map() {
     let app = app_with_a_finished_fight();
 
     assert_eq!(
@@ -721,10 +721,10 @@ fn a_finished_fight_lands_on_the_results_page_rather_than_the_map() {
     );
 }
 
-/// The whole point of the page: the loot and XP the engine pruned the log
-/// down to are on *this* screen, not sliding past in the map's pane.
+/// The whole point: the loot and XP the engine pruned the log down to
+/// arrive in the battle screen's own pane, not sliding past on the map.
 #[test]
-fn the_results_page_shows_the_pruned_outcome_lines() {
+fn the_results_arrive_while_the_battle_screen_is_still_up() {
     let mut app = app_with_a_finished_fight();
     app.finish_reveal();
 
@@ -736,7 +736,7 @@ fn the_results_page_shows_the_pruned_outcome_lines() {
 }
 
 #[test]
-fn a_key_dismisses_the_results_page_to_the_map() {
+fn a_key_leaves_the_finished_battle_screen_for_the_map() {
     let mut app = app_with_a_finished_fight();
     app.finish_reveal();
     assert_eq!(app.mode, Mode::BattleResult);
@@ -748,7 +748,7 @@ fn a_key_dismisses_the_results_page_to_the_map() {
 
 /// The first key is spent skipping, so loot cannot be dismissed unread.
 #[test]
-fn a_key_pressed_while_the_results_scroll_skips_rather_than_dismissing() {
+fn a_key_pressed_while_the_results_scroll_skips_rather_than_leaving() {
     let mut app = app_with_a_finished_fight();
     app.restart_reveal();
     app.advance_reveal(0.0);
@@ -767,20 +767,41 @@ fn a_key_pressed_while_the_results_scroll_skips_rather_than_dismissing() {
     assert_eq!(app.mode, Mode::Playing, "the second key did not dismiss");
 }
 
-/// The closing roster survives `BattleState` being removed, which is what
-/// lets the page say what the fight cost as well as what it paid.
+/// The battle screen stays up on a finished fight, so `App::battle_view`
+/// has to keep answering after `end_battle` has removed `BattleState` and
+/// `Game::battle_view` has gone `None`. Without the fallback the renderer
+/// returns early and the player sees the map — which is the behaviour this
+/// replaced.
 #[test]
-fn the_results_page_can_still_name_the_party() {
+fn the_screen_still_has_a_roster_to_draw_once_the_fight_is_over() {
     let app = app_with_a_finished_fight();
 
-    let closing = app.game.as_ref().unwrap().battle_result_party();
-    assert!(
-        !closing.is_empty(),
-        "nothing left to draw the party roster from"
-    );
     assert!(
         app.game.as_ref().unwrap().battle_view().is_none(),
         "test premise: the live view is gone once the fight ends"
+    );
+    let view = app
+        .battle_view()
+        .expect("the screen has nothing to draw, so it would fall back to the map");
+    assert!(!view.party.is_empty(), "the party roster came back empty");
+    assert!(
+        view.options.is_empty(),
+        "a finished fight should offer no actions to spend"
+    );
+}
+
+/// The fallback is scoped to the results screen, so a stale roster cannot
+/// surface once the player is back on the map.
+#[test]
+fn the_closing_roster_does_not_leak_onto_the_map() {
+    let mut app = app_with_a_finished_fight();
+    app.finish_reveal();
+    app.handle_key(GameKey::Char(' '));
+    assert_eq!(app.mode, Mode::Playing);
+
+    assert!(
+        app.battle_view().is_none(),
+        "the finished fight's roster followed the player onto the map"
     );
 }
 

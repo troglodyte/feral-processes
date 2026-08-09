@@ -47,8 +47,8 @@ use arena::{
 };
 use base::{draw_history, draw_playing_base};
 use battle::{
-    draw_battle, draw_battle_ally_menu, draw_battle_item_menu, draw_battle_result,
-    draw_battle_special_menu, draw_battle_target_menu,
+    draw_battle, draw_battle_ally_menu, draw_battle_item_menu, draw_battle_special_menu,
+    draw_battle_target_menu,
 };
 use building::{
     draw_build_direction, draw_build_menu, draw_remove_confirm, draw_remove_menu,
@@ -377,7 +377,7 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
             painter,
             &m,
         ),
-        Mode::BattleResult => draw_battle_result(app, fx, painter, &m),
+        Mode::BattleResult => draw_battle(app, fx, painter, &m),
         _ => {
             draw_playing_base(app, fx, painter, &m);
             draw_mode_overlay(app, painter, &m);

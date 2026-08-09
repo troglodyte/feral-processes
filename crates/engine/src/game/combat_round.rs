@@ -517,11 +517,23 @@ impl Game {
             });
     }
 
-    /// The player's side as the last fight ended — what the results page
-    /// shows once `end_battle` has removed `BattleState` and `battle_view`
-    /// has gone `None`. See `BattleTimeline::closing`.
-    pub fn battle_result_party(&self) -> Vec<PartySlotView> {
-        self.world.resource::<BattleTimeline>().closing.clone()
+    /// The battle screen as the last fight ended — what it keeps drawing
+    /// while the results scroll into its log pane, once `end_battle` has
+    /// removed `BattleState` and `battle_view` has gone `None`.
+    ///
+    /// No `active_slot` and no `options`: nothing is choosing anything, and
+    /// the caller draws a continue prompt where the action bar was. See
+    /// `BattleTimeline::closing`.
+    pub fn battle_result_view(&self) -> Option<BattleView> {
+        let closing = self.world.resource::<BattleTimeline>().closing.as_ref()?;
+        Some(BattleView {
+            groups: closing.groups.clone(),
+            party: closing.party.clone(),
+            active_slot: None,
+            options: Vec::new(),
+            round: closing.round,
+            player_decompiler: closing.player_decompiler,
+        })
     }
 
     /// The front `battle::attackers_in_group` members of each reachable

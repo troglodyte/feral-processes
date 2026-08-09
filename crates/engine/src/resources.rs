@@ -475,14 +475,30 @@ pub struct RosterFrame {
 #[derive(Resource, Default)]
 pub struct BattleTimeline {
     pub frames: Vec<RosterFrame>,
-    /// The player's side as the fight ended, for the results page to show
-    /// after `BattleState` is gone.
+    /// The whole roster as the fight ended, so the battle screen can keep
+    /// drawing itself while the results scroll into its own log pane.
+    /// `None` before the first fight of a run.
     ///
     /// Captured at the top of `end_battle`, before `dissolve_tamed_program`
     /// drops the dead out of `Party` and despawns them — a companion that
-    /// died winning the fight is the single thing the page most needs to
+    /// died winning the fight is the single thing the screen most needs to
     /// say, and one line later there is nothing left to read it off.
-    pub closing: Vec<crate::views::PartySlotView>,
+    ///
+    /// The hostile half comes out **empty on a win**, because
+    /// `finish_member` only calls `end_battle` once `remove_member` has
+    /// emptied the last group. That is the intended reading: the pane
+    /// clearing is what winning looks like. A jack-out leaves it populated,
+    /// which is equally the point — you can see what you ran from.
+    pub closing: Option<ClosingRoster>,
+}
+
+/// The battle screen's state at the moment a fight ended — see
+/// `BattleTimeline::closing`.
+pub struct ClosingRoster {
+    pub groups: Vec<crate::views::EnemyGroupView>,
+    pub party: Vec<crate::views::PartySlotView>,
+    pub round: u32,
+    pub player_decompiler: i32,
 }
 
 impl BattleTimeline {

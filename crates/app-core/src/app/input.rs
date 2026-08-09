@@ -271,8 +271,19 @@ impl App {
     /// That stays safe because `handle_key` skips rather than acting while
     /// `is_revealing` holds, which is what
     /// `a_key_pressed_mid_reveal_skips_instead_of_acting` pins.
+    ///
+    /// On `Mode::BattleResult` it answers from the closing roster instead,
+    /// because `end_battle` has removed `BattleState` and the live view is
+    /// `None` — that fallback is what lets a finished fight keep its own
+    /// screen while the results scroll into the pane, rather than handing
+    /// the player off to a summary page. Gated on the mode rather than on
+    /// "no live battle" so a stale roster can never surface on the map.
     pub fn battle_view(&self) -> Option<BattleView> {
-        self.game.as_ref()?.battle_view_at(self.revealed_count())
+        let game = self.game.as_ref()?;
+        if self.mode == Mode::BattleResult {
+            return game.battle_result_view();
+        }
+        game.battle_view_at(self.revealed_count())
     }
 
     /// The battle pane's lines: this battle's narration, truncated to what

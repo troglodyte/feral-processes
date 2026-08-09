@@ -27,6 +27,33 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.5.11
+
+### Rooms in the Stack stop being corridors with the sides missing
+
+Standing in an open frame and looking down it, the floor and ceiling ran
+away ahead of you and everything to your left and right was flat black.
+Corridors were fine — their walls filled that space — so the fault only
+showed in the rooms and chambers that arrived in `0.5.9`, and it made a
+hall read as a narrow passage someone had cut the sides out of.
+
+The view was drawing one column of cells, straight ahead. The cells beside
+you were being looked at for a single thing: whether to put a wall there.
+When the answer was no, nothing was drawn at all, and the background
+showed through.
+
+The whole cross-section is drawn now, so the cells to either side are
+floor, wall, doorway, cache or lair the same as the one ahead — including
+their markers, so a cache off to your left is something you can spot
+rather than something you find by walking into it. What is *behind* them
+is unchanged: a passage running past the rock ahead of you shows, and one
+running behind it still doesn't.
+
+Two things remain that no cell accounts for — the far end of a corridor
+that continues past what you can make out, and the outer edges of a hall
+wider than your field of view. Both used to be the same flat black, which
+read as a hole in the world. They are now the dark the light doesn't reach.
+
 ## 0.5.10
 
 ### The test suite stops filling up `/tmp`

@@ -1,0 +1,70 @@
+// PLAYTEST: does the trained policy survive a party that actually fights
+// back with everything it has?
+//
+// This is the scenario the whole result rests on, and the one the offline
+// harness cannot answer. `arena::run_rep` plays the party's side as
+// All-Attack — every slot, every round — so no companion Special has ever
+// fired in a single one of the 5.7 million fights the policy was trained
+// and measured over. Its doc comment explains why, and the reason is good:
+// an arena that invented party decisions would drift from the game.
+//
+// The consequence is specific rather than general. The policy's whole edge
+// is focus fire compounding — put a companion down early and the party's
+// damage collapses for the rest of the fight — and **heals are the exact
+// counter to that**. This party carries two:
+//
+//     Sentinel     sandbox (Def buff, L1) + redundancy_sync (Heal 10, L6)
+//     Sprite       the soft link, and the target the policy will pick
+//     Sub-Process  hot_patch (Heal 8, L1) + redundancy_sync (Heal 10, L7)
+//
+// So the policy was trained against a party that physically cannot undo the
+// one thing it does. "Finish the wounded" is a weaker plan against someone
+// who can un-wound them, and it can even be baited. The measured 0.324 ->
+// 0.611 is therefore best read as an **upper bound**.
+//
+// A full party of three at level 12 is `BASE_PET_CAPACITY`, so this is the
+// most the player can field without structure bonuses.
+//
+// The composition is chosen, not arbitrary. Measured at 40 reps on this
+// seed, the policy's bite depends entirely on whether the party has a soft
+// member to converge on — a uniformly bulky party is *immune* to it:
+//
+//     sentinel / sprite / sub_process     100% -> 12.5%   (this file)
+//     sentinel / sprite / scrapper        100% -> 77.5%
+//     sentinel / sub_process / rootkit    100% -> 97.5%
+//     rootkit x3                          100% -> 100%
+//     sentinel x3                         100% -> 100%
+//
+// A composition from the bottom of that table would make this scenario look
+// reassuring while testing nothing. This one is at the top on purpose: it
+// is where the policy is strongest, so it is where a heal has the most to
+// prove. Auto-play also drops the fight from 31 rounds to 10, which is the
+// snowball itself showing up in the clock.
+//
+// What to watch:
+//   - Does a heal actually undo the focus fire, or does the convergence
+//     out-pace it? All-Attack loses this 87.5% of the time. If two heals a
+//     fight turn that around, the real difficulty gain is a fraction of the
+//     headline and every number in the training report is overstated.
+//   - Does the enemy keep piling onto a target that just got healed back
+//     up? It re-scores every round, so it should switch — and if it does,
+//     that is the policy looking smart for free.
+//   - Is spending a round on `sandbox` or a stun worth more than attacking
+//     now that the other side focuses?
+//
+// Run it through `./arena.sh policy-full-kit --ab` first for the All-Attack
+// numbers, then play it — the gap between those two is the answer.
+(
+    player: Fresh(level: 12, zone: 3),
+    party: [
+        (species: "sentinel", level: 12),
+        (species: "sprite", level: 12),
+        (species: "sub_process", level: 12),
+    ],
+    opponents: [
+        (species: "trojan", count: 4),
+        (species: "trojan", count: 4),
+    ],
+    reps: 1,
+    seed: 904,
+)

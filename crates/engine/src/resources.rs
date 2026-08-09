@@ -440,6 +440,50 @@ pub struct BattleState {
     pub player_won: bool,
 }
 
+/// What the battle roster looked like at one point in the current round's
+/// narration — see `BattleTimeline`.
+pub struct RosterFrame {
+    /// `Game::battle_log().len()` when this was taken. A count rather than
+    /// an index, because the trailing `tick` in `battle_resolve_round` lets
+    /// background systems push lines nothing took a frame for; the lookup
+    /// takes the last frame at or under the revealed count, so an unframed
+    /// line simply holds the previous frame on screen.
+    pub lines: usize,
+    pub groups: Vec<crate::views::EnemyGroupView>,
+    pub party: Vec<crate::views::PartySlotView>,
+}
+
+/// The current round's roster, recorded once per narrated line.
+///
+/// `battle_resolve_round` resolves the whole round in one call while a
+/// frontend scrolls the narration in over a second or two, so without this
+/// every HP bar has already dropped to its end-of-round value before the
+/// first line is legible. `Game::battle_view_at` reads it to answer what
+/// the roster looked like when a given line landed.
+///
+/// It stores *rendered rows* rather than entities and HP numbers, because
+/// two things about a round are not recoverable from a dead entity:
+/// `finish_member` despawns a victim mid-round, and a group emptied
+/// mid-round is dropped from `BattleState::groups`, which re-letters every
+/// group behind it. Rows make deaths, counts, letters and decompile odds
+/// all rewind together for free.
+///
+/// Transient presentation state, deliberately not saved — the same
+/// category as app-core's reveal counter. A loaded game resumes with an
+/// empty timeline, which reads as "nothing pending" rather than as a
+/// rewind to somewhere the round never was.
+#[derive(Resource, Default)]
+pub struct BattleTimeline(pub Vec<RosterFrame>);
+
+impl BattleTimeline {
+    /// The roster as of `revealed` narrated lines, or `None` when no frame
+    /// covers that far back — an empty timeline, or a count of zero, which
+    /// is the frame before the round header itself.
+    pub fn frame_at(&self, revealed: usize) -> Option<&RosterFrame> {
+        self.0.iter().rev().find(|f| f.lines <= revealed)
+    }
+}
+
 /// The player's active battle party: up to `MAX_PARTY_SIZE` tamed programs
 /// that fight alongside them and can be commanded to attack during an
 /// intrusion. Membership is mutually exclusive with an active cronjob

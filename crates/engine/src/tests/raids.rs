@@ -1333,10 +1333,15 @@ fn structures_survive_save_and_load_with_their_durability() {
     let mut loaded = Game::load(&path, &assets).unwrap();
     let _ = std::fs::remove_file(&path);
 
-    let mut query = loaded.world.query::<&Durability>();
-    let durability = query
+    // Filtered to the structure by kind rather than taking the first
+    // `Durability` in the world: a nest carries one too, and bevy's query
+    // iteration order is not stable — the unfiltered version passed on
+    // luck and picked the nest the moment a new resource shifted
+    // `ComponentId` allocation.
+    let mut query = loaded.world.query::<(&Structure, &Durability)>();
+    let (_, durability) = query
         .iter(&loaded.world)
-        .next()
+        .find(|(s, _)| s.kind == structure_def.id)
         .expect("the structure should survive a save/load round trip");
     assert_eq!(durability.hp, 12);
     assert_eq!(durability.max_hp, structure_def.durability);

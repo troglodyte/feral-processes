@@ -59,6 +59,7 @@ impl Game {
         world.insert_resource(GameClock::default());
         world.insert_resource(GameRng(StdRng::seed_from_u64(seed as u64)));
         world.insert_resource(MessageLog::default());
+        world.insert_resource(BattleTimeline::default());
         world.insert_resource(EffectQueue::default());
         world.insert_resource(GameOver::default());
         world.insert_resource(difficulty);
@@ -216,6 +217,7 @@ impl Game {
         world.insert_resource(GameClock { tick: data.tick });
         world.insert_resource(GameRng(StdRng::seed_from_u64(data.seed as u64 ^ data.tick)));
         world.insert_resource(MessageLog::default());
+        world.insert_resource(BattleTimeline::default());
         world.insert_resource(EffectQueue::default());
         world.insert_resource(GameOver::default());
         world.insert_resource(data.difficulty);

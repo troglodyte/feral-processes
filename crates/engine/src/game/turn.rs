@@ -29,10 +29,12 @@ impl Game {
 
     pub(crate) fn log(&mut self, s: impl Into<String>) {
         self.world.resource_mut::<MessageLog>().push(s);
+        self.snapshot_roster();
     }
 
     pub(crate) fn log_kind(&mut self, kind: MessageKind, s: impl Into<String>) {
         self.world.resource_mut::<MessageLog>().push_kind(kind, s);
+        self.snapshot_roster();
     }
 
     /// News from the base — production, construction, and the base coming

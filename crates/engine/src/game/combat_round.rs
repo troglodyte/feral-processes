@@ -33,8 +33,10 @@ impl Game {
         // matches the planning screen's own "round N" header.
         let round = self.world.resource::<BattleState>().round;
         // The pane shows one round at a time, so this round's narration
-        // replaces the last round's rather than piling on top of it.
+        // replaces the last round's rather than piling on top of it — and
+        // the frames pacing that narration are scoped to the same range.
         self.world.resource_mut::<MessageLog>().open_round();
+        self.world.resource_mut::<BattleTimeline>().0.clear();
         self.log_kind(MessageKind::Round, format!("── round {round} ──"));
         let player = self.world.resource::<BattleState>().player;
         let plan = self.world.resource::<BattleState>().planned.clone();
@@ -360,7 +362,12 @@ impl Game {
         }
     }
 
-    pub fn battle_view(&self) -> Option<BattleView> {
+    /// The live roster — every row of both sides as things stand right now.
+    ///
+    /// Split out of `battle_view` so `snapshot_roster` records exactly what
+    /// the screen would have drawn, rather than a second, drifting notion of
+    /// what a row holds.
+    pub(crate) fn battle_rows(&self) -> Option<(Vec<EnemyGroupView>, Vec<PartySlotView>)> {
         let battle = self.world.get_resource::<BattleState>()?;
         let bonuses = self.player_decompiler_bonuses();
         let catalyst_potency = self.taming_catalyst().map(|(_, potency)| potency);
@@ -434,6 +441,45 @@ impl Game {
             })
             .collect();
 
+        Some((groups, party))
+    }
+
+    /// The battle screen's whole readout, as things stand right now. This is
+    /// the truthful view: input handling maps a typed group letter through
+    /// it, and every test reads it. A renderer pacing narration wants
+    /// `battle_view_at` instead.
+    pub fn battle_view(&self) -> Option<BattleView> {
+        let (groups, party) = self.battle_rows()?;
+        self.assemble_view(groups, party)
+    }
+
+    /// The battle screen's readout as of `revealed` narrated lines of the
+    /// current round — the roster stepping in time with the log rather than
+    /// snapping to the end of the round before line one is legible.
+    ///
+    /// Falls back to the live rows when no frame covers that far back, which
+    /// covers a fight whose reveal has already caught up and a loaded game
+    /// whose timeline is empty.
+    pub fn battle_view_at(&self, revealed: usize) -> Option<BattleView> {
+        let (groups, party) = match self.world.resource::<BattleTimeline>().frame_at(revealed) {
+            Some(frame) => (frame.groups.clone(), frame.party.clone()),
+            None => self.battle_rows()?,
+        };
+        self.assemble_view(groups, party)
+    }
+
+    /// Wraps a pair of roster halves in the rest of the screen's state.
+    ///
+    /// `active_slot` and its `options` are deliberately live rather than
+    /// recorded: they are what the *next* keypress will do, not part of the
+    /// round being narrated, and the action bar they drive is hidden while
+    /// narration is still scrolling in anyway.
+    fn assemble_view(
+        &self,
+        groups: Vec<EnemyGroupView>,
+        party: Vec<PartySlotView>,
+    ) -> Option<BattleView> {
+        let battle = self.world.get_resource::<BattleState>()?;
         let active_slot = self.battle_active_slot();
         Some(BattleView {
             groups,
@@ -443,8 +489,26 @@ impl Game {
                 .map(|slot| self.battle_action_options(slot))
                 .unwrap_or_default(),
             round: battle.round,
-            player_decompiler: bonuses.skill,
+            player_decompiler: self.player_decompiler_bonuses().skill,
         })
+    }
+
+    /// Records the roster as it stands into the current round's timeline,
+    /// tagged with the log length that made it. Called after every battle
+    /// log line — see `BattleTimeline`.
+    pub(crate) fn snapshot_roster(&mut self) {
+        let Some((groups, party)) = self.battle_rows() else {
+            return;
+        };
+        let lines = self.battle_log().len();
+        self.world
+            .resource_mut::<BattleTimeline>()
+            .0
+            .push(RosterFrame {
+                lines,
+                groups,
+                party,
+            });
     }
 
     /// The front `battle::attackers_in_group` members of each reachable

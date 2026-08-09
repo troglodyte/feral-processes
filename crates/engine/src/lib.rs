@@ -57,9 +57,9 @@ pub use perks::{Perk, PerkDb, PerkDef};
 use research::{ResearchDb, ResearchDef};
 pub use research::{ResearchId, ResearchRecipe};
 use resources::{
-    BattleState, BuybackLedger, CurrentStack, EffectQueue, GameClock, GameOver, GameRng,
-    KnownRoutines, Locale, MessageLog, Party, Platform, PlayerEntity, Research, StackMemory,
-    WieldedProgram, ZoneLevel, ZoneSpawnPoint,
+    BattleState, BattleTimeline, BuybackLedger, CurrentStack, EffectQueue, GameClock, GameOver,
+    GameRng, KnownRoutines, Locale, MessageLog, Party, Platform, PlayerEntity, Research,
+    RosterFrame, StackMemory, WieldedProgram, ZoneLevel, ZoneSpawnPoint,
 };
 pub use resources::{
     DifficultyMode, EffectKind, LogEntry, LogLine, MESSAGE_LOG_CAP, MessageKind, MessageSource,

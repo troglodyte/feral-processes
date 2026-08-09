@@ -216,6 +216,11 @@ impl Game {
         self.world
             .resource_mut::<MessageLog>()
             .retain_outcomes_since_battle();
+        // The prune deletes lines from inside the range the frames are
+        // counted against, so every one of them now points at the wrong
+        // line. There is no roster left to draw them on either — the
+        // screen is gone with `BattleState`.
+        self.world.resource_mut::<BattleTimeline>().0.clear();
         self.world.remove_resource::<BattleState>();
     }
 }

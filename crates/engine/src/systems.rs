@@ -100,7 +100,10 @@ pub fn wander_ai_system(
                 continue;
             }
         }
-        if world.tile(nx, ny).walkable {
+        // `open_to_hostiles`, not `walkable`: the base slab is the one safe
+        // ground, and a wandering program was the only mover in the game
+        // that did not honour that — see `Tile::open_to_hostiles`.
+        if world.tile(nx, ny).open_to_hostiles() {
             pos.x = nx;
             pos.y = ny;
         }

@@ -7,7 +7,7 @@
 use crate::abilities::AbilityId;
 use crate::game::spawning;
 use crate::game::zone::find_walkable_start;
-use crate::tuning::{INITIAL_WILD_POPULATION, NEST_DURABILITY, STACK_LINKS_PER_ZONE};
+use crate::tuning::{NEST_DURABILITY, STACK_LINKS_PER_ZONE, initial_wild_population};
 use crate::*;
 
 /// Splits a persisted routine list into what `db` still recognizes and what
@@ -132,7 +132,7 @@ impl Game {
         for warning in load_warnings {
             game.log(warning);
         }
-        game.spawn_initial_creatures(INITIAL_WILD_POPULATION);
+        game.spawn_initial_creatures(initial_wild_population());
         game.spawn_surface_links(STACK_LINKS_PER_ZONE);
         game.log("Connection established. You materialize at the edge of the Grid.");
         Ok(game)

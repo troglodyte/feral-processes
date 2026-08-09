@@ -1767,3 +1767,45 @@ fn a_worker_still_earns_xp_from_a_completed_cycle() {
         after.xp
     );
 }
+
+/// The base slab is the one safe ground, and `wander_ai_system` was the one
+/// mover that did not honour it: it checked `walkable` alone, so an ordinary
+/// wild program could stroll onto a base a *pursuing* nest guardian was
+/// forbidden to enter (`pursuit_field`). Both now read
+/// `Tile::open_to_hostiles`.
+///
+/// Placed one tile off the slab edge and ticked, rather than relying on the
+/// spawn-side test to catch it: that one only noticed because a seeded
+/// program happened to be adjacent, which is luck rather than coverage.
+#[test]
+fn a_wild_program_will_not_wander_onto_the_base_slab() {
+    let mut game = Game::new(925, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 0);
+
+    // Just outside the slab, so every tick offers it a step onto platform
+    // floor and nothing else is needed to tempt it in.
+    let edge = MAX_BUILD_DISTANCE_FROM_HOME + 1;
+    let species = game.species_defs().into_iter().next().unwrap().id;
+    let wanderer = game.spawn_wild_creature(&species, 0, edge).unwrap();
+
+    for _ in 0..200 {
+        game.tick();
+        // A tick can legitimately end the creature (a cull, a fight), and a
+        // despawned program proves nothing either way.
+        let Some(pos) = game.world.get::<Position>(wanderer).copied() else {
+            return;
+        };
+        let biome = game
+            .world
+            .resource_mut::<WorldMap>()
+            .tile(pos.x, pos.y)
+            .biome;
+        assert_ne!(
+            biome,
+            Biome::Platform,
+            "a wild program wandered onto the base slab at ({}, {})",
+            pos.x,
+            pos.y
+        );
+    }
+}

@@ -1955,8 +1955,12 @@ fn an_opened_door_stays_open_across_a_save_and_load() {
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
     game.enter_stack(pos.x, pos.y);
     stand_before_the_lair(&mut game);
-    game.step_forward();
-    game.step_back();
+    // `_clear`, like every other walk in this file: `arrive` rolls a Stack
+    // encounter, so a raw `step_forward` can end in a battle instead of
+    // through the door — and then the door this test is about was never
+    // opened, and the failure reads as "loading re-sealed it".
+    step_forward_clear(&mut game);
+    step_back_clear(&mut game);
 
     let path = std::env::temp_dir().join(format!(
         "feral_processes_door_open_{}.bin",

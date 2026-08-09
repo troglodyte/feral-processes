@@ -449,16 +449,71 @@ pub const WILD_SPAWN_RADIUS_TILES: i32 = 12;
 /// on base platform tiles, and never produces a boss or a nest.
 pub const RANDOM_ENCOUNTER_CHANCE: f64 = 0.02;
 
-/// How many wild programs a zone is seeded with on entry, before any
-/// per-tick spawn rolls — see `Game::spawn_initial_creatures`. Applies both
-/// to a new run and to every zone breached afterwards, so a fresh sector is
-/// never empty while the spawn rolls warm up.
-pub const INITIAL_WILD_POPULATION: usize = 14;
+/// The wild population one screenful of map should hold: `Hostile`s within
+/// `WILD_SPAWN_RADIUS_TILES` of a tile, which is a 25x25 box and so almost
+/// exactly the ~33x19 the map pane shows at default zoom. The target is
+/// therefore legible on screen rather than being an abstract number.
+///
+/// A *target*, not a cap, and the one figure both halves of the population
+/// model read: `Game::spawn_initial_creatures` seeds a zone up to it and
+/// `Game::maybe_spawn_wild_creature` tops it back up without exceeding it.
+///
+/// Before it existed there was no target at all. Spawning is player-relative
+/// and nothing ever removed a creature — `WILD_CREATURE_CAP` sits two orders
+/// of magnitude above any real population and has never fired — so density
+/// was simply the integral of where the player had stood. Measured on a real
+/// save: 65 hostiles in one box around a base that had been worked at, 7 in
+/// the entire map beyond 40 tiles. Both numbers are the same bug.
+pub const WILD_LOCAL_DENSITY_TARGET: usize = 12;
 
 /// How far from the player a zone's opening wild programs scatter (see
 /// `Game::spawn_initial_creatures`). Widened by the platform radius when
 /// the player has a base, since nothing can spawn on platform floor.
-pub const INITIAL_SPAWN_SCATTER_TILES: i32 = 15;
+///
+/// Matched to `STACK_LINK_SCATTER_TILES` deliberately: that constant is
+/// already the game's statement of how far out a player is expected to
+/// travel, so seeding any tighter leaves the ground the links send them to
+/// born empty. It was 15, and the per-tick roll cannot make up the
+/// difference — walking costs a tick a tile against `WILD_SPAWN_CHANCE`, so
+/// the player outruns the spawner and finds the far field abandoned.
+pub const INITIAL_SPAWN_SCATTER_TILES: i32 = 40;
+
+/// Seeding must reach at least as far as the links a zone scatters, or the
+/// ground the game sends the player to is born empty and only the per-tick
+/// roll ever populates it — which a walking player outruns.
+///
+/// A compile-time assertion rather than a test: this is a relationship
+/// between two constants, so it can be caught by the build rather than by
+/// running anything, and a `#[test]` on it is a constant expression clippy
+/// rightly objects to.
+const _: () = assert!(
+    INITIAL_SPAWN_SCATTER_TILES >= STACK_LINK_SCATTER_TILES,
+    "wild programs must be seeded at least as far out as Stack links scatter"
+);
+
+/// How many wild spawn rolls a zone is seeded with on entry, before any
+/// per-tick spawn rolls — see `Game::spawn_initial_creatures`. Applies both
+/// to a new run and to every zone breached afterwards, so a fresh sector is
+/// never empty while the spawn rolls warm up.
+///
+/// Derived rather than tuned, so the density a zone is *born* at and the
+/// density `maybe_spawn_wild_creature` *maintains* cannot drift apart: it is
+/// `WILD_LOCAL_DENSITY_TARGET` scaled from one spawn box up to the whole
+/// seeded area. Tuning the two independently is exactly what let them
+/// disagree — the old pair (14 rolls across 15 tiles) worked out to ~9 per
+/// box, near the target by luck rather than by construction, and widening
+/// the scatter without touching the count would have thinned the zone
+/// tenfold instead of spreading it.
+///
+/// An upper bound on attempts rather than a promise. Seeding consults the
+/// same density gate the ambient roll does, so a roll that would overfill
+/// its own patch is skipped — which is what keeps this honest even though a
+/// roll places a *group* of up to `max_group_size` rather than one creature.
+pub const fn initial_wild_population() -> usize {
+    let seeded = (2 * INITIAL_SPAWN_SCATTER_TILES + 1) as usize;
+    let spawn_box = (2 * WILD_SPAWN_RADIUS_TILES + 1) as usize;
+    (seeded * seeded * WILD_LOCAL_DENSITY_TARGET) / (spawn_box * spawn_box)
+}
 
 /// How many Stack links a zone is seeded with — see
 /// `Game::spawn_surface_links`. Deliberately few: a link is
@@ -1418,6 +1473,28 @@ pub const MAX_PROFILE_STARTING_PROGRAMS: u32 = 1;
 mod tests {
     use super::*;
     use crate::resources::ZoneLevel;
+
+    /// Seeding and maintenance must agree about how crowded a zone should
+    /// be. The derivation is what makes them agree by construction, so the
+    /// property to pin is the round trip: scaling the seeded area back down
+    /// to one spawn box has to land on the target the ambient roll enforces.
+    ///
+    /// Integer division loses a fraction of a creature per box, so this
+    /// allows exactly that and no more — a derivation that drifted by a
+    /// whole creature per box would be a real disagreement.
+    #[test]
+    fn a_zone_is_seeded_at_the_density_it_is_maintained_at() {
+        let seeded = (2 * INITIAL_SPAWN_SCATTER_TILES + 1) as usize;
+        let spawn_box = (2 * WILD_SPAWN_RADIUS_TILES + 1) as usize;
+        let boxes_covered = (seeded * seeded) as f64 / (spawn_box * spawn_box) as f64;
+        let per_box = initial_wild_population() as f64 / boxes_covered;
+
+        assert!(
+            (per_box - WILD_LOCAL_DENSITY_TARGET as f64).abs() < 1.0,
+            "seeding places {per_box:.2} per spawn box but the ambient roll \
+             maintains {WILD_LOCAL_DENSITY_TARGET}"
+        );
+    }
 
     /// The zone curve was a bare `1 << (zone - 1)` before it was named.
     /// Pinning the sequence keeps a retune of `ZONE_STAT_GROWTH` honest

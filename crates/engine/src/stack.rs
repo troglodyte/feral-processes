@@ -21,14 +21,6 @@ use serde::{Deserialize, Serialize};
 /// 10x10 lattice of cells inside a solid border.
 const FRAME_SIZE: i32 = 21;
 
-/// Percent of dead ends the braid pass opens back up into the rest of the
-/// maze. A perfect maze is *all* dead ends, which is tedious to walk and
-/// reads as noise from a first-person view; loops are what make a frame feel
-/// like a place rather than a puzzle box. Not in `tuning.rs` for the same
-/// reason `world::WorldMap::classify` keeps its noise thresholds inline —
-/// this is the shape of generated content, not a difficulty knob.
-const BRAID_PERCENT: u32 = 50;
-
 /// Rooms are placed by rejection sampling until they cover this much of the
 /// frame — an area target rather than a count, because the frame has to hold
 /// about as much *place* as a maze does. Encounters roll per step against a
@@ -67,6 +59,22 @@ const EXTRA_ROOM_LINKS: usize = 5;
 /// least three rows however they jitter.
 const HALL_SIZE: i32 = 6;
 const CHAMBER_GAP_WIDTH: i32 = 3;
+
+/// Percent of dead ends the braid pass opens back up into the rest of the
+/// maze. A perfect maze is *all* dead ends, which is tedious to walk and
+/// reads as noise from a first-person view; loops are what make a frame feel
+/// like a place rather than a puzzle box. Not in `tuning.rs` for the same
+/// reason `world::WorldMap::classify` keeps its noise thresholds inline —
+/// this is the shape of generated content, not a difficulty knob.
+///
+/// Raising it was tried and reverted. At 100 the maze reaches 13 independent
+/// loops instead of 8 — still nowhere near the hundred-odd the open layouts
+/// carry — and it pays for them twice over: opening every dead end also
+/// consumes the rock cells `stub_sites` needs, so the frame can no longer
+/// carve the spurs its caches and orphan live in. The maze is the tight
+/// layout of the three, and that is a choice rather than an oversight. See
+/// `every_layout_offers_more_than_one_route`.
+const BRAID_PERCENT: u32 = 50;
 
 /// Which way the party is facing. North is `-y`, matching the top-down
 /// renderer's convention that increasing `y` draws further down the screen.
@@ -364,27 +372,44 @@ pub fn generate(spec: FrameSpec) -> Frame {
         FrameLayout::Chambers => carve_chambers(&mut level, &mut rng),
     }
 
+    // The way up goes down first, before anything counts dead ends. A maze
+    // entry is the lattice corner and usually *is* a dead end, so a stub
+    // pass that ran first would count it as a cache site and then watch this
+    // line pave over it — one frame in several quietly losing its orphan.
+    level.set(level.entry.0, level.entry.1, CellKind::LinkUp);
+
+    // Runs before anything is sited, so every pass below measures the frame
+    // the player will actually walk. Carving spurs afterwards would move the
+    // distances the far-half pick is made from, and
+    // `the_way_down_is_far_without_always_being_the_furthest_cell` measures
+    // the finished frame.
+    guarantee_loot_stubs(&mut level, &mut rng);
+
     // The far cell earns its place either way: the way down on a frame that
     // has one, and on the bottom frame the lair — the deepest room of the
     // whole stack, and the only place the thing guarding it could sensibly
     // be. Placed before `place_caches`, which only ever builds on plain
     // floor and so cannot pave over either.
-    let far = furthest_floor_from(&level, level.entry);
+    //
+    // Dead ends are excluded from both. A spur exists to hold a cache, and
+    // the way down at the end of one is a blind alley that turns out to be
+    // the exit; for the lair it would also cost `place_caches` a site.
+    let far = far_site(&level, &mut rng, spec.is_bottom());
     if spec.is_bottom() {
         level.set(far.0, far.1, CellKind::Lair);
     } else {
         level.link_down = Some(far);
         level.set(far.0, far.1, CellKind::LinkDown);
     }
-    level.set(level.entry.0, level.entry.1, CellKind::LinkUp);
 
     if spec.is_bottom() {
         seal_the_lair(&mut level, far);
+        // Topped up, because the seal turns every open neighbour of the lair
+        // into a `SealedDoor` and one of those can be a spur tip — which
+        // costs the bottom frame the cache or orphan that spur was carved
+        // for. A no-op on the frames where it took none.
+        guarantee_loot_stubs(&mut level, &mut rng);
     }
-    // Before every pass that reads the frame's shape, so all of them see the
-    // same frame the player will walk. After the seal, so a spur cannot open
-    // inside the lair's enclosure.
-    guarantee_loot_stubs(&mut level, &mut rng);
     place_doors(&mut level, &mut rng);
     // Phase 3's three, between the doors and the caches. Each takes its own
     // kind of site — a junction, then open floor — and none takes a dead
@@ -1058,6 +1083,73 @@ fn furthest_floor_from(level: &Frame, from: (i32, i32)) -> (i32, i32) {
     best.0
 }
 
+/// Every plain-floor cell in the far half of the frame, measured from
+/// `from` in steps.
+///
+/// The one definition of "far", shared by the three things that need one:
+/// where the way down goes, where the lair goes, and where a party falling
+/// through a fault comes down. It replaced `furthest_floor_from` for the
+/// first two — the single furthest cell is the opposite corner every time,
+/// which is half of what made a frame read as one long weave — and it was
+/// already written out longhand inside `fault_landing`, which is the second
+/// copy CLAUDE.md's mirroring rule is about.
+///
+/// `Floor` specifically, so nothing lands on a cache, the lair, a fault or
+/// either link.
+fn far_half_floor(level: &Frame, from: (i32, i32)) -> Vec<(i32, i32)> {
+    let dist = distances_from(level, from);
+    let Some(reach) = dist.iter().filter(|&&d| d != u32::MAX).max().copied() else {
+        return Vec::new();
+    };
+
+    let mut far = Vec::new();
+    for y in 0..level.height {
+        for x in 0..level.width {
+            let d = dist[(y * level.width + x) as usize];
+            if level.cell(x, y) == CellKind::Floor && d != u32::MAX && d * 2 >= reach {
+                far.push((x, y));
+            }
+        }
+    }
+    far
+}
+
+/// Picks the cell the frame's way down — or its lair — is built on.
+///
+/// Drawn from `far_half_floor` rather than taken as the single furthest
+/// cell, which was the opposite corner every time. Dead ends are excluded
+/// from both: a spur is there to hold a cache, and the way down at the end
+/// of one is a blind alley that turns out to be the exit.
+///
+/// The lair takes the *least connected* of the candidates, because
+/// `seal_the_lair` puts a sealed door on every open neighbour — on a cell
+/// with four of them that is a ring of doors standing in the middle of a
+/// room, which seals correctly and reads as nonsense. Fewest neighbours
+/// makes the seal a doorway.
+///
+/// Falls back to the furthest cell when a frame offers no far-half floor at
+/// all, which keeps the old behaviour as the degenerate case rather than
+/// leaving the frame without a way on.
+fn far_site(level: &Frame, rng: &mut StdRng, is_lair: bool) -> (i32, i32) {
+    let mut sites: Vec<(i32, i32)> = far_half_floor(level, level.entry)
+        .into_iter()
+        .filter(|&(x, y)| !is_dead_end(level, x, y))
+        .collect();
+    if sites.is_empty() {
+        return furthest_floor_from(level, level.entry);
+    }
+
+    if is_lair {
+        let fewest = sites
+            .iter()
+            .map(|&(x, y)| exits(level, x, y))
+            .min()
+            .expect("sites is not empty");
+        sites.retain(|&(x, y)| exits(level, x, y) == fewest);
+    }
+    sites[rng.random_range(0..sites.len())]
+}
+
 /// Where a party falling into this frame through a fault comes down.
 ///
 /// Plain `Floor` in the **far half** of the frame, measured from `entry` —
@@ -1072,19 +1164,7 @@ fn furthest_floor_from(level: &Frame, from: (i32, i32)) -> (i32, i32) {
 pub(crate) fn fault_landing(level: &Frame, spec: FrameSpec) -> Option<(i32, i32)> {
     const FALL_SALT: u64 = 0xFA11_1E15;
 
-    let dist = distances_from(level, level.entry);
-    let reach = dist.iter().filter(|&&d| d != u32::MAX).max().copied()?;
-
-    let mut far: Vec<(i32, i32)> = Vec::new();
-    for y in 0..level.height {
-        for x in 0..level.width {
-            let d = dist[(y * level.width + x) as usize];
-            if level.cell(x, y) == CellKind::Floor && d != u32::MAX && d * 2 >= reach {
-                far.push((x, y));
-            }
-        }
-    }
-
+    let far = far_half_floor(level, level.entry);
     let mut rng = StdRng::seed_from_u64(spec.rng_seed() ^ FALL_SALT);
     (!far.is_empty()).then(|| far[rng.random_range(0..far.len())])
 }
@@ -1228,6 +1308,157 @@ mod tests {
         }
     }
 
+    /// The way down used to sit on the single furthest cell from the entry.
+    /// That is the opposite corner every time, and it is half of what made a
+    /// frame read as one long weave — the topology was only the other half.
+    /// It is drawn from the far half now: still a real walk, and still never
+    /// the near half, but not a maximal one and not the same shape of walk
+    /// twice.
+    #[test]
+    fn the_way_down_is_far_without_always_being_the_furthest_cell() {
+        let mut maximal = 0;
+        let mut frames = 0;
+        for world_seed in 0..90 {
+            for depth in 1..=5 {
+                let level = generate(spec(world_seed, depth));
+                let down = level.link_down.expect("these frames have room below");
+                let dist = distances_from(&level, level.entry);
+                let reach = dist.iter().filter(|&&d| d != u32::MAX).max().unwrap();
+                let at_down = dist[(down.1 * level.width + down.0) as usize];
+                assert!(
+                    at_down * 2 >= *reach,
+                    "seed {world_seed} depth {depth}: the way down sits in the \
+                     near half, {at_down} steps out of {reach}"
+                );
+                if at_down == *reach {
+                    maximal += 1;
+                }
+                frames += 1;
+            }
+        }
+        assert!(
+            maximal * 2 < frames,
+            "{maximal} of {frames} frames put the way down on the single \
+             furthest cell — it is still the opposite corner every time"
+        );
+    }
+
+    /// Walkable adjacencies, counted once per pair.
+    fn edges(level: &Frame) -> usize {
+        let mut n = 0;
+        for y in 0..level.height {
+            for x in 0..level.width {
+                if !level.walkable(x, y) {
+                    continue;
+                }
+                n += usize::from(level.walkable(x + 1, y));
+                n += usize::from(level.walkable(x, y + 1));
+            }
+        }
+        n
+    }
+
+    /// The complaint, stated as a number.
+    ///
+    /// A tree over N cells has N-1 edges and exactly one route between any
+    /// two of them, so every wrong turn has to be walked back — that is what
+    /// weaving through the whole map *is*. Independent loops are
+    /// `edges - cells + 1`.
+    ///
+    /// The floors differ per layout because the layouts genuinely do, and
+    /// flattening them to one number would either be vacuous for the open
+    /// two or unreachable for the maze. A maze on a 21x21 lattice cannot be
+    /// made much loopier without spending density it has not got — see
+    /// `BRAID_PERCENT`, where raising it was tried and reverted — so it
+    /// stays the tight layout, and the answer to weaving is that two frames
+    /// in three are not one.
+    #[test]
+    fn every_layout_offers_more_than_one_route() {
+        for (layout, floor) in [
+            (FrameLayout::Maze, 2),
+            (FrameLayout::Rooms, 40),
+            (FrameLayout::Chambers, 40),
+        ] {
+            for level in frames_of(layout) {
+                let (cells, edges) = (floors(&level).len(), edges(&level));
+                let loops = edges + 1 - cells;
+                assert!(
+                    loops >= floor,
+                    "a {layout:?} frame offers {loops} ways round its \
+                     {cells} cells, under its floor of {floor} — a tree \
+                     would offer 1"
+                );
+            }
+        }
+    }
+
+    /// The lair has to stay something you shoulder your way into, on every
+    /// layout. `seal_the_lair` puts a sealed door on every open neighbour,
+    /// so the enclosure is only as good as the *cell chosen* — and
+    /// `far_site` now chooses it, taking the least connected far-half
+    /// candidate for exactly this reason. Dropped into the middle of a hall
+    /// it would still seal correctly and read as four doors standing in open
+    /// space, so the door count is asserted beside the enclosure.
+    #[test]
+    fn the_lair_is_sealed_off_on_every_layout() {
+        let mut seen = Vec::new();
+        for world_seed in 0..90 {
+            let level = generate(FrameSpec {
+                world_seed,
+                entrance: (0, 0),
+                depth: 4,
+                frames: 4,
+            });
+            let lair = *cells_of(&level, CellKind::Lair)
+                .first()
+                .expect("a bottom frame has a lair");
+
+            // Flood from the entry treating the seal as solid: the lair must
+            // be out of reach.
+            let mut seen_cells = vec![level.entry];
+            let mut queue = VecDeque::from([level.entry]);
+            while let Some((x, y)) = queue.pop_front() {
+                for dir in DIRS {
+                    let (dx, dy) = dir.delta();
+                    let next = (x + dx, y + dy);
+                    if level.cell(next.0, next.1) == CellKind::SealedDoor
+                        || !level.walkable(next.0, next.1)
+                        || seen_cells.contains(&next)
+                    {
+                        continue;
+                    }
+                    seen_cells.push(next);
+                    queue.push_back(next);
+                }
+            }
+            assert!(
+                !seen_cells.contains(&lair),
+                "seed {world_seed} ({:?}) leaves a way into the lair that \
+                 crosses no seal",
+                level.layout
+            );
+
+            let doors = DIRS
+                .into_iter()
+                .filter(|dir| {
+                    let (dx, dy) = dir.delta();
+                    level.cell(lair.0 + dx, lair.1 + dy) == CellKind::SealedDoor
+                })
+                .count();
+            assert!(
+                (1..=2).contains(&doors),
+                "seed {world_seed} ({:?}) sealed the lair behind {doors} \
+                 doors — `far_site` is meant to pick a cell that takes one \
+                 or two",
+                level.layout
+            );
+            if !seen.contains(&level.layout) {
+                seen.push(level.layout);
+            }
+        }
+        assert_eq!(seen.len(), 3, "only {seen:?} bottom frames in the sweep");
+    }
+
     /// Every frame carving the same shape is the complaint this change
     /// exists to answer. A stack the party walks down has to offer more than
     /// one kind of place, so all three layouts must turn up over a sweep.
@@ -1290,18 +1521,23 @@ mod tests {
         );
     }
 
+    /// Swept per layout rather than down one seed's stack. The maze is
+    /// connected by construction and always was; the rooms carver relies on
+    /// its spanning tree and the chambers carver on its ring, and a bug in
+    /// either would strand a wing behind rock on some seeds and not others.
     #[test]
     fn every_walkable_cell_is_reachable_from_the_entry() {
-        for depth in 1..=5 {
-            let level = generate(spec(99, depth));
-            let reached = reachable_from(&level, level.entry);
-            let all = floors(&level);
-            assert_eq!(
-                reached.len(),
-                all.len(),
-                "depth {depth} stranded {} cells behind solid rock",
-                all.len() - reached.len()
-            );
+        for layout in [FrameLayout::Maze, FrameLayout::Rooms, FrameLayout::Chambers] {
+            for level in frames_of(layout) {
+                let reached = reachable_from(&level, level.entry);
+                let all = floors(&level);
+                assert_eq!(
+                    reached.len(),
+                    all.len(),
+                    "a {layout:?} frame stranded {} cells behind solid rock",
+                    all.len() - reached.len()
+                );
+            }
         }
     }
 
@@ -1376,7 +1612,14 @@ mod tests {
 
     #[test]
     fn the_frame_is_walled_in() {
-        let level = generate(spec(5, 1));
+        for layout in [FrameLayout::Maze, FrameLayout::Rooms, FrameLayout::Chambers] {
+            for level in frames_of(layout) {
+                assert_walled_in(&level);
+            }
+        }
+    }
+
+    fn assert_walled_in(level: &Frame) {
         for i in 0..level.width {
             assert!(!level.walkable(i, 0), "top edge leaks at {i}");
             assert!(

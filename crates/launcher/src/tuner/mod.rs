@@ -25,3 +25,4 @@ pub mod eval;
 pub mod objective;
 pub mod roster;
 pub mod score;
+pub mod search;

@@ -21,6 +21,7 @@
 //! overfitting to those seeds; that is what the held-out set exists to catch.
 
 pub mod constraints;
+pub mod eval;
 pub mod objective;
 pub mod roster;
 pub mod score;

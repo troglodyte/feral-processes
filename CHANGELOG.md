@@ -27,6 +27,32 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.5.10
+
+### The test suite stops filling up `/tmp`
+
+A build died with `No space left on device` on a filesystem that was 15%
+full. The number that had run out was not bytes but **inodes** — 1,048,576
+of 1,048,576 — and the suite was producing them at 10,741 per run, which
+exhausts the table in about 97 runs.
+
+`scratch_assets_dir` builds a test a private copy of the whole shipped
+asset set, eight directories and ~190 files, and left deleting it to the
+caller. Two shapes defeated that: a test that panics on a failed assert
+never reaches its own cleanup line, and a helper returning a bare `Game`
+had nowhere to put one. Neither is exotic — between them they had left
+5,437 stale installs on the machine.
+
+Cleanup is now an RAII guard, `ScratchAssets`, so it happens on the
+unwinding path too. Its `Drop` is deliberately best-effort: turning a
+failed removal into a second panic mid-unwind would abort the process and
+bury the assertion that actually failed.
+
+Measured over a full workspace run, before and after: 62 directories and
+10,741 inodes become 9 and 34. The remainder is app-core's save fixtures
+and the arena's, which are different helpers and are left for their own
+change.
+
 ## 0.5.9
 
 ### The Stack is not all maze any more

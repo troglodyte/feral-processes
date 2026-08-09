@@ -331,8 +331,8 @@ pub(super) fn modded_assets_dir(
 /// Like `modded_assets_dir`, but for the one existing test that needs a
 /// modded *structure* — none of `modded_assets_dir`'s five callers-so-far
 /// have needed one, and widening its signature for a single caller isn't
-/// worth the churn across its other ~20 call sites. The caller removes the
-/// directory once its `Game` is done with it.
+/// worth the churn across its other ~20 call sites. Cleanup is the
+/// `ScratchAssets` guard's, not the caller's.
 pub(super) fn assets_dir_with_extra_structure(tag: &str, name: &str, body: &str) -> ScratchAssets {
     let dir = scratch_assets_dir(tag);
     copy_shipped_assets(&dir, &[]);

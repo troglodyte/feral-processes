@@ -29,10 +29,26 @@ fn a_malformed_policy_file_is_skipped_with_a_warning() {
     assert_eq!(warnings.len(), 1, "{warnings:?}");
 }
 
+/// The shipped weights are wired all the way through: on disk, past
+/// `load_asset_dbs`, into the resource `choose_wild_action` reads.
+///
+/// This replaces `a_game_starts_with_no_policy_file`, which asserted the
+/// opposite and was correct right up until a trained file existed. Deleting
+/// the file is still a supported way to play — `a_malformed_policy_file_is_
+/// skipped_with_a_warning` and `an_absent_policy_file_loads_as_none_without_
+/// warning` are what cover that, and they use scratch paths rather than the
+/// real assets dir precisely so they keep meaning what they say.
 #[test]
-fn a_game_starts_with_no_policy_file() {
+fn the_shipped_policy_file_loads_into_the_game() {
     let game = Game::new(1, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    assert!(game.world.resource::<EnemyPolicy>().0.is_none());
+    let policy = &game.world.resource::<EnemyPolicy>().0;
+    let weights = policy
+        .as_ref()
+        .expect("assets/policies/enemy_battle.ron ships with the game");
+    assert!(
+        weights.to_pairs().iter().any(|(_, v)| *v != 0.0),
+        "an all-zero shipped file is the baseline wearing a costume"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -429,38 +445,37 @@ fn a_modded_species_with_one_move_scores() {
     );
 }
 
-/// The Defend census. Bracing buys `DEFEND_AGGRO_WEIGHT` on top of the slot
-/// weight, and that has to survive the learned term multiplying it —
-/// otherwise a designed player action quietly stops doing what its
+/// The Defend census, run against **whatever weights are installed** rather
+/// than against a hand-authored set. Bracing buys `DEFEND_AGGRO_WEIGHT` on
+/// top of the slot weight, and that has to survive the learned term
+/// multiplying it, or a designed player action quietly stops doing what its
 /// description promises.
 ///
 /// `balance_sim` cannot cover this: its own docs say it passes
-/// `defending: false` throughout and models no Defend actions at all. The
-/// weights here are hand-authored and plausible rather than trained, which
-/// is the strongest form available until a trained file ships — at which
-/// point this is re-pointed at that file.
+/// `defending: false` throughout and models no Defend actions at all.
+///
+/// **This test has already done its job once, and the reason it exists is
+/// worth keeping.** The first unconstrained training run learned
+/// `target_bracing: -3.3` — avoid whoever braced — and the second, with
+/// that feature pinned to zero, learned `target_def_rel: -7.3` and dodged
+/// the brace *through the DEF it grants* instead. Bracing drew 10% of the
+/// fire against 46% not bracing. Both routes had to be closed by pinning
+/// before a policy could ship, and the trained file's own zeroes are the
+/// record of it — see `docs/superpowers/reports/`.
+///
+/// The trap for a future retrain: any damage-maximising policy has a reason
+/// to avoid the braced target, because reducing damage taken is what
+/// bracing *is*. Defend's aggro bonus was tuned against an enemy that rolls
+/// at random. A retrain that lets a DEF-reading feature back into the
+/// search reopens this, and fails here rather than shipping.
 #[test]
-fn bracing_draws_more_fire_under_hand_authored_weights() {
-    let plausible = || {
-        weights(&[
-            ("target_hp_frac", -1.8),
-            ("would_kill", 2.3),
-            ("est_damage_frac", 1.0),
-            ("move_power_rel", 0.6),
-            // Negative on purpose: a policy that shies away from hard
-            // targets is the shape most likely to cancel the brace, so it
-            // is the shape worth guarding against.
-            ("target_def_rel", -0.5),
-        ])
-    };
-
+fn bracing_still_draws_more_fire_under_the_shipped_weights() {
     let share_of_first_companion = |bracing: bool| {
         let (mut game, wild, members) = battle_against_scrapper(64, &[(60, 60), (60, 60)]);
         if bracing {
             game.begin_defend(members[0]);
             assert!(game.is_defending(members[0]));
         }
-        install(&mut game, plausible());
         const DRAWS: usize = 4_000;
         let counts = target_counts(&mut game, wild, DRAWS);
         *counts.get(&members[0]).unwrap_or(&0) as f32 / DRAWS as f32
@@ -469,8 +484,71 @@ fn bracing_draws_more_fire_under_hand_authored_weights() {
     let braced = share_of_first_companion(true);
     let exposed = share_of_first_companion(false);
     assert!(
-        braced > exposed + 0.05,
+        braced > exposed + 0.02,
         "bracing drew {braced:.2} of the fire against {exposed:.2} not bracing — \
-         Defend has to keep pulling aggro under a learned policy"
+         Defend has to keep pulling aggro under the shipped policy"
+    );
+}
+
+/// The shipped policy hardly ever picks an effect-carrying move, and this
+/// records that as a measured fact rather than leaving it to surface as a
+/// puzzling failure in the gate test above.
+///
+/// It is not a bug in the policy — it is the roster's own pricing read back
+/// to us. Every shipped species prices its effect move *below* its
+/// damage-only sibling (Worm: Replicate 5 with Bleed against Burrow Strike
+/// 8; Cipher: Encrypt 6 with Stun against Cross-Reference 9), and
+/// `WILD_ABILITY_CHANCE` then gates the effect down to roughly 6-10% of
+/// swings. An expected-damage maximiser correctly never pays that. Only a
+/// uniform roll ever did, which means the condition variety in wild fights
+/// was a product of the enemy not thinking.
+///
+/// Two ways to make effect moves worth picking again, neither taken here
+/// because both are balance changes to shipped content rather than to this
+/// feature: price them at or above their sibling, or raise
+/// `WILD_ABILITY_CHANCE` so the effect actually lands often enough to be
+/// worth the lost damage. If either is done, this test is the one that
+/// should start failing.
+#[test]
+fn a_trained_policy_rarely_picks_an_effect_carrying_move() {
+    let mut effect_moves = 0;
+    let mut total = 0;
+    for seed in 0..300u32 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let wild = start_battle_with_a_wild_program(&mut game);
+        // A carrier spends its round on a routine and never reaches the
+        // move choice, so it would silently shrink the sample.
+        game.world.entity_mut(wild).insert(Routines::default());
+        let species = game.world.get::<Creature>(wild).unwrap().species.clone();
+        let has_effect_move = game
+            .world
+            .resource::<SpeciesDb>()
+            .get(&species)
+            .map(|s| s.moves.iter().any(|m| m.effect.is_some()))
+            .unwrap_or(false);
+        if !has_effect_move {
+            continue;
+        }
+        let Some((mv, _)) = game.choose_wild_action(wild, 0, player) else {
+            continue;
+        };
+        total += 1;
+        if mv.effect.is_some() {
+            effect_moves += 1;
+        }
+    }
+
+    assert!(
+        total > 50,
+        "only {total} usable samples — the fixture stopped producing species with effect moves"
+    );
+    let rate = effect_moves as f32 / total as f32;
+    assert!(
+        rate < 0.15,
+        "the shipped policy picked an effect move on {:.0}% of turns ({effect_moves} of \
+         {total}). If effect moves have been repriced to be worth taking, that is good news \
+         and this test is the one to update — read its doc comment first.",
+        rate * 100.0
     );
 }

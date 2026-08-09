@@ -79,3 +79,35 @@ scoring high on that feature *more* likely.
 The three interaction terms are how a linear model buys the only
 nonlinearity that matters here. There is no bias term: a constant added to
 every candidate cancels under the softmax.
+
+## The shipped file, read out loud
+
+`enemy_battle.ron` was trained on 2026-08-09 — see
+`docs/superpowers/reports/2026-08-09-enemy-policy-training.md`. Its largest
+weights say:
+
+| Weight | Meaning |
+|---|---|
+| `target_hp_frac` −10.86 | Finish the wounded one. |
+| `est_damage_frac` +10.10 | Hit whoever this move hurts proportionally most. |
+| `effect_x_target_healthy` −5.51 | Do not spend a condition on someone healthy. |
+| `move_power_rel` −5.00 | Read together with `est_damage_frac` — the two are correlated and the model split them, so neither means much alone. |
+| `would_kill` +4.23 | Take a kill when it is there. |
+
+**Three features are deliberately zero**, and that is not the trainer
+running out of things to say — it is a design boundary:
+
+- `target_is_player`
+- `target_bracing`
+- `target_def_rel`
+
+Left free, the policy learns to kill the player and ignore everyone else,
+and to walk past whoever braced. That is optimal play, and it deletes soft
+ranks, party positioning and Defend in one go. The trainer's `--pin` flag is
+what holds them at zero; the aggro table in `tuning.rs` owns the question of
+*who* gets hit, and the policy may not reopen it.
+
+A retrained file that gives any of those three a non-zero weight will fail
+`bracing_still_draws_more_fire_under_the_shipped_weights` rather than
+shipping quietly. If you are writing weights by hand, that test is the one
+to run.

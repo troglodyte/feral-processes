@@ -45,6 +45,15 @@ struct Args {
     reps: Option<u32>,
     seed: u64,
     report: Option<PathBuf>,
+    /// Features held at zero for the whole run, by name.
+    ///
+    /// Not a tuning knob — a design boundary. The first real run learned
+    /// `target_is_player: +7.4` and `target_bracing: -3.3`, which together
+    /// mean "kill the player, ignore everyone else, and especially ignore
+    /// whoever braced". That is optimal play and it deletes soft ranks,
+    /// party positioning and Defend in one go. Pinning a feature says the
+    /// aggro table decides that question and the policy may not reopen it.
+    pin: Vec<Feature>,
 }
 
 fn main() {
@@ -85,6 +94,11 @@ fn run() -> Result<(), String> {
     // generations, from `on_progress`.
     let seed_offset = AtomicU64::new(args.seed.wrapping_mul(1_000_003));
 
+    if !args.pin.is_empty() {
+        let names: Vec<&str> = args.pin.iter().map(|f| f.name()).collect();
+        println!("pinned to zero: {}", names.join(", "));
+    }
+
     let baseline = evaluate_set(
         &scenarios,
         &arena_pool,
@@ -107,7 +121,7 @@ fn run() -> Result<(), String> {
     let mut rng = StdRng::seed_from_u64(args.seed);
 
     let fitness = |candidate: &[f32]| -> f32 {
-        let weights = weights_from_slice(candidate);
+        let weights = weights_from_slice(candidate, &args.pin);
         let offset = seed_offset.load(Ordering::Relaxed);
         match evaluate_set(&scenarios, &arena_pool, &weights, offset) {
             Ok(result) => result.fitness,
@@ -136,7 +150,7 @@ fn run() -> Result<(), String> {
         );
     });
 
-    let weights = weights_from_slice(&trained);
+    let weights = weights_from_slice(&trained, &args.pin);
     let final_result = evaluate_set(&scenarios, &arena_pool, &weights, args.seed)?;
     println!(
         "trained: enemy win rate {:.3} (baseline {:.3}), fitness {:.4} (baseline {:.4})",
@@ -202,11 +216,22 @@ fn evaluate_set(
     })
 }
 
-fn weights_from_slice(values: &[f32]) -> PolicyWeights {
+/// The one place a CEM candidate becomes a weight vector, and therefore the
+/// one place a pin has to be applied — masking here means the fitness
+/// function never sees a pinned feature's value, so the search cannot learn
+/// to exploit it and the written file cannot carry a stray one.
+fn weights_from_slice(values: &[f32], pin: &[Feature]) -> PolicyWeights {
     let pairs: Vec<(String, f32)> = Feature::ALL
         .into_iter()
         .enumerate()
-        .map(|(i, f)| (f.name().to_string(), values.get(i).copied().unwrap_or(0.0)))
+        .map(|(i, f)| {
+            let value = if pin.contains(&f) {
+                0.0
+            } else {
+                values.get(i).copied().unwrap_or(0.0)
+            };
+            (f.name().to_string(), value)
+        })
         .collect();
     PolicyWeights::from_pairs(&pairs)
         .expect("CEM samples are finite")
@@ -377,6 +402,8 @@ fn report_ron(
         trained.enemy_win_rate, trained.mean_player_hp_fraction, trained.fitness
     )
     .unwrap();
+    let pinned: Vec<&str> = args.pin.iter().map(|f| f.name()).collect();
+    writeln!(s, "    pinned_to_zero: {pinned:?},").unwrap();
     writeln!(s, "    per_scenario: [").unwrap();
     for ((name, base_enemy, base_hp), (_, trained_enemy, trained_hp)) in
         baseline.per_scenario.iter().zip(&trained.per_scenario)
@@ -409,6 +436,7 @@ fn parse_args() -> Result<Args, String> {
         reps: None,
         seed: 1,
         report: None,
+        pin: Vec::new(),
     };
     let mut it = std::env::args().skip(1);
     while let Some(flag) = it.next() {
@@ -426,10 +454,18 @@ fn parse_args() -> Result<Args, String> {
             "--pop" => args.pop = parse(value()?)?,
             "--reps" => args.reps = Some(parse(value()?)?),
             "--seed" => args.seed = parse(value()?)?,
+            "--pin" => {
+                for name in value()?.1.split(',').filter(|s| !s.is_empty()) {
+                    let feature = Feature::from_name(name)
+                        .ok_or_else(|| format!("--pin: {name:?} is not a feature name"))?;
+                    args.pin.push(feature);
+                }
+            }
             "-h" | "--help" => {
                 println!(
                     "train --out <path> --scenarios <dir> [--assets <dir>] [--iters 30] \
-                     [--pop 40] [--reps N] [--seed 1] [--report <path>]"
+                     [--pop 40] [--reps N] [--seed 1] [--report <path>] \
+                     [--pin feature,feature]"
                 );
                 std::process::exit(0);
             }

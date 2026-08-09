@@ -231,7 +231,28 @@ pub const DIFFICULTY_TOUGH_MAX: f64 = 1.6;
 /// party-level play rather than a selfish one.
 pub const FRONT_SLOT_AGGRO_WEIGHT: u32 = 3;
 pub const BACK_SLOT_AGGRO_WEIGHT: u32 = 1;
-pub const DEFEND_AGGRO_WEIGHT: u32 = 4;
+/// Raised from 4 on 2026-08-09, and the reason is the whole argument for
+/// why this number is not free to drift back down.
+///
+/// These weights enter `Game::choose_wild_action` as `ln(weight)`, so what
+/// Defend actually buys is `ln(7/3) = +0.85` of score — and the trained
+/// policy's `est_damage_frac` term is worth about `-1.0` against a bracing
+/// target, because *reducing incoming damage is what bracing is*. At 4 the
+/// two cancelled and came out the wrong way round: bracing drew 40% of the
+/// fire against 44% not bracing, so Defend was quietly counterproductive.
+///
+/// This is not fixable by pinning a feature — a damage-aware policy will
+/// always have a reason to walk past the tank — nor by
+/// `ENEMY_POLICY_TEMPERATURE`, which divides the prior and the learned term
+/// alike and so cannot flip the sign. The prior has to be big enough to
+/// win, and 7 is the smallest value that clears
+/// `bracing_still_draws_more_fire_under_the_shipped_weights` with margin;
+/// 6 flips the sign back but only by 0.02, which is inside the noise.
+///
+/// Bracing is therefore a stronger taunt than it was against the old
+/// random-rolling enemy. That is the intended reading: Defend's old value
+/// was an artifact of nobody on the other side thinking about it.
+pub const DEFEND_AGGRO_WEIGHT: u32 = 7;
 
 /// How many party slots count as the front line for `FRONT_SLOT_AGGRO_WEIGHT`
 /// — the player plus the first two companions.

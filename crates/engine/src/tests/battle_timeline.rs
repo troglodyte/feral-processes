@@ -140,6 +140,71 @@ fn a_group_keeps_its_dead_front_member_until_the_line_announcing_it() {
     );
 }
 
+/// `end_battle` removes `BattleState`, so `battle_view` goes `None` the
+/// instant a fight ends — but the results page still has to say what the
+/// fight cost. That roster is captured on the way out.
+#[test]
+fn the_party_roster_outlives_the_fight_for_the_results_page() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let wild = spawn_wild_on_player_tile(&mut game);
+    game.world.get_mut::<Stats>(wild).unwrap().hp = 1;
+    insert_battle(&mut game, player, vec![wild]);
+
+    player_attacks(&mut game);
+
+    assert!(
+        !game.has_active_battle(),
+        "the fixture did not end the fight"
+    );
+    assert!(
+        game.battle_view().is_none(),
+        "the live view should be gone with the battle"
+    );
+    let closing = game.battle_result_party();
+    assert_eq!(
+        closing.len(),
+        1,
+        "the player should be on the closing roster"
+    );
+    assert_eq!(closing[0].name, "You");
+}
+
+/// Captured at the *top* of `end_battle`, before `dissolve_tamed_program`
+/// drops the dead from `Party` and despawns them. A companion that died
+/// winning the fight is exactly what the player needs the page to tell them,
+/// and it is unrecoverable one line later.
+#[test]
+fn a_companion_that_died_is_still_on_the_closing_roster() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.world.resource_mut::<Party>().0.push(companion);
+    let wild = spawn_wild_on_player_tile(&mut game);
+    game.world.get_mut::<Stats>(wild).unwrap().hp = 1;
+    insert_battle(&mut game, player, vec![wild]);
+    game.world.get_mut::<Stats>(companion).unwrap().hp = 0;
+
+    player_attacks(&mut game);
+
+    assert!(
+        !game.has_active_battle(),
+        "the fixture did not end the fight"
+    );
+    let closing = game.battle_result_party();
+    assert_eq!(
+        closing.len(),
+        2,
+        "the fallen companion was dropped before the roster was captured"
+    );
+    assert_eq!(closing[1].hp, 0);
+    assert!(
+        game.world.get::<Stats>(companion).is_none(),
+        "the companion should still have been dissolved — this asserts the \
+         capture is a copy, not a live read"
+    );
+}
+
 #[test]
 fn a_fresh_round_forgets_the_previous_rounds_frames() {
     let (mut game, _) = a_fight_that_survives_a_round();

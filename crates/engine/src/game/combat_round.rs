@@ -36,7 +36,7 @@ impl Game {
         // replaces the last round's rather than piling on top of it — and
         // the frames pacing that narration are scoped to the same range.
         self.world.resource_mut::<MessageLog>().open_round();
-        self.world.resource_mut::<BattleTimeline>().0.clear();
+        self.world.resource_mut::<BattleTimeline>().frames.clear();
         // A frame at zero lines, before the header goes out. `App::
         // revealed_count` reports zero for the whole gap between a round
         // resolving and the next frame the frontend draws, so without this
@@ -509,12 +509,19 @@ impl Game {
         let lines = self.battle_log().len();
         self.world
             .resource_mut::<BattleTimeline>()
-            .0
+            .frames
             .push(RosterFrame {
                 lines,
                 groups,
                 party,
             });
+    }
+
+    /// The player's side as the last fight ended — what the results page
+    /// shows once `end_battle` has removed `BattleState` and `battle_view`
+    /// has gone `None`. See `BattleTimeline::closing`.
+    pub fn battle_result_party(&self) -> Vec<PartySlotView> {
+        self.world.resource::<BattleTimeline>().closing.clone()
     }
 
     /// The front `battle::attackers_in_group` members of each reachable

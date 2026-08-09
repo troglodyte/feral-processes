@@ -694,6 +694,96 @@ fn the_roster_the_screen_draws_steps_with_the_reveal() {
     panic!("forty defended rounds landed no enemy damage — encounter setup changed");
 }
 
+/// Attacks until the fight ends, and returns the app sitting on whatever
+/// screen that produced. Attacking rather than jacking out because the roll
+/// to jack out can fail, and a fight the player is winning is the ending
+/// the results page is most about.
+fn app_with_a_finished_fight() -> App {
+    let mut app = battling_app();
+    for _ in 0..60 {
+        if !app.game.as_ref().is_some_and(|g| g.has_active_battle()) {
+            return app;
+        }
+        app.handle_key(GameKey::Char('a'));
+        app.finish_reveal();
+    }
+    panic!("sixty rounds did not finish a single-program fight — combat setup changed");
+}
+
+#[test]
+fn a_finished_fight_lands_on_the_results_page_rather_than_the_map() {
+    let app = app_with_a_finished_fight();
+
+    assert_eq!(
+        app.mode,
+        Mode::BattleResult,
+        "the fight ended straight onto the map instead of stopping to report"
+    );
+}
+
+/// The whole point of the page: the loot and XP the engine pruned the log
+/// down to are on *this* screen, not sliding past in the map's pane.
+#[test]
+fn the_results_page_shows_the_pruned_outcome_lines() {
+    let mut app = app_with_a_finished_fight();
+    app.finish_reveal();
+
+    let lines = app.revealed_battle_log();
+    assert!(
+        !lines.is_empty(),
+        "a won fight reported nothing — the prune left no results to show"
+    );
+}
+
+#[test]
+fn a_key_dismisses_the_results_page_to_the_map() {
+    let mut app = app_with_a_finished_fight();
+    app.finish_reveal();
+    assert_eq!(app.mode, Mode::BattleResult);
+
+    app.handle_key(GameKey::Char(' '));
+
+    assert_eq!(app.mode, Mode::Playing, "the page did not dismiss");
+}
+
+/// The first key is spent skipping, so loot cannot be dismissed unread.
+#[test]
+fn a_key_pressed_while_the_results_scroll_skips_rather_than_dismissing() {
+    let mut app = app_with_a_finished_fight();
+    app.restart_reveal();
+    app.advance_reveal(0.0);
+    assert!(app.is_revealing(), "the fixture left nothing to scroll");
+
+    app.handle_key(GameKey::Char(' '));
+
+    assert_eq!(
+        app.mode,
+        Mode::BattleResult,
+        "the page dismissed on the key that should have released the narration"
+    );
+    assert!(!app.is_revealing(), "the key did not finish the reveal");
+
+    app.handle_key(GameKey::Char(' '));
+    assert_eq!(app.mode, Mode::Playing, "the second key did not dismiss");
+}
+
+/// The closing roster survives `BattleState` being removed, which is what
+/// lets the page say what the fight cost as well as what it paid.
+#[test]
+fn the_results_page_can_still_name_the_party() {
+    let app = app_with_a_finished_fight();
+
+    let closing = app.game.as_ref().unwrap().battle_result_party();
+    assert!(
+        !closing.is_empty(),
+        "nothing left to draw the party roster from"
+    );
+    assert!(
+        app.game.as_ref().unwrap().battle_view().is_none(),
+        "test premise: the live view is gone once the fight ends"
+    );
+}
+
 /// A refusal is drawn over the action bar, so leaving it up hides the menu
 /// the player needs in order to press a different key.
 #[test]

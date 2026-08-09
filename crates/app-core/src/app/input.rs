@@ -155,6 +155,7 @@ impl App {
             Mode::ArenaSave => self.handle_arena_save_key(key),
             Mode::ArenaPick => self.handle_arena_pick_key(key),
             Mode::ArenaResult => self.handle_arena_result_key(key),
+            Mode::BattleResult => self.handle_battle_result_key(key),
         }
         // Every menu's arrow-key highlight (see `selected_index`) starts
         // fresh at the top of its list, rather than carrying over whatever

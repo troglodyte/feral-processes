@@ -473,14 +473,24 @@ pub struct RosterFrame {
 /// empty timeline, which reads as "nothing pending" rather than as a
 /// rewind to somewhere the round never was.
 #[derive(Resource, Default)]
-pub struct BattleTimeline(pub Vec<RosterFrame>);
+pub struct BattleTimeline {
+    pub frames: Vec<RosterFrame>,
+    /// The player's side as the fight ended, for the results page to show
+    /// after `BattleState` is gone.
+    ///
+    /// Captured at the top of `end_battle`, before `dissolve_tamed_program`
+    /// drops the dead out of `Party` and despawns them — a companion that
+    /// died winning the fight is the single thing the page most needs to
+    /// say, and one line later there is nothing left to read it off.
+    pub closing: Vec<crate::views::PartySlotView>,
+}
 
 impl BattleTimeline {
     /// The roster as of `revealed` narrated lines, or `None` when no frame
     /// covers that far back — an empty timeline, or a count of zero, which
     /// is the frame before the round header itself.
     pub fn frame_at(&self, revealed: usize) -> Option<&RosterFrame> {
-        self.0.iter().rev().find(|f| f.lines <= revealed)
+        self.frames.iter().rev().find(|f| f.lines <= revealed)
     }
 }
 

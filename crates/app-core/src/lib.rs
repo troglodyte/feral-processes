@@ -522,6 +522,16 @@ pub enum Mode {
     /// `Mode::BattleSpecial` when the chosen ability is `Ally`-targeted,
     /// where an enemy-targeted one goes to `Mode::BattleTarget` instead.
     BattleAlly,
+    /// Where every fight ends — won, jacked out of, or survived. Shows the
+    /// closing party roster (`Game::battle_result_party`, since
+    /// `BattleState` is gone by now) over the pruned results scrolling in,
+    /// and waits for a key rather than dropping the player straight onto
+    /// the map with their loot already sliding past in the log pane.
+    ///
+    /// A run that *ended* skips this: `check_game_over` runs after
+    /// `settle_after_round` in every battle path and overwrites the mode
+    /// with `Mode::GameOver`, which is the screen a permadeath death wants.
+    BattleResult,
     Build,
     BuildDirection,
     /// The dev keypad, opened with `DEV_CONSOLE_KEY` when
@@ -717,7 +727,12 @@ impl Mode {
             | Mode::BattleTarget
             | Mode::BattleItem
             | Mode::BattleSpecial
-            | Mode::BattleAlly => true,
+            | Mode::BattleAlly
+            // The results page draws the closing roster and its bars are
+            // still settling as the last lines scroll in, so wiping the
+            // ghost trail here would cut the animation off at the moment
+            // the player is finally looking at it.
+            | Mode::BattleResult => true,
             Mode::MainMenu
             | Mode::Achievements
             | Mode::DifficultyPick

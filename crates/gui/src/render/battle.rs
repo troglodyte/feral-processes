@@ -5,6 +5,7 @@ use super::bars::*;
 use super::field::draw_battle_buffs;
 use super::popup::*;
 use super::*;
+use feral_processes_engine::PartySlotView;
 use feral_processes_engine::battle::SpecialOption;
 use feral_processes_engine::components::NEED_MAX;
 
@@ -184,6 +185,154 @@ fn roster_row(
     )
 }
 
+/// Where a party roster goes, so `draw_party_roster` stays inside clippy's
+/// argument budget without three loose floats at every call site.
+struct PartyRosterLayout {
+    x: f32,
+    y: f32,
+    w: f32,
+}
+
+/// The player's side of the roster — title, column header, and one bar per
+/// member — returning the y it finished at.
+///
+/// One definition rather than two, because the battle screen and the
+/// results page must agree on what a party row *says*: an HP pair, the
+/// critical-red threshold, the fatigue cell, the status tag. The results
+/// page passes `None` for the active slot, which is what drops the `>`
+/// prefix and the bold face — there is no slot choosing anything once the
+/// fight is over.
+fn draw_party_roster(
+    title: &str,
+    rows: &[PartySlotView],
+    active_slot: Option<usize>,
+    layout: PartyRosterLayout,
+    fx: &mut Fx,
+    painter: &Painter,
+    m: &Metrics,
+) -> f32 {
+    let PartyRosterLayout { x, mut y, w } = layout;
+    let dt = painter.delta();
+    painter.ui(title, x, y, m.font_size, TEXT);
+    y += m.line_height;
+    painter.ui(party_header(), x, y, m.label(), TEXT_DIM);
+    y += m.line_height;
+
+    for p in rows {
+        let bar = BarGeometry { x, y, w };
+        let ghost = fx.bar_ghost(PARTY_BAR_KEY_BASE + p.slot as u64, p.hp, dt);
+        let active = active_slot == Some(p.slot);
+        // Danger outranks the active-slot cue: the `>` prefix and the bold
+        // face already mark who is acting, and nothing else on this screen
+        // says "one more hit and this is gone".
+        let color = if hp_critical(p.hp, p.max_hp) {
+            RED
+        } else if active {
+            CYAN
+        } else {
+            GREEN
+        };
+        y = draw_bar(
+            bar,
+            &roster_row(
+                &format!("{}{} ", if active { ">" } else { " " }, p.slot + 1),
+                &p.name,
+                &format!("{}/{}", p.hp, p.max_hp),
+                p.atk,
+                p.def,
+                if p.front { "FRONT" } else { "BACK" },
+                // A member's own condition rides in the ACTION column
+                // rather than getting a fixed cell of its own that would be
+                // empty on almost every row.
+                &party_tail(
+                    &fatigue_cell(p.fatigue),
+                    &format!(
+                        "{}{}",
+                        p.planned.as_deref().unwrap_or("—"),
+                        status_tag(&p.status_effect),
+                    ),
+                ),
+            ),
+            p.hp as f32,
+            p.max_hp.max(1) as f32,
+            BarStyle {
+                color,
+                bold: active,
+            },
+            painter,
+            m,
+        );
+        draw_ghost_band(
+            bar,
+            p.hp as f32,
+            ghost.ghost,
+            p.max_hp.max(1) as f32,
+            color,
+            painter,
+            m,
+        );
+        if ghost.damage > 0 {
+            fx.spawn_float(format!("-{}", ghost.damage), w / 2.0, bar.y, TEXT);
+        }
+        y += m.inset;
+    }
+    y
+}
+
+/// Where a fight ends. The closing party roster over the pruned results
+/// scrolling in, and a prompt — see `Mode::BattleResult`.
+///
+/// The roster comes from `Game::battle_result_party` rather than
+/// `App::battle_view`, which is `None` by now: `end_battle` has removed
+/// `BattleState`, and a companion that died winning the fight has already
+/// been despawned. That closing copy is the only record left of either.
+pub(super) fn draw_battle_result(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Metrics) {
+    let revealed = app.revealed_battle_log();
+    let revealing = app.is_revealing();
+    let Some(game) = &app.game else { return };
+    let party = game.battle_result_party();
+
+    let w = painter.screen_w();
+    let margin = m.inset * 2.0;
+    let mut y = draw_party_roster(
+        "Your party",
+        &party,
+        None,
+        PartyRosterLayout {
+            x: margin,
+            y: margin,
+            w: w - margin * 2.0,
+        },
+        fx,
+        painter,
+        m,
+    );
+
+    y += m.line_height;
+    painter.ui("── results ──", margin, y, m.font_size, TEXT_DIM);
+    y += m.line_height;
+    // Two lines held back off the bottom, so the prompt always has a home:
+    // a fight that dropped a lot of loot must not push the one thing
+    // telling the player how to leave off the screen. Showing the *tail*
+    // rather than the head, for the same reason the battle pane does —
+    // what just landed is what is being read.
+    let floor = painter.screen_h() - margin - m.line_height * 2.0;
+    let room = (((floor - y) / m.line_height).floor().max(0.0)) as usize;
+    for e in revealed.iter().skip(revealed.len().saturating_sub(room)) {
+        draw_message_line(e.kind, &e.text, margin + m.inset, y, painter, m);
+        y += m.line_height;
+    }
+
+    // Withheld while the results are still arriving, for the same reason
+    // the battle screen hides its action bar: the next key skips rather
+    // than continuing, so offering it would advertise a key that doesn't
+    // do what it says.
+    if !revealing {
+        y += m.line_height;
+        painter.ui("[any key] continue", margin, y, m.font_size, TEXT);
+    }
+}
+
 pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Metrics) {
     // Read before the `game` borrow below, which is held for the rest of
     // the function.
@@ -328,80 +477,19 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
     // roster's HP/DECOMP columns, which is everywhere else on this screen.
     draw_battle_buffs(&buffs, w - margin, y, painter, m);
 
-    y = party_top;
-    painter.ui(
-        format!("Your party — DECOMP {}", view.player_decompiler),
-        margin,
-        y,
-        m.font_size,
-        TEXT,
-    );
-    y += m.line_height;
-    painter.ui(party_header(), margin, y, m.label(), TEXT_DIM);
-    y += m.line_height;
-
-    for p in &view.party {
-        let bar = BarGeometry {
+    draw_party_roster(
+        &format!("Your party — DECOMP {}", view.player_decompiler),
+        &view.party,
+        view.active_slot,
+        PartyRosterLayout {
             x: margin,
-            y,
+            y: party_top,
             w: w - margin * 2.0,
-        };
-        let ghost = fx.bar_ghost(PARTY_BAR_KEY_BASE + p.slot as u64, p.hp, dt);
-        let active = view.active_slot == Some(p.slot);
-        // Danger outranks the active-slot cue: the `>` prefix and the bold
-        // face already mark who is acting, and nothing else on this screen
-        // says "one more hit and this is gone".
-        let color = if hp_critical(p.hp, p.max_hp) {
-            RED
-        } else if active {
-            CYAN
-        } else {
-            GREEN
-        };
-        y = draw_bar(
-            bar,
-            &roster_row(
-                &format!("{}{} ", if active { ">" } else { " " }, p.slot + 1),
-                &p.name,
-                &format!("{}/{}", p.hp, p.max_hp),
-                p.atk,
-                p.def,
-                if p.front { "FRONT" } else { "BACK" },
-                // A member's own condition rides in the ACTION column
-                // rather than getting a fixed cell of its own that would be
-                // empty on almost every row.
-                &party_tail(
-                    &fatigue_cell(p.fatigue),
-                    &format!(
-                        "{}{}",
-                        p.planned.as_deref().unwrap_or("—"),
-                        status_tag(&p.status_effect),
-                    ),
-                ),
-            ),
-            p.hp as f32,
-            p.max_hp.max(1) as f32,
-            BarStyle {
-                color,
-                bold: active,
-            },
-            painter,
-            m,
-        );
-        draw_ghost_band(
-            bar,
-            p.hp as f32,
-            ghost.ghost,
-            p.max_hp.max(1) as f32,
-            color,
-            painter,
-            m,
-        );
-        if ghost.damage > 0 {
-            fx.spawn_float(format!("-{}", ghost.damage), w / 2.0, bar.y, TEXT);
-        }
-        y += m.inset;
-    }
+        },
+        fx,
+        painter,
+        m,
+    );
 
     // Hidden while narration is still scrolling in: a key pressed then
     // skips the reveal rather than acting, so offering the actions would be

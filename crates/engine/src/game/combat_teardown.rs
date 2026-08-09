@@ -179,6 +179,16 @@ impl Game {
     /// stepped up behind it. A freshly tamed program joining the party still
     /// Bleeding is the bug this guards.
     pub(crate) fn end_battle(&mut self, player: Entity, wild: Option<Entity>) {
+        // First, deliberately: `dissolve_tamed_program` below drops the dead
+        // out of `Party` and despawns them, and a companion that died
+        // winning the fight is the one thing the results page most needs to
+        // report. A copy, not a live read — the entities are gone by the
+        // time anything draws it.
+        let closing = self
+            .battle_rows()
+            .map(|(_, party)| party)
+            .unwrap_or_default();
+        self.world.resource_mut::<BattleTimeline>().closing = closing;
         self.clear_battle_status_effects(player, wild);
         let dead: Vec<Entity> = self
             .world
@@ -220,7 +230,7 @@ impl Game {
         // counted against, so every one of them now points at the wrong
         // line. There is no roster left to draw them on either — the
         // screen is gone with `BattleState`.
-        self.world.resource_mut::<BattleTimeline>().0.clear();
+        self.world.resource_mut::<BattleTimeline>().frames.clear();
         self.world.remove_resource::<BattleState>();
     }
 }

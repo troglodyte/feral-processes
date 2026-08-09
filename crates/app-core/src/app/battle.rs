@@ -436,11 +436,20 @@ impl App {
         self.mode = if still_active {
             Mode::Battle
         } else {
-            Mode::Playing
+            Mode::BattleResult
         };
         if !still_active {
             self.restart_reveal();
         }
+    }
+
+    /// Any key leaves the results page for the map. Deliberately not a
+    /// menu: there is nothing to choose, and a key pressed while the
+    /// results are still scrolling in has already been spent skipping the
+    /// reveal by `handle_key`'s own guard — so the player reads them either
+    /// way and never dismisses loot they never saw.
+    pub(crate) fn handle_battle_result_key(&mut self, _key: GameKey) {
+        self.mode = Mode::Playing;
     }
 
     /// Backs the planning cursor up one slot, so a misclick can be undone.

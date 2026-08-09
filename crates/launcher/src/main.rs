@@ -63,6 +63,10 @@ fn main() -> io::Result<()> {
         history_path,
         profile_path,
         repo_root.join("dev-arenas"),
+        // Beside `dev-saves/`, `dev-arenas/` and `dev-training/`, and
+        // gitignored: written only when `FERAL_DEV_LOG` is set, and never
+        // reachable in a player's build. See `dev-logs/README.md`.
+        repo_root.join("dev-logs").join("battles.jsonl"),
     );
     // Unconditionally, not behind `FERAL_DEV_ARENA`: the gate decides
     // whether the arena is *visible*, and a launcher that installed only

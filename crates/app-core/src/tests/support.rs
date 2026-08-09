@@ -54,6 +54,9 @@ pub(crate) fn test_app(seed: u32) -> App {
         history_path,
         profile_path,
         arenas_dir(),
+        std::env::temp_dir().join(format!(
+            "feral_processes_appcore_test_{seed}_telemetry.jsonl"
+        )),
     );
     app.game = Game::new(seed, DifficultyMode::Forgiving, &assets_dir).ok();
     app.mode = Mode::Playing;

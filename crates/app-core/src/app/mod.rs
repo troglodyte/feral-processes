@@ -19,4 +19,5 @@ mod party;
 mod playing;
 mod progression;
 mod routines;
+pub(crate) mod telemetry;
 pub(crate) mod trade;

@@ -9,6 +9,7 @@ impl App {
         history_path: PathBuf,
         profile_path: PathBuf,
         arenas_dir: PathBuf,
+        telemetry_path: PathBuf,
     ) -> Self {
         let (profile, profile_warning) = Profile::load(&profile_path);
         // A failed load leaves an empty ladder and an empty screen rather
@@ -73,6 +74,8 @@ impl App {
             pending_arena_pick: None,
             arena_save_input: String::new(),
             arena_enabled: crate::app::arena::dev_arena_enabled(),
+            telemetry_enabled: crate::app::dev_console::dev_flag("FERAL_DEV_LOG"),
+            telemetry_path,
             dev_console: crate::app::dev_console::dev_console_enabled(),
             dev_templates: None,
         }
@@ -154,7 +157,7 @@ impl App {
                 // deliberately does not do this — see the comment there.
                 game.grant_profile_rewards();
                 self.last_autosave_tick = game.current_tick();
-                self.game = Some(game);
+                self.install_game(game);
                 self.current_save_path = Some(self.new_save_path());
                 self.history_written = false;
                 self.status_line = warning;
@@ -187,7 +190,7 @@ impl App {
                 // needed, or `achievement_system` would re-earn every rung
                 // the profile already holds.
                 self.last_autosave_tick = game.current_tick();
-                self.game = Some(game);
+                self.install_game(game);
                 self.current_save_path = Some(path);
                 self.history_written = false;
                 self.status_line = warning;
@@ -322,11 +325,56 @@ impl App {
     /// new game by `grant_profile_rewards`. One guard covers both precisely
     /// because this function is the one place they happen.
     pub(crate) fn after_tick(&mut self) {
+        // **Deliberately above the guard, and the exception is the point.**
+        // The rule below exists so a tester's fight cannot corrupt a save or
+        // pay a real profile reward; a dev-only file under `dev-logs/` does
+        // neither, and the arena is the single place a recorded fight is
+        // most wanted. `an_arena_fight_still_writes_telemetry` is what stops
+        // this being folded back inside for tidiness.
+        self.flush_battle_telemetry();
         if self.in_arena() {
             return;
         }
         self.flush_profile_writes();
         self.maybe_autosave();
+    }
+
+    /// The one door a `Game` becomes the live run through — a new game, a
+    /// load, or an arena staging.
+    ///
+    /// It exists so telemetry is armed *before* the game can tick. Arming
+    /// inside `flush_battle_telemetry` instead would leave the first
+    /// `idle_tick` of a session — which can open a nest fight on its own —
+    /// unrecorded, and a fourth install site added later would silently
+    /// collect nothing at all.
+    pub(crate) fn install_game(&mut self, mut game: Game) {
+        if self.telemetry_enabled {
+            game.enable_battle_telemetry();
+        }
+        self.game = Some(game);
+    }
+
+    /// Appends everything the engine recorded since the last tick, one JSON
+    /// object per line.
+    ///
+    /// Every tick rather than at battle end: appending is cheap, and a
+    /// crash mid-session should not cost the fight that caused it.
+    ///
+    /// A failed write reports on the status line and the run carries on —
+    /// the contract `flush_profile_writes` keeps, and for the same reason: a
+    /// dev log must never take a run down with it.
+    fn flush_battle_telemetry(&mut self) {
+        if !self.telemetry_enabled {
+            return;
+        }
+        let Some(game) = &mut self.game else { return };
+        let records = game.take_battle_telemetry();
+        if records.is_empty() {
+            return;
+        }
+        if let Err(e) = crate::app::telemetry::append_records(&self.telemetry_path, &records) {
+            self.status_line = Some(format!("Could not write telemetry: {e}"));
+        }
     }
 
     /// Writes `profile.ron` if this tick earned anything.

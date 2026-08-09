@@ -361,6 +361,7 @@ mod tests {
             tmp.join(format!("feral_processes_gui_{seed_tag}.log")),
             tmp.join(format!("feral_processes_gui_{seed_tag}_profile.ron")),
             tmp.join(format!("feral_processes_gui_{seed_tag}_arenas")),
+            tmp.join(format!("feral_processes_gui_{seed_tag}_telemetry.jsonl")),
         );
         app.game = Game::new(seed, DifficultyMode::Forgiving, &assets).ok();
         app.mode = Mode::Playing;

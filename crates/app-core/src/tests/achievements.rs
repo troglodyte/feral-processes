@@ -29,6 +29,7 @@ fn app_with_profile(seed: u32, profile_path: PathBuf) -> App {
         history_path,
         profile_path,
         super::support::arenas_dir(),
+        std::env::temp_dir().join("feral_processes_achievements_telemetry.jsonl"),
     )
 }
 

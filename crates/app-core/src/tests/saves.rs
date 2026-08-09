@@ -25,6 +25,7 @@ fn starting_a_new_game_creates_a_listed_save_that_can_be_loaded_and_deleted() {
         history_path,
         profile_path,
         super::support::arenas_dir(),
+        std::env::temp_dir().join("feral_processes_saves_telemetry.jsonl"),
     );
 
     app.start_new_game(DifficultyMode::Forgiving);

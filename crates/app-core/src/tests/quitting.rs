@@ -28,6 +28,7 @@ fn app_with_a_save_slot(name: &str) -> App {
         history_path,
         profile_path,
         super::support::arenas_dir(),
+        std::env::temp_dir().join("feral_processes_quitting_telemetry.jsonl"),
     );
     app.start_new_game(DifficultyMode::Forgiving);
     app

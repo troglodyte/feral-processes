@@ -681,6 +681,9 @@ fn app_with_scratch_arenas(seed: u32) -> App {
             "feral_processes_arenas_{seed}_{unique}_profile.ron"
         )),
         dir,
+        std::env::temp_dir().join(format!(
+            "feral_processes_arenas_{seed}_{unique}_telemetry.jsonl"
+        )),
     );
     app.arena_enabled = true;
     app.handle_key(GameKey::Char('r'));

@@ -9,6 +9,14 @@
 //! the corridor, each one cell further away than the last, shrinking toward
 //! a vanishing point at the centre of the pane. Walls between two
 //! cross-sections are trapezoids, which is what `Painter::poly` exists for.
+//!
+//! Each cross-section is drawn across its whole row, not just down the middle
+//! of it. Only the middle used to be drawn, with the cells either side
+//! consulted for one thing — whether to put a wall there — so an open flank
+//! had nothing claiming it and a room came out as lit corridor between two
+//! slabs of background. Every column is the same slice offset by whole cells
+//! (`column_slice`), which is both the true projection and what makes the
+//! columns tile edge to edge.
 
 use super::*;
 use feral_processes_engine::{StackCellView, StackView};
@@ -48,6 +56,22 @@ const VOID: Color = Color::new(0.02, 0.03, 0.05, 1.0);
 const DOOR: Color = Color::new(0.55, 0.42, 0.18, 1.0);
 const SEALED: Color = Color::new(0.62, 0.20, 0.24, 1.0);
 
+/// What the corridor recedes into where no cell of the cone claims the
+/// pixel — the far end of a view that has not run out of corridor, and the
+/// outer edges of a room wider than three cells.
+///
+/// Both used to be `VOID`, and `VOID` is a hole: hard-edged near-black
+/// butted against lit geometry reads as a gap in the world rather than as
+/// somewhere the light does not reach.
+///
+/// Bounded from both sides, and the upper bound is the one that is easy to
+/// get wrong — it sits behind the *far* end of the corridor as well as
+/// beside the near end, so anything brighter than the dimmest wall the fog
+/// produces turns the vanishing point into the brightest thing on screen.
+/// `the_unlit_fill_is_lighter_than_void_and_darker_than_the_far_wall` holds
+/// both.
+const UNLIT: Color = Color::new(0.03, 0.07, 0.085, 1.0);
+
 /// The corridor's cross-section `depth` cells away, in pane-local pixels.
 ///
 /// Returned as (left, top, right, bottom). Every slice is centred on the
@@ -58,6 +82,21 @@ fn slice(depth: usize, w: f32, h: f32) -> (f32, f32, f32, f32) {
     let half_w = w / 2.0 * scale;
     let half_h = h / 2.0 * CORRIDOR_HEIGHT * scale;
     (cx - half_w, cy - half_h, cx + half_w, cy + half_h)
+}
+
+/// The same cross-section for the cell `lateral` columns to the party's
+/// right, negative for their left.
+///
+/// One whole cell of horizontal offset per column, and no change of size:
+/// cells at one depth are all the same distance away, so they differ only
+/// in where they sit across the view. That is what makes the columns tile
+/// — the right edge of one is the left edge of the next, at every depth —
+/// which in turn is what lets the floor and ceiling of neighbouring cells
+/// meet along a shared edge instead of overlapping or leaving a seam.
+fn column_slice(depth: usize, lateral: i32, w: f32, h: f32) -> (f32, f32, f32, f32) {
+    let (l, t, r, b) = slice(depth, w, h);
+    let dx = (r - l) * lateral as f32;
+    (l + dx, t, r + dx, b)
 }
 
 /// How bright a surface `depth` cells away is drawn.
@@ -114,60 +153,33 @@ fn face_color(cell: StackCellView) -> Color {
 pub(super) fn draw_stack(view: &StackView, painter: &Painter, w: f32, h: f32, m: &Metrics) {
     painter.rect(0.0, 0.0, w, h, VOID);
 
-    let middle = view.cells.first().map(|row| row.len() / 2).unwrap_or(0);
+    // Floored before any geometry, so nothing inside the corridor's own band
+    // can come out as hard `VOID`. Two places need it and neither is a bug in
+    // the projection: the view runs out of cells before the corridor runs out
+    // of floor, and a ray that leaves a three-wide cone sideways as it
+    // recedes has left it for good — which is simply what standing in a room
+    // wider than the cone looks like. The band only, so the letterbox above
+    // and below the corridor stays void.
+    let (bl, bt, br, bb) = slice(0, w, h);
+    painter.rect(bl, bt, br - bl, bb - bt, UNLIT);
 
-    // Back to front, so nearer geometry paints over further geometry and no
-    // depth sorting is needed.
-    for depth in (0..view.cells.len()).rev() {
-        let row = &view.cells[depth];
-        let (nl, nt, nr, nb) = slice(depth, w, h);
-        let (fl, ft, fr, fb) = slice(depth + 1, w, h);
-        let s = shade(depth);
-
-        let face = draws_as_face(depth, row[middle]);
-        if face {
-            // The corridor is blocked here: this cell's face toward us fills
-            // the whole slice. Anything beyond it was drawn already and is
-            // now covered, which is exactly right.
-            painter.rect(nl, nt, nr - nl, nb - nt, dim(face_color(row[middle]), s));
-        } else {
-            // An open cell: floor and ceiling recede from this slice to the
-            // next.
-            painter.poly(&[(nl, nb), (nr, nb), (fr, fb), (fl, fb)], dim(FLOOR, s));
-            painter.poly(&[(nl, nt), (nr, nt), (fr, ft), (fl, ft)], dim(CEILING, s));
-
-            if middle > 0 && solid(row[middle - 1]) {
-                painter.poly(&[(nl, nt), (fl, ft), (fl, fb), (nl, nb)], dim(WALL, s));
-            }
-            if middle + 1 < row.len() && solid(row[middle + 1]) {
-                painter.poly(&[(nr, nt), (fr, ft), (fr, fb), (nr, nb)], dim(WALL, s));
+    // The columns either side of the party's line of sight overhang the pane
+    // — at depth 0 they are entirely off it — so the pane cuts them.
+    painter.clipped(0.0, 0.0, w, h, |painter| {
+        // Back to front, so nearer geometry paints over further geometry and
+        // no depth sorting is needed. That is the whole occlusion rule, and
+        // it stays correct now that the whole row is drawn rather than only
+        // its middle: every cell at one depth is the same distance away, so
+        // a nearer cell's face covers exactly the pixels it hides. A side
+        // passage running past the rock ahead is drawn and stays visible; one
+        // that runs behind it is drawn and is painted over.
+        for depth in (0..view.cells.len()).rev() {
+            let row = &view.cells[depth];
+            for i in 0..row.len() {
+                draw_cell(painter, row, i, depth, w, h, m);
             }
         }
-
-        // Anything worth noticing reads as a glyph rather than as geometry or
-        // as a shade — the party needs to spot it down a corridor, and
-        // neither a subtle change in floor shape nor one in wall colour
-        // carries that far. Drawn last so the surface it names is under it.
-        if let Some((mark, color)) = cell_mark(row[middle]) {
-            let glyph = mark.to_string();
-            let dims = painter.measure_map(&glyph, m.font_size * 2);
-            // A face fills its slice, so its mark goes in the middle of it;
-            // an open cell's lies on the floor at the far end of it. That is
-            // the only thing the two placements disagree about.
-            let (cx, baseline) = if face {
-                ((nl + nr) / 2.0, (nt + nb) / 2.0 + dims.height / 2.0)
-            } else {
-                ((fl + fr) / 2.0, fb - (fb - ft) * 0.15)
-            };
-            painter.map(
-                &glyph,
-                cx - dims.width / 2.0,
-                baseline,
-                m.font_size * 2,
-                dim(color, mark_shade(depth)),
-            );
-        }
-    }
+    });
 
     painter.rect_lines(0.0, 0.0, w, h, 2.0, BORDER);
 
@@ -191,6 +203,80 @@ pub(super) fn draw_stack(view: &StackView, painter: &Painter, w: f32, h: f32, m:
             h - m.inset,
             m.font_size,
             YELLOW,
+        );
+    }
+}
+
+/// Draws `row[i]` — one cell of the cross-section `depth` ahead — into its
+/// own slice of the pane.
+///
+/// The middle column is the one whose lateral offset works out to zero and
+/// has no special case: what used to be the whole of `draw_stack`'s loop
+/// body is this, run once per cell. The row comes in whole rather than just
+/// the cell, because a wall is a property of the boundary between two cells
+/// rather than of either one — and because the offset is measured from the
+/// row's own middle, so a row shorter than the rest is drawn centred rather
+/// than indexed off the end of.
+fn draw_cell(
+    painter: &Painter,
+    row: &[StackCellView],
+    i: usize,
+    depth: usize,
+    w: f32,
+    h: f32,
+    m: &Metrics,
+) {
+    let cell = row[i];
+    let lateral = i as i32 - (row.len() / 2) as i32;
+    let (nl, nt, nr, nb) = column_slice(depth, lateral, w, h);
+    let (fl, ft, fr, fb) = column_slice(depth + 1, lateral, w, h);
+    let s = shade(depth);
+
+    let face = draws_as_face(depth, cell);
+    if face {
+        // This cell's face toward us fills its slice. Anything behind it was
+        // drawn already and is now covered, which is exactly right.
+        painter.rect(nl, nt, nr - nl, nb - nt, dim(face_color(cell), s));
+    } else {
+        // An open cell: floor and ceiling recede from this slice to the next.
+        painter.poly(&[(nl, nb), (nr, nb), (fr, fb), (fl, fb)], dim(FLOOR, s));
+        painter.poly(&[(nl, nt), (nr, nt), (fr, ft), (fl, ft)], dim(CEILING, s));
+
+        // A solid neighbour is seen edge-on from here, which is the wall this
+        // draws — the neighbour's own face is its business, and it draws
+        // that itself when its turn comes. The outermost column has no
+        // neighbour in the cone, so its outer side is left to the unlit fill
+        // rather than guessed at: the cone is what the party can see, and a
+        // wall invented past its edge would be the view claiming to know.
+        if i > 0 && solid(row[i - 1]) {
+            painter.poly(&[(nl, nt), (fl, ft), (fl, fb), (nl, nb)], dim(WALL, s));
+        }
+        if i + 1 < row.len() && solid(row[i + 1]) {
+            painter.poly(&[(nr, nt), (fr, ft), (fr, fb), (nr, nb)], dim(WALL, s));
+        }
+    }
+
+    // Anything worth noticing reads as a glyph rather than as geometry or as
+    // a shade — the party needs to spot it down a corridor, and neither a
+    // subtle change in floor shape nor one in wall colour carries that far.
+    // Drawn last so the surface it names is under it.
+    if let Some((mark, color)) = cell_mark(cell) {
+        let glyph = mark.to_string();
+        let dims = painter.measure_map(&glyph, m.font_size * 2);
+        // A face fills its slice, so its mark goes in the middle of it; an
+        // open cell's lies on the floor at the far end of it. That is the
+        // only thing the two placements disagree about.
+        let (cx, baseline) = if face {
+            ((nl + nr) / 2.0, (nt + nb) / 2.0 + dims.height / 2.0)
+        } else {
+            ((fl + fr) / 2.0, fb - (fb - ft) * 0.15)
+        };
+        painter.map(
+            &glyph,
+            cx - dims.width / 2.0,
+            baseline,
+            m.font_size * 2,
+            dim(color, mark_shade(depth)),
         );
     }
 }
@@ -279,6 +365,100 @@ mod tests {
             let (fl, ft, fr, fb) = slice(depth + 1, w, h);
             assert!(fl > nl && fr < nr, "depth {depth} walls cross over");
             assert!(ft > nt && fb < nb, "depth {depth} floor and ceiling cross");
+        }
+    }
+
+    /// The middle column is the projection's origin, not a special case.
+    #[test]
+    fn the_middle_column_is_the_plain_slice() {
+        for depth in 0..5 {
+            assert_eq!(
+                column_slice(depth, 0, 800.0, 600.0),
+                slice(depth, 800.0, 600.0)
+            );
+        }
+    }
+
+    /// Columns tile: one cell's right edge is its neighbour's left edge, at
+    /// every depth. That is what makes the floor and ceiling of adjacent
+    /// cells meet along a shared edge — a column placed by anything other
+    /// than a whole cell width would leave a seam of background between two
+    /// lit surfaces, which is the exact fault this change exists to remove.
+    #[test]
+    fn neighbouring_columns_share_an_edge() {
+        let (w, h) = (800.0, 600.0);
+        for depth in 0..5 {
+            for lateral in -2..2 {
+                let (_, _, r, _) = column_slice(depth, lateral, w, h);
+                let (l, _, _, _) = column_slice(depth, lateral + 1, w, h);
+                assert!(
+                    (r - l).abs() < 0.001,
+                    "depth {depth}: column {lateral} does not meet {}",
+                    lateral + 1
+                );
+            }
+        }
+    }
+
+    /// The cell beside the party is off the edge of the view at depth 0 and
+    /// swings into it as it recedes. Both halves matter: the first is why
+    /// the pane has to clip, and the second is why drawing the flanks fills
+    /// the region that used to be void.
+    #[test]
+    fn the_column_beside_the_party_swings_into_the_pane() {
+        let (w, h) = (800.0, 600.0);
+        let (l, _, r, _) = column_slice(0, -1, w, h);
+        assert!(r <= 0.0, "the cell alongside the party is not in frame");
+        assert!(l < 0.0);
+
+        for depth in 1..4 {
+            let (_, _, r, _) = column_slice(depth, -1, w, h);
+            assert!(
+                r > 0.0,
+                "depth {depth}'s left-hand cell claims nothing inside the pane"
+            );
+        }
+    }
+
+    /// No pixel inside the corridor's band can be left at hard `VOID`: the
+    /// band is floored with `UNLIT` before anything else is drawn, and every
+    /// column at every depth sits vertically inside it. A cell that reached
+    /// outside the band would be drawn over the letterbox instead, which is
+    /// the frame rather than the world.
+    #[test]
+    fn every_column_stays_inside_the_band_the_unlit_fill_covers() {
+        let (w, h) = (800.0, 600.0);
+        let (bl, bt, br, bb) = slice(0, w, h);
+        assert!(bl <= 0.0 && br >= w, "the fill does not span the pane");
+        for depth in 0..6 {
+            for lateral in -3..=3 {
+                let (_, t, _, b) = column_slice(depth, lateral, w, h);
+                assert!(
+                    t >= bt - 0.001 && b <= bb + 0.001,
+                    "depth {depth} column {lateral} reaches outside the fill"
+                );
+            }
+        }
+    }
+
+    /// The fill has to clear the void it replaced without reaching the
+    /// dimmest wall the fog produces. Below the floor it is the hole again;
+    /// above the far wall the vanishing point — which the fill also sits
+    /// behind — becomes the brightest thing on screen.
+    ///
+    /// The far end is the last row the engine sends, which this file is
+    /// never told; `STACK_VIEW_DEPTH` ships at 4, so the deepest surface
+    /// drawn is three cells out.
+    #[test]
+    fn the_unlit_fill_is_lighter_than_void_and_darker_than_the_far_wall() {
+        let far_wall = dim(WALL, shade(3));
+        for (fill, void, wall) in [
+            (UNLIT.r, VOID.r, far_wall.r),
+            (UNLIT.g, VOID.g, far_wall.g),
+            (UNLIT.b, VOID.b, far_wall.b),
+        ] {
+            assert!(fill > void, "the fill is still the hole it replaced");
+            assert!(fill < wall, "the fill outshines the end of the corridor");
         }
     }
 

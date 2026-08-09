@@ -263,6 +263,28 @@ impl Painter {
         ));
     }
 
+    /// Runs `f` against a painter that throws away anything outside
+    /// `(x, y, w, h)`.
+    ///
+    /// The one operation about *not* drawing, and it exists because the
+    /// first-person Stack corridor's lateral columns are wider than their
+    /// pane by construction: the cell beside the party is off the edge of
+    /// the view and only its far end swings into frame. Trimming the
+    /// projection to fit instead would mean clipping trapezoids by hand and
+    /// getting a different, wrong perspective for the trouble.
+    ///
+    /// `screen_w`/`screen_h` are untouched inside — they mean the window,
+    /// not the pane, and every caller that reads them is laying out against
+    /// the window.
+    pub fn clipped(&self, x: f32, y: f32, w: f32, h: f32, f: impl FnOnce(&Painter)) {
+        f(&Painter {
+            painter: self.painter.with_clip_rect(rect_of(x, y, w, h)),
+            width: self.width,
+            height: self.height,
+            delta: self.delta,
+        });
+    }
+
     /// Draws `text` with its baseline at `y`. See the module docs on why
     /// that, and not the top edge, is the anchor.
     pub fn text(&self, face: Face, text: impl AsRef<str>, x: f32, y: f32, size: u16, color: Color) {

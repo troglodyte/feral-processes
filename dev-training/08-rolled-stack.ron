@@ -1,0 +1,15 @@
+// A rolled Stack encounter at depth 3: the zone and depth multipliers
+// compound here, which is the hardest thing in the shipped game and a known
+// open balance question. It is in the set so a trained policy is measured
+// against it rather than surprised by it later.
+(
+    player: Fresh(level: 20, zone: 3),
+    party: [
+        (species: "scrapper", level: 14),
+        (species: "sentinel", level: 14),
+        (species: "construct", level: 14),
+    ],
+    encounter: Some(Stack(biome: NullSector, depth: 3)),
+    reps: 200,
+    seed: 108,
+)

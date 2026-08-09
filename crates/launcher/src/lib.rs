@@ -6,4 +6,5 @@
 //! three bins could not be without compiling its tests three times. Nothing
 //! about the game itself lives here.
 
+pub mod cem;
 pub mod dev_template;

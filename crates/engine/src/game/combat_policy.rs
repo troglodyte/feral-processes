@@ -1,0 +1,240 @@
+//! How a wild program decides what to swing and who to swing it at.
+//!
+//! The arithmetic — the feature vector, the weights and the softmax — is
+//! `crate::policy`, which knows nothing about the `World`. This file is the
+//! other half: reading battle state into that vector, and the one function
+//! `combat_enemy.rs` asks for a decision.
+
+use crate::policy::{self, Feature, Features};
+use crate::resources::EnemyPolicy;
+use crate::tuning::{ENEMY_POLICY_TEMPERATURE, ENGAGED_GROUPS};
+use crate::*;
+
+impl Game {
+    /// The one place a wild program's swing is decided: which move, and at
+    /// whom. `None` means nothing it has reaches from where it is standing
+    /// — the caller keeps its "circles beyond reach" line.
+    ///
+    /// Both the trained policy and the baseline exit through here, the same
+    /// "one way in" shape as `Game::enter_frame` and `Game::arrive`. With no
+    /// weights installed it is exactly the two rolls this replaced: a
+    /// uniform pick over the moves that reach, then `roll_enemy_target`.
+    ///
+    /// `roll_enemy_target` is therefore not orphaned — that fallback is one
+    /// caller and the routine branch in `wild_retaliate` is the other.
+    pub(crate) fn choose_wild_action(
+        &mut self,
+        wild: Entity,
+        group: usize,
+        player: Entity,
+    ) -> Option<(MoveDef, Entity)> {
+        self.choose_wild_action_at(wild, group, player, ENEMY_POLICY_TEMPERATURE)
+    }
+
+    /// `choose_wild_action` with the softmax temperature supplied rather
+    /// than read from `tuning`. The parameter exists because the constant is
+    /// what `a_high_temperature_approaches_the_uniform_baseline` is testing:
+    /// a dial-back nobody can vary is a dial-back nobody has checked works.
+    pub(crate) fn choose_wild_action_at(
+        &mut self,
+        wild: Entity,
+        group: usize,
+        player: Entity,
+        temperature: f32,
+    ) -> Option<(MoveDef, Entity)> {
+        let moves = self.moves_that_reach(wild, group);
+        if moves.is_empty() {
+            return None;
+        }
+
+        let Some(weights) = self.world.resource::<EnemyPolicy>().0.clone() else {
+            // The baseline, and deliberately in this order: it is the order
+            // `wild_retaliate` rolled in before the seam existed, so an
+            // uninstalled policy leaves every seeded fight in the suite
+            // playing out move-for-move as it did.
+            let idx = {
+                let mut rng = self.world.resource_mut::<GameRng>();
+                rng.0.random_range(0..moves.len())
+            };
+            let target = self.roll_enemy_target(player);
+            return Some((moves[idx].clone(), target));
+        };
+
+        let targets = self.living_targets(player);
+        if targets.is_empty() {
+            return None;
+        }
+
+        // Scored first, in one pass, because the RNG is a resource and every
+        // feature read borrows the world immutably — the same shape the two
+        // rolls this replaced used.
+        let mut pairs: Vec<(usize, Entity)> = Vec::with_capacity(moves.len() * targets.len());
+        let mut scores: Vec<f32> = Vec::with_capacity(moves.len() * targets.len());
+        for (mi, mv) in moves.iter().enumerate() {
+            for (slot, target) in &targets {
+                // The aggro table enters as a fixed prior with a pinned
+                // coefficient of 1.0, through `ln` so that the softmax's
+                // `exp` hands the weight back unchanged: an all-zero policy
+                // is today's distribution exactly, and a trained one
+                // *multiplies* it rather than replacing it. Never a learned
+                // feature — see `assets/policies/README.md`.
+                let prior =
+                    (battle::slot_aggro_weight(*slot, self.is_defending(*target)) as f32).ln();
+                scores.push(prior + weights.score(&self.action_features(wild, mv, *target, group)));
+                pairs.push((mi, *target));
+            }
+        }
+
+        let idx = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            policy::sample_scored(&scores, temperature, &mut rng.0)
+        };
+        let (mi, target) = pairs[idx];
+        Some((moves[mi].clone(), target))
+    }
+
+    /// The moves `wild` can actually bring to bear from `group`. Only the
+    /// front `ENGAGED_GROUPS` are close enough to swing; anything further
+    /// back has to shoot.
+    fn moves_that_reach(&self, wild: Entity, group: usize) -> Vec<MoveDef> {
+        let Some(species_id) = self.world.get::<Creature>(wild).map(|c| c.species.clone()) else {
+            return Vec::new();
+        };
+        let engaged = group < ENGAGED_GROUPS;
+        self.world
+            .resource::<SpeciesDb>()
+            .get(&species_id)
+            .map(|def| def.moves.as_slice())
+            .unwrap_or_default()
+            .iter()
+            .filter(|m| engaged || m.ranged)
+            .cloned()
+            .collect()
+    }
+
+    /// Everyone the other side can hit, each with its aggro slot.
+    ///
+    /// The slot is the position in `player + Party`, counted **before** the
+    /// dead are dropped, exactly as `roll_enemy_target` counts it — a fallen
+    /// front-rank companion must not promote the member behind it.
+    fn living_targets(&self, player: Entity) -> Vec<(usize, Entity)> {
+        let party = self.world.resource::<Party>().0.clone();
+        std::iter::once(player)
+            .chain(party)
+            .enumerate()
+            .filter(|(_, e)| self.creature_alive(*e))
+            .collect()
+    }
+
+    /// Reads one candidate `(move, target)` pair into the feature vector the
+    /// weights are trained over. Every value is normalised to roughly
+    /// `[0, 1]`, which is what lets one weight vector mean the same thing
+    /// across species, zones and party sizes — including a modded roster
+    /// nobody trained against.
+    fn action_features(
+        &self,
+        wild: Entity,
+        mv: &MoveDef,
+        target: Entity,
+        group: usize,
+    ) -> Features {
+        let mut f = Features::zeroed();
+        let wild_stats = self.world.get::<Stats>(wild).copied().unwrap_or(Stats {
+            hp: 1,
+            max_hp: 1,
+            atk: 0,
+            def: 0,
+        });
+
+        // Relative to this species' own best move rather than to an absolute
+        // scale, so "hits hard for what it is" means the same thing for a
+        // drone and for a modded boss. `.max(1)` is the degenerate-moveset
+        // guard: a species whose every move is power 0 scores them all zero
+        // rather than dividing by it.
+        let best_power = self
+            .world
+            .get::<Creature>(wild)
+            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+            .map(|def| def.moves.iter().map(|m| m.power).max().unwrap_or(0))
+            .unwrap_or(0);
+        f.set(
+            Feature::MovePowerRel,
+            mv.power as f32 / best_power.max(1) as f32,
+        );
+        f.set(Feature::MoveRanged, mv.ranged as u8 as f32);
+        f.set(Feature::MoveHasEffect, mv.effect.is_some() as u8 as f32);
+        let stun_move = matches!(&mv.effect, Some(e) if e.kind == StatusKind::Stun);
+        let bleed_move = matches!(&mv.effect, Some(e) if e.kind == StatusKind::Bleed);
+        f.set(Feature::MoveEffectStun, stun_move as u8 as f32);
+        f.set(Feature::MoveEffectBleed, bleed_move as u8 as f32);
+        f.set(
+            Feature::MoveEffectChance,
+            mv.effect.as_ref().map(|e| e.chance).unwrap_or(0.0),
+        );
+
+        let target_stats = self.world.get::<Stats>(target).copied().unwrap_or(Stats {
+            hp: 1,
+            max_hp: 1,
+            atk: 0,
+            def: 0,
+        });
+        let target_hp_frac = target_stats.hp_fraction();
+        f.set(Feature::TargetHpFrac, target_hp_frac);
+        f.set(
+            Feature::TargetIsPlayer,
+            (target == self.player_entity()) as u8 as f32,
+        );
+        let def = self.effective_def(target);
+        // Squashed into [0, 1]: DEF at or past twice the attacker's ATK is
+        // simply "very hard to hurt" and the difference above that is not
+        // information the policy can act on.
+        f.set(
+            Feature::TargetDefRel,
+            (def as f32 / wild_stats.atk.max(1) as f32).clamp(0.0, 2.0) / 2.0,
+        );
+        let status = self
+            .world
+            .get::<StatusEffects>(target)
+            .and_then(|s| s.active);
+        let stunned = matches!(status, Some(a) if a.kind == StatusKind::Stun);
+        let bleeding = matches!(status, Some(a) if a.kind == StatusKind::Bleed);
+        f.set(Feature::TargetStunned, stunned as u8 as f32);
+        f.set(Feature::TargetBleeding, bleeding as u8 as f32);
+        f.set(
+            Feature::TargetBracing,
+            self.is_defending(target) as u8 as f32,
+        );
+
+        // The real formula, called rather than restated — a copy here would
+        // drift from the damage the swing then actually deals.
+        let dmg = battle::compute_damage(wild_stats.atk, def, mv.power);
+        f.set(
+            Feature::EstDamageFrac,
+            (dmg as f32 / target_stats.hp.max(1) as f32).clamp(0.0, 1.0),
+        );
+        f.set(Feature::WouldKill, (dmg >= target_stats.hp) as u8 as f32);
+
+        f.set(Feature::SelfHpFrac, wild_stats.hp_fraction());
+        f.set(
+            Feature::SelfFrontGroup,
+            (group < ENGAGED_GROUPS) as u8 as f32,
+        );
+
+        // The three interactions are the whole of the nonlinearity a linear
+        // model gets here: whether a condition is worth spending, and
+        // whether it is being spent on someone who already has it.
+        f.set(
+            Feature::EffectXTargetHealthy,
+            f.get(Feature::MoveHasEffect) * target_hp_frac,
+        );
+        f.set(
+            Feature::StunXNotStunned,
+            f.get(Feature::MoveEffectStun) * (1.0 - f.get(Feature::TargetStunned)),
+        );
+        f.set(
+            Feature::BleedXNotBleeding,
+            f.get(Feature::MoveEffectBleed) * (1.0 - f.get(Feature::TargetBleeding)),
+        );
+        f
+    }
+}

@@ -1,0 +1,13 @@
+// A rolled surface encounter rather than an authored one, so the policy is
+// scored against compositions nobody chose for it. `Mainframe` fields the
+// widest species pool of any walkable biome.
+(
+    player: Fresh(level: 12, zone: 3),
+    party: [
+        (species: "scrapper", level: 9),
+        (species: "sprite", level: 9),
+    ],
+    encounter: Some(Field(biome: Mainframe)),
+    reps: 200,
+    seed: 107,
+)

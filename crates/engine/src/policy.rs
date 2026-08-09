@@ -6,6 +6,8 @@
 //! here is pure, so it is unit-testable on its own and the code that reads
 //! the world can trust it.
 
+use std::path::Path;
+
 pub const FEATURE_COUNT: usize = 19;
 
 /// One term of the score a candidate `(move, target)` pair gets.
@@ -167,6 +169,61 @@ impl PolicyWeights {
     }
 }
 
+/// The on-disk shape of `assets/policies/enemy_battle.ron` — see that
+/// directory's README. Name-keyed rather than positional so that adding a
+/// feature degrades an existing file to "that name is absent, so zero"
+/// rather than silently re-reading its numbers against new meanings.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct PolicyFile {
+    features: Vec<(String, f32)>,
+}
+
+/// Reads the trained weights, if any are installed.
+///
+/// Unlike every other asset DB this takes a **file**, not a directory: a
+/// policy is a singleton, and `std::fs::read_dir` on a missing directory is
+/// an `Err` where a missing policy is an ordinary, silent, valid state —
+/// the game plays exactly as it did before this feature existed. A
+/// malformed or non-finite-weighted file is skipped with a warning instead,
+/// the same shape as `PerkDb::load_dir`.
+pub fn load_file(path: &Path) -> std::io::Result<(Option<PolicyWeights>, Vec<String>)> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok((None, Vec::new())),
+        Err(e) => return Err(e),
+    };
+    let skipped = |e: String| {
+        Ok((
+            None,
+            vec![format!("skipped invalid policy file {path:?}: {e}")],
+        ))
+    };
+    match ron::from_str::<PolicyFile>(&text) {
+        Ok(file) => match PolicyWeights::from_pairs(&file.features) {
+            Ok((weights, warnings)) => Ok((Some(weights), warnings)),
+            Err(e) => skipped(e),
+        },
+        Err(e) => skipped(e.to_string()),
+    }
+}
+
+/// Writes a trained weight vector where `load_file` will find it.
+///
+/// Every feature is named, including the zeroes: a file listing all
+/// nineteen is legible as "this is what was learned", where one listing the
+/// six that happened to come out large reads as an incomplete file.
+pub fn write_file(path: &Path, w: &PolicyWeights) -> std::io::Result<()> {
+    let file = PolicyFile {
+        features: w.to_pairs(),
+    };
+    let text = ron::ser::to_string_pretty(&file, ron::ser::PrettyConfig::default())
+        .map_err(std::io::Error::other)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, text)
+}
+
 /// Picks an index into `scores`, softmax-weighted at `temperature`.
 ///
 /// The maximum score is subtracted before `exp`, so a weight the trainer
@@ -317,6 +374,29 @@ mod tests {
                 "index {i} took {share} of {DRAWS} draws at a high temperature"
             );
         }
+    }
+
+    /// The trainer writes and the game reads, so the two have to agree —
+    /// and a name-keyed file makes that a real risk rather than a formality.
+    #[test]
+    fn written_weights_load_back_identically() {
+        let (written, _) = PolicyWeights::from_pairs(&[
+            ("target_hp_frac".into(), -1.84),
+            ("would_kill".into(), 2.31),
+            ("bleed_x_not_bleeding".into(), -0.07),
+        ])
+        .unwrap();
+
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_policy_roundtrip_{}.ron",
+            std::process::id()
+        ));
+        write_file(&path, &written).unwrap();
+        let (read_back, warnings) = load_file(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(read_back.unwrap().to_pairs(), written.to_pairs());
     }
 
     #[test]

@@ -231,7 +231,28 @@ pub const DIFFICULTY_TOUGH_MAX: f64 = 1.6;
 /// party-level play rather than a selfish one.
 pub const FRONT_SLOT_AGGRO_WEIGHT: u32 = 3;
 pub const BACK_SLOT_AGGRO_WEIGHT: u32 = 1;
-pub const DEFEND_AGGRO_WEIGHT: u32 = 4;
+/// Raised from 4 on 2026-08-09, and the reason is the whole argument for
+/// why this number is not free to drift back down.
+///
+/// These weights enter `Game::choose_wild_action` as `ln(weight)`, so what
+/// Defend actually buys is `ln(7/3) = +0.85` of score — and the trained
+/// policy's `est_damage_frac` term is worth about `-1.0` against a bracing
+/// target, because *reducing incoming damage is what bracing is*. At 4 the
+/// two cancelled and came out the wrong way round: bracing drew 40% of the
+/// fire against 44% not bracing, so Defend was quietly counterproductive.
+///
+/// This is not fixable by pinning a feature — a damage-aware policy will
+/// always have a reason to walk past the tank — nor by
+/// `ENEMY_POLICY_TEMPERATURE`, which divides the prior and the learned term
+/// alike and so cannot flip the sign. The prior has to be big enough to
+/// win, and 7 is the smallest value that clears
+/// `bracing_still_draws_more_fire_under_the_shipped_weights` with margin;
+/// 6 flips the sign back but only by 0.02, which is inside the noise.
+///
+/// Bracing is therefore a stronger taunt than it was against the old
+/// random-rolling enemy. That is the intended reading: Defend's old value
+/// was an artifact of nobody on the other side thinking about it.
+pub const DEFEND_AGGRO_WEIGHT: u32 = 7;
 
 /// How many party slots count as the front line for `FRONT_SLOT_AGGRO_WEIGHT`
 /// — the player plus the first two companions.
@@ -272,6 +293,27 @@ pub const PLAYER_STRIKE_POWER: i32 = 5;
 /// the shipped roster) rather than replacing it, so an effect actually
 /// lands on roughly 6-10% of wild attacks.
 pub const WILD_ABILITY_CHANCE: f64 = 0.2;
+
+/// How sharply a wild program acts on the trained battle policy — the
+/// softmax temperature `Game::choose_wild_action` samples its
+/// `(move, target)` pair at.
+///
+/// 1.0 is the trained distribution as-is. Below 1.0 sharpens it, and 0 (or
+/// less) is argmax — always the best-scoring pair, which reads as an enemy
+/// that never makes a mistake. A large value flattens it back towards the
+/// uniform move roll and slot-weighted target roll the game had before
+/// policies existed, so raising this is how a policy that trained too well
+/// gets dialled back without retraining.
+///
+/// This is the **only** shipping control over how hard the learned enemy
+/// plays, and it is deliberately not backed by `balance_sim`: that gate is
+/// RNG-free and models no abilities, so a policy that makes real fights
+/// substantially harder moves none of its curves. The arena
+/// (`dev-arenas/`, `FERAL_DEV_ARENA=1`) is the instrument here.
+///
+/// Inert with no `assets/policies/enemy_battle.ron` installed: with no
+/// weights there is nothing to sample and the baseline rolls run instead.
+pub const ENEMY_POLICY_TEMPERATURE: f32 = 1.0;
 
 /// DEF granted for the round by the Defend action.
 pub const DEFEND_DEF_BONUS: i32 = 6;

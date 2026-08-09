@@ -1,0 +1,19 @@
+// Four groups, so two of them are past `ENGAGED_GROUPS` and can only act
+// with a ranged move. The one scenario that puts `self_front_group` and
+// `move_ranged` under real pressure — a policy that ignores reach idles
+// half its side.
+(
+    player: Fresh(level: 12, zone: 3),
+    party: [
+        (species: "scrapper", level: 9),
+        (species: "construct", level: 9),
+    ],
+    opponents: [
+        (species: "scrapper", count: 2),
+        (species: "crawler", count: 2),
+        (species: "zero_day", count: 2),
+        (species: "drone", count: 2),
+    ],
+    reps: 200,
+    seed: 104,
+)

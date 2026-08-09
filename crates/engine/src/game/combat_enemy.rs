@@ -4,7 +4,7 @@
 //! `all_wild_retaliate` (`game/combat_round.rs`) drives this once per
 //! engaged group; everything about *choosing* the strike lives here.
 
-use crate::tuning::{ENEMY_ROUTINE_MIN_COOLDOWN, ENGAGED_GROUPS, WILD_ABILITY_CHANCE};
+use crate::tuning::{ENEMY_ROUTINE_MIN_COOLDOWN, WILD_ABILITY_CHANCE};
 use crate::*;
 
 impl Game {
@@ -125,30 +125,17 @@ impl Game {
             return;
         }
 
-        let species_id = self.world.get::<Creature>(wild).unwrap().species.clone();
-        // Only the front `ENGAGED_GROUPS` are close enough to swing; anything
-        // further back has to shoot, and idles if it has nothing that reaches.
-        let engaged = group < ENGAGED_GROUPS;
-        let candidates: Vec<MoveDef> = self
-            .world
-            .resource::<SpeciesDb>()
-            .get(&species_id)
-            .unwrap()
-            .moves
-            .iter()
-            .filter(|m| engaged || m.ranged)
-            .cloned()
-            .collect();
-        if candidates.is_empty() {
+        // Which move and which target are one decision, made in
+        // `Game::choose_wild_action` (`game/combat_policy.rs`) — the trained
+        // policy scores the pairs jointly, and with no policy installed that
+        // is the uniform move roll and the aggro-weighted target roll this
+        // used to make inline. `None` is "nothing it has reaches from where
+        // it stands", which only a back group with no ranged move can be.
+        let Some((mut mv, target)) = self.choose_wild_action(wild, group, player) else {
             let name = self.creature_label(wild);
             self.log(format!("{name} circles beyond reach, unable to strike."));
             return;
-        }
-        let idx = {
-            let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_range(0..candidates.len())
         };
-        let mut mv = candidates[idx].clone();
         // A moveset's status effects are what a program *can* bring to bear,
         // not what it does every turn. Reaching for one every time meant a
         // species with a nasty stun was that stun on repeat.
@@ -169,7 +156,6 @@ impl Game {
             mv.effect = None;
         }
 
-        let target = self.roll_enemy_target(player);
         let targets_companion = target != player;
 
         let (w_atk, t_def) = {

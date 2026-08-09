@@ -379,12 +379,23 @@ fn resolving_a_round_clears_the_pane_of_the_previous_one() {
 /// rate. Counts only the turns where the move actually used carries an
 /// effect, so a damage-only move being picked is never mistaken for the
 /// gate having fired.
+///
+/// **`EnemyPolicy` is cleared, and that is the test, not a convenience.**
+/// The gate is a property of `wild_retaliate`, and measuring it needs the
+/// move choice to be the uniform roll it was written against. Under the
+/// shipped policy the sample collapses to *one* effect-move turn in 400,
+/// which is too few to judge any rate at all — see
+/// `a_trained_policy_rarely_picks_an_effect_carrying_move` below, which is
+/// where that behaviour is asserted deliberately instead of showing up here
+/// as an unexplained failure.
 #[test]
 fn wild_programs_only_sometimes_reach_for_their_status_effect() {
     let mut with_effect_move = 0;
     let mut landed = 0;
     for seed in 0..400u32 {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.world
+            .insert_resource(crate::resources::EnemyPolicy(None));
         let player = game.player_entity();
         let wild = start_battle_with_a_wild_program(&mut game);
         let species = game.world.get::<Creature>(wild).unwrap().species.clone();
@@ -1013,6 +1024,14 @@ fn a_stun_that_lands_this_round_costs_the_victim_their_next_turn() {
         .entity_mut(enemies[0])
         .insert(Routines(vec!["deadlock".to_string()]));
     game.world.get_mut::<Stats>(enemies[0]).unwrap().atk = 0;
+    // Round 2 it acts on a *move*, its routine having gone on cooldown, and
+    // `battle_with_a_pack_of`'s default species is a Cipher — whose Encrypt
+    // carries a `duration: 1` Stun of its own. A fresh stun landing there is
+    // a legitimate event that says nothing about whether the first one
+    // cleared, so the pack is a Scrapper instead: two moves, no effects.
+    // Left as a Cipher this passed on `WILD_ABILITY_CHANCE` x that move's
+    // own 0.35 missing, which is a 93% coin flip and not a mechanic.
+    game.world.get_mut::<Creature>(enemies[0]).unwrap().species = "scrapper".to_string();
 
     player_attacks(&mut game);
     assert!(

@@ -1,0 +1,10 @@
+// Level 1, zone 1, nobody alongside you. The floor of the game, and the
+// only scenario in the set where the policy has one target and nothing to
+// choose between — which is exactly why it is here: whatever is learned
+// must not make the opening unwinnable.
+(
+    player: Fresh(level: 1, zone: 1),
+    opponents: [(species: "drone", count: 1)],
+    reps: 200,
+    seed: 101,
+)

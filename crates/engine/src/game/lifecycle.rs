@@ -39,6 +39,7 @@ impl Game {
             research: research_db,
             items: item_db,
             perks: perk_db,
+            policy: enemy_policy,
             warnings: load_warnings,
         } = load_asset_dbs(assets_dir)?;
 
@@ -52,6 +53,7 @@ impl Game {
         world.insert_resource(research_db);
         world.insert_resource(item_db);
         world.insert_resource(perk_db);
+        world.insert_resource(enemy_policy);
         world.insert_resource(crash_log_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock::default());
@@ -181,6 +183,7 @@ impl Game {
             research: research_db,
             items: item_db,
             perks: perk_db,
+            policy: enemy_policy,
             warnings: load_warnings,
         } = load_asset_dbs(assets_dir)?;
 
@@ -207,6 +210,7 @@ impl Game {
         world.insert_resource(research_db);
         world.insert_resource(item_db);
         world.insert_resource(perk_db);
+        world.insert_resource(enemy_policy);
         world.insert_resource(crash_log_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock { tick: data.tick });
@@ -1015,6 +1019,7 @@ struct AssetDbs {
     research: ResearchDb,
     items: ItemDb,
     perks: PerkDb,
+    policy: crate::resources::EnemyPolicy,
     warnings: Vec<String>,
 }
 
@@ -1037,6 +1042,12 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     warnings.extend(item_warnings);
     let (perks, perk_warnings) = PerkDb::load_dir(&assets_dir.join("perks"))?;
     warnings.extend(perk_warnings);
+    // A file, not a directory, and an absent one is silent — see
+    // `policy::load_file`. Nothing downstream branches on whether it loaded;
+    // `Game::choose_wild_action` reads the resource and falls back.
+    let (policy, policy_warnings) =
+        crate::policy::load_file(&assets_dir.join("policies/enemy_battle.ron"))?;
+    warnings.extend(policy_warnings);
     let (achievements, achievement_warnings) =
         crate::achievements::AchievementDb::load_dir(&assets_dir.join("achievements"))?;
     warnings.extend(achievement_warnings);
@@ -1076,6 +1087,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         research,
         items,
         perks,
+        policy: crate::resources::EnemyPolicy(policy),
         warnings,
     })
 }

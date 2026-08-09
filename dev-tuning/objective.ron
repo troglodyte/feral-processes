@@ -1,0 +1,64 @@
+// What the tuner is aiming at.
+//
+// Each target names a scenario in `dev-arenas/` and says what it should
+// measure. The scenario files are the same ones the game's arena screen
+// loads with `[L]`, so anything here can be played by hand.
+//
+// Numbers are deliberately a *floor*: the headless arena plays All-Attack
+// every round and fires no companion Specials, so a real player outputs
+// more than this measures. A win-rate target set to what you want a player
+// to feel would therefore land too easy once Specials are in play.
+Objective(
+    // Fights per target when comparing candidates. Every candidate is
+    // compared on this same seed set, so a score difference is the roster
+    // rather than noise.
+    seeds: 20,
+    // Fights on seeds the search never saw, used only on the winner. This
+    // is what catches a proposal that merely learned the training seeds.
+    holdout_seeds: 20,
+    iterations: 60,
+    search_seed: 1337,
+
+    targets: [
+        // The fight the game opens on. Weighted heavily: if this moves, the
+        // first five minutes of the game moved.
+        Target(
+            scenario: "dev-arenas/opening-fight.ron",
+            reps: 20,
+            want_win_rate: 0.92,
+            want_hp_left: 0.62,
+            weight: 3.0,
+        ),
+        // A geared mid-run party against a full zone-3 group.
+        Target(
+            scenario: "dev-arenas/full-group.ron",
+            reps: 20,
+            want_win_rate: 0.75,
+            want_hp_left: 0.45,
+            weight: 1.0,
+        ),
+        // The band this tool was pointed at first: measured 0/50 with gear
+        // and a full party, resolving in 2.5 rounds. Deep Stack should be
+        // punishing, not impossible — a little over half, on a party that
+        // arrived in shape.
+        Target(
+            scenario: "dev-arenas/stack-depth-5.ron",
+            reps: 20,
+            want_win_rate: 0.55,
+            want_hp_left: 0.30,
+            weight: 3.0,
+        ),
+    ],
+
+    // Every movable field needs a range. Unbounded, the search proposes a
+    // 4000-HP drone that satisfies one target by breaking something no
+    // target happened to measure.
+    bounds: [
+        Bound(field: "base_hp", min: 8.0, max: 400.0),
+        Bound(field: "base_atk", min: 1.0, max: 90.0),
+        Bound(field: "base_def", min: 0.0, max: 60.0),
+        Bound(field: "base_speed", min: 4.0, max: 30.0),
+        Bound(field: "taming_difficulty", min: 0.05, max: 0.95),
+        Bound(field: "growth_multiplier", min: 0.6, max: 2.0),
+    ],
+)

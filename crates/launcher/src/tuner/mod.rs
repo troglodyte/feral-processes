@@ -24,5 +24,6 @@ pub mod constraints;
 pub mod eval;
 pub mod objective;
 pub mod roster;
+pub mod run;
 pub mod score;
 pub mod search;

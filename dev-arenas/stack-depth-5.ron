@@ -1,0 +1,30 @@
+// Depth 5 of the Stack, rolled rather than authored: whatever the game
+// actually puts in front of a party that has descended five frames.
+//
+// This band was measured at 0/50 wins on 2026-08-08 and never fixed. That
+// measurement used a fixture with no gear, which is not what a party four
+// frames down looks like — a player who got there has been through four
+// frames of caches and fights. So this one is geared and partied, to ask
+// the narrower question: is depth 5 unwinnable for a party that arrived
+// there in reasonable shape, or only for a naked one?
+//
+// `Stack` takes its own biome because the biome alone decides the species
+// pool; the zone comes from the player row, since `ZoneLevel` drives both
+// gear scaling and enemy scaling and two zones on one screen would be two
+// answers to one question.
+(
+    player: Fresh(level: 20, zone: 3),
+    equip: [
+        (item: "plasma_router", tier: 0),
+        (item: "bastion_lattice", tier: 0),
+        (item: "singularity_matrix", tier: 0),
+    ],
+    party: [
+        (species: "scrapper", level: 12),
+        (species: "scrapper", level: 12),
+        (species: "scrapper", level: 12),
+    ],
+    encounter: Some(Stack(biome: NullSector, depth: 5)),
+    reps: 50,
+    seed: 41,
+)

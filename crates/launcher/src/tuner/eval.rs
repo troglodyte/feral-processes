@@ -135,6 +135,11 @@ pub fn measure(
     for target in targets {
         let mut scenario = Scenario::load(Path::new(&target.scenario))
             .map_err(|e| format!("{}: {e}", target.scenario))?;
+        // A scenario naming a template has to become a `Save` before the
+        // engine sees it. Shared with the `arena` bin rather than copied:
+        // a scenario that runs there must measure identically here.
+        crate::dev_template::resolve_scenario(&mut scenario)
+            .map_err(|e| format!("{}: {e}", target.scenario))?;
         scenario.reps = reps;
         scenario.seed = seed_base;
         let report = arena::run(&scenario, workspace.dir())

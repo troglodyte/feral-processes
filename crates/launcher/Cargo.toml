@@ -28,6 +28,10 @@ path = "src/bin/savetool.rs"
 name = "arena"
 path = "src/bin/arena.rs"
 
+[[bin]]
+name = "tuner"
+path = "src/bin/tuner.rs"
+
 [dependencies]
 feral-processes-app-core = { workspace = true }
 feral-processes-engine = { workspace = true }

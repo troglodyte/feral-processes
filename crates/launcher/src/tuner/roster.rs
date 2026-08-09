@@ -10,6 +10,11 @@
 
 use std::fmt::Write as _;
 
+/// Decimal places a float field is written to. A search step produces
+/// values like `0.6877884316068232`; a person reviewing a diff needs a
+/// number, not a residue.
+const FLOAT_DECIMALS: i32 = 3;
+
 /// The numeric fields a candidate may move.
 ///
 /// Deliberately a closed set rather than "any number in the file". A
@@ -66,13 +71,22 @@ impl Field {
     }
 
     /// This field's value rendered as RON of the right type.
+    ///
+    /// Floats are rounded to `FLOAT_DECIMALS`, which is a readability rule
+    /// with teeth: a proposal is a file a person reviews and commits, and
+    /// `taming_difficulty: 0.6877884316068232` is float noise from a search
+    /// step rather than a decision anyone made. Rounding happens here, in
+    /// the one place a value becomes text, so the number that gets measured
+    /// is the same number that gets written — rounding only at proposal
+    /// time would report a roster that was never actually fought.
     pub fn render(self, value: f64) -> String {
         if self.is_integer() {
             format!("{}", value.round() as i64)
         } else {
+            let factor = 10f64.powi(FLOAT_DECIMALS);
             // `{}` on 1.0f64 prints "1", which RON reads as an integer and
             // serde then refuses for an f32 field.
-            let mut s = format!("{value}");
+            let mut s = format!("{}", (value * factor).round() / factor);
             if !s.contains('.') {
                 s.push_str(".0");
             }
@@ -153,13 +167,44 @@ pub struct Candidate {
 }
 
 impl Candidate {
-    /// Renders a one-line-per-change summary, for the proposal report.
-    pub fn summary(&self) -> String {
-        let mut out = String::new();
-        for (id, changes) in &self.species {
-            for (field, value) in changes {
-                let _ = writeln!(out, "{id}.{} -> {}", field.key(), field.render(*value));
+    /// What this candidate changes relative to `baseline`, as
+    /// `(species id, field, was, now)`.
+    ///
+    /// A candidate carries every movable field of every species, most of
+    /// them untouched, so listing the candidate is not a report of what the
+    /// search decided — it is a hundred lines in which the four that matter
+    /// are invisible. Compares rendered text rather than the `f64`s so that
+    /// a change too small to survive rounding is not reported as a change:
+    /// the file is what a reviewer applies, and a row saying `0.75 -> 0.75`
+    /// is noise that costs trust in the whole report.
+    pub fn changes_from(&self, baseline: &Candidate) -> Vec<(String, Field, String, String)> {
+        let mut out = Vec::new();
+        for (id, fields) in &self.species {
+            for (field, value) in fields {
+                let now = field.render(*value);
+                let was = baseline
+                    .species
+                    .get(id)
+                    .and_then(|b| b.iter().find(|(f, _)| f == field))
+                    .map(|(_, v)| field.render(*v))
+                    .unwrap_or_else(|| "(default)".into());
+                if was != now {
+                    out.push((id.clone(), *field, was, now));
+                }
             }
+        }
+        out
+    }
+
+    /// The changes against `baseline`, one line apiece.
+    pub fn summary(&self, baseline: &Candidate) -> String {
+        let changes = self.changes_from(baseline);
+        if changes.is_empty() {
+            return "(nothing moved)\n".into();
+        }
+        let mut out = String::new();
+        for (id, field, was, now) in changes {
+            let _ = writeln!(out, "{id}.{} {was} -> {now}", field.key());
         }
         out
     }
@@ -258,6 +303,68 @@ mod tests {
         // Absent from the file, so absent here — that is what tells the
         // patcher to insert rather than replace.
         assert!(!fields.iter().any(|(f, _)| *f == Field::GrowthMultiplier));
+    }
+
+    fn candidate(pairs: &[(&str, Field, f64)]) -> Candidate {
+        let mut species: std::collections::BTreeMap<String, Vec<(Field, f64)>> = Default::default();
+        for (id, field, value) in pairs {
+            species
+                .entry((*id).into())
+                .or_default()
+                .push((*field, *value));
+        }
+        Candidate { species }
+    }
+
+    #[test]
+    fn a_float_field_is_rounded_rather_than_written_as_search_residue() {
+        // A proposal is a file a person reviews and commits, and
+        // `0.6877884316068232` is the residue of a search step rather than
+        // a decision anyone made.
+        assert_eq!(Field::TamingDifficulty.render(0.6877884316068232), "0.688");
+    }
+
+    #[test]
+    fn the_summary_reports_only_what_moved() {
+        // The whole point: a candidate carries every movable field of every
+        // species, so listing the candidate buries the few that changed.
+        let base = candidate(&[
+            ("drone", Field::BaseHp, 42.0),
+            ("rootkit", Field::BaseHp, 120.0),
+        ]);
+        let proposed = candidate(&[
+            ("drone", Field::BaseHp, 42.0),
+            ("rootkit", Field::BaseHp, 139.0),
+        ]);
+        let changes = proposed.changes_from(&base);
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].0, "rootkit");
+        assert_eq!(
+            (changes[0].2.as_str(), changes[0].3.as_str()),
+            ("120", "139")
+        );
+        assert!(!proposed.summary(&base).contains("drone"));
+    }
+
+    #[test]
+    fn a_change_too_small_to_survive_rounding_is_not_reported() {
+        // The file is what a reviewer applies. A row reading `0.75 -> 0.75`
+        // is noise that costs trust in every other row.
+        let base = candidate(&[("drone", Field::TamingDifficulty, 0.75)]);
+        let proposed = candidate(&[("drone", Field::TamingDifficulty, 0.7501)]);
+        assert!(proposed.changes_from(&base).is_empty());
+    }
+
+    #[test]
+    fn a_field_the_baseline_never_had_is_reported_as_a_default() {
+        let base = candidate(&[("drone", Field::BaseHp, 42.0)]);
+        let proposed = candidate(&[
+            ("drone", Field::BaseHp, 42.0),
+            ("drone", Field::GrowthMultiplier, 1.4),
+        ]);
+        let changes = proposed.changes_from(&base);
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].2, "(default)");
     }
 
     #[test]

@@ -32,6 +32,17 @@ impl Game {
         // Read before the increment at the end of this method, so the number
         // matches the planning screen's own "round N" header.
         let round = self.world.resource::<BattleState>().round;
+        // At the top of the round, before anything resolves. Taken at the
+        // end it would be a snapshot of the aftermath, and the round-by-round
+        // curve the file is for would be shifted by one against the actions
+        // that produced it.
+        let fight = self.fight_id();
+        self.record(|g| crate::telemetry::Record::Round {
+            fight,
+            round,
+            party_hp: g.telemetry_party_hp(),
+            enemies: g.telemetry_enemy_hp(),
+        });
         // The pane shows one round at a time, so this round's narration
         // replaces the last round's rather than piling on top of it — and
         // the frames pacing that narration are scoped to the same range.
@@ -118,6 +129,29 @@ impl Game {
         action: BattleAction,
         player: Entity,
     ) {
+        // Before the action resolves: this is a record of what was *chosen*,
+        // the party-side counterpart to `enemy_choice`. Reached only for a
+        // member that actually acts — `battle_resolve_round` skips the dead
+        // and the stunned before calling — so a recorded action is one that
+        // happened.
+        let fight = self.fight_id();
+        let round = self.telemetry_round();
+        // `telemetry_action` allocates — a `Vec` of abilities and a `String`
+        // — so it is called *inside* the closure, which is the whole reason
+        // `record` takes one. Borrowing `action` here is fine: the closure
+        // runs to completion inside `record`, before the match below moves it.
+        self.record(|g| {
+            let (kind, name, target_slot) = g.telemetry_action(entity, &action);
+            crate::telemetry::Record::PartyAction {
+                fight,
+                round,
+                slot,
+                actor: g.telemetry_actor_label(slot, entity),
+                kind,
+                name,
+                target_slot,
+            }
+        });
         match action {
             BattleAction::Attack { group } => {
                 let Some(group) = self.retarget(group) else {

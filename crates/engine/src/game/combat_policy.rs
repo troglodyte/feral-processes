@@ -57,7 +57,9 @@ impl Game {
                 rng.0.random_range(0..moves.len())
             };
             let target = self.roll_enemy_target(player);
-            return Some((moves[idx].clone(), target));
+            let mv = moves[idx].clone();
+            self.record_enemy_choice(wild, group, &mv, target);
+            return Some((mv, target));
         };
 
         let targets = self.living_targets(player);
@@ -90,7 +92,49 @@ impl Game {
             policy::sample_scored(&scores, temperature, &mut rng.0)
         };
         let (mi, target) = pairs[idx];
-        Some((moves[mi].clone(), target))
+        let mv = moves[mi].clone();
+        self.record_enemy_choice(wild, group, &mv, target);
+        Some((mv, target))
+    }
+
+    /// Records the swing that was just decided, **before** the caller applies
+    /// its damage. This is the only point at which `target_hp_before` exists
+    /// — taken any later it is the HP *after* the hit, which silently
+    /// inverts the meaning of the whole dataset while still looking
+    /// plausible.
+    ///
+    /// One definition called from both exits of `choose_wild_action_at`
+    /// rather than a copy at each: the baseline and the trained policy must
+    /// not be able to disagree about what a swing looks like in the file.
+    /// The two `None` exits above deliberately do not call it — nothing
+    /// reached, so no swing happened.
+    fn record_enemy_choice(&mut self, wild: Entity, group: usize, mv: &MoveDef, target: Entity) {
+        let fight = self.fight_id();
+        let round = self.telemetry_round();
+        self.record(|g| {
+            let stats = g.world.get::<Stats>(target).copied().unwrap_or(Stats {
+                hp: 0,
+                max_hp: 0,
+                atk: 0,
+                def: 0,
+            });
+            crate::telemetry::Record::EnemyChoice {
+                fight,
+                round,
+                group,
+                actor: g
+                    .world
+                    .get::<Creature>(wild)
+                    .map(|c| c.species.to_string())
+                    .unwrap_or_default(),
+                move_name: mv.name.clone(),
+                target_slot: g.party_slot_of(target).unwrap_or(0),
+                target: g.creature_label(target),
+                target_hp_before: stats.hp,
+                target_max_hp: stats.max_hp,
+                target_bracing: g.is_defending(target),
+            }
+        });
     }
 
     /// The moves `wild` can actually bring to bear from `group`. Only the

@@ -25,6 +25,23 @@ impl Game {
         let Some(player) = self.world.get_resource::<BattleState>().map(|b| b.player) else {
             return false;
         };
+        // The sixth emission site, and the only `ActionKind` with no
+        // `BattleAction` behind it: jacking out is its own entry point, not
+        // a planned action `resolve_one_action` ever sees. Recorded after
+        // the two refusals above and before the roll, so what is in the file
+        // is an attempt actually made — whether it got clear is the
+        // `fight_end` that follows, or its absence.
+        let fight = self.fight_id();
+        let round = self.telemetry_round();
+        self.record(|g| crate::telemetry::Record::PartyAction {
+            fight,
+            round,
+            slot: 0,
+            actor: g.telemetry_actor_label(0, player),
+            kind: crate::telemetry::ActionKind::Flee,
+            name: None,
+            target_slot: None,
+        });
         let luck = {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_range(JACK_OUT_LUCK_MIN..=JACK_OUT_LUCK_MAX)
@@ -191,6 +208,37 @@ impl Game {
             player_decompiler: self.player_decompiler_bonuses().skill,
         });
         self.world.resource_mut::<BattleTimeline>().closing = closing;
+        // Beside the `closing` capture and for the same reason: the reap
+        // below drops the dead out of `Party` and despawns them, so this is
+        // the last moment `companions_downed` can be counted at all.
+        //
+        // "Won" is read off the enemies, never off the player — a defeat is
+        // absorbed inside the round that lands it by
+        // `difficulty::death_handling_system`, which in Forgiving reboots the
+        // player, so their HP afterwards says nothing about the outcome.
+        // `finish_member` only reaches here once `remove_member` has emptied
+        // the last group, which is what makes an empty roster the win.
+        let fight = self.fight_id();
+        self.record(|g| {
+            let battle = g.world.resource::<BattleState>();
+            crate::telemetry::Record::FightEnd {
+                fight,
+                rounds: battle.round,
+                won: battle.groups.is_empty(),
+                player_hp_frac: g
+                    .world
+                    .get::<Stats>(player)
+                    .map(|s| s.hp_fraction())
+                    .unwrap_or(0.0),
+                companions_downed: g
+                    .world
+                    .resource::<Party>()
+                    .0
+                    .iter()
+                    .filter(|&&e| !g.creature_alive(e))
+                    .count() as u32,
+            }
+        });
         self.clear_battle_status_effects(player, wild);
         let dead: Vec<Entity> = self
             .world

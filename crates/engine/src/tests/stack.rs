@@ -1169,6 +1169,71 @@ fn the_map_survives_a_save_and_load() {
     assert!((before.explored - after.explored).abs() < f32::EPSILON);
 }
 
+/// A frame is regenerated from its spec rather than saved, so a change to
+/// the generator moves the walls under a save made mid-dive — which is
+/// exactly what adding `FrameLayout` did to every save in existence.
+///
+/// Landing in rock is not a cosmetic problem. Rock is the one `CellKind`
+/// that is both unwalkable and sight-blocking, so the party cannot step out
+/// of it, the first-person view fills with wall and the map truncates to
+/// their own row: the occluder trap, reached by loading rather than by
+/// walking. The load path puts them on the frame's entry instead, which is
+/// the one cell every layout guarantees.
+#[test]
+fn a_save_whose_cell_no_longer_exists_lands_on_the_entry() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    game.enter_stack(pos.x, pos.y);
+
+    let Locale::Stack {
+        depth,
+        frames,
+        entrance,
+        facing,
+        ..
+    } = locale(&game)
+    else {
+        unreachable!("not underground")
+    };
+    let level = game
+        .world
+        .resource::<CurrentStack>()
+        .0
+        .as_ref()
+        .unwrap()
+        .clone();
+    let rock = (0..level.height)
+        .flat_map(|y| (0..level.width).map(move |x| (x, y)))
+        .find(|&(x, y)| level.cell(x, y) == CellKind::Rock && x > 0 && y > 0)
+        .expect("every frame has rock in it");
+    game.world.insert_resource(Locale::Stack {
+        depth,
+        frames,
+        entrance,
+        facing,
+        x: rock.0,
+        y: rock.1,
+    });
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_stack_rock_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let Locale::Stack { x, y, .. } = locale(&loaded) else {
+        panic!("the load surfaced the party instead of placing them")
+    };
+    assert_eq!(
+        (x, y),
+        level.entry,
+        "a save pointing into rock loaded the party into it"
+    );
+}
+
 /// Two links are two stacks, so they are two maps. Sharing one would
 /// pre-reveal a frame the party has never set foot in.
 ///

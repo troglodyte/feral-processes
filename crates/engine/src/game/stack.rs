@@ -757,15 +757,27 @@ impl Game {
     /// Restores a saved Stack position, regenerating the frame from the
     /// world seed and the saved spec rather than reading it off disk — see
     /// `resources::CurrentStack`.
-    pub(crate) fn restore_locale(&mut self, locale: Locale) {
+    pub(crate) fn restore_locale(&mut self, mut locale: Locale) {
         if let Locale::Stack {
             depth,
             frames,
             entrance,
+            ref mut x,
+            ref mut y,
             ..
         } = locale
         {
             let level = stack::generate(self.frame_spec(depth, frames, entrance));
+            // A frame is regenerated, not saved, so a change to the generator
+            // moves the walls under an old save — and a party restored into
+            // rock is stuck in it. Rock is the one kind that is both
+            // unwalkable and sight-blocking, so they cannot step out, the
+            // first-person view fills with wall and the map truncates to
+            // their own row. The entry is the one cell every layout
+            // guarantees, and it is where they came in.
+            if !level.walkable(*x, *y) {
+                (*x, *y) = level.entry;
+            }
             self.world.insert_resource(CurrentStack(Some(level)));
         }
         self.world.insert_resource(locale);

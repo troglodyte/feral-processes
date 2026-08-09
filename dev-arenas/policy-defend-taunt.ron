@@ -1,0 +1,44 @@
+// PLAYTEST: is `DEFEND_AGGRO_WEIGHT` at 7 now overtuned the other way?
+//
+// It was raised from 4 on 2026-08-09 because against a trained policy the
+// old value made bracing *counterproductive* — the enemy walked past the
+// tank, because reducing incoming damage is exactly what bracing does. 7 is
+// the smallest value that clears the Defend census with margin. Nothing
+// says it is the right value to *play*, and this is the fight for deciding
+// that.
+//
+// Built for reading a distribution by eye. Swings per round is
+// `battle::attackers_in_group`, which is `ceil(sqrt(n))` *per group* — so a
+// single group of four swings only twice, and the way to get more attackers
+// without simply piling on damage is two groups, both inside
+// `ENGAGED_GROUPS`. Two fours is four swings a round, which is enough to
+// see where the fire goes in a round or two of bracing.
+//
+// Tuned by measurement: 62% player wins, 58% HP remaining, 0.65 companions
+// down over 40 reps, ~17 rounds. The first draft (four Drones, one group)
+// was a 100% win at 99% HP — two swings a round from an enemy that could
+// not hurt anyone, so bracing was pointless and unobservable. Weak species
+// stay trivial at *any* zone; it is the composition that had to change.
+//
+// What to watch: brace one companion and count. A stronger draw is the
+// intent. *Every single swing* landing on the bracer is not — that makes
+// Defend a hard taunt and turns every fight into the same opening move,
+// which is a worse game than the one where it was too weak.
+//
+// Then try bracing the Sprite specifically. It is the fragile one, and the
+// interesting failure is Defend becoming a way to get your weakest
+// companion killed.
+(
+    player: Fresh(level: 12, zone: 3),
+    party: [
+        (species: "sentinel", level: 9),
+        (species: "sprite", level: 9),
+        (species: "scrapper", level: 9),
+    ],
+    opponents: [
+        (species: "trojan", count: 4),
+        (species: "trojan", count: 4),
+    ],
+    reps: 1,
+    seed: 901,
+)

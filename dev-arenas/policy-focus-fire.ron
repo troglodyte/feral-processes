@@ -1,0 +1,37 @@
+// PLAYTEST: does the trained enemy read as *smarter*, or merely as harsher?
+//
+// The question this exists to answer cannot be measured. A win rate cannot
+// tell you whether being ground down felt like being outplayed or like a
+// damage buff, and that difference is the whole value of the feature.
+//
+// Three companions of visibly different bulk (Sentinel tanky, Sprite
+// fragile, Construct between), against opponents chosen to make the fight
+// *last* rather than to be dangerous — a long fight is what lets HP spread
+// out across the party, and an uneven party is what makes the enemy's
+// choice legible round to round.
+//
+// What to watch: once someone drops low, does the fire converge on them?
+// That convergence is `target_hp_frac: -10.86`, the largest weight in the
+// shipped file. If it reads as bullying the weakest rather than as tactics,
+// that is a real finding and the number to move.
+//
+// Deliberately NOT one of the eight `dev-training/` scenarios — different
+// zone, level and species, so this is a fight the policy never trained on.
+// Play it once with `assets/policies/enemy_battle.ron` in place and once
+// with it moved aside.
+// Tuned by measurement, not by guess: at 40 reps this sits at 67% player
+// wins with 60% HP remaining. The first draft (zone 2, three Trojans) was
+// a 100% win at 99% HP — nobody was ever hurt, so no HP spread developed
+// and there was nothing for focus-fire to converge *on*. A scenario has to
+// be contested before it can be read.
+(
+    player: Fresh(level: 10, zone: 3),
+    party: [
+        (species: "sentinel", level: 8),
+        (species: "sprite", level: 8),
+        (species: "construct", level: 8),
+    ],
+    opponents: [(species: "virus", count: 4)],
+    reps: 1,
+    seed: 900,
+)

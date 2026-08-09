@@ -1,0 +1,36 @@
+// PLAYTEST: how bad is the deep Stack now?
+//
+// `Stack depth 5 may be unwinnable` has been an open question since
+// 2026-08-08, diagnosed then as a scaling problem rather than a gear or
+// roster one: zone and depth multipliers compound, 4x zone by 3.32x depth
+// is 13.3x at zone 3 depth 5, and no species stat can fix a multiplier.
+//
+// The trained policy makes it worse. The nearest training scenario,
+// `08-rolled-stack` at depth *3*, went from 80% to 92% enemy win rate. This
+// is the same shape two frames deeper, and it is here so the decision about
+// that scaling is made against what the game now actually does rather than
+// against last week's numbers.
+//
+// A rolled encounter rather than an authored one on purpose: the question
+// is what the Stack *generates*, not what someone can compose.
+//
+// What to watch: is there a line of play that wins this, or is every round
+// forced? If nothing you do changes the outcome, the answer is not
+// `ENEMY_POLICY_TEMPERATURE` — a policy dialled back far enough to matter
+// here is a policy switched off — it is the zone x depth curve.
+(
+    player: Fresh(level: 20, zone: 3),
+    equip: [
+        (item: "plasma_router", tier: 0),
+        (item: "bastion_lattice", tier: 0),
+        (item: "singularity_matrix", tier: 0),
+    ],
+    party: [
+        (species: "scrapper", level: 14),
+        (species: "sentinel", level: 14),
+        (species: "construct", level: 14),
+    ],
+    encounter: Some(Stack(biome: NullSector, depth: 5)),
+    reps: 1,
+    seed: 902,
+)

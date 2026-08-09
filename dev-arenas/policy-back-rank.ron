@@ -1,0 +1,38 @@
+// PLAYTEST: does the back rank still behave, and does clearing the front
+// group still feel like it accomplished something?
+//
+// Four groups, so two of them sit past `ENGAGED_GROUPS` and can only act
+// with a `ranged` move. This is the one part of the rewrite where a wild
+// program can end up with *nothing* to do — `Game::choose_wild_action`
+// returns `None` and the existing "circles beyond reach" line runs — and it
+// is worth seeing on a real screen rather than trusting to a unit test.
+//
+// The composition mixes species that have a ranged move (Drone, Zero-Day,
+// Crawler) with one that does not (Scrapper), so both behaviours appear in
+// the same fight depending on which group a program is standing in.
+//
+// What to watch:
+//   - Do back-group programs that *can* shoot actually shoot, and do the
+//     ones that cannot say so rather than silently skipping?
+//   - Wiping the front group promotes a back group into reach. Does that
+//     read as a turning point, or does the difficulty just step up with no
+//     sense that you caused it?
+//   - `move_ranged` is -2.56 in the shipped weights: a program that has
+//     both kinds of move prefers the melee one when it is in reach. Watch
+//     whether a front-group Crawler still bothers with Freeze.
+(
+    player: Fresh(level: 12, zone: 3),
+    party: [
+        (species: "scrapper", level: 9),
+        (species: "sentinel", level: 9),
+        (species: "sprite", level: 9),
+    ],
+    opponents: [
+        (species: "scrapper", count: 2),
+        (species: "crawler", count: 2),
+        (species: "zero_day", count: 2),
+        (species: "drone", count: 2),
+    ],
+    reps: 1,
+    seed: 903,
+)

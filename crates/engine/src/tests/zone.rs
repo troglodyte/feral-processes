@@ -58,8 +58,14 @@ fn entering_a_zone_portal_increments_zone_and_doubles_wild_stats() {
             (max_hp as f32) >= (species.base_hp as f32) * 2.0 * MIN_INDIVIDUAL_ROLL,
             "zone 2 wild creatures should have at least doubled stats, times the roll floor"
         );
+        // Rounded, because `spawn_wild_creature_scaled` rounds: a 112-HP
+        // species at the roll ceiling computes 268.8 and stores 269, which
+        // a bare float bound reads as over-cap. The bound was only ever
+        // right by luck — 14 seeded creatures rarely landed a near-ceiling
+        // roll on a high-HP species, and seeding to a density target makes
+        // that the common case.
         assert!(
-            (max_hp as f32) <= (species.base_hp as f32) * 2.0 * MAX_INDIVIDUAL_ROLL,
+            (max_hp as f32) <= ((species.base_hp as f32) * 2.0 * MAX_INDIVIDUAL_ROLL).round(),
             "zone 2 wild creatures shouldn't exceed the zone doubling times the roll ceiling"
         );
     }

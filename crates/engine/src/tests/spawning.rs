@@ -3,7 +3,7 @@
 use super::support::*;
 use crate::tuning::{
     NEST_DURABILITY, NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN, NEST_RESPAWN_TICKS, NEST_TETHER_RADIUS,
-    OPENING_RING_TILES, WILD_CREATURE_CAP,
+    OPENING_RING_TILES, WILD_CREATURE_CAP, WILD_LOCAL_DENSITY_TARGET, WILD_SPAWN_RADIUS_TILES,
 };
 use crate::*;
 
@@ -510,10 +510,13 @@ fn wild_spawn_cap_is_not_exhausted_by_tamed_creatures() {
         ));
     }
 
-    // `Game::new` already seeds 14 initial (hostile) wild creatures, so
-    // the true wild population here is 14 — comfortably under any
-    // reasonable cap — even though total `Creature` entities (wild +
-    // tamed) is 38.
+    // A zone is now seeded to `WILD_LOCAL_DENSITY_TARGET`, so the ground
+    // around the player starts full and the ambient roll is legitimately
+    // gated. Clear the box to isolate what this test is actually about —
+    // whether *tamed* programs eat the wild population's room.
+    let ppos = *game.world.get::<Position>(player).unwrap();
+    despawn_hostiles_near(&mut game, ppos.x, ppos.y);
+
     let mut creature_query = game.world.query_filtered::<(), With<Creature>>();
     let before = creature_query.iter(&game.world).count();
 
@@ -621,6 +624,14 @@ fn nest_guardians_are_eligible_to_be_culled_for_spawn_room() {
             },
         ))
         .id();
+
+    // Clear the box around the player *before* filling to the cap, and in
+    // that order. A seeded zone starts at `WILD_LOCAL_DENSITY_TARGET`, which
+    // would gate the ambient roll before it ever reached the cull this test
+    // is about — but clearing after the fill would drop the total back under
+    // the cap and leave the cull with nothing to do, which is the same test
+    // passing for the wrong reason.
+    despawn_hostiles_near(&mut game, player_pos.x, player_pos.y);
 
     // Fill the cap entirely with guardians of that far-away nest — the
     // farthest hostile from the player is always going to be one of them.
@@ -1661,4 +1672,173 @@ fn a_zone_one_boss_still_fights_alone() {
     );
 
     assert_eq!(pack.len(), 1, "zone 1 fields one group, so the boss is it");
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Local density: the target a zone is seeded to and topped back up to.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Every `Hostile` within `WILD_SPAWN_RADIUS_TILES` of `(x, y)` — the same
+/// box `spawn_wild_nearby` places into, restated here so these tests measure
+/// what the gate measures without reaching into a private helper.
+fn hostiles_near(game: &mut Game, x: i32, y: i32) -> usize {
+    let mut query = game.world.query_filtered::<&Position, With<Hostile>>();
+    query
+        .iter(&game.world)
+        .filter(|p| (p.x - x).abs().max((p.y - y).abs()) <= WILD_SPAWN_RADIUS_TILES)
+        .count()
+}
+
+/// Empties the spawn box around `(x, y)`, leaving anything outside it alone.
+///
+/// The precondition every "does a spawn happen here" test now needs: a zone
+/// is seeded to `WILD_LOCAL_DENSITY_TARGET`, so the ambient roll around a
+/// freshly placed player is legitimately gated and a test that does not
+/// clear the box is measuring the gate rather than its own subject.
+fn despawn_hostiles_near(game: &mut Game, x: i32, y: i32) {
+    let mut query = game
+        .world
+        .query_filtered::<(Entity, &Position), With<Hostile>>();
+    let near: Vec<Entity> = query
+        .iter(&game.world)
+        .filter(|(_, p)| (p.x - x).abs().max((p.y - y).abs()) <= WILD_SPAWN_RADIUS_TILES)
+        .map(|(e, _)| e)
+        .collect();
+    for e in near {
+        game.world.despawn(e);
+    }
+}
+
+fn despawn_all_hostiles(game: &mut Game) {
+    let mut query = game.world.query_filtered::<Entity, With<Hostile>>();
+    let all: Vec<Entity> = query.iter(&game.world).collect();
+    for e in all {
+        game.world.despawn(e);
+    }
+}
+
+/// The bug this whole feature exists for: standing in one place used to
+/// accumulate wild programs without bound, because spawning is
+/// player-relative and the only thing that ever removed a creature was a
+/// `WILD_CREATURE_CAP` two orders of magnitude above any real population.
+/// A real save measured 65 hostiles in one box around a base the player had
+/// been working at.
+///
+/// 4000 rolls at `WILD_SPAWN_CHANCE` is ~200 spawn events; ungated that is
+/// ~200 creatures in the box, so the bound below fails by an order of
+/// magnitude with the gate removed rather than by a hair.
+#[test]
+fn idling_in_one_place_stops_at_the_local_density_target() {
+    let mut game = Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    despawn_all_hostiles(&mut game);
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+
+    for _ in 0..4000 {
+        game.maybe_spawn_wild_creature();
+    }
+
+    let near = hostiles_near(&mut game, pos.x, pos.y);
+    // A nest rolled at 11 counts adds its guardians on top of the target,
+    // which is the one legitimate way to land above it.
+    assert!(
+        near <= WILD_LOCAL_DENSITY_TARGET + NEST_GUARDIAN_MAX as usize,
+        "idling should settle at the density target, found {near} in the box"
+    );
+    assert!(
+        near >= WILD_LOCAL_DENSITY_TARGET / 2,
+        "the gate should still let the area fill up, found only {near}"
+    );
+}
+
+/// The other side of the same rule: the gate must not be so eager that
+/// ground the player has just walked onto stays empty.
+#[test]
+fn a_sparse_area_still_fills_to_the_target() {
+    let mut game = Game::new(4243, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    despawn_all_hostiles(&mut game);
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+
+    for _ in 0..4000 {
+        game.maybe_spawn_wild_creature();
+    }
+
+    assert!(
+        hostiles_near(&mut game, pos.x, pos.y) > 0,
+        "an empty area must still spawn"
+    );
+}
+
+/// Tamed programs are not counted, matching `WILD_CREATURE_CAP`'s rule that
+/// a full roster never starves the map of things to fight. Counting every
+/// `Creature` instead would let a six-program party suppress spawning
+/// wherever it stood.
+#[test]
+fn a_full_roster_does_not_suppress_wild_spawns() {
+    let mut game = Game::new(4244, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    despawn_all_hostiles(&mut game);
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    for _ in 0..(WILD_LOCAL_DENSITY_TARGET * 2) {
+        spawn_tamed_on_map(&mut game, pos.x, pos.y);
+    }
+
+    for _ in 0..4000 {
+        game.maybe_spawn_wild_creature();
+    }
+
+    assert!(
+        hostiles_near(&mut game, pos.x, pos.y) > 0,
+        "tamed programs standing on the tile must not count as local density"
+    );
+}
+
+/// The far-field half of the complaint: a zone used to be seeded in a
+/// 15-tile bubble around the arrival point, so everything past it was born
+/// empty and stayed that way — walking costs a tick a tile against a 5%
+/// roll, so the player outruns the spawner and finds nothing out there.
+/// Seeding now covers `INITIAL_SPAWN_SCATTER_TILES`, matched to the link
+/// scatter that already says how far out the game sends people.
+#[test]
+fn a_new_zone_is_seeded_past_the_arrival_bubble() {
+    // Swept rather than trusting one seed: scatter is a uniform roll, so a
+    // single lucky seed proves nothing about the distribution.
+    for seed in 0u32..8 {
+        let game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let spawn = *game.world.resource::<ZoneSpawnPoint>();
+        let mut world = game.world;
+        let mut query = world.query_filtered::<&Position, With<Hostile>>();
+        let farthest = query
+            .iter(&world)
+            .map(|p| (p.x - spawn.x).abs().max((p.y - spawn.y).abs()))
+            .max()
+            .unwrap_or(0);
+        assert!(
+            farthest > 30,
+            "seed {seed}: the zone should be populated past the old 22-tile \
+             bubble, but the farthest wild program is {farthest} tiles out"
+        );
+    }
+}
+
+/// The density gate is about pacing an *ambient* spawn, so it lives in
+/// `maybe_spawn_wild_creature` rather than in the body the dev console
+/// shares. Forcing an encounter while standing in a crowd must still
+/// produce a fight, or the console silently stops working exactly where a
+/// tester is most likely to use it.
+#[test]
+fn the_dev_console_ignores_the_density_target() {
+    let mut game = Game::new(4245, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    // Saturate the box well past the target with hand-placed hostiles.
+    let species = game.species_defs().into_iter().next().unwrap().id;
+    for i in 0..(WILD_LOCAL_DENSITY_TARGET * 2) {
+        game.spawn_wild_creature(&species, pos.x + (i % 5) as i32, pos.y);
+    }
+    let before = hostiles_near(&mut game, pos.x, pos.y);
+
+    game.dev_force_encounter();
+
+    assert!(
+        hostiles_near(&mut game, pos.x, pos.y) > before,
+        "the console's forced encounter must not be gated by local density"
+    );
 }

@@ -8,7 +8,8 @@ use crate::tuning::{
 };
 use crate::tuning::{
     GROUP_SIZE_DISTANCE_GROWTH, GROUP_SIZE_STEP_FRAMES, GROUP_SIZE_STEP_ZONES,
-    MAX_GROUP_SIZE_STEPS, WILD_ROUTINE_CHANCE, WILD_SPAWN_CHANCE, WILD_SPAWN_RADIUS_TILES,
+    MAX_GROUP_SIZE_STEPS, WILD_LOCAL_DENSITY_TARGET, WILD_ROUTINE_CHANCE, WILD_SPAWN_CHANCE,
+    WILD_SPAWN_RADIUS_TILES,
 };
 use crate::*;
 
@@ -485,10 +486,40 @@ impl Game {
                     rng.0.random_range(-reach..=reach),
                 )
             };
-            if self.try_spawn_habitat_creature(player_pos.x + dx, player_pos.y + dy) {
+            let (x, y) = (player_pos.x + dx, player_pos.y + dy);
+            // Seeding obeys the same density target the ambient roll does, so
+            // a zone is born at the density it will be kept at rather than at
+            // whatever `initial_wild_population` happened to work out to.
+            // This is also what makes that count an upper bound it is safe to
+            // over-estimate: a roll places a *group*, so without the gate a
+            // deep zone's larger packs would seed far past the target.
+            if self.local_hostile_count(x, y) < WILD_LOCAL_DENSITY_TARGET
+                && self.try_spawn_habitat_creature(x, y)
+            {
                 spawned += 1;
             }
         }
+    }
+
+    /// How many `Hostile`s stand within `WILD_SPAWN_RADIUS_TILES` (Chebyshev,
+    /// matching 8-directional movement) of `(x, y)` — the one definition of
+    /// "how crowded is it here", read by the ambient spawn roll and by zone
+    /// seeding so the density a zone is born at is the density it keeps.
+    ///
+    /// Deliberately the same radius the roll places into: a target measured
+    /// over a different box than the one being filled would steer toward a
+    /// density that never appears on screen.
+    ///
+    /// Tamed programs are not counted, matching `WILD_CREATURE_CAP` — a full
+    /// roster should not starve the map of things to fight. Nest guardians
+    /// are `Hostile` and so do count, which is right: they are a real part of
+    /// why the ground around a besieged nest is crowded.
+    pub(crate) fn local_hostile_count(&mut self, x: i32, y: i32) -> usize {
+        let mut query = self.world.query_filtered::<&Position, With<Hostile>>();
+        query
+            .iter(&self.world)
+            .filter(|p| (p.x - x).abs().max((p.y - y).abs()) <= WILD_SPAWN_RADIUS_TILES)
+            .count()
     }
 
     pub(crate) fn maybe_spawn_wild_creature(&mut self) {
@@ -499,6 +530,20 @@ impl Game {
             rng.0.random_bool(damped_wild_spawn_chance(damp_pct))
         };
         if !roll {
+            return;
+        }
+        // The density gate sits here rather than inside `spawn_wild_nearby`
+        // because it paces an *ambient* spawn; it is not part of what a spawn
+        // is. `dev_force_encounter` shares that body and must still place a
+        // fight when the player is already standing in a crowd — which is
+        // exactly when a tester reaches for it.
+        //
+        // After the roll, not before, for the reason the comment above gives:
+        // the scan is wasted work on the 95% of ticks that spawn nothing, and
+        // rolling first leaves the RNG sequence the seeded spawn tests depend
+        // on untouched on a miss.
+        let pos = *self.world.get::<Position>(self.player_entity()).unwrap();
+        if self.local_hostile_count(pos.x, pos.y) >= WILD_LOCAL_DENSITY_TARGET {
             return;
         }
         self.spawn_wild_nearby();

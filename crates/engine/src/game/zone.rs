@@ -3,9 +3,9 @@
 //! zone.
 
 use crate::tuning::{
-    INITIAL_WILD_POPULATION, MAX_BUILD_DISTANCE_FROM_HOME, NEST_CACHE_CREDIT_ZONE_BONUS,
-    NEST_CACHE_CREDITS, NEST_CACHE_EQUIPMENT_ROLLS, NEST_CACHE_WORK_RESOURCE_MULT,
-    NEST_ORPHAN_CHANCE, STACK_LINKS_PER_ZONE, WORK_RESOURCE_DROP,
+    MAX_BUILD_DISTANCE_FROM_HOME, NEST_CACHE_CREDIT_ZONE_BONUS, NEST_CACHE_CREDITS,
+    NEST_CACHE_EQUIPMENT_ROLLS, NEST_CACHE_WORK_RESOURCE_MULT, NEST_ORPHAN_CHANCE,
+    STACK_LINKS_PER_ZONE, WORK_RESOURCE_DROP, initial_wild_population,
 };
 use crate::*;
 
@@ -584,7 +584,7 @@ impl Game {
                 "Your caches decohere in transit — {manifest} lost to the breach."
             ));
         }
-        self.spawn_initial_creatures(INITIAL_WILD_POPULATION);
+        self.spawn_initial_creatures(initial_wild_population());
         self.spawn_surface_links(STACK_LINKS_PER_ZONE);
     }
 

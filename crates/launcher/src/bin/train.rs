@@ -54,6 +54,46 @@ struct Args {
     /// party positioning and Defend in one go. Pinning a feature says the
     /// aggro table decides that question and the policy may not reopen it.
     pin: Vec<Feature>,
+    /// Where the two evaluation passes write their battle telemetry, if
+    /// anywhere. `None` — the default — collects nothing at all.
+    log_dir: Option<PathBuf>,
+    /// Names this config's files inside `log_dir`, so a sweep's runs stay
+    /// apart on disk. The pins are what a config *is*, and they are not
+    /// derivable into a filename anyone would recognise a week later.
+    label: String,
+}
+
+/// Which of the two evaluation passes a set of records came from.
+///
+/// The search between them is deliberately unlogged: it is 1.9M fights of
+/// candidates that were thrown away, and recording it would cost tens of
+/// gigabytes to describe weight vectors nothing ever used.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Pass {
+    Baseline,
+    Trained,
+}
+
+impl Pass {
+    fn name(self) -> &'static str {
+        match self {
+            Pass::Baseline => "baseline",
+            Pass::Trained => "trained",
+        }
+    }
+}
+
+/// Where one config's one pass over one scenario writes.
+///
+/// A file per (config, pass, scenario) rather than fields inside a shared
+/// one, for two reasons that both come down to `arena::run` numbering each
+/// call's fights from 1. Two passes or two configs appended together collide
+/// outright — and so do two *scenarios*, because `evaluate_set` calls
+/// `arena::run` once per scenario. Splitting the file is what makes a fight
+/// id unique within it, and the filename then carries all three labels for
+/// free, with no arena-only field added to a `Record` the game also writes.
+fn log_path(dir: &Path, label: &str, pass: Pass, scenario: &str) -> PathBuf {
+    dir.join(format!("{label}-{}-{scenario}.jsonl", pass.name()))
 }
 
 fn main() {
@@ -99,11 +139,25 @@ fn run() -> Result<(), String> {
         println!("pinned to zero: {}", names.join(", "));
     }
 
+    let log = |pass: Pass| {
+        args.log_dir
+            .as_deref()
+            .map(|dir| (dir, args.label.as_str(), pass))
+    };
+    if let Some(dir) = &args.log_dir {
+        println!(
+            "logging both evaluation passes to {}/{}-{{baseline,trained}}-<scenario>.jsonl",
+            dir.display(),
+            args.label
+        );
+    }
+
     let baseline = evaluate_set(
         &scenarios,
         &arena_pool,
         &PolicyWeights::default(),
         args.seed,
+        log(Pass::Baseline),
     )?;
     println!(
         "baseline (all-zero weights): enemy win rate {:.3}, fitness {:.4}",
@@ -123,7 +177,10 @@ fn run() -> Result<(), String> {
     let fitness = |candidate: &[f32]| -> f32 {
         let weights = weights_from_slice(candidate, &args.pin);
         let offset = seed_offset.load(Ordering::Relaxed);
-        match evaluate_set(&scenarios, &arena_pool, &weights, offset) {
+        // Never logged, whatever `--log-dir` says: this is the search, and
+        // recording 1.9M discarded candidates would cost tens of gigabytes
+        // to describe weight vectors nothing ever used.
+        match evaluate_set(&scenarios, &arena_pool, &weights, offset, None) {
             Ok(result) => result.fitness,
             // A scenario that cannot be staged is a broken scenario file,
             // not a bad candidate — but every candidate hits it equally, so
@@ -151,7 +208,13 @@ fn run() -> Result<(), String> {
     });
 
     let weights = weights_from_slice(&trained, &args.pin);
-    let final_result = evaluate_set(&scenarios, &arena_pool, &weights, args.seed)?;
+    let final_result = evaluate_set(
+        &scenarios,
+        &arena_pool,
+        &weights,
+        args.seed,
+        log(Pass::Trained),
+    )?;
     println!(
         "trained: enemy win rate {:.3} (baseline {:.3}), fitness {:.4} (baseline {:.4})",
         final_result.enemy_win_rate,
@@ -185,11 +248,19 @@ struct SetResult {
     per_scenario: Vec<(String, f32, f32)>,
 }
 
+/// Scores `weights` over the whole scenario set, optionally logging every
+/// fight it plays under `log`.
+///
+/// Records are written **per scenario** rather than gathered and written at
+/// the end: peak memory stays at one scenario's worth, a run killed part-way
+/// leaves every completed scenario on disk instead of nothing, and each
+/// scenario's file is the one `arena::run` call whose fight ids it numbers.
 fn evaluate_set(
     scenarios: &[(String, Scenario)],
     pool: &AssetPool,
     weights: &PolicyWeights,
     seed_offset: u64,
+    log: Option<(&Path, &str, Pass)>,
 ) -> Result<SetResult, String> {
     let lease = pool.take();
     policy::write_file(&lease.policy_path(), weights).map_err(|e| e.to_string())?;
@@ -199,9 +270,16 @@ fn evaluate_set(
     for (name, scenario) in scenarios {
         let mut scenario = scenario.clone();
         scenario.seed = scenario.seed.wrapping_add(seed_offset);
-        let summary = arena::run(&scenario, lease.assets(), arena::RunOptions::default())?
-            .0
-            .summary();
+        let options = arena::RunOptions {
+            telemetry: log.is_some(),
+        };
+        let (report, records) = arena::run(&scenario, lease.assets(), options)?;
+        if let Some((dir, label, pass)) = log {
+            let path = log_path(dir, label, pass, name);
+            feral_processes_app_core::append_records(&path, &records)
+                .map_err(|e| format!("{}: {e}", path.display()))?;
+        }
+        let summary = report.summary();
         let enemy = 1.0 - summary.win_rate;
         enemy_wins += enemy;
         hp += summary.mean_player_hp_fraction;
@@ -439,6 +517,8 @@ fn parse_args() -> Result<Args, String> {
         seed: 1,
         report: None,
         pin: Vec::new(),
+        log_dir: None,
+        label: "run".to_string(),
     };
     let mut it = std::env::args().skip(1);
     while let Some(flag) = it.next() {
@@ -452,6 +532,8 @@ fn parse_args() -> Result<Args, String> {
             "--scenarios" => args.scenarios = value()?.1.into(),
             "--assets" => args.assets = value()?.1.into(),
             "--report" => args.report = Some(value()?.1.into()),
+            "--log-dir" => args.log_dir = Some(value()?.1.into()),
+            "--label" => args.label = value()?.1,
             "--iters" => args.iters = parse(value()?)?,
             "--pop" => args.pop = parse(value()?)?,
             "--reps" => args.reps = Some(parse(value()?)?),
@@ -467,7 +549,7 @@ fn parse_args() -> Result<Args, String> {
                 println!(
                     "train --out <path> --scenarios <dir> [--assets <dir>] [--iters 30] \
                      [--pop 40] [--reps N] [--seed 1] [--report <path>] \
-                     [--pin feature,feature]"
+                     [--pin feature,feature] [--log-dir <dir>] [--label <name>]"
                 );
                 std::process::exit(0);
             }
@@ -475,6 +557,49 @@ fn parse_args() -> Result<Args, String> {
         }
     }
     Ok(args)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Baseline and trained are the two halves of the comparison the whole
+    /// sweep exists for. Interleaved in one file there is nothing left to
+    /// compare — every record carries a fight id but none carries which
+    /// weights produced it.
+    #[test]
+    fn the_two_passes_of_a_config_do_not_share_a_file() {
+        let dir = Path::new("dev-logs");
+        assert_ne!(
+            log_path(dir, "pin3", Pass::Baseline, "03-midgame-group"),
+            log_path(dir, "pin3", Pass::Trained, "03-midgame-group")
+        );
+    }
+
+    /// And neither do two configs. `arena::run` numbers each pass's fights
+    /// from 1, so two configs appended to one file collide outright.
+    #[test]
+    fn two_configs_do_not_share_a_file() {
+        let dir = Path::new("dev-logs");
+        assert_ne!(
+            log_path(dir, "unpinned", Pass::Trained, "03-midgame-group"),
+            log_path(dir, "pin3", Pass::Trained, "03-midgame-group")
+        );
+    }
+
+    /// The one the smoke test found. `evaluate_set` calls `arena::run` once
+    /// per scenario and each call numbers its reps from 1, so eight
+    /// scenarios sharing a file means eight fights called `1` — and nothing
+    /// in a record says which scenario it came from, so they cannot be told
+    /// apart afterwards either.
+    #[test]
+    fn two_scenarios_in_one_pass_do_not_share_a_file() {
+        let dir = Path::new("dev-logs");
+        assert_ne!(
+            log_path(dir, "pin3", Pass::Trained, "01-opening-solo"),
+            log_path(dir, "pin3", Pass::Trained, "03-midgame-group")
+        );
+    }
 }
 
 fn parse<T: std::str::FromStr>((flag, value): (String, String)) -> Result<T, String> {

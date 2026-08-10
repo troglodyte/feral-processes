@@ -593,7 +593,16 @@ mod tests {
 
         // Every record, not just the openers: a renumber that touched only
         // `FightStart` would leave the swings pointing at the wrong fight.
-        let ids: std::collections::BTreeSet<u64> = records.iter().map(|r| r.fight()).collect();
+        fn fight_of(record: &Record) -> u64 {
+            match record {
+                Record::FightStart { fight, .. }
+                | Record::Round { fight, .. }
+                | Record::EnemyChoice { fight, .. }
+                | Record::PartyAction { fight, .. }
+                | Record::FightEnd { fight, .. } => *fight,
+            }
+        }
+        let ids: std::collections::BTreeSet<u64> = records.iter().map(fight_of).collect();
         assert_eq!(
             ids,
             starts.iter().copied().collect(),

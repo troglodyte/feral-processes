@@ -12,9 +12,10 @@ The arena can now exercise Defend, and two things fell out of the first run.
 smart one.** And **the run could not answer the question it was built for**,
 because the brace rule was collinear with the policy's strongest feature.
 
-The pins question — whether `target_is_player`, `target_bracing` and
-`target_def_rel` still need pinning once Defend costs the enemy something —
-remains **open**.
+A second run with a fixed rule then **answered** the pins question: they are
+justified. See "The answer" below — and note that the reason recorded in the
+2026-08-09 report for pinning `target_bracing` turns out to have been
+measuring nothing at all.
 
 ## How to reproduce it
 
@@ -47,7 +48,7 @@ scripted party is **bad play**, which is a limitation of the harness rather
 than a finding about Defend: the enemy is being trained against a party that
 handicaps itself.
 
-## Why the pins question is still open
+## Why the first run could not answer it
 
 `target_bracing` in the unpinned weights went **−1.93** (All-Attack) to
 **−0.11** (bracing party), which reads like "the policy stopped avoiding the
@@ -71,9 +72,11 @@ then blunted by the rule chosen to drive it.
 
 ## The fix, and the guard
 
-The run needs a brace trigger that varies **independently of health** — a
-designated member bracing every round regardless, say. Less like real play,
-but it was never realistic; its job is to make one variable move on its own.
+The run needs a brace trigger that varies **independently of health**. Note
+that the obvious candidate — a *designated* member bracing every round —
+trades one confound for another: bracing would then track slot position,
+which carries its own weight in `slot_aggro_weight`. Rotating by round
+decorrelates from both.
 
 Rather than write that down and hope, `analysis/policy_report.py` now checks
 every run for collinear observables and prints the warning **above the first
@@ -86,9 +89,64 @@ constant rows swamped the two that do — so the guard is grouped per run, and
 treatment variable must not be a function of the model's strongest feature.
 If it is, every number comes out clean and means nothing.
 
+## The answer
+
+`PartyPlan::BraceInRotation` braces one slot per round by round number,
+whatever anyone's health — an instrument, not a model of play. The guard
+reports it as the **only unconfounded run** in the sweep, which is what makes
+the rest of this section readable at all.
+
+```sh
+./target/release/train --scenarios dev-training --iters 30 --pop 40 \
+    --reps 200 --seed 1 --party-plan rotate \
+    --log-dir dev-logs/policy-sweep --label unpinned-rotate
+```
+
+Unpinned, the three targeting features across all three harnesses:
+
+| feature | All-Attack | brace-when-hurt | **brace-in-rotation** |
+|---|---|---|---|
+| `target_bracing` | −1.93 | −0.11 | **−1.64** |
+| `target_def_rel` | −2.78 | −3.45 | −2.88 |
+| `target_is_player` | +6.50 | +7.39 | +6.29 |
+
+And the behaviour, which does not depend on reading coefficients: the
+trained policy puts **52.3%** of its swings on bracing targets against the
+uniform baseline's **64.7%**. It is pushing *against* `DEFEND_AGGRO_WEIGHT`'s
+taunt, not merely ignoring it.
+
+**So the pins are justified.** Given a party that braces for reasons the
+policy cannot otherwise read, a free search learns to avoid the brace, which
+would delete Defend. `target_def_rel`'s −3.45 in the confounded run was
+mostly that confound; at −2.88 it sits where All-Attack had it.
+
+### The 2026-08-09 justification was unidentifiable
+
+Worth stating plainly, because it changes *why* the pin is right.
+
+Under `PartyPlan::AllAttack` **no party member ever braces**, so
+`target_bracing` is zero for every candidate in every fight. It contributes
+nothing to any score, so fitness is completely indifferent to its weight and
+CEM leaves it wherever the Gaussian happened to drift. The 2026-08-09 report
+read run 1's `target_bracing: −3.34` as "training learned to dodge the
+brace". Training **could not have learned that** — it never saw a brace.
+
+The pin was still the right call, and arguably more urgent than the report
+knew: an *unconstrained* weight is worse than a badly-learned one, because
+nothing bounds it, and it is then applied in a live game where players do
+brace. What is new here is that the behaviour is now confirmed rather than
+inferred — at −1.64, measured where the feature is identifiable, a free
+policy really does avoid the brace.
+
+No shipped change follows. The pins stay, `DEFEND_AGGRO_WEIGHT` stays at 7.
+
 ## What it does not say
 
-- **Nothing about the pins.** See above. Do not cite the −0.11.
+- **The −0.11 is not a result.** It came from the confounded run; the
+  identifiable figure is −1.64. Do not cite the former.
+- **One seed.** The sign is large and matches All-Attack's drift direction
+  and the behavioural read, so it is unlikely to be noise — but a second
+  seed is what would settle it, and none was run.
 - **Nothing about companion Specials**, which no party plan exercises.
 - **Nothing about how bracing feels.** The rule is not how a person plays;
   it is a lever for moving one variable.

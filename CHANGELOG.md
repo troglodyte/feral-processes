@@ -27,6 +27,21 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.5.17
+
+### A routine you can't run stops being pickable
+
+Picking a routine the game had already greyed out — no ICE Breaker for a
+Decompile, a cooldown still running, a full roster — opened the target
+picker anyway. You chose the routine, chose who to point it at, and only
+then found out it was never going to fire. The picker now refuses the
+press on the reason already printed on the row: `Can't use Decompile — no
+taming catalyst.`
+
+Both other places a routine is chosen, the battle action menu and the
+field cast list, already worked this way. The ability picker was the one
+step of the three that skipped the check.
+
 ## 0.5.16
 
 ### A drop says what kind of thing it is

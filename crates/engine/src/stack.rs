@@ -304,6 +304,26 @@ impl FrameSpec {
         }
         h
     }
+
+    /// Continues `rng_seed`'s FNV-1a fold with further words, so anything
+    /// that must be a stable property of a *cell* of a stack salts off the
+    /// one scheme rather than inventing a second that could collide with it.
+    ///
+    /// Each word is multiplied through the FNV prime rather than XOR-ed in
+    /// once, so `[a, b]` and `[b, a]` diverge and two adjacent cells cannot
+    /// rhyme — the same argument `rng_seed` makes about adjacent links.
+    ///
+    /// `LAIR_SALT`, `ORPHAN_SALT` and `FALL_SALT` are deliberately **not**
+    /// migrated onto this: each answers one question per frame, a single XOR
+    /// is sufficient there, and all three are pinned by tests.
+    pub(crate) fn salted(self, words: &[u64]) -> u64 {
+        let mut h = self.rng_seed();
+        for &word in words {
+            h ^= word;
+            h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        h
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1908,5 +1928,59 @@ mod tests {
         assert_eq!(Dir::East.right_delta(), Dir::South.delta());
         assert_eq!(Dir::South.right_delta(), Dir::West.delta());
         assert_eq!(Dir::West.right_delta(), Dir::North.delta());
+    }
+
+    /// The whole point of continuing the fold rather than XOR-ing once: two
+    /// cells of one frame, and the three lengths of one cell, have to
+    /// diverge robustly rather than by luck.
+    #[test]
+    fn salting_the_frame_seed_diverges_on_every_word() {
+        let spec = FrameSpec {
+            world_seed: 7,
+            entrance: (3, -4),
+            depth: 2,
+            frames: 4,
+        };
+        let seeds = [
+            spec.salted(&[]),
+            spec.salted(&[1]),
+            spec.salted(&[2]),
+            spec.salted(&[1, 0]),
+            spec.salted(&[0, 1]),
+            spec.salted(&[1, 1]),
+        ];
+        for (i, a) in seeds.iter().enumerate() {
+            for (j, b) in seeds.iter().enumerate().skip(i + 1) {
+                assert_ne!(a, b, "salted words {i} and {j} collided on {a}");
+            }
+        }
+    }
+
+    /// Salting is a continuation of `rng_seed`, so two frames that already
+    /// differ still differ after any number of words.
+    #[test]
+    fn salting_keeps_two_frames_apart() {
+        let a = FrameSpec {
+            world_seed: 7,
+            entrance: (3, -4),
+            depth: 2,
+            frames: 4,
+        };
+        let b = FrameSpec { depth: 3, ..a };
+        assert_ne!(a.salted(&[9, 9, 9]), b.salted(&[9, 9, 9]));
+    }
+
+    /// Same inputs, same answer — across calls and, because the mix is
+    /// fixed arithmetic rather than a hasher, across builds.
+    #[test]
+    fn salting_is_stable() {
+        let spec = FrameSpec {
+            world_seed: 7,
+            entrance: (3, -4),
+            depth: 2,
+            frames: 4,
+        };
+        assert_eq!(spec.salted(&[4, 5]), spec.salted(&[4, 5]));
+        assert_eq!(spec.salted(&[]), spec.rng_seed());
     }
 }

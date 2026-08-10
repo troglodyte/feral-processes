@@ -11,7 +11,7 @@
     habitats: [Mainframe, StaticField],
     base_speed: 11,
     moves: [
-        (name: "Encrypt", power: 6, effect: Some((kind: Stun, chance: 0.35, duration: 1, power: 0))),
+        (name: "Encrypt", power: 6, effect: Some((kind: Stun, chance: 0.35, duration: 2, power: 0))),
         (name: "Cross-Reference", power: 9, ranged: true),
     ],
     work_resource: None,

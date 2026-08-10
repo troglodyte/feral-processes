@@ -54,3 +54,6 @@ an honest "unknown".
 - [2026-08-10 — Enemy policy pin sweep](2026-08-10-enemy-policy-pin-sweep.md)
   — the three pinned features are a real design boundary, not a tuning
   accident, and an unpinned policy downs zero companions in 1,600 fights.
+- [2026-08-10 — Stun move levers](2026-08-10-stun-move-levers.md) — power is
+  a switch and not a dial, so repricing an effect move cannot buy variety;
+  duration can, and the asset edit is inert without a retrain.

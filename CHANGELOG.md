@@ -27,6 +27,29 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.5.19
+
+### Wild programs use their stun moves again
+
+Three moves were effectively dead — cipher's Encrypt, crawler's Freeze and
+rootkit's Privilege Escalation, each chosen on 1-2% of swings where the
+program had a choice. All three are Stun, and each is priced below its
+damage-only sibling, so skipping them was correct expected-damage play.
+
+Each now stuns for **two turns instead of one**. Their power is untouched:
+raising it to match the sibling was measured first and flips the problem
+rather than fixing it, taking the stun move to ~96% and killing the *other*
+move instead. Duration moves usage to 12-20% and leaves the enemy's win
+rate where it was.
+
+The retrained weights ship with it, and have to: stun duration is not one of
+the policy's features, so the enemy cannot see the change directly. What it
+changes is what training measures — longer stuns win more fights, so the
+search stopped penalising the moves that carry them.
+
+Measured in `docs/measurements/2026-08-10-stun-move-levers.md`, including
+what the run could not establish.
+
 ## 0.5.18
 
 ### The trainer can now show its working

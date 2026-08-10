@@ -132,11 +132,37 @@ all-zero-weights enemy win rate of **0.254**; the 2026-08-09 report records
 
 Determinism within the sweep is intact: all three configs produced
 byte-identical baseline rows, so the harness is reproducible and every
-comparison *inside* this document holds. What is not established is whether
-a number here may be compared with a number in the older report. Do not
-quote a cross-report delta until this is chased down.
+comparison *inside* this document holds.
 
-First suspect is 0.5.17's routine-availability gate, which changed when a
-wild program may cast, since that is the only shipped change since
-2026-08-09 that touches what happens inside a fight. Cheap test: check out
-`v0.5.15`, run the baseline pass alone, and see which number comes back.
+**The likely cause is that an arena number is not comparable across
+builds**, which if true is the more useful finding of the two. Ruled out
+first, by inspection:
+
+- `dev-training/` and `assets/` are **unchanged** since `v0.5.13`, when the
+  policy shipped. Same scenarios, same species, same items.
+- 0.5.17's routine-availability gate lives entirely in
+  `crates/app-core/src/app/battle.rs` — the *player's* picker.
+  `arena::run_rep` never opens a picker; it calls `battle_plan_remaining` in
+  the engine. It cannot reach these fights.
+- The only other engine changes since `v0.5.13` are `combat_rewards` (drop
+  tags — what a kill pays, not who wins) and a catalog lookup.
+
+What *did* change is that **two new `Resource`s were registered**:
+`BattleTimeline` in 0.5.14 and `BattleTelemetry` in 0.5.15. This repo has
+already been bitten by that: registering a resource shifts bevy's query
+iteration order, and a system that iterates a query and draws from
+`GameRng` then consumes the stream in a different order. The fights at a
+given seed are not weaker — they are **different fights**.
+
+That reading is consistent with every observation and nothing contradicts
+it, but it has not been proved. The decisive test is to check out `v0.5.13`,
+run the baseline pass alone, and see whether 0.324 comes back; it needs a
+separate worktree, since it means building an old tree.
+
+Two consequences if it holds, and the second is the one worth carrying:
+
+1. Nothing about the shipped game got easier. No player-facing regression.
+2. **Arena win rates may only be compared within one build.** A cross-report
+   delta is meaningless unless the resource set is identical, which no
+   report currently records. Treat the numbers in any measurement here as
+   valid against their own baseline and against nothing else.

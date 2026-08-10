@@ -27,6 +27,51 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.5.22
+
+### Generated flavour prose for the Stack
+
+The Stack's first-person view used to hand you one string per cell: a key
+prompt like `"A link leads down  [>] descend"` and nothing else. Every cell
+now composes real prose around that prompt from an offline-authored bank,
+on three surfaces:
+
+- **Underfoot.** The row under the view still carries its key prompt, but
+  the description in front of it is drawn from the bank instead of a fixed
+  literal.
+- **The log.** Walking a notable cell into view — an unopened cache, a live
+  breakpoint, a sealed door — writes one line about it, at most once per
+  move, for the single most notable thing that just came into sight.
+  Arriving on a new frame writes a one-line mood beat of its own, once per
+  frame regardless of how many steps it takes to get there.
+- **Examine.** Press `x` underground, then a direction, to read a full
+  paragraph about whatever's ahead, to either side, or underfoot.
+
+A given cell of a given stack always reads the same way — the door you
+walked past once reads identically the second time — and a different stack,
+or a different depth of the same one, reads differently. Nothing is stored
+to make that true: every line is derived from the world seed, the entrance,
+the depth and the cell, the same way the Stack's own layout already is.
+**No save-format change** — an existing save loads with the feature already
+working, nothing to migrate.
+
+### The crash-log reader draws from the same bank
+
+The `Z` key's crash-log reading used to draw from its own small, separate
+pool of eight lines. That pool is gone; `Z` now composes its reading from
+the shared corruption vocabulary instead. The words you read are unchanged
+— every line carried over verbatim — only where they come from did.
+
+### Fix: examining underground no longer answers with a surface creature
+
+Pressing `x` while in the Stack used to run the surface creature-and-structure
+scan, because the party's on-map position stays pinned to the entrance tile
+the whole time underground — so it could name a creature standing near that
+entrance as your target while you were several frames below it. Examining
+underground now always describes the Stack cell you're facing instead (see
+above); the surface scan refuses outright rather than answering with stale
+ground data.
+
 ## 0.5.21
 
 ### Rename a program

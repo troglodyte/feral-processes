@@ -4,7 +4,6 @@
 //! `crates/engine/EASTER_EGGS.md`.
 
 use super::support::*;
-use crate::crash_logs::CrashLogDb;
 use crate::resources::Trace;
 use crate::stack::{CellKind, Dir};
 use crate::tuning::TRACE_PER_LISTEN;
@@ -218,10 +217,10 @@ fn listening_on_the_surface_is_refused_and_costs_nothing() {
     assert_eq!(game.current_tick(), tick, "a refusal spent a turn");
 }
 
-// ---- the crash log ---------------------------------------------------
+// ---- the rot's own reading --------------------------------------------
 
-/// Every rotten cell of the current frame — the two `CellKind`s that read a
-/// crash log rather than a bearing.
+/// Every rotten cell of the current frame — the two `CellKind`s that read
+/// the description bank's paragraph rather than a bearing.
 fn rotten_cells(game: &Game) -> Vec<(i32, i32)> {
     let level = frame(game);
     every_cell(&level)
@@ -229,30 +228,18 @@ fn rotten_cells(game: &Game) -> Vec<(i32, i32)> {
         .collect()
 }
 
-/// A scratch crash-log directory holding `files` as `(filename, id, lines)`.
-/// The caller removes it.
-fn crash_log_dir(tag: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "feral_crash_logs_{tag}_{}_{}",
-        std::process::id(),
-        files.len()
-    ));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    for (name, body) in files {
-        std::fs::write(dir.join(name), body).unwrap();
-    }
-    dir
-}
-
+/// The rot's own reading now comes from the description bank rather than
+/// from a second flavour system beside it.
 #[test]
-fn standing_on_rot_reads_the_crash_log_instead_of_a_bearing() {
+fn listening_on_rot_reads_the_description_bank() {
     let mut game = game();
     descend(&mut game);
     let cell = *rotten_cells(&game)
         .first()
         .expect("every frame grows corruption");
     stand_at(&mut game, cell, Dir::North);
+    let pos = game.stack_pos().unwrap();
+    let expected = game.cell_paragraph(pos, cell).expect("rot describes");
     let (trace, tick) = (trace_of(&game), game.current_tick());
 
     let reading = listen(&mut game);
@@ -261,14 +248,7 @@ fn standing_on_rot_reads_the_crash_log_instead_of_a_bearing() {
         !reading.starts_with("You go still"),
         "rotten ground should read its own log, not point at something: {reading}"
     );
-    assert!(
-        game.world
-            .resource::<CrashLogDb>()
-            .all()
-            .iter()
-            .any(|line| *line == reading),
-        "the reading came from somewhere other than the shipped crash logs: {reading}"
-    );
+    assert_eq!(reading, expected);
     assert_eq!(trace_of(&game) - trace, TRACE_PER_LISTEN);
     assert!(game.current_tick() > tick, "reading rot should cost a turn");
 }
@@ -288,7 +268,7 @@ fn the_same_rotten_cell_reads_the_same_line_after_a_reload() {
     let before = listen(&mut game);
 
     let path = std::env::temp_dir().join(format!(
-        "feral_crash_log_roundtrip_{}.bin",
+        "feral_rot_reading_roundtrip_{}.bin",
         std::process::id()
     ));
     game.save(&path).unwrap();
@@ -299,90 +279,5 @@ fn the_same_rotten_cell_reads_the_same_line_after_a_reload() {
         listen(&mut loaded),
         before,
         "the rot said something different after a reload"
-    );
-}
-
-#[test]
-fn the_line_varies_with_the_cell_it_is_read_from() {
-    let mut game = game();
-    descend(&mut game);
-    let pos = game.stack_pos().unwrap();
-    let zone = game.world.resource::<ZoneLevel>().0;
-    let db = game.world.resource::<CrashLogDb>();
-
-    let readings: std::collections::HashSet<&str> = rotten_cells(&game)
-        .into_iter()
-        .filter_map(|cell| db.line_for(zone, pos.depth, cell))
-        .collect();
-
-    assert!(
-        readings.len() > 1,
-        "every rotten cell in the frame read the same line — the cell is not in the index"
-    );
-}
-
-/// `std::fs::read_dir` returns entries in no defined order, so the pooled
-/// lines are sorted by id. Without that the same cell reads a different
-/// line between runs and across a reload — which is the bug the round-trip
-/// test above would only catch by luck. The filenames here are deliberately
-/// the reverse of the ids.
-#[test]
-fn the_pool_is_ordered_by_id_rather_than_by_directory_order() {
-    let dir = crash_log_dir(
-        "sorted",
-        &[
-            ("zzz.ron", r#"(id: "aaa", lines: ["first"])"#),
-            ("aaa.ron", r#"(id: "zzz", lines: ["second"])"#),
-        ],
-    );
-    let (db, warnings) = CrashLogDb::load_dir(&dir).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
-
-    assert!(warnings.is_empty(), "{warnings:?}");
-    assert_eq!(db.all(), ["first", "second"]);
-    assert_eq!(db.line_for(0, 0, (0, 0)), Some("first"));
-}
-
-#[test]
-fn a_malformed_crash_log_is_skipped_and_the_rest_still_load() {
-    let dir = crash_log_dir(
-        "malformed",
-        &[
-            ("good.ron", r#"(id: "good", lines: ["a line"])"#),
-            ("broken.ron", "(id: \"broken\", lines: [ oops"),
-        ],
-    );
-    let (db, warnings) = CrashLogDb::load_dir(&dir).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
-
-    assert_eq!(db.all(), ["a line"]);
-    assert_eq!(warnings.len(), 1, "{warnings:?}");
-    assert!(warnings[0].contains("broken.ron"), "{warnings:?}");
-}
-
-/// A crash-log directory with nothing in it is not an error and not a
-/// modulo by zero: the rotten cell falls back to the bearing reading.
-#[test]
-fn an_empty_crash_log_directory_leaves_the_key_working() {
-    let dir = crash_log_dir("empty", &[]);
-    let (db, warnings) = CrashLogDb::load_dir(&dir).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
-    assert!(db.all().is_empty());
-    assert!(warnings.is_empty(), "{warnings:?}");
-    assert_eq!(db.line_for(3, 2, (5, 7)), None);
-
-    let mut game = game();
-    descend(&mut game);
-    let cell = *rotten_cells(&game)
-        .first()
-        .expect("every frame grows corruption");
-    stand_at(&mut game, cell, Dir::North);
-    game.world.insert_resource(db);
-
-    let reading = listen(&mut game);
-
-    assert!(
-        reading.starts_with("You go still"),
-        "with no crash logs loaded, rot should fall back to the bearing: {reading}"
     );
 }

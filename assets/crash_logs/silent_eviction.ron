@@ -1,7 +1,0 @@
-(
-    id: "silent_eviction",
-    lines: [
-        "Eviction notice, timestamped, unread. Whatever lived here was still resident.",
-        "The substrate reclaimed this block while it was in use. Nothing logged an objection.",
-    ],
-)

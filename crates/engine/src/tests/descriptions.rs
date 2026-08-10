@@ -8,7 +8,7 @@
 use crate::descriptions::{DescriptionDb, DescriptionDef, Slot, fold, index, merge};
 
 /// A scratch bank directory holding `files` as `(filename, body)`. The
-/// caller removes it. Mirrors `tests/listen.rs`'s `crash_log_dir`.
+/// caller removes it.
 pub(crate) fn bank_dir(tag: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!(
         "feral_descriptions_{tag}_{}_{}",

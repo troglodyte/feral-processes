@@ -1,7 +1,0 @@
-(
-    id: "orphaned_write",
-    lines: [
-        "The rot still holds a write that never landed. Something was saving when the floor went.",
-        "A buffer, flushed over and over into a device that had already stopped answering.",
-    ],
-)

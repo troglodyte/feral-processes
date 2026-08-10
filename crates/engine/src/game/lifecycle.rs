@@ -33,7 +33,6 @@ impl Game {
         let AssetDbs {
             abilities: ability_db,
             achievements: achievement_db,
-            crash_logs: crash_log_db,
             descriptions: description_db,
             species: species_db,
             structures: structure_db,
@@ -55,7 +54,6 @@ impl Game {
         world.insert_resource(item_db);
         world.insert_resource(perk_db);
         world.insert_resource(enemy_policy);
-        world.insert_resource(crash_log_db);
         world.insert_resource(description_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock::default());
@@ -184,7 +182,6 @@ impl Game {
         let AssetDbs {
             abilities: ability_db,
             achievements: achievement_db,
-            crash_logs: crash_log_db,
             descriptions: description_db,
             species: species_db,
             structures: structure_db,
@@ -219,7 +216,6 @@ impl Game {
         world.insert_resource(item_db);
         world.insert_resource(perk_db);
         world.insert_resource(enemy_policy);
-        world.insert_resource(crash_log_db);
         world.insert_resource(description_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock { tick: data.tick });
@@ -1025,7 +1021,6 @@ impl Game {
 struct AssetDbs {
     abilities: AbilityDb,
     achievements: crate::achievements::AchievementDb,
-    crash_logs: crate::crash_logs::CrashLogDb,
     descriptions: crate::descriptions::DescriptionDb,
     species: SpeciesDb,
     structures: StructureDb,
@@ -1064,9 +1059,6 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (achievements, achievement_warnings) =
         crate::achievements::AchievementDb::load_dir(&assets_dir.join("achievements"))?;
     warnings.extend(achievement_warnings);
-    let (crash_logs, crash_log_warnings) =
-        crate::crash_logs::CrashLogDb::load_dir(&assets_dir.join("crash_logs"))?;
-    warnings.extend(crash_log_warnings);
     let (descriptions, description_warnings) =
         crate::descriptions::DescriptionDb::load_dir(&assets_dir.join("descriptions"))?;
     warnings.extend(description_warnings);
@@ -1097,7 +1089,6 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     Ok(AssetDbs {
         abilities,
         achievements,
-        crash_logs,
         descriptions,
         species,
         structures,

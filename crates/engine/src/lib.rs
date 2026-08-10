@@ -4,7 +4,6 @@ pub mod arena;
 pub mod balance_sim;
 pub mod battle;
 pub mod components;
-pub mod crash_logs;
 pub mod descriptions;
 pub mod difficulty;
 mod game;

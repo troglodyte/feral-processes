@@ -97,6 +97,16 @@ no surface state for it to misreport.
 
 ### The crash log is data
 
+> **2026-08-10:** `CrashLogDb` and `assets/crash_logs/` described below were
+> absorbed into the description bank (`assets/descriptions/`,
+> `crate::descriptions::DescriptionDb`) — the eight lines were migrated
+> verbatim into `stack.fault` and `stack.corruption`'s `details` pools. `Z`
+> still works, still costs a turn and raises Trace, and still says the thing
+> the frame map cannot; only what it reads now comes from the shared bank
+> rather than from a second, narrower flavour system beside it. This section
+> is left as written to record the decision as it was made; it no longer
+> describes the current code.
+
 A new content directory, `assets/crash_logs/`, following the `load_dir`
 pattern the other five databases use: one `.ron` file per entry, malformed
 files skipped with a logged warning rather than a panic, and an

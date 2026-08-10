@@ -9,7 +9,7 @@ module documentation, and nothing player-facing links to it.
 | Key | Screen | What it does |
 | --- | --- | --- |
 | `W` | companion screen | Wields the highlighted program as your weapon (`Game::wield_program`). |
-| `Z` | the Stack (map screen) | Listens: reads the local crash log on rotten ground, otherwise gives the bearing and distance of the nearest unspent feature. Costs a turn and raises Trace (`Game::listen`). |
+| `Z` | the Stack (map screen) | Listens: reads the description bank's paragraph for the cell on rotten ground, otherwise gives the bearing and distance of the nearest unspent feature. Costs a turn and raises Trace (`Game::listen`). |
 | `T` | battle roster | Your front companion says a line at the wild group. No turn, no round (`Game::taunt`). |
 | `T` | battle item picker | Throws the highlighted consumable at the wild group instead of using it. One point of damage, and it cannot kill (`Game::throw_item`). |
 

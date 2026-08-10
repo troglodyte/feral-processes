@@ -26,7 +26,7 @@
         ),
         (
             when: Some("cleared"),
-            underfoot: ["The lair, cleared"],
+            underfoot: ["The lair, and nothing left holding it"],
             sighted: [
                 "The cleared room lies open {bearing}.",
             ],

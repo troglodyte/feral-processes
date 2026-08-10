@@ -399,24 +399,42 @@ fn every_pair_of_slots_is_independent() {
 }
 
 /// Every subject the engine will ask for, and every condition it will ask
-/// for it under. A content edit that empties a pool fails here instead of
-/// shipping silence at a cell nobody happened to walk onto during testing.
-/// Same shape as `every_biome_a_stack_link_can_open_in_fields_a_boss`.
-const SHIPPED: &[(&str, &[&str])] = &[
-    ("stack.floor", &[]),
-    ("stack.door", &[]),
-    ("stack.sealed_door", &["opened"]),
-    ("stack.cache", &["spent"]),
-    ("stack.lair", &["cleared"]),
-    ("stack.orphan", &["spent"]),
-    ("stack.breakpoint", &["spent"]),
-    ("stack.link_up", &["surface"]),
-    ("stack.link_down", &[]),
-    ("stack.fault", &[]),
-    ("stack.corruption", &[]),
+/// for it under, plus the key-prompt suffix width `standing_on` appends
+/// after this subject's descriptive clause on that row.
+///
+/// The third element mirrors the `standing_on` match a later task builds in
+/// `crates/engine/src/game/stack_view.rs`: `stack.link_down` gets
+/// `"  [>] descend"` (13), `stack.link_up` gets `"  [<] climb"` or, at
+/// depth 1, `"  [<] surface"` — 13 is that subject's worst case — and
+/// `stack.orphan` gets `"  [o] adopt"` (11). `stack.corruption` is the
+/// outlier at 19, for `"  — moving on costs"`. Every other arm — `cache`,
+/// `lair`, `door`, `sealed_door`, `breakpoint`, `floor`, `fault` — reports
+/// rather than offers, so it appends nothing; `frame.arrival` has no
+/// underfoot pool at all. **These two places have to change together.** If
+/// `standing_on`'s match ever disagrees with this table, this test stops
+/// being a gate and starts rubber-stamping whatever ships — the same way a
+/// drifted fixture once hid a real overflow behind a green suite elsewhere
+/// in this repo (see `manifest-column-packer-is-suboptimal`).
+///
+/// A content edit that empties a pool fails here instead of shipping
+/// silence at a cell nobody happened to walk onto during testing. Same
+/// shape as `every_biome_a_stack_link_can_open_in_fields_a_boss`.
+const SHIPPED: &[(&str, &[&str], usize)] = &[
+    ("stack.floor", &[], 0),
+    ("stack.door", &[], 0),
+    ("stack.sealed_door", &["opened"], 0),
+    ("stack.cache", &["spent"], 0),
+    ("stack.lair", &["cleared"], 0),
+    ("stack.orphan", &["spent"], 11),
+    ("stack.breakpoint", &["spent"], 0),
+    ("stack.link_up", &["surface"], 13),
+    ("stack.link_down", &[], 13),
+    ("stack.fault", &[], 0),
+    ("stack.corruption", &[], 19),
     (
         "stack.frame.arrival",
         &["shallow", "bottom", "traced", "hunted"],
+        0,
     ),
 ];
 
@@ -426,7 +444,7 @@ fn every_describable_cell_kind_has_a_shipped_bank_entry() {
     let (db, warnings) = DescriptionDb::load_dir(&dir).unwrap();
     assert!(warnings.is_empty(), "the shipped bank warned: {warnings:?}");
 
-    for (subject, conditions) in SHIPPED {
+    for (subject, conditions, _) in SHIPPED {
         // Every subject answers at its fallback, in all three lengths...
         assert!(
             db.underfoot(subject, None, 0).is_some() || *subject == "stack.frame.arrival",
@@ -462,16 +480,14 @@ fn every_describable_cell_kind_has_a_shipped_bank_entry() {
 fn every_shipped_underfoot_line_fits_the_standing_on_row() {
     let dir = crate::tests::support::test_assets_dir().join("descriptions");
     let (db, _) = DescriptionDb::load_dir(&dir).unwrap();
-    // The longest key-prompt suffix any arm appends — "  — moving on costs".
-    const LONGEST_SUFFIX: usize = 19;
-    for (subject, conditions) in SHIPPED {
+    for (subject, conditions, suffix) in SHIPPED {
         for condition in std::iter::once(None).chain(conditions.iter().map(|c| Some(*c))) {
             for seed in 0..64u64 {
                 let Some(line) = db.underfoot(subject, condition, seed) else {
                     continue;
                 };
                 assert!(
-                    line.chars().count() + LONGEST_SUFFIX <= crate::MAX_UNDERFOOT_LINE,
+                    line.chars().count() + suffix <= crate::MAX_UNDERFOOT_LINE,
                     "{subject} {condition:?} underfoot is {} chars: {line:?}",
                     line.chars().count()
                 );

@@ -210,6 +210,26 @@ def main() -> None:
     print("\n-- Defend ------------------------------------------------------")
     print(check_bracing(swings))
 
+    # Before any table, not after: a confounded pair means the numbers below
+    # do not mean what their column headings say, and a reader who has
+    # already read them will not go back.
+    print("\n-- Confounds ---------------------------------------------------")
+    # Per run, never pooled: most configs in a sweep use the default plan
+    # and never brace, and those constant rows hide a perfect correlation
+    # inside the one config that does.
+    found = battles.confounds_by(swings, ["config", "pass"])
+    if not found:
+        print("no run has a collinear observable pair above r =", battles.CONFOUND_THRESHOLD)
+    for (config, pass_name), pairs in sorted(found.items()):
+        for a, b, r in pairs:
+            print(
+                f"WARNING  {config}/{pass_name}: {a} and {b} move together "
+                f"(r = {r:+.2f}).\n"
+                f"         Any statement about one is also a statement about the\n"
+                f"         other; this run cannot separate them. Change the rule\n"
+                f"         so they vary independently before concluding anything."
+            )
+
     print("\n-- Who gets hit (scenarios with a party) ------------------------")
     target = targeting(swings)
     print(_table(target))

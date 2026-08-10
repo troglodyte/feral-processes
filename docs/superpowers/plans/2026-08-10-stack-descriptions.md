@@ -330,7 +330,7 @@ fn two_variants_on_one_condition_merge_into_one_pool() {
         variants: [
             (underfoot: ["one"]),
             (underfoot: ["two"]),
-            (when: "opened", underfoot: ["open"]),
+            (when: Some("opened"), underfoot: ["open"]),
         ],
     )"#;
     let dir = bank_dir("merge_within", &[("door.ron", body)]);
@@ -704,7 +704,7 @@ const CACHE: &str = r#"(
             codas: ["", "Nobody came back for it.", "The lock still holds."],
         ),
         (
-            when: "spent",
+            when: Some("spent"),
             underfoot: ["An empty casing"],
             sighted: ["An emptied casing lies {bearing}."],
             openers: ["An emptied casing."],
@@ -1102,7 +1102,7 @@ Create `assets/descriptions/sealed_door.ron`:
             ],
         ),
         (
-            when: "opened",
+            when: Some("opened"),
             underfoot: ["A forced seal"],
             sighted: [
                 "The seal you forced stands open {bearing}.",
@@ -1155,7 +1155,7 @@ Create `assets/descriptions/cache.ron`:
             ],
         ),
         (
-            when: "spent",
+            when: Some("spent"),
             underfoot: ["An empty casing"],
             sighted: [
                 "The casing you emptied lies {bearing}.",
@@ -1207,7 +1207,7 @@ Create `assets/descriptions/lair.ron`:
             ],
         ),
         (
-            when: "cleared",
+            when: Some("cleared"),
             underfoot: ["The lair, and nothing left holding it"],
             sighted: [
                 "The cleared room lies open {bearing}.",
@@ -1259,7 +1259,7 @@ Create `assets/descriptions/orphan.ron`:
             ],
         ),
         (
-            when: "spent",
+            when: Some("spent"),
             underfoot: [""],
             sighted: [
                 "The dead end you emptied lies {bearing}.",
@@ -1310,7 +1310,7 @@ Create `assets/descriptions/breakpoint.ron`:
             ],
         ),
         (
-            when: "spent",
+            when: Some("spent"),
             underfoot: ["A burnt-out debug port"],
             sighted: [
                 "The port you burnt out hangs open {bearing}.",
@@ -1359,7 +1359,7 @@ Create `assets/descriptions/link_up.ron`:
             ],
         ),
         (
-            when: "surface",
+            when: Some("surface"),
             underfoot: ["The link out"],
             sighted: [
                 "The link out is {bearing}.",
@@ -1503,7 +1503,7 @@ run state, and the reason it is a subject of its own:
             codas: [""],
         ),
         (
-            when: "shallow",
+            when: Some("shallow"),
             sighted: [
                 "The grid is still overhead somewhere. It does not feel close.",
                 "The first frame down. The light behind you is already the wrong colour.",
@@ -1513,7 +1513,7 @@ run state, and the reason it is a subject of its own:
             codas: [""],
         ),
         (
-            when: "bottom",
+            when: Some("bottom"),
             sighted: [
                 "The floor here holds. There is nothing below this.",
                 "The bottom of the stack. Whatever it was built around is on this frame.",
@@ -1523,7 +1523,7 @@ run state, and the reason it is a subject of its own:
             codas: [""],
         ),
         (
-            when: "traced",
+            when: Some("traced"),
             sighted: [
                 "Something in the walls turns over as you arrive.",
                 "The frame has been expecting somebody, and now it has one.",
@@ -1533,7 +1533,7 @@ run state, and the reason it is a subject of its own:
             codas: [""],
         ),
         (
-            when: "hunted",
+            when: Some("hunted"),
             sighted: [
                 "The corridors are awake. You are the reason.",
                 "Whatever is running this stack knows which frame you are on.",
@@ -1579,7 +1579,7 @@ This directory replaced `assets/crash_logs/`, whose lines live on here as
             codas: ["", "Nothing answers through it."],
         ),
         (
-            when: "opened",          // a condition — see the table below
+            when: Some("opened"),          // a condition — see the table below
             underfoot: ["A forced seal"],
             sighted: ["The seal you forced stands open {bearing}."],
             openers: ["The seal, standing open."],
@@ -1591,6 +1591,10 @@ This directory replaced `assets/crash_logs/`, whose lines live on here as
 ```
 
 Every field except `subject` is optional and defaults to empty.
+
+`when` is an `Option`, so RON needs it spelled `Some("opened")` — a bare
+`"opened"` will not parse. Omit the field entirely for the fallback variant
+rather than writing `None`.
 
 ### The three lengths
 

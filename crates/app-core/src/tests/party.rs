@@ -135,3 +135,83 @@ fn the_hidden_key_is_ignored_on_an_empty_roster() {
     assert_eq!(app.status_line, None, "no roster, nothing to say about it");
     assert_eq!(app.mode, Mode::Companion);
 }
+
+/// The display name of the highlighted roster row.
+fn name_of(app: &mut App, row: usize) -> String {
+    app.game.as_mut().unwrap().owned_pets()[row].name.clone()
+}
+
+fn type_name(app: &mut App, text: &str) {
+    for c in text.chars() {
+        app.handle_key(GameKey::Char(c));
+    }
+}
+
+#[test]
+fn n_renames_the_highlighted_program() {
+    let mut app = app_with_companions_in_the_party(770, 2);
+    open_via_menu(&mut app, 'p', "Companions");
+    app.handle_key(GameKey::Down);
+
+    app.handle_key(GameKey::Char('N'));
+    assert_eq!(app.mode, Mode::RenamePet, "'N' opens the naming page");
+
+    type_name(&mut app, "Hexed");
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::Companion, "Enter returns to the roster");
+    // `PetInfo::name` is zone-tagged ("Hexed 1"), so match the prefix — the
+    // engine's own tests pin the exact stored name; what this one is for is
+    // that the key reaches it at all.
+    assert!(
+        name_of(&mut app, 1).starts_with("Hexed"),
+        "got {:?}",
+        name_of(&mut app, 1)
+    );
+}
+
+#[test]
+fn esc_leaves_a_rename_without_changing_the_name() {
+    let mut app = app_with_companions_in_the_party(771, 2);
+    open_via_menu(&mut app, 'p', "Companions");
+    let before = name_of(&mut app, 0);
+
+    app.handle_key(GameKey::Char('N'));
+    type_name(&mut app, "Hexed");
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::Companion, "Esc backs into the roster");
+    assert_eq!(name_of(&mut app, 0), before, "the typed name is discarded");
+    assert!(
+        app.rename_input.is_empty(),
+        "the buffer must not survive into the next rename"
+    );
+}
+
+#[test]
+fn an_empty_rename_puts_the_species_name_back() {
+    let mut app = app_with_companions_in_the_party(772, 2);
+    open_via_menu(&mut app, 'p', "Companions");
+    let species_name = name_of(&mut app, 0);
+
+    app.handle_key(GameKey::Char('N'));
+    type_name(&mut app, "Hexed");
+    app.handle_key(GameKey::Enter);
+    assert!(name_of(&mut app, 0).starts_with("Hexed"));
+
+    app.handle_key(GameKey::Char('N'));
+    assert_eq!(
+        app.rename_input, "Hexed",
+        "the page opens on the name it already has, so a correction is not a retype"
+    );
+    for _ in 0.."Hexed".len() {
+        app.handle_key(GameKey::Backspace);
+    }
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(
+        name_of(&mut app, 0),
+        species_name,
+        "clearing the field is the way back to the species name"
+    );
+}

@@ -1,6 +1,7 @@
 use bevy_ecs::prelude::{Component, Entity};
 use serde::{Deserialize, Serialize};
 
+use crate::MAX_CUSTOM_NAME_LEN;
 use crate::abilities::AbilityId;
 use crate::items::{EquipmentSlot, ItemId};
 use crate::items_db::ItemDb;
@@ -46,10 +47,32 @@ pub struct Creature {
 }
 
 /// A player-chosen display name that overrides a creature's species name
-/// wherever it's shown — currently only set via `Game::fuse_companions`.
-/// Length is enforced by the caller (`MAX_CUSTOM_NAME_LEN`), not here.
+/// wherever it's shown — set by `Game::fuse_companions` and
+/// `Game::rename_companion`. The constructor enforces the length; the
+/// tuple field does not, so build one through `sanitize` rather than
+/// wrapping a raw string.
 #[derive(Component, Clone, Debug)]
 pub struct CustomName(pub String);
+
+impl CustomName {
+    /// What the player typed, reduced to what may actually be stored:
+    /// trimmed, truncated to `MAX_CUSTOM_NAME_LEN`, and `None` if nothing
+    /// is left.
+    ///
+    /// **`None` means "no override", and both callers want that** — it is
+    /// why this returns an `Option` rather than refusing empty input.
+    /// Fusion reads it as "insert no `CustomName`" and a rename reads it as
+    /// "remove the one that's there", and those land on the same place: the
+    /// species name. So blank is the way back to the default, in both.
+    pub fn sanitize(input: Option<String>) -> Option<String> {
+        let trimmed = input?
+            .trim()
+            .chars()
+            .take(MAX_CUSTOM_NAME_LEN)
+            .collect::<String>();
+        (!trimmed.is_empty()).then_some(trimmed)
+    }
+}
 
 /// Which zone portal's sector a creature was spawned in — set once at
 /// spawn time and never changed afterward, even if the creature is later

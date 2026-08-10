@@ -1251,3 +1251,107 @@ fn only_the_outcome_death_line_follows_the_player_out_of_the_battle() {
         "the dissolve's departure chatter must be pruned, not trail the death line"
     );
 }
+
+#[test]
+fn rename_companion_sets_the_display_name() {
+    let mut game = Game::new(4201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+
+    game.rename_companion(pet, Some("Hexed".to_string()))
+        .unwrap();
+
+    assert_eq!(game.creature_name(pet).as_deref(), Some("Hexed"));
+}
+
+#[test]
+fn renaming_with_a_blank_name_restores_the_species_name() {
+    let mut game = Game::new(4202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species_name = generic_species(&game).name;
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.rename_companion(pet, Some("Hexed".to_string()))
+        .unwrap();
+
+    // Blank is the only way back to the species name, so it clears rather
+    // than being refused as empty input — `sanitize_custom_name` returns
+    // `None` for it and this caller reads that as "drop the override".
+    game.rename_companion(pet, Some("   ".to_string())).unwrap();
+
+    assert_eq!(
+        game.creature_name(pet).as_deref(),
+        Some(species_name.as_str()),
+        "a blank rename should fall back to the species name"
+    );
+}
+
+#[test]
+fn rename_companion_trims_and_truncates_the_way_fusion_does() {
+    let mut game = Game::new(4203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+
+    game.rename_companion(pet, Some("  Way Too Long A Name  ".to_string()))
+        .unwrap();
+
+    let name = game.creature_name(pet).expect("a tamed program has a name");
+    assert_eq!(
+        name.chars().count(),
+        MAX_CUSTOM_NAME_LEN,
+        "an overlong name should be truncated, not rejected"
+    );
+    assert!(
+        "Way Too Long A Name".starts_with(&name),
+        "leading whitespace should be trimmed before truncating, got {name:?}"
+    );
+}
+
+#[test]
+fn rename_companion_refuses_a_program_you_do_not_own() {
+    let mut game = Game::new(4204, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_on_player_tile(&mut game);
+
+    assert!(
+        game.rename_companion(wild, Some("Hexed".to_string()))
+            .is_err(),
+        "only a program compiled under your control can be renamed"
+    );
+}
+
+#[test]
+fn custom_name_reports_only_a_name_the_player_chose() {
+    let mut game = Game::new(4205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+
+    assert_eq!(
+        game.custom_name(pet),
+        None,
+        "an unnamed program reports no custom name, not its species name"
+    );
+
+    game.rename_companion(pet, Some("Hexed".to_string()))
+        .unwrap();
+    assert_eq!(game.custom_name(pet).as_deref(), Some("Hexed"));
+}
+
+#[test]
+fn a_renamed_program_keeps_its_name_across_a_save() {
+    let mut game = Game::new(4206, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(pet).unwrap();
+    game.rename_companion(pet, Some("Hexed".to_string()))
+        .unwrap();
+
+    let dir = scratch_assets_dir("rename_save");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+
+    let names: Vec<String> = loaded.owned_pets().iter().map(|p| p.name.clone()).collect();
+    // Zone-tagged only on the far side: `spawn_tamed` grants no
+    // `ZonePortal`, but `Game::load` restores one from `CreatureSave::zone`
+    // for every creature. The tag is the fixture's, the name is the point.
+    assert_eq!(
+        names,
+        vec!["Hexed 1".to_string()],
+        "the rename is what `CreatureSave::custom_name` is for"
+    );
+}

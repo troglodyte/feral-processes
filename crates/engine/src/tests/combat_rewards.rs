@@ -158,6 +158,37 @@ fn award_loot_grants_nothing_for_species_without_a_work_resource() {
     );
 }
 
+/// The battle log is where a player meets a dropped item for the first
+/// time, and every screen that lists one — inventory, trade — puts its
+/// category beside the name. A drop line that named it alone was the one
+/// place the player had to already know what a "Hardened Shell" was.
+#[test]
+fn a_drop_line_tags_the_items_category() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let boss = a_boss(&game);
+
+    let wild = corpse_of(&mut game, &boss.id);
+    game.award_loot(wild);
+
+    let drops: Vec<String> = game
+        .message_log(40)
+        .into_iter()
+        .filter(|l| l.kind == MessageKind::Loot && l.text.starts_with("Its crash spills"))
+        .map(|l| l.text)
+        .collect();
+    assert!(
+        !drops.is_empty(),
+        "a surface boss should have spilled gear to tag, got: {:?}",
+        game.message_log(40)
+    );
+    for line in &drops {
+        assert!(
+            ["[WEP]", "[ARM]", "[MOD]"].iter().any(|t| line.contains(t)),
+            "a gear drop line should carry its equipment category tag, got: {line}"
+        );
+    }
+}
+
 #[test]
 fn defeating_a_boss_in_the_stack_guarantees_a_cache_of_portal_fragments() {
     let mut game = Game::new(51, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

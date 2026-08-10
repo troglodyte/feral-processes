@@ -39,6 +39,21 @@ impl Game {
             .unwrap_or_else(|| id.as_str())
     }
 
+    /// The display name for `id` with its `ItemCategory::short_label` in
+    /// brackets after it — what a log line uses, where there is no column to
+    /// put the tag in front of the way the inventory and trade screens do.
+    ///
+    /// A drop line is the one place an item is named to a player who has not
+    /// opened a screen listing it, so the tag is the whole of what tells them
+    /// whether the thing that just landed is gear or stock.
+    pub fn item_name_tagged(&self, id: &ItemId) -> String {
+        format!(
+            "{} [{}]",
+            self.item_name(id),
+            self.item_category(id).short_label()
+        )
+    }
+
     /// Every conversion a structure runs, each expanded back to the raw
     /// inputs it bottoms out in.
     ///

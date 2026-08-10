@@ -870,8 +870,9 @@ impl Potential {
 /// **Variant order is save format.** bincode encodes enums positionally and
 /// `CreatureSave::rarity` holds one, so append new tiers, never reorder —
 /// the same trap `Perk` carries.
-#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-#[derive(Serialize, Deserialize)]
+#[derive(
+    Component, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
+)]
 pub enum Rarity {
     #[default]
     Ordinary,

@@ -279,6 +279,18 @@ fn the_shipped_ice_breaker_still_tames_for_a_player_holding_only_it() {
         let mut stats = game.world.get_mut::<Stats>(wild).unwrap();
         stats.hp = 1;
     }
+    // The player has to outlive the attempts, or this stops being a test
+    // about the catalyst and becomes a race between the capture roll and
+    // the wild program's damage — which is a race the RNG stream position
+    // decides. It was lost the day a draw was added upstream: the player
+    // died on the 12th attempt and the untamed target read as a taming
+    // failure. Capture odds are a function of the *target's* HP fraction
+    // (`taming::capture_chance`), so nothing here touches what is measured.
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 100_000;
+        stats.hp = 100_000;
+    }
 
     // Counted by what the inventory actually lost rather than by loop
     // iterations: once the roll lands, `Tamed` is not visible until the

@@ -207,6 +207,9 @@ impl DescriptionDb {
     /// this, and `pub` was doing the same job an `#[allow(dead_code)]`
     /// would — suppressing the unused-in-production warning rather than
     /// stating the truth, which is that this has no production caller.
+    /// `#[cfg(test)]` states that truth outright rather than leaving a
+    /// standing warning on an otherwise-clean lib build.
+    #[cfg(test)]
     pub(crate) fn subjects(&self) -> impl Iterator<Item = &str> {
         self.subjects.keys().map(String::as_str)
     }
@@ -215,7 +218,9 @@ impl DescriptionDb {
     /// including the fallback, since `load_dir` merges duplicates.
     ///
     /// `pub(crate)` for the same reason `subjects` above is: test-only,
-    /// with no production caller to widen it for.
+    /// with no production caller to widen it for. `#[cfg(test)]` for the
+    /// same reason too.
+    #[cfg(test)]
     pub(crate) fn variant_count(&self, subject: &str) -> usize {
         self.subjects.get(subject).map_or(0, Vec::len)
     }

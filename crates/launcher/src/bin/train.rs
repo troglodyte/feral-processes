@@ -61,6 +61,9 @@ struct Args {
     /// apart on disk. The pins are what a config *is*, and they are not
     /// derivable into a filename anyone would recognise a week later.
     label: String,
+    /// How the party plays. Defaults to the game's own All-Attack, which is
+    /// what every published arena number was measured against.
+    party: arena::PartyPlan,
 }
 
 /// Which of the two evaluation passes a set of records came from.
@@ -158,6 +161,7 @@ fn run() -> Result<(), String> {
         &PolicyWeights::default(),
         args.seed,
         log(Pass::Baseline),
+        args.party,
     )?;
     println!(
         "baseline (all-zero weights): enemy win rate {:.3}, fitness {:.4}",
@@ -180,7 +184,7 @@ fn run() -> Result<(), String> {
         // Never logged, whatever `--log-dir` says: this is the search, and
         // recording 1.9M discarded candidates would cost tens of gigabytes
         // to describe weight vectors nothing ever used.
-        match evaluate_set(&scenarios, &arena_pool, &weights, offset, None) {
+        match evaluate_set(&scenarios, &arena_pool, &weights, offset, None, args.party) {
             Ok(result) => result.fitness,
             // A scenario that cannot be staged is a broken scenario file,
             // not a bad candidate — but every candidate hits it equally, so
@@ -214,6 +218,7 @@ fn run() -> Result<(), String> {
         &weights,
         args.seed,
         log(Pass::Trained),
+        args.party,
     )?;
     println!(
         "trained: enemy win rate {:.3} (baseline {:.3}), fitness {:.4} (baseline {:.4})",
@@ -261,6 +266,7 @@ fn evaluate_set(
     weights: &PolicyWeights,
     seed_offset: u64,
     log: Option<(&Path, &str, Pass)>,
+    party: arena::PartyPlan,
 ) -> Result<SetResult, String> {
     let lease = pool.take();
     policy::write_file(&lease.policy_path(), weights).map_err(|e| e.to_string())?;
@@ -272,6 +278,7 @@ fn evaluate_set(
         scenario.seed = scenario.seed.wrapping_add(seed_offset);
         let options = arena::RunOptions {
             telemetry: log.is_some(),
+            party,
         };
         let (report, records) = arena::run(&scenario, lease.assets(), options)?;
         if let Some((dir, label, pass)) = log {
@@ -519,6 +526,7 @@ fn parse_args() -> Result<Args, String> {
         pin: Vec::new(),
         log_dir: None,
         label: "run".to_string(),
+        party: arena::PartyPlan::default(),
     };
     let mut it = std::env::args().skip(1);
     while let Some(flag) = it.next() {
@@ -533,6 +541,14 @@ fn parse_args() -> Result<Args, String> {
             "--assets" => args.assets = value()?.1.into(),
             "--report" => args.report = Some(value()?.1.into()),
             "--log-dir" => args.log_dir = Some(value()?.1.into()),
+            "--party-plan" => {
+                let (_, name) = value()?;
+                args.party = match name.as_str() {
+                    "all-attack" => arena::PartyPlan::AllAttack,
+                    "brace" => arena::PartyPlan::BraceWhenHurt,
+                    other => return Err(format!("--party-plan: {other:?} is not a plan")),
+                };
+            }
             "--label" => args.label = value()?.1,
             "--iters" => args.iters = parse(value()?)?,
             "--pop" => args.pop = parse(value()?)?,
@@ -549,7 +565,8 @@ fn parse_args() -> Result<Args, String> {
                 println!(
                     "train --out <path> --scenarios <dir> [--assets <dir>] [--iters 30] \
                      [--pop 40] [--reps N] [--seed 1] [--report <path>] \
-                     [--pin feature,feature] [--log-dir <dir>] [--label <name>]"
+                     [--pin feature,feature] [--log-dir <dir>] [--label <name>] \
+                     [--party-plan all-attack|brace]"
                 );
                 std::process::exit(0);
             }

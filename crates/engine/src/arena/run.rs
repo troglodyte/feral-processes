@@ -53,13 +53,11 @@ pub(crate) fn run_rep(game: &mut Game, watch: &mut Watch, plan: PartyPlan) -> Re
         if !game.has_active_battle() || game.is_game_over().is_some() {
             break;
         }
-        if plan == PartyPlan::BraceWhenHurt {
-            for slot in hurt_slots(game) {
-                // Same reasoning as the `Err` below: a slot that has just
-                // stopped being able to act is the fight moving on, not a
-                // bug. `battle_plan_remaining` will skip it too.
-                let _ = game.battle_set_action(slot, BattleAction::Defend);
-            }
+        for slot in bracing_slots(game, plan) {
+            // Same reasoning as the `Err` below: a slot that has just
+            // stopped being able to act is the fight moving on, not a bug.
+            // `battle_plan_remaining` will skip it too.
+            let _ = game.battle_set_action(slot, BattleAction::Defend);
         }
         // An `Err` here means the battle ended between the check above and
         // this call — the fight being over, not a bug to panic on.
@@ -81,28 +79,45 @@ pub(crate) fn run_rep(game: &mut Game, watch: &mut Watch, plan: PartyPlan) -> Re
     watch.finish(game)
 }
 
-/// The party slots that would brace this round, in slot order.
+/// The party slots that brace this round under `plan`, in slot order.
 ///
-/// Reads `Stats` off the world directly, the way `Watch` does — the arena
-/// lives inside the engine, so there is no reason to route this through a
-/// view built for a renderer. A slot that cannot act is skipped here rather
-/// than being refused later, so the mop-up plan sees exactly the slots this
-/// rule declined to touch.
-fn hurt_slots(game: &Game) -> Vec<usize> {
-    let slots = game
-        .world
-        .get_resource::<BattleState>()
-        .map(|b| b.planned.len())
-        .unwrap_or(0);
-    (0..slots)
+/// One function for all three plans so the "which slots depart from
+/// All-Attack" question has a single answer; `AllAttack` returning empty is
+/// what makes the caller unconditional.
+///
+/// Reads `Stats` and `BattleState` off the world directly, the way `Watch`
+/// does — the arena lives inside the engine, so there is no reason to route
+/// this through a view built for a renderer. A slot that cannot act is
+/// skipped here rather than refused later, so the mop-up plan sees exactly
+/// the slots this rule declined to touch.
+fn bracing_slots(game: &Game, plan: PartyPlan) -> Vec<usize> {
+    let Some(battle) = game.world.get_resource::<BattleState>() else {
+        return Vec::new();
+    };
+    let slots = battle.planned.len();
+    if slots == 0 {
+        return Vec::new();
+    }
+    let round = battle.round as usize;
+    let candidates: Vec<usize> = match plan {
+        PartyPlan::AllAttack => return Vec::new(),
+        PartyPlan::BraceWhenHurt => (0..slots)
+            .filter(|&slot| {
+                game.actor_entity(battle::Actor::Party(slot))
+                    .and_then(|e| game.world.get::<Stats>(e))
+                    .is_some_and(|s| {
+                        s.max_hp > 0 && (s.hp as f32 / s.max_hp as f32) < BRACE_BELOW_HP_FRACTION
+                    })
+            })
+            .collect(),
+        // By round rather than by anything about the member, which is the
+        // entire point: health and slot position both carry their own
+        // signal, so a rule keyed on either is not measuring Defend.
+        PartyPlan::BraceInRotation => vec![round % slots],
+    };
+    candidates
+        .into_iter()
         .filter(|&slot| game.slot_can_act(slot))
-        .filter(|&slot| {
-            game.actor_entity(battle::Actor::Party(slot))
-                .and_then(|e| game.world.get::<Stats>(e))
-                .is_some_and(|s| {
-                    s.max_hp > 0 && (s.hp as f32 / s.max_hp as f32) < BRACE_BELOW_HP_FRACTION
-                })
-        })
         .collect()
 }
 

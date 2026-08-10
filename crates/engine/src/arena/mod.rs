@@ -225,7 +225,22 @@ pub enum PartyPlan {
     /// every arena measurement, and the three targeting features pinned in
     /// `assets/policies/enemy_battle.ron` are pinned on the strength of a
     /// single unit-test census as a result.
+    ///
+    /// **Not usable for measuring a response to Defend** — see
+    /// `BraceInRotation`, which exists because of that.
     BraceWhenHurt,
+    /// One slot Defends each round, rotating by round number, whatever
+    /// anyone's health.
+    ///
+    /// An instrument rather than a model of play, and deliberately so.
+    /// `BraceWhenHurt` fires on a threshold over `target_hp_frac`, which is
+    /// the policy's largest weight — so bracing and being wounded are one
+    /// variable (measured r = -0.8) and no reading can attribute anything to
+    /// Defend. Rotating by round decorrelates it from health, and rotating
+    /// rather than picking a fixed slot decorrelates it from slot position
+    /// too, which carries its own aggro weight and would have been the next
+    /// confound.
+    BraceInRotation,
 }
 
 /// Runs `scenario` and reports what happened, plus whatever telemetry
@@ -653,6 +668,44 @@ mod tests {
         assert!(
             at_bracing > 0,
             "no swing landed on a bracing target — the harness still cannot see Defend"
+        );
+    }
+
+    /// A fight the party wins without being hurt, so `BraceWhenHurt` never
+    /// fires and any Defend seen came from the rotation instead.
+    fn a_walkover_scenario() -> Scenario {
+        Scenario {
+            player: PlayerSource::Fresh { level: 20, zone: 1 },
+            party: vec![CompanionSpec {
+                species: "glitch".into(),
+                level: 12,
+            }],
+            opponents: vec![OpponentSpec {
+                species: "sprite".into(),
+                count: 3,
+            }],
+            reps: 4,
+            seed: 77,
+            ..Scenario::default()
+        }
+    }
+
+    /// The whole point of the rotation, and the fix for the 2026-08-10 run
+    /// that could not answer its own question: bracing has to vary
+    /// independently of health, or it is just a restatement of
+    /// `target_hp_frac` and the policy's response to the two cannot be told
+    /// apart.
+    #[test]
+    fn the_rotating_plan_braces_at_full_health() {
+        let healthy = a_walkover_scenario();
+        assert_eq!(
+            defends(&bracing_records(&healthy, PartyPlan::BraceWhenHurt)),
+            0,
+            "the fixture is meant to be a walkover — nobody should drop under half HP"
+        );
+        assert!(
+            defends(&bracing_records(&healthy, PartyPlan::BraceInRotation)) > 0,
+            "the rotation braced nobody in a fight where nobody was hurt"
         );
     }
 

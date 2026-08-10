@@ -546,6 +546,7 @@ fn parse_args() -> Result<Args, String> {
                 args.party = match name.as_str() {
                     "all-attack" => arena::PartyPlan::AllAttack,
                     "brace" => arena::PartyPlan::BraceWhenHurt,
+                    "rotate" => arena::PartyPlan::BraceInRotation,
                     other => return Err(format!("--party-plan: {other:?} is not a plan")),
                 };
             }
@@ -566,7 +567,7 @@ fn parse_args() -> Result<Args, String> {
                     "train --out <path> --scenarios <dir> [--assets <dir>] [--iters 30] \
                      [--pop 40] [--reps N] [--seed 1] [--report <path>] \
                      [--pin feature,feature] [--log-dir <dir>] [--label <name>] \
-                     [--party-plan all-attack|brace]"
+                     [--party-plan all-attack|brace|rotate]"
                 );
                 std::process::exit(0);
             }

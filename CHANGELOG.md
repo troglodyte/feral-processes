@@ -27,6 +27,47 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.6.0
+
+**Breaking: existing saves will not load.** `SAVE_FORMAT_VERSION` goes 25 →
+26 because every creature now records the rare tier it rolled. To carry a
+game across, dump it to RON *before* installing this version and pack it
+back afterwards — RON is field-named, so the new field fills itself in:
+
+```sh
+cargo run --bin savetool -- dump saves/save.bin s.ron   # on the old build
+cargo run --bin savetool -- pack s.ron saves/save.bin   # on the new one
+```
+
+### Rare programs: Optimized and Overclocked
+
+Wild programs used to vary along one invisible axis — a ±20% roll per stat,
+readable only as a "quality" label on a screen you reach *after* catching
+something. There was no moment on the map that said *that one, go get that
+one*.
+
+There is now. A wild spawn can come up **Optimized** (uncommon, 1.5x stats)
+or **Overclocked** (rare, 1.8x). Both multiply on top of the existing roll,
+so an Overclocked program lands between 1.44x and 2.16x an ordinary one of
+its species — a real threat, and a real prize.
+
+- **You can see one coming.** A rare program wears a silver or gold bar
+  along the top of its tile. Its glyph still shows the difficulty colour,
+  because how dangerous something is and how rare it is are two different
+  things you need at once.
+- **Catching one keeps it.** Decompiling never re-rolls stats, so a program
+  you take stays Optimized or Overclocked for the rest of the run — and
+  fusing two keeps the better of the pair rather than laundering it away.
+- **It pays for itself.** A kill already pays the defeated program's max HP
+  as XP, so a rare one is worth proportionally more.
+- **Bosses and the opening ring are excluded.** A boss's stats are authored
+  by hand, and the first ring around your landing site is guaranteed to be
+  beatable by a fresh player. Neither gets a tier.
+
+Both the spawn chances and the multipliers are tuning constants
+(`SILVER_SPAWN_CHANCE`, `GOLD_SPAWN_CHANCE`, `SILVER_STAT_MULT`,
+`GOLD_STAT_MULT`), so the rate and the reward move independently.
+
 ## 0.5.23
 
 ### The examine key no longer reads through shut doors

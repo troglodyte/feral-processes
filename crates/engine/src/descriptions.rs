@@ -88,7 +88,7 @@ impl DescriptionVariant {
     /// make the loser dead content with nothing on screen to say so, which
     /// is the failure `crash_logs`' flat pool never had.
     ///
-    /// This is also what makes `load_dir`'s sort load-bearing rather than
+    /// This is also what makes `merge`'s sort load-bearing rather than
     /// cosmetic: the pool a cell indexes into has to be in the same order
     /// every run, and concatenation order is that order.
     fn absorb(&mut self, other: DescriptionVariant) {
@@ -143,17 +143,9 @@ impl DescriptionDb {
     /// with a returned warning rather than aborting the load, same as
     /// `AbilityDb::load_dir` and `CrashLogDb::load_dir`.
     ///
-    /// **Pools are filled in `(subject, file id)` order, not directory
-    /// order.** `std::fs::read_dir` returns entries in no defined order, so
-    /// without the sort the same cell would read a different fragment
-    /// between runs and across a reload — the whole property this module
-    /// exists to provide, lost to something no test of a single-file bank
-    /// would see. The `assembler_system` position sort and
-    /// `CrashLogDb::load_dir` both exist against the same class of bug.
-    ///
-    /// Variants sharing a condition are merged rather than kept side by
-    /// side, so a subject holds exactly one variant per condition and
-    /// `variant` never has to choose between two candidates.
+    /// IO and ordering are deliberately separate calls — see `merge` for why
+    /// the sort has to be tested against it directly rather than through
+    /// this method.
     pub fn load_dir(dir: &Path) -> std::io::Result<(Self, Vec<String>)> {
         let mut defs: Vec<(String, DescriptionDef)> = Vec::new();
         let mut warnings = Vec::new();
@@ -173,18 +165,7 @@ impl DescriptionDb {
                 Err(e) => warnings.push(format!("skipped invalid description file {path:?}: {e}")),
             }
         }
-        defs.sort_by(|(a_id, a), (b_id, b)| (&a.subject, a_id).cmp(&(&b.subject, b_id)));
-
-        let mut subjects: BTreeMap<String, Vec<DescriptionVariant>> = BTreeMap::new();
-        for (_, def) in defs {
-            let variants = subjects.entry(def.subject).or_default();
-            for incoming in def.variants {
-                match variants.iter_mut().find(|v| v.when == incoming.when) {
-                    Some(existing) => existing.absorb(incoming),
-                    None => variants.push(incoming),
-                }
-            }
-        }
+        let subjects = merge(defs);
         Ok((DescriptionDb { subjects }, warnings))
     }
 
@@ -244,6 +225,11 @@ impl DescriptionDb {
     /// `None` when there is no opener: a paragraph that is only a detail is
     /// not a reading of anything, and the caller has a corridor fallback for
     /// exactly that case. May contain `{bearing}`.
+    ///
+    /// An opener that picks as `""` counts as no opener, unlike `details`
+    /// and `codas` where `""` is a legal, blessed shorter draw: the opener
+    /// is the sentence that makes this a *reading of something*, so an
+    /// empty one is authoring error rather than an intentional short form.
     pub(crate) fn paragraph(
         &self,
         subject: &str,
@@ -252,6 +238,9 @@ impl DescriptionDb {
     ) -> Option<String> {
         let v = self.variant(subject, condition)?;
         let opener = pick(&v.openers, fold(seed, Slot::Opener))?;
+        if opener.is_empty() {
+            return None;
+        }
         let detail = pick(&v.details, fold(seed, Slot::Detail)).unwrap_or_default();
         let coda = pick(&v.codas, fold(seed, Slot::Coda)).unwrap_or_default();
         Some(
@@ -262,6 +251,37 @@ impl DescriptionDb {
                 .join(" "),
         )
     }
+}
+
+/// Sorts `defs` by `(subject, file id)` and folds them into one pool per
+/// subject, merging variants that share a condition via
+/// `DescriptionVariant::absorb`.
+///
+/// Split out of `load_dir` and kept `pub(crate)` — rather than inlined and
+/// private — because the sort is the one load-bearing line in this module
+/// and it cannot be pinned by a test that drives `load_dir`'s directory
+/// walk. `std::fs::read_dir`'s order is unspecified, but on at least one
+/// real filesystem it already comes back alphabetically — the same order
+/// the sort produces — so a `load_dir`-level test can pass with the
+/// `sort_by` below deleted and prove nothing. Calling `merge` directly with
+/// a deliberately mis-ordered `Vec` is the only way to exercise the sort
+/// itself; `tests::descriptions` does exactly that.
+pub(crate) fn merge(
+    mut defs: Vec<(String, DescriptionDef)>,
+) -> BTreeMap<String, Vec<DescriptionVariant>> {
+    defs.sort_by(|(a_id, a), (b_id, b)| (&a.subject, a_id).cmp(&(&b.subject, b_id)));
+
+    let mut subjects: BTreeMap<String, Vec<DescriptionVariant>> = BTreeMap::new();
+    for (_, def) in defs {
+        let variants = subjects.entry(def.subject).or_default();
+        for incoming in def.variants {
+            match variants.iter_mut().find(|v| v.when == incoming.when) {
+                Some(existing) => existing.absorb(incoming),
+                None => variants.push(incoming),
+            }
+        }
+    }
+    subjects
 }
 
 /// Continues the caller's fold with the slot's own two words, so the three

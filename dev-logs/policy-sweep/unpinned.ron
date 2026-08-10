@@ -1,0 +1,23 @@
+(
+    features: [
+        ("move_power_rel", 2.7001913),
+        ("move_ranged", -4.9304633),
+        ("move_has_effect", -1.268067),
+        ("move_effect_stun", -4.8858624),
+        ("move_effect_bleed", -3.533254),
+        ("move_effect_chance", -1.5555584),
+        ("target_hp_frac", -7.3815737),
+        ("target_is_player", 6.499366),
+        ("target_def_rel", -2.7816052),
+        ("target_stunned", -2.3382092),
+        ("target_bleeding", 0.78257096),
+        ("target_bracing", -1.9293206),
+        ("est_damage_frac", 3.9382846),
+        ("would_kill", 4.692488),
+        ("self_hp_frac", -1.0465896),
+        ("self_front_group", 1.3630985),
+        ("effect_x_target_healthy", -1.5116928),
+        ("stun_x_not_stunned", -2.204916),
+        ("bleed_x_not_bleeding", -1.4624088),
+    ],
+)

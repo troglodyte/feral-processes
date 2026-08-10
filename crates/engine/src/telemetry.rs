@@ -62,6 +62,27 @@ pub enum Record {
     },
 }
 
+impl Record {
+    /// Re-keys a record onto another fight. `arena::run` is the one caller:
+    /// it builds a fresh `Game` per rep, and a fresh `Game` mints its ids
+    /// from 1, so without this every fight in a 200-rep evaluation would
+    /// land in the file as fight 1.
+    ///
+    /// Or-patterns rather than five arms: a variant added without a `fight`
+    /// fails to compile here, which is what keeps "every record carries one"
+    /// true rather than merely documented.
+    pub(crate) fn set_fight(&mut self, fight: u64) {
+        let slot = match self {
+            Record::FightStart { fight, .. }
+            | Record::Round { fight, .. }
+            | Record::EnemyChoice { fight, .. }
+            | Record::PartyAction { fight, .. }
+            | Record::FightEnd { fight, .. } => fight,
+        };
+        *slot = fight;
+    }
+}
+
 /// Which `BattleAction` a party slot spent its turn on. Taken from the
 /// variant rather than re-derived, so "did the human actually brace or
 /// heal" is answerable at all.

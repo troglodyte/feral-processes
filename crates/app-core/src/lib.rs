@@ -12,6 +12,9 @@ mod app;
 pub use app::arena::{ArenaRow, ArenaRowKind, DevTemplates};
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
 pub use app::group_menu::GroupMenuRow;
+/// One name rather than `pub mod app`: `train` needs the JSONL writer and
+/// nothing else of app-core's internals.
+pub use app::telemetry::append_records;
 
 use app::arena::{ArenaPickKind, ArenaSession};
 

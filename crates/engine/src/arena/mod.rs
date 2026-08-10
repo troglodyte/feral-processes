@@ -35,6 +35,7 @@ use rand::rngs::StdRng;
 
 use crate::progression;
 use crate::resources::GameRng;
+use crate::telemetry::Record;
 use crate::tuning::{BASELINE_GROWTH_MULTIPLIER, CREATURE_MAX_LEVEL};
 use crate::*;
 
@@ -184,29 +185,78 @@ pub fn stage(
     })
 }
 
-/// Runs `scenario` and reports what happened. The engine's whole public
-/// arena surface.
+/// Per-run knobs, with `Default` meaning "just play the fights".
+///
+/// A struct rather than a parameter per knob: the callers that want plain
+/// behaviour spell it `RunOptions::default()` once and never change again,
+/// so the next thing that has to reach `run_rep` — a party plan, a round
+/// cap — costs no call-site churn.
+#[derive(Clone, Debug, Default)]
+pub struct RunOptions {
+    /// Collect per-fight telemetry and hand it back beside the report.
+    ///
+    /// Off by default, and both existing callers want it that way: the
+    /// headless bin's output is its `Report`, and `train`'s search runs
+    /// 1.9M fights that must not each be recorded. It is the *evaluation*
+    /// passes either side of that search that are worth logging.
+    pub telemetry: bool,
+}
+
+/// Runs `scenario` and reports what happened, plus whatever telemetry
+/// `opts` asked for. The engine's whole public arena surface.
 ///
 /// **A fresh `Game` per rep.** One carried over would bring the last
 /// fight's dead companions, spent items and XP with it, so rep 2 would
 /// measure a different party from rep 1 — and the drift would compound.
 /// Warnings are taken from the first rep only: they are identical every
 /// rep, and fifty copies of the same line is noise.
-pub fn run(scenario: &Scenario, assets_dir: &Path) -> Result<Report, String> {
+///
+/// **Telemetry is drained inside the loop and renumbered**, both because of
+/// that fresh `Game`: it mints fight ids from 1, so a drain after the loop
+/// would see only the last rep's records and an un-renumbered one would
+/// give every fight in the set the id 1. A rep is exactly one staged fight
+/// — `stage` opens one battle — so the rep index *is* the fight id.
+pub fn run(
+    scenario: &Scenario,
+    assets_dir: &Path,
+    opts: RunOptions,
+) -> Result<(Report, Vec<Record>), String> {
     let mut warnings = Vec::new();
     let mut reps = Vec::with_capacity(scenario.reps as usize);
+    let mut records = Vec::new();
     for rep in 0..scenario.reps {
-        let mut staged = stage(scenario, assets_dir, scenario.seed + rep as u64, false)?;
+        let mut staged = stage(
+            scenario,
+            assets_dir,
+            scenario.seed + rep as u64,
+            opts.telemetry,
+        )?;
         if rep == 0 {
             warnings = staged.warnings.clone();
         }
         reps.push(run::run_rep(&mut staged.game, &mut staged.watch));
+        if opts.telemetry {
+            let fight = rep as u64 + 1;
+            records.extend(
+                staged
+                    .game
+                    .take_battle_telemetry()
+                    .into_iter()
+                    .map(|mut record| {
+                        record.set_fight(fight);
+                        record
+                    }),
+            );
+        }
     }
-    Ok(Report {
-        scenario: scenario.clone(),
-        warnings,
-        reps,
-    })
+    Ok((
+        Report {
+            scenario: scenario.clone(),
+            warnings,
+            reps,
+        },
+        records,
+    ))
 }
 
 /// One staged fight, auto-played — the shared fixture for the tests of both
@@ -294,7 +344,13 @@ mod tests {
 
     #[test]
     fn each_rep_runs_at_its_own_seed_counted_up_from_the_scenarios() {
-        let report = run(&a_scenario(3, 40, &[("glitch", 4)]), &test_assets_dir()).unwrap();
+        let report = run(
+            &a_scenario(3, 40, &[("glitch", 4)]),
+            &test_assets_dir(),
+            RunOptions::default(),
+        )
+        .unwrap()
+        .0;
         let seeds: Vec<u64> = report.reps.iter().map(|r| r.seed).collect();
         assert_eq!(seeds, vec![40, 41, 42]);
     }
@@ -304,8 +360,12 @@ mod tests {
         // The property the whole tool rests on: without it a tuning
         // comparison measures noise.
         let s = a_scenario(3, 40, &[("glitch", 4)]);
-        let a = run(&s, &test_assets_dir()).unwrap();
-        let b = run(&s, &test_assets_dir()).unwrap();
+        let a = run(&s, &test_assets_dir(), RunOptions::default())
+            .unwrap()
+            .0;
+        let b = run(&s, &test_assets_dir(), RunOptions::default())
+            .unwrap()
+            .0;
         assert_eq!(a.reps, b.reps);
     }
 
@@ -324,7 +384,9 @@ mod tests {
         // measured one are one code path, so a divergence here means `stage`
         // reordered something the RNG stream sees.
         let s = a_scenario(1, 40, &[("glitch", 4)]);
-        let report = run(&s, &test_assets_dir()).unwrap();
+        let report = run(&s, &test_assets_dir(), RunOptions::default())
+            .unwrap()
+            .0;
 
         assert_eq!(report.reps[0], test_fight(&s, 40));
     }
@@ -382,7 +444,9 @@ mod tests {
         // played half and the measured half must roll the *same pack*, not
         // merely the same battle.
         let s = a_rolled_scenario(1, 40);
-        let report = run(&s, &test_assets_dir()).unwrap();
+        let report = run(&s, &test_assets_dir(), RunOptions::default())
+            .unwrap()
+            .0;
 
         assert_eq!(report.reps[0], test_fight(&s, 40));
     }
@@ -403,7 +467,9 @@ mod tests {
             seed: 1,
             ..Scenario::default()
         };
-        let report = run(&s, &test_assets_dir()).unwrap();
+        let report = run(&s, &test_assets_dir(), RunOptions::default())
+            .unwrap()
+            .0;
 
         assert!(
             report.reps.iter().all(|r| !r.won),
@@ -455,7 +521,7 @@ mod tests {
             seed: 11,
             ..Scenario::default()
         };
-        let report = run(&s, &test_assets_dir()).unwrap();
+        let (report, _) = run(&s, &test_assets_dir(), RunOptions::default()).unwrap();
 
         let swung = |rep: &RepRecord| rep.transcript.iter().any(|l| l.contains("Glitch"));
         assert!(swung(&report.reps[0]), "{:?}", report.reps[0].transcript);
@@ -463,6 +529,84 @@ mod tests {
             swung(&report.reps[1]),
             "rep 2 fielded no companion — the `Game` was carried over: {:?}",
             report.reps[1].transcript
+        );
+    }
+
+    fn two_rep_scenario() -> Scenario {
+        Scenario {
+            player: PlayerSource::Fresh { level: 8, zone: 2 },
+            opponents: vec![OpponentSpec {
+                species: "sub_process".into(),
+                count: 2,
+            }],
+            reps: 2,
+            seed: 21,
+            ..Scenario::default()
+        }
+    }
+
+    #[test]
+    fn a_run_collects_nothing_unless_asked() {
+        let (_, records) = run(
+            &two_rep_scenario(),
+            &test_assets_dir(),
+            RunOptions::default(),
+        )
+        .unwrap();
+        assert!(
+            records.is_empty(),
+            "the default must stay free: {} records",
+            records.len()
+        );
+    }
+
+    /// The regression that matters, and it has two halves. A fresh `Game`
+    /// per rep means each rep mints its own ids from 1, so an implementation
+    /// that drains without renumbering hands every fight in a 200-rep
+    /// evaluation the id `1` — and one that drains after the loop instead of
+    /// inside it sees only the last rep's `Game` and loses the rest outright.
+    #[test]
+    fn every_rep_in_a_run_gets_its_own_fight_id() {
+        let (_, records) = run(
+            &two_rep_scenario(),
+            &test_assets_dir(),
+            RunOptions {
+                telemetry: true,
+                ..RunOptions::default()
+            },
+        )
+        .unwrap();
+
+        let starts: Vec<u64> = records
+            .iter()
+            .filter_map(|r| match r {
+                Record::FightStart { fight, .. } => Some(*fight),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(starts.len(), 2, "one per rep, got {starts:?}");
+        assert_ne!(
+            starts[0], starts[1],
+            "both reps minted id {} — the drain did not renumber",
+            starts[0]
+        );
+
+        // Every record, not just the openers: a renumber that touched only
+        // `FightStart` would leave the swings pointing at the wrong fight.
+        fn fight_of(record: &Record) -> u64 {
+            match record {
+                Record::FightStart { fight, .. }
+                | Record::Round { fight, .. }
+                | Record::EnemyChoice { fight, .. }
+                | Record::PartyAction { fight, .. }
+                | Record::FightEnd { fight, .. } => *fight,
+            }
+        }
+        let ids: std::collections::BTreeSet<u64> = records.iter().map(fight_of).collect();
+        assert_eq!(
+            ids,
+            starts.iter().copied().collect(),
+            "some records carry an id no fight opened with"
         );
     }
 }

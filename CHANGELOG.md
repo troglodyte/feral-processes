@@ -27,6 +27,43 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.5.18
+
+### The trainer can now show its working
+
+`train` records the two evaluation passes either side of its search —
+the all-zero baseline and the trained result — as battle telemetry, one
+file per config, pass and scenario. The 1.9M-fight search between them
+stays unlogged on purpose: those are candidates that were thrown away,
+and keeping them would cost tens of gigabytes to describe weight vectors
+nothing ever used.
+
+```sh
+cargo run --release --bin train -- --label pin3 --log-dir dev-logs/policy-sweep …
+```
+
+Nothing about a played game changes. `arena::run` gained a `RunOptions`
+argument that defaults to collecting nothing, so the headless arena bin
+and the game's own arena screen behave exactly as before.
+
+### Reading that telemetry, in Python
+
+`analysis/` is the first Python in the repo with dependencies — pandas
+and matplotlib, behind a venv and a `requirements.txt`. It answers who
+the enemy swings at, how hurt the target is when chosen, and how much of
+its moveset each species still uses. The training itself stays in Rust:
+the objective function is the real game, so an optimiser over here would
+have to call back into `arena::run` for every one of its evaluations.
+
+### A place for what the instruments said
+
+`docs/measurements/` — one file per question actually answered, each
+carrying the commands that produced it and the blind spots it had. The
+first entry finds that the three pinned policy features are a design
+boundary a free search will always cross: trained unpinned, the enemy
+downs **zero** companions across 1,600 fights where the baseline downs
+267.
+
 ## 0.5.17
 
 ### A routine you can't run stops being pickable

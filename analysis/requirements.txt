@@ -1,0 +1,8 @@
+# The first Python in this repo with dependencies. `docs/*-gen.py` are
+# deliberately stdlib-only and stay that way — they generate documentation
+# pages and nothing about them wants a venv. This directory reads a few
+# hundred megabytes of JSONL and plots distributions, which is what pandas
+# and matplotlib exist for.
+pandas>=2.2
+matplotlib>=3.8
+pytest>=8.0

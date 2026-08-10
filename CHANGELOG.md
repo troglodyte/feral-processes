@@ -27,6 +27,22 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.5.16
+
+### A drop says what kind of thing it is
+
+The battle log is where a player meets a dropped item for the first time,
+and it named the item and nothing else. Every screen that *lists* an item —
+the inventory, a trader's shelf — puts its category beside the name, so the
+log was the one place you had to already know whether a "Hardened Shell"
+was armour, a module or stock for the bench. Drop lines now carry the same
+tag those screens do: `It also drops a Hardened Shell [ARM]!`
+
+`Game::item_name_tagged` is the one formatter, reading the same
+`ItemCategory::short_label` the columns do, so the two cannot drift. The
+tag goes after the name rather than in front of it because a sentence has
+no column to put it in.
+
 ## 0.5.15
 
 ### A played fight leaves something behind

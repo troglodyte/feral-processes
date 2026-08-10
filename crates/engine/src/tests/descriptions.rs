@@ -469,6 +469,24 @@ fn every_describable_cell_kind_has_a_shipped_bank_entry() {
                 "{subject}'s {condition:?} variant is missing and fell back"
             );
         }
+        // `Game::arrival_line` is the one `sighted` reader that never runs
+        // `fill_bearing` — an arrival line has no cell for the token to
+        // point at (see its doc comment) — so unlike every other subject's
+        // `sighted` pool, `stack.frame.arrival`'s can never carry `{bearing}`
+        // without it reaching the screen unexpanded.
+        if *subject == "stack.frame.arrival" {
+            for condition in std::iter::once(None).chain(conditions.iter().map(|c| Some(*c))) {
+                for seed in 0..64u64 {
+                    if let Some(line) = db.sighted(subject, condition, seed) {
+                        assert!(
+                            !line.contains("{bearing}"),
+                            "{subject} {condition:?} uses {{bearing}} in `sighted`, but \
+                             arrival_line never fills it"
+                        );
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -518,6 +536,7 @@ fn the_shipped_bank_uses_no_occult_naming() {
 
 // ---- the `Game` half: subjects, seeds and bearings --------------------
 
+use crate::game::stack::StackPos;
 use crate::stack::{CellKind, Dir};
 use crate::*;
 
@@ -578,11 +597,29 @@ fn the_same_cell_reads_the_same_description_twice() {
 /// Two frames of one stack are two different places and must read as two.
 /// `stack.floor` carries four openers, four details and four codas, so this
 /// is not vacuous — with one fragment per slot it would pass regardless.
+///
+/// The coordinate is held fixed across depths on purpose: comparing "the
+/// first `Floor` cell" per frame (an earlier version of this test) compares
+/// two different *coordinates* whenever the maze layout shifts between
+/// frames, which it does at seed 16 — depth 1's first floor is `(4, 1)`,
+/// depth 2's is `(13, 1)`. That version passed even with depth stripped out
+/// of `description_seed` entirely, because it was never actually holding
+/// the cell steady. This version finds a coordinate that reads `Floor` in
+/// every sampled frame and re-reads *that* one, so only depth varies.
+///
+/// If no such coordinate exists for a given seed, the property under test —
+/// that `description_seed` depends on depth — is reached directly instead
+/// of being given up on, since going through a subject/condition pair that
+/// isn't even the same subject across frames would no longer be testing the
+/// same claim.
 #[test]
 fn two_different_frames_describe_the_same_cell_differently() {
     let mut game = game();
     crate::tests::support::descend(&mut game);
-    let mut readings = std::collections::HashSet::new();
+
+    let mut common: Option<std::collections::BTreeSet<(i32, i32)>> = None;
+    let mut depths = Vec::new();
+    let (mut frames_seen, mut entrance_seen) = (0u32, (0i32, 0i32));
     for depth in 1..=4u32 {
         let Locale::Stack {
             frames, entrance, ..
@@ -594,15 +631,50 @@ fn two_different_frames_describe_the_same_cell_differently() {
             break;
         }
         game.descend_to(depth, frames, entrance);
-        let pos = game.stack_pos().unwrap();
-        if let Some(cell) = cell_of(&game, CellKind::Floor) {
-            readings.extend(game.cell_paragraph(pos, cell));
-        }
+        depths.push(depth);
+        (frames_seen, entrance_seen) = (frames, entrance);
+        let level = crate::tests::support::frame(&game);
+        let floors: std::collections::BTreeSet<(i32, i32)> =
+            crate::tests::support::every_cell(&level)
+                .filter(|&(x, y)| level.cell(x, y) == CellKind::Floor)
+                .collect();
+        common = Some(match common {
+            None => floors,
+            Some(prev) => prev.intersection(&floors).copied().collect(),
+        });
     }
     assert!(
-        readings.len() > 1,
-        "every frame of the stack read the corridor identically: {readings:?}"
+        depths.len() > 1,
+        "the stack needs at least two frames to compare"
     );
+
+    if let Some(cell) = common.and_then(|set| set.into_iter().next()) {
+        let readings: std::collections::HashSet<_> = depths
+            .iter()
+            .filter_map(|&depth| {
+                game.descend_to(depth, frames_seen, entrance_seen);
+                let pos = game.stack_pos().unwrap();
+                game.cell_paragraph(pos, cell)
+            })
+            .collect();
+        assert!(
+            readings.len() > 1,
+            "coordinate {cell:?} read identically at every sampled depth: {readings:?}"
+        );
+    } else {
+        let seeds: std::collections::HashSet<_> = depths
+            .iter()
+            .map(|&depth| {
+                game.descend_to(depth, frames_seen, entrance_seen);
+                let pos = game.stack_pos().unwrap();
+                game.description_seed(pos, (0, 0))
+            })
+            .collect();
+        assert!(
+            seeds.len() > 1,
+            "description_seed did not vary with depth: {seeds:?}"
+        );
+    }
 }
 
 /// The bearing is live view geometry, not a stored property — turning in
@@ -661,22 +733,225 @@ fn notability_ranks_unspent_features_over_terrain() {
 
 /// `arrival_line` is a property of the frame, not of a sighted cell, so
 /// unlike `sighted_description` and `cell_paragraph` it is never run through
-/// `fill_bearing` — there is no `cell` for the token to point at. Not in the
-/// brief's fixture list, but added here because this task is what gives
-/// `arrival_line` its first caller (mirroring `FrameSpec::salted` above),
-/// and leaving it uncalled would leave it dead code.
+/// `fill_bearing` — there is no `cell` for the token to point at. Proven by
+/// standing somewhere else in the same frame and getting the same line back
+/// — the thing that would break if `arrival_line` were ever seeded off the
+/// party's position instead of the frame's. Not in the brief's fixture
+/// list, but added here because this task is what gives `arrival_line` its
+/// first caller (mirroring `FrameSpec::salted` above), and leaving it
+/// uncalled would leave it dead code.
 #[test]
 fn arrival_line_reads_the_frame_not_a_sighted_cell() {
     let mut game = game();
     crate::tests::support::descend(&mut game);
     let pos = game.stack_pos().unwrap();
 
-    let line = game
+    let here = game
         .arrival_line(pos)
         .expect("depth 1 should read as shallow");
+    assert!(
+        !here.contains("{bearing}"),
+        "arrival has no cell to point a bearing at: {here:?}"
+    );
+
+    let elsewhere = cell_of(&game, CellKind::Floor)
+        .filter(|&cell| cell != (pos.x, pos.y))
+        .or_else(|| {
+            // The first `Floor` cell can coincide with where the party
+            // already stands; fall back to any other floor cell in the
+            // frame so the two reads are genuinely at different positions.
+            let level = crate::tests::support::frame(&game);
+            crate::tests::support::every_cell(&level).find(|&cell| {
+                cell != (pos.x, pos.y) && level.cell(cell.0, cell.1) == CellKind::Floor
+            })
+        })
+        .expect("a frame with more than one floor cell");
+    crate::tests::support::stand_at(&mut game, elsewhere, Dir::North);
+    let there = game
+        .arrival_line(game.stack_pos().unwrap())
+        .expect("still depth 1, still shallow");
+
+    assert_eq!(
+        here, there,
+        "arrival_line changed when only the party's position moved, not the frame"
+    );
+}
+
+/// Pins `Game::subject_of`'s bank routing against the shipped bank, through
+/// only the public entry points — `subject_of` itself is private, and a
+/// typo'd or unauthored condition string would fall back to the general
+/// reading with a fully green suite otherwise. The census test above only
+/// proves the bank *has* every entry; this proves the game actually asks
+/// for the right one.
+///
+/// For the five state-driven axes, `pos` and `cell` are held identical
+/// before and after the flip, so `description_seed` is identical on both
+/// sides and only the condition passed to the bank can have changed — each
+/// side is checked for exact equality against `DescriptionDb::paragraph`
+/// computed at that same seed, not merely asserted to differ, since a bare
+/// inequality could pass on a coincidental seed collision for the wrong
+/// reason (the trap `two_different_frames_describe_the_same_cell_differently`
+/// fell into above).
+///
+/// `link_up` cannot be held to the same shape: its condition **is**
+/// `pos.depth == 1`, and depth also feeds `description_seed`
+/// (`FrameSpec::rng_seed` folds it in — see that method's doc), so there is
+/// no way to flip this one axis without the seed moving too. It gets the
+/// same exact-match treatment against the bank, just at two different
+/// seeds — the synthetic depth-2 `StackPos` still points at the real
+/// depth-1 frame data (`subject_of` reads the cell kind from `CurrentStack`,
+/// not from `pos.depth`), so this is still pinning the same `subject_of`
+/// arm, not a different frame.
+///
+/// Paragraph fragments never carry `{bearing}` in the shipped bank (only
+/// `sighted` lines do — see `every_shipped_underfoot_line_fits_the_standing_on_row`'s
+/// sibling check below for `sighted`), so `cell_paragraph`'s `fill_bearing`
+/// pass is a no-op here and the exact-match comparison against the raw bank
+/// text holds.
+///
+/// Not every condition axis has a matching cell kind in every sampled
+/// frame (seed 16's depth-1 frame has no `SealedDoor` or `Lair`, for
+/// instance), so every reached frame of the stack is checked — up to depth
+/// 4, mirroring `two_different_frames_describe_the_same_cell_differently`'s
+/// bound above — and an axis is skipped only once none of them offered a
+/// matching cell. The test fails if it manages to skip all six, since that
+/// would mean it proved nothing.
+#[test]
+fn subject_of_asks_the_bank_for_the_condition_the_predicates_say() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let mut exercised: Vec<&str> = Vec::new();
+
+    fn bank(game: &Game, subject: &str, condition: Option<&str>, seed: u64) -> Option<String> {
+        game.world
+            .resource::<DescriptionDb>()
+            .paragraph(subject, condition, seed)
+    }
+
+    for depth in 1..=4u32 {
+        let Locale::Stack {
+            frames, entrance, ..
+        } = game.locale()
+        else {
+            unreachable!("not underground")
+        };
+        if depth > frames {
+            break;
+        }
+        game.descend_to(depth, frames, entrance);
+        let pos = game.stack_pos().unwrap();
+
+        if !exercised.contains(&"cache")
+            && let Some(cell) = cell_of(&game, CellKind::Cache)
+        {
+            let seed = game.description_seed(pos, cell);
+            assert_eq!(
+                game.cell_paragraph(pos, cell),
+                bank(&game, "stack.cache", None, seed)
+            );
+            game.frame_memory_mut(pos).looted.insert(cell);
+            assert_eq!(
+                game.cell_paragraph(pos, cell),
+                bank(&game, "stack.cache", Some("spent"), seed)
+            );
+            exercised.push("cache");
+        }
+
+        if !exercised.contains(&"sealed_door")
+            && let Some(cell) = cell_of(&game, CellKind::SealedDoor)
+        {
+            let seed = game.description_seed(pos, cell);
+            assert_eq!(
+                game.cell_paragraph(pos, cell),
+                bank(&game, "stack.sealed_door", None, seed)
+            );
+            game.frame_memory_mut(pos).opened.insert(cell);
+            assert_eq!(
+                game.cell_paragraph(pos, cell),
+                bank(&game, "stack.sealed_door", Some("opened"), seed)
+            );
+            exercised.push("sealed_door");
+        }
+
+        if !exercised.contains(&"breakpoint")
+            && let Some(cell) = cell_of(&game, CellKind::Breakpoint)
+        {
+            let seed = game.description_seed(pos, cell);
+            assert_eq!(
+                game.cell_paragraph(pos, cell),
+                bank(&game, "stack.breakpoint", None, seed)
+            );
+            game.frame_memory_mut(pos).jacked.insert(cell);
+            assert_eq!(
+                game.cell_paragraph(pos, cell),
+                bank(&game, "stack.breakpoint", Some("spent"), seed)
+            );
+            exercised.push("breakpoint");
+        }
+
+        if !exercised.contains(&"orphan")
+            && let Some(cell) = cell_of(&game, CellKind::Orphan)
+        {
+            let seed = game.description_seed(pos, cell);
+            assert_eq!(
+                game.cell_paragraph(pos, cell),
+                bank(&game, "stack.orphan", None, seed)
+            );
+            game.frame_memory_mut(pos).adopted.insert(cell);
+            assert_eq!(
+                game.cell_paragraph(pos, cell),
+                bank(&game, "stack.orphan", Some("spent"), seed)
+            );
+            exercised.push("orphan");
+        }
+
+        if !exercised.contains(&"lair")
+            && let Some(cell) = cell_of(&game, CellKind::Lair)
+        {
+            let seed = game.description_seed(pos, cell);
+            assert_eq!(
+                game.cell_paragraph(pos, cell),
+                bank(&game, "stack.lair", None, seed)
+            );
+            game.frame_memory_mut(pos).cleared = true;
+            assert_eq!(
+                game.cell_paragraph(pos, cell),
+                bank(&game, "stack.lair", Some("cleared"), seed)
+            );
+            exercised.push("lair");
+        }
+
+        // `link_up`'s condition is `pos.depth == 1` itself, so only a frame
+        // reached at real depth 1 gives the "surface" side natively; the
+        // "not surface" side is reached by a synthetic depth override below
+        // rather than by waiting for a deeper frame, since a deeper frame's
+        // `LinkUp` cell may not be at the same coordinate at all.
+        if !exercised.contains(&"link_up")
+            && pos.depth == 1
+            && let Some(cell) = cell_of(&game, CellKind::LinkUp)
+        {
+            let seed_surface = game.description_seed(pos, cell);
+            assert_eq!(
+                game.cell_paragraph(pos, cell),
+                bank(&game, "stack.link_up", Some("surface"), seed_surface)
+            );
+
+            let deeper = StackPos {
+                depth: pos.depth + 1,
+                ..pos
+            };
+            let seed_deep = game.description_seed(deeper, cell);
+            assert_eq!(
+                game.cell_paragraph(deeper, cell),
+                bank(&game, "stack.link_up", None, seed_deep)
+            );
+            exercised.push("link_up");
+        }
+    }
 
     assert!(
-        !line.contains("{bearing}"),
-        "arrival has no cell to point a bearing at: {line:?}"
+        !exercised.is_empty(),
+        "no condition axis had a matching cell kind in any sampled frame — the test proved nothing"
     );
+    eprintln!("subject_of condition axes exercised: {exercised:?}");
 }

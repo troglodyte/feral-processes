@@ -77,7 +77,13 @@ impl Game {
     /// depth — and `world_seed` changes on every breach — so two links in a
     /// sector are two different stacks, two depths are two different frames,
     /// and a new zone is new text, all for free.
-    fn description_seed(&self, pos: StackPos, cell: (i32, i32)) -> u64 {
+    ///
+    /// `pub(crate)` rather than private: `two_different_frames_describe_the_same_cell_differently`
+    /// needs to pin "the seed depends on depth" directly for the rare case
+    /// where no single coordinate reads the same `CellKind` in every sampled
+    /// frame, mirroring why `crate::descriptions::index` is exposed the same
+    /// way.
+    pub(crate) fn description_seed(&self, pos: StackPos, cell: (i32, i32)) -> u64 {
         self.frame_spec(pos.depth, pos.frames, pos.entrance)
             .salted(&[DESCRIPTION_SALT, cell.0 as u32 as u64, cell.1 as u32 as u64])
     }

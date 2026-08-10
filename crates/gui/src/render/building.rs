@@ -541,6 +541,7 @@ mod tests {
             level: None,
             durability: None,
             fusions: 0,
+            rarity: Rarity::Ordinary,
             machine_status: None,
             linked_edges: Vec::new(),
         }

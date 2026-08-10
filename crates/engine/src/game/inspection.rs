@@ -345,6 +345,7 @@ impl Game {
                     level,
                     durability,
                     fusions: self.fusion_count(entity),
+                    rarity: self.rarity_of(entity),
                     machine_status,
                     linked_edges: linked_edges.remove(&entity).unwrap_or_default(),
                 }
@@ -734,6 +735,9 @@ impl Game {
                         .get::<Durability>(entity)
                         .map(|d| (d.hp, d.max_hp)),
                     fusions: 0,
+                    // Structures only, so there is no creature here to have
+                    // rolled a tier.
+                    rarity: Rarity::Ordinary,
                 }
             })
             .collect();

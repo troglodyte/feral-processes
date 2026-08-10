@@ -122,13 +122,38 @@ impl Game {
         )
     }
 
-    /// `creature_name`, zone-tagged, falling back to a generic label if
-    /// `entity` isn't a `Creature`.
+    /// `creature_name`, rare-tier prefixed and zone-tagged, falling back to
+    /// a generic label if `entity` isn't a `Creature`.
+    ///
+    /// The prefix goes here rather than in `zone_tagged_name` deliberately.
+    /// That one is also called directly by `EnemyGroupView::species_name`
+    /// (`game/combat_round.rs`), and the battle roster draws its name into a
+    /// fixed `NAME_W` cell that "Overclocked Scrapper 2" overflows — the
+    /// roster carries the tier as its own short tag instead, outside the
+    /// column. A `CustomName` gets the prefix too, which is right: renaming
+    /// a program does not make it ordinary.
     pub(crate) fn creature_label(&self, entity: Entity) -> String {
         match self.creature_name(entity) {
-            Some(name) => self.zone_tagged_name(entity, name),
+            Some(name) => {
+                let named = match self.rarity_of(entity).label() {
+                    Some(tier) => format!("{tier} {name}"),
+                    None => name,
+                };
+                self.zone_tagged_name(entity, named)
+            }
             None => "Program".to_string(),
         }
+    }
+
+    /// The rare-spawn tier of `entity`, or `Ordinary` for anything without
+    /// the component — which is every ordinary creature, every structure and
+    /// every hand-built test fixture. The one reader, so no caller has to
+    /// know the component is optional.
+    pub(crate) fn rarity_of(&self, entity: Entity) -> Rarity {
+        self.world
+            .get::<Rarity>(entity)
+            .copied()
+            .unwrap_or_default()
     }
 
     /// Appends a creature's `ZonePortal` to its species name for display
@@ -269,6 +294,7 @@ impl Game {
                     activity: self.program_activity(entity),
                     quality: self.potential_quality_label(entity),
                     fusions: self.fusion_count(entity),
+                    rarity: self.rarity_of(entity),
                     wielded: self.wielded_program() == Some(entity),
                 })
             })
@@ -600,6 +626,17 @@ impl Game {
         let fused_atk = fuse_stat(stats_a.atk, stats_b.atk);
         let fused_def = fuse_stat(stats_a.def, stats_b.def);
         let fused_potential = Potential::averaged(potential_a, potential_b);
+        // The better of the two parents, the same shape `FusionCount` takes
+        // (`max(a, b) + 1`) and for the same reason: fusing away an
+        // Overclocked program must not quietly launder it into an ordinary
+        // one. Averaging it the way `Potential` is averaged would need a
+        // tier between the tiers, which the enum deliberately doesn't have.
+        //
+        // Carried as a *tag* only — `fuse_stat` above already derives the
+        // stats from parents whose numbers include their own multiplier, so
+        // applying `stat_mult` here would pay for the tier twice. See
+        // `Rarity`'s doc.
+        let fused_rarity = self.rarity_of(a).max(self.rarity_of(b));
 
         let name_a = self.creature_label(a);
         let name_b = self.creature_label(b);
@@ -642,6 +679,7 @@ impl Game {
             ZonePortal(1),
             StatusEffects::default(),
             FusionCount(fused_depth),
+            fused_rarity,
         ));
         let fused_entity = fused.id();
         if let Some(name) = &final_name {

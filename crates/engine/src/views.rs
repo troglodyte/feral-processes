@@ -6,7 +6,7 @@
 
 use crate::abilities::AffinityKind;
 use crate::battle::ActionOption;
-use crate::components::{EquippedItem, GlyphColor, MachineStatus, TaskKind};
+use crate::components::{EquippedItem, GlyphColor, MachineStatus, Rarity, TaskKind};
 use crate::items::ItemId;
 use crate::perks::Perk;
 use crate::research::ResearchId;
@@ -212,6 +212,11 @@ pub struct PetInfo {
     /// — see `components::FusionCount`. At `MAX_FUSIONS` it can no longer
     /// be fused.
     pub fusions: u32,
+    /// This program's rare-spawn tier — see `components::Rarity`. Already
+    /// spelled into `name` as a prefix by `Game::creature_label`; carried
+    /// separately so a menu can also colour the row without parsing it back
+    /// out of the string.
+    pub rarity: Rarity,
     /// Whether this is the program equipped as the player's weapon (see
     /// `resources::WieldedProgram`). At most one row in a list carries it.
     pub wielded: bool,
@@ -324,6 +329,13 @@ pub struct EntityView {
     /// `MAX_FUSIONS` — see `components::FusionCount`. At `MAX_FUSIONS` it
     /// can no longer be an input to a fusion, which the fuse menus show.
     pub fusions: u32,
+    /// This (creature) entity's rare-spawn tier — see `components::Rarity`.
+    ///
+    /// The map draws it as a bar along the top edge of the tile rather than
+    /// by recolouring the glyph, because `color` above is already carrying
+    /// `difficulty_color` for a hostile: how dangerous something is and how
+    /// rare it is are two readings, and the glyph can only hold one.
+    pub rarity: Rarity,
     /// Why this (structure) entity is or isn't producing, or `None` for
     /// anything that runs no job and so has no state to be in. Lets the map
     /// colour a machine's outline by what it is doing.

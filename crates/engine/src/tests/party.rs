@@ -1355,3 +1355,88 @@ fn a_renamed_program_keeps_its_name_across_a_save() {
         "the rename is what `CreatureSave::custom_name` is for"
     );
 }
+
+#[test]
+fn fusing_two_shinies_keeps_the_higher_rarity() {
+    let mut game = Game::new(92, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let a = spawn_tamed(&mut game, 10, 3);
+    let b = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(a).insert(Rarity::Silver);
+    game.world.entity_mut(b).insert(Rarity::Gold);
+
+    game.fuse_companions(a, b, None).unwrap();
+
+    let fused = game.owned_pets();
+    assert_eq!(fused.len(), 1);
+    assert_eq!(
+        fused[0].rarity,
+        Rarity::Gold,
+        "fusing must not launder an Overclocked program into a lesser tier"
+    );
+}
+
+/// The tier is a tag on a fusion, not a fresh multiplier: `fuse_stat`
+/// already works from parents whose `Stats` carry their own tier, so
+/// applying it again here would pay for it twice.
+#[test]
+fn fusing_does_not_re_apply_the_rarity_multiplier() {
+    let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let plain_a = spawn_tamed(&mut game, 10, 3);
+    let plain_b = spawn_tamed(&mut game, 10, 3);
+    game.fuse_companions(plain_a, plain_b, None).unwrap();
+    let baseline = game.owned_pets()[0].max_hp;
+
+    let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let a = spawn_tamed(&mut game, 10, 3);
+    let b = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(a).insert(Rarity::Gold);
+    game.world.entity_mut(b).insert(Rarity::Gold);
+    game.fuse_companions(a, b, None).unwrap();
+
+    assert_eq!(
+        game.owned_pets()[0].max_hp,
+        baseline,
+        "two parents with identical stats must fuse to identical stats \
+         whatever tier they are tagged with"
+    );
+}
+
+#[test]
+fn a_shiny_programs_name_carries_its_tier() {
+    let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    let plain = game.owned_pets()[0].name.clone();
+
+    game.world.entity_mut(pet).insert(Rarity::Gold);
+    let shiny = game.owned_pets()[0].name.clone();
+
+    assert_ne!(
+        shiny, plain,
+        "the tier has to show up somewhere in the name"
+    );
+    assert!(
+        shiny.contains(Rarity::Gold.label().unwrap()),
+        "expected the player-facing tier word in {shiny:?}"
+    );
+    assert!(
+        shiny.ends_with(&plain),
+        "the tier is a prefix, so the zone tag stays on the end: {shiny:?}"
+    );
+}
+
+/// Renaming is not a way to shed the tier — a renamed Overclocked program
+/// is still Overclocked, and the prefix says so.
+#[test]
+fn a_custom_name_still_carries_the_tier() {
+    let mut game = Game::new(95, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(pet).insert(Rarity::Silver);
+    game.rename_companion(pet, Some("Hexed".to_string()))
+        .unwrap();
+
+    let name = game.owned_pets()[0].name.clone();
+    assert!(
+        name.contains("Hexed") && name.contains(Rarity::Silver.label().unwrap()),
+        "expected both the chosen name and the tier in {name:?}"
+    );
+}

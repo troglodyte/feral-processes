@@ -276,6 +276,50 @@ fn a_special_is_only_built_once_both_the_ability_and_a_target_are_known() {
     );
 }
 
+/// The engine already greys a routine it would refuse — no taming
+/// catalyst, still recharging, roster full — and both the action menu
+/// (`handle_battle_key`) and the field cast list refuse the press with
+/// that reason. The ability picker didn't: it took the press and opened
+/// the group picker, so the player aimed a routine that could only be
+/// thrown away once committed.
+#[test]
+fn an_unavailable_routine_is_refused_instead_of_opening_the_target_picker() {
+    let mut app = battling_app_with(|game| {
+        // Decompile's catalyst. Gone, the row reads "no taming catalyst",
+        // which is the cheapest of the three reasons to set up.
+        let _ = game.erase_item(
+            &ItemId::from(feral_processes_engine::items::ids::ICE_BREAKER),
+            0,
+            99,
+        );
+    });
+    let options = app.game.as_ref().unwrap().battle_special_options(0);
+    let idx = options
+        .iter()
+        .position(|o| o.unavailable.is_some())
+        .expect("with no ICE Breakers the player's Decompile row should be greyed");
+
+    app.mode = Mode::BattleSpecial;
+    app.pending_battle_action = Some(ActionKind::Special);
+    app.pending_special_ability = None;
+    app.menu_selected = idx;
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(
+        app.mode,
+        Mode::BattleSpecial,
+        "an unavailable routine should leave the player on the picker it was refused from"
+    );
+    assert_eq!(
+        app.pending_special_ability, None,
+        "nothing was chosen, so nothing should be pending"
+    );
+    assert!(
+        app.status_line.is_some_and(|s| s.contains("catalyst")),
+        "the refusal should say why, the way the action menu's does"
+    );
+}
+
 /// Backing out of the target picker for a Special returns to the ability
 /// picker rather than discarding both choices — one Esc, one step.
 #[test]

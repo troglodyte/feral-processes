@@ -280,6 +280,15 @@ impl App {
             return;
         };
         let chosen = &options[idx];
+        // The engine already wrote the reason onto the row it greyed, so this
+        // refuses on the same sentence the player is looking at — same shape
+        // as the action menu's `ActionOption::unavailable` check. Without it
+        // the picker took the press and asked for a target for a routine that
+        // could only be discarded once committed.
+        if let Some(reason) = &chosen.unavailable {
+            self.status_line = Some(format!("Can't use {} — {reason}.", chosen.name));
+            return;
+        }
         // Which picker comes next is the ability's own business, read off the
         // engine's option rather than decided here.
         self.pending_special_ability = Some(chosen.index);

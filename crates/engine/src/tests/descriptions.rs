@@ -1103,50 +1103,62 @@ fn log_lines(game: &Game) -> Vec<String> {
         .collect()
 }
 
-/// A corridor opening onto four features must not push four rows into a
-/// pane that shows a handful — one line per call, for the most notable
-/// thing.
+/// Searches every walkable cell and facing in `game`'s current frame for a
+/// vantage whose view cone holds at least `min_notable` notable cells that
+/// are not yet in `FrameMemory::seen` — asked through the real
+/// `remember_view_silent`/`notability`, never reimplemented, so the search
+/// exercises exactly the machinery the tests that call this are pinning.
 ///
 /// At an arbitrary vantage point (the entry, facing north) a view cone
-/// rarely holds more than one notable cell, so a loose "at most two turns
-/// worth of lines" bound over `turn_left`/`turn_right` never actually
-/// exercises the cap — it would pass with `announce_sighting`'s cap deleted
-/// exactly as readily as with it in place. Searching the frame for a
-/// position whose view cone holds *at least two* notable cells at once —
-/// through `remember_view_silent` and `notability` themselves, never
-/// reimplemented — manufactures the case the cap exists for, then a single
-/// `remember_view` call is pinned to produce exactly one line.
-#[test]
-fn a_newly_seen_notable_cell_logs_once_per_move() {
-    let mut game = game();
-    crate::tests::support::descend(&mut game);
-    let level = crate::tests::support::frame(&game);
+/// rarely holds more than zero or one notable cells, so fixtures built on
+/// `descend` alone are the same vacuous trap this task has already hit
+/// twice: comparing "nothing" to "nothing" passes with the code under test
+/// deleted. This is how both fixes route around it.
+///
+/// Leaves the search's own bookkeeping behind: `FrameMemory::seen` for the
+/// found vantage is cleared and the party is standing there, but
+/// `remember_view` has *not* been called, so the caller controls exactly
+/// which call is under test.
+fn find_vantage_with_notable_cells(game: &mut Game, min_notable: usize) -> (i32, i32, Dir) {
+    let level = crate::tests::support::frame(game);
     let pos = game.stack_pos().unwrap();
-
-    let mut found = None;
-    'search: for (x, y) in crate::tests::support::every_cell(&level) {
+    for (x, y) in crate::tests::support::every_cell(&level) {
         if !level.walkable(x, y) {
             continue;
         }
         for facing in [Dir::North, Dir::East, Dir::South, Dir::West] {
             game.frame_memory_mut(pos).seen.clear();
-            crate::tests::support::stand_at(&mut game, (x, y), facing);
+            crate::tests::support::stand_at(game, (x, y), facing);
             let here = game.stack_pos().unwrap();
             let notable = game
                 .remember_view_silent()
                 .into_iter()
                 .filter(|&cell| cell != (x, y) && game.notability(here, cell).is_some())
                 .count();
-            if notable >= 2 {
-                found = Some(((x, y), facing));
-                break 'search;
+            if notable >= min_notable {
+                game.frame_memory_mut(pos).seen.clear();
+                crate::tests::support::stand_at(game, (x, y), facing);
+                return (x, y, facing);
             }
         }
     }
-    let (stand, facing) = found.expect("some vantage in this frame sees two notable cells at once");
+    panic!("no vantage in this frame sees {min_notable} notable cells at once");
+}
 
-    game.frame_memory_mut(pos).seen.clear();
-    crate::tests::support::stand_at(&mut game, stand, facing);
+/// A corridor opening onto four features must not push four rows into a
+/// pane that shows a handful — one line per call, for the most notable
+/// thing.
+///
+/// Built on `find_vantage_with_notable_cells`'s search rather than turning
+/// in place at the entry, which manufactures the case the cap exists for
+/// instead of hoping the default vantage happens to offer it.
+#[test]
+fn a_newly_seen_notable_cell_logs_once_per_move() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let (x, y, facing) = find_vantage_with_notable_cells(&mut game, 2);
+    crate::tests::support::stand_at(&mut game, (x, y), facing);
+
     let before = log_lines(&game).len();
     game.remember_view();
     let after = log_lines(&game).len();
@@ -1158,22 +1170,197 @@ fn a_newly_seen_notable_cell_logs_once_per_move() {
     );
 }
 
-/// A step that reveals nothing new says nothing. Turning twice returns the
-/// party to the exact view they started from, so the second turn has no
-/// newly-seen cells at all.
+/// A step that reveals nothing new says nothing — the diff is the whole
+/// point of splitting `remember_view_silent` out, and this is the test that
+/// pins it: it must fail if `remember_view_silent` ever goes back to
+/// returning the entire view cone instead of the cells not already in
+/// `FrameMemory::seen`, which is the exact regression (re-announcing
+/// everything currently in view, every single call) this task exists to
+/// prevent.
+///
+/// The first draft of this test turned in place at the post-`descend`
+/// vantage and compared `turn_left`/`turn_right`'s line counts, but that
+/// vantage's view cone holds no notable cell at all — both turns log
+/// nothing, so the assertion compared zero lines to zero lines and would
+/// have passed with the diff logic deleted just as readily as with it kept.
+/// Reusing `find_vantage_with_notable_cells` instead: stand somewhere a
+/// notable cell genuinely is newly visible, require the first
+/// `remember_view` to announce it, then require a second call from the same
+/// spot — nothing left unseen — to announce nothing at all.
 #[test]
 fn a_step_revealing_nothing_new_logs_nothing() {
     let mut game = game();
     crate::tests::support::descend(&mut game);
-    game.turn_left();
-    game.turn_right();
-    let settled = log_lines(&game).len();
-    game.turn_left();
-    game.turn_right();
+    let (x, y, facing) = find_vantage_with_notable_cells(&mut game, 1);
+    crate::tests::support::stand_at(&mut game, (x, y), facing);
+
+    let before = log_lines(&game).len();
+    game.remember_view();
+    let after_first = log_lines(&game).len();
+    assert!(
+        after_first > before,
+        "a notable cell came into view for the first time and said nothing"
+    );
+
+    game.remember_view();
+    let after_second = log_lines(&game).len();
+    assert_eq!(after_second, after_first, "a repeated view announced again");
+}
+
+/// `notability`'s ranks are not a total order, so ties are common — see
+/// `Game::notability`'s doc comment for the list. `announce_sighting`
+/// breaks a tie on Manhattan distance before falling back to the cell
+/// coordinate; reducing the comparator to rank alone still passes the whole
+/// engine suite unless something pins the nearer-wins behaviour directly,
+/// so this does.
+///
+/// Searches seed 16 (this file's fixture seed, via `game()`) across every
+/// frame of its stack first, since that is the seed every other test here
+/// already commits to. If none of those frames offers two newly-seen cells
+/// that share a rank and differ in distance, a handful of the other seeds
+/// this suite already uses elsewhere (`every_seed_puts_one_link_inside_the_opening_view`
+/// in `tests/stack.rs`) are tried next, across their own depth-1 frames,
+/// rather than skipping the assertion — see this test's own failure message
+/// if none of them turn one up. In practice seed 16's own depth-1 frame
+/// already offers one: standing at `(4, 2)` facing west sees two corruption
+/// cells tied at rank 1, `(3, 2)` one step away and `(3, 3)` two steps away
+/// — and `(3, 3)` is scanned *before* the nearer `(3, 2)` in `view_cone`'s
+/// ahead-then-lateral order, so this fixture only passes if the tiebreak is
+/// actually consulting distance rather than agreeing with scan order by
+/// coincidence.
+#[test]
+fn a_rank_tie_is_broken_by_distance_not_scan_order() {
+    // A vantage (stand + facing) and the (near, far) cells found there.
+    type Vantage = (i32, i32, Dir);
+    type TiedPair = (Vantage, (i32, i32), (i32, i32));
+
+    // The pair returned must be tied at the *top* rank a vantage's view
+    // offers, not just tied with each other — a same-rank pair buried under
+    // a third, higher-ranked newly-seen cell would have that third cell
+    // announced instead, which would make the assertion below fail for a
+    // reason that has nothing to do with the tiebreak this test is pinning.
+    // The true nearest top-rank cell (`near`) is required to be unique (no
+    // second top-rank cell at the same minimal distance — that case is the
+    // coordinate tiebreak's territory, not distance's, and this test isn't
+    // making a claim about it) *and* to be scanned later than some other
+    // top-rank cell (`far`) in `view_cone`'s ahead-then-lateral order. That
+    // second requirement is the one that actually exercises the tiebreak:
+    // reducing the comparator to rank alone leaves a stable sort, which
+    // resolves a tie by scan order, so a vantage where scan order already
+    // agrees with distance order (the nearest cell happens to be scanned
+    // first anyway) would pass with the tiebreak deleted just as readily as
+    // with it in place.
+    fn rank_tie_in_current_frame(game: &mut Game) -> Option<TiedPair> {
+        let level = crate::tests::support::frame(game);
+        let pos = game.stack_pos().unwrap();
+        for (x, y) in crate::tests::support::every_cell(&level) {
+            if !level.walkable(x, y) {
+                continue;
+            }
+            for facing in [Dir::North, Dir::East, Dir::South, Dir::West] {
+                game.frame_memory_mut(pos).seen.clear();
+                crate::tests::support::stand_at(game, (x, y), facing);
+                let here = game.stack_pos().unwrap();
+                // `idx` is the cell's position in `remember_view_silent`'s
+                // returned order, which is `view_cone`'s ahead-then-lateral
+                // scan order (filtering preserves relative order).
+                let ranked: Vec<(usize, u8, i32, (i32, i32))> = game
+                    .remember_view_silent()
+                    .into_iter()
+                    .enumerate()
+                    .filter(|&(_, cell)| cell != (x, y))
+                    .filter_map(|(idx, cell)| {
+                        game.notability(here, cell).map(|rank| {
+                            let steps = (cell.0 - x).abs() + (cell.1 - y).abs();
+                            (idx, rank, steps, cell)
+                        })
+                    })
+                    .collect();
+                let Some(max_rank) = ranked.iter().map(|&(_, r, _, _)| r).max() else {
+                    continue;
+                };
+                let mut top: Vec<(usize, i32, (i32, i32))> = ranked
+                    .iter()
+                    .filter(|&&(_, r, _, _)| r == max_rank)
+                    .map(|&(idx, _, s, c)| (idx, s, c))
+                    .collect();
+                top.sort_by_key(|&(_, s, _)| s);
+                if top.len() < 2 || top[0].1 == top[1].1 {
+                    continue;
+                }
+                let (near_idx, _, near_cell) = top[0];
+                // Among the top-rank cells scanned before the true nearest
+                // one, the earliest-scanned is exactly what a scan-order
+                // tiebreak (rank alone, stable sort) would pick instead.
+                if let Some(&(_, _, far_cell)) = top
+                    .iter()
+                    .filter(|&&(idx, _, _)| idx < near_idx)
+                    .min_by_key(|&&(idx, _, _)| idx)
+                {
+                    return Some(((x, y, facing), near_cell, far_cell));
+                }
+            }
+        }
+        None
+    }
+
+    fn rank_tie_across_frames(mut game: Game) -> Option<(Game, TiedPair)> {
+        crate::tests::support::descend(&mut game);
+        loop {
+            if let Some(tied) = rank_tie_in_current_frame(&mut game) {
+                return Some((game, tied));
+            }
+            let Locale::Stack {
+                depth,
+                frames,
+                entrance,
+                ..
+            } = game.locale()
+            else {
+                return None;
+            };
+            if depth >= frames {
+                return None;
+            }
+            game.descend_to(depth + 1, frames, entrance);
+        }
+    }
+
+    let mut outcome = rank_tie_across_frames(game());
+    if outcome.is_none() {
+        for seed in [43u32, 77, 101, 2024, 7, 999, 31337] {
+            let candidate = Game::new(
+                seed,
+                DifficultyMode::Forgiving,
+                &crate::tests::support::test_assets_dir(),
+            )
+            .unwrap();
+            outcome = rank_tie_across_frames(candidate);
+            if outcome.is_some() {
+                break;
+            }
+        }
+    }
+    let (mut game, ((x, y, facing), near, far)) = outcome
+        .expect("no frame across seed 16 or the fallback seeds offers a same-rank tie at different distances");
+
+    game.frame_memory_mut(game.stack_pos().unwrap())
+        .seen
+        .clear();
+    crate::tests::support::stand_at(&mut game, (x, y), facing);
+    let pos = game.stack_pos().unwrap();
+    let near_line = game
+        .sighted_description(pos, near)
+        .expect("the nearer tied cell has a line");
+    let far_line = game.sighted_description(pos, far);
+
+    let before = log_lines(&game).len();
+    game.remember_view();
+    let logged = &log_lines(&game)[before..];
+    assert_eq!(logged.len(), 1, "a rank tie logged {} lines", logged.len());
     assert_eq!(
-        log_lines(&game).len(),
-        settled,
-        "a repeated view announced again"
+        logged[0], near_line,
+        "a rank tie picked the farther cell over the nearer one: {logged:?} vs far candidate {far_line:?}"
     );
 }
 

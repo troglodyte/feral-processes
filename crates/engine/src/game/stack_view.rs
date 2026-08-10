@@ -165,29 +165,39 @@ impl Game {
     ///
     /// `notability`'s ranks are not a total order — an unspent cache and an
     /// unspent breakpoint both rank 3, `LinkDown` and a sealed door both rank
-    /// 2 — so breaking ties on rank alone would pick whichever `HashSet`
-    /// happened to iterate first, which is not a property of the frame.
-    /// Ties break on Manhattan distance (nearest first) and then on the cell
-    /// coordinate itself, both of which are fixed by the frame and the
-    /// party's position, so the whole key is total and the winner is
-    /// deterministic.
+    /// 2. `newly_seen` is already a `Vec` walked off `view_cone` in a fixed
+    /// order, so `max_by_key` on rank alone would still be deterministic —
+    /// but it resolves ties by picking whichever tied cell happens to come
+    /// *last* in that scan order, which is an accident of the view cone's
+    /// layout, not the cell nearest the party. Breaking ties on Manhattan
+    /// distance (nearest first) makes the winner the tied cell closest to
+    /// where the player is standing — the one they would actually walk to —
+    /// and the final `Reverse(cell)` only matters for the rarer case of two
+    /// notable cells tied on both rank and distance, where it keeps the pick
+    /// a pure function of coordinates rather than of scan order.
+    ///
+    /// Falls through to the next-best candidate if the winner's own line is
+    /// missing from the bank (an empty variant pool, or a deleted asset
+    /// directory) rather than saying nothing: a lower-ranked cell with a
+    /// line to offer is still more useful than silence, and the cap still
+    /// holds because at most one candidate's line is ever logged.
     fn announce_sighting(&mut self, newly_seen: &[(i32, i32)]) {
         let Some(pos) = self.stack_pos() else {
             return;
         };
-        let Some(best) = newly_seen
+        let mut candidates: Vec<(u8, (i32, i32))> = newly_seen
             .iter()
             .filter(|&&cell| cell != (pos.x, pos.y))
             .filter_map(|&cell| self.notability(pos, cell).map(|rank| (rank, cell)))
-            .max_by_key(|&(rank, cell)| {
-                let steps = (cell.0 - pos.x).abs() + (cell.1 - pos.y).abs();
-                (rank, std::cmp::Reverse(steps), std::cmp::Reverse(cell))
-            })
-            .map(|(_, cell)| cell)
-        else {
-            return;
-        };
-        if let Some(line) = self.sighted_description(pos, best) {
+            .collect();
+        candidates.sort_by_key(|&(rank, cell)| {
+            let steps = (cell.0 - pos.x).abs() + (cell.1 - pos.y).abs();
+            std::cmp::Reverse((rank, std::cmp::Reverse(steps), std::cmp::Reverse(cell)))
+        });
+        if let Some(line) = candidates
+            .into_iter()
+            .find_map(|(_, cell)| self.sighted_description(pos, cell))
+        {
             self.log(line);
         }
     }

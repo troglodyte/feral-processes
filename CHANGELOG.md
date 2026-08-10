@@ -27,6 +27,43 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.5.15
+
+### A played fight leaves something behind
+
+The game could be played, and it could be measured, but not at the same
+time. `arena` runs a fight offline and reports it; a fight a person plays
+by hand produced nothing — the arena session writes no save and no profile
+by design, the message log dies with the process, and the only artifact was
+recall. So the question the trained enemy policy shipped with, whether a
+party actually using its routines still loses to it, could be played out and
+then not answered.
+
+`FERAL_DEV_LOG=1` now records what happens inside a fight to
+`dev-logs/battles.jsonl` — one JSON object per line, per swing, round and
+decision. Five kinds: the fight opening with its party and pack, a snapshot
+at the top of each round, every enemy's chosen move and target, every party
+member's chosen action, and the outcome.
+
+The number it exists for is `target_hp_before`, the target's HP *before* the
+hit lands. Focus fire is a distribution over that number and a per-round
+snapshot cannot show it: four attackers all act inside one round, and by the
+snapshot they have finished. It is recorded at the single point where a wild
+program's move and target are decided, so no swing can be missed.
+
+`dev-logs/README.md` is the schema, one row per field. Unset — which is
+every ordinary run and every player's build — nothing is collected, nothing
+is written, and no file is created.
+
+### An arena fight is allowed to write this one thing
+
+An arena session deliberately touches no disk: no save, no profile, no run
+history. That rule exists so a tester's fight cannot corrupt a save or pay
+out profile rewards to a real player. A dev-only log does neither, and the
+arena is the single place a recorded fight is most wanted — so telemetry is
+a stated exception, with a test of its own sitting beside the three that
+assert the opposite about everything else.
+
 ## 0.5.14
 
 ### Damage lands when the log says it does

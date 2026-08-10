@@ -18,6 +18,7 @@
 //! (`column_slice`), which is both the true projection and what makes the
 //! columns tile edge to edge.
 
+use super::popup::*;
 use super::*;
 use feral_processes_engine::{StackCellView, StackView};
 
@@ -312,6 +313,31 @@ fn cell_mark(cell: StackCellView) -> Option<(char, Color)> {
         StackCellView::SealedDoor => Some(('+', RED)),
         StackCellView::Rock | StackCellView::Floor => None,
     }
+}
+
+/// How wide the cell description lets prose run before wrapping. Matches
+/// `inventory::DESCRIBE_WRAP_COLUMNS` and for the same reason — a fixed
+/// column count rather than a pixel width derived from the window, which
+/// varies per machine.
+const DESCRIBE_WRAP_COLUMNS: usize = 72;
+
+/// The environment paragraph reached with `x` + a direction underground.
+///
+/// The same shape as `inventory::draw_item_describe` — the repo's one
+/// prose-on-screen pattern, and `wrap_text` its only wrap helper.
+pub(super) fn draw_cell_describe(text: Option<&str>, painter: &Painter, m: &Metrics) {
+    let mut rows = Vec::new();
+    match text {
+        Some(text) => rows.extend(
+            wrap_text(text, DESCRIBE_WRAP_COLUMNS)
+                .into_iter()
+                .map(text_row),
+        ),
+        None => rows.push(text_row("Nothing to say about that.")),
+    }
+    rows.push(text_row(""));
+    rows.push(text_row("Any key to go back"));
+    draw_popup("You look", PopupSize::Large, &rows, painter, m);
 }
 
 #[cfg(test)]
@@ -629,6 +655,28 @@ mod tests {
         crate::paint::with_painter(|p| {
             draw_stack(&empty, p, 800.0, 600.0, &m);
             draw_stack(&single, p, 800.0, 600.0, &m);
+        });
+    }
+
+    /// `engine::MAX_UNDERFOOT_LINE` is a character budget; this is what makes
+    /// it a real one. The UI font is DejaVu Sans Mono, so the widest possible
+    /// line of that many characters is that many of any glyph — measured
+    /// against the corridor pane at the narrowest window the UI supports.
+    #[test]
+    fn the_longest_underfoot_line_fits_the_stack_pane() {
+        const NARROWEST_WINDOW: (f32, f32) = (1280.0, 720.0);
+        let m = crate::text::ui_metrics(NARROWEST_WINDOW.1);
+        let pane_w = NARROWEST_WINDOW.0 * super::super::base::PANE_W;
+        let longest = "M".repeat(feral_processes_engine::MAX_UNDERFOOT_LINE);
+        crate::paint::with_painter(|p| {
+            let dims = p.measure_ui(&longest, m.font_size);
+            assert!(
+                dims.width <= pane_w,
+                "{} chars measured {:.1}px against a {:.1}px pane",
+                feral_processes_engine::MAX_UNDERFOOT_LINE,
+                dims.width,
+                pane_w
+            );
         });
     }
 }

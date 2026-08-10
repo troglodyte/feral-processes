@@ -50,6 +50,7 @@ use components::{
     Pursuing, ResourceNode, Routines, StackSpawn, Stats, StatusEffects, StatusKind, Stock,
     Structure, StructureTier, SurfaceLink, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
 };
+pub use game::stack_view::ExamineDir;
 use items::{EquipmentSlot, EquipmentStats, ItemCategory, ItemId, ids};
 use items_db::ItemDb;
 #[cfg(test)]

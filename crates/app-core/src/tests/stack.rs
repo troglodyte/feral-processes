@@ -382,3 +382,29 @@ fn shift_z_on_the_surface_does_nothing() {
         "listening above ground spent a turn"
     );
 }
+
+/// Underground, `x` + a direction describes a cell of the frame instead of
+/// scanning the surface the party's `Position` is still pinned to.
+#[test]
+fn x_underground_opens_a_cell_description() {
+    let mut app = app_underground(606);
+    app.handle_key(GameKey::Char('x'));
+    assert_eq!(app.mode, Mode::InspectDirection);
+
+    app.handle_key(GameKey::Up);
+    assert_eq!(app.mode, Mode::CellDescribe);
+    let text = app
+        .pending_description
+        .clone()
+        .expect("the key always answers");
+    assert!(!text.is_empty());
+    assert!(
+        !text.contains("{bearing}"),
+        "the token reached the screen: {text}"
+    );
+
+    // A plain popup: any key leaves, and the text goes with it.
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+    assert!(app.pending_description.is_none());
+}

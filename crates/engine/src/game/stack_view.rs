@@ -96,7 +96,68 @@ pub(crate) fn underfoot_suffix(subject: &str, condition: Option<&str>) -> &'stat
         .map_or("", |&(_, _, suffix)| suffix)
 }
 
+/// Which way the examine key is looking, in **view space**.
+///
+/// Up is ahead, left and right are the party's own, and down is the cell
+/// underfoot. Absolute compass directions are wrong in a first-person view:
+/// the same keypress has to mean the same thing to the player whichever way
+/// they are facing, and `Dir::delta` is what makes it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExamineDir {
+    Ahead,
+    Left,
+    Right,
+    Underfoot,
+}
+
 impl Game {
+    /// The examine paragraph for the nearest notable cell that way, or for
+    /// the corridor itself when the ray holds nothing notable — so the key
+    /// always answers. `None` on the surface, where
+    /// `find_target_in_direction` is the inspector instead.
+    ///
+    /// Reads the same `view_cone` the first-person view is built from, so
+    /// `x` can only describe a cell the player can actually see, and the
+    /// same `notability` ranking the sighting line uses, so the thing `x`
+    /// describes is the thing the log announced.
+    pub fn describe_view_direction(&self, dir: ExamineDir) -> Option<String> {
+        let pos = self.stack_pos()?;
+        if dir == ExamineDir::Underfoot {
+            return self.cell_paragraph(pos, (pos.x, pos.y));
+        }
+        let lateral = match dir {
+            ExamineDir::Left => 0,
+            ExamineDir::Ahead => STACK_VIEW_HALF_WIDTH,
+            ExamineDir::Right => STACK_VIEW_HALF_WIDTH * 2,
+            ExamineDir::Underfoot => unreachable!("returned above"),
+        };
+        let cone = view_cone(pos.x, pos.y, pos.facing);
+        // Nearest first, and skipping the party's own row: a cell you are
+        // standing in is what `Underfoot` is for.
+        let along = cone
+            .iter()
+            .skip(1)
+            .filter_map(|row| row.get(lateral).copied());
+        for cell in along.clone() {
+            if self.notability(pos, cell).is_some() {
+                return self.cell_paragraph(pos, cell);
+            }
+        }
+        // Nothing notable that way, so describe the corridor the ray runs
+        // down — the nearest walkable cell on it, or the party's own.
+        let fallback = along
+            .clone()
+            .find(|&(x, y)| {
+                self.world
+                    .resource::<CurrentStack>()
+                    .0
+                    .as_ref()
+                    .is_some_and(|level| level.cell(x, y).walkable())
+            })
+            .unwrap_or((pos.x, pos.y));
+        self.cell_paragraph(pos, fallback)
+    }
+
     /// Records everything the party can see from where they are standing,
     /// and announces the most notable thing that just came into view.
     ///

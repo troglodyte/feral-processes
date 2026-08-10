@@ -540,6 +540,9 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             painter,
             m,
         ),
+        Mode::CellDescribe => {
+            stack::draw_cell_describe(app.pending_description.as_deref(), painter, m)
+        }
         Mode::Inventory => draw_inventory(game, selected, painter, m),
         Mode::EquipSwap => draw_equip_swap(game, app.pending_swap_slot, selected, painter, m),
         Mode::InventoryItemAction => {

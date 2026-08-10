@@ -1436,3 +1436,57 @@ fn a_frame_arrival_logs_a_mood_line_and_a_step_does_not() {
     game.step_forward();
     assert_eq!(count(&game), 1, "walking re-fired the arrival line");
 }
+
+// ---- the examine ray: `x` + a direction, in view space -----------------
+
+use crate::ExamineDir;
+
+/// The key always answers: a ray with nothing notable on it still describes
+/// the corridor, so `x` is never a keypress that does nothing.
+#[test]
+fn examining_an_empty_direction_still_describes_the_corridor() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    for dir in [
+        ExamineDir::Ahead,
+        ExamineDir::Left,
+        ExamineDir::Right,
+        ExamineDir::Underfoot,
+    ] {
+        assert!(
+            game.describe_view_direction(dir).is_some(),
+            "{dir:?} answered nothing"
+        );
+    }
+}
+
+/// View space, not compass space — `Ahead` is the way the party is looking,
+/// so turning has to change what it describes.
+#[test]
+fn examining_ahead_is_read_in_view_space() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let north = game.describe_view_direction(ExamineDir::Ahead);
+    game.turn_left();
+    game.turn_left();
+    let south = game.describe_view_direction(ExamineDir::Ahead);
+    assert!(north.is_some() && south.is_some());
+    assert_ne!(north, south, "about-facing described the same cell");
+}
+
+#[test]
+fn examining_underfoot_describes_the_cell_the_party_is_standing_on() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let pos = game.stack_pos().unwrap();
+    assert_eq!(
+        game.describe_view_direction(ExamineDir::Underfoot),
+        game.cell_paragraph(pos, (pos.x, pos.y))
+    );
+}
+
+#[test]
+fn examining_on_the_surface_answers_nothing() {
+    let game = game();
+    assert_eq!(game.describe_view_direction(ExamineDir::Ahead), None);
+}

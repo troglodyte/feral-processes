@@ -38,6 +38,7 @@ impl App {
             pending_remove_structure: None,
             pending_manifest: None,
             pending_structure_manifest: None,
+            pending_description: None,
             manifest_from_picker: false,
             pending_fuse_first: None,
             pending_fuse_second: None,

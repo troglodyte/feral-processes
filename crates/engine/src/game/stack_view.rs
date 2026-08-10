@@ -69,6 +69,33 @@ fn view_cone(x: i32, y: i32, facing: Dir) -> Vec<Vec<(i32, i32)>> {
         .collect()
 }
 
+/// The key-prompt suffix `standing_on` appends after a cell's descriptive
+/// clause, keyed by the same `(subject, condition)` pair
+/// `Game::subject_of` resolves a cell to.
+///
+/// This is the single home for those strings: `Game::stack_view`'s match
+/// below reads it to build the row, and
+/// `tests::descriptions::every_shipped_underfoot_line_fits_the_standing_on_row`
+/// reads it to size the per-subject budget it holds the shipped bank to. A
+/// subject/condition pair absent from this table appends nothing, which is
+/// every arm that reports rather than offers.
+const UNDERFOOT_SUFFIXES: &[(&str, Option<&str>, &str)] = &[
+    ("stack.link_down", None, "  [>] descend"),
+    ("stack.link_up", Some("surface"), "  [<] surface"),
+    ("stack.link_up", None, "  [<] climb"),
+    ("stack.orphan", None, "  [o] adopt"),
+    ("stack.corruption", None, "  — moving on costs"),
+];
+
+/// Looks up `UNDERFOOT_SUFFIXES`, or `""` for a subject/condition pair that
+/// appends nothing.
+pub(crate) fn underfoot_suffix(subject: &str, condition: Option<&str>) -> &'static str {
+    UNDERFOOT_SUFFIXES
+        .iter()
+        .find(|&&(s, c, _)| s == subject && c == condition)
+        .map_or("", |&(_, _, suffix)| suffix)
+}
+
 impl Game {
     /// Records everything the party can see from where they are standing.
     ///
@@ -265,29 +292,57 @@ impl Game {
             })
             .collect();
 
+        // Each arm keeps its key-prompt suffix verbatim (via
+        // `underfoot_suffix`) and draws only its *descriptive clause* from
+        // the bank, falling back to the literal this row shipped with. The
+        // `None` arms stay `None`: those are cells with nothing to offer,
+        // not cells with nothing to say, and two tests in `tests/stack.rs`
+        // pin the difference.
+        let described = |fallback: &str| {
+            self.underfoot_description(pos)
+                .unwrap_or_else(|| fallback.to_string())
+        };
         let standing_on = match level.cell(x, y) {
-            CellKind::LinkDown => Some("A link leads down  [>] descend".to_string()),
-            CellKind::LinkUp if depth == 1 => Some("The link out  [<] surface".to_string()),
-            CellKind::LinkUp => Some("A link leads up  [<] climb".to_string()),
+            CellKind::LinkDown => Some(format!(
+                "{}{}",
+                described("A link leads down"),
+                underfoot_suffix("stack.link_down", None)
+            )),
+            CellKind::LinkUp if depth == 1 => Some(format!(
+                "{}{}",
+                described("The link out"),
+                underfoot_suffix("stack.link_up", Some("surface"))
+            )),
+            CellKind::LinkUp => Some(format!(
+                "{}{}",
+                described("A link leads up"),
+                underfoot_suffix("stack.link_up", None)
+            )),
             // Emptied on arrival rather than on a key, so this reports what
             // already happened rather than offering a choice.
-            CellKind::Cache => Some("An empty casing".to_string()),
-            CellKind::Lair => Some("The lair, and nothing left holding it".to_string()),
-            CellKind::Door | CellKind::SealedDoor => Some("A doorway".to_string()),
+            CellKind::Cache => Some(described("An empty casing")),
+            CellKind::Lair => Some(described("The lair, and nothing left holding it")),
+            CellKind::Door | CellKind::SealedDoor => Some(described("A doorway")),
             // Like the cache above, these report rather than offer: all three
             // fire on arrival, so by the time this line is read the port is
             // spent and the substrate has already bitten. A fault never
             // appears here at all — the party is in the frame below before
             // the view is next built.
-            CellKind::Breakpoint => Some("A burnt-out debug port".to_string()),
-            CellKind::Corruption => Some("Rotten substrate  — moving on costs".to_string()),
+            CellKind::Breakpoint => Some(described("A burnt-out debug port")),
+            CellKind::Corruption => Some(format!(
+                "{}{}",
+                described("Rotten substrate"),
+                underfoot_suffix("stack.corruption", None)
+            )),
             // The one line here that offers rather than reports. Everything
             // else underfoot has already happened by the time this is read;
             // an orphan costs a catalyst, so it waits for the key — and
             // stops offering once it has been taken.
-            CellKind::Orphan if self.orphan_present(pos, (x, y)) => {
-                Some("An orphaned process  [o] adopt".to_string())
-            }
+            CellKind::Orphan if self.orphan_present(pos, (x, y)) => Some(format!(
+                "{}{}",
+                described("An orphaned process"),
+                underfoot_suffix("stack.orphan", None)
+            )),
             CellKind::Orphan => None,
             CellKind::Rock | CellKind::Floor | CellKind::Fault => None,
         };

@@ -399,42 +399,36 @@ fn every_pair_of_slots_is_independent() {
 }
 
 /// Every subject the engine will ask for, and every condition it will ask
-/// for it under, plus the key-prompt suffix width `standing_on` appends
-/// after this subject's descriptive clause on that row.
+/// for it under.
 ///
-/// The third element mirrors the `standing_on` match a later task builds in
-/// `crates/engine/src/game/stack_view.rs`: `stack.link_down` gets
-/// `"  [>] descend"` (13), `stack.link_up` gets `"  [<] climb"` or, at
-/// depth 1, `"  [<] surface"` — 13 is that subject's worst case — and
-/// `stack.orphan` gets `"  [o] adopt"` (11). `stack.corruption` is the
-/// outlier at 19, for `"  — moving on costs"`. Every other arm — `cache`,
-/// `lair`, `door`, `sealed_door`, `breakpoint`, `floor`, `fault` — reports
-/// rather than offers, so it appends nothing; `frame.arrival` has no
-/// underfoot pool at all. **These two places have to change together.** If
-/// `standing_on`'s match ever disagrees with this table, this test stops
-/// being a gate and starts rubber-stamping whatever ships — the same way a
-/// drifted fixture once hid a real overflow behind a green suite elsewhere
-/// in this repo (see `manifest-column-packer-is-suboptimal`).
+/// The key-prompt suffix width `standing_on` appends after each subject's
+/// descriptive clause is deliberately *not* repeated here as a hand-copied
+/// number: `every_shipped_underfoot_line_fits_the_standing_on_row` below
+/// reads it straight from `game::stack_view::underfoot_suffix`, the same
+/// table `Game::stack_view`'s match consults to build the row. That closes
+/// the drift this table used to be exposed to — a widths column that only
+/// agreed with the match by hand-copying — the same way a drifted fixture
+/// once hid a real overflow behind a green suite elsewhere in this repo
+/// (see `manifest-column-packer-is-suboptimal`).
 ///
 /// A content edit that empties a pool fails here instead of shipping
 /// silence at a cell nobody happened to walk onto during testing. Same
 /// shape as `every_biome_a_stack_link_can_open_in_fields_a_boss`.
-const SHIPPED: &[(&str, &[&str], usize)] = &[
-    ("stack.floor", &[], 0),
-    ("stack.door", &[], 0),
-    ("stack.sealed_door", &["opened"], 0),
-    ("stack.cache", &["spent"], 0),
-    ("stack.lair", &["cleared"], 0),
-    ("stack.orphan", &["spent"], 11),
-    ("stack.breakpoint", &["spent"], 0),
-    ("stack.link_up", &["surface"], 13),
-    ("stack.link_down", &[], 13),
-    ("stack.fault", &[], 0),
-    ("stack.corruption", &[], 19),
+const SHIPPED: &[(&str, &[&str])] = &[
+    ("stack.floor", &[]),
+    ("stack.door", &[]),
+    ("stack.sealed_door", &["opened"]),
+    ("stack.cache", &["spent"]),
+    ("stack.lair", &["cleared"]),
+    ("stack.orphan", &["spent"]),
+    ("stack.breakpoint", &["spent"]),
+    ("stack.link_up", &["surface"]),
+    ("stack.link_down", &[]),
+    ("stack.fault", &[]),
+    ("stack.corruption", &[]),
     (
         "stack.frame.arrival",
         &["shallow", "bottom", "traced", "hunted"],
-        0,
     ),
 ];
 
@@ -444,7 +438,7 @@ fn every_describable_cell_kind_has_a_shipped_bank_entry() {
     let (db, warnings) = DescriptionDb::load_dir(&dir).unwrap();
     assert!(warnings.is_empty(), "the shipped bank warned: {warnings:?}");
 
-    for (subject, conditions, _) in SHIPPED {
+    for (subject, conditions) in SHIPPED {
         // Every subject answers at its fallback, in all three lengths...
         assert!(
             db.underfoot(subject, None, 0).is_some() || *subject == "stack.frame.arrival",
@@ -494,12 +488,19 @@ fn every_describable_cell_kind_has_a_shipped_bank_entry() {
 /// an over-long fragment runs off the pane. `crates/gui`'s
 /// `the_longest_underfoot_line_fits_the_stack_pane` proves this budget in
 /// pixels at the narrowest supported window; this one holds the bank to it.
+///
+/// The suffix width is read from `underfoot_suffix` per condition, rather
+/// than a hand-copied worst case, so a mismatch between this test and the
+/// live match in `stack_view.rs` is structurally impossible.
 #[test]
 fn every_shipped_underfoot_line_fits_the_standing_on_row() {
     let dir = crate::tests::support::test_assets_dir().join("descriptions");
     let (db, _) = DescriptionDb::load_dir(&dir).unwrap();
-    for (subject, conditions, suffix) in SHIPPED {
+    for (subject, conditions) in SHIPPED {
         for condition in std::iter::once(None).chain(conditions.iter().map(|c| Some(*c))) {
+            let suffix = crate::game::stack_view::underfoot_suffix(subject, condition)
+                .chars()
+                .count();
             for seed in 0..64u64 {
                 let Some(line) = db.underfoot(subject, condition, seed) else {
                     continue;
@@ -954,4 +955,61 @@ fn subject_of_asks_the_bank_for_the_condition_the_predicates_say() {
         "no condition axis had a matching cell kind in any sampled frame — the test proved nothing"
     );
     eprintln!("subject_of condition axes exercised: {exercised:?}");
+}
+
+// ---- `standing_on`: the row itself ------------------------------------
+
+/// The `None` arms stay `None`. Two existing tests in `tests/stack.rs`
+/// depend on this and must keep passing untouched.
+#[test]
+fn a_spent_orphan_still_offers_nothing_underfoot() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let Some(orphan) = cell_of(&game, CellKind::Orphan) else {
+        return; // not every frame grows one
+    };
+    crate::tests::support::stand_at(&mut game, orphan, Dir::North);
+    let pos = game.stack_pos().unwrap();
+    assert!(
+        game.stack_view().unwrap().standing_on.is_some(),
+        "an unspent orphan offers"
+    );
+
+    game.frame_memory_mut(pos).adopted.insert(orphan);
+    assert_eq!(game.stack_view().unwrap().standing_on, None);
+}
+
+/// The key prompts are the row's real job and survive the bank.
+#[test]
+fn the_underfoot_row_keeps_its_key_prompt() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let up = cell_of(&game, CellKind::LinkUp).expect("every frame has its entry");
+    crate::tests::support::stand_at(&mut game, up, Dir::North);
+    let row = game
+        .stack_view()
+        .unwrap()
+        .standing_on
+        .expect("the way out reads");
+    assert!(row.ends_with("[<] surface"), "lost the prompt: {row:?}");
+    assert!(
+        row.chars().count() <= MAX_UNDERFOOT_LINE,
+        "row is {} chars: {row:?}",
+        row.chars().count()
+    );
+}
+
+/// Deleting the asset directory leaves the game working — the same argument
+/// `crash_logs` made, and the reason the bank returns `Option`.
+#[test]
+fn an_empty_bank_falls_back_to_the_shipped_literals() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let up = cell_of(&game, CellKind::LinkUp).unwrap();
+    crate::tests::support::stand_at(&mut game, up, Dir::North);
+    game.world.insert_resource(DescriptionDb::default());
+    assert_eq!(
+        game.stack_view().unwrap().standing_on.as_deref(),
+        Some("The link out  [<] surface")
+    );
 }

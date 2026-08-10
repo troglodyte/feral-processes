@@ -19,9 +19,12 @@ unchanged. Power behaves as a switch, not a dial: at
 sharp enough that there is probably no power value yielding a mixed
 distribution.
 
-Raising **stun duration** 1→2, leaving power alone, is the lever that works.
-It moves usage to 12–20% and top-move share from ~0.98 to 0.80–0.88, at no
-meaningful difficulty cost.
+Raising **stun duration** 1→2, leaving power alone, is the lever that works
+for those three moves: usage 12–20%, top-move share ~0.98 → 0.80–0.88, no
+meaningful difficulty cost. **But see the correction below** — across the
+whole roster the retrain that shipped with it made most species *less*
+varied, so the change did not do at the game level what it did at the level
+it was measured.
 
 ## How to reproduce it
 
@@ -81,6 +84,70 @@ duration-2 assets, `move_effect_stun` went **−2.81 → +0.75** and
 So the `.ron` edit alone is inert. Shipping it without retraining
 `assets/policies/enemy_battle.ron` delivers none of the above and looks like
 a change that did nothing.
+
+## Correction: the roster went the other way
+
+**Added after the fact.** The top-move table above covers the three species
+whose files were edited. That is a cherry-picked sample, chosen because they
+were the ones changed, and it is not what happened to the game.
+
+A retrain replaces all nineteen weights, so every species' move choice
+moves. Measured across the whole roster, shipped `pin3` → retrained
+`longstun`, groups 0–1, **lower is more varied**:
+
+| species | before | after | |
+|---|---|---|---|
+| cipher | 0.99 | 0.87 | edited |
+| crawler | 0.98 | 0.88 | edited |
+| rootkit | 0.98 | 0.80 | edited |
+| trojan | 0.91 | 0.60 | |
+| construct | 1.00 | 0.94 | |
+| scrapper | 0.74 | 0.72 | |
+| overseer | 1.00 | 1.00 | |
+| virus | 0.78 | 0.85 | |
+| wintermute | 0.88 | 0.94 | |
+| worm | 0.94 | 1.00 | |
+| sprite | 0.87 | 0.98 | opening ring |
+| proxy | 0.81 | 0.95 | |
+| zero_day | 0.54 | 0.70 | |
+| drone | 0.79 | 0.95 | opening ring |
+| sub_process | 0.57 | 0.77 | opening ring |
+| glitch | 0.58 | 0.82 | opening ring |
+
+Three edited species got more varied. **Eight unedited ones got less**,
+including all four opening-ring programs a new player meets. At the roster
+level this change *reduced* move variety, which is the opposite of its
+stated purpose.
+
+### Why, and why it may not matter
+
+The cause is not stuns. `move_power_rel` flipped **−5.00 → +2.14** in the
+retrain — the largest single weight change, and the only sign flip that
+touches every species. Preferring the higher-power move collapses choice for
+any species whose moves differ only in power, which is most of the roster;
+the four opening-ring programs carry no effect moves at all.
+
+The case that this is acceptable: for drone (Buzz 4, Recon Ping 3) "variety"
+is a coin flip between near-identical options, and concentrating on the
+better one is correct play rather than lost tactics. The variety worth
+having is cipher's — damage against a status effect — and that improved.
+
+**But the coefficient may not be meaningful.** `move_power_rel` and
+`est_damage_frac` are strongly correlated, so a linear model's split between
+them is under-determined: many combinations score almost identically and the
+optimiser slides along that ridge when the landscape shifts. `est_damage_frac`
+barely moved (10.10 → 10.13) while its correlated partner swung 7.14, which
+is what a slide looks like. **Unresolved:** retrain on two further seeds. If
+`move_power_rel` lands near +2 each time it is a finding; if it scatters
+while fitness holds, a roster-wide behaviour change is riding on noise.
+
+### The process failure
+
+Three species were measured because three species were edited. Nobody
+checked the other thirteen, and the change shipped on a claim that is false
+at the level anyone would care about. Same shape as the census test that
+turned out to be one species picked by filesystem order — a conclusion drawn
+from whichever subset was convenient to look at.
 
 ## What it does not say
 

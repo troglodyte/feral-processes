@@ -27,6 +27,49 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.5.23
+
+### The examine key no longer reads through shut doors
+
+`0.5.22` shipped `x`-then-a-direction with a real defect: the ray it walks
+to find something to describe never checked whether anything was in the
+way. A door two cells ahead is opaque to the eye and to the map, but not to
+`x` — so standing in a corridor and looking at a closed door reported the
+unopened cache sitting behind it, seal intact. You could read the contents
+of a room by looking at the door to it.
+
+The ray now stops where sight stops, using the same occlusion rule the
+first-person view and the frame map have always used. It stops *at* the
+blocker rather than before it, so looking at a door still describes the
+door — a wall in plain sight is a thing you can look at. Standing inside a
+doorway still shows you the corridor beyond, which is the one case where a
+sight-blocking cell is also one you can occupy.
+
+Two smaller corrections to the same key. The cell immediately to your left
+or right could not be examined at all — the ray skipped its whole nearest
+rank rather than just the square underfoot — and nothing distinguished left
+from right, so the two could have been swapped without any test noticing.
+
+### Flavour text that described mechanics the game does not have
+
+Three shipped fragments claimed rules that were never implemented. Rotten
+substrate said standing on it "a while costs more"; the bleed fires once
+when you arrive, so waiting is free. Corruption said it "spreads slower
+than you walk", and a cleared lair was "already starting to rot back over";
+corruption is placed when the frame is generated and never spreads at all.
+All three now describe what actually happens.
+
+### Fixes
+
+- The description bank's schema doc contradicted itself on how long an
+  underfoot line may be and on whether a fragment may run to two sentences,
+  and did not mention that the frame-arrival subject is the one place a
+  `{bearing}` token would reach the screen unexpanded. It is the prompt an
+  author works from, so an error in it propagates into content.
+- Engine tests no longer leak scratch directories under `/tmp` when a test
+  panics; they now use the same cleanup guard the rest of the suite does.
+  The failure mode this avoids is inode exhaustion, not disk space.
+
 ## 0.5.22
 
 ### Generated flavour prose for the Stack

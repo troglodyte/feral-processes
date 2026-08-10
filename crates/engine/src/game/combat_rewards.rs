@@ -76,7 +76,7 @@ impl Game {
             if landed > 0 {
                 self.log_kind(
                     MessageKind::Loot,
-                    format!("It drops {} {}.", landed, self.item_name(resource)),
+                    format!("It drops {} {}.", landed, self.item_name_tagged(resource)),
                 );
             }
         }
@@ -89,7 +89,7 @@ impl Game {
             if roll && self.grant_loot(item.clone(), 1) > 0 {
                 self.log_kind(
                     MessageKind::Loot,
-                    format!("It also drops a {}!", self.item_name(&item)),
+                    format!("It also drops a {}!", self.item_name_tagged(&item)),
                 );
             }
         }
@@ -157,7 +157,7 @@ impl Game {
             if self.grant_loot(item.clone(), 1) > 0 {
                 self.log_kind(
                     MessageKind::Loot,
-                    format!("Its crash spills a {}!", self.item_name(&item)),
+                    format!("Its crash spills a {}!", self.item_name_tagged(&item)),
                 );
             }
         }

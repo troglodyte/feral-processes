@@ -515,3 +515,168 @@ fn the_shipped_bank_uses_no_occult_naming() {
         }
     }
 }
+
+// ---- the `Game` half: subjects, seeds and bearings --------------------
+
+use crate::stack::{CellKind, Dir};
+use crate::*;
+
+fn game() -> Game {
+    Game::new(
+        16,
+        DifficultyMode::Forgiving,
+        &crate::tests::support::test_assets_dir(),
+    )
+    .unwrap()
+}
+
+/// The first cell of the current frame holding `kind`.
+fn cell_of(game: &Game, kind: CellKind) -> Option<(i32, i32)> {
+    let level = crate::tests::support::frame(game);
+    crate::tests::support::every_cell(&level).find(|&(x, y)| level.cell(x, y) == kind)
+}
+
+/// The core property: the same cell of the same stack reads the same way,
+/// through a save and a reload, with no new save state carrying it. Mirrors
+/// `the_species_a_frame_offers_survives_a_save_and_load`.
+#[test]
+fn a_description_survives_a_save_and_load() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let cell = cell_of(&game, CellKind::Floor).expect("every frame has floor");
+    let pos = game.stack_pos().unwrap();
+    let before = game.cell_paragraph(pos, cell).expect("floor describes");
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_description_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let reloaded = Game::load(&path, &crate::tests::support::test_assets_dir()).unwrap();
+    std::fs::remove_file(&path).unwrap();
+
+    let pos = reloaded.stack_pos().unwrap();
+    assert_eq!(reloaded.cell_paragraph(pos, cell), Some(before));
+}
+
+#[test]
+fn the_same_cell_reads_the_same_description_twice() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let pos = game.stack_pos().unwrap();
+    let cell = cell_of(&game, CellKind::Floor).unwrap();
+    assert_eq!(
+        game.cell_paragraph(pos, cell),
+        game.cell_paragraph(pos, cell)
+    );
+    assert_eq!(
+        game.underfoot_description(pos),
+        game.underfoot_description(pos)
+    );
+}
+
+/// Two frames of one stack are two different places and must read as two.
+/// `stack.floor` carries four openers, four details and four codas, so this
+/// is not vacuous — with one fragment per slot it would pass regardless.
+#[test]
+fn two_different_frames_describe_the_same_cell_differently() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let mut readings = std::collections::HashSet::new();
+    for depth in 1..=4u32 {
+        let Locale::Stack {
+            frames, entrance, ..
+        } = game.locale()
+        else {
+            unreachable!("not underground")
+        };
+        if depth > frames {
+            break;
+        }
+        game.descend_to(depth, frames, entrance);
+        let pos = game.stack_pos().unwrap();
+        if let Some(cell) = cell_of(&game, CellKind::Floor) {
+            readings.extend(game.cell_paragraph(pos, cell));
+        }
+    }
+    assert!(
+        readings.len() > 1,
+        "every frame of the stack read the corridor identically: {readings:?}"
+    );
+}
+
+/// The bearing is live view geometry, not a stored property — turning in
+/// place has to move it, or the token is decoration.
+#[test]
+fn turning_in_place_moves_the_bearing_in_a_sighted_line() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let pos = game.stack_pos().unwrap();
+    let target = (pos.x, pos.y - 2);
+
+    crate::tests::support::stand_at(&mut game, (pos.x, pos.y), Dir::North);
+    let north = game.sighted_description(game.stack_pos().unwrap(), target);
+    crate::tests::support::stand_at(&mut game, (pos.x, pos.y), Dir::South);
+    let south = game.sighted_description(game.stack_pos().unwrap(), target);
+
+    assert!(north.is_some() && south.is_some());
+    assert_ne!(north, south, "the bearing did not turn with the party");
+    assert!(
+        !north.unwrap().contains("{bearing}"),
+        "the token was left unfilled"
+    );
+}
+
+/// Spent features stop being worth a line; plain corridor never was.
+///
+/// `open_cache` takes no arguments and only ever loots the cell the party is
+/// physically standing on (per `game/stack_features.rs`), which the cache
+/// found by `cell_of` need not be — so the loot is marked directly through
+/// `frame_memory_mut`, exactly as this test's own brief suggested as the
+/// fallback.
+#[test]
+fn notability_ranks_unspent_features_over_terrain() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let pos = game.stack_pos().unwrap();
+    let floor = cell_of(&game, CellKind::Floor).unwrap();
+    assert_eq!(
+        game.notability(pos, floor),
+        None,
+        "plain corridor is not news"
+    );
+
+    if let Some(cache) = cell_of(&game, CellKind::Cache) {
+        let unopened = game
+            .notability(pos, cache)
+            .expect("an unopened cache is notable");
+        game.frame_memory_mut(pos).looted.insert(cache);
+        assert!(
+            game.notability(pos, cache)
+                .is_none_or(|spent| spent < unopened),
+            "an emptied cache should not outrank itself unopened"
+        );
+    }
+}
+
+/// `arrival_line` is a property of the frame, not of a sighted cell, so
+/// unlike `sighted_description` and `cell_paragraph` it is never run through
+/// `fill_bearing` — there is no `cell` for the token to point at. Not in the
+/// brief's fixture list, but added here because this task is what gives
+/// `arrival_line` its first caller (mirroring `FrameSpec::salted` above),
+/// and leaving it uncalled would leave it dead code.
+#[test]
+fn arrival_line_reads_the_frame_not_a_sighted_cell() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let pos = game.stack_pos().unwrap();
+
+    let line = game
+        .arrival_line(pos)
+        .expect("depth 1 should read as shallow");
+
+    assert!(
+        !line.contains("{bearing}"),
+        "arrival has no cell to point a bearing at: {line:?}"
+    );
+}

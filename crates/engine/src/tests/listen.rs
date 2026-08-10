@@ -5,8 +5,8 @@
 
 use super::support::*;
 use crate::crash_logs::CrashLogDb;
-use crate::resources::{CurrentStack, Locale, Trace};
-use crate::stack::{CellKind, Dir, Frame};
+use crate::resources::Trace;
+use crate::stack::{CellKind, Dir};
 use crate::tuning::TRACE_PER_LISTEN;
 use crate::*;
 
@@ -14,47 +14,8 @@ fn game() -> Game {
     Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
 }
 
-/// Drops the party into depth 1 through an entrance on the tile they are
-/// standing on, which is what walking onto a link does.
-fn descend(game: &mut Game) {
-    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    game.enter_stack(pos.x, pos.y);
-}
-
 fn trace_of(game: &Game) -> u32 {
     game.world.resource::<Trace>().0
-}
-
-fn frame(game: &Game) -> Frame {
-    game.world.resource::<CurrentStack>().0.clone().unwrap()
-}
-
-fn every_cell(level: &Frame) -> impl Iterator<Item = (i32, i32)> + use<> {
-    let (w, h) = (level.width, level.height);
-    (0..h).flat_map(move |y| (0..w).map(move |x| (x, y)))
-}
-
-/// Puts the party on `cell` facing `facing` without walking there. Caches
-/// and orphans sit in dead ends, so reaching one honestly would mean
-/// solving the maze first — `tests/stack.rs` teleports for the same reason.
-fn stand_at(game: &mut Game, cell: (i32, i32), facing: Dir) {
-    let Locale::Stack {
-        depth,
-        frames,
-        entrance,
-        ..
-    } = game.locale()
-    else {
-        unreachable!("not underground")
-    };
-    game.world.insert_resource(Locale::Stack {
-        depth,
-        frames,
-        x: cell.0,
-        y: cell.1,
-        facing,
-        entrance,
-    });
 }
 
 /// Every cell of the current frame that `Game::listen` should count as

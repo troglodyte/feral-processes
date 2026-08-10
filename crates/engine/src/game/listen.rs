@@ -123,7 +123,11 @@ impl Game {
 /// `Dir::delta` is the way they are looking and `Dir::right_delta` is their
 /// right hand. Reading a bearing off compass north instead would be the
 /// same mistake with a plausible-looking answer.
-fn relative_bearing(pos: StackPos, target: (i32, i32)) -> &'static str {
+///
+/// `pub(crate)` because the description bank's `sighted` lines and examine
+/// paragraphs need the same answer. A second copy of this rotation is
+/// exactly the drift the doc comment above warns about.
+pub(crate) fn relative_bearing(pos: StackPos, target: (i32, i32)) -> &'static str {
     let (dx, dy) = (target.0 - pos.x, target.1 - pos.y);
     let (fx, fy) = pos.facing.delta();
     let (rx, ry) = pos.facing.right_delta();

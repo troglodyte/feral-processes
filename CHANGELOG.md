@@ -56,6 +56,19 @@ species whose files were edited. Across the whole roster three improved and
 meets. The entry now carries the full table and the correction; nothing in
 the game changed, but the note that justified a shipped change did.
 
+### Most trained weights turn out to mean nothing
+
+Retraining the enemy policy three times, changing only the optimiser's seed,
+**seven of the sixteen free features flip sign** — while the enemy win rate
+lands within 2 points every time. Only `target_hp_frac` and
+`est_damage_frac` are stable. Three quite different-looking policies play
+about equally well, so a single weight is not evidence of anything and
+several claims across the measurement notes were reading them as if it were.
+Written up in `docs/measurements/2026-08-10-weight-identifiability.md`, with
+corrections threaded back through the two entries that leaned on a
+coefficient. The shipped policy is unchanged and still doubles the enemy win
+rate; what changed is what we are entitled to say about why.
+
 ## 0.5.20
 
 Tooling and measurement only — nothing about a played game changes.

@@ -137,9 +137,21 @@ having is cipher's — damage against a status effect — and that improved.
 them is under-determined: many combinations score almost identically and the
 optimiser slides along that ridge when the landscape shifts. `est_damage_frac`
 barely moved (10.10 → 10.13) while its correlated partner swung 7.14, which
-is what a slide looks like. **Unresolved:** retrain on two further seeds. If
-`move_power_rel` lands near +2 each time it is a finding; if it scatters
-while fitness holds, a roster-wide behaviour change is riding on noise.
+is what a slide looks like.
+
+**Settled, and it was a slide.** Retrained at two further seeds
+([weight identifiability](2026-08-10-weight-identifiability.md)),
+`move_power_rel` came out 2.14 / 0.93 / **7.17** while best fitness held at
+0.63 / 0.60 / 0.61. The magnitude is arbitrary and 2.14 carries no
+information; quoting it, as the paragraph above originally did, was the
+error that entry exists to name.
+
+What survives is the **sign**: all three seeds are positive, against −5.00
+before the retrain. So higher-power moves genuinely are favoured now, and
+the roster-wide concentration above has a real cause — but "the largest
+single weight change" was never a meaningful way to say so. Confirming the
+concentration itself means measuring top-move share on seeds 2 and 3 with
+`--log-dir`, not reading a coefficient. Still unrun.
 
 ### The process failure
 

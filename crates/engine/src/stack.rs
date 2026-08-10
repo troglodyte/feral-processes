@@ -309,9 +309,23 @@ impl FrameSpec {
     /// that must be a stable property of a *cell* of a stack salts off the
     /// one scheme rather than inventing a second that could collide with it.
     ///
-    /// Each word is multiplied through the FNV prime rather than XOR-ed in
-    /// once, so `[a, b]` and `[b, a]` diverge and two adjacent cells cannot
-    /// rhyme — the same argument `rng_seed` makes about adjacent links.
+    /// Each word is folded in **one byte at a time**, true FNV-1a style,
+    /// rather than XOR-ed in whole and multiplied through the prime once.
+    /// A whole-word XOR gets exactly one multiply-by-prime round to spread
+    /// it, and one round cannot carry a low-bit difference much past the
+    /// prime's own width (`PRIME` is ~41 bits) before the fold ends —
+    /// measured, a whole-word fold left 23 of 64 output bits, *including
+    /// the top 7*, identical across every one of 4096 adjacent cell pairs
+    /// `(x, y)` / `(x + 1, y)`, with the bottom bit alternating in lockstep
+    /// with `x`'s parity instead. `[a, b]` diverging from `[b, a]` (the
+    /// property the existing `salting_*` tests check) is not the same
+    /// claim as "adjacent cells cannot rhyme" — the two can both be true at
+    /// once, exactly as measured here, because `assert_ne!` only needs one
+    /// bit of difference to pass. Folding each word in eight single-byte
+    /// rounds gives every byte its own XOR-then-multiply pass, so no output
+    /// bit is left a fixed function of the input the way one round leaves
+    /// the low bit (see `descriptions::fold`'s doc for the general version
+    /// of this argument).
     ///
     /// `LAIR_SALT`, `ORPHAN_SALT` and `FALL_SALT` are deliberately **not**
     /// migrated onto this: each answers one question per frame, a single XOR
@@ -319,8 +333,10 @@ impl FrameSpec {
     pub(crate) fn salted(self, words: &[u64]) -> u64 {
         let mut h = self.rng_seed();
         for &word in words {
-            h ^= word;
-            h = h.wrapping_mul(0x0000_0100_0000_01b3);
+            for byte in word.to_le_bytes() {
+                h ^= byte as u64;
+                h = h.wrapping_mul(0x0000_0100_0000_01b3);
+            }
         }
         h
     }
@@ -1954,6 +1970,51 @@ mod tests {
                 assert_ne!(a, b, "salted words {i} and {j} collided on {a}");
             }
         }
+    }
+
+    /// `salting_the_frame_seed_diverges_on_every_word` proves the salted
+    /// outputs are *unequal*; it does not prove *where* they differ.
+    /// `assert_ne!` is satisfied by one flipped bit, and a whole-word XOR
+    /// fold (the previous implementation) reliably supplied exactly one —
+    /// the low bit, alternating with `x`'s parity — while leaving the top 7
+    /// bits of every adjacent-cell pair identical across the whole sweep.
+    /// Any caller that reduces `salted`'s output to a small index would
+    /// have inherited that: fine on the bit `%` or a low-bit read happens to
+    /// use, silently broken on the bits a high-bit reducer (like
+    /// `descriptions::pick`) reads instead.
+    #[test]
+    fn salting_mixes_the_high_bits_of_adjacent_cells() {
+        let spec = FrameSpec {
+            world_seed: 7,
+            entrance: (3, -4),
+            depth: 2,
+            frames: 4,
+        };
+        // A 64x64 grid of cells, each compared to its eastward neighbour —
+        // 4096 adjacent pairs. Fixing `y` and only sweeping `x` (an earlier
+        // draft of this test did exactly that) understates the bug: folding
+        // a second, *shared* word after the differing one adds a free extra
+        // mixing round that can accidentally reach the top bits for that
+        // one companion value. Varying `y` across the sweep too is what
+        // actually reproduces the measurement in `salted`'s doc.
+        let mut top_bits_seen = std::collections::HashSet::new();
+        for y in 0..64u64 {
+            for x in 0..64u64 {
+                let a = spec.salted(&[x, y]);
+                let b = spec.salted(&[(x + 1) % 64, y]);
+                let diff = a ^ b;
+                for bit in 56..64 {
+                    if (diff >> bit) & 1 == 1 {
+                        top_bits_seen.insert(bit);
+                    }
+                }
+            }
+        }
+        let missing: Vec<_> = (56..64).filter(|b| !top_bits_seen.contains(b)).collect();
+        assert!(
+            missing.is_empty(),
+            "top bits {missing:?} never flip across 4096 adjacent cell pairs"
+        );
     }
 
     /// Salting is a continuation of `rng_seed`, so two frames that already

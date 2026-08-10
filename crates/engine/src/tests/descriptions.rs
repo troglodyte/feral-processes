@@ -5,7 +5,7 @@
 //! a fold of the frame spec. A test that needed a seeded `Game` to be stable
 //! would be evidence the fold had been replaced by a draw.
 
-use crate::descriptions::{DescriptionDb, DescriptionDef, merge};
+use crate::descriptions::{DescriptionDb, DescriptionDef, Slot, fold, index, merge};
 
 /// A scratch bank directory holding `files` as `(filename, body)`. The
 /// caller removes it. Mirrors `tests/listen.rs`'s `crash_log_dir`.
@@ -350,4 +350,50 @@ fn a_subject_with_no_opener_has_no_paragraph() {
     assert!(warnings.is_empty(), "warnings were {warnings:?}");
     assert_eq!(db.paragraph("stack.floor", None, 0), None);
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// The claim `Slot::tags`'s doc makes precise: **every pair** of the five
+/// real slots reaches **every** possible joint outcome, at every pool size
+/// a bank might plausibly use — not merely "looks different" for one
+/// bank's particular pools, the way `different_seeds_reach_different_fragments`
+/// and `the_three_lengths_of_one_cell_do_not_move_in_lockstep` above check
+/// only the specific pool sizes `CACHE` happens to have.
+///
+/// This is the test a badly chosen future sixth slot has to fail. Verified
+/// by mutation: temporarily setting `Slot::Coda`'s tags to `Slot::Detail`'s
+/// with a single bit of the second word flipped reproduces exactly the
+/// lockstep bug this suite already caught once — see the fix report for the
+/// observed failure and the restore-to-green.
+#[test]
+fn every_pair_of_slots_is_independent() {
+    const SLOTS: [(&str, Slot); 5] = [
+        ("Underfoot", Slot::Underfoot),
+        ("Sighted", Slot::Sighted),
+        ("Opener", Slot::Opener),
+        ("Detail", Slot::Detail),
+        ("Coda", Slot::Coda),
+    ];
+    const SWEEP: u64 = 4096;
+
+    for (i, &(name_a, a)) in SLOTS.iter().enumerate() {
+        for &(name_b, b) in &SLOTS[i + 1..] {
+            for pool_len in [2usize, 3, 4] {
+                let joints: std::collections::HashSet<_> = (0..SWEEP)
+                    .map(|seed| {
+                        (
+                            index(fold(seed, a), pool_len),
+                            index(fold(seed, b), pool_len),
+                        )
+                    })
+                    .collect();
+                let possible = pool_len * pool_len;
+                assert_eq!(
+                    joints.len(),
+                    possible,
+                    "{name_a} and {name_b} reached only {}/{possible} joint outcomes at pool size {pool_len}",
+                    joints.len(),
+                );
+            }
+        }
+    }
 }

@@ -11,9 +11,12 @@
 //! method at all** — the compiler barrier keeping the renderer out of the
 //! ECS is untouched.
 //!
-//! Its known blind spot, stated rather than hidden: the party plays the
-//! game's own All-Attack, which fires no companion Specials. An arena number
-//! is a floor on the party's output, the same gap `balance_sim` has.
+//! Its known blind spot, stated rather than hidden: by default the party
+//! plays the game's own All-Attack, which braces for nobody and fires no
+//! companion Specials. An arena number is a floor on the party's output, the
+//! same gap `balance_sim` has. `RunOptions::party` lifts half of that —
+//! `PartyPlan::BraceWhenHurt` makes Defend reachable — and Specials remain
+//! unexercised.
 
 mod encounter;
 mod report;
@@ -200,6 +203,44 @@ pub struct RunOptions {
     /// 1.9M fights that must not each be recorded. It is the *evaluation*
     /// passes either side of that search that are worth logging.
     pub telemetry: bool,
+    /// How the party plays its rounds.
+    pub party: PartyPlan,
+}
+
+/// How the party decides its actions in an arena fight.
+///
+/// The default is the whole of the arena's original guarantee — see
+/// `run::run_rep` — and anything else here is a decision invented for the
+/// tester, so a variant has to earn its place by answering something the
+/// game's own All-Attack cannot.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PartyPlan {
+    /// `battle_plan_remaining(Attack)`, exactly what pressing `[A]` does.
+    #[default]
+    AllAttack,
+    /// All-Attack, except that a member under
+    /// `run::BRACE_BELOW_HP_FRACTION` Defends instead.
+    ///
+    /// Exists because the party never bracing made Defend invisible to
+    /// every arena measurement, and the three targeting features pinned in
+    /// `assets/policies/enemy_battle.ron` are pinned on the strength of a
+    /// single unit-test census as a result.
+    ///
+    /// **Not usable for measuring a response to Defend** — see
+    /// `BraceInRotation`, which exists because of that.
+    BraceWhenHurt,
+    /// One slot Defends each round, rotating by round number, whatever
+    /// anyone's health.
+    ///
+    /// An instrument rather than a model of play, and deliberately so.
+    /// `BraceWhenHurt` fires on a threshold over `target_hp_frac`, which is
+    /// the policy's largest weight — so bracing and being wounded are one
+    /// variable (measured r = -0.8) and no reading can attribute anything to
+    /// Defend. Rotating by round decorrelates it from health, and rotating
+    /// rather than picking a fixed slot decorrelates it from slot position
+    /// too, which carries its own aggro weight and would have been the next
+    /// confound.
+    BraceInRotation,
 }
 
 /// Runs `scenario` and reports what happened, plus whatever telemetry
@@ -234,7 +275,11 @@ pub fn run(
         if rep == 0 {
             warnings = staged.warnings.clone();
         }
-        reps.push(run::run_rep(&mut staged.game, &mut staged.watch));
+        reps.push(run::run_rep(
+            &mut staged.game,
+            &mut staged.watch,
+            opts.party,
+        ));
         if opts.telemetry {
             let fight = rep as u64 + 1;
             records.extend(
@@ -271,7 +316,7 @@ pub(crate) fn test_fight(scenario: &Scenario, seed: u64) -> RepRecord {
         false,
     )
     .unwrap();
-    run::run_rep(&mut staged.game, &mut staged.watch)
+    run::run_rep(&mut staged.game, &mut staged.watch, PartyPlan::default())
 }
 
 #[cfg(test)]
@@ -529,6 +574,138 @@ mod tests {
             swung(&report.reps[1]),
             "rep 2 fielded no companion — the `Game` was carried over: {:?}",
             report.reps[1].transcript
+        );
+    }
+
+    /// A fight the party is losing, so somebody drops under the brace
+    /// threshold rather than winning untouched.
+    fn a_losing_scenario() -> Scenario {
+        Scenario {
+            player: PlayerSource::Fresh { level: 3, zone: 2 },
+            party: vec![CompanionSpec {
+                species: "glitch".into(),
+                level: 3,
+            }],
+            opponents: vec![OpponentSpec {
+                species: "sub_process".into(),
+                count: 4,
+            }],
+            reps: 6,
+            seed: 31,
+            ..Scenario::default()
+        }
+    }
+
+    fn defends(records: &[Record]) -> usize {
+        records
+            .iter()
+            .filter(|r| {
+                matches!(
+                    r,
+                    Record::PartyAction {
+                        kind: crate::telemetry::ActionKind::Defend,
+                        ..
+                    }
+                )
+            })
+            .count()
+    }
+
+    fn bracing_records(scenario: &Scenario, party: PartyPlan) -> Vec<Record> {
+        run(
+            scenario,
+            &test_assets_dir(),
+            RunOptions {
+                telemetry: true,
+                party,
+            },
+        )
+        .unwrap()
+        .1
+    }
+
+    /// The guarantee `run_rep`'s doc has always made, now that a mode exists
+    /// which breaks it: by default the arena invents no decision the game
+    /// would not make, and `[A]` never braces.
+    #[test]
+    fn the_default_party_plan_never_braces() {
+        let records = bracing_records(&a_losing_scenario(), PartyPlan::default());
+        assert_eq!(
+            defends(&records),
+            0,
+            "All-Attack braced — the default is no longer the game's own plan"
+        );
+    }
+
+    #[test]
+    fn the_bracing_plan_defends_when_a_member_is_hurt() {
+        let records = bracing_records(&a_losing_scenario(), PartyPlan::BraceWhenHurt);
+        assert!(
+            defends(&records) > 0,
+            "nobody braced in a fight the party is losing"
+        );
+    }
+
+    /// The payoff, and why the plan exists at all: with a party that braces,
+    /// `target_bracing` stops being false on every swing ever recorded, so
+    /// the Defend question becomes answerable from telemetry rather than
+    /// from one unit-test census.
+    #[test]
+    fn a_bracing_party_is_visible_to_the_enemy() {
+        let records = bracing_records(&a_losing_scenario(), PartyPlan::BraceWhenHurt);
+        let at_bracing = records
+            .iter()
+            .filter(|r| {
+                matches!(
+                    r,
+                    Record::EnemyChoice {
+                        target_bracing: true,
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert!(
+            at_bracing > 0,
+            "no swing landed on a bracing target — the harness still cannot see Defend"
+        );
+    }
+
+    /// A fight the party wins without being hurt, so `BraceWhenHurt` never
+    /// fires and any Defend seen came from the rotation instead.
+    fn a_walkover_scenario() -> Scenario {
+        Scenario {
+            player: PlayerSource::Fresh { level: 20, zone: 1 },
+            party: vec![CompanionSpec {
+                species: "glitch".into(),
+                level: 12,
+            }],
+            opponents: vec![OpponentSpec {
+                species: "sprite".into(),
+                count: 3,
+            }],
+            reps: 4,
+            seed: 77,
+            ..Scenario::default()
+        }
+    }
+
+    /// The whole point of the rotation, and the fix for the 2026-08-10 run
+    /// that could not answer its own question: bracing has to vary
+    /// independently of health, or it is just a restatement of
+    /// `target_hp_frac` and the policy's response to the two cannot be told
+    /// apart.
+    #[test]
+    fn the_rotating_plan_braces_at_full_health() {
+        let healthy = a_walkover_scenario();
+        assert_eq!(
+            defends(&bracing_records(&healthy, PartyPlan::BraceWhenHurt)),
+            0,
+            "the fixture is meant to be a walkover — nobody should drop under half HP"
+        );
+        assert!(
+            defends(&bracing_records(&healthy, PartyPlan::BraceInRotation)) > 0,
+            "the rotation braced nobody in a fight where nobody was hurt"
         );
     }
 

@@ -27,6 +27,80 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.5.21
+
+### Rename a program
+
+Press `N` on the companion roster to give a program your own name for it.
+The page opens on the name it already has, so fixing a typo isn't a retype;
+clearing the field puts its species name back. It works on any program you
+own, wherever it is — in the party, posted to a cronjob, standing guard —
+because a name changes nothing about where it is or what it's doing.
+
+Names survive saving, and always did: `CustomName` has been complete since
+fusion learned to name its result, and fusion was simply the only way to
+reach it. **No save-format change** — an existing save loads unchanged, and
+a program you already named by fusing keeps that name.
+
+Renaming is refused during a battle. The reason is the log rather than the
+roster: the battle screen replays *rendered* rows as its narration scrolls
+in, so a name changed mid-fight would leave what you're reading and what
+you're looking at disagreeing about who is being hit.
+
+### The stun measurement was reported on a cherry-picked sample
+
+`docs/measurements/2026-08-10-stun-move-levers.md` claimed the 2-turn stun
+retrain made enemies vary their moves more. It measured only the three
+species whose files were edited. Across the whole roster three improved and
+**eight got worse**, including all four opening-ring programs a new player
+meets. The entry now carries the full table and the correction; nothing in
+the game changed, but the note that justified a shipped change did.
+
+### Most trained weights turn out to mean nothing
+
+Retraining the enemy policy three times, changing only the optimiser's seed,
+**seven of the sixteen free features flip sign** — while the enemy win rate
+lands within 2 points every time. Only `target_hp_frac` and
+`est_damage_frac` are stable. Three quite different-looking policies play
+about equally well, so a single weight is not evidence of anything and
+several claims across the measurement notes were reading them as if it were.
+Written up in `docs/measurements/2026-08-10-weight-identifiability.md`, with
+corrections threaded back through the two entries that leaned on a
+coefficient. The shipped policy is unchanged and still doubles the enemy win
+rate; what changed is what we are entitled to say about why.
+
+## 0.5.20
+
+Tooling and measurement only — nothing about a played game changes.
+
+### The arena can exercise Defend
+
+`arena::run_rep` played the party as All-Attack, so nobody ever braced and
+no arena measurement could say anything about Defend at all.
+`RunOptions::party` adds two plans: `BraceWhenHurt` (a member under half HP
+Defends) and `BraceInRotation` (one slot per round, whatever anyone's
+health). `--party-plan brace|rotate` reaches them from `train`.
+
+All-Attack is still the default, so every number published before this keeps
+meaning what it meant, and `the_default_party_plan_never_braces` holds it.
+
+### The analysis refuses to present a confounded number
+
+`analysis/policy_report.py` now checks each run for observables that move
+together and warns above the first table. It was written after a run that
+could not answer its own question — the brace rule fired on a threshold over
+the policy's largest feature, so bracing and being wounded were one
+variable. The check is grouped per run, because pooling a sweep hides the
+confound behind the configs that never brace.
+
+### What the instruments said
+
+`docs/measurements/` gains the pin sweep, the stun-move levers, and the
+bracing runs. The last of these confirms the three pinned policy features
+are justified — and corrects the 2026-08-09 reason for one of them, which
+read a weight that training could not have learned, since under All-Attack
+`target_bracing` is constant and fitness is indifferent to it.
+
 ## 0.5.19
 
 ### Wild programs use their stun moves again

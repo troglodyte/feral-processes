@@ -56,4 +56,13 @@ an honest "unknown".
   accident, and an unpinned policy downs zero companions in 1,600 fights.
 - [2026-08-10 — Stun move levers](2026-08-10-stun-move-levers.md) — power is
   a switch and not a dial, so repricing an effect move cannot buy variety;
-  duration can, and the asset edit is inert without a retrain.
+  duration can. Carries a correction: measured roster-wide, the retrain that
+  shipped with it made most species *less* varied.
+- [2026-08-10 — Weight identifiability](2026-08-10-weight-identifiability.md)
+  — **read this before quoting any trained weight.** Retrained at three
+  seeds, seven of the sixteen free features flip sign at indistinguishable
+  fitness; only `target_hp_frac` and `est_damage_frac` are stable.
+- [2026-08-10 — A party that braces](2026-08-10-a-party-that-braces.md) —
+  Defend blunts a trained enemy and loses to a random one. The pins are
+  justified — but the 2026-08-09 reason for pinning `target_bracing` was an
+  unidentifiable weight, since All-Attack never braces.

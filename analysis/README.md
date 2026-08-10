@@ -61,9 +61,12 @@ contain them. The line schema itself is `dev-logs/README.md`.
 
 ## What it cannot answer
 
-**Defend.** `arena::run_rep` plays the party as All-Attack, so nobody braces
-in any of these fights and `target_bracing` is `False` on every swing.
-`check_bracing` prints that as a line in the report rather than leaving it
-to be assumed — the single most interesting question about the shipped
-policy is the one this data is structurally blind to, and it stays that way
-until the arena grows a party plan that braces.
+**Defend, unless the sweep asked for it.** By default `arena::run_rep`
+plays the party as All-Attack, so nobody braces and `target_bracing` is
+`False` on every swing. Pass `--party-plan brace` to `train` and it stops
+being false; `check_bracing` reports the count either way rather than
+leaving it to be assumed. Any sweep recorded before 2026-08-10 predates the
+option and is blind to Defend by construction.
+
+**Companion Specials.** Still unexercised by any plan — the scripted party
+braces and does nothing else.

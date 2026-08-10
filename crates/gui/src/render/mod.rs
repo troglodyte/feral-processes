@@ -67,7 +67,10 @@ use meta::{
     draw_achievements, draw_difficulty_pick, draw_game_over, draw_help, draw_load_game,
     draw_main_menu, draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
 };
-use party::{draw_companion_menu, draw_fuse_menu, draw_fuse_name_menu, draw_fuse_second_menu};
+use party::{
+    draw_companion_menu, draw_fuse_menu, draw_fuse_name_menu, draw_fuse_second_menu,
+    draw_rename_menu,
+};
 use popup::{PopupSize, Row, counted_item_row, draw_popup, text_row};
 use progression::{draw_perks_menu, draw_research_menu};
 use routines::{
@@ -568,6 +571,9 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             painter,
             m,
         ),
+        Mode::RenamePet => {
+            draw_rename_menu(game, app.pending_rename, &app.rename_input, painter, m)
+        }
         Mode::FieldCast => draw_field_cast(game, selected, painter, m),
         Mode::FieldCastAlly => {
             draw_field_cast_ally(game, pending_field_routine, selected, painter, m)

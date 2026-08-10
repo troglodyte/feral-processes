@@ -613,6 +613,11 @@ pub enum Mode {
     /// programs in `Mode::Fuse`/`Mode::FuseSecond`; Enter actually runs the
     /// fusion.
     FuseName,
+    /// Typing a new display name (`App::rename_input`) for the program
+    /// highlighted on the roster — the same text-entry idiom
+    /// `Mode::FuseName` uses. Blank and Enter clears the name back to the
+    /// species. Reached with `N` from `Mode::Companion`.
+    RenamePet,
     /// Picking whose routines to manage — you, or any program you own.
     /// Reached with `m` from `Mode::Playing`.
     RoutineTarget,
@@ -780,6 +785,7 @@ impl Mode {
             | Mode::Fuse
             | Mode::FuseSecond
             | Mode::FuseName
+            | Mode::RenamePet
             | Mode::RoutineTarget
             | Mode::Routines
             | Mode::RoutineInstall
@@ -963,6 +969,13 @@ pub struct App {
     pub pending_fuse_second: Option<Entity>,
     /// Characters typed so far on the fuse-naming page (see `Mode::FuseName`).
     pub fuse_name_input: String,
+    /// The program being renamed in `Mode::RenamePet`, captured when `N` is
+    /// pressed rather than re-read from the highlight on Enter — the roster
+    /// reorders itself around a name change, so the row index is not a
+    /// stable handle across the page.
+    pub pending_rename: Option<Entity>,
+    /// Characters typed so far on the renaming page (see `Mode::RenamePet`).
+    pub rename_input: String,
     /// The routine holder picked in `Mode::RoutineTarget` — the player or one
     /// of their programs — awaiting a slot pick from `Mode::Routines`.
     pub pending_routine_holder: Option<Entity>,

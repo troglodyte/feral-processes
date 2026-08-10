@@ -105,7 +105,7 @@ impl Game {
     }
 
     /// A creature's own display name: the player's `CustomName` if they set
-    /// one (currently only via `Game::fuse_companions`), else its species
+    /// one (`Game::fuse_companions` or `Game::rename_companion`), else its species
     /// name (falling back to the raw species id if the species definition
     /// is somehow missing). `None` if `entity` isn't a `Creature` at all.
     pub(crate) fn creature_name(&self, entity: Entity) -> Option<String> {
@@ -424,6 +424,62 @@ impl Game {
         }
     }
 
+    /// The player-chosen name on `creature`, or `None` if it is still going
+    /// by its species. Deliberately *not* `creature_name`, which always
+    /// answers with something: a rename page seeded from that would put the
+    /// species name in the edit buffer and turn "leave it alone" into
+    /// "freeze today's species name onto it".
+    pub fn custom_name(&self, creature: Entity) -> Option<String> {
+        self.world.get::<CustomName>(creature).map(|n| n.0.clone())
+    }
+
+    /// Renames a tamed program you own, or clears the name back to its
+    /// species (see `CustomName`). Works wherever the program is — in the
+    /// party, on a cronjob, standing guard — because it changes nothing
+    /// about where it is or what it's doing.
+    ///
+    /// `name` goes through `CustomName::sanitize`, the same rule
+    /// `fuse_companions` applies, so blank or all-whitespace drops the
+    /// override rather than storing an empty name.
+    ///
+    /// Refused during a battle, and the reason is the log rather than the
+    /// roster: `resources::BattleTimeline` stores **rendered rows**, so a
+    /// name changed mid-fight would leave the rewound narration and the
+    /// live roster disagreeing about who is being hit. Like
+    /// `move_party_member` it doesn't tick — naming a program is free.
+    pub fn rename_companion(
+        &mut self,
+        creature: Entity,
+        name: Option<String>,
+    ) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        let player = self.player_entity();
+        let owner = self
+            .world
+            .get::<Tamed>(creature)
+            .ok_or_else(|| "That program isn't compiled under your control.".to_string())?
+            .owner;
+        if owner != player {
+            return Err("You don't control that program.".into());
+        }
+        let was = self.creature_label(creature);
+        match CustomName::sanitize(name) {
+            Some(name) => {
+                self.world.entity_mut(creature).insert(CustomName(name));
+                let now = self.creature_label(creature);
+                self.log(format!("{was} answers to {now} from now on."));
+            }
+            None => {
+                self.world.entity_mut(creature).remove::<CustomName>();
+                let now = self.creature_label(creature);
+                self.log(format!("{was} goes back to being a plain {now}."));
+            }
+        }
+        Ok(())
+    }
+
     /// Shifts `creature` one slot along the battle line. Front slots draw
     /// more fire (see `battle::slot_aggro_weight`), so this is how the
     /// player decides who tanks — the only other way to change the order is
@@ -555,15 +611,7 @@ impl Game {
         self.world.despawn(a);
         self.world.despawn(b);
 
-        let final_name: Option<String> = custom_name.and_then(|n| {
-            let trimmed = n.trim();
-            (!trimmed.is_empty()).then(|| {
-                trimmed
-                    .chars()
-                    .take(MAX_CUSTOM_NAME_LEN)
-                    .collect::<String>()
-            })
-        });
+        let final_name = CustomName::sanitize(custom_name);
 
         let player_pos = *self.world.get::<Position>(player).unwrap();
         let mut fused = self.world.spawn((

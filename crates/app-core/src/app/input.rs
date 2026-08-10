@@ -129,6 +129,7 @@ impl App {
             Mode::Fuse => self.handle_fuse_key(key),
             Mode::FuseSecond => self.handle_fuse_second_key(key),
             Mode::FuseName => self.handle_fuse_name_key(key),
+            Mode::RenamePet => self.handle_rename_pet_key(key),
             Mode::RoutineTarget => self.handle_routine_target_key(key),
             Mode::Routines => self.handle_routines_key(key),
             Mode::RoutineInstall => self.handle_routine_install_key(key),

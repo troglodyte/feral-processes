@@ -68,6 +68,14 @@ Signs and rough magnitudes match the 2026-08-09 report on an independent
 run. This is replication, not new information, and it is the reason to
 trust the entry above.
 
+**Do not generalise it to the other fourteen features.** These five are, as
+it turns out, the identifiable ones — see
+[weight identifiability](2026-08-10-weight-identifiability.md), which
+retrained the same `pin3` configuration at three seeds and found seven of
+the sixteen free features flipping sign at indistinguishable fitness. That
+this table replicates is real; it replicates because of *which* features are
+in it, not because trained weights are generally reproducible.
+
 | feature | unpinned | pin2 | pin3 | 2026-08-09 |
 |---|---|---|---|---|
 | `target_is_player` | **+6.50** | 0 pinned | 0 pinned | +7.42 (run 1) |

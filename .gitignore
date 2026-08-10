@@ -26,6 +26,11 @@
 __pycache__/
 .pytest_cache/
 
+# Agent worktrees. `.claude/settings.json` is project config and stays
+# tracked; a worktree gitlink is another session's checkout state and was
+# committed here once by accident.
+/.claude/worktrees/
+
 # Editor/IDE
 .vscode/
 .idea/

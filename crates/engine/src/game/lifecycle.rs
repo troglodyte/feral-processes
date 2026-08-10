@@ -432,6 +432,11 @@ impl Game {
                 StatusEffects::default(),
                 FusionCount(c.fusions),
                 Routines(routines),
+                // The tag only. `Stats` above are the recorded numbers and
+                // already carry this tier's multiplier from the spawn that
+                // rolled it — re-applying `stat_mult` here would compound
+                // the bonus on every reload. See `Rarity`'s doc.
+                c.rarity,
             ));
             if let Some(name) = c.custom_name.clone() {
                 entity.insert(CustomName(name));
@@ -640,7 +645,12 @@ impl Game {
             // this one is full. Grouped by what they describe — where the
             // creature belongs and what it is holding — rather than split
             // wherever the count happened to run out.
-            (Option<&NestGuardian>, Option<&Pursuing>, Option<&Carrying>),
+            (
+                Option<&NestGuardian>,
+                Option<&Pursuing>,
+                Option<&Carrying>,
+                Option<&Rarity>,
+            ),
         )>();
         for (
             entity,
@@ -656,7 +666,7 @@ impl Game {
             fusions,
             routines,
             field_buff,
-            (nest_guardian, pursuing, carrying),
+            (nest_guardian, pursuing, carrying, rarity),
         ) in creature_query.iter(&self.world)
         {
             let potential = potential.copied().unwrap_or(Potential::NEUTRAL);
@@ -710,6 +720,7 @@ impl Game {
                 nest_position,
                 pursuing: pursuing.is_some(),
                 carrying: carrying.map(|c| (c.item.clone(), c.qty)),
+                rarity: rarity.copied().unwrap_or_default(),
             });
         }
 

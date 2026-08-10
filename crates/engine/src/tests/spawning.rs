@@ -1529,6 +1529,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             nest_position: Some((999, 999)),
             pursuing: true,
             carrying: None,
+            rarity: Rarity::Ordinary,
         }],
         structures: Vec::new(),
         nests: Vec::new(),
@@ -1954,6 +1955,48 @@ fn an_eligible_spawn_can_roll_both_tiers() {
     assert!(
         gold < silver,
         "gold is the rarer tier: got {gold} gold to {silver} silver"
+    );
+}
+
+#[test]
+fn a_shiny_survives_a_save_round_trip() {
+    let mut game = Game::new(9025, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let far = OPENING_RING_TILES + 60;
+    let wild = game
+        .spawn_wild_creature("scrapper", far, far)
+        .expect("scrapper ships with the game");
+    // Set the tier by hand rather than hunting a seed that rolls one: what
+    // is under test is whether the tag travels and whether the numbers stay
+    // put, not the roll — which `an_eligible_spawn_can_roll_both_tiers`
+    // covers on its own.
+    game.world.entity_mut(wild).insert(Rarity::Gold);
+    let before = *game.world.get::<Stats>(wild).unwrap();
+
+    let path =
+        std::env::temp_dir().join(format!("feral_rarity_roundtrip_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let mut q = loaded
+        .world
+        .query_filtered::<(&Position, &Stats, Option<&Rarity>), With<Hostile>>();
+    let (_, after, rarity) = q
+        .iter(&loaded.world)
+        .find(|(p, _, _)| p.x == far && p.y == far)
+        .expect("the wild program should come back");
+    assert_eq!(
+        rarity.copied(),
+        Some(Rarity::Gold),
+        "the rare tier is part of what a creature is"
+    );
+    // The multiplier was spent at spawn and the numbers were saved verbatim.
+    // A load that re-applied `stat_mult` would hand back 1.8x of these and
+    // compound again on the next reload — see `Rarity`'s doc.
+    assert_eq!(
+        (after.hp, after.max_hp, after.atk, after.def),
+        (before.hp, before.max_hp, before.atk, before.def),
+        "loading must restore recorded stats, not re-apply the tier"
     );
 }
 

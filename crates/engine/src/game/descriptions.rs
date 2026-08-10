@@ -90,16 +90,26 @@ impl Game {
 
     /// The frame's own seed, for the one description that is a property of
     /// the frame rather than of a cell in it.
-    fn frame_description_seed(&self, pos: StackPos) -> u64 {
+    ///
+    /// `pub(crate)` for the same reason `description_seed` is:
+    /// `arrival_line_reads_its_condition_axis` needs it directly to pin
+    /// each condition band against the bank at an exact seed, including
+    /// bands reached only through a synthetic `StackPos` no real descent
+    /// produces (an interior depth, or a depth past where the party has
+    /// actually gone).
+    pub(crate) fn frame_description_seed(&self, pos: StackPos) -> u64 {
         self.frame_spec(pos.depth, pos.frames, pos.entrance)
             .salted(&[DESCRIPTION_SALT])
     }
 
     /// The descriptive clause for the row under the first-person view, or
     /// `None` when the bank has nothing — which leaves `stack_view` free to
-    /// fall back to its own literal, so deleting the asset directory leaves
+    /// fall back to its own literal, so an *empty* asset directory leaves
     /// the game working. A mod's prerogative, the same argument
-    /// `crash_logs` made.
+    /// `crash_logs` made. An *absent* directory is a different case:
+    /// `DescriptionDb::load_dir` calls `read_dir(dir)?`, so a deleted
+    /// `assets/descriptions/` makes `Game::new` fail loudly with `NotFound`
+    /// before this function is ever reached, rather than degrading here.
     pub(crate) fn underfoot_description(&self, pos: StackPos) -> Option<String> {
         let (subject, condition) = self.subject_of(pos, (pos.x, pos.y))?;
         let seed = self.description_seed(pos, (pos.x, pos.y));

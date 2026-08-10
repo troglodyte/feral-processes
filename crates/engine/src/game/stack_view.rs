@@ -263,10 +263,11 @@ impl Game {
     /// a pure function of coordinates rather than of scan order.
     ///
     /// Falls through to the next-best candidate if the winner's own line is
-    /// missing from the bank (an empty variant pool, or a deleted asset
-    /// directory) rather than saying nothing: a lower-ranked cell with a
-    /// line to offer is still more useful than silence, and the cap still
-    /// holds because at most one candidate's line is ever logged.
+    /// missing from the bank (an empty variant pool, or an empty asset
+    /// directory — a *deleted* one fails `Game::new` outright, see
+    /// `DescriptionDb::load_dir`) rather than saying nothing: a lower-ranked
+    /// cell with a line to offer is still more useful than silence, and the
+    /// cap still holds because at most one candidate's line is ever logged.
     fn announce_sighting(&mut self, newly_seen: &[(i32, i32)]) {
         let Some(pos) = self.stack_pos() else {
             return;

@@ -123,12 +123,16 @@ impl Slot {
     /// reusing another slot's.
     ///
     /// **Their size buys nothing by itself — do not read "large, distinct
-    /// constant" as a safety argument.** Only two more FNV rounds run after
-    /// the last tag word, and one `wrapping_mul(PRIME)` round only carries a
-    /// bit difference roughly 40 places upward before the fold ends (`PRIME`
-    /// is a ~41-bit constant), so a difference confined to the low ~48 bits
-    /// of a tag word never reaches bit 63 — the bit `index`'s high-bit
-    /// reducer actually reads. Measured: a hypothetical sixth slot sharing
+    /// constant" as a safety argument.** `fold`'s loop applies one round —
+    /// XOR the word in, then `wrapping_mul(PRIME)` — per tag word, and
+    /// nothing runs after the last one: its own round is the final step of
+    /// the fold, `h` is returned as soon as the loop ends. A difference
+    /// confined to the second (last) tag word therefore gets exactly that
+    /// one round to spread, and one round only carries a bit difference
+    /// roughly 40 places upward before the fold ends (`PRIME` is a ~41-bit
+    /// constant), so a difference confined to the low ~48 bits of that word
+    /// never reaches bit 63 — the bit `index`'s high-bit reducer actually
+    /// reads. Measured: a hypothetical sixth slot sharing
     /// `Coda`'s tags but with a single bit of the second word flipped at
     /// position 0, 1, 24 or 32 still collapses to 2 of the 4 possible joint
     /// outcomes over 100k seeds at pool size 2 — the exact shape of the bug
@@ -198,13 +202,21 @@ impl DescriptionDb {
 
     /// Every loaded subject, in key order. For the census test and for
     /// reporting; nothing in play iterates the bank.
-    pub fn subjects(&self) -> impl Iterator<Item = &str> {
+    ///
+    /// `pub(crate)` rather than `pub`: only `tests::descriptions` calls
+    /// this, and `pub` was doing the same job an `#[allow(dead_code)]`
+    /// would — suppressing the unused-in-production warning rather than
+    /// stating the truth, which is that this has no production caller.
+    pub(crate) fn subjects(&self) -> impl Iterator<Item = &str> {
         self.subjects.keys().map(String::as_str)
     }
 
     /// How many distinct conditions `subject` carries — one per `when`,
     /// including the fallback, since `load_dir` merges duplicates.
-    pub fn variant_count(&self, subject: &str) -> usize {
+    ///
+    /// `pub(crate)` for the same reason `subjects` above is: test-only,
+    /// with no production caller to widen it for.
+    pub(crate) fn variant_count(&self, subject: &str) -> usize {
         self.subjects.get(subject).map_or(0, Vec::len)
     }
 
@@ -319,9 +331,10 @@ pub(crate) fn merge(
 /// deliberately the same one `FrameSpec::salted` uses. But this function
 /// makes **no assumption about who produced `seed` or how well-mixed it
 /// already is**: a cell coordinate, a raw `FrameSpec::rng_seed()` (whose own
-/// word-wise fold leaves a large share of its output bits, including the
-/// top 7, identical between adjacent cells — see `FrameSpec::salted`'s doc
-/// for the measurement), and a test sweeping `0..64` are all fair game here,
+/// word-wise fold leaves a large share of its output bits, including
+/// several of the highest, identical between adjacent cells — see
+/// `FrameSpec::salted`'s doc for the measurement), and a test sweeping
+/// `0..64` are all fair game here,
 /// and none of them can be trusted to already have a fair footprint in every
 /// bit. So `seed` is folded in **one byte at a time**, true FNV-1a style,
 /// from the same 64-bit offset basis `rng_seed` starts from, before slot

@@ -7,15 +7,16 @@
 
 use crate::descriptions::{DescriptionDb, DescriptionDef, Slot, fold, index, merge};
 
-/// A scratch bank directory holding `files` as `(filename, body)`. The
-/// caller removes it.
-pub(crate) fn bank_dir(tag: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "feral_descriptions_{tag}_{}_{}",
-        std::process::id(),
-        files.len()
-    ));
-    let _ = std::fs::remove_dir_all(&dir);
+/// A scratch bank directory holding `files` as `(filename, body)`.
+///
+/// Built on `support::scratch_assets_dir`'s `ScratchAssets` RAII guard
+/// (the same mechanism `modded_assets_dir` and its siblings use) rather
+/// than a hand-rolled `/tmp` path cleaned up by a call at the end of each
+/// test body: a panic between creation and that call used to leak the
+/// directory, and this module's `feral_descriptions_*` leftovers were the
+/// evidence. `Drop` runs unconditionally, including on an unwind.
+pub(crate) fn bank_dir(tag: &str, files: &[(&str, &str)]) -> crate::tests::support::ScratchAssets {
+    let dir = crate::tests::support::scratch_assets_dir(tag);
     std::fs::create_dir_all(&dir).unwrap();
     for (name, body) in files {
         std::fs::write(dir.join(name), body).unwrap();
@@ -51,7 +52,6 @@ fn a_malformed_description_file_is_skipped_with_a_warning() {
         warnings[0]
     );
     assert_eq!(db.subjects().collect::<Vec<_>>(), vec!["stack.door"]);
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -61,7 +61,6 @@ fn a_non_ron_file_is_ignored_without_a_warning() {
 
     assert!(warnings.is_empty(), "warnings were {warnings:?}");
     assert_eq!(db.subjects().count(), 1);
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -71,7 +70,6 @@ fn an_empty_bank_directory_loads_clean() {
 
     assert!(warnings.is_empty());
     assert_eq!(db.subjects().count(), 0);
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// `merge`'s sort is the one load-bearing line in this module, and it
@@ -131,7 +129,6 @@ fn two_files_on_one_subject_merge_their_pools() {
         std::collections::HashSet::from(["from a", "from z"]),
         "both files' fragments must be reachable"
     );
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// Two variants sharing a condition merge into one pool — within a single
@@ -166,7 +163,6 @@ fn two_variants_on_one_condition_merge_into_one_pool() {
         "both fallback fragments must be reachable"
     );
     assert_eq!(db.underfoot("stack.door", Some("opened"), 0), Some("open"));
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// An opener that picks as `""` is authoring error, not a blessed short
@@ -186,7 +182,6 @@ fn an_empty_opener_counts_as_no_paragraph() {
 
     assert!(warnings.is_empty(), "warnings were {warnings:?}");
     assert_eq!(db.paragraph("stack.door", None, 0), None);
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// A bank with enough fragments per slot that a differing seed can actually
@@ -212,7 +207,7 @@ const CACHE: &str = r#"(
     ],
 )"#;
 
-fn cache_bank(tag: &str) -> (DescriptionDb, std::path::PathBuf) {
+fn cache_bank(tag: &str) -> (DescriptionDb, crate::tests::support::ScratchAssets) {
     let dir = bank_dir(tag, &[("cache.ron", CACHE)]);
     let (db, warnings) = DescriptionDb::load_dir(&dir).unwrap();
     assert!(warnings.is_empty(), "warnings were {warnings:?}");
@@ -221,39 +216,36 @@ fn cache_bank(tag: &str) -> (DescriptionDb, std::path::PathBuf) {
 
 #[test]
 fn a_condition_resolves_to_its_own_variant() {
-    let (db, dir) = cache_bank("condition");
+    let (db, _dir) = cache_bank("condition");
     assert_eq!(
         db.underfoot("stack.cache", Some("spent"), 0),
         Some("An empty casing")
     );
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// An unauthored condition falls back rather than going silent, so writing a
 /// new spent state is additive.
 #[test]
 fn an_unmatched_condition_falls_back() {
-    let (db, dir) = cache_bank("fallback");
+    let (db, _dir) = cache_bank("fallback");
     let general = db.underfoot("stack.cache", None, 0);
     assert_eq!(db.underfoot("stack.cache", Some("scorched"), 0), general);
     assert!(general.is_some());
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn an_unknown_subject_reads_nothing() {
-    let (db, dir) = cache_bank("unknown");
+    let (db, _dir) = cache_bank("unknown");
     assert_eq!(db.underfoot("stack.nowhere", None, 0), None);
     assert_eq!(db.sighted("stack.nowhere", None, 0), None);
     assert_eq!(db.paragraph("stack.nowhere", None, 0), None);
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// The same seed reads the same way, every time. This is the test that
 /// fails the day someone reaches for a draw instead of a fold.
 #[test]
 fn the_same_seed_reads_the_same_description_twice() {
-    let (db, dir) = cache_bank("stable");
+    let (db, _dir) = cache_bank("stable");
     for seed in [0u64, 1, 17, u64::MAX] {
         assert_eq!(
             db.underfoot("stack.cache", None, seed),
@@ -264,7 +256,6 @@ fn the_same_seed_reads_the_same_description_twice() {
             db.paragraph("stack.cache", None, seed)
         );
     }
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// Different seeds have to actually reach different fragments — the whole
@@ -272,7 +263,7 @@ fn the_same_seed_reads_the_same_description_twice() {
 /// pair can legitimately collide on a three-deep pool.
 #[test]
 fn different_seeds_reach_different_fragments() {
-    let (db, dir) = cache_bank("varied");
+    let (db, _dir) = cache_bank("varied");
     let paragraphs: std::collections::HashSet<_> = (0..64u64)
         .filter_map(|s| db.paragraph("stack.cache", None, s))
         .collect();
@@ -289,7 +280,6 @@ fn different_seeds_reach_different_fragments() {
         2,
         "both underfoot fragments should be reachable"
     );
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// The three lengths of one cell are independent draws. If they folded the
@@ -297,7 +287,7 @@ fn different_seeds_reach_different_fragments() {
 /// pair opener 0 with underfoot 0.
 #[test]
 fn the_three_lengths_of_one_cell_do_not_move_in_lockstep() {
-    let (db, dir) = cache_bank("lockstep");
+    let (db, _dir) = cache_bank("lockstep");
     let pairs: std::collections::HashSet<_> = (0..64u64)
         .map(|s| {
             (
@@ -311,14 +301,13 @@ fn the_three_lengths_of_one_cell_do_not_move_in_lockstep() {
         "underfoot and sighted moved together: {} combinations over 64 seeds",
         pairs.len()
     );
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// Empty fragments are how a shorter paragraph is authored — they drop out
 /// rather than leaving a double space or a dangling sentence.
 #[test]
 fn empty_slots_compose_into_a_shorter_paragraph() {
-    let (db, dir) = cache_bank("short");
+    let (db, _dir) = cache_bank("short");
     let all: Vec<_> = (0..64u64)
         .filter_map(|s| db.paragraph("stack.cache", None, s))
         .collect();
@@ -333,7 +322,6 @@ fn empty_slots_compose_into_a_shorter_paragraph() {
             "stray edge space in {p:?}"
         );
     }
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// A subject whose fallback variant has no `openers` at all has no
@@ -349,7 +337,6 @@ fn a_subject_with_no_opener_has_no_paragraph() {
     let (db, warnings) = DescriptionDb::load_dir(&dir).unwrap();
     assert!(warnings.is_empty(), "warnings were {warnings:?}");
     assert_eq!(db.paragraph("stack.floor", None, 0), None);
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// The claim `Slot::tags`'s doc makes precise: **every pair** of the five
@@ -414,6 +401,27 @@ fn every_pair_of_slots_is_independent() {
 /// A content edit that empties a pool fails here instead of shipping
 /// silence at a cell nobody happened to walk onto during testing. Same
 /// shape as `every_biome_a_stack_link_can_open_in_fields_a_boss`.
+///
+/// **The `sighted` requirement below is deliberately broader than what
+/// `Game::notability` will ever let reach the screen.** `sighted_description`
+/// has exactly one production caller, `announce_sighting`, and it only
+/// calls it for a cell `notability` returned `Some` for. `notability`
+/// returns `None` unconditionally for `stack.floor`, `stack.door` and
+/// `stack.link_up` — they are never worth a line at all, by the design
+/// argument in `notability`'s own doc comment — and it returns `None` for
+/// every "already used" condition: `spent` (cache, breakpoint, orphan),
+/// `opened` (sealed door) and `cleared` (lair). Their `sighted` pools are
+/// authored anyway and checked here anyway, on purpose: `underfoot` and
+/// `paragraph` (via `x`) read any cell regardless of `notability`, so a
+/// player can still stand on or examine an emptied cache and see its
+/// `sighted`-length prose reused nowhere — and holding every subject to
+/// the same three-length shape is cheaper than tracking which subjects are
+/// exempt, catches a malformed `sighted` fragment before an author has to
+/// remember it is inert, and stops being inert the moment `notability`'s
+/// ranking ever changes. This test's shape does not claim these particular
+/// `sighted` pools play back in the current build — only `notability`'s
+/// doc comment and `announce_sighting`'s call site are the source of truth
+/// for that.
 const SHIPPED: &[(&str, &[&str])] = &[
     ("stack.floor", &[]),
     ("stack.door", &[]),
@@ -733,7 +741,56 @@ fn cell_paragraph_expands_bearing_even_in_a_field_the_shipped_bank_never_uses_it
         !text.contains("{bearing}"),
         "the token reached the screen unexpanded: {text:?}"
     );
-    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// `fill_bearing`'s `cell == (pos.x, pos.y)` branch — "right under you" for
+/// the cell the party is standing on, spelled out because `relative_bearing`
+/// would otherwise answer "behind" for it — has no coverage from the shipped
+/// bank at all: the census forbids `{bearing}` in `underfoot` pools, and no
+/// shipped `opener`/`detail`/`coda` carries it either, so the branch is only
+/// live for a modded bank read through `x`+`Underfoot` or `Z`-listen.
+/// `cell_paragraph_expands_bearing_even_in_a_field_the_shipped_bank_never_uses_it_in`
+/// above proves the token gets expanded at all, but its fixture cell need
+/// not be where the party stands, so it can pass by taking the `else`
+/// branch alone. This one stands the party on the cell it paragraphs, so
+/// only the standing-on-it branch can produce the expected text.
+///
+/// Verified by deletion: with `fill_bearing`'s `if cell == (pos.x, pos.y)`
+/// special case removed (falling through to `relative_bearing` for every
+/// cell, including this one), this test fails — `relative_bearing` reads
+/// "behind" for a cell coincident with the party's own position — and
+/// restoring the branch makes it pass again.
+#[test]
+fn fill_bearing_reads_right_under_you_for_the_cell_the_party_stands_on() {
+    let body = r#"(
+        subject: "stack.floor",
+        variants: [(
+            openers: ["The corridor continues {bearing}."],
+        )],
+    )"#;
+    let dir = bank_dir("bearing_underfoot", &[("floor.ron", body)]);
+    let (db, warnings) = DescriptionDb::load_dir(&dir).unwrap();
+    assert!(warnings.is_empty(), "warnings were {warnings:?}");
+
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let floor = cell_of(&game, CellKind::Floor).expect("every frame has floor");
+    crate::tests::support::stand_at(&mut game, floor, Dir::North);
+    game.world.insert_resource(db);
+    let pos = game.stack_pos().unwrap();
+    assert_eq!(
+        (pos.x, pos.y),
+        floor,
+        "the party must be standing on the cell it paragraphs"
+    );
+
+    let text = game
+        .cell_paragraph(pos, floor)
+        .expect("floor underfoot describes");
+    assert_eq!(
+        text, "The corridor continues right under you.",
+        "fill_bearing did not take the standing-on-it branch: {text:?}"
+    );
 }
 
 /// Spent features stop being worth a line; plain corridor never was.
@@ -811,6 +868,155 @@ fn arrival_line_reads_the_frame_not_a_sighted_cell() {
     assert_eq!(
         here, there,
         "arrival_line changed when only the party's position moved, not the frame"
+    );
+}
+
+/// The twin of `subject_of_asks_the_bank_for_the_condition_the_predicates_say`
+/// below, for `arrival_line`'s own condition axis. Replacing that `match`
+/// with a constant `None` left every engine test green, because nothing
+/// tied its four condition strings — `shallow`, `bottom`, `traced`,
+/// `hunted` — to the code that picks between them; the census only proves
+/// the bank *has* all four, not that `arrival_line` ever asks for the
+/// right one.
+///
+/// Pinned by exact match against `DescriptionDb::sighted` at the frame's
+/// own seed, the same shape `subject_of_asks_the_bank_for_the_condition_the_predicates_say`
+/// uses — and simpler here, because unlike `subject_of`'s state-driven
+/// axes, `frame_description_seed` folds only depth/frames/entrance, never
+/// Trace, so raising Trace never moves the seed out from under the
+/// comparison. That also means every band can be reached through a
+/// synthetic `StackPos` (`frame_description_seed`/`arrival_line` read only
+/// `pos.depth`/`pos.frames`, never `CurrentStack`), so this does not need
+/// to search the stack for a frame at the right depth the way
+/// `two_different_frames_describe_the_same_cell_differently` has to.
+///
+/// Depth bands: `shallow` at depth 1, `bottom` at `depth >= frames`, and
+/// the unconditioned fallback for a depth strictly in between — asserted
+/// against the shipped bank both as an exact match *and* as a change from
+/// its neighbours, since three exact matches against three different
+/// pools already prove they read differently, but the explicit `assert_ne!`
+/// pairs are what the brief asks for directly.
+///
+/// Precedence: Trace overrides depth once it is loud enough, per
+/// `arrival_line`'s own doc comment. A test that only ever raises depth
+/// cannot tell that from a version where depth always wins, so the
+/// decisive cases hold depth fixed at the shallow and bottom extremes —
+/// the two bands most likely to be checked first in a depth-primary
+/// rewrite — and raise Trace across them: depth 1 with Trace `Hunted`
+/// must read `hunted`, not `shallow`; the bottom frame with Trace `Traced`
+/// must read `traced`, not `bottom`.
+///
+/// Verified by two mutations, both restored before this test was reported
+/// done: forcing `arrival_line`'s whole `match` to a constant `None` turns
+/// this test red (every band reads the unconditioned fallback instead of
+/// its own pool); separately rewriting the `match` so depth is checked
+/// before `trace_band()` — `if pos.depth >= pos.frames { bottom } else if
+/// pos.depth == 1 { shallow } else { match trace_band() { Hunted =>
+/// hunted, Traced => traced, _ => None } }` — also turns it red, at the
+/// two precedence assertions specifically.
+#[test]
+fn arrival_line_reads_its_condition_axis() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let pos = game.stack_pos().unwrap();
+
+    fn bank(game: &Game, condition: Option<&str>, seed: u64) -> Option<String> {
+        game.world
+            .resource::<DescriptionDb>()
+            .sighted("stack.frame.arrival", condition, seed)
+            .map(str::to_string)
+    }
+
+    fn set_trace(game: &mut Game, value: u32) {
+        game.world.resource_mut::<crate::resources::Trace>().0 = value;
+    }
+
+    // `frame_description_seed`/`arrival_line` read only `pos.depth`,
+    // `pos.frames` and `pos.entrance` — never `CurrentStack` — so a
+    // synthetic `frames` picked here, wide enough to leave room for a
+    // depth that is neither 1 nor the bottom, reaches all three depth
+    // bands without needing the real stack to happen to run that deep
+    // (`STACK_FRAMES_MIN` is 2, so a live descent cannot be relied on for
+    // this). The same freedom `link_up`'s test above already takes with a
+    // synthetic depth.
+    let frames = 5u32;
+    let shallow_pos = StackPos {
+        depth: 1,
+        frames,
+        ..pos
+    };
+    let mid_pos = StackPos {
+        depth: 3,
+        frames,
+        ..pos
+    };
+    let bottom_pos = StackPos {
+        depth: frames,
+        frames,
+        ..pos
+    };
+
+    // ---- depth bands, Trace held Quiet ----
+    set_trace(&mut game, 0);
+    let shallow_seed = game.frame_description_seed(shallow_pos);
+    let mid_seed = game.frame_description_seed(mid_pos);
+    let bottom_seed = game.frame_description_seed(bottom_pos);
+
+    let shallow_line = game.arrival_line(shallow_pos);
+    let mid_line = game.arrival_line(mid_pos);
+    let bottom_line = game.arrival_line(bottom_pos);
+
+    assert_eq!(shallow_line, bank(&game, Some("shallow"), shallow_seed));
+    assert_eq!(mid_line, bank(&game, None, mid_seed));
+    assert_eq!(bottom_line, bank(&game, Some("bottom"), bottom_seed));
+
+    assert_ne!(shallow_line, mid_line, "shallow and mid read identically");
+    assert_ne!(mid_line, bottom_line, "mid and bottom read identically");
+    assert_ne!(
+        shallow_line, bottom_line,
+        "shallow and bottom read identically"
+    );
+
+    // ---- Trace bands, depth held at mid (neither shallow nor bottom) ----
+    set_trace(&mut game, crate::tuning::TRACE_TRACED);
+    let traced_line = game.arrival_line(mid_pos);
+    assert_eq!(traced_line, bank(&game, Some("traced"), mid_seed));
+    assert_ne!(
+        traced_line, mid_line,
+        "raising Trace to Traced changed nothing"
+    );
+
+    set_trace(&mut game, crate::tuning::TRACE_HUNTED);
+    let hunted_line = game.arrival_line(mid_pos);
+    assert_eq!(hunted_line, bank(&game, Some("hunted"), mid_seed));
+    assert_ne!(
+        hunted_line, traced_line,
+        "Traced and Hunted read identically"
+    );
+
+    // ---- precedence: Trace overrides depth, checked at both depth extremes ----
+    set_trace(&mut game, crate::tuning::TRACE_HUNTED);
+    let shallow_hunted = game.arrival_line(shallow_pos);
+    assert_eq!(
+        shallow_hunted,
+        bank(&game, Some("hunted"), shallow_seed),
+        "depth 1 with Trace Hunted must read hunted, not shallow"
+    );
+    assert_ne!(
+        shallow_hunted, shallow_line,
+        "Trace Hunted did not override the shallow band at depth 1"
+    );
+
+    set_trace(&mut game, crate::tuning::TRACE_TRACED);
+    let bottom_traced = game.arrival_line(bottom_pos);
+    assert_eq!(
+        bottom_traced,
+        bank(&game, Some("traced"), bottom_seed),
+        "the bottom frame with Trace Traced must read traced, not bottom"
+    );
+    assert_ne!(
+        bottom_traced, bottom_line,
+        "Trace Traced did not override the bottom band at the bottom frame"
     );
 }
 
@@ -1115,8 +1321,13 @@ fn every_other_suffixed_arm_keeps_its_exact_key_prompt() {
     assert!(row.ends_with("  [<] climb"), "lost the prompt: {row:?}");
 }
 
-/// Deleting the asset directory leaves the game working — the same argument
-/// `crash_logs` made, and the reason the bank returns `Option`.
+/// An *empty* bank leaves the game working — the same argument `crash_logs`
+/// made, and the reason the bank returns `Option`. Simulated here with
+/// `DescriptionDb::default()` rather than an actually-deleted
+/// `assets/descriptions/` directory: `DescriptionDb::load_dir` calls
+/// `read_dir(dir)?`, so a genuinely absent directory makes `Game::new`
+/// return `NotFound` before a `Game` exists to call `stack_view` on. What a
+/// mod can safely delete is the *contents*, not the directory itself.
 #[test]
 fn an_empty_bank_falls_back_to_the_shipped_literals() {
     let mut game = game();

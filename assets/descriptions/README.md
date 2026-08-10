@@ -57,11 +57,17 @@ They are not truncations of each other — each is authored for where it goes.
   `every_shipped_underfoot_line_fits_the_standing_on_row` holds this.
 - **`sighted`** — one log line, fired once when the cell first comes into
   view. The log pane draws exactly one row per line with no wrapping, so
-  write one sentence.
+  write one sentence — except `stack.frame.arrival`, whose lines read as
+  mood copy rather than a report on a specific cell and may run to two
+  short ones; see the `{bearing}` section below for why that subject is
+  special.
 - **`openers` / `details` / `codas`** — the examine paragraph, sentence by
   sentence. The engine joins the non-empty parts with a single space and
-  does nothing else, so **each fragment must be a complete sentence with its
-  own full stop.** An empty string in `details` or `codas` is how a shorter
+  does nothing else, so **each fragment must consist of one or two complete
+  sentences, each with its own full stop** — ordinarily one; the shipped
+  bank uses two in a handful of `details` (`corruption.ron`, `fault.ron`)
+  where a single fragment reads better as a pair of short sentences than as
+  one long one. An empty string in `details` or `codas` is how a shorter
   paragraph is authored; a subject with no `openers` has no paragraph at
   all.
 
@@ -72,6 +78,12 @@ or `to your right`, computed from the party's facing at the moment the line
 is drawn. Legal in `sighted`, `openers`, `details` and `codas`. Write it as
 a bare direction phrase — `"A door stands shut {bearing}."`, not
 `"A door stands shut to the {bearing}."`.
+
+**One exception: `stack.frame.arrival`.** It is fired once on entering a
+frame rather than read from a specific cell, so `Game::arrival_line` never
+calls the code that fills `{bearing}` in — there is no cell for the token
+to point at. Writing `{bearing}` anywhere in `frame_arrival.ron` would reach
+the screen unexpanded; the engine's shipped-bank test checks this directly.
 
 ### Subjects and conditions
 
@@ -147,17 +159,25 @@ shipped bank was written to:
 >
 > For the subject `<SUBJECT>` under the condition `<CONDITION>`, write:
 >
-> - 1-2 `underfoot` phrases: at most 28 characters, no full stop, no
->   `{bearing}`. What the row under the view says when you are standing on
->   it.
+> - 1-2 `underfoot` phrases: at most 48 characters minus the key-prompt
+>   suffix the game appends after this subject/condition's row (0 for most
+>   subjects; up to 19 for `stack.corruption` — see the Schema section
+>   above), no full stop, no `{bearing}`. What the row under the view says
+>   when you are standing on it. When in doubt, a short phrase well under
+>   30 characters is always safe — the shipped `stack.lair` line runs 37
+>   with no suffix to spare.
 > - 2-3 `sighted` sentences: exactly one sentence each, containing
 >   `{bearing}` once as a bare direction phrase. What the log says when this
->   first comes into view.
+>   first comes into view. Exception: `stack.frame.arrival` never fills
+>   `{bearing}` (see the `{bearing}` section below) and its `sighted` lines
+>   may run to two short sentences, since they read as mood copy rather
+>   than a report on a specific place.
 > - 3-4 `openers`: one complete sentence each, naming the thing.
-> - 3-4 `details`, including one `""`: one complete sentence each, adding an
->   observation about this particular thing.
-> - 3-4 `codas`, including one `""`: one complete sentence each, closing the
->   paragraph.
+> - 3-4 `details`, including one `""`: ordinarily one complete sentence
+>   each, adding an observation about this particular thing — two short
+>   sentences are acceptable when one reads better than a single long one.
+> - 3-4 `codas`, including one `""`: ordinarily one complete sentence each,
+>   closing the paragraph — same two-sentence allowance as `details`.
 >
 > Any opener must read correctly followed by any detail followed by any
 > coda, joined with single spaces — they are composed independently.

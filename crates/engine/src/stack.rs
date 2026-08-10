@@ -314,10 +314,15 @@ impl FrameSpec {
     /// A whole-word XOR gets exactly one multiply-by-prime round to spread
     /// it, and one round cannot carry a low-bit difference much past the
     /// prime's own width (`PRIME` is ~41 bits) before the fold ends —
-    /// measured, a whole-word fold left 23 of 64 output bits, *including
-    /// the top 7*, identical across every one of 4096 adjacent cell pairs
-    /// `(x, y)` / `(x + 1, y)`, with the bottom bit alternating in lockstep
-    /// with `x`'s parity instead. `[a, b]` diverging from `[b, a]` (the
+    /// measured, a whole-word fold leaves many of the 64 output bits,
+    /// including several of the highest, identical across most adjacent
+    /// cell pairs `(x, y)` / `(x + 1, y)`, with the bottom bit alternating
+    /// in lockstep with `x`'s parity instead. This is a property of the
+    /// fold, not a fixed count — three separate measurements taken against
+    /// this function's history came back 21/64 with the top 6 fixed,
+    /// 22/64 with the top 8, and 23/64 with the top 7, all depending on
+    /// which cell pairs happened to be sampled, so no single number is
+    /// asserted here or by a test. `[a, b]` diverging from `[b, a]` (the
     /// property the existing `salting_*` tests check) is not the same
     /// claim as "adjacent cells cannot rhyme" — the two can both be true at
     /// once, exactly as measured here, because `assert_ne!` only needs one
@@ -1976,8 +1981,9 @@ mod tests {
     /// outputs are *unequal*; it does not prove *where* they differ.
     /// `assert_ne!` is satisfied by one flipped bit, and a whole-word XOR
     /// fold (the previous implementation) reliably supplied exactly one —
-    /// the low bit, alternating with `x`'s parity — while leaving the top 7
-    /// bits of every adjacent-cell pair identical across the whole sweep.
+    /// the low bit, alternating with `x`'s parity — while leaving several
+    /// of the highest bits of most adjacent-cell pairs identical across
+    /// the sweep (see `salted`'s doc for why no fixed count is quoted).
     /// Any caller that reduces `salted`'s output to a small index would
     /// have inherited that: fine on the bit `%` or a low-bit read happens to
     /// use, silently broken on the bits a high-bit reducer (like

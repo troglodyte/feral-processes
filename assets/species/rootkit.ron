@@ -11,7 +11,7 @@
     habitats: [Mainframe, NullSector],
     base_speed: 9,
     moves: [
-        (name: "Privilege Escalation", power: 10, effect: Some((kind: Stun, chance: 0.4, duration: 1, power: 0))),
+        (name: "Privilege Escalation", power: 10, effect: Some((kind: Stun, chance: 0.4, duration: 2, power: 0))),
         (name: "Kernel Panic", power: 12, ranged: true),
     ],
     work_resource: None,

@@ -11,7 +11,7 @@
     habitats: [StaticField],
     base_speed: 11,
     moves: [
-        (name: "Freeze", power: 7, ranged: true, effect: Some((kind: Stun, chance: 0.3, duration: 1, power: 0))),
+        (name: "Freeze", power: 7, ranged: true, effect: Some((kind: Stun, chance: 0.3, duration: 2, power: 0))),
         (name: "Corrupt", power: 9, effect: Some((kind: Bleed, chance: 0.4, duration: 3, power: 3))),
     ],
     work_resource: None,

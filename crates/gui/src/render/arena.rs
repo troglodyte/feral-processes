@@ -260,6 +260,6 @@ mod tests {
                 "the widest builder row overflows its popup by {:.0}px:\n{widest}",
                 drawn - room
             );
-        })
+        });
     }
 }

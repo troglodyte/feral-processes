@@ -543,7 +543,7 @@ mod tests {
                 suffix_x(label, row_x, p, &m) >= text_right,
                 "the suffix must start past the row text, not inside it"
             );
-        })
+        });
     }
 
     /// The icon is painted *over* a slot reserved inside the label rather than

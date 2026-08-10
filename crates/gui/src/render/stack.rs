@@ -761,4 +761,49 @@ mod tests {
             draw_cell_describe(None, p, &m);
         });
     }
+
+    /// `with_painter` reports what it actually recorded, so `draw_
+    /// cell_describe` — the full paint call, not just `cell_describe_rows`'s
+    /// content — is directly assertable: this is the test that goes red if
+    /// `draw_cell_describe` itself were ever gutted to a no-op, which
+    /// nothing above it in this module can catch (`cell_describe_rows`'s
+    /// tests are pinned to the pure content-building helper, and
+    /// `drawing_the_cell_description_does_not_panic` above stays green for
+    /// an empty draw exactly as readily as a real one).
+    ///
+    /// Pins three things `cell_describe_rows`'s own tests cannot see at
+    /// all: the title actually reaches the screen, the body text actually
+    /// reaches the screen (not merely gets built into a `Row`), and the
+    /// popup draws at `PopupSize::Large` rather than `Small` — the two
+    /// sizes leave no other trace a test outside `popup.rs` can read,
+    /// which is why this checks the widest painted rect's width against
+    /// `screen_w * 0.88` (`Large`'s fraction) rather than `* 0.5`
+    /// (`Small`'s).
+    #[test]
+    fn drawing_the_cell_description_paints_the_title_the_body_and_a_large_popup() {
+        const SCREEN_W: f32 = 1440.0; // the fixed geometry `with_painter` sets up
+        let m = crate::text::ui_metrics(900.0);
+        let (_, shapes) = crate::paint::with_painter(|p| {
+            draw_cell_describe(Some("A doorway, still framed."), p, &m);
+        });
+
+        let text = crate::paint::painted_text(&shapes);
+        assert!(
+            text.iter().any(|t| t == "You look"),
+            "the title never painted: {text:?}"
+        );
+        assert!(
+            text.iter().any(|t| t.contains("A doorway, still framed.")),
+            "the body text never painted: {text:?}"
+        );
+
+        let widest = crate::paint::painted_rect_widths(&shapes)
+            .into_iter()
+            .fold(0.0_f32, f32::max);
+        let large_w = SCREEN_W * 0.88;
+        assert!(
+            (widest - large_w).abs() < 1.0,
+            "expected a PopupSize::Large panel ({large_w}px wide), the widest painted rect was {widest}px"
+        );
+    }
 }

@@ -1570,6 +1570,42 @@ fn examining_ahead_does_not_see_through_a_shut_door() {
     }
 }
 
+/// The map's memory has to stop at the same wall the eye does — the same
+/// door/cache fixture `examining_ahead_does_not_see_through_a_shut_door`
+/// above pins for the examine ray. Before `visible_rows` existed as one
+/// walk shared by both consumers, `remember_view_silent` had its own copy
+/// of the occlusion check and this property was never at risk from a ray
+/// bug; now that both consumers are built off the same function, deleting
+/// occlusion from `visible_rows` breaks the map's memory too, and this is
+/// the test on *this* side of that shared function — removing occlusion
+/// entirely from `visible_rows` must turn this test red as well as the
+/// examine one, not just the examine one, or the consolidation quietly
+/// concentrated map coverage onto a test that belongs to a different
+/// feature.
+#[test]
+fn the_map_does_not_remember_a_cell_behind_a_shut_door() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let level = crate::tests::support::frame(&game);
+    assert_eq!(
+        level.cell(2, 18),
+        CellKind::Door,
+        "fixture drifted: no door at (2, 18)"
+    );
+    assert_eq!(
+        level.cell(2, 19),
+        CellKind::Cache,
+        "fixture drifted: no cache at (2, 19)"
+    );
+
+    crate::tests::support::stand_at(&mut game, (2, 16), Dir::South);
+    let seen = game.remember_view_silent();
+    assert!(
+        !seen.contains(&(2, 19)),
+        "the map recorded a cell behind a shut door as seen: {seen:?}"
+    );
+}
+
 /// A vantage (stand, facing) where the cell immediately beside the party —
 /// `ahead == 0`, not the corridor ahead — is notable, and which `ExamineDir`
 /// (`Left` or `Right`) finds it. Because it is the nearest possible cell on

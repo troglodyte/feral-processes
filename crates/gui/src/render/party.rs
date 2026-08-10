@@ -273,7 +273,7 @@ mod tests {
                     drawn - room
                 );
             }
-        })
+        });
     }
 
     /// The easter-egg census. Wielding a program as your weapon is

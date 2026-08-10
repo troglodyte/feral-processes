@@ -27,6 +27,38 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.5.20
+
+Tooling and measurement only — nothing about a played game changes.
+
+### The arena can exercise Defend
+
+`arena::run_rep` played the party as All-Attack, so nobody ever braced and
+no arena measurement could say anything about Defend at all.
+`RunOptions::party` adds two plans: `BraceWhenHurt` (a member under half HP
+Defends) and `BraceInRotation` (one slot per round, whatever anyone's
+health). `--party-plan brace|rotate` reaches them from `train`.
+
+All-Attack is still the default, so every number published before this keeps
+meaning what it meant, and `the_default_party_plan_never_braces` holds it.
+
+### The analysis refuses to present a confounded number
+
+`analysis/policy_report.py` now checks each run for observables that move
+together and warns above the first table. It was written after a run that
+could not answer its own question — the brace rule fired on a threshold over
+the policy's largest feature, so bracing and being wounded were one
+variable. The check is grouped per run, because pooling a sweep hides the
+confound behind the configs that never brace.
+
+### What the instruments said
+
+`docs/measurements/` gains the pin sweep, the stun-move levers, and the
+bracing runs. The last of these confirms the three pinned policy features
+are justified — and corrects the 2026-08-09 reason for one of them, which
+read a weight that training could not have learned, since under All-Attack
+`target_bracing` is constant and fitness is indifferent to it.
+
 ## 0.5.19
 
 ### Wild programs use their stun moves again

@@ -57,3 +57,7 @@ an honest "unknown".
 - [2026-08-10 — Stun move levers](2026-08-10-stun-move-levers.md) — power is
   a switch and not a dial, so repricing an effect move cannot buy variety;
   duration can, and the asset edit is inert without a retrain.
+- [2026-08-10 — A party that braces](2026-08-10-a-party-that-braces.md) —
+  Defend blunts a trained enemy and loses to a random one; the run could not
+  answer the pins question because its treatment variable was collinear with
+  the policy's strongest feature.

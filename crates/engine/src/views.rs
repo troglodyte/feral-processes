@@ -158,6 +158,11 @@ pub struct ProgramSaleOption {
     /// is giving up, and a maxed fusion is the least replaceable thing on
     /// the list.
     pub fusions: u32,
+    /// This program's rare-spawn tier — carried for exactly the reason
+    /// `fusions` above is. An Overclocked program is the other least
+    /// replaceable thing that can be on this list, and the tier is not
+    /// something a payout figure reflects.
+    pub rarity: Rarity,
     /// What the program is doing right now — see `Game::program_activity`.
     /// Shown on the row, so the screen that permanently erases a program
     /// says what it was in the middle of.
@@ -426,6 +431,12 @@ pub struct EnemyGroupView {
     pub count: usize,
     pub front_hp: i32,
     pub front_max_hp: i32,
+    /// The rare-spawn tier of the *front* member — the same one whose HP the
+    /// two fields above report, since a group's members can differ and the
+    /// row has one of each to show. Deliberately absent from `species_name`,
+    /// which the roster draws into a fixed-width cell an "Overclocked
+    /// Scrapper 2" overflows; the renderer tags it outside that column.
+    pub front_rarity: Rarity,
     pub atk: i32,
     pub def: i32,
     pub is_boss: bool,

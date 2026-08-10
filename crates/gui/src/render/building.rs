@@ -153,8 +153,9 @@ pub(super) fn draw_worker_menu(
         let power = pet.map(|p| format!(" PWR {}", p.power)).unwrap_or_default();
         let activity = pet.map(|p| activity_tag(&p.activity)).unwrap_or_default();
         let fusions = pet.map(|p| p.fusions).unwrap_or(0);
+        let rarity = pet.map(|p| p.rarity).unwrap_or_default();
         rows.push(with_icon(
-            fusion_row(
+            program_row(
                 format!(
                     "[{}] {}{}{} at ({}, {}){}{}",
                     menu_shortcut(i),
@@ -168,6 +169,7 @@ pub(super) fn draw_worker_menu(
                 ),
                 i == selected,
                 fusions,
+                rarity,
             ),
             w.glyph,
             glyph_color(w.color),

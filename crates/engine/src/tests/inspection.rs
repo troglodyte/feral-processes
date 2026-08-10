@@ -320,6 +320,46 @@ fn difficulty_color_buckets_relative_power_into_con_colors() {
     );
 }
 
+/// A rare tier is drawn as a bar along the top of the tile, *not* by
+/// recolouring the glyph, because the glyph is already carrying
+/// `difficulty_color` — how badly this thing would beat you, which is the
+/// one reading a player cannot afford to lose. Two channels, and this is
+/// what stops a later tidy-up collapsing them into one recolour.
+#[test]
+fn a_shiny_hostile_still_reports_its_difficulty_colour() {
+    let mut game = Game::new(9030, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let wild = game
+        .spawn_wild_creature("scrapper", pos.x + 1, pos.y)
+        .expect("scrapper ships with the game");
+
+    game.world.entity_mut(wild).insert(Rarity::Gold);
+
+    // Compared against the *computed* difficulty colour rather than against
+    // the same creature's pre-tier view: a before/after comparison passes
+    // whenever a wrong override happens to land on the colour the fight was
+    // going to be anyway, and an even matchup draws Yellow — which is
+    // exactly what a first draft of this test collided with.
+    let power = game.world.get::<Stats>(wild).unwrap().power();
+    let expected = difficulty_color(power, game.player_status().power, false);
+    let shiny = game
+        .view_entities(5, 5)
+        .into_iter()
+        .find(|v| v.entity == wild)
+        .expect("the wild program should be in view");
+
+    assert_eq!(
+        shiny.color, expected,
+        "the tier must not touch the glyph colour — that channel is the \
+         difficulty read"
+    );
+    assert_eq!(
+        shiny.rarity,
+        Rarity::Gold,
+        "the tier rides its own field for the map bar to draw"
+    );
+}
+
 #[test]
 fn difficulty_color_is_always_magenta_for_a_boss_regardless_of_power() {
     assert_eq!(difficulty_color(1, 1000, true), GlyphColor::Magenta);

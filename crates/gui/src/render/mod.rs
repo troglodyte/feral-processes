@@ -93,6 +93,23 @@ const CYAN: Color = Color::new(0.25, 0.85, 0.85, 1.0);
 const MAGENTA: Color = Color::new(0.8, 0.35, 0.85, 1.0);
 const GREEN: Color = Color::new(0.35, 0.85, 0.4, 1.0);
 const ORANGE: Color = Color::new(0.95, 0.55, 0.15, 1.0);
+/// The two rare-spawn tiers (`components::Rarity`), pinned by
+/// `the_tier_colours_are_separable_from_their_neighbours`.
+///
+/// Both sit in crowded parts of the palette and the first draft of each was
+/// too close to a neighbour to survive being drawn two pixels tall: silver
+/// is cool and clearly blue-leaning rather than a near-neutral that reads
+/// as dimmed `TEXT`, and gold is *paler* than `YELLOW` rather than warmer,
+/// because warmer runs straight into `ORANGE` — and a hostile's glyph can
+/// be drawn in either of those by `difficulty_color`, directly under the
+/// bar.
+const SILVER: Color = Color::new(0.72, 0.80, 0.92, 1.0);
+const GOLD: Color = Color::new(1.0, 0.85, 0.40, 1.0);
+/// Thickness of the rare-tier bar the map draws along the top edge of a
+/// creature's tile — see `draw_surface_map`. Matches the breach spawn
+/// point's outline, the other overlay drawn over a glyph rather than
+/// instead of it.
+const RARITY_BAR_PX: f32 = 2.0;
 
 /// How far toward grey a back-rank group's bar is pulled — enough to read
 /// as "can't reach you" beside an engaged group without becoming
@@ -136,6 +153,53 @@ pub(super) fn fusion_color(fusions: u32) -> Option<Color> {
         0 => None,
         n if n >= MAX_FUSIONS => Some(MAGENTA),
         _ => Some(CYAN),
+    }
+}
+
+/// What colour a rare-spawn tier draws in, or `None` for an ordinary
+/// creature. Silver and gold, which is what the tiers are named after
+/// internally even though a player only ever reads Optimized/Overclocked.
+///
+/// **The map's tile bar and every menu row call this same function**, so a
+/// program cannot read as one colour on the grid and another on its own
+/// row — the argument `fusion_color` above makes about programs and gear,
+/// applied to the two places a tier is shown.
+pub(super) fn rarity_color(rarity: Rarity) -> Option<Color> {
+    match rarity {
+        Rarity::Ordinary => None,
+        Rarity::Silver => Some(SILVER),
+        Rarity::Gold => Some(GOLD),
+    }
+}
+
+/// The one colour rule for a program's menu row, resolving the only case
+/// where two permanent properties both want the same channel.
+///
+/// **Fusion outranks rarity**, extending the chain `fusion_color`'s doc
+/// starts to `CRITICAL > fusion > rarity > plain`. The same argument
+/// applies one step down: on the fuse pickers, cyan-versus-magenta is the
+/// read for *can this still be an input*, a question about an action
+/// available right now, while a rare tier is never actionable — it is worth
+/// knowing, not worth deciding on. A fused Overclocked program keeps the
+/// tier in its name and gives up only the colour.
+///
+/// Gear keeps calling `fusion_color` directly, because gear has no tier.
+pub(super) fn program_color(fusions: u32, rarity: Rarity) -> Option<Color> {
+    fusion_color(fusions).or_else(|| rarity_color(rarity))
+}
+
+/// How a rare tier reads where a full name will not fit — the battle
+/// roster, whose `NAME_W` cell an "Overclocked Scrapper 2" overflows.
+/// Bracketed to sit beside `[BOSS]`, and empty for an ordinary creature so
+/// the overwhelming majority of rows gain nothing at all.
+///
+/// The words are the engine's (`Rarity::label`), not this renderer's: the
+/// enum names colours and the player reads Optimized/Overclocked, and only
+/// one place gets to make that translation.
+pub(super) fn rarity_tag(rarity: Rarity) -> String {
+    match rarity.label() {
+        Some(tier) => format!(" [{}]", tier.to_uppercase()),
+        None => String::new(),
     }
 }
 
@@ -661,6 +725,85 @@ mod tests {
             fusion_color(MAX_FUSIONS + 1),
             Some(MAGENTA),
             "a legacy over-ceiling gear tier still reads as maxed"
+        );
+    }
+
+    /// Two permanent properties, one channel. Fusion wins because it is the
+    /// one that gates an action available now (can this still be a fusion
+    /// input); a rare tier is only ever worth knowing.
+    #[test]
+    fn fusion_outranks_rarity_in_a_menu_row() {
+        assert_eq!(
+            program_color(0, Rarity::Gold),
+            Some(GOLD),
+            "an unfused program shows its tier"
+        );
+        assert_eq!(
+            program_color(1, Rarity::Gold),
+            Some(CYAN),
+            "fusion depth is the actionable read and takes the channel"
+        );
+        assert_eq!(
+            program_color(MAX_FUSIONS, Rarity::Silver),
+            Some(MAGENTA),
+            "and still does at the ceiling"
+        );
+        assert_eq!(
+            program_color(0, Rarity::Ordinary),
+            None,
+            "an ordinary unfused program keeps the plain row colour"
+        );
+    }
+
+    /// The tier bar is two pixels tall and is drawn directly above a glyph
+    /// that `difficulty_color` may have painted green, yellow, orange, red
+    /// or magenta — so each tier has to stay clear of all of them, of the
+    /// neutrals it could read as a dimmed version of, and of the other tier.
+    ///
+    /// Asserting the separation rather than the literals, so a palette
+    /// retune is free to move any of them. This caught both first drafts:
+    /// gold was 0.23 from `YELLOW` and silver 0.22 from `TEXT`.
+    #[test]
+    fn the_tier_colours_are_separable_from_their_neighbours() {
+        let dist = |a: Color, b: Color| (a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs();
+        // Everything a tier bar can end up sitting against: the five
+        // `difficulty_color` outputs, the neutrals, and the other tier.
+        let neighbours = [
+            ("GREEN", GREEN),
+            ("YELLOW", YELLOW),
+            ("ORANGE", ORANGE),
+            ("RED", RED),
+            ("MAGENTA", MAGENTA),
+            ("CYAN", CYAN),
+            ("BLUE", BLUE),
+            ("TEXT", TEXT),
+            ("TEXT_DIM", TEXT_DIM),
+            ("GRAY", GRAY),
+            ("WHITE", WHITE),
+        ];
+        for (name, tier) in [("SILVER", SILVER), ("GOLD", GOLD)] {
+            for (other_name, other) in neighbours {
+                assert!(
+                    dist(tier, other) > 0.25,
+                    "{name} is only {:.2} from {other_name} — it would read \
+                     as that colour in a two-pixel bar",
+                    dist(tier, other)
+                );
+            }
+        }
+        assert!(
+            dist(SILVER, GOLD) > 0.25,
+            "the two tiers must not read alike"
+        );
+    }
+
+    #[test]
+    fn only_a_rare_tier_gets_a_roster_tag() {
+        assert_eq!(rarity_tag(Rarity::Ordinary), "");
+        assert!(rarity_tag(Rarity::Gold).contains("OVERCLOCKED"));
+        assert!(
+            rarity_tag(Rarity::Silver).starts_with(' '),
+            "the tag is appended after a name and separates itself"
         );
     }
 

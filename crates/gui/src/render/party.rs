@@ -63,13 +63,15 @@ pub(super) fn draw_companion_menu(
             activity,
             if critical { " - CRITICAL" } else { "" }
         );
-        // CRITICAL outranks the fusion colour: one is a state to act on
-        // this turn, the other a permanent property to read at leisure.
+        // CRITICAL outranks both the fusion colour and the rare tier: one is
+        // a state to act on this turn, the others are permanent properties
+        // to read at leisure. `program_color` settles those two against each
+        // other, so this only has to know about the loud one.
         rows.push(with_icon(
             if critical {
                 critical_item_row(text, i == selected)
             } else {
-                fusion_row(text, i == selected, p.fusions)
+                program_row(text, i == selected, p.fusions, p.rarity)
             },
             p.glyph,
             glyph_color(p.color),
@@ -97,10 +99,11 @@ pub(super) fn draw_fuse_menu(game: &mut Game, selected: usize, painter: &Painter
     }
     for (i, p) in candidates.iter().enumerate() {
         rows.push(with_icon(
-            fusion_row(
+            program_row(
                 fuse_candidate_label(menu_shortcut(i), p),
                 i == selected,
                 p.fusions,
+                p.rarity,
             ),
             p.glyph,
             glyph_color(p.color),
@@ -132,10 +135,11 @@ pub(super) fn draw_fuse_second_menu(
     }
     for (i, p) in candidates.iter().enumerate() {
         rows.push(with_icon(
-            fusion_row(
+            program_row(
                 fuse_candidate_label(menu_shortcut(i), p),
                 i == selected,
                 p.fusions,
+                p.rarity,
             ),
             p.glyph,
             glyph_color(p.color),

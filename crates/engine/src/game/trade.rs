@@ -310,6 +310,7 @@ impl Game {
                     power: pet.power,
                     payout: self.program_payout(structure, pet.entity)?,
                     fusions: pet.fusions,
+                    rarity: pet.rarity,
                     activity: pet.activity,
                     detaches: self.sale_detachments(pet.entity),
                 })

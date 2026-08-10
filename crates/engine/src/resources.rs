@@ -416,6 +416,26 @@ pub struct RunFeats {
 #[derive(Resource, Default)]
 pub struct PendingProfileWrites(pub Vec<crate::achievements::AchievementId>);
 
+/// Battle records waiting for app-core to write them out, and the one bool
+/// that decides whether any are built at all.
+///
+/// The `PendingProfileWrites` shape: the engine knows what happened, app-core
+/// owns the path and does the IO. Deliberately **not saved** — this is dev
+/// output, not run state, so `SAVE_FORMAT_VERSION` is untouched.
+///
+/// `on` is set once at startup from `FERAL_DEV_LOG` and never read from the
+/// environment again; `Game::record` tests it before doing anything else.
+#[derive(Resource, Default)]
+pub struct BattleTelemetry {
+    pub on: bool,
+    pub(crate) records: Vec<crate::telemetry::Record>,
+    /// The fight the emission seams are currently tagging records with.
+    pub(crate) fight: u64,
+    /// Counts up within the process, so many fights in one session separate
+    /// cleanly in the file.
+    pub(crate) next_fight: u64,
+}
+
 /// The single player-controlled entity. Kept as a resource (rather than
 /// re-queried with a `With<Player>` filter each time) since lookups happen
 /// on almost every action.

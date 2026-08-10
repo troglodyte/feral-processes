@@ -196,6 +196,18 @@ impl Game {
             finished: false,
             player_won: false,
         });
+        // After `BattleState` is in place, deliberately: the party slots and
+        // the groups are both read back off it, so a record taken earlier
+        // would describe a fight that does not exist yet.
+        let fight = self.next_fight_id();
+        self.record(|g| crate::telemetry::Record::FightStart {
+            fight,
+            seed: g.world.resource::<WorldMap>().seed() as u64,
+            zone: g.world.resource::<ZoneLevel>().0,
+            depth: g.stack_pos().map(|p| p.depth).unwrap_or(0),
+            party: g.telemetry_party(),
+            enemies: g.telemetry_enemy_groups(),
+        });
         if others > 0 {
             self.log(format!(
                 "A pack of rogue programs intercepts your signal — a {name} takes point, {others} more behind it!"

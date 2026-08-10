@@ -5,3 +5,7 @@ edition.workspace = true
 
 [dependencies]
 feral-processes-engine = { workspace = true }
+# Battle telemetry's wire format, and the one crate that may have it. The
+# engine derives `Serialize` and hands over values; turning one into a line
+# happens here. See `docs/superpowers/specs/2026-08-09-battle-telemetry-design.md`.
+serde_json = "1.0.145"

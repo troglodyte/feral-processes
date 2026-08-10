@@ -131,8 +131,21 @@ pub struct Staged {
 /// at `scenario.seed + n` and the result screen's next-seed key is the same
 /// increment — a `stage` that read the field would force both callers to
 /// mutate a scenario they do not own.
-pub fn stage(scenario: &Scenario, assets_dir: &Path, seed: u64) -> Result<Staged, String> {
+pub fn stage(
+    scenario: &Scenario,
+    assets_dir: &Path,
+    seed: u64,
+    telemetry: bool,
+) -> Result<Staged, String> {
     let mut game = setup::build_player(scenario, assets_dir)?;
+    // Armed here rather than by whoever installs the `Game`, because
+    // `begin_battle` below is what emits `fight_start` — a game armed after
+    // staging joins its own fight already in progress. `run_rep` passes
+    // `false`: the headless bin's output is its `Report`, and `train` runs
+    // 1.9M fights a session that must not each open a file.
+    if telemetry {
+        game.enable_battle_telemetry();
+    }
 
     // Per fight, not per run: twenty reps are then a sample rather than
     // twenty copies, and any one of them replays alone from its own seed.
@@ -183,7 +196,7 @@ pub fn run(scenario: &Scenario, assets_dir: &Path) -> Result<Report, String> {
     let mut warnings = Vec::new();
     let mut reps = Vec::with_capacity(scenario.reps as usize);
     for rep in 0..scenario.reps {
-        let mut staged = stage(scenario, assets_dir, scenario.seed + rep as u64)?;
+        let mut staged = stage(scenario, assets_dir, scenario.seed + rep as u64, false)?;
         if rep == 0 {
             warnings = staged.warnings.clone();
         }
@@ -201,7 +214,13 @@ pub fn run(scenario: &Scenario, assets_dir: &Path) -> Result<Report, String> {
 /// the headless path do", which is the thing the split has to preserve.
 #[cfg(test)]
 pub(crate) fn test_fight(scenario: &Scenario, seed: u64) -> RepRecord {
-    let mut staged = stage(scenario, &crate::tests::support::test_assets_dir(), seed).unwrap();
+    let mut staged = stage(
+        scenario,
+        &crate::tests::support::test_assets_dir(),
+        seed,
+        false,
+    )
+    .unwrap();
     run::run_rep(&mut staged.game, &mut staged.watch)
 }
 
@@ -293,7 +312,7 @@ mod tests {
     #[test]
     fn staging_leaves_the_fight_open_with_nobody_having_acted() {
         let s = a_scenario(1, 5, &[("glitch", 3)]);
-        let staged = stage(&s, &test_assets_dir(), 5).unwrap();
+        let staged = stage(&s, &test_assets_dir(), 5, false).unwrap();
 
         assert!(staged.game.has_active_battle());
         assert_eq!(staged.watch.rounds(), 0);
@@ -325,7 +344,7 @@ mod tests {
             ..Scenario::default()
         };
         let hp = |seed: u64| {
-            let staged = stage(&s, &test_assets_dir(), seed).unwrap();
+            let staged = stage(&s, &test_assets_dir(), seed, false).unwrap();
             let mut game = staged.game;
             let mut query = game.world.query_filtered::<&Stats, With<Hostile>>();
             query.iter(&game.world).map(|s| s.max_hp).sum::<i32>()
@@ -349,7 +368,7 @@ mod tests {
 
     #[test]
     fn staging_a_rolled_encounter_opens_a_fight_with_no_warnings() {
-        let staged = stage(&a_rolled_scenario(1, 4), &test_assets_dir(), 4).unwrap();
+        let staged = stage(&a_rolled_scenario(1, 4), &test_assets_dir(), 4, false).unwrap();
 
         assert!(staged.game.has_active_battle());
         assert_eq!(staged.watch.rounds(), 0);
@@ -408,7 +427,7 @@ mod tests {
             ..Scenario::default()
         };
 
-        let staged = stage(&s, &test_assets_dir(), 0).unwrap();
+        let staged = stage(&s, &test_assets_dir(), 0, false).unwrap();
 
         assert_eq!(staged.warnings.len(), 1, "{:?}", staged.warnings);
         let w = &staged.warnings[0];

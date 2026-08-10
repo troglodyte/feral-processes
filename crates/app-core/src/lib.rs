@@ -15,7 +15,7 @@ pub use app::group_menu::GroupMenuRow;
 
 use app::arena::{ArenaPickKind, ArenaSession};
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use feral_processes_engine::achievements::{AchievementDb, Profile};
@@ -1055,6 +1055,16 @@ pub struct App {
     /// once, in `App::new`, so the parallel test suite can open the gate on
     /// a field rather than in a process-global environment.
     arena_enabled: bool,
+    /// Whether `FERAL_DEV_LOG` was set when this `App` was built. Read once,
+    /// in `App::new`, for the reason `arena_enabled` records: a field lets
+    /// the parallel test suite open the gate without writing to a
+    /// process-global environment every other case in flight can see.
+    telemetry_enabled: bool,
+    /// Where battle records are appended, `dev-logs/battles.jsonl` in the
+    /// real launcher. A constructor parameter beside `history_path` and
+    /// `profile_path` rather than something derived here — `App` takes its
+    /// paths from the launcher and resolves none itself.
+    telemetry_path: PathBuf,
     dev_console: bool,
     /// Where a row picked in `Mode::ArenaPick` is going — see
     /// `ArenaPickKind`. `None` outside that mode.

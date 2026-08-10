@@ -90,6 +90,10 @@ impl Game {
         // only one. See `grant_profile_rewards`.
         world.insert_resource(crate::achievements::Profile::default());
         world.insert_resource(crate::resources::PendingProfileWrites::default());
+        // Both doors, deliberately: a loaded game must collect telemetry too,
+        // and this is not saved (dev output, not run state) so `load` has
+        // nothing to restore it from.
+        world.insert_resource(crate::resources::BattleTelemetry::default());
         world.insert_resource(ZoneSpawnPoint {
             x: start.0,
             y: start.1,
@@ -245,6 +249,8 @@ impl Game {
         // only one. See `grant_profile_rewards`.
         world.insert_resource(crate::achievements::Profile::default());
         world.insert_resource(crate::resources::PendingProfileWrites::default());
+        // See `Game::new`'s copy: both doors, and nothing restores it.
+        world.insert_resource(crate::resources::BattleTelemetry::default());
         world.insert_resource(ZoneSpawnPoint {
             x: data.spawn_point.0,
             y: data.spawn_point.1,

@@ -15,7 +15,15 @@ cargo run --bin arena -- dev-arenas/full-group.ron --out report.ron
 cargo run --bin arena -- templates          # what `player: Template(..)` may name
 
 FERAL_DEV_ARENA=1 cargo run                 # ...then [R] Arena on the main menu
+FERAL_DEV_LOG=1 FERAL_DEV_ARENA=1 cargo run # ...and leave a record of it behind
 ```
+
+A fight you play by hand otherwise leaves nothing but recall — the arena
+session writes no save, no profile and no run history by design. `FERAL_DEV_
+LOG=1` is the deliberate exception: it appends what happened inside the
+fight to `dev-logs/battles.jsonl`, one JSON object per swing, round and
+decision. See `dev-logs/README.md` for the schema. Set it before playing a
+scenario whose answer you want to keep.
 
 ## Playing one
 

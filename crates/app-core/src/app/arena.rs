@@ -262,7 +262,7 @@ impl App {
             }
         }
 
-        match arena::stage(&scenario, &self.assets_dir, seed) {
+        match arena::stage(&scenario, &self.assets_dir, seed, self.telemetry_enabled) {
             Ok(staged) => {
                 if let Some(session) = &mut self.arena {
                     session.warnings = staged.warnings;
@@ -276,7 +276,7 @@ impl App {
                     .as_ref()
                     .filter(|s| !s.warnings.is_empty())
                     .map(|s| format!("warning: {}", s.warnings.join(" · ")));
-                self.game = Some(staged.game);
+                self.install_game(staged.game);
                 self.restart_reveal();
                 self.mode = Mode::Battle;
             }

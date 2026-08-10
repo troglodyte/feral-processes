@@ -11,6 +11,9 @@
 # The arena's default report path — a measurement, not source. Scenarios in
 # `dev-arenas/` are checked in; what one run of them said is not.
 /arena-report.ron
+# Battle telemetry, written only under `FERAL_DEV_LOG`. The log is a
+# measurement; `dev-logs/README.md` is the schema and stays checked in.
+/dev-logs/*.jsonl
 
 # Editor/IDE
 .vscode/

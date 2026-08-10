@@ -1,0 +1,47 @@
+(
+    subject: "stack.breakpoint",
+    variants: [
+        (
+            underfoot: ["An exposed debug port"],
+            sighted: [
+                "A debug port stands open {bearing}.",
+                "Something is jacked into the wall {bearing}.",
+            ],
+            openers: [
+                "An exposed debug port.",
+                "A maintenance jack, left open.",
+                "A port, still live.",
+            ],
+            details: [
+                "",
+                "It would hand over the whole frame at a touch.",
+                "Someone opened this to read the stack and never closed it again.",
+                "The contacts are bright — this is the least corroded thing in the corridor.",
+            ],
+            codas: [
+                "",
+                "Whatever is watching this stack would hear you use it.",
+                "It is the loudest thing you could do down here.",
+            ],
+        ),
+        (
+            when: Some("spent"),
+            underfoot: ["A burnt-out debug port"],
+            sighted: [
+                "The port you burnt out hangs open {bearing}.",
+            ],
+            openers: [
+                "A burnt-out debug port.",
+                "The port, dead now.",
+            ],
+            details: [
+                "",
+                "You took the whole frame off it and it did not survive the read.",
+            ],
+            codas: [
+                "",
+                "It will not answer twice.",
+            ],
+        ),
+    ],
+)

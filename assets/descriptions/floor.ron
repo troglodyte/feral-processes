@@ -1,0 +1,30 @@
+(
+    subject: "stack.floor",
+    variants: [
+        (
+            underfoot: ["Bare corridor"],
+            sighted: [
+                "The corridor runs on {bearing}.",
+                "More of the same {bearing}.",
+            ],
+            openers: [
+                "Corridor.",
+                "Bare floor, laid straight.",
+                "More corridor, unremarkable.",
+                "The substrate here is intact.",
+            ],
+            details: [
+                "",
+                "The walls carry the same faint hum as everything else down here.",
+                "Something walked this stretch often enough to wear it smooth.",
+                "Whatever addressing scheme laid this out has long since been forgotten.",
+            ],
+            codas: [
+                "",
+                "There is nothing here.",
+                "It goes on.",
+                "Nothing is listening.",
+            ],
+        ),
+    ],
+)

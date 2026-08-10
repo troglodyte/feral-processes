@@ -1,0 +1,45 @@
+(
+    subject: "stack.orphan",
+    variants: [
+        (
+            underfoot: ["An orphaned process"],
+            sighted: [
+                "Something is still running {bearing}.",
+                "A process idles {bearing}, with nothing to serve.",
+            ],
+            openers: [
+                "A process, still running.",
+                "Something left going down here.",
+                "An orphan, at the end of the corridor.",
+            ],
+            details: [
+                "",
+                "Its parent went down with the rest of this frame and it has not noticed.",
+                "It is polling an address that stopped answering years ago.",
+                "It cycles, waits, and cycles again.",
+            ],
+            codas: [
+                "",
+                "It would come with you.",
+                "There is nothing left for it to do here.",
+            ],
+        ),
+        (
+            when: Some("spent"),
+            sighted: [
+                "The dead end you emptied lies {bearing}.",
+            ],
+            openers: [
+                "The end of the corridor.",
+                "An alcove with nothing running in it.",
+            ],
+            details: [
+                "",
+                "Whatever was cycling here left with you.",
+            ],
+            codas: [
+                "",
+            ],
+        ),
+    ],
+)

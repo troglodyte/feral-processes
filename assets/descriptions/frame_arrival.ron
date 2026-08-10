@@ -1,0 +1,55 @@
+(
+    subject: "stack.frame.arrival",
+    variants: [
+        (
+            sighted: [
+                "The frame closes around you. Colder than the last.",
+                "New corridors, laid to the same forgotten plan.",
+                "The hum here is a half-step off the frame above.",
+            ],
+            openers: ["A frame of the stack."],
+            details: [""],
+            codas: [""],
+        ),
+        (
+            when: Some("shallow"),
+            sighted: [
+                "The grid is still overhead somewhere. It does not feel close.",
+                "The first frame down. The light behind you is already the wrong colour.",
+            ],
+            openers: ["The first frame down."],
+            details: [""],
+            codas: [""],
+        ),
+        (
+            when: Some("bottom"),
+            sighted: [
+                "The floor here holds. There is nothing below this.",
+                "The bottom of the stack. Whatever it was built around is on this frame.",
+            ],
+            openers: ["The bottom frame."],
+            details: [""],
+            codas: [""],
+        ),
+        (
+            when: Some("traced"),
+            sighted: [
+                "Something in the walls turns over as you arrive.",
+                "The frame has been expecting somebody, and now it has one.",
+            ],
+            openers: ["A frame of the stack, and it has noticed you."],
+            details: [""],
+            codas: [""],
+        ),
+        (
+            when: Some("hunted"),
+            sighted: [
+                "The corridors are awake. You are the reason.",
+                "Whatever is running this stack knows which frame you are on.",
+            ],
+            openers: ["A frame of the stack, and it is looking for you."],
+            details: [""],
+            codas: [""],
+        ),
+    ],
+)

@@ -1,0 +1,44 @@
+(
+    subject: "stack.link_up",
+    variants: [
+        (
+            underfoot: ["A link leads up"],
+            sighted: [
+                "A link runs back up {bearing}.",
+                "The way up is {bearing}.",
+            ],
+            openers: [
+                "A link, running up.",
+                "The way back into the frame above.",
+            ],
+            details: [
+                "",
+                "It is the way you came in.",
+                "The shaft is clean where everything around it is not.",
+            ],
+            codas: [
+                "",
+                "It goes where you have already been.",
+            ],
+        ),
+        (
+            when: Some("surface"),
+            underfoot: ["The link out"],
+            sighted: [
+                "The link out is {bearing}.",
+            ],
+            openers: [
+                "The link out.",
+                "The way back up to the grid.",
+            ],
+            details: [
+                "",
+                "Open sky at the top of it, or what passes for sky.",
+            ],
+            codas: [
+                "",
+                "Everything you are carrying goes up with you.",
+            ],
+        ),
+    ],
+)

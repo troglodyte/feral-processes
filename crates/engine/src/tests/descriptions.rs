@@ -397,3 +397,105 @@ fn every_pair_of_slots_is_independent() {
         }
     }
 }
+
+/// Every subject the engine will ask for, and every condition it will ask
+/// for it under. A content edit that empties a pool fails here instead of
+/// shipping silence at a cell nobody happened to walk onto during testing.
+/// Same shape as `every_biome_a_stack_link_can_open_in_fields_a_boss`.
+const SHIPPED: &[(&str, &[&str])] = &[
+    ("stack.floor", &[]),
+    ("stack.door", &[]),
+    ("stack.sealed_door", &["opened"]),
+    ("stack.cache", &["spent"]),
+    ("stack.lair", &["cleared"]),
+    ("stack.orphan", &["spent"]),
+    ("stack.breakpoint", &["spent"]),
+    ("stack.link_up", &["surface"]),
+    ("stack.link_down", &[]),
+    ("stack.fault", &[]),
+    ("stack.corruption", &[]),
+    (
+        "stack.frame.arrival",
+        &["shallow", "bottom", "traced", "hunted"],
+    ),
+];
+
+#[test]
+fn every_describable_cell_kind_has_a_shipped_bank_entry() {
+    let dir = crate::tests::support::test_assets_dir().join("descriptions");
+    let (db, warnings) = DescriptionDb::load_dir(&dir).unwrap();
+    assert!(warnings.is_empty(), "the shipped bank warned: {warnings:?}");
+
+    for (subject, conditions) in SHIPPED {
+        // Every subject answers at its fallback, in all three lengths...
+        assert!(
+            db.underfoot(subject, None, 0).is_some() || *subject == "stack.frame.arrival",
+            "{subject} has no underfoot line"
+        );
+        assert!(
+            db.sighted(subject, None, 0).is_some(),
+            "{subject} has no sighted line"
+        );
+        assert!(
+            db.paragraph(subject, None, 0).is_some(),
+            "{subject} has no paragraph"
+        );
+        // ...and every authored condition resolves to a variant of its own
+        // rather than silently falling back, which would make the condition
+        // dead content nobody could see was dead.
+        for condition in *conditions {
+            let general = db.paragraph(subject, None, 0);
+            assert_ne!(
+                db.paragraph(subject, Some(condition), 0),
+                general,
+                "{subject}'s {condition:?} variant is missing and fell back"
+            );
+        }
+    }
+}
+
+/// The `standing_on` row is centred and **unwrapped** — nothing clips it, so
+/// an over-long fragment runs off the pane. `crates/gui`'s
+/// `the_longest_underfoot_line_fits_the_stack_pane` proves this budget in
+/// pixels at the narrowest supported window; this one holds the bank to it.
+#[test]
+fn every_shipped_underfoot_line_fits_the_standing_on_row() {
+    let dir = crate::tests::support::test_assets_dir().join("descriptions");
+    let (db, _) = DescriptionDb::load_dir(&dir).unwrap();
+    // The longest key-prompt suffix any arm appends — "  — moving on costs".
+    const LONGEST_SUFFIX: usize = 19;
+    for (subject, conditions) in SHIPPED {
+        for condition in std::iter::once(None).chain(conditions.iter().map(|c| Some(*c))) {
+            for seed in 0..64u64 {
+                let Some(line) = db.underfoot(subject, condition, seed) else {
+                    continue;
+                };
+                assert!(
+                    line.chars().count() + LONGEST_SUFFIX <= crate::MAX_UNDERFOOT_LINE,
+                    "{subject} {condition:?} underfoot is {} chars: {line:?}",
+                    line.chars().count()
+                );
+                assert!(
+                    !line.contains("{bearing}"),
+                    "{subject} {condition:?} uses {{bearing}} underfoot — you are standing on it"
+                );
+            }
+        }
+    }
+}
+
+/// The standing no-occult-naming rule, over the whole shipped bank.
+#[test]
+fn the_shipped_bank_uses_no_occult_naming() {
+    let dir = crate::tests::support::test_assets_dir().join("descriptions");
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|e| e.to_str()) != Some("ron") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path).unwrap().to_lowercase();
+        for word in ["daemon", "demon", "ghost", "wraith", "phantom"] {
+            assert!(!text.contains(word), "{path:?} uses {word:?}");
+        }
+    }
+}

@@ -1,0 +1,48 @@
+(
+    subject: "stack.cache",
+    variants: [
+        (
+            underfoot: ["A sealed casing", "A casing, still shut"],
+            sighted: [
+                "A casing sits {bearing}, unopened.",
+                "Something is stowed {bearing}.",
+                "There is a casing {bearing}.",
+            ],
+            openers: [
+                "A stowed casing.",
+                "A cache, tucked into the alcove.",
+                "Someone left a casing here.",
+            ],
+            details: [
+                "",
+                "Its label rotted off a long time ago.",
+                "The seal is intact, which down here is worth remarking on.",
+                "It is stacked square against the wall, the way a thing is put down by someone intending to come back.",
+            ],
+            codas: [
+                "",
+                "Nobody came back for it.",
+                "It has been waiting.",
+            ],
+        ),
+        (
+            when: Some("spent"),
+            underfoot: ["An empty casing"],
+            sighted: [
+                "The casing you emptied lies {bearing}.",
+            ],
+            openers: [
+                "An emptied casing.",
+                "The casing, open and light.",
+            ],
+            details: [
+                "",
+                "You took what was in it.",
+            ],
+            codas: [
+                "",
+                "It is an alcove now, and nothing else.",
+            ],
+        ),
+    ],
+)

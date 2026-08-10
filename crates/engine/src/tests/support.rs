@@ -289,6 +289,7 @@ pub(super) fn copy_shipped_assets(dir: &std::path::Path, omit_items: &[&str]) {
         "perks",
         "achievements",
         "crash_logs",
+        "descriptions",
         // The trained enemy policy comes along too, or a modded install
         // would quietly fight under the uniform baseline while the shipped
         // one fought under the weights — a difference no test would name.

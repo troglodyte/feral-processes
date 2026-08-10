@@ -1,0 +1,48 @@
+(
+    subject: "stack.sealed_door",
+    variants: [
+        (
+            underfoot: ["A heavy seal"],
+            sighted: [
+                "A sealed partition blocks the way {bearing}.",
+                "Something heavy is shut {bearing}.",
+                "A seal holds {bearing}.",
+            ],
+            openers: [
+                "A sealed partition.",
+                "A seal, set into the wall.",
+                "Something built to stay shut.",
+            ],
+            details: [
+                "",
+                "It is heavier than the frame around it, and older.",
+                "No lock, no reader, no way to ask it politely.",
+                "The substrate has grown over the join and been forced apart again.",
+            ],
+            codas: [
+                "",
+                "It will move if you put your shoulder into it, and it will be heard.",
+                "Whatever it was closed against is still on the other side.",
+            ],
+        ),
+        (
+            when: Some("opened"),
+            underfoot: ["A forced seal"],
+            sighted: [
+                "The seal you forced stands open {bearing}.",
+            ],
+            openers: [
+                "The seal, standing open.",
+                "A forced partition.",
+            ],
+            details: [
+                "",
+                "You put it there — the join is bright where the growth tore.",
+            ],
+            codas: [
+                "",
+                "It will not close again.",
+            ],
+        ),
+    ],
+)

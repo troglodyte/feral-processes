@@ -4,6 +4,7 @@
 //! `crates/engine/EASTER_EGGS.md`.
 
 use super::support::*;
+use crate::descriptions::DescriptionDb;
 use crate::resources::Trace;
 use crate::stack::{CellKind, Dir};
 use crate::tuning::TRACE_PER_LISTEN;
@@ -279,5 +280,101 @@ fn the_same_rotten_cell_reads_the_same_line_after_a_reload() {
         listen(&mut loaded),
         before,
         "the rot said something different after a reload"
+    );
+}
+
+/// Two distinct rotten cells in one live frame must read distinct text.
+/// `FrameSpec::rng_seed`'s fold leaves many bits identical between adjacent
+/// cells — including the top bits the selection reducer reads — so this
+/// pins the byte-wise premix in `fold` actually earning its keep at the
+/// level a player experiences: two cells a step apart, not two synthetic
+/// seeds.
+///
+/// **Held to one `CellKind` on purpose.** `Fault` and `Corruption` are two
+/// different bank subjects, so a pair drawn from both could read different
+/// text purely because they draw from different pools, with the seed doing
+/// nothing — exactly the false pass an earlier version of this test had.
+/// Searches forward through the stack's frames if the first one holds fewer
+/// than two rotten cells of one kind, rather than skip it; `.expect()`s
+/// loudly if none of them offer a pair to compare.
+#[test]
+fn the_line_varies_with_the_cell_it_is_read_from() {
+    let mut game = game();
+    descend(&mut game);
+    let Locale::Stack {
+        frames, entrance, ..
+    } = game.locale()
+    else {
+        unreachable!("not underground")
+    };
+
+    let (pos, cells) = (1..=frames)
+        .find_map(|depth| {
+            game.descend_to(depth, frames, entrance);
+            let level = frame(&game);
+            [CellKind::Fault, CellKind::Corruption]
+                .into_iter()
+                .find_map(|kind| {
+                    let cells: Vec<(i32, i32)> = every_cell(&level)
+                        .filter(|&(x, y)| level.cell(x, y) == kind)
+                        .collect();
+                    (cells.len() >= 2).then(|| (game.stack_pos().unwrap(), cells))
+                })
+        })
+        .expect("no frame in this stack held two rotten cells of the same kind to compare");
+
+    let readings: std::collections::HashSet<Option<String>> = cells
+        .into_iter()
+        .map(|cell| game.cell_paragraph(pos, cell))
+        .collect();
+    assert!(
+        readings.len() > 1,
+        "every same-kind rotten cell in the frame read the same text — the cell is not mixed into the seed"
+    );
+}
+
+/// A description-bank directory with nothing in it is not an error and not
+/// a lost key: the rotten cell falls back to the bearing reading, and the
+/// turn and Trace are still charged — `Z` costs the same on rotten ground
+/// and ordinary ground alike, deliberately, so a fallback that quietly
+/// stopped charging would be a real regression, not a cosmetic one.
+#[test]
+fn an_empty_description_bank_leaves_the_key_working() {
+    let mut game = game();
+    descend(&mut game);
+    let cell = *rotten_cells(&game)
+        .first()
+        .expect("every frame grows corruption");
+    // Rotten ground is never itself a spendable feature, so if the frame
+    // holds at least one, `nearest_unspent` cannot be at distance zero from
+    // here — the bearing branch must name it as "unspent", never "right
+    // under you". That is what makes the assertion below able to tell a
+    // real bearing apart from silence rather than merely from both sharing
+    // "You go still and listen." as a prefix, which an earlier version of
+    // this test could not do.
+    assert!(
+        !unspent(&game).is_empty(),
+        "the fixture needs an unspent feature elsewhere in the frame so the \
+         fallback reading can be told apart from silence"
+    );
+    stand_at(&mut game, cell, Dir::North);
+    game.world.insert_resource(DescriptionDb::default());
+    let (trace, tick) = (trace_of(&game), game.current_tick());
+
+    let reading = listen(&mut game);
+
+    assert!(
+        reading.contains("unspent"),
+        "with no descriptions loaded, rot should fall back to the bearing \
+         rather than to silence: {reading}"
+    );
+    assert_eq!(
+        trace_of(&game) - trace,
+        TRACE_PER_LISTEN,
+        "the fallback reading should still charge Trace"
+    );
+    assert!(
+        game.current_tick() > tick,
+        "the fallback reading should still cost a turn"
     );
 }

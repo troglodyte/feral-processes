@@ -27,6 +27,35 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.5.21
+
+### Rename a program
+
+Press `N` on the companion roster to give a program your own name for it.
+The page opens on the name it already has, so fixing a typo isn't a retype;
+clearing the field puts its species name back. It works on any program you
+own, wherever it is — in the party, posted to a cronjob, standing guard —
+because a name changes nothing about where it is or what it's doing.
+
+Names survive saving, and always did: `CustomName` has been complete since
+fusion learned to name its result, and fusion was simply the only way to
+reach it. **No save-format change** — an existing save loads unchanged, and
+a program you already named by fusing keeps that name.
+
+Renaming is refused during a battle. The reason is the log rather than the
+roster: the battle screen replays *rendered* rows as its narration scrolls
+in, so a name changed mid-fight would leave what you're reading and what
+you're looking at disagreeing about who is being hit.
+
+### The stun measurement was reported on a cherry-picked sample
+
+`docs/measurements/2026-08-10-stun-move-levers.md` claimed the 2-turn stun
+retrain made enemies vary their moves more. It measured only the three
+species whose files were edited. Across the whole roster three improved and
+**eight got worse**, including all four opening-ring programs a new player
+meets. The entry now carries the full table and the correction; nothing in
+the game changed, but the note that justified a shipped change did.
+
 ## 0.5.20
 
 Tooling and measurement only — nothing about a played game changes.

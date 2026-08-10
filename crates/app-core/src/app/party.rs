@@ -26,6 +26,11 @@ impl App {
             self.toggle_wield();
             return;
         }
+        if key == GameKey::Char('N') {
+            self.begin_rename();
+            return;
+        }
+
         let Some(game) = &mut self.game else { return };
         let candidates = game.owned_pets();
         if let Some(idx) = self.selected_index(key, candidates.len()) {
@@ -41,6 +46,69 @@ impl App {
                 }
             }
         }
+    }
+
+    /// Types a new display name for the program picked with `N`; Enter
+    /// commits it and blank clears back to the species name. Esc backs into
+    /// the roster leaving the name alone.
+    ///
+    /// The entity comes from `pending_rename` rather than from
+    /// `menu_selected`: `owned_pets` is not ordered by name today, but
+    /// re-reading the highlight on Enter would silently rename whatever row
+    /// happened to be under it if that ever changed.
+    pub(crate) fn handle_rename_pet_key(&mut self, key: GameKey) {
+        match key {
+            GameKey::Esc => {
+                self.pending_rename = None;
+                self.rename_input.clear();
+                self.mode = Mode::Companion;
+            }
+            GameKey::Backspace => {
+                self.rename_input.pop();
+            }
+            GameKey::Char(c)
+                if !c.is_control()
+                    && self.rename_input.chars().count()
+                        < feral_processes_engine::MAX_CUSTOM_NAME_LEN =>
+            {
+                self.rename_input.push(c);
+            }
+            GameKey::Enter => {
+                let name = std::mem::take(&mut self.rename_input);
+                let Some(entity) = self.pending_rename.take() else {
+                    self.mode = Mode::Companion;
+                    return;
+                };
+                let Some(game) = &mut self.game else { return };
+                // Always `Some`, even when empty: the engine reads a blank
+                // as "drop the override", which is the only way back to the
+                // species name. `None` here would mean "leave it alone".
+                match game.rename_companion(entity, Some(name)) {
+                    Ok(()) => self.status_line = None,
+                    Err(e) => self.status_line = Some(e),
+                }
+                self.mode = Mode::Companion;
+            }
+            _ => {}
+        }
+    }
+
+    /// Opens the naming page for the highlighted program, seeded with the
+    /// name it already carries so a small correction isn't a retype.
+    ///
+    /// Handled before `selected_index` for the same reason `W` is, and
+    /// bound to an uppercase key so it can never collide with
+    /// `menu_shortcut`'s digits-then-lowercase scheme. Unlike `W`, this one
+    /// is advertised in the roster's help text.
+    fn begin_rename(&mut self) {
+        let row = self.menu_selected;
+        let Some(game) = &mut self.game else { return };
+        let Some(pet) = game.owned_pets().get(row).map(|p| p.entity) else {
+            return;
+        };
+        self.rename_input = game.custom_name(pet).unwrap_or_default();
+        self.pending_rename = Some(pet);
+        self.mode = Mode::RenamePet;
     }
 
     /// Takes the highlighted program in hand as a weapon, or puts it down if

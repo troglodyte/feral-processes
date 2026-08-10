@@ -3,19 +3,21 @@
 use super::popup::*;
 use super::*;
 
-/// The two help lines above the roster.
+/// The help lines above the roster.
 ///
 /// **They deliberately say nothing about wielding a program as a weapon.**
 /// That command is an easter egg: it is reachable, it changes the run, and
 /// nothing in the game's text points at it. Extracted into a const so
 /// `the_companion_screen_never_advertises_the_hidden_key` can read them —
 /// a later helpful edit then fails a test rather than quietly spoiling it.
-fn companion_help() -> [String; 2] {
+fn companion_help() -> [String; 3] {
     [
         format!(
             "Pick a program to add to your party (max {MAX_PARTY_SIZE}) - select a party member's own number to stand it down."
         ),
         "< and > move the highlighted member along the battle line; the front slot draws the most fire."
+            .to_string(),
+        "N renames the highlighted program; clear the name to go back to its species."
             .to_string(),
     ]
 }
@@ -198,9 +200,81 @@ pub(super) fn draw_fuse_name_menu(
     draw_popup("Fuse", PopupSize::Small, &rows, painter, m);
 }
 
+/// The rename page's two footer lines, extracted so
+/// `the_rename_footer_fits_its_popup` can measure them — this page is
+/// `PopupSize::Small`, which is half the window, and these are the widest
+/// thing on it by a wide margin.
+fn rename_help() -> [&'static str; 2] {
+    [
+        "Enter to confirm; clear the field to go back to the species name",
+        "Esc to leave the name as it is",
+    ]
+}
+
+/// Free-text naming page for a program already on the roster, opened with
+/// `N`. Seeded with the name it already carries, so the field is empty only
+/// when the player has emptied it — which is what clears the name.
+pub(super) fn draw_rename_menu(
+    game: &mut Game,
+    target: Option<Entity>,
+    name_input: &str,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let Some(target) = target else {
+        return;
+    };
+    let pets = game.owned_pets();
+    let subject = pets
+        .iter()
+        .find(|p| p.entity == target)
+        .map(|p| p.name.clone())
+        .unwrap_or_else(|| "it".to_string());
+    let mut rows = vec![
+        text_row(format!("Renaming {subject}.")),
+        text_row(""),
+        item_row(
+            format!(
+                "Name ({} max): {name_input}",
+                feral_processes_engine::MAX_CUSTOM_NAME_LEN
+            ),
+            true,
+        ),
+        text_row(""),
+    ];
+    rows.extend(rename_help().into_iter().map(text_row));
+    draw_popup("Rename", PopupSize::Small, &rows, painter, m);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::paint::with_painter;
+    use crate::text::ui_metrics;
+
+    /// `draw_row` clamps a row vertically and nothing clamps it
+    /// horizontally, so a footer wider than its popup silently runs off the
+    /// right edge. The rename page is `PopupSize::Small` — half the window,
+    /// where the fusion pages that inspired it are `Large` — so its footers
+    /// have meaningfully less room than they look like they do.
+    #[test]
+    fn the_rename_footer_fits_its_popup() {
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            // 0.5 is `PopupSize::Small`'s width fraction; 1440x900 is the
+            // geometry `ui_metrics` is calibrated against.
+            let room = 1440.0 * 0.5 - m.pad * 2.0;
+            for line in rename_help() {
+                let drawn = p.measure_ui_advance(line, m.font_size);
+                assert!(
+                    drawn <= room,
+                    "the rename footer overflows its popup by {:.0}px \
+                     ({drawn:.0} drawn into {room:.0} of room):\n{line}",
+                    drawn - room
+                );
+            }
+        })
+    }
 
     /// The easter-egg census. Wielding a program as your weapon is
     /// deliberately undocumented in-game, and the help lines above the

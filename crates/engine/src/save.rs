@@ -88,8 +88,8 @@ pub struct CreatureSave {
     /// `components::ZonePortal`).
     pub zone: u32,
     /// The player's custom display name for this creature, if they set one
-    /// (see `components::CustomName`) — currently only possible via
-    /// `Game::fuse_companions`. This is a shape change to `CreatureSave`,
+    /// (see `components::CustomName`) — via `Game::fuse_companions` or
+    /// `Game::rename_companion`. This is a shape change to `CreatureSave`,
     /// so it required bumping `SAVE_FORMAT_VERSION` (bincode has no
     /// granular field-level compatibility here — see that constant's docs).
     pub custom_name: Option<String>,

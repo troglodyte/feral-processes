@@ -398,10 +398,14 @@ fn x_underground_opens_a_cell_description() {
         .clone()
         .expect("the key always answers");
     assert!(!text.is_empty());
-    assert!(
-        !text.contains("{bearing}"),
-        "the token reached the screen: {text}"
-    );
+    // `{bearing}` never showing up here is not asserted: the shipped bank
+    // never puts the token anywhere but its `sighted` pools, so a check
+    // against this fixture's text would be true regardless of whether
+    // `cell_paragraph` ever actually expanded it — a permanently-green
+    // assertion that reads as coverage it isn't. The engine's own
+    // `cell_paragraph_expands_bearing_even_in_a_field_the_shipped_bank_never_uses_it_in`
+    // (`tests/descriptions.rs`) proves the substitution itself, with a
+    // custom bank built to make the claim fallible.
 
     // A plain popup: any key leaves, and the text goes with it.
     app.handle_key(GameKey::Esc);

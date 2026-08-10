@@ -700,6 +700,42 @@ fn turning_in_place_moves_the_bearing_in_a_sighted_line() {
     );
 }
 
+/// `cell_paragraph` calls `fill_bearing` unconditionally — same as
+/// `sighted_description` above — but the shipped bank only ever puts
+/// `{bearing}` in `sighted` pools (see every `assets/descriptions/*.ron`),
+/// never in an `opener`/`detail`/`coda`. That makes any check against the
+/// shipped bank's paragraph text true whether or not the substitution ever
+/// actually ran — a permanently-green assertion an app-core test once
+/// carried, which read as coverage it wasn't. A custom bank with the token
+/// in an `opener` is what makes the claim fallible: if `cell_paragraph`
+/// ever stopped calling `fill_bearing`, or `fill_bearing` were bypassed for
+/// paragraph text specifically, this is what would catch it.
+#[test]
+fn cell_paragraph_expands_bearing_even_in_a_field_the_shipped_bank_never_uses_it_in() {
+    let body = r#"(
+        subject: "stack.floor",
+        variants: [(
+            openers: ["Somewhere {bearing}, the corridor goes on."],
+        )],
+    )"#;
+    let dir = bank_dir("bearing_in_opener", &[("floor.ron", body)]);
+    let (db, warnings) = DescriptionDb::load_dir(&dir).unwrap();
+    assert!(warnings.is_empty(), "warnings were {warnings:?}");
+
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let floor = cell_of(&game, CellKind::Floor).expect("every frame has floor");
+    game.world.insert_resource(db);
+    let pos = game.stack_pos().unwrap();
+
+    let text = game.cell_paragraph(pos, floor).expect("floor describes");
+    assert!(
+        !text.contains("{bearing}"),
+        "the token reached the screen unexpanded: {text:?}"
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 /// Spent features stop being worth a line; plain corridor never was.
 ///
 /// `open_cache` takes no arguments and only ever loots the cell the party is
@@ -1489,4 +1525,156 @@ fn examining_underfoot_describes_the_cell_the_party_is_standing_on() {
 fn examining_on_the_surface_answers_nothing() {
     let game = game();
     assert_eq!(game.describe_view_direction(ExamineDir::Ahead), None);
+}
+
+/// The examine ray must not see through a wall or a shut door: seed 16's
+/// depth-1 frame has a `Door` at (2, 18) sitting directly between the party
+/// and an unopened `Cache` at (2, 19), so standing at (2, 16) or (2, 17)
+/// facing South puts the cache one and two cells past the door on the
+/// `Ahead` ray. Before `visible_rows` existed, `describe_view_direction`
+/// walked the raw `view_cone` with no occlusion at all and read straight
+/// through the door — a player would learn what was behind a closed door by
+/// looking at the door. This is that exact repro, pinned directly rather
+/// than searched for, since a search that merely required "some notable
+/// cell is hidden behind some sight-blocker" would be satisfied by a case
+/// the fix already handles and could miss the one that broke it.
+#[test]
+fn examining_ahead_does_not_see_through_a_shut_door() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let level = crate::tests::support::frame(&game);
+    assert_eq!(
+        level.cell(2, 18),
+        CellKind::Door,
+        "fixture drifted: no door at (2, 18)"
+    );
+    assert_eq!(
+        level.cell(2, 19),
+        CellKind::Cache,
+        "fixture drifted: no cache at (2, 19)"
+    );
+
+    let pos = game.stack_pos().unwrap();
+    let behind_the_door = game
+        .cell_paragraph(pos, (2, 19))
+        .expect("an unopened cache has a paragraph");
+
+    for stand in [(2, 16), (2, 17)] {
+        crate::tests::support::stand_at(&mut game, stand, Dir::South);
+        let seen = game.describe_view_direction(ExamineDir::Ahead);
+        assert_ne!(
+            seen,
+            Some(behind_the_door.clone()),
+            "standing at {stand:?} facing South, x+Ahead described the cache through the shut door: {seen:?}"
+        );
+    }
+}
+
+/// A vantage (stand, facing) where the cell immediately beside the party —
+/// `ahead == 0`, not the corridor ahead — is notable, and which `ExamineDir`
+/// (`Left` or `Right`) finds it. Because it is the nearest possible cell on
+/// its lateral column, a notable flank always wins the ray's nearest-first
+/// search regardless of what lies beyond it, which is what makes it usable
+/// to pin both "the flank is reachable at all" and "which side is which".
+///
+/// Searches every walkable cell and facing across the frames of a fresh
+/// stack, descending until one is found or the bottom frame is reached,
+/// rather than a hardcoded coordinate — mirroring
+/// `rank_tie_across_frames` above — since where the maze happens to grow an
+/// adjacent feature is an accident of generation. `want` restricts the
+/// search to one specific side when the caller needs that side in
+/// particular, e.g. to pin `Left` independently of `Right`.
+type AdjacentVantage = (Game, (i32, i32), Dir, ExamineDir, (i32, i32));
+
+fn adjacent_notable_vantage(mut game: Game, want: Option<ExamineDir>) -> Option<AdjacentVantage> {
+    crate::tests::support::descend(&mut game);
+    loop {
+        let level = crate::tests::support::frame(&game);
+        for (x, y) in crate::tests::support::every_cell(&level) {
+            if !level.walkable(x, y) {
+                continue;
+            }
+            for facing in [Dir::North, Dir::East, Dir::South, Dir::West] {
+                let (rx, ry) = facing.right_delta();
+                let candidates = [
+                    (ExamineDir::Left, (x - rx, y - ry)),
+                    (ExamineDir::Right, (x + rx, y + ry)),
+                ];
+                crate::tests::support::stand_at(&mut game, (x, y), facing);
+                let pos = game.stack_pos().unwrap();
+                for (dir, flank) in candidates {
+                    if want.is_some_and(|w| w != dir) {
+                        continue;
+                    }
+                    if game.notability(pos, flank).is_some() {
+                        return Some((game, (x, y), facing, dir, flank));
+                    }
+                }
+            }
+        }
+        let Locale::Stack {
+            depth,
+            frames,
+            entrance,
+            ..
+        } = game.locale()
+        else {
+            return None;
+        };
+        if depth >= frames {
+            return None;
+        }
+        game.descend_to(depth + 1, frames, entrance);
+    }
+}
+
+/// `skip(1)` used to drop the whole nearest row rather than just the party's
+/// own cell, so a notable cell immediately beside the party — reachable at
+/// `ahead == 0` — was invisible to `Left`/`Right` and the ray answered with
+/// whatever came next along that column instead. Pins that the flank is
+/// reachable at all, for whichever side the search finds first.
+#[test]
+fn examining_a_flank_reads_the_cell_immediately_beside_the_party() {
+    let (mut game, (x, y), facing, dir, flank) = adjacent_notable_vantage(game(), None)
+        .expect("no frame across this stack offers a notable cell beside a walkable tile");
+    crate::tests::support::stand_at(&mut game, (x, y), facing);
+    let pos = game.stack_pos().unwrap();
+    assert_eq!(
+        game.describe_view_direction(dir),
+        game.cell_paragraph(pos, flank),
+        "{dir:?} did not read the cell immediately beside the party at {flank:?}"
+    );
+}
+
+/// Nothing pins which lateral index is `Left` and which is `Right` except
+/// the match arms in `describe_view_direction` — swapping their two indices
+/// leaves every other test in this file green, since most of them either
+/// don't distinguish a side or use a fixture where both sides happen to
+/// answer with plain corridor. This searches specifically for a vantage
+/// where the party's *left* flank is notable, so `Left`'s answer is pinned
+/// exactly (nearest-first guarantees a notable flank wins), and then checks
+/// that `Right` does **not** return that same left-flank text — which is
+/// exactly what a `Left`/`Right` index swap would produce, since `Right`
+/// would then read the same lateral column `Left` just read.
+#[test]
+fn left_and_right_read_opposite_flanks_not_each_others() {
+    let (mut game, (x, y), facing, dir, left_flank) =
+        adjacent_notable_vantage(game(), Some(ExamineDir::Left))
+            .expect("no frame across this stack offers a notable cell on the party's left");
+    assert_eq!(dir, ExamineDir::Left, "search returned the wrong side");
+    crate::tests::support::stand_at(&mut game, (x, y), facing);
+    let pos = game.stack_pos().unwrap();
+    let left_text = game
+        .cell_paragraph(pos, left_flank)
+        .expect("a notable cell has a paragraph");
+
+    assert_eq!(
+        game.describe_view_direction(ExamineDir::Left),
+        Some(left_text.clone())
+    );
+    assert_ne!(
+        game.describe_view_direction(ExamineDir::Right),
+        Some(left_text),
+        "Right described the party's LEFT flank — Left/Right are swapped"
+    );
 }

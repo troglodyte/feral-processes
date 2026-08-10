@@ -321,11 +321,11 @@ fn cell_mark(cell: StackCellView) -> Option<(char, Color)> {
 /// varies per machine.
 const DESCRIBE_WRAP_COLUMNS: usize = 72;
 
-/// The environment paragraph reached with `x` + a direction underground.
-///
-/// The same shape as `inventory::draw_item_describe` — the repo's one
-/// prose-on-screen pattern, and `wrap_text` its only wrap helper.
-pub(super) fn draw_cell_describe(text: Option<&str>, painter: &Painter, m: &Metrics) {
+/// `draw_cell_describe`'s rows, built without touching a `Painter` — the
+/// same split `building::build_direction_rows` uses for its prompt, so the
+/// wrapping and the "nothing to say" fallback are each directly assertable
+/// instead of only reachable through a paint call nothing can inspect.
+fn cell_describe_rows(text: Option<&str>) -> Vec<Row> {
     let mut rows = Vec::new();
     match text {
         Some(text) => rows.extend(
@@ -337,7 +337,21 @@ pub(super) fn draw_cell_describe(text: Option<&str>, painter: &Painter, m: &Metr
     }
     rows.push(text_row(""));
     rows.push(text_row("Any key to go back"));
-    draw_popup("You look", PopupSize::Large, &rows, painter, m);
+    rows
+}
+
+/// The environment paragraph reached with `x` + a direction underground.
+///
+/// The same shape as `inventory::draw_item_describe` — the repo's one
+/// prose-on-screen pattern, and `wrap_text` its only wrap helper.
+pub(super) fn draw_cell_describe(text: Option<&str>, painter: &Painter, m: &Metrics) {
+    draw_popup(
+        "You look",
+        PopupSize::Large,
+        &cell_describe_rows(text),
+        painter,
+        m,
+    );
 }
 
 #[cfg(test)]
@@ -677,6 +691,74 @@ mod tests {
                 dims.width,
                 pane_w
             );
+        });
+    }
+
+    /// Pulls the text out of a row the way `building.rs`'s own `row_text`
+    /// does, for the same reason: asserting on the rows a screen builds
+    /// rather than on anything a `Painter` would have to record (nothing
+    /// here records).
+    fn row_text(row: &Row) -> &str {
+        match row {
+            Row::Text(t) | Row::TextColored(t, _) => t,
+            Row::Item { text, .. } => text,
+        }
+    }
+
+    /// A cache paragraph longer than `DESCRIBE_WRAP_COLUMNS` must actually
+    /// wrap at that width, using `wrap_text`, and still end with the
+    /// "go back" footer every plain popup carries. This is the test that
+    /// fails if `draw_cell_describe`'s content logic is ever gutted to
+    /// nothing: an empty or unwrapped `rows` would show up here directly,
+    /// where no earlier test in this file touched `cell_describe_rows` or
+    /// `DESCRIBE_WRAP_COLUMNS` at all.
+    #[test]
+    fn the_cell_description_wraps_its_own_text_and_keeps_the_footer() {
+        let paragraph = "A stretch of corridor unspools ahead, longer than the \
+            wrap column allows on one line, so it has to break onto more \
+            than a single row of the popup before the footer appears.";
+        assert!(
+            paragraph.chars().count() > DESCRIBE_WRAP_COLUMNS,
+            "fixture must actually need wrapping"
+        );
+
+        let rows = cell_describe_rows(Some(paragraph));
+        let text: Vec<&str> = rows.iter().map(row_text).collect();
+        let expected: Vec<String> = wrap_text(paragraph, DESCRIBE_WRAP_COLUMNS);
+
+        assert!(
+            expected.len() > 1,
+            "fixture did not actually wrap: {expected:?}"
+        );
+        assert_eq!(
+            &text[..expected.len()],
+            expected.iter().map(String::as_str).collect::<Vec<_>>(),
+            "the popup's rows are not wrap_text's output"
+        );
+        assert_eq!(text.last(), Some(&"Any key to go back"));
+    }
+
+    /// `describe_view_direction` always answers on the engine side, but the
+    /// popup still has to survive `None` gracefully rather than showing a
+    /// blank box.
+    #[test]
+    fn a_missing_cell_description_still_says_something() {
+        let rows = cell_describe_rows(None);
+        let text: Vec<&str> = rows.iter().map(row_text).collect();
+        assert!(text.contains(&"Nothing to say about that."));
+        assert_eq!(text.last(), Some(&"Any key to go back"));
+    }
+
+    /// The full paint call still has to survive both shapes without
+    /// panicking — `cell_describe_rows`'s two tests above pin content;
+    /// this is `drawing_every_shape_of_corridor_does_not_panic`'s sibling,
+    /// pinning that the popup call built from those rows actually paints.
+    #[test]
+    fn drawing_the_cell_description_does_not_panic() {
+        let m = crate::text::ui_metrics(900.0);
+        crate::paint::with_painter(|p| {
+            draw_cell_describe(Some("A doorway, still framed."), p, &m);
+            draw_cell_describe(None, p, &m);
         });
     }
 }

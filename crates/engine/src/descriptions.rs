@@ -13,7 +13,8 @@
 //! `crash_logs.rs`: a draw from the shared stream does not survive a
 //! save/load, so the same door would say something different after a
 //! reload; and drawing from it to pick a cosmetic string shifts every later
-//! roll in the run. Selection is a modulo of an FNV-1a fold rather than an
+//! roll in the run. Selection is an FNV-1a fold, reduced to an index by
+//! multiplication rather than `%` — see `pick` — rather than an
 //! `StdRng` for a third reason — `StdRng`'s output sequence is not
 //! guaranteed stable across a `rand` upgrade, and a dependency bump that
 //! silently reshuffled every description in the game is exactly the failure
@@ -117,13 +118,28 @@ pub(crate) enum Slot {
 }
 
 impl Slot {
+    /// Large, mutually distinct, odd 64-bit constants — borrowed from
+    /// well-known hash functions (SplitMix64, xxhash, MurmurHash3's
+    /// finalizer) for nothing but their size and mutual independence, no
+    /// deeper significance — rather than small sequential integers.
+    ///
+    /// `fold`'s per-round step, `h ^= word; h = h.wrapping_mul(PRIME)`,
+    /// provably never disturbs the low bit of whatever it is given: XOR-ing
+    /// in a word flips that bit iff the word is odd, and multiplying by an
+    /// odd prime cannot touch it again. So if two slots' tag sequences
+    /// differed only in the low bit of one word — `[0, 0]` versus `[1, 0]`,
+    /// say — their folded outputs would carry **exactly** opposite low bits
+    /// for every seed, not just often. That is invisible until a pool
+    /// happens to hold exactly two entries and `pick` reduces by parity, at
+    /// which point two "independent" slots turn out to be perfectly
+    /// (anti-)correlated. Tags this far apart do not have that problem.
     fn tags(self) -> [u64; 2] {
         match self {
-            Slot::Underfoot => [0, 0],
-            Slot::Sighted => [1, 0],
-            Slot::Opener => [2, 0],
-            Slot::Detail => [2, 1],
-            Slot::Coda => [2, 2],
+            Slot::Underfoot => [0x9E37_79B9_7F4A_7C15, 0],
+            Slot::Sighted => [0xC2B2_AE3D_27D4_EB4F, 0],
+            Slot::Opener => [0x1656_67B1_9E37_79F9, 0xFF51_AFD7_ED55_8CCD],
+            Slot::Detail => [0x1656_67B1_9E37_79F9, 0xC4CE_B9FE_1A85_EC53],
+            Slot::Coda => [0x1656_67B1_9E37_79F9, 0x2545_F491_4F6C_DD1D],
         }
     }
 }
@@ -288,11 +304,25 @@ pub(crate) fn merge(
 /// lengths of one cell — and the three sentences of one paragraph — do not
 /// all land on index 0 of their pools together.
 ///
-/// Deliberately the same FNV-1a step `FrameSpec::salted` uses. Two schemes
-/// mixing the same seed differently is how a description ends up stable in
-/// one length and not in another.
+/// The per-round step — XOR a word in, multiply by the FNV-1a prime — is
+/// deliberately the same one `FrameSpec::salted` uses. Where this diverges
+/// from `salted` is in how `seed` itself enters the fold: `salted` continues
+/// off `rng_seed()`, which is already spread across every bit by four prior
+/// rounds, so folding in one more word is enough. `seed` here has no such
+/// guarantee — a cell coordinate, or a test sweeping `0..64`, is small and
+/// sequential — and a single XOR-then-multiply round does not spread a
+/// handful of low bits into the other 60-odd; every slot's draw would
+/// otherwise be dominated by whichever few low bits `seed` actually varies.
+/// Folding `seed` in one byte at a time, true FNV-1a style, starting from
+/// the same 64-bit offset basis `rng_seed` starts from, gives a seed of any
+/// size a fair footprint in every bit before slot identity ever gets folded
+/// in.
 fn fold(seed: u64, slot: Slot) -> u64 {
-    let mut h = seed;
+    let mut h = 0xcbf2_9ce4_8422_2325_u64;
+    for byte in seed.to_le_bytes() {
+        h ^= byte as u64;
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
     for word in slot.tags() {
         h ^= word;
         h = h.wrapping_mul(0x0000_0100_0000_01b3);
@@ -302,9 +332,18 @@ fn fold(seed: u64, slot: Slot) -> u64 {
 
 /// Indexes `pool` by `seed`, or `None` when the pool is empty — which is
 /// legal at every slot and is how a two-sentence paragraph is authored.
+///
+/// Lemire's `(seed as u128 * len) >> 64` rather than `seed % len`: `%` for a
+/// two-entry pool reads nothing but `seed`'s lowest bit, and `fold`'s
+/// multiply-by-odd-prime step provably never disturbs that bit once it is
+/// set — see `Slot::tags`. Reading the *high* bits instead uses the ones the
+/// repeated multiplication actually mixes, so a two-entry pool decorrelates
+/// from its neighbours the same as a larger one instead of standing out as
+/// the one size that silently breaks the independence `fold` promises.
 fn pick(pool: &[String], seed: u64) -> Option<&str> {
     if pool.is_empty() {
         return None;
     }
-    Some(&pool[(seed % pool.len() as u64) as usize])
+    let idx = ((seed as u128 * pool.len() as u128) >> 64) as usize;
+    Some(&pool[idx])
 }

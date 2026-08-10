@@ -188,3 +188,166 @@ fn an_empty_opener_counts_as_no_paragraph() {
     assert_eq!(db.paragraph("stack.door", None, 0), None);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// A bank with enough fragments per slot that a differing seed can actually
+/// show, and with a condition variant to resolve against.
+const CACHE: &str = r#"(
+    subject: "stack.cache",
+    variants: [
+        (
+            underfoot: ["A sealed casing", "A casing, still shut"],
+            sighted: ["A casing sits {bearing}.", "Something is stowed {bearing}."],
+            openers: ["A cache.", "A stowed casing.", "A casing in the alcove."],
+            details: ["The seal is intact.", "", "Its label has rotted off."],
+            codas: ["", "Nobody came back for it.", "The lock still holds."],
+        ),
+        (
+            when: Some("spent"),
+            underfoot: ["An empty casing"],
+            sighted: ["An emptied casing lies {bearing}."],
+            openers: ["An emptied casing."],
+            details: ["You took what was in it."],
+            codas: [""],
+        ),
+    ],
+)"#;
+
+fn cache_bank(tag: &str) -> (DescriptionDb, std::path::PathBuf) {
+    let dir = bank_dir(tag, &[("cache.ron", CACHE)]);
+    let (db, warnings) = DescriptionDb::load_dir(&dir).unwrap();
+    assert!(warnings.is_empty(), "warnings were {warnings:?}");
+    (db, dir)
+}
+
+#[test]
+fn a_condition_resolves_to_its_own_variant() {
+    let (db, dir) = cache_bank("condition");
+    assert_eq!(
+        db.underfoot("stack.cache", Some("spent"), 0),
+        Some("An empty casing")
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// An unauthored condition falls back rather than going silent, so writing a
+/// new spent state is additive.
+#[test]
+fn an_unmatched_condition_falls_back() {
+    let (db, dir) = cache_bank("fallback");
+    let general = db.underfoot("stack.cache", None, 0);
+    assert_eq!(db.underfoot("stack.cache", Some("scorched"), 0), general);
+    assert!(general.is_some());
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn an_unknown_subject_reads_nothing() {
+    let (db, dir) = cache_bank("unknown");
+    assert_eq!(db.underfoot("stack.nowhere", None, 0), None);
+    assert_eq!(db.sighted("stack.nowhere", None, 0), None);
+    assert_eq!(db.paragraph("stack.nowhere", None, 0), None);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// The same seed reads the same way, every time. This is the test that
+/// fails the day someone reaches for a draw instead of a fold.
+#[test]
+fn the_same_seed_reads_the_same_description_twice() {
+    let (db, dir) = cache_bank("stable");
+    for seed in [0u64, 1, 17, u64::MAX] {
+        assert_eq!(
+            db.underfoot("stack.cache", None, seed),
+            db.underfoot("stack.cache", None, seed)
+        );
+        assert_eq!(
+            db.paragraph("stack.cache", None, seed),
+            db.paragraph("stack.cache", None, seed)
+        );
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Different seeds have to actually reach different fragments — the whole
+/// point. Asserting over a sweep rather than one pair, because any single
+/// pair can legitimately collide on a three-deep pool.
+#[test]
+fn different_seeds_reach_different_fragments() {
+    let (db, dir) = cache_bank("varied");
+    let paragraphs: std::collections::HashSet<_> = (0..64u64)
+        .filter_map(|s| db.paragraph("stack.cache", None, s))
+        .collect();
+    assert!(
+        paragraphs.len() >= 4,
+        "64 seeds produced only {} distinct paragraphs",
+        paragraphs.len()
+    );
+    let underfoot: std::collections::HashSet<_> = (0..64u64)
+        .filter_map(|s| db.underfoot("stack.cache", None, s))
+        .collect();
+    assert_eq!(
+        underfoot.len(),
+        2,
+        "both underfoot fragments should be reachable"
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// The three lengths of one cell are independent draws. If they folded the
+/// same seed they would move in lockstep, and the paragraph would only ever
+/// pair opener 0 with underfoot 0.
+#[test]
+fn the_three_lengths_of_one_cell_do_not_move_in_lockstep() {
+    let (db, dir) = cache_bank("lockstep");
+    let pairs: std::collections::HashSet<_> = (0..64u64)
+        .map(|s| {
+            (
+                db.underfoot("stack.cache", None, s),
+                db.sighted("stack.cache", None, s),
+            )
+        })
+        .collect();
+    assert!(
+        pairs.len() > 2,
+        "underfoot and sighted moved together: {} combinations over 64 seeds",
+        pairs.len()
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Empty fragments are how a shorter paragraph is authored — they drop out
+/// rather than leaving a double space or a dangling sentence.
+#[test]
+fn empty_slots_compose_into_a_shorter_paragraph() {
+    let (db, dir) = cache_bank("short");
+    let all: Vec<_> = (0..64u64)
+        .filter_map(|s| db.paragraph("stack.cache", None, s))
+        .collect();
+    assert!(
+        all.iter().any(|p| p.split_whitespace().count() < 8),
+        "no seed produced a short paragraph: {all:?}"
+    );
+    for p in &all {
+        assert!(!p.contains("  "), "double space in {p:?}");
+        assert!(
+            !p.starts_with(' ') && !p.ends_with(' '),
+            "stray edge space in {p:?}"
+        );
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A subject whose fallback variant has no `openers` at all has no
+/// paragraph, rather than one made only of a detail. This is a different
+/// path from `an_empty_opener_counts_as_no_paragraph` above: there, the pool
+/// holds one entry that picks as `""`; here, the pool itself is empty, so
+/// `pick` returns `None` before the empty-string check ever runs. The
+/// corridor fallback covers this case at the call site.
+#[test]
+fn a_subject_with_no_opener_has_no_paragraph() {
+    let body = r#"(subject: "stack.floor", variants: [(details: ["Just corridor."])])"#;
+    let dir = bank_dir("no_opener", &[("floor.ron", body)]);
+    let (db, warnings) = DescriptionDb::load_dir(&dir).unwrap();
+    assert!(warnings.is_empty(), "warnings were {warnings:?}");
+    assert_eq!(db.paragraph("stack.floor", None, 0), None);
+    std::fs::remove_dir_all(&dir).unwrap();
+}

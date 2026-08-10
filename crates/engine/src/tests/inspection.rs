@@ -1017,27 +1017,19 @@ fn the_inspector_returns_whichever_of_the_two_kinds_is_nearer() {
     );
 }
 
-/// `Position` is pinned to the surface entrance while the party is in the
-/// Stack, so an unguarded scan would report the base four frames overhead as
-/// lying off to your east. Creatures are deliberately still found — that is
-/// how the inspector already behaves underground, and this changes only what
-/// was newly added.
-#[test]
-fn the_inspector_offers_no_structure_while_the_party_is_underground() {
-    let mut game = Game::new(1402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+/// A creature two tiles east of the player and a structure five tiles east,
+/// both inside the default scan cone, with any wild leftovers in that cone
+/// cleared first — the shared fixture for every test asserting what the
+/// eastward scan finds and does not find. The creature is nearer so a
+/// surface scan resolves to it despite the structure also being in the
+/// cone. Returns the creature's entity, which is the only one either test
+/// needs to assert against by identity.
+fn game_with_structure_and_creature_east_of_player(seed: u32) -> (Game, Entity) {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let start = *game.world.get::<Position>(game.player_entity()).unwrap();
     let species = game.species_defs().into_iter().next().unwrap();
     clear_creatures_east_of_player(&mut game, start, 10);
 
-    game.world.spawn((
-        Structure {
-            kind: "refinery".to_string(),
-        },
-        Position {
-            x: start.x + 2,
-            y: start.y,
-        },
-    ));
     let creature = game
         .world
         .spawn((
@@ -1045,7 +1037,7 @@ fn the_inspector_offers_no_structure_while_the_party_is_underground() {
                 species: species.id.clone(),
             },
             Position {
-                x: start.x + 5,
+                x: start.x + 2,
                 y: start.y,
             },
             Stats {
@@ -1056,16 +1048,67 @@ fn the_inspector_offers_no_structure_while_the_party_is_underground() {
             },
         ))
         .id();
+    game.world.spawn((
+        Structure {
+            kind: "refinery".to_string(),
+        },
+        Position {
+            x: start.x + 5,
+            y: start.y,
+        },
+    ));
+    (game, creature)
+}
+
+/// `Position` is pinned to the surface entrance while the party is in the
+/// Stack, so an unguarded scan would report the base four frames overhead as
+/// lying off to your east. The whole function refuses underground now, so
+/// this no longer stops at "no structure" — nothing is found at all, and the
+/// creature this fixture put in the cone is proof the emptiness is the
+/// guard's doing, not an accident of an empty cone.
+#[test]
+fn the_inspector_offers_no_structure_while_the_party_is_underground() {
+    let (mut game, _creature) = game_with_structure_and_creature_east_of_player(1402);
+    let start = *game.world.get::<Position>(game.player_entity()).unwrap();
 
     game.enter_stack(start.x, start.y);
     assert!(game.is_underground(), "the fixture really went down");
 
     assert_eq!(
         game.find_target_in_direction(1, 0, 10),
-        Some(InspectTarget::Creature(creature)),
-        "the nearer structure is skipped underground, so the creature behind \
-         it is what the cone finds"
+        None,
+        "structure and creature both sit in the cone, but the guard refuses \
+         underground regardless of kind"
     );
+}
+
+/// The other half of the same defect. `Position` is pinned to the surface
+/// entrance tile while the party is in the Stack, so an unguarded creature
+/// scan opens a manifest for a program four frames overhead and reports it
+/// as lying that way. The test for whether a `Position` reader needs the
+/// guard is not "does it act" but "does it claim something about where the
+/// party is", and this claims exactly that.
+#[test]
+fn the_inspector_scans_no_creature_while_the_party_is_underground() {
+    let (mut game, creature) = game_with_structure_and_creature_east_of_player(1404);
+    let start = *game.world.get::<Position>(game.player_entity()).unwrap();
+
+    assert_eq!(
+        game.find_target_in_direction(1, 0, 10),
+        Some(InspectTarget::Creature(creature)),
+        "the fixture must put the creature where the surface scan finds it"
+    );
+
+    game.enter_stack(start.x, start.y);
+    assert!(game.is_underground(), "the fixture really went down");
+
+    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+        assert_eq!(
+            game.find_target_in_direction(dx, dy, 10),
+            None,
+            "the inspector found something at ({dx}, {dy}) from four frames under it"
+        );
+    }
 }
 
 /// The detail screen and the `B` roster must never disagree about the same

@@ -85,6 +85,70 @@ def fights(log_dir: str | Path) -> pd.DataFrame:
     return load(log_dir, {"fight_end"})
 
 
+# Above this absolute Pearson r, two per-swing observables are treated as
+# telling the same story. 0.7 rather than something stricter because the
+# failure this guards is not subtle: the case that prompted it was r = 1.0,
+# a treatment defined as a threshold on the very feature it was confounded
+# with. A borderline pair is worth a look; a perfect one is worth a stop.
+CONFOUND_THRESHOLD = 0.7
+
+# The per-swing observables worth checking against each other. Deliberately
+# short: these are the columns a conclusion actually gets phrased in terms
+# of, and a wider net produces pairs nobody was going to claim anything
+# about.
+OBSERVABLES = ["target_bracing", "target_hp_frac", "at_player"]
+
+
+def confounds(swings: pd.DataFrame, threshold: float = CONFOUND_THRESHOLD) -> list:
+    """Pairs of observables too correlated to be discussed separately.
+
+    Returns `[(a, b, r), ...]`, alphabetical within a pair.
+
+    **Why this exists.** The 2026-08-10 bracing run made a member Defend
+    exactly when it fell under half HP, so `target_bracing` was a pure
+    function of `target_hp_frac` — and since the policy's largest weight is
+    on the latter, every statement about bracing was also a statement about
+    being wounded, with no way to tell which was doing the work. The numbers
+    looked clean and answered nothing. A reader cannot spot that by looking
+    at a mean, so the report says it rather than leaving it to be noticed.
+
+    A column that never varies is skipped: its correlation is undefined, and
+    undefined is not the same as "checked and fine". Under the default
+    `PartyPlan::AllAttack` nobody braces at all, which is exactly that case.
+    """
+    present = [c for c in OBSERVABLES if c in swings.columns]
+    numeric = swings[present].astype(float)
+    varying = [c for c in present if numeric[c].nunique() > 1]
+    found = []
+    for i, a in enumerate(varying):
+        for b in varying[i + 1 :]:
+            r = numeric[a].corr(numeric[b])
+            if pd.notna(r) and abs(r) >= threshold:
+                found.append((a, b, float(r)))
+    return found
+
+
+def confounds_by(swings: pd.DataFrame, keys: list) -> dict:
+    """`confounds` per run, keyed by the values of `keys`. Clean runs omitted.
+
+    **Pooling is not safe here**, which is the trap the first version of
+    this shipped with. A sweep holds several configs and most use the
+    default All-Attack plan where nobody braces at all; those constant rows
+    swamp the collinear ones and the pooled correlation comes out near zero.
+    The guard then reports all clear on precisely the dataset it exists to
+    flag. A confound is a property of one run's design, so it has to be
+    measured inside one run.
+    """
+    out = {}
+    for key, group in swings.groupby(keys, observed=True):
+        if not isinstance(key, tuple):
+            key = (key,)
+        found = confounds(group)
+        if found:
+            out[key] = found
+    return out
+
+
 # The four columns that identify a fight. `fight` alone is not enough and
 # neither is any three of these: `arena::run` numbers each call's fights from
 # 1, and one call is one (config, pass, scenario).

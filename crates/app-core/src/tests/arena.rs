@@ -845,8 +845,12 @@ fn the_whole_loop_walks_from_a_shipped_scenario_to_a_new_one() {
     assert_eq!(written.opponents.len(), 2);
     assert_eq!(written.party.len(), 1);
     assert_eq!(written.equip.len(), 1);
-    let report =
-        feral_processes_engine::arena::run(&written, &test_assets_dir()).expect("the bin's path");
+    let (report, _) = feral_processes_engine::arena::run(
+        &written,
+        &test_assets_dir(),
+        feral_processes_engine::arena::RunOptions::default(),
+    )
+    .expect("the bin's path");
     assert_eq!(report.reps.len(), written.reps as usize);
 }
 

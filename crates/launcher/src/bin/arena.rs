@@ -70,7 +70,11 @@ fn run(scenario_path: &Path, out: &Path) -> Result<(), String> {
     let mut scenario = Scenario::load(scenario_path)?;
     resolve_template(&mut scenario)?;
 
-    let report = arena::run(&scenario, &dev_template::assets_dir())?;
+    let (report, _) = arena::run(
+        &scenario,
+        &dev_template::assets_dir(),
+        arena::RunOptions::default(),
+    )?;
 
     // stderr, so piping stdout to a file keeps the data clean.
     for warning in &report.warnings {

@@ -199,7 +199,9 @@ fn evaluate_set(
     for (name, scenario) in scenarios {
         let mut scenario = scenario.clone();
         scenario.seed = scenario.seed.wrapping_add(seed_offset);
-        let summary = arena::run(&scenario, lease.assets())?.summary();
+        let summary = arena::run(&scenario, lease.assets(), arena::RunOptions::default())?
+            .0
+            .summary();
         let enemy = 1.0 - summary.win_rate;
         enemy_wins += enemy;
         hp += summary.mean_player_hp_fraction;

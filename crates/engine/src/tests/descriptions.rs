@@ -999,6 +999,86 @@ fn the_underfoot_row_keeps_its_key_prompt() {
     );
 }
 
+/// The four other suffixed arms, pinned by exact literal text the same way
+/// `the_underfoot_row_keeps_its_key_prompt` above already pins `LinkUp`'s
+/// surface case.
+///
+/// Review found the gap this closes: `underfoot_suffix`'s call sites in
+/// `stack_view.rs` pass `(subject, condition)` as bare string literals that
+/// nothing checks against `UNDERFOOT_SUFFIXES`'s keys, and a miss resolves
+/// to `""` (`.map_or("", ...)`) rather than failing loud. A typo'd subject
+/// on any one arm silently drops that arm's key prompt from the screen
+/// while every other test — including the width census, which a
+/// zero-width suffix satisfies trivially — stays green. Only `LinkUp`'s
+/// surface case had literal-text coverage before this test.
+///
+/// `LinkDown` and `Corruption` are asserted firmly rather than skipped:
+/// `CellKind::LinkDown` is "never generated on the bottom frame"
+/// (`stack.rs`), and depth 1 is proven non-bottom for this seed by
+/// `two_different_frames_describe_the_same_cell_differently` above
+/// (multiple frames); `tests/stack.rs`'s own
+/// `stand_facing(&mut game, CellKind::Corruption)` call is documented
+/// "every frame grows corruption". `LinkUp`'s non-surface ("climb") case
+/// needs a frame past the entrance, which that same multi-frame proof
+/// guarantees for this seed. `Orphan` is the one genuinely optional case —
+/// `a_spent_orphan_still_offers_nothing_underfoot` above skips it the same
+/// way — so it alone is skipped explicitly, with a comment, rather than
+/// asserted.
+#[test]
+fn every_other_suffixed_arm_keeps_its_exact_key_prompt() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+
+    let down = cell_of(&game, CellKind::LinkDown).expect("every non-bottom frame links down");
+    crate::tests::support::stand_at(&mut game, down, Dir::North);
+    let row = game
+        .stack_view()
+        .unwrap()
+        .standing_on
+        .expect("a link down reads");
+    assert!(row.ends_with("  [>] descend"), "lost the prompt: {row:?}");
+
+    let rot = cell_of(&game, CellKind::Corruption).expect("every frame grows corruption");
+    crate::tests::support::stand_at(&mut game, rot, Dir::North);
+    let row = game
+        .stack_view()
+        .unwrap()
+        .standing_on
+        .expect("corruption reads");
+    assert!(
+        row.ends_with("  — moving on costs"),
+        "lost the prompt: {row:?}"
+    );
+
+    if let Some(orphan) = cell_of(&game, CellKind::Orphan) {
+        crate::tests::support::stand_at(&mut game, orphan, Dir::North);
+        let row = game
+            .stack_view()
+            .unwrap()
+            .standing_on
+            .expect("an unspent orphan reads");
+        assert!(row.ends_with("  [o] adopt"), "lost the prompt: {row:?}");
+    } else {
+        eprintln!("skipped Orphan: not every frame grows one");
+    }
+
+    let Locale::Stack {
+        frames, entrance, ..
+    } = game.locale()
+    else {
+        unreachable!("not underground")
+    };
+    game.descend_to(2, frames, entrance);
+    let up = cell_of(&game, CellKind::LinkUp).expect("every frame has its entry");
+    crate::tests::support::stand_at(&mut game, up, Dir::North);
+    let row = game
+        .stack_view()
+        .unwrap()
+        .standing_on
+        .expect("a link up reads");
+    assert!(row.ends_with("  [<] climb"), "lost the prompt: {row:?}");
+}
+
 /// Deleting the asset directory leaves the game working — the same argument
 /// `crash_logs` made, and the reason the bank returns `Option`.
 #[test]

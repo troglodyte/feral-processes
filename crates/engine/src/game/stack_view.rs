@@ -97,18 +97,34 @@ pub(crate) fn underfoot_suffix(subject: &str, condition: Option<&str>) -> &'stat
 }
 
 impl Game {
-    /// Records everything the party can see from where they are standing.
+    /// Records everything the party can see from where they are standing,
+    /// and announces the most notable thing that just came into view.
     ///
-    /// Called from every place that moves the party or turns them, plus the
-    /// load path — anywhere the view changes, the map has to change with it,
-    /// or the player is told they never looked down a corridor they are
-    /// currently staring at.
+    /// Called from every place that moves the party or turns them — anywhere
+    /// the view changes, the map has to change with it, or the player is
+    /// told they never looked down a corridor they are currently staring at.
+    ///
+    /// **The load path calls `remember_view_silent` instead.**
+    /// `restore_locale` runs the same walk, and a save reloading into a
+    /// corridor would replay sightings the player already read a session
+    /// ago. One site, pinned by `tests::descriptions::loading_a_save_announces_no_sightings`.
     pub(crate) fn remember_view(&mut self) {
+        let newly_seen = self.remember_view_silent();
+        self.announce_sighting(&newly_seen);
+    }
+
+    /// The view walk itself, returning the cells that were not on the map
+    /// before this call.
+    ///
+    /// The diff is free: `FrameMemory::seen` is consulted before the
+    /// `extend`, so nothing new is stored to support it and the save format
+    /// does not move.
+    pub(crate) fn remember_view_silent(&mut self) -> Vec<(i32, i32)> {
         let Some(pos) = self.stack_pos() else {
-            return;
+            return Vec::new();
         };
         let Some(level) = self.world.resource::<CurrentStack>().0.clone() else {
-            return;
+            return Vec::new();
         };
 
         let mut seen = Vec::new();
@@ -131,7 +147,49 @@ impl Game {
         }
 
         let memory = self.frame_memory_mut(pos);
+        let newly_seen: Vec<(i32, i32)> = seen
+            .iter()
+            .copied()
+            .filter(|cell| !memory.seen.contains(cell))
+            .collect();
         memory.seen.extend(seen);
+        newly_seen
+    }
+
+    /// Logs one line for the most notable cell that just came into view, or
+    /// nothing when none of them was worth a line.
+    ///
+    /// **Capped at one.** A corridor opening onto four features must not
+    /// push four rows into a pane that shows a handful — and the one row it
+    /// does push should be the thing the player would actually walk to.
+    ///
+    /// `notability`'s ranks are not a total order — an unspent cache and an
+    /// unspent breakpoint both rank 3, `LinkDown` and a sealed door both rank
+    /// 2 — so breaking ties on rank alone would pick whichever `HashSet`
+    /// happened to iterate first, which is not a property of the frame.
+    /// Ties break on Manhattan distance (nearest first) and then on the cell
+    /// coordinate itself, both of which are fixed by the frame and the
+    /// party's position, so the whole key is total and the winner is
+    /// deterministic.
+    fn announce_sighting(&mut self, newly_seen: &[(i32, i32)]) {
+        let Some(pos) = self.stack_pos() else {
+            return;
+        };
+        let Some(best) = newly_seen
+            .iter()
+            .filter(|&&cell| cell != (pos.x, pos.y))
+            .filter_map(|&cell| self.notability(pos, cell).map(|rank| (rank, cell)))
+            .max_by_key(|&(rank, cell)| {
+                let steps = (cell.0 - pos.x).abs() + (cell.1 - pos.y).abs();
+                (rank, std::cmp::Reverse(steps), std::cmp::Reverse(cell))
+            })
+            .map(|(_, cell)| cell)
+        else {
+            return;
+        };
+        if let Some(line) = self.sighted_description(pos, best) {
+            self.log(line);
+        }
     }
 
     /// The party's map of the frame they are in — see

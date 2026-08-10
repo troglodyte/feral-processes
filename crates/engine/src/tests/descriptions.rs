@@ -1093,3 +1093,159 @@ fn an_empty_bank_falls_back_to_the_shipped_literals() {
         Some("The link out  [<] surface")
     );
 }
+
+// ---- sightings and the frame-arrival mood line -------------------------
+
+fn log_lines(game: &Game) -> Vec<String> {
+    game.message_log(crate::MESSAGE_LOG_CAP)
+        .into_iter()
+        .map(|l| l.text)
+        .collect()
+}
+
+/// A corridor opening onto four features must not push four rows into a
+/// pane that shows a handful — one line per call, for the most notable
+/// thing.
+///
+/// At an arbitrary vantage point (the entry, facing north) a view cone
+/// rarely holds more than one notable cell, so a loose "at most two turns
+/// worth of lines" bound over `turn_left`/`turn_right` never actually
+/// exercises the cap — it would pass with `announce_sighting`'s cap deleted
+/// exactly as readily as with it in place. Searching the frame for a
+/// position whose view cone holds *at least two* notable cells at once —
+/// through `remember_view_silent` and `notability` themselves, never
+/// reimplemented — manufactures the case the cap exists for, then a single
+/// `remember_view` call is pinned to produce exactly one line.
+#[test]
+fn a_newly_seen_notable_cell_logs_once_per_move() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let level = crate::tests::support::frame(&game);
+    let pos = game.stack_pos().unwrap();
+
+    let mut found = None;
+    'search: for (x, y) in crate::tests::support::every_cell(&level) {
+        if !level.walkable(x, y) {
+            continue;
+        }
+        for facing in [Dir::North, Dir::East, Dir::South, Dir::West] {
+            game.frame_memory_mut(pos).seen.clear();
+            crate::tests::support::stand_at(&mut game, (x, y), facing);
+            let here = game.stack_pos().unwrap();
+            let notable = game
+                .remember_view_silent()
+                .into_iter()
+                .filter(|&cell| cell != (x, y) && game.notability(here, cell).is_some())
+                .count();
+            if notable >= 2 {
+                found = Some(((x, y), facing));
+                break 'search;
+            }
+        }
+    }
+    let (stand, facing) = found.expect("some vantage in this frame sees two notable cells at once");
+
+    game.frame_memory_mut(pos).seen.clear();
+    crate::tests::support::stand_at(&mut game, stand, facing);
+    let before = log_lines(&game).len();
+    game.remember_view();
+    let after = log_lines(&game).len();
+    assert_eq!(
+        after - before,
+        1,
+        "two or more notable cells came into view at once and logged {} lines",
+        after - before
+    );
+}
+
+/// A step that reveals nothing new says nothing. Turning twice returns the
+/// party to the exact view they started from, so the second turn has no
+/// newly-seen cells at all.
+#[test]
+fn a_step_revealing_nothing_new_logs_nothing() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    game.turn_left();
+    game.turn_right();
+    let settled = log_lines(&game).len();
+    game.turn_left();
+    game.turn_right();
+    assert_eq!(
+        log_lines(&game).len(),
+        settled,
+        "a repeated view announced again"
+    );
+}
+
+/// `restore_locale` calls into the same view walk, and a save reloading into
+/// a corridor would otherwise replay sightings the player already read.
+///
+/// A save made immediately after `descend` is the wrong fixture for this:
+/// every mutator that changes `Locale::Stack` (`enter_frame`, `set_facing`,
+/// `step`, `relocate_within_frame`) ends by calling `remember_view`, which
+/// leaves the current view fully inside `FrameMemory::seen` before the save
+/// ever happens. Reload that and `remember_view_silent`'s diff is empty
+/// regardless of which variant `restore_locale` calls — the announcing
+/// variant would have nothing new to announce either, and this test would
+/// pass with the fix reverted just as readily as with it in place.
+///
+/// `tests::support::stand_at` is the way around that: it teleports the party
+/// by writing `Locale::Stack` directly, the one path that does *not* call
+/// `remember_view`. Standing next to the frame's link down (every frame has
+/// exactly one, and `notability` ranks it unconditionally, so there is
+/// always something to announce) leaves it inside the new view but outside
+/// `FrameMemory::seen` in the save that follows. `Game::load` never restores
+/// `MessageLog` (see `game::lifecycle::load`, which always inserts
+/// `MessageLog::default()`), so the reloaded log holds nothing but what the
+/// load itself produced — a blank slate a wrongly-announcing load path
+/// cannot hide in.
+#[test]
+fn loading_a_save_announces_no_sightings() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let link_down = cell_of(&game, CellKind::LinkDown).expect("every frame has a link down");
+    let level = crate::tests::support::frame(&game);
+    let (stand, facing) = [Dir::North, Dir::East, Dir::South, Dir::West]
+        .into_iter()
+        .find_map(|facing| {
+            let (dx, dy) = facing.delta();
+            // Standing one step behind `link_down` along `facing` puts it
+            // dead ahead (`ahead == 1`, dead center) once the party turns to
+            // face it.
+            let stand = (link_down.0 - dx, link_down.1 - dy);
+            level.walkable(stand.0, stand.1).then_some((stand, facing))
+        })
+        .expect("a reachable link down has at least one walkable neighbor");
+    crate::tests::support::stand_at(&mut game, stand, facing);
+
+    let path = std::env::temp_dir().join(format!("feral_sighting_load_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let reloaded = Game::load(&path, &crate::tests::support::test_assets_dir()).unwrap();
+    std::fs::remove_file(&path).unwrap();
+
+    // The only line a correct silent load produces is the fixed "session
+    // restored" narration — no sighting of the link down or anything else
+    // freshly in view.
+    assert_eq!(
+        log_lines(&reloaded),
+        vec!["Session restored. Reconnecting to the Grid."],
+        "the load path replayed sightings"
+    );
+}
+
+/// Once per frame, not once per step.
+#[test]
+fn a_frame_arrival_logs_a_mood_line_and_a_step_does_not() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let pos = game.stack_pos().unwrap();
+    let arrival = game
+        .arrival_line(pos)
+        .expect("the bank ships arrival lines");
+    let count = |game: &Game| log_lines(game).iter().filter(|l| **l == arrival).count();
+    assert_eq!(count(&game), 1, "arriving should say it once");
+
+    game.turn_left();
+    game.step_forward();
+    assert_eq!(count(&game), 1, "walking re-fired the arrival line");
+}

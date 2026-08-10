@@ -14,6 +14,17 @@
 # Battle telemetry, written only under `FERAL_DEV_LOG`. The log is a
 # measurement; `dev-logs/README.md` is the schema and stays checked in.
 /dev-logs/*.jsonl
+# `train --log-dir`'s output. Hundreds of megabytes of JSONL per sweep, and
+# regenerable from the seed — but the `-report.ron` and weight files beside
+# them are small and *are* the record of what a sweep found, so they stay.
+/dev-logs/policy-sweep/*.jsonl
+
+# The analysis venv and whatever it plots. `requirements.txt` is the record
+# of what it needs; the tree itself and its charts are regenerable.
+/analysis/.venv/
+/analysis/out/
+__pycache__/
+.pytest_cache/
 
 # Editor/IDE
 .vscode/

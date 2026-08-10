@@ -33,8 +33,10 @@ spec is right and the plan is a bug.
 - **Never `GameRng`, never `StdRng`.** Selection is `fold % pool.len()`.
   `StdRng`'s sequence is not stable across a `rand` upgrade; a silent
   reshuffle of every description on a dependency bump is the failure being
-  designed out. Confirm with `rg GameRng crates/engine/src/descriptions.rs
-  crates/engine/src/game/descriptions.rs` returning nothing.
+  designed out. Confirm with `rg 'GameRng|StdRng|DefaultHasher'
+  crates/engine/src/descriptions.rs crates/engine/src/game/descriptions.rs` —
+  the only matches allowed are the words appearing inside doc comments that
+  explain why they are not used.
 - **`DESCRIPTION_SALT` must differ from the three existing salts:**
   `LAIR_SALT` `0x1A19_B055` and `ORPHAN_SALT` `0xDEAD_C0DE`
   (`game/stack_features.rs:196, 422`), `FALL_SALT` `0xFA11_1E15`
@@ -294,11 +296,11 @@ fn an_empty_bank_directory_loads_clean() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-/// Two files may contribute to one subject, and the order they merge in has
-/// to be the file id — not `read_dir`'s. Without the sort the same cell
-/// reads a different fragment between runs, which is the one property the
-/// whole system exists to provide. `CrashLogDb::load_dir` carries the same
-/// sort for the same reason.
+/// Two files may contribute to one subject, and the order their fragments
+/// land in the pool has to be the file id — not `read_dir`'s. Without the
+/// sort the same cell reads a different fragment between runs, which is the
+/// one property the whole system exists to provide. `CrashLogDb::load_dir`
+/// carries the same sort for the same reason.
 #[test]
 fn two_files_on_one_subject_merge_in_file_id_order() {
     let a = r#"(subject: "stack.door", variants: [(underfoot: ["from a"])])"#;
@@ -309,33 +311,37 @@ fn two_files_on_one_subject_merge_in_file_id_order() {
     let (db, warnings) = DescriptionDb::load_dir(&dir).unwrap();
 
     assert!(warnings.is_empty(), "warnings were {warnings:?}");
-    assert_eq!(db.variant_count("stack.door"), 2);
+    // One condition, both files' fragments inside it — additive, not
+    // first-wins.
+    assert_eq!(db.variant_count("stack.door"), 1);
     assert_eq!(db.underfoot("stack.door", None, 0), Some("from a"));
     assert_eq!(db.underfoot("stack.door", None, 1), Some("from z"));
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-/// At most one fallback per subject. A second is authoring drift — the two
-/// would race for every unconditioned draw — so it is a load warning rather
-/// than a silent first-wins.
+/// Two variants sharing a condition merge into one pool — within a single
+/// file as well as across two — while a different condition stays its own
+/// variant. First-match-wins here would make an author's second variant
+/// dead content with nothing to say so.
 #[test]
-fn a_second_fallback_variant_on_one_subject_warns() {
+fn two_variants_on_one_condition_merge_into_one_pool() {
     let body = r#"(
         subject: "stack.door",
         variants: [
             (underfoot: ["one"]),
             (underfoot: ["two"]),
+            (when: "opened", underfoot: ["open"]),
         ],
     )"#;
-    let dir = bank_dir("two_fallbacks", &[("door.ron", body)]);
-    let (_, warnings) = DescriptionDb::load_dir(&dir).unwrap();
+    let dir = bank_dir("merge_within", &[("door.ron", body)]);
+    let (db, warnings) = DescriptionDb::load_dir(&dir).unwrap();
 
-    assert_eq!(warnings.len(), 1, "warnings were {warnings:?}");
-    assert!(
-        warnings[0].contains("stack.door"),
-        "the warning must name the subject: {}",
-        warnings[0]
-    );
+    assert!(warnings.is_empty(), "warnings were {warnings:?}");
+    assert_eq!(db.variant_count("stack.door"), 2, "one fallback, one condition");
+    let reachable: std::collections::HashSet<_> =
+        (0..8u64).filter_map(|s| db.underfoot("stack.door", None, s)).collect();
+    assert_eq!(reachable.len(), 2, "both fallback fragments must be reachable");
+    assert_eq!(db.underfoot("stack.door", Some("opened"), 0), Some("open"));
     std::fs::remove_dir_all(&dir).unwrap();
 }
 ```
@@ -407,7 +413,12 @@ pub struct DescriptionDef {
 #[derive(Clone, Debug, Deserialize)]
 pub struct DescriptionVariant {
     /// `None` is the fallback, used when no other variant on this subject
-    /// matches. At most one per subject; a second is a load warning.
+    /// matches.
+    ///
+    /// Two variants sharing a `when` — in one file or across two — have
+    /// their pools concatenated rather than racing, so a mod adds fragments
+    /// to a shipped door instead of replacing it and nothing an author
+    /// writes goes silently dead. See `DescriptionVariant::absorb`.
     #[serde(default)]
     pub when: Option<String>,
     /// The descriptive clause of the `standing_on` row. Bounded in length:
@@ -430,6 +441,27 @@ pub struct DescriptionVariant {
     /// Its third. `""` is legal, as in `details`.
     #[serde(default)]
     pub codas: Vec<String>,
+}
+
+impl DescriptionVariant {
+    /// Concatenates `other`'s pools onto this one's, slot by slot.
+    ///
+    /// Two files describing one subject under one condition are **additive**
+    /// — a mod adds fragments to the shipped door rather than replacing it,
+    /// and neither file's prose goes silently dead. First-match-wins would
+    /// make the loser dead content with nothing on screen to say so, which
+    /// is the failure `crash_logs`' flat pool never had.
+    ///
+    /// This is also what makes `load_dir`'s sort load-bearing rather than
+    /// cosmetic: the pool a cell indexes into has to be in the same order
+    /// every run, and concatenation order is that order.
+    fn absorb(&mut self, other: DescriptionVariant) {
+        self.underfoot.extend(other.underfoot);
+        self.sighted.extend(other.sighted);
+        self.openers.extend(other.openers);
+        self.details.extend(other.details);
+        self.codas.extend(other.codas);
+    }
 }
 
 /// Which pool a draw comes from.
@@ -475,13 +507,17 @@ impl DescriptionDb {
     /// with a returned warning rather than aborting the load, same as
     /// `AbilityDb::load_dir` and `CrashLogDb::load_dir`.
     ///
-    /// **Variants are merged in `(subject, file id)` order, not directory
+    /// **Pools are filled in `(subject, file id)` order, not directory
     /// order.** `std::fs::read_dir` returns entries in no defined order, so
     /// without the sort the same cell would read a different fragment
     /// between runs and across a reload — the whole property this module
     /// exists to provide, lost to something no test of a single-file bank
     /// would see. The `assembler_system` position sort and
     /// `CrashLogDb::load_dir` both exist against the same class of bug.
+    ///
+    /// Variants sharing a condition are merged rather than kept side by
+    /// side, so a subject holds exactly one variant per condition and
+    /// `variant` never has to choose between two candidates.
     pub fn load_dir(dir: &Path) -> std::io::Result<(Self, Vec<String>)> {
         let mut defs: Vec<(String, DescriptionDef)> = Vec::new();
         let mut warnings = Vec::new();
@@ -505,15 +541,12 @@ impl DescriptionDb {
 
         let mut subjects: BTreeMap<String, Vec<DescriptionVariant>> = BTreeMap::new();
         for (_, def) in defs {
-            subjects.entry(def.subject).or_default().extend(def.variants);
-        }
-        for (subject, variants) in &subjects {
-            let fallbacks = variants.iter().filter(|v| v.when.is_none()).count();
-            if fallbacks > 1 {
-                warnings.push(format!(
-                    "subject {subject:?} declares {fallbacks} fallback variants; only the first is \
-                     reachable"
-                ));
+            let variants = subjects.entry(def.subject).or_default();
+            for incoming in def.variants {
+                match variants.iter_mut().find(|v| v.when == incoming.when) {
+                    Some(existing) => existing.absorb(incoming),
+                    None => variants.push(incoming),
+                }
             }
         }
         Ok((DescriptionDb { subjects }, warnings))
@@ -525,8 +558,8 @@ impl DescriptionDb {
         self.subjects.keys().map(String::as_str)
     }
 
-    /// How many variants `subject` carries, for tests that assert a merge
-    /// happened at all.
+    /// How many distinct conditions `subject` carries — one per `when`,
+    /// including the fallback, since `load_dir` merges duplicates.
     pub fn variant_count(&self, subject: &str) -> usize {
         self.subjects.get(subject).map_or(0, Vec::len)
     }
@@ -1612,8 +1645,14 @@ only the place — the depth band and the Trace band. It is a separate subject
 so that exception stays visible.
 
 A condition with no variant falls back to the `when`-less one, so writing a
-new spent state is additive. A subject with **two** `when`-less variants is a
-load warning: only the first is ever reachable.
+new spent state is additive.
+
+**Two files may describe the same subject, and they add rather than
+replace.** Variants sharing a `when` have their pools concatenated in
+filename order, so dropping `my-doors.ron` beside the shipped `door.ron`
+widens the door's pools instead of overriding them. The same holds for two
+variants sharing a `when` inside one file. There is no override mechanism and
+no precedence to learn: everything authored is reachable.
 
 ## How a fragment gets picked
 

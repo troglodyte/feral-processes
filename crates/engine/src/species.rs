@@ -198,7 +198,13 @@ pub struct SpeciesDef {
     #[serde(default = "default_base_int")]
     pub base_int: i32,
     pub moves: Vec<MoveDef>,
-    /// If set, a tamed member of this species can work a matching resource node.
+    /// If set, the item a defeated or nest-destroyed member of this species
+    /// drops as salvage (`Game::award_loot`, `Game::grant_nest_cache`), and
+    /// what the inspection view names as its yield. Despite the name, this
+    /// does not gate which structures a tamed member can work — any program
+    /// can be posted to any producing structure, and what a cronjob pays out
+    /// comes from the structure's own `produces`, not from the worker's
+    /// species.
     pub work_resource: Option<ItemId>,
     /// If set, defeating/decompiling this species has a chance (0.0-1.0) to
     /// additionally drop one piece of equipment, independent of

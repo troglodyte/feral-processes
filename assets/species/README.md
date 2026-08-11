@@ -56,7 +56,13 @@ is skipped with a warning logged in-game rather than crashing startup.
     // tick, however extreme a modded value. The player has no species and
     // works at the baseline, so a machine's own `ticks_per_unit` (see
     // `assets/structures/README.md`) is exactly what working it by hand
-    // costs — unchanged from before this field applied to work at all.
+    // costs — unchanged from before this field applied to work at all. That
+    // baseline is 10, one lower than the 11 the player rolls for initiative
+    // above: two different constants for two different rolls, not a typo —
+    // `PLAYER_BASE_SPEED` gives the player a slight edge in a fight, while
+    // the work side deliberately sits at the same zero point (`DEFAULT_
+    // BASE_SPEED`) every species does, so posting is judged against the
+    // same 10 a modded species with no `base_speed` field extracts at.
     //
     // Initiative and work rate are one field, not two, and that's
     // deliberate: "the sprite is quick" is meant to read as quick in a
@@ -71,6 +77,12 @@ is skipped with a warning logged in-game rather than crashing startup.
     // what a successful one pays out. The shipped roster spans 5 (Construct
     // and Glitch, neither of them thinkers) to 15 (SubProcess); the player
     // works a node at 10.
+    //
+    // That reliability roll only exists at all on a structure whose `work`
+    // def sets `level` (see assets/structures/README.md) — a Power Conduit's
+    // `work` has no `level`, so every cycle there is a guaranteed yield and
+    // base_int has nothing to act on. It only matters at a producer that
+    // opted into the chancier variant.
     //
     // The number is read as a *distance from 10*, not as an absolute, which
     // is worth knowing before you tune it: 10 contributes exactly nothing,
@@ -122,8 +134,10 @@ is skipped with a warning logged in-game rather than crashing startup.
     // this species gathers, and does not gate whether it can be posted to a
     // cronjob — any program can work any structure, and a cronjob's output
     // comes from the structure's own `produces`. What it actually sets is
-    // what *killing* a wild one drops. Its only other reader is the
-    // inspection view.
+    // what *killing* a wild one drops. It has two other readers: destroying
+    // a Nest of this species pays out from the same field
+    // (`Game::grant_nest_cache`), and the inspection view names it as the
+    // species' yield.
     //
     // work_resource (above) and equipment_drop (below) both take any item
     // id from assets/items/*.ron — see assets/items/README.md for the

@@ -273,10 +273,14 @@ pub const PLAYER_BASE_SPEED: i32 = 11;
 ///
 /// Deliberately one constant rather than the `DEFAULT_BASE_SPEED` /
 /// `PLAYER_BASE_SPEED` pair above. Those two differ and so earn separate
-/// names; here the player being *exactly* the roster average is the design,
-/// not a coincidence — it is what makes posting a sharp program better than
-/// doing the job yourself and posting a dull one worse. A second constant
-/// would let the two drift and quietly delete one side of that pressure.
+/// names; here the player sitting at exactly the midpoint of the non-boss
+/// roster's range (5..15, same as `DEFAULT_BASE_SPEED`'s own midpoint) is
+/// the design, not a coincidence — it is what makes posting a sharp program
+/// better than doing the job yourself and posting a dull one worse. (The
+/// non-boss *mean* runs a touch above it, 10.27, which is fine — it's the
+/// baseline both sides are judged against that matters, not a perfect
+/// average.) A second constant would let the two drift and quietly delete
+/// one side of that pressure.
 ///
 /// It is also the zero point of `systems::mining_success_chance`'s fourth
 /// term, so an un-annotated mod species extracts at exactly the rate every
@@ -1135,12 +1139,14 @@ pub const MINING_SUCCESS_BASE: f64 = 0.4;
 pub const MINING_SUCCESS_PER_LEVEL: f64 = 0.1;
 
 /// What one point of `SpeciesDef::base_int` **either side of**
-/// `DEFAULT_BASE_INT` is worth on the mining roll. The shipped roster spans
-/// 5 to 14, so the fourth term ranges about -0.10 to +0.08 — enough that a
-/// Cipher and a Construct posted to the same Mk1 node visibly disagree
-/// (0.58 against 0.40), and small enough that a node's own tier, worth
-/// `MINING_SUCCESS_PER_LEVEL` a step, still outruns species choice over a
-/// few upgrades.
+/// `DEFAULT_BASE_INT` is worth on the mining roll. The shipped *non-boss*
+/// roster spans 5 to 15, so the fourth term ranges about -0.10 to +0.10 —
+/// enough that a Cipher and a Construct posted to the same Mk1 node visibly
+/// disagree (0.58 against 0.40), and small enough that a node's own tier,
+/// worth `MINING_SUCCESS_PER_LEVEL` a step, still outruns species choice
+/// over a few upgrades. The two bosses run higher still (Overseer 16,
+/// Wintermute 18), but neither can ever be tamed or posted to a job, so
+/// their `base_int` never reaches this roll.
 pub const MINING_SUCCESS_PER_INT: f64 = 0.02;
 
 /// What one point of `SpeciesDef::base_speed` **either side of**

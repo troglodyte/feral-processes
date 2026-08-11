@@ -135,10 +135,16 @@ their 12-tick feeders is the point: a Refinery outruns an Armory better than
 two to one, so a single feeder keeps a bench saturated and the queue backs up
 at the bench rather than starving it.
 
-Rate is a property of the machine, not of the worker — an assembler's speed
-comes from its own `ticks_per_unit` and never from how the program was
-assigned. A stall is announced only on the transition into it, so a base with
-four stalled machines does not put four lines in the pane every tick.
+Rate starts as a property of the machine — its own `ticks_per_unit` above is
+the baseline — but the posted program scales it: a species' `base_speed`
+paces the cycle the same way `base_int` paces a mining roll, faster above
+`DEFAULT_BASE_SPEED` and slower below it (see
+[`assets/species/README.md`](../assets/species/README.md)). The scaled
+length is computed once, at assignment (`Game::work_ticks_for`), and baked
+into the `Task`, so re-reading a machine's `ticks_per_unit` mid-cycle would
+not show a swapped-in program taking effect early. A stall is announced only
+on the transition into it, so a base with four stalled machines does not put
+four lines in the pane every tick.
 
 ## Upgrades
 

@@ -7,7 +7,8 @@ Every shipped species in feral-processes, charted from its own file in
 `assets/species/*.ron` on 2026-08-05 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind. Where a
 file omits a field, the engine default from `crates/engine/src/tuning.rs` is
-shown: `base_speed 10`, `growth_multiplier 1.0`, all five affinities `1.0`.
+shown: `base_speed 10`, `base_int 10`, `growth_multiplier 1.0`, all five
+affinities `1.0`.
 
 POW is the engine's own scalar, `Stats::power` — `max_hp + atk + def`,
 unweighted. It is what `difficulty_color` reads to decide whether a program
@@ -21,28 +22,29 @@ shows up green or red on your map. Every table below is in POW order.
 | work yields | 8 — 7 `core_fragment`, 1 `power_cell` |
 | HP span | 36 (Glitch) to 200 (Wintermute) |
 | speed span | 6 (Construct) to 14 (Sprite); the player rolls from 11 |
+| extraction span | 5 (Construct, Glitch) to 15 (SubProcess), non-boss; the player works at 10 |
 
 ## Core stats
 
-|  | Species | HP | ATK | DEF | SPD | POW | Tame | Growth |
-|:---|:---|---:|---:|---:|---:|---:|---:|---:|
-| `W` | Wintermute **·boss** | 200 | 19 | 17 | 13 | 236 | 0.95 | x2.00 |
-| `B` | Overseer **·boss** | 180 | 17 | 15 | 12 | 212 | 0.90 | x2.00 |
-| `S` | Sentinel | 150 | 9 | 12 | 7 | 171 | 0.65 | x1.50 |
-| `C` | Construct | 128 | 11 | 9 | 6 | 148 | 0.70 | x1.50 |
-| `k` | Rootkit | 120 | 11 | 10 | 9 | 141 | 0.75 | x1.50 |
-| `c` | Cipher | 112 | 10 | 8 | 11 | 130 | 0.80 | x1.50 |
-| `v` | Virus | 112 | 10 | 6 | 10 | 128 | 0.60 | x1.50 |
-| `z` | ZeroDay | 98 | 14 | 4 | 10 | 116 | 0.65 | x1.50 |
-| `m` | Worm | 105 | 8 | 2 | 9 | 115 | 0.40 | x1.25 |
-| `x` | Scrapper | 98 | 9 | 5 | 9 | 112 | 0.45 | x1.25 |
-| `t` | Trojan | 90 | 10 | 4 | 10 | 104 | 0.50 | x1.25 |
-| `p` | Proxy | 82 | 12 | 2 | 12 | 96 | 0.55 | x1.25 |
-| `r` | Crawler | 75 | 8 | 4 | 11 | 87 | 0.50 | x1.25 |
-| `d` | SubProcess | 54 | 5 | 3 | 12 | 62 | 0.30 | x1.00 |
-| `s` | Sprite | 48 | 4 | 2 | 14 | 54 | 0.20 | x1.00 |
-| `o` | Drone | 42 | 3 | 2 | 13 | 47 | 0.15 | x1.00 |
-| `g` | Glitch | 36 | 3 | 1 | 13 | 40 | 0.15 | x1.00 |
+|  | Species | HP | ATK | DEF | SPD | INT | POW | Tame | Growth |
+|:---|:---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `W` | Wintermute **·boss** | 200 | 19 | 17 | 13 | 18 | 236 | 0.95 | x2.00 |
+| `B` | Overseer **·boss** | 180 | 17 | 15 | 12 | 16 | 212 | 0.90 | x2.00 |
+| `S` | Sentinel | 150 | 9 | 12 | 7 | 8 | 171 | 0.65 | x1.50 |
+| `C` | Construct | 128 | 11 | 9 | 6 | 5 | 148 | 0.70 | x1.50 |
+| `k` | Rootkit | 120 | 11 | 10 | 9 | 13 | 141 | 0.75 | x1.50 |
+| `c` | Cipher | 112 | 10 | 8 | 11 | 14 | 130 | 0.80 | x1.50 |
+| `v` | Virus | 112 | 10 | 6 | 10 | 12 | 128 | 0.60 | x1.50 |
+| `z` | ZeroDay | 98 | 14 | 4 | 10 | 12 | 116 | 0.65 | x1.50 |
+| `m` | Worm | 105 | 8 | 2 | 9 | 11 | 115 | 0.40 | x1.25 |
+| `x` | Scrapper | 98 | 9 | 5 | 9 | 7 | 112 | 0.45 | x1.25 |
+| `t` | Trojan | 90 | 10 | 4 | 10 | 13 | 104 | 0.50 | x1.25 |
+| `p` | Proxy | 82 | 12 | 2 | 12 | 13 | 96 | 0.55 | x1.25 |
+| `r` | Crawler | 75 | 8 | 4 | 11 | 8 | 87 | 0.50 | x1.25 |
+| `d` | SubProcess | 54 | 5 | 3 | 12 | 15 | 62 | 0.30 | x1.00 |
+| `s` | Sprite | 48 | 4 | 2 | 14 | 11 | 54 | 0.20 | x1.00 |
+| `o` | Drone | 42 | 3 | 2 | 13 | 7 | 47 | 0.15 | x1.00 |
+| `g` | Glitch | 36 | 3 | 1 | 13 | 5 | 40 | 0.15 | x1.00 |
 
 ## Attack against defense
 
@@ -174,7 +176,10 @@ Construct and Sentinel, the two heaviest non-bosses. Both bosses sit near the
 top anyway, which is the one place the roster does not trade power for pace.
 Speed is an initiative baseline rather than a turn order, though — every
 combatant rolls `base_speed + d10` each round, so a 4-point gap still loses
-sometimes.
+sometimes. The same number sets a posted program's pace at a machine too: a
+cycle scales faster above `DEFAULT_BASE_SPEED` and slower below it, so a
+Sprite mining a Mk1 node finishes cycles a fifth quicker than a Construct
+doing the same job (see [`assets/species/README.md`](../assets/species/README.md)).
 
 ## Taming cost against growth tier
 

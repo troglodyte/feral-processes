@@ -689,6 +689,7 @@ impl Game {
                 base_speed: species.base_speed,
                 base_int: species.base_int,
                 affinities: species.affinities.non_neutral(),
+                base_job: species.affinity_class(),
             }),
         })
     }

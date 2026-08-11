@@ -5,7 +5,7 @@ use super::bars::*;
 use super::manifest_layout::*;
 use super::popup::*;
 use super::*;
-use feral_processes_engine::species::MoveDef;
+use feral_processes_engine::species::{AffinityClass, MoveDef};
 use feral_processes_engine::{
     ManifestEquipSlot, ManifestSubject, ManifestView, PlayerManifest, ProgramManifest,
 };
@@ -475,12 +475,16 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
     // disappears. Speed moved across rather than being duplicated: it means
     // initiative in a fight and pace at a machine, and one number said twice
     // on one page reads as two different numbers.
+    let mut work = vec![
+        stat("Speed", p.base_speed.to_string()),
+        stat("Analysis", p.base_int.to_string()),
+    ];
+    if let Some(class) = p.base_job {
+        work.push(stat("Base job", base_job_label(class)));
+    }
     sections.push(Section {
         title: "WORK",
-        rows: section_rows(vec![
-            stat("Speed", p.base_speed.to_string()),
-            stat("Analysis", p.base_int.to_string()),
-        ]),
+        rows: section_rows(work),
         full_width: false,
     });
 
@@ -491,6 +495,28 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
             full_width: true,
         });
     }
+}
+
+/// What a class does when its program is posted to a structure, beside the
+/// class' own name — "repair (Medic)".
+///
+/// Both halves earn their place. The job is what the row is *for*, and the
+/// class name is the only place in the game a player meets the vocabulary
+/// `assets/species/README.md` is written in; a row saying only "Medic" would
+/// be a word with no referent, and one saying only "repair" would leave the
+/// five classes unnamed everywhere.
+///
+/// Exhaustive on purpose: a sixth class must decide what it does at a post
+/// before it compiles, which is the same argument `render/stack.rs`'s
+/// `cell_mark` makes about a new `CellKind`.
+fn base_job_label(class: AffinityClass) -> String {
+    let job = match class {
+        AffinityClass::Striker | AffinityClass::Saboteur => "none",
+        AffinityClass::Bastion => "guard",
+        AffinityClass::Medic => "repair",
+        AffinityClass::Leech => "extraction",
+    };
+    format!("{job} ({class:?})")
 }
 
 fn move_row(mv: &MoveDef) -> SectionRow {
@@ -613,6 +639,12 @@ mod tests {
             base_speed,
             base_int,
             affinities: vec![],
+            // The two boss species are the only shipped programs with no
+            // class, and a boss cannot be tamed or posted — so a job row is
+            // the ordinary case and this fixture is deliberately the one
+            // that omits it, the same way it keeps a `work_resource` to
+            // hold SPECIES at its worst case.
+            base_job: None,
         }
     }
 
@@ -677,6 +709,80 @@ mod tests {
         );
     }
 
+    /// A class the player can post is stated on the one screen that says
+    /// what a program is like to post. Without it the three base jobs are
+    /// invisible: nothing else names a class anywhere in the game, and a
+    /// player would have to notice a Medic mending a wall by watching a
+    /// Durability number tick.
+    #[test]
+    fn the_work_box_names_what_a_class_does_at_a_post() {
+        let job_row = |class| {
+            let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+            let game = Game::new(
+                11,
+                feral_processes_engine::DifficultyMode::Forgiving,
+                assets,
+            )
+            .expect("shipped assets load");
+            let mut program = plain_program(14, 12);
+            program.base_job = class;
+            let mut sections = Vec::new();
+            program_sections(&mut sections, &game, &program);
+            sections
+                .iter()
+                .find(|s| s.title == "WORK")
+                .expect("a WORK box is always emitted")
+                .rows
+                .iter()
+                .find_map(|r| match r {
+                    SectionRow::Stat(label, value) if label == "Base job" => Some(value.clone()),
+                    _ => None,
+                })
+        };
+
+        assert_eq!(
+            job_row(Some(AffinityClass::Medic)).as_deref(),
+            Some("repair (Medic)")
+        );
+        assert_eq!(
+            job_row(Some(AffinityClass::Bastion)).as_deref(),
+            Some("guard (Bastion)")
+        );
+        assert_eq!(
+            job_row(Some(AffinityClass::Leech)).as_deref(),
+            Some("extraction (Leech)")
+        );
+    }
+
+    /// The two classes with no base job say so rather than going quiet. The
+    /// asymmetry is the design — with three pet slots, a program at a
+    /// machine is one absent from the party — and a blank row would read as
+    /// missing data instead of as a decision.
+    #[test]
+    fn a_class_with_no_base_job_says_so_on_the_row() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(
+            11,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            assets,
+        )
+        .expect("shipped assets load");
+        let mut program = plain_program(14, 12);
+        program.base_job = Some(AffinityClass::Striker);
+        let mut sections = Vec::new();
+        program_sections(&mut sections, &game, &program);
+
+        let work = sections.iter().find(|s| s.title == "WORK").unwrap();
+        assert!(
+            work.rows.iter().any(|r| matches!(
+                r,
+                SectionRow::Stat(label, value) if label == "Base job" && value == "none (Striker)"
+            )),
+            "a Striker's row has to state the absence, and WORK has {} rows",
+            work.rows.len()
+        );
+    }
+
     /// `manifest_layout::tests::worst_case_program` lists ROUTINES before
     /// MOVES, but `sections_for` does not: `program_sections` pushes MOVES
     /// last (it's the full-width band), and ROUTINES is appended only after
@@ -705,6 +811,9 @@ mod tests {
             effect: None,
             ranged: false,
         }];
+        // Every program a player can page to has a class, so the WORK box is
+        // three rows here and two only for a boss.
+        program.base_job = Some(AffinityClass::Striker);
         let view = ManifestView {
             entity: Entity::PLACEHOLDER,
             name: "Testmon".to_string(),
@@ -738,7 +847,7 @@ mod tests {
             vec![
                 ("COMBAT", 3, false),
                 ("SPECIES", 5, false),
-                ("WORK", 2, false),
+                ("WORK", 3, false),
                 ("MOVES", 1, true),
                 ("ROUTINES", 1, false),
             ],

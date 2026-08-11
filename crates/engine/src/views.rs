@@ -10,7 +10,7 @@ use crate::components::{EquippedItem, GlyphColor, MachineStatus, Rarity, TaskKin
 use crate::items::ItemId;
 use crate::perks::Perk;
 use crate::research::ResearchId;
-use crate::species::MoveDef;
+use crate::species::{AffinityClass, MoveDef};
 use crate::structures::StructureId;
 use crate::world::Biome;
 use bevy_ecs::prelude::Entity;
@@ -986,6 +986,16 @@ pub struct ProgramManifest {
     /// Empty for a species that declares nothing, so the screen omits the
     /// section entirely rather than drawing five rows of 1.00.
     pub affinities: Vec<(AffinityKind, f32)>,
+    /// The class this species reads as, which decides what it does when
+    /// posted to a structure — extraction, guarding or repair, or nothing
+    /// at all for the two classes with no base job.
+    ///
+    /// Carried as the class rather than as a finished phrase, because the
+    /// class is the vocabulary `assets/species/README.md` teaches and the
+    /// renderer is where every other player-facing word on this screen is
+    /// chosen ("Analysis" above is the same decision). `None` for a boss and
+    /// for anything else outside the class system.
+    pub base_job: Option<AffinityClass>,
 }
 
 /// An individual's four `Potential` rolls, surfaced separately rather than

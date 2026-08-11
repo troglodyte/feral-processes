@@ -338,7 +338,9 @@ mod tests {
             section("POTENTIAL", 5, false),
             section("AFFINITIES", MAX_AFFINITY_ROWS, false),
             section("SPECIES", 5, false),
-            section("WORK", 2, false),
+            // Speed, Analysis, Base job — a tameable program always has a
+            // class, so three is the real worst case and two is the boss.
+            section("WORK", 3, false),
             section("ROUTINES", 6, false),
             section("MOVES", MAX_BAND_ROWS, true),
         ]

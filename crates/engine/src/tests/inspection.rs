@@ -1,5 +1,35 @@
 //! The read-only views the renderer draws from, plus symlink targeting.
 
+#[test]
+fn a_manifest_carries_the_class_whose_base_job_it_names() {
+    use super::support::*;
+    use crate::species::AffinityClass;
+
+    let mut game = Game::new(3200, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 20, 5);
+    game.world.get_mut::<Creature>(program).unwrap().species = "sentinel".to_string();
+
+    assert_eq!(
+        program_manifest(&game, program).base_job,
+        Some(AffinityClass::Bastion),
+        "the screen that says what a program is like to post has to say \
+         which of the three base jobs it does"
+    );
+}
+
+/// A boss is outside the class system, and the manifest is the one screen a
+/// player meets one on — `Game::manifest` answers for a hostile too.
+#[test]
+fn a_boss_manifest_names_no_base_job() {
+    use super::support::*;
+
+    let mut game = Game::new(3201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 20, 5);
+    game.world.get_mut::<Creature>(program).unwrap().species = "overseer".to_string();
+
+    assert_eq!(program_manifest(&game, program).base_job, None);
+}
+
 use super::support::*;
 use crate::abilities::AffinityKind;
 use crate::game::inspection::difficulty_color;

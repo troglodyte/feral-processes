@@ -181,6 +181,22 @@ pub struct SpeciesDef {
     /// average.
     #[serde(default = "default_base_speed")]
     pub base_speed: i32,
+    /// How good a member of this species is at *extracting* — the fourth
+    /// term in `systems::mining_success_chance`, so it moves how often a
+    /// worked node fizzles rather than what a successful cycle pays.
+    ///
+    /// Read as a **deviation from `tuning::DEFAULT_BASE_INT`**, which is why
+    /// `#[serde(default)]` here is stronger than the usual modding promise:
+    /// an existing species file (including a mod's) doesn't merely keep
+    /// parsing, it keeps extracting at precisely its old rate, because the
+    /// term it contributes is zero.
+    ///
+    /// Not on `Stats`, and that is a decision rather than a shortcut: a stat
+    /// grows on level-up, so a level-20 bruiser would out-think a level-1
+    /// specialist and role would collapse back into tier — the confound this
+    /// field exists to remove. A species' aptitude is fixed to the species.
+    #[serde(default = "default_base_int")]
+    pub base_int: i32,
     pub moves: Vec<MoveDef>,
     /// If set, a tamed member of this species can work a matching resource node.
     pub work_resource: Option<ItemId>,
@@ -257,6 +273,10 @@ fn default_growth_multiplier() -> f32 {
 
 fn default_base_speed() -> i32 {
     crate::tuning::DEFAULT_BASE_SPEED
+}
+
+fn default_base_int() -> i32 {
+    crate::tuning::DEFAULT_BASE_INT
 }
 
 #[derive(Resource, Default)]
@@ -430,6 +450,51 @@ mod tests {
         )
         .expect("a species file with no base_speed must still parse");
         assert_eq!(def.base_speed, crate::tuning::DEFAULT_BASE_SPEED);
+    }
+
+    /// Same modding contract as `base_speed` above, and one step stronger:
+    /// the baseline is not merely *a* value a mod lands on, it is the value
+    /// at which `mining_success_chance`'s deviation term is zero. A species
+    /// file predating this field therefore extracts at exactly the rate it
+    /// did before the field existed.
+    #[test]
+    fn base_int_defaults_when_a_species_file_omits_it() {
+        let omitted: SpeciesDef = ron::from_str(
+            r#"(
+                id: "testmon",
+                name: "Testmon",
+                glyph: 't',
+                color: Green,
+                base_hp: 10,
+                base_atk: 1,
+                base_def: 1,
+                taming_difficulty: 0.5,
+                habitats: [OpenGrid],
+                moves: [(name: "Poke", power: 1)],
+                work_resource: None,
+            )"#,
+        )
+        .expect("a species file with no base_int must still parse");
+        assert_eq!(omitted.base_int, crate::tuning::DEFAULT_BASE_INT);
+
+        let declared: SpeciesDef = ron::from_str(
+            r#"(
+                id: "testmon",
+                name: "Testmon",
+                glyph: 't',
+                color: Green,
+                base_hp: 10,
+                base_atk: 1,
+                base_def: 1,
+                taming_difficulty: 0.5,
+                habitats: [OpenGrid],
+                base_int: 14,
+                moves: [(name: "Poke", power: 1)],
+                work_resource: None,
+            )"#,
+        )
+        .expect("a species file declaring base_int must parse");
+        assert_eq!(declared.base_int, 14);
     }
 
     #[test]

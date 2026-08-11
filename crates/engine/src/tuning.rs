@@ -268,6 +268,21 @@ pub const DEFAULT_BASE_SPEED: i32 = 10;
 /// anything genuinely fast.
 pub const PLAYER_BASE_SPEED: i32 = 11;
 
+/// Extraction-aptitude baseline for a species whose `.ron` file omits
+/// `base_int`, **and** the value the player themselves works a node at.
+///
+/// Deliberately one constant rather than the `DEFAULT_BASE_SPEED` /
+/// `PLAYER_BASE_SPEED` pair above. Those two differ and so earn separate
+/// names; here the player being *exactly* the roster average is the design,
+/// not a coincidence — it is what makes posting a sharp program better than
+/// doing the job yourself and posting a dull one worse. A second constant
+/// would let the two drift and quietly delete one side of that pressure.
+///
+/// It is also the zero point of `systems::mining_success_chance`'s fourth
+/// term, so an un-annotated mod species extracts at exactly the rate every
+/// species did before `base_int` existed.
+pub const DEFAULT_BASE_INT: i32 = 10;
+
 /// Each round every combatant rolls `base_speed + rng(0..=INITIATIVE_DIE)`
 /// and acts in descending order. Sized so a 4-point speed gap still loses
 /// the roll sometimes — order should be a tendency, not a lookup table.
@@ -1114,10 +1129,19 @@ pub const WORK_RESOURCE_DROP: std::ops::RangeInclusive<u32> = 2..=4;
 /// A mining node's per-cycle success chance is `MINING_SUCCESS_BASE` plus
 /// `MINING_SUCCESS_PER_LEVEL` per tier, capped at 1.0 — so a basic level-1
 /// node succeeds about half the time and upgrading buys reliability. The
-/// player's `Perk::KeenScavenger` adds a third term; see
-/// `systems::mining_success_chance`.
+/// player's `Perk::KeenScavenger` adds a third term, and whoever is working
+/// the node adds a fourth; see `systems::mining_success_chance`.
 pub const MINING_SUCCESS_BASE: f64 = 0.4;
 pub const MINING_SUCCESS_PER_LEVEL: f64 = 0.1;
+
+/// What one point of `SpeciesDef::base_int` **either side of**
+/// `DEFAULT_BASE_INT` is worth on the mining roll. The shipped roster spans
+/// 5 to 14, so the fourth term ranges about -0.10 to +0.08 — enough that a
+/// Cipher and a Construct posted to the same Mk1 node visibly disagree
+/// (0.30 against 0.50), and small enough that a node's own tier, worth
+/// `MINING_SUCCESS_PER_LEVEL` a step, still outruns species choice over a
+/// few upgrades.
+pub const MINING_SUCCESS_PER_INT: f64 = 0.02;
 
 /// Extra units a worked node pays per zone below the current one, on top of
 /// its upgrade tier — see `systems::node_payout`.

@@ -1,10 +1,17 @@
 # Species classes: role as an axis independent of tier
 
-Status: approved 2026-08-10. Phases 1-3 built and merged; phase 4 (4a and
-4b together) built 2026-08-11. Phase 5's three base jobs are what remains,
-and the decisions taken for them are in "Phase 5, as decided" below —
-5a/5b/5c are being built as one branch rather than three releases, since
-they share the runtime class derivation none of them had.
+Status: approved 2026-08-10. **All eight phases built.** Phases 1-3 merged;
+phase 4 (4a and 4b together) and phase 5 (5a/5b/5c as one branch, since
+they share the runtime class derivation none of them had) built
+2026-08-11. The decisions phase 5 settled are in "Phase 5, as decided"
+below, and it settled two of them differently from the sketch:
+
+- **The Bastion job is smaller than it reads**, because `run_raid` finds
+  its defender by `Task::target` alone — every posted program already
+  mitigated by its DEF, so the class is a multiplier rather than a switch.
+- **The Medic job is per structure and Guard-only**, and `structure_regen`
+  had to stop early-returning on a zero base-wide rate: a base with no
+  Patch Node is exactly the case a posted Medic is for.
 
 Two things phase 4 settled differently from the sketch below, both recorded
 in `assets/species/README.md`'s "The five classes", which is the authored
@@ -247,6 +254,12 @@ Eight releases, ordered so the first already changes how the game plays.
 4a. Author the missing ability content — referenced by nothing yet, zero Rust.
 4b. Attach the kits (after `generic_species` moves).
 5a/5b/5c. Leech yield, Bastion guard, Medic repair.
+
+All built. What is left is not a phase: **none of it has been played.**
+`balance_sim` models no posted programs and the arena models no base, so
+the three magnitudes (`LEECH_YIELD_BONUS`, `BASTION_DEF_MULTIPLIER`,
+`MEDIC_REPAIR_PER_INTERVAL`) rest on argument alone until someone runs
+`--template chains` and `--template extraction` with one of each posted.
 
 ## What this is blind to
 

@@ -440,14 +440,14 @@ fn all_five_affinity_perks_are_on_offer_in_the_picker() {
 /// than of the seed. Derived from the live curve so a retune of either
 /// constant cannot quietly leave the tests below rolling.
 ///
-/// `DEFAULT_BASE_INT` is the right aptitude to derive against because these
-/// tests reach the node through `Game::work_structure` — the player working
-/// it themselves, who is the baseline by definition. A test that posted a
-/// program instead would have to derive against *that species*, and would
-/// under-buy the moment the species turned out to be a dull one.
-fn buy_enough_keen_scavenger_to_cap_a_level_1_node(game: &mut Game) {
-    let levels = ((1.0
-        - crate::systems::mining_success_chance(1, 0, crate::tuning::DEFAULT_BASE_INT))
+/// `base_int` is whoever will actually be working the node, and it has to be
+/// a parameter rather than the baseline: the roll it is capping now includes
+/// the worker's own aptitude, so deriving against the player while a *dull*
+/// program does the job under-buys and leaves cycles fizzling. The player
+/// working the node passes `DEFAULT_BASE_INT`, being the baseline by
+/// definition; a posted program passes its own species'.
+fn buy_enough_keen_scavenger_to_cap_a_level_1_node(game: &mut Game, base_int: i32) {
+    let levels = ((1.0 - crate::systems::mining_success_chance(1, 0, base_int))
         / KEEN_SCAVENGER_BONUS_PER_LEVEL)
         .ceil() as usize;
     let player = game.player_entity();
@@ -478,7 +478,7 @@ fn keen_scavenger_reaches_the_roll_when_you_work_a_node_yourself() {
         "a fresh node has to roll at all for the perk to be measurable against it"
     );
 
-    buy_enough_keen_scavenger_to_cap_a_level_1_node(&mut game);
+    buy_enough_keen_scavenger_to_cap_a_level_1_node(&mut game, crate::tuning::DEFAULT_BASE_INT);
 
     game.work_structure(node)
         .expect("a deployed node is workable");
@@ -516,7 +516,12 @@ fn keen_scavenger_reaches_the_roll_a_cronjob_worker_runs() {
     let worker = spawn_tamed(&mut game, 10, 3);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
-    buy_enough_keen_scavenger_to_cap_a_level_1_node(&mut game);
+    // Read off the species actually posted rather than assumed: `spawn_tamed`
+    // picks whichever species declares no abilities, and what that resolves
+    // to is not this test's business — only that the cap is derived against
+    // the aptitude doing the work.
+    let worker_int = generic_species(&game).base_int;
+    buy_enough_keen_scavenger_to_cap_a_level_1_node(&mut game, worker_int);
 
     for _ in 0..60 {
         game.wait();

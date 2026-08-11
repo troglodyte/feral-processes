@@ -10,6 +10,7 @@
     growth_multiplier: 1.25,
     habitats: [NullSector, OpenGrid],
     base_speed: 9,
+    base_int: 11,
     moves: [
         (name: "Replicate", power: 5, ranged: true, effect: Some((kind: Bleed, chance: 0.4, duration: 2, power: 3))),
         (name: "Burrow Strike", power: 8),

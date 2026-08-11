@@ -10,6 +10,7 @@
     growth_multiplier: 1.5,
     habitats: [Mainframe, NullSector],
     base_speed: 9,
+    base_int: 13,
     moves: [
         (name: "Privilege Escalation", power: 10, effect: Some((kind: Stun, chance: 0.4, duration: 2, power: 0))),
         (name: "Kernel Panic", power: 12, ranged: true),

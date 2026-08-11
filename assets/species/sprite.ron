@@ -9,6 +9,7 @@
     taming_difficulty: 0.2,
     habitats: [OpenGrid, Mainframe],
     base_speed: 14,
+    base_int: 11,
     moves: [
         (name: "Ping", power: 5, ranged: true),
         (name: "Pulse", power: 8),

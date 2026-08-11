@@ -9,6 +9,7 @@
     taming_difficulty: 0.15,
     habitats: [OpenGrid, Mainframe],
     base_speed: 13,
+    base_int: 7,
     moves: [
         (name: "Buzz", power: 4),
         (name: "Recon Ping", power: 3, ranged: true),

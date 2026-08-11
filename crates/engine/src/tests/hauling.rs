@@ -284,11 +284,23 @@ fn clearing_a_full_buffer_takes_several_trips() {
     park_at_post(&mut game, worker, node);
 
     let cap = capacity_of(&game, node);
-    fill_output(&mut game, node, ids::CORE_FRAGMENT, cap);
 
-    tick_until(&mut game, 600, |g| {
-        node_output(g, depot, ids::CORE_FRAGMENT) >= cap
-    });
+    // Topped back up every tick, which drops two couplings this test never
+    // meant to have. A worker departs only from a *clogged* machine, so
+    // without the refill each trip after the first waits on the node
+    // re-filling its own buffer — which puts a hauling test at the mercy of
+    // how fast the posted program extracts, and then of whether a GC Entropy
+    // Sweep flattens the Depot before the fourth load lands. Both were true
+    // here: the run held together on seed luck until the extraction rate
+    // moved underneath it. What is under test is that a buffer's worth
+    // crosses in `HAUL_CARRY_CAPACITY` loads, not how quickly it refills.
+    for _ in 0..600 {
+        if node_output(&game, depot, ids::CORE_FRAGMENT) >= cap {
+            break;
+        }
+        fill_output(&mut game, node, ids::CORE_FRAGMENT, cap);
+        game.tick();
+    }
 
     assert!(
         node_output(&game, depot, ids::CORE_FRAGMENT) >= cap,

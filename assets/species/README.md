@@ -46,6 +46,26 @@ is skipped with a warning logged in-game rather than crashing startup.
     // untouched.
     base_speed: 12,
 
+    // Optional; can be left out entirely (defaults to 10). How good this
+    // species is at *extracting* — posted to a Mining Node or any other
+    // producing structure, it changes how often a cycle fizzles rather than
+    // what a successful one pays out. The shipped roster spans 5 (Construct
+    // and Glitch, neither of them thinkers) to 15 (SubProcess); the player
+    // works a node at 10.
+    //
+    // The number is read as a *distance from 10*, not as an absolute, which
+    // is worth knowing before you tune it: 10 contributes exactly nothing,
+    // above it helps and below it hurts. That is why a species file written
+    // before this field existed doesn't merely keep parsing — it keeps
+    // extracting at precisely the rate it always did.
+    //
+    // Deliberately not tied to how tough the species is. A Sprite out-mines
+    // a Sentinel, and the roster is authored so every difficulty tier has
+    // both a sharp program and a dull one on it. If you are adding species,
+    // keep that true: aptitude that climbs with tier is just the difficulty
+    // ladder wearing a second name, and the player learns nothing from it.
+    base_int: 12,
+
     moves: [
         (name: "Move Name", power: 8),
         (name: "Other Move", power: 5),
@@ -78,7 +98,14 @@ is skipped with a warning logged in-game rather than crashing startup.
             power: 3,
         ))),
     ],
-    work_resource: Some("core_fragment"),  // or `None` if it shouldn't be assignable to a cronjob
+    work_resource: Some("core_fragment"),  // or `None` for no salvage drop
+    // Despite the name, work_resource does not decide what a tamed member of
+    // this species gathers, and does not gate whether it can be posted to a
+    // cronjob — any program can work any structure, and a cronjob's output
+    // comes from the structure's own `produces`. What it actually sets is
+    // what *killing* a wild one drops. Its only other reader is the
+    // inspection view.
+    //
     // work_resource (above) and equipment_drop (below) both take any item
     // id from assets/items/*.ron — see assets/items/README.md for the
     // schema, and the top-level README's "Item ids" for the full set.

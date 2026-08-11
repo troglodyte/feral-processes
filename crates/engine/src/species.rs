@@ -651,6 +651,81 @@ mod tests {
         assert_eq!(get("wintermute"), 2.0);
     }
 
+    /// The point of `base_int` is a species axis that is **not** the ladder
+    /// wearing another name. Growth multiplier is the ladder, so the property
+    /// asserted here is that aptitude cuts across it.
+    ///
+    /// Deliberately not "INT is uncorrelated with tier": a correlation
+    /// threshold is fragile to a one-point retune and would fail for reasons
+    /// nobody could read. These two are the things a *player* could notice —
+    /// that every rung has both a sharp and a dull program on it, and that
+    /// climbing the ladder is not how you get the best extractor.
+    ///
+    /// Bosses are excluded because they can never be posted to a node, so
+    /// their values are flavour and must not be able to carry this either
+    /// way.
+    #[test]
+    fn extraction_aptitude_cuts_across_the_difficulty_ladder() {
+        let (db, warnings) =
+            SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
+        assert!(
+            warnings.is_empty(),
+            "species assets should all load cleanly: {warnings:?}"
+        );
+
+        let ordinary: Vec<&SpeciesDef> = db.all().filter(|s| !s.is_boss).collect();
+        let mean =
+            ordinary.iter().map(|s| s.base_int).sum::<i32>() as f64 / ordinary.len() as f64;
+
+        let mut bands: std::collections::BTreeMap<String, Vec<&SpeciesDef>> =
+            std::collections::BTreeMap::new();
+        for s in &ordinary {
+            bands
+                .entry(format!("{:.2}", s.growth_multiplier))
+                .or_default()
+                .push(s);
+        }
+        assert!(
+            bands.len() >= 3,
+            "the ladder should have at least three rungs to cut across, found {}",
+            bands.len()
+        );
+
+        for (band, members) in &bands {
+            assert!(
+                members.iter().any(|s| (s.base_int as f64) > mean),
+                "growth band {band} has no species above the roster's mean aptitude \
+                 ({mean:.1}), so on that rung aptitude is just the ladder again"
+            );
+            assert!(
+                members.iter().any(|s| (s.base_int as f64) < mean),
+                "growth band {band} has no species below the roster's mean aptitude \
+                 ({mean:.1}), so on that rung aptitude is just the ladder again"
+            );
+        }
+
+        // Phrased as two maxima rather than "the argmax isn't on the top
+        // rung", which would be decided by how `max_by_key` happens to break
+        // a tie — a property of the iterator, not of the roster.
+        let steepest = ordinary
+            .iter()
+            .map(|s| s.growth_multiplier)
+            .fold(f32::MIN, f32::max);
+        let sharpest_overall = ordinary.iter().map(|s| s.base_int).max().unwrap();
+        let sharpest_on_top_rung = ordinary
+            .iter()
+            .filter(|s| s.growth_multiplier == steepest)
+            .map(|s| s.base_int)
+            .max()
+            .expect("the steepest band has members");
+        assert!(
+            sharpest_on_top_rung < sharpest_overall,
+            "the best extractor in the game ({sharpest_overall}) is available on the \
+             steepest growth band, which is how 'best extractor' collapses back into \
+             'furthest up the ladder'"
+        );
+    }
+
     #[test]
     fn can_nest_is_set_only_for_the_intended_swarm_flavored_species() {
         let (db, warnings) =

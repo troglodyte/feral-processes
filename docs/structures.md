@@ -1,7 +1,7 @@
 # Structures
 
 Every shipped structure in feral-processes, charted from its own file in
-`assets/structures/`. 21 of them.
+`assets/structures/`. 23 of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
 `assets/structures/*.ron` on 2026-08-06 and will drift the moment one of those
@@ -15,12 +15,12 @@ that automate a base, not the base itself.
 
 | | |
 |---|---|
-| structures | 21 |
+| structures | 23 |
 | producers (make something from nothing, on a timer) | 4 |
-| assemblers (consume a neighbour's output) | 9 |
+| assemblers (consume a neighbour's output) | 11 |
 | utility | 8 |
 | upgradeable | 5, all to Mk5 |
-| built from something other than salvage | 4 — Disk Press, Assembly Bay, Patch Node, Zone Portal |
+| built from something other than salvage | 5 — Disk Press, Assembly Bay, Refactor Bench, Patch Node, Zone Portal |
 
 ## Everything that can be built
 
@@ -40,6 +40,8 @@ that automate a base, not the base itself.
 | `%` | Armory | 18 `core_fragment` | 15 | `hardened_shell` |
 | `*` | Fabricator | 18 `core_fragment` | 15 | `trace_sniffer` |
 | `Y` | Assembly Bay | 20 `core_fragment`, 4 `charge_coil` | 10 | `patch_routine` |
+| `A` | Annealing Node | 16 `core_fragment` | 20 | `annealed_core` |
+| `X` | Refactor Bench | 22 `core_fragment`, 4 `annealed_core` | 10 | `recompile_kernel` |
 | `$` | iso Market | 16 `core_fragment` | - | buys and sells, 1 Credit a unit |
 | `=` | Data Cache | 10 `core_fragment` | - | +5 roster slots while standing |
 | `D` | Depot | 12 `core_fragment` | 100 | programs empty full machines into it |
@@ -68,6 +70,7 @@ $ Mining Node   -> L Lathe          -> P Disk Press    -> routine_disk
 $ Mining Node   -> B Refinery       -> % Armory        -> hardened_shell
 $ Mining Node   -> S Transcriber    -> * Fabricator    -> trace_sniffer
 $ Mining Node   -> W Winding Node   -> Y Assembly Bay  -> patch_routine
+$ Mining Node   -> A Annealing Node -> X Refactor Bench -> recompile_kernel
 
 standalone taps (no machine downstream):
   T Log Scraper   -> raw_trace every 10 ticks
@@ -75,7 +78,7 @@ standalone taps (no machine downstream):
   + Power Conduit -> power_cell every 6 ticks
 ```
 
-Every one of the nine assembler recipes is a **single ingredient**, and that
+Every one of the eleven assembler recipes is a **single ingredient**, and that
 is a property of the items rather than the machines — a machine runs its
 product's own `craftable.cost`, so there is no separate recipe on the
 structure that could drift from the bench recipe. A second ingredient added to
@@ -96,8 +99,9 @@ of the four lines exist.
 | Armory | `bytecode_block` | 18 `core_fragment` |
 | Fabricator | `logic_wafer` | 18 `core_fragment` |
 | Assembly Bay | `charge_coil` | 20 `core_fragment`, 4 `charge_coil` |
+| Refactor Bench | `annealed_core` | 22 `core_fragment`, 4 `annealed_core` |
 
-2 of those 4 are built out of the very thing their own feeder makes.
+3 of those 5 are built out of the very thing their own feeder makes.
 The Disk Press costs Blank Substrate and the Assembly Bay costs Charge Coils, so
 the line that runs the bench is also the line that pays for it. The Armory and
 the Fabricator are not — both cost plain salvage, so they can be put up before
@@ -117,9 +121,11 @@ Lathe           12  ##############....................
 Refinery        12  ##############....................
 Transcriber     12  ##############....................
 Winding Node    12  ##############....................
+Annealing Node  12  ##############....................
 Research Node   14  ################..................
 Disk Press      20  #######################...........
 Assembly Bay    20  #######################...........
+Refactor Bench  20  #######################...........
 Armory          30  ##################################
 Fabricator      30  ##################################
 ```

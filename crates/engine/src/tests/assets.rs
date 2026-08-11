@@ -162,6 +162,50 @@ fn no_craftable_item_is_worth_more_than_its_ingredients() {
     assert!(checked > 20, "only {checked} craftable items were checked");
 }
 
+/// An upgrade item's magnitudes are `.ron` data, so nothing in Rust stops one
+/// shipping at zero effect or with no text saying what it does — and this is
+/// the one item class whose whole purpose is a number the player never sees
+/// applied twice. A dud reads on screen exactly like a real one.
+///
+/// The finiteness half is belt-and-braces over `ItemDef::non_finite_field`,
+/// which already refuses such a file at load: that guard would make a broken
+/// upgrade item *vanish* rather than misbehave, and a silently absent item is
+/// the harder failure to trace back to its file.
+#[test]
+fn every_shipped_upgrade_item_says_what_it_does() {
+    let game = Game::new(82, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut checked = 0;
+    for def in game.item_defs() {
+        let Some(upgrade) = def.upgrade else {
+            continue;
+        };
+        let id = def.id.as_str();
+        for (field, pct) in [
+            ("hp_percent", upgrade.hp_percent),
+            ("atk_percent", upgrade.atk_percent),
+            ("def_percent", upgrade.def_percent),
+        ] {
+            assert!(pct.is_finite(), "{id}: {field} is not a finite number");
+            assert!(pct >= 0.0, "{id}: {field} is negative — a downgrade");
+        }
+        assert!(
+            upgrade.spends_a_slot() || upgrade.zone_bump,
+            "{id} declares an upgrade that does nothing at all"
+        );
+        assert!(
+            !def.description.is_empty(),
+            "{id} upgrades a program without saying so anywhere the player can read"
+        );
+        checked += 1;
+    }
+    assert_eq!(
+        checked, 7,
+        "expected the Recompile Kernel, the three craftable buffs and the three rare \
+         drops; an upgrade item that lost its `upgrade` field would drop out of this \
+         scan unnoticed"
+    );
+}
+
 /// A production line is a straight line: raw producer → refiner → bench, each
 /// machine pulling from exactly one upstream. That is a property of the
 /// *recipes*, not of the machines — an assembler runs its product's own
@@ -197,8 +241,8 @@ fn every_shipped_assembler_recipe_is_a_single_ingredient() {
         checked += 1;
     }
     assert_eq!(
-        checked, 9,
-        "expected the nine shipped assemblers; one that lost its recipe would drop out of this scan unnoticed"
+        checked, 11,
+        "expected the eleven shipped assemblers; one that lost its recipe would drop out of this scan unnoticed"
     );
 }
 
@@ -950,12 +994,12 @@ fn every_shipped_assembles_names_an_item_that_declares_a_recipe() {
         }
     }
     assert_eq!(
-        checked, 9,
+        checked, 11,
         "the shipped chains are Refinery, Winding Node and Assembly Bay, plus the \
          Lathe, Transcriber and Disk Press, plus the Compiler, plus the Armory and \
          Fabricator, which assemble one gear item apiece while staying benches for \
-         the rest — if that changes, change this count deliberately rather than \
-         letting the check go vacuous"
+         the rest, plus the Annealing Node and Refactor Bench — if that changes, \
+         change this count deliberately rather than letting the check go vacuous"
     );
 }
 

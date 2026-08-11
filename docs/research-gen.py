@@ -14,6 +14,7 @@ N = [
  ("armor_bench",         "Reactive Armor",       18, ["automation"],      ("structures", ["armory"])),
  ("weapon_bench",        "Weapon Fabrication",   18, ["automation"],      ("structures", ["fabricator"])),
  ("routine_fabrication", "Routine Fabrication",  20, ["automation"],      ("structures", ["log_scraper", "lathe", "transcriber", "disk_press"])),
+ ("program_refactoring", "Program Refactoring",  34, ["automation"],      ("structures", ["annealing_node", "refactor_bench"])),
  ("fortification",       "Fortification",        15, ["power_grid"],      ("structures", ["shield", "patch_node"])),
  ("self_exec",           "Self-Execution",       12, ["routine_fabrication"], ("abilities", ["priority_boost"])),
  ("field_ops",           "Field Operations",     16, ["self_exec"],       ("abilities", ["repair_loop", "coolant_flush", "trickle_charge"])),
@@ -114,7 +115,7 @@ abilities_unlocked = sum(len(r["unlocks"][1]) for r in R if r["unlocks"][0] == "
 doc = f"""# Research tree
 
 Every shipped research node in feral-processes, charted from its own file in
-`assets/research/`. Nineteen of them.
+`assets/research/`. Twenty of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
 `assets/research/*.ron` on 2026-08-05 and will drift the moment one of those

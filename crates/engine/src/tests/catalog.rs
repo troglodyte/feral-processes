@@ -64,12 +64,14 @@ fn structure_defs_are_grouped_by_category_and_stable_across_sessions() {
         assert_eq!(
             assemblers,
             [
+                "annealing_node",
                 "armory",
                 "assembly_bay",
                 "compiler",
                 "disk_press",
                 "fabricator",
                 "lathe",
+                "refactor_bench",
                 "refinery",
                 "transcriber",
                 "winding_node"

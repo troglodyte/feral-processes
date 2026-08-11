@@ -1,0 +1,8 @@
+(
+    id: "bounds_check",
+    name: "Bounds Check",
+    description: "Wraps a tamed program's reads in guard rails for good: +5% DEF, and one of its five upgrade slots.",
+    value: Some(5),
+    craftable: Some((cost: [("annealed_core", 2)], requires_structure: Some("refactor_bench"))),
+    upgrade: Some((def_percent: 5.0)),
+)

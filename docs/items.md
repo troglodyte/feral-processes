@@ -1,10 +1,10 @@
 # Item catalogue
 
 Every shipped item in feral-processes, charted from its own file in
-`assets/items/`. Forty-six of them.
+`assets/items/`. Fifty-four of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/items/*.ron` on 2026-08-05 and will drift the moment one of those
+`assets/items/*.ron` on 2026-08-11 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
 `ItemId` is a string newtype rather than an enum, so a new item never requires
@@ -13,11 +13,12 @@ for test setup and data-defined recipes, and nothing else needs them.
 
 | | |
 |---|---|
-| items | 46 |
+| items | 54 |
 | equipment | 31 across 3 slots |
-| craftable | 34 |
-| need a bench | 25 |
-| drop from a kill | 31 |
+| craftable | 39 |
+| need a bench | 30 |
+| drop from a kill | 34 |
+| upgrade a companion | 7 |
 | species that drop anything | 17 |
 
 ## The value ladder
@@ -30,9 +31,9 @@ on it rather than a price of its own. So the ladder below is the economy.
 THE VALUE LADDER
 
 printable     1-2     5 items   a base can make it out of nothing
-scavenged     3-8    14 items   salvage and intermediates
+scavenged     3-8    19 items   salvage and intermediates
 standard     12-16   11 items   the craftable working set
-researched   20-60    6 items   needs a node and a bench
+researched   20-60    9 items   needs a node and a bench
 premium      80-120   9 items   portal_fragment gear
 
 unpriced: Credits (TradeCurrency)
@@ -130,6 +131,7 @@ breach.
 | Kinetic Edge | 7 | 7 core_fragment | hand |
 | Packet Buffer | 7 | 7 core_fragment | hand |
 | Handshake Forge | 8 | 8 core_fragment | hand |
+| Annealed Core | 3 | 4 core_fragment | `annealing_node` |
 | Hardened Shell | 12 | 3 bytecode_block | `armory` |
 | Null Weave | 14 | 3 bytecode_block, 1 charge_coil | `armory` |
 | Static Mesh | 14 | 2 bytecode_block, 1 charge_coil, 1 logic_wafer | `armory` |
@@ -152,38 +154,72 @@ breach.
 | Siege Compiler | 90 | 18 portal_fragment | `fabricator` |
 | Singularity Matrix | 120 | 20 portal_fragment, 3 logic_wafer, 3 charge_coil, 2 bytecode_block | `fabricator` |
 | Blank Substrate | 3 | 4 core_fragment | `lathe` |
+| Bounds Check | 5 | 2 annealed_core | `refactor_bench` |
+| Buffer Extension | 5 | 2 annealed_core | `refactor_bench` |
+| Inline Cache | 5 | 2 annealed_core | `refactor_bench` |
+| Recompile Kernel | 8 | 3 annealed_core | `refactor_bench` |
 | Bytecode Block | 4 | 4 core_fragment | `refinery` |
 | Logic Wafer | 3 | 4 raw_trace | `transcriber` |
 | Charge Coil | 3 | 3 power_cell | `winding_node` |
 
-25 of the 46 items name a bench, and the nine assembler
-recipes in the game are exactly the products of the nine machines — because a
+30 of the 54 items name a bench, and the eleven assembler
+recipes in the game are exactly the products of the eleven machines — because a
 machine runs its product's own `craftable.cost`, there is no second recipe on
 the structure that could drift from the bench recipe, and every craftable a
 mod adds is automatable for free.
+
+## Companion upgrades
+
+Seven items do something no other item does: they permanently rewrite a
+**tamed program**. They are applied from the party menu, never worn, never
+consumed in battle, and they never touch the player.
+
+| Item | Value | Effect | Source |
+|:---|---:|:---|:---|
+| Bounds Check | 5 | def+5% | `refactor_bench` |
+| Buffer Extension | 5 | hp+5% | `refactor_bench` |
+| Inline Cache | 5 | atk+5% | `refactor_bench` |
+| Recompile Kernel | 8 | zone+1 | `refactor_bench` |
+| Guard Page | 45 | def+12% | drop only |
+| JIT Cache | 45 | atk+12% | drop only |
+| Paged Arena | 45 | hp+12% | drop only |
+
+The split is the design: the **Recompile Kernel** is the one that keeps a
+companion level with the ground, doubling its stats to catch up one zone at a
+time and refusing once it has caught up with you — so it costs no upgrade
+slot, because a player should not have to burn a permanent slot just staying
+current. The six percentage buffs are specialisation instead, bounded at five
+slots per companion, and they are percentages precisely so they **commute**
+with the kernel: a buff bought in zone 1 is worth exactly as much three
+breaches later, and there is no ordering to exploit.
+
+Both halves come off one chain and one research node: Mining Node → Annealing
+Node → Refactor Bench, which assembles kernels on a timer and hand-gates the
+three craftable buffs. The other three arrive the way premium gear does — off
+a boss, or rarely off the mid-tier programs in the drop table below.
 
 ## Drops
 
 ```
 WHO DROPS WHAT
 
+overseer     Neural Amplifier 50%, Guard Page 20%, JIT Cache 20%, Paged Arena 20%, Oracle Core 12%, Singularity Matrix 8%
+rootkit      Ablative Plating 30%, Bastion Lattice 6%, Black ICE Pick 6%, Guard Page 5%, Oracle Core 5%
+sentinel     Firewall Plating 35%, Bastion Lattice 8%, Hardened Shell 8%, Siege Compiler 6%, Paged Arena 4%
+cipher       Cortex Hack 35%, Kernel Key 8%, Black ICE Pick 7%, Nullsteel Plate 6%, Guard Page 4%
 proxy        Neural Amplifier 30%, Trace Sniffer 10%, Null Weave 9%, Entropy Damper 7%, Recursion Blade 7%
+wintermute   Monofilament Whip 60%, Guard Page 25%, JIT Cache 25%, Paged Arena 25%, Singularity Matrix 15%
+zero_day     Neural Amplifier 30%, Phase Carapace 7%, Trace Sniffer 7%, Nullsteel Plate 6%, JIT Cache 5%
+virus        Neural Amplifier 25%, Kernel Key 6%, Phase Carapace 6%, Plasma Router 6%, JIT Cache 4%
 trojan       Overclock Core 20%, Recursion Blade 10%, Logic Probe 8%, Null Weave 7%, Sync Governor 6%
-rootkit      Ablative Plating 30%, Bastion Lattice 6%, Black ICE Pick 6%, Oracle Core 5%
 scrapper     Overclock Core 15%, Arc Lance 10%, Logic Probe 7%, Shim Blade 7%
 worm         Shim Blade 9%, Arc Lance 8%, Static Mesh 7%, Sync Governor 7%
-sentinel     Firewall Plating 35%, Bastion Lattice 8%, Hardened Shell 8%, Siege Compiler 6%
-cipher       Cortex Hack 35%, Kernel Key 8%, Black ICE Pick 7%, Nullsteel Plate 6%
 crawler      Firewall Plating 20%, Hardened Shell 10%, Entropy Damper 8%, Static Mesh 8%
-virus        Neural Amplifier 25%, Kernel Key 6%, Phase Carapace 6%, Plasma Router 6%
-zero_day     Neural Amplifier 30%, Phase Carapace 7%, Trace Sniffer 7%, Nullsteel Plate 6%
+construct    Overclock Core 30%, Plasma Router 8%, Siege Compiler 7%, Paged Arena 5%
 drone        Packet Buffer 10%, Handshake Forge 9%, Shiv Routine 8%
 sub_process  Kinetic Edge 10%, Packet Buffer 8%, Handshake Forge 7%
 glitch       Scrap Ward 10%, Kinetic Edge 8%, Probe Service 7%
-overseer     Neural Amplifier 50%, Oracle Core 12%, Singularity Matrix 8%
-construct    Overclock Core 30%, Plasma Router 8%, Siege Compiler 7%
 sprite       Shiv Routine 10%, Probe Service 9%, Scrap Ward 8%
-wintermute   Monofilament Whip 60%, Singularity Matrix 15%
 ```
 
 A drop table is declared on the **item**, naming the species that pay it out,

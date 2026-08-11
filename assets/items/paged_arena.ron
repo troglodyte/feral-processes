@@ -1,0 +1,8 @@
+(
+    id: "paged_arena",
+    name: "Paged Arena",
+    description: "Salvaged whole out of something that outlived its own memory limits. +12% max HP to one tamed program, and one of its five upgrade slots.",
+    value: Some(45),
+    droppable: Some([("wintermute", 0.25), ("overseer", 0.2), ("construct", 0.05), ("sentinel", 0.04)]),
+    upgrade: Some((hp_percent: 12.0)),
+)

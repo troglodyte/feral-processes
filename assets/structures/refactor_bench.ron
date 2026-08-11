@@ -1,0 +1,11 @@
+(
+    id: "refactor_bench",
+    name: "Refactor Bench",
+    description: "Assign a program here and it builds Recompile Kernels out of Annealed Cores from whatever is touching it. Compiles the three stat upgrades by hand. Put it next to an Annealing Node.",
+    glyph: 'X',
+    color: Orange,
+    build_cost: [("core_fragment", 22), ("annealed_core", 4)],
+    work: None,
+    capacity: 10,
+    assembles: Some((item: "recompile_kernel", ticks_per_unit: 20)),
+)

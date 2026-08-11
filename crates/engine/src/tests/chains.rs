@@ -534,6 +534,7 @@ fn each_bench_is_built_out_of_what_its_own_feeder_makes() {
     for (bench, feeder_product) in [
         ("assembly_bay", ids::CHARGE_COIL),
         ("disk_press", "blank_substrate"),
+        ("refactor_bench", "annealed_core"),
     ] {
         let cost = &structures.get(bench).expect("it ships").build_cost;
         assert!(

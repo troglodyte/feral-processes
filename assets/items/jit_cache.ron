@@ -1,0 +1,8 @@
+(
+    id: "jit_cache",
+    name: "JIT Cache",
+    description: "Compiled on the fly by something that never expected to be caught. +12% ATK to one tamed program, and one of its five upgrade slots.",
+    value: Some(45),
+    droppable: Some([("wintermute", 0.25), ("overseer", 0.2), ("zero_day", 0.05), ("virus", 0.04)]),
+    upgrade: Some((atk_percent: 12.0)),
+)

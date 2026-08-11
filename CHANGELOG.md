@@ -29,6 +29,31 @@ first, separated by a rule.
 
 ## Unreleased
 
+### Three of the five classes now have a job at your base
+
+A class has meant a stat shape and a kit — both about a fight. It now also
+decides what a program does when you post it to a structure.
+
+- A **Leech** draws an extra unit out of every successful gather cycle.
+- A **Bastion**'s Defense counts twice against a GC Entropy Sweep on the
+  structure it is guarding.
+- A **Medic** repairs that structure by 2 Durability every 20 ticks, which
+  is the first repair in the game that isn't a Patch Node — and the only
+  one a base with no Patch Node has at all.
+
+A **Striker** and a **Saboteur** do nothing at a post, and that is the
+decision the feature is for. You have three pet slots: every program at a
+machine is one absent from the party, so a base that runs itself is a party
+that can't fight, and the classes that are worth posting are exactly the
+ones you least want in the line. The manifest's WORK box now names each
+program's job beside its Speed and Analysis, so the trade is legible before
+you make it rather than after.
+
+Two limits worth knowing. A Leech draws nothing extra from a Research Node
+— banked resources pay a flat rate to everyone, which is what keeps the
+research ladder priced — and a Medic only mends while it is *guarding*: put
+it on a cronjob and it is extracting, not repairing.
+
 ### Every program now knows two moves, and which two says what it is
 
 Until now, eight of the seventeen species taught a captured program

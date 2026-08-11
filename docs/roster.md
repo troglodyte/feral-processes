@@ -268,6 +268,13 @@ kit is checked against it by `every_ordinary_species_kit_agrees_with_its_
 affinity_class`, which together stop a retune quietly changing a species'
 role. Bosses declare no affinity at all: they are outside the class system.
 
+The class also decides what a program does when it is **posted to a
+structure**: a Leech draws an extra unit from every successful gather cycle, a
+Bastion's Defense counts twice against a sweep on the structure it guards, and
+a Medic mends that structure by 2 Durability every 20 ticks. A Striker and a
+Saboteur do nothing at a post, which is the asymmetry the three pet slots make
+expensive — every program at a machine is one absent from the party.
+
 Every ordinary species grants two abilities: a class utility at level 2 that
 all three members of its class share, and a tier rung at level 6 that it holds
 alone. Nothing unlocks at level 1, which is what keeps `priority_boost` — the

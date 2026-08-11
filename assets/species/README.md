@@ -404,10 +404,40 @@ A kit entry must be a **battle** ability. `AffinityKind` is blind to the
 distinction: a `FieldBuff(kind: Def)` reports `Buff` like any other buff while
 never appearing in the Special picker, which is the one place a kit is spent.
 
+### Base jobs
+
+The class also decides what a program *does* when it is posted to a structure,
+and three of the five classes do something:
+
+| Class | Posted to a structure |
+|---|---|
+| Leech | draws one extra unit from every successful gather cycle |
+| Bastion | its Defense counts twice against a GC Entropy Sweep on that structure |
+| Medic | restores 2 Durability to that structure every 20 ticks |
+| Striker | nothing |
+| Saboteur | nothing |
+
+The two blanks are the point rather than a gap. Three pet slots means every
+program at a machine is one absent from the party, so a roster of Strikers is
+a party with nothing to leave behind and a roster of Leeches is a base with
+nobody to fight for it.
+
+Three details are worth knowing before authoring against this. The Leech bonus
+applies only where the payout curve does — a `flat_payout` node or a banked
+resource like `research_data` pays its flat 1 to everyone. The Bastion job is
+a multiplier on mitigation that *every* posted program already has, since a
+sweep's defender is whoever holds a task pointing at the structure. And the
+Medic job counts a **guard** post alone: a Medic running a cronjob is
+extracting, not mending, which is the cost that makes the posting a decision.
+
+The manifest's WORK box names a program's job, beside its Speed and Analysis.
+
 ### What holds all three legs together
 
-Two censuses in `crates/engine/src/species.rs`, both deriving the class from
-the affinities through one shared `class_of` and checking the rest against it:
+Two censuses in `crates/engine/src/species.rs`, both looking the class up from
+`SpeciesDef::affinity_class` — the same function the base jobs below read, so
+a census passing is evidence about the game rather than about the test — and
+checking the rest against it:
 `every_ordinary_species_stat_shape_agrees_with_its_affinity_class` for the
 stats and the speed, `every_ordinary_species_kit_agrees_with_its_affinity_
 class` for the kit. So editing a stat block or a kit without meaning to change

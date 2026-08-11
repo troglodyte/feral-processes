@@ -294,9 +294,11 @@ is skipped with a warning logged in-game rather than crashing startup.
     // one — only structures.
     //
     // This is how the Patch Node works: `repair: Some((per_tier: 1))` with
-    // no `work` recipe. It is also the *only* source of repair in the game —
-    // structures do not heal on their own at all, so raid damage is permanent
-    // until something declaring this field is standing.
+    // no `work` recipe. It is the only source of repair a *structure* can
+    // declare — structures do not heal on their own at all — and the other
+    // source is not a building: a Medic-class program posted to guard a
+    // structure mends that one structure (see `assets/species/README.md`,
+    // "Base jobs"). With neither standing, raid damage is permanent.
     repair: Some((per_tier: 1)),
 
     // Optional; can be left out entirely (defaults to un-upgradeable). If

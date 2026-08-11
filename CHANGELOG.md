@@ -27,6 +27,28 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.7.4
+
+### The roster tuner lands
+
+`cargo run --bin tuner` is a seeded hill-climb over the shipped species
+roster: it perturbs `assets/species/` into a scratch install, fights the
+result against authored arena scenarios, and scores the outcome against an
+objective read as data from `dev-tuning/objective.ron`. It has been parked
+on a branch since `0.5.10`; the code is unchanged apart from being brought
+up to the current arena API, and the whole of it is developer tooling —
+`assets/` is never written to, and the tool proposes rather than applies.
+
+Two things about it are worth knowing before running one. Its constraint
+layer refuses any candidate that would nerf a program the player actually
+fields, so a search cannot buy an easier fight by weakening the party's own
+roster. And its headline finding is recorded in `dev-tuning/NOTES.md`:
+**Stack depth 5 is not a roster problem.** Zone and depth stat scaling
+compound — 4x at zone 3 times 3.32x at depth 5 is 13.3x base stats — which
+floors every party hit at `MIN_DAMAGE`, and no species file inside any sane
+bound can undo a multiplier. The tool was built to answer that question and
+the answer is that it should not try.
+
 ## 0.7.3
 
 ### Fix: the `chains` template's spare programs carry their species kit

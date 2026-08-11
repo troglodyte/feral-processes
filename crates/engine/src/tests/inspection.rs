@@ -1,10 +1,14 @@
 //! The read-only views the renderer draws from, plus symlink targeting.
 
+use super::support::*;
+use crate::abilities::AffinityKind;
+use crate::game::inspection::difficulty_color;
+use crate::species::AffinityClass;
+use crate::tuning::MAX_FUSIONS;
+use crate::*;
+
 #[test]
 fn a_manifest_carries_the_class_whose_base_job_it_names() {
-    use super::support::*;
-    use crate::species::AffinityClass;
-
     let mut game = Game::new(3200, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let program = spawn_tamed(&mut game, 20, 5);
     game.world.get_mut::<Creature>(program).unwrap().species = "sentinel".to_string();
@@ -21,20 +25,12 @@ fn a_manifest_carries_the_class_whose_base_job_it_names() {
 /// player meets one on — `Game::manifest` answers for a hostile too.
 #[test]
 fn a_boss_manifest_names_no_base_job() {
-    use super::support::*;
-
     let mut game = Game::new(3201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let program = spawn_tamed(&mut game, 20, 5);
     game.world.get_mut::<Creature>(program).unwrap().species = "overseer".to_string();
 
     assert_eq!(program_manifest(&game, program).base_job, None);
 }
-
-use super::support::*;
-use crate::abilities::AffinityKind;
-use crate::game::inspection::difficulty_color;
-use crate::tuning::MAX_FUSIONS;
-use crate::*;
 
 #[test]
 fn a_creatures_display_label_is_tagged_with_its_spawn_zone() {

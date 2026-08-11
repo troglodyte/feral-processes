@@ -797,16 +797,22 @@ pub fn assembler_system(
         }
         announce(&mut statuses, &mut log, MachineStatus::Running);
 
-        let ticks_per_unit = def
-            .assembles
-            .as_ref()
-            .map(|a| a.ticks_per_unit.max(1))
-            .unwrap_or(1);
         let Ok((_, mut task)) = tasks.get_mut(worker) else {
             continue;
         };
+        // The rate comes from the task, not from `def.assembles`: it was
+        // baked at assignment out of the machine's `ticks_per_unit` and the
+        // posted program's `base_speed` (`Game::work_ticks_for`). Safe
+        // because `upgrade_structure` never touches `ticks_per_unit`, so
+        // nothing changes a machine's rate after a program is on it, and
+        // `displace_task_holder` allows only one `GatherResource` per
+        // structure. The cost is that a cronjob in an old save keeps its
+        // pre-`base_speed` rate until it is re-posted.
+        //
+        // `.max(1)` for the reason the def read had it: a zero would
+        // produce on every tick forever.
         task.progress += 1;
-        if task.progress < ticks_per_unit {
+        if task.progress < task.required.max(1) {
             continue;
         }
         task.progress = 0;

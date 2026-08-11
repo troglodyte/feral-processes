@@ -271,6 +271,56 @@ fn output_of(game: &Game, machine: Entity, item: &str) -> u32 {
         .unwrap_or(0)
 }
 
+/// Posts a program of `species` to `machine` through the real assignment
+/// path, so its `Task::required` is baked out of the machine's rate and the
+/// species' `base_speed` by `Game::work_ticks_for` rather than hand-written.
+///
+/// `assign_cronjob` starts a program from the player's tile, so the player is
+/// stood at the post first — otherwise the two machines under comparison
+/// would differ by a walk as well as by a rate.
+fn post_species(game: &mut Game, machine: Entity, species: &str) -> Entity {
+    let worker = spawn_tamed(game, 10, 3);
+    game.world.get_mut::<Creature>(worker).unwrap().species = species.to_string();
+    stand_player_at_post(game, machine);
+    game.assign_cronjob(worker, machine)
+        .expect("an assembler takes a program like any other machine");
+    worker
+}
+
+/// The phase's whole claim, at an assembler: two identical machines,
+/// identically fed, differing only in who is posted. It is invisible until
+/// `assembler_system` stops reading the def's `ticks_per_unit` and starts
+/// reading the rate baked into `Task::required` at assignment.
+///
+/// Thirty ticks, deliberately: `test_assembler` is rated 3 ticks a unit, so
+/// the Sprite (`base_speed: 14`) runs it at 2 and the Construct
+/// (`base_speed: 6`) at 4, and neither machine reaches the 20 its `Stock`
+/// holds. A longer run would clog the quick one and start measuring capacity
+/// instead of pace.
+#[test]
+fn a_quicker_program_runs_the_same_assembler_harder() {
+    let mut game = game_with_assembler("assembler_speed", 1000);
+
+    let quick = assembler_at(&mut game, 40, 40, false);
+    feeder_at(&mut game, 41, 40, 200);
+    post_species(&mut game, quick, "sprite");
+
+    let slow = assembler_at(&mut game, 40, 50, false);
+    feeder_at(&mut game, 41, 50, 200);
+    post_species(&mut game, slow, "construct");
+
+    for _ in 0..30 {
+        game.tick();
+    }
+
+    let fast_out = output_of(&game, quick, ids::POWER_CELL);
+    let slow_out = output_of(&game, slow, ids::POWER_CELL);
+    assert!(
+        fast_out > slow_out,
+        "the sprite-run machine should be ahead — got {fast_out} against {slow_out}"
+    );
+}
+
 fn status_of(game: &Game, machine: Entity) -> Option<MachineStatus> {
     game.world.get::<MachineStatus>(machine).copied()
 }
@@ -769,14 +819,26 @@ fn two_benches_competing_for_one_coil_resolve_in_position_order() {
 }
 
 /// A staffed structure of `kind` at an absolute tile.
+///
+/// The task carries the machine's own `ticks_per_unit`, because
+/// `assembler_system` reads `Task::required` — these tests are about which
+/// machine pulls what, and a worker that finished a batch on tick 1 would
+/// eat the very input they assert on.
 fn staffed(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
     let machine = deployed(game, kind, x, y);
+    let required = game
+        .world
+        .resource::<crate::structures::StructureDb>()
+        .get(kind)
+        .and_then(|d| d.assembles.as_ref())
+        .map(|a| a.ticks_per_unit.max(1))
+        .unwrap_or(1);
     let worker = spawn_tamed(game, 10, 3);
     game.world.entity_mut(worker).insert(Task {
         kind: TaskKind::GatherResource,
         target: machine,
         progress: 0,
-        required: 1,
+        required,
     });
     machine
 }
@@ -1155,11 +1217,21 @@ fn the_shipped_compiler_compiles_catalysts_out_of_an_adjacent_mining_node() {
         ))
         .id();
     let worker = spawn_tamed(&mut game, 10, 3);
+    // The Compiler's own `ticks_per_unit`, for the reason `staffed` carries
+    // it: `assembler_system` reads `Task::required`, and a hand-written `1`
+    // would have this machine finish a batch every tick.
+    let required = game
+        .world
+        .resource::<crate::structures::StructureDb>()
+        .get("compiler")
+        .and_then(|d| d.assembles.as_ref())
+        .map(|a| a.ticks_per_unit.max(1))
+        .expect("the Compiler ships as an assembler");
     game.world.entity_mut(worker).insert(Task {
         kind: TaskKind::GatherResource,
         target: compiler,
         progress: 0,
-        required: 1,
+        required,
     });
     let stocked = batch * 50;
     let feeder = feeder_at(&mut game, 41, 40, stocked);

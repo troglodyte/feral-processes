@@ -312,12 +312,16 @@ mod tests {
 
     /// The fullest page a program can produce, at every cap that actually
     /// bounds `program_sections`' output: 3 combat stats, 5 potential lines,
-    /// `MAX_AFFINITY_ROWS` affinity lines, 6 species facts,
-    /// `COMPANION_ROUTINE_SLOT_CAP` routines, and `MAX_BAND_ROWS` moves.
-    /// POTENTIAL and AFFINITIES together are the ordinary case for a tamed
-    /// Scrapper, not an edge case — the balance sweep models a mid-grade
-    /// party as three of them, and `scrapper.ron` carries both a
-    /// `Potential` roll and a non-neutral `damage` affinity.
+    /// `MAX_AFFINITY_ROWS` affinity lines, 5 species facts (a non-boss
+    /// species carrying a `work_resource` — Habitats, Work aptitude, the two
+    /// Decompile rows, Growth), 2 work facts in their own WORK box (Speed
+    /// and Analysis, split out of SPECIES so it can hold that fifth row
+    /// without hitting `MAX_SECTION_ROWS`), `COMPANION_ROUTINE_SLOT_CAP`
+    /// routines, and `MAX_BAND_ROWS` moves. POTENTIAL and AFFINITIES
+    /// together are the ordinary case for a tamed Scrapper, not an edge
+    /// case — the balance sweep models a mid-grade party as three of them,
+    /// and `scrapper.ron` carries both a `Potential` roll and a non-neutral
+    /// `damage` affinity.
     ///
     /// Five affinity rows is *not* a layout state and must not be modeled
     /// here: `program_sections` builds the AFFINITIES box through
@@ -491,12 +495,12 @@ mod tests {
             section("COMBAT", 3, false),
             section("POTENTIAL", 4, false),
             section("ROUTINES", 3, false),
-            section("SPECIES", 6, false),
+            section("SPECIES", 5, false),
         ];
         let without_potential = vec![
             section("COMBAT", 3, false),
             section("ROUTINES", 3, false),
-            section("SPECIES", 6, false),
+            section("SPECIES", 5, false),
         ];
         let a = manifest_layout(1600.0, 1080.0, 2, &full, &m);
         let b = manifest_layout(1600.0, 1080.0, 2, &without_potential, &m);

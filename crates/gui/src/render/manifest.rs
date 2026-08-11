@@ -576,11 +576,19 @@ mod tests {
     use crate::render::manifest_layout::manifest_layout;
     use crate::text::ui_metrics;
 
-    /// A `ProgramManifest` for a species that declares nothing optional, so
-    /// the only boxes `program_sections` emits are the unconditional ones.
-    /// Hand-built rather than pulled off a real creature because what is
-    /// under test is which box a *row* lands in, and a shipped species would
-    /// tie that to whatever the roster happens to say today.
+    /// A `ProgramManifest` for a species that declares no *box-level*
+    /// optionals (no POTENTIAL, no AFFINITIES), so the only boxes
+    /// `program_sections` emits are the unconditional ones. Hand-built
+    /// rather than pulled off a real creature because what is under test is
+    /// which box a *row* lands in, and a shipped species would tie that to
+    /// whatever the roster happens to say today.
+    ///
+    /// `work_resource` is set rather than left `None`, deliberately: within
+    /// SPECIES it is the one row that is itself conditional, and a non-boss
+    /// species carrying one is the real worst case for that box's row count
+    /// (5, not 4) — see `work_rows_live_in_their_own_box_and_species_drops_
+    /// below_its_cap` below, which is what would stop catching a species-box
+    /// overflow if this quietly went back to `None`.
     fn plain_program(base_speed: i32, base_int: i32) -> ProgramManifest {
         ProgramManifest {
             species_name: Some("Testmon".to_string()),
@@ -598,7 +606,7 @@ mod tests {
             player_zone: 1,
             habitats: vec![],
             moves: vec![],
-            work_resource: None,
+            work_resource: Some("core_fragment".into()),
             taming_difficulty: 0.5,
             decompile_chance: None,
             growth_multiplier: 1.0,
@@ -655,10 +663,87 @@ mod tests {
             !species.iter().any(|l| l == "Speed"),
             "Speed must not be left behind in SPECIES too: {species:?}"
         );
+        assert_eq!(
+            species.len(),
+            5,
+            "a non-boss species with a work_resource is SPECIES' real worst \
+             case (Habitats, Work aptitude, Decompile difficulty, Decompile \
+             chance now, Growth) — it must land below MAX_SECTION_ROWS: {species:?}"
+        );
         assert!(
             species.len() < MAX_SECTION_ROWS,
             "SPECIES has to come off its cap, or the next row added to it \
              vanishes into '+N more': {species:?}"
+        );
+    }
+
+    /// `manifest_layout::tests::worst_case_program` lists ROUTINES before
+    /// MOVES, but `sections_for` does not: `program_sections` pushes MOVES
+    /// last (it's the full-width band), and ROUTINES is appended only after
+    /// `program_sections` returns (see `sections_for`'s own doc). That drift
+    /// is currently harmless — MOVES is the only `full_width` box, so
+    /// `best_column_split` filters it out before packing the columned two,
+    /// and order stops mattering the moment a box leaves that set — but this
+    /// project has previously shipped a layout fixture that drifted from
+    /// what the renderer actually emits and hid a real overflow behind a
+    /// green suite. Pinning the real sequence here is what would catch that
+    /// again if a future change ever made full-width order matter.
+    #[test]
+    fn sections_for_emits_moves_before_routines() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(
+            11,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            assets,
+        )
+        .expect("shipped assets load");
+
+        let mut program = plain_program(14, 12);
+        program.moves = vec![MoveDef {
+            name: "Strike".to_string(),
+            power: 5,
+            effect: None,
+            ranged: false,
+        }];
+        let view = ManifestView {
+            entity: Entity::PLACEHOLDER,
+            name: "Testmon".to_string(),
+            glyph: 'x',
+            color: GlyphColor::White,
+            level: None,
+            xp: None,
+            hp: 10,
+            max_hp: 10,
+            atk: 5,
+            def: 5,
+            power: 15,
+            status_effect: None,
+            routines: vec![feral_processes_engine::RoutineSlotView {
+                index: 0,
+                ability: None,
+                name: "(empty)".to_string(),
+                description: String::new(),
+            }],
+            subject: ManifestSubject::Program(program),
+        };
+
+        let sections = sections_for(&game, &view);
+        let shape: Vec<(&str, usize, bool)> = sections
+            .iter()
+            .map(|s| (s.title, s.rows.len(), s.full_width))
+            .collect();
+
+        assert_eq!(
+            shape,
+            vec![
+                ("COMBAT", 3, false),
+                ("SPECIES", 5, false),
+                ("WORK", 2, false),
+                ("MOVES", 1, true),
+                ("ROUTINES", 1, false),
+            ],
+            "sections_for's real emission order — the shape the layout \
+             fixture must mirror: {shape:?}"
         );
     }
 

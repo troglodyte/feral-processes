@@ -539,6 +539,29 @@ fn a_full_wild_population_far_away_is_culled_so_spawns_near_the_player_still_hap
     let species_id = game.species_defs().into_iter().next().unwrap().id;
     let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
 
+    // Clear the ground the player is standing on first. `spawn_initial_
+    // creatures` seeds *to* `WILD_LOCAL_DENSITY_TARGET`, so whether the
+    // local box starts with headroom is a property of where that seeded
+    // scatter happened to land — and this test is about the *cap* and the
+    // far-away cull, not about density. Leaving it to the seed made the
+    // premise silently depend on the RNG stream position, which is what
+    // broke it when a draw was added upstream.
+    let local: Vec<Entity> = {
+        let mut q = game
+            .world
+            .query_filtered::<(Entity, &Position), With<Hostile>>();
+        q.iter(&game.world)
+            .filter(|(_, p)| {
+                (p.x - player_pos.x).abs() <= WILD_SPAWN_RADIUS_TILES
+                    && (p.y - player_pos.y).abs() <= WILD_SPAWN_RADIUS_TILES
+            })
+            .map(|(e, _)| e)
+            .collect()
+    };
+    for e in local {
+        game.world.despawn(e);
+    }
+
     // Fill the cap with a wild population the player wandered away from,
     // far outside the (-12..=12) radius `maybe_spawn_wild_creature` ever
     // spawns into around the player's *current* position.
@@ -1506,6 +1529,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             nest_position: Some((999, 999)),
             pursuing: true,
             carrying: None,
+            rarity: Rarity::Ordinary,
         }],
         structures: Vec::new(),
         nests: Vec::new(),
@@ -1840,5 +1864,172 @@ fn the_dev_console_ignores_the_density_target() {
     assert!(
         hostiles_near(&mut game, pos.x, pos.y) > before,
         "the console's forced encounter must not be gated by local density"
+    );
+}
+
+/// The two ineligible spawns must cost nothing from the shared stream —
+/// see `Game::roll_rarity`, where gating before the draw is what keeps every
+/// seeded boss and opening-ring test from moving. Asserting only that the
+/// tier comes back `Ordinary` would pass just as well with the gate placed
+/// *after* the roll, which is the regression this exists to catch.
+/// `StdRng` is not `Clone`, so the proof is two games built from one seed:
+/// they share a stream position, and only one of them is asked to refuse a
+/// roll. If the refusal spent a draw, their next values diverge.
+fn rng_unadvanced_by(seed: u32, f: impl FnOnce(&mut Game)) -> bool {
+    let mut touched = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut untouched = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    f(&mut touched);
+    let after: u64 = touched.world.resource_mut::<GameRng>().0.random();
+    let baseline: u64 = untouched.world.resource_mut::<GameRng>().0.random();
+    after == baseline
+}
+
+#[test]
+fn a_boss_never_rolls_a_rarity() {
+    let mut game = Game::new(9021, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let boss = game
+        .species_defs()
+        .into_iter()
+        .find(|s| s.is_boss)
+        .expect("at least one boss species should ship");
+    // Far from the danger origin, so the opening ring is not what is doing
+    // the refusing here.
+    let far = OPENING_RING_TILES + 50;
+    for _ in 0..200 {
+        assert_eq!(
+            game.roll_rarity(&boss, far, far),
+            Rarity::Ordinary,
+            "a boss's stats are hand-authored; a multiplier discards that"
+        );
+    }
+    assert!(
+        rng_unadvanced_by(9021, |g| {
+            g.roll_rarity(&boss, far, far);
+        }),
+        "refusing a boss must not spend a draw from the shared stream"
+    );
+}
+
+#[test]
+fn no_shiny_spawns_in_the_opening_ring() {
+    let mut game = Game::new(9022, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ordinary = game
+        .species_defs()
+        .into_iter()
+        .find(|s| !s.is_boss)
+        .expect("ordinary species should ship");
+    for _ in 0..500 {
+        assert_eq!(
+            game.roll_rarity(&ordinary, 0, 0),
+            Rarity::Ordinary,
+            "balance_sim::beatable_by_a_fresh_player guarantees a fresh \
+             player can beat one program in the ring"
+        );
+    }
+    assert!(
+        rng_unadvanced_by(9022, |g| {
+            g.roll_rarity(&ordinary, 0, 0);
+        }),
+        "refusing an opening-ring spawn must not spend a draw"
+    );
+}
+
+#[test]
+fn an_eligible_spawn_can_roll_both_tiers() {
+    let mut game = Game::new(9023, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ordinary = game
+        .species_defs()
+        .into_iter()
+        .find(|s| !s.is_boss)
+        .expect("ordinary species should ship");
+    let far = OPENING_RING_TILES + 50;
+    let (mut silver, mut gold) = (0, 0);
+    for _ in 0..20_000 {
+        match game.roll_rarity(&ordinary, far, far) {
+            Rarity::Silver => silver += 1,
+            Rarity::Gold => gold += 1,
+            Rarity::Ordinary => {}
+        }
+    }
+    assert!(silver > 0 && gold > 0, "both tiers must be reachable");
+    assert!(
+        gold < silver,
+        "gold is the rarer tier: got {gold} gold to {silver} silver"
+    );
+}
+
+#[test]
+fn a_shiny_survives_a_save_round_trip() {
+    let mut game = Game::new(9025, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let far = OPENING_RING_TILES + 60;
+    let wild = game
+        .spawn_wild_creature("scrapper", far, far)
+        .expect("scrapper ships with the game");
+    // Set the tier by hand rather than hunting a seed that rolls one: what
+    // is under test is whether the tag travels and whether the numbers stay
+    // put, not the roll — which `an_eligible_spawn_can_roll_both_tiers`
+    // covers on its own.
+    game.world.entity_mut(wild).insert(Rarity::Gold);
+    let before = *game.world.get::<Stats>(wild).unwrap();
+
+    let path =
+        std::env::temp_dir().join(format!("feral_rarity_roundtrip_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let mut q = loaded
+        .world
+        .query_filtered::<(&Position, &Stats, Option<&Rarity>), With<Hostile>>();
+    let (_, after, rarity) = q
+        .iter(&loaded.world)
+        .find(|(p, _, _)| p.x == far && p.y == far)
+        .expect("the wild program should come back");
+    assert_eq!(
+        rarity.copied(),
+        Some(Rarity::Gold),
+        "the rare tier is part of what a creature is"
+    );
+    // The multiplier was spent at spawn and the numbers were saved verbatim.
+    // A load that re-applied `stat_mult` would hand back 1.8x of these and
+    // compound again on the next reload — see `Rarity`'s doc.
+    assert_eq!(
+        (after.hp, after.max_hp, after.atk, after.def),
+        (before.hp, before.max_hp, before.atk, before.def),
+        "loading must restore recorded stats, not re-apply the tier"
+    );
+}
+
+#[test]
+fn a_shiny_spawn_has_its_stats_multiplied() {
+    let mut game = Game::new(9024, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|s| !s.is_boss)
+        .expect("ordinary species should ship");
+    let far = OPENING_RING_TILES + 50;
+    // Potential is a +/-20% band per stat, so a single ordinary spawn is no
+    // baseline. Take the luckiest ordinary roll seen and require a gold to
+    // beat it outright: 1.8x clears 1.2x with room, and that gap is the
+    // whole reason the tier is discrete rather than a wider band.
+    let mut best_ordinary = 0;
+    let mut gold_hp = None;
+    for i in 0..4000 {
+        let e = game
+            .spawn_wild_creature(&species.id, far + (i % 7), far + (i % 5))
+            .expect("shipped species should spawn");
+        let hp = game.world.get::<Stats>(e).unwrap().max_hp;
+        match game.world.get::<Rarity>(e).copied().unwrap_or_default() {
+            Rarity::Ordinary => best_ordinary = best_ordinary.max(hp),
+            Rarity::Gold if gold_hp.is_none() => gold_hp = Some(hp),
+            _ => {}
+        }
+    }
+    let gold_hp = gold_hp.expect("4000 spawns should turn up at least one gold");
+    assert!(
+        gold_hp > best_ordinary,
+        "an Overclocked spawn ({gold_hp} HP) should beat the luckiest \
+         ordinary roll ({best_ordinary} HP)"
     );
 }

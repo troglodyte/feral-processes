@@ -113,6 +113,9 @@ is skipped with a warning logged in-game rather than crashing startup.
     // the player's roster, where fusion compounds them. Since fusing needs
     // two tamed programs, it follows that a boss can never be fused either.
     // Set this flag and `taming_difficulty` stops mattering for the species.
+    //
+    // A boss is also the one thing that never rolls a rare tier — see the
+    // note on those below.
     is_boss: true,
 
     // Optional; can be left out entirely (defaults to empty). This is not
@@ -240,3 +243,23 @@ is skipped with a warning logged in-game rather than crashing startup.
 
 The filename doesn't matter to the loader (only the `id` field does), but
 name it after the species for readability, e.g. `crawler.ron`.
+
+## Rare tiers are engine-rolled, not a species field
+
+There is deliberately no `rarity` field, and adding one to a `.ron` file
+does nothing. A wild spawn independently rolls **Optimized** or
+**Overclocked** — a multiplier on all four stats, on top of the individual
+±20% roll — and that happens per *individual*, not per species: every
+ordinary species can produce one.
+
+The chances and the multipliers live in `crates/engine/src/tuning.rs`
+(`SILVER_SPAWN_CHANCE`, `GOLD_SPAWN_CHANCE`, `SILVER_STAT_MULT`,
+`GOLD_STAT_MULT`) rather than here, for the same reason every other
+difficulty knob does: content is moddable, how hard the game is, is not.
+
+Two spawns never roll a tier, and both are relevant when authoring a
+species. A `is_boss: true` species is excluded, because its stats are
+already hand-authored and a blanket multiplier would discard that tuning —
+so make a boss as tough as you want it to be, here, and nothing will scale
+it further. And nothing rolls one inside the opening ring around the
+player's landing site, which is what keeps a fresh run winnable.

@@ -579,6 +579,13 @@ pub enum Mode {
     /// rather than a subject variant of it because the two share almost no
     /// fields — a structure has no HP, level, XP or stats.
     StructureManifest,
+    /// The environment paragraph for one cell of a Stack frame, opened with
+    /// `x` + a direction while underground. `App::pending_description` is
+    /// the text — already composed by the engine, since what a place says is
+    /// the engine's business and not the shell's. A plain popup: any key
+    /// leaves, like `Mode::StructureManifest`, because there is nothing to
+    /// page through.
+    CellDescribe,
     Inventory,
     /// Replacements for one equipment slot, reached by picking that slot on
     /// `Mode::Inventory`. Rows come from `equip_swap_rows`, so the picker
@@ -768,6 +775,7 @@ impl Mode {
             | Mode::Manifest
             | Mode::ManifestPick
             | Mode::StructureManifest
+            | Mode::CellDescribe
             | Mode::Inventory
             | Mode::EquipSwap
             | Mode::InventoryItemAction
@@ -940,6 +948,11 @@ pub struct App {
     /// inspector found in the direction you pointed. Not `pending_structure`:
     /// that one is a structure *kind* awaiting placement in `Mode::Build`.
     pub pending_structure_manifest: Option<Entity>,
+    /// What `Mode::CellDescribe` is showing. Held rather than re-derived per
+    /// frame because the paragraph is a function of the party's *facing* at
+    /// the moment `x` was pressed, and the popup must not change under the
+    /// player if something later moves them.
+    pub pending_description: Option<String>,
     /// Whether `Mode::Manifest` was opened from `Mode::ManifestPick`, which
     /// is where Esc then goes back to. Reached from the map with `x` instead,
     /// there is no list to return to and Esc goes straight back to play.

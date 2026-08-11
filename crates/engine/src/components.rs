@@ -8,7 +8,7 @@ use crate::items_db::ItemDb;
 use crate::perks::Perk;
 use crate::species::SpeciesId;
 use crate::structures::StructureId;
-use crate::tuning::{MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL};
+use crate::tuning::{GOLD_STAT_MULT, MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL, SILVER_STAT_MULT};
 
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Position {
@@ -844,6 +844,66 @@ impl Potential {
     }
 }
 
+/// The rare-spawn tier a creature rolled when it was created, if any — see
+/// `Game::roll_rarity`. A creature that rolled ordinary has no such
+/// component at all, which reads as `Ordinary`, so no test fixture or
+/// hand-built bundle has to know this exists.
+///
+/// **This is a record of a multiplier already spent, not a live one.**
+/// `stat_mult` is applied exactly once, inside
+/// `Game::spawn_wild_creature_scaled`, and baked into `Stats` there the same
+/// way `Potential`'s three stat rolls are. `Game::load` restores those
+/// numbers verbatim and `Game::fuse_companions` derives them from its
+/// parents, so neither may re-apply it — the shape is
+/// `EquippedItem::fusion_tier`, whose doc makes the same argument. Applying
+/// it a second time compounds the bonus on every reload, invisibly, because
+/// a stat carries no record of where it came from. The regression to head
+/// off is a later reader finding a multiplier that appears to go unused and
+/// "finishing the job"; `a_shiny_survives_a_save_round_trip` asserts the
+/// stats come back *unchanged* for exactly that reason.
+///
+/// Player-facing text says Optimized/Overclocked rather than silver/gold,
+/// which is the `MessageKind::Raid` / "GC Entropy Sweep" split: the enum and
+/// the save field name the colours, everything a player reads names the
+/// thing. `label` is the one place that translation happens.
+///
+/// **Variant order is save format.** bincode encodes enums positionally and
+/// `CreatureSave::rarity` holds one, so append new tiers, never reorder —
+/// the same trap `Perk` carries.
+#[derive(
+    Component, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
+)]
+pub enum Rarity {
+    #[default]
+    Ordinary,
+    Silver,
+    Gold,
+}
+
+impl Rarity {
+    /// What this tier multiplies every one of a creature's four stats by,
+    /// on top of zone, depth and the individual `Potential` roll.
+    pub fn stat_mult(self) -> f32 {
+        match self {
+            Rarity::Ordinary => 1.0,
+            Rarity::Silver => SILVER_STAT_MULT,
+            Rarity::Gold => GOLD_STAT_MULT,
+        }
+    }
+
+    /// How the tier reads to a player, or `None` for an ordinary creature —
+    /// `Option` rather than an empty string so a caller has to decide what
+    /// "no tier" looks like in its own context, the way `fusion_color`
+    /// returns `Option` so a louder rule can compose with it.
+    pub fn label(self) -> Option<&'static str> {
+        match self {
+            Rarity::Ordinary => None,
+            Rarity::Silver => Some("Optimized"),
+            Rarity::Gold => Some("Overclocked"),
+        }
+    }
+}
+
 /// How many fusions deep a creature's lineage is (see
 /// `Game::fuse_companions`). A creature that was caught or spawned
 /// normally has no such component at all, which reads as 0; a fusion's
@@ -944,6 +1004,38 @@ impl Perks {
     /// How many levels of `perk` have been bought — 0 if none.
     pub fn level(&self, perk: Perk) -> u32 {
         self.unlocked.iter().filter(|&&p| p == perk).count() as u32
+    }
+}
+
+#[cfg(test)]
+mod rarity_tests {
+    use super::Rarity;
+
+    #[test]
+    fn rarity_multiplies_every_stat() {
+        assert_eq!(Rarity::Ordinary.stat_mult(), 1.0, "ordinary must be inert");
+        assert!(Rarity::Silver.stat_mult() > Rarity::Ordinary.stat_mult());
+        assert!(Rarity::Gold.stat_mult() > Rarity::Silver.stat_mult());
+    }
+
+    #[test]
+    fn only_a_rare_tier_has_a_label() {
+        assert_eq!(Rarity::Ordinary.label(), None);
+        assert!(Rarity::Silver.label().is_some());
+        assert!(Rarity::Gold.label().is_some());
+    }
+
+    /// `Game::fuse_companions` inherits `max(parent_a, parent_b)`, so the
+    /// derived `Ord` has to agree with the tiers' worth. Reordering the
+    /// variants would silently make a fusion of a gold and a silver
+    /// produce a silver — and reordering is already forbidden for a save
+    /// format reason, so this pins the second consequence too.
+    #[test]
+    fn the_tiers_order_by_how_good_they_are() {
+        assert!(Rarity::Gold > Rarity::Silver);
+        assert!(Rarity::Silver > Rarity::Ordinary);
+        assert_eq!(Rarity::Silver.max(Rarity::Gold), Rarity::Gold);
+        assert_eq!(Rarity::default(), Rarity::Ordinary);
     }
 }
 

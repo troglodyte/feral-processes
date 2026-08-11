@@ -221,6 +221,6 @@ mod tests {
                  ({drawn:.0} drawn into {room:.0} of room):\n{widest}",
                 drawn - room
             );
-        })
+        });
     }
 }

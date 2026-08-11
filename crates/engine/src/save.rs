@@ -3,7 +3,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::components::ActiveFieldBuff;
+use crate::components::{ActiveFieldBuff, Rarity};
 use crate::items::ItemId;
 use crate::perks::Perk;
 use crate::resources::DifficultyMode;
@@ -145,6 +145,23 @@ pub struct CreatureSave {
     /// This is a shape change to `CreatureSave`, so it required bumping
     /// `SAVE_FORMAT_VERSION` — see that constant's docs.
     pub carrying: Option<(ItemId, u32)>,
+    /// The rare-spawn tier this creature rolled — see `components::Rarity`.
+    ///
+    /// Persisted as the *tag* only. The multiplier it names was already
+    /// spent into `Stats` at spawn and those numbers are saved verbatim
+    /// above, so `Game::load` must restore this field without re-applying
+    /// `stat_mult` — see `Rarity`'s doc for why a second application is
+    /// invisible and compounds on every reload.
+    ///
+    /// `#[serde(default)]` does nothing for the bincode save (see
+    /// `SAVE_FORMAT_VERSION`) and is here only so the field-named RON
+    /// templates under `dev-saves/` keep parsing without being re-captured,
+    /// matching `stock_input`/`stock_output`/`known_routines`/`trace`.
+    ///
+    /// This is a shape change to `CreatureSave`, so it required bumping
+    /// `SAVE_FORMAT_VERSION` — see that constant's docs.
+    #[serde(default)]
+    pub rarity: Rarity,
 }
 
 /// A nest's state on disk: its species, position, remaining `Durability`,
@@ -327,7 +344,12 @@ pub struct SaveData {
 /// as the player's weapon (`resources::WieldedProgram`).
 /// 23 → 24: `CreatureSave` gained `carrying`, for a program mid-delivery to
 /// a depot (`components::Carrying`).
-pub const SAVE_FORMAT_VERSION: u32 = 25;
+/// 24 → 25: gear fuses per physical copy, so `PlayerSave` carries
+/// `FusedGear`'s `(item, tier, qty)` rows and every entry point naming an
+/// item names a tier beside it. Backfilled — this bump shipped undocumented.
+/// 25 → 26: `CreatureSave` gained `rarity`, the rare-spawn tier
+/// (`components::Rarity`).
+pub const SAVE_FORMAT_VERSION: u32 = 26;
 
 /// Renders a save as editable RON, for the `savetool` binary.
 ///

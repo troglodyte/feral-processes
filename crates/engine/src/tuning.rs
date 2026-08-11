@@ -911,6 +911,31 @@ pub const WILD_CREATURE_CAP: usize = 2000;
 /// has at least one boss defined for it.
 pub const BOSS_SPAWN_CHANCE: f64 = 0.04;
 
+/// How often a wild spawn comes up rare, and what it's worth when it does —
+/// see `Game::roll_rarity` and `components::Rarity`. The two chances are
+/// checked against one roll in tier order, so they don't sum past 1.0 and
+/// gold is genuinely the rarer of the two rather than a second independent
+/// draw that could land on top of silver.
+///
+/// This is a *discrete* axis deliberately laid over the continuous one:
+/// `MIN_INDIVIDUAL_ROLL`/`MAX_INDIVIDUAL_ROLL` above already give every
+/// creature a ±20% band, but a band has no threshold, so nothing about it
+/// can be spotted on the map or chased. These multiply with that band
+/// rather than replacing it, so a gold lands 1.44x-2.16x an ordinary spawn
+/// of the same species.
+///
+/// Neither applies to a boss (its stats are hand-authored per `.ron`, so a
+/// multiplier discards the authoring) nor inside `Game::in_opening_ring`
+/// (where `balance_sim::beatable_by_a_fresh_player` guarantees a fresh
+/// player can beat one program, computed against `MAX_INDIVIDUAL_ROLL`).
+/// That second exclusion is what lets `balance_sim` stay ignorant of rarity
+/// entirely — if its curves ever move because of this, the exclusion is
+/// wrong, not the test.
+pub const SILVER_SPAWN_CHANCE: f64 = 0.030;
+pub const GOLD_SPAWN_CHANCE: f64 = 0.005;
+pub const SILVER_STAT_MULT: f32 = 1.5;
+pub const GOLD_STAT_MULT: f32 = 1.8;
+
 /// Range of Portal Fragments a defeated boss guarantees **underground**,
 /// multiplied by the frame's depth. The one and only source of the
 /// breaching currency: ordinary kills, surface bosses, nests and Stack

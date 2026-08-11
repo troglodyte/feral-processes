@@ -6,7 +6,7 @@
 
 use crate::abilities::AffinityKind;
 use crate::battle::ActionOption;
-use crate::components::{EquippedItem, GlyphColor, MachineStatus, TaskKind};
+use crate::components::{EquippedItem, GlyphColor, MachineStatus, Rarity, TaskKind};
 use crate::items::ItemId;
 use crate::perks::Perk;
 use crate::research::ResearchId;
@@ -158,6 +158,11 @@ pub struct ProgramSaleOption {
     /// is giving up, and a maxed fusion is the least replaceable thing on
     /// the list.
     pub fusions: u32,
+    /// This program's rare-spawn tier — carried for exactly the reason
+    /// `fusions` above is. An Overclocked program is the other least
+    /// replaceable thing that can be on this list, and the tier is not
+    /// something a payout figure reflects.
+    pub rarity: Rarity,
     /// What the program is doing right now — see `Game::program_activity`.
     /// Shown on the row, so the screen that permanently erases a program
     /// says what it was in the middle of.
@@ -212,6 +217,11 @@ pub struct PetInfo {
     /// — see `components::FusionCount`. At `MAX_FUSIONS` it can no longer
     /// be fused.
     pub fusions: u32,
+    /// This program's rare-spawn tier — see `components::Rarity`. Already
+    /// spelled into `name` as a prefix by `Game::creature_label`; carried
+    /// separately so a menu can also colour the row without parsing it back
+    /// out of the string.
+    pub rarity: Rarity,
     /// Whether this is the program equipped as the player's weapon (see
     /// `resources::WieldedProgram`). At most one row in a list carries it.
     pub wielded: bool,
@@ -324,6 +334,13 @@ pub struct EntityView {
     /// `MAX_FUSIONS` — see `components::FusionCount`. At `MAX_FUSIONS` it
     /// can no longer be an input to a fusion, which the fuse menus show.
     pub fusions: u32,
+    /// This (creature) entity's rare-spawn tier — see `components::Rarity`.
+    ///
+    /// The map draws it as a bar along the top edge of the tile rather than
+    /// by recolouring the glyph, because `color` above is already carrying
+    /// `difficulty_color` for a hostile: how dangerous something is and how
+    /// rare it is are two readings, and the glyph can only hold one.
+    pub rarity: Rarity,
     /// Why this (structure) entity is or isn't producing, or `None` for
     /// anything that runs no job and so has no state to be in. Lets the map
     /// colour a machine's outline by what it is doing.
@@ -414,6 +431,12 @@ pub struct EnemyGroupView {
     pub count: usize,
     pub front_hp: i32,
     pub front_max_hp: i32,
+    /// The rare-spawn tier of the *front* member — the same one whose HP the
+    /// two fields above report, since a group's members can differ and the
+    /// row has one of each to show. Deliberately absent from `species_name`,
+    /// which the roster draws into a fixed-width cell an "Overclocked
+    /// Scrapper 2" overflows; the renderer tags it outside that column.
+    pub front_rarity: Rarity,
     pub atk: i32,
     pub def: i32,
     pub is_boss: bool,

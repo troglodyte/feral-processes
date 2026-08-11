@@ -1,0 +1,28 @@
+(
+    subject: "stack.link_down",
+    variants: [
+        (
+            underfoot: ["A link leads down"],
+            sighted: [
+                "A link drops away {bearing}.",
+                "The way down is {bearing}.",
+            ],
+            openers: [
+                "A link, running down.",
+                "The way into the next frame.",
+                "A shaft, dropping.",
+            ],
+            details: [
+                "",
+                "It is a clean descent, which is not the same as a safe one.",
+                "The hum from below is a shade lower than the hum up here.",
+                "Nothing has come up it in a long time.",
+            ],
+            codas: [
+                "",
+                "Whatever is down there is further from the surface than you are.",
+                "It goes down.",
+            ],
+        ),
+    ],
+)

@@ -249,7 +249,16 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
             bar,
             &roster_row(
                 &format!("{}  ", g.letter),
-                &format!("{name}{}", if g.is_boss { " [BOSS]" } else { "" }),
+                // Both tags sit *after* the fixed-width name cell, so
+                // neither eats into `NAME_W` or shifts the columns behind
+                // it. That is why the roster carries a short tier tag
+                // rather than the "Overclocked " prefix the rest of the
+                // game shows — see `Game::creature_label`.
+                &format!(
+                    "{name}{}{}",
+                    if g.is_boss { " [BOSS]" } else { "" },
+                    rarity_tag(g.front_rarity),
+                ),
                 &format!("{}/{}", g.front_hp, g.front_max_hp),
                 g.atk,
                 g.def,

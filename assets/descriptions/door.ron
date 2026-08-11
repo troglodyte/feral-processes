@@ -1,0 +1,32 @@
+(
+    subject: "stack.door",
+    variants: [
+        (
+            underfoot: ["A doorway", "Standing in the frame"],
+            sighted: [
+                "A door stands shut {bearing}.",
+                "There is a door {bearing}.",
+                "Something closed off {bearing}.",
+            ],
+            openers: [
+                "A door.",
+                "A doorway, still framed.",
+                "A door, shut and holding.",
+                "A partition with a door in it.",
+            ],
+            details: [
+                "",
+                "The bottom-right corner is phase-shifting, leaking bits and sparking.",
+                "The frame is warm to stand near.",
+                "Its edges do not quite agree on where they are.",
+                "The panel is scored where something forced it once already.",
+            ],
+            codas: [
+                "",
+                "There is no telling what is on the other side.",
+                "Nothing answers through it.",
+                "It has been shut a long time.",
+            ],
+        ),
+    ],
+)

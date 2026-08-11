@@ -1,7 +1,0 @@
-(
-    id: "stalled_handshake",
-    lines: [
-        "A handshake opened and never closed. It is still counting the seconds since.",
-        "Something here asked for authorization eleven thousand times and got no reply at all.",
-    ],
-)

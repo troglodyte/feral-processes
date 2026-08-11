@@ -436,13 +436,20 @@ fn to_egui(c: Color) -> egui::Color32 {
 ///
 /// egui lays text out and records shapes on the CPU, so a draw routine can be
 /// exercised end to end without a window or a GPU — which is enough to catch
-/// a panic in one, even though nothing here can assert about pixels. Only the
-/// shapes that come out the far end need a display.
+/// a panic in one, and enough to read back what it painted:
+/// `Context::end_pass`'s `FullOutput::shapes` carries one `Shape::Text` per
+/// galley egui laid out, and `painted_text` below pulls the string back out
+/// of it. Nothing here can assert about pixels, but text content is not
+/// pixels — an earlier version of this doc comment claimed the shapes
+/// "need a display" to be useful, which was never true and cost this repo a
+/// popup content test it could have had; don't repeat that claim.
 ///
 /// Lives at module level rather than inside `mod tests` so `render/`'s own
 /// tests can drive a screen through it.
 #[cfg(test)]
-pub(crate) fn with_painter<R>(f: impl FnOnce(&Painter) -> R) -> R {
+pub(crate) fn with_painter<R>(
+    f: impl FnOnce(&Painter) -> R,
+) -> (R, Vec<egui::epaint::ClippedShape>) {
     let ctx = egui::Context::default();
     install_fonts(&ctx);
     ctx.begin_pass(egui::RawInput {
@@ -453,8 +460,39 @@ pub(crate) fn with_painter<R>(f: impl FnOnce(&Painter) -> R) -> R {
         ..Default::default()
     });
     let out = f(&Painter::for_frame(&ctx, 1.0 / 60.0));
-    let _ = ctx.end_pass();
-    out
+    let shapes = ctx.end_pass().shapes;
+    (out, shapes)
+}
+
+/// The text of every `Shape::Text` `with_painter` recorded, in paint order —
+/// what a test reaches for to check *what* a draw call painted, since
+/// `Painter` itself offers no way to ask.
+#[cfg(test)]
+pub(crate) fn painted_text(shapes: &[egui::epaint::ClippedShape]) -> Vec<String> {
+    shapes
+        .iter()
+        .filter_map(|cs| match &cs.shape {
+            egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The width of every `Shape::Rect` `with_painter` recorded. `render/`
+/// deliberately never names the graphics library directly (see this file's
+/// module doc) — this stays that boundary's one exception, so a test that
+/// wants to know how wide a popup drew (e.g. to tell `PopupSize::Large`
+/// from `Small`, which otherwise leaves no trace outside `popup.rs`) does
+/// not have to reach for `egui::Shape` itself to get it.
+#[cfg(test)]
+pub(crate) fn painted_rect_widths(shapes: &[egui::epaint::ClippedShape]) -> Vec<f32> {
+    shapes
+        .iter()
+        .filter_map(|cs| match &cs.shape {
+            egui::Shape::Rect(r) => Some(r.rect.width()),
+            _ => None,
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -491,7 +529,7 @@ mod tests {
                 "advance width must include the prefix the ink box skips: \
                  advance {advance}, ink {inked}"
             );
-        })
+        });
     }
 
     /// A family name that doesn't match what `install_fonts` registered would

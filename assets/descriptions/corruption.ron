@@ -1,0 +1,29 @@
+(
+    subject: "stack.corruption",
+    variants: [
+        (
+            underfoot: ["Rotten substrate"],
+            sighted: [
+                "The substrate is rotten {bearing}.",
+                "A rotten stretch runs {bearing}.",
+            ],
+            openers: [
+                "Rotten substrate.",
+                "The floor here has gone soft.",
+                "A stretch of rot.",
+            ],
+            details: [
+                "",
+                "The rot still holds a write that never landed. Something was saving when the floor went.",
+                "A buffer, flushed over and over into a device that had already stopped answering.",
+                "Eviction notice, timestamped, unread. Whatever lived here was still resident.",
+                "The substrate reclaimed this block while it was in use. Nothing logged an objection.",
+            ],
+            codas: [
+                "",
+                "It costs you once, on arrival — nothing here meters how long you stay.",
+                "The rot was written here once and has not moved since.",
+            ],
+        ),
+    ],
+)

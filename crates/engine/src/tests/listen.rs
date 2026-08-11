@@ -4,9 +4,9 @@
 //! `crates/engine/EASTER_EGGS.md`.
 
 use super::support::*;
-use crate::crash_logs::CrashLogDb;
-use crate::resources::{CurrentStack, Locale, Trace};
-use crate::stack::{CellKind, Dir, Frame};
+use crate::descriptions::DescriptionDb;
+use crate::resources::Trace;
+use crate::stack::{CellKind, Dir};
 use crate::tuning::TRACE_PER_LISTEN;
 use crate::*;
 
@@ -14,47 +14,8 @@ fn game() -> Game {
     Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
 }
 
-/// Drops the party into depth 1 through an entrance on the tile they are
-/// standing on, which is what walking onto a link does.
-fn descend(game: &mut Game) {
-    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    game.enter_stack(pos.x, pos.y);
-}
-
 fn trace_of(game: &Game) -> u32 {
     game.world.resource::<Trace>().0
-}
-
-fn frame(game: &Game) -> Frame {
-    game.world.resource::<CurrentStack>().0.clone().unwrap()
-}
-
-fn every_cell(level: &Frame) -> impl Iterator<Item = (i32, i32)> + use<> {
-    let (w, h) = (level.width, level.height);
-    (0..h).flat_map(move |y| (0..w).map(move |x| (x, y)))
-}
-
-/// Puts the party on `cell` facing `facing` without walking there. Caches
-/// and orphans sit in dead ends, so reaching one honestly would mean
-/// solving the maze first — `tests/stack.rs` teleports for the same reason.
-fn stand_at(game: &mut Game, cell: (i32, i32), facing: Dir) {
-    let Locale::Stack {
-        depth,
-        frames,
-        entrance,
-        ..
-    } = game.locale()
-    else {
-        unreachable!("not underground")
-    };
-    game.world.insert_resource(Locale::Stack {
-        depth,
-        frames,
-        x: cell.0,
-        y: cell.1,
-        facing,
-        entrance,
-    });
 }
 
 /// Every cell of the current frame that `Game::listen` should count as
@@ -257,10 +218,10 @@ fn listening_on_the_surface_is_refused_and_costs_nothing() {
     assert_eq!(game.current_tick(), tick, "a refusal spent a turn");
 }
 
-// ---- the crash log ---------------------------------------------------
+// ---- the rot's own reading --------------------------------------------
 
-/// Every rotten cell of the current frame — the two `CellKind`s that read a
-/// crash log rather than a bearing.
+/// Every rotten cell of the current frame — the two `CellKind`s that read
+/// the description bank's paragraph rather than a bearing.
 fn rotten_cells(game: &Game) -> Vec<(i32, i32)> {
     let level = frame(game);
     every_cell(&level)
@@ -268,30 +229,18 @@ fn rotten_cells(game: &Game) -> Vec<(i32, i32)> {
         .collect()
 }
 
-/// A scratch crash-log directory holding `files` as `(filename, id, lines)`.
-/// The caller removes it.
-fn crash_log_dir(tag: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "feral_crash_logs_{tag}_{}_{}",
-        std::process::id(),
-        files.len()
-    ));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    for (name, body) in files {
-        std::fs::write(dir.join(name), body).unwrap();
-    }
-    dir
-}
-
+/// The rot's own reading now comes from the description bank rather than
+/// from a second flavour system beside it.
 #[test]
-fn standing_on_rot_reads_the_crash_log_instead_of_a_bearing() {
+fn listening_on_rot_reads_the_description_bank() {
     let mut game = game();
     descend(&mut game);
     let cell = *rotten_cells(&game)
         .first()
         .expect("every frame grows corruption");
     stand_at(&mut game, cell, Dir::North);
+    let pos = game.stack_pos().unwrap();
+    let expected = game.cell_paragraph(pos, cell).expect("rot describes");
     let (trace, tick) = (trace_of(&game), game.current_tick());
 
     let reading = listen(&mut game);
@@ -300,14 +249,7 @@ fn standing_on_rot_reads_the_crash_log_instead_of_a_bearing() {
         !reading.starts_with("You go still"),
         "rotten ground should read its own log, not point at something: {reading}"
     );
-    assert!(
-        game.world
-            .resource::<CrashLogDb>()
-            .all()
-            .iter()
-            .any(|line| *line == reading),
-        "the reading came from somewhere other than the shipped crash logs: {reading}"
-    );
+    assert_eq!(reading, expected);
     assert_eq!(trace_of(&game) - trace, TRACE_PER_LISTEN);
     assert!(game.current_tick() > tick, "reading rot should cost a turn");
 }
@@ -327,7 +269,7 @@ fn the_same_rotten_cell_reads_the_same_line_after_a_reload() {
     let before = listen(&mut game);
 
     let path = std::env::temp_dir().join(format!(
-        "feral_crash_log_roundtrip_{}.bin",
+        "feral_rot_reading_roundtrip_{}.bin",
         std::process::id()
     ));
     game.save(&path).unwrap();
@@ -341,87 +283,98 @@ fn the_same_rotten_cell_reads_the_same_line_after_a_reload() {
     );
 }
 
+/// Two distinct rotten cells in one live frame must read distinct text.
+/// `FrameSpec::rng_seed`'s fold leaves many bits identical between adjacent
+/// cells — including the top bits the selection reducer reads — so this
+/// pins the byte-wise premix in `fold` actually earning its keep at the
+/// level a player experiences: two cells a step apart, not two synthetic
+/// seeds.
+///
+/// **Held to one `CellKind` on purpose.** `Fault` and `Corruption` are two
+/// different bank subjects, so a pair drawn from both could read different
+/// text purely because they draw from different pools, with the seed doing
+/// nothing — exactly the false pass an earlier version of this test had.
+/// Searches forward through the stack's frames if the first one holds fewer
+/// than two rotten cells of one kind, rather than skip it; `.expect()`s
+/// loudly if none of them offer a pair to compare.
 #[test]
 fn the_line_varies_with_the_cell_it_is_read_from() {
     let mut game = game();
     descend(&mut game);
-    let pos = game.stack_pos().unwrap();
-    let zone = game.world.resource::<ZoneLevel>().0;
-    let db = game.world.resource::<CrashLogDb>();
+    let Locale::Stack {
+        frames, entrance, ..
+    } = game.locale()
+    else {
+        unreachable!("not underground")
+    };
 
-    let readings: std::collections::HashSet<&str> = rotten_cells(&game)
+    let (pos, cells) = (1..=frames)
+        .find_map(|depth| {
+            game.descend_to(depth, frames, entrance);
+            let level = frame(&game);
+            [CellKind::Fault, CellKind::Corruption]
+                .into_iter()
+                .find_map(|kind| {
+                    let cells: Vec<(i32, i32)> = every_cell(&level)
+                        .filter(|&(x, y)| level.cell(x, y) == kind)
+                        .collect();
+                    (cells.len() >= 2).then(|| (game.stack_pos().unwrap(), cells))
+                })
+        })
+        .expect("no frame in this stack held two rotten cells of the same kind to compare");
+
+    let readings: std::collections::HashSet<Option<String>> = cells
         .into_iter()
-        .filter_map(|cell| db.line_for(zone, pos.depth, cell))
+        .map(|cell| game.cell_paragraph(pos, cell))
         .collect();
-
     assert!(
         readings.len() > 1,
-        "every rotten cell in the frame read the same line — the cell is not in the index"
+        "every same-kind rotten cell in the frame read the same text — the cell is not mixed into the seed"
     );
 }
 
-/// `std::fs::read_dir` returns entries in no defined order, so the pooled
-/// lines are sorted by id. Without that the same cell reads a different
-/// line between runs and across a reload — which is the bug the round-trip
-/// test above would only catch by luck. The filenames here are deliberately
-/// the reverse of the ids.
+/// A description-bank directory with nothing in it is not an error and not
+/// a lost key: the rotten cell falls back to the bearing reading, and the
+/// turn and Trace are still charged — `Z` costs the same on rotten ground
+/// and ordinary ground alike, deliberately, so a fallback that quietly
+/// stopped charging would be a real regression, not a cosmetic one.
 #[test]
-fn the_pool_is_ordered_by_id_rather_than_by_directory_order() {
-    let dir = crash_log_dir(
-        "sorted",
-        &[
-            ("zzz.ron", r#"(id: "aaa", lines: ["first"])"#),
-            ("aaa.ron", r#"(id: "zzz", lines: ["second"])"#),
-        ],
-    );
-    let (db, warnings) = CrashLogDb::load_dir(&dir).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
-
-    assert!(warnings.is_empty(), "{warnings:?}");
-    assert_eq!(db.all(), ["first", "second"]);
-    assert_eq!(db.line_for(0, 0, (0, 0)), Some("first"));
-}
-
-#[test]
-fn a_malformed_crash_log_is_skipped_and_the_rest_still_load() {
-    let dir = crash_log_dir(
-        "malformed",
-        &[
-            ("good.ron", r#"(id: "good", lines: ["a line"])"#),
-            ("broken.ron", "(id: \"broken\", lines: [ oops"),
-        ],
-    );
-    let (db, warnings) = CrashLogDb::load_dir(&dir).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
-
-    assert_eq!(db.all(), ["a line"]);
-    assert_eq!(warnings.len(), 1, "{warnings:?}");
-    assert!(warnings[0].contains("broken.ron"), "{warnings:?}");
-}
-
-/// A crash-log directory with nothing in it is not an error and not a
-/// modulo by zero: the rotten cell falls back to the bearing reading.
-#[test]
-fn an_empty_crash_log_directory_leaves_the_key_working() {
-    let dir = crash_log_dir("empty", &[]);
-    let (db, warnings) = CrashLogDb::load_dir(&dir).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
-    assert!(db.all().is_empty());
-    assert!(warnings.is_empty(), "{warnings:?}");
-    assert_eq!(db.line_for(3, 2, (5, 7)), None);
-
+fn an_empty_description_bank_leaves_the_key_working() {
     let mut game = game();
     descend(&mut game);
     let cell = *rotten_cells(&game)
         .first()
         .expect("every frame grows corruption");
+    // Rotten ground is never itself a spendable feature, so if the frame
+    // holds at least one, `nearest_unspent` cannot be at distance zero from
+    // here — the bearing branch must name it as "unspent", never "right
+    // under you". That is what makes the assertion below able to tell a
+    // real bearing apart from silence rather than merely from both sharing
+    // "You go still and listen." as a prefix, which an earlier version of
+    // this test could not do.
+    assert!(
+        !unspent(&game).is_empty(),
+        "the fixture needs an unspent feature elsewhere in the frame so the \
+         fallback reading can be told apart from silence"
+    );
     stand_at(&mut game, cell, Dir::North);
-    game.world.insert_resource(db);
+    game.world.insert_resource(DescriptionDb::default());
+    let (trace, tick) = (trace_of(&game), game.current_tick());
 
     let reading = listen(&mut game);
 
     assert!(
-        reading.starts_with("You go still"),
-        "with no crash logs loaded, rot should fall back to the bearing: {reading}"
+        reading.contains("unspent"),
+        "with no descriptions loaded, rot should fall back to the bearing \
+         rather than to silence: {reading}"
+    );
+    assert_eq!(
+        trace_of(&game) - trace,
+        TRACE_PER_LISTEN,
+        "the fallback reading should still charge Trace"
+    );
+    assert!(
+        game.current_tick() > tick,
+        "the fallback reading should still cost a turn"
     );
 }

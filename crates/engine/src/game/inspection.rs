@@ -39,21 +39,33 @@ impl Game {
     /// already computed, so a caller never has to ask a second time what it
     /// just found.
     ///
-    /// **Structures are excluded underground**, and the guard lives here
-    /// rather than at the call site for the reason `require_surface` exists:
-    /// `Position` stays pinned to the surface entrance tile while the party
-    /// is in the Stack, so an unguarded scan reports the base four frames
-    /// overhead as being off to your east. Creatures are unaffected —
-    /// finding one is already how the inspector behaves down there.
+    /// **Nothing is found underground, and that is the whole function's
+    /// guard rather than one scan's.** `Position` stays pinned to the
+    /// surface entrance tile while the party is in the Stack, so an
+    /// unguarded scan reports the base four frames overhead as being off to
+    /// your east — and, before this guard covered creatures too, opened a
+    /// manifest for a wild program up there as lying "that way". The guard
+    /// lives here rather than at the call site for the reason
+    /// `require_surface` exists.
+    ///
+    /// This takes no action and moves nothing, so `require_surface` does not
+    /// apply and never would have caught it. The test for whether a
+    /// `Position` reader needs the guard is not "does it act" but "does it
+    /// claim something about where the party is" — see `CLAUDE.md`'s
+    /// load-bearing-seams entry. Underground, `x` describes the cell instead
+    /// (`Game::describe_view_direction`), which is a claim about the frame
+    /// the party is actually in.
     pub fn find_target_in_direction(
         &mut self,
         dx: i32,
         dy: i32,
         max_range: i32,
     ) -> Option<InspectTarget> {
+        if self.is_underground() {
+            return None;
+        }
         let player = self.player_entity();
         let start = *self.world.get::<Position>(player).unwrap();
-        let underground = self.is_underground();
         let in_cone = |pos: &Position| -> Option<i32> {
             let (ddx, ddy) = (pos.x - start.x, pos.y - start.y);
             let leans = if dx != 0 {
@@ -73,22 +85,20 @@ impl Game {
             })
             .min_by_key(|(dist, _)| *dist);
 
-        if !underground {
-            let mut structures = self.world.query::<(Entity, &Position, &Structure)>();
-            let nearest_structure = structures
-                .iter(&self.world)
-                .filter_map(|(entity, pos, _)| {
-                    in_cone(pos).map(|d| (d, InspectTarget::Structure(entity)))
-                })
-                .min_by_key(|(dist, _)| *dist);
-            // Strictly nearer, so a creature standing *on* a structure's tile
-            // keeps the tie — it is the thing that might wander off before
-            // you look again, and the structure will still be there.
-            best = match (best, nearest_structure) {
-                (Some((cd, c)), Some((sd, s))) => Some(if sd < cd { (sd, s) } else { (cd, c) }),
-                (some, None) | (None, some) => some,
-            };
-        }
+        let mut structures = self.world.query::<(Entity, &Position, &Structure)>();
+        let nearest_structure = structures
+            .iter(&self.world)
+            .filter_map(|(entity, pos, _)| {
+                in_cone(pos).map(|d| (d, InspectTarget::Structure(entity)))
+            })
+            .min_by_key(|(dist, _)| *dist);
+        // Strictly nearer, so a creature standing *on* a structure's tile
+        // keeps the tie — it is the thing that might wander off before
+        // you look again, and the structure will still be there.
+        best = match (best, nearest_structure) {
+            (Some((cd, c)), Some((sd, s))) => Some(if sd < cd { (sd, s) } else { (cd, c) }),
+            (some, None) | (None, some) => some,
+        };
         best.map(|(_, target)| target)
     }
 
@@ -335,6 +345,7 @@ impl Game {
                     level,
                     durability,
                     fusions: self.fusion_count(entity),
+                    rarity: self.rarity_of(entity),
                     machine_status,
                     linked_edges: linked_edges.remove(&entity).unwrap_or_default(),
                 }
@@ -724,6 +735,9 @@ impl Game {
                         .get::<Durability>(entity)
                         .map(|d| (d.hp, d.max_hp)),
                     fusions: 0,
+                    // Structures only, so there is no creature here to have
+                    // rolled a tier.
+                    rarity: Rarity::Ordinary,
                 }
             })
             .collect();

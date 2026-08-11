@@ -149,7 +149,7 @@ pub(super) fn draw_trade_action_menu(
             TEXT,
         ));
         for program in &programs {
-            rows.push(fusion_row(
+            rows.push(program_row(
                 format!(
                     "[{}] Sell {} Lv{} — power {} → {} {money}{}{}",
                     menu_shortcut(idx),
@@ -162,6 +162,7 @@ pub(super) fn draw_trade_action_menu(
                 ),
                 idx == selected,
                 program.fusions,
+                program.rarity,
             ));
             idx += 1;
         }

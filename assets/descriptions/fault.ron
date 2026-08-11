@@ -1,0 +1,29 @@
+(
+    subject: "stack.fault",
+    variants: [
+        (
+            underfoot: ["A hole in the floor"],
+            sighted: [
+                "The floor has gone {bearing}.",
+                "There is a fault {bearing}, and nothing under it.",
+            ],
+            openers: [
+                "A fault, and no floor across it.",
+                "The substrate has failed here.",
+                "A hole, straight down.",
+            ],
+            details: [
+                "",
+                "The same fault logged all the way down, each line a little more corrupt than the last.",
+                "A routine that called itself until there was no floor left underneath it.",
+                "A handshake opened and never closed. It is still counting the seconds since.",
+                "Something here asked for authorization eleven thousand times and got no reply at all.",
+            ],
+            codas: [
+                "",
+                "It is a long way to the next frame, and only one way to find out.",
+                "Nothing has patched it and nothing is going to.",
+            ],
+        ),
+    ],
+)

@@ -1,6 +1,7 @@
 //! Fixtures and helpers shared by the engine's unit tests.
 
 use crate::game::spawning;
+use crate::stack::{Dir, Frame};
 use crate::tuning::{MAX_ENEMY_GROUPS, NEST_DURABILITY};
 use crate::*;
 use std::path::Path;
@@ -67,6 +68,45 @@ pub(super) fn set_zone(game: &mut Game, zone: u32) {
 
 pub(crate) fn test_assets_dir() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+}
+
+/// Drops the party into depth 1 through an entrance on the tile they are
+/// standing on, which is what walking onto a link does.
+pub(crate) fn descend(game: &mut Game) {
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    game.enter_stack(pos.x, pos.y);
+}
+
+pub(crate) fn frame(game: &Game) -> Frame {
+    game.world.resource::<CurrentStack>().0.clone().unwrap()
+}
+
+pub(crate) fn every_cell(level: &Frame) -> impl Iterator<Item = (i32, i32)> + use<> {
+    let (w, h) = (level.width, level.height);
+    (0..h).flat_map(move |y| (0..w).map(move |x| (x, y)))
+}
+
+/// Puts the party on `cell` facing `facing` without walking there. Caches
+/// and orphans sit in dead ends, so reaching one honestly would mean
+/// solving the maze first — `tests/stack.rs` teleports for the same reason.
+pub(crate) fn stand_at(game: &mut Game, cell: (i32, i32), facing: Dir) {
+    let Locale::Stack {
+        depth,
+        frames,
+        entrance,
+        ..
+    } = game.locale()
+    else {
+        unreachable!("not underground")
+    };
+    game.world.insert_resource(Locale::Stack {
+        depth,
+        frames,
+        x: cell.0,
+        y: cell.1,
+        facing,
+        entrance,
+    });
 }
 
 /// Plans `action` for the player and a plain attack for every
@@ -288,7 +328,7 @@ pub(super) fn copy_shipped_assets(dir: &std::path::Path, omit_items: &[&str]) {
         "abilities",
         "perks",
         "achievements",
-        "crash_logs",
+        "descriptions",
         // The trained enemy policy comes along too, or a modded install
         // would quietly fight under the uniform baseline while the shipped
         // one fought under the weights — a difference no test would name.

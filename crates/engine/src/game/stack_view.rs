@@ -1,19 +1,23 @@
-//! The two views of a Stack frame, and the record of what they showed.
+//! The three views of a Stack frame, and the record of what they showed.
 //!
-//! `view_cone` is the single walk both are built from, which is why it and
-//! both its consumers live here and it stays private to this file: the map
-//! cannot mark a cell the first-person view never showed, and it cannot do
-//! so by construction rather than by agreement.
+//! `view_cone` is the single walk every one of them is built from, which is
+//! why it and its consumers live here and it stays private to this file:
+//! the map cannot mark a cell the first-person view never showed, and the
+//! examine ray cannot describe a cell neither of them drew — by
+//! construction rather than by agreement.
 //!
-//! Sight stops at `CellKind::blocks_sight` — rock, and any door, since a
-//! shut door is the point of a door. Never at `ahead == 0`: that row is the
-//! cell the party is standing in, and a cell cannot hide the party from
-//! their own surroundings. A door is both walkable and sight-blocking, so
-//! standing inside an occluder is reachable and both consumers carry that
-//! exception explicitly.
+//! `visible_rows` is where sight actually stops, at `CellKind::blocks_sight`
+//! — rock, and any door, since a shut door is the point of a door. Never at
+//! `ahead == 0`: that row is the cell the party is standing in, and a cell
+//! cannot hide the party from their own surroundings. A door is both
+//! walkable and sight-blocking, so standing inside an occluder is reachable,
+//! and the exception is carried once, in `visible_rows`, rather than by
+//! each consumer separately — a second copy of this walk is exactly the
+//! drift that let the examine ray describe a cache through a shut door
+//! before `visible_rows` existed.
 
 use super::stack::StackPos;
-use crate::stack::{CellKind, Dir};
+use crate::stack::{CellKind, Dir, Frame};
 use crate::*;
 
 /// How far ahead the first-person view reaches, in cells. Four is enough
@@ -69,42 +73,220 @@ fn view_cone(x: i32, y: i32, facing: Dir) -> Vec<Vec<(i32, i32)>> {
         .collect()
 }
 
+/// The rows of `view_cone` the party can actually see from `(x, y)` facing
+/// `facing` — same shape and order, truncated after the row whose middle
+/// (dead-ahead) cell blocks sight.
+///
+/// This is the one place that walk happens. `remember_view_silent` and
+/// `Game::describe_view_direction` both call it rather than each re-walking
+/// `view_cone` and re-deciding where sight stops, which is what makes them
+/// agree: the map cannot mark a cell this never showed, and the examine ray
+/// cannot describe one either. Before this existed, the ray walked the raw
+/// `view_cone` on its own and could describe a cache sitting behind a shut
+/// door — the exact drift a shared walk exists to rule out.
+///
+/// Never at `ahead == 0`: that row is the cell the party is standing in, and
+/// a cell cannot hide the party from their own surroundings. A door is both
+/// walkable and sight-blocking — the only cell that is both — so standing in
+/// one must not blind the party to the corridor they are standing in. The
+/// wall or door that stops the walk is itself included, since it is in
+/// plain sight; only what lies beyond it is cut.
+fn visible_rows(level: &Frame, x: i32, y: i32, facing: Dir) -> Vec<Vec<(i32, i32)>> {
+    let mut rows = Vec::new();
+    for (ahead, row) in view_cone(x, y, facing).into_iter().enumerate() {
+        let blocked = ahead > 0
+            && row
+                .get(STACK_VIEW_HALF_WIDTH)
+                .is_some_and(|&(cx, cy)| level.cell(cx, cy).blocks_sight());
+        rows.push(row);
+        if blocked {
+            break;
+        }
+    }
+    rows
+}
+
+/// The key-prompt suffix `standing_on` appends after a cell's descriptive
+/// clause, keyed by the same `(subject, condition)` pair
+/// `Game::subject_of` resolves a cell to.
+///
+/// This is the single home for those strings: `Game::stack_view`'s match
+/// below reads it to build the row, and
+/// `tests::descriptions::every_shipped_underfoot_line_fits_the_standing_on_row`
+/// reads it to size the per-subject budget it holds the shipped bank to. A
+/// subject/condition pair absent from this table appends nothing, which is
+/// every arm that reports rather than offers.
+const UNDERFOOT_SUFFIXES: &[(&str, Option<&str>, &str)] = &[
+    ("stack.link_down", None, "  [>] descend"),
+    ("stack.link_up", Some("surface"), "  [<] surface"),
+    ("stack.link_up", None, "  [<] climb"),
+    ("stack.orphan", None, "  [o] adopt"),
+    ("stack.corruption", None, "  — moving on costs"),
+];
+
+/// Looks up `UNDERFOOT_SUFFIXES`, or `""` for a subject/condition pair that
+/// appends nothing.
+pub(crate) fn underfoot_suffix(subject: &str, condition: Option<&str>) -> &'static str {
+    UNDERFOOT_SUFFIXES
+        .iter()
+        .find(|&&(s, c, _)| s == subject && c == condition)
+        .map_or("", |&(_, _, suffix)| suffix)
+}
+
+/// Which way the examine key is looking, in **view space**.
+///
+/// Up is ahead, left and right are the party's own, and down is the cell
+/// underfoot. Absolute compass directions are wrong in a first-person view:
+/// the same keypress has to mean the same thing to the player whichever way
+/// they are facing, and `Dir::delta` is what makes it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExamineDir {
+    Ahead,
+    Left,
+    Right,
+    Underfoot,
+}
+
 impl Game {
-    /// Records everything the party can see from where they are standing.
+    /// The examine paragraph for the nearest notable cell that way, or for
+    /// the corridor itself when the ray holds nothing notable — so the key
+    /// always answers. `None` on the surface, where
+    /// `find_target_in_direction` is the inspector instead.
     ///
-    /// Called from every place that moves the party or turns them, plus the
-    /// load path — anywhere the view changes, the map has to change with it,
-    /// or the player is told they never looked down a corridor they are
-    /// currently staring at.
+    /// Reads `visible_rows`, the same walk the first-person view and the
+    /// map's memory are built from, so `x` can only describe a cell the
+    /// player can actually see — a shut door blocks the ray exactly as it
+    /// blocks the eye, the same as it already blocked `remember_view_silent`
+    /// from ever marking what's behind it as seen. And the same `notability`
+    /// ranking the sighting line uses, so the thing `x` describes is the
+    /// thing the log announced.
+    pub fn describe_view_direction(&self, dir: ExamineDir) -> Option<String> {
+        let pos = self.stack_pos()?;
+        if dir == ExamineDir::Underfoot {
+            return self.cell_paragraph(pos, (pos.x, pos.y));
+        }
+        let lateral = match dir {
+            ExamineDir::Left => 0,
+            ExamineDir::Ahead => STACK_VIEW_HALF_WIDTH,
+            ExamineDir::Right => STACK_VIEW_HALF_WIDTH * 2,
+            ExamineDir::Underfoot => unreachable!("returned above"),
+        };
+        let level = self.world.resource::<CurrentStack>().0.as_ref()?;
+        let cone = visible_rows(level, pos.x, pos.y, pos.facing);
+        // Nearest first. Only the party's own cell is excluded — row 0's
+        // centre column, which is where `Underfoot` answers instead — not
+        // row 0 itself: the cells beside the party at `ahead == 0` are what
+        // `Left`/`Right` read there, and dropping the whole row would make
+        // an adjacent cell unreachable by the ray that is supposed to cover
+        // it.
+        let along = cone
+            .iter()
+            .filter_map(|row| row.get(lateral).copied())
+            .filter(|&cell| cell != (pos.x, pos.y));
+        for cell in along.clone() {
+            if self.notability(pos, cell).is_some() {
+                return self.cell_paragraph(pos, cell);
+            }
+        }
+        // Nothing notable that way, so describe the corridor the ray runs
+        // down — the nearest walkable cell on it, or the party's own.
+        let fallback = along
+            .clone()
+            .find(|&(x, y)| level.walkable(x, y))
+            .unwrap_or((pos.x, pos.y));
+        self.cell_paragraph(pos, fallback)
+    }
+
+    /// Records everything the party can see from where they are standing,
+    /// and announces the most notable thing that just came into view.
+    ///
+    /// Called from every place that moves the party or turns them — anywhere
+    /// the view changes, the map has to change with it, or the player is
+    /// told they never looked down a corridor they are currently staring at.
+    ///
+    /// **The load path calls `remember_view_silent` instead.**
+    /// `restore_locale` runs the same walk, and a save reloading into a
+    /// corridor would replay sightings the player already read a session
+    /// ago. One site, pinned by `tests::descriptions::loading_a_save_announces_no_sightings`.
     pub(crate) fn remember_view(&mut self) {
+        let newly_seen = self.remember_view_silent();
+        self.announce_sighting(&newly_seen);
+    }
+
+    /// The view walk itself, returning the cells that were not on the map
+    /// before this call.
+    ///
+    /// The diff is free: `FrameMemory::seen` is consulted before the
+    /// `extend`, so nothing new is stored to support it and the save format
+    /// does not move.
+    pub(crate) fn remember_view_silent(&mut self) -> Vec<(i32, i32)> {
+        let Some(pos) = self.stack_pos() else {
+            return Vec::new();
+        };
+        let Some(level) = self.world.resource::<CurrentStack>().0.clone() else {
+            return Vec::new();
+        };
+
+        let seen: Vec<(i32, i32)> = visible_rows(&level, pos.x, pos.y, pos.facing)
+            .into_iter()
+            .flatten()
+            .collect();
+
+        let memory = self.frame_memory_mut(pos);
+        let newly_seen: Vec<(i32, i32)> = seen
+            .iter()
+            .copied()
+            .filter(|cell| !memory.seen.contains(cell))
+            .collect();
+        memory.seen.extend(seen);
+        newly_seen
+    }
+
+    /// Logs one line for the most notable cell that just came into view, or
+    /// nothing when none of them was worth a line.
+    ///
+    /// **Capped at one.** A corridor opening onto four features must not
+    /// push four rows into a pane that shows a handful — and the one row it
+    /// does push should be the thing the player would actually walk to.
+    ///
+    /// `notability`'s ranks are not a total order — an unspent cache and an
+    /// unspent breakpoint both rank 3, `LinkDown` and a sealed door both rank
+    /// 2. `newly_seen` is already a `Vec` walked off `view_cone` in a fixed
+    /// order, so `max_by_key` on rank alone would still be deterministic —
+    /// but it resolves ties by picking whichever tied cell happens to come
+    /// *last* in that scan order, which is an accident of the view cone's
+    /// layout, not the cell nearest the party. Breaking ties on Manhattan
+    /// distance (nearest first) makes the winner the tied cell closest to
+    /// where the player is standing — the one they would actually walk to —
+    /// and the final `Reverse(cell)` only matters for the rarer case of two
+    /// notable cells tied on both rank and distance, where it keeps the pick
+    /// a pure function of coordinates rather than of scan order.
+    ///
+    /// Falls through to the next-best candidate if the winner's own line is
+    /// missing from the bank (an empty variant pool, or an empty asset
+    /// directory — a *deleted* one fails `Game::new` outright, see
+    /// `DescriptionDb::load_dir`) rather than saying nothing: a lower-ranked
+    /// cell with a line to offer is still more useful than silence, and the
+    /// cap still holds because at most one candidate's line is ever logged.
+    fn announce_sighting(&mut self, newly_seen: &[(i32, i32)]) {
         let Some(pos) = self.stack_pos() else {
             return;
         };
-        let Some(level) = self.world.resource::<CurrentStack>().0.clone() else {
-            return;
-        };
-
-        let mut seen = Vec::new();
-        for (ahead, row) in view_cone(pos.x, pos.y, pos.facing).into_iter().enumerate() {
-            // The party's own cell can never stop their view out of it. That
-            // is not hypothetical: a door both blocks sight and is walkable —
-            // the only cell that is both — so standing in a doorway would
-            // otherwise blind the party to the corridor they are standing in.
-            //
-            // The wall that stops the view is itself in plain sight, so the
-            // row is recorded before the break, not after the check.
-            let blocked = ahead > 0
-                && row
-                    .get(STACK_VIEW_HALF_WIDTH)
-                    .is_some_and(|&(cx, cy)| level.cell(cx, cy).blocks_sight());
-            seen.extend(row);
-            if blocked {
-                break;
-            }
+        let mut candidates: Vec<(u8, (i32, i32))> = newly_seen
+            .iter()
+            .filter(|&&cell| cell != (pos.x, pos.y))
+            .filter_map(|&cell| self.notability(pos, cell).map(|rank| (rank, cell)))
+            .collect();
+        candidates.sort_by_key(|&(rank, cell)| {
+            let steps = (cell.0 - pos.x).abs() + (cell.1 - pos.y).abs();
+            std::cmp::Reverse((rank, std::cmp::Reverse(steps), std::cmp::Reverse(cell)))
+        });
+        if let Some(line) = candidates
+            .into_iter()
+            .find_map(|(_, cell)| self.sighted_description(pos, cell))
+        {
+            self.log(line);
         }
-
-        let memory = self.frame_memory_mut(pos);
-        memory.seen.extend(seen);
     }
 
     /// The party's map of the frame they are in — see
@@ -265,29 +447,57 @@ impl Game {
             })
             .collect();
 
+        // Each arm keeps its key-prompt suffix verbatim (via
+        // `underfoot_suffix`) and draws only its *descriptive clause* from
+        // the bank, falling back to the literal this row shipped with. The
+        // `None` arms stay `None`: those are cells with nothing to offer,
+        // not cells with nothing to say, and two tests in `tests/stack.rs`
+        // pin the difference.
+        let described = |fallback: &str| {
+            self.underfoot_description(pos)
+                .unwrap_or_else(|| fallback.to_string())
+        };
         let standing_on = match level.cell(x, y) {
-            CellKind::LinkDown => Some("A link leads down  [>] descend".to_string()),
-            CellKind::LinkUp if depth == 1 => Some("The link out  [<] surface".to_string()),
-            CellKind::LinkUp => Some("A link leads up  [<] climb".to_string()),
+            CellKind::LinkDown => Some(format!(
+                "{}{}",
+                described("A link leads down"),
+                underfoot_suffix("stack.link_down", None)
+            )),
+            CellKind::LinkUp if depth == 1 => Some(format!(
+                "{}{}",
+                described("The link out"),
+                underfoot_suffix("stack.link_up", Some("surface"))
+            )),
+            CellKind::LinkUp => Some(format!(
+                "{}{}",
+                described("A link leads up"),
+                underfoot_suffix("stack.link_up", None)
+            )),
             // Emptied on arrival rather than on a key, so this reports what
             // already happened rather than offering a choice.
-            CellKind::Cache => Some("An empty casing".to_string()),
-            CellKind::Lair => Some("The lair, and nothing left holding it".to_string()),
-            CellKind::Door | CellKind::SealedDoor => Some("A doorway".to_string()),
+            CellKind::Cache => Some(described("An empty casing")),
+            CellKind::Lair => Some(described("The lair, and nothing left holding it")),
+            CellKind::Door | CellKind::SealedDoor => Some(described("A doorway")),
             // Like the cache above, these report rather than offer: all three
             // fire on arrival, so by the time this line is read the port is
             // spent and the substrate has already bitten. A fault never
             // appears here at all — the party is in the frame below before
             // the view is next built.
-            CellKind::Breakpoint => Some("A burnt-out debug port".to_string()),
-            CellKind::Corruption => Some("Rotten substrate  — moving on costs".to_string()),
+            CellKind::Breakpoint => Some(described("A burnt-out debug port")),
+            CellKind::Corruption => Some(format!(
+                "{}{}",
+                described("Rotten substrate"),
+                underfoot_suffix("stack.corruption", None)
+            )),
             // The one line here that offers rather than reports. Everything
             // else underfoot has already happened by the time this is read;
             // an orphan costs a catalyst, so it waits for the key — and
             // stops offering once it has been taken.
-            CellKind::Orphan if self.orphan_present(pos, (x, y)) => {
-                Some("An orphaned process  [o] adopt".to_string())
-            }
+            CellKind::Orphan if self.orphan_present(pos, (x, y)) => Some(format!(
+                "{}{}",
+                described("An orphaned process"),
+                underfoot_suffix("stack.orphan", None)
+            )),
             CellKind::Orphan => None,
             CellKind::Rock | CellKind::Floor | CellKind::Fault => None,
         };

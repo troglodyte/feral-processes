@@ -338,6 +338,15 @@ impl Game {
             entrance,
         });
         self.remember_view();
+        // After the view, so the frame's own line reads as the thing you
+        // notice once you are standing in it. `enter_frame` is the one spine
+        // every descent, ascent and fall goes through, which is why the line
+        // fires here and not at each of them.
+        if let Some(pos) = self.stack_pos()
+            && let Some(line) = self.arrival_line(pos)
+        {
+            self.log(line);
+        }
     }
 
     /// Arrives on the frame's entry cell — walking in from the surface, and
@@ -781,7 +790,9 @@ impl Game {
             self.world.insert_resource(CurrentStack(Some(level)));
         }
         self.world.insert_resource(locale);
-        self.remember_view();
+        // Silent: this is a reload, and every sighting in this view was
+        // already announced in the session that saved it.
+        self.remember_view_silent();
     }
 
     pub(crate) fn locale(&self) -> Locale {

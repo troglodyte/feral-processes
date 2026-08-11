@@ -133,6 +133,22 @@ pub(super) fn fusion_row(s: impl Into<String>, selected: bool, fusions: u32) -> 
     }
 }
 
+/// `fusion_row` for a *program*, which unlike a piece of gear can also carry
+/// a rare-spawn tier. `program_color` is what decides between the two when
+/// a program has both; this is only the row-building half, and the same
+/// "one function so no menu grows its own idea" rule applies.
+pub(super) fn program_row(
+    s: impl Into<String>,
+    selected: bool,
+    fusions: u32,
+    rarity: Rarity,
+) -> Row {
+    match program_color(fusions, rarity) {
+        Some(color) => colored_item_row(s, selected, color),
+        None => item_row(s, selected),
+    }
+}
+
 /// `colored_item_row` for a row standing for `repeats` identical log lines —
 /// the history screen's folded rows (see `Game::message_history`). The count
 /// is drawn dim and set apart, so it reads as an annotation rather than as
@@ -543,7 +559,7 @@ mod tests {
                 suffix_x(label, row_x, p, &m) >= text_right,
                 "the suffix must start past the row text, not inside it"
             );
-        })
+        });
     }
 
     /// The icon is painted *over* a slot reserved inside the label rather than

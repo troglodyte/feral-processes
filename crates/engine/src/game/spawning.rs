@@ -7,9 +7,9 @@ use crate::tuning::{
     NEST_TETHER_RADIUS, OPENING_RING_TILES, PACK_GATHER_RADIUS, WILD_CREATURE_CAP, ZONE_GROUP_STEP,
 };
 use crate::tuning::{
-    GROUP_SIZE_DISTANCE_GROWTH, GROUP_SIZE_STEP_FRAMES, GROUP_SIZE_STEP_ZONES,
-    MAX_GROUP_SIZE_STEPS, WILD_LOCAL_DENSITY_TARGET, WILD_ROUTINE_CHANCE, WILD_SPAWN_CHANCE,
-    WILD_SPAWN_RADIUS_TILES,
+    GOLD_SPAWN_CHANCE, GROUP_SIZE_DISTANCE_GROWTH, GROUP_SIZE_STEP_FRAMES, GROUP_SIZE_STEP_ZONES,
+    MAX_GROUP_SIZE_STEPS, SILVER_SPAWN_CHANCE, WILD_LOCAL_DENSITY_TARGET, WILD_ROUTINE_CHANCE,
+    WILD_SPAWN_CHANCE, WILD_SPAWN_RADIUS_TILES,
 };
 use crate::*;
 
@@ -179,8 +179,15 @@ impl Game {
         let zone = zone_level.0;
         let potential = self.roll_potential();
         let routines = self.roll_wild_routine();
-        let scale =
-            |base: i32, roll: f32| ((base as f32) * mult * depth_mult * roll).round() as i32;
+        let rarity = self.roll_rarity(&species, x, y);
+        // Rarity multiplies here and exactly here. It is baked into `Stats`
+        // the same way `Potential`'s three stat rolls are, and the component
+        // that rides along is the receipt — see `Rarity`'s doc for why
+        // nothing downstream may apply it a second time.
+        let rarity_mult = rarity.stat_mult();
+        let scale = |base: i32, roll: f32| {
+            ((base as f32) * mult * depth_mult * rarity_mult * roll).round() as i32
+        };
         Some(
             self.world
                 .spawn((
@@ -199,6 +206,7 @@ impl Game {
                         def: scale(species.base_def, potential.def_roll),
                     },
                     potential,
+                    rarity,
                     Hostile,
                     WanderAi::default(),
                     ZonePortal(zone),
@@ -362,6 +370,45 @@ impl Game {
             growth_roll: rng
                 .0
                 .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
+        }
+    }
+
+    /// Rolls the rare-spawn tier for a creature about to be created at
+    /// `(x, y)` — see `components::Rarity`, which is where the "record of a
+    /// multiplier already spent" rule lives.
+    ///
+    /// Two spawns are ineligible and **return without touching `GameRng`**,
+    /// which is the load-bearing half of this function. A boss is excluded
+    /// because its stats are hand-authored per `.ron` (see
+    /// `assets/species/README.md`) and a multiplier discards that authoring;
+    /// the opening ring is excluded because
+    /// `balance_sim::beatable_by_a_fresh_player` guarantees a fresh player
+    /// can beat one program there, computed against `MAX_INDIVIDUAL_ROLL`,
+    /// and a gold spawn falsifies it.
+    ///
+    /// Gating *before* the draw is deliberate and is the mirror image of the
+    /// density gate in `maybe_spawn_wild_creature`, which rolls first so a
+    /// miss leaves the stream untouched. The reasoning inverts here: every
+    /// zone-1 opening-ring spawn and every boss keeps its exact current RNG
+    /// sequence, so the seeded tests covering those paths do not move.
+    /// Eligible spawns do consume one draw, which shifts the stream for
+    /// everything after them — that was a one-time, expected re-baselining.
+    ///
+    /// One roll decides both tiers rather than two independent draws, so the
+    /// chances cannot sum past 1.0 and gold is genuinely rarer than silver
+    /// instead of landing on top of it.
+    pub(crate) fn roll_rarity(&mut self, species: &SpeciesDef, x: i32, y: i32) -> Rarity {
+        if species.is_boss || self.in_opening_ring(x, y) {
+            return Rarity::Ordinary;
+        }
+        let mut rng = self.world.resource_mut::<GameRng>();
+        let roll: f64 = rng.0.random_range(0.0..1.0);
+        if roll < GOLD_SPAWN_CHANCE {
+            Rarity::Gold
+        } else if roll < GOLD_SPAWN_CHANCE + SILVER_SPAWN_CHANCE {
+            Rarity::Silver
+        } else {
+            Rarity::Ordinary
         }
     }
 

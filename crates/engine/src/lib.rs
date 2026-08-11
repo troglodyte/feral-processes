@@ -4,7 +4,7 @@ pub mod arena;
 pub mod balance_sim;
 pub mod battle;
 pub mod components;
-pub mod crash_logs;
+pub mod descriptions;
 pub mod difficulty;
 mod game;
 pub mod items;
@@ -47,9 +47,10 @@ use components::{
     CombatBuff, Creature, CustomName, Decompiler, Durability, Equipment, EquippedItem, Experience,
     FieldBuff, FieldBuffKind, FusedGear, FusionCount, Glyph, GlyphColor, Hostile, Inventory,
     MachineStatus, NEED_MAX, Needs, Nest, NestGuardian, Perks, Player, Position, Potential,
-    Pursuing, ResourceNode, Routines, StackSpawn, Stats, StatusEffects, StatusKind, Stock,
+    Pursuing, Rarity, ResourceNode, Routines, StackSpawn, Stats, StatusEffects, StatusKind, Stock,
     Structure, StructureTier, SurfaceLink, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
 };
+pub use game::stack_view::ExamineDir;
 use items::{EquipmentSlot, EquipmentStats, ItemCategory, ItemId, ids};
 use items_db::ItemDb;
 #[cfg(test)]
@@ -75,6 +76,21 @@ use world::{Biome, Tile, WorldMap};
 /// `Game::fuse_companions`) — enforced by truncation, not rejection, so a
 /// too-long name just gets shortened rather than failing the fusion.
 pub const MAX_CUSTOM_NAME_LEN: usize = 12;
+
+/// How many characters the `standing_on` row will take, descriptive clause
+/// and key-prompt suffix together.
+///
+/// That row is centred, drawn at `Metrics::font_size` and **unwrapped** —
+/// nothing clips it, so an over-long line runs off the pane rather than
+/// eliding. 48 leaves headroom over the longest literal the row carried
+/// before the bank existed ("Rotten substrate  — moving on costs", 35) while
+/// still keeping the clause a phrase rather than a sentence.
+///
+/// Proved in pixels by `crates/gui`'s
+/// `the_longest_underfoot_line_fits_the_stack_pane`, at the narrowest
+/// window size the UI supports. A number asserted in one place and repeated
+/// in a doc comment somewhere else is how this measurement rots.
+pub const MAX_UNDERFOOT_LINE: usize = 48;
 
 /// The quantity a zone-portal structure costing `base_qty` of an item
 /// charges at `zone`.

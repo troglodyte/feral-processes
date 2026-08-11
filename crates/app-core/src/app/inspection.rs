@@ -1,7 +1,7 @@
 //! Aiming the inspector at a tile, and the manifest screen it opens.
 
 use crate::*;
-use feral_processes_engine::InspectTarget;
+use feral_processes_engine::{ExamineDir, InspectTarget};
 
 impl App {
     /// Picks a direction (arrows/hjkl) and inspects the first creature the
@@ -12,6 +12,25 @@ impl App {
             self.close_screen();
             return;
         }
+        let Some(game) = &mut self.game else { return };
+        // Underground the four keys are read in view space and describe a
+        // cell, because `Position` is pinned to the surface entrance tile
+        // down there and a scan of it would report the base as lying that
+        // way. `Game::find_target_in_direction` refuses underground for the
+        // same reason.
+        if game.is_underground() {
+            let dir = match key {
+                GameKey::Up | GameKey::Char('k') => ExamineDir::Ahead,
+                GameKey::Down | GameKey::Char('j') => ExamineDir::Underfoot,
+                GameKey::Left | GameKey::Char('h') => ExamineDir::Left,
+                GameKey::Right | GameKey::Char('l') => ExamineDir::Right,
+                _ => return,
+            };
+            self.pending_description = game.describe_view_direction(dir);
+            self.status_line = None;
+            self.mode = Mode::CellDescribe;
+            return;
+        }
         let dir = match key {
             GameKey::Up | GameKey::Char('k') => Some((0, -1)),
             GameKey::Down | GameKey::Char('j') => Some((0, 1)),
@@ -20,7 +39,6 @@ impl App {
             _ => None,
         };
         let Some((dx, dy)) = dir else { return };
-        let Some(game) = &mut self.game else { return };
         match game.find_target_in_direction(dx, dy, MENU_SCAN_RADIUS) {
             Some(InspectTarget::Creature(entity)) => {
                 self.pending_manifest = Some(entity);
@@ -46,6 +64,14 @@ impl App {
     /// Any key leaves, the way a plain popup does.
     pub(crate) fn handle_structure_manifest_key(&mut self, _key: GameKey) {
         self.pending_structure_manifest = None;
+        self.close_screen();
+    }
+
+    /// The cell description is read-only and reached only from the corridor
+    /// view, so there is nothing to page through and no origin to return to.
+    /// Any key leaves, the way a plain popup does.
+    pub(crate) fn handle_cell_describe_key(&mut self, _key: GameKey) {
+        self.pending_description = None;
         self.close_screen();
     }
 

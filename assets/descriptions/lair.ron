@@ -1,0 +1,47 @@
+(
+    subject: "stack.lair",
+    variants: [
+        (
+            underfoot: ["The lair"],
+            sighted: [
+                "The corridor opens out {bearing}, and something is using the space.",
+                "A held room {bearing}.",
+            ],
+            openers: [
+                "The room at the bottom.",
+                "A chamber, and something holding it.",
+                "The deepest room this stack has.",
+            ],
+            details: [
+                "",
+                "The substrate here has been kept clear, which nothing down here does by accident.",
+                "Everything the stack still runs, it runs from in here.",
+                "The hum is louder, and it is not the walls.",
+            ],
+            codas: [
+                "",
+                "Whatever holds this has not moved in a long time.",
+                "It knows the shape of the room better than you do.",
+            ],
+        ),
+        (
+            when: Some("cleared"),
+            underfoot: ["The lair, and nothing left holding it"],
+            sighted: [
+                "The cleared room lies open {bearing}.",
+            ],
+            openers: [
+                "The room at the bottom, emptied.",
+                "The chamber, and nothing in it now.",
+            ],
+            details: [
+                "",
+                "Nothing is coming back to hold this room again.",
+            ],
+            codas: [
+                "",
+                "The hum here is only the walls again.",
+            ],
+        ),
+    ],
+)

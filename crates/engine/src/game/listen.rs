@@ -10,7 +10,6 @@
 //! first-person sense returns, and turning in place moves the answer.
 
 use super::stack::StackPos;
-use crate::crash_logs::CrashLogDb;
 use crate::resources::CurrentStack;
 use crate::stack::CellKind;
 use crate::tuning::TRACE_PER_LISTEN;
@@ -52,12 +51,12 @@ impl Game {
     /// What listening from `pos` says.
     ///
     /// Rotten ground gets the first word. Standing on a fault or on
-    /// corruption reads *that place's* crash log rather than pointing at
-    /// anything, which is why neither cell appears in `nearest_unspent`:
+    /// corruption reads *that place's* own description rather than pointing
+    /// at anything, which is why neither cell appears in `nearest_unspent`:
     /// they are not features to be spent, they are the ones with something
     /// to say.
     fn reading(&self, pos: StackPos) -> String {
-        if let Some(line) = self.crash_log(pos) {
+        if let Some(line) = self.rot_reading(pos) {
             return line;
         }
         let Some(target) = self.nearest_unspent(pos) else {
@@ -72,22 +71,18 @@ impl Game {
         format!("You go still and listen. Something unspent {bearing}, {steps} step{plural} off.")
     }
 
-    /// The crash log of the cell the party is standing on, or `None` if it
-    /// is not rotten — or if no crash logs are loaded at all, which is a
-    /// mod's prerogative and falls back to the bearing rather than to
-    /// nothing.
-    fn crash_log(&self, pos: StackPos) -> Option<String> {
+    /// What the rot underfoot has to say — the description bank's paragraph
+    /// for this exact cell, or `None` when the ground is not rotten, or when
+    /// the bank has nothing for it, which is a mod's prerogative and falls
+    /// back to the bearing rather than to silence.
+    fn rot_reading(&self, pos: StackPos) -> Option<String> {
         if !matches!(
             self.cell_underfoot(),
             Some(CellKind::Fault | CellKind::Corruption)
         ) {
             return None;
         }
-        let zone = self.world.resource::<ZoneLevel>().0;
-        self.world
-            .resource::<CrashLogDb>()
-            .line_for(zone, pos.depth, (pos.x, pos.y))
-            .map(str::to_string)
+        self.cell_paragraph(pos, (pos.x, pos.y))
     }
 
     /// The nearest cell of the frame holding something the party has not
@@ -123,7 +118,11 @@ impl Game {
 /// `Dir::delta` is the way they are looking and `Dir::right_delta` is their
 /// right hand. Reading a bearing off compass north instead would be the
 /// same mistake with a plausible-looking answer.
-fn relative_bearing(pos: StackPos, target: (i32, i32)) -> &'static str {
+///
+/// `pub(crate)` because the description bank's `sighted` lines and examine
+/// paragraphs need the same answer. A second copy of this rotation is
+/// exactly the drift the doc comment above warns about.
+pub(crate) fn relative_bearing(pos: StackPos, target: (i32, i32)) -> &'static str {
     let (dx, dy) = (target.0 - pos.x, target.1 - pos.y);
     let (fx, fy) = pos.facing.delta();
     let (rx, ry) = pos.facing.right_delta();

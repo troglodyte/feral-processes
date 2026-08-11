@@ -436,6 +436,7 @@ impl Game {
                     count: group.members.len(),
                     front_hp: stats.hp,
                     front_max_hp: stats.max_hp,
+                    front_rarity: self.rarity_of(front),
                     atk: stats.atk,
                     def: stats.def,
                     is_boss,

@@ -232,17 +232,29 @@ fn taking_the_link_up_from_depth_one_surfaces() {
 
 #[test]
 fn surfacing_hands_movement_back_to_the_zone_map() {
-    let mut app = app_underground(505);
+    let mut app = app_underground(506);
     app.handle_key(GameKey::Char('<'));
     let before = app.game.as_ref().unwrap().player_status().position;
 
+    // A step *or* a bump into a wild program: both are the zone map
+    // answering, and which one the party gets is decided by whether the
+    // seeded population happens to have put something on the next tile.
+    // Requiring the step alone made this fail the day an upstream `GameRng`
+    // draw moved that population — the party surfaced beside a hostile and
+    // the first arrow key opened a fight instead. A key still routed to the
+    // Stack would do neither: it would walk the frame, leaving the surface
+    // `Position` pinned to the entrance and starting no surface battle.
     for key in [GameKey::Right, GameKey::Down, GameKey::Left, GameKey::Up] {
         app.handle_key(key);
-        if app.game.as_ref().unwrap().player_status().position != before {
+        if app.game.as_ref().unwrap().player_status().position != before || app.mode == Mode::Battle
+        {
             return;
         }
     }
-    panic!("no direction moved the player after surfacing");
+    panic!(
+        "no direction reached the zone map after surfacing (mode={:?})",
+        app.mode
+    );
 }
 
 /// Up and down are separate commands, not one key that guesses. Pressing
@@ -381,4 +393,34 @@ fn shift_z_on_the_surface_does_nothing() {
         before,
         "listening above ground spent a turn"
     );
+}
+
+/// Underground, `x` + a direction describes a cell of the frame instead of
+/// scanning the surface the party's `Position` is still pinned to.
+#[test]
+fn x_underground_opens_a_cell_description() {
+    let mut app = app_underground(606);
+    app.handle_key(GameKey::Char('x'));
+    assert_eq!(app.mode, Mode::InspectDirection);
+
+    app.handle_key(GameKey::Up);
+    assert_eq!(app.mode, Mode::CellDescribe);
+    let text = app
+        .pending_description
+        .clone()
+        .expect("the key always answers");
+    assert!(!text.is_empty());
+    // `{bearing}` never showing up here is not asserted: the shipped bank
+    // never puts the token anywhere but its `sighted` pools, so a check
+    // against this fixture's text would be true regardless of whether
+    // `cell_paragraph` ever actually expanded it — a permanently-green
+    // assertion that reads as coverage it isn't. The engine's own
+    // `cell_paragraph_expands_bearing_even_in_a_field_the_shipped_bank_never_uses_it_in`
+    // (`tests/descriptions.rs`) proves the substitution itself, with a
+    // custom bank built to make the claim fallible.
+
+    // A plain popup: any key leaves, and the text goes with it.
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+    assert!(app.pending_description.is_none());
 }

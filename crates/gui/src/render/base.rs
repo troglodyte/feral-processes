@@ -680,6 +680,26 @@ fn draw_surface_map(
                 let ty = py + (tile_px + dims.height) / 2.0;
                 painter.map(&glyph, tx, ty, glyph_px, color);
             }
+            // A rare-spawn tier draws as a bar along the top edge rather
+            // than by recolouring the glyph, because the glyph's colour is
+            // already spoken for: a hostile is tinted by `difficulty_color`
+            // (green through red by power ratio against the player), which
+            // is the "can I win this fight" read and cannot be given up.
+            // Two readings, two channels — the glyph says how dangerous,
+            // the bar says how rare.
+            //
+            // Keyed off `actor` and never `structure`: a structure has no
+            // tier, and the actor is what owns this channel. Vignette but
+            // not the tile shade, matching the glyph's rule above.
+            if let Some(bar) = actor.and_then(|ev| rarity_color(ev.rarity)) {
+                painter.rect(
+                    px,
+                    py,
+                    tile_px - 1.0,
+                    RARITY_BAR_PX,
+                    Color::new(bar.r * vig, bar.g * vig, bar.b * vig, bar.a),
+                );
+            }
             // Marks where the player materialized on breaching into this
             // zone (see `Game::zone_spawn_point`) — an outline rather than
             // replacing the glyph, so whatever's actually standing there

@@ -33,7 +33,7 @@ impl Game {
         let AssetDbs {
             abilities: ability_db,
             achievements: achievement_db,
-            crash_logs: crash_log_db,
+            descriptions: description_db,
             species: species_db,
             structures: structure_db,
             research: research_db,
@@ -54,7 +54,7 @@ impl Game {
         world.insert_resource(item_db);
         world.insert_resource(perk_db);
         world.insert_resource(enemy_policy);
-        world.insert_resource(crash_log_db);
+        world.insert_resource(description_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock::default());
         world.insert_resource(GameRng(StdRng::seed_from_u64(seed as u64)));
@@ -182,7 +182,7 @@ impl Game {
         let AssetDbs {
             abilities: ability_db,
             achievements: achievement_db,
-            crash_logs: crash_log_db,
+            descriptions: description_db,
             species: species_db,
             structures: structure_db,
             research: research_db,
@@ -216,7 +216,7 @@ impl Game {
         world.insert_resource(item_db);
         world.insert_resource(perk_db);
         world.insert_resource(enemy_policy);
-        world.insert_resource(crash_log_db);
+        world.insert_resource(description_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock { tick: data.tick });
         world.insert_resource(GameRng(StdRng::seed_from_u64(data.seed as u64 ^ data.tick)));
@@ -432,6 +432,11 @@ impl Game {
                 StatusEffects::default(),
                 FusionCount(c.fusions),
                 Routines(routines),
+                // The tag only. `Stats` above are the recorded numbers and
+                // already carry this tier's multiplier from the spawn that
+                // rolled it — re-applying `stat_mult` here would compound
+                // the bonus on every reload. See `Rarity`'s doc.
+                c.rarity,
             ));
             if let Some(name) = c.custom_name.clone() {
                 entity.insert(CustomName(name));
@@ -640,7 +645,12 @@ impl Game {
             // this one is full. Grouped by what they describe — where the
             // creature belongs and what it is holding — rather than split
             // wherever the count happened to run out.
-            (Option<&NestGuardian>, Option<&Pursuing>, Option<&Carrying>),
+            (
+                Option<&NestGuardian>,
+                Option<&Pursuing>,
+                Option<&Carrying>,
+                Option<&Rarity>,
+            ),
         )>();
         for (
             entity,
@@ -656,7 +666,7 @@ impl Game {
             fusions,
             routines,
             field_buff,
-            (nest_guardian, pursuing, carrying),
+            (nest_guardian, pursuing, carrying, rarity),
         ) in creature_query.iter(&self.world)
         {
             let potential = potential.copied().unwrap_or(Potential::NEUTRAL);
@@ -710,6 +720,7 @@ impl Game {
                 nest_position,
                 pursuing: pursuing.is_some(),
                 carrying: carrying.map(|c| (c.item.clone(), c.qty)),
+                rarity: rarity.copied().unwrap_or_default(),
             });
         }
 
@@ -1021,7 +1032,7 @@ impl Game {
 struct AssetDbs {
     abilities: AbilityDb,
     achievements: crate::achievements::AchievementDb,
-    crash_logs: crate::crash_logs::CrashLogDb,
+    descriptions: crate::descriptions::DescriptionDb,
     species: SpeciesDb,
     structures: StructureDb,
     research: ResearchDb,
@@ -1059,9 +1070,9 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (achievements, achievement_warnings) =
         crate::achievements::AchievementDb::load_dir(&assets_dir.join("achievements"))?;
     warnings.extend(achievement_warnings);
-    let (crash_logs, crash_log_warnings) =
-        crate::crash_logs::CrashLogDb::load_dir(&assets_dir.join("crash_logs"))?;
-    warnings.extend(crash_log_warnings);
+    let (descriptions, description_warnings) =
+        crate::descriptions::DescriptionDb::load_dir(&assets_dir.join("descriptions"))?;
+    warnings.extend(description_warnings);
     let missing = items.missing_roles();
     if !missing.is_empty() {
         return Err(std::io::Error::new(
@@ -1089,7 +1100,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     Ok(AssetDbs {
         abilities,
         achievements,
-        crash_logs,
+        descriptions,
         species,
         structures,
         research,

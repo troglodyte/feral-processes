@@ -8,11 +8,11 @@ members = ["crates/engine", "crates/app-core", "crates/gui", "crates/launcher"]
 # "Breaking" for this project means a save-format bump above all — see
 # `save::SAVE_FORMAT_VERSION` and the CHANGELOG.
 [workspace.package]
-version = "0.5.21"
+version = "0.6.0"
 edition = "2024"
 
 # Internal crates are declared once here so a version bump is a single edit.
 [workspace.dependencies]
-feral-processes-engine = { version = "0.5.1", path = "crates/engine" }
-feral-processes-app-core = { version = "0.5.1", path = "crates/app-core" }
-feral-processes-gui = { version = "0.5.1", path = "crates/gui" }
+feral-processes-engine = { version = "0.6.0", path = "crates/engine" }
+feral-processes-app-core = { version = "0.6.0", path = "crates/app-core" }
+feral-processes-gui = { version = "0.6.0", path = "crates/gui" }

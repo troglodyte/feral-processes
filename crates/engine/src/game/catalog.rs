@@ -20,9 +20,12 @@ impl Game {
         self.world.resource::<ItemDb>().all().cloned().collect()
     }
 
-    /// One item definition by id, or `None` if nothing declares it. Same
-    /// test-only rationale as `item_defs`.
-    #[cfg(test)]
+    /// One item definition by id, or `None` if nothing declares it.
+    ///
+    /// Returns a clone rather than a borrow because its callers go on to
+    /// mutate the world with what they read — `refactor_companion` decides
+    /// its refusals off the `upgrade` field and then writes `Stats`, which a
+    /// live borrow of the `ItemDb` resource would not allow.
     pub(crate) fn item_def(&self, item: &ItemId) -> Option<ItemDef> {
         self.world.resource::<ItemDb>().get(item.as_str()).cloned()
     }

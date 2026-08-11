@@ -53,9 +53,7 @@ use components::{
 };
 pub use game::stack_view::ExamineDir;
 use items::{EquipmentSlot, EquipmentStats, ItemCategory, ItemId, ids};
-use items_db::ItemDb;
-#[cfg(test)]
-use items_db::ItemDef;
+use items_db::{ItemDb, ItemDef};
 pub use perks::{Perk, PerkDb, PerkDef};
 use research::{ResearchDb, ResearchDef};
 pub use research::{ResearchId, ResearchRecipe};

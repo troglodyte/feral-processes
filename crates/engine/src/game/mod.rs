@@ -26,6 +26,7 @@ pub(crate) mod lifecycle;
 pub(crate) mod listen;
 pub(crate) mod party;
 pub(crate) mod pursuit;
+pub(crate) mod refactor;
 pub(crate) mod routines;
 pub(crate) mod spawning;
 pub(crate) mod stack;

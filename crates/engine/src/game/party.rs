@@ -217,6 +217,17 @@ impl Game {
             .unwrap_or(0)
     }
 
+    /// How many percentage upgrades have been spent on `entity`, 0 for
+    /// anything without the component — every program that has never been
+    /// refactored, and every hand-built test fixture. The one reader, so no
+    /// caller has to know it is optional.
+    pub(crate) fn refactor_count(&self, entity: Entity) -> u32 {
+        self.world
+            .get::<Refactors>(entity)
+            .map(|r| r.0)
+            .unwrap_or(0)
+    }
+
     /// Display string for `entity`'s rolled `Potential`, e.g.
     /// "Excellent (94%)" — `None` if it has no `Potential` component (an
     /// old save predating it, or a non-creature entity).
@@ -294,6 +305,7 @@ impl Game {
                     activity: self.program_activity(entity),
                     quality: self.potential_quality_label(entity),
                     fusions: self.fusion_count(entity),
+                    refactors: self.refactor_count(entity),
                     rarity: self.rarity_of(entity),
                     wielded: self.wielded_program() == Some(entity),
                 })

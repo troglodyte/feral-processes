@@ -217,6 +217,11 @@ pub struct PetInfo {
     /// — see `components::FusionCount`. At `MAX_FUSIONS` it can no longer
     /// be fused.
     pub fusions: u32,
+    /// How many of this program's upgrade slots are spent, 0 to
+    /// `MAX_COMPANION_REFACTORS` — see `components::Refactors`. Counts the
+    /// percentage buffs only; a zone bump spends none and shows up as the
+    /// zone tag on `name` instead.
+    pub refactors: u32,
     /// This program's rare-spawn tier — see `components::Rarity`. Already
     /// spelled into `name` as a prefix by `Game::creature_label`; carried
     /// separately so a menu can also colour the row without parsing it back
@@ -929,6 +934,20 @@ pub struct ProgramManifest {
     /// `tuning::MAX_FUSIONS`, carried so the renderer prints "1/3" without
     /// importing a tuning constant of its own.
     pub max_fusions: u32,
+    /// Spent upgrade slots and `tuning::MAX_COMPANION_REFACTORS`, the same
+    /// pair as `fusions`/`max_fusions` above and for the same reason.
+    pub refactors: u32,
+    pub max_refactors: u32,
+    /// The zone tier this program is scaled to (`components::ZonePortal`),
+    /// beside the zone the player is currently standing in.
+    ///
+    /// This pair is the whole reason the manifest carries either. Nothing on
+    /// screen otherwise tells a player in zone 4 that the Scrapper they have
+    /// carried since the opening ring is three doublings behind the ground
+    /// under it — the tag on its name says "1" and means nothing without the
+    /// number to compare it to.
+    pub zone_tier: u32,
+    pub player_zone: u32,
     pub habitats: Vec<Biome>,
     pub moves: Vec<MoveDef>,
     pub work_resource: Option<ItemId>,

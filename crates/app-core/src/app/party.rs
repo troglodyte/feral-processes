@@ -177,6 +177,60 @@ impl App {
         }
     }
 
+    /// Picks which program to permanently upgrade, then goes on to what to
+    /// spend on it. Two pages rather than one, mirroring the routine install
+    /// flow: which program and which upgrade are separate decisions, and the
+    /// second list is short enough to read only once the first is made.
+    pub(crate) fn handle_refactor_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.close_screen();
+            return;
+        }
+        let Some(game) = &mut self.game else { return };
+        let programs = game.owned_pets();
+        if let Some(idx) = self.selected_index(key, programs.len()) {
+            self.pending_refactor_target = Some(programs[idx].entity);
+            self.mode = Mode::RefactorItem;
+        }
+    }
+
+    /// Spends the chosen upgrade and stays on this page, so a player working
+    /// through five slots on one program is not sent back to pick it again
+    /// each time. A refusal lands in the status line and the page holds.
+    pub(crate) fn handle_refactor_item_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.pending_refactor_target = None;
+            self.mode = Mode::Refactor;
+            return;
+        }
+        let Some(target) = self.pending_refactor_target else {
+            self.mode = Mode::Refactor;
+            return;
+        };
+        let Some(offered) = self.game.as_ref().map(|g| g.companion_upgrades()) else {
+            return;
+        };
+        if let Some(idx) = self.selected_index(key, offered.len()) {
+            let item = offered[idx].item.clone();
+            let Some(game) = &mut self.game else { return };
+            match game.refactor_companion(target, &item) {
+                Ok(()) => self.status_line = None,
+                Err(e) => self.status_line = Some(e),
+            }
+            // Spending the last copy empties this page; there is nothing
+            // left to choose, so back out rather than leaving the player on
+            // a blank screen to press Esc on.
+            if self
+                .game
+                .as_ref()
+                .is_some_and(|g| g.companion_upgrades().is_empty())
+            {
+                self.pending_refactor_target = None;
+                self.mode = Mode::Refactor;
+            }
+        }
+    }
+
     /// Picks the second program to fuse with the one from `handle_fuse_key`,
     /// then actually runs the fusion.
     pub(crate) fn handle_fuse_second_key(&mut self, key: GameKey) {

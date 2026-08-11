@@ -57,6 +57,36 @@ fn refactored(stats: &Stats, upgrade: &CompanionUpgradeDef) -> Stats {
 }
 
 impl Game {
+    /// Every upgrade item the player is carrying, id-sorted so the menu
+    /// numbering is stable across sessions the way the research tree's is.
+    ///
+    /// Cargo rather than the whole item set: an upgrade the player has not
+    /// found yet is not a choice, and listing it would put the one refusal
+    /// the screen can prevent in front of them as a row to press.
+    pub fn companion_upgrades(&self) -> Vec<UpgradeOption> {
+        let player = self.player_entity();
+        let inventory = self.world.get::<Inventory>(player).unwrap();
+        let db = self.world.resource::<ItemDb>();
+        let mut rows: Vec<UpgradeOption> = inventory
+            .items
+            .iter()
+            .filter(|(_, qty)| *qty > 0)
+            .filter_map(|(item, qty)| {
+                let def = db.get(item.as_str())?;
+                let upgrade = def.upgrade?;
+                Some(UpgradeOption {
+                    item: item.clone(),
+                    name: def.name.clone(),
+                    description: def.description.clone(),
+                    qty: *qty,
+                    zone_bump: upgrade.zone_bump,
+                })
+            })
+            .collect();
+        rows.sort_by(|a, b| a.item.as_str().cmp(b.item.as_str()));
+        rows
+    }
+
     /// Spends one `item` to permanently upgrade `target`.
     ///
     /// The item is taken **last**, once every refusal has had its chance —

@@ -246,3 +246,42 @@ fn the_hot_keys_stayed_on_the_map() {
         assert_eq!(app.mode, expected, "{key:?} should still be a map key");
     }
 }
+
+/// Clause 2 again, and the one row where both halves of it bite: a refactor
+/// needs a program to spend an upgrade *on* and an upgrade to spend, and
+/// either missing leaves the second page empty. Cargo is the half that
+/// changes during a run, so it is the half worth pinning.
+#[test]
+fn refactor_needs_both_a_program_and_an_upgrade_in_cargo() {
+    let mut app = app_owning_a_program_and_a_compiler(4020, &[]);
+    let rows = labels(&app.party_menu_rows());
+    assert!(
+        !rows.contains(&"Refactor a program"),
+        "a program with nothing to spend on it has no screen: {rows:?}"
+    );
+
+    let mut app =
+        app_owning_a_program_and_a_compiler_with_cargo(4020, &[], &[("buffer_extension", 1)]);
+    let rows = labels(&app.party_menu_rows());
+    assert!(
+        rows.contains(&"Refactor a program"),
+        "one upgrade in cargo is enough to open the row: {rows:?}"
+    );
+}
+
+/// A refactor reaches no zone-map state through `Position`, so unlike
+/// building or trading it is not `surface_only` — and managing what you
+/// brought down with you is exactly what the Stack is for.
+#[test]
+fn refactoring_works_underground() {
+    let mut surface =
+        app_owning_a_program_and_a_compiler_with_cargo(4021, &[], &[("buffer_extension", 1)]);
+    assert!(labels(&surface.party_menu_rows()).contains(&"Refactor a program"));
+
+    let mut app =
+        app_owning_a_program_and_a_compiler_deep(4021, &[], &[("buffer_extension", 1)], true);
+    assert!(
+        labels(&app.party_menu_rows()).contains(&"Refactor a program"),
+        "a refactor reaches no zone-map state through Position, so it is not surface-only"
+    );
+}

@@ -734,6 +734,24 @@ pub struct RoutineHolderView {
     pub slots: usize,
 }
 
+/// One row of the refactor picker — an upgrade item the player is carrying.
+/// Held items only, so the screen never offers something that would be
+/// refused for want of the item; every other refusal
+/// `Game::refactor_companion` makes is about the program, not the shelf.
+pub struct UpgradeOption {
+    pub item: ItemId,
+    pub name: String,
+    /// The item's own authored `.ron` description, which is where an upgrade
+    /// says what it does — the magnitudes are data, so there is nothing else
+    /// the screen could derive the text from.
+    pub description: String,
+    pub qty: u32,
+    /// Whether this one raises the zone tier rather than spending an upgrade
+    /// slot. The two tracks read very differently to a player deciding, and
+    /// this is the flag rather than the renderer re-deriving it.
+    pub zone_bump: bool,
+}
+
 /// One row of the install picker — a routine the player knows. Knowing it
 /// is not enough to install it: that also costs a blank Routine Disk, which
 /// the screen reports separately through `Game::routine_disks_held`.

@@ -439,8 +439,15 @@ fn all_five_affinity_perks_are_on_offer_in_the_picker() {
 /// clamps at 1.0, so "no cycle fizzles" is a property of the formula rather
 /// than of the seed. Derived from the live curve so a retune of either
 /// constant cannot quietly leave the tests below rolling.
+///
+/// `DEFAULT_BASE_INT` is the right aptitude to derive against because these
+/// tests reach the node through `Game::work_structure` — the player working
+/// it themselves, who is the baseline by definition. A test that posted a
+/// program instead would have to derive against *that species*, and would
+/// under-buy the moment the species turned out to be a dull one.
 fn buy_enough_keen_scavenger_to_cap_a_level_1_node(game: &mut Game) {
-    let levels = ((1.0 - crate::systems::mining_success_chance(1, 0))
+    let levels = ((1.0
+        - crate::systems::mining_success_chance(1, 0, crate::tuning::DEFAULT_BASE_INT))
         / KEEN_SCAVENGER_BONUS_PER_LEVEL)
         .ceil() as usize;
     let player = game.player_entity();

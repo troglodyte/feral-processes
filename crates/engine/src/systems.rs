@@ -20,8 +20,8 @@ use crate::tuning::{
     FATIGUE_REGEN_PER_TICK, HUNGER_DECAY_PER_TICK, WORK_XP_LEVEL_CAP, WORK_XP_PER_CYCLE,
 };
 use crate::tuning::{
-    KEEN_SCAVENGER_BONUS_PER_LEVEL, MINING_SUCCESS_BASE, MINING_SUCCESS_PER_LEVEL,
-    NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS,
+    DEFAULT_BASE_INT, KEEN_SCAVENGER_BONUS_PER_LEVEL, MINING_SUCCESS_BASE, MINING_SUCCESS_PER_INT,
+    MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS,
 };
 use crate::world::WorldMap;
 
@@ -136,11 +136,24 @@ pub(crate) fn node_payout(tier: u32, zone: ZoneLevel) -> u32 {
 /// is worth. It is a parameter rather than a lookup because this runs inside
 /// systems iterating worker programs, and the perk belongs to the player —
 /// callers read it once, outside their loop.
-pub(crate) fn mining_success_chance(level: u32, keen_scavenger_level: u32) -> f64 {
+///
+/// `base_int` is whoever is actually working the node — the posted program's
+/// `SpeciesDef::base_int`, or `DEFAULT_BASE_INT` when the player is doing it
+/// themselves. It enters as a **deviation from that baseline**, not as an
+/// absolute: at the baseline the term is exactly zero, so a species file
+/// that never heard of the field extracts at the rate it always did. Making
+/// it absolute would silently re-rate every existing species and every mod
+/// by wiring alone, which is a change nobody asked for and nobody would see.
+///
+/// Clamped at both ends because `GameRng::random_bool` panics outside
+/// 0..=1 — the low end matters, since nothing stops a mod authoring a
+/// deeply negative `base_int`.
+pub(crate) fn mining_success_chance(level: u32, keen_scavenger_level: u32, base_int: i32) -> f64 {
     (MINING_SUCCESS_BASE
         + level as f64 * MINING_SUCCESS_PER_LEVEL
-        + keen_scavenger_level as f64 * KEEN_SCAVENGER_BONUS_PER_LEVEL)
-        .min(1.0)
+        + keen_scavenger_level as f64 * KEEN_SCAVENGER_BONUS_PER_LEVEL
+        + (base_int - DEFAULT_BASE_INT) as f64 * MINING_SUCCESS_PER_INT)
+        .clamp(0.0, 1.0)
 }
 
 /// Whether the structure `node_entity` belongs to declares
@@ -172,19 +185,24 @@ fn node_is_flat_payout(node_entity: Option<&Structure>, structure_db: &Structure
 /// line, which is the one thing that legitimately differs between them, and
 /// each reads `keen_scavenger_level` off the player for itself — the perk is
 /// the player's wherever the cycle is being run.
+///
+/// `base_int` is the opposite: it belongs to whoever is standing there, so
+/// the two callers genuinely differ on it rather than both reading the
+/// player. That difference is the feature — see each call site.
 pub(crate) fn resolve_gather_cycle(
     node: &ResourceNode,
     tier: Option<&StructureTier>,
     zone: ZoneLevel,
     flat_payout: bool,
     keen_scavenger_level: u32,
+    base_int: i32,
     item_db: &ItemDb,
     rng: &mut GameRng,
 ) -> Option<(crate::items::ItemId, u32)> {
     if let Some(level) = node.level
         && !rng
             .0
-            .random_bool(mining_success_chance(level, keen_scavenger_level))
+            .random_bool(mining_success_chance(level, keen_scavenger_level, base_int))
     {
         return None;
     }
@@ -442,12 +460,22 @@ pub fn task_progress_system(
             continue;
         }
         task.progress = 0;
+        // The posted program's own aptitude, which is the whole of what this
+        // parameter is for: who you post to a node now changes how often it
+        // fizzles. A species missing from the db is a hand-spawned test
+        // fixture and takes the baseline, the same way `node_is_flat_payout`
+        // already treats a structure kind the db has never heard of.
+        let worker_int = species_db
+            .get(&creature.species)
+            .map(|d| d.base_int)
+            .unwrap_or(DEFAULT_BASE_INT);
         let Some((resource, payout)) = resolve_gather_cycle(
             &node,
             tier,
             *zone,
             node_is_flat_payout(structure, &structure_db),
             keen_scavenger_level,
+            worker_int,
             &item_db,
             &mut rng,
         ) else {
@@ -543,12 +571,20 @@ pub fn player_gather_system(
         }
         task.progress = 0;
         let keen_scavenger_level = perks.map(|p| p.level(Perk::KeenScavenger)).unwrap_or(0);
+        // The player has no species and so no aptitude of their own; they
+        // work a node at exactly the roster average, by decision rather than
+        // for want of a value. That is what puts pressure on the posting in
+        // both directions — a sharp program beats doing it yourself, and a
+        // dull one is genuinely worse than rolling your sleeves up. Give the
+        // player the top of the range instead and posting collapses back
+        // into a pure time-saver, which is the thing this phase is undoing.
         let Some((resource, payout)) = resolve_gather_cycle(
             &node,
             tier,
             *zone,
             node_is_flat_payout(structure, &structure_db),
             keen_scavenger_level,
+            DEFAULT_BASE_INT,
             &item_db,
             &mut rng,
         ) else {
@@ -1074,8 +1110,8 @@ mod tests {
 
     #[test]
     fn mining_success_chance_rises_with_level_and_caps_at_one() {
-        let level_1 = mining_success_chance(1, 0);
-        let level_2 = mining_success_chance(2, 0);
+        let level_1 = mining_success_chance(1, 0, DEFAULT_BASE_INT);
+        let level_2 = mining_success_chance(2, 0, DEFAULT_BASE_INT);
         assert!(
             level_1 > 0.0 && level_1 < 1.0,
             "a basic level-1 node shouldn't be a sure thing"
@@ -1085,7 +1121,7 @@ mod tests {
             "a higher-level node should succeed more reliably"
         );
         assert_eq!(
-            mining_success_chance(100, 0),
+            mining_success_chance(100, 0, DEFAULT_BASE_INT),
             1.0,
             "chance should never exceed a sure thing"
         );
@@ -1093,17 +1129,67 @@ mod tests {
 
     #[test]
     fn keen_scavenger_adds_to_the_mining_roll_and_still_caps_at_one() {
-        let plain = mining_success_chance(1, 0);
-        let boosted = mining_success_chance(1, 3);
+        let plain = mining_success_chance(1, 0, DEFAULT_BASE_INT);
+        let boosted = mining_success_chance(1, 3, DEFAULT_BASE_INT);
         assert!(
             (boosted - (plain + 3.0 * crate::tuning::KEEN_SCAVENGER_BONUS_PER_LEVEL)).abs()
                 < f64::EPSILON,
             "each perk level should add exactly its tuning constant to the roll"
         );
         assert_eq!(
-            mining_success_chance(1, 1000),
+            mining_success_chance(1, 1000, DEFAULT_BASE_INT),
             1.0,
             "the perk must not push the roll past a sure thing either"
+        );
+    }
+
+    /// The whole point of reading `base_int` as a deviation: a species that
+    /// declares nothing, a mod's species predating the field, and the player
+    /// working the node themselves all sit at the baseline and must get the
+    /// number the formula gave before the term existed. Asserted against the
+    /// arithmetic on the constants rather than a literal, so a retune of
+    /// `MINING_SUCCESS_BASE` doesn't turn this into a false alarm.
+    #[test]
+    fn a_baseline_worker_extracts_at_exactly_the_pre_int_rate() {
+        for level in 1..=4 {
+            let expected = crate::tuning::MINING_SUCCESS_BASE
+                + level as f64 * crate::tuning::MINING_SUCCESS_PER_LEVEL;
+            assert!(
+                (mining_success_chance(level, 0, DEFAULT_BASE_INT) - expected).abs() < f64::EPSILON,
+                "a baseline worker must contribute exactly nothing at level {level}"
+            );
+        }
+    }
+
+    #[test]
+    fn each_point_of_base_int_moves_the_roll_by_its_tuning_constant() {
+        let baseline = mining_success_chance(1, 0, DEFAULT_BASE_INT);
+        let sharp = mining_success_chance(1, 0, DEFAULT_BASE_INT + 4);
+        let dull = mining_success_chance(1, 0, DEFAULT_BASE_INT - 4);
+        assert!(
+            (sharp - (baseline + 4.0 * crate::tuning::MINING_SUCCESS_PER_INT)).abs() < f64::EPSILON,
+            "each point above the baseline should add exactly its tuning constant"
+        );
+        assert!(
+            (dull - (baseline - 4.0 * crate::tuning::MINING_SUCCESS_PER_INT)).abs() < f64::EPSILON,
+            "and each point below should subtract it — the pressure is two-sided"
+        );
+    }
+
+    /// `rng.random_bool` panics outside 0..=1, so both ends are a crash and
+    /// not merely a wrong number. The low end is the one that isn't obvious:
+    /// nothing stops a mod authoring `base_int: -500`.
+    #[test]
+    fn base_int_cannot_push_the_roll_outside_a_probability() {
+        assert_eq!(
+            mining_success_chance(1, 0, 10_000),
+            1.0,
+            "aptitude must not push the roll past a sure thing"
+        );
+        assert_eq!(
+            mining_success_chance(4, 0, -10_000),
+            0.0,
+            "nor below an impossibility, which would panic the roll"
         );
     }
 

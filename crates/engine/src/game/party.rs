@@ -217,6 +217,33 @@ impl Game {
             .unwrap_or(0)
     }
 
+    /// The zone tier `entity` is scaled to (`components::ZonePortal`), or 1
+    /// for anything without the component — a hand-spawned fixture, or a
+    /// creature from a save predating it. One reader for the same reason
+    /// `rarity_of` is: absent-means-tier-1 is a rule, and four call sites
+    /// each spelling `map_or(1, ..)` is four chances to pick a different one.
+    pub(crate) fn zone_tier(&self, entity: Entity) -> u32 {
+        self.world.get::<ZonePortal>(entity).map_or(1, |z| z.0)
+    }
+
+    /// How many of `entity`'s zone tiers were bought with Recompile Kernels
+    /// rather than earned by being tamed that deep — 0 for anything without
+    /// the component. Same one-reader argument as `rarity_of`.
+    pub(crate) fn purchased_tiers(&self, entity: Entity) -> u32 {
+        self.world.get::<PurchasedTiers>(entity).map_or(0, |t| t.0)
+    }
+
+    /// How many percentage upgrades have been spent on `entity`, 0 for
+    /// anything without the component — every program that has never been
+    /// refactored, and every hand-built test fixture. The one reader, so no
+    /// caller has to know it is optional.
+    pub(crate) fn refactor_count(&self, entity: Entity) -> u32 {
+        self.world
+            .get::<Refactors>(entity)
+            .map(|r| r.0)
+            .unwrap_or(0)
+    }
+
     /// Display string for `entity`'s rolled `Potential`, e.g.
     /// "Excellent (94%)" — `None` if it has no `Potential` component (an
     /// old save predating it, or a non-creature entity).
@@ -294,6 +321,7 @@ impl Game {
                     activity: self.program_activity(entity),
                     quality: self.potential_quality_label(entity),
                     fusions: self.fusion_count(entity),
+                    refactors: self.refactor_count(entity),
                     rarity: self.rarity_of(entity),
                     wielded: self.wielded_program() == Some(entity),
                 })
@@ -637,6 +665,17 @@ impl Game {
         // applying `stat_mult` here would pay for the tier twice. See
         // `Rarity`'s doc.
         let fused_rarity = self.rarity_of(a).max(self.rarity_of(b));
+        // Both take the better parent for exactly the argument above, and
+        // both used to be dropped here: the tier was hardcoded to 1, which
+        // was harmless while it was a display tag and stopped being harmless
+        // the moment `refactor_companion` multiplied current stats and capped
+        // itself against it. `fuse_stat` carries the parents' numbers
+        // forward, so resetting either bound turns fuse → bump → fuse into an
+        // unbounded stat loop, and lets a fusion launder a program that has
+        // spent all five upgrade slots back into a fresh one.
+        let fused_zone = self.zone_tier(a).max(self.zone_tier(b));
+        let fused_refactors = self.refactor_count(a).max(self.refactor_count(b));
+        let fused_purchased = self.purchased_tiers(a).max(self.purchased_tiers(b));
 
         let name_a = self.creature_label(a);
         let name_b = self.creature_label(b);
@@ -676,10 +715,12 @@ impl Game {
                 xp: 0,
                 xp_to_next: progression::xp_for_level(level),
             },
-            ZonePortal(1),
+            ZonePortal(fused_zone),
             StatusEffects::default(),
             FusionCount(fused_depth),
             fused_rarity,
+            Refactors(fused_refactors),
+            PurchasedTiers(fused_purchased),
         ));
         let fused_entity = fused.id();
         if let Some(name) = &final_name {

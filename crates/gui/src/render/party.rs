@@ -280,6 +280,53 @@ mod tests {
         });
     }
 
+    /// The refactor picker prints an upgrade item's own authored `.ron`
+    /// description under each row, and those are the longest descriptions in
+    /// the item set — an upgrade has to say what it does, because its
+    /// magnitudes are data and there is nothing else on screen to read them
+    /// off. Same hazard the rename footer above documents: nothing clamps a
+    /// row horizontally, so an over-long line runs off the popup's right
+    /// edge rather than wrapping.
+    ///
+    /// Measured against the shipped assets rather than a literal, so an
+    /// author lengthening one of the eight fails this rather than shipping a
+    /// line that runs off the box.
+    #[test]
+    fn every_upgrade_items_description_fits_the_refactor_picker() {
+        // Straight off the item files rather than through a `Game`: the
+        // picker lists cargo, and a census wants every shipped upgrade
+        // whether or not a player is carrying it.
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/items");
+        let (items, warnings) =
+            feral_processes_engine::items_db::ItemDb::load_dir(&dir).expect("the items load");
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let described: Vec<String> = items
+            .all()
+            .filter(|d| d.upgrade.is_some())
+            .map(|d| format!("    {}", d.description))
+            .collect();
+        assert!(
+            described.len() >= 7,
+            "the census found {} upgrade items, so it is measuring nothing",
+            described.len()
+        );
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            // 0.88 is `PopupSize::Large`'s width fraction, against the
+            // 1440x900 geometry `ui_metrics` is calibrated for.
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            for line in &described {
+                let drawn = p.measure_ui_advance(line, m.font_size);
+                assert!(
+                    drawn <= room,
+                    "an upgrade description overflows the picker by {:.0}px \
+                     ({drawn:.0} drawn into {room:.0} of room):\n{line}",
+                    drawn - room
+                );
+            }
+        });
+    }
+
     /// The easter-egg census. Wielding a program as your weapon is
     /// deliberately undocumented in-game, and the help lines above the
     /// roster are the one place a well-meaning edit would give it away.
@@ -298,4 +345,85 @@ mod tests {
             );
         }
     }
+}
+
+/// Page one of the refactor flow: which program to upgrade.
+///
+/// The zone tag is already spelled into `PetInfo::name` by
+/// `Game::creature_label`, which is exactly the number this screen is about —
+/// so a player choosing between two programs can see which one is behind
+/// without opening a manifest for each.
+pub(super) fn draw_refactor(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
+    let zone = game.player_status().zone;
+    let programs = game.owned_pets();
+    let mut rows = vec![
+        text_row("Refactor which program? An upgrade is permanent and cannot be taken back off."),
+        text_row(format!("You are in zone {zone}.")),
+    ];
+    for (i, p) in programs.iter().enumerate() {
+        rows.push(with_icon(
+            program_row(
+                format!(
+                    "[{}] {} Lv{}{}{}",
+                    menu_shortcut(i),
+                    p.name,
+                    p.level,
+                    fusion_tag(p.fusions),
+                    refactor_tag(p.refactors)
+                ),
+                i == selected,
+                p.fusions,
+                p.rarity,
+            ),
+            p.glyph,
+            glyph_color(p.color),
+        ));
+    }
+    draw_popup("Refactor", PopupSize::Large, &rows, painter, m);
+}
+
+/// Page two: what to spend on it.
+///
+/// The rows come from `Game::companion_upgrades`, which lists cargo only, so
+/// this page cannot offer something the engine would then refuse for want of
+/// the item. Every other refusal is about the program and lands in the status
+/// line instead.
+pub(super) fn draw_refactor_item(
+    game: &mut Game,
+    target: Option<Entity>,
+    selected: usize,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let Some(target) = target else {
+        return;
+    };
+    let subject = game
+        .owned_pets()
+        .into_iter()
+        .find(|p| p.entity == target)
+        .map(|p| (p.name, p.refactors));
+    let offered = game.companion_upgrades();
+
+    let mut rows = Vec::new();
+    if let Some((name, refactors)) = &subject {
+        rows.push(text_row(format!("Refactoring {name}.")));
+        rows.push(text_row(format!(
+            "Upgrade slots: {refactors}/{MAX_COMPANION_REFACTORS} spent. A zone rebuild costs none."
+        )));
+    }
+    for (i, u) in offered.iter().enumerate() {
+        rows.push(item_row(
+            format!(
+                "[{}] {}{}  x{}",
+                menu_shortcut(i),
+                u.name,
+                if u.zone_bump { " (zone rebuild)" } else { "" },
+                u.qty
+            ),
+            i == selected,
+        ));
+        rows.push(text_row(format!("    {}", u.description)));
+    }
+    draw_popup("Refactor", PopupSize::Large, &rows, painter, m);
 }

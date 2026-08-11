@@ -99,6 +99,8 @@ pub(crate) fn app_owning_distant_programs(seed: u32, count: i32) -> App {
             def_roll: 1.0,
             growth_roll: 1.0,
             fusions: 0,
+            refactors: 0,
+            purchased_tiers: 0,
             routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
             field_buffs: Vec::new(),
             nest_position: None,
@@ -119,6 +121,30 @@ pub(crate) fn app_owning_distant_programs(seed: u32, count: i32) -> App {
 /// preconditions. Built by editing a save and reloading it, for the same
 /// reason `app_owning_distant_programs` is.
 pub(crate) fn app_owning_a_program_and_a_compiler(seed: u32, routines: &[&str]) -> App {
+    app_owning_a_program_and_a_compiler_with_cargo(seed, routines, &[])
+}
+
+/// The same, plus exactly `cargo` in the player's inventory — the refactor
+/// flow needs a program *and* something to spend on it, and the second half
+/// is the one that changes during a run.
+pub(crate) fn app_owning_a_program_and_a_compiler_with_cargo(
+    seed: u32,
+    routines: &[&str],
+    cargo: &[(&str, u32)],
+) -> App {
+    app_owning_a_program_and_a_compiler_deep(seed, routines, cargo, false)
+}
+
+/// The same again, optionally four frames down. `underground` is a parameter
+/// rather than a second fixture because the point of the Stack variant is
+/// that *nothing else about the game differs* — a row that changes has
+/// changed because of the locale and not because two fixtures drifted.
+pub(crate) fn app_owning_a_program_and_a_compiler_deep(
+    seed: u32,
+    routines: &[&str],
+    cargo: &[(&str, u32)],
+    underground: bool,
+) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
     let path = scratch_path("extract", seed);
@@ -127,6 +153,13 @@ pub(crate) fn app_owning_a_program_and_a_compiler(seed: u32, routines: &[&str]) 
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
+    // Extended, never assigned over: replacing the whole inventory would
+    // silently delete the starting kit `Game::new` grants, and the next test
+    // written against this fixture would fail for a reason with nothing to do
+    // with what it was testing.
+    data.player
+        .inventory
+        .extend(cargo.iter().map(|(item, qty)| (ItemId::from(*item), *qty)));
     let (px, py) = data.player.position;
     data.creatures.push(CreatureSave {
         species,
@@ -149,6 +182,8 @@ pub(crate) fn app_owning_a_program_and_a_compiler(seed: u32, routines: &[&str]) 
         def_roll: 1.0,
         growth_roll: 1.0,
         fusions: 0,
+        refactors: 0,
+        purchased_tiers: 0,
         routines: routines.iter().map(|r| r.to_string()).collect(),
         field_buffs: Vec::new(),
         nest_position: None,
@@ -164,6 +199,16 @@ pub(crate) fn app_owning_a_program_and_a_compiler(seed: u32, routines: &[&str]) 
         stock_input: Vec::new(),
         stock_output: Vec::new(),
     });
+    if underground {
+        data.locale = Locale::Stack {
+            depth: 1,
+            frames: 2,
+            x: 1,
+            y: 1,
+            facing: feral_processes_engine::stack::Dir::North,
+            entrance: data.player.position,
+        };
+    }
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();
     let _ = std::fs::remove_file(&path);
@@ -219,6 +264,8 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
         def_roll: 1.0,
         growth_roll: 1.0,
         fusions: 0,
+        refactors: 0,
+        purchased_tiers: 0,
         routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
         field_buffs: Vec::new(),
         nest_position: None,
@@ -342,6 +389,8 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
             def_roll: 1.0,
             growth_roll: 1.0,
             fusions: 0,
+            refactors: 0,
+            purchased_tiers: 0,
             routines: Vec::new(),
             field_buffs: Vec::new(),
             nest_position: None,
@@ -396,6 +445,8 @@ pub(crate) fn app_with_companions_in_the_party(seed: u32, count: u32) -> App {
             def_roll: 1.0,
             growth_roll: 1.0,
             fusions: 0,
+            refactors: 0,
+            purchased_tiers: 0,
             routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
             field_buffs: Vec::new(),
             nest_position: None,

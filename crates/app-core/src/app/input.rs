@@ -136,6 +136,8 @@ impl App {
             Mode::FieldCast => self.handle_field_cast_key(key),
             Mode::FieldCastAlly => self.handle_field_cast_ally_key(key),
             Mode::FieldCastCell => self.handle_field_cast_cell_key(key),
+            Mode::Refactor => self.handle_refactor_key(key),
+            Mode::RefactorItem => self.handle_refactor_item_key(key),
             Mode::Extract => self.handle_extract_key(key),
             Mode::ExtractPick => self.handle_extract_pick_key(key),
             Mode::ExtractConfirm => self.handle_extract_confirm_key(key),

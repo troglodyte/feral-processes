@@ -177,6 +177,71 @@ impl App {
         }
     }
 
+    /// Picks which program to permanently upgrade, then goes on to what to
+    /// spend on it. Two pages rather than one, mirroring the routine install
+    /// flow: which program and which upgrade are separate decisions, and the
+    /// second list is short enough to read only once the first is made.
+    pub(crate) fn handle_refactor_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.close_screen();
+            return;
+        }
+        let Some(game) = &mut self.game else { return };
+        let programs = game.owned_pets();
+        if let Some(idx) = self.selected_index(key, programs.len()) {
+            self.pending_refactor_target = Some(programs[idx].entity);
+            self.mode = Mode::RefactorItem;
+        }
+    }
+
+    /// Spends the chosen upgrade and stays on this page, so a player working
+    /// through five slots on one program is not sent back to pick it again
+    /// each time. A refusal lands in the status line and the page holds.
+    pub(crate) fn handle_refactor_item_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.pending_refactor_target = None;
+            self.mode = Mode::Refactor;
+            return;
+        }
+        let Some(target) = self.pending_refactor_target else {
+            self.mode = Mode::Refactor;
+            return;
+        };
+        let Some(offered) = self.game.as_ref().map(|g| g.companion_upgrades()) else {
+            return;
+        };
+        if let Some(idx) = self.selected_index(key, offered.len()) {
+            let item = offered[idx].item.clone();
+            let Some(game) = &mut self.game else { return };
+            match game.refactor_companion(target, &item) {
+                Ok(()) => self.status_line = None,
+                Err(e) => self.status_line = Some(e),
+            }
+            let left = self
+                .game
+                .as_ref()
+                .map(|g| g.companion_upgrades().len())
+                .unwrap_or(0);
+            if left == 0 {
+                // Nothing left to pick anywhere in the flow. Backing out one
+                // page looks safe and is not: the program picker is still
+                // fully populated, and every row on it opens this page with
+                // no rows on it — the blank screen backing out was meant to
+                // avoid.
+                self.pending_refactor_target = None;
+                self.close_screen();
+            } else {
+                // The list just shrank under the highlight. `selected_index`
+                // resolves Enter to `menu_selected.min(len - 1)` and the mode
+                // has not changed, so `handle_key`'s own reset never fires —
+                // a highlight left past the end means the next Enter spends a
+                // permanent, irreversible upgrade the player was not looking
+                // at. `handle_trade_key` clamps for the same reason.
+                self.menu_selected = self.menu_selected.min(left - 1);
+            }
+        }
+    }
+
     /// Picks the second program to fuse with the one from `handle_fuse_key`,
     /// then actually runs the fusion.
     pub(crate) fn handle_fuse_second_key(&mut self, key: GameKey) {

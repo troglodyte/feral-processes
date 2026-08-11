@@ -32,6 +32,7 @@ mod party;
 mod perks;
 mod policy;
 mod raids;
+mod refactor;
 mod research;
 mod routines;
 mod spawning;

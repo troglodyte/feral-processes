@@ -916,6 +916,38 @@ impl Rarity {
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FusionCount(pub u32);
 
+/// How many percentage upgrades have been spent on this program — see
+/// `Game::refactor_companion`. Absent means zero, the same way `FusionCount`
+/// is absent on a program that has never been fused.
+///
+/// It counts **only** the percentage buffs. A Recompile Kernel raises
+/// `ZonePortal` instead and spends nothing here, because that track bounds
+/// itself against the player's own zone and a player forced to burn permanent
+/// slots just staying current has had the feature taken away at exactly the
+/// point it was meant to help.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Refactors(pub u32);
+
+/// How many of this program's zone tiers were **bought** with Recompile
+/// Kernels rather than earned by being tamed that deep. Absent means none,
+/// like `Refactors` above.
+///
+/// It exists for one reason: `Game::program_payout` pays a fraction of
+/// `Stats::power()`, and a kernel multiplies every one of those stats for
+/// twelve printable Core Fragments. Left unrecorded, buying tiers and selling
+/// the program prints Credits — measured at zone 7, a zone-1 program bought
+/// up six tiers sold for 716 against 72 fragments' worth of kernels, and
+/// Credits are the one currency that survives a breach. So the sale divides
+/// the bought tiers back out, and a trader pays for what a program *is*.
+///
+/// `ZonePortal` cannot answer this on its own: a tier-4 program is worth
+/// tier-4 money when it was tamed in zone 4, and this is what tells those two
+/// apart. The percentage buffs deliberately are *not* divided out — five
+/// slots is at most a 1.28x on power, which never repays the annealed cores
+/// it costs, so there is nothing to close.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PurchasedTiers(pub u32);
+
 /// A structure's remaining health against raids (see `Game::raid_check`).
 /// Every deployed structure gets one, sized from its
 /// `StructureDef::durability`; reaching 0 destroys the structure.

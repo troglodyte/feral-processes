@@ -185,6 +185,20 @@ fn draw_header(view: &ManifestView, rect: Rect, painter: &Painter, m: &Metrics) 
             if p.fusions > 0 {
                 tags.push(format!("fused {}/{}", p.fusions, p.max_fusions));
             }
+            if p.refactors > 0 {
+                tags.push(format!("upgraded {}/{}", p.refactors, p.max_refactors));
+            }
+            // Only when it is behind, the way `fused` only shows once it has
+            // been. A program level with the zone needs no telling; one that
+            // is three doublings back has nothing else on the page saying so,
+            // and the bare zone tag on its name reads as decoration without
+            // the player's own number beside it.
+            if p.zone_tier < p.player_zone {
+                tags.push(format!(
+                    "zone {} — you're in {}",
+                    p.zone_tier, p.player_zone
+                ));
+            }
             if p.is_companion {
                 tags.push("in party".to_string());
             } else if let Some(activity) = &p.activity {
@@ -538,4 +552,55 @@ pub(super) fn draw_manifest_pick(
     rows.push(text_row(""));
     rows.push(text_row("Esc to cancel"));
     draw_popup("Manifest", PopupSize::Large, &rows, painter, m);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::paint::with_painter;
+    use crate::render::manifest_layout::manifest_layout;
+    use crate::text::ui_metrics;
+
+    /// The header's tag line is one unclamped `painter.ui` call, so a run of
+    /// tags wider than the header rect runs off it rather than wrapping —
+    /// the same hazard `every_upgrade_items_description_fits_the_refactor_
+    /// picker` covers on the other screen, and this line had no test at all
+    /// until the refactor tags landed on it.
+    ///
+    /// The worst case is built here rather than sampled from a real `Game`,
+    /// because it is a program that is simultaneously high-level, excellently
+    /// rolled, maxed on both permanent ceilings, far behind the zone, and
+    /// posted to a long-named structure — reachable, but not something a
+    /// fixture would stumble into.
+    #[test]
+    fn the_widest_header_tag_line_fits_the_header() {
+        let tags = [
+            "Lv 30".to_string(),
+            "Excellent (99%)".to_string(),
+            format!("fused {MAX_FUSIONS}/{MAX_FUSIONS}"),
+            format!("upgraded {MAX_COMPANION_REFACTORS}/{MAX_COMPANION_REFACTORS}"),
+            "zone 1 — you're in 9".to_string(),
+            // The longest activity string a program can report, against the
+            // longest-named structure that accepts one.
+            "hauling to Recharger Node".to_string(),
+            "STUNNED".to_string(),
+        ];
+        let line = tags.join("   ");
+
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            let l = manifest_layout(1440.0, 900.0, 4, &[], &m);
+            // The glyph portrait and a pad sit left of the text; the tag line
+            // starts there and has the rest of the header to run into.
+            let portrait = p.measure_map("@", m.title() * 2).width + m.pad;
+            let room = l.header.w - portrait;
+            let drawn = p.measure_ui_advance(&line, m.font_size);
+            assert!(
+                drawn <= room,
+                "the manifest header's tags overflow it by {:.0}px \
+                 ({drawn:.0} drawn into {room:.0} of room):\n{line}",
+                drawn - room
+            );
+        });
+    }
 }

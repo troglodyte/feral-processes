@@ -14,7 +14,7 @@ use feral_processes_app_core::{
 use feral_processes_engine::components::{GlyphColor, MachineStatus, Rarity, TaskKind};
 use feral_processes_engine::items::{EquipmentSlot, ItemId};
 use feral_processes_engine::structures::StructureCategory;
-use feral_processes_engine::tuning::{MAX_FUSIONS, MAX_PARTY_SIZE};
+use feral_processes_engine::tuning::{MAX_COMPANION_REFACTORS, MAX_FUSIONS, MAX_PARTY_SIZE};
 use feral_processes_engine::world::{Biome, Tile};
 use feral_processes_engine::{
     Assignee, Entity, EntityView, Game, InventoryRow, LogEntry, MESSAGE_LOG_CAP, MessageKind,
@@ -68,8 +68,8 @@ use meta::{
     draw_main_menu, draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
 };
 use party::{
-    draw_companion_menu, draw_fuse_menu, draw_fuse_name_menu, draw_fuse_second_menu,
-    draw_rename_menu,
+    draw_companion_menu, draw_fuse_menu, draw_fuse_name_menu, draw_fuse_second_menu, draw_refactor,
+    draw_refactor_item, draw_rename_menu,
 };
 use popup::{PopupSize, Row, counted_item_row, draw_popup, text_row};
 use progression::{draw_perks_menu, draw_research_menu};
@@ -213,6 +213,19 @@ pub(super) fn fusion_tag(fusions: u32) -> String {
         0 => String::new(),
         n if n >= MAX_FUSIONS => format!(" (fused {n}/{MAX_FUSIONS} - maxed)"),
         n => format!(" (fused {n}/{MAX_FUSIONS})"),
+    }
+}
+
+/// The spent-upgrade-slots counterpart of `fusion_tag`, and deliberately the
+/// same shape: both are permanent, both are capped, and a player reading a
+/// row wants to know how much of each ceiling is gone.
+pub(super) fn refactor_tag(refactors: u32) -> String {
+    match refactors {
+        0 => String::new(),
+        n if n >= MAX_COMPANION_REFACTORS => {
+            format!(" (upgraded {n}/{MAX_COMPANION_REFACTORS} - maxed)")
+        }
+        n => format!(" (upgraded {n}/{MAX_COMPANION_REFACTORS})"),
     }
 }
 
@@ -645,6 +658,10 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         Mode::RoutineTarget => draw_routine_target(game, selected, painter, m),
         Mode::Routines => draw_routines(game, app.pending_routine_holder, selected, painter, m),
         Mode::RoutineInstall => draw_routine_install(game, selected, painter, m),
+        Mode::Refactor => draw_refactor(game, selected, painter, m),
+        Mode::RefactorItem => {
+            draw_refactor_item(game, app.pending_refactor_target, selected, painter, m)
+        }
         Mode::Extract => draw_extract(game, selected, painter, m),
         Mode::ExtractPick => {
             draw_extract_pick(game, app.pending_extract_program, selected, painter, m)

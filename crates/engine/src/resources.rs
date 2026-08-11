@@ -655,6 +655,20 @@ impl ZoneLevel {
     pub fn stat_multiplier(self) -> i32 {
         crate::tuning::ZONE_STAT_GROWTH.pow(self.0 - 1)
     }
+
+    /// What a stat is multiplied by to move a program from tier `from` to
+    /// `from + 1` — the step `Game::refactor_companion`'s zone bump applies.
+    ///
+    /// Derived from `stat_multiplier` rather than reaching for
+    /// `ZONE_STAT_GROWTH` directly, because "one zone tier" has to keep
+    /// meaning the same thing on both sides. A Recompile Kernel is sold to
+    /// the player as catching a companion up with the ground the spawner
+    /// scales to, so if that curve ever gains a cap or stops being geometric,
+    /// a bump that kept doubling would be paying for a tier the spawner no
+    /// longer grants.
+    pub fn tier_step(from: u32) -> i32 {
+        ZoneLevel(from + 1).stat_multiplier() / ZoneLevel(from).stat_multiplier()
+    }
 }
 
 /// Whether the player is walking the zone map or is down inside the Stack,

@@ -1,0 +1,7 @@
+(
+    id: "annealed_core",
+    name: "Annealed Core",
+    description: "Core Fragments cycled hot and cooled slow until the lattice holds a rewrite. What the Refactor Bench builds Recompile Kernels out of.",
+    value: Some(3),
+    craftable: Some((cost: [("core_fragment", 4)], requires_structure: Some("annealing_node"))),
+)

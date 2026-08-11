@@ -1413,3 +1413,37 @@ fn a_full_machine_with_nowhere_to_unload_reads_as_stranded() {
         .insert(ItemId::from(ids::CORE_FRAGMENT), capacity);
     assert_eq!(stranded(&mut game, node), Some(true));
 }
+
+/// The manifest is where a player finds out their companion is behind the
+/// zone they are standing in. The tag on its name says "1"; without the
+/// player's own zone beside it that number means nothing, which is why the
+/// view carries the pair rather than the tier alone.
+#[test]
+fn the_manifest_shows_a_programs_zone_tier_against_the_players_own() {
+    let mut game = Game::new(640, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(pet)
+        .insert((ZonePortal(1), Refactors(2)));
+    game.world.resource_mut::<crate::resources::ZoneLevel>().0 = 4;
+
+    let ManifestSubject::Program(view) = game.manifest(pet).unwrap().subject else {
+        panic!("a creature is a Program subject");
+    };
+
+    assert_eq!(
+        (view.zone_tier, view.player_zone),
+        (1, 4),
+        "three doublings behind the ground it is standing on, and the screen has to say so"
+    );
+    assert_eq!(
+        (view.refactors, view.max_refactors),
+        (2, crate::tuning::MAX_COMPANION_REFACTORS),
+        "and how many upgrade slots are left"
+    );
+    assert_eq!(
+        game.owned_pets()[0].refactors,
+        2,
+        "the party menu's own row carries the same count"
+    );
+}

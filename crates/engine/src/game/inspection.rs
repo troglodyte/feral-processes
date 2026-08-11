@@ -2,7 +2,10 @@
 //! renderer draws, plus inspect and symlink targeting.
 
 use crate::game::hauling::at_station;
-use crate::tuning::{DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX, DIFFICULTY_TOUGH_MAX, MAX_FUSIONS};
+use crate::tuning::{
+    DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX, DIFFICULTY_TOUGH_MAX, MAX_COMPANION_REFACTORS,
+    MAX_FUSIONS,
+};
 use crate::*;
 use std::collections::HashSet;
 
@@ -666,6 +669,10 @@ impl Game {
                     }),
                 fusions: self.fusion_count(entity),
                 max_fusions: MAX_FUSIONS,
+                refactors: self.refactor_count(entity),
+                max_refactors: MAX_COMPANION_REFACTORS,
+                zone_tier: self.zone_tier(entity),
+                player_zone: self.world.resource::<ZoneLevel>().0,
                 habitats: species.habitats.clone(),
                 moves: species.moves.clone(),
                 work_resource: species.work_resource.clone(),

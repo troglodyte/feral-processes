@@ -570,6 +570,87 @@ fn companion_status_survives_save_and_load() {
     );
 }
 
+/// `fuse_companions` used to hardcode `ZonePortal(1)` on the result, which
+/// was harmless while that field was a display tag. It stopped being harmless
+/// the moment a Recompile Kernel multiplied current stats and capped itself
+/// against that field: fusing carries the parents' stats forward, so resetting
+/// the tier that bounds them makes fuse → bump → fuse an unbounded stat loop.
+///
+/// The same argument covers `Refactors`, one level down — a fusion must not
+/// launder a program that has spent all five slots back into a fresh one.
+#[test]
+fn fusing_two_bumped_programs_keeps_the_higher_tier() {
+    let mut game = Game::new(95, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let a = spawn_tamed(&mut game, 10, 3);
+    let b = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(a)
+        .insert((ZonePortal(4), Refactors(5), PurchasedTiers(3)));
+    game.world
+        .entity_mut(b)
+        .insert((ZonePortal(2), Refactors(1), PurchasedTiers(0)));
+
+    game.fuse_companions(a, b, None).unwrap();
+
+    let mut pets = game.world.query_filtered::<Entity, With<Tamed>>();
+    let fused = pets.iter(&game.world).next().expect("one program remains");
+    assert_eq!(
+        game.world.get::<ZonePortal>(fused).map(|z| z.0),
+        Some(4),
+        "a fusion must not reset the tier its own stats were built at"
+    );
+    assert_eq!(
+        game.world.get::<Refactors>(fused).copied(),
+        Some(Refactors(5)),
+        "nor hand back the upgrade slots the parents had already spent"
+    );
+    assert_eq!(
+        game.world.get::<PurchasedTiers>(fused).copied(),
+        Some(PurchasedTiers(3)),
+        "nor relabel bought tiers as earned ones, which is what a trader pays for"
+    );
+}
+
+/// Both halves of a refactor are permanent and both bound future ones — the
+/// slot count against `MAX_COMPANION_REFACTORS`, the zone tier against the
+/// player's own. A round trip that dropped either would hand back a fresh
+/// budget of upgrades on every reload, which is the same free-fusions hole
+/// `fusions` was persisted to close.
+#[test]
+fn a_refactored_companion_keeps_its_slots_and_tier_across_a_save() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(29, DifficultyMode::Forgiving, &assets).unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(worker)
+        .insert((Refactors(3), ZonePortal(4), PurchasedTiers(2)));
+
+    let dir = scratch_assets_dir("refactor_save");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &assets).unwrap();
+
+    let mut pets = loaded.world.query_filtered::<Entity, With<Tamed>>();
+    let pet = pets.iter(&loaded.world).next().expect("the program loaded");
+    assert_eq!(
+        loaded.world.get::<Refactors>(pet).copied(),
+        Some(Refactors(3)),
+        "the spent upgrade slots have to survive, or a reload refills them"
+    );
+    assert_eq!(
+        loaded.world.get::<ZonePortal>(pet).map(|z| z.0),
+        Some(4),
+        "and so does the tier the bump raised it to"
+    );
+    assert_eq!(
+        loaded.world.get::<PurchasedTiers>(pet).copied(),
+        Some(PurchasedTiers(2)),
+        "and which of those tiers were bought — dropping it would let a \
+         save/load launder a bought-up program into an earned one"
+    );
+}
+
 #[test]
 fn party_accepts_up_to_max_party_size_and_rejects_beyond_that() {
     let mut game = Game::new(70, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

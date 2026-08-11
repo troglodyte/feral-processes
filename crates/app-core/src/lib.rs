@@ -653,6 +653,15 @@ pub enum Mode {
     /// rather than lethal. Enter commits, Esc backs out spending nothing,
     /// matching every other second pick.
     FieldCastCell,
+    /// Picking which program to permanently upgrade. Reached from the party
+    /// group menu; `surface_only: false`, since a refactor reaches no
+    /// zone-map state through `Position` and so works four frames down.
+    Refactor,
+    /// Picking which upgrade item to spend on the program chosen in
+    /// `Mode::Refactor`. Rows come from `Game::companion_upgrades`, which
+    /// lists cargo only — so the one refusal a screen could prevent is
+    /// prevented by there being no row for it.
+    RefactorItem,
     /// Picking which program to break down for a routine. Reached with `M`
     /// from `Mode::Playing`.
     Extract,
@@ -792,6 +801,8 @@ impl Mode {
             | Mode::FieldCast
             | Mode::FieldCastAlly
             | Mode::FieldCastCell
+            | Mode::Refactor
+            | Mode::RefactorItem
             | Mode::Extract
             | Mode::ExtractPick
             | Mode::ExtractConfirm
@@ -979,6 +990,9 @@ pub struct App {
     /// The routine holder picked in `Mode::RoutineTarget` — the player or one
     /// of their programs — awaiting a slot pick from `Mode::Routines`.
     pub pending_routine_holder: Option<Entity>,
+    /// The program picked in `Mode::Refactor`, awaiting an upgrade pick from
+    /// `Mode::RefactorItem`.
+    pub pending_refactor_target: Option<Entity>,
     /// The program picked in `Mode::Extract`, awaiting a routine pick from
     /// `Mode::ExtractPick`.
     pub pending_extract_program: Option<Entity>,

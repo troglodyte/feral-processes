@@ -1,0 +1,11 @@
+(
+    id: "annealing_node",
+    name: "Annealing Node",
+    description: "Assign a program here and it cycles Core Fragments from whatever is touching it into Annealed Cores. Put it next to a Mining Node, and a Refactor Bench next to it.",
+    glyph: 'A',
+    color: Cyan,
+    build_cost: [("core_fragment", 16)],
+    work: None,
+    capacity: 20,
+    assembles: Some((item: "annealed_core", ticks_per_unit: 12)),
+)

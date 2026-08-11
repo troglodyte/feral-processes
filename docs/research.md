@@ -1,7 +1,7 @@
 # Research tree
 
 Every shipped research node in feral-processes, charted from its own file in
-`assets/research/`. Nineteen of them.
+`assets/research/`. Twenty of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
 `assets/research/*.ron` on 2026-08-05 and will drift the moment one of those
@@ -14,12 +14,12 @@ it is the one progression track you cannot fight your way along.
 
 | | |
 |---|---|
-| nodes | 19 |
+| nodes | 20 |
 | roots (need nothing) | 3 — Automation, Isometric Commerce, Power Grid |
 | deepest chain | 5 nodes |
-| total Research Data | 477 |
+| total Research Data | 511 |
 | cheapest / dearest node | 8 / 48 |
-| unlocks | 11 structures, 13 routines, 6 gear recipes |
+| unlocks | 13 structures, 13 routines, 6 gear recipes |
 
 ## The tree
 
@@ -35,13 +35,14 @@ Automation (8)
 |   |   `-- Cortex Hacking (45)
 |   `-- Overclock Cores (22)
 |       `-- Monofilament Edge (40)
-`-- Routine Fabrication (20)
-    `-- Self-Execution (12)
-        |-- Field Operations (16)
-        |   |-- Adaptive Plating (32)
-        |   `-- Deep Analysis (46)
-        `-- Runtime Patching (28)
-            `-- Kernel Privileges (48)
+|-- Routine Fabrication (20)
+|   `-- Self-Execution (12)
+|       |-- Field Operations (16)
+|       |   |-- Adaptive Plating (32)
+|       |   `-- Deep Analysis (46)
+|       `-- Runtime Patching (28)
+|           `-- Kernel Privileges (48)
+`-- Program Refactoring (34)
 
 Isometric Commerce (12)
 
@@ -71,6 +72,7 @@ there is no node you can reach two ways.
 | Isometric Commerce | 12 | - | `market` |
 | Power Grid | 10 | - | `power_conduit` |
 | Fortification | 15 | `power_grid` | `shield`, `patch_node` |
+| Program Refactoring | 34 | `automation` | `annealing_node`, `refactor_bench` |
 | Reactive Armor | 18 | `automation` | `armory` |
 | Routine Fabrication | 20 | `automation` | `log_scraper`, `lathe`, `transcriber`, `disk_press` |
 | Weapon Fabrication | 18 | `automation` | `fabricator` |
@@ -107,6 +109,7 @@ Reactive Armor         26  #########...............................
 Weapon Fabrication     26  #########...............................
 Routine Fabrication    28  ##########..............................
 Self-Execution         40  ##############..........................
+Program Refactoring    42  ##############..........................
 Firewall Plating       48  #################.......................
 Overclock Cores        48  #################.......................
 Neural Interfacing     51  ##################......................
@@ -160,4 +163,3 @@ this page is regenerated -- edit the table at the top of
 [`docs/research-gen.py`](research-gen.py) and run
 `python3 docs/research-gen.py` from the repo root. The schema is documented in
 [`assets/research/README.md`](../assets/research/README.md).
-

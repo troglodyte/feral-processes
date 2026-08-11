@@ -47,14 +47,13 @@ use components::{
     CombatBuff, Creature, CustomName, Decompiler, Durability, Equipment, EquippedItem, Experience,
     FieldBuff, FieldBuffKind, FusedGear, FusionCount, Glyph, GlyphColor, Hostile, Inventory,
     MachineStatus, NEED_MAX, Needs, Nest, NestGuardian, Perks, Player, Position, Potential,
-    Pursuing, Rarity, ResourceNode, Routines, StackSpawn, Stats, StatusEffects, StatusKind, Stock,
-    Structure, StructureTier, SurfaceLink, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
+    PurchasedTiers, Pursuing, Rarity, Refactors, ResourceNode, Routines, StackSpawn, Stats,
+    StatusEffects, StatusKind, Stock, Structure, StructureTier, SurfaceLink, Tamed, Task, TaskKind,
+    Temporary, WanderAi, ZonePortal,
 };
 pub use game::stack_view::ExamineDir;
 use items::{EquipmentSlot, EquipmentStats, ItemCategory, ItemId, ids};
-use items_db::ItemDb;
-#[cfg(test)]
-use items_db::ItemDef;
+use items_db::{ItemDb, ItemDef};
 pub use perks::{Perk, PerkDb, PerkDef};
 use research::{ResearchDb, ResearchDef};
 pub use research::{ResearchId, ResearchRecipe};

@@ -50,6 +50,36 @@ pub struct PrebattleBuff {
     pub ticks: u32,
 }
 
+/// What `Game::refactor_companion` does to a tamed program. Magnitudes live
+/// here rather than in `tuning.rs` so a new upgrade item is a `.ron` file and
+/// never a code change — only the per-companion slot cap is tuning.
+///
+/// Percentages rather than flat amounts because a companion's stats keep
+/// growing across breaches, and because `×1.05` commutes with the `zone_bump`'s
+/// `×ZONE_STAT_GROWTH` — so there is no ordering a player can exploit.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub struct CompanionUpgradeDef {
+    #[serde(default)]
+    pub hp_percent: f32,
+    #[serde(default)]
+    pub atk_percent: f32,
+    #[serde(default)]
+    pub def_percent: f32,
+    /// Raises the program one zone tier, never above the player's own. Costs
+    /// no upgrade slot — see `tuning::MAX_COMPANION_REFACTORS`.
+    #[serde(default)]
+    pub zone_bump: bool,
+}
+
+impl CompanionUpgradeDef {
+    /// Whether this upgrade spends one of the companion's bounded slots. A
+    /// bump bounds itself against the player's zone, so only the percentages
+    /// need the cap.
+    pub fn spends_a_slot(&self) -> bool {
+        self.hp_percent != 0.0 || self.atk_percent != 0.0 || self.def_percent != 0.0
+    }
+}
+
 /// A craft recipe declared by the item itself, replacing the two
 /// formerly-hardcoded starter recipes. With no `requires_structure` it is
 /// always available; naming a bench gates it on that structure standing,
@@ -107,6 +137,12 @@ pub struct ItemDef {
     /// without touching engine code.
     #[serde(default)]
     pub cache_drop: Option<f32>,
+    /// What this item does to a tamed program through
+    /// `Game::refactor_companion`. `#[serde(default)]` like every other
+    /// optional field, so an existing mod's items keep parsing as ordinary
+    /// cargo.
+    #[serde(default)]
+    pub upgrade: Option<CompanionUpgradeDef>,
 }
 
 impl ItemDef {
@@ -134,7 +170,7 @@ impl ItemDef {
         ItemCategory::Material
     }
 
-    /// Names the first field holding a NaN or infinity, if any. RON accepts
+    /// Names the first field whose value is not usable, if any. RON accepts
     /// bare `NaN`/`inf` literals, and they survive every clamp downstream —
     /// a NaN `taming_potency` outranks every real catalyst and then panics
     /// the RNG. Cheaper to refuse the file at load, like any other malformed
@@ -150,6 +186,29 @@ impl ItemDef {
         }
         if self.cache_drop.is_some_and(|chance| !chance.is_finite()) {
             return Some("cache_drop");
+        }
+        if let Some(u) = self.upgrade {
+            // Negative is refused as well as non-finite, and that is not
+            // symmetry for its own sake: `Game::refactor_companion` floors
+            // every percentage at `+1`, so a `-10.0` would *raise* the stat
+            // by a point while spending one of the five permanent upgrade
+            // slots. A downgrade item is a coherent thing to want and this
+            // is not it, so the file is refused rather than half-honoured.
+            for (name, pct) in [
+                ("upgrade.hp_percent", u.hp_percent),
+                ("upgrade.atk_percent", u.atk_percent),
+                ("upgrade.def_percent", u.def_percent),
+            ] {
+                if !pct.is_finite() || pct < 0.0 {
+                    return Some(name);
+                }
+            }
+            // An `upgrade` block that does nothing would be taken out of the
+            // player's cargo, change no stat, spend no slot, and log a
+            // success line naming the numbers it did not move.
+            if !u.spends_a_slot() && !u.zone_bump {
+                return Some("upgrade (declares no effect)");
+            }
         }
         match self.consume {
             Some(c) if !c.power.is_finite() => Some("consume.power"),
@@ -453,7 +512,7 @@ mod tests {
             equipment.len(),
             "an equippable not in the table above is unpinned"
         );
-        assert_eq!(db.all().count(), 46);
+        assert_eq!(db.all().count(), 54);
     }
 
     #[test]
@@ -521,6 +580,43 @@ mod tests {
         assert_eq!((stats.atk, stats.def), (2, 1), "hybrids stack two stats");
     }
 
+    /// The engine floors a percentage gain at `+1`, so a negative one would
+    /// quietly become a *raise* that also costs a permanent upgrade slot —
+    /// and an `upgrade` block declaring nothing at all would spend the item
+    /// for no effect while logging a success. Both are refused at load, so
+    /// the guarantee holds for a mod and not merely for the shipped assets
+    /// that `every_shipped_upgrade_item_says_what_it_does` censuses.
+    #[test]
+    fn an_upgrade_that_would_do_nothing_or_the_wrong_thing_is_skipped() {
+        for (field, ron) in [
+            (
+                "upgrade.hp_percent",
+                r#"upgrade: Some((hp_percent: -10.0))"#,
+            ),
+            (
+                "upgrade.atk_percent",
+                r#"upgrade: Some((atk_percent: -1.0))"#,
+            ),
+            (
+                "upgrade.def_percent",
+                r#"upgrade: Some((def_percent: -0.5))"#,
+            ),
+            ("declares no effect", r#"upgrade: Some(())"#),
+            (
+                "declares no effect",
+                r#"upgrade: Some((hp_percent: 0.0, zone_bump: false))"#,
+            ),
+        ] {
+            let (db, warnings) =
+                load_fixture(&[("bad.ron", &format!(r#"(id: "bad", name: "Bad", {ron})"#))]);
+            assert_eq!(db.all().count(), 0, "{field}: the whole file is refused");
+            assert!(
+                warnings.iter().any(|w| w.contains(field)),
+                "{field}: {warnings:?}"
+            );
+        }
+    }
+
     /// A non-finite drop chance would reach `random_bool` and panic the RNG,
     /// the same hazard `taming_potency` already guards against.
     #[test]
@@ -534,6 +630,52 @@ mod tests {
             warnings.iter().any(|w| w.contains("droppable")),
             "{warnings:?}"
         );
+    }
+
+    #[test]
+    fn an_item_can_declare_a_companion_upgrade() {
+        let (db, warnings) = load_fixture(&[
+            (
+                "kernel.ron",
+                r#"(id: "kernel", name: "Kernel", upgrade: Some((zone_bump: true)))"#,
+            ),
+            (
+                "buff.ron",
+                r#"(id: "buff", name: "Buff", upgrade: Some((hp_percent: 5.0, atk_percent: 2.5)))"#,
+            ),
+        ]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+
+        let kernel = db.get("kernel").unwrap().upgrade.unwrap();
+        assert!(kernel.zone_bump);
+        assert_eq!(
+            (kernel.hp_percent, kernel.atk_percent, kernel.def_percent),
+            (0.0, 0.0, 0.0),
+            "an unnamed percent defaults to no change"
+        );
+
+        let buff = db.get("buff").unwrap().upgrade.unwrap();
+        assert_eq!((buff.hp_percent, buff.atk_percent), (5.0, 2.5));
+        assert!(!buff.zone_bump, "a percent buff is not a bump by default");
+    }
+
+    /// Same hazard as `taming_potency`: a NaN percent survives every clamp and
+    /// then poisons the stat arithmetic it is multiplied into.
+    #[test]
+    fn an_item_with_a_non_finite_upgrade_percent_is_skipped() {
+        for (field, ron) in [
+            ("hp_percent", r#"upgrade: Some((hp_percent: NaN))"#),
+            ("atk_percent", r#"upgrade: Some((atk_percent: inf))"#),
+            ("def_percent", r#"upgrade: Some((def_percent: NaN))"#),
+        ] {
+            let (db, warnings) =
+                load_fixture(&[("bad.ron", &format!(r#"(id: "bad", name: "Bad", {ron})"#))]);
+            assert_eq!(db.all().count(), 0, "{field}: the whole file is refused");
+            assert!(
+                warnings.iter().any(|w| w.contains(field)),
+                "{field}: {warnings:?}"
+            );
+        }
     }
 
     #[test]

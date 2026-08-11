@@ -159,6 +159,20 @@ const PARTY_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
+        // Both halves matter: a program to spend an upgrade on, and an
+        // upgrade to spend. Either missing leaves the second page empty.
+        // Not `surface_only` — a refactor reaches no zone-map state through
+        // `Position`, so it works four frames down.
+        label: "Refactor a program",
+        target: Mode::Refactor,
+        surface_only: false,
+        available: |app| {
+            app.game
+                .as_mut()
+                .is_some_and(|g| !g.owned_pets().is_empty() && !g.companion_upgrades().is_empty())
+        },
+    },
+    GroupEntry {
         label: "Extract a routine",
         target: Mode::Extract,
         surface_only: false,

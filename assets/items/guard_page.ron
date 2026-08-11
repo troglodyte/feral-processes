@@ -1,0 +1,8 @@
+(
+    id: "guard_page",
+    name: "Guard Page",
+    description: "A trap from the edge of someone else's address space. +12% DEF, and one upgrade slot.",
+    value: Some(45),
+    droppable: Some([("wintermute", 0.25), ("overseer", 0.2), ("rootkit", 0.05), ("cipher", 0.04)]),
+    upgrade: Some((def_percent: 12.0)),
+)

@@ -27,6 +27,8 @@ S = [
  ("armory",         "Armory",         "%", "Blue",   [("core_fragment", 18)],                   "assembler","hardened_shell",                   30,   15, "refinery",    None),
  ("fabricator",     "Fabricator",     "*", "White",  [("core_fragment", 18)],                   "assembler","trace_sniffer",                    30,   15, "transcriber", None),
  ("assembly_bay",   "Assembly Bay",   "Y", "Magenta",[("core_fragment", 20), ("charge_coil", 4)],"assembler","patch_routine",                   20,   10, "winding_node",None),
+ ("annealing_node", "Annealing Node", "A", "Cyan",   [("core_fragment", 16)],                   "assembler","annealed_core",                    12,   20, "mining_node", None),
+ ("refactor_bench", "Refactor Bench", "X", "Orange", [("core_fragment", 22), ("annealed_core", 4)],"assembler","recompile_kernel",              20,   10, "annealing_node",None),
  ("market",         "iso Market",     "$", "Yellow", [("core_fragment", 16)],                   "utility",  "buys and sells, 1 Credit a unit", None, None, None,          None),
  ("data_cache",     "Data Cache",     "=", "Gray",   [("core_fragment", 10)],                   "utility",  "+5 roster slots while standing",  None, None, None,          None),
  ("depot",          "Depot",          "D", "Cyan",   [("core_fragment", 12)],                   "utility",  "programs empty full machines into it",None, 100, None,        None),
@@ -149,7 +151,7 @@ into what it is still working on. Adjacency is the whole of the wiring.
 
 {chains()}
 
-Every one of the nine assembler recipes is a **single ingredient**, and that
+Every one of the eleven assembler recipes is a **single ingredient**, and that
 is a property of the items rather than the machines — a machine runs its
 product's own `craftable.cost`, so there is no separate recipe on the
 structure that could drift from the bench recipe. A second ingredient added to

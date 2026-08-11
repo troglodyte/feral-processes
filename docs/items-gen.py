@@ -13,10 +13,13 @@ I = [
  # id                    name                        val  role        slot      stats                    recipe                                               bench          drops                              cache pot
  ("ablative_plating",    "Ablative Plating",          25, "",         "Armor",  "def+4",                 "",                                                  "",            "rootkit 30%",                     0, 0),
  ("access_shard",        "Access Shard",              12, "",         "",       "",                      "",                                                  "",            "",                                0, 0),
+ ("annealed_core",       "Annealed Core",              3, "",         "",       "",                      "4 core_fragment",                                   "annealing_node", "",                             0, 0),
  ("arc_lance",           "Arc Lance",                 12, "",         "Weapon", "atk+3",                 "12 core_fragment",                                  "fabricator",  "scrapper 10%;worm 8%",            0, 0),
  ("bastion_lattice",     "Bastion Lattice",           80, "",         "Armor",  "def+4",                 "12 portal_fragment+4 bytecode_block+2 charge_coil", "armory",      "sentinel 8%;rootkit 6%",          0, 0),
  ("black_ice_pick",      "Black ICE Pick",            90, "",         "Weapon", "atk+3 decompiler+2",    "18 portal_fragment",                                "fabricator",  "cipher 7%;rootkit 6%",            0, 0),
  ("blank_substrate",     "Blank Substrate",            3, "",         "",       "",                      "4 core_fragment",                                   "lathe",       "",                                0, 0),
+ ("bounds_check",        "Bounds Check",               5, "",         "",       "companion def+5%",      "2 annealed_core",                                   "refactor_bench", "",                             0, 0),
+ ("buffer_extension",    "Buffer Extension",           5, "",         "",       "companion hp+5%",       "2 annealed_core",                                   "refactor_bench", "",                             0, 0),
  ("bytecode_block",      "Bytecode Block",             4, "",         "",       "",                      "4 core_fragment",                                   "refinery",    "",                                0, 0),
  ("charge_coil",         "Charge Coil",                3, "",         "",       "",                      "3 power_cell",                                      "winding_node", "",                                0, 0),
  ("core_fragment",       "Core Fragment",              1, "Currency", "",       "",                      "",                                                  "",            "",                                0, 0),
@@ -24,9 +27,12 @@ I = [
  ("credits",             "Credits",                    0, "TradeCurrency", "",       "",                      "",                                                  "",            "",                                0, 0),
  ("entropy_damper",      "Entropy Damper",            15, "",         "Module", "decompiler+2 def+1",    "2 logic_wafer+3 charge_coil",                       "fabricator",  "crawler 8%;proxy 7%",             0, 0),
  ("firewall_plating",    "Firewall Plating",          20, "",         "Armor",  "def+3",                 "",                                                  "",            "sentinel 35%;crawler 20%",        0, 0),
+ ("guard_page",          "Guard Page",                45, "",         "",       "companion def+12%",     "",                                                  "",            "wintermute 25%;overseer 20%;rootkit 5%;cipher 4%", 0, 0),
  ("handshake_forge",     "Handshake Forge",            8, "",         "Module", "decompiler+2",          "8 core_fragment",                                   "",            "drone 9%;sub_process 7%",         0, 0),
  ("hardened_shell",      "Hardened Shell",            12, "",         "Armor",  "def+3",                 "3 bytecode_block",                                  "armory",      "crawler 10%;sentinel 8%",         0, 0),
  ("ice_breaker",         "ICE Breaker",                1, "",         "",       "",                      "3 core_fragment",                                   "",            "",                                0.3, 0.4),
+ ("inline_cache",        "Inline Cache",               5, "",         "",       "companion atk+5%",      "2 annealed_core",                                   "refactor_bench", "",                             0, 0),
+ ("jit_cache",           "JIT Cache",                 45, "",         "",       "companion atk+12%",     "",                                                  "",            "wintermute 25%;overseer 20%;zero_day 5%;virus 4%", 0, 0),
  ("kernel_key",          "Kernel Key",                80, "",         "Module", "decompiler+4",          "12 portal_fragment+5 logic_wafer+2 charge_coil",    "fabricator",  "cipher 8%;virus 6%",              0.02, 0),
  ("kinetic_edge",        "Kinetic Edge",               7, "",         "Weapon", "atk+2",                 "7 core_fragment",                                   "",            "sub_process 10%;glitch 8%",       0, 0),
  ("logic_probe",         "Logic Probe",               15, "",         "Module", "decompiler+2 atk+1",    "3 logic_wafer+1 charge_coil+1 bytecode_block",      "fabricator",  "trojan 8%;scrapper 7%",           0.08, 0),
@@ -39,6 +45,7 @@ I = [
  ("outlet",              "Power Outlet",               5, "",         "",       "",                      "5 core_fragment",                                   "",            "",                                0, 0),
  ("overclock_core",      "Overclock Core",            22, "",         "Weapon", "atk+3",                 "",                                                  "",            "construct 30%;scrapper 15%;trojan 20%", 0, 0),
  ("packet_buffer",       "Packet Buffer",              7, "",         "Armor",  "def+2",                 "7 core_fragment",                                   "",            "drone 10%;sub_process 8%",        0, 0),
+ ("paged_arena",         "Paged Arena",               45, "",         "",       "companion hp+12%",      "",                                                  "",            "wintermute 25%;overseer 20%;construct 5%;sentinel 4%", 0, 0),
  ("patch_routine",       "Patch Routine",              7, "",         "",       "",                      "3 charge_coil",                                     "assembly_bay", "",                                0, 0),
  ("phase_carapace",      "Phase Carapace",            90, "",         "Armor",  "def+3 atk+2",           "14 portal_fragment+5 bytecode_block+1 charge_coil", "armory",      "zero_day 7%;virus 6%",            0, 0),
  ("plasma_router",       "Plasma Router",             80, "",         "Weapon", "atk+4",                 "16 portal_fragment",                                "fabricator",  "construct 8%;virus 6%",           0, 0),
@@ -46,6 +53,7 @@ I = [
  ("power_cell",          "Power Cell",                 1, "",         "",       "",                      "2 core_fragment",                                   "",            "",                                0.15, 0),
  ("probe_service",       "Probe Service",              5, "",         "Module", "decompiler+1",          "5 core_fragment",                                   "",            "sprite 9%;glitch 7%",             0.12, 0),
  ("raw_trace",           "Raw Trace",                  1, "",         "",       "",                      "",                                                  "",            "",                                0, 0),
+ ("recompile_kernel",    "Recompile Kernel",           8, "",         "",       "companion zone+1",      "3 annealed_core",                                   "refactor_bench", "",                             0, 0),
  ("recursion_blade",     "Recursion Blade",           14, "",         "Weapon", "atk+2 def+1",           "14 core_fragment",                                  "fabricator",  "trojan 10%;proxy 7%",             0, 0),
  ("research_data",       "Research Data",              1, "ResearchCurrency", "",       "",                      "",                                                  "",            "",                                0, 0),
  ("routine_disk",        "Routine Disk",               5, "",         "",       "",                      "2 blank_substrate",                                 "disk_press",  "",                                0, 0),
@@ -68,7 +76,7 @@ BANDS = [
     (1, 2, "printable", "a base can make it out of nothing"),
     (3, 8, "scavenged", "salvage and intermediates"),
     (12, 16, "standard", "the craftable working set"),
-    (20, 60, "researched", "needs a node and a bench"),
+    (20, 60, "researched", "a node and a bench, or a rare drop"),
     (80, 120, "premium", "portal_fragment gear"),
 ]
 
@@ -77,6 +85,7 @@ gear = [r for r in R if r["slot"]]
 craftable = [r for r in R if r["recipe"]]
 benched = [r for r in R if r["bench"]]
 droppers = [r for r in R if r["drops"]]
+upgrades = [r for r in R if "companion" in r["stats"]]
 
 
 def table(header, rows, align):
@@ -141,10 +150,10 @@ DROPS_CHART, TALLY = drop_table()
 doc = f"""# Item catalogue
 
 Every shipped item in feral-processes, charted from its own file in
-`assets/items/`. Forty-six of them.
+`assets/items/`. Fifty-four of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/items/*.ron` on 2026-08-05 and will drift the moment one of those
+`assets/items/*.ron` on 2026-08-11 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
 `ItemId` is a string newtype rather than an enum, so a new item never requires
@@ -158,6 +167,7 @@ for test setup and data-defined recipes, and nothing else needs them.
 | craftable | {len(craftable)} |
 | need a bench | {len(benched)} |
 | drop from a kill | {len(droppers)} |
+| upgrade a companion | {len(upgrades)} |
 | species that drop anything | {len(TALLY)} |
 
 ## The value ladder
@@ -215,11 +225,37 @@ breach.
         for r in sorted(craftable, key=lambda r: (r["bench"], r["value"]))],
        ["l", "r", "l", "l"])}
 
-{len(benched)} of the {len(R)} items name a bench, and the nine assembler
-recipes in the game are exactly the products of the nine machines — because a
+{len(benched)} of the {len(R)} items name a bench, and the eleven assembler
+recipes in the game are exactly the products of the eleven machines — because a
 machine runs its product's own `craftable.cost`, there is no second recipe on
 the structure that could drift from the bench recipe, and every craftable a
 mod adds is automatable for free.
+
+## Companion upgrades
+
+Seven items do something no other item does: they permanently rewrite a
+**tamed program**. They are applied from the party menu, never worn, never
+consumed in battle, and they never touch the player.
+
+{table(["Item", "Value", "Effect", "Source"],
+       [[r["name"], r["value"], r["stats"].replace("companion ", ""),
+         f'`{r["bench"]}`' if r["bench"] else "drop only"]
+        for r in sorted(upgrades, key=lambda r: (r["value"], r["name"]))],
+       ["l", "r", "l", "l"])}
+
+The split is the design: the **Recompile Kernel** is the one that keeps a
+companion level with the ground, doubling its stats to catch up one zone at a
+time and refusing once it has caught up with you — so it costs no upgrade
+slot, because a player should not have to burn a permanent slot just staying
+current. The six percentage buffs are specialisation instead, bounded at five
+slots per companion, and they are percentages precisely so they **commute**
+with the kernel: a buff bought in zone 1 is worth exactly as much three
+breaches later, and there is no ordering to exploit.
+
+Both halves come off one chain and one research node: Mining Node → Annealing
+Node → Refactor Bench, which assembles kernels on a timer and hand-gates the
+three craftable buffs. The other three arrive the way premium gear does — off
+a boss, or rarely off the mid-tier programs in the drop table below.
 
 ## Drops
 

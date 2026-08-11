@@ -46,6 +46,7 @@ impl App {
             pending_rename: None,
             rename_input: String::new(),
             pending_routine_holder: None,
+            pending_refactor_target: None,
             pending_extract_program: None,
             pending_extract_index: None,
             pending_field_routine: None,

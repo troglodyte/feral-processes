@@ -422,6 +422,99 @@ fn feeding_a_starved_machine_resumes_it_and_says_so() {
     assert_eq!(log_hits(&game, "resumes"), 1);
 }
 
+/// Two modded programs alike in every way the base economy has ever read —
+/// same stats, same lack of abilities — and differing only in `base_int`.
+/// Authored here rather than reusing shipped species so the assertion below
+/// survives any later retune of the roster.
+const SHARP_PROGRAM: &str = r#"(
+    id: "sharpmon",
+    name: "Sharpmon",
+    glyph: 's',
+    color: Cyan,
+    base_hp: 40,
+    base_atk: 4,
+    base_def: 2,
+    taming_difficulty: 0.5,
+    habitats: [OpenGrid],
+    base_int: 16,
+    moves: [(name: "Poke", power: 3)],
+    work_resource: None,
+)"#;
+
+const DULL_PROGRAM: &str = r#"(
+    id: "dullmon",
+    name: "Dullmon",
+    glyph: 'd',
+    color: Brown,
+    base_hp: 40,
+    base_atk: 4,
+    base_def: 2,
+    taming_difficulty: 0.5,
+    habitats: [OpenGrid],
+    base_int: 4,
+    moves: [(name: "Poke", power: 3)],
+    work_resource: None,
+)"#;
+
+/// Posts one program of `species` to a fresh Mining Node and runs it for 25
+/// gather cycles, returning what landed in the node's buffer.
+///
+/// 25 is chosen against `DEFAULT_OUTPUT_CAPACITY`: the node's own def sets
+/// `ticks_per_unit: 10` and its buffer holds 20, so a sharper worker would
+/// clog somewhere past cycle 30 and both runs would then report the same
+/// capped number — the comparison would quietly stop measuring anything.
+fn units_mined_by(tag: &str, species: &str) -> u32 {
+    let dir = modded_assets_dir(
+        tag,
+        &[],
+        &[],
+        &[
+            ("sharpmon.ron", SHARP_PROGRAM),
+            ("dullmon.ron", DULL_PROGRAM),
+        ],
+        &[],
+        &[],
+    );
+    let mut game = Game::new(4181, DifficultyMode::Forgiving, &dir).unwrap();
+    let node = deploy_upgradeable_node(&mut game);
+    let worker = spawn_tamed(&mut game, 40, 4);
+    game.world.get_mut::<Creature>(worker).unwrap().species = species.to_string();
+    stand_player_at_post(&mut game, node);
+    game.assign_cronjob(worker, node)
+        .expect("a Mining Node takes a posted program");
+    park_at_post(&mut game, worker, node);
+    for _ in 0..250 {
+        game.tick();
+    }
+    let mined = node_output(&game, node, ids::CORE_FRAGMENT);
+    let _ = std::fs::remove_dir_all(&dir);
+    mined
+}
+
+/// The formula tests prove the arithmetic; this proves it reaches the base.
+///
+/// Before `base_int` the only creature-side input to the entire base economy
+/// was one `Stats::def` read mitigating sweep damage — every program was an
+/// interchangeable pair of hands, and swapping who was posted to a node
+/// changed nothing at all. This is the assertion that says that is no longer
+/// true, and it is deliberately about *output* rather than about a chance,
+/// because a roll nobody's buffer ever sees is not a feature.
+#[test]
+fn a_sharper_program_mines_more_from_the_same_node() {
+    let sharp = units_mined_by("int_sharp", "sharpmon");
+    let dull = units_mined_by("int_dull", "dullmon");
+    assert!(
+        sharp > dull,
+        "who you post to a node has to change what it produces \
+         (sharp mined {sharp}, dull mined {dull})"
+    );
+    assert!(
+        sharp < 20,
+        "both runs must stay under DEFAULT_OUTPUT_CAPACITY or the node \
+         clogs and the comparison stops measuring anything (sharp mined {sharp})"
+    );
+}
+
 /// A program can actually be posted to an assembler through the same
 /// cronjob assignment an extractor uses — there is no second concept, and
 /// the menu and the assignment agree about what is assignable.

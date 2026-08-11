@@ -1581,6 +1581,94 @@ fn the_players_own_work_holds_the_cronjob_slot() {
     );
 }
 
+/// A tamed worker forced onto a named species, so a test can post a
+/// specific `base_speed`. `spawn_tamed` builds from `generic_species`,
+/// whose own `base_speed` is whatever the first ability-less species on the
+/// roster happens to declare — not something a test should reason about.
+fn tamed_of(game: &mut Game, species: &str) -> Entity {
+    let worker = spawn_tamed(game, 10, 3);
+    game.world.get_mut::<Creature>(worker).unwrap().species = SpeciesId::from(species);
+    worker
+}
+
+/// `base_speed` paces a machine as well as combat initiative: the cycle a
+/// posted program runs is the structure's own rate scaled by how far its
+/// species sits from `DEFAULT_BASE_SPEED`, baked into `Task::required` at
+/// the moment it is posted.
+#[test]
+fn a_quicker_program_is_posted_on_a_shorter_cycle() {
+    let mut game = Game::new(954, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = workable_structure(&mut game, 3, 4);
+    stand_player_at_post(&mut game, node);
+
+    let sprite = tamed_of(&mut game, "sprite");
+    game.assign_cronjob(sprite, node).unwrap();
+    let quick = game.world.get::<Task>(sprite).unwrap().required;
+
+    let construct = tamed_of(&mut game, "construct");
+    game.assign_cronjob(construct, node).unwrap();
+    let slow = game.world.get::<Task>(construct).unwrap().required;
+
+    assert!(
+        quick < slow,
+        "posting a faster species must buy a shorter cycle — got {quick} against {slow}"
+    );
+}
+
+/// The player has no species, so their deviation is zero. This is the other
+/// half of the pressure `base_int` set up: it has to stay true that a dull
+/// program is worse than doing the job yourself.
+///
+/// Checked on two rates, and the second one is what gives the test teeth.
+/// The player's initiative baseline (`PLAYER_BASE_SPEED`, 11) is a shade
+/// above the roster's (`DEFAULT_BASE_SPEED`, 10), and pacing work off the
+/// wrong one of those is the live mistake here — but a Mining Node cannot
+/// see it: `10 * 0.95` rounds straight back to 10, so that node alone would
+/// pass this test either way. A Research Node's 14 does discriminate, at
+/// `14 * 0.95 -> 13`.
+#[test]
+fn working_a_node_by_hand_still_costs_exactly_the_machines_own_rate() {
+    let mut game = Game::new(955, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    for (i, kind) in ["mining_node", "research_node"].iter().enumerate() {
+        let def = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| &d.id == kind)
+            .unwrap_or_else(|| panic!("{kind} ships with the game"));
+        let work = def.work.expect("both of these are worked structures");
+        let node = game
+            .world
+            .spawn((
+                Structure {
+                    kind: kind.to_string(),
+                },
+                Position {
+                    x: 3 + i as i32 * 6,
+                    y: 4,
+                },
+                ResourceNode {
+                    resource: work.produces.clone(),
+                    level: None,
+                },
+            ))
+            .id();
+        stand_player_at_post(&mut game, node);
+
+        game.work_structure(node).unwrap();
+
+        let required = game
+            .world
+            .get::<Task>(game.player_entity())
+            .expect("working a node puts the same Task on the player a worker carries")
+            .required;
+        assert_eq!(
+            required, work.ticks_per_unit,
+            "the player works a {kind} at the def's own rate, not at PLAYER_BASE_SPEED"
+        );
+    }
+}
+
 /// Every deployed structure carries a buffer, not just the ones that
 /// produce: a collect must be able to reach any of them, and a storage
 /// building declares neither `work` nor `assembles` and still needs an

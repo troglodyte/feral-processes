@@ -363,20 +363,26 @@ impl Game {
         Ok(())
     }
 
-    /// How many ticks one gather cycle against `structure` takes, from its
-    /// def's `work` recipe. Shared by `assign_cronjob` and `work_structure`
-    /// so a program and the player grind at the same rate.
-    fn work_ticks_for(&mut self, structure: Entity) -> u32 {
+    /// How many ticks one work cycle against `structure` takes for a worker
+    /// of `worker_speed`, from the structure's def rate scaled by
+    /// `systems::work_ticks_at_speed`.
+    ///
+    /// Shared by `assign_cronjob` and `work_structure`, which is what makes
+    /// the comparison legible: the player has no species and so works at
+    /// the baseline, and a posted program is faster or slower than that by
+    /// its own `base_speed`.
+    fn work_ticks_for(&mut self, structure: Entity, worker_speed: i32) -> u32 {
         let kind = self.world.get::<Structure>(structure).unwrap().kind.clone();
         let db = self.world.resource::<StructureDb>();
-        let Some(def) = db.get(&kind) else {
-            return 5;
+        let base = match db.get(&kind) {
+            None => 5,
+            Some(def) => match (&def.work, &def.assembles) {
+                (Some(work), _) => work.ticks_per_unit,
+                (None, Some(assembles)) => assembles.ticks_per_unit,
+                (None, None) => 5,
+            },
         };
-        match (&def.work, &def.assembles) {
-            (Some(work), _) => work.ticks_per_unit,
-            (None, Some(assembles)) => assembles.ticks_per_unit,
-            (None, None) => 5,
-        }
+        crate::systems::work_ticks_at_speed(base, worker_speed)
     }
 
     /// Whether a program can be posted to `structure` — an extractor
@@ -444,8 +450,9 @@ impl Game {
                 "You have to be standing next to it to work it — get beside it first.".into(),
             );
         }
-        let ticks = self.work_ticks_for(structure);
         let player = self.player_entity();
+        let speed = self.species_base_speed(player);
+        let ticks = self.work_ticks_for(structure, speed);
         self.world.entity_mut(player).insert(Task {
             kind: TaskKind::GatherResource,
             target: structure,
@@ -537,7 +544,8 @@ impl Game {
         if let Some(mut pos) = self.world.get_mut::<Position>(worker) {
             *pos = from;
         }
-        let ticks = self.work_ticks_for(structure);
+        let speed = self.species_base_speed(worker);
+        let ticks = self.work_ticks_for(structure, speed);
         if self.world.resource::<Party>().0.contains(&worker) {
             self.world
                 .resource_mut::<Party>()

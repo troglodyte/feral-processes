@@ -1,6 +1,20 @@
 # Species classes: role as an axis independent of tier
 
-Status: approved, unstarted. 2026-08-10.
+Status: approved 2026-08-10. Phases 1-3 built and merged; phase 4 (4a and
+4b together) built 2026-08-11. Phase 5's three base jobs are what remains.
+
+Two things phase 4 settled differently from the sketch below, both recorded
+in `assets/species/README.md`'s "The five classes", which is the authored
+reference for what a class is:
+
+- **The Medic kit is Heal alone, not Heal + Cleanse.** Both `Cleanse` files
+  are hunt-only, and leaving them there keeps a real reason to decompile a
+  wild carrier. The census accepts either, so a later phase can add one
+  without moving the gate.
+- **`generic_species` never needed to move under `modded_assets_dir`.** It
+  went into `load_asset_dbs` behind `#[cfg(test)]` in phase 3, because the
+  blocker was `Game::load` rebuilding `SpeciesDb` from the asset dir rather
+  than the 233 call sites.
 
 ## The problem
 

@@ -1,7 +1,10 @@
 # Species classes: role as an axis independent of tier
 
 Status: approved 2026-08-10. Phases 1-3 built and merged; phase 4 (4a and
-4b together) built 2026-08-11. Phase 5's three base jobs are what remains.
+4b together) built 2026-08-11. Phase 5's three base jobs are what remains,
+and the decisions taken for them are in "Phase 5, as decided" below —
+5a/5b/5c are being built as one branch rather than three releases, since
+they share the runtime class derivation none of them had.
 
 Two things phase 4 settled differently from the sketch below, both recorded
 in `assets/species/README.md`'s "The five classes", which is the authored
@@ -170,6 +173,69 @@ into `required` at assignment and having `assembler_system` read it inverts that
 `upgrade_structure` never touches `ticks_per_unit` so nothing changes a machine's
 rate after assignment. The known cost: a cronjob in an existing save keeps its
 old rate until reassigned.
+
+## Phase 5, as decided 2026-08-11
+
+The sketch above says *which* three classes get a base job. These are the
+decisions about what each one does, taken with the code open.
+
+**The class stops being a test-only idea.** Until now nothing at runtime knew
+what class a species was — `class_of` lived in `#[cfg(test)]` in `species.rs`
+and existed to cross-check the assets. Phase 5 needs the answer while the game
+is running, so `AffinityClass` and `SpeciesDef::affinity_class()` move into the
+engine proper, derived from the one raised affinity axis exactly as the census
+derived it. `None` is the answer for a species raising none or two axes, which
+is what a boss is; the censuses assert `Some` and lose their own copy. This
+keeps the "no `role` field" promise — the axis you raise still names the class.
+
+A continuous scheme was considered and rejected: scale each job by the raised
+affinity's magnitude, the way `base_int` and `base_speed` scale as deviations
+from their baselines. Every shipped species raises to exactly 1.3 and damps to
+0.85, so it would collapse to a constant per class today while inviting the
+reading that every class does every job a little.
+
+- **Leech** adds **+1 unit per successful cycle**, applied where `node_payout`
+  is applied inside `resolve_gather_cycle`, never to `node_payout` itself — so
+  the projection `balance_sim` shares with the real payout is untouched. It
+  does **not** apply to `flat_payout` or banked nodes. `research_data` is the
+  game's only banked item and the Research Node one of its four producers, so
+  the bonus there would double research income against a research ladder whose
+  deepest node is a fixed 45 — the flat-1 branch is what keeps a bank honest
+  and it stays flat.
+- **Bastion** counts its `def` **twice** when mitigating a sweep in `run_raid`.
+  Nothing else moves: every class still defends, still takes
+  `RAID_DEFENDER_DAMAGE`, and still can die at the post. Note the job is
+  smaller than it looks from the sketch — `run_raid` finds its defender by
+  `Task::target` alone, so *any* posted program already mitigates by its DEF
+  and a Bastion is a multiplier on behaviour that exists, not a switch.
+- **Medic** repairs the structure its own `Guard` task names, by a flat
+  `MEDIC_REPAIR_PER_INTERVAL` on `structure_regen`'s existing interval — per
+  structure, on top of the base-wide `total_repair_rate`. Per-structure rather
+  than a contribution to that base-wide number, so *where* you post it is a
+  decision about what to protect; that matches Bastion's shape and makes the
+  Guard post mean "protect this, in the way this program knows how".
+  Deliberately flat rather than scaled by the program's level: the magnitude
+  wants a played `--template chains`, not a formula, and 2 is the figure to
+  argue with.
+
+Guard is **position-blind** and stays that way. `assign_guard` writes no
+`Position` and `run_raid` never checks one, so neither the Bastion nor the
+Medic job needs the walk-in that `assign_cronjob` has. `assign_guard`'s refusal
+of unraidable structures also stands: a structure a sweep cannot target is one
+whose Durability is never spent, so a Medic there would have nothing to do.
+
+**What it costs.** `RollModifiers` widens to three fields and has to be
+renamed: its doc comment is explicit that the two it carries are "the only
+inputs to whether the cycle lands at all", and a yield bonus is not one. It
+becomes a worker-aptitude bundle rather than a fourth loose parameter, since
+the argument count is why the struct exists. And the manifest WORK box gains
+its third row, `Posted`, naming the job — the headroom phase 1 built it for.
+A Striker or Saboteur reads "no base job" there, which is the asymmetry being
+stated rather than hidden.
+
+No save-format change: no new `TaskKind`, no new component, no new `.ron`
+field. `balance_sim` cannot see any of this — it models no posted programs —
+so the gate that applies is a played template, per "What this is blind to".
 
 ## Sequence
 

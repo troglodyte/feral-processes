@@ -27,6 +27,23 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.7.3
+
+### Fix: the `chains` template's spare programs carry their species kit
+
+The six spare programs `0.7.2` added were hand-authored holding a single
+`priority_boost` between them, so they opened with nothing but the default
+buff. A save's routine list is taken verbatim on load —
+`install_innate_routines` runs when a program *comes into existence*, a
+decompile or a fusion, and never on a load — so nothing filled the gap in.
+At level 12 they hold six slots and now carry what their species grants:
+`redundancy_sync`/`rollback_v1` for the Medics, `skim_group`/`skim_v3` for
+the Leeches, `overclock_array`/`sandbox` for the Bastions, with
+`priority_boost` kept beside them.
+
+Their jobs at a post were never affected — a class's work at a structure is
+passive and reads nothing from the routine slots.
+
 ## 0.7.2
 
 ### The `chains` dev template is now a factory sandbox

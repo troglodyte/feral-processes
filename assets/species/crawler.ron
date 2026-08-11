@@ -17,5 +17,6 @@
     ],
     work_resource: None,
     can_nest: true,
+    abilities: [(id: "overclock_array", level: 2), (id: "bastion_shield_v2", level: 6)],
     affinities: (damage: 0.85, buff: 1.3),
 )

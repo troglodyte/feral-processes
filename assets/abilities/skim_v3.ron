@@ -1,0 +1,9 @@
+(
+    id: "skim_v3",
+    name: "Skim Single v3.0",
+    description: "Damage one target and restore half of it to yourself",
+    target: OneEnemyGroupFront,
+    effect: Drain(power: 14, heal_fraction: 0.5),
+    cooldown: 4,
+    fatigue_cost: 10.0,
+)

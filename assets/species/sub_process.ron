@@ -15,7 +15,7 @@
         (name: "Signal Spam", power: 4, ranged: true),
     ],
     work_resource: Some("core_fragment"),
-    abilities: [(id: "hot_patch"), (id: "redundancy_sync", level: 7)],
+    abilities: [(id: "redundancy_sync", level: 2), (id: "rollback_v1", level: 6)],
     affinities: (damage: 0.85, heal: 1.3),
     taunts: [
         "forks a copy of itself just to have someone to agree with.",

@@ -1,0 +1,9 @@
+(
+    id: "bastion_shield_v2",
+    name: "Bastion Single v2.0",
+    description: "Raise one ally's Defense by 5 for 3 rounds",
+    target: OneAlly,
+    effect: Buff(kind: Def, power: 5, duration: 3),
+    cooldown: 2,
+    fatigue_cost: 7.0,
+)

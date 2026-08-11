@@ -15,5 +15,6 @@
         (name: "Lockdown", power: 5, effect: Some((kind: Stun, chance: 0.35, duration: 1, power: 0))),
     ],
     work_resource: Some("core_fragment"),
+    abilities: [(id: "overclock_array", level: 2), (id: "sandbox", level: 6)],
     affinities: (damage: 0.85, buff: 1.3),
 )

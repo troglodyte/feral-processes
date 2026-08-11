@@ -17,5 +17,6 @@
     ],
     work_resource: None,
     can_nest: true,
+    abilities: [(id: "deadlock", level: 2), (id: "bit_rot_v2", level: 6)],
     affinities: (heal: 0.85, debuff: 1.3),
 )

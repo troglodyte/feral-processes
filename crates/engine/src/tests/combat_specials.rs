@@ -219,7 +219,7 @@ fn a_species_with_several_abilities_offers_each_one_in_menu_order() {
     let options = game.battle_special_options(1);
     assert_eq!(
         options.iter().map(|o| o.name.as_str()).collect::<Vec<_>>(),
-        vec!["Patch Single v1.0", "Bastion Single"],
+        vec!["Patch Single v1.0", "Bastion Single v1.0"],
         "the picker should list the species' abilities in declaration order"
     );
     assert_eq!(

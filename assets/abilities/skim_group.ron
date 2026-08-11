@@ -1,0 +1,9 @@
+(
+    id: "skim_group",
+    name: "Skim Group",
+    description: "Damage every member of one group and restore a third of it to yourself",
+    target: WholeEnemyGroup,
+    effect: Drain(power: 4, heal_fraction: 0.3),
+    cooldown: 3,
+    fatigue_cost: 8.0,
+)

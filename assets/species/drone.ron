@@ -15,6 +15,7 @@
         (name: "Recon Ping", power: 3, ranged: true),
     ],
     work_resource: Some("core_fragment"),
+    abilities: [(id: "skim_group", level: 2), (id: "skim_v1", level: 6)],
     affinities: (buff: 0.85, drain: 1.3),
     taunts: [
         "buzzes one flat tone at the pack and holds it there.",

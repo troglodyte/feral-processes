@@ -16,5 +16,6 @@
         (name: "Spoof", power: 9, ranged: true),
     ],
     work_resource: None,
+    abilities: [(id: "redundancy_sync", level: 2), (id: "rollback_v2", level: 6)],
     affinities: (damage: 0.85, heal: 1.3),
 )

@@ -15,6 +15,7 @@
         (name: "Pulse", power: 8),
     ],
     work_resource: Some("core_fragment"),
+    abilities: [(id: "deadlock", level: 2), (id: "memory_leak", level: 6)],
     affinities: (heal: 0.85, debuff: 1.3),
     taunts: [
         "pings the pack on every open port at once.",

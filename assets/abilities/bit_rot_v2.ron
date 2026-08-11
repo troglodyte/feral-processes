@@ -1,0 +1,9 @@
+(
+    id: "bit_rot_v2",
+    name: "Bit Rot Single v2.0",
+    description: "Bleed one target for 4 a round over 3 rounds",
+    target: OneEnemyGroupFront,
+    effect: Debuff(kind: Bleed, power: 4, duration: 3),
+    cooldown: 2,
+    fatigue_cost: 7.0,
+)

@@ -1,0 +1,9 @@
+(
+    id: "segfault_v1",
+    name: "Segfault Single v1.0",
+    description: "Damage 6 to one target",
+    target: OneEnemyGroupFront,
+    effect: Damage(power: 6),
+    cooldown: 2,
+    fatigue_cost: 6.0,
+)

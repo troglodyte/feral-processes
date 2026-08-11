@@ -671,6 +671,60 @@ mod tests {
         (value * percent + 50) / 100
     }
 
+    /// The `CLASSES` row a non-boss species is read as, derived from the one
+    /// affinity axis it raises and cross-checked against the one it damps.
+    ///
+    /// Both censuses go through here rather than deriving the class each for
+    /// itself: the class is what they disagree about most cheaply, and a
+    /// second copy of "raises exactly one axis" is a copy that can drift
+    /// into checking the stats against one class and the kit against
+    /// another.
+    fn class_of(
+        species: &SpeciesDef,
+    ) -> (AffinityKind, AffinityKind, i32, i32, i32, i32, i32, i32) {
+        let all_axes = [
+            AffinityKind::Damage,
+            AffinityKind::Heal,
+            AffinityKind::Buff,
+            AffinityKind::Debuff,
+            AffinityKind::Drain,
+        ];
+        let id = &species.id;
+        let raised: Vec<AffinityKind> = all_axes
+            .into_iter()
+            .filter(|k| species.affinities.get(*k) > AFFINITY_NEUTRAL)
+            .collect();
+        let damped: Vec<AffinityKind> = all_axes
+            .into_iter()
+            .filter(|k| species.affinities.get(*k) < AFFINITY_NEUTRAL)
+            .collect();
+        assert_eq!(
+            raised.len(),
+            1,
+            "{id} raises {} affinity axes — exactly one is what names its class, \
+             and a species with none or two has no readable role",
+            raised.len()
+        );
+        assert_eq!(
+            damped.len(),
+            1,
+            "{id} damps {} affinity axes; a class is one thing it is good at and \
+             one it is bad at",
+            damped.len()
+        );
+
+        let row = CLASSES
+            .into_iter()
+            .find(|c| c.0 == raised[0])
+            .unwrap_or_else(|| panic!("{id} raises {:?}, which names no class", raised[0]));
+        assert_eq!(
+            damped[0], row.1,
+            "{id} is a {:?} class, which damps {:?}, but it damps {:?}",
+            row.0, row.1, damped[0]
+        );
+        row
+    }
+
     /// Total HP+ATK+DEF a species of each growth band is built from, before
     /// its class weight. Taken from the bands' own means at the time the
     /// classes landed, so the ladder itself did not move.
@@ -710,48 +764,10 @@ mod tests {
             "species assets should all load cleanly: {warnings:?}"
         );
 
-        let all_axes = [
-            AffinityKind::Damage,
-            AffinityKind::Heal,
-            AffinityKind::Buff,
-            AffinityKind::Debuff,
-            AffinityKind::Drain,
-        ];
-
         for species in db.all().filter(|s| !s.is_boss) {
             let id = &species.id;
-            let raised: Vec<AffinityKind> = all_axes
-                .into_iter()
-                .filter(|k| species.affinities.get(*k) > AFFINITY_NEUTRAL)
-                .collect();
-            let damped: Vec<AffinityKind> = all_axes
-                .into_iter()
-                .filter(|k| species.affinities.get(*k) < AFFINITY_NEUTRAL)
-                .collect();
-            assert_eq!(
-                raised.len(),
-                1,
-                "{id} raises {} affinity axes — exactly one is what names its class, \
-                 and a species with none or two has no readable role",
-                raised.len()
-            );
-            assert_eq!(
-                damped.len(),
-                1,
-                "{id} damps {} affinity axes; a class is one thing it is good at and \
-                 one it is bad at",
-                damped.len()
-            );
-
-            let (up, down, weight, hp_share, atk_share, def_share, slowest, fastest) = CLASSES
-                .into_iter()
-                .find(|c| c.0 == raised[0])
-                .unwrap_or_else(|| panic!("{id} raises {:?}, which names no class", raised[0]));
-            assert_eq!(
-                damped[0], down,
-                "{id} is a {up:?} class, which damps {down:?}, but it damps {:?}",
-                damped[0]
-            );
+            let (up, _down, weight, hp_share, atk_share, def_share, slowest, fastest) =
+                class_of(species);
 
             let total = species.base_hp + species.base_atk + species.base_def;
             let budget = tier_budget(species.growth_multiplier);
@@ -783,6 +799,175 @@ mod tests {
                  paces the machine a program is posted to (see Game::work_ticks_for)",
                 species.base_speed
             );
+        }
+    }
+
+    /// The authored magnitude of a kit entry, which is what the ladder is
+    /// ordered by. Every category a kit may hold carries one; the panic arm
+    /// is the reachable-by-editing case of a `Cleanse` or a field buff
+    /// reaching the ladder slot, which the checks below refuse first.
+    fn kit_power(effect: &crate::abilities::AbilityEffect) -> i32 {
+        use crate::abilities::AbilityEffect as E;
+        match effect {
+            E::Damage { power, .. }
+            | E::Heal { power }
+            | E::Buff { power, .. }
+            | E::Debuff { power, .. }
+            | E::Drain { power, .. } => *power,
+            other => panic!("{other:?} carries no magnitude to rank a tier ladder by"),
+        }
+    }
+
+    /// The third leg of a class, and the one a player actually spends a
+    /// round on. The stat shape says what a species *is*; the kit says what
+    /// it *does*, and the two agreeing is the whole of the design — a
+    /// Bastion whose kit heals is a Medic that has been mis-shaped.
+    ///
+    /// Every species carries two entries: a **class utility** shared
+    /// verbatim by all three members of its class, and a **tier rung** it
+    /// holds alone. So the class is legible from the first unlock and the
+    /// tier from the second, which mirrors the stat budget being set by the
+    /// tier and spent by the class.
+    ///
+    /// Three of the checks are about a trap rather than about taste:
+    ///
+    /// - **Nothing unlocks at level 1.** `abilities::FALLBACK_ABILITY_ID`
+    ///   fills an *empty* kit (`Game::install_innate_routines`), and every
+    ///   species granting something at level 1 would make it unreachable —
+    ///   it is obtainable no other way than by extraction from a companion
+    ///   holding it. Holding the first entry back to level 2 is also what
+    ///   makes a fresh capture read as generic before it reads as a class.
+    /// - **No field-only effect.** `AffinityKind` is blind to the
+    ///   distinction — a `FieldBuff(kind: Def)` reports `Buff` and would
+    ///   pass the category check while never appearing in the battle
+    ///   Special picker at all, which is the one place a kit is spent.
+    /// - **The rungs rank by their authored power**, so a rung assigned to
+    ///   the wrong tier fails here rather than shipping. Checked against
+    ///   the growth band rather than against a table of ids, which would
+    ///   just be the species files copied into a test.
+    #[test]
+    fn every_ordinary_species_kit_agrees_with_its_affinity_class() {
+        use crate::abilities::AbilityEffect;
+
+        let abilities = shipped_abilities();
+        let (db, warnings) = SpeciesDb::load_dir(&species_assets_dir(), &abilities).unwrap();
+        assert!(
+            warnings.is_empty(),
+            "species assets should all load cleanly: {warnings:?}"
+        );
+
+        // (class, growth band, species id, utility id, rung id, rung power)
+        let mut kits: Vec<(AffinityKind, f32, String, String, String, i32)> = Vec::new();
+
+        for species in db.all().filter(|s| !s.is_boss) {
+            let id = &species.id;
+            let (class, ..) = class_of(species);
+
+            assert_eq!(
+                species.abilities.len(),
+                2,
+                "{id} grants {} abilities; every ordinary species carries a class \
+                 utility and a tier rung, and nothing else",
+                species.abilities.len()
+            );
+
+            for entry in &species.abilities {
+                let def = abilities.get(&entry.id).unwrap_or_else(|| {
+                    panic!("{id} grants {:?}, which no ability file defines", entry.id)
+                });
+                assert!(
+                    entry.level >= 2,
+                    "{id} unlocks {:?} at level {}; the first kit entry sits at level 2 \
+                     so a level-1 capture still installs {}, which nothing else grants",
+                    entry.id,
+                    entry.level,
+                    crate::abilities::FALLBACK_ABILITY_ID
+                );
+                assert!(
+                    !def.effect.field_only(),
+                    "{id} grants {:?}, which is field-only — a kit is spent through the \
+                     battle Special picker, where a field routine never appears",
+                    entry.id
+                );
+                let categorised = match (&def.effect, class) {
+                    // The one effect with no affinity category that still
+                    // belongs to a class: undoing a status is what a Medic
+                    // is for, and there is nothing there for an affinity to
+                    // scale.
+                    (AbilityEffect::Cleanse, AffinityKind::Heal) => true,
+                    _ => def.effect.affinity_kind() == Some(class),
+                };
+                assert!(
+                    categorised,
+                    "{id} is a {class:?} class but grants {:?}, which is {:?}. The kit is \
+                     the leg of a class a player actually spends a round on",
+                    entry.id,
+                    def.effect.affinity_kind()
+                );
+            }
+
+            let mut entries = species.abilities.clone();
+            entries.sort_by_key(|a| a.level);
+            assert!(
+                entries[0].level < entries[1].level,
+                "{id} unlocks both kit entries at level {}; the utility comes first and \
+                 the tier rung second",
+                entries[0].level
+            );
+            let rung = abilities.get(&entries[1].id).unwrap();
+            kits.push((
+                class,
+                species.growth_multiplier,
+                id.clone(),
+                entries[0].id.clone(),
+                entries[1].id.clone(),
+                kit_power(&rung.effect),
+            ));
+        }
+
+        for (class, ..) in CLASSES {
+            let mut members: Vec<_> = kits.iter().filter(|k| k.0 == class).collect();
+            assert_eq!(
+                members.len(),
+                3,
+                "{class:?} has {} species; one per growth band is what makes a class \
+                 readable independently of the ladder",
+                members.len()
+            );
+
+            let utility = &members[0].3;
+            for m in &members {
+                assert_eq!(
+                    &m.3, utility,
+                    "{} opens with {:?} but its {class:?} classmates open with {utility:?}; \
+                     the first unlock is the shared tell that names the class",
+                    m.2, m.3
+                );
+            }
+
+            members.sort_by(|a, b| a.1.total_cmp(&b.1));
+            for pair in members.windows(2) {
+                let (lo, hi) = (pair[0], pair[1]);
+                assert_ne!(
+                    lo.4, hi.4,
+                    "{} and {} share the tier rung {:?}; the second unlock is what \
+                     separates the members of a class",
+                    lo.2, hi.2, lo.4
+                );
+                assert!(
+                    lo.5 < hi.5,
+                    "{} ({:.2} growth) holds {:?} at power {}, and {} ({:.2}) holds {:?} \
+                     at power {} — a {class:?}'s rung climbs with its growth band",
+                    lo.2,
+                    lo.1,
+                    lo.4,
+                    lo.5,
+                    hi.2,
+                    hi.1,
+                    hi.4,
+                    hi.5
+                );
+            }
         }
     }
 

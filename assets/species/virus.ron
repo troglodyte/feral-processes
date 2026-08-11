@@ -16,5 +16,6 @@
         (name: "Corrupt", power: 8, effect: Some((kind: Bleed, chance: 0.4, duration: 3, power: 4))),
     ],
     work_resource: Some("core_fragment"),
+    abilities: [(id: "redundancy_sync", level: 2), (id: "rollback_v3", level: 6)],
     affinities: (damage: 0.85, heal: 1.3),
 )

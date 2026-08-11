@@ -107,6 +107,19 @@ pub struct CreatureSave {
     /// survives a save/load instead of resetting to 0 and handing the
     /// player unlimited fusions for free.
     pub fusions: u32,
+    /// How many percentage upgrades have been spent on this program — see
+    /// `components::Refactors`. Persisted for exactly the reason `fusions`
+    /// above is: `MAX_COMPANION_REFACTORS` is the only bound on a buff
+    /// chain that runs off a Mining Node forever, and a count that reset to
+    /// 0 on load would refill the budget on every reload.
+    ///
+    /// `#[serde(default)]` does nothing for the bincode save — that
+    /// encoding is positional, which is why this field's arrival bumped
+    /// `SAVE_FORMAT_VERSION` at all. It is here for the RON round trip that
+    /// `savetool dump`/`pack` performs, where fields are named and an older
+    /// dump simply won't carry the key.
+    #[serde(default)]
+    pub refactors: u32,
     /// The abilities installed in this program's routine slots, in menu
     /// order — see `components::Routines`. Persisted rather than re-derived
     /// from its species, because an innate routine can be popped out and a
@@ -349,7 +362,9 @@ pub struct SaveData {
 /// item names a tier beside it. Backfilled — this bump shipped undocumented.
 /// 25 → 26: `CreatureSave` gained `rarity`, the rare-spawn tier
 /// (`components::Rarity`).
-pub const SAVE_FORMAT_VERSION: u32 = 26;
+/// 26 → 27: `CreatureSave` gained `refactors`, the spent companion upgrade
+/// slots (`components::Refactors`).
+pub const SAVE_FORMAT_VERSION: u32 = 27;
 
 /// Renders a save as editable RON, for the `savetool` binary.
 ///

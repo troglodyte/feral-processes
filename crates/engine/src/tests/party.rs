@@ -570,6 +570,40 @@ fn companion_status_survives_save_and_load() {
     );
 }
 
+/// Both halves of a refactor are permanent and both bound future ones — the
+/// slot count against `MAX_COMPANION_REFACTORS`, the zone tier against the
+/// player's own. A round trip that dropped either would hand back a fresh
+/// budget of upgrades on every reload, which is the same free-fusions hole
+/// `fusions` was persisted to close.
+#[test]
+fn a_refactored_companion_keeps_its_slots_and_tier_across_a_save() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(29, DifficultyMode::Forgiving, &assets).unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(worker)
+        .insert((Refactors(3), ZonePortal(4)));
+
+    let dir = scratch_assets_dir("refactor_save");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &assets).unwrap();
+
+    let mut pets = loaded.world.query_filtered::<Entity, With<Tamed>>();
+    let pet = pets.iter(&loaded.world).next().expect("the program loaded");
+    assert_eq!(
+        loaded.world.get::<Refactors>(pet).copied(),
+        Some(Refactors(3)),
+        "the spent upgrade slots have to survive, or a reload refills them"
+    );
+    assert_eq!(
+        loaded.world.get::<ZonePortal>(pet).map(|z| z.0),
+        Some(4),
+        "and so does the tier the bump raised it to"
+    );
+}
+
 #[test]
 fn party_accepts_up_to_max_party_size_and_rejects_beyond_that() {
     let mut game = Game::new(70, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

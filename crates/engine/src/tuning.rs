@@ -1207,6 +1207,19 @@ pub const ITEM_FUSION_COST: u32 = 2;
 /// laundry.
 pub const MAX_FUSIONS: u32 = 3;
 
+/// How many percentage upgrades one program may carry (see
+/// `components::Refactors`), in the same spirit as `MAX_FUSIONS` above.
+///
+/// The cap is what stands between a craftable buff and infinite stats: those
+/// buffs come off a chain rooted in a Mining Node, which produces Core
+/// Fragments forever, and turns are free — so nothing else bounds how many a
+/// player can compile. The zone-bump track needs no such cap because it
+/// bounds itself, refusing once the program has caught up with the player.
+///
+/// It is also what makes the choice interesting, since five slots across
+/// three stats is a specialisation rather than a shopping list.
+pub const MAX_COMPANION_REFACTORS: u32 = 5;
+
 /// What an item is worth when its `.ron` file names no `value` — the flat
 /// rate every item in the game traded at before the price ladder existed,
 /// so a mod written against the older schema keeps its old behaviour.

@@ -916,6 +916,18 @@ impl Rarity {
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FusionCount(pub u32);
 
+/// How many percentage upgrades have been spent on this program — see
+/// `Game::refactor_companion`. Absent means zero, the same way `FusionCount`
+/// is absent on a program that has never been fused.
+///
+/// It counts **only** the percentage buffs. A Recompile Kernel raises
+/// `ZonePortal` instead and spends nothing here, because that track bounds
+/// itself against the player's own zone and a player forced to burn permanent
+/// slots just staying current has had the feature taken away at exactly the
+/// point it was meant to help.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Refactors(pub u32);
+
 /// A structure's remaining health against raids (see `Game::raid_check`).
 /// Every deployed structure gets one, sized from its
 /// `StructureDef::durability`; reaching 0 destroys the structure.

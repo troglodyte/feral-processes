@@ -1254,10 +1254,12 @@ fn flat_payout_takes_a_node_off_the_tier_and_depth_curve() {
                 Some(&tier),
                 ZoneLevel(5),
                 flat,
-                0,
                 // Unread: `level: None` above skips the reliability roll, so
-                // the worker's aptitude has nothing to act on here.
-                crate::tuning::DEFAULT_BASE_INT,
+                // neither modifier has anything to act on here.
+                crate::systems::RollModifiers {
+                    keen_scavenger_level: 0,
+                    base_int: crate::tuning::DEFAULT_BASE_INT,
+                },
                 world.resource::<ItemDb>(),
                 &mut rng,
             )

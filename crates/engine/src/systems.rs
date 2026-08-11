@@ -17,11 +17,11 @@ use crate::resources::{GameRng, MessageKind, MessageLog, ZoneLevel};
 use crate::species::SpeciesDb;
 use crate::structures::StructureDb;
 use crate::tuning::{
-    FATIGUE_REGEN_PER_TICK, HUNGER_DECAY_PER_TICK, WORK_XP_LEVEL_CAP, WORK_XP_PER_CYCLE,
-};
-use crate::tuning::{
     DEFAULT_BASE_INT, KEEN_SCAVENGER_BONUS_PER_LEVEL, MINING_SUCCESS_BASE, MINING_SUCCESS_PER_INT,
     MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS,
+};
+use crate::tuning::{
+    FATIGUE_REGEN_PER_TICK, HUNGER_DECAY_PER_TICK, WORK_XP_LEVEL_CAP, WORK_XP_PER_CYCLE,
 };
 use crate::world::WorldMap;
 
@@ -156,6 +156,24 @@ pub(crate) fn mining_success_chance(level: u32, keen_scavenger_level: u32, base_
         .clamp(0.0, 1.0)
 }
 
+/// The two modifiers on a gather cycle's reliability roll. Bundled rather
+/// than passed loose because `resolve_gather_cycle` is otherwise one
+/// argument past clippy's threshold, and this is the grouping that is
+/// actually real — everything else that function takes describes the *node*
+/// or the payout, while these two are the only inputs to whether the cycle
+/// lands at all.
+///
+/// They are still two fields and not one number, because they differ in
+/// whose they are: the perk is the player's wherever the cycle is being run,
+/// the aptitude belongs to whoever is standing at the machine. Collapsing
+/// them into a single "bonus" would lose exactly the distinction that makes
+/// posting a program a decision.
+#[derive(Clone, Copy)]
+pub(crate) struct RollModifiers {
+    pub keen_scavenger_level: u32,
+    pub base_int: i32,
+}
+
 /// Whether the structure `node_entity` belongs to declares
 /// `WorkDef::flat_payout`. Read per cycle off the `StructureDb` rather than
 /// mirrored onto `ResourceNode` at build time: the component is rebuilt from
@@ -194,15 +212,16 @@ pub(crate) fn resolve_gather_cycle(
     tier: Option<&StructureTier>,
     zone: ZoneLevel,
     flat_payout: bool,
-    keen_scavenger_level: u32,
-    base_int: i32,
+    roll: RollModifiers,
     item_db: &ItemDb,
     rng: &mut GameRng,
 ) -> Option<(crate::items::ItemId, u32)> {
     if let Some(level) = node.level
-        && !rng
-            .0
-            .random_bool(mining_success_chance(level, keen_scavenger_level, base_int))
+        && !rng.0.random_bool(mining_success_chance(
+            level,
+            roll.keen_scavenger_level,
+            roll.base_int,
+        ))
     {
         return None;
     }
@@ -474,8 +493,10 @@ pub fn task_progress_system(
             tier,
             *zone,
             node_is_flat_payout(structure, &structure_db),
-            keen_scavenger_level,
-            worker_int,
+            RollModifiers {
+                keen_scavenger_level,
+                base_int: worker_int,
+            },
             &item_db,
             &mut rng,
         ) else {
@@ -583,8 +604,10 @@ pub fn player_gather_system(
             tier,
             *zone,
             node_is_flat_payout(structure, &structure_db),
-            keen_scavenger_level,
-            DEFAULT_BASE_INT,
+            RollModifiers {
+                keen_scavenger_level,
+                base_int: DEFAULT_BASE_INT,
+            },
             &item_db,
             &mut rng,
         ) else {

@@ -674,8 +674,7 @@ mod tests {
         );
 
         let ordinary: Vec<&SpeciesDef> = db.all().filter(|s| !s.is_boss).collect();
-        let mean =
-            ordinary.iter().map(|s| s.base_int).sum::<i32>() as f64 / ordinary.len() as f64;
+        let mean = ordinary.iter().map(|s| s.base_int).sum::<i32>() as f64 / ordinary.len() as f64;
 
         let mut bands: std::collections::BTreeMap<String, Vec<&SpeciesDef>> =
             std::collections::BTreeMap::new();

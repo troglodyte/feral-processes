@@ -273,6 +273,65 @@ pub struct SpeciesDef {
     pub can_nest: bool,
 }
 
+/// The role a species is read as, independent of its tier — the axis the
+/// class system is built on. See `assets/species/README.md`'s "The five
+/// classes" for the authored reference.
+///
+/// It is **derived, never declared**: a class is the one affinity axis a
+/// species raises, cross-checked in the censuses against the stat shape and
+/// the kit that axis implies. That is why there is no `role` field in the
+/// `.ron` schema — three things have to agree, and a field would let a
+/// species claim a role its numbers contradict.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AffinityClass {
+    Striker,
+    Bastion,
+    Medic,
+    Saboteur,
+    Leech,
+}
+
+impl SpeciesDef {
+    /// The class this species reads as, or `None` for one that raises no
+    /// axis or more than one.
+    ///
+    /// `None` is what a boss is — they carry no affinities at all and sit
+    /// outside the class system — and it is also the honest answer for a
+    /// mod that raises two axes. Both cases must resolve to *no base job*
+    /// rather than to some default class, which is what the `Option` buys
+    /// over a fallback: a species with no readable role should not silently
+    /// acquire a Medic's repair rate.
+    pub fn affinity_class(&self) -> Option<AffinityClass> {
+        let mut raised = self
+            .affinities
+            .non_neutral()
+            .into_iter()
+            .filter(|&(_, v)| v > crate::tuning::AFFINITY_NEUTRAL);
+        let (axis, _) = raised.next()?;
+        if raised.next().is_some() {
+            return None;
+        }
+        Some(AffinityClass::of_axis(axis))
+    }
+}
+
+impl AffinityClass {
+    /// The class an affinity axis names. Public because the kit census asks
+    /// it of an *ability's* category rather than of a species' affinities —
+    /// "is this routine the kind of thing this class does" is the same
+    /// mapping asked from the other end, and two copies of it could drift
+    /// into checking a kit against one class and the stats against another.
+    pub fn of_axis(kind: AffinityKind) -> AffinityClass {
+        match kind {
+            AffinityKind::Damage => AffinityClass::Striker,
+            AffinityKind::Buff => AffinityClass::Bastion,
+            AffinityKind::Heal => AffinityClass::Medic,
+            AffinityKind::Debuff => AffinityClass::Saboteur,
+            AffinityKind::Drain => AffinityClass::Leech,
+        }
+    }
+}
+
 fn default_growth_multiplier() -> f32 {
     crate::tuning::BASELINE_GROWTH_MULTIPLIER
 }
@@ -407,6 +466,40 @@ mod tests {
         )
         .unwrap()
         .0
+    }
+
+    /// A class is readable at runtime, not only from a census. Phase 5's
+    /// base jobs ask what a posted program *is* while the game is running,
+    /// which nothing outside `#[cfg(test)]` could answer before.
+    ///
+    /// The five arms are spot-checked against real files rather than
+    /// hand-built defs, because the mapping is only worth anything if it
+    /// agrees with the roster the player actually meets.
+    #[test]
+    fn a_class_is_the_one_affinity_axis_a_species_raises() {
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
+        for (id, expected) in [
+            ("glitch", AffinityClass::Striker),
+            ("sentinel", AffinityClass::Bastion),
+            ("virus", AffinityClass::Medic),
+            ("trojan", AffinityClass::Saboteur),
+            ("drone", AffinityClass::Leech),
+        ] {
+            assert_eq!(
+                db.get(id).unwrap().affinity_class(),
+                Some(expected),
+                "{id} raises the axis that names {expected:?}"
+            );
+        }
+    }
+
+    /// A boss raises nothing, so it is outside the class system rather than
+    /// being some default class — which is what keeps a base job from
+    /// silently attaching to one, and what `derive`'s `Option` is for.
+    #[test]
+    fn a_boss_has_no_class() {
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
+        assert_eq!(db.get("overseer").unwrap().affinity_class(), None);
     }
 
     /// The habitat pools feed the per-tile spawn roll by index
@@ -658,12 +751,12 @@ mod tests {
     /// consistency check and cannot name one on its own — Bastion and
     /// Medic both damp `damage`.
     #[rustfmt::skip]
-    const CLASSES: [(AffinityKind, AffinityKind, i32, i32, i32, i32, i32, i32); 5] = [
-        (AffinityKind::Damage, AffinityKind::Heal,    90, 84, 13, 3, 10, 11),
-        (AffinityKind::Debuff, AffinityKind::Heal,    95, 85, 11, 4, 13, 14),
-        (AffinityKind::Heal,   AffinityKind::Damage, 100, 87,  7, 6, 12, 12),
-        (AffinityKind::Drain,  AffinityKind::Buff,   105, 90,  8, 2,  8,  9),
-        (AffinityKind::Buff,   AffinityKind::Damage, 110, 88,  4, 8,  6,  7),
+    const CLASSES: [(AffinityClass, AffinityKind, i32, i32, i32, i32, i32, i32); 5] = [
+        (AffinityClass::Striker,  AffinityKind::Heal,    90, 84, 13, 3, 10, 11),
+        (AffinityClass::Saboteur, AffinityKind::Heal,    95, 85, 11, 4, 13, 14),
+        (AffinityClass::Medic,    AffinityKind::Damage, 100, 87,  7, 6, 12, 12),
+        (AffinityClass::Leech,    AffinityKind::Buff,   105, 90,  8, 2,  8,  9),
+        (AffinityClass::Bastion,  AffinityKind::Damage, 110, 88,  4, 8,  6,  7),
     ];
 
     /// `percent` of `value`, rounded half up.
@@ -671,40 +764,37 @@ mod tests {
         (value * percent + 50) / 100
     }
 
-    /// The `CLASSES` row a non-boss species is read as, derived from the one
-    /// affinity axis it raises and cross-checked against the one it damps.
+    /// The `CLASSES` row a non-boss species is read as, looked up from
+    /// `SpeciesDef::affinity_class` and cross-checked against the axis it
+    /// damps.
     ///
     /// Both censuses go through here rather than deriving the class each for
     /// itself: the class is what they disagree about most cheaply, and a
     /// second copy of "raises exactly one axis" is a copy that can drift
     /// into checking the stats against one class and the kit against
-    /// another.
+    /// another. The derivation itself is no longer one of those copies — it
+    /// is the shipping function the base jobs read, so a census passing is
+    /// evidence about the game rather than about the test.
     fn class_of(
         species: &SpeciesDef,
-    ) -> (AffinityKind, AffinityKind, i32, i32, i32, i32, i32, i32) {
-        let all_axes = [
+    ) -> (AffinityClass, AffinityKind, i32, i32, i32, i32, i32, i32) {
+        let id = &species.id;
+        let class = species.affinity_class().unwrap_or_else(|| {
+            panic!(
+                "{id} raises no single affinity axis — exactly one is what names its class, \
+                 and a species with none or two has no readable role"
+            )
+        });
+        let damped: Vec<AffinityKind> = [
             AffinityKind::Damage,
             AffinityKind::Heal,
             AffinityKind::Buff,
             AffinityKind::Debuff,
             AffinityKind::Drain,
-        ];
-        let id = &species.id;
-        let raised: Vec<AffinityKind> = all_axes
-            .into_iter()
-            .filter(|k| species.affinities.get(*k) > AFFINITY_NEUTRAL)
-            .collect();
-        let damped: Vec<AffinityKind> = all_axes
-            .into_iter()
-            .filter(|k| species.affinities.get(*k) < AFFINITY_NEUTRAL)
-            .collect();
-        assert_eq!(
-            raised.len(),
-            1,
-            "{id} raises {} affinity axes — exactly one is what names its class, \
-             and a species with none or two has no readable role",
-            raised.len()
-        );
+        ]
+        .into_iter()
+        .filter(|k| species.affinities.get(*k) < AFFINITY_NEUTRAL)
+        .collect();
         assert_eq!(
             damped.len(),
             1,
@@ -713,10 +803,7 @@ mod tests {
             damped.len()
         );
 
-        let row = CLASSES
-            .into_iter()
-            .find(|c| c.0 == raised[0])
-            .unwrap_or_else(|| panic!("{id} raises {:?}, which names no class", raised[0]));
+        let row = CLASSES.into_iter().find(|c| c.0 == class).unwrap();
         assert_eq!(
             damped[0], row.1,
             "{id} is a {:?} class, which damps {:?}, but it damps {:?}",
@@ -857,7 +944,7 @@ mod tests {
         );
 
         // (class, growth band, species id, utility id, rung id, rung power)
-        let mut kits: Vec<(AffinityKind, f32, String, String, String, i32)> = Vec::new();
+        let mut kits: Vec<(AffinityClass, f32, String, String, String, i32)> = Vec::new();
 
         for species in db.all().filter(|s| !s.is_boss) {
             let id = &species.id;
@@ -894,8 +981,8 @@ mod tests {
                     // belongs to a class: undoing a status is what a Medic
                     // is for, and there is nothing there for an affinity to
                     // scale.
-                    (AbilityEffect::Cleanse, AffinityKind::Heal) => true,
-                    _ => def.effect.affinity_kind() == Some(class),
+                    (AbilityEffect::Cleanse, AffinityClass::Medic) => true,
+                    _ => def.effect.affinity_kind().map(AffinityClass::of_axis) == Some(class),
                 };
                 assert!(
                     categorised,

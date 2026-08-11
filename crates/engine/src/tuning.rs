@@ -1138,7 +1138,7 @@ pub const MINING_SUCCESS_PER_LEVEL: f64 = 0.1;
 /// `DEFAULT_BASE_INT` is worth on the mining roll. The shipped roster spans
 /// 5 to 14, so the fourth term ranges about -0.10 to +0.08 — enough that a
 /// Cipher and a Construct posted to the same Mk1 node visibly disagree
-/// (0.30 against 0.50), and small enough that a node's own tier, worth
+/// (0.58 against 0.40), and small enough that a node's own tier, worth
 /// `MINING_SUCCESS_PER_LEVEL` a step, still outruns species choice over a
 /// few upgrades.
 pub const MINING_SUCCESS_PER_INT: f64 = 0.02;

@@ -38,7 +38,7 @@ cycle becomes 8; post a Construct (`base_speed: 6`) and the same node takes
 12. `base_int`, a stat with no meaning at all before this, is read as a
 fourth term on the extraction roll, alongside the node's own tier and the
 player's Keen Scavenger perk — a Cipher and a Construct posted to the same
-Mk1 node now visibly disagree, 0.30 against 0.50. Working a node yourself is
+Mk1 node now visibly disagree, 0.58 against 0.40. Working a node yourself is
 untouched by either change: the player has no species, so both read at
 exactly the roster's baseline, which is what keeps posting a sharp program
 better than doing the job by hand, and a dull one worse.

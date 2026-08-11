@@ -27,6 +27,37 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.7.2
+
+### The `chains` dev template is now a factory sandbox
+
+`cargo run -- --template chains` already stood up a three-stage production
+chain, but it opened with eight of the twenty-one research nodes and fifteen
+Core Fragments — enough to watch the chain it ships with, not enough to build
+a second one. Testing the factory therefore still started by playing the
+research tree. It now opens with:
+
+- **Every research node unlocked**, so the whole build menu and every bench
+  recipe is available. The eleven structures no research file names were
+  already unlocked by default, so nothing is behind a gate any more.
+- **Deep cargo**: 600 Core Fragments, 120 each of the four bench
+  intermediates (Bytecode Block, Blank Substrate, Logic Wafer, Charge Coil)
+  plus Annealed Cores and Raw Trace, 120 Power Cells, 100 Outlets, 20 Portal
+  Fragments, 5000 Credits, 500 Research Data, 200 ICE Breakers, 50 Routine
+  Disks — including the four intermediates that gate a bench's own
+  `build_cost`.
+- **Six unposted programs** standing on the player's tile — two each of the
+  three classes that do something at a post, named `Spare Medic A/B`,
+  `Spare Leech A/B` and `Spare Bastion A/B` — so the base jobs are testable
+  without taming first. They are on top of the nine already running
+  cronjobs; the five-slot party is unchanged.
+
+Developer tooling only: no shipped asset, no engine code and no save format
+changed, and the two gates that keep a template honest —
+`every_checked_in_template_still_loads` and
+`the_chains_template_starts_with_a_chain_that_actually_runs` — both still
+pass against it.
+
 ## 0.7.1
 
 ### Three of the five classes now have a job at your base

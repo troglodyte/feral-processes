@@ -656,7 +656,7 @@ mod tests {
             "Speed must not be left behind in SPECIES too: {species:?}"
         );
         assert!(
-            species.len() <= MAX_SECTION_ROWS - 1,
+            species.len() < MAX_SECTION_ROWS,
             "SPECIES has to come off its cap, or the next row added to it \
              vanishes into '+N more': {species:?}"
         );

@@ -27,6 +27,38 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## Unreleased
+
+### A species' stats now say something about work, not only about fighting
+
+Two of a species' base stats picked up a second job today. `base_speed` —
+until now read only to order turns in a fight — also sets a species' pace at
+a machine: post a Sprite (`base_speed: 14`) to a Mining Node and its 10-tick
+cycle becomes 8; post a Construct (`base_speed: 6`) and the same node takes
+12. `base_int`, a stat with no meaning at all before this, is read as a
+fourth term on the extraction roll, alongside the node's own tier and the
+player's Keen Scavenger perk — a Cipher and a Construct posted to the same
+Mk1 node now visibly disagree, 0.30 against 0.50. Working a node yourself is
+untouched by either change: the player has no species, so both read at
+exactly the roster's baseline, which is what keeps posting a sharp program
+better than doing the job by hand, and a dull one worse.
+
+The manifest has a new WORK box to say so — Speed and Analysis, the two
+numbers that describe what a program is like to post somewhere, sit
+together rather than getting buried in SPECIES or duplicated across two
+places on the same screen. An assembler now runs at the rate baked in when
+its program was posted, rather than at its structure's flat
+`ticks_per_unit` regardless of who was staffing it — previously two very
+different species posted to the same Assembly Bay ran identically. A
+cronjob already posted before this update, including one loaded from an
+older save, keeps its old rate until reassigned; nothing recalculates a
+running job's pace mid-cycle.
+
+Both effects are sized by their own tuning constant
+(`MINING_SUCCESS_PER_INT`, `WORK_TICKS_PER_SPEED`), independent of the node
+or machine's own numbers, so how much a species' choice matters can be
+retuned without touching how much the machine itself matters.
+
 ## 0.7.0
 
 **Breaking: existing saves will not load.** `SAVE_FORMAT_VERSION` goes 26 →

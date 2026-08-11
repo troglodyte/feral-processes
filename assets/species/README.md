@@ -44,6 +44,25 @@ is skipped with a warning logged in-game rather than crashing startup.
     // 11. Leaving this out puts your species at the roster average, which
     // is why an existing species file predating this field keeps working
     // untouched.
+    //
+    // The same number also sets this species' pace at a machine: posted to
+    // a cronjob, it scales how long a work cycle takes, read as a *distance
+    // from 10* exactly the way `base_int`, immediately below, explains for
+    // extraction odds — 10 costs nothing either side, above it is faster,
+    // below it is slower. The shipped extremes: Construct at 6 takes a
+    // fifth longer per cycle (a Mining Node's 10 ticks becomes 12, a
+    // Fabricator's 30 becomes 36), Sprite at 14 takes a fifth less (10
+    // becomes 8, 30 becomes 24), and it can never scale below one cycle per
+    // tick, however extreme a modded value. The player has no species and
+    // works at the baseline, so a machine's own `ticks_per_unit` (see
+    // `assets/structures/README.md`) is exactly what working it by hand
+    // costs — unchanged from before this field applied to work at all.
+    //
+    // Initiative and work rate are one field, not two, and that's
+    // deliberate: "the sprite is quick" is meant to read as quick in a
+    // fight and quick at a machine both. There is no way to tune the two
+    // apart — that's the design, not an oversight, if you're modding one
+    // half only.
     base_speed: 12,
 
     // Optional; can be left out entirely (defaults to 10). How good this

@@ -31,8 +31,16 @@ is skipped with a warning logged in-game rather than crashing startup.
     description: "Extracts Core Fragments while a program is posted to it. The cheapest thing you can deploy.",
 
     // Omit (`None`) for a purely decorative/utility structure. Set `Some(...)`
-    // to make it assignable to a tamed creature via the cronjob menu — it'll
-    // produce one unit of `produces` every `ticks_per_unit` ticks.
+    // to make it assignable to a tamed creature via the cronjob menu.
+    // `ticks_per_unit` is the machine's *baseline* rate — one unit of
+    // `produces` every that many ticks — which the posted program's
+    // `base_speed` (see `assets/species/README.md`) then scales faster or
+    // slower. The player has no species and works a node at the baseline,
+    // so `ticks_per_unit` is exactly what working it by hand costs. The
+    // scaled rate is baked in the moment a program is posted, or the
+    // player sets to work, not re-read every tick afterward — a cronjob
+    // already running keeps its old rate, even across a save/load, until
+    // it's reassigned.
     //
     // A node is a tap, not a reserve: there's no pool to mine down, and it
     // never runs dry. What paces it is the top-level `capacity` below — the
@@ -105,10 +113,12 @@ is skipped with a warning logged in-game rather than crashing startup.
     stores: true,
 
     // Optional; can be left out entirely (defaults to no assembling). If
-    // set, this structure automatically builds `item` — one unit every
-    // `ticks_per_unit` ticks — out of ingredients it pulls from the output
-    // buffers of the four structures orthogonally touching it. Diagonals
-    // feed nothing. Like `work`, it needs a program assigned to it via the
+    // set, this structure automatically builds `item` out of ingredients it
+    // pulls from the output buffers of the four structures orthogonally
+    // touching it. Diagonals feed nothing. `ticks_per_unit` is this
+    // machine's baseline rate the same way `work`'s is above — one unit
+    // every that many ticks at the baseline, scaled by whatever program is
+    // posted to it. Like `work`, it needs a program assigned to it via the
     // cronjob menu; unlike `work`, it consumes, which is what lets machines
     // form a chain across the base.
     //

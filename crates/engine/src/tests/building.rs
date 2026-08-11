@@ -1343,6 +1343,67 @@ fn walking_away_stops_the_job() {
     );
 }
 
+/// A cycle you run yourself pays into the *node's* buffer
+/// (`player_gather_system`), and `c` reaches only the four orthogonal tiles
+/// (`collect_adjacent`) — so a job started from across the base earns into a
+/// buffer that is nowhere near you, and the extraction lines read as though
+/// you were pocketing it. The work menu lists everything within
+/// `MENU_SCAN_RADIUS`, so this is a refusal at the action rather than a
+/// hidden row, the same shape as `assign_cronjob`'s walk check.
+#[test]
+fn working_a_node_you_are_not_standing_beside_is_refused() {
+    let mut game = Game::new(952, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = deploy_upgradeable_node(&mut game);
+    let player = game.player_entity();
+    let node_pos = *game.world.get::<Position>(node).unwrap();
+    let mut pos = game.world.get_mut::<Position>(player).unwrap();
+    pos.x = node_pos.x + 6;
+    pos.y = node_pos.y;
+
+    let err = game
+        .work_structure(node)
+        .expect_err("a node you could not collect from must not be workable");
+
+    assert!(err.contains("next to"), "unexpected refusal: {err}");
+    assert!(
+        game.world.get::<Task>(player).is_none(),
+        "a refused job must leave no Task behind"
+    );
+}
+
+/// The rule is `hauling::at_station`, not "roughly beside it": a diagonal
+/// neighbour is the one tile that looks adjacent and is out of `c`'s reach,
+/// which is exactly the buffer a player would never find.
+#[test]
+fn a_diagonal_neighbour_is_not_close_enough_to_work() {
+    let mut game = Game::new(953, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = deploy_upgradeable_node(&mut game);
+    let player = game.player_entity();
+    let node_pos = *game.world.get::<Position>(node).unwrap();
+
+    {
+        let mut pos = game.world.get_mut::<Position>(player).unwrap();
+        pos.x = node_pos.x + 1;
+        pos.y = node_pos.y + 1;
+    }
+    assert!(
+        game.work_structure(node).is_err(),
+        "a diagonal is not a tile the node can be collected from"
+    );
+
+    {
+        let mut pos = game.world.get_mut::<Position>(player).unwrap();
+        pos.x = node_pos.x + 1;
+        pos.y = node_pos.y;
+    }
+    game.work_structure(node)
+        .expect("standing on one of the node's four station tiles works it");
+    assert!(
+        game.world.get::<Task>(player).is_some(),
+        "or the refusal is blanket rather than about reach"
+    );
+}
+
 /// Spawns a workable structure with a full node, away from anything else.
 fn workable_structure(game: &mut Game, x: i32, y: i32) -> Entity {
     let def = game
@@ -1497,6 +1558,7 @@ fn the_players_own_work_holds_the_cronjob_slot() {
     let structure = workable_structure(&mut game, 3, 4);
     let worker = spawn_tamed(&mut game, 10, 3);
 
+    stand_player_at_post(&mut game, structure);
     game.work_structure(structure).unwrap();
     let player = game.player_entity();
     assert!(game.world.get::<Task>(player).is_some());

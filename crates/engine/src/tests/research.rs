@@ -114,6 +114,7 @@ fn the_player_working_a_research_node_banks_it_too() {
         .id();
     let before = research_data_held(&game);
 
+    stand_player_at_post(&mut game, node);
     game.work_structure(node).expect("the node can be worked");
     for _ in 0..100 {
         game.tick();

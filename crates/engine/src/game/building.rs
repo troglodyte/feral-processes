@@ -407,6 +407,22 @@ impl Game {
     /// carries no task, so loading a save puts you next to the node rather
     /// than mid-cycle at it, and that costs at most one cycle's progress
     /// without a save-format bump.
+    ///
+    /// You have to be standing on one of the node's four station tiles, by
+    /// the same `hauling::at_station` a posted program has to walk to. The
+    /// cycle pays into the node's *own* buffer (`systems::
+    /// player_gather_system`) and `c` reaches only those four tiles
+    /// (`collect_adjacent`), so a job run from anywhere else fills a buffer
+    /// the player cannot open — silently, since the extraction lines read
+    /// the same either way. `move_player` drops the `Task` on any step, so
+    /// checking once at the start is what makes "a player still holding one
+    /// is standing beside the node" true for the whole job rather than an
+    /// assumption those two functions were making.
+    ///
+    /// A refusal rather than a filtered menu, for the reason `assign_cronjob`
+    /// refuses an unwalkable post: the picker lists everything within
+    /// `MENU_SCAN_RADIUS`, and a row that vanished by distance would take the
+    /// whole screen — and the base menu row leading to it — with it.
     pub fn work_structure(&mut self, structure: Entity) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -414,6 +430,19 @@ impl Game {
         self.require_surface()?;
         if self.world.get::<ResourceNode>(structure).is_none() {
             return Err("That structure can't be worked.".into());
+        }
+        let here = *self
+            .world
+            .get::<Position>(self.player_entity())
+            .ok_or_else(|| "You aren't anywhere you can work from.".to_string())?;
+        let structure_pos = *self
+            .world
+            .get::<Position>(structure)
+            .ok_or_else(|| "That structure isn't anywhere you can reach.".to_string())?;
+        if !hauling::at_station(here, structure_pos) {
+            return Err(
+                "You have to be standing next to it to work it — get beside it first.".into(),
+            );
         }
         let ticks = self.work_ticks_for(structure);
         let player = self.player_entity();

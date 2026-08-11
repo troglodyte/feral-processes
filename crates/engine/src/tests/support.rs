@@ -1231,13 +1231,20 @@ pub(super) fn build_a_base(game: &mut Game) -> (Entity, Entity) {
 
 /// Deploys a Mining Node beside a Home with materials to spare, and
 /// returns it.
+///
+/// Orthogonally east of the player rather than on a diagonal, which is
+/// twice deliberate: the build menu offers only the four orthogonals
+/// (`App::handle_build_direction_key`), so a diagonal node is a tile no
+/// player can build on, and `Game::work_structure` refuses a node the
+/// player is not standing at the station of — so a diagonal fixture left
+/// every test that works this node by hand testing an unreachable state.
 pub(super) fn deploy_upgradeable_node(game: &mut Game) -> Entity {
     place_home(game, 0, 1);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 12);
-    game.place_structure("mining_node", 1, 1).unwrap();
+    game.place_structure("mining_node", 1, 0).unwrap();
     find_structure_by_kind(game, "mining_node").unwrap()
 }
 

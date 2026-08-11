@@ -518,9 +518,12 @@ pub fn player_gather_system(
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
         }
-        // The node's `Position` goes unread here: `move_player` drops this
-        // task the moment the player steps away, so a player still holding
-        // one is standing beside the node by construction.
+        // The node's `Position` goes unread here, and it takes both halves to
+        // earn that: `work_structure` refuses a node the player is not at the
+        // station of, and `move_player` drops the task the moment they step
+        // away. Either half alone leaves a player working a node they are
+        // nowhere near — which pays into a buffer `collect_adjacent` cannot
+        // reach.
         let Ok((node, tier, structure, mut stock, mut status, _)) = nodes.get_mut(task.target)
         else {
             continue;

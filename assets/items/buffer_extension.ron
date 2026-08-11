@@ -1,7 +1,7 @@
 (
     id: "buffer_extension",
     name: "Buffer Extension",
-    description: "Widens a tamed program's allocation for good: +5% max HP, and one of its five upgrade slots.",
+    description: "Widens a tamed program's allocation for good. +5% max HP, and one upgrade slot.",
     value: Some(5),
     craftable: Some((cost: [("annealed_core", 2)], requires_structure: Some("refactor_bench"))),
     upgrade: Some((hp_percent: 5.0)),

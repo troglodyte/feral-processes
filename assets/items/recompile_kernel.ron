@@ -1,7 +1,7 @@
 (
     id: "recompile_kernel",
     name: "Recompile Kernel",
-    description: "Rebuilds a tamed program against the zone you are standing in. Doubles its stats, once per zone you are ahead of it.",
+    description: "Rebuilds a tamed program for the zone you are in. Doubles its stats, once per zone it is behind.",
     value: Some(8),
     craftable: Some((cost: [("annealed_core", 3)], requires_structure: Some("refactor_bench"))),
     upgrade: Some((zone_bump: true)),

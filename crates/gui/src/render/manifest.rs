@@ -185,6 +185,20 @@ fn draw_header(view: &ManifestView, rect: Rect, painter: &Painter, m: &Metrics) 
             if p.fusions > 0 {
                 tags.push(format!("fused {}/{}", p.fusions, p.max_fusions));
             }
+            if p.refactors > 0 {
+                tags.push(format!("upgraded {}/{}", p.refactors, p.max_refactors));
+            }
+            // Only when it is behind, the way `fused` only shows once it has
+            // been. A program level with the zone needs no telling; one that
+            // is three doublings back has nothing else on the page saying so,
+            // and the bare zone tag on its name reads as decoration without
+            // the player's own number beside it.
+            if p.zone_tier < p.player_zone {
+                tags.push(format!(
+                    "zone {} — you're in {}",
+                    p.zone_tier, p.player_zone
+                ));
+            }
             if p.is_companion {
                 tags.push("in party".to_string());
             } else if let Some(activity) = &p.activity {

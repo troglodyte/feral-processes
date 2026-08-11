@@ -13,58 +13,72 @@
 # put it in front of a reader as though it meant something. `status` is the
 # rider on a Damage effect, flattened to "kind chance duration".
 A = [
- # id                    name                          target                 effect       sub            pow  dur  status             cd  cost
- ("ablative_layer",      "Ablative Layer Single",      "OneAlly",             "FieldBuff", "Mitigation",    10,   80, "",                0, 20.0),
- ("acid_wash",           "Etch Single",                "OneEnemyGroupFront",  "Buff",      "Def",           -5,    3, "",                2, 0),
- ("bastion",             "Bastion Party",              "WholeParty",          "Buff",      "Def",            4,    3, "",                3, 0),
- ("buffer_overrun",      "Buffer Overrun Party",       "WholeParty",          "Phase",     "",               0,    0, "",                0, 12.0),
- ("bit_rot",             "Bit Rot Everyone",           "AllEnemies",          "Debuff",    "Bleed",          2,    4, "",                5, 0),
- ("branch_hazard",       "Pipeline Stall Group",       "WholeEnemyGroup",     "Damage",    "",               6,    0, "Stun 30% 1r",     4, 0),
- ("broadcast_storm",     "Packet Shred Everyone",      "AllEnemies",          "Damage",    "",              25,    0, "",                4, 0),
- ("brownout",            "Throttle Everyone",          "AllEnemies",          "Buff",      "Atk",           -3,    3, "",                5, 0),
- ("bus_fault",           "Pipeline Stall Everyone",    "AllEnemies",          "Damage",    "",               6,    0, "Stun 25% 1r",     5, 0),
- ("cascade_overflow",    "Packet Shred Group v1.0",    "WholeEnemyGroup",     "Damage",    "",               6,    0, "",                2, 0),
- ("checksum_repair",     "Patch Single v2.0",          "OneAlly",             "Heal",      "",              25,    0, "",                3, 0),
- ("clock_gate",          "Throttle Single",            "OneEnemyGroupFront",  "Buff",      "Atk",           -5,    3, "",                2, 0),
- ("cold_boot",           "Patch Single v3.0",          "OneAlly",             "Heal",      "",              50,    0, "",                5, 0),
- ("coolant_flush",       "Coolant Flush Party",        "WholeParty",          "FieldBuff", "Coolant",        1,   90, "",                0, 15.0),
- ("cycle_harvest",       "Leech Everyone",             "AllEnemies",          "Drain",     "",               4,    0, "",                5, 0),
- ("deadlock",            "Hard Lock Single v1.0",      "OneEnemyGroupFront",  "Debuff",    "Stun",           0,    1, "",                2, 0),
- ("decompile",           "Decompile Single",           "OneEnemyGroupFront",  "Decompile", "",               0,    0, "",                0, 0),
- ("deep_scan",           "Deep Scan Party",            "WholeParty",          "FieldBuff", "CaptureBoost",   20,  100, "",                0, 18.0),
- ("etch",                "Etch Group",                 "WholeEnemyGroup",     "Buff",      "Def",           -4,    3, "",                3, 0),
- ("flush_cache",         "Flush Cache Party",          "WholeParty",          "Cleanse",   "",               0,    0, "",                3, 0),
- ("fork_bomb",           "Fork Bomb Group",            "WholeEnemyGroup",     "Damage",    "",              15,    0, "Bleed 35% 2r",    3, 0),
- ("hard_lock",           "Hard Lock Single v2.0",      "OneEnemyGroupFront",  "Debuff",    "Stun",           0,    2, "",                4, 0),
- ("hardened_shell",      "Hardened Shell Single",      "OneAlly",             "FieldBuff", "Def",            4,   90, "",                0, 14.0),
- ("heap_corruption",     "Bit Rot Group",              "WholeEnemyGroup",     "Debuff",    "Bleed",          3,    3, "",                3, 0),
- ("hot_patch",           "Patch Single v1.0",          "OneAlly",             "Heal",      "",               8,    0, "",                1, 0),
- ("hyperthread",         "Hyperthread Single v2.0",    "OneAlly",             "Buff",      "Atk",            6,    4, "",                3, 0),
- ("invalidate_line",     "Flush Cache Single",         "OneAlly",             "Cleanse",   "",               0,    0, "",                2, 0),
- ("kernel_panic",        "Packet Shred Single",        "OneEnemyGroupFront",  "Damage",    "",              16,    0, "",                3, 0),
- ("leech_array",         "Leech Group",                "WholeEnemyGroup",     "Drain",     "",               6,    0, "",                4, 0),
- ("memory_leak",         "Bit Rot Single",             "OneEnemyGroupFront",  "Debuff",    "Bleed",          2,    3, "",                1, 0),
- ("mirror_restore",      "Patch Party v1.0",           "WholeParty",          "Heal",      "",               8,    0, "",                2, 0),
- ("null_route",          "Hard Lock Everyone",         "AllEnemies",          "Debuff",    "Stun",           0,    1, "",                5, 0),
- ("overclock",           "Overclock Single",           "OneAlly",             "FieldBuff", "Atk",            4,   90, "",                0, 14.0),
- ("overclock_array",     "Hyperthread Party",          "WholeParty",          "Buff",      "Atk",            3,    3, "",                3, 0),
- ("oxide_strip",         "Etch Everyone",              "AllEnemies",          "Buff",      "Def",           -3,    3, "",                5, 0),
- ("packet_shred",        "Packet Shred Group v2.0",    "WholeEnemyGroup",     "Damage",    "",              10,    0, "",                3, 0),
- ("pid_exhaustion",      "Fork Bomb Everyone",         "AllEnemies",          "Damage",    "",               8,    0, "Bleed 20% 2r",    5, 0),
- ("pipeline_stall",      "Pipeline Stall Single",      "OneEnemyGroupFront",  "Damage",    "",               7,    0, "Stun 40% 1r",     3, 0),
- ("priority_boost",      "Hyperthread Single v1.0",    "OneAlly",             "Buff",      "Atk",            3,    3, "",                1, 0),
- ("race_condition",      "Hard Lock Group",            "WholeEnemyGroup",     "Debuff",    "Stun",           0,    1, "",                4, 0),
- ("redundancy_sync",     "Patch Party v1.1",           "WholeParty",          "Heal",      "",              10,    0, "",                3, 0),
- ("repair_loop",         "Repair Loop Single",         "OneAlly",             "FieldBuff", "Regen",          2,  100, "",                0, 18.0),
- ("salvage_routine",     "Salvage Routine Party",      "WholeParty",          "FieldBuff", "DropBoost",     20,  100, "",                0, 18.0),
- ("sandbox",             "Bastion Single",             "OneAlly",             "Buff",      "Def",            3,    3, "",                1, 0),
- ("siphon_cycles",       "Leech Single",               "OneEnemyGroupFront",  "Drain",     "",              10,    0, "",                2, 0),
- ("stack_smash",         "Fork Bomb Single",           "OneEnemyGroupFront",  "Damage",    "",               9,    0, "Bleed 60% 3r",    2, 0),
- ("stealth_protocol",    "Stealth Protocol Party",     "WholeParty",          "FieldBuff", "EncounterDamp",   20,   90, "",                0, 18.0),
- ("throttle",            "Throttle Group",             "WholeEnemyGroup",     "Buff",      "Atk",           -4,    3, "",                3, 0),
- ("trace_analysis",      "Trace Analysis Party",       "WholeParty",          "FieldBuff", "XpBoost",       20,  100, "",                0, 18.0),
- ("trickle_charge",      "Trickle Charge Party",       "WholeParty",          "FieldBuff", "Trickle",        1,   80, "",                0, 20.0),
- ("wild_jump",           "Wild Jump Party",            "WholeParty",          "Jump",      "",               0,    0, "",                0, 20.0),
+ # id                   name                       target                effect       sub              pow  dur  status             cd  cost
+ ("ablative_layer",    "Ablative Layer Single",   "OneAlly",            "FieldBuff", "Mitigation",     10,   80, "",                 0, 20.0),
+ ("acid_wash",         "Etch Single",             "OneEnemyGroupFront", "Buff",      "Def",            -5,    3, "",                 2, 0),
+ ("bastion",           "Bastion Party",           "WholeParty",         "Buff",      "Def",             4,    3, "",                 3, 0),
+ ("bastion_shield_v2", "Bastion Single v2.0",     "OneAlly",            "Buff",      "Def",             5,    3, "",                 2, 0),
+ ("bastion_shield_v3", "Bastion Single v3.0",     "OneAlly",            "Buff",      "Def",             7,    4, "",                 2, 0),
+ ("bit_rot",           "Bit Rot Everyone",        "AllEnemies",         "Debuff",    "Bleed",           2,    4, "",                 5, 0),
+ ("bit_rot_v2",        "Bit Rot Single v2.0",     "OneEnemyGroupFront", "Debuff",    "Bleed",           4,    3, "",                 2, 0),
+ ("bit_rot_v3",        "Bit Rot Single v3.0",     "OneEnemyGroupFront", "Debuff",    "Bleed",           6,    4, "",                 3, 0),
+ ("branch_hazard",     "Pipeline Stall Group",    "WholeEnemyGroup",    "Damage",    "",                6,    0, "Stun 30% 1r",      4, 0),
+ ("broadcast_storm",   "Packet Shred Everyone",   "AllEnemies",         "Damage",    "",               25,    0, "",                 4, 0),
+ ("brownout",          "Throttle Everyone",       "AllEnemies",         "Buff",      "Atk",            -3,    3, "",                 5, 0),
+ ("buffer_overrun",    "Buffer Overrun Party",    "WholeParty",         "Phase",     "",                0,    0, "",                 0, 12.0),
+ ("bus_fault",         "Pipeline Stall Everyone", "AllEnemies",         "Damage",    "",                6,    0, "Stun 25% 1r",      5, 0),
+ ("cascade_overflow",  "Packet Shred Group v1.0", "WholeEnemyGroup",    "Damage",    "",                6,    0, "",                 2, 0),
+ ("checksum_repair",   "Patch Single v2.0",       "OneAlly",            "Heal",      "",               25,    0, "",                 3, 0),
+ ("clock_gate",        "Throttle Single",         "OneEnemyGroupFront", "Buff",      "Atk",            -5,    3, "",                 2, 0),
+ ("cold_boot",         "Patch Single v3.0",       "OneAlly",            "Heal",      "",               50,    0, "",                 5, 0),
+ ("coolant_flush",     "Coolant Flush Party",     "WholeParty",         "FieldBuff", "Coolant",         1,   90, "",                 0, 15.0),
+ ("cycle_harvest",     "Leech Everyone",          "AllEnemies",         "Drain",     "",                4,    0, "",                 5, 0),
+ ("deadlock",          "Hard Lock Single v1.0",   "OneEnemyGroupFront", "Debuff",    "Stun",            0,    1, "",                 2, 0),
+ ("decompile",         "Decompile Single",        "OneEnemyGroupFront", "Decompile", "",                0,    0, "",                 0, 0),
+ ("deep_scan",         "Deep Scan Party",         "WholeParty",         "FieldBuff", "CaptureBoost",   20,  100, "",                 0, 18.0),
+ ("etch",              "Etch Group",              "WholeEnemyGroup",    "Buff",      "Def",            -4,    3, "",                 3, 0),
+ ("flush_cache",       "Flush Cache Party",       "WholeParty",         "Cleanse",   "",                0,    0, "",                 3, 0),
+ ("fork_bomb",         "Fork Bomb Group",         "WholeEnemyGroup",    "Damage",    "",               15,    0, "Bleed 35% 2r",     3, 0),
+ ("hard_lock",         "Hard Lock Single v2.0",   "OneEnemyGroupFront", "Debuff",    "Stun",            0,    2, "",                 4, 0),
+ ("hardened_shell",    "Hardened Shell Single",   "OneAlly",            "FieldBuff", "Def",             4,   90, "",                 0, 14.0),
+ ("heap_corruption",   "Bit Rot Group",           "WholeEnemyGroup",    "Debuff",    "Bleed",           3,    3, "",                 3, 0),
+ ("hot_patch",         "Patch Single v1.0",       "OneAlly",            "Heal",      "",                8,    0, "",                 1, 0),
+ ("hyperthread",       "Hyperthread Single v2.0", "OneAlly",            "Buff",      "Atk",             6,    4, "",                 3, 0),
+ ("invalidate_line",   "Flush Cache Single",      "OneAlly",            "Cleanse",   "",                0,    0, "",                 2, 0),
+ ("kernel_panic",      "Packet Shred Single",     "OneEnemyGroupFront", "Damage",    "",               16,    0, "",                 3, 0),
+ ("leech_array",       "Leech Group",             "WholeEnemyGroup",    "Drain",     "",                6,    0, "",                 4, 0),
+ ("memory_leak",       "Bit Rot Single v1.0",     "OneEnemyGroupFront", "Debuff",    "Bleed",           2,    3, "",                 1, 0),
+ ("mirror_restore",    "Patch Party v1.0",        "WholeParty",         "Heal",      "",                8,    0, "",                 2, 0),
+ ("null_route",        "Hard Lock Everyone",      "AllEnemies",         "Debuff",    "Stun",            0,    1, "",                 5, 0),
+ ("overclock",         "Overclock Single",        "OneAlly",            "FieldBuff", "Atk",             4,   90, "",                 0, 14.0),
+ ("overclock_array",   "Hyperthread Party",       "WholeParty",         "Buff",      "Atk",             3,    3, "",                 3, 0),
+ ("oxide_strip",       "Etch Everyone",           "AllEnemies",         "Buff",      "Def",            -3,    3, "",                 5, 0),
+ ("packet_shred",      "Packet Shred Group v2.0", "WholeEnemyGroup",    "Damage",    "",               10,    0, "",                 3, 0),
+ ("pid_exhaustion",    "Fork Bomb Everyone",      "AllEnemies",         "Damage",    "",                8,    0, "Bleed 20% 2r",     5, 0),
+ ("pipeline_stall",    "Pipeline Stall Single",   "OneEnemyGroupFront", "Damage",    "",                7,    0, "Stun 40% 1r",      3, 0),
+ ("priority_boost",    "Hyperthread Single v1.0", "OneAlly",            "Buff",      "Atk",             3,    3, "",                 1, 0),
+ ("race_condition",    "Hard Lock Group",         "WholeEnemyGroup",    "Debuff",    "Stun",            0,    1, "",                 4, 0),
+ ("redundancy_sync",   "Patch Party v1.1",        "WholeParty",         "Heal",      "",               10,    0, "",                 3, 0),
+ ("repair_loop",       "Repair Loop Single",      "OneAlly",            "FieldBuff", "Regen",           2,  100, "",                 0, 18.0),
+ ("rollback_v1",       "Rollback Single v1.0",    "OneAlly",            "Heal",      "",               10,    0, "",                 2, 0),
+ ("rollback_v2",       "Rollback Single v2.0",    "OneAlly",            "Heal",      "",               20,    0, "",                 3, 0),
+ ("rollback_v3",       "Rollback Single v3.0",    "OneAlly",            "Heal",      "",               35,    0, "",                 4, 0),
+ ("salvage_routine",   "Salvage Routine Party",   "WholeParty",         "FieldBuff", "DropBoost",      20,  100, "",                 0, 18.0),
+ ("sandbox",           "Bastion Single v1.0",     "OneAlly",            "Buff",      "Def",             3,    3, "",                 1, 0),
+ ("segfault_v1",       "Segfault Single v1.0",    "OneEnemyGroupFront", "Damage",    "",                6,    0, "",                 2, 0),
+ ("segfault_v2",       "Segfault Single v2.0",    "OneEnemyGroupFront", "Damage",    "",               11,    0, "",                 3, 0),
+ ("segfault_v3",       "Segfault Single v3.0",    "OneEnemyGroupFront", "Damage",    "",               17,    0, "",                 4, 0),
+ ("siphon_cycles",     "Leech Single",            "OneEnemyGroupFront", "Drain",     "",               10,    0, "",                 2, 0),
+ ("skim_group",        "Skim Group",              "WholeEnemyGroup",    "Drain",     "",                4,    0, "",                 3, 0),
+ ("skim_v1",           "Skim Single v1.0",        "OneEnemyGroupFront", "Drain",     "",                5,    0, "",                 2, 0),
+ ("skim_v2",           "Skim Single v2.0",        "OneEnemyGroupFront", "Drain",     "",                9,    0, "",                 3, 0),
+ ("skim_v3",           "Skim Single v3.0",        "OneEnemyGroupFront", "Drain",     "",               14,    0, "",                 4, 0),
+ ("stack_smash",       "Fork Bomb Single",        "OneEnemyGroupFront", "Damage",    "",                9,    0, "Bleed 60% 3r",     2, 0),
+ ("stealth_protocol",  "Stealth Protocol Party",  "WholeParty",         "FieldBuff", "EncounterDamp",  20,   90, "",                 0, 18.0),
+ ("throttle",          "Throttle Group",          "WholeEnemyGroup",    "Buff",      "Atk",            -4,    3, "",                 3, 0),
+ ("trace_analysis",    "Trace Analysis Party",    "WholeParty",         "FieldBuff", "XpBoost",        20,  100, "",                 0, 18.0),
+ ("trickle_charge",    "Trickle Charge Party",    "WholeParty",         "FieldBuff", "Trickle",         1,   80, "",                 0, 20.0),
+ ("wild_jump",         "Wild Jump Party",         "WholeParty",         "Jump",      "",                0,    0, "",                 0, 20.0),
 ]
 K = "id name target effect sub power dur status cd cost".split()
 R = [dict(zip(K, r)) for r in A]
@@ -167,7 +181,7 @@ Every shipped ability in feral-processes, charted from its own file in
 `assets/abilities/`. {len(R)} of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/abilities/*.ron` on 2026-08-08 and will drift the moment one of those
+`assets/abilities/*.ron` on 2026-08-11 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
 A species grants abilities by naming their ids with a level to unlock each at;
@@ -251,12 +265,19 @@ Nothing here is *cheap*, because nothing here is bought. Every one of these
 was priced in the player's Fatigue as well until 2026-08-08, including the
 ones a companion ran; a routine now costs only the rounds it spends locked
 away, so the question a player is answering has changed from "can I afford
-this" to "is this the round to spend it". What marks out the starters a
-species grants at level 1 is the bottom of the cooldown ladder: every routine
-in the set that recharges in a single round — `hot_patch`, `memory_leak`,
-`priority_boost`, `sandbox` — is one of them, with `deadlock` a round behind.
-Each is still deliberately the weakest tier of its family, so the opening move
-of a fight is always available and never the best one.
+this" to "is this the round to spend it". What marks out the first thing a
+species grants is the bottom of the cooldown ladder: the routines that
+recharge in a single round — `memory_leak`, `priority_boost`, `sandbox`,
+`hot_patch` — are the weakest tier of their families, and three of the five
+class utilities are one or two rounds behind them. So the opening move of a
+fight is always available and never the best one.
+
+**Nothing is granted at level 1**, and that is deliberate rather than an
+accident of tuning. `priority_boost` is the fallback a companion falls back
+on when its species has taught it nothing *yet*, and it is obtainable no
+other way than by extracting it from one — so every species holding its
+first entry back to level 2 is what keeps it reachable. It also means a
+program you have just tamed reads as generic before it reads as its class.
 
 ## Field routines
 

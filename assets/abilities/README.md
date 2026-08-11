@@ -299,6 +299,18 @@ scope and differ only in magnitude — `Patch Single v1.0` / `v2.0` / `v3.0`
 restore 8, 25 and 50. A major bump is a real step up, a minor one is the
 same thing slightly bigger (`Patch Party v1.0` and `v1.1` heal 8 and 10).
 
+One consequence worth knowing before authoring a set of them: a family is a
+**shared namespace between the hunt-only pool and everything else**, and the
+hunt-only set got there first. Most family × scope slots are already held by
+an ability with a `wild_weight`, which a species file may not name (see "The
+hunt-only set" below), so a ladder built by adding rungs to an existing family
+usually ends up with a hole no species can fill. `Segfault`, `Rollback` and
+`Skim` are new families for exactly that reason rather than for flavour —
+`Packet Shred Single`, `Patch Single v2.0` and `Leech Single` were all taken
+by hunt-only files. Adding a version tag to an existing name is fine and
+costs nothing (`sandbox` and `memory_leak` both picked one up when their
+families became ladders); **renaming an `id` is not**, per the rule above.
+
 Two tests in `crates/engine/src/tests/assets.rs` hold this over the
 shipped set — `every_shipped_ability_name_ends_in_the_scope_it_targets`
 and `no_two_shipped_abilities_share_a_display_name`. Neither looks at
@@ -352,10 +364,16 @@ companion level that unlocks it:
 
 ```ron
     abilities: [
-        (id: "sandbox"),                    // level defaults to 1
-        (id: "redundancy_sync", level: 6),
+        (id: "overclock_array", level: 2),  // level defaults to 1 if omitted
+        (id: "bastion_shield_v3", level: 6),
     ],
 ```
+
+That is the shipped Sentinel's, and it is the shape every shipped non-boss
+species uses: a class utility at level 2 and a tier rung at level 6. See
+`../species/README.md`'s "The five classes" for the table and for why nothing
+unlocks at level 1. A mod is under no such obligation — the loader has no
+opinion about how many abilities a species grants or when.
 
 Ids are validated when the game starts. A species naming an ability that
 doesn't exist keeps loading — the unknown entry is dropped with a warning,

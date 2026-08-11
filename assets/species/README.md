@@ -374,8 +374,46 @@ Three species fill each class, one per growth band. Speed is the fourth axis
 and is not only initiative — it also paces the machine a posted program works
 at, so a Bastion is a slow worker and a Saboteur a quick one.
 
-`every_ordinary_species_stat_shape_agrees_with_its_affinity_class`
-(`crates/engine/src/species.rs`) derives the class from the affinities and
-checks the stats and the speed against it, so editing a stat block without
-meaning to change a species' role fails rather than shipping. It runs over the
-shipped directory only — a mod's species is never held to any of this.
+### Kits
+
+The third leg, and the one a player actually spends a round on. Every shipped
+non-boss species grants exactly two abilities: a **class utility** at level 2,
+shared verbatim by all three members of its class, and a **tier rung** at
+level 6 that it holds alone.
+
+| Class | Utility (level 2) | Tier rungs (level 6), 1.0 → 1.25 → 1.5 |
+|---|---|---|
+| Striker | `cascade_overflow` | `segfault_v1` → `v2` → `v3` |
+| Saboteur | `deadlock` | `memory_leak` → `bit_rot_v2` → `bit_rot_v3` |
+| Medic | `redundancy_sync` | `rollback_v1` → `v2` → `v3` |
+| Leech | `skim_group` | `skim_v1` → `v2` → `v3` |
+| Bastion | `overclock_array` | `sandbox` → `bastion_shield_v2` → `v3` |
+
+So the class is legible from the first unlock and the tier from the second,
+which is the same split the stats make: the tier sets the budget, the class
+spends it.
+
+**Nothing unlocks at level 1**, and that is load-bearing rather than tidy.
+`abilities::FALLBACK_ABILITY_ID` (`priority_boost`) fills an *empty* kit, so
+a species granting anything at level 1 would make it unreachable — extraction
+from a companion holding it is the only other way to get it. Holding the first
+entry back is also what makes a fresh capture read as generic before it reads
+as a class.
+
+A kit entry must be a **battle** ability. `AffinityKind` is blind to the
+distinction: a `FieldBuff(kind: Def)` reports `Buff` like any other buff while
+never appearing in the Special picker, which is the one place a kit is spent.
+
+### What holds all three legs together
+
+Two censuses in `crates/engine/src/species.rs`, both deriving the class from
+the affinities through one shared `class_of` and checking the rest against it:
+`every_ordinary_species_stat_shape_agrees_with_its_affinity_class` for the
+stats and the speed, `every_ordinary_species_kit_agrees_with_its_affinity_
+class` for the kit. So editing a stat block or a kit without meaning to change
+a species' role fails rather than shipping. The kit census also ranks the three
+rungs of a class by their authored `power` against the growth band, which is
+what catches a rung assigned to the wrong tier.
+
+Both run over the shipped directory only — a mod's species is never held to
+any of this.

@@ -29,6 +29,48 @@ first, separated by a rule.
 
 ## Unreleased
 
+### Every program now knows two moves, and which two says what it is
+
+Until now, eight of the seventeen species taught a captured program
+nothing at all — it fell back on `priority_boost` and stayed there for the
+rest of the run, and the five that did teach something taught it in no
+particular pattern. Every non-boss species now grants exactly two
+abilities: a **class utility at level 2**, shared by all three members of
+its class, and a **tier rung at level 6** that it holds alone.
+
+So a program tells you what it is twice. The Drone, the Worm and the
+Rootkit all open with Skim Group, which is what a Leech does; what
+separates them is the second unlock, where the Drone learns Skim Single
+v1.0 and the Rootkit v3.0. The same split the stats already make — the
+tier sets the budget, the class spends it — now runs through the kit.
+
+Fourteen new routines, in five families. Three of those families are new
+(Segfault, Rollback, Skim) and one of them fills a real gap: **Drain was
+previously findable only in the field**, so the Leech class had no move it
+was allowed to know. Skim is a Leech's own drain, and the three hunt-only
+Leech routines stay exactly where they were — the hunt-only pool is
+unchanged at twenty-eight, and nothing that was a prize has become
+standard issue.
+
+**Nothing unlocks at level 1**, deliberately. `priority_boost` is what a
+companion falls back on when its species has taught it nothing *yet*, and
+extracting it from such a companion is the only way to get it — so a
+species granting anything at level 1 would delete it from the game. It also
+means a freshly tamed program reads as generic for a level before it reads
+as its class.
+
+Two routines you may already own display slightly differently: Bastion
+Single is now **Bastion Single v1.0** and Bit Rot Single is **Bit Rot
+Single v1.0**, because both are now the bottom rung of a ladder. Nothing
+about either has changed and no save is affected — the names moved, the
+ids did not.
+
+`dev-arenas/class-mirror.ron` is the instrument for all of this, and it
+exists because neither offline harness can be: `balance_sim` models no
+abilities and the `arena` bin never fires a Special. It stages a Bastion,
+a Medic and a Leech of one tier against a pack picked for the one thing a
+kit needs, which is rounds to spend it in.
+
 ### Seventeen species stop being one axis wearing seventeen names
 
 Every non-boss program now belongs to one of five classes — Striker,

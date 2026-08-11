@@ -4,7 +4,7 @@ Every shipped species in feral-processes, charted from its own file in
 `assets/species/`. Seventeen of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/species/*.ron` on 2026-08-05 and will drift the moment one of those
+`assets/species/*.ron` on 2026-08-11 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind. Where a
 file omits a field, the engine default from `crates/engine/src/tuning.rs` is
 shown: `base_speed 10`, `base_int 10`, `growth_multiplier 1.0`, all five
@@ -241,21 +241,21 @@ only source of `power_cell` in the roster.
 |:---|:---|:---|:---|:---|
 | `W` | Wintermute | BOSS | `broadcast_storm`, `null_route L4` | baseline |
 | `B` | Overseer | BOSS | `broadcast_storm`, `overclock_array L5` | baseline |
-| `S` | Sentinel | - | `sandbox`, `redundancy_sync L6` | buff 1.3 / damage 0.85 |
-| `k` | Rootkit | - | `deadlock`, `memory_leak L4` | drain 1.3 / buff 0.85 |
-| `v` | Virus | - | - | heal 1.3 / damage 0.85 |
-| `c` | Cipher | - | `memory_leak`, `null_route L8` | debuff 1.3 / heal 0.85 |
-| `z` | ZeroDay | - | - | damage 1.3 / heal 0.85 |
-| `r` | Crawler | NEST | - | buff 1.3 / damage 0.85 |
-| `m` | Worm | NEST | - | drain 1.3 / buff 0.85 |
-| `p` | Proxy | - | - | heal 1.3 / damage 0.85 |
-| `t` | Trojan | NEST | - | debuff 1.3 / heal 0.85 |
-| `x` | Scrapper | NEST | `cascade_overflow L3` | damage 1.3 / heal 0.85 |
-| `C` | Construct | - | - | buff 1.3 / damage 0.85 |
-| `o` | Drone | - | - | drain 1.3 / buff 0.85 |
-| `d` | SubProcess | - | `hot_patch`, `redundancy_sync L7` | heal 1.3 / damage 0.85 |
-| `s` | Sprite | - | - | debuff 1.3 / heal 0.85 |
-| `g` | Glitch | - | - | damage 1.3 / heal 0.85 |
+| `S` | Sentinel | - | `overclock_array L2`, `bastion_shield_v3 L6` | buff 1.3 / damage 0.85 |
+| `k` | Rootkit | - | `skim_group L2`, `skim_v3 L6` | drain 1.3 / buff 0.85 |
+| `v` | Virus | - | `redundancy_sync L2`, `rollback_v3 L6` | heal 1.3 / damage 0.85 |
+| `c` | Cipher | - | `deadlock L2`, `bit_rot_v3 L6` | debuff 1.3 / heal 0.85 |
+| `z` | ZeroDay | - | `cascade_overflow L2`, `segfault_v3 L6` | damage 1.3 / heal 0.85 |
+| `r` | Crawler | NEST | `overclock_array L2`, `bastion_shield_v2 L6` | buff 1.3 / damage 0.85 |
+| `m` | Worm | NEST | `skim_group L2`, `skim_v2 L6` | drain 1.3 / buff 0.85 |
+| `p` | Proxy | - | `redundancy_sync L2`, `rollback_v2 L6` | heal 1.3 / damage 0.85 |
+| `t` | Trojan | NEST | `deadlock L2`, `bit_rot_v2 L6` | debuff 1.3 / heal 0.85 |
+| `x` | Scrapper | NEST | `cascade_overflow L2`, `segfault_v2 L6` | damage 1.3 / heal 0.85 |
+| `C` | Construct | - | `overclock_array L2`, `sandbox L6` | buff 1.3 / damage 0.85 |
+| `o` | Drone | - | `skim_group L2`, `skim_v1 L6` | drain 1.3 / buff 0.85 |
+| `d` | SubProcess | - | `redundancy_sync L2`, `rollback_v1 L6` | heal 1.3 / damage 0.85 |
+| `s` | Sprite | - | `deadlock L2`, `memory_leak L6` | debuff 1.3 / heal 0.85 |
+| `g` | Glitch | - | `cascade_overflow L2`, `segfault_v1 L6` | damage 1.3 / heal 0.85 |
 
 Every non-boss species raises exactly one affinity axis to 1.3 and damps
 exactly one to 0.85, and **the raised axis is what names its class** — damage
@@ -263,10 +263,16 @@ is a Striker, buff a Bastion, heal a Medic, debuff a Saboteur, drain a Leech.
 Three species share each class, one per growth band, so the axis says what a
 program does and the tier says how much of it. The stats and the speed above
 are checked against that axis by
-`every_ordinary_species_stat_shape_agrees_with_its_affinity_class`, which is
-what stops a stat retune quietly changing a species' role. Bosses declare no
-affinity at all: they are outside the class system. Seven species grant
-abilities; one that grants none falls back to `priority_boost`.
+`every_ordinary_species_stat_shape_agrees_with_its_affinity_class`, and the
+kit is checked against it by `every_ordinary_species_kit_agrees_with_its_
+affinity_class`, which together stop a retune quietly changing a species'
+role. Bosses declare no affinity at all: they are outside the class system.
+
+Every ordinary species grants two abilities: a class utility at level 2 that
+all three members of its class share, and a tier rung at level 6 that it holds
+alone. Nothing unlocks at level 1, which is what keeps `priority_boost` — the
+fallback for a species that has taught a companion nothing yet — reachable at
+all, since extracting it from such a companion is the only way to get it.
 
 ---
 

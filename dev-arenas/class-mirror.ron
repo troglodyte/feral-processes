@@ -1,0 +1,95 @@
+// PLAYTEST: do the class kits read as five different jobs, or as five
+// spellings of "attack"?
+//
+// This is the instrument the class design asks for and neither offline
+// harness can be. `balance_sim` models no abilities at all, and the `arena`
+// bin plays the party as All-Attack, so no companion Special has ever fired
+// in a measured fight. Every kit magnitude in `assets/abilities/` is
+// therefore unmeasured by anything but this file being played by hand:
+//
+//     FERAL_DEV_ARENA=1 cargo run     ->  [R] Arena  ->  [L] class-mirror
+//
+// **Three classes of five, and that is a cap rather than a full census.**
+// `BASE_PET_CAPACITY` is 3, and `arena::stage` posts the party through the
+// real `Game::add_companion`, so a five-slot party is refused rather than
+// truncated. The three here are the ones whose kits change the *shape* of a
+// fight — a heal undoes damage already dealt, a buff changes what the next
+// round costs, a drain pays the user for landing it. A Striker's Segfault
+// and a Saboteur's Bit Rot are closer to what All-Attack already does, so
+// they are the two the bin's floor speaks for most nearly.
+//
+// To see those two, load this file, swap two party rows on the builder
+// screen (Enter opens the species picker) and fight it again:
+//
+//     Bastion  sentinel     overclock_array (L2) + Bastion Single v3.0 (L6)
+//     Medic    virus        redundancy_sync (L2) + Rollback Single v3.0 (L6)
+//     Leech    rootkit      skim_group      (L2) + Skim Single v3.0    (L6)
+//     Striker  zero_day     cascade_overflow(L2) + Segfault Single v3.0(L6)
+//     Saboteur cipher       deadlock        (L2) + Bit Rot Single v3.0 (L6)
+//
+// All five are the 1.5 growth band, so the party is one tier and three
+// classes: whatever separates these fights is the class and nothing else.
+// That is the whole claim the design makes, and it is the claim this
+// scenario is here to fail.
+//
+// Level 12 is the companion cap and puts both kit entries in slots with
+// room to spare (one slot per two levels). The opponents are a common pack
+// rather than a mirror of the party — two groups, so the front/back rank
+// rules apply and a group ability has something to reach.
+//
+// The pack is chosen, not arbitrary, and what it is chosen for is **rounds
+// to spend**. A kit cannot prove anything in a fight that ends before it is
+// worth casting. Measured at 20 reps each in the bin (so All-Attack, no
+// Specials), on this party at zone 3:
+//
+//     trojan   x5 + trojan  x5     60% won, mean 13 rounds   <- this file
+//     trojan   x4 + trojan  x4     70%      mean 12
+//     trojan   x6 + trojan  x6     45%      median 4 rounds
+//     trojan   x3 + crawler x3    100%      won at full HP
+//     zero_day x2 + cipher  x2     20%      median 2 rounds
+//     zero_day x4 + cipher  x4      0%
+//
+// Note the two failure modes that table is picking between. A soft pack
+// leaves every kit unexercised because nothing needed undoing. A pack of
+// the party's *own* tier is worse than it looks: the 20% row is not a close
+// fight, it is the player being deleted in two rounds four times in five,
+// and no amount of healing buys a round back that was never played. 13
+// rounds at 56% mean HP left is a fight with damage worth undoing and the
+// time to undo it in.
+//
+// Seed 7 is a 20-round win in the bin — the longest kind this pack
+// produces, so the played fight has the most room to differ from the floor.
+// `[N]` steps to the next seed; 8, 9 and 10 are 2, 13 and 6 rounds, which
+// is the spread.
+//
+// What to watch:
+//   - Does a class's second unlock read as *its* move, or as a bigger
+//     version of everyone else's? The v3.0 rungs are where the tier ladder
+//     is supposed to become visible.
+//   - The Leech is the untested one. `Drain` heals off damage *dealt*, so
+//     an armoured target returns less — does Skim pay for the round it
+//     costs, or is it a worse attack with a garnish?
+//   - Is a round spent on the shared level-2 utility ever worth more than
+//     attacking? If it never is, the class tell arrives as a dead row.
+//   - Companions almost never drop here (0.05 a fight); the player is who
+//     takes the damage. So a Medic in this party is healing *you*, and if
+//     that is the only thing the heal is ever for, the class reads as a
+//     second health bar rather than as a role.
+//   - Running the same file through `cargo run --bin arena --
+//     dev-arenas/class-mirror.ron` gives the same fight with no Specials at
+//     all. The gap between that 60% and what you play is what the kits are
+//     worth.
+(
+    player: Fresh(level: 12, zone: 3),
+    party: [
+        (species: "sentinel", level: 12),
+        (species: "virus", level: 12),
+        (species: "rootkit", level: 12),
+    ],
+    opponents: [
+        (species: "trojan", count: 5),
+        (species: "trojan", count: 5),
+    ],
+    reps: 1,
+    seed: 7,
+)

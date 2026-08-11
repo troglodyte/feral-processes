@@ -1,10 +1,10 @@
 # Ability catalogue
 
 Every shipped ability in feral-processes, charted from its own file in
-`assets/abilities/`. 51 of them.
+`assets/abilities/`. 65 of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/abilities/*.ron` on 2026-08-08 and will drift the moment one of those
+`assets/abilities/*.ron` on 2026-08-11 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
 A species grants abilities by naming their ids with a level to unlock each at;
@@ -13,7 +13,7 @@ species grants nothing. The [research tree](research.md) teaches the rest.
 
 | | |
 |---|---|
-| abilities | 51 |
+| abilities | 65 |
 | effect shapes | 10 |
 | target shapes | 5 |
 | field routines (run outside battle) | 12 |
@@ -31,17 +31,20 @@ same word order.
 ```
 ABILITY FAMILIES            (display name = effect + scope + tier)
 
+Bit Rot         Single v1.0 (2), Single v2.0 (4), Single v3.0 (6), Group (3), Everyone (2)
 Patch           Single v1.0 (8), Single v2.0 (25), Single v3.0 (50), Party v1.0 (8), Party v1.1 (10)
+Bastion         Single v1.0 (3), Single v2.0 (5), Single v3.0 (7), Party (4)
 Packet Shred    Single (16), Group v1.0 (6), Group v2.0 (10), Everyone (25)
 Hard Lock       Single v1.0 (0), Single v2.0 (0), Group (0), Everyone (0)
+Skim            Single v1.0 (5), Single v2.0 (9), Single v3.0 (14), Group (4)
 Etch            Single (-5), Group (-4), Everyone (-3)
-Bit Rot         Single (2), Group (3), Everyone (2)
 Pipeline Stall  Single (7), Group (6), Everyone (6)
 Throttle        Single (-5), Group (-4), Everyone (-3)
 Leech           Single (10), Group (6), Everyone (4)
 Fork Bomb       Single (9), Group (15), Everyone (8)
 Hyperthread     Single v1.0 (3), Single v2.0 (6), Party (3)
-Bastion         Single (3), Party (4)
+Rollback        Single v1.0 (10), Single v2.0 (20), Single v3.0 (35)
+Segfault        Single v1.0 (6), Single v2.0 (11), Single v3.0 (17)
 Flush Cache     Single (0), Party (0)
 
 one of a kind: Ablative Layer, Buffer Overrun, Coolant Flush, Decompile, Deep Scan, Hardened Shell, Overclock, Repair Loop, Salvage Routine, Stealth Protocol, Trace Analysis, Trickle Charge, Wild Jump
@@ -64,13 +67,13 @@ TARGET AGAINST EFFECT
 
                       Damag  Debuf   Buff   Heal  Drain  Field  Clean  Decom  Phase   Jump
 
-OneAlly                   .      .      3      3      .      4      1      .      .      .
+OneAlly                   .      .      5      6      .      4      1      .      .      .
 WholeParty                .      .      2      2      .      6      1      .      1      1
-OneEnemyGroupFront        3      3      2      .      1      .      .      1      .      .
-WholeEnemyGroup           4      2      2      .      1      .      .      .      .      .
+OneEnemyGroupFront        6      5      2      .      4      .      .      1      .      .
+WholeEnemyGroup           4      2      2      .      2      .      .      .      .      .
 AllEnemies                3      2      2      .      1      .      .      .      .      .
 
-                         10      7     11      5      3     10      2      1      1      1
+                         13      9     13      8      7     10      2      1      1      1
 ```
 
 The grid is sparse on purpose. Heals and buffs point at allies, damage and
@@ -87,8 +90,10 @@ with nothing to scale.
 | Ability | Name | Target | Effect | Pow | Dur | Rider | CD |
 |:---|:---|:---|:---|---:|---:|:---|---:|
 | `broadcast_storm` | Packet Shred Everyone | AllEnemies | Damage | 25 | - | - | 4 |
+| `segfault_v3` | Segfault Single v3.0 | OneEnemyGroupFront | Damage | 17 | - | - | 4 |
 | `kernel_panic` | Packet Shred Single | OneEnemyGroupFront | Damage | 16 | - | - | 3 |
 | `fork_bomb` | Fork Bomb Group | WholeEnemyGroup | Damage | 15 | - | Bleed 35% 2r | 3 |
+| `segfault_v2` | Segfault Single v2.0 | OneEnemyGroupFront | Damage | 11 | - | - | 3 |
 | `packet_shred` | Packet Shred Group v2.0 | WholeEnemyGroup | Damage | 10 | - | - | 3 |
 | `stack_smash` | Fork Bomb Single | OneEnemyGroupFront | Damage | 9 | - | Bleed 60% 3r | 2 |
 | `pid_exhaustion` | Fork Bomb Everyone | AllEnemies | Damage | 8 | - | Bleed 20% 2r | 5 |
@@ -96,18 +101,23 @@ with nothing to scale.
 | `branch_hazard` | Pipeline Stall Group | WholeEnemyGroup | Damage | 6 | - | Stun 30% 1r | 4 |
 | `bus_fault` | Pipeline Stall Everyone | AllEnemies | Damage | 6 | - | Stun 25% 1r | 5 |
 | `cascade_overflow` | Packet Shred Group v1.0 | WholeEnemyGroup | Damage | 6 | - | - | 2 |
+| `segfault_v1` | Segfault Single v1.0 | OneEnemyGroupFront | Damage | 6 | - | - | 2 |
+| `bit_rot_v3` | Bit Rot Single v3.0 | OneEnemyGroupFront | Debuff Bleed | 6 | 4 | - | 3 |
+| `bit_rot_v2` | Bit Rot Single v2.0 | OneEnemyGroupFront | Debuff Bleed | 4 | 3 | - | 2 |
 | `heap_corruption` | Bit Rot Group | WholeEnemyGroup | Debuff Bleed | 3 | 3 | - | 3 |
 | `bit_rot` | Bit Rot Everyone | AllEnemies | Debuff Bleed | 2 | 4 | - | 5 |
-| `memory_leak` | Bit Rot Single | OneEnemyGroupFront | Debuff Bleed | 2 | 3 | - | 1 |
+| `memory_leak` | Bit Rot Single v1.0 | OneEnemyGroupFront | Debuff Bleed | 2 | 3 | - | 1 |
 | `deadlock` | Hard Lock Single v1.0 | OneEnemyGroupFront | Debuff Stun | 0 | 1 | - | 2 |
 | `hard_lock` | Hard Lock Single v2.0 | OneEnemyGroupFront | Debuff Stun | 0 | 2 | - | 4 |
 | `null_route` | Hard Lock Everyone | AllEnemies | Debuff Stun | 0 | 1 | - | 5 |
 | `race_condition` | Hard Lock Group | WholeEnemyGroup | Debuff Stun | 0 | 1 | - | 4 |
+| `bastion_shield_v3` | Bastion Single v3.0 | OneAlly | Buff Def | 7 | 4 | - | 2 |
 | `hyperthread` | Hyperthread Single v2.0 | OneAlly | Buff Atk | 6 | 4 | - | 3 |
+| `bastion_shield_v2` | Bastion Single v2.0 | OneAlly | Buff Def | 5 | 3 | - | 2 |
 | `bastion` | Bastion Party | WholeParty | Buff Def | 4 | 3 | - | 3 |
 | `overclock_array` | Hyperthread Party | WholeParty | Buff Atk | 3 | 3 | - | 3 |
 | `priority_boost` | Hyperthread Single v1.0 | OneAlly | Buff Atk | 3 | 3 | - | 1 |
-| `sandbox` | Bastion Single | OneAlly | Buff Def | 3 | 3 | - | 1 |
+| `sandbox` | Bastion Single v1.0 | OneAlly | Buff Def | 3 | 3 | - | 1 |
 | `brownout` | Throttle Everyone | AllEnemies | Buff Atk | -3 | 3 | - | 5 |
 | `oxide_strip` | Etch Everyone | AllEnemies | Buff Def | -3 | 3 | - | 5 |
 | `etch` | Etch Group | WholeEnemyGroup | Buff Def | -4 | 3 | - | 3 |
@@ -115,13 +125,20 @@ with nothing to scale.
 | `acid_wash` | Etch Single | OneEnemyGroupFront | Buff Def | -5 | 3 | - | 2 |
 | `clock_gate` | Throttle Single | OneEnemyGroupFront | Buff Atk | -5 | 3 | - | 2 |
 | `cold_boot` | Patch Single v3.0 | OneAlly | Heal | 50 | - | - | 5 |
+| `rollback_v3` | Rollback Single v3.0 | OneAlly | Heal | 35 | - | - | 4 |
 | `checksum_repair` | Patch Single v2.0 | OneAlly | Heal | 25 | - | - | 3 |
+| `rollback_v2` | Rollback Single v2.0 | OneAlly | Heal | 20 | - | - | 3 |
 | `redundancy_sync` | Patch Party v1.1 | WholeParty | Heal | 10 | - | - | 3 |
+| `rollback_v1` | Rollback Single v1.0 | OneAlly | Heal | 10 | - | - | 2 |
 | `hot_patch` | Patch Single v1.0 | OneAlly | Heal | 8 | - | - | 1 |
 | `mirror_restore` | Patch Party v1.0 | WholeParty | Heal | 8 | - | - | 2 |
+| `skim_v3` | Skim Single v3.0 | OneEnemyGroupFront | Drain | 14 | - | - | 4 |
 | `siphon_cycles` | Leech Single | OneEnemyGroupFront | Drain | 10 | - | - | 2 |
+| `skim_v2` | Skim Single v2.0 | OneEnemyGroupFront | Drain | 9 | - | - | 3 |
 | `leech_array` | Leech Group | WholeEnemyGroup | Drain | 6 | - | - | 4 |
+| `skim_v1` | Skim Single v1.0 | OneEnemyGroupFront | Drain | 5 | - | - | 2 |
 | `cycle_harvest` | Leech Everyone | AllEnemies | Drain | 4 | - | - | 5 |
+| `skim_group` | Skim Group | WholeEnemyGroup | Drain | 4 | - | - | 3 |
 | `deep_scan` | Deep Scan Party | WholeParty | FieldBuff CaptureBoost | 20 | 100 | - | - |
 | `salvage_routine` | Salvage Routine Party | WholeParty | FieldBuff DropBoost | 20 | 100 | - | - |
 | `stealth_protocol` | Stealth Protocol Party | WholeParty | FieldBuff EncounterDamp | 20 | 90 | - | - |
@@ -152,8 +169,11 @@ Packet Shred Everyone      25 / 4    ############################## 6.25
 Packet Shred Single        16 / 3    ##########################.... 5.33
 Fork Bomb Group            15 / 3    ########################...... 5.00
 Fork Bomb Single            9 / 2    ######################........ 4.50
+Segfault Single v3.0       17 / 4    ####################.......... 4.25
+Segfault Single v2.0       11 / 3    ##################............ 3.67
 Packet Shred Group v2.0    10 / 3    ################.............. 3.33
 Packet Shred Group v1.0     6 / 2    ##############................ 3.00
+Segfault Single v1.0        6 / 2    ##############................ 3.00
 Pipeline Stall Single       7 / 3    ###########................... 2.33
 Fork Bomb Everyone          8 / 5    ########...................... 1.60
 Pipeline Stall Group        6 / 4    #######....................... 1.50
@@ -178,12 +198,19 @@ Nothing here is *cheap*, because nothing here is bought. Every one of these
 was priced in the player's Fatigue as well until 2026-08-08, including the
 ones a companion ran; a routine now costs only the rounds it spends locked
 away, so the question a player is answering has changed from "can I afford
-this" to "is this the round to spend it". What marks out the starters a
-species grants at level 1 is the bottom of the cooldown ladder: every routine
-in the set that recharges in a single round — `hot_patch`, `memory_leak`,
-`priority_boost`, `sandbox` — is one of them, with `deadlock` a round behind.
-Each is still deliberately the weakest tier of its family, so the opening move
-of a fight is always available and never the best one.
+this" to "is this the round to spend it". What marks out the first thing a
+species grants is the bottom of the cooldown ladder: the routines that
+recharge in a single round — `memory_leak`, `priority_boost`, `sandbox`,
+`hot_patch` — are the weakest tier of their families, and three of the five
+class utilities are one or two rounds behind them. So the opening move of a
+fight is always available and never the best one.
+
+**Nothing is granted at level 1**, and that is deliberate rather than an
+accident of tuning. `priority_boost` is the fallback a companion falls back
+on when its species has taught it nothing *yet*, and it is obtainable no
+other way than by extracting it from one — so every species holding its
+first entry back to level 2 is what keeps it reachable. It also means a
+program you have just tamed reads as generic before it reads as its class.
 
 ## Field routines
 

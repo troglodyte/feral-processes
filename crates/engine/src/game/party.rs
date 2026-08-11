@@ -226,6 +226,13 @@ impl Game {
         self.world.get::<ZonePortal>(entity).map_or(1, |z| z.0)
     }
 
+    /// How many of `entity`'s zone tiers were bought with Recompile Kernels
+    /// rather than earned by being tamed that deep — 0 for anything without
+    /// the component. Same one-reader argument as `rarity_of`.
+    pub(crate) fn purchased_tiers(&self, entity: Entity) -> u32 {
+        self.world.get::<PurchasedTiers>(entity).map_or(0, |t| t.0)
+    }
+
     /// How many percentage upgrades have been spent on `entity`, 0 for
     /// anything without the component — every program that has never been
     /// refactored, and every hand-built test fixture. The one reader, so no
@@ -668,6 +675,7 @@ impl Game {
         // spent all five upgrade slots back into a fresh one.
         let fused_zone = self.zone_tier(a).max(self.zone_tier(b));
         let fused_refactors = self.refactor_count(a).max(self.refactor_count(b));
+        let fused_purchased = self.purchased_tiers(a).max(self.purchased_tiers(b));
 
         let name_a = self.creature_label(a);
         let name_b = self.creature_label(b);
@@ -712,6 +720,7 @@ impl Game {
             FusionCount(fused_depth),
             fused_rarity,
             Refactors(fused_refactors),
+            PurchasedTiers(fused_purchased),
         ));
         let fused_entity = fused.id();
         if let Some(name) = &final_name {

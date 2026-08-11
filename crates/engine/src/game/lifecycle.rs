@@ -432,6 +432,7 @@ impl Game {
                 StatusEffects::default(),
                 FusionCount(c.fusions),
                 Refactors(c.refactors),
+                PurchasedTiers(c.purchased_tiers),
                 Routines(routines),
                 // The tag only. `Stats` above are the recorded numbers and
                 // already carry this tier's multiplier from the spawn that
@@ -652,6 +653,7 @@ impl Game {
                 Option<&Carrying>,
                 Option<&Rarity>,
                 Option<&Refactors>,
+                Option<&PurchasedTiers>,
             ),
         )>();
         for (
@@ -668,7 +670,7 @@ impl Game {
             fusions,
             routines,
             field_buff,
-            (nest_guardian, pursuing, carrying, rarity, refactors),
+            (nest_guardian, pursuing, carrying, rarity, refactors, purchased_tiers),
         ) in creature_query.iter(&self.world)
         {
             let potential = potential.copied().unwrap_or(Potential::NEUTRAL);
@@ -718,6 +720,7 @@ impl Game {
                 growth_roll: potential.growth_roll,
                 fusions: fusions.map(|f| f.0).unwrap_or(0),
                 refactors: refactors.map(|r| r.0).unwrap_or(0),
+                purchased_tiers: purchased_tiers.map(|t| t.0).unwrap_or(0),
                 routines: routines.map(|r| r.0.clone()).unwrap_or_default(),
                 field_buffs: field_buff.map(|f| f.active.clone()).unwrap_or_default(),
                 nest_position,

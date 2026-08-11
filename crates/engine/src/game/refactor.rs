@@ -157,7 +157,13 @@ impl Game {
         let after = refactored(&stats, &upgrade, tier);
         *self.world.get_mut::<Stats>(target).unwrap() = after;
         if upgrade.zone_bump {
-            self.world.entity_mut(target).insert(ZonePortal(tier + 1));
+            // Recorded, not merely applied: `program_payout` divides bought
+            // tiers back out, or twelve printable Core Fragments would buy a
+            // permanent rise in what a trader pays. See `PurchasedTiers`.
+            let bought = self.purchased_tiers(target);
+            self.world
+                .entity_mut(target)
+                .insert((ZonePortal(tier + 1), PurchasedTiers(bought + 1)));
         }
         if upgrade.spends_a_slot() {
             self.world.entity_mut(target).insert(Refactors(spent + 1));

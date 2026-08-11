@@ -585,10 +585,10 @@ fn fusing_two_bumped_programs_keeps_the_higher_tier() {
     let b = spawn_tamed(&mut game, 10, 3);
     game.world
         .entity_mut(a)
-        .insert((ZonePortal(4), Refactors(5)));
+        .insert((ZonePortal(4), Refactors(5), PurchasedTiers(3)));
     game.world
         .entity_mut(b)
-        .insert((ZonePortal(2), Refactors(1)));
+        .insert((ZonePortal(2), Refactors(1), PurchasedTiers(0)));
 
     game.fuse_companions(a, b, None).unwrap();
 
@@ -604,6 +604,11 @@ fn fusing_two_bumped_programs_keeps_the_higher_tier() {
         Some(Refactors(5)),
         "nor hand back the upgrade slots the parents had already spent"
     );
+    assert_eq!(
+        game.world.get::<PurchasedTiers>(fused).copied(),
+        Some(PurchasedTiers(3)),
+        "nor relabel bought tiers as earned ones, which is what a trader pays for"
+    );
 }
 
 /// Both halves of a refactor are permanent and both bound future ones — the
@@ -618,7 +623,7 @@ fn a_refactored_companion_keeps_its_slots_and_tier_across_a_save() {
     let worker = spawn_tamed(&mut game, 10, 3);
     game.world
         .entity_mut(worker)
-        .insert((Refactors(3), ZonePortal(4)));
+        .insert((Refactors(3), ZonePortal(4), PurchasedTiers(2)));
 
     let dir = scratch_assets_dir("refactor_save");
     std::fs::create_dir_all(&*dir).unwrap();
@@ -637,6 +642,12 @@ fn a_refactored_companion_keeps_its_slots_and_tier_across_a_save() {
         loaded.world.get::<ZonePortal>(pet).map(|z| z.0),
         Some(4),
         "and so does the tier the bump raised it to"
+    );
+    assert_eq!(
+        loaded.world.get::<PurchasedTiers>(pet).copied(),
+        Some(PurchasedTiers(2)),
+        "and which of those tiers were bought — dropping it would let a \
+         save/load launder a bought-up program into an earned one"
     );
 }
 

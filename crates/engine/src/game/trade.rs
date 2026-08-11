@@ -287,10 +287,39 @@ impl Game {
     /// What `structure` would pay for `creature`: a fraction of its
     /// `Stats::power()`, floored at 1 so a sale can never destroy a program
     /// for nothing.
+    ///
+    /// Tiers the player *bought* with Recompile Kernels are divided back out
+    /// first, so a trader pays for what a program is rather than for what was
+    /// spent on it. Without that, twelve printable Core Fragments buy a
+    /// permanent rise in the sale price and the round trip prints Credits —
+    /// which compounds, since each kernel doubles the stats the next one
+    /// doubles again. Earned tiers are untouched: a program tamed three zones
+    /// down really is worth four times one tamed at the entrance, because
+    /// beating it is what the game charges for that.
+    ///
+    /// The divisor comes from `ZoneLevel::stat_multiplier` rather than
+    /// `ZONE_STAT_GROWTH.pow(..)`, so it stays the exact inverse of what
+    /// `refactored` multiplied in even if that curve stops being geometric.
     pub(crate) fn program_payout(&self, structure: Entity, creature: Entity) -> Option<u32> {
         let divisor = self.program_sell_divisor(structure)?;
         let power = self.world.get::<Stats>(creature)?.power().max(0) as u32;
-        Some((power / divisor).max(1))
+        Some((self.earned_power(creature, power) / divisor).max(1))
+    }
+
+    /// `power` with every bought zone tier divided back out. Saturating and
+    /// floored at 1: a save whose `PurchasedTiers` outruns its `ZonePortal`
+    /// is nonsense rather than a crash, and a program is never worth nothing.
+    fn earned_power(&self, creature: Entity, power: u32) -> u32 {
+        let bought = self.purchased_tiers(creature);
+        if bought == 0 {
+            return power;
+        }
+        let tier = self.zone_tier(creature);
+        let now = ZoneLevel(tier).stat_multiplier().max(1) as u32;
+        let before = ZoneLevel(tier.saturating_sub(bought).max(1))
+            .stat_multiplier()
+            .max(1) as u32;
+        (power * before / now).max(1)
     }
 
     /// Every tamed program the player could sell at `structure`, priced.

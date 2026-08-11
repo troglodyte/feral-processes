@@ -120,6 +120,17 @@ pub struct CreatureSave {
     /// dump simply won't carry the key.
     #[serde(default)]
     pub refactors: u32,
+    /// How many of this program's zone tiers were bought with Recompile
+    /// Kernels — see `components::PurchasedTiers`. Persisted because
+    /// `Game::program_payout` divides these back out: a count that reset to 0
+    /// on load would make saving and reloading launder a bought-up program
+    /// into one that reads as having earned every tier, which is the Credit
+    /// press this field exists to close.
+    ///
+    /// Landed in the same unreleased `SAVE_FORMAT_VERSION` 27 as `refactors`
+    /// above, so it cost no further bump.
+    #[serde(default)]
+    pub purchased_tiers: u32,
     /// The abilities installed in this program's routine slots, in menu
     /// order — see `components::Routines`. Persisted rather than re-derived
     /// from its species, because an innate routine can be popped out and a
@@ -362,8 +373,9 @@ pub struct SaveData {
 /// item names a tier beside it. Backfilled — this bump shipped undocumented.
 /// 25 → 26: `CreatureSave` gained `rarity`, the rare-spawn tier
 /// (`components::Rarity`).
-/// 26 → 27: `CreatureSave` gained `refactors`, the spent companion upgrade
-/// slots (`components::Refactors`).
+/// 26 → 27: `CreatureSave` gained `refactors` and `purchased_tiers`, the
+/// spent companion upgrade slots and the zone tiers bought with Recompile
+/// Kernels (`components::Refactors`, `components::PurchasedTiers`).
 pub const SAVE_FORMAT_VERSION: u32 = 27;
 
 /// Renders a save as editable RON, for the `savetool` binary.

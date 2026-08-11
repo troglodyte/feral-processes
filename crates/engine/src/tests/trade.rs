@@ -952,3 +952,76 @@ fn selling_a_fused_copy_and_buying_it_back_returns_it_fused() {
         "and not as an ordinary copy"
     );
 }
+
+/// A trader pays for what a program *is*, never for what the player spent on
+/// it — and that is an economy bound, not a flavour preference.
+///
+/// `program_payout` is a tenth of `Stats::power()`, and a Recompile Kernel
+/// doubles every one of those stats for 12 Core Fragments. Core Fragments
+/// sell for 1 Credit each, so from zone 3 up the round trip prints money, and
+/// it compounds: measured at zone 7 a zone-1 program bought up through six
+/// tiers sold for 716 Credits against 72 fragments' worth of kernels. Wild
+/// programs are free to tame and Credits are the one currency that survives a
+/// breach, so it is a repeatable press rather than a one-off.
+///
+/// Neither existing bound can see it — `no_craftable_item_is_worth_more_than_
+/// its_ingredients` prices the kernel (correctly, 8 against 12) and
+/// `every_base_produced_item_sits_at_the_floor_price` prices what structures
+/// print. The leak is the program-power channel.
+#[test]
+fn buying_a_programs_zone_tiers_does_not_raise_what_a_trader_pays() {
+    let mut game = Game::new(133, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market(&mut game);
+    let pet = spawn_tamed(&mut game, 60, 8);
+    game.world.get_mut::<Stats>(pet).unwrap().def = 2;
+    game.world.entity_mut(pet).insert(ZonePortal(1));
+    let unbumped = game.program_payout(market, pet).unwrap();
+
+    // Two kernels, applied the way a player would.
+    game.world.resource_mut::<crate::resources::ZoneLevel>().0 = 3;
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from("recompile_kernel"), 2);
+    for _ in 0..2 {
+        game.refactor_companion(pet, &ItemId::from("recompile_kernel"))
+            .unwrap();
+    }
+
+    assert_eq!(
+        game.world.get::<Stats>(pet).unwrap().power(),
+        70 * 4,
+        "the program really is four times as strong — this is not a no-op"
+    );
+    assert_eq!(
+        game.program_payout(market, pet).unwrap(),
+        unbumped,
+        "but the market pays what it paid before, so the kernels bought no Credits"
+    );
+}
+
+/// The other side of that rule, and the one it could destroy by accident: a
+/// program tamed deep is *legitimately* worth more, because beating it is
+/// what the game charges for the tier. Only bought tiers are divided out.
+#[test]
+fn a_program_tamed_in_a_deep_zone_still_sells_for_what_it_is() {
+    let mut game = Game::new(134, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market(&mut game);
+
+    let shallow = spawn_tamed(&mut game, 60, 8);
+    game.world.get_mut::<Stats>(shallow).unwrap().def = 2;
+    game.world.entity_mut(shallow).insert(ZonePortal(1));
+
+    // Same species tamed three zones down: the spawner scaled it, nobody
+    // bought it, and no `PurchasedTiers` records otherwise.
+    let deep = spawn_tamed(&mut game, 240, 32);
+    game.world.get_mut::<Stats>(deep).unwrap().def = 8;
+    game.world.entity_mut(deep).insert(ZonePortal(3));
+
+    assert_eq!(
+        game.program_payout(market, deep).unwrap(),
+        game.program_payout(market, shallow).unwrap() * 4,
+        "earned tiers are still worth every Credit they were"
+    );
+}

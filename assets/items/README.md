@@ -252,6 +252,19 @@ any non-finite `taming_potency`, `consume.power`, `consume.fatigue`, or
     // Neither applies retroactively to a program's current HP as a heal — a
     // refactor raises current HP by exactly the amount it raised the maximum,
     // so it can't be used as a field patch mid-run.
+    //
+    // A `zone_bump` is *recorded* as well as applied, and traders divide
+    // bought tiers back out of what they pay for a program (a tenth of its
+    // power). So upgrading a program never raises its resale value: what a
+    // trader pays for is what the program is, not what you spent on it.
+    // Without that, a printable upgrade item plus a sale is a Credit press.
+    // A percentage buff is not divided out — five slots is at most a 1.28x on
+    // power, which never repays what it costs.
+    //
+    // Percentages must be zero or positive, and an `upgrade` declaring no
+    // effect at all is refused with the rest of the malformed files: the
+    // engine floors every gain at +1, so a negative percentage would become a
+    // *raise* that also burned one of the five permanent slots.
     upgrade: Some((
         hp_percent: 5.0,
         atk_percent: 0.0,

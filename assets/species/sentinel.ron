@@ -3,8 +3,8 @@
     name: "Sentinel",
     glyph: 'S',
     color: Blue,
-    base_hp: 150,
-    base_atk: 9,
+    base_hp: 136,
+    base_atk: 6,
     base_def: 12,
     taming_difficulty: 0.65,
     growth_multiplier: 1.5,
@@ -17,5 +17,5 @@
     ],
     work_resource: None,
     abilities: [(id: "sandbox"), (id: "redundancy_sync", level: 6)],
-    affinities: (buff: 1.3, damage: 0.85),
+    affinities: (damage: 0.85, buff: 1.3),
 )

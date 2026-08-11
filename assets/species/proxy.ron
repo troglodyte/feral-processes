@@ -3,9 +3,9 @@
     name: "Proxy",
     glyph: 'p',
     color: DarkGreen,
-    base_hp: 82,
-    base_atk: 12,
-    base_def: 2,
+    base_hp: 92,
+    base_atk: 7,
+    base_def: 6,
     taming_difficulty: 0.55,
     growth_multiplier: 1.25,
     habitats: [Mainframe, StaticField],
@@ -16,4 +16,5 @@
         (name: "Spoof", power: 9, ranged: true),
     ],
     work_resource: None,
+    affinities: (damage: 0.85, heal: 1.3),
 )

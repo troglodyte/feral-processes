@@ -392,6 +392,7 @@ impl SpeciesDb {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tuning::AFFINITY_NEUTRAL;
     use std::path::Path;
 
     fn species_assets_dir() -> std::path::PathBuf {
@@ -641,6 +642,146 @@ mod tests {
                 "{biome:?} is walkable, so a Stack link can open in it — but no shipped \
                  boss inhabits it, which would make every stack under that terrain pay \
                  no portal fragments at all"
+            );
+        }
+    }
+
+    /// The five classes, as the tuple every non-boss species is checked
+    /// against: `(up axis, down axis, budget weight, HP share, ATK share,
+    /// DEF share, slowest speed, fastest speed)`. Every share is a
+    /// **percent**, and the arithmetic below is integer, because
+    /// `50.0f32 * 1.05` is 52.4999… — a census that a species passes or
+    /// fails on the binary representation of a tuning fraction is a census
+    /// nobody can reason about.
+    ///
+    /// The **up axis alone** names the class. The down axis is a
+    /// consistency check and cannot name one on its own — Bastion and
+    /// Medic both damp `damage`.
+    #[rustfmt::skip]
+    const CLASSES: [(AffinityKind, AffinityKind, i32, i32, i32, i32, i32, i32); 5] = [
+        (AffinityKind::Damage, AffinityKind::Heal,    90, 84, 13, 3, 10, 11),
+        (AffinityKind::Debuff, AffinityKind::Heal,    95, 85, 11, 4, 13, 14),
+        (AffinityKind::Heal,   AffinityKind::Damage, 100, 87,  7, 6, 12, 12),
+        (AffinityKind::Drain,  AffinityKind::Buff,   105, 90,  8, 2,  8,  9),
+        (AffinityKind::Buff,   AffinityKind::Damage, 110, 88,  4, 8,  6,  7),
+    ];
+
+    /// `percent` of `value`, rounded half up.
+    fn pct(value: i32, percent: i32) -> i32 {
+        (value * percent + 50) / 100
+    }
+
+    /// Total HP+ATK+DEF a species of each growth band is built from, before
+    /// its class weight. Taken from the bands' own means at the time the
+    /// classes landed, so the ladder itself did not move.
+    fn tier_budget(growth: f32) -> i32 {
+        match growth {
+            g if g < 1.125 => 50,
+            g if g < 1.375 => 105,
+            _ => 140,
+        }
+    }
+
+    /// A class is three things that must agree — the affinity axis, the
+    /// stat shape and (from phase 4b) the kit. This is the agreement
+    /// between the first two, and it is a cross-check rather than a
+    /// restatement of the files: the class is **derived from the
+    /// affinities** and the stats are checked against what that class
+    /// implies, so editing a stat block without meaning to change the
+    /// species' role fails here.
+    ///
+    /// The mechanism that makes role independent of tier is the split
+    /// between the two numbers. The *tier* sets the budget; the *class*
+    /// sets both how much of that budget the species gets (a wall carries
+    /// more stuff than a glass cannon, by the same factor at every tier)
+    /// and how it is spent. So "low DEF for its size" is readable at tier 1
+    /// and tier 3 alike, which raw totals never were — a tier-3 striker
+    /// out-tanks a tier-1 tank on absolute HP.
+    ///
+    /// Bosses are excluded: they are outside the class system entirely and
+    /// have no affinities at all, which is what `derive` refusing a neutral
+    /// species would otherwise make an error.
+    #[test]
+    fn every_ordinary_species_stat_shape_agrees_with_its_affinity_class() {
+        let (db, warnings) =
+            SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
+        assert!(
+            warnings.is_empty(),
+            "species assets should all load cleanly: {warnings:?}"
+        );
+
+        let all_axes = [
+            AffinityKind::Damage,
+            AffinityKind::Heal,
+            AffinityKind::Buff,
+            AffinityKind::Debuff,
+            AffinityKind::Drain,
+        ];
+
+        for species in db.all().filter(|s| !s.is_boss) {
+            let id = &species.id;
+            let raised: Vec<AffinityKind> = all_axes
+                .into_iter()
+                .filter(|k| species.affinities.get(*k) > AFFINITY_NEUTRAL)
+                .collect();
+            let damped: Vec<AffinityKind> = all_axes
+                .into_iter()
+                .filter(|k| species.affinities.get(*k) < AFFINITY_NEUTRAL)
+                .collect();
+            assert_eq!(
+                raised.len(),
+                1,
+                "{id} raises {} affinity axes — exactly one is what names its class, \
+                 and a species with none or two has no readable role",
+                raised.len()
+            );
+            assert_eq!(
+                damped.len(),
+                1,
+                "{id} damps {} affinity axes; a class is one thing it is good at and \
+                 one it is bad at",
+                damped.len()
+            );
+
+            let (up, down, weight, hp_share, atk_share, def_share, slowest, fastest) = CLASSES
+                .into_iter()
+                .find(|c| c.0 == raised[0])
+                .unwrap_or_else(|| panic!("{id} raises {:?}, which names no class", raised[0]));
+            assert_eq!(
+                damped[0], down,
+                "{id} is a {up:?} class, which damps {down:?}, but it damps {:?}",
+                damped[0]
+            );
+
+            let total = species.base_hp + species.base_atk + species.base_def;
+            let budget = tier_budget(species.growth_multiplier);
+            let expected = pct(budget, weight);
+            assert_eq!(
+                total, expected,
+                "{id} spends {total} stat points; its growth band's budget is {budget} \
+                 and a {up:?} class carries {weight}% of that, so it should spend {expected}"
+            );
+
+            for (name, actual, share) in [
+                ("HP", species.base_hp, hp_share),
+                ("ATK", species.base_atk, atk_share),
+                ("DEF", species.base_def, def_share),
+            ] {
+                let target = pct(total, share);
+                assert!(
+                    (actual - target).abs() <= 1,
+                    "{id} puts {actual} of its {total} points into {name}; a {up:?} class \
+                     spends {share}% there, which is {target}. One point of slack is allowed \
+                     for the residue that makes the three sum to the budget, no more"
+                );
+            }
+
+            assert!(
+                (slowest..=fastest).contains(&species.base_speed),
+                "{id} is a {up:?} class, which is a {slowest}-{fastest} speed, but it is \
+                 {}. Speed is the fourth shape axis and it is not only initiative — it \
+                 paces the machine a program is posted to (see Game::work_ticks_for)",
+                species.base_speed
             );
         }
     }

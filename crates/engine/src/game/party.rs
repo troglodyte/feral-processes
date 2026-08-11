@@ -637,6 +637,18 @@ impl Game {
         // applying `stat_mult` here would pay for the tier twice. See
         // `Rarity`'s doc.
         let fused_rarity = self.rarity_of(a).max(self.rarity_of(b));
+        // Both take the better parent for exactly the argument above, and
+        // both used to be dropped here: the tier was hardcoded to 1, which
+        // was harmless while it was a display tag and stopped being harmless
+        // the moment `refactor_companion` multiplied current stats and capped
+        // itself against it. `fuse_stat` carries the parents' numbers
+        // forward, so resetting either bound turns fuse → bump → fuse into an
+        // unbounded stat loop, and lets a fusion launder a program that has
+        // spent all five upgrade slots back into a fresh one.
+        let tier_of = |g: &Self, e| g.world.get::<ZonePortal>(e).map_or(1, |z| z.0);
+        let fused_zone = tier_of(self, a).max(tier_of(self, b));
+        let slots_of = |g: &Self, e| g.world.get::<Refactors>(e).copied().unwrap_or_default().0;
+        let fused_refactors = slots_of(self, a).max(slots_of(self, b));
 
         let name_a = self.creature_label(a);
         let name_b = self.creature_label(b);
@@ -676,10 +688,11 @@ impl Game {
                 xp: 0,
                 xp_to_next: progression::xp_for_level(level),
             },
-            ZonePortal(1),
+            ZonePortal(fused_zone),
             StatusEffects::default(),
             FusionCount(fused_depth),
             fused_rarity,
+            Refactors(fused_refactors),
         ));
         let fused_entity = fused.id();
         if let Some(name) = &final_name {

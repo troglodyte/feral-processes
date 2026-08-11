@@ -570,6 +570,42 @@ fn companion_status_survives_save_and_load() {
     );
 }
 
+/// `fuse_companions` used to hardcode `ZonePortal(1)` on the result, which
+/// was harmless while that field was a display tag. It stopped being harmless
+/// the moment a Recompile Kernel multiplied current stats and capped itself
+/// against that field: fusing carries the parents' stats forward, so resetting
+/// the tier that bounds them makes fuse → bump → fuse an unbounded stat loop.
+///
+/// The same argument covers `Refactors`, one level down — a fusion must not
+/// launder a program that has spent all five slots back into a fresh one.
+#[test]
+fn fusing_two_bumped_programs_keeps_the_higher_tier() {
+    let mut game = Game::new(95, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let a = spawn_tamed(&mut game, 10, 3);
+    let b = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(a)
+        .insert((ZonePortal(4), Refactors(5)));
+    game.world
+        .entity_mut(b)
+        .insert((ZonePortal(2), Refactors(1)));
+
+    game.fuse_companions(a, b, None).unwrap();
+
+    let mut pets = game.world.query_filtered::<Entity, With<Tamed>>();
+    let fused = pets.iter(&game.world).next().expect("one program remains");
+    assert_eq!(
+        game.world.get::<ZonePortal>(fused).map(|z| z.0),
+        Some(4),
+        "a fusion must not reset the tier its own stats were built at"
+    );
+    assert_eq!(
+        game.world.get::<Refactors>(fused).copied(),
+        Some(Refactors(5)),
+        "nor hand back the upgrade slots the parents had already spent"
+    );
+}
+
 /// Both halves of a refactor are permanent and both bound future ones — the
 /// slot count against `MAX_COMPANION_REFACTORS`, the zone tier against the
 /// player's own. A round trip that dropped either would hand back a fresh

@@ -14,12 +14,12 @@ use crate::items_db::ItemDb;
 use crate::perks::Perk;
 use crate::progression;
 use crate::resources::{GameRng, MessageKind, MessageLog, ZoneLevel};
-use crate::species::SpeciesDb;
+use crate::species::{AffinityClass, SpeciesDb};
 use crate::structures::StructureDb;
 use crate::tuning::{
-    DEFAULT_BASE_INT, DEFAULT_BASE_SPEED, KEEN_SCAVENGER_BONUS_PER_LEVEL, MINING_SUCCESS_BASE,
-    MINING_SUCCESS_PER_INT, MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS,
-    WORK_TICKS_PER_SPEED,
+    DEFAULT_BASE_INT, DEFAULT_BASE_SPEED, KEEN_SCAVENGER_BONUS_PER_LEVEL, LEECH_YIELD_BONUS,
+    MINING_SUCCESS_BASE, MINING_SUCCESS_PER_INT, MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS,
+    NODE_PAYOUT_ZONE_BONUS, WORK_TICKS_PER_SPEED,
 };
 use crate::tuning::{
     FATIGUE_REGEN_PER_TICK, HUNGER_DECAY_PER_TICK, WORK_XP_LEVEL_CAP, WORK_XP_PER_CYCLE,
@@ -175,22 +175,30 @@ pub(crate) fn work_ticks_at_speed(base_ticks: u32, speed: i32) -> u32 {
     (base_ticks as f64 * scale).round().max(1.0) as u32
 }
 
-/// The two modifiers on a gather cycle's reliability roll. Bundled rather
-/// than passed loose because `resolve_gather_cycle` is otherwise one
-/// argument past clippy's threshold, and this is the grouping that is
-/// actually real — everything else that function takes describes the *node*
-/// or the payout, while these two are the only inputs to whether the cycle
-/// lands at all.
+/// What the *worker* brings to a gather cycle, as opposed to what the node
+/// is. Bundled rather than passed loose because `resolve_gather_cycle` is
+/// otherwise past clippy's argument threshold, and this is the grouping that
+/// is actually real — everything else that function takes describes the node
+/// or the payout.
 ///
-/// They are still two fields and not one number, because they differ in
-/// whose they are: the perk is the player's wherever the cycle is being run,
-/// the aptitude belongs to whoever is standing at the machine. Collapsing
-/// them into a single "bonus" would lose exactly the distinction that makes
-/// posting a program a decision.
+/// They stay three fields and not one number because they differ in whose
+/// they are and in what they touch: the perk is the player's wherever the
+/// cycle is being run, while the aptitude and the class belong to whoever is
+/// standing at the machine — and the first two decide whether the cycle
+/// lands at all, the third only what a landed cycle is worth.
+///
+/// The class is carried rather than a pre-computed yield bonus because the
+/// bonus does not apply to a banked or `flat_payout` node, and that branch
+/// lives inside `resolve_gather_cycle`. A caller handing over a finished
+/// number would have to know about an exclusion it cannot see.
 #[derive(Clone, Copy)]
-pub(crate) struct RollModifiers {
+pub(crate) struct CycleModifiers {
     pub keen_scavenger_level: u32,
     pub base_int: i32,
+    /// `None` for the player working a node themselves, for a species the
+    /// db has never heard of, and for anything outside the class system —
+    /// all of which take the ordinary payout.
+    pub class: Option<AffinityClass>,
 }
 
 /// Whether the structure `node_entity` belongs to declares
@@ -231,15 +239,15 @@ pub(crate) fn resolve_gather_cycle(
     tier: Option<&StructureTier>,
     zone: ZoneLevel,
     flat_payout: bool,
-    roll: RollModifiers,
+    worker: CycleModifiers,
     item_db: &ItemDb,
     rng: &mut GameRng,
 ) -> Option<(crate::items::ItemId, u32)> {
     if let Some(level) = node.level
         && !rng.0.random_bool(mining_success_chance(
             level,
-            roll.keen_scavenger_level,
-            roll.base_int,
+            worker.keen_scavenger_level,
+            worker.base_int,
         ))
     {
         return None;
@@ -247,10 +255,19 @@ pub(crate) fn resolve_gather_cycle(
     let def = item_db.get(node.resource.as_str());
     // Read per cycle rather than baked in at deploy, so a base that travels
     // to a deeper zone immediately earns at the new rate.
+    //
+    // A Leech's bonus rides the scaled branch and not the flat one: the flat
+    // 1 is what keeps a banked resource honest (see `LEECH_YIELD_BONUS`), so
+    // the class that draws more out of a tap draws nothing extra out of a
+    // bank.
     let payout = if flat_payout || def.is_some_and(|d| d.banked) {
         1
     } else {
         node_payout(tier.map(|t| t.0).unwrap_or(1), zone)
+            + match worker.class {
+                Some(AffinityClass::Leech) => LEECH_YIELD_BONUS,
+                _ => 0,
+            }
     };
     Some((node.resource.clone(), payout))
 }
@@ -503,18 +520,17 @@ pub fn task_progress_system(
         // fizzles. A species missing from the db is a hand-spawned test
         // fixture and takes the baseline, the same way `node_is_flat_payout`
         // already treats a structure kind the db has never heard of.
-        let worker_int = species_db
-            .get(&creature.species)
-            .map(|d| d.base_int)
-            .unwrap_or(DEFAULT_BASE_INT);
+        let worker_def = species_db.get(&creature.species);
+        let worker_int = worker_def.map(|d| d.base_int).unwrap_or(DEFAULT_BASE_INT);
         let Some((resource, payout)) = resolve_gather_cycle(
             &node,
             tier,
             *zone,
             node_is_flat_payout(structure, &structure_db),
-            RollModifiers {
+            CycleModifiers {
                 keen_scavenger_level,
                 base_int: worker_int,
+                class: worker_def.and_then(|d| d.affinity_class()),
             },
             &item_db,
             &mut rng,
@@ -623,9 +639,13 @@ pub fn player_gather_system(
             tier,
             *zone,
             node_is_flat_payout(structure, &structure_db),
-            RollModifiers {
+            CycleModifiers {
                 keen_scavenger_level,
                 base_int: DEFAULT_BASE_INT,
+                // Same decision as the aptitude above: the player is in no
+                // class, so working a node yourself pays the ordinary curve
+                // and a Leech is a reason to hand the job over.
+                class: None,
             },
             &item_db,
             &mut rng,
@@ -906,6 +926,116 @@ mod tests {
             node_payout(5, ZoneLevel(3)) - node_payout(1, ZoneLevel(3)),
             node_payout(5, ZoneLevel(1)) - node_payout(1, ZoneLevel(1)),
             "what four upgrade tiers are worth must not depend on depth"
+        );
+    }
+
+    /// The shipped item set, so the banked case below is asserted against
+    /// the real `research_data` rather than a fixture that merely claims to
+    /// resemble it — the whole point of that exclusion is a specific item.
+    fn shipped_items() -> ItemDb {
+        ItemDb::load_dir(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/items"),
+        )
+        .unwrap()
+        .0
+    }
+
+    /// What one cycle against an always-yielding node of `resource` pays a
+    /// worker of `class`. `level: None` skips the reliability roll, so the
+    /// RNG below is never drawn from and these are pure payout assertions.
+    fn cycle_payout(resource: &str, class: Option<AffinityClass>, flat_payout: bool) -> u32 {
+        let node = ResourceNode {
+            resource: ItemId::from(resource),
+            level: None,
+        };
+        let mut rng = GameRng(rand::SeedableRng::seed_from_u64(1));
+        resolve_gather_cycle(
+            &node,
+            None,
+            ZoneLevel(3),
+            flat_payout,
+            CycleModifiers {
+                keen_scavenger_level: 0,
+                base_int: DEFAULT_BASE_INT,
+                class,
+            },
+            &shipped_items(),
+            &mut rng,
+        )
+        .expect("a node with no level always yields")
+        .1
+    }
+
+    /// The extraction half of the class base jobs: a Leech is worth a unit
+    /// per cycle over anyone else at the same node.
+    ///
+    /// Asserted as a *difference from the ordinary payout* rather than
+    /// against a hardcoded number, because `node_payout`'s curve is shared
+    /// with `balance_sim` and is expected to move under a retune — what must
+    /// not move is that the drain class is the one that gets more out of a
+    /// tap.
+    #[test]
+    fn a_leech_draws_an_extra_unit_from_a_scaled_node() {
+        let ordinary = cycle_payout(crate::items::ids::CORE_FRAGMENT, None, false);
+        assert_eq!(
+            ordinary,
+            node_payout(1, ZoneLevel(3)),
+            "a classless worker takes the ordinary curve"
+        );
+        assert_eq!(
+            cycle_payout(
+                crate::items::ids::CORE_FRAGMENT,
+                Some(AffinityClass::Leech),
+                false
+            ),
+            ordinary + LEECH_YIELD_BONUS,
+        );
+    }
+
+    /// Every other class works a node at the ordinary rate. Striker stands
+    /// for the four here: the job is Leech's alone, and a bonus that leaked
+    /// to any class would make posting a decision about nothing again.
+    #[test]
+    fn a_striker_draws_no_more_than_a_classless_worker() {
+        assert_eq!(
+            cycle_payout(
+                crate::items::ids::CORE_FRAGMENT,
+                Some(AffinityClass::Striker),
+                false
+            ),
+            cycle_payout(crate::items::ids::CORE_FRAGMENT, None, false),
+        );
+    }
+
+    /// The exclusion that keeps the research ladder honest. `research_data`
+    /// is banked, which pays a flat 1 however deep the zone and however
+    /// upgraded the node — the only thing holding a bank's uncapped total in
+    /// check is that flatness, against a research tree whose deepest node
+    /// costs a fixed 45. A Leech doubling it is a different game.
+    #[test]
+    fn a_leech_draws_no_more_from_a_banked_node() {
+        assert_eq!(
+            cycle_payout(
+                crate::items::ids::RESEARCH_DATA,
+                Some(AffinityClass::Leech),
+                false
+            ),
+            1,
+        );
+    }
+
+    /// Same argument for a `flat_payout` node: it has opted out of the
+    /// scaling curve entirely, and a bonus riding on top would put it back
+    /// on a curve of its own.
+    #[test]
+    fn a_leech_draws_no_more_from_a_flat_payout_node() {
+        assert_eq!(
+            cycle_payout(
+                crate::items::ids::CORE_FRAGMENT,
+                Some(AffinityClass::Leech),
+                true
+            ),
+            1,
         );
     }
 

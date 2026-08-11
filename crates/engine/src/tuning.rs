@@ -1174,6 +1174,25 @@ pub const WORK_TICKS_PER_SPEED: f64 = 0.05;
 /// `stat_multiplier` to mean enemy difficulty and nothing else.
 pub const NODE_PAYOUT_ZONE_BONUS: u32 = 1;
 
+// --- Class base jobs -------------------------------------------------------
+//
+// What a posted program's `SpeciesDef::affinity_class` is worth at a
+// structure. Three of the five classes have a base job and two deliberately
+// do not: with `BASE_PET_CAPACITY` at 3, every program at a machine is one
+// absent from the party, so a Striker or a Saboteur being a waste at a post
+// is what makes roster composition a cost rather than a formality.
+
+/// Extra units a **Leech** draws from each successful gather cycle, on top of
+/// `systems::node_payout`.
+///
+/// Flat rather than proportional, which makes it worth most at the shallow
+/// end where the tap itself pays 1-2 a cycle — a class is meant to be worth
+/// posting before the base is established, not after. It rides the same
+/// branch `node_payout` does, so a `flat_payout` or banked node is untouched:
+/// `research_data` is the game's only banked item and its flat 1 is the whole
+/// of what keeps an uncapped bank honest against a fixed research ladder.
+pub const LEECH_YIELD_BONUS: u32 = 1;
+
 /// Divisor applied to the *lesser* of two fused programs' stats: a fusion
 /// keeps the better parent's stat outright and adds this fraction of the
 /// weaker one (see `Game::fuse_companions`). Bounded further by

@@ -1254,11 +1254,13 @@ fn flat_payout_takes_a_node_off_the_tier_and_depth_curve() {
                 Some(&tier),
                 ZoneLevel(5),
                 flat,
-                // Unread: `level: None` above skips the reliability roll, so
-                // neither modifier has anything to act on here.
-                crate::systems::RollModifiers {
+                // `level: None` above skips the reliability roll, so neither
+                // roll modifier has anything to act on here; the classless
+                // worker is what makes this the ordinary payout curve.
+                crate::systems::CycleModifiers {
                     keen_scavenger_level: 0,
                     base_int: crate::tuning::DEFAULT_BASE_INT,
+                    class: None,
                 },
                 world.resource::<ItemDb>(),
                 &mut rng,

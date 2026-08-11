@@ -750,8 +750,11 @@ mod tests {
     /// The **up axis alone** names the class. The down axis is a
     /// consistency check and cannot name one on its own — Bastion and
     /// Medic both damp `damage`.
+    /// (class, damped axis, stat weight %, HP/ATK/DEF shares %, speed band)
+    type ClassRow = (AffinityClass, AffinityKind, i32, i32, i32, i32, i32, i32);
+
     #[rustfmt::skip]
-    const CLASSES: [(AffinityClass, AffinityKind, i32, i32, i32, i32, i32, i32); 5] = [
+    const CLASSES: [ClassRow; 5] = [
         (AffinityClass::Striker,  AffinityKind::Heal,    90, 84, 13, 3, 10, 11),
         (AffinityClass::Saboteur, AffinityKind::Heal,    95, 85, 11, 4, 13, 14),
         (AffinityClass::Medic,    AffinityKind::Damage, 100, 87,  7, 6, 12, 12),
@@ -775,9 +778,7 @@ mod tests {
     /// another. The derivation itself is no longer one of those copies — it
     /// is the shipping function the base jobs read, so a census passing is
     /// evidence about the game rather than about the test.
-    fn class_of(
-        species: &SpeciesDef,
-    ) -> (AffinityClass, AffinityKind, i32, i32, i32, i32, i32, i32) {
+    fn class_of(species: &SpeciesDef) -> ClassRow {
         let id = &species.id;
         let class = species.affinity_class().unwrap_or_else(|| {
             panic!(

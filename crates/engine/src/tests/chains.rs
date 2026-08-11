@@ -506,14 +506,51 @@ const DULL_PROGRAM: &str = r#"(
     work_resource: None,
 )"#;
 
-/// Posts one program of `species` to a fresh Mining Node and runs it for 25
-/// gather cycles, returning what landed in the node's buffer.
+/// Two more of the same, differing only in the affinity axis they raise —
+/// which is the whole of what names a class. Same `base_int` and the same
+/// (defaulted) `base_speed`, so a difference in what lands in the buffer is
+/// the class and can be nothing else.
+const DRAIN_PROGRAM: &str = r#"(
+    id: "leechmon",
+    name: "Leechmon",
+    glyph: 'l',
+    color: Magenta,
+    base_hp: 40,
+    base_atk: 4,
+    base_def: 2,
+    taming_difficulty: 0.5,
+    habitats: [OpenGrid],
+    moves: [(name: "Poke", power: 3)],
+    work_resource: None,
+    affinities: (buff: 0.85, drain: 1.3),
+)"#;
+
+const BURST_PROGRAM: &str = r#"(
+    id: "strikermon",
+    name: "Strikermon",
+    glyph: 'k',
+    color: Red,
+    base_hp: 40,
+    base_atk: 4,
+    base_def: 2,
+    taming_difficulty: 0.5,
+    habitats: [OpenGrid],
+    moves: [(name: "Poke", power: 3)],
+    work_resource: None,
+    affinities: (heal: 0.85, damage: 1.3),
+)"#;
+
+/// Posts one program of `species` to a fresh Mining Node, runs it for
+/// `ticks`, and returns what landed in the node's buffer.
 ///
-/// 25 is chosen against `DEFAULT_OUTPUT_CAPACITY`: the node's own def sets
-/// `ticks_per_unit: 10` and its buffer holds 20, so a sharper worker would
-/// clog somewhere past cycle 30 and both runs would then report the same
-/// capped number — the comparison would quietly stop measuring anything.
-fn units_mined_by(tag: &str, species: &str) -> u32 {
+/// The horizon is a parameter and matters, because of
+/// `DEFAULT_OUTPUT_CAPACITY`: the node's def sets `ticks_per_unit: 10` and
+/// its buffer holds 20, so a run long enough for the better worker to clog
+/// reports the same capped number for both and quietly stops measuring
+/// anything. 250 ticks is the ceiling for a comparison of *reliability*
+/// (one unit a cycle either way); a comparison of *yield* has to stop well
+/// short of it, since the Leech is taking two.
+fn units_mined_by(tag: &str, species: &str, ticks: u32) -> u32 {
     let dir = modded_assets_dir(
         tag,
         &[],
@@ -521,6 +558,8 @@ fn units_mined_by(tag: &str, species: &str) -> u32 {
         &[
             ("sharpmon.ron", SHARP_PROGRAM),
             ("dullmon.ron", DULL_PROGRAM),
+            ("leechmon.ron", DRAIN_PROGRAM),
+            ("strikermon.ron", BURST_PROGRAM),
         ],
         &[],
         &[],
@@ -528,12 +567,21 @@ fn units_mined_by(tag: &str, species: &str) -> u32 {
     let mut game = Game::new(4181, DifficultyMode::Forgiving, &dir).unwrap();
     let node = deploy_upgradeable_node(&mut game);
     let worker = spawn_tamed(&mut game, 40, 4);
+    // A fixture that fails to parse is *skipped* with a warning, and the
+    // lookups in `task_progress_system` then quietly fall back to the
+    // baseline — so a typo in one of the files above reads as "the feature
+    // does nothing" rather than as a broken test. It cost a debugging round
+    // once; this is that round, spent.
+    assert!(
+        game.species_defs().iter().any(|d| d.id == species),
+        "{species} did not load — check the fixture parses"
+    );
     game.world.get_mut::<Creature>(worker).unwrap().species = species.to_string();
     stand_player_at_post(&mut game, node);
     game.assign_cronjob(worker, node)
         .expect("a Mining Node takes a posted program");
     park_at_post(&mut game, worker, node);
-    for _ in 0..250 {
+    for _ in 0..ticks {
         game.tick();
     }
     let mined = node_output(&game, node, ids::CORE_FRAGMENT);
@@ -549,10 +597,28 @@ fn units_mined_by(tag: &str, species: &str) -> u32 {
 /// changed nothing at all. This is the assertion that says that is no longer
 /// true, and it is deliberately about *output* rather than about a chance,
 /// because a roll nobody's buffer ever sees is not a feature.
+/// The Leech base job, measured where the player meets it: in the buffer.
+///
+/// The formula test in `systems.rs` proves a cycle pays a unit more; this
+/// proves the class reaches `task_progress_system`'s call at all, which is
+/// the wiring a unit test cannot see. The two programs differ in nothing
+/// else the economy reads, so the gap is the drain affinity and can be
+/// nothing else.
+#[test]
+fn a_leech_fills_a_node_buffer_faster_than_a_striker() {
+    let leech = units_mined_by("class_leech", "leechmon", 100);
+    let striker = units_mined_by("class_striker", "strikermon", 100);
+    assert!(
+        leech > striker,
+        "the drain class has to draw more out of the same tap \
+         (leech took {leech}, striker took {striker})"
+    );
+}
+
 #[test]
 fn a_sharper_program_mines_more_from_the_same_node() {
-    let sharp = units_mined_by("int_sharp", "sharpmon");
-    let dull = units_mined_by("int_dull", "dullmon");
+    let sharp = units_mined_by("int_sharp", "sharpmon", 250);
+    let dull = units_mined_by("int_dull", "dullmon", 250);
     assert!(
         sharp > dull,
         "who you post to a node has to change what it produces \

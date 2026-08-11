@@ -29,6 +29,60 @@ first, separated by a rule.
 
 ## Unreleased
 
+### Seventeen species stop being one axis wearing seventeen names
+
+Every non-boss program now belongs to one of five classes — Striker,
+Bastion, Medic, Saboteur, Leech — and none of them is a field in a file.
+A class is the affinity axis a species raises, the shape of its stats and
+the pace it moves at, all saying the same thing. A Crawler is now a wall
+with 102 HP behind 9 DEF and almost no bite; a Scrapper of the same tier
+is 80 HP, 12 ATK and 3 DEF. Before today those two were 75/8/4 and 98/9/5
+— the same creature, one of them slightly larger.
+
+What makes the role readable is that it is **independent of tier**. A
+species' growth band sets a stat budget and its class decides both how
+much of that budget it gets and how it spends it, so "low DEF for its
+size" reads the same at tier 1 and tier 3. It could not before: a tier-3
+striker out-tanks a tier-1 tank on raw HP, which made "tanky" a thing you
+could only see if you already knew the ladder. Every raised affinity is
+1.3 and every damped one 0.85, so the magnitudes say nothing and the axis
+says everything; the manifest's AFFINITIES box, previously hidden for
+eleven of seventeen species, now has something to show for all fifteen
+ordinary programs.
+
+Speed carries the class too, which since the last entry means it carries
+into the base: Bastions and Leeches are slow at a machine and Saboteurs
+and Medics quick. The Drone in particular drops from 13 to 8 — the
+commonest early worker is now a slow one, and what it gets back for that
+arrives in a later release.
+
+**The Construct has moved down the ladder**, from the 1.5 growth band to
+1.0, because the four species already carrying affinities plus the Virus'
+pinned 1.5 fill that tier's five roles. It is a tier-1 wall now, 49/2/4,
+and cheap to compile at 0.35; its Crash came down from power 13 to 8,
+which was the highest move power of any ordinary program and made no
+sense on an opening-ring statline. It does now spawn in the opening ring,
+which is five species rather than four.
+
+**The projected progression curve moved**, and is recorded rather than
+retuned. `balance_sim`'s median party species is a Proxy instead of a
+Scrapper, and the levels its sweeps project to clear each zone with a
+full party are:
+
+| zone | grind-only | geared | full roster |
+|---|---|---|---|
+| 2 | 19 → 15 | 14 → 10 | 11 → 8 |
+| 3 | 40 → 30 | 29 → 26 | 26 → 22 |
+| 4 | 77 → 63 | 55 → 61 | 49 → 55 |
+| 5 | 149 → 131 | 100 → 127 | 96 → 117 |
+
+The shallow zones got easier and the deep ones harder, both for the same
+reason: the toughest ordinary program is a Sentinel, and a Sentinel is a
+Bastion, so its ATK fell from 9 to 6 while its DEF held. The hardest
+ordinary fight in the game is now a longer, safer one. The gate itself
+asserts the curve's *shape* — monotonic, geometric, gear beating grind —
+and all of that still holds.
+
 ### A species' stats now say something about work, not only about fighting
 
 Two of a species' base stats picked up a second job today. `base_speed` —

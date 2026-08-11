@@ -25,6 +25,13 @@ is skipped with a warning logged in-game rather than crashing startup.
     base_hp: 60,
     base_atk: 6,
     base_def: 3,
+    // The shipped roster authors these three as one number split three ways,
+    // and it is worth knowing the scheme before adding to it — see "The five
+    // classes" at the bottom of this file. A mod is not held to it: the
+    // census that enforces it runs over `assets/species/` only, so your file
+    // may spend whatever it likes. What you give up by ignoring it is that a
+    // player cannot read your species' role off its stat block the way they
+    // can read every shipped one's.
     taming_difficulty: 0.4,       // 0.0 (trivial) .. 1.0 (very hard) to compile/tame
     habitats: [OpenGrid, Mainframe],
     // Biome options: DataVoid, StaticField, NullSector, Mainframe, OpenGrid, BlackIce, Platform
@@ -271,7 +278,11 @@ is skipped with a warning logged in-game rather than crashing startup.
     // row, so three declared categories show one, not two. Name only one
     // or two if you want every one of them visible; a species naming three
     // or more still works, it just won't all be shown on the same screen.
-    affinities: (heal: 1.4, damage: 0.85),
+    //
+    // For a shipped species this field carries a second job: the axis it
+    // raises *names the species' class*, and its stats and speed are
+    // checked against that. See "The five classes" below.
+    affinities: (heal: 1.3, damage: 0.85),
 
     // Optional; can be left out entirely (defaults to false). If true,
     // this species can spawn as a Nest instead of an ordinary lone
@@ -323,3 +334,48 @@ already hand-authored and a blanket multiplier would discard that tuning —
 so make a boss as tough as you want it to be, here, and nothing will scale
 it further. And nothing rolls one inside the opening ring around the
 player's landing site, which is what keeps a fresh run winnable.
+
+## The five classes
+
+Every shipped non-boss species belongs to one of five classes. There is no
+`role` field and there is not going to be one: a class is three things that
+have to agree, and the agreement is what a player reads.
+
+| Class | Raises | Damps | HP | ATK | DEF | Speed |
+|---|---|---|---:|---:|---:|---|
+| Striker | `damage` | `heal` | 84% | 13% | 3% | 10-11 |
+| Saboteur | `debuff` | `heal` | 85% | 11% | 4% | 13-14 |
+| Medic | `heal` | `damage` | 87% | 7% | 6% | 12 |
+| Leech | `drain` | `buff` | 90% | 8% | 2% | 8-9 |
+| Bastion | `buff` | `damage` | 88% | 4% | 8% | 6-7 |
+
+The **raised axis alone** names the class; the damped one is a consistency
+check and could not name one on its own, since a Bastion and a Medic both damp
+`damage`. Every raise is 1.3 and every damp 0.85, uniformly — the magnitudes
+say nothing, so the field says class and nothing else.
+
+The percentages are shares of a **stat budget**, and that is the mechanism
+that makes role independent of tier:
+
+- the species' `growth_multiplier` band sets the budget — 50 at 1.0, 105 at
+  1.25, 140 at 1.5;
+- the class sets how much of that budget the species gets (Striker 90%,
+  Saboteur 95%, Medic 100%, Leech 105%, Bastion 110% — a wall carries more
+  stuff than a glass cannon) and how it is spent.
+
+So a species' three stats are `budget × class weight`, divided by the class
+shares, rounded, with at most one point of residue moved to make the three sum
+back to the total. "Low DEF for its size" is then readable at tier 1 and at
+tier 3 alike. Raw totals never allowed that: a tier-3 Striker out-tanks a
+tier-1 Bastion on absolute HP, which is why "tanky" used to be unreadable
+without already knowing the ladder.
+
+Three species fill each class, one per growth band. Speed is the fourth axis
+and is not only initiative — it also paces the machine a posted program works
+at, so a Bastion is a slow worker and a Saboteur a quick one.
+
+`every_ordinary_species_stat_shape_agrees_with_its_affinity_class`
+(`crates/engine/src/species.rs`) derives the class from the affinities and
+checks the stats and the speed against it, so editing a stat block without
+meaning to change a species' role fails rather than shipping. It runs over the
+shipped directory only — a mod's species is never held to any of this.

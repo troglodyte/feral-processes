@@ -8,21 +8,21 @@ S = [
  # id            name         glyph hp  atk def spd int tame  grow  biomes                                          yield           boss nest abilities                                affinities
  ("wintermute",  "Wintermute", "W", 200, 19, 17, 13, 18, .95, 2.0,  ["OpenGrid","Mainframe","NullSector","StaticField"], None,            1, 0, ["broadcast_storm","null_route L4"],      None),
  ("overseer",    "Overseer",   "B", 180, 17, 15, 12, 16, .90, 2.0,  ["OpenGrid","Mainframe","NullSector","StaticField"], None,            1, 0, ["broadcast_storm","overclock_array L5"], None),
- ("sentinel",    "Sentinel",   "S", 150,  9, 12,  7,  8, .65, 1.5,  ["StaticField"],                                    None,            0, 0, ["sandbox","redundancy_sync L6"],         "buff 1.3 / damage 0.85"),
- ("construct",   "Construct",  "C", 128, 11,  9,  6,  5, .70, 1.5,  ["Mainframe"],                                      "core_fragment", 0, 0, [],                                       None),
- ("rootkit",     "Rootkit",    "k", 120, 11, 10,  9, 13, .75, 1.5,  ["Mainframe","NullSector"],                         None,            0, 0, ["deadlock","memory_leak L4"],            "drain 1.3 / buff 0.85"),
- ("cipher",      "Cipher",     "c", 112, 10,  8, 11, 14, .80, 1.5,  ["Mainframe","StaticField"],                        None,            0, 0, ["memory_leak","null_route L8"],          "debuff 1.35 / heal 0.85"),
- ("virus",       "Virus",      "v", 112, 10,  6, 10, 12, .60, 1.5,  ["NullSector","Mainframe"],                         "core_fragment", 0, 0, [],                                       None),
- ("zero_day",      "ZeroDay",    "z",  98, 14,  4, 10, 12, .65, 1.5,  ["StaticField","NullSector"],                       None,            0, 0, [],                                       "damage 1.25 / buff 0.85"),
- ("worm",        "Worm",       "m", 105,  8,  2,  9, 11, .40, 1.25, ["NullSector","OpenGrid"],                          "core_fragment", 0, 1, [],                                       None),
- ("scrapper",    "Scrapper",   "x",  98,  9,  5,  9,  7, .45, 1.25, ["OpenGrid","NullSector"],                          "core_fragment", 0, 1, ["cascade_overflow L3"],                  "damage 1.2 / heal 0.85"),
- ("trojan",      "Trojan",     "t",  90, 10,  4, 10, 13, .50, 1.25, ["Mainframe","OpenGrid"],                           None,            0, 1, [],                                       None),
- ("proxy",       "Proxy",      "p",  82, 12,  2, 12, 13, .55, 1.25, ["Mainframe","StaticField"],                        None,            0, 0, [],                                       None),
- ("crawler",     "Crawler",    "r",  75,  8,  4, 11,  8, .50, 1.25, ["StaticField"],                                    None,            0, 1, [],                                       None),
- ("sub_process", "SubProcess", "d",  54,  5,  3, 12, 15, .30, 1.0,  ["OpenGrid","NullSector"],                          "core_fragment", 0, 0, ["hot_patch","redundancy_sync L7"],       "heal 1.4 / damage 0.8"),
- ("sprite",      "Sprite",     "s",  48,  4,  2, 14, 11, .20, 1.0,  ["OpenGrid","Mainframe"],                           "core_fragment", 0, 0, [],                                       None),
- ("drone",       "Drone",      "o",  42,  3,  2, 13,  7, .15, 1.0,  ["OpenGrid","Mainframe"],                           "core_fragment", 0, 0, [],                                       None),
- ("glitch",      "Glitch",     "g",  36,  3,  1, 13,  5, .15, 1.0,  ["OpenGrid","NullSector"],                          "power_cell",    0, 0, [],                                       None),
+ ("sentinel",    "Sentinel",   "S", 136,  6, 12,  7,  8, .65, 1.5,  ["StaticField"],                                    None,            0, 0, ["sandbox","redundancy_sync L6"],         "buff 1.3 / damage 0.85"),
+ ("construct",   "Construct",  "C",  49,  2,  4,  6,  5, .35, 1.0,  ["Mainframe"],                                      "core_fragment", 0, 0, [],                                       "buff 1.3 / damage 0.85"),
+ ("rootkit",     "Rootkit",    "k", 132, 12,  3,  9, 13, .75, 1.5,  ["Mainframe","NullSector"],                         None,            0, 0, ["deadlock","memory_leak L4"],            "drain 1.3 / buff 0.85"),
+ ("cipher",      "Cipher",     "c", 113, 15,  5, 13, 14, .80, 1.5,  ["Mainframe","StaticField"],                        None,            0, 0, ["memory_leak","null_route L8"],          "debuff 1.3 / heal 0.85"),
+ ("virus",       "Virus",      "v", 122, 10,  8, 12, 12, .60, 1.5,  ["NullSector","Mainframe"],                         "core_fragment", 0, 0, [],                                       "heal 1.3 / damage 0.85"),
+ ("zero_day",      "ZeroDay",    "z",  106, 16,  4, 10, 12, .65, 1.5,  ["StaticField","NullSector"],                       None,            0, 0, [],                                       "damage 1.3 / heal 0.85"),
+ ("worm",        "Worm",       "m",  99,  9,  2,  9, 11, .40, 1.25, ["NullSector","OpenGrid"],                          "core_fragment", 0, 1, [],                                       "drain 1.3 / buff 0.85"),
+ ("scrapper",    "Scrapper",   "x",   80, 12,  3, 10,  7, .45, 1.25, ["OpenGrid","NullSector"],                          "core_fragment", 0, 1, ["cascade_overflow L3"],                  "damage 1.3 / heal 0.85"),
+ ("trojan",      "Trojan",     "t",   85, 11,  4, 13, 13, .50, 1.25, ["Mainframe","OpenGrid"],                           None,            0, 1, [],                                       "debuff 1.3 / heal 0.85"),
+ ("proxy",       "Proxy",      "p",   92,  7,  6, 12, 13, .55, 1.25, ["Mainframe","StaticField"],                        None,            0, 0, [],                                       "heal 1.3 / damage 0.85"),
+ ("crawler",     "Crawler",    "r",  102,  5,  9,  7,  8, .50, 1.25, ["StaticField"],                                    None,            0, 1, [],                                       "buff 1.3 / damage 0.85"),
+ ("sub_process", "SubProcess", "d",   43,  4,  3, 12, 15, .30, 1.0,  ["OpenGrid","NullSector"],                          "core_fragment", 0, 0, ["hot_patch","redundancy_sync L7"],       "heal 1.3 / damage 0.85"),
+ ("sprite",      "Sprite",     "s",   41,  5,  2, 14, 11, .20, 1.0,  ["OpenGrid","Mainframe"],                           "core_fragment", 0, 0, [],                                       "debuff 1.3 / heal 0.85"),
+ ("drone",       "Drone",      "o",   48,  4,  1,  8,  7, .15, 1.0,  ["OpenGrid","Mainframe"],                           "core_fragment", 0, 0, [],                                       "drain 1.3 / buff 0.85"),
+ ("glitch",      "Glitch",     "g",   38,  6,  1, 11,  5, .15, 1.0,  ["OpenGrid","NullSector"],                          "power_cell",    0, 0, [],                                       "damage 1.3 / heal 0.85"),
 ]
 K = "id name g hp atk def spd int tame grow bio yield boss nest ab aff".split()
 R = [dict(zip(K, r)) for r in S]
@@ -118,7 +118,7 @@ shows up green or red on your map. Every table below is in POW order.
 | bosses | 2 (Wintermute, Overseer) |
 | nest builders | 4 (Scrapper, Trojan, Worm, Crawler) |
 | work yields | 8 — 7 `core_fragment`, 1 `power_cell` |
-| HP span | 36 (Glitch) to 200 (Wintermute) |
+| HP span | 38 (Glitch) to 200 (Wintermute) |
 | speed span | 6 (Construct) to 14 (Sprite); the player rolls from 11 |
 | extraction span | 5 (Construct, Glitch) to 15 (SubProcess), non-boss; the player works at 10 |
 
@@ -134,15 +134,19 @@ shows up green or red on your map. Every table below is in POW order.
 
 Each species sits at its own `(base_atk, base_def)`, drawn with its map glyph.
 The top-right corner belongs to the two bosses alone, and the bottom-left to
-the four programs the opening ring draws from. Between them the roster splits
-into a defended column around ATK 9-11 and a glass column out at ATK 12-14.
+the five programs the opening ring draws from. Between them the roster is laid
+out by **class**: a species' position here is its role, and its distance from
+the origin is its tier.
 
 {scatter()}
 
-Five species pile up at ATK 10-11 — Cipher, Construct, Rootkit, Virus and
-Trojan. What separates them is entirely HP and DEF, which is what the profiles
-below are for. ZeroDay is the roster's outlier: ATK 14 on DEF 4, the highest
-attack outside a boss carried on almost nothing.
+Each species spends its growth band's stat budget on a class share, so the
+five programs of any one tier all cost the same and differ only in shape. The
+extremes are ZeroDay (ATK 16 on DEF 4, the highest attack outside a boss
+carried on almost nothing) and Sentinel (DEF 12 on ATK 6, which is the same
+trade read backwards). Because the shares are constant across tiers, that
+contrast repeats at every rung: Scrapper against Crawler, and Glitch against
+Construct, are the same two shapes at a third of the size.
 
 ## Stat profiles
 
@@ -158,16 +162,16 @@ against the others — the HP bars are not comparable to the ATK bars.
 
 {speed_ladder()}
 
-Speed inverts almost everything else: the top of the ladder is Sprite, Drone
-and Glitch, three of the four weakest programs in the game, and the bottom is
-Construct and Sentinel, the two heaviest non-bosses. Both bosses sit near the
-top anyway, which is the one place the roster does not trade power for pace.
+Speed is the fourth axis of a species' class rather than a fifth stat: the
+three Saboteurs sit at the top, the three Bastions at the bottom, and the
+ladder repeats itself once per tier. Both bosses sit near the top regardless,
+which is the one place the roster does not trade power for pace.
 Speed is an initiative baseline rather than a turn order, though — every
 combatant rolls `base_speed + d10` each round, so a 4-point gap still loses
 sometimes. The same number sets a posted program's pace at a machine too: a
 cycle scales faster above `DEFAULT_BASE_SPEED` and slower below it, so a
-Sprite mining a Mk1 node finishes cycles a fifth quicker than a Construct
-doing the same job (see [`assets/species/README.md`](../assets/species/README.md)).
+Sprite mining a Mk1 node finishes cycles a fifth quicker than the roster
+baseline while a Construct takes a fifth longer than that same baseline (see [`assets/species/README.md`](../assets/species/README.md)).
 
 ## Taming cost against growth tier
 
@@ -202,10 +206,16 @@ only source of `power_cell` in the roster.
          r["aff"] or "baseline"] for r in R],
        ["l", "l", "l", "l", "l"])}
 
-Six species override an affinity, and each override is paid for with a
-matching weakness — SubProcess heals at 1.4 and hits at 0.8, Sentinel buffs at
-1.3 and hits at 0.85. Seven grant abilities; a species that grants none falls
-back to `priority_boost`.
+Every non-boss species raises exactly one affinity axis to 1.3 and damps
+exactly one to 0.85, and **the raised axis is what names its class** — damage
+is a Striker, buff a Bastion, heal a Medic, debuff a Saboteur, drain a Leech.
+Three species share each class, one per growth band, so the axis says what a
+program does and the tier says how much of it. The stats and the speed above
+are checked against that axis by
+`every_ordinary_species_stat_shape_agrees_with_its_affinity_class`, which is
+what stops a stat retune quietly changing a species' role. Bosses declare no
+affinity at all: they are outside the class system. Seven species grant
+abilities; one that grants none falls back to `priority_boost`.
 
 ---
 

@@ -773,7 +773,7 @@ fn popping_decompile_out_leaves_the_player_with_no_special() {
 #[test]
 fn a_carried_routine_survives_capture() {
     let mut game = Game::new(5501, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species = generic_species(&game);
+    let species = generic_species();
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
     let carrier = game
         .spawn_wild_creature(&species.id, spawn.x + 2, spawn.y)
@@ -800,7 +800,7 @@ fn a_carried_routine_survives_capture() {
 #[test]
 fn a_carrier_of_an_ability_less_species_is_not_given_the_fallback() {
     let mut game = Game::new(5502, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species = generic_species(&game);
+    let species = generic_species();
     assert!(
         species.abilities.is_empty(),
         "fixture: this species grants nothing of its own"

@@ -107,6 +107,53 @@ fn the_shipped_species_kits_reference_only_real_abilities() {
     );
 }
 
+/// `spawn_tamed`'s companion must be blank, and the shipped roster is not
+/// the place to find a blank species — it used to be construct, which
+/// tethered 233 call sites to whatever the roster's first kitless entry
+/// happened to be, and would have handed every fixture construct's
+/// affinities the moment the roster gained any.
+///
+/// The properties asserted are the ones a later change could take away
+/// silently. Absence is checked against the asset **files** rather than
+/// against `Game::species_defs`, because `load_asset_dbs` puts the fixture
+/// into every test-built db by design — that is what makes it survive a
+/// `Game::load`.
+#[test]
+fn the_generic_fixture_species_is_blank_and_unshipped() {
+    let shipped = std::fs::read_dir(test_assets_dir().join("species")).unwrap();
+    for entry in shipped {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|e| e.to_str()) != Some("ron") {
+            continue;
+        }
+        let def: crate::species::SpeciesDef =
+            ron::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_ne!(
+            def.id, GENERIC_SPECIES_ID,
+            "{GENERIC_SPECIES_ID} must not be a shipped species — the fixture exists \
+             precisely so the test companion is not one of the roster's programs"
+        );
+    }
+
+    let fixture = generic_species();
+    assert!(
+        fixture.abilities.is_empty(),
+        "the fixture companion must declare no abilities, or install_innate_routines \
+         stops yielding FALLBACK_ABILITY_ID and every routine-slot fixture shifts"
+    );
+    assert!(
+        fixture.affinities.non_neutral().is_empty(),
+        "the fixture companion must be affinity-neutral, or every ability cast in \
+         every spawn_tamed test is silently multiplied"
+    );
+    assert!(
+        fixture.habitats.is_empty(),
+        "the fixture companion must have no habitat: habitat_matches is indexed into \
+         by the spawn roll, so a fixture species in a pool moves what a seeded \
+         Game::new spawns"
+    );
+}
+
 /// Authored text replaced a derivation that could not go blank. The only
 /// thing left to guard mechanically is that nothing shipped is *missing*
 /// text — a wrong number in an authored line is a review problem, not a

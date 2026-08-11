@@ -1045,7 +1045,7 @@ fn fuse_companions_with_no_name_or_blank_name_keeps_the_species_name() {
     // same-level, same-species programs keeps it — capturing it directly
     // here avoids having to pick the fused entity back out of a world that
     // also has 14 unrelated wild creatures in it from `Game::new`.
-    let species_name = generic_species(&game).name;
+    let species_name = generic_species().name;
     let a = spawn_tamed(&mut game, 10, 3);
     let b = spawn_tamed(&mut game, 10, 3);
     game.fuse_companions(a, b, None).unwrap();
@@ -1347,7 +1347,7 @@ fn rename_companion_sets_the_display_name() {
 #[test]
 fn renaming_with_a_blank_name_restores_the_species_name() {
     let mut game = Game::new(4202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species_name = generic_species(&game).name;
+    let species_name = generic_species().name;
     let pet = spawn_tamed(&mut game, 10, 3);
     game.rename_companion(pet, Some("Hexed".to_string()))
         .unwrap();

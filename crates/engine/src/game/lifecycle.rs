@@ -1056,8 +1056,20 @@ struct AssetDbs {
 /// instead of a startup error.
 fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (abilities, mut warnings) = AbilityDb::load_dir(&assets_dir.join("abilities"))?;
-    let (species, species_warnings) = SpeciesDb::load_dir(&assets_dir.join("species"), &abilities)?;
+    // `mut` is only used by the `#[cfg(test)]` fixture insertion below.
+    #[cfg_attr(not(test), allow(unused_mut))]
+    let (mut species, species_warnings) =
+        SpeciesDb::load_dir(&assets_dir.join("species"), &abilities)?;
     warnings.extend(species_warnings);
+    // The blank fixture companion joins every test-built db, rather than
+    // being registered onto one `Game`, because `Game::load` rebuilds the
+    // db from the asset directory: a species registered after `new` is
+    // gone by the time the load path looks a saved creature's id up, and
+    // that creature is dropped. Both doors come through here, so both see
+    // it. See `tests::support::generic_species` for why the fixture is not
+    // a shipped species.
+    #[cfg(test)]
+    species.insert(crate::tests::support::generic_species());
     let (structures, structure_warnings) = StructureDb::load_dir(&assets_dir.join("structures"))?;
     warnings.extend(structure_warnings);
     let (research, research_warnings) =

@@ -24,17 +24,54 @@ pub(super) fn ability(game: &Game, id: &str) -> crate::abilities::AbilityDef {
         .unwrap_or_else(|| panic!("{id} ships with the game"))
 }
 
-/// The species `spawn_tamed` builds its companions from: deliberately one
-/// that declares no abilities, so the generic-companion helper yields the
-/// fallback rather than whatever kit the shipped roster happens to give
-/// its first species. Tests that need to name that species must read it
-/// through here rather than re-deriving it, or the two silently drift when
-/// kits are reassigned.
-pub(super) fn generic_species(game: &Game) -> SpeciesDef {
-    game.species_defs()
-        .into_iter()
-        .find(|s| s.abilities.is_empty())
-        .expect("at least one species with no declared abilities")
+pub(super) const GENERIC_SPECIES_ID: &str = "test_generic";
+
+/// The species `spawn_tamed` builds its companions from: a hand-written
+/// fixture rather than whichever shipped species happens to declare no
+/// abilities.
+///
+/// It used to be "first species by id with no declared abilities", which
+/// resolved to construct and made **every** `spawn_tamed` companion carry
+/// that species' data — so giving the roster kits would have taken the
+/// `expect` out from under 233 call sites at once, and giving it affinities
+/// silently multiplied every fixture's ability casts by construct's. Both
+/// are properties of the shipped roster leaking into a fixture that only
+/// ever wanted a blank program.
+///
+/// Blank is the whole specification: no abilities (so
+/// `install_innate_routines` yields `FALLBACK_ABILITY_ID`), neutral
+/// affinities, and — load-bearing — **no habitats**, which is what keeps it
+/// out of `habitat_matches`. That pool is indexed into by the spawn roll, so
+/// a fixture species with a habitat would shift which species a seeded
+/// `Game::new` spawns.
+pub(crate) fn generic_species() -> SpeciesDef {
+    SpeciesDef {
+        id: GENERIC_SPECIES_ID.to_string(),
+        name: "Test Generic".to_string(),
+        glyph: '?',
+        color: GlyphColor::White,
+        base_hp: 40,
+        base_atk: 4,
+        base_def: 2,
+        taming_difficulty: 0.5,
+        habitats: Vec::new(),
+        base_speed: crate::tuning::DEFAULT_BASE_SPEED,
+        base_int: crate::tuning::DEFAULT_BASE_INT,
+        moves: vec![crate::species::MoveDef {
+            name: "Test Strike".to_string(),
+            power: 5,
+            ranged: false,
+            effect: None,
+        }],
+        work_resource: None,
+        equipment_drop: None,
+        is_boss: false,
+        abilities: Vec::new(),
+        growth_multiplier: crate::tuning::BASELINE_GROWTH_MULTIPLIER,
+        affinities: crate::species::Affinities::NEUTRAL,
+        taunts: Vec::new(),
+        can_nest: false,
+    }
 }
 
 /// A tile far enough from the danger origin that a fight there may hold a
@@ -807,7 +844,7 @@ pub(super) fn spawn_wild_without_routine(game: &mut Game, species: &str, x: i32,
 
 pub(super) fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
     let player = game.player_entity();
-    let species = generic_species(game);
+    let species = generic_species();
     let entity = game
         .world
         .spawn((

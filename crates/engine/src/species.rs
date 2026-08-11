@@ -345,6 +345,18 @@ impl SpeciesDb {
         self.species.get(id)
     }
 
+    /// Adds `def`, replacing any species already under its id.
+    ///
+    /// Test-only, and deliberately so: the shipped roster is a directory of
+    /// `.ron` files and a mod's is too, so nothing in the game builds a
+    /// species in Rust. It exists for `tests::support::generic_species`, the
+    /// blank fixture companion, which has to be a species the roster does
+    /// not contain.
+    #[cfg(test)]
+    pub(crate) fn insert(&mut self, def: SpeciesDef) {
+        self.species.insert(def.id.clone(), def);
+    }
+
     /// Ordinary (non-boss) species that can inhabit `biome` — the pool the
     /// normal per-tile spawn roll draws from. Sorted by `id` for the same
     /// reason `all` is, and more urgently: the spawn roll picks out of this

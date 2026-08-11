@@ -2,7 +2,10 @@
 
 use super::support::*;
 use crate::game::upkeep::DEV_HIT_DAMAGE_PERCENT;
-use crate::tuning::{NEST_DURABILITY, RAID_DAMAGE, RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_INTERVAL};
+use crate::tuning::{
+    MEDIC_REPAIR_PER_INTERVAL, NEST_DURABILITY, RAID_DAMAGE, RAID_DEFENDER_DAMAGE,
+    STRUCTURE_REGEN_INTERVAL,
+};
 use crate::*;
 
 /// The two axes are independent, and this is the line that proves it. A raid
@@ -920,6 +923,64 @@ fn guard_assignment_on_a_non_resource_structure_survives_save_and_load() {
     assert_eq!((target_pos.x, target_pos.y), (3, 3));
 }
 
+/// Durability lost to one forced sweep on a structure guarded by a program
+/// of `species` carrying `def` Defense.
+fn durability_lost_with_guard(species: &str, def: i32) -> u32 {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+            Durability { hp: 30, max_hp: 30 },
+        ))
+        .id();
+    let worker = spawn_tamed(&mut game, 50, 3);
+    assert!(
+        game.species_defs().iter().any(|d| d.id == species),
+        "{species} should be in the shipped roster"
+    );
+    game.world.get_mut::<Creature>(worker).unwrap().species = species.to_string();
+    game.world.get_mut::<Stats>(worker).unwrap().def = def;
+    game.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::Guard,
+        target: structure,
+        progress: 0,
+        required: 0,
+    });
+
+    game.dev_force_raid();
+
+    30 - game.world.get::<Durability>(structure).unwrap().hp
+}
+
+/// The Bastion base job. Half a sweep's worth of Defense stops all of it
+/// when the guard is a Bastion and half of it when the guard is anything
+/// else.
+///
+/// Written as a comparison rather than against a number because the job is
+/// a *multiplier on mitigation that already existed*: `run_raid` finds its
+/// defender by `Task::target` alone, so every posted program has always
+/// mitigated by its DEF. Asserting the Bastion figure alone would pass
+/// against a build where the buff class did nothing and DEF had simply
+/// been doubled for everyone.
+#[test]
+fn a_bastion_stops_a_sweep_that_gets_past_another_class() {
+    let half = RAID_DAMAGE as i32 / 2;
+    assert_eq!(
+        durability_lost_with_guard("glitch", half),
+        RAID_DAMAGE / 2,
+        "a Striker mitigates by its Defense once"
+    );
+    assert_eq!(
+        durability_lost_with_guard("sentinel", half),
+        0,
+        "a Bastion's Defense counts twice, which is the whole of its base job"
+    );
+}
+
 #[test]
 fn raid_check_defended_by_a_worker_reduces_structure_damage_and_hurts_the_worker() {
     for seed in 0..300u32 {
@@ -1089,6 +1150,95 @@ fn a_patch_node_adds_its_tier_to_every_structures_regen() {
         game.world.get::<Durability>(structure).unwrap().hp,
         10 + per_tier
     );
+}
+
+/// Posts a program of `species` to guard `structure`, the way the Guard
+/// menu does — the walk-in doesn't apply, since `assign_guard` writes no
+/// `Position` and nothing about a sweep or a repair reads one.
+fn post_guard(game: &mut Game, species: &str, structure: Entity) -> Entity {
+    let worker = spawn_tamed(game, 50, 3);
+    assert!(
+        game.species_defs().iter().any(|d| d.id == species),
+        "{species} should be in the shipped roster"
+    );
+    game.world.get_mut::<Creature>(worker).unwrap().species = species.to_string();
+    game.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::Guard,
+        target: structure,
+        progress: 0,
+        required: 0,
+    });
+    worker
+}
+
+/// The Medic base job, and the case that matters most: a base with no Patch
+/// Node repairs *nothing at all* — `total_repair_rate` is the only source
+/// and raid damage is otherwise permanent. A posted Medic is a second
+/// source, so this asserts against a total of zero rather than against a
+/// base-wide rate it might merely be adding to.
+#[test]
+fn a_posted_medic_repairs_the_structure_it_guards() {
+    let mut game = Game::new(142, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let guarded = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+            Durability { hp: 10, max_hp: 30 },
+        ))
+        .id();
+    let elsewhere = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 8, y: 5 },
+            Durability { hp: 10, max_hp: 30 },
+        ))
+        .id();
+    post_guard(&mut game, "virus", guarded);
+    game.world.resource_mut::<GameClock>().tick = STRUCTURE_REGEN_INTERVAL;
+
+    game.structure_regen();
+
+    assert_eq!(
+        game.world.get::<Durability>(guarded).unwrap().hp,
+        10 + MEDIC_REPAIR_PER_INTERVAL,
+    );
+    assert_eq!(
+        game.world.get::<Durability>(elsewhere).unwrap().hp,
+        10,
+        "a Medic repairs what it is standing at, not the base — the post is \
+         a decision about what to protect"
+    );
+}
+
+/// The other four classes hold a structure without mending it. Bastion
+/// stands for them because it is the class most easily confused with this
+/// one: both jobs are about a structure surviving, and they are bought
+/// separately.
+#[test]
+fn a_posted_bastion_repairs_nothing() {
+    let mut game = Game::new(143, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let guarded = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+            Durability { hp: 10, max_hp: 30 },
+        ))
+        .id();
+    post_guard(&mut game, "sentinel", guarded);
+    game.world.resource_mut::<GameClock>().tick = STRUCTURE_REGEN_INTERVAL;
+
+    game.structure_regen();
+
+    assert_eq!(game.world.get::<Durability>(guarded).unwrap().hp, 10);
 }
 
 #[test]

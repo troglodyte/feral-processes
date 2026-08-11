@@ -1193,6 +1193,30 @@ pub const NODE_PAYOUT_ZONE_BONUS: u32 = 1;
 /// of what keeps an uncapped bank honest against a fixed research ladder.
 pub const LEECH_YIELD_BONUS: u32 = 1;
 
+/// How many times a **Bastion**'s Defense counts when it is the program
+/// guarding a structure a GC Entropy Sweep lands on.
+///
+/// The job is smaller than it reads: `Game::run_raid` finds its defender by
+/// `Task::target` alone, so *every* posted program has always mitigated by
+/// its DEF and this is a multiplier on behaviour that already existed. It is
+/// stated as a multiplier rather than a flat bonus for exactly that reason —
+/// a Bastion is the class whose stat shape spends most of its budget on DEF,
+/// so doubling what that shape is already good at is what makes the post a
+/// use of the *species* rather than a use of a program.
+pub const BASTION_DEF_MULTIPLIER: i32 = 2;
+
+/// Durability a posted **Medic** restores to the structure it guards, per
+/// `STRUCTURE_REGEN_INTERVAL` — on top of whatever the base's Patch Nodes
+/// restore to everything.
+///
+/// Per structure rather than a contribution to `Game::total_repair_rate`,
+/// which is what makes *where* it stands a decision about what to protect.
+/// Flat rather than scaled by the program's level, because the figure wants
+/// a base played with one posted rather than a formula: 2 beats a Mk1 Patch
+/// Node on that one structure and loses to a Mk3 across a whole base, which
+/// is the trade it should be.
+pub const MEDIC_REPAIR_PER_INTERVAL: u32 = 2;
+
 /// Divisor applied to the *lesser* of two fused programs' stats: a fusion
 /// keeps the better parent's stat outright and adds this fraction of the
 /// weaker one (see `Game::fuse_companions`). Bounded further by

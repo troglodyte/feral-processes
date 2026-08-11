@@ -1,8 +1,10 @@
 //! Per-tick base maintenance: structure regeneration, nest respawns,
 //! visual effects, and raids.
 
+use crate::species::AffinityClass;
 use crate::tuning::{
-    RAID_CHANCE_PER_TICK, RAID_DAMAGE, RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_INTERVAL,
+    BASTION_DEF_MULTIPLIER, MEDIC_REPAIR_PER_INTERVAL, RAID_CHANCE_PER_TICK, RAID_DAMAGE,
+    RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_INTERVAL,
 };
 use crate::*;
 
@@ -18,13 +20,37 @@ use crate::*;
 pub(crate) const DEV_HIT_DAMAGE_PERCENT: u32 = 25;
 
 impl Game {
+    /// The class `creature` is read as, or `None` for the player, for a
+    /// species the db has never heard of, and for anything outside the class
+    /// system (a boss, or a mod raising two affinity axes).
+    ///
+    /// The one door from an entity to its base job, so the two jobs that
+    /// happen to a *posted* program — mitigating a sweep and repairing what
+    /// one took — cannot disagree about who qualifies.
+    pub(crate) fn creature_class(&self, creature: Entity) -> Option<AffinityClass> {
+        let species = &self.world.get::<Creature>(creature)?.species;
+        self.world
+            .resource::<SpeciesDb>()
+            .get(species)?
+            .affinity_class()
+    }
+
     /// Repairs damaged structures — every `STRUCTURE_REGEN_INTERVAL` ticks,
     /// every structure below max `Durability` recovers whatever the base's
-    /// repairers restore between them (`total_repair_rate`).
+    /// repairers restore between them (`total_repair_rate`), and each
+    /// structure a Medic is posted to recovers
+    /// `MEDIC_REPAIR_PER_INTERVAL` more.
     ///
-    /// That total is the only source: nothing heals on its own, so a base
-    /// with no repairer standing never recovers a point and raid damage is
-    /// permanent until the player builds something that undoes it.
+    /// Those two are the only sources: nothing heals on its own, so a base
+    /// with neither a repairer standing nor a Medic posted never recovers a
+    /// point and raid damage is permanent.
+    ///
+    /// The two differ in reach on purpose. A Patch Node is a *building* and
+    /// works base-wide from wherever it stands; a Medic is a *program* and
+    /// mends the one structure it is guarding, so posting it is a decision
+    /// about what to protect rather than a rate added to a pool. Which is
+    /// also why the early return has to ask about both — a base with no
+    /// Patch Node at all is the case a posted Medic is most for.
     ///
     /// `With<Structure>` is load-bearing, not tidiness: a `Nest` carries
     /// `Durability` too, and an unfiltered pass healed it alongside the
@@ -36,16 +62,48 @@ impl Game {
         if !tick.is_multiple_of(STRUCTURE_REGEN_INTERVAL) {
             return;
         }
-        let amount = self.total_repair_rate();
-        if amount == 0 {
+        let base_wide = self.total_repair_rate();
+        let mended = self.medic_posts();
+        if base_wide == 0 && mended.is_empty() {
             return;
         }
         let mut query = self
             .world
-            .query_filtered::<&mut Durability, With<Structure>>();
-        for mut durability in query.iter_mut(&mut self.world) {
+            .query_filtered::<(Entity, &mut Durability), With<Structure>>();
+        for (structure, mut durability) in query.iter_mut(&mut self.world) {
+            let amount = base_wide
+                + MEDIC_REPAIR_PER_INTERVAL
+                    * mended.iter().filter(|&&e| e == structure).count() as u32;
             durability.hp = (durability.hp + amount).min(durability.max_hp);
         }
+    }
+
+    /// The structures a Medic is currently guarding, one entry per posted
+    /// Medic — `displace_task_holder` allows a single `Guard` per structure,
+    /// so today that is one entry each, but counting rather than
+    /// de-duplicating means a second route to a shared post would stack
+    /// rather than silently do nothing.
+    ///
+    /// `TaskKind::Guard` and not any task pointing at the structure, which
+    /// is deliberately narrower than the sweep defender `run_raid` picks:
+    /// mitigating a sweep is a passive property of whoever happens to be
+    /// standing there, while mending is *what the post is*. A Medic running
+    /// a cronjob is extracting, not repairing, and that is the cost that
+    /// makes posting one a decision.
+    fn medic_posts(&mut self) -> Vec<Entity> {
+        let posts: Vec<(Entity, Entity)> = {
+            let mut query = self.world.query::<(Entity, &Task)>();
+            query
+                .iter(&self.world)
+                .filter(|(_, task)| task.kind == TaskKind::Guard)
+                .map(|(worker, task)| (worker, task.target))
+                .collect()
+        };
+        posts
+            .into_iter()
+            .filter(|&(worker, _)| self.creature_class(worker) == Some(AffinityClass::Medic))
+            .map(|(_, structure)| structure)
+            .collect()
     }
 
     /// `Durability` restored to every deployed structure per regen interval
@@ -293,6 +351,14 @@ impl Game {
         };
 
         let worker_def = self.world.get::<Stats>(worker).map(|s| s.def).unwrap_or(0);
+        // The Bastion base job. Every posted program mitigates by its
+        // Defense — the defender above is found by `Task::target`, not by
+        // `TaskKind::Guard` — so what the buff class brings is that the
+        // number counts twice.
+        let worker_def = match self.creature_class(worker) {
+            Some(AffinityClass::Bastion) => worker_def * BASTION_DEF_MULTIPLIER,
+            _ => worker_def,
+        };
         let mitigated = raid_damage.saturating_sub(worker_def.max(0) as u32);
         let worker_label = self.creature_label(worker);
         if mitigated > 0 {

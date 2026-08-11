@@ -217,6 +217,15 @@ impl Game {
             .unwrap_or(0)
     }
 
+    /// The zone tier `entity` is scaled to (`components::ZonePortal`), or 1
+    /// for anything without the component — a hand-spawned fixture, or a
+    /// creature from a save predating it. One reader for the same reason
+    /// `rarity_of` is: absent-means-tier-1 is a rule, and four call sites
+    /// each spelling `map_or(1, ..)` is four chances to pick a different one.
+    pub(crate) fn zone_tier(&self, entity: Entity) -> u32 {
+        self.world.get::<ZonePortal>(entity).map_or(1, |z| z.0)
+    }
+
     /// How many percentage upgrades have been spent on `entity`, 0 for
     /// anything without the component — every program that has never been
     /// refactored, and every hand-built test fixture. The one reader, so no
@@ -657,10 +666,8 @@ impl Game {
         // forward, so resetting either bound turns fuse → bump → fuse into an
         // unbounded stat loop, and lets a fusion launder a program that has
         // spent all five upgrade slots back into a fresh one.
-        let tier_of = |g: &Self, e| g.world.get::<ZonePortal>(e).map_or(1, |z| z.0);
-        let fused_zone = tier_of(self, a).max(tier_of(self, b));
-        let slots_of = |g: &Self, e| g.world.get::<Refactors>(e).copied().unwrap_or_default().0;
-        let fused_refactors = slots_of(self, a).max(slots_of(self, b));
+        let fused_zone = self.zone_tier(a).max(self.zone_tier(b));
+        let fused_refactors = self.refactor_count(a).max(self.refactor_count(b));
 
         let name_a = self.creature_label(a);
         let name_b = self.creature_label(b);

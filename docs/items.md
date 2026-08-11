@@ -33,7 +33,7 @@ THE VALUE LADDER
 printable     1-2     5 items   a base can make it out of nothing
 scavenged     3-8    19 items   salvage and intermediates
 standard     12-16   11 items   the craftable working set
-researched   20-60    9 items   needs a node and a bench
+researched   20-60    9 items   a node and a bench, or a rare drop
 premium      80-120   9 items   portal_fragment gear
 
 unpriced: Credits (TradeCurrency)

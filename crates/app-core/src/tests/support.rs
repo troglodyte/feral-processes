@@ -152,12 +152,13 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
-    if !cargo.is_empty() {
-        data.player.inventory = cargo
-            .iter()
-            .map(|(item, qty)| (ItemId::from(*item), *qty))
-            .collect();
-    }
+    // Extended, never assigned over: replacing the whole inventory would
+    // silently delete the starting kit `Game::new` grants, and the next test
+    // written against this fixture would fail for a reason with nothing to do
+    // with what it was testing.
+    data.player
+        .inventory
+        .extend(cargo.iter().map(|(item, qty)| (ItemId::from(*item), *qty)));
     let (px, py) = data.player.position;
     data.creatures.push(CreatureSave {
         species,

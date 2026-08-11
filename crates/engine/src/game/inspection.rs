@@ -671,7 +671,7 @@ impl Game {
                 max_fusions: MAX_FUSIONS,
                 refactors: self.refactor_count(entity),
                 max_refactors: MAX_COMPANION_REFACTORS,
-                zone_tier: self.world.get::<ZonePortal>(entity).map_or(1, |z| z.0),
+                zone_tier: self.zone_tier(entity),
                 player_zone: self.world.resource::<ZoneLevel>().0,
                 habitats: species.habitats.clone(),
                 moves: species.moves.clone(),

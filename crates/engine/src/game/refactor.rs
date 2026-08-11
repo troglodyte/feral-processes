@@ -7,7 +7,8 @@
 //! chain rooted in a Mining Node that produces forever.
 
 use crate::items_db::CompanionUpgradeDef;
-use crate::tuning::{MAX_COMPANION_REFACTORS, ZONE_STAT_GROWTH};
+use crate::resources::ZoneLevel;
+use crate::tuning::MAX_COMPANION_REFACTORS;
 use crate::*;
 
 /// A stat raised by `pct` percent, rounded, never gaining less than a point.
@@ -37,13 +38,19 @@ fn raised(old: i32, pct: f32) -> i32 {
 /// refilling. A level-up full-heals; if a refactor did too, a Recompile
 /// Kernel would be the strongest healing item in the game and would be
 /// carried into fights for that instead of for what it is.
-fn refactored(stats: &Stats, upgrade: &CompanionUpgradeDef) -> Stats {
+///
+/// `tier` is the program's tier *before* the bump, because the step from one
+/// tier to the next comes from `ZoneLevel::tier_step` rather than from a
+/// constant restated here — the spawner's curve is what a bump is catching
+/// the program up with, so the two have to be one formula.
+fn refactored(stats: &Stats, upgrade: &CompanionUpgradeDef, tier: u32) -> Stats {
     let mut max_hp = stats.max_hp;
     let (mut atk, mut def) = (stats.atk, stats.def);
     if upgrade.zone_bump {
-        max_hp *= ZONE_STAT_GROWTH;
-        atk *= ZONE_STAT_GROWTH;
-        def *= ZONE_STAT_GROWTH;
+        let step = ZoneLevel::tier_step(tier);
+        max_hp *= step;
+        atk *= step;
+        def *= step;
     }
     max_hp = raised(max_hp, upgrade.hp_percent);
     atk = raised(atk, upgrade.atk_percent);
@@ -116,9 +123,9 @@ impl Game {
             return Err(format!("{} can't refactor a program.", def.name));
         };
 
+        let tier = self.zone_tier(target);
         if upgrade.zone_bump {
-            let tier = self.world.get::<ZonePortal>(target).map_or(1, |z| z.0);
-            let zone = self.world.resource::<resources::ZoneLevel>().0;
+            let zone = self.world.resource::<ZoneLevel>().0;
             if tier >= zone {
                 return Err(format!(
                     "{} is already current for this zone.",
@@ -147,10 +154,9 @@ impl Game {
         inventory.take(item.clone(), 1);
 
         let stats = *self.world.get::<Stats>(target).unwrap();
-        let after = refactored(&stats, &upgrade);
+        let after = refactored(&stats, &upgrade, tier);
         *self.world.get_mut::<Stats>(target).unwrap() = after;
         if upgrade.zone_bump {
-            let tier = self.world.get::<ZonePortal>(target).map_or(1, |z| z.0);
             self.world.entity_mut(target).insert(ZonePortal(tier + 1));
         }
         if upgrade.spends_a_slot() {

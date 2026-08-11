@@ -170,7 +170,7 @@ impl ItemDef {
         ItemCategory::Material
     }
 
-    /// Names the first field holding a NaN or infinity, if any. RON accepts
+    /// Names the first field whose value is not usable, if any. RON accepts
     /// bare `NaN`/`inf` literals, and they survive every clamp downstream —
     /// a NaN `taming_potency` outranks every real catalyst and then panics
     /// the RNG. Cheaper to refuse the file at load, like any other malformed
@@ -188,14 +188,26 @@ impl ItemDef {
             return Some("cache_drop");
         }
         if let Some(u) = self.upgrade {
-            if !u.hp_percent.is_finite() {
-                return Some("upgrade.hp_percent");
+            // Negative is refused as well as non-finite, and that is not
+            // symmetry for its own sake: `Game::refactor_companion` floors
+            // every percentage at `+1`, so a `-10.0` would *raise* the stat
+            // by a point while spending one of the five permanent upgrade
+            // slots. A downgrade item is a coherent thing to want and this
+            // is not it, so the file is refused rather than half-honoured.
+            for (name, pct) in [
+                ("upgrade.hp_percent", u.hp_percent),
+                ("upgrade.atk_percent", u.atk_percent),
+                ("upgrade.def_percent", u.def_percent),
+            ] {
+                if !pct.is_finite() || pct < 0.0 {
+                    return Some(name);
+                }
             }
-            if !u.atk_percent.is_finite() {
-                return Some("upgrade.atk_percent");
-            }
-            if !u.def_percent.is_finite() {
-                return Some("upgrade.def_percent");
+            // An `upgrade` block that does nothing would be taken out of the
+            // player's cargo, change no stat, spend no slot, and log a
+            // success line naming the numbers it did not move.
+            if !u.spends_a_slot() && !u.zone_bump {
+                return Some("upgrade (declares no effect)");
             }
         }
         match self.consume {
@@ -566,6 +578,43 @@ mod tests {
         );
         let (_, stats) = def.equipment.unwrap();
         assert_eq!((stats.atk, stats.def), (2, 1), "hybrids stack two stats");
+    }
+
+    /// The engine floors a percentage gain at `+1`, so a negative one would
+    /// quietly become a *raise* that also costs a permanent upgrade slot —
+    /// and an `upgrade` block declaring nothing at all would spend the item
+    /// for no effect while logging a success. Both are refused at load, so
+    /// the guarantee holds for a mod and not merely for the shipped assets
+    /// that `every_shipped_upgrade_item_says_what_it_does` censuses.
+    #[test]
+    fn an_upgrade_that_would_do_nothing_or_the_wrong_thing_is_skipped() {
+        for (field, ron) in [
+            (
+                "upgrade.hp_percent",
+                r#"upgrade: Some((hp_percent: -10.0))"#,
+            ),
+            (
+                "upgrade.atk_percent",
+                r#"upgrade: Some((atk_percent: -1.0))"#,
+            ),
+            (
+                "upgrade.def_percent",
+                r#"upgrade: Some((def_percent: -0.5))"#,
+            ),
+            ("declares no effect", r#"upgrade: Some(())"#),
+            (
+                "declares no effect",
+                r#"upgrade: Some((hp_percent: 0.0, zone_bump: false))"#,
+            ),
+        ] {
+            let (db, warnings) =
+                load_fixture(&[("bad.ron", &format!(r#"(id: "bad", name: "Bad", {ron})"#))]);
+            assert_eq!(db.all().count(), 0, "{field}: the whole file is refused");
+            assert!(
+                warnings.iter().any(|w| w.contains(field)),
+                "{field}: {warnings:?}"
+            );
+        }
     }
 
     /// A non-finite drop chance would reach `random_bool` and panic the RNG,

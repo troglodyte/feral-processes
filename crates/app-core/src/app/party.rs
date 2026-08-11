@@ -217,16 +217,27 @@ impl App {
                 Ok(()) => self.status_line = None,
                 Err(e) => self.status_line = Some(e),
             }
-            // Spending the last copy empties this page; there is nothing
-            // left to choose, so back out rather than leaving the player on
-            // a blank screen to press Esc on.
-            if self
+            let left = self
                 .game
                 .as_ref()
-                .is_some_and(|g| g.companion_upgrades().is_empty())
-            {
+                .map(|g| g.companion_upgrades().len())
+                .unwrap_or(0);
+            if left == 0 {
+                // Nothing left to pick anywhere in the flow. Backing out one
+                // page looks safe and is not: the program picker is still
+                // fully populated, and every row on it opens this page with
+                // no rows on it — the blank screen backing out was meant to
+                // avoid.
                 self.pending_refactor_target = None;
-                self.mode = Mode::Refactor;
+                self.close_screen();
+            } else {
+                // The list just shrank under the highlight. `selected_index`
+                // resolves Enter to `menu_selected.min(len - 1)` and the mode
+                // has not changed, so `handle_key`'s own reset never fires —
+                // a highlight left past the end means the next Enter spends a
+                // permanent, irreversible upgrade the player was not looking
+                // at. `handle_trade_key` clamps for the same reason.
+                self.menu_selected = self.menu_selected.min(left - 1);
             }
         }
     }

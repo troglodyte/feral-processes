@@ -76,7 +76,7 @@ BANDS = [
     (1, 2, "printable", "a base can make it out of nothing"),
     (3, 8, "scavenged", "salvage and intermediates"),
     (12, 16, "standard", "the craftable working set"),
-    (20, 60, "researched", "needs a node and a bench"),
+    (20, 60, "researched", "a node and a bench, or a rare drop"),
     (80, 120, "premium", "portal_fragment gear"),
 ]
 

@@ -1143,6 +1143,17 @@ pub const MINING_SUCCESS_PER_LEVEL: f64 = 0.1;
 /// few upgrades.
 pub const MINING_SUCCESS_PER_INT: f64 = 0.02;
 
+/// What one point of `SpeciesDef::base_speed` **either side of**
+/// `DEFAULT_BASE_SPEED` is worth on the length of a work cycle. The shipped
+/// roster spans 6 (Construct) to 14 (Sprite), so a cycle ranges 1.2x to
+/// 0.8x the machine's own rate — a Mining Node's 10 ticks becomes 12 or 8,
+/// and a Fabricator's 30 becomes 36 or 24.
+///
+/// Sized like `MINING_SUCCESS_PER_INT`: enough that swapping the posted
+/// program is visible on one screen, small enough that upgrading the
+/// machine still beats re-casting the roster.
+pub const WORK_TICKS_PER_SPEED: f64 = 0.05;
+
 /// Extra units a worked node pays per zone below the current one, on top of
 /// its upgrade tier — see `systems::node_payout`.
 ///

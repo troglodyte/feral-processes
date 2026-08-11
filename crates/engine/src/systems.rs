@@ -17,8 +17,9 @@ use crate::resources::{GameRng, MessageKind, MessageLog, ZoneLevel};
 use crate::species::SpeciesDb;
 use crate::structures::StructureDb;
 use crate::tuning::{
-    DEFAULT_BASE_INT, KEEN_SCAVENGER_BONUS_PER_LEVEL, MINING_SUCCESS_BASE, MINING_SUCCESS_PER_INT,
-    MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS,
+    DEFAULT_BASE_INT, DEFAULT_BASE_SPEED, KEEN_SCAVENGER_BONUS_PER_LEVEL, MINING_SUCCESS_BASE,
+    MINING_SUCCESS_PER_INT, MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS,
+    WORK_TICKS_PER_SPEED,
 };
 use crate::tuning::{
     FATIGUE_REGEN_PER_TICK, HUNGER_DECAY_PER_TICK, WORK_XP_LEVEL_CAP, WORK_XP_PER_CYCLE,
@@ -154,6 +155,24 @@ pub(crate) fn mining_success_chance(level: u32, keen_scavenger_level: u32, base_
         + keen_scavenger_level as f64 * KEEN_SCAVENGER_BONUS_PER_LEVEL
         + (base_int - DEFAULT_BASE_INT) as f64 * MINING_SUCCESS_PER_INT)
         .clamp(0.0, 1.0)
+}
+
+/// How many ticks one work cycle costs a worker of `speed` at a machine
+/// whose def rates it at `base_ticks`.
+///
+/// Read as a **deviation from `DEFAULT_BASE_SPEED`**, exactly like
+/// `base_int`'s term in `mining_success_chance` above. A species at the
+/// baseline — and the player, who has no `Creature` and so takes the
+/// baseline from `Game::species_base_speed` — gets `base_ticks` back
+/// unchanged. That is what keeps a machine's shipped `ticks_per_unit`
+/// meaning what it says, and what puts pressure on the posting in both
+/// directions: a quick program beats working the node yourself, and a slow
+/// one is worse than rolling your sleeves up.
+pub(crate) fn work_ticks_at_speed(base_ticks: u32, speed: i32) -> u32 {
+    let scale = 1.0 + (DEFAULT_BASE_SPEED - speed) as f64 * WORK_TICKS_PER_SPEED;
+    // Floored at one cycle per tick however fast the species: a modded
+    // `base_speed: 200` scales straight past zero into negative.
+    (base_ticks as f64 * scale).round().max(1.0) as u32
 }
 
 /// The two modifiers on a gather cycle's reliability roll. Bundled rather
@@ -1214,6 +1233,39 @@ mod tests {
             0.0,
             "nor below an impossibility, which would panic the roll"
         );
+    }
+
+    #[test]
+    fn a_baseline_worker_works_at_exactly_the_machines_own_rate() {
+        // The whole moddability contract: a species file with no `base_speed`,
+        // and the player (who has no species at all), must reproduce the def's
+        // number rather than merely land near it.
+        for base in [1, 3, 6, 8, 10, 12, 20, 30] {
+            assert_eq!(
+                work_ticks_at_speed(base, DEFAULT_BASE_SPEED),
+                base,
+                "a worker at the roster baseline must cost exactly the def's rate"
+            );
+        }
+    }
+
+    #[test]
+    fn a_faster_species_needs_fewer_ticks_and_a_slower_one_more() {
+        // The shipped extremes — construct 6, sprite 14 — against a Mining
+        // Node's 10 and a Fabricator's 30.
+        assert_eq!(work_ticks_at_speed(10, 14), 8);
+        assert_eq!(work_ticks_at_speed(10, 6), 12);
+        assert_eq!(work_ticks_at_speed(30, 14), 24);
+        assert_eq!(work_ticks_at_speed(30, 6), 36);
+    }
+
+    #[test]
+    fn an_absurd_modded_speed_still_costs_at_least_one_tick() {
+        // A `base_speed: 200` mod scales the multiplier straight past zero and
+        // negative. Without the floor that is a machine producing on every tick
+        // forever, which is also what a `required: 0` would do.
+        assert_eq!(work_ticks_at_speed(10, 200), 1);
+        assert_eq!(work_ticks_at_speed(1, 14), 1);
     }
 
     #[test]

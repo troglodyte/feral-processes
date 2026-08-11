@@ -6,12 +6,12 @@ edition.workspace = true
 # would be ambiguous without this. The game is what you run; the tool is asked for by
 # name. Set here rather than as a workspace `default-members` because that
 # would also narrow a bare `cargo test` to this crate, whose only tests
-# cover the two dev tools in `[lib]` — the suite would report green having
+# cover the dev tools in `[lib]` — the suite would report green having
 # run nothing about the game itself.
 default-run = "feral-processes"
 
-# Exists only to share `dev_template` between the two bins and give it
-# somewhere unit-testable to live. See `src/lib.rs`.
+# Exists only to share `dev_template` and `tuner` between the bins and give
+# them somewhere unit-testable to live. See `src/lib.rs`.
 [lib]
 name = "feral_processes"
 path = "src/lib.rs"
@@ -32,13 +32,21 @@ path = "src/bin/arena.rs"
 name = "train"
 path = "src/bin/train.rs"
 
+[[bin]]
+name = "tuner"
+path = "src/bin/tuner.rs"
+
 [dependencies]
 feral-processes-app-core = { workspace = true }
 feral-processes-engine = { workspace = true }
 feral-processes-gui = { workspace = true }
-# Already in the lock file at this exact version via the engine, so this
-# grows the dependency *graph* by nothing — it is the CEM trainer's source
-# of randomness. `rand_distr` is deliberately not here for the one Gaussian
-# it would provide; `cem::standard_normal` is three lines of Box-Muller.
+# Already in the lock file at these exact versions via the engine, so these
+# grow the dependency *graph* by nothing. `rand` is the CEM trainer's source
+# of randomness and the seeded stream `tuner` perturbs a roster from;
+# `rand_distr` is deliberately not here for the one Gaussian it would
+# provide, since `cem::standard_normal` is three lines of Box-Muller. `ron`
+# and `serde` are how `tuner` reads its objective, at the engine's versions
+# so the two halves of a scenario cannot parse differently.
 rand = "0.10.2"
 ron = "0.12.2"
+serde = { version = "1.0.228", features = ["derive"] }

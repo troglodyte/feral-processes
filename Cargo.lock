@@ -2400,6 +2400,7 @@ dependencies = [
  "feral-processes-gui",
  "rand 0.10.2",
  "ron",
+ "serde",
 ]
 
 [[package]]

@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use feral_processes::dev_template;
-use feral_processes_engine::arena::{self, PlayerSource, Report, Scenario};
+use feral_processes_engine::arena::{self, Report, Scenario};
 
 const USAGE: &str = "\
 usage:
@@ -68,7 +68,7 @@ fn parse_args(args: &[&str]) -> Result<Command, String> {
 
 fn run(scenario_path: &Path, out: &Path) -> Result<(), String> {
     let mut scenario = Scenario::load(scenario_path)?;
-    resolve_template(&mut scenario)?;
+    dev_template::resolve_scenario(&mut scenario)?;
 
     let (report, _) = arena::run(
         &scenario,
@@ -84,21 +84,6 @@ fn run(scenario_path: &Path, out: &Path) -> Result<(), String> {
 
     std::fs::write(out, report.to_ron()?).map_err(|e| format!("{}: {e}", out.display()))?;
     eprintln!("wrote {}", out.display());
-    Ok(())
-}
-
-/// The one thing this bin can do that `arena::run` cannot: turn a template
-/// name into a save on disk. `dev_template` lives here, not in the engine.
-///
-/// Rewriting the `Scenario` stays here rather than in `dev_template`:
-/// mutating a scenario is this bin's business, and the game's arena screen
-/// deliberately does *not* do it — a saved scenario must keep saying
-/// `Template(name)` rather than a path into `saves/`.
-fn resolve_template(scenario: &mut Scenario) -> Result<(), String> {
-    let PlayerSource::Template(name) = &scenario.player else {
-        return Ok(());
-    };
-    scenario.player = PlayerSource::Save(dev_template::resolve(name)?);
     Ok(())
 }
 

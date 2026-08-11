@@ -166,6 +166,29 @@ pub fn resolve(name: &str) -> Result<PathBuf, String> {
     Ok(path)
 }
 
+/// Rewrites a scenario's `Template(name)` player into the `Save(path)` the
+/// engine can load. The one thing `arena::run` cannot do for itself, since
+/// `dev_template` lives in the launcher and the engine cannot see it.
+///
+/// This lived in the `arena` bin, on the stated reasoning that mutating a
+/// scenario was that bin's business. `tuner` is a second bin that must do
+/// exactly this before it can measure a scenario, so the reasoning no
+/// longer holds and the alternative is the copy this repo forbids.
+///
+/// Still deliberately not done by the game's arena screen: a scenario saved
+/// from there has to keep saying `Template(name)` rather than a path into
+/// `saves/`, which is a regenerated working copy and expendable.
+pub fn resolve_scenario(
+    scenario: &mut feral_processes_engine::arena::Scenario,
+) -> Result<(), String> {
+    use feral_processes_engine::arena::PlayerSource;
+    let PlayerSource::Template(name) = &scenario.player else {
+        return Ok(());
+    };
+    scenario.player = PlayerSource::Save(resolve(name)?);
+    Ok(())
+}
+
 /// Records an existing save as the template `name`, overwriting one of that
 /// name if it exists. The save is read through `load_from_file`, so a `.bin`
 /// from an older format is refused here rather than being frozen into a

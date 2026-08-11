@@ -50,3 +50,6 @@ AGENTS.md
 .superpowers/
 .claude/settings.local.json
 repo-hotspots.md
+
+# The tuner writes proposals here; a proposal is a measurement, not source.
+/dev-tuning/out/

@@ -577,6 +577,39 @@ fn the_armoury_chain_produces_a_hardened_shell() {
     );
 }
 
+/// The refactor chain end to end. The census tests hold its *shape* — one
+/// ingredient per recipe, the bench built out of its own feeder's product,
+/// nobody assembling anyone else's — and none of them runs a tick, so none
+/// of them would notice a chain that is shaped right and produces nothing.
+///
+/// ```text
+///   $ A X      $ mining_node  A annealing_node  X refactor_bench
+/// ```
+#[test]
+fn the_refactor_chain_produces_a_recompile_kernel() {
+    let mut game = Game::new(1108, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    let bench = staffed(&mut game, "refactor_bench", 42, 40);
+    let annealer = staffed(&mut game, "annealing_node", 41, 40);
+    // Pre-stocked rather than mined, for the reason the armoury chain above
+    // is: this measures the chain, not `mining_success_chance`'s roll.
+    stocked(&mut game, "mining_node", 40, 40, ids::CORE_FRAGMENT, 400);
+
+    for _ in 0..400 {
+        game.tick();
+    }
+
+    assert!(
+        output_of(&game, annealer, "annealed_core") > 0
+            || input_of(&game, bench, "annealed_core") > 0,
+        "the annealing node turned fragments into cores"
+    );
+    assert!(
+        output_of(&game, bench, "recompile_kernel") > 0,
+        "and the bench built kernels out of them"
+    );
+}
+
 /// The module chain, which is the one that proves the two gear classes draw
 /// on *different* taps: this one runs off the Log Scraper's Raw Trace through
 /// the Transcriber, and never touches a Mining Node.

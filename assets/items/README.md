@@ -5,8 +5,8 @@ next time a game session starts — no recompiling required. A malformed file
 is skipped with a warning logged in-game rather than crashing startup. That
 includes a file whose numbers aren't finite: RON accepts bare `NaN` and
 `inf` literals, and they'd otherwise slip past every clamp downstream, so
-any non-finite `taming_potency`, `consume.power`, or `consume.fatigue`
-disqualifies the whole file.
+any non-finite `taming_potency`, `consume.power`, `consume.fatigue`, or
+`upgrade` percentage disqualifies the whole file.
 
 ## Schema
 
@@ -225,6 +225,39 @@ disqualifies the whole file.
     // cache pays depth-scaled Credits and rolls for a Portal Fragment, from
     // constants in `tuning.rs`.
     cache_drop: Some(0.08),
+
+    // Optional; can be left out entirely (defaults to no upgrade). What this
+    // item does to one *tamed program* when applied from the party menu's
+    // "Refactor a program" screen. It upgrades a companion permanently; it
+    // never touches the player.
+    //
+    // The three percentages raise that stat by a percentage of its current
+    // value, rounded, with a floor of +1 — so a +5% ATK buff still moves a
+    // 3-ATK Drone, which is exactly the companion the feature exists to
+    // rescue. Percentages rather than flat amounts because a companion's
+    // numbers keep growing across breaches, and because they *commute* with
+    // `zone_bump`: buying a buff now and bumping later lands on the same
+    // stats as the reverse, so there is no ordering to exploit.
+    //
+    // `zone_bump: true` raises the program one zone tier, multiplying HP, ATK
+    // and DEF by the game's per-zone growth. It is refused once the program
+    // has caught up with the player's own zone, which is what bounds it.
+    //
+    // The two are independent and an item may declare both. An item with any
+    // non-zero percentage spends one of the companion's bounded upgrade slots
+    // (`MAX_COMPANION_REFACTORS` in `tuning.rs`); a pure `zone_bump` spends
+    // none, because a player should never have to burn slots just staying
+    // current with the zone they are standing in.
+    //
+    // Neither applies retroactively to a program's current HP as a heal — a
+    // refactor raises current HP by exactly the amount it raised the maximum,
+    // so it can't be used as a field patch mid-run.
+    upgrade: Some((
+        hp_percent: 5.0,
+        atk_percent: 0.0,
+        def_percent: 0.0,
+        zone_bump: false,
+    )),
 
 )
 ```

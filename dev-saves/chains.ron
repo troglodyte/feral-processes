@@ -408,6 +408,8 @@
             growth_roll: 1.0,
             fusions: 0,
             routines: [
+                "redundancy_sync",
+                "rollback_v1",
                 "priority_boost",
             ],
             field_buffs: [],
@@ -437,6 +439,8 @@
             growth_roll: 1.0,
             fusions: 0,
             routines: [
+                "redundancy_sync",
+                "rollback_v1",
                 "priority_boost",
             ],
             field_buffs: [],
@@ -466,6 +470,8 @@
             growth_roll: 1.0,
             fusions: 0,
             routines: [
+                "skim_group",
+                "skim_v3",
                 "priority_boost",
             ],
             field_buffs: [],
@@ -495,6 +501,8 @@
             growth_roll: 1.0,
             fusions: 0,
             routines: [
+                "skim_group",
+                "skim_v3",
                 "priority_boost",
             ],
             field_buffs: [],
@@ -524,6 +532,8 @@
             growth_roll: 1.0,
             fusions: 0,
             routines: [
+                "overclock_array",
+                "sandbox",
                 "priority_boost",
             ],
             field_buffs: [],
@@ -553,6 +563,8 @@
             growth_roll: 1.0,
             fusions: 0,
             routines: [
+                "overclock_array",
+                "sandbox",
                 "priority_boost",
             ],
             field_buffs: [],

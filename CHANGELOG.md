@@ -27,6 +27,69 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.7.0
+
+**Breaking: existing saves will not load.** `SAVE_FORMAT_VERSION` goes 26 →
+27 because every program now records the upgrades spent on it. To carry a
+game across, dump it to RON *before* installing this version and pack it
+back afterwards — RON is field-named, so the new fields fill themselves in:
+
+```sh
+cargo run --bin savetool -- dump saves/save.bin s.ron   # on the old build
+cargo run --bin savetool -- pack s.ron saves/save.bin   # on the new one
+```
+
+### Refactoring: your programs can keep up now
+
+A tamed program's stats were baked once, at capture, and never rescaled.
+Enemies double every zone. So a Scrapper caught in the opening ring was
+permanently anchored to zone-1 numbers, and the only answers were to throw it
+away for a fresh catch or to fuse it — both of which are ways of *replacing*
+a program rather than decisions about the one you have. Nothing on screen
+even said it was happening.
+
+There are two permanent, player-driven upgrade tracks now, both off a new
+production line: Mining Node → **Annealing Node** → **Refactor Bench**, behind
+one research node. Apply them from the party menu; it works underground, which
+is where you are most likely to notice a companion falling behind.
+
+- **Recompile Kernel** — rebuilds a program for the zone you are standing in,
+  doubling its stats. Refused once it has caught up with you, which is what
+  bounds it, and it costs no upgrade slot: nobody should have to burn a
+  permanent slot merely staying current. The bench assembles these on a timer,
+  because it is the thing you want again after every breach.
+- **Six percentage buffs**, one per stat — `+5%` crafted at the bench, `+12%`
+  off a boss or, rarely, off a mid-tier program. Each spends one of a
+  program's five permanent upgrade slots, so which stat gets them is the
+  choice.
+
+Percentages rather than flat amounts, because a companion's numbers keep
+growing and a `+15 HP` buff means nothing at 500 HP. They also commute with
+the zone rebuild, so a buff bought in zone 1 is worth as much three breaches
+later and there is no ordering to exploit. Small stats floor at `+1`: `+5%` of
+a Drone's 3 ATK would otherwise round back to 3 and do nothing to exactly the
+programs the feature exists to rescue.
+
+**The manifest now tells you when a program is behind**, which it never did —
+a zone tag reading "1" means nothing without the zone you are standing in
+printed beside it.
+
+**Traders pay for what a program is, not what you spent on it.** A trader
+offers a tenth of a program's power, so upgrading one and selling it would
+have turned printable salvage into Credits — the one currency that survives a
+breach — at a rate that compounded with every rebuild. Bought tiers are
+divided back out of the sale. Tiers *earned* by taming something deep are
+untouched: beating it is what the game charges for that.
+
+### Also
+
+- Fusing two programs keeps the higher zone tier and the higher upgrade count
+  rather than resetting both, which would otherwise have laundered a maxed-out
+  program back into a fresh one.
+- Item files may now declare an `upgrade` block; see
+  `assets/items/README.md`. A negative percentage or one that declares no
+  effect is refused at load with the rest of the malformed files.
+
 ## 0.6.0
 
 **Breaking: existing saves will not load.** `SAVE_FORMAT_VERSION` goes 25 →

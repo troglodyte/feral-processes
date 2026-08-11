@@ -977,6 +977,11 @@ pub struct ProgramManifest {
     pub decompile_chance: Option<f32>,
     pub growth_multiplier: f32,
     pub base_speed: i32,
+    /// Drawn as "Analysis" — `base_int` is the field name, not the word the
+    /// player reads. Shown beside `base_speed` in the manifest's WORK box
+    /// rather than in SPECIES, because both are about what this program is
+    /// like to *post* somewhere.
+    pub base_int: i32,
     /// Categories this species is not neutral in, in `AffinityKind` order.
     /// Empty for a species that declares nothing, so the screen omits the
     /// section entirely rather than drawing five rows of 1.00.

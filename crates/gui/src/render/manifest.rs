@@ -462,10 +462,25 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
         ));
     }
     species.push(stat("Growth", format!("{:.2}x", p.growth_multiplier)));
-    species.push(stat("Speed", p.base_speed.to_string()));
     sections.push(Section {
         title: "SPECIES",
         rows: section_rows(species),
+        full_width: false,
+    });
+
+    // What this program is like to *post* somewhere, as opposed to what it
+    // is. Its own box rather than two more SPECIES rows because SPECIES was
+    // already sitting on `MAX_SECTION_ROWS`, and a row past that cap does
+    // not fail — it truncates to "+N more" and the reading silently
+    // disappears. Speed moved across rather than being duplicated: it means
+    // initiative in a fight and pace at a machine, and one number said twice
+    // on one page reads as two different numbers.
+    sections.push(Section {
+        title: "WORK",
+        rows: section_rows(vec![
+            stat("Speed", p.base_speed.to_string()),
+            stat("Analysis", p.base_int.to_string()),
+        ]),
         full_width: false,
     });
 
@@ -560,6 +575,92 @@ mod tests {
     use crate::paint::with_painter;
     use crate::render::manifest_layout::manifest_layout;
     use crate::text::ui_metrics;
+
+    /// A `ProgramManifest` for a species that declares nothing optional, so
+    /// the only boxes `program_sections` emits are the unconditional ones.
+    /// Hand-built rather than pulled off a real creature because what is
+    /// under test is which box a *row* lands in, and a shipped species would
+    /// tie that to whatever the roster happens to say today.
+    fn plain_program(base_speed: i32, base_int: i32) -> ProgramManifest {
+        ProgramManifest {
+            species_name: Some("Testmon".to_string()),
+            is_hostile: false,
+            is_tamed: true,
+            is_companion: true,
+            is_boss: false,
+            activity: None,
+            potential: None,
+            fusions: 0,
+            max_fusions: 3,
+            refactors: 0,
+            max_refactors: 3,
+            zone_tier: 1,
+            player_zone: 1,
+            habitats: vec![],
+            moves: vec![],
+            work_resource: None,
+            taming_difficulty: 0.5,
+            decompile_chance: None,
+            growth_multiplier: 1.0,
+            base_speed,
+            base_int,
+            affinities: vec![],
+        }
+    }
+
+    /// Speed belongs in WORK, not SPECIES, and the reason is a row cap rather
+    /// than taxonomy: SPECIES sat at exactly `MAX_SECTION_ROWS`, where a
+    /// seventh row does not fail anything — it silently truncates to "+N
+    /// more" and the data just vanishes. Moving Speed out buys the headroom
+    /// that Analysis then spends, and leaves some for the base-job row.
+    #[test]
+    fn work_rows_live_in_their_own_box_and_species_drops_below_its_cap() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(
+            11,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            assets,
+        )
+        .expect("shipped assets load");
+
+        let mut sections = Vec::new();
+        program_sections(&mut sections, &game, &plain_program(14, 12));
+
+        let labels = |title: &str| -> Vec<String> {
+            sections
+                .iter()
+                .find(|s| s.title == title)
+                .unwrap_or_else(|| panic!("no {title} box was emitted"))
+                .rows
+                .iter()
+                .filter_map(|r| match r {
+                    SectionRow::Stat(label, _) => Some(label.clone()),
+                    SectionRow::Note(_) => None,
+                })
+                .collect()
+        };
+
+        let work = labels("WORK");
+        assert!(
+            work.iter().any(|l| l == "Speed"),
+            "Speed moves into WORK: {work:?}"
+        );
+        assert!(
+            work.iter().any(|l| l == "Analysis"),
+            "base_int is shown as Analysis: {work:?}"
+        );
+
+        let species = labels("SPECIES");
+        assert!(
+            !species.iter().any(|l| l == "Speed"),
+            "Speed must not be left behind in SPECIES too: {species:?}"
+        );
+        assert!(
+            species.len() <= MAX_SECTION_ROWS - 1,
+            "SPECIES has to come off its cap, or the next row added to it \
+             vanishes into '+N more': {species:?}"
+        );
+    }
 
     /// The header's tag line is one unclamped `painter.ui` call, so a run of
     /// tags wider than the header rect runs off it rather than wrapping —

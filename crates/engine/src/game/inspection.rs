@@ -687,6 +687,7 @@ impl Game {
                 }),
                 growth_multiplier: species.growth_multiplier,
                 base_speed: species.base_speed,
+                base_int: species.base_int,
                 affinities: species.affinities.non_neutral(),
             }),
         })

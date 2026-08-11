@@ -333,7 +333,8 @@ mod tests {
             section("COMBAT", 3, false),
             section("POTENTIAL", 5, false),
             section("AFFINITIES", MAX_AFFINITY_ROWS, false),
-            section("SPECIES", 6, false),
+            section("SPECIES", 5, false),
+            section("WORK", 2, false),
             section("ROUTINES", 6, false),
             section("MOVES", MAX_BAND_ROWS, true),
         ]

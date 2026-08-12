@@ -27,6 +27,56 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.0
+
+### Your programs can wear your gear
+
+Every program you own now wears the same three slots you do — Weapon, Armor
+and Module — out of the same cargo. Press `E` on the roster (`p`, then
+Companions) and the program under the highlight gets a page of its own three
+slots; picking one opens the replacement picker you already know, showing
+what each swap would change for *that program*.
+
+A copy is interchangeable. What comes off your back goes on a program's, and
+comes back off again into your cargo — nothing is bound to a wearer and
+nothing is consumed by being worn. That is the point: you have been hoarding
+every second copy of every weapon you ever found, and the programs fighting
+beside you have been going in bare while you outgrew them.
+
+Gear always comes home. Sell a program, extract its routine, fuse it away,
+lose it in a fight or lose it defending the base, and whatever it was wearing
+is back in your cargo. A trader appraises the program and never the gear it
+happens to be holding, so kitting one out before selling it neither raises
+nor lowers what you are paid.
+
+Two things worth knowing before you spend anything:
+
+- A **Decompiler bonus does nothing on a program.** Only you ever attempt a
+  capture. Ten shipped items carry the stat, they still equip, and the slot
+  page says so at the top rather than leaving you to work it out.
+- A refactor still upgrades the program and only the program. Whatever it is
+  wearing is lifted off for the arithmetic and put straight back, so a
+  Recompile Kernel cannot quietly bake a borrowed weapon into a program's
+  permanent stat block.
+
+### Saves from 0.7.x will not load
+
+The save format moves to v28, because a program's loadout is new state that
+has to be written per creature. **Existing saves stop loading** — the game
+says so plainly and names the version rather than failing strangely.
+
+If you want to carry a run across, dump it to RON with a 0.7.x build first,
+then pack it with this one:
+
+```sh
+cargo run --bin savetool -- dump saves/<your-save>.bin save.ron   # on 0.7.x
+cargo run --bin savetool -- pack save.ron saves/<your-save>.bin   # on 0.8.0
+```
+
+The dump has no loadout in it and every program comes through wearing
+nothing, which is correct — none of them could have been wearing anything.
+The `dev-saves/` templates need no migration at all for the same reason.
+
 ## 0.7.7
 
 ### A decompile that fails still gets you somewhere

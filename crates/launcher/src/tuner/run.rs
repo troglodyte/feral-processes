@@ -7,8 +7,39 @@
 use super::objective::Objective;
 use super::roster::Candidate;
 use super::{constraints, eval, score, search, sides};
-use std::collections::BTreeSet;
+use feral_processes_engine::balance_sim::ReachRuleVerdict;
+use feral_processes_engine::species::AptitudeFault;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+
+/// The two censuses too expensive to reject a candidate by, run once on the
+/// winner.
+///
+/// Neither is a rejection. The reach rule runs a level search per call and
+/// would be paid on every candidate; the aptitude spread is a property of
+/// the roster's whole distribution rather than of any one move. Both are
+/// *reported* instead, because by the time these run a human is reading a
+/// diff, and the rule about no silent caps applies to a proposal as much as
+/// to a search.
+pub struct PostCheck {
+    pub reach: ReachRuleVerdict,
+    pub aptitude: Vec<AptitudeFault>,
+}
+
+impl PostCheck {
+    /// Measures the roster currently written into `workspace`.
+    fn measure(workspace: &eval::Workspace) -> Result<PostCheck, String> {
+        let db = workspace.species_db()?;
+        Ok(PostCheck {
+            reach: feral_processes_engine::balance_sim::reach_rule_verdict(&db),
+            aptitude: feral_processes_engine::species::extraction_aptitude_faults(db.all()),
+        })
+    }
+
+    pub fn holds(&self) -> bool {
+        self.reach.holds() && self.aptitude.is_empty()
+    }
+}
 
 pub struct Proposal {
     pub candidate: Candidate,
@@ -28,6 +59,16 @@ pub struct Proposal {
     /// searched — a proposal that leaves a species alone and a proposal that
     /// was never allowed to touch it read identically otherwise.
     pub frozen: BTreeSet<String>,
+    /// How many candidates each constraint threw out, by the rejection's own
+    /// wording.
+    ///
+    /// A bare count says a search was turned away without saying from what,
+    /// and the two readings need different fixes: bounds set wrong is a
+    /// config edit, while a legal move set thinner than the search space is
+    /// a reason to narrow `perturb` so it stops proposing the illegal.
+    pub rejections: BTreeMap<String, u32>,
+    /// The expensive censuses, run on the winner only.
+    pub post_check: PostCheck,
 }
 
 impl Proposal {
@@ -72,14 +113,21 @@ pub fn run(
     }
 
     let mut evaluated = 0u32;
+    let mut rejections: BTreeMap<String, u32> = BTreeMap::new();
     let outcome = {
         let workspace = &workspace;
+        let rejections = &mut rejections;
         search::search(baseline.clone(), objective, |candidate| {
             workspace.apply(candidate).ok()?;
             let defs = workspace.species_defs().ok()?;
             // Rejected before any fight runs, which is both the correct
-            // reading and the cheap one.
-            constraints::check(&defs).ok()?;
+            // reading and the cheap one. The reason is tallied here rather
+            // than inside `search`, which sees only `None` — keeping the
+            // search generic over what an evaluation means.
+            if let Err(rejection) = constraints::check(&defs) {
+                *rejections.entry(rejection_label(&rejection)).or_default() += 1;
+                return None;
+            }
             let summaries = eval::measure(
                 workspace,
                 &objective.targets,
@@ -99,6 +147,9 @@ pub fn run(
         "search done: {} fought, {} rejected, error {:.4} -> {:.4}",
         outcome.evaluated, outcome.rejected, outcome.baseline_error, outcome.best_error
     ));
+    for (reason, count) in &rejections {
+        log(&format!("  {count} rejected: {reason}"));
+    }
 
     let holdout_seed = holdout_seed(objective);
     workspace.apply(&baseline)?;
@@ -115,6 +166,9 @@ pub fn run(
         objective.holdout_seeds,
         holdout_seed,
     )?;
+    // With the winner still installed, so this measures the proposal rather
+    // than whatever the search last wrote.
+    let post_check = PostCheck::measure(&workspace)?;
 
     Ok(Proposal {
         candidate: outcome.best.clone(),
@@ -124,8 +178,21 @@ pub fn run(
         holdout_error_before: score::total_error(&objective.targets, &before)?,
         holdout_error_after: score::total_error(&objective.targets, &after)?,
         frozen,
+        rejections,
+        post_check,
         outcome,
     })
+}
+
+/// A rejection's wording, without the particular species or numbers that
+/// tripped it — so a tally counts *rules*, not individual candidates.
+fn rejection_label(rejection: &constraints::Rejection) -> String {
+    match rejection {
+        constraints::Rejection::OffClassShape { .. } => {
+            "a species' stat block no longer agrees with its class".into()
+        }
+        other => other.to_string(),
+    }
 }
 
 /// The seed set every candidate is compared on.
@@ -182,6 +249,21 @@ fn report(objective: &Objective, proposal: &Proposal) -> String {
         proposal.outcome.best_error
     );
 
+    if !proposal.rejections.is_empty() {
+        let _ = writeln!(
+            out,
+            "### Why candidates were rejected\n\n\
+             A search that spends most of its iteration budget being turned away \
+             proposes nothing, and the count alone does not say which fix that calls for \
+             — bounds set wrong is a config edit, a legal move set thinner than the \
+             search space is a reason to narrow `perturb`.\n"
+        );
+        for (reason, count) in &proposal.rejections {
+            let _ = writeln!(out, "- **{count}x** {reason}");
+        }
+        let _ = writeln!(out);
+    }
+
     let _ = writeln!(
         out,
         "## Held-out seeds\n\nSeeds the search never saw. A proposal that \
@@ -217,6 +299,42 @@ fn report(objective: &Objective, proposal: &Proposal) -> String {
         "\n## Fields moved\n\n```\n{}```\n",
         proposal.candidate.summary(&proposal.baseline)
     );
+
+    let _ = writeln!(
+        out,
+        "## Censuses too expensive to reject by\n\n\
+         Run once, on the winner. A proposal that breaks one of these is **not** \
+         rejected — it is reported, because by now a human is reading a diff and \
+         deciding. Both are the shipped suite's own checks, called rather than \
+         restated.\n"
+    );
+    let _ = writeln!(
+        out,
+        "- Reach rule: {} — **{}**",
+        proposal.post_check.reach,
+        if proposal.post_check.reach.holds() {
+            "holds"
+        } else {
+            "BROKEN: a full pack is no easier than the same enemies all in melee range, \
+             so `ENGAGED_GROUPS` is buying nothing"
+        }
+    );
+    if proposal.post_check.aptitude.is_empty() {
+        let _ = writeln!(
+            out,
+            "- Extraction aptitude still cuts across the difficulty ladder — **holds**\n"
+        );
+    } else {
+        let _ = writeln!(
+            out,
+            "- Extraction aptitude has collapsed back into the difficulty ladder — \
+             **BROKEN**:"
+        );
+        for fault in &proposal.post_check.aptitude {
+            let _ = writeln!(out, "  - {fault}");
+        }
+        let _ = writeln!(out);
+    }
 
     if !proposal.frozen.is_empty() {
         let _ = writeln!(
@@ -314,6 +432,36 @@ mod tests {
         assert!(
             proposal.candidate.species.contains_key("rootkit"),
             "the opponent must still be movable, or the freeze froze the fight"
+        );
+    }
+
+    /// The two censuses the search cannot afford to reject by still have to
+    /// reach the person applying the proposal. A silent pass and a check
+    /// that never ran read identically in a report, which is the whole
+    /// reason this asserts on the rendered text rather than on `PostCheck`.
+    #[test]
+    fn the_report_carries_the_censuses_the_search_could_not_afford() {
+        let objective = tiny_objective();
+        let proposal = run(&repo("assets"), &objective, &mut |_| {}).expect("tuner run");
+        let text = report(&objective, &proposal);
+
+        assert!(
+            proposal.post_check.holds(),
+            "the shipped roster must pass both post-checks: reach {}, aptitude {:?}",
+            proposal.post_check.reach,
+            proposal.post_check.aptitude
+        );
+        let section = text
+            .split_once("## Censuses too expensive to reject by")
+            .expect("report has a post-check section")
+            .1;
+        assert!(
+            section.contains("Reach rule:") && section.contains("with the reach rule"),
+            "the reach rule's own numbers must be in the report, not just a verdict:\n{section}"
+        );
+        assert!(
+            section.contains("Extraction aptitude"),
+            "the aptitude census is missing from:\n{section}"
         );
     }
 

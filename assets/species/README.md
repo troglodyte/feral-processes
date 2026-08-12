@@ -374,6 +374,15 @@ Three species fill each class, one per growth band. Speed is the fourth axis
 and is not only initiative — it also paces the machine a posted program works
 at, so a Bastion is a slow worker and a Saboteur a quick one.
 
+Because the budget is a *step function*, a `growth_multiplier` between those
+three rungs derives a whole stat block from a number nobody chose. The shipped
+roster therefore only ever uses 1.0, 1.25 and 1.5 (bosses sit at 2.0 and are
+outside all of this), and `species::stat_shape_faults` is the one definition
+of that whole rule — read by the census and by the roster tuner. **A mod is
+not refused for breaking any of it**: nothing in `SpeciesDb::load_dir` asks,
+so an off-budget species loads and plays exactly as written. What you lose is
+the guarantee that its role is readable from its numbers.
+
 ### Kits
 
 The third leg, and the one a player actually spends a round on. Every shipped

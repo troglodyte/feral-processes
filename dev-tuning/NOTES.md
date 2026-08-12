@@ -213,7 +213,9 @@ step function (50 / 105 / 140). The tuner's six movable fields are precisely
 the inputs to that formula and it moves them independently, so essentially
 any change it makes to an ordinary species' `base_hp`/`base_atk`/`base_def`/
 `growth_multiplier` is invalid by construction. The censuses are in
-`species.rs`; `constraints.rs` has never known about them.
+`species.rs`; `constraints.rs` had never known about them. **Closed
+2026-08-12** — see the next section for what teaching it cost and what it
+revealed.
 
 **The move that mattered was legal, and alone it beats the whole proposal.**
 `overseer.base_atk 17 -> 11` is the lair guardian, and a boss — which the
@@ -225,6 +227,43 @@ reverted.
 So the legal move set — bosses, `taming_difficulty`, speed within a class's
 band — is not the crippling restriction it looks like. It is where the only
 value in this search was.
+
+## The constraints landed, and the search stopped moving — 2026-08-12
+
+`constraints.rs` now knows the derived stat budget
+(`species::stat_shape_faults`, shipping code the census asserts through), so
+the 13 damaging moves in the run above are unreachable. The measurement that
+matters is what that did to the search:
+
+```
+search done: 21 fought, 40 rejected, error 0.1019 -> 0.1019
+```
+
+**Two thirds of the iteration budget was spent being turned away, and the
+proposal moved nothing at all.** This is exactly the failure the plan
+predicted and the reason it said to measure before narrowing `perturb`: a
+rejecting search whose legal move set is a thin slice of its search space
+proposes nothing, and reports that as a converged run.
+
+Read the two numbers apart, though, because they are not one finding:
+
+- **40 rejected of 61** is a `perturb` problem. It picks one of six fields
+  on one species uniformly, and four of the six are illegal to move
+  independently on any of the 15 ordinary species. Narrowing it — a boss's
+  stats free, `taming_difficulty` free, `base_speed` within its class band,
+  and an ordinary block moved only by *changing the budget and
+  redistributing by class share* — is the fix, and it is a new search
+  operator rather than a tweak.
+- **error 0.1019 -> 0.1019** is not necessarily the same problem. The
+  baseline was 0.2201 in the run above and is 0.1019 now, because
+  `overseer.base_atk 17 -> 11` was applied in between. The shipped roster is
+  already close to the best the *legal* move set can reach, so a search that
+  proposes nothing may be right. 21 legal candidates is too few to tell, and
+  that is the point: the two questions cannot be separated until the search
+  can actually spend its budget.
+
+`report.md` now tallies rejections by rule, so the next run says which of
+these it is without anyone re-deriving it.
 
 ## Two defects found on 2026-08-12, neither fixed
 
@@ -253,13 +292,25 @@ recorded rather than fixed because neither is a tuning question.
 3. ~~Land `fixture-cleanup`~~ — merged and released as `0.5.10`.
 4. ~~Run a search against the re-argued objective~~ — run 2026-08-12. See
    the section below; the one field worth taking from it is applied.
-5. **Unfreeze `scrapper` via coverage.** It is the party in both party
+5. ~~Teach `constraints.rs` the derived stat budget~~ — done 2026-08-12,
+   and it is the safety net either way. It also answered the question it
+   was told to measure: **`perturb` now needs narrowing.**
+6. **Narrow `perturb` to the legal move set.** Two thirds of the last
+   search's budget went on candidates it should never have generated. The
+   shape is in the section above and in
+   `docs/superpowers/plans/2026-08-12-tuner-roster-constraints.md`'s central
+   design question — a boss's stats free, `taming_difficulty` free,
+   `base_speed` within its class band, and an ordinary block moved only by
+   changing the *budget* and redistributing by class share. Until this
+   lands, "the search proposed nothing" is not evidence the roster is
+   already right.
+7. **Unfreeze `scrapper` via coverage.** It is the party in both party
    targets and therefore frozen out of the candidate entirely, which means
    the game's most-fielded species is the one the tool can never tune.
    `README.md`'s two-sided note has the argument; the change is a target
    that fields it as an *opponent*, plus a freeze rule that reads coverage
    rather than `party` alone.
-4. **Phase B (burn / learned enemy tactics)** is still gated on the same
+8. **Phase B (burn / learned enemy tactics)** is still gated on the same
    thing it was gated on at the start: enemies carry at most one routine
    (`roll_wild_routine`, `game/spawning.rs:108`), so there is no per-turn
    decision for a policy to learn. Giving enemies real choices is a

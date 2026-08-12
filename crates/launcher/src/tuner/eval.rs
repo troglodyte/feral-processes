@@ -125,6 +125,29 @@ impl Workspace {
         }
         Ok(defs)
     }
+
+    /// The install as the engine would load it, abilities and all.
+    ///
+    /// Separate from `species_defs` because it is far more expensive —
+    /// `SpeciesDb::load_dir` validates every kit against the ability set —
+    /// and only the post-check on a winning proposal needs it. A constraint
+    /// paid on every candidate must not.
+    pub fn species_db(&self) -> Result<feral_processes_engine::species::SpeciesDb, String> {
+        let (abilities, _) =
+            feral_processes_engine::abilities::AbilityDb::load_dir(&self.dir.join("abilities"))
+                .map_err(|e| format!("cannot load abilities: {e}"))?;
+        let (db, warnings) = feral_processes_engine::species::SpeciesDb::load_dir(
+            &self.dir.join("species"),
+            &abilities,
+        )
+        .map_err(|e| format!("cannot load species: {e}"))?;
+        if !warnings.is_empty() {
+            return Err(format!(
+                "candidate roster does not load cleanly: {warnings:?}"
+            ));
+        }
+        Ok(db)
+    }
 }
 
 static COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);

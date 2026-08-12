@@ -30,6 +30,10 @@ impl App {
             self.begin_rename();
             return;
         }
+        if key == GameKey::Char('E') {
+            self.open_companion_equip();
+            return;
+        }
 
         let Some(game) = &mut self.game else { return };
         let candidates = game.owned_pets();
@@ -100,6 +104,67 @@ impl App {
     /// bound to an uppercase key so it can never collide with
     /// `menu_shortcut`'s digits-then-lowercase scheme. Unlike `W`, this one
     /// is advertised in the roster's help text.
+    /// Opens the highlighted program's three equipment slots.
+    ///
+    /// Handled before `selected_index` and bound to an uppercase key for the
+    /// reason `toggle_wield` gives: uppercase reaches app-core as a distinct
+    /// key, so it can never collide with `menu_shortcut`'s
+    /// digits-then-lowercase scheme however large the roster grows.
+    fn open_companion_equip(&mut self) {
+        let row = self.menu_selected;
+        let Some(game) = &mut self.game else { return };
+        let Some(program) = game.owned_pets().get(row).map(|p| p.entity) else {
+            return;
+        };
+        self.pending_equip_program = Some(program);
+        self.status_line = None;
+        // The roster's highlight indexes a different list from the three
+        // slots, and can sit well past their end.
+        self.menu_selected = 0;
+        self.mode = Mode::CompanionEquip;
+    }
+
+    /// The slot page for `pending_equip_program`: three rows, each opening
+    /// the same `Mode::EquipSwap` picker the inventory uses, with the target
+    /// set so the swap lands on the program rather than the player.
+    pub(crate) fn handle_companion_equip_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.pending_equip_program = None;
+            self.status_line = None;
+            self.mode = Mode::Companion;
+            return;
+        }
+        let Some(program) = self.pending_equip_program else {
+            self.mode = Mode::Companion;
+            return;
+        };
+        let Some(idx) = self.selected_index(key, EquipmentSlot::ALL.len()) else {
+            return;
+        };
+        let slot = EquipmentSlot::ALL[idx];
+        let Some(game) = &mut self.game else { return };
+        let name = game
+            .owned_pets()
+            .into_iter()
+            .find(|p| p.entity == program)
+            .map(|p| p.name)
+            .unwrap_or_else(|| "That program".to_string());
+        // An occupied slot always offers to be emptied, so an empty picker
+        // only arises for a bare slot with nothing in cargo that fits — a
+        // dead end, reported here the way the player's own picker reports it.
+        if equip_swap_rows(game, program, slot).is_empty() {
+            self.status_line = Some(format!(
+                "Nothing in cargo fits {name}'s {} slot.",
+                slot.label()
+            ));
+            return;
+        }
+        self.pending_swap_slot = Some(slot);
+        self.pending_swap_target = Some(program);
+        self.menu_selected = 0;
+        self.mode = Mode::EquipSwap;
+    }
+
     fn begin_rename(&mut self) {
         let row = self.menu_selected;
         let Some(game) = &mut self.game else { return };

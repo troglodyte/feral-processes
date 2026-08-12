@@ -192,11 +192,18 @@ pub struct EquippedItem {
     pub fusion_tier: u32,
 }
 
-/// Player-only: what's currently equipped in each slot. Each slot's
-/// level-scaled stat bonus (see `EquippedItem`, `Game::equipment_of`) is
-/// added directly onto `Stats`/`Decompiler` when equipped and subtracted
-/// back on unequip — mirroring how leveling directly mutates `Stats`
-/// elsewhere, rather than maintaining a separate "base stats" layer.
+/// What's currently equipped in each slot, on the player or on any program
+/// they own — `Game::check_wearer` is the rule. Each slot's level-scaled
+/// stat bonus (see `EquippedItem`, `Game::equipment_of`) is added directly
+/// onto `Stats`/`Decompiler` when equipped and subtracted back on unequip —
+/// mirroring how leveling directly mutates `Stats` elsewhere, rather than
+/// maintaining a separate "base stats" layer.
+///
+/// Inserted on demand by `Game::equip` rather than at every spawn site: its
+/// absence already reads as an empty loadout everywhere it is consulted, so
+/// a program grows one only when it first wears something. Because the bonus
+/// lives in `Stats`, **no stats operation may run while it is there** — see
+/// `Game::gear_bonus` and `Game::strip_gear`.
 #[derive(Component, Default, Clone)]
 pub struct Equipment {
     pub weapon: Option<EquippedItem>,

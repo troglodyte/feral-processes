@@ -444,6 +444,17 @@ impl Game {
             if let Some(name) = c.custom_name.clone() {
                 entity.insert(CustomName(name));
             }
+            // Inserted only when something is worn, so an absent component
+            // keeps meaning "wears nothing" — the invariant `Game::equip`
+            // relies on when it grows one on demand. A v27 dump defaults
+            // this to empty and lands here.
+            if !c.equipment.is_empty() {
+                let mut worn = Equipment::default();
+                for (slot, item) in c.equipment.clone() {
+                    *worn.slot_mut(slot) = Some(item);
+                }
+                entity.insert(worn);
+            }
             // Only the player is spawned holding a `FieldBuff` — see that
             // component's docs — so a creature with none recorded stays
             // without one, the same as a freshly tamed program.
@@ -655,6 +666,7 @@ impl Game {
                 Option<&Rarity>,
                 Option<&Refactors>,
                 Option<&PurchasedTiers>,
+                Option<&Equipment>,
             ),
         )>();
         for (
@@ -671,7 +683,7 @@ impl Game {
             fusions,
             routines,
             field_buff,
-            (nest_guardian, pursuing, carrying, rarity, refactors, purchased_tiers),
+            (nest_guardian, pursuing, carrying, rarity, refactors, purchased_tiers, equipment),
         ) in creature_query.iter(&self.world)
         {
             let potential = potential.copied().unwrap_or(Potential::NEUTRAL);
@@ -728,6 +740,14 @@ impl Game {
                 pursuing: pursuing.is_some(),
                 carrying: carrying.map(|c| (c.item.clone(), c.qty)),
                 rarity: rarity.copied().unwrap_or_default(),
+                equipment: equipment
+                    .map(|eq| {
+                        EquipmentSlot::ALL
+                            .into_iter()
+                            .filter_map(|slot| Some((slot, eq.get(slot)?)))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
             });
         }
 

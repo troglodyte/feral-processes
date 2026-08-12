@@ -215,3 +215,155 @@ fn an_empty_rename_puts_the_species_name_back() {
         "clearing the field is the way back to the species name"
     );
 }
+
+// --- Companion equipment -------------------------------------------------
+
+/// Opens the roster and puts the highlight on the first program.
+fn open_roster(app: &mut App) {
+    open_via_menu(app, 'p', "Companions");
+    assert_eq!(app.mode, Mode::Companion);
+}
+
+fn companion_atk(app: &mut App) -> i32 {
+    app.game.as_mut().unwrap().owned_pets()[0].atk
+}
+
+#[test]
+fn e_on_the_roster_opens_the_highlighted_programs_slots_and_esc_backs_out() {
+    let mut app = app_with_companions_and_cargo(770, 1, &[("overclock_core", 1)]);
+    let program = roster(&mut app)[0];
+    open_roster(&mut app);
+
+    app.handle_key(GameKey::Char('E'));
+
+    assert_eq!(app.mode, Mode::CompanionEquip);
+    assert_eq!(
+        app.pending_equip_program,
+        Some(program),
+        "the page is about the program under the highlight"
+    );
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Companion, "Esc backs into the roster");
+}
+
+#[test]
+fn picking_a_slot_opens_the_picker_for_the_program_and_esc_returns_to_its_slots() {
+    let mut app = app_with_companions_and_cargo(771, 1, &[("overclock_core", 1)]);
+    let program = roster(&mut app)[0];
+    open_roster(&mut app);
+    app.handle_key(GameKey::Char('E'));
+
+    app.handle_key(GameKey::Char('1'));
+
+    assert_eq!(app.mode, Mode::EquipSwap);
+    assert_eq!(app.pending_swap_slot, Some(EquipmentSlot::Weapon));
+    assert_eq!(
+        app.pending_swap_target,
+        Some(program),
+        "the picker has to know whose slot it is filling"
+    );
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(
+        app.mode,
+        Mode::CompanionEquip,
+        "Esc returns where the picker was opened from, not to the inventory"
+    );
+    assert_eq!(
+        app.pending_swap_target, None,
+        "every exit from the picker clears the target"
+    );
+}
+
+#[test]
+fn choosing_a_row_equips_the_program_and_not_the_player() {
+    let mut app = app_with_companions_and_cargo(772, 1, &[("overclock_core", 1)]);
+    let player_atk_before = app.game.as_ref().unwrap().player_status().atk;
+    let companion_atk_before = companion_atk(&mut app);
+    open_roster(&mut app);
+    app.handle_key(GameKey::Char('E'));
+    app.handle_key(GameKey::Char('1'));
+
+    app.handle_key(GameKey::Char('1'));
+
+    assert_eq!(
+        companion_atk(&mut app),
+        companion_atk_before + 3,
+        "the weapon goes on the program"
+    );
+    assert_eq!(
+        app.game.as_ref().unwrap().player_status().atk,
+        player_atk_before,
+        "and not on the player"
+    );
+    assert_eq!(
+        app.mode,
+        Mode::CompanionEquip,
+        "back to the program's slots"
+    );
+    assert_eq!(app.pending_swap_target, None);
+}
+
+#[test]
+fn the_pickers_rows_are_measured_against_the_programs_own_worn_copy() {
+    // Two copies of one weapon: the program wears one, the player the other,
+    // so the only thing that can make the two row sets differ is which
+    // wearer the picker measured against.
+    let mut app = app_with_companions_and_cargo(773, 1, &[("overclock_core", 3)]);
+    let program = roster(&mut app)[0];
+    let (game, player) = {
+        let game = app.game.as_mut().unwrap();
+        let player = game.player_entity();
+        (game, player)
+    };
+    game.equip(program, &ItemId::from("overclock_core"), 0)
+        .unwrap();
+
+    let program_rows: Vec<String> =
+        equip_swap_rows(app.game.as_ref().unwrap(), program, EquipmentSlot::Weapon)
+            .into_iter()
+            .map(|r| r.label)
+            .collect();
+    let player_rows: Vec<String> =
+        equip_swap_rows(app.game.as_ref().unwrap(), player, EquipmentSlot::Weapon)
+            .into_iter()
+            .map(|r| r.label)
+            .collect();
+
+    assert_ne!(
+        program_rows, player_rows,
+        "a geared program and a bare player must not see the same rows"
+    );
+    assert!(
+        program_rows.iter().any(|l| l.contains("Unequip")),
+        "the program's picker offers to empty the slot it has filled: {program_rows:?}"
+    );
+    assert!(
+        !player_rows.iter().any(|l| l.contains("Unequip")),
+        "the player's does not, because the player is wearing nothing: {player_rows:?}"
+    );
+}
+
+#[test]
+fn a_slot_with_nothing_to_fit_it_reports_that_instead_of_an_empty_picker() {
+    let mut app = app_with_companions_and_cargo(774, 1, &[("overclock_core", 1)]);
+    open_roster(&mut app);
+    app.handle_key(GameKey::Char('E'));
+
+    // Row 2 is Armor, and the only gear in cargo is a weapon.
+    app.handle_key(GameKey::Char('2'));
+
+    assert_eq!(
+        app.mode,
+        Mode::CompanionEquip,
+        "a dead-end picker should not open at all"
+    );
+    assert!(
+        app.status_line
+            .as_deref()
+            .is_some_and(|s| s.contains("Armor")),
+        "the refusal names the slot: {:?}",
+        app.status_line
+    );
+}

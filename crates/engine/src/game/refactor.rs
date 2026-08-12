@@ -153,9 +153,18 @@ impl Game {
         }
         inventory.take(item.clone(), 1);
 
+        // Lifted and replaced rather than stripped: the program survives, so
+        // its gear stays on. `refactored` *multiplies* — a bonus present
+        // during that call is scaled, and the later unequip subtracts only
+        // the unscaled amount, welding the difference into the program's base
+        // stats forever. The recorded `EquippedItem` is untouched, so the
+        // add-back is exact and the player sees nothing happen.
+        let gear = self.gear_bonus(target);
+        self.apply_equipment_delta(target, gear, -1);
         let stats = *self.world.get::<Stats>(target).unwrap();
         let after = refactored(&stats, &upgrade, tier);
         *self.world.get_mut::<Stats>(target).unwrap() = after;
+        self.apply_equipment_delta(target, gear, 1);
         if upgrade.zone_bump {
             // Recorded, not merely applied: `program_payout` divides bought
             // tiers back out, or twelve printable Core Fragments would buy a

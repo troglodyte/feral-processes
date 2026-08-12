@@ -3,8 +3,8 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::components::{ActiveFieldBuff, Rarity};
-use crate::items::ItemId;
+use crate::components::{ActiveFieldBuff, EquippedItem, Rarity};
+use crate::items::{EquipmentSlot, ItemId};
 use crate::perks::Perk;
 use crate::resources::DifficultyMode;
 use crate::species::SpeciesId;
@@ -186,6 +186,20 @@ pub struct CreatureSave {
     /// `SAVE_FORMAT_VERSION` — see that constant's docs.
     #[serde(default)]
     pub rarity: Rarity,
+    /// What this program is wearing — see `components::Equipment`. Only
+    /// meaningful when `tamed` is true; nothing else may be geared.
+    ///
+    /// A `Vec` rather than `PlayerSave`'s nine flat fields, for one reason
+    /// that decides it: a single defaulted field means an older RON dump
+    /// packs with no hand-editing at all. `PlayerSave`'s existing shape is
+    /// what that migration matches, so it stays as it is.
+    ///
+    /// `#[serde(default)]` does nothing for the bincode save, which is
+    /// positional — that is why this bumped `SAVE_FORMAT_VERSION`. It is
+    /// here for the field-named RON that `savetool dump`/`pack` round-trips
+    /// through, which is the migration path.
+    #[serde(default)]
+    pub equipment: Vec<(EquipmentSlot, EquippedItem)>,
 }
 
 /// A nest's state on disk: its species, position, remaining `Durability`,
@@ -376,7 +390,20 @@ pub struct SaveData {
 /// 26 → 27: `CreatureSave` gained `refactors` and `purchased_tiers`, the
 /// spent companion upgrade slots and the zone tiers bought with Recompile
 /// Kernels (`components::Refactors`, `components::PurchasedTiers`).
-pub const SAVE_FORMAT_VERSION: u32 = 27;
+/// 27 → 28: `CreatureSave` gained `equipment` — any program the player owns
+/// can now wear the three gear slots the player wears, so a loadout is per
+/// creature rather than player-only.
+/// 28 → 29: the encoding stopped being positional. Every bump listed above
+/// is a struct *gaining* a field — nine in a row, no removals, no changed
+/// meanings — and bincode is the only reason any of them broke a save. The
+/// payload is now the same field-named RON `savetool dump` prints, so a
+/// field added behind `#[serde(default)]` loads out of a file written
+/// before it existed and needs no bump at all. **This is the last entry
+/// this list should need for an additive change.** What still earns one is
+/// a field removed, or one whose meaning changes under a name it keeps —
+/// and that needs real migration code, which no encoding could have saved
+/// you from.
+pub const SAVE_FORMAT_VERSION: u32 = 29;
 
 /// Renders a save as editable RON, for the `savetool` binary.
 ///
@@ -395,24 +422,44 @@ pub fn from_ron(text: &str) -> io::Result<SaveData> {
     ron::from_str(text).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
 
+/// Writes the version as the first line and the save as the same
+/// field-named RON `to_ron` produces.
+///
+/// The version is a line rather than a struct field so it can be read
+/// without parsing — a file this build cannot understand is refused *by
+/// version*, which is a sentence a player can act on, instead of by a parse
+/// error about a byte offset. It is a line rather than the 4-byte binary
+/// prefix it used to be so the whole file stays hand-editable in a text
+/// editor, which an encoding this legible may as well allow.
 pub fn save_to_file(path: &Path, data: &SaveData) -> io::Result<()> {
-    let encoded = bincode::serde::encode_to_vec(data, bincode::config::standard())
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    let mut bytes = Vec::with_capacity(4 + encoded.len());
-    bytes.extend_from_slice(&SAVE_FORMAT_VERSION.to_le_bytes());
-    bytes.extend(encoded);
-    std::fs::write(path, bytes)
+    let text = to_ron(data)?;
+    std::fs::write(path, format!("{SAVE_FORMAT_VERSION}\n{text}"))
 }
 
 pub fn load_from_file(path: &Path) -> io::Result<SaveData> {
-    let bytes = std::fs::read(path)?;
-    let Some((version_bytes, payload)) = bytes.split_first_chunk::<4>() else {
+    let text = std::fs::read_to_string(path).map_err(|e| {
+        // A save written by a build older than 0.8.0 is bincode, so it is not
+        // valid UTF-8 and never reaches the version line below. It is the same
+        // refusal — this build cannot read that file — and saying so is the
+        // difference between a player deleting it and a player filing a bug
+        // about invalid UTF-8.
+        if e.kind() == io::ErrorKind::InvalidData {
+            return io::Error::new(io::ErrorKind::InvalidData, OLD_FORMAT_REFUSAL);
+        }
+        e
+    })?;
+    let Some((version_line, payload)) = text.split_once('\n') else {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "save file is too short to be valid",
         ));
     };
-    let version = u32::from_le_bytes(*version_bytes);
+    let Ok(version) = version_line.trim().parse::<u32>() else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            OLD_FORMAT_REFUSAL,
+        ));
+    };
     if version != SAVE_FORMAT_VERSION {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -422,10 +469,15 @@ pub fn load_from_file(path: &Path) -> io::Result<SaveData> {
             ),
         ));
     }
-    let (data, _) = bincode::serde::decode_from_slice(payload, bincode::config::standard())
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    Ok(data)
+    from_ron(payload)
 }
+
+/// Both routes to "this file predates the text format", worded once. A
+/// bincode save fails as invalid UTF-8 if its bytes happen to be malformed
+/// and as an unparseable version line if they happen not to be, and a player
+/// should not get two different sentences for one situation.
+const OLD_FORMAT_REFUSAL: &str = "this save was written by an older version of the game and can't \
+                                  be read — delete it and start a new game";
 
 /// Minimal nod to Dwarf Fortress's legends: on a permadeath run ending, a
 /// short structured summary is appended to a plain-text history log.
@@ -491,6 +543,42 @@ mod tests {
         }
     }
 
+    /// A minimal tamed program, for the fixtures that need the save to hold
+    /// a creature at all.
+    fn sample_creature() -> CreatureSave {
+        CreatureSave {
+            species: "scrapper".to_string(),
+            position: (1, 1),
+            hp: 10,
+            max_hp: 10,
+            atk: 3,
+            def: 1,
+            tamed: true,
+            level: 1,
+            xp: 0,
+            xp_to_next: 20,
+            cronjob: None,
+            party_slot: None,
+            wielded: false,
+            zone: 1,
+            custom_name: None,
+            hp_roll: 1.0,
+            atk_roll: 1.0,
+            def_roll: 1.0,
+            growth_roll: 1.0,
+            fusions: 0,
+            refactors: 0,
+            purchased_tiers: 0,
+            routines: Vec::new(),
+            field_buffs: Vec::new(),
+            nest_position: None,
+            pursuing: false,
+            carrying: None,
+            rarity: Rarity::Ordinary,
+            equipment: Vec::new(),
+        }
+    }
+
     /// The savetool's whole premise: a save dumped to RON, then packed back,
     /// must be the same save. Byte identity of the bincode encoding is the
     /// strictest form of that and catches a field silently dropped by the
@@ -543,6 +631,97 @@ mod tests {
         );
     }
 
+    /// The save on disk is the same field-named RON `savetool dump` prints,
+    /// behind one line naming the version. Positional encodings are why
+    /// every bump from v19 to v28 broke saves for a change that only ever
+    /// *added* a field — see `SAVE_FORMAT_VERSION`.
+    #[test]
+    fn a_save_file_is_field_named_text() {
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_save_text_{}.bin",
+            std::process::id()
+        ));
+        save_to_file(&path, &sample_data()).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        let loaded = load_from_file(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        assert!(
+            text.starts_with(&format!("{SAVE_FORMAT_VERSION}\n")),
+            "the version is the first line, so it can be read without parsing the rest"
+        );
+        assert!(
+            text.contains("seed:"),
+            "the payload names its fields: {}",
+            &text[..text.len().min(120)]
+        );
+        assert_eq!(loaded.seed, sample_data().seed);
+    }
+
+    /// The whole point of the format. A field added behind
+    /// `#[serde(default)]` must load out of a file written before it
+    /// existed, with no migration code and no version bump — which is what
+    /// every single bump in this file's history would have needed.
+    #[test]
+    fn a_save_file_written_before_a_defaulted_field_existed_still_loads() {
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_save_older_{}.bin",
+            std::process::id()
+        ));
+        let mut data = sample_data();
+        data.creatures.push(sample_creature());
+        save_to_file(&path, &data).unwrap();
+
+        // Exactly what an older build would have written: the same file
+        // with a since-added key absent. Derived from the real one rather
+        // than hand-written, so the fixture cannot drift.
+        let text = std::fs::read_to_string(&path).unwrap();
+        let older: String = text
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("equipment: ["))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            !older.contains("equipment: ["),
+            "the key has to actually be gone for this to prove anything"
+        );
+        std::fs::write(&path, &older).unwrap();
+
+        let loaded = match load_from_file(&path) {
+            Ok(loaded) => loaded,
+            Err(e) => panic!("an older file must still load: {e}"),
+        };
+        let _ = std::fs::remove_file(&path);
+        assert!(loaded.creatures[0].equipment.is_empty());
+    }
+
+    /// A save from a build that wrote bincode is not text at all, so the
+    /// version line is missing entirely. It has to be refused by version,
+    /// the way any other unreadable save is, rather than surfacing a parse
+    /// error about a byte offset.
+    #[test]
+    fn a_save_from_a_binary_format_build_is_refused_by_version() {
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_save_binary_{}.bin",
+            std::process::id()
+        ));
+        let mut bytes = 28u32.to_le_bytes().to_vec();
+        bytes.extend(
+            bincode::serde::encode_to_vec(sample_data(), bincode::config::standard()).unwrap(),
+        );
+        std::fs::write(&path, bytes).unwrap();
+
+        let err = match load_from_file(&path) {
+            Ok(_) => panic!("a binary save must not decode as text"),
+            Err(e) => e.to_string(),
+        };
+        let _ = std::fs::remove_file(&path);
+        assert!(
+            err.contains("older version of the game"),
+            "the refusal should name the cause, not a byte offset: {err}"
+        );
+    }
+
     #[test]
     fn a_save_round_trips_through_the_current_version() {
         let path = std::env::temp_dir().join(format!(
@@ -561,11 +740,10 @@ mod tests {
             "feral_processes_save_badversion_{}.bin",
             std::process::id()
         ));
-        let encoded =
-            bincode::serde::encode_to_vec(sample_data(), bincode::config::standard()).unwrap();
-        let mut bytes = 999u32.to_le_bytes().to_vec();
-        bytes.extend(encoded);
-        std::fs::write(&path, bytes).unwrap();
+        // A save at a version this build does not read, written the way a
+        // build at that version would have: the same text framing, a
+        // different number on the first line.
+        std::fs::write(&path, format!("999\n{}", to_ron(&sample_data()).unwrap())).unwrap();
 
         let Err(err) = load_from_file(&path) else {
             panic!("loading a mismatched-version save should fail, not succeed");
@@ -594,11 +772,15 @@ mod tests {
             "feral_processes_save_prev_version_{}.bin",
             std::process::id()
         ));
-        let encoded =
-            bincode::serde::encode_to_vec(sample_data(), bincode::config::standard()).unwrap();
-        let mut bytes = (SAVE_FORMAT_VERSION - 1).to_le_bytes().to_vec();
-        bytes.extend(encoded);
-        std::fs::write(&path, bytes).unwrap();
+        std::fs::write(
+            &path,
+            format!(
+                "{}\n{}",
+                SAVE_FORMAT_VERSION - 1,
+                to_ron(&sample_data()).unwrap()
+            ),
+        )
+        .unwrap();
 
         let Err(err) = load_from_file(&path) else {
             panic!("a save one version back should not load");

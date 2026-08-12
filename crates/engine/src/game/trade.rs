@@ -410,6 +410,11 @@ impl Game {
     /// couldn't. Returns the label logged, since both callers still need it
     /// for their own payout line afterward.
     pub(crate) fn dissolve_tamed_program(&mut self, creature: Entity) -> String {
+        // Gear is the player's property; the program was only wearing it.
+        // Here rather than at the callers because this is the one function
+        // sale, extraction, battle death and a raid defender's death already
+        // agree through — a fifth caller inherits it for free.
+        self.strip_gear(creature);
         let name = self.creature_label(creature);
         for detached in self.sale_detachments(creature) {
             self.log(format!("{name} {detached}."));
@@ -446,6 +451,13 @@ impl Game {
         if owner != self.player_entity() {
             return Err("You don't control that program.".into());
         }
+        // Explicit here even though `dissolve_tamed_program` strips too:
+        // `program_payout` reads `Stats::power()` and runs *before* the
+        // dissolve, so a trader would otherwise pay for gear the player is
+        // about to get back. After every reachable refusal, so a refused sale
+        // leaves the loadout alone — the `ok_or_else` below cannot fire from
+        // here, since the divisor is checked above and a `Tamed` has `Stats`.
+        self.strip_gear(creature);
         let payout = self
             .program_payout(structure, creature)
             .ok_or_else(|| "That program can't be appraised.".to_string())?;

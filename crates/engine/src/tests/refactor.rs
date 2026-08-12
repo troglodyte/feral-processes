@@ -299,3 +299,54 @@ fn a_refactor_you_cannot_pay_for_changes_nothing() {
         "a refactor that never happened must not have spent a slot"
     );
 }
+
+/// A refactor multiplies `Stats`, and a gear bonus sitting in there would be
+/// multiplied with it — the later unequip subtracts only the unscaled amount
+/// and welds the difference into the program's base numbers forever. This is
+/// `EquippedItem::fusion_tier`'s trap reached by a new route, so the second
+/// half of this test (unequip, compare) is the half that catches it; the
+/// first half passes against the bug.
+#[test]
+fn refactoring_a_geared_program_scales_its_own_stats_and_not_the_gear() {
+    let mut game = Game::new(402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    set_stats(&mut game, pet, 80, 9, 5);
+    game.world.entity_mut(pet).insert(ZonePortal(1));
+    set_zone(&mut game, 3);
+    stock(&mut game, KERNEL, 1);
+
+    // A bare twin refactored the same way is the yardstick: whatever the
+    // formula does, gear must not change the answer.
+    let bare = spawn_tamed(&mut game, 10, 3);
+    set_stats(&mut game, bare, 80, 9, 5);
+    game.world.entity_mut(bare).insert(ZonePortal(1));
+    stock(&mut game, KERNEL, 1);
+    game.refactor_companion(bare, &ItemId::from(KERNEL))
+        .unwrap();
+    let expected = stats(&game, bare);
+
+    let weapon = ItemId::from(ids::OVERCLOCK_CORE);
+    stock(&mut game, ids::OVERCLOCK_CORE, 1);
+    let before_gear = stats(&game, pet);
+    game.equip(pet, &weapon, 0).unwrap();
+
+    game.refactor_companion(pet, &ItemId::from(KERNEL)).unwrap();
+    game.unequip(pet, EquipmentSlot::Weapon).unwrap();
+
+    assert_eq!(
+        stats(&game, pet),
+        expected,
+        "a geared program must refactor to exactly what a bare one does"
+    );
+    let (_, max_hp, atk, def) = stats(&game, pet);
+    let (_, was_max_hp, was_atk, was_def) = before_gear;
+    assert_eq!(
+        (max_hp, atk, def),
+        (
+            was_max_hp * ZONE_STAT_GROWTH,
+            was_atk * ZONE_STAT_GROWTH,
+            was_def * ZONE_STAT_GROWTH
+        ),
+        "and the multiplier lands on its own numbers, with no gear welded in"
+    );
+}

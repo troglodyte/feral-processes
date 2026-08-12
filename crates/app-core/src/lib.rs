@@ -238,13 +238,15 @@ const SWAP_STATS_COLUMN: usize = 20;
 /// like a point of ATK. That is a display heuristic for "probably the one
 /// you want" and not a claim about what those stats are worth, which is why
 /// it is here rather than a weighting in `tuning.rs`.
-pub fn equip_swap_rows(game: &Game, slot: EquipmentSlot) -> Vec<SwapRow> {
+///
+/// `wearer` is the player or a program they own. `status.inventory` and
+/// `status.zone` stay the player's whichever it is — cargo is shared and the
+/// zone is the zone — so the only thing the wearer decides is which worn copy
+/// the candidates are measured against. That is what keeps the two-levels
+/// asymmetry above correct for a companion as well.
+pub fn equip_swap_rows(game: &Game, wearer: Entity, slot: EquipmentSlot) -> Vec<SwapRow> {
     let status = game.player_status();
-    let worn = match slot {
-        EquipmentSlot::Weapon => &status.weapon,
-        EquipmentSlot::Armor => &status.armor,
-        EquipmentSlot::Module => &status.module,
-    };
+    let worn = game.worn(wearer, slot);
     let worn_mods = worn
         .as_ref()
         .and_then(|e| {
@@ -645,6 +647,12 @@ pub enum Mode {
     /// whole stack to free two units of room is not a real option.
     EraseQuantity,
     Companion,
+    /// One program's three equipment slots, reached with `E` from
+    /// `Mode::Companion`. The same three rows the inventory screen leads
+    /// with, for the program under the highlight rather than for the player;
+    /// picking one opens the *existing* `Mode::EquipSwap` with
+    /// `App::pending_swap_target` set.
+    CompanionEquip,
     Fuse,
     FuseSecond,
     /// Typing a name (`App::fuse_name_input`) for the program that'll
@@ -832,6 +840,7 @@ impl Mode {
             | Mode::ItemDescribe
             | Mode::EraseQuantity
             | Mode::Companion
+            | Mode::CompanionEquip
             | Mode::Fuse
             | Mode::FuseSecond
             | Mode::FuseName
@@ -1064,9 +1073,20 @@ pub struct App {
     /// — a fused copy and its ordinary spares are separate rows and every
     /// action on one has to say which it meant.
     pub pending_inventory_item: Option<(ItemId, u32)>,
-    /// The equipment slot picked on `Mode::Inventory`, awaiting a
-    /// replacement (or an unequip) from `Mode::EquipSwap`.
+    /// The equipment slot picked on `Mode::Inventory` or
+    /// `Mode::CompanionEquip`, awaiting a replacement (or an unequip) from
+    /// `Mode::EquipSwap`.
     pub pending_swap_slot: Option<EquipmentSlot>,
+    /// Who the pending swap is *for*. `None` means the player, which is what
+    /// keeps the inventory screen's flow untouched; the roster sets it to the
+    /// program whose slot page opened the picker. Cleared on every exit from
+    /// `Mode::EquipSwap`, including the commit path — it says which picker is
+    /// open, not which program the slot page is about, and
+    /// `pending_equip_program` is the field that outlives it.
+    pub pending_swap_target: Option<Entity>,
+    /// The program `Mode::CompanionEquip` is showing the slots of, picked
+    /// with `E` on the roster.
+    pub pending_equip_program: Option<Entity>,
     /// The inventory item picked for erasure, awaiting a quantity from
     /// `Mode::EraseQuantity`.
     pub pending_erase: Option<(ItemId, u32)>,

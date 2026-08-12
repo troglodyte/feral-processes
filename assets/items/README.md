@@ -119,6 +119,14 @@ any non-finite `taming_potency`, `consume.power`, `consume.fatigue`, or
     // fusion tier of the *individual copy* worn — see
     // `EquipmentStats::scaled_for_level`/`fused_for_tier` and
     // `components::FusedGear`. Only equippable items can be fused.
+    //
+    // The wearer is the player *or* any program they own — one copy is
+    // interchangeable, and every copy comes out of and returns to the
+    // player's own cargo whoever is wearing it. One consequence worth
+    // knowing before pricing a module: `decompiler` does nothing at all on
+    // a program, since only the player ever attempts a capture. Such an
+    // item is still worn, and still worth its `value`; it is simply inert
+    // in that slot.
     equipment: Some((Weapon, (atk: 4))),
 
     // Optional; can be left out entirely (defaults to not a catalyst). If

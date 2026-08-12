@@ -1025,3 +1025,39 @@ fn a_program_tamed_in_a_deep_zone_still_sells_for_what_it_is() {
         "earned tiers are still worth every Credit they were"
     );
 }
+
+/// `program_payout` prices a program off `Stats::power()` and runs *before*
+/// the dissolve, so the strip has to be explicit here rather than inherited
+/// from `dissolve_tamed_program` — otherwise the trader pays for gear the
+/// player is about to get back.
+#[test]
+fn selling_a_geared_program_returns_the_gear_and_prices_the_program_alone() {
+    let mut game = Game::new(134, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let market = spawn_market(&mut game);
+    let weapon = ItemId::from(ids::OVERCLOCK_CORE);
+    give(&mut game, &weapon, 1);
+
+    let geared = spawn_tamed(&mut game, 60, 8);
+    game.world.get_mut::<Stats>(geared).unwrap().def = 2;
+    let bare = spawn_tamed(&mut game, 60, 8);
+    game.world.get_mut::<Stats>(bare).unwrap().def = 2;
+    game.equip(geared, &weapon, 0).unwrap();
+
+    let before = credits(&game);
+    game.sell_companion(market, geared).unwrap();
+    let geared_payout = credits(&game) - before;
+    assert_eq!(
+        held(&game, &weapon),
+        1,
+        "the gear is the player's and comes back off a sold program"
+    );
+
+    let before = credits(&game);
+    game.sell_companion(market, bare).unwrap();
+    let bare_payout = credits(&game) - before;
+
+    assert_eq!(
+        geared_payout, bare_payout,
+        "a sale appraises the program, not the gear it happens to be holding"
+    );
+}

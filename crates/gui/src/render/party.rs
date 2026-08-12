@@ -1,5 +1,6 @@
 //! The companion roster and the three-page fusion flow.
 
+use super::inventory::equipped_row;
 use super::popup::*;
 use super::*;
 
@@ -10,7 +11,12 @@ use super::*;
 /// nothing in the game's text points at it. Extracted into a const so
 /// `the_companion_screen_never_advertises_the_hidden_key` can read them —
 /// a later helpful edit then fails a test rather than quietly spoiling it.
-fn companion_help() -> [String; 3] {
+/// The gear line follows the two above it — bare `E ...`, not the `[E]quip`
+/// label style the item-action page uses. It also cannot name the slot a
+/// wielded program fills, because that word starts with the capital letter
+/// the census below forbids anywhere in these lines. That is the constraint
+/// working, not a phrasing accident.
+fn companion_help() -> [String; 4] {
     [
         format!(
             "Pick a program to add to your party (max {MAX_PARTY_SIZE}) - select a party member's own number to stand it down."
@@ -19,7 +25,61 @@ fn companion_help() -> [String; 3] {
             .to_string(),
         "N renames the highlighted program; clear the name to go back to its species."
             .to_string(),
+        "E fits gear to the highlighted program, out of your own cargo."
+            .to_string(),
     ]
+}
+
+/// One program's three equipment slots — the same three rows the inventory
+/// leads with, through the same formatter, for a program rather than for the
+/// player.
+///
+/// The decompiler line is a standing note rather than a per-item warning:
+/// ten shipped items carry the stat, `components::Decompiler` is player-only,
+/// and a program simply never attempts a capture. Saying so once here is
+/// what keeps that from being something a player discovers by wasting a
+/// module on it.
+pub(super) fn draw_companion_equip(
+    game: &mut Game,
+    program: Option<Entity>,
+    selected: usize,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let name = program.and_then(|p| {
+        game.owned_pets()
+            .into_iter()
+            .find(|row| row.entity == p)
+            .map(|row| row.name)
+    });
+    let (Some(program), Some(name)) = (program, name) else {
+        draw_popup(
+            "Program Gear",
+            PopupSize::Small,
+            &[text_row("That program is gone.")],
+            painter,
+            m,
+        );
+        return;
+    };
+    let mut rows = vec![
+        Row::TextColored(format!("{name}'s gear"), CYAN),
+        text_row("Number to swap or unequip. Gear comes out of your cargo and goes back to it."),
+        text_row("A Decompiler bonus does nothing on a program - only you attempt a capture."),
+        text_row(""),
+    ];
+    for (i, slot) in EquipmentSlot::ALL.into_iter().enumerate() {
+        rows.push(equipped_row(
+            i + 1,
+            slot.label(),
+            game.worn(program, slot),
+            i == selected,
+            game,
+        ));
+    }
+    rows.push(text_row(""));
+    rows.push(text_row("Esc to go back; Up/Down + Enter also work"));
+    draw_popup("Program Gear", PopupSize::Large, &rows, painter, m);
 }
 
 pub(super) fn draw_companion_menu(
@@ -325,6 +385,18 @@ mod tests {
                 );
             }
         });
+    }
+
+    /// The gear key is the opposite of the one below: it has a screen, it
+    /// costs cargo, and a player who never finds it never equips a program
+    /// at all. So the help has to name it.
+    #[test]
+    fn the_companion_screen_names_the_gear_key() {
+        assert!(
+            companion_help().iter().any(|line| line.starts_with("E ")),
+            "the roster must say which key opens a program's gear: {:?}",
+            companion_help()
+        );
     }
 
     /// The easter-egg census. Wielding a program as your weapon is

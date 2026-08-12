@@ -107,6 +107,7 @@ pub(crate) fn app_owning_distant_programs(seed: u32, count: i32) -> App {
             pursuing: false,
             carrying: None,
             rarity: Default::default(),
+            equipment: Vec::new(),
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -190,6 +191,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         pursuing: false,
         carrying: None,
         rarity: Default::default(),
+        equipment: Vec::new(),
     });
     data.structures.push(save::StructureSave {
         kind: "compiler".to_string(),
@@ -272,6 +274,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
         pursuing: false,
         carrying: None,
         rarity: Default::default(),
+        equipment: Vec::new(),
     });
     for n in 0..posts {
         data.structures.push(save::StructureSave {
@@ -397,6 +400,7 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
             pursuing: false,
             carrying: None,
             rarity: Default::default(),
+            equipment: Vec::new(),
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -414,6 +418,16 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
 /// nothing outside the engine can hand-place a tamed program, and
 /// `party_slot` is the save field that puts one on the roster.
 pub(crate) fn app_with_companions_in_the_party(seed: u32, count: u32) -> App {
+    app_with_companions_and_cargo(seed, count, &[])
+}
+
+/// `app_with_companions_in_the_party` with gear in the player's cargo, which
+/// is where a companion's loadout comes from and returns to.
+pub(crate) fn app_with_companions_and_cargo(
+    seed: u32,
+    count: u32,
+    extra_cargo: &[(&str, u32)],
+) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
     let path = scratch_path("party", seed);
@@ -422,6 +436,13 @@ pub(crate) fn app_with_companions_in_the_party(seed: u32, count: u32) -> App {
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
+    // Extended rather than assigned over, for the reason
+    // `app_owning_a_program_and_a_compiler_deep` gives.
+    data.player.inventory.extend(
+        extra_cargo
+            .iter()
+            .map(|(item, qty)| (ItemId::from(*item), *qty)),
+    );
     let (px, py) = data.player.position;
     for slot in 0..count {
         data.creatures.push(CreatureSave {
@@ -453,6 +474,7 @@ pub(crate) fn app_with_companions_in_the_party(seed: u32, count: u32) -> App {
             pursuing: false,
             carrying: None,
             rarity: Default::default(),
+            equipment: Vec::new(),
         });
     }
     save::save_to_file(&path, &data).unwrap();

@@ -431,7 +431,7 @@ impl Game {
             .get::<Equipment>(player)
             .is_some_and(|e| e.weapon.is_some());
         if displaced {
-            self.unequip(EquipmentSlot::Weapon)?;
+            self.unequip(player, EquipmentSlot::Weapon)?;
         }
         self.remove_companion(creature);
         self.world.insert_resource(WieldedProgram(Some(creature)));
@@ -476,6 +476,18 @@ impl Game {
             let name = self.creature_label(creature);
             self.log(format!("{name} falls back from active duty."));
         }
+    }
+
+    /// What `wearer` has on in `slot`, or `None` for an empty slot — and for
+    /// an entity with no `Equipment` at all, which is what a program that has
+    /// never been geared looks like (see `Game::equip`).
+    ///
+    /// The one public read of a *companion's* loadout. The player's own is
+    /// already three fields on `PlayerStatus`, and that stays: this exists so
+    /// the swap picker can measure the worn copy of whichever wearer it was
+    /// opened for, rather than matching on the player's three by slot.
+    pub fn worn(&self, wearer: Entity, slot: EquipmentSlot) -> Option<EquippedItem> {
+        self.world.get::<Equipment>(wearer)?.get(slot)
     }
 
     /// The player-chosen name on `creature`, or `None` if it is still going
@@ -615,6 +627,15 @@ impl Game {
                     "{name} has already been fused {MAX_FUSIONS} times — it can't be fused again."
                 ));
             }
+        }
+        // Before the snapshot below, and that ordering is the whole
+        // correctness argument: `fuse_stat` combines both parents' `Stats`
+        // into the child's, so a gear bonus still sitting in one of them is
+        // banked into a new program permanently, with no record of where it
+        // came from. This function does its own reap and never calls
+        // `dissolve_tamed_program`, so it carries its own strip.
+        for e in [a, b] {
+            self.strip_gear(e);
         }
         let fused_depth = self.fusion_count(a).max(self.fusion_count(b)) + 1;
         let (species_a, exp_a, stats_a, potential_a) = (

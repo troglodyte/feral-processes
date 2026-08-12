@@ -11,13 +11,23 @@ pub(super) fn draw_craft_menu(game: &mut Game, selected: usize, painter: &Painte
         text_row(""),
     ];
     for (i, recipe) in recipes.iter().enumerate() {
-        rows.push(item_row(
-            craft_row(game, recipe, i, &status.inventory),
-            i == selected,
-        ));
+        let mut lines = craft_rows(game, recipe, i, &status.inventory).into_iter();
+        let head = lines.next().expect("craft_rows always emits the head line");
+        rows.push(item_row(head, i == selected));
+        // Dim, unselected continuations, the same shape `draw_recipes` gives a
+        // product and its steps: the highlight belongs on the line carrying the
+        // shortcut, and the popup's scroll anchor is the *first* selected Item,
+        // so these cannot disturb it.
+        for line in lines {
+            rows.push(colored_item_row(line, false, TEXT_DIM));
+        }
     }
     draw_popup("Compile", PopupSize::Large, &rows, painter, m);
 }
+
+/// What a wrapped cost line is indented by: the width of `"[x] MOD  "`, so the
+/// continuation sits under the item's name rather than under its shortcut.
+const CRAFT_ROW_INDENT: &str = "         ";
 
 /// One recipe's row: its kind, its name, what it does, and what it costs.
 ///
@@ -31,22 +41,46 @@ pub(super) fn draw_craft_menu(game: &mut Game, selected: usize, painter: &Painte
 /// as noise repeated at random, which is `Game::craft_recipes`' job: it hands
 /// the list back already grouped by category.
 ///
-/// Split out of `draw_craft_menu` so the width it reaches is measurable
-/// without a window — see `the_widest_compile_row_fits_the_popup_it_is_drawn_in`.
-fn craft_row(game: &Game, recipe: &CraftRecipe, i: usize, inventory: &[InventoryRow]) -> String {
-    let cost = cost_display(game, &recipe.cost, inventory);
+/// A row past `ROW_WRAP_COLUMNS` sheds its cost list onto continuation lines
+/// rather than running off the popup, which `draw_row` would otherwise let it
+/// do — it clamps a row vertically and nothing clamps it horizontally. The
+/// split is at the ` - ` seam rather than a word wrap of the whole row, so the
+/// shortcut, kind and name stay together on the line the eye scans.
+///
+/// Returns the lines rather than drawing them so the width they reach is
+/// measurable without a window — see
+/// `a_row_too_wide_for_the_popup_wraps_instead_of_running_off`. The head line
+/// is always present, so a caller may take it unconditionally.
+fn craft_rows(
+    game: &Game,
+    recipe: &CraftRecipe,
+    i: usize,
+    inventory: &[InventoryRow],
+) -> Vec<String> {
     let blurb = game
         .item_blurb(&recipe.result)
         .map(|b| format!(" ({b})"))
         .unwrap_or_default();
-    format!(
-        "[{}] {}  {}{} - {}",
+    let head = format!(
+        "[{}] {}  {}{}",
         menu_shortcut(i),
         game.item_category(&recipe.result).short_label(),
         game.item_name(&recipe.result),
         blurb,
-        cost.join(", ")
-    )
+    );
+    let cost = cost_display(game, &recipe.cost, inventory).join(", ");
+
+    let one_line = format!("{head} - {cost}");
+    if one_line.chars().count() <= ROW_WRAP_COLUMNS {
+        return vec![one_line];
+    }
+    std::iter::once(head)
+        .chain(
+            wrap_text(&cost, ROW_WRAP_COLUMNS - CRAFT_ROW_INDENT.len())
+                .into_iter()
+                .map(|line| format!("{CRAFT_ROW_INDENT}{line}")),
+        )
+        .collect()
 }
 
 pub(super) fn draw_craft_quantity(
@@ -179,10 +213,35 @@ fn step_rows(chain: &RecipeChain) -> Vec<String> {
         .zip(&chain.steps)
         .map(|((inputs, maker), step)| {
             format!(
-                "  {inputs:in_w$} -> {maker:maker_w$} -> {}",
+                "{inputs:in_w$} -> {maker:maker_w$} -> {}",
                 output_text(step)
             )
         })
+        .flat_map(wrap_step_line)
+        .collect()
+}
+
+/// What a wrapped step line's continuations are indented by — past the two
+/// spaces every step line already carries, so a continuation reads as part of
+/// the step above rather than as a step of its own.
+const STEP_ROW_INDENT: &str = "      ";
+
+/// A step line, indented, and split if it would otherwise run off the popup.
+///
+/// A step that fits is returned untouched, which is what preserves the arrow
+/// alignment `step_rows` pads for: `wrap_text` splits on whitespace and so
+/// collapses that padding, and a row wide enough to need wrapping has lost the
+/// alignment anyway. So the cost of wrapping falls only on the row that needs
+/// it, and every shipped chain today takes the first branch.
+fn wrap_step_line(line: String) -> Vec<String> {
+    const PREFIX: &str = "  ";
+    if line.chars().count() + PREFIX.len() <= ROW_WRAP_COLUMNS {
+        return vec![format!("{PREFIX}{line}")];
+    }
+    let mut wrapped = wrap_text(&line, ROW_WRAP_COLUMNS - STEP_ROW_INDENT.len()).into_iter();
+    let first = wrapped.next().unwrap_or_default();
+    std::iter::once(format!("{PREFIX}{first}"))
+        .chain(wrapped.map(|rest| format!("{STEP_ROW_INDENT}{rest}")))
         .collect()
 }
 
@@ -223,7 +282,7 @@ mod tests {
     use super::*;
     use crate::paint::with_painter;
     use crate::text::ui_metrics;
-    use feral_processes_engine::DifficultyMode;
+    use feral_processes_engine::{DifficultyMode, RecipeInput};
 
     /// The chain says how to make the thing; the description is the only
     /// line saying why you would want one. Asserted as `wrap_text`'s own
@@ -308,51 +367,170 @@ mod tests {
     #[test]
     fn every_compile_row_leads_with_its_items_category() {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
-        let mut game =
-            Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
+        let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
         let recipes = game.craft_recipes();
         let status = game.player_status();
         assert!(!recipes.is_empty(), "a fresh game can compile something");
 
         for (i, recipe) in recipes.iter().enumerate() {
-            let row = craft_row(&game, recipe, i, &status.inventory);
+            let lines = craft_rows(&game, recipe, i, &status.inventory);
             let tag = game.item_category(&recipe.result).short_label();
             assert!(
-                row.contains(&format!("] {tag}  ")),
+                lines[0].contains(&format!("] {tag}  ")),
                 "a Compile row should name its item's kind in a column of its \
-                 own, as the inventory does: {row}"
+                 own, as the inventory does: {}",
+                lines[0]
+            );
+        }
+    }
+
+    /// A chain whose one step has more, and longer-named, ingredients than any
+    /// shipped recipe. Built rather than named off the assets for
+    /// `a_very_wide_recipe`'s reason: the shipped chains all fit today, so the
+    /// wrap on this screen is defensive, and a fixture that merely tracked the
+    /// current widest would stop testing the wrap the moment the assets moved.
+    fn a_very_wide_chain() -> RecipeChain {
+        RecipeChain {
+            product: "Overwrought Assembly".to_string(),
+            description: None,
+            steps: vec![RecipeStep {
+                inputs: (0..4)
+                    .map(|n| RecipeInput {
+                        item: format!("Rather Long Ingredient Name {n}"),
+                        qty: 20,
+                        source: Some(format!("Some Extractor With A Long Name {n}")),
+                    })
+                    .collect(),
+                maker: Some("Overwrought Assembly Bench".to_string()),
+                output: "Overwrought Assembly".to_string(),
+                output_qty: Some(1),
+            }],
+        }
+    }
+
+    /// The Recipes screen's half of the same rule. Its step lines are arrow-
+    /// aligned columns, so an over-wide one wraps with a hanging indent rather
+    /// than splitting at a seam the way a Compile row does — the alignment is
+    /// what the screen is for, and a continuation indented under the row it
+    /// belongs to keeps it readable as one step.
+    #[test]
+    fn a_step_line_too_wide_for_the_popup_wraps_instead_of_running_off() {
+        let chain = a_very_wide_chain();
+        let lines = chain_rows(&chain);
+        assert!(
+            lines.len() > 1,
+            "a step this wide should have been split: {lines:?}"
+        );
+
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            for line in &lines {
+                let drawn = p.measure_ui_advance(&format!("  {line}"), m.font_size);
+                assert!(
+                    drawn <= room,
+                    "a wrapped step line still overflows by {:.0}px \
+                     ({drawn:.0} into {room:.0}):\n{line}",
+                    drawn - room
+                );
+            }
+        });
+    }
+
+    /// A recipe whose cost list runs past `ROW_WRAP_COLUMNS`. Built rather than
+    /// named off the shipped assets so it cannot go stale, and so the wrap is
+    /// asserted against something wider than anything shipped: the ids resolve
+    /// to no `ItemDef`, so `Game::item_name` falls back to the id itself, which
+    /// is exactly the long-name case a mod can produce.
+    fn a_very_wide_recipe() -> CraftRecipe {
+        CraftRecipe {
+            result: ItemId::from("singularity_matrix"),
+            cost: (0..5)
+                .map(|n| {
+                    (
+                        ItemId::from(format!("some_rather_long_ingredient_id_{n}")),
+                        20,
+                    )
+                })
+                .collect(),
+        }
+    }
+
+    /// The wrap itself: an over-wide row moves its cost list onto continuation
+    /// lines, and *every* line it produces fits the popup. Asserted on the
+    /// lines rather than on a count, so a wrap that merely split the row
+    /// somewhere and still overflowed would fail here.
+    #[test]
+    fn a_row_too_wide_for_the_popup_wraps_instead_of_running_off() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
+        let lines = craft_rows(&game, &a_very_wide_recipe(), 0, &[]);
+
+        assert!(
+            lines.len() > 1,
+            "a row this wide should have been split: {lines:?}"
+        );
+        assert!(
+            lines[0].starts_with("[1] MOD  Singularity Matrix"),
+            "the shortcut, kind and name are what the eye scans, so they stay \
+             together on the first line: {}",
+            lines[0]
+        );
+
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            for line in &lines {
+                let drawn = p.measure_ui_advance(&format!("  {line}"), m.font_size);
+                assert!(
+                    drawn <= room,
+                    "a wrapped line still overflows by {:.0}px \
+                     ({drawn:.0} into {room:.0}):\n{line}",
+                    drawn - room
+                );
+            }
+        });
+    }
+
+    /// The other half of a conditional wrap, and the half a threshold set too
+    /// low would break silently: a row that fits is left alone. Every recipe a
+    /// fresh game offers is comfortably inside the limit, so any of them
+    /// splitting means the threshold has been mis-set.
+    #[test]
+    fn a_row_that_fits_is_left_on_one_line() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
+        let status = game.player_status();
+        for (i, recipe) in game.craft_recipes().iter().enumerate() {
+            let lines = craft_rows(&game, recipe, i, &status.inventory);
+            assert_eq!(
+                lines.len(),
+                1,
+                "no starter recipe is wide enough to need wrapping: {lines:?}"
             );
         }
     }
 
     /// `draw_row` clamps a row vertically and nothing clamps it horizontally,
-    /// so the kind column's five extra cells run a long recipe further off the
-    /// popup rather than wrapping.
+    /// so a row past the popup's edge runs off it rather than wrapping — which
+    /// is what `craft_rows` now prevents.
     ///
-    /// **This covers the nine recipes a fresh game offers, and not the rest.**
-    /// Every other recipe is gated behind a bench, research, or both, and a
-    /// gui test can reach neither: `place_structure` wants build materials and
-    /// `unlock_research` wants banked Research Data, both of which live in the
-    /// engine's private `World`. Widening it means an engine-side accessor,
-    /// not a cleverer fixture.
-    ///
-    /// What that gap hides, measured at 1440x900 on 2026-08-12: the widest row
-    /// in the shipped assets is Singularity Matrix's, and it draws 1517px into
-    /// 1243px of room. It overflowed before this column existed too — 1463px —
-    /// so the four Portal-Fragment recipes have always run off this popup and
-    /// the tag deepens it by 54px rather than causing it. Fixing that is a
-    /// separate call about what a Compile row drops when it cannot fit.
+    /// This measures the shipped recipes a fresh game offers. The rest are
+    /// gated behind a bench, research or both, and a gui test can reach
+    /// neither: `place_structure` wants build materials and `unlock_research`
+    /// wants banked Research Data, and both live in the engine's private
+    /// `World`. `a_row_too_wide_for_the_popup_wraps_instead_of_running_off`
+    /// is what covers them, by building a row wider than any of them.
     #[test]
     fn the_widest_compile_row_fits_the_popup_it_is_drawn_in() {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
-        let mut game =
-            Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
+        let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
         let status = game.player_status();
         let widest = game
             .craft_recipes()
             .iter()
             .enumerate()
-            .map(|(i, r)| craft_row(&game, r, i, &status.inventory))
+            .flat_map(|(i, r)| craft_rows(&game, r, i, &status.inventory))
             .map(|line| format!("  {line}"))
             .max_by_key(|line| line.chars().count())
             .expect("the shipped assets declare recipes");

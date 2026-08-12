@@ -98,22 +98,28 @@ frozen set at all.
 Measured against the shipped roster, 2026-08-12, 200 seeds
 (`tuner dev-tuning/objective.ron --measure`):
 
-| scenario | want | shipped |
-|---|---|---|
-| opening-fight | 100% / 62% HP | 99.0% / 66.7% |
-| full-group | 100% / 90% HP | 100% / 99.9% |
-| lair-on-curve | 55% / 30% HP | 28.5% / 27.6% |
+| scenario | want | shipped | before the retune |
+|---|---|---|---|
+| opening-fight | 100% / 62% HP | 99.0% / 66.7% | 99.0% / 66.7% |
+| full-group | 100% / 90% HP | 100% / 99.9% | 100% / 99.9% |
+| lair-on-curve | 55% / 30% HP | 56.0% / 54.9% | 28.5% / 27.6% |
 
 Two of the three are deliberately near what the game already does. The
 opening ring is a nursery by design and surface content at zone 3 is
 deliberately a victory lap, so those targets are *guards* — what they catch
-is the surface getting harder, not the search failing to make it so. The
-lair is the lever, and it carries about 96% of the objective's error.
+is the surface getting harder, not the search failing to make it so.
 
-That split is the shape of the game as measured: an on-curve zone-3 party
-takes **zero** damage from the largest group zone 3 can field, and clears a
-depth-2 lair 28.5% of the time. A cliff, not a curve — the same finding the
-older numbers pointed at, now measured on both sides of it.
+The lair was the lever, and the first search against this objective moved it
+from 28.5% to 56% — by lowering `overseer.base_atk` from 17 to 11 and
+nothing else. That is now applied. **What is left of the error is almost
+entirely the lair's HP band**: the fight is won at 54.9% health against a
+want of 30%, so it is winnable but not yet the cost it was specced as.
+Whether to chase that is a design call rather than a search problem.
+
+The measured shape of the game behind those targets: an on-curve zone-3
+party takes **zero** damage from the largest group zone 3 can field, and
+before the retune cleared a depth-2 lair 28.5% of the time. A cliff, not a
+curve.
 
 The targets were re-argued on 2026-08-12; before that they still encoded a
 game where a zone doubled enemy stats. `stack-depth-5.ron` was a target

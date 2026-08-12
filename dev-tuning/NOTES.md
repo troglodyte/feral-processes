@@ -186,6 +186,46 @@ fourth, asserting the *written* proposal was byte-identical, was written and
 never happened to pick `scrapper` and patching writes identical values back
 idempotently. Don't re-add that shape; it reads as coverage and is not.
 
+## The first search against the re-argued objective — 2026-08-12
+
+61 candidates, training error 0.2201 -> 0.0888, holdout 0.2738 -> 0.0761.
+It moved 14 fields across 6 species and took the lair from 26% to 52%.
+
+**One of those 14 was worth having and the other 13 were damage.** Applying
+the whole proposal failed four censuses in the shipped suite:
+
+| census | caused by |
+|---|---|
+| `base_roster_growth_multiplier_rises_with_difficulty_tier` | `sprite.growth_multiplier -> 1.238` |
+| `extraction_aptitude_cuts_across_the_difficulty_ladder` | same field |
+| `every_ordinary_species_stat_shape_agrees_with_its_affinity_class` | `drone.base_speed 8 -> 6` |
+| `the_reach_rule_measurably_softens_a_full_pack` | `rootkit.base_hp +19`, `base_def +3` |
+
+And two more violations went *unreported*, because the shape census panics
+on the first failure: proposed `rootkit` spends 169 stat points where its
+budget is 147, and proposed `sprite` spends 40 where its new growth band
+demands 101.
+
+**Why it can hardly avoid this.** Every ordinary species' stat block is
+*derived*: `total == tier_budget(growth_multiplier) * class weight` exactly,
+with per-axis shares to ±1 and a speed band per class. `tier_budget` is a
+step function (50 / 105 / 140). The tuner's six movable fields are precisely
+the inputs to that formula and it moves them independently, so essentially
+any change it makes to an ordinary species' `base_hp`/`base_atk`/`base_def`/
+`growth_multiplier` is invalid by construction. The censuses are in
+`species.rs`; `constraints.rs` has never known about them.
+
+**The move that mattered was legal, and alone it beats the whole proposal.**
+`overseer.base_atk 17 -> 11` is the lair guardian, and a boss — which the
+shape census exempts. Applied by itself it takes the lair to **56.0%**
+against a want of 55%, better than the full proposal's 52%, with the whole
+workspace suite green. That is what is applied; the other five files were
+reverted.
+
+So the legal move set — bosses, `taming_difficulty`, speed within a class's
+band — is not the crippling restriction it looks like. It is where the only
+value in this search was.
+
 ## Two defects found on 2026-08-12, neither fixed
 
 Both were found while re-arguing the targets and both are small; they are
@@ -211,9 +251,8 @@ recorded rather than fixed because neither is a tuning question.
    linear in `0.8.1`. What that did and did not fix is above.
 2. ~~Fix the side-blindness~~ — done, see above.
 3. ~~Land `fixture-cleanup`~~ — merged and released as `0.5.10`.
-4. **Run a search against the re-argued objective.** It has never been run
-   with these targets, this sample size, or a geared party. The lair target
-   carries ~96% of the error and is the only one with room to move.
+4. ~~Run a search against the re-argued objective~~ — run 2026-08-12. See
+   the section below; the one field worth taking from it is applied.
 5. **Unfreeze `scrapper` via coverage.** It is the party in both party
    targets and therefore frozen out of the candidate entirely, which means
    the game's most-fielded species is the one the tool can never tune.

@@ -1,5 +1,11 @@
 # What a lair costs a party that is on its zone's curve
 
+> **Measured before the roster retune later the same day.** `overseer.base_atk`
+> went 17 -> 11 after this sweep, which is the lair guardian at `Mainframe` —
+> so the depth-2 column below (15% on curve) now reads 56%. The *shape* is
+> what this file is for and that stands; the absolute cells do not describe
+> the shipped game any more. `dev-tuning/NOTES.md` has the retune.
+
 ## The claim
 
 Linear scaling (`0.8.1`) made every lair depth reachable *for the run it was

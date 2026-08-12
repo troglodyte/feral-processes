@@ -150,6 +150,31 @@ fn face_color(cell: StackCellView) -> Color {
     }
 }
 
+/// The colours of the two side walls of an open cell: the surface each solid
+/// neighbour presents edge-on, or `None` where the cone has no neighbour that
+/// way or the neighbour opens into more corridor.
+///
+/// It reads `face_color` rather than painting a flat `WALL`, and that is the
+/// whole point of the function existing. `solid` has always included both
+/// doors, so a door beside the party did stop the corridor — but the wall it
+/// stopped it with was drawn the same cyan as rock, and a door one step to
+/// your left was indistinguishable from the wall it is set into. Dead ahead
+/// the same door draws brown with a `+` over it, because the *face* branch
+/// asks `face_color` and this one did not.
+///
+/// The colour is all a door beside the party has. At depth 0 the neighbour's
+/// own column is entirely off the pane
+/// (`the_column_beside_the_party_swings_into_the_pane`), so it never draws
+/// its own face and its `+` is clipped away — this shared boundary is the
+/// only pixel the door owns.
+fn flank_colors(row: &[StackCellView], i: usize) -> (Option<Color>, Option<Color>) {
+    let side = |cell: Option<&StackCellView>| cell.copied().filter(|&c| solid(c)).map(face_color);
+    (
+        side(i.checked_sub(1).and_then(|j| row.get(j))),
+        side(row.get(i + 1)),
+    )
+}
+
 /// Draws the corridor into the pane at the origin, `w` by `h`.
 pub(super) fn draw_stack(view: &StackView, painter: &Painter, w: f32, h: f32, m: &Metrics) {
     painter.rect(0.0, 0.0, w, h, VOID);
@@ -249,11 +274,14 @@ fn draw_cell(
         // neighbour in the cone, so its outer side is left to the unlit fill
         // rather than guessed at: the cone is what the party can see, and a
         // wall invented past its edge would be the view claiming to know.
-        if i > 0 && solid(row[i - 1]) {
-            painter.poly(&[(nl, nt), (fl, ft), (fl, fb), (nl, nb)], dim(WALL, s));
+        // `flank_colors` is what makes a door beside the party read as a
+        // door rather than as the rock it is set into.
+        let (left, right) = flank_colors(row, i);
+        if let Some(color) = left {
+            painter.poly(&[(nl, nt), (fl, ft), (fl, fb), (nl, nb)], dim(color, s));
         }
-        if i + 1 < row.len() && solid(row[i + 1]) {
-            painter.poly(&[(nr, nt), (fr, ft), (fr, fb), (nr, nb)], dim(WALL, s));
+        if let Some(color) = right {
+            painter.poly(&[(nr, nt), (fr, ft), (fr, fb), (nr, nb)], dim(color, s));
         }
     }
 
@@ -542,6 +570,66 @@ mod tests {
                 "{cell:?} draws as bare corridor — invisible until stepped on"
             );
         }
+    }
+
+    /// A door beside the party has to read as a door. The corridor stops at
+    /// one either way — `solid` has always included both doors — but the
+    /// wall it stopped at was painted the same cyan as rock, so the player
+    /// found out a door was there by walking into it. Dead ahead the same
+    /// door draws brown, which is what made this legible as a bug rather
+    /// than as the view simply not modelling doors.
+    #[test]
+    fn a_door_beside_the_party_is_not_drawn_as_rock() {
+        let row = [
+            StackCellView::Door,
+            StackCellView::Floor,
+            StackCellView::Rock,
+        ];
+        let (left, right) = flank_colors(&row, 1);
+        assert_eq!(
+            left,
+            Some(DOOR),
+            "a door to the left draws as the rock it is set into"
+        );
+        assert_eq!(right, Some(WALL), "rock to the right must stay rock");
+    }
+
+    /// The sealed/plain split the face branch already draws is the same one
+    /// seen edge-on: a seal is a locked way on, and mistaking it for a door
+    /// you can walk through sends the party to find a key they don't need.
+    #[test]
+    fn a_sealed_door_beside_the_party_keeps_its_own_colour() {
+        let row = [
+            StackCellView::Floor,
+            StackCellView::Floor,
+            StackCellView::SealedDoor,
+        ];
+        assert_eq!(flank_colors(&row, 1).1, Some(SEALED));
+    }
+
+    /// Open corridor either side claims no wall, and neither does the edge
+    /// of the cone — the outermost column's outer side is left to the unlit
+    /// fill rather than guessed at.
+    #[test]
+    fn an_open_flank_and_the_edge_of_the_cone_draw_no_wall() {
+        let open = [
+            StackCellView::Floor,
+            StackCellView::Floor,
+            StackCellView::Cache,
+        ];
+        assert_eq!(flank_colors(&open, 1), (None, None));
+
+        let walled = [
+            StackCellView::Floor,
+            StackCellView::Rock,
+            StackCellView::Floor,
+        ];
+        assert_eq!(
+            flank_colors(&walled, 0),
+            (None, Some(WALL)),
+            "the cone's edge invented a wall it cannot see"
+        );
+        assert_eq!(flank_colors(&walled, 2), (Some(WALL), None));
     }
 
     /// `slice(0)` spans the whole pane, so a face drawn at depth 0 fills the

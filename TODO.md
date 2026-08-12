@@ -14,5 +14,7 @@
 [ ] silver and gold special variants, bosted stats, routines. special routines etc.
 
 # Bugs
-[ ] doors do not render in the distance in the stack, i don't see the walls changing color until i'm directly next to it
+[x] doors do not render in the distance in the stack, i don't see the walls changing color until i'm directly next to it
  - not entirely fixed, if i'm next to one, i can't see the wall to my side as brown
+ - the side wall was painted the same cyan as rock whatever it was; it now
+   asks face_color like the wall ahead already did

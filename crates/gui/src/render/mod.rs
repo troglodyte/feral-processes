@@ -598,6 +598,16 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             painter,
             m,
         ),
+        // Names the cascade the way the picker's own header does: this route
+        // reaches Home in one keypress, so the warning cannot wait for the
+        // confirmation screen to be the first mention of it.
+        Mode::RemoveDirection => draw_direction_prompt(
+            "Demolish Direction",
+            "Demolish which neighbour? Removing Home destroys the whole base. \
+             (arrows/hjkl, Esc to cancel)",
+            painter,
+            m,
+        ),
         Mode::Manifest => {
             // Only advertise ←/→ when they actually do something. A wild
             // program reached via `x` is not in the owned list, so cycling

@@ -220,7 +220,7 @@ pub(super) const HELP_ROWS: &[&str] = &[
     "Esc backs out one level; finishing a job returns to the map.",
     "",
     "c collect from adjacent structures   t trade   a routine",
-    "u symlink   x examine a direction",
+    "u symlink   x examine a direction   d demolish a direction",
     "L history   f filter the log (all/field/base)",
     "s save   q main menu (confirms first)",
     "+/- zoom   [/] volume   \\ visual effects",

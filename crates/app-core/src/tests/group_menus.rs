@@ -201,14 +201,18 @@ fn esc_from_a_group_menu_returns_to_the_map() {
     }
 }
 
-/// The thirteen keys the group menus replaced. Kept as aliases they would
-/// have meant the flat surface never actually shrank, and the help screen
-/// would have had two systems to document.
+/// Twelve of the thirteen keys the group menus replaced. Kept as aliases they
+/// would have meant the flat surface never actually shrank, and the help
+/// screen would have had two systems to document.
+///
+/// `d` is the thirteenth and has left this list: it was the manifest picker's
+/// key, and is now the direct demolish (`the_demolish_key_*` in
+/// `tests/building.rs`). A retired key is free to be *reissued* — what this
+/// census forbids is an old binding surviving as a silent alias, which is a
+/// different thing from the key being used again deliberately.
 #[test]
 fn the_retired_map_keys_do_nothing() {
-    for key in [
-        'c', 'w', 'W', 'G', 'R', 'U', 'B', 'T', 'f', 'm', 'M', 'd', 'v',
-    ] {
+    for key in ['c', 'w', 'W', 'G', 'R', 'U', 'B', 'T', 'f', 'm', 'M', 'v'] {
         let mut app = test_app(4012);
         app.handle_key(GameKey::Char(key));
         assert_eq!(

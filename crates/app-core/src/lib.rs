@@ -557,6 +557,12 @@ pub enum Mode {
     /// Warns that demolishing the Home destroys every other base structure
     /// too, before `Game::remove_structure` is actually called.
     RemoveConfirm,
+    /// Aiming the demolish key at one of the four neighbouring tiles, reached
+    /// with `d` from `Mode::Playing`. The direct route to the same removal
+    /// `Mode::Remove` lists — a structure has to be *adjacent*, so a single
+    /// keypress can never take down something off the far side of the screen.
+    /// Home still routes into `Mode::RemoveConfirm`.
+    RemoveDirection,
     /// Lists nearby structures that declare an upgrade path (see
     /// `Game::upgrade_structure`); picking one advances it a tier. Anything
     /// un-upgradeable is filtered out rather than offered and then refused.
@@ -571,7 +577,7 @@ pub enum Mode {
     /// you own, or a wild one. `App::pending_manifest` is the subject.
     Manifest,
     /// Picking whose manifest to read — you, or any program you own.
-    /// Reached with `d` from `Mode::Playing`.
+    /// Reached from the party group menu; `d` on the map is the demolish key.
     ManifestPick,
     /// A read-only detail sheet for one structure, opened when
     /// `Mode::InspectDirection` finds a structure nearer than any creature.
@@ -778,6 +784,7 @@ impl Mode {
             | Mode::GuardStructure
             | Mode::Remove
             | Mode::RemoveConfirm
+            | Mode::RemoveDirection
             | Mode::Upgrade
             | Mode::Symlink
             | Mode::InspectDirection

@@ -566,3 +566,47 @@ pub(crate) fn open_via_menu(app: &mut App, group: char, label: &str) {
         .unwrap_or_else(|| panic!("{label:?} is not offered right now; rows: {labels:?}"));
     app.handle_key(GameKey::Char(menu_shortcut(idx)));
 }
+
+/// A base the player is standing inside: a Home one tile north and an
+/// ordinary Mining Node one tile east, with nothing to the south or west.
+///
+/// Built by editing a save for the same reason `app_owning_a_program_and_a_
+/// compiler` is — deploying a second structure through the build flow needs
+/// materials the player does not start with, and the layout is the whole
+/// point here: the direct demolish key has to tell a Home from anything else
+/// and both from an empty tile, which is three neighbours of one tile.
+pub(crate) fn app_inside_a_small_base(seed: u32, underground: bool) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("small_base", seed);
+    let game = app.game.as_mut().unwrap();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    for (kind, position) in [("home", (px, py - 1)), ("mining_node", (px + 1, py))] {
+        data.structures.push(save::StructureSave {
+            kind: kind.to_string(),
+            position,
+            durability: None,
+            tier: None,
+            stock_input: Vec::new(),
+            stock_output: Vec::new(),
+        });
+    }
+    if underground {
+        data.locale = Locale::Stack {
+            depth: 1,
+            frames: 2,
+            x: 1,
+            y: 1,
+            facing: Dir::North,
+            entrance: data.player.position,
+        };
+    }
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Game::load(&path, &assets_dir).ok();
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}

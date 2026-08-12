@@ -1473,3 +1473,69 @@ fn the_manifest_shows_a_programs_zone_tier_against_the_players_own() {
         "the party menu's own row carries the same count"
     );
 }
+
+/// The direct demolish key aims at one tile, not down a line. `x`'s cone
+/// scan would let a single keypress take down something forty tiles off.
+#[test]
+fn adjacent_structure_finds_only_the_neighbouring_tile() {
+    let mut game = Game::new(60, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_player_at(&mut game, 0, 0);
+    place_home(&mut game, 0, 0);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 500);
+    game.place_structure("mining_node", 1, 0).unwrap();
+    game.place_structure("mining_node", 3, 0).unwrap();
+
+    let east = game
+        .adjacent_structure(1, 0)
+        .expect("the structure one tile east is adjacent");
+    assert_eq!(east.pos, (1, 0));
+    assert!(east.is_structure);
+    assert!(!east.is_home);
+
+    assert!(
+        game.adjacent_structure(0, 1).is_none(),
+        "an empty neighbour is nothing to demolish"
+    );
+    assert!(
+        game.adjacent_structure(-1, 0).is_none(),
+        "the tile the player stands on is not a neighbour, Home or not"
+    );
+}
+
+#[test]
+fn adjacent_structure_reports_the_home_it_finds() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_player_at(&mut game, 0, 0);
+    place_home(&mut game, 1, 0);
+
+    let found = game
+        .adjacent_structure(1, 0)
+        .expect("Home is a structure like any other to this lookup");
+    assert!(
+        found.is_home,
+        "the caller needs this to route Home into its confirmation screen"
+    );
+}
+
+/// `Position` is pinned to the surface entrance tile while the party is in
+/// the Stack, so a direction key down there would aim at the base overhead —
+/// the same trap `find_target_in_direction` refuses for.
+#[test]
+fn adjacent_structure_finds_nothing_underground() {
+    let mut game = Game::new(62, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_player_at(&mut game, 0, 0);
+    place_home(&mut game, 1, 0);
+    assert!(game.adjacent_structure(1, 0).is_some(), "precondition");
+
+    let start = *game.world.get::<Position>(game.player_entity()).unwrap();
+    game.enter_stack(start.x, start.y);
+    assert!(game.is_underground(), "the fixture really went down");
+
+    assert!(
+        game.adjacent_structure(1, 0).is_none(),
+        "a structure on the surface must not be reachable from four frames down"
+    );
+}

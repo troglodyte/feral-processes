@@ -6,6 +6,8 @@
 //! so the two cannot disagree with each other the way a hand-maintained
 //! `HaulState` enum would.
 
+use std::collections::HashSet;
+
 use crate::game::collect::ORTHOGONAL;
 use crate::game::pursuit::walk_field;
 use crate::tuning::HAUL_WALK_RADIUS;
@@ -72,17 +74,38 @@ pub(crate) fn nearest_depot(
         .copied()
 }
 
+/// Every tile a deployed structure stands on. A worker may not walk over one,
+/// for the reason the player may not: `move_player` refuses a tile
+/// `find_blocking_structure_at` answers for, and a base that a program walks
+/// through while its owner walks around stops reading as a physical place.
+///
+/// Built per tick from whatever positions the caller can see, rather than
+/// cached — the same reasoning `haul_step_system` rebuilds its depot list on:
+/// a demolished structure has to stop blocking without anything noticing it
+/// changed.
+pub(crate) fn structure_tiles(positions: impl Iterator<Item = Position>) -> HashSet<(i32, i32)> {
+    positions.map(|p| (p.x, p.y)).collect()
+}
+
 /// The tile a worker must stand on to work or deliver to `structure`: the
-/// walkable orthogonal neighbour nearest `from`, ties by `(x, y)`. `None`
-/// when the structure is walled in.
+/// walkable, unoccupied orthogonal neighbour nearest `from`, ties by
+/// `(x, y)`. `None` when the structure is walled in.
 ///
 /// A specific tile rather than "get within one step". Descending a cost
 /// field until it reads 1 would let a worker park on a *diagonal* at cost 1,
 /// never satisfy `at_station`, and spin there for the rest of the run.
+///
+/// `blocked` is applied here and not only in the walk: an occupied neighbour
+/// nominated as a station is a tile the worker is being sent to stand *on*,
+/// which is the one thing the walk refuses. A machine packed tightly enough
+/// that all four of its neighbours hold buildings has no station at all —
+/// and the player could never have collected from it either, since
+/// `collect_adjacent` is orthogonal and they cannot stand on a building.
 pub(crate) fn station_tile(
     map: &mut WorldMap,
     structure: Position,
     from: Position,
+    blocked: &HashSet<(i32, i32)>,
 ) -> Option<Position> {
     ORTHOGONAL
         .iter()
@@ -90,7 +113,7 @@ pub(crate) fn station_tile(
             x: structure.x + dx,
             y: structure.y + dy,
         })
-        .filter(|p| map.tile(p.x, p.y).walkable)
+        .filter(|p| map.tile(p.x, p.y).walkable && !blocked.contains(&(p.x, p.y)))
         .min_by_key(|p| (chebyshev(*p, from), p.x, p.y))
 }
 
@@ -98,34 +121,67 @@ pub(crate) fn station_tile(
 /// Aliased for the same `type_complexity` reason `Hauler` below is.
 type PostRoute = (HashMap<(i32, i32), u32>, u32);
 
+/// Why a worker cannot walk to a post. The two are worth telling apart
+/// because they leave the player different errands: a boxed-in machine has to
+/// be dug out of its own base, while an unroutable one may just need you to
+/// stand closer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum NoPost {
+    /// Not one of the structure's four neighbours is both walkable and
+    /// unoccupied — nothing can stand next to it at all.
+    BoxedIn,
+    /// A station exists, but no route reaches it from `from` within
+    /// `HAUL_WALK_RADIUS`: too far, or something is in the way.
+    NoRoute,
+}
+
 /// The walk field a worker at `from` follows to reach `structure`, paired
-/// with `from`'s own cost in it — or `None` when there is no route within
-/// `HAUL_WALK_RADIUS`, because the structure is walled in or the worker was
-/// tamed further away than a base is wide.
+/// with `from`'s own cost in it — or why there is no such walk.
 ///
 /// One function rather than a distance check beside the walk: `assign_cronjob`
 /// refuses exactly what `haul_step_system` cannot deliver, so a posting the
 /// menu accepts is a posting that arrives. Returning `from`'s cost with the
 /// field is what makes "the worker is in it" a fact the caller is handed
 /// rather than one it has to re-establish.
-fn post_field(map: &mut WorldMap, from: Position, structure: Position) -> Option<PostRoute> {
-    let station = station_tile(map, structure, from)?;
-    let field = walk_field(map, (station.x, station.y), HAUL_WALK_RADIUS, |t| {
-        t.walkable
+///
+/// The worker's own tile is admitted whatever `blocked` says. `place_structure`
+/// checks terrain and other structures but never whether a program is standing
+/// there, so a building can go up on top of a hauler mid-walk; since the walk
+/// filters successors, that worker would otherwise be absent from its own
+/// field and frozen for the rest of the run. You may step *off* an occupied
+/// tile, never onto one.
+fn post_field(
+    map: &mut WorldMap,
+    from: Position,
+    structure: Position,
+    blocked: &HashSet<(i32, i32)>,
+) -> Result<PostRoute, NoPost> {
+    let station = station_tile(map, structure, from, blocked).ok_or(NoPost::BoxedIn)?;
+    let start = (from.x, from.y);
+    let field = walk_field(map, (station.x, station.y), HAUL_WALK_RADIUS, |t, p| {
+        t.walkable && (p == start || !blocked.contains(&p))
     });
-    let here = *field.get(&(from.x, from.y))?;
-    Some((field, here))
+    let here = *field.get(&start).ok_or(NoPost::NoRoute)?;
+    Ok((field, here))
 }
 
 /// Whether a worker standing at `from` could ever reach a post at
-/// `structure`. See `post_field` for why this is the same question the
-/// walker asks.
+/// `structure`, and why not when it could not. See `post_field` for why this
+/// is the same question the walker asks.
 ///
 /// `at_station` first, in the order `haul_step_system` asks it: a worker
 /// already on one of the four tiles it works from never walks, so it never
 /// builds a field and cannot be refused for lacking a route through one.
-pub(crate) fn can_reach_post(map: &mut WorldMap, from: Position, structure: Position) -> bool {
-    at_station(from, structure) || post_field(map, from, structure).is_some()
+pub(crate) fn post_reach(
+    map: &mut WorldMap,
+    from: Position,
+    structure: Position,
+    blocked: &HashSet<(i32, i32)>,
+) -> Result<(), NoPost> {
+    if at_station(from, structure) {
+        return Ok(());
+    }
+    post_field(map, from, structure, blocked).map(|_| ())
 }
 
 /// Moves as much of `load` into `stock`'s output as fits, and reports how
@@ -175,6 +231,8 @@ pub(crate) fn haul_step_system(
     mut map: ResMut<WorldMap>,
     mut commands: Commands,
 ) {
+    let blocked = structure_tiles(structures.iter().map(|(_, p, _, _)| *p));
+
     // Rebuilt every tick rather than cached: this is the list that makes a
     // demolished or newly-filled depot stop being a destination without
     // anything having to notice it changed.
@@ -218,6 +276,12 @@ pub(crate) fn haul_step_system(
         let dest_pos = *dest_pos;
 
         if at_station(worker_pos, dest_pos) {
+            // A worker standing where it meant to stand is not stranded,
+            // whatever it was a tick ago. Cleared here as well as after a
+            // successful field because this branch returns before one is
+            // ever built — a depot deployed beside a stranded worker would
+            // otherwise leave the marker set while it went back to work.
+            commands.entity(worker).remove::<Stranded>();
             match carrying {
                 Some(load) => {
                     let Ok((_, _, mut stock, _)) = structures.get_mut(destination) else {
@@ -253,13 +317,16 @@ pub(crate) fn haul_step_system(
             continue;
         }
 
-        // No field means no route within the radius. `assign_cronjob` refuses
-        // that case up front, so what is left here is a route lost after the
-        // posting — a depot demolished behind a wall, or terrain that changed.
-        // The worker stands still and its machine reports `Unstaffed`.
-        let Some((field, here)) = post_field(&mut map, worker_pos, dest_pos) else {
+        // No field means no route. `assign_cronjob` refuses that case up
+        // front, so what is left here is a route lost after the posting — a
+        // wall of new buildings, a depot demolished behind one, or terrain
+        // that changed. The worker stands still, and the marker is what turns
+        // its machine's status from `Unstaffed` into `Stranded`.
+        let Ok((field, here)) = post_field(&mut map, worker_pos, dest_pos, &blocked) else {
+            commands.entity(worker).insert(Stranded);
             continue;
         };
+        commands.entity(worker).remove::<Stranded>();
         let step = NEIGHBOURS
             .iter()
             .map(|(dx, dy)| (worker_pos.x + dx, worker_pos.y + dy))

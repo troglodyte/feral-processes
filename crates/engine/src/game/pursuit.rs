@@ -22,15 +22,20 @@ use crate::world::{NEIGHBOURS, Tile, WorldMap};
 /// callers must not try to tell those apart, since none of them is a tile
 /// the walker should step onto.
 ///
-/// The step rule is a parameter because the two callers genuinely disagree
-/// about one tile set: `pursuit_field` below refuses the base slab, and a
-/// hauling program has to cross it. A third caller widens this predicate
-/// rather than copying the walk.
+/// The step rule is a parameter because the callers genuinely disagree about
+/// which tiles are theirs to cross: `pursuit_field` below refuses the base
+/// slab, and a hauling program has to cross it but must not walk over the
+/// buildings standing on it. A further caller widens this predicate rather
+/// than copying the walk.
+///
+/// It takes the coordinate as well as the tile because only one of those two
+/// rules is about terrain. What occupies a tile is entity state — a
+/// `Structure`'s `Position` — and is not readable from a `Tile` at all.
 pub(crate) fn walk_field(
     map: &mut WorldMap,
     origin: (i32, i32),
     radius: i32,
-    step_allowed: impl Fn(&Tile) -> bool,
+    step_allowed: impl Fn(&Tile, (i32, i32)) -> bool,
 ) -> HashMap<(i32, i32), u32> {
     // `WorldMap::tile` takes `&mut self` — it generates chunks lazily — so
     // the successor closure has to hold the map mutably. `dijkstra_all`
@@ -48,7 +53,7 @@ pub(crate) fn walk_field(
                 // nothing to stop it.
                 (nx - origin.0).abs() <= radius
                     && (ny - origin.1).abs() <= radius
-                    && step_allowed(&map.tile(nx, ny))
+                    && step_allowed(&map.tile(nx, ny), (nx, ny))
             })
             // Movement is Chebyshev: all eight directions, diagonals
             // included, cost the same single step.
@@ -74,7 +79,9 @@ pub(crate) fn pursuit_field(
     origin: (i32, i32),
     radius: i32,
 ) -> HashMap<(i32, i32), u32> {
-    walk_field(map, origin, radius, Tile::open_to_hostiles)
+    // The coordinate is ignored here: a guardian's refusal is entirely a
+    // property of the terrain it is standing on.
+    walk_field(map, origin, radius, |t, _| t.open_to_hostiles())
 }
 
 #[cfg(test)]
@@ -123,7 +130,7 @@ mod tests {
             "pursuit must still refuse the base slab"
         );
 
-        let walked = walk_field(&mut map, (0, 0), 2, |t| t.walkable);
+        let walked = walk_field(&mut map, (0, 0), 2, |t, _| t.walkable);
         assert_eq!(
             walked.get(&(1, 0)),
             Some(&1),

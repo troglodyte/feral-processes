@@ -5,8 +5,8 @@ use rand::RngExt;
 use crate::components::{
     Carrying, Creature, Experience, FieldBuff, FieldBuffKind, Inventory, MachineStatus, NEED_MAX,
     NEED_MIN, Needs, Nest, NestGuardian, Perks, Player, Position, Potential, Pursuing,
-    ResourceNode, Stats, Stock, Structure, StructureTier, Tamed, Task, TaskKind, WanderAi,
-    field_buff_power_of,
+    ResourceNode, Stats, Stock, Stranded, Structure, StructureTier, Tamed, Task, TaskKind,
+    WanderAi, field_buff_power_of,
 };
 use crate::game::hauling::at_station;
 use crate::items::ItemId;
@@ -374,6 +374,9 @@ pub(crate) fn set_machine_status(
         MachineStatus::Starved => format!("The {name} is starved — nothing is feeding it."),
         MachineStatus::Clogged => format!("The {name} is clogged — its output buffer is full."),
         MachineStatus::Unstaffed => format!("The {name} has no one at it — its program is away."),
+        MachineStatus::Stranded => {
+            format!("The {name} is cut off — its program can't find a way to it.")
+        }
         MachineStatus::Idle => format!("The {name} sits idle — no program is assigned."),
     });
 }
@@ -404,6 +407,7 @@ type CronjobWorker = (
     &'static mut Stats,
     &'static Position,
     Option<&'static Carrying>,
+    Option<&'static Stranded>,
 );
 
 /// The read-only lookups `task_progress_system` needs, bundled so bevy's
@@ -475,7 +479,9 @@ pub fn task_progress_system(
         ),
         None => (0, 0, None),
     };
-    for (mut task, creature, potential, mut exp, mut stats, worker_pos, carrying) in &mut tasks {
+    for (mut task, creature, potential, mut exp, mut stats, worker_pos, carrying, stranded) in
+        &mut tasks
+    {
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
         }
@@ -494,12 +500,16 @@ pub fn task_progress_system(
         // specifically — a worker that produced there would refill the room
         // its own load needs and be left holding the remainder forever.
         if !at_station(*worker_pos, *node_pos) || carrying.is_some() {
-            set_machine_status(
-                &mut status,
-                MachineStatus::Unstaffed,
-                machine_name,
-                &mut log,
-            );
+            // `Stranded` is the more specific reading of the same situation:
+            // nobody is at the machine, and no amount of waiting will change
+            // that. The marker is `haul_step_system`'s, written a tick ago —
+            // see `components::Stranded` for why the lag is accepted.
+            let away = if stranded.is_some() {
+                MachineStatus::Stranded
+            } else {
+                MachineStatus::Unstaffed
+            };
+            set_machine_status(&mut status, away, machine_name, &mut log);
             continue;
         }
         task.progress += 1;

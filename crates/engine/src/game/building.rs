@@ -533,13 +533,21 @@ impl Game {
         // program can never walk to would stand a companion down and displace
         // the structure's current worker to pay for a cronjob that produces
         // nothing.
+        let blocked = self.structure_tiles();
         let mut map = self.world.resource_mut::<WorldMap>();
-        if !hauling::can_reach_post(&mut map, from, structure_pos) {
-            return Err(
-                "That structure is too far away to post a program to — get closer \
-                 to it first."
+        if let Err(reason) = hauling::post_reach(&mut map, from, structure_pos, &blocked) {
+            // Two errands, not one. A structure the base has been built around
+            // needs digging out; one with no route may just need you to walk
+            // over to it. Saying "too far" for both sent players walking at a
+            // machine they were already standing beside.
+            return Err(match reason {
+                hauling::NoPost::BoxedIn => "That structure is walled in — nothing can stand \
+                     next to it. Demolish something beside it first."
                     .into(),
-            );
+                hauling::NoPost::NoRoute => "No route to that structure from here — get closer, \
+                     or clear a path to it."
+                    .into(),
+            });
         }
         if let Some(mut pos) = self.world.get_mut::<Position>(worker) {
             *pos = from;

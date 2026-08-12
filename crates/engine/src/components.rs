@@ -449,6 +449,24 @@ pub struct Carrying {
     pub qty: u32,
 }
 
+/// A posted program that found no route to where it is trying to get. Set and
+/// cleared every tick by `game::hauling::haul_step_system`, the one system
+/// that walks a field and so the only one that can know.
+///
+/// A cache of that tick's answer rather than stored state, and not saved for
+/// the same reason `MachineStatus` isn't: the walk that produced it runs
+/// again on the next tick. It exists at all because the status it drives is
+/// written by `systems::task_progress_system` — giving `MachineStatus` two
+/// writers would have them ping-pong `Unstaffed`↔`Stranded` every tick, and
+/// `set_machine_status` logs on every transition.
+///
+/// `task_progress_system` runs *first* in the chain, so it reads a marker
+/// written on the previous tick. That one-tick lag on a status label is the
+/// price of leaving the chain order alone, which is load-bearing for the
+/// clog/pickup handoff (see `Game::build_schedule`).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Stranded;
+
 /// Why a machine is or isn't producing. Present only on structures that
 /// actually run a job (`StructureDef::work` or `::assembles`) — absence
 /// means "not a machine", which is why a Home never reports a status it
@@ -474,6 +492,15 @@ pub enum MachineStatus {
     /// without the precedence the pane would claim it is running while
     /// nothing produces.
     Unstaffed,
+    /// A program is posted and cannot get here at all — no route to the
+    /// machine or to any depot, usually because the base has been built
+    /// around it. Strictly more specific than `Unstaffed`, which it wins
+    /// over: both mean nobody is at the machine, but this one will not
+    /// resolve itself by waiting, so it is the difference between a worker
+    /// walking and a worker that needs the player to clear a path.
+    ///
+    /// Driven by the `Stranded` marker `haul_step_system` maintains.
+    Stranded,
     /// No program assigned.
     Idle,
 }

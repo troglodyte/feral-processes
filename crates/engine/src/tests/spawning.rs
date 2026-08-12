@@ -1532,6 +1532,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             pursuing: true,
             carrying: None,
             rarity: Rarity::Ordinary,
+            equipment: Vec::new(),
         }],
         structures: Vec::new(),
         nests: Vec::new(),

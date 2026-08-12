@@ -1013,3 +1013,114 @@ fn extracting_a_routine_from_a_geared_program_returns_its_gear() {
     );
     assert_eq!(held(&game, &armor), 1, "its gear comes back to cargo");
 }
+
+/// A scratch save path unique to the calling test, cleaned up by the caller.
+fn save_path(tag: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "feral_processes_companion_gear_{tag}_{}.bin",
+        std::process::id()
+    ))
+}
+
+#[test]
+fn a_geared_companion_survives_save_and_load() {
+    let mut game = Game::new(14, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(companion).unwrap();
+    let armor = ItemId::from(ids::FIREWALL_PLATING);
+    give(&mut game, &armor, 2);
+    game.fuse_item(&armor, 0).unwrap(); // one tier-1 copy
+    game.equip(companion, &armor, 1).unwrap();
+    let geared = stats_of(&game, companion);
+
+    let path = save_path("roundtrip");
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let restored = loaded.world.resource::<Party>().0[0];
+    assert_eq!(
+        loaded
+            .world
+            .get::<Equipment>(restored)
+            .and_then(|e| e.get(EquipmentSlot::Armor)),
+        Some(EquippedItem {
+            item: armor,
+            level: 1,
+            fusion_tier: 1,
+        }),
+        "the slot, its gear level and the tier of the copy all survive"
+    );
+    // The load path restores stats verbatim, so the numbers are the assertion
+    // that matters — a restored slot with unrestored stats reads as a working
+    // save right up until the first unequip subtracts a bonus never added.
+    let after = stats_of(&loaded, restored);
+    assert_eq!((after.def, after.atk), (geared.def, geared.atk));
+}
+
+#[test]
+fn a_geared_companion_survives_the_savetools_ron_round_trip() {
+    let mut game = Game::new(15, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(companion).unwrap();
+    let weapon = ItemId::from(ids::OVERCLOCK_CORE);
+    give(&mut game, &weapon, 1);
+    game.equip(companion, &weapon, 0).unwrap();
+
+    let path = save_path("ron");
+    game.save(&path).unwrap();
+    let data = crate::save::load_from_file(&path).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let text = crate::save::to_ron(&data).unwrap();
+    let parsed = crate::save::from_ron(&text).unwrap();
+
+    let before = bincode::serde::encode_to_vec(&data, bincode::config::standard()).unwrap();
+    let after = bincode::serde::encode_to_vec(&parsed, bincode::config::standard()).unwrap();
+    assert_eq!(
+        before, after,
+        "dump-then-pack must not change a byte of a save holding a geared program"
+    );
+    assert!(
+        parsed
+            .creatures
+            .iter()
+            .any(|c| c.equipment.iter().any(|(_, worn)| worn.item == weapon)),
+        "and the program is still wearing it on the other side"
+    );
+}
+
+/// A v27 dump carries no `equipment` key at all. `savetool pack` is the
+/// migration path, so it has to default rather than refuse.
+#[test]
+fn a_save_dump_without_the_equipment_key_still_packs() {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(companion).unwrap();
+
+    let path = save_path("v27");
+    game.save(&path).unwrap();
+    let data = crate::save::load_from_file(&path).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let text = crate::save::to_ron(&data).unwrap();
+    assert!(
+        text.contains("equipment: ["),
+        "the v28 dump should carry the key at all"
+    );
+    let v27: String = text
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("equipment: ["))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !v27.contains("equipment: ["),
+        "the older shape is what is being parsed"
+    );
+
+    let parsed = crate::save::from_ron(&v27).expect("a v27-shaped dump must still parse");
+    assert!(
+        parsed.creatures.iter().all(|c| c.equipment.is_empty()),
+        "a program in an older dump wears nothing"
+    );
+}

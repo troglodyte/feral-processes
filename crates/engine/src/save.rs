@@ -3,8 +3,8 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::components::{ActiveFieldBuff, Rarity};
-use crate::items::ItemId;
+use crate::components::{ActiveFieldBuff, EquippedItem, Rarity};
+use crate::items::{EquipmentSlot, ItemId};
 use crate::perks::Perk;
 use crate::resources::DifficultyMode;
 use crate::species::SpeciesId;
@@ -186,6 +186,20 @@ pub struct CreatureSave {
     /// `SAVE_FORMAT_VERSION` — see that constant's docs.
     #[serde(default)]
     pub rarity: Rarity,
+    /// What this program is wearing — see `components::Equipment`. Only
+    /// meaningful when `tamed` is true; nothing else may be geared.
+    ///
+    /// A `Vec` rather than `PlayerSave`'s nine flat fields, for one reason
+    /// that decides it: a single defaulted field means an older RON dump
+    /// packs with no hand-editing at all. `PlayerSave`'s existing shape is
+    /// what that migration matches, so it stays as it is.
+    ///
+    /// `#[serde(default)]` does nothing for the bincode save, which is
+    /// positional — that is why this bumped `SAVE_FORMAT_VERSION`. It is
+    /// here for the field-named RON that `savetool dump`/`pack` round-trips
+    /// through, which is the migration path.
+    #[serde(default)]
+    pub equipment: Vec<(EquipmentSlot, EquippedItem)>,
 }
 
 /// A nest's state on disk: its species, position, remaining `Durability`,
@@ -376,7 +390,11 @@ pub struct SaveData {
 /// 26 → 27: `CreatureSave` gained `refactors` and `purchased_tiers`, the
 /// spent companion upgrade slots and the zone tiers bought with Recompile
 /// Kernels (`components::Refactors`, `components::PurchasedTiers`).
-pub const SAVE_FORMAT_VERSION: u32 = 27;
+/// 27 → 28: `CreatureSave` gained `equipment` — any program the player owns
+/// can now wear the three gear slots the player wears, so a loadout is per
+/// creature rather than player-only. Positional encoding means an extra
+/// field is an extra field wherever it sits, so no v27 file can be read.
+pub const SAVE_FORMAT_VERSION: u32 = 28;
 
 /// Renders a save as editable RON, for the `savetool` binary.
 ///

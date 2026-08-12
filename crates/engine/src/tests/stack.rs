@@ -4087,6 +4087,140 @@ fn the_wider_rungs_hand_over_more_disks_of_the_same_routine() {
     }
 }
 
+/// An exclusive routine is never an ordinary routine row — it has no
+/// bundle rungs, because six copies of the one thing nobody can etch would
+/// make it exactly as ordinary as Throttle.
+#[test]
+fn a_market_never_lists_an_exclusive_routine_as_an_ordinary_rung() {
+    let game = game_at_a_market();
+    let exclusive: Vec<String> = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .exclusive_pool()
+        .into_iter()
+        .map(|def| def.id.clone())
+        .collect();
+    assert!(!exclusive.is_empty(), "the pool census found nothing");
+
+    let pos = game.stack_pos().unwrap();
+    let mut listed = 0;
+    for depth in 1..=8 {
+        for offer in game.market_offers(StackPos { depth, ..pos }) {
+            if let MarketOfferKind::Routine { ability, .. } = offer {
+                listed += 1;
+                assert!(
+                    !exclusive.contains(&ability),
+                    "a market is selling {ability} at a bundle rung, and nobody can etch one"
+                );
+            }
+        }
+    }
+    assert!(listed > 0, "no shelf in the sweep listed a routine at all");
+}
+
+/// The rare row exists, gets likelier with depth, and sells one disk at the
+/// exclusive price. Swept across depths rather than asserted on one frame:
+/// at the shallow end it is roughly one market in twelve, so a single-frame
+/// test would be a coin flip dressed up as an assertion.
+#[test]
+fn the_deep_stack_carries_exclusive_disks_and_the_shallow_one_barely_does() {
+    let mut game = game_at_a_market();
+    let pos = game.stack_pos().unwrap();
+
+    // Swept over the *entrance*, not over `frames`: `FrameSpec::rng_seed`
+    // hashes the world seed, the entrance and the depth, and nothing else.
+    // A sweep over `frames` would derive the same shelf every time and
+    // count it 200 times — a vacuous test that reads like a thorough one.
+    let count_at = |game: &Game, depth: u32| {
+        (0..200)
+            .filter(|&i| {
+                game.market_offers(StackPos {
+                    depth,
+                    entrance: (i, i * 7 + 3),
+                    ..pos
+                })
+                .iter()
+                .any(|offer| matches!(offer, MarketOfferKind::ExclusiveDisk { .. }))
+            })
+            .count()
+    };
+    let shallow = count_at(&game, 1);
+    let deep = count_at(&game, 8);
+    assert!(
+        deep > shallow,
+        "depth bought no better odds of an exclusive disk ({deep} deep vs {shallow} shallow)"
+    );
+    assert!(
+        deep > 0,
+        "no market at depth 8 carried an exclusive disk in 60 frames"
+    );
+}
+
+/// What an exclusive disk costs, and what it delivers, bought through the
+/// real door — the party standing on the stall and paying for the row.
+///
+/// A seed sweep rather than a forced position, because a market is a
+/// property of the frame the party is actually in: there is no way to stand
+/// somewhere the shelf was derived for without walking there.
+#[test]
+fn buying_the_exclusive_row_costs_its_own_price_and_delivers_one_disk() {
+    let (mut game, index, ability) =
+        game_at_a_market_selling_an_exclusive_disk().expect(
+            "no seed in the sweep put an exclusive disk on a reachable shelf;              if STACK_MARKET_EXCLUSIVE_CHANCE_BASE was lowered, widen the sweep",
+        );
+
+    give_credits(&mut game, 50_000);
+    let before = credits(&game);
+    game.buy_market_offer(index).unwrap();
+
+    assert_eq!(
+        credits(&game),
+        before - crate::tuning::STACK_MARKET_EXCLUSIVE_PRICE,
+        "the exclusive row charged something other than its own price"
+    );
+    assert_eq!(
+        game.etched_disks_of(&ability),
+        1,
+        "one disk, never a bundle"
+    );
+    assert!(
+        !game.knows_routine(&ability),
+        "buying the disk taught the routine"
+    );
+}
+
+/// A game standing on a market whose shelf carries an exclusive disk, with
+/// that row's shelf index and the routine on it.
+///
+/// `game_at_a_market`'s sweep, widened: the exclusive row is a roll on top
+/// of the market roll, so a great many more seeds have to be tried.
+fn game_at_a_market_selling_an_exclusive_disk() -> Option<(Game, usize, String)> {
+    for seed in 0..1200 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        descend(&mut game);
+        if stand_facing(&mut game, CellKind::Market).is_none() {
+            continue;
+        }
+        step_forward_clear(&mut game);
+        let Some(pos) = game.stack_pos() else { continue };
+        if game.stack_market().is_none() {
+            continue;
+        }
+        let found = game
+            .market_offers(pos)
+            .into_iter()
+            .enumerate()
+            .find_map(|(index, offer)| match offer {
+                MarketOfferKind::ExclusiveDisk { ability } => Some((index, ability)),
+                _ => None,
+            });
+        if let Some((index, ability)) = found {
+            return Some((game, index, ability));
+        }
+    }
+    None
+}
+
 /// What "whatever's sold is gone" means on the shelf. The row leaving is
 /// only half of it — the frame regenerates from its spec every time the
 /// party steps off and on, so without the record the stall restocks itself.

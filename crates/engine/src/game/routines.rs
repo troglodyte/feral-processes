@@ -117,10 +117,13 @@ impl Game {
     /// numbering is stable between sessions. Knowing one is half of an
     /// etch; the other half is `blank_disks_held`.
     ///
-    /// Exclusive routines never appear here, because nothing ever puts one
-    /// in `KnownRoutines` — so this needs no filter of its own, and the test
-    /// `an_exclusive_routine_never_reaches_the_known_list` is what holds
-    /// that rather than a line of code here restating it.
+    /// Exclusive routines are filtered out explicitly, even though nothing
+    /// is supposed to put one in `KnownRoutines` in the first place. That
+    /// is deliberate belt-and-braces: `etch_disk` refuses them anyway, so
+    /// without this a leak — a save written by a modded build, a future
+    /// grant that forgets the rule — would show up as a picker row that
+    /// always fails rather than as a routine quietly missing. Two cheap
+    /// checks, and the loud failure mode is the one on the outside.
     pub fn etchable_routines(&self) -> Vec<KnownRoutineView> {
         let db = self.world.resource::<AbilityDb>();
         let mut rows: Vec<KnownRoutineView> = self
@@ -129,6 +132,7 @@ impl Game {
             .0
             .iter()
             .filter_map(|id| db.get(id))
+            .filter(|def| !def.exclusive)
             .map(|def| KnownRoutineView {
                 ability: def.id.clone(),
                 name: def.name.clone(),

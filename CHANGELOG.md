@@ -27,6 +27,25 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.3
+
+### A door beside you looks like a door
+
+Walking a Stack corridor, a door dead ahead draws brown with a `+` over it.
+A door one step to your left drew as the same cyan wall as the rock it is
+set into — so the only way to find a side passage was to walk into it.
+
+The side wall now takes its colour from whatever is actually standing
+there, the way the wall ahead of you already did. Sealed doors keep their
+own red, so a way on you cannot open yet still reads as different from one
+you can.
+
+This is the half of the fault that survived the last attempt at it. That
+one made a door legible *down* a corridor, by marking it with a glyph after
+the distance fog was found to be eating the colour; this one is about the
+door you are standing next to, where the neighbouring cell is off the edge
+of the view entirely and its colour is the only thing left to see it by.
+
 ## 0.8.2
 
 ### The guardian at the bottom of a stack stops outclassing you

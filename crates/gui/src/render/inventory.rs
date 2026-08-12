@@ -104,7 +104,7 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
     draw_popup("Inventory", PopupSize::Large, &rows, painter, m);
 }
 
-fn equipped_row(
+pub(super) fn equipped_row(
     num: usize,
     label: &str,
     equipped: Option<feral_processes_engine::components::EquippedItem>,

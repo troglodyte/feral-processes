@@ -68,8 +68,8 @@ use meta::{
     draw_main_menu, draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
 };
 use party::{
-    draw_companion_menu, draw_fuse_menu, draw_fuse_name_menu, draw_fuse_second_menu, draw_refactor,
-    draw_refactor_item, draw_rename_menu,
+    draw_companion_equip, draw_companion_menu, draw_fuse_menu, draw_fuse_name_menu,
+    draw_fuse_second_menu, draw_refactor, draw_refactor_item, draw_rename_menu,
 };
 use popup::{PopupSize, Row, counted_item_row, draw_popup, text_row};
 use progression::{draw_perks_menu, draw_research_menu};
@@ -634,6 +634,9 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             stack::draw_cell_describe(app.pending_description.as_deref(), painter, m)
         }
         Mode::Inventory => draw_inventory(game, selected, painter, m),
+        Mode::CompanionEquip => {
+            draw_companion_equip(game, app.pending_equip_program, selected, painter, m)
+        }
         Mode::EquipSwap => draw_equip_swap(
             game,
             app.pending_swap_slot,

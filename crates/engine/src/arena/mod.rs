@@ -86,7 +86,7 @@ pub(crate) fn set_level(game: &mut Game, entity: Entity, level: u32) {
     // remainder a later kill would inherit.
     while exp.level < level {
         let owed = exp.xp_to_next.saturating_sub(exp.xp);
-        if progression::add_xp(&mut exp, &mut stats, owed, growth, cap, 0) == 0 {
+        if progression::add_xp(&mut exp, &mut stats, owed, growth, cap, 0).levels == 0 {
             break;
         }
     }

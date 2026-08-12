@@ -48,14 +48,16 @@ impl App {
         }
     }
 
-    /// Which inventory row each equipment slot sits on, so Esc can put the
-    /// highlight back where the player left it.
-    fn slot_row(slot: EquipmentSlot) -> usize {
-        match slot {
-            EquipmentSlot::Weapon => 0,
-            EquipmentSlot::Armor => 1,
-            EquipmentSlot::Module => 2,
-        }
+    /// Which row each equipment slot sits on, so Esc can put the highlight
+    /// back where the player left it. The inventory leads with the three
+    /// slots and `Mode::CompanionEquip` is nothing but them, so one answer
+    /// serves both — it is `EquipmentSlot::ALL`'s order, which is also the
+    /// order both screens draw.
+    pub(crate) fn slot_row(slot: EquipmentSlot) -> usize {
+        EquipmentSlot::ALL
+            .iter()
+            .position(|s| *s == slot)
+            .unwrap_or(0)
     }
 
     /// Opens the replacement picker for `slot`, unless there is nothing to
@@ -64,7 +66,8 @@ impl App {
     /// where opening a picker with no rows would just be a dead end.
     fn open_equip_swap(&mut self, slot: EquipmentSlot) {
         let Some(game) = &self.game else { return };
-        if equip_swap_rows(game, slot).is_empty() {
+        let wearer = game.player_entity();
+        if equip_swap_rows(game, wearer, slot).is_empty() {
             self.status_line = Some(format!("Nothing in cargo fits your {} slot.", slot.label()));
             return;
         }
@@ -81,19 +84,33 @@ impl App {
     /// `Game::equip` returns the outgoing item to cargo itself, so a swap is
     /// never an unequip followed by an equip — which could strand the player
     /// bare-handed if the second half were refused.
+    ///
+    /// `pending_swap_target` decides both the wearer and where Esc goes: the
+    /// screen a picker returns to is the one that opened it. It is cleared on
+    /// *every* exit, the commit path included, so a later swap opened from
+    /// the inventory can never inherit a program from an earlier one.
     pub(crate) fn handle_equip_swap_key(&mut self, key: GameKey) {
         let Some(slot) = self.pending_swap_slot else {
             self.mode = Mode::Inventory;
             return;
         };
+        let target = self.pending_swap_target;
+        let done = |app: &mut Self| {
+            app.pending_swap_slot = None;
+            app.pending_swap_target = None;
+            app.menu_selected = Self::slot_row(slot);
+            match target {
+                Some(_) => app.mode = Mode::CompanionEquip,
+                None => app.mode = Mode::Inventory,
+            }
+        };
         if key == GameKey::Esc {
-            self.pending_swap_slot = None;
-            self.menu_selected = Self::slot_row(slot);
-            self.mode = Mode::Inventory;
+            done(self);
             return;
         }
         let Some(game) = &self.game else { return };
-        let choices: Vec<SwapChoice> = equip_swap_rows(game, slot)
+        let wearer = target.unwrap_or_else(|| game.player_entity());
+        let choices: Vec<SwapChoice> = equip_swap_rows(game, wearer, slot)
             .into_iter()
             .map(|r| r.choice)
             .collect();
@@ -101,15 +118,12 @@ impl App {
             return;
         };
         let Some(game) = &mut self.game else { return };
-        let wearer = game.player_entity();
         let outcome = match &choices[idx] {
             SwapChoice::Equip(item, tier) => game.equip(wearer, item, *tier).err(),
             SwapChoice::Unequip => game.unequip(wearer, slot).err(),
         };
         self.status_line = outcome;
-        self.pending_swap_slot = None;
-        self.menu_selected = Self::slot_row(slot);
-        self.mode = Mode::Inventory;
+        done(self);
     }
 
     /// Sells one `item` to the trader in range, or asks which one.

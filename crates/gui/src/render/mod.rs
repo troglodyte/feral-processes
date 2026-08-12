@@ -634,7 +634,14 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             stack::draw_cell_describe(app.pending_description.as_deref(), painter, m)
         }
         Mode::Inventory => draw_inventory(game, selected, painter, m),
-        Mode::EquipSwap => draw_equip_swap(game, app.pending_swap_slot, selected, painter, m),
+        Mode::EquipSwap => draw_equip_swap(
+            game,
+            app.pending_swap_slot,
+            app.pending_swap_target,
+            selected,
+            painter,
+            m,
+        ),
         Mode::InventoryItemAction => {
             let zone = game.player_status().zone;
             let (item, fusion_tier) = split_pending_item(&pending_item);

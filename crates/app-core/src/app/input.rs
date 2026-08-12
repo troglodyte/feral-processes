@@ -127,6 +127,7 @@ impl App {
             Mode::ItemDescribe => self.handle_item_describe_key(key),
             Mode::EraseQuantity => self.handle_erase_quantity_key(key),
             Mode::Companion => self.handle_companion_key(key),
+            Mode::CompanionEquip => self.handle_companion_equip_key(key),
             Mode::Fuse => self.handle_fuse_key(key),
             Mode::FuseSecond => self.handle_fuse_second_key(key),
             Mode::FuseName => self.handle_fuse_name_key(key),

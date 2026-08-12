@@ -279,7 +279,11 @@ fn a_swap_row_carries_its_items_fusion_tier() {
     let spare = ItemId::from("kinetic_edge");
     app.game.as_mut().unwrap().fuse_item(&spare, 0).unwrap();
 
-    let rows = equip_swap_rows(app.game.as_ref().unwrap(), EquipmentSlot::Weapon);
+    let rows = equip_swap_rows(
+        app.game.as_ref().unwrap(),
+        app.game.as_ref().unwrap().player_entity(),
+        EquipmentSlot::Weapon,
+    );
     let row = rows
         .iter()
         .find(|r| r.choice == SwapChoice::Equip(spare.clone(), 1))
@@ -327,7 +331,11 @@ fn picking_a_swap_row_equips_it_and_returns_to_the_inventory() {
     app.mode = Mode::Inventory;
     app.handle_key(GameKey::Char('1'));
 
-    let rows = equip_swap_rows(app.game.as_ref().unwrap(), EquipmentSlot::Weapon);
+    let rows = equip_swap_rows(
+        app.game.as_ref().unwrap(),
+        app.game.as_ref().unwrap().player_entity(),
+        EquipmentSlot::Weapon,
+    );
     let idx = rows
         .iter()
         .position(|r| r.choice == SwapChoice::Equip(ItemId::from("kinetic_edge"), 0))
@@ -356,7 +364,11 @@ fn the_unequip_row_empties_the_slot() {
     app.mode = Mode::Inventory;
     app.handle_key(GameKey::Char('1'));
 
-    let rows = equip_swap_rows(app.game.as_ref().unwrap(), EquipmentSlot::Weapon);
+    let rows = equip_swap_rows(
+        app.game.as_ref().unwrap(),
+        app.game.as_ref().unwrap().player_entity(),
+        EquipmentSlot::Weapon,
+    );
     let idx = rows
         .iter()
         .position(|r| r.choice == SwapChoice::Unequip)
@@ -388,13 +400,17 @@ fn the_swap_list_offers_only_gear_for_that_slot() {
         1,
     );
 
-    let offered: Vec<ItemId> = equip_swap_rows(app.game.as_ref().unwrap(), EquipmentSlot::Weapon)
-        .into_iter()
-        .filter_map(|r| match r.choice {
-            SwapChoice::Equip(item, _) => Some(item),
-            SwapChoice::Unequip => None,
-        })
-        .collect();
+    let offered: Vec<ItemId> = equip_swap_rows(
+        app.game.as_ref().unwrap(),
+        app.game.as_ref().unwrap().player_entity(),
+        EquipmentSlot::Weapon,
+    )
+    .into_iter()
+    .filter_map(|r| match r.choice {
+        SwapChoice::Equip(item, _) => Some(item),
+        SwapChoice::Unequip => None,
+    })
+    .collect();
 
     assert_eq!(
         offered,
@@ -416,11 +432,14 @@ fn swap_rows_are_sorted_best_first_with_unequip_last() {
         1,
     );
 
-    let choices: Vec<SwapChoice> =
-        equip_swap_rows(app.game.as_ref().unwrap(), EquipmentSlot::Weapon)
-            .into_iter()
-            .map(|r| r.choice)
-            .collect();
+    let choices: Vec<SwapChoice> = equip_swap_rows(
+        app.game.as_ref().unwrap(),
+        app.game.as_ref().unwrap().player_entity(),
+        EquipmentSlot::Weapon,
+    )
+    .into_iter()
+    .map(|r| r.choice)
+    .collect();
 
     // Worn is +3 ATK, so the deltas run whip +1, edge -1, shiv -2.
     assert_eq!(
@@ -448,7 +467,11 @@ fn a_spare_of_the_worn_item_reports_the_gain_from_re_equipping_it() {
         3,
     );
 
-    let rows = equip_swap_rows(app.game.as_ref().unwrap(), EquipmentSlot::Weapon);
+    let rows = equip_swap_rows(
+        app.game.as_ref().unwrap(),
+        app.game.as_ref().unwrap().player_entity(),
+        EquipmentSlot::Weapon,
+    );
     let row = rows
         .iter()
         .find(|r| r.choice == SwapChoice::Equip(ItemId::from("overclock_core"), 0))
@@ -564,13 +587,17 @@ fn the_swap_picker_lists_a_fused_copy_beside_its_spares() {
     let mut app = app_wearing_weapon(9131, None, &[("kinetic_edge", 4)], 1);
     app.game.as_mut().unwrap().fuse_item(&spare, 0).unwrap();
 
-    let tiers: Vec<u32> = equip_swap_rows(app.game.as_ref().unwrap(), EquipmentSlot::Weapon)
-        .into_iter()
-        .filter_map(|r| match r.choice {
-            SwapChoice::Equip(item, tier) if item == spare => Some(tier),
-            _ => None,
-        })
-        .collect();
+    let tiers: Vec<u32> = equip_swap_rows(
+        app.game.as_ref().unwrap(),
+        app.game.as_ref().unwrap().player_entity(),
+        EquipmentSlot::Weapon,
+    )
+    .into_iter()
+    .filter_map(|r| match r.choice {
+        SwapChoice::Equip(item, tier) if item == spare => Some(tier),
+        _ => None,
+    })
+    .collect();
 
     assert_eq!(
         tiers,

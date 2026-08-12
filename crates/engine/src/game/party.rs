@@ -478,6 +478,18 @@ impl Game {
         }
     }
 
+    /// What `wearer` has on in `slot`, or `None` for an empty slot — and for
+    /// an entity with no `Equipment` at all, which is what a program that has
+    /// never been geared looks like (see `Game::equip`).
+    ///
+    /// The one public read of a *companion's* loadout. The player's own is
+    /// already three fields on `PlayerStatus`, and that stays: this exists so
+    /// the swap picker can measure the worn copy of whichever wearer it was
+    /// opened for, rather than matching on the player's three by slot.
+    pub fn worn(&self, wearer: Entity, slot: EquipmentSlot) -> Option<EquippedItem> {
+        self.world.get::<Equipment>(wearer)?.get(slot)
+    }
+
     /// The player-chosen name on `creature`, or `None` if it is still going
     /// by its species. Deliberately *not* `creature_name`, which always
     /// answers with something: a rename page seeded from that would put the

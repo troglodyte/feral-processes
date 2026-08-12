@@ -168,6 +168,7 @@ fn equipped_summary(
 pub(super) fn draw_equip_swap(
     game: &mut Game,
     slot: Option<EquipmentSlot>,
+    target: Option<Entity>,
     selected: usize,
     painter: &Painter,
     m: &Metrics,
@@ -182,17 +183,13 @@ pub(super) fn draw_equip_swap(
         );
         return;
     };
-    let status = game.player_status();
-    let worn = match slot {
-        EquipmentSlot::Weapon => status.weapon.clone(),
-        EquipmentSlot::Armor => status.armor.clone(),
-        EquipmentSlot::Module => status.module.clone(),
-    };
+    let wearer = target.unwrap_or_else(|| game.player_entity());
+    let worn = game.worn(wearer, slot);
     let mut rows = vec![
         Row::TextColored(equipped_summary("Wearing", worn, game), CYAN),
         text_row(""),
     ];
-    for (i, row) in equip_swap_rows(game, slot).iter().enumerate() {
+    for (i, row) in equip_swap_rows(game, wearer, slot).iter().enumerate() {
         rows.push(fusion_row(
             format!("[{}] {}", menu_shortcut(i), row.label),
             i == selected,

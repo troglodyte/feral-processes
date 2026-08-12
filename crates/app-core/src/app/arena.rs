@@ -176,13 +176,14 @@ fn step(value: u32, delta: i32, min: u32, max: u32) -> u32 {
 }
 
 /// How the encounter row reads. `Authored` is the absence of one, which is
-/// what makes the row a three-state cycle rather than a toggle beside a
+/// what makes the row a four-state cycle rather than a toggle beside a
 /// separate on-off.
 fn encounter_label(encounter: &Option<Encounter>) -> &'static str {
     match encounter {
         None => "Authored",
         Some(Encounter::Field { .. }) => "Field",
         Some(Encounter::Stack { .. }) => "Stack",
+        Some(Encounter::Lair { .. }) => "Lair",
     }
 }
 
@@ -382,7 +383,7 @@ impl App {
                 format!("  Biome: {biome:?}"),
                 ArenaRowKind::EncounterBiome,
             )),
-            Some(Encounter::Stack { biome, depth }) => {
+            Some(Encounter::Stack { biome, depth }) | Some(Encounter::Lair { biome, depth }) => {
                 rows.push(row(
                     format!("  Biome: {biome:?}"),
                     ArenaRowKind::EncounterBiome,
@@ -582,7 +583,12 @@ impl App {
                 }
             }
             ArenaRowKind::EncounterDepth => {
-                if let Some(Encounter::Stack { depth, .. }) = &mut s.encounter {
+                // Both underground encounters, because the row is drawn for
+                // both. A pattern naming only one still compiles against the
+                // outer catch-all, and ships a depth dial that does nothing.
+                if let Some(Encounter::Stack { depth, .. } | Encounter::Lair { depth, .. }) =
+                    &mut s.encounter
+                {
                     *depth = step(*depth, delta, 1, u32::MAX);
                 }
             }
@@ -654,12 +660,15 @@ impl App {
             None => 0,
             Some(Encounter::Field { .. }) => 1,
             Some(Encounter::Stack { .. }) => 2,
+            Some(Encounter::Lair { .. }) => 3,
         };
-        // A biome already chosen survives the Field/Stack step: only the
+        // A biome already chosen survives every step of the cycle: only the
         // depth is new, and re-picking the biome to change frame is the
         // dial-losing bug the picker's replace rule exists to avoid.
         let biome = match &s.encounter {
-            Some(Encounter::Field { biome }) | Some(Encounter::Stack { biome, .. }) => Some(*biome),
+            Some(Encounter::Field { biome })
+            | Some(Encounter::Stack { biome, .. })
+            | Some(Encounter::Lair { biome, .. }) => Some(*biome),
             None => first_biome,
         };
         let Some(biome) = biome else {
@@ -667,9 +676,10 @@ impl App {
             // roll on. The row then simply does not move.
             return;
         };
-        s.encounter = match (here + delta).rem_euclid(3) {
+        s.encounter = match (here + delta).rem_euclid(4) {
             1 => Some(Encounter::Field { biome }),
             2 => Some(Encounter::Stack { biome, depth: 1 }),
+            3 => Some(Encounter::Lair { biome, depth: 1 }),
             _ => None,
         };
         if s.encounter.is_some() {
@@ -772,9 +782,9 @@ impl App {
                 ArenaPickKind::EncounterBiome => {
                     if let (Some(picked), Some(encounter)) = (biome, s.encounter.as_mut()) {
                         match encounter {
-                            Encounter::Field { biome } | Encounter::Stack { biome, .. } => {
-                                *biome = picked
-                            }
+                            Encounter::Field { biome }
+                            | Encounter::Stack { biome, .. }
+                            | Encounter::Lair { biome, .. } => *biome = picked,
                         }
                     }
                 }

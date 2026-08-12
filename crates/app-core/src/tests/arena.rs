@@ -873,6 +873,10 @@ fn row_labels(app: &App) -> Vec<String> {
         .collect()
 }
 
+/// How many states the `Encounter:` row cycles through: Authored, Field,
+/// Stack, Lair. Named so a test that means "all the way round" says so.
+const ENCOUNTER_CYCLE_STATES: usize = 4;
+
 /// Steps the `Encounter:` row `n` times to the right.
 fn cycle_encounter(app: &mut App, n: usize) {
     highlight(app, ArenaRowKind::Encounter);
@@ -905,10 +909,13 @@ fn cycling_to_a_rolled_encounter_hides_the_opponent_rows() {
 
 #[test]
 fn cycling_back_to_authored_restores_an_opponent_row() {
-    // Every state the cycle can reach has to be one `save` will accept.
+    // Every state the cycle can reach has to be one `save` will accept, so
+    // this walks the *whole* cycle rather than a fixed number of steps — a
+    // fourth state added without a step here would have read as the cycle
+    // being broken rather than as the test being stale.
     let mut app = app_building(61, scenario(1, 1, &[("glitch", 1)], 0));
 
-    cycle_encounter(&mut app, 3);
+    cycle_encounter(&mut app, ENCOUNTER_CYCLE_STATES);
 
     let s = &app.arena.as_ref().unwrap().scenario;
     assert!(s.encounter.is_none());
@@ -940,6 +947,30 @@ fn a_stack_encounter_shows_a_depth_row_and_a_field_one_does_not() {
             depth: 1,
         }),
         "depth floors at 1, and the biome beside it is untouched"
+    );
+}
+
+#[test]
+fn a_lair_encounter_carries_its_biome_over_and_nudges_its_own_depth() {
+    // The depth dial is an `if let` under a catch-all arm, so a Lair the
+    // pattern forgot compiles clean and ships a row that does nothing. This
+    // asserts the number actually moved, not that the row is drawn.
+    let mut app = app_building(65, scenario(1, 1, &[("glitch", 1)], 0));
+
+    cycle_encounter(&mut app, 3);
+    let kinds = row_kinds(&app);
+    assert!(kinds.contains(&ArenaRowKind::EncounterDepth), "{kinds:?}");
+
+    highlight(&mut app, ArenaRowKind::EncounterDepth);
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Right);
+    assert_eq!(
+        app.arena.as_ref().unwrap().scenario.encounter,
+        Some(Encounter::Lair {
+            biome: Biome::Mainframe,
+            depth: 3,
+        }),
+        "the biome survives the step onto Lair and the depth dial moves"
     );
 }
 

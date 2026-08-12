@@ -30,7 +30,9 @@ pub(crate) fn roll(game: &mut Game, encounter: &Encounter) -> Result<Vec<EnemyGr
     // point is reachable, which leaves most of the encounter tables
     // unaskable.
     let biome = match encounter {
-        Encounter::Field { biome } | Encounter::Stack { biome, .. } => *biome,
+        Encounter::Field { biome }
+        | Encounter::Stack { biome, .. }
+        | Encounter::Lair { biome, .. } => *biome,
     };
     game.world.resource_mut::<WorldMap>().set_override(
         x,
@@ -69,6 +71,31 @@ pub(crate) fn roll(game: &mut Game, encounter: &Encounter) -> Result<Vec<EnemyGr
             // reports as a win. The tag exists to stop a jacked-out-on pack
             // waiting at the link mouth of a run that continues; a rep has
             // no such run, so nothing about the *fight* changes.
+            for &member in &pack {
+                game.world.entity_mut(member).remove::<StackSpawn>();
+            }
+            pack
+        }
+        // The same descent, then `rouse_lair`'s own two steps — which
+        // species guards this stack, and the pack that species brings —
+        // without the three things that make it an *event*: the cell
+        // underfoot, the `FrameMemory` record of a cleared lair, and the
+        // narration. A scenario asks for the guardian directly, so none of
+        // the machinery that decides *when* you meet it applies; what it
+        // must not do is restate *what* you meet, which is why both steps
+        // are calls.
+        Encounter::Lair { depth, .. } => {
+            let frames = game.frames_at((x, y)).max(*depth);
+            game.descend_to(*depth, frames, (x, y));
+            let pos = game.stack_pos().expect("`descend_to` installed a frame");
+            let pack = match game.pick_lair_species(pos) {
+                Some((species, is_boss)) => {
+                    let esc = game.stack_escalation(pos.depth);
+                    let (ex, ey) = pos.entrance;
+                    game.spawn_pack(&species, is_boss, ex, ey, esc)
+                }
+                None => Vec::new(),
+            };
             for &member in &pack {
                 game.world.entity_mut(member).remove::<StackSpawn>();
             }
@@ -203,6 +230,64 @@ mod tests {
             deep(5),
             deep(1)
         );
+    }
+
+    #[test]
+    fn a_lair_roll_fields_the_boss_a_stack_roll_never_can() {
+        // The two underground encounters at one depth and one biome. The
+        // ambush is asserted to hold *no* boss rather than merely a different
+        // species, because that is the property `Lair` exists to reach past:
+        // `stack_encounter_pack` passes `allow_boss: false`, so before this
+        // variant the guardian was unmeasurable.
+        let boss_count = |encounter: Encounter| {
+            let mut game = arena(3, 7);
+            let groups = roll(&mut game, &encounter).unwrap();
+            members(&groups)
+                .into_iter()
+                .filter(|&e| {
+                    let species = &game.world.get::<Creature>(e).unwrap().species;
+                    game.world
+                        .resource::<SpeciesDb>()
+                        .get(species)
+                        .is_some_and(|d| d.is_boss)
+                })
+                .count()
+        };
+
+        let biome = Biome::Mainframe;
+        assert_eq!(
+            boss_count(Encounter::Lair { biome, depth: 4 }),
+            1,
+            "a lair fields exactly one guardian"
+        );
+        assert_eq!(
+            boss_count(Encounter::Stack { biome, depth: 4 }),
+            0,
+            "an ambush at the same depth fields no boss"
+        );
+    }
+
+    #[test]
+    fn a_lair_roll_leaves_the_party_underground_at_the_depth_asked_for() {
+        let mut game = arena(3, 7);
+        let groups = roll(
+            &mut game,
+            &Encounter::Lair {
+                biome: Biome::Mainframe,
+                depth: 4,
+            },
+        )
+        .unwrap();
+
+        let pos = game.stack_pos().expect("the party is underground");
+        assert_eq!(pos.depth, 4);
+        for member in members(&groups) {
+            assert!(
+                game.world.get::<components::StackSpawn>(member).is_none(),
+                "a tagged member is one `end_battle` sweeps, taking the \
+                 evidence of a defeat with it"
+            );
+        }
     }
 
     #[test]

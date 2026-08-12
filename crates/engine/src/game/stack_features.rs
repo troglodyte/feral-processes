@@ -178,7 +178,7 @@ impl Game {
         self.start_battle(pack);
     }
 
-    fn pick_lair_species(&mut self, pos: StackPos) -> Option<(String, bool)> {
+    pub(crate) fn pick_lair_species(&mut self, pos: StackPos) -> Option<(String, bool)> {
         let (ex, ey) = pos.entrance;
         let biome = self.world.resource_mut::<WorldMap>().tile(ex, ey).biome;
         let spec = self.frame_spec(pos.depth, pos.frames, pos.entrance);

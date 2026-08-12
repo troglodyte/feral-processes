@@ -65,10 +65,19 @@ impl Default for Scenario {
 ///
 /// `depth` takes no serde default: a Stack encounter with no depth is a typo,
 /// the same argument this file's header makes about an unnamed species id.
+///
+/// `Stack` and `Lair` are both underground at a named depth, and they are not
+/// the same question. `Stack` is the corridor — what a walk between frames
+/// costs, and never a boss, since `stack_encounter_pack` passes
+/// `allow_boss: false`. `Lair` is the thing at the bottom, the only boss the
+/// Stack fields and the game's only source of Portal Fragments. A depth curve
+/// that leaves the corridor walkable can still leave the gate shut, so the
+/// instrument has to be able to ask about the two separately.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Encounter {
     Field { biome: Biome },
     Stack { biome: Biome, depth: u32 },
+    Lair { biome: Biome, depth: u32 },
 }
 
 /// Where the player under test comes from.

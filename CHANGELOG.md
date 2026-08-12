@@ -27,6 +27,53 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.7.5
+
+### Haulers walk around the base instead of through it
+
+A posted program's route was a walk over terrain, and a structure never makes
+its tile unwalkable — the player is blocked from one separately. So a hauler
+carrying a load to a depot walked straight over the machines its owner had to
+walk around. It now refuses any tile a structure stands on, and the tile a
+worker is sent to stand on while working or delivering is picked the same way.
+One exception, and it is deliberate: a worker may always step *off* its own
+tile, because deploying a structure never checks whether a program is standing
+there and a worker built over would otherwise be stuck for the rest of the run.
+
+Some tightly packed bases will find a machine that no longer has anywhere to
+stand. That is not new — you could never have collected from such a machine
+either, since you cannot stand on a building — it was simply invisible before.
+
+### Machines say when their program cannot reach them
+
+A new **cut off** state, distinct from a machine whose program is merely away:
+it means no route exists at all, and waiting will not fix it. It draws red
+rather than yellow, because it is asking you to go and clear a path.
+
+Posting now tells *walled in* apart from *no route to it from here*, instead
+of calling both "too far away" — which had become a lie about a machine you
+were standing beside.
+
+### Demolish with `d` and a direction
+
+`d` on the map aims at one of the four neighbouring tiles and demolishes what
+is there, without opening the base menu. Adjacent only: this key destroys what
+it finds, so you have to be standing next to it. Removing your Home still asks
+first, and the key is refused underground. The menu route is unchanged.
+
+### Fixes
+
+- A machine with nobody posted to it now reports **idle** and draws grey. It
+  never did for an extractor: only assemblers were ever told they were idle,
+  and the status defaults to *running*, so a freshly deployed Research Node
+  drew green as though it were producing, and a machine whose program was
+  killed or reassigned kept its old state for the rest of the run.
+- A machine part-way through a long cycle now reads as running rather than
+  falling back to that default.
+- The manifest shows a rare spawn's **Optimized**/**Overclocked** flag. It was
+  previously readable only as a bar on the map tile and a tag on the battle
+  roster, with nowhere to go and check.
+
 ## 0.7.4
 
 ### The roster tuner lands
